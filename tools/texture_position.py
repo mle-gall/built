@@ -797,7 +797,7 @@ class TexturePositionTool(Tool):
         if not self.active:
             return False
         from PySide6.QtWidgets import QMenu
-        menu = QMenu(viewport)
+        menu = QMenu(getattr(viewport, "keys_stand_in", None) or viewport)
         menu.addAction(tr("Done"), lambda: self.commit(viewport))
         menu.addAction(tr("Reset"), lambda: (self.reset(), viewport.update()))
         flip = menu.addMenu(tr("Flip"))

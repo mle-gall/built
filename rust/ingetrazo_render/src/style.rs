@@ -113,6 +113,11 @@ impl Style {
             if let Some(v) = d.get_item("sky")? {
                 next[3][3] = if v.extract::<bool>()? { 1. } else { 0. };
             }
+            if let Some(v) = d.get_item("transparent_background")? {
+                if v.extract::<bool>()? {
+                    next[3][3] = -1.0;
+                }
+            }
             if let Some(v) = d.get_item("horizon")? {
                 let h: f32 = v.extract()?;
                 if !h.is_finite() {

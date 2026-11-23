@@ -5,7 +5,7 @@ dialogs, and the wgpu renderer (linked in statically and registered as the
 built-in ``ingetrazo_render`` module). This package is what it embeds: it
 runs today's ``core/``, ``tools/`` and ``formats/`` unchanged, behind a
 document controller and a view that are plain QObjects instead of Qt
-widgets (see :mod:`app_shell.borrow`).
+widgets (see :mod:`views.view_host`).
 
 Qt is still imported, headless (the ``offscreen`` platform), for the value
 types the model and tools use (QVector3D, QMatrix4x4, QImage, QPainter for

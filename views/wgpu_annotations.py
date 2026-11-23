@@ -38,44 +38,44 @@ from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QColor, QPainter, QPen
 from ingetrazo_core import Vec3 as QVector3D
 
-from views.viewport import Viewport, _guide_vertices, shown_guides
+from views.viewport import DocumentInteraction, _guide_vertices, shown_guides
 
 
 class AnnotationLayout:
     """Isolated scene/camera projection for a logical annotation canvas."""
 
     # Explicit allowlist: no accidental delegation into live widget geometry.
-    _clip_pixel_line = Viewport._clip_pixel_line
-    _clip_segment_front = Viewport._clip_segment_front
-    _draw_dimensions = Viewport._draw_dimensions
-    _draw_text_labels = Viewport._draw_text_labels
-    _draw_guides = Viewport._draw_guides
-    _draw_section_planes = Viewport._draw_section_planes
-    section_plane_frame = Viewport.section_plane_frame
-    _draw_geo_surfaces = Viewport._draw_geo_surfaces
-    _draw_geo_paths = Viewport._draw_geo_paths
-    _draw_geo_points = Viewport._draw_geo_points
-    _draw_geo_path_label = Viewport._draw_geo_path_label
-    ground_height = Viewport.ground_height
-    drape = Viewport.drape
-    _text_block_x = staticmethod(Viewport._text_block_x)
-    _format_dim_value = staticmethod(Viewport._format_dim_value)
+    _clip_pixel_line = DocumentInteraction._clip_pixel_line
+    _clip_segment_front = DocumentInteraction._clip_segment_front
+    _draw_dimensions = DocumentInteraction._draw_dimensions
+    _draw_text_labels = DocumentInteraction._draw_text_labels
+    _draw_guides = DocumentInteraction._draw_guides
+    _draw_section_planes = DocumentInteraction._draw_section_planes
+    section_plane_frame = DocumentInteraction.section_plane_frame
+    _draw_geo_surfaces = DocumentInteraction._draw_geo_surfaces
+    _draw_geo_paths = DocumentInteraction._draw_geo_paths
+    _draw_geo_points = DocumentInteraction._draw_geo_points
+    _draw_geo_path_label = DocumentInteraction._draw_geo_path_label
+    ground_height = DocumentInteraction.ground_height
+    drape = DocumentInteraction.drape
+    _text_block_x = staticmethod(DocumentInteraction._text_block_x)
+    _format_dim_value = staticmethod(DocumentInteraction._format_dim_value)
     # Live tool feedback (draw_tool_feedback): GL's own painters.
-    _segment_to_pixels = Viewport._segment_to_pixels
-    _clip_w = Viewport._clip_w
-    _CLIP_W = Viewport._CLIP_W
-    _SNAP_LABELS = Viewport._SNAP_LABELS
-    _rubber_band_style = Viewport._rubber_band_style
-    _draw_rubber_band_overlay = Viewport._draw_rubber_band_overlay
-    _draw_guide_preview = Viewport._draw_guide_preview
-    _draw_inference_marker = Viewport._draw_inference_marker
-    _draw_scale_box = Viewport._draw_scale_box
-    _draw_length_label = Viewport._draw_length_label
-    _draw_route_marker = Viewport._draw_route_marker
-    _OCCLUSION_STEP_PX = Viewport._OCCLUSION_STEP_PX
-    _OCCLUSION_MAX_SAMPLES = Viewport._OCCLUSION_MAX_SAMPLES
-    _OCCLUSION_SPLIT = Viewport._OCCLUSION_SPLIT
-    _OCCLUSION_ROUNDS = Viewport._OCCLUSION_ROUNDS
+    _segment_to_pixels = DocumentInteraction._segment_to_pixels
+    _clip_w = DocumentInteraction._clip_w
+    _CLIP_W = DocumentInteraction._CLIP_W
+    _SNAP_LABELS = DocumentInteraction._SNAP_LABELS
+    _rubber_band_style = DocumentInteraction._rubber_band_style
+    _draw_rubber_band_overlay = DocumentInteraction._draw_rubber_band_overlay
+    _draw_guide_preview = DocumentInteraction._draw_guide_preview
+    _draw_inference_marker = DocumentInteraction._draw_inference_marker
+    _draw_scale_box = DocumentInteraction._draw_scale_box
+    _draw_length_label = DocumentInteraction._draw_length_label
+    _draw_route_marker = DocumentInteraction._draw_route_marker
+    _OCCLUSION_STEP_PX = DocumentInteraction._OCCLUSION_STEP_PX
+    _OCCLUSION_MAX_SAMPLES = DocumentInteraction._OCCLUSION_MAX_SAMPLES
+    _OCCLUSION_SPLIT = DocumentInteraction._OCCLUSION_SPLIT
+    _OCCLUSION_ROUNDS = DocumentInteraction._OCCLUSION_ROUNDS
 
     def __init__(self, scene, camera, logical_size, *, occluded=None, hover=None, clear_segment=None):
         self.scene = scene
@@ -97,7 +97,7 @@ class AnnotationLayout:
         return self._height
 
     def _world_to_pixel(self, point, mvp=None):
-        return Viewport._world_to_pixel(self, point, self._mvp if mvp is None else mvp)
+        return DocumentInteraction._world_to_pixel(self, point, self._mvp if mvp is None else mvp)
 
     def _occluded_on_screen(self, point):
         if not self._occluded or point.toTuple() in self._clear_points:
@@ -114,7 +114,7 @@ class AnnotationLayout:
             self._clear_points.update((a.toTuple(), b.toTuple(), ((a + b) * .5).toTuple()))
             self._occluded = None
         try:
-            Viewport._draw_occluded_segment(self, painter, a, b)
+            DocumentInteraction._draw_occluded_segment(self, painter, a, b)
         finally:
             self._occluded = occluded
 
@@ -197,7 +197,7 @@ def rubber_band(tools):
     depth_tested)`` or None. A depth-tested band (Push/Pull's forming box,
     Offset, Paste) goes to the native preview's edges so faces hide its
     back side; the rest floats in the overlay, as in GL."""
-    style = Viewport._rubber_band_style(tools)
+    style = DocumentInteraction._rubber_band_style(tools)
     if style is None:
         return None
     tool = getattr(tools, "active_tool", None)
@@ -232,7 +232,7 @@ def draw_tool_feedback(painter, tools, layout):
         layout._draw_inference_marker(painter)
         layout._draw_scale_box(painter)
         layout._draw_route_marker(painter)
-        draw = getattr(Viewport, "_draw_extension_overlays", None)
+        draw = getattr(DocumentInteraction, "_draw_extension_overlays", None)
         if draw is not None and getattr(tools, "_ext_overlays", None):
             draw(tools, painter)
         if (callable(getattr(tool, "value_label", None))
@@ -286,16 +286,16 @@ def draw_tool_overlays(painter, tools, *, labels=True):
         if not labels:
             return
         if getattr(tools, "reference_mode", None) is not None:
-            Viewport._draw_reference_label(tools, painter)
+            DocumentInteraction._draw_reference_label(tools, painter)
         elif getattr(tools, "axis_lock", None) is not None:
-            Viewport._draw_axis_lock_label(tools, painter)
+            DocumentInteraction._draw_axis_lock_label(tools, painter)
         elif getattr(tool, "plane_lock", None) is not None:
             # NativeTools may still expose source.active_tool; use the actual tool.
             from types import SimpleNamespace
-            Viewport._draw_plane_lock_label(SimpleNamespace(active_tool=tool), painter)
+            DocumentInteraction._draw_plane_lock_label(SimpleNamespace(active_tool=tool), painter)
         else:
-            Viewport._draw_inference_label(tools, painter)
+            DocumentInteraction._draw_inference_label(tools, painter)
         if getattr(tools, "linear_inference_mode", "all") != "all":
-            Viewport._draw_linear_mode_label(tools, painter)
+            DocumentInteraction._draw_linear_mode_label(tools, painter)
     finally:
         painter.restore()

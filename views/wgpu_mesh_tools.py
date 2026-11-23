@@ -7,11 +7,11 @@ _VIEWPORT = None
 
 
 def _viewport_class():
-    """``views.viewport.Viewport``, imported once (no import cycle at load)."""
+    """``views.viewport.DocumentInteraction``, imported once (no import cycle at load)."""
     global _VIEWPORT
     if _VIEWPORT is None:
-        from views.viewport import Viewport
-        _VIEWPORT = Viewport
+        from views.viewport import DocumentInteraction
+        _VIEWPORT = DocumentInteraction
     return _VIEWPORT
 
 
@@ -27,13 +27,13 @@ class MeshToolAccess:
 
     @staticmethod
     def _text_block_x(*args):
-        from views.viewport import Viewport
-        return Viewport._text_block_x(*args)
+        from views.viewport import DocumentInteraction
+        return DocumentInteraction._text_block_x(*args)
 
     @staticmethod
     def _format_dim_value(*args):
-        from views.viewport import Viewport
-        return Viewport._format_dim_value(*args)
+        from views.viewport import DocumentInteraction
+        return DocumentInteraction._format_dim_value(*args)
 
 
     def inference_meshes(self, x, y):
@@ -71,7 +71,7 @@ class MeshToolAccess:
         return self._ray_hit_plane((x, y), plane)
 
     def _face_replan(self, tool, x, y, captured, picked_row):
-        """``Viewport._planar_face_plane`` with the face under the cursor
+        """``DocumentInteraction._planar_face_plane`` with the face under the cursor
         from this view's picks (:meth:`_face_plane_under`). Only a planar
         shape pays for the ray."""
         from tools.base import PlaneLock
@@ -114,14 +114,14 @@ class MeshToolAccess:
     def _segment_to_pixels(self, a, b):
         """GL's: cut where the segment passes behind the eye instead of
         dropping it (a guide preview is kilometres long)."""
-        from views.viewport import Viewport
-        return Viewport._segment_to_pixels(self, a, b)
+        from views.viewport import DocumentInteraction
+        return DocumentInteraction._segment_to_pixels(self, a, b)
 
     def _clip_w(self):
-        from views.viewport import Viewport
-        return Viewport._clip_w(self)
+        from views.viewport import DocumentInteraction
+        return DocumentInteraction._clip_w(self)
 
-    _CLIP_W = 1e-3      # Viewport._CLIP_W (no import cycle at class level)
+    _CLIP_W = 1e-3      # DocumentInteraction._CLIP_W (no import cycle at class level)
 
     def _pixel_to_ray(self, x, y):
         return self.view._pixel_to_ray(x, y)
@@ -138,8 +138,8 @@ class MeshToolAccess:
         return self.view._project_to_lock_line(*args)
 
     def _ray_hit_plane(self, cursor, plane):
-        from views.viewport import Viewport
-        return Viewport._ray_hit_plane(self, cursor, plane)
+        from views.viewport import DocumentInteraction
+        return DocumentInteraction._ray_hit_plane(self, cursor, plane)
 
     def _picked_mesh(self, x, y):
         row = self._selection_row(x, y) if self.mode == 'select' else self.view.pick_row(x, y)
@@ -344,15 +344,15 @@ class MeshToolAccess:
         return None
 
     def pick_locked_image_plane(self, x, y):
-        from views.viewport import Viewport
-        return Viewport.pick_locked_image_plane(self, x, y)
+        from views.viewport import DocumentInteraction
+        return DocumentInteraction.pick_locked_image_plane(self, x, y)
 
     def _face_or_image_in_front(self, x, y):
         return self.pick_face(x, y)
 
     def _context_pick(self, x, y):
-        from views.viewport import Viewport
-        return Viewport._context_pick(self, x, y)
+        from views.viewport import DocumentInteraction
+        return DocumentInteraction._context_pick(self, x, y)
 
     #: How near (logical pixels) a click must come to a line to take it.
     EDGE_PICK_PX = 12.
@@ -384,14 +384,14 @@ class MeshToolAccess:
     pick_visible_edge = pick_edge
 
     def linework_hidden(self, point):
-        """``Viewport.linework_hidden``: occlusion with the depth slack of
+        """``DocumentInteraction.linework_hidden``: occlusion with the depth slack of
         a line lying on (or a hair off) a face."""
         from views.viewport import linework_slack_point
         return self._is_occluded(linework_slack_point(self.view.camera, point))
 
     def pick_linework_edge(self, x, y):
         """``(edge, pixels)``: the loose edge the Select tool takes before
-        the face under the cursor (``Viewport.pick_linework_edge``)."""
+        the face under the cursor (``DocumentInteraction.pick_linework_edge``)."""
         return self._pick_loose_edge(x, y, self.linework_hidden)
 
     def _linework_rows(self):
@@ -413,7 +413,7 @@ class MeshToolAccess:
     def pick_linework_groups(self, x, y):
         """``[(group, pixels)]``, nearest first: the objects made of lines
         only whose visible lines pass within :attr:`EDGE_PICK_PX` of the
-        cursor (``Viewport.pick_linework_groups``). Their 1-px lines in
+        cursor (``DocumentInteraction.pick_linework_groups``). Their 1-px lines in
         the ID pass were all the hitbox they had: off by a pixel, at a
         grazing angle or z-fighting the face below, the face's group
         took the click."""
@@ -428,7 +428,7 @@ class MeshToolAccess:
         edges = nearby_edges(v.inference_index, v.packed, v.camera, v.width(),
                              v.height(), x, y, radius_px=self.EDGE_PICK_PX,
                              cap=48, rows=rows, edit_group=self.scene.edit_group)
-        from views.viewport import Viewport
+        from views.viewport import DocumentInteraction
         out, seen = [], set()
         for e in edges:
             if not e.in_group or not e.distance < self.EDGE_PICK_PX:
@@ -436,7 +436,7 @@ class MeshToolAccess:
             target = v.context_placement(e.group)
             if target is None or id(target) in seen or not self.scene.entity_selectable(target):
                 continue
-            p = Viewport.edge_point_under_cursor(self, e, x, y)
+            p = DocumentInteraction.edge_point_under_cursor(self, e, x, y)
             if p is None or self.linework_hidden(p):
                 continue
             seen.add(id(target))
@@ -445,7 +445,7 @@ class MeshToolAccess:
 
     def linework_groups_around(self, x, y):
         """The objects made of lines only whose screen box holds the
-        cursor, smallest first (``Viewport.linework_groups_around``)."""
+        cursor, smallest first (``DocumentInteraction.linework_groups_around``)."""
         v = self.view
         if v.inference_index is None or v.packed is None or not len(v.packed.instances):
             return []
@@ -611,8 +611,8 @@ class MeshToolAccess:
         return self._project_px(np.asarray(pts, dtype=float).reshape(-1, 3))
 
     def _draw_occluded_segment(self, painter, a, b):
-        from views.viewport import Viewport
-        Viewport._draw_occluded_segment(self, painter, a, b)
+        from views.viewport import DocumentInteraction
+        DocumentInteraction._draw_occluded_segment(self, painter, a, b)
 
     def _project_samples(self, points):
         return [(self._world_to_pixel(p), not self._is_occluded(p)) for p in points]
@@ -621,52 +621,52 @@ class MeshToolAccess:
         return self._is_occluded(point)
 
     def pick_dimension(self, *args, **kwargs):
-        from views.viewport import Viewport
-        return Viewport.pick_dimension(self, *args, **kwargs)
+        from views.viewport import DocumentInteraction
+        return DocumentInteraction.pick_dimension(self, *args, **kwargs)
 
     def pick_text_label(self, *args, **kwargs):
-        from views.viewport import Viewport
-        return Viewport.pick_text_label(self, *args, **kwargs)
+        from views.viewport import DocumentInteraction
+        return DocumentInteraction.pick_text_label(self, *args, **kwargs)
 
     def _unsupported_pick(self, *args, **kwargs):
         return None
 
     def pick_geopath(self, *args):
-        from views.viewport import Viewport
-        return Viewport.pick_geopath(self, *args)
+        from views.viewport import DocumentInteraction
+        return DocumentInteraction.pick_geopath(self, *args)
 
     def _draw_geo_path_label(self, *args):
-        from views.viewport import Viewport
-        return Viewport._draw_geo_path_label(self, *args)
+        from views.viewport import DocumentInteraction
+        return DocumentInteraction._draw_geo_path_label(self, *args)
 
     def section_plane_frame(self, plane):
-        from views.viewport import Viewport
-        return Viewport.section_plane_frame(self, plane)
+        from views.viewport import DocumentInteraction
+        return DocumentInteraction.section_plane_frame(self, plane)
 
     def _clip_segment_front(self, a, b):
-        from views.viewport import Viewport
-        return Viewport._clip_segment_front(self, a, b)
+        from views.viewport import DocumentInteraction
+        return DocumentInteraction._clip_segment_front(self, a, b)
 
     def pick_section_plane(self, x, y):
-        from views.viewport import Viewport
-        return Viewport.pick_section_plane(self, x, y)
+        from views.viewport import DocumentInteraction
+        return DocumentInteraction.pick_section_plane(self, x, y)
 
     pick_image = _unsupported_pick
     def pick_image_plane(self, x, y):
-        from views.viewport import Viewport
-        return Viewport.image_plane_at(self, x, y, selectable_only=True)
+        from views.viewport import DocumentInteraction
+        return DocumentInteraction.image_plane_at(self, x, y, selectable_only=True)
 
     def image_in_front_of(self, face, x, y):
-        from views.viewport import Viewport
-        return Viewport.image_in_front_of(self, face, x, y)
+        from views.viewport import DocumentInteraction
+        return DocumentInteraction.image_in_front_of(self, face, x, y)
 
     def edge_point_under_cursor(self, edge, x, y):
-        from views.viewport import Viewport
-        return Viewport.edge_point_under_cursor(self, edge, x, y)
+        from views.viewport import DocumentInteraction
+        return DocumentInteraction.edge_point_under_cursor(self, edge, x, y)
 
     def pick_extension_item(self, x, y):
-        from views.viewport import Viewport
-        return Viewport.pick_extension_item(self, x, y)
+        from views.viewport import DocumentInteraction
+        return DocumentInteraction.pick_extension_item(self, x, y)
 
     _group_obb = _unsupported_pick
     def begin_groups_preview(self, groups):

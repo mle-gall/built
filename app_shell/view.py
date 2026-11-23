@@ -8,21 +8,15 @@ chrome through views/wgpu_ui.py) runs unchanged.
 """
 from __future__ import annotations
 
-from app_shell.borrow import WidgetShim, _rebind, borrow, signals_of
+from views.view_host import WidgetShim
+from views.wgpu_view import MetalView
 
 
-def _make_class():
-    from views.wgpu_view import WgpuView
-    cls = type("ShellView", (WidgetShim,), {
-        **signals_of(WgpuView),
-        "__module__": __name__,
-        "_shim_visible": True,
-    })
-    init = _rebind(WgpuView.__init__, cls)
+class ShellView(MetalView, WidgetShim):
+    _shim_visible = True
 
     def __init__(self, host):
-        self._host = host
-        init(self, None)
+        super().__init__()
         self._host = host
 
     def winId(self):
@@ -57,18 +51,3 @@ def _make_class():
         self.renderer = None
         if hasattr(self, "_inference_worker"):
             self._inference_worker.shutdown(wait=False, cancel_futures=True)
-
-    for fn in (__init__, winId, isVisible, showEvent, resizeEvent, hideEvent, leaveEvent, closeEvent):
-        setattr(cls, fn.__name__, fn)
-    borrow(WgpuView, cls, skip={"paintEngine", "paintEvent"})
-    return cls
-
-
-_CLASS = None
-
-
-def ShellView(host):
-    global _CLASS
-    if _CLASS is None:
-        _CLASS = _make_class()
-    return _CLASS(host)

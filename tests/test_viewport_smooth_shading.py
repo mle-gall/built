@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import math
 import os
+import inspect
 import types
 from collections import defaultdict
 
@@ -86,7 +87,7 @@ def _stub(scene):
     for name in dir(Viewport):
         if name.startswith("__") or hasattr(vp, name):
             continue
-        attr = Viewport.__dict__.get(name)
+        attr = inspect.getattr_static(Viewport, name)
         if isinstance(attr, types.FunctionType):
             setattr(vp, name, attr.__get__(vp))
         elif isinstance(attr, staticmethod):

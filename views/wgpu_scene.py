@@ -359,12 +359,12 @@ def _placement_records(scene, roots, vp, state):
     """Read the tree from the Rust
     document in one call (``doc_tree``): handles, parents, f64 matrices and
     Hide flags as arrays, no attribute read per placement for them."""
-    from views.viewport import Viewport
+    from views.viewport import DocumentInteraction
     from core import doc_model
     handles, parent, local, has, own_hidden = doc_model.NATIVE.doc_tree(roots)
     world, defined = _doc_worlds(local, has, parent)
     par = parent.tolist()
-    proxies = Viewport._bind_placement_rows(vp, handles, par, [])
+    proxies = DocumentInteraction._bind_placement_rows(vp, handles, par, [])
     allowed = getattr(scene, '_navigator_allowed', None)
     own_hidden = own_hidden.tolist()
     defined = defined.tolist()
@@ -414,7 +414,7 @@ def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=Tru
         resource = None
     begin = perf_counter()
     state = _placement_state(scene)
-    from views.viewport import _paint_of, Viewport
+    from views.viewport import _paint_of, DocumentInteraction
     vp = SimpleNamespace(scene=scene)
     texture_ids = {}
     meshes, lookup, rows, uids, paints = [], {}, [], [], []

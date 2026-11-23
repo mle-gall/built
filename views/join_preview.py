@@ -61,7 +61,7 @@ class JoinPreview(QFrame):
     finished = Signal(bool)
 
     def __init__(self, viewport, verdicts: dict, matrix=None) -> None:
-        super().__init__(viewport)
+        super().__init__(getattr(viewport, "keys_stand_in", None) or viewport)
         self._viewport = viewport
         self._matrix = matrix
         self._open = True
@@ -111,7 +111,7 @@ class JoinPreview(QFrame):
         form.addRow(buttons)
 
         self._keys = _Keys(self)
-        viewport.installEventFilter(self._keys)
+        self.parentWidget().installEventFilter(self._keys)
         overlays = getattr(viewport, "_ext_overlays", None)
         if overlays is not None:
             overlays.append(self._paint)
@@ -148,7 +148,7 @@ class JoinPreview(QFrame):
         if not self._open:
             return False
         self._open = False
-        self._viewport.removeEventFilter(self._keys)
+        self.parentWidget().removeEventFilter(self._keys)
         overlays = getattr(self._viewport, "_ext_overlays", None)
         if overlays is not None and self._paint in overlays:
             overlays.remove(self._paint)

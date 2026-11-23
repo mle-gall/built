@@ -74,7 +74,10 @@ def _tool_frame(method):
     return handle
 
 
-class WgpuView(QWidget):
+from views.view_navigation import ViewNavigation
+
+
+class MetalView(ViewNavigation):
     frameReady = Signal(float, object, float)
     _ZOOM_OUT_STEP = 0.05
 
@@ -808,7 +811,7 @@ class WgpuView(QWidget):
         return cpu, gpu, wall
 
     def _fit_depth(self):
-        """The GL view's depth fit (``Viewport._fit_scene_depth``) on the
+        """The GL view's depth fit (``DocumentInteraction._fit_scene_depth``) on the
         shown placements' box. Reverse-Z already keeps millimetres apart
         at any distance here, so this only keeps the shared camera's planes
         the same in both views; the same refusals apply, and a live mesh
@@ -820,9 +823,9 @@ class WgpuView(QWidget):
         if (source is None or packed is None or not len(packed.instances)
                 or self.tools.mode == 'mesh' or getattr(self, 'preview_faces', None)):
             return
-        from views.viewport import Viewport
+        from views.viewport import DocumentInteraction
         try:
-            refused = Viewport._depth_fit_refused(source)
+            refused = DocumentInteraction._depth_fit_refused(source)
         except Exception:
             return
         lo, hi = np.asarray(packed.world_bounds, float)
@@ -834,21 +837,21 @@ class WgpuView(QWidget):
         """R3c-2a: reuse GL's frame, brackets and symbols at Metal's size."""
         from types import SimpleNamespace
         from PySide6.QtGui import QPainter
-        from views.viewport import Viewport
+        from views.viewport import DocumentInteraction
         context = SimpleNamespace(scene=self.scene, camera=self.camera,
                                   width=self.width, height=self.height)
-        context.section_plane_frame = lambda sp: Viewport.section_plane_frame(context, sp)
-        context._clip_segment_front = lambda a, b: Viewport._clip_segment_front(context, a, b)
-        context._world_to_pixel = lambda p: Viewport._world_to_pixel(context, p)
+        context.section_plane_frame = lambda sp: DocumentInteraction.section_plane_frame(context, sp)
+        context._clip_segment_front = lambda a, b: DocumentInteraction._clip_segment_front(context, a, b)
+        context._world_to_pixel = lambda p: DocumentInteraction._world_to_pixel(context, p)
         painter = QPainter(image)
         painter.setRenderHint(QPainter.Antialiasing)
         try:
-            Viewport._draw_section_planes(context, painter)
+            DocumentInteraction._draw_section_planes(context, painter)
         finally:
             painter.end()
 
     def render_image(self, width_px, height_px=None, overlays=False,
-                     sharp_shadows=False):
+                     sharp_shadows=False, *, transparent=False, annotations_only=False):
         """R3c-2a: render sheet targets using this view's resident scene."""
         from copy import copy
         from PySide6.QtGui import QImage
@@ -884,6 +887,7 @@ class WgpuView(QWidget):
                                 edit_rest_fade=getattr(source, 'edit_rest_fade', .75),
                                 soft_shadows=getattr(source, '_soft_shadows', 0),
                                 camera=camera)
+        payload['transparent_background'] = transparent
         payload['edge_width'] = float(getattr(source, '_export_edge_px', 1))
         payload['profile_width'] = float(getattr(source, '_export_profile_px', 1))
         from views.wgpu_sections import capture_rows, geometry
@@ -930,7 +934,8 @@ class WgpuView(QWidget):
         if overlays:
             from views.wgpu_annotations import composite_annotations
             image = composite_annotations(image, source.scene, camera,
-                logical_size=(self.width(), self.height()), overlays=True)
+                logical_size=(self.width(), self.height()), overlays=True,
+                annotations_only=annotations_only)
         return image
         # End R3c-2a offscreen entry point.
 
@@ -974,14 +979,6 @@ class WgpuView(QWidget):
         scale = self.devicePixelRatioF()
         row = self.renderer.pick(int(x*scale), int(y*scale))
         return row if self.resolve(row) is not None else None
-
-    def _pixel_to_ray(self, x, y):
-        from views.viewport import Viewport
-        return Viewport._pixel_to_ray(self, x, y)
-
-    def _world_to_pixel(self, point):
-        from views.viewport import Viewport
-        return Viewport._world_to_pixel(self, point)
 
     @_tool_frame
     def hover(self, x, y, modifiers=Qt.NoModifier):
@@ -1116,11 +1113,11 @@ class WgpuView(QWidget):
         hidden_geometry(self)
 
     def _group_obb(self, group):
-        from views.viewport import Viewport
+        from views.viewport import DocumentInteraction
         shared = self._shared.__dict__
         boxes = shared.setdefault('_container_boxes', {})
         if group not in boxes:
-            boxes[group] = Viewport._compute_obb(group)
+            boxes[group] = DocumentInteraction._compute_obb(group)
             # Which rows it measured: an edit elsewhere keeps the box.
             if getattr(self, 'uid_rows', None) is not None:
                 shared.setdefault('_container_box_rows', {})[group] = np.asarray(
@@ -1148,12 +1145,12 @@ class WgpuView(QWidget):
                 self._container_box_rows[group] = rows
 
     def _edit_group_box_corners(self):
-        from views.viewport import Viewport
-        return Viewport._edit_group_box_corners(self)
+        from views.viewport import DocumentInteraction
+        return DocumentInteraction._edit_group_box_corners(self)
 
     def edit_group_box_contains_pixel(self, x, y):
-        from views.viewport import Viewport
-        return Viewport.edit_group_box_contains_pixel(self, x, y)
+        from views.viewport import DocumentInteraction
+        return DocumentInteraction.edit_group_box_contains_pixel(self, x, y)
 
     def _leave_edit_on_empty_click(self, x, y, modifiers):
         if (self.scene.edit_group is not None and not self.scene.selection
@@ -1357,8 +1354,7 @@ class WgpuView(QWidget):
         self._last_double = None
         if (not self._drag_nav and callable(getattr(self.tools.tool, 'on_look', None))
                 and event.button() in (Qt.LeftButton, Qt.RightButton)):
-            from views.viewport import Viewport
-            Viewport._begin_look(self, event)
+            self._begin_look(event)
             return
         if not self._drag_nav and event.button() == Qt.LeftButton and mode in ('tape', 'move', 'mesh'):
             self.hover(self.press.x(), self.press.y(), event.modifiers())
@@ -1369,9 +1365,8 @@ class WgpuView(QWidget):
     @_tool_frame
     def mouseMoveEvent(self, event):
         if getattr(self, '_look_drag', None) is not None:
-            from views.viewport import Viewport
             if event.buttons():
-                Viewport._look_move(self, event)
+                self._look_move(event)
                 return
             self._look_drag = None
             self.tools._apply_tool_cursor()
@@ -1400,12 +1395,12 @@ class WgpuView(QWidget):
             self.tools.hover(event)
         elif event.buttons() & Qt.LeftButton and (self.tools.mode == 'select' or mode == 'zoom_window'):
             from views import wgpu_overlay
-            from views.viewport import Viewport
+            from views.viewport import DocumentInteraction
             zoom = mode == 'zoom_window'
             # GL shows a selection box only past the drag threshold (a
             # click that jitters a pixel is no box); Zoom Window at once.
             moved = self.last - self.press
-            if zoom or math.hypot(moved.x(), moved.y()) >= Viewport.BOX_DRAG_THRESHOLD_PX:
+            if zoom or math.hypot(moved.x(), moved.y()) >= DocumentInteraction.BOX_DRAG_THRESHOLD_PX:
                 primitive = wgpu_overlay.selection_rectangle((self.press.x(), self.press.y()),
                     (self.last.x(), self.last.y()), zoom=zoom)
                 self.overlay_primitives = [primitive]
@@ -1416,10 +1411,6 @@ class WgpuView(QWidget):
     @property
     def active_tool(self):
         return self.tools.tool
-
-    def _can_warp_pointer(self):
-        from views.viewport import Viewport
-        return Viewport._can_warp_pointer()
 
     @_tool_frame
     def focusOutEvent(self, event):
@@ -1454,8 +1445,7 @@ class WgpuView(QWidget):
         mode = getattr(self.source_viewport, 'nav_mode', None)
         if self._drag_nav:
             if mode == 'zoom_window':
-                from views.viewport import Viewport
-                Viewport._zoom_to_box(self, self.press, event.position())
+                self._zoom_to_box(self.press, event.position())
         elif event.button() == Qt.LeftButton and self.tools.sync() == 'select':
             from tools.select import SelectTool
             from tools.base import ToolContext
@@ -1544,8 +1534,8 @@ class WgpuView(QWidget):
         self.update()
 
     def _is_triple_click(self, event):
-        from views.viewport import Viewport
-        return Viewport._is_triple_click(self, event)
+        from views.viewport import DocumentInteraction
+        return DocumentInteraction._is_triple_click(self, event)
 
     def event(self, event):
         if event.type() == QEvent.NativeGesture:
@@ -1563,11 +1553,11 @@ class WgpuView(QWidget):
                 return True
         if event.type() == QEvent.ShortcutOverride and hasattr(self, 'tools'):
             mode = self.tools.sync()
-            from views.viewport import Viewport
+            from views.viewport import DocumentInteraction
             target = self.tools if mode == 'mesh' else self.source_viewport
             if target is not None:
                 buffer = self.tools.value_buffer if mode == 'mesh' else target._value_buffer
-                if Viewport._measurement_claims_key(target, event, buffer):
+                if DocumentInteraction._measurement_claims_key(target, event, buffer):
                     event.accept()
                     return True
             claims = getattr(self.tools.tool, 'claims_key', None)
@@ -1640,10 +1630,6 @@ class WgpuView(QWidget):
         if self.source_viewport is not None:
             self.source_viewport.keyReleaseEvent(event)
 
-    def _project_to_lock_line(self, start, direction, x, y):
-        from views.viewport import Viewport
-        return Viewport._project_to_lock_line(self, start, direction, x, y)
-
     def _depth_world_at(self, x, y):
         from views.wgpu_inference import surface, packed_surface
         row = self.pick_row(x, y)
@@ -1663,25 +1649,9 @@ class WgpuView(QWidget):
 
     def _model_point_at(self, x, y):
         """The model point under pixel ``(x, y)`` from the Metal pick, or
-        ``None`` on sky or ground (GL's ``Viewport._model_point_at``)."""
+        ``None`` on sky or ground (GL's ``DocumentInteraction._model_point_at``)."""
         seen, point = self._depth_world_at(x, y)
         return point if seen == 'hit' else None
-
-    def _depth_of(self, point):
-        from views.viewport import Viewport
-        return Viewport._depth_of(self, point)
-
-    def _point_at_centre_depth(self, x, y):
-        from views.viewport import Viewport
-        return Viewport._point_at_centre_depth(self, x, y)
-
-    def _recentre_on(self, x, y):
-        from views.viewport import Viewport
-        Viewport._recentre_on(self, x, y)
-
-    def _world_under_cursor(self, x, y):
-        from views.viewport import Viewport
-        return Viewport._world_under_cursor(self, x, y)
 
     def _orbit_pivot_at(self, x, y):
         from views.viewport import _ray_aabb_span
@@ -1695,20 +1665,11 @@ class WgpuView(QWidget):
             return origin + direction*((span[0]+span[1])*.5)
         return QVector3D(self.camera.target)
 
-    def _zoom_out_step(self):
-        from views.viewport import Viewport
-        return Viewport._zoom_out_step(self)
-
-    def _zoom_at(self, steps, pos):
-        from views.viewport import Viewport
-        self._invert_wheel = getattr(self.source_viewport, '_invert_wheel', False)
-        return Viewport._zoom_at(self, steps, pos)
-
     @_tool_frame
     def wheelEvent(self, event):
-        from views.viewport import Viewport
+        from views.viewport import DocumentInteraction
         self._invert_wheel = getattr(self.source_viewport, '_invert_wheel', False)
-        Viewport.wheelEvent(self, event)
+        DocumentInteraction.wheelEvent(self, event)
         self.update()
 
     def set_highlight(self, selected_ids, hovered_id=None):
@@ -1740,3 +1701,7 @@ class WgpuView(QWidget):
         if hasattr(self, '_inference_worker'):
             self._inference_worker.shutdown(wait=False, cancel_futures=True)
         super().closeEvent(event)
+
+
+class WgpuView(MetalView, QWidget):
+    """Qt presentation surface for the shared Metal view."""

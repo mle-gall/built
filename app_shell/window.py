@@ -8,16 +8,16 @@ code runs unchanged.
 **MainWindow's own Python, on demand.** Every method, property and
 constant of ``views.main_window.MainWindow`` (and its worksession mixin)
 that the shell does not define is borrowed the first time something asks
-for it (:meth:`ShellWindow.__getattr__`, ``app_shell.borrow``): Select All,
+for it (:meth:`ShellWindow.__getattr__`): Select All,
 Undo, the links menu's verbs, the unsaved-changes question, File ▸ New…
 run as the Qt app runs them. What they reach for and the shell lacks (a
 dock, a tray, a Qt menu) raises inside them, and the host reports it as
 "not in the shell yet" with the classic app as the way out. What was
 looked up and is nowhere is still counted in
-:data:`app_shell.borrow.MISSING`.
+:data:`views.view_host.MISSING`.
 
 **Documents.** Each open project is a ``views.documents.Document`` with
-its own controller (``ShellViewport``: scene, history, camera) and its own
+its own controller (``DocumentController``: scene, history, camera) and its own
 view object (``ShellView``: the packed scene, picking, inference index,
 tool dispatch). One renderer, the window's surface, is handed to the
 document in front; a switch uploads that document's packed arrays again
@@ -34,7 +34,7 @@ import types
 from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtGui import QKeySequence
 
-from app_shell.borrow import MISSING, _rebind
+from views.view_host import MISSING
 
 
 class ShellAction:
@@ -363,6 +363,42 @@ class _Tray:
         self.scenes = ShellScenes(win)
 
 
+def _rebind(fn, cls, depth=0):
+    """``fn`` with every ``__class__`` cell (its own and its closures')
+    pointing at ``cls``."""
+    if not isinstance(fn, types.FunctionType) or depth > 3:
+        return fn
+    code = fn.__code__
+    if not code.co_freevars:
+        return fn
+    cells = []
+    changed = False
+    for name, cell in zip(code.co_freevars, fn.__closure__):
+        if name == "__class__":
+            cells.append(types.CellType(cls))
+            changed = True
+            continue
+        try:
+            value = cell.cell_contents
+        except ValueError:
+            cells.append(cell)
+            continue
+        new = _rebind(value, cls, depth + 1)
+        if new is not value:
+            cells.append(types.CellType(new))
+            changed = True
+        else:
+            cells.append(cell)
+    if not changed:
+        return fn
+    out = types.FunctionType(code, fn.__globals__, fn.__name__, fn.__defaults__, tuple(cells))
+    out.__kwdefaults__ = fn.__kwdefaults__
+    out.__dict__.update(fn.__dict__)
+    out.__qualname__ = fn.__qualname__
+    out.__doc__ = fn.__doc__
+    return out
+
+
 #: MainWindow members the shell defines itself and never borrows (they
 #: build Qt widgets, or the shell has its own version).
 _OWN = {"viewport", "documents", "active_document", "activate_document",
@@ -536,12 +572,12 @@ class ShellWindow(QObject):
         """A new, empty project with its own controller and view, right of
         the one in front."""
         from views.documents import Document
-        from app_shell.document import ShellViewport
+        from views.document_controller import DocumentController
         from app_shell.view import ShellView
         host = self._host
         doc = Document()
         doc.untitled_no = self._free_untitled_no() if self._documents else 1
-        vp = ShellViewport(host)
+        vp = DocumentController(host)
         try:
             vp.history.max_steps = 200
         except Exception:  # noqa: BLE001

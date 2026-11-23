@@ -45,7 +45,7 @@ def style_payload(scene, override=None, *, horizon=2.0, scale=1.0, edit_rest_fad
     return result
 
 
-#: Height of the GL shadow catcher (Viewport._draw_shadow_ground).
+#: Height of the GL shadow catcher (DocumentInteraction._draw_shadow_ground).
 SHADOW_CATCHER_Z = -0.005
 
 
@@ -53,13 +53,13 @@ def sun_payload(scene, *, override=None, soft_shadows=0, camera=None):
     """Same sun/date/north convention and GL light fit; no viewport required.
 
     ``soft_shadows`` is the Preferences level (#1281, GL's
-    ``Viewport._soft_shadows``); the payload carries its penumbra spread,
+    ``DocumentInteraction._soft_shadows``); the payload carries its penumbra spread,
     0 for the crisp map. A ``camera`` that sees the ground from below turns
     the ground's shadows off, like GL's catcher pass (#1301)."""
     import datetime
     import os
     from core import sun
-    from views.viewport import Viewport, SOFT_SHADOW_SPREAD
+    from views.viewport import DocumentInteraction, SOFT_SHADOW_SPREAD
     result = dict(shadows=False, sun_direction=(0., 0., 1.),
                   shadow_darkness=0.55, ground_shadows=True,
                   shadow_soft=0.0)
@@ -85,11 +85,11 @@ def sun_payload(scene, *, override=None, soft_shadows=0, camera=None):
     result.update(shadows=True, sun_direction=tuple(direction),
                   shadow_darkness=float(getattr(sh, 'darkness', 0.55)),
                   shadow_soft=float(SOFT_SHADOW_SPREAD.get(soft_shadows, 0.0)),
-                  shadow_matrix=list(Viewport._light_vp(direction, lo, hi).data()))
+                  shadow_matrix=list(DocumentInteraction._light_vp(direction, lo, hi).data()))
     from types import SimpleNamespace
     reference = SimpleNamespace(scene=scene)
-    result['ground_shadows'] = not (Viewport._base_map_showing(reference)
-        or Viewport._terrain_showing(reference)
+    result['ground_shadows'] = not (DocumentInteraction._base_map_showing(reference)
+        or DocumentInteraction._terrain_showing(reference)
         or (getattr(scene, 'photo_mesh', None) is not None
             and getattr(scene.photo_mesh, 'visible', False)
             and scene.entity_visible(scene.photo_mesh))

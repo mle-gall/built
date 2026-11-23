@@ -2874,7 +2874,8 @@ class LayersPanel(QWidget):
         vp = getattr(self._window, "viewport", None)
         if vp is None or widget is None:
             return False
-        return widget is vp or vp.isAncestorOf(widget)
+        display = getattr(vp, "keys_stand_in", None) or vp
+        return widget is display or display.isAncestorOf(widget)
 
     def _on_focus_changed(self, _old, new) -> None:
         try:
