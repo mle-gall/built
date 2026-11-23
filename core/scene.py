@@ -283,7 +283,12 @@ class Scene:
     #: The open contexts, outermost first — nested editing. Each
     #: entry is ``{"group", "mesh", "share"}``: the group, the mesh ``scene.mesh``
     #: pointed at before entering it, and its pending instance share-back.
-    _edit_stack: list = field(default_factory=list)
+    if _dm.ENABLED:
+        @property
+        def _edit_stack(self):
+            return self._root._edit_levels
+    else:
+        _edit_stack: list = field(default_factory=list)
     #: While a component INSTANCE is open for editing: ``(group, proto,
     #: xform, state0)`` — the shared definition it left, its placement, and
     #: the temp mesh's snapshot at entry (to tell an edit from a look).
@@ -304,6 +309,9 @@ class Scene:
                 if name != "_root":
                     object.__setattr__(out, name, copy.deepcopy(value, memo))
             object.__setattr__(out, "_root", _dm.NATIVE.doc_new_root())
+            for level in self._edit_stack:
+                copied = copy.deepcopy(level, memo)
+                out._root._enter_edit(copied["group"], copied)
             out.groups = copy.deepcopy(list(self.groups), memo)
             out.layers = copy.deepcopy(list(self.layers), memo)
             for name in ROOT_TABLES:
@@ -606,10 +614,13 @@ class Scene:
                                 group.mesh.capture_state())
         if not self._edit_stack:
             self._loose_mesh = anterior
-        self._edit_stack.append(
-            {"group": group, "mesh": anterior, "share": self._edit_share,
-             "frame": frame, "definition": definition, "parts": parts,
-             "world_copy": group.mesh if entry_mesh is not group.mesh else None})
+        level = {"group": group, "mesh": anterior, "share": self._edit_share,
+                 "frame": frame, "definition": definition, "parts": parts,
+                 "world_copy": group.mesh if entry_mesh is not group.mesh else None}
+        if _dm.ENABLED:
+            self._root._enter_edit(group, level)
+        else:
+            self._edit_stack.append(level)
         self._placement_context_bumps += 1
         self.mesh = group.mesh
         self.edit_group = group
@@ -673,7 +684,7 @@ class Scene:
         if not self._edit_stack:
             return
         self._refresh_dimension_holds()
-        nivel = self._edit_stack.pop()
+        nivel = self._root._leave_edit() if _dm.ENABLED else self._edit_stack.pop()
         share = nivel["share"]
         nivel["share"] = None
         self._edit_share = None

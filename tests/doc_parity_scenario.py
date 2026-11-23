@@ -246,6 +246,47 @@ def slice_two(scene, h):
     return out
 
 
+def structural_steps(steps):
+    from core.history import (ExplodeGroupCommand, GroupToComponentCommand,
+                              MakeComponentOfCommand, MakeGroupCommand,
+                              MakeUniqueCommand, MergeGroupsCommand,
+                              ReplaceComponentCommand, SplitIntoPiecesCommand,
+                              UnlinkCommand)
+    scene = build()
+    scene.active_layer = None
+    history = History(scene)
+    history.feed.subscribe(lambda step: steps.append(step_record(step)))
+    assembly, target, classic = scene.groups
+    source = assembly.children[1]
+    link = template()
+    link.ext = {"link": {"path": "/synthetic/reference.igz"}}
+    scene.groups.append(link)
+    scene.plugin_data["links"] = {"/synthetic/reference.igz": {}}
+    box(scene.mesh)
+    commands = [
+        MakeGroupCommand(scene.mesh.faces, [], name="Faces"),
+        GroupToComponentCommand(classic),
+        MakeComponentOfCommand([], [], [classic, target], "Assembly"),
+        MakeUniqueCommand(target),
+        ReplaceComponentCommand([target], source),
+        SplitIntoPiecesCommand(classic, [template()]),
+        ExplodeGroupCommand(assembly),
+        MergeGroupsCommand([classic, target]),
+        UnlinkCommand([link]),
+    ]
+    states = []
+    for cmd in commands:
+        history.execute(cmd)
+        assert not history.last_error and not history.last_rejected
+        if doc_model.ENABLED:
+            assert cmd._doc_txn is not None, type(cmd).__name__
+        for action in (None, history.undo, history.redo, history.undo):
+            if action:
+                assert action()
+            states.append(dump(scene))
+    return states
+
+
 def main(work: Path):
     initial = saved(build(), work, "initial")
     scene = build()
@@ -291,6 +332,7 @@ def main(work: Path):
     h.redo()
     states.append(dump(scene))
     states.extend(slice_two(scene, h))
+    states.extend(structural_steps(steps))
     print(json.dumps({"engine": doc_model.engine(), "states": states,
                       "feed": steps, "initial": initial,
                       "final": saved(scene, work, "final")}))

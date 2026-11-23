@@ -19823,9 +19823,8 @@ class Viewport(QOpenGLWidget):
         happened («hago clic en ese grupo que me sale atenuado y sigue así»,
         Marco, 2026-09-11 — he was two levels deep and had no way to know).
         """
-        pila = getattr(self.scene, "_edit_stack", None) or ()
-        nombres = [n["group"].name for n in pila]
-        return " ▸ ".join(nombres) if nombres else ""
+        from core.outliner import open_path
+        return " ▸ ".join(group.name for group in open_path(self.scene))
 
     def end_one_group_edit(self) -> None:
         """Step out ONE level — Esc, which leaves you inside the

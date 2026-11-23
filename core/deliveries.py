@@ -152,15 +152,20 @@ def scoped(scene, record):
         tables = {name: deepcopy(getattr(scene, name)) for name in (
             "active_layer", "layer_folders", "folder_parents", "folder_visibility",
             "layer_folder_uids", "layer_folder_names", "plugin_data")}
-        materials = list(scene.materials)
+        materials = scene.materials.copy()
         kept = list(getattr(scene, "kept_components", []) or [])
         out._root = doc_model.new_scene_root()
         for name, value in tables.items():
             setattr(out, name, value)
         out.materials = materials
         if kept:
-            out.kept_components = kept
-    out._edit_stack = []
+            # A kept placement has one parent. Give the projection its own
+            # placement handles while preserving the geometry definitions.
+            from core.purge import iter_groups
+            geometry = {id(g.mesh): g.mesh for g in iter_groups(kept)}
+            out.kept_components = deepcopy(kept, geometry)
+    else:
+        out._edit_stack = []
     out.edit_group = None
     out.__dict__.pop("_groups_owner", None)
     out.layers = [copy(layer) for layer in scene.layers]
