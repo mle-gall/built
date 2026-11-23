@@ -118,14 +118,14 @@ def test_native_first_run_custom_units(tmp_path):
     settings.setValue("units/new_document", json.dumps(custom))
     settings.sync()
     steps = tmp_path / "commands"
-    # In the 1000 × 720 Units sheet, click “Also use for new documents”.
+    # In the 1000 × 920 Units sheet, click “Also use for new documents”.
     steps.write_text("wait 700\nmenu home\nwait 200\nmenu new\nwait 300\nstate\n"
                      "key enter\nwait 300\nstate\nkey enter\nwait 300\nstate\n"
-                     "menu units\nwait 300\nstate\nclick 355 600\nwait 250\n"
+                     "menu units\nwait 300\nstate\nclick 391 655\nwait 250\n"
                      "key escape\nwait 300\nstate\nquit\n")
     home = tmp_path / "home"
     home.mkdir()
-    result = run([str(BIN), "--root", str(ROOT), "--new-instance", "--size", "1000x720",
+    result = run([str(BIN), "--root", str(ROOT), "--new-instance", "--size", "1000x920",
                   "--script", str(steps)],
                  home=home, settings=profile, capture_output=True, text=True, timeout=90)
     log = result.stdout + result.stderr
@@ -152,7 +152,7 @@ def test_native_settings_device_preferences(tmp_path):
     steps = tmp_path / "commands"
     # Navigate from the sidebar to the device pane and toggle navigation.
     steps.write_text("wait 600\nkey escape\nmenu prefs\nwait 400\nstate\n"
-                     "click 83 244\nwait 250\nclick 390 196\nwait 250\n"
+                     "click 119 282\nwait 250\nclick 426 234\nwait 250\n"
                      "key escape\nwait 300\nstate\nquit\n")
     result = run([str(BIN), "--root", str(ROOT), "--new-instance", "--size", "1000x720",
                   "--script", str(steps)], home=home, settings=profile,
@@ -176,7 +176,7 @@ def test_native_about_copies_diagnostics(tmp_path):
     home = tmp_path / "home"
     home.mkdir()
     steps = tmp_path / "steps"
-    steps.write_text("wait 600\nmenu about\nwait 350\nstate\nclick 310 226\nwait 250\n"
+    steps.write_text("wait 600\nmenu about\nwait 350\nstate\nclick 320 264\nwait 250\n"
                      "key escape\nwait 300\nstate\nquit\n")
     result = run([str(BIN), "--root", str(ROOT), "--new-instance", "--venv", str(venv),
                   "--size", "1000x720", "--script", str(steps)],

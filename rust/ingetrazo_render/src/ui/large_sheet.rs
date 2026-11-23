@@ -1328,7 +1328,7 @@ mod tests {
         let _ = ctx.run(egui::RawInput { screen_rect: Some(screen), ..Default::default() }, |ctx| {
             egui::CentralPanel::default().show(ctx, |ui| {
                 let available = Rect::from_min_max(pos2(0., TOP_H), screen.max);
-        let sheet = sheet_bounds(available, 1100., 1.);
+                let sheet = sheet_bounds(available, 1100., 1.);
                 let frame = sheet_frame(ui, sheet, 216., 0., true);
                 let footer = frame.footer.unwrap();
                 assert!(sheet.contains_rect(footer) && sheet.contains_rect(frame.header));
