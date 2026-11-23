@@ -112,6 +112,7 @@ def command(win, name, *args):
         "units": lambda: win._on_units(),
         "check_updates": lambda: win._on_check_updates(),
         "check_updates_quiet": lambda: win.check_updates_quietly(),
+        "export_view_svg": lambda: win._on_export_view_svg(),
         "export_image": lambda: win._on_export_image(),
         "soften": lambda: win._on_soften_edges(),
         "export_igz": lambda: export_igz(win),

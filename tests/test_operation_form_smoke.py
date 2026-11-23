@@ -437,3 +437,65 @@ def test_native_svg_preview_and_delivery_edit(tmp_path):
     load_into(edited, saved)
     frame = deliveries.records(edited)[key]["options"]["frame"]
     assert frame[0] < 0 and frame[1] > 0 and frame[2] == 1
+
+
+@pytest.mark.skipif(
+    os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
+    reason="requires a built window and BUILT_WINDOW_TESTS=1",
+)
+def test_current_view_svg_modes_stay_centred_and_export(tmp_path):
+    from formats.igz import save_scene
+    from tests.test_ifc_export import _tagged_wall_scene
+
+    drawing, initial = tmp_path / "current.svg", tmp_path / "wall.built"
+    save_scene(_tagged_wall_scene(), initial)
+    venv = fixture_venv(
+        tmp_path,
+        f"""from app_shell import native
+from app_shell.host import Host
+native.save_file = lambda *args: {str(drawing)!r}
+original_state = Host.state
+def state(self):
+    return dict(original_state(self), rect=self.renderer.ui_large_sheet_rect())
+Host.state = state
+""",
+    )
+    steps = tmp_path / "steps"
+    steps.write_text(
+        "wait 700\nkey escape\nmenu export_view_svg\nwait 600\nstate\n"
+        "click 847 178\nwait 160\nclick 228 212\nwait 1200\nstate\n"
+        "click 95 212\nwait 400\nstate\nkey enter\nwait 650\nstate\nquit\n"
+    )
+    result = run(
+        [
+            str(BIN),
+            "--root",
+            str(ROOT),
+            "--venv",
+            str(venv),
+            "--new-instance",
+            "--size",
+            "1280x800",
+            "--script",
+            str(steps),
+            str(initial),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    log = result.stdout + result.stderr
+    assert result.returncode == 0 and "Traceback" not in log, log
+    states = [
+        json.loads(line.removeprefix("[built] state "))
+        for line in result.stdout.splitlines()
+        if line.startswith("[built] state ")
+    ]
+    assert [s["large_sheet"] for s in states[:4]] == ["export", "export", "export", ""], log
+    assert not any(s["errors"] or s["blocked_widgets"] for s in states), log
+    rects = [s["rect"] for s in states[:3]]
+    assert rects[0] == rects[2] and rects[1][2] > rects[0][2]
+    for x, y, w, h in rects:
+        assert x >= 0 and y >= 0 and x + w <= 1280 and y + h <= 800
+        assert x + w / 2 == pytest.approx(640, abs=1)
+    assert "<image" in drawing.read_text()

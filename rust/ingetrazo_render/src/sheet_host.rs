@@ -120,6 +120,35 @@ pub fn show_delivery_form(
     Ok(())
 }
 
+/// The format is fixed by the current-view command. Only its destination
+/// and the SVG model are editable. Both one-off paths use ExportSheet.
+#[pyfunction]
+pub fn show_view_export<'py>(
+    py: Python<'py>,
+    win: &Bound<'py, PyAny>,
+    svg: &Bound<'py, crate::svg_options::SvgOptions>,
+    write: Py<PyAny>,
+    preview: Py<PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let forms = py.import("views.chrome_forms")?;
+    let field = PyDict::new(py);
+    field.set_item("pick", "save")?;
+    field.set_item("filters", "SVG (*.svg)")?;
+    let destination = forms
+        .getattr("Field")?
+        .call(("destination", "path", "Destination", ""), Some(&field))?;
+    let args = PyDict::new(py);
+    args.set_item("buttons", [("cancel", "Cancel"), ("export", "Export")])?;
+    args.set_item("default", "export")?;
+    args.set_item("validate", svg.getattr("validate_view")?)?;
+    args.set_item("on_done", write)?;
+    let form = forms
+        .getattr("Form")?
+        .call(("Export", vec![destination]), Some(&args))?;
+    show_delivery_form(py, win, &form, true, svg, preview)?;
+    Ok(form)
+}
+
 #[pymethods]
 impl ExportSheet {
     #[getter]
@@ -150,10 +179,11 @@ impl ExportSheet {
         let chrome = py.import("views.chrome_sheet")?;
         let options = PyDict::new(py);
         let svg = self.svg.bind(py);
-        let is_svg = form
-            .call_method1("value", ("format",))?
-            .extract::<String>()?
-            == "svg";
+        let is_svg = svg.borrow().is_current_view()
+            || form
+                .call_method1("value", ("format",))?
+                .extract::<String>()?
+                == "svg";
         let preview = is_svg && svg.getattr("preview_enabled")?.is_truthy()?;
         options.set_item("width", if preview { 1152 } else { 880 })?;
         let sheet = chrome
@@ -213,6 +243,9 @@ impl ExportSheet {
                 block.set_item("icon", "delivery_svg_preview")?;
                 block.set_item("text", guide)?;
                 pane.getattr("blocks")?.call_method1("append", (block,))?;
+                if let Some(caption) = svg.borrow().preview_caption() {
+                    pane.call_method1("text", (caption,))?;
+                }
             } else {
                 pane.call_method1(
                     "text",

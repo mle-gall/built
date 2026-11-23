@@ -2,6 +2,7 @@
 use crate::ui::dialog::Field;
 mod paper;
 mod preview;
+mod view;
 use paper::SvgPaper;
 use preview::Preview;
 use pyo3::prelude::*;
@@ -27,6 +28,7 @@ const FACES: &[&str] = &[
 
 #[pyclass]
 pub struct SvgOptions {
+    view: Option<view::View>,
     paper: SvgPaper,
     fill: usize,
     axes: bool,
@@ -72,6 +74,10 @@ fn check(id: &str, label: &str, on: bool) -> Field {
 }
 
 impl SvgOptions {
+    pub(crate) fn is_current_view(&self) -> bool {
+        self.view.is_some()
+    }
+
     fn restore(options: &Value, screen: [f64; 2]) -> Self {
         let faces = &options["faces"];
         let fill = if options["picture"] == true {
@@ -89,6 +95,7 @@ impl SvgOptions {
         };
         let frame = serde_json::from_value::<[f64; 3]>(options["frame"].clone()).ok();
         Self {
+            view: None,
             paper: SvgPaper::restore(options, screen),
             fill,
             axes: options["axes"].as_bool().unwrap_or(true),
@@ -105,6 +112,13 @@ impl SvgOptions {
     }
 
     fn fields(&self) -> Vec<Field> {
+        match &self.view {
+            Some(view) => self.view_rows(view),
+            None => self.delivery_fields(),
+        }
+    }
+
+    fn delivery_fields(&self) -> Vec<Field> {
         let mut rows = vec![(
             "fill".into(),
             "choice".into(),
@@ -194,6 +208,9 @@ impl SvgOptions {
     }
 
     fn edit(&mut self, id: &str, raw: &str) {
+        if self.edit_view(id, raw) {
+            return;
+        }
         if self.paper.owns(id) {
             self.paper.change(id, raw);
             return;
@@ -260,6 +277,61 @@ type Wire = (
 
 #[pymethods]
 impl SvgOptions {
+    #[staticmethod]
+    #[pyo3(signature=(preferences,screen,axes,shadows,selection,scenes,frame_scale=None,switch=None))]
+    fn current_view(
+        preferences: &str,
+        screen: [f64; 2],
+        axes: bool,
+        shadows: bool,
+        selection: bool,
+        scenes: Vec<String>,
+        frame_scale: Option<f64>,
+        switch: Option<Py<PyAny>>,
+    ) -> PyResult<Self> {
+        Self::from_view(
+            preferences,
+            screen,
+            axes,
+            shadows,
+            selection,
+            scenes,
+            frame_scale,
+            switch,
+        )
+    }
+
+    fn destination(&self, path: &str) -> String {
+        let path = path.trim();
+        if path.to_ascii_lowercase().ends_with(".svg") {
+            path.into()
+        } else {
+            format!("{path}.svg")
+        }
+    }
+
+    fn validate_view(
+        &self,
+        form: &Bound<'_, PyAny>,
+        _answer: &str,
+    ) -> PyResult<Option<&'static str>> {
+        let path: String = form.call_method1("value", ("destination",))?.extract()?;
+        Ok(if path.trim().is_empty() {
+            Some("Choose a destination.")
+        } else {
+            self.validation_error()
+        })
+    }
+
+    fn view_preferences(&self) -> PyResult<String> {
+        self.view
+            .as_ref()
+            .map(|v| self.saved_view_preferences(v))
+            .ok_or_else(|| {
+                pyo3::exceptions::PyValueError::new_err("Expected a current-view export")
+            })
+    }
+
     #[new]
     fn new(options: &str, screen_mm: [f64; 2]) -> PyResult<Self> {
         let options = serde_json::from_str(options)
@@ -279,12 +351,12 @@ impl SvgOptions {
 
     fn preview_ticket(&mut self, revision: Option<String>) -> Option<u64> {
         self.preview
-            .update(revision.filter(|_| self.preview.enabled))
+            .update(revision.filter(|_| self.preview_enabled()))
     }
 
     #[getter]
     pub(crate) fn preview_enabled(&self) -> bool {
-        self.preview.enabled
+        self.preview.enabled && self.view.as_ref().is_none_or(|v| v.advanced)
     }
 
     pub(crate) fn begin_preview(&mut self, ticket: u64) -> bool {
@@ -299,6 +371,35 @@ impl SvgOptions {
         self.preview.finish(ticket, error)
     }
 
+    /// Our SVG writer puts millimetres and scale before the layer stream. Read
+    /// only that header, including when the first layer is a large photograph.
+    fn preview_header(&mut self, ticket: u64, header: &str) {
+        if !self.preview.current(ticket) {
+            return;
+        }
+        let Some(v) = self.view.as_mut() else {
+            return;
+        };
+        let page = || {
+            let (_, root) = header.split_once("<svg ")?;
+            let measure = |key: &str| -> Option<f64> {
+                root.split_once(key)?.1.split_once("mm\"")?.0.parse().ok()
+            };
+            let scale = root.split_once("<desc>")?.1.split_once("</desc>")?.0;
+            Some((
+                measure(" width=\"")?,
+                measure(" height=\"")?,
+                scale.to_string(),
+            ))
+        };
+        v.preview_page = page();
+    }
+
+    pub(crate) fn preview_caption(&self) -> Option<String> {
+        let (w, h, scale) = self.view.as_ref()?.preview_page.as_ref()?;
+        Some(format!("{w:.0} × {h:.0} mm · {scale}"))
+    }
+
     fn preview_block(&self) -> (bool, String, String) {
         (
             self.preview.ready,
@@ -308,7 +409,12 @@ impl SvgOptions {
     }
 
     fn move_frame(&mut self, dx: f64, dy: f64, zoom: f64) {
-        if !self.preview.enabled || !dx.is_finite() || !dy.is_finite() || !zoom.is_finite() {
+        if !self.preview_enabled()
+            || self.view.as_ref().is_some_and(|v| !v.can_frame())
+            || !dx.is_finite()
+            || !dy.is_finite()
+            || !zoom.is_finite()
+        {
             return;
         }
         let old = if self.framed {
@@ -328,7 +434,11 @@ impl SvgOptions {
     }
 
     fn options_json(&self) -> String {
-        self.record().to_string()
+        match &self.view {
+            Some(v) => self.view_result(v),
+            None => self.record(),
+        }
+        .to_string()
     }
 
     fn field(&self, id: &str) -> Option<String> {
@@ -340,10 +450,13 @@ impl SvgOptions {
 
     fn receive(&mut self, py: Python<'_>, id: &str, raw: &str) -> PyResult<()> {
         self.edit(id, raw);
+        if id == "svg_scene" {
+            self.switch_scene(py)?;
+        }
         if let Some(form) = &self.form {
             let form = form.bind(py).call0()?;
             if !form.is_none() {
-                if id == "fill" && self.fill == 1 {
+                if self.view.is_none() && id == "fill" && self.fill == 1 {
                     form.call_method1("set", ("scope", "visible"))?;
                 } else {
                     form.call_method0("changed")?;

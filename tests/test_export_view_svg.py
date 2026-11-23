@@ -157,14 +157,8 @@ def _two_layer_scene(scene):
 
 def test_the_export_menu_writes_the_view_as_svg(tmp_path, monkeypatch):
     from PySide6.QtGui import QAction
-    from views import main_window as mw
     from views.main_window import MainWindow
 
-    from views import export_svg_dialog
-    monkeypatch.setattr(
-        export_svg_dialog, "ask_svg_options",
-        lambda parent, *a, **k: (True, {"textures": True,
-                                        "as_view": True}, None))
     win = MainWindow()
     try:
         labels = [a.text() for a in win.findChildren(QAction)]
@@ -180,9 +174,7 @@ def test_the_export_menu_writes_the_view_as_svg(tmp_path, monkeypatch):
             vp.camera.perspective = mode == "perspective"
             vp.camera.two_point = False
             asked = tmp_path / mode                  # no extension typed
-            monkeypatch.setattr(mw.file_dialogs, "getSaveFileName",
-                                lambda *a, p=asked, **k: (str(p), ""))
-            win._on_export_view_svg()
+            _export_sheet(win, asked)
             root, layers = _layers(tmp_path / f"{mode}.svg")
             assert root.findall(f".//{SVG}path"), mode
             # The faces go under the lines, on their own layers.
@@ -455,66 +447,89 @@ def test_a_shaded_texture_is_darkened_in_the_file(tmp_path):
     assert r_dark == pytest.approx(r_full * 0.5, abs=4)
 
 
-def _settings(tmp_path, advanced=True):
-    """Settings of its own for a test; the dialog in its advanced mode
-    unless asked (the tests of the full dialog), or in its basic one."""
-    from PySide6.QtCore import QSettings
-    from views.export_svg_dialog import _KEY
-    name = "ajustes.ini" if advanced else "ajustes-basico.ini"
-    st = QSettings(str(tmp_path / name), QSettings.IniFormat)
-    if st.value(_KEY + "advanced") is None:
-        st.setValue(_KEY + "advanced", advanced)
-    return st
+def _svg(
+    *,
+    advanced=True,
+    prefs=None,
+    screen=(278.0, 162.0),
+    axes=False,
+    shadows=False,
+    selection=False,
+    scenes=(),
+    frame_scale=None,
+    switch=None,
+):
+    import json
+    from ingetrazo_render import SvgOptions
+
+    return SvgOptions.current_view(
+        json.dumps({"advanced": advanced} if prefs is None else prefs),
+        screen,
+        axes,
+        shadows,
+        selection,
+        list(scenes),
+        frame_scale,
+        switch,
+    )
 
 
-def test_the_dialog_offers_the_ways_for_the_faces_and_the_light(tmp_path):
-    from views.export_svg_dialog import ExportSvgDialog
-    dlg = ExportSvgDialog(None, screen_mm=(217.0, 174.0),
-                          settings=_settings(tmp_path))
-    # The first time: the view as on screen — what you see, like the screen.
-    assert dlg.options() == {"image": True}
-    assert dlg.paper() == {"area": "view", "size": "screen"}
-    assert (dlg.w_box.value(), dlg.h_box.value()) == (217.0, 174.0)
-    assert not dlg.w_box.isEnabled()                 # shown, not typed
-    dlg.face_buttons["full"].setChecked(True)
-    assert dlg.options() == {"materials": True, "textures": True,
-                             "as_view": True, "shadows": False}
-    assert dlg.note.text() == dlg.face_buttons["full"].toolTip()
-    dlg.face_buttons["colours"].setChecked(True)
-    assert dlg.options() == {"materials": True, "textures": False,
-                             "as_view": True, "shadows": False}
-    dlg.face_buttons["default"].setChecked(True)
-    dlg.as_view_box.setChecked(False)
-    assert dlg.options() == {"materials": False, "textures": False,
-                             "as_view": False, "shadows": False}
-    dlg.face_buttons["view"].setChecked(True)
-    assert dlg.options() == {"image": True}
-    assert not dlg.as_view_box.isEnabled()
-    dlg.face_buttons["none"].setChecked(True)
-    assert dlg.options() is None
-    dlg.deleteLater()
-
-def test_the_dialog_remembers_the_last_choice(tmp_path):
-    from views.export_svg_dialog import ExportSvgDialog
-    st = _settings(tmp_path)
-    dlg = ExportSvgDialog(None, settings=st)
-    dlg.face_buttons["default"].setChecked(True)
-    dlg.as_view_box.setChecked(False)
-    dlg.accept()
-    again = ExportSvgDialog(None, settings=st)
-    assert again.face_buttons["default"].isChecked()
-    assert not again.as_view_box.isChecked()
-    for d in (dlg, again):
-        d.deleteLater()
+def _rows(model):
+    return {r[0]: r for r in model.wire()[4]}
 
 
-def test_each_choice_has_its_own_little_cube():
-    from views.export_svg_dialog import FACE_CHOICES, cube_preview
-    images = [cube_preview(key).toImage() for key, _o in FACE_CHOICES]
-    assert all(not im.isNull() for im in images)
-    # Four different pictures: textured, coloured, white, lines.
-    keys = {bytes(im.constBits()) for im in images}
-    assert len(keys) == len(FACE_CHOICES) == 5
+def _opts(model):
+    import json
+
+    return json.loads(model.options_json())
+
+
+def _saved(model):
+    import json
+
+    return json.loads(model.view_preferences())
+
+
+def _export_sheet(win, path, fill="2", *, opener=None, scene=None):
+    from views import chrome_sheet
+
+    form = (opener or win._on_export_view_svg)()
+    provider = chrome_sheet.current(win)
+    ctx = chrome_sheet.Ctx(win, None)
+    model = provider.build(ctx).forms()[1]
+    model.receive("advanced", "1")
+    model.receive("svg_preview", "0")
+    model.receive("fill", fill)
+    if scene:
+        scene(model)
+    form.set("destination", str(path))
+    provider.act(ctx, "verb", ["export"])
+    assert form.answer == "export"
+
+
+def test_svg_face_options_and_lighting():
+    m = _svg()
+    assert _opts(m)["faces"] == {"image": True}
+    assert _opts(m)["paper"] == {"area": "view", "size": "screen"}
+    for i in range(2, 5):
+        m.receive("fill", str(i))
+        assert _opts(m)["faces"] == {
+            "materials": i != 4,
+            "textures": i == 2,
+            "as_view": True,
+            "shadows": False,
+        }
+    m.receive("as_view", "0")
+    assert not _opts(m)["faces"]["as_view"]
+    m.receive("fill", "0")
+    assert _opts(m)["faces"] is None and m.field("as_view") is None
+
+
+def test_svg_restores_the_last_choice():
+    m = _svg()
+    m.receive("fill", "4")
+    m.receive("as_view", "0")
+    assert _opts(_svg(prefs=_saved(m))) == _opts(m)
 
 
 def test_default_colour_only_drops_every_material_and_texture(tmp_path):
@@ -687,7 +702,6 @@ def _tmp_png_dir():
 
 def test_default_colour_only_also_inks_every_line_black(tmp_path,
                                                          monkeypatch):
-    from views import export_svg_dialog, main_window as mw
     from views.main_window import MainWindow
     win = MainWindow()
     try:
@@ -700,18 +714,8 @@ def test_default_colour_only_also_inks_every_line_black(tmp_path,
         vp.camera.fit_to(lo, hi, 1.2)
         vp.camera.perspective = False
         strokes = {}
-        for name, opts in (("color", {"materials": True, "textures": True,
-                                      "as_view": True}),
-                           ("defecto", {"materials": False,
-                                        "textures": False,
-                                        "as_view": True})):
-            monkeypatch.setattr(export_svg_dialog, "ask_svg_options",
-                                lambda parent, *a, o=opts, **k: (
-                                    True, o, None))
-            monkeypatch.setattr(mw.file_dialogs, "getSaveFileName",
-                                lambda *a, n=name, **k: (
-                                    str(tmp_path / n), ""))
-            win._on_export_view_svg()
+        for name, fill in (("color", "2"), ("defecto", "4")):
+            _export_sheet(win, tmp_path / name, fill)
             _root, layers = _layers(tmp_path / f"{name}.svg")
             strokes[name] = {g.get("stroke") for n, g in layers.items()
                              if "-CARAS" not in n}
@@ -905,33 +909,15 @@ def test_the_screen_size_sheet_is_the_window_edge_to_edge():
     assert ET2.fromstring(b.build(None, None)[0]).get("width") != "200.000mm"
 
 
-def test_the_cubes_are_whole_inside_their_picture():
-    from views.export_svg_dialog import FACE_CHOICES, cube_preview
-    for key, _o in FACE_CHOICES:
-        img = cube_preview(key, 56).toImage()
-        # Nothing drawn on the picture's top and bottom rows.
-        for y in (0, 55):
-            assert all(img.pixelColor(x, y).alpha() == 0
-                       for x in range(56)), (key, y)
-
-
 def test_the_picture_of_the_view_can_leave_the_axes_out(tmp_path):
-    from views.export_svg_dialog import ExportSvgDialog
     from views.svg_export import SvgBuilder
-    st = _settings(tmp_path)
-    dlg = ExportSvgDialog(None, axes_available=True, settings=st)
-    dlg.face_buttons["view"].setChecked(True)
-    assert dlg.axes_box.isEnabled() and dlg.axes_box.isChecked()
-    assert dlg.options() == {"image": True, "axes": False}
-    dlg.axes_box.setChecked(False)
-    assert dlg.options() == {"image": True}
-    dlg.face_buttons["full"].setChecked(True)
-    assert not dlg.axes_box.isEnabled()                  # faces: no axes
-    # A view without axes: nothing to hide.
-    plain = ExportSvgDialog(None, axes_available=False, settings=st)
-    plain.face_buttons["view"].setChecked(True)
-    assert not plain.axes_box.isEnabled()
-    assert plain.options() == {"image": True}
+    m = _svg(axes=True)
+    assert _opts(m)["faces"] == {"image": True, "axes": False}
+    m.receive("axes", "1")
+    assert _opts(m)["faces"] == {"image": True}
+    m.receive("fill", "2")
+    assert m.field("axes") is None
+    assert _svg().field("axes") is None
     # The builder asks for the picture with or without them, each once.
     asked = []
 
@@ -944,8 +930,6 @@ def test_the_picture_of_the_view_can_leave_the_axes_out(tmp_path):
     b.build({"image": True, "axes": False}, None, preview=True)
     b.build({"image": True}, None, preview=True)
     assert [a for _w, a in asked] == [False, True]
-    for d in (dlg, plain):
-        d.deleteLater()
 
 
 def test_the_view_picture_without_axes_leaves_the_view_as_it_was(
@@ -968,31 +952,14 @@ def test_the_view_picture_without_axes_leaves_the_view_as_it_was(
         win.close()
 
 
-def test_the_preview_can_be_turned_off(tmp_path):
-    from views.export_svg_dialog import ExportSvgDialog
-    calls = []
-
-    def build(options, paper, preview=False):
-        calls.append(preview)
-        from formats.svg_out import svg_text
-        return svg_text([("VISTA", np.array([(0, 0, 1, 0)], float))])
-
-    st = _settings(tmp_path)
-    dlg = ExportSvgDialog(None, build, settings=st)
-    dlg.preview_box.setChecked(False)
-    calls.clear()
-    dlg.face_buttons["full"].setChecked(True)
-    dlg._refresh_preview()
-    assert calls == []
-    assert dlg.preview.text()                          # «Preview off»
-    dlg.accept()
-    again = ExportSvgDialog(None, build, settings=st)
-    assert not again.preview_box.isChecked()           # remembered
-    again.preview_box.setChecked(True)
-    again._refresh_preview()
-    assert calls == [True]
-    for d in (dlg, again):
-        d.deleteLater()
+def test_svg_preview_can_be_turned_off_and_remembers_it():
+    m = _svg()
+    m.receive("svg_preview", "0")
+    assert m.preview_ticket("changed") is None
+    again = _svg(prefs=_saved(m))
+    assert not again.preview_enabled
+    again.receive("svg_preview", "1")
+    assert again.begin_preview(again.preview_ticket("changed"))
 
 
 def test_the_sheet_takes_the_part_and_the_size_apart():
@@ -1030,25 +997,6 @@ def test_the_sheet_takes_the_part_and_the_size_apart():
     assert page({"area": "view", "size": None})[:2] == (40.0, 20.0)
 
 
-
-def test_the_size_list_opens_upwards(tmp_path):
-    from PySide6.QtWidgets import QApplication
-    from views.export_svg_dialog import ExportSvgDialog
-    dlg = ExportSvgDialog(None, settings=_settings(tmp_path))
-    dlg.move(200, 500)
-    dlg.show()
-    QApplication.processEvents()
-    combo = dlg.size_combo
-    combo.showPopup()
-    QApplication.processEvents()
-    popup = combo.view().window()
-    combo_top = combo.mapToGlobal(combo.rect().topLeft()).y()
-    assert popup.geometry().bottom() <= combo_top
-    combo.hidePopup()
-    dlg.close()
-    dlg.deleteLater()
-
-
 def test_the_selection_part_exports_only_what_is_selected(tmp_path):
     """«Selection»: only the selected objects, as if the rest were hidden —
     and the model is left as it was."""
@@ -1056,7 +1004,6 @@ def test_the_selection_part_exports_only_what_is_selected(tmp_path):
     from core.mesh import Mesh
     from core.scene import Scene
     from core.vista_caras import view_faces
-    from views.export_svg_dialog import ExportSvgDialog
     from views.svg_export import SvgBuilder, selection_only
     scene = Scene()
     a, b = Group(Mesh(), name="a"), Group(Mesh(), name="b")
@@ -1084,21 +1031,14 @@ def test_the_selection_part_exports_only_what_is_selected(tmp_path):
     builder.build(opts, {"area": "selection", "size": None})
     builder.build(opts, {"area": "model", "size": None})
     assert built == [False, True]
-    # The dialog offers it only with something selected — for every
-    # choice, the picture of the view too.
-    dlg = ExportSvgDialog(None, selection_available=True,
-                          settings=_settings(tmp_path))
-    dlg.face_buttons["full"].setChecked(True)
-    dlg.area_combo.setCurrentIndex(dlg.area_combo.findData("selection"))
-    assert dlg.paper()["area"] == "selection"
-    dlg.face_buttons["view"].setChecked(True)
-    assert dlg.paper()["area"] == "selection"
-    none = ExportSvgDialog(None, selection_available=False,
-                           settings=_settings(tmp_path))
-    item = none.area_combo.model().item(none.area_combo.findData("selection"))
-    assert not item.isEnabled()
-    for d in (dlg, none):
-        d.deleteLater()
+    m = _svg(selection=True)
+    m.receive("area", "2")
+    for fill in ("2", "1"):
+        m.receive("fill", fill)
+        assert _opts(m)["paper"]["area"] == "selection"
+    none = _svg(selection=False)
+    none.receive("area", "2")
+    assert len(_rows(none)["area"][7]) == 2 and _opts(none)["paper"]["area"] == "view"
 
 
 @pytest.mark.parametrize("perspective", [False, True])
@@ -1165,91 +1105,40 @@ def test_the_builder_works_a_new_shape_out_in_the_widened_view():
 
 # ---- The sheet: on screen, custom (paper sheet, proportion, mm), at scale --
 
-def _sheet_state(dlg):
-    return {"sheet": dlg.sheet_combo.isEnabled(),
-            "ratio": dlg.ratio_combo.isEnabled(),
-            "mm": dlg.w_box.isEnabled() and dlg.h_box.isEnabled(),
-            "turn": dlg.turn_buttons["landscape"].isEnabled()}
+
+def test_only_custom_paper_enables_its_dimensions():
+    assert len(_rows(_svg())["view_size"][7]) == 2
+    m = _svg(frame_scale=50)
+    assert "50" in _rows(m)["view_size"][7][2]
+    assert _rows(m)["width"][8] != 0 and m.field("paper_preset") is None
+    m.receive("view_size", "1")
+    assert _rows(m)["width"][8] == 0
+    m.receive("paper_preset", "2")
+    assert _opts(m)["paper"]["size"] == [420.0, 297.0] and _rows(m)["paper_ratio"][8] != 0
+    m.receive("view_size", "2")
+    assert m.field("width") is None and _opts(m)["paper"]["size"] is None
 
 
-def test_only_custom_switches_on_the_controls_that_depend_on_it(tmp_path):
-    """The acceptance: a main choice — on screen, custom, at scale —; with
-    «Custom» the paper sheet, the proportion (when no sheet sets one) and
-    the millimetres come on; with anything else they all go off."""
-    from views.export_svg_dialog import ExportSvgDialog
-    # The view has no scale of its own to keep: no «at scale».
-    view = ExportSvgDialog(None, screen_mm=(300.0, 200.0),
-                           settings=_settings(tmp_path))
-    assert [view.size_combo.itemData(i)
-            for i in range(view.size_combo.count())] == ["screen", "custom"]
-    view.deleteLater()
-    # A composer frame has one.
-    dlg = ExportSvgDialog(None, base_label="Frame scale (1:50)",
-                          screen_mm=(300.0, 200.0),
-                          settings=_settings(tmp_path))
-    modes = [dlg.size_combo.itemData(i)
-             for i in range(dlg.size_combo.count())]
-    assert modes == ["screen", "custom", "scale"]
-    off = {"sheet": False, "ratio": False, "mm": False, "turn": False}
-    assert dlg.paper()["size"] == "screen"
-    assert _sheet_state(dlg) == off
-    assert (dlg.w_box.value(), dlg.h_box.value()) == (300.0, 200.0)
-    dlg.size_combo.setCurrentIndex(dlg.size_combo.findData("custom"))
-    assert _sheet_state(dlg) == {"sheet": True, "ratio": True, "mm": True,
-                                 "turn": True}
-    # A paper sheet sets its own proportion: the proportion goes off.
-    dlg.sheet_combo.setCurrentIndex(dlg.sheet_combo.findData("A3"))
-    assert _sheet_state(dlg) == {"sheet": True, "ratio": False,
-                                 "mm": True, "turn": True}
-    assert dlg.paper()["size"] == (420.0, 297.0)
-    # Out of «Custom»: everything that hangs on it off again.
-    dlg.size_combo.setCurrentIndex(dlg.size_combo.findData("scale"))
-    assert _sheet_state(dlg) == off
-    assert dlg.paper()["size"] is None
-    dlg.size_combo.setCurrentIndex(dlg.size_combo.findData("screen"))
-    assert _sheet_state(dlg) == off
-    dlg.deleteLater()
+def test_preview_renders_the_requested_page_and_remembers_it():
+    from views.svg_export import SvgBuilder, preview_pixels
 
-
-def test_the_dialog_previews_the_sheet_and_remembers_it(tmp_path):
-    from views.export_svg_dialog import ExportSvgDialog
-    from formats.svg_out import svg_text
-    calls = []
-
-    def build(options, sheet, preview=False):
-        calls.append((options, sheet, preview))
-        groups = [("VISTA", np.array([(0, 0, 4, 0), (4, 0, 4, 2)], float))]
-        size = sheet["size"]
-        return svg_text(groups, paper=size if isinstance(size, tuple)
-                        else None)
-
-    st = _settings(tmp_path)
-    dlg = ExportSvgDialog(None, build, "1:100", screen_mm=(217.0, 174.0),
-                          settings=st, selection_available=True)
-    assert dlg.area_combo.findData("model") < 0     # no «whole model»
-    dlg.face_buttons["full"].setChecked(True)
-    dlg.area_combo.setCurrentIndex(dlg.area_combo.findData("selection"))
-    dlg.size_combo.setCurrentIndex(dlg.size_combo.findData("scale"))
-    dlg._refresh_preview()
-    assert calls and calls[-1][2] is True
-    assert not dlg.preview.pixmap().isNull()
-    assert "1:100" in dlg.preview_note.text()
-    assert dlg.w_box.value() == 60.0                 # 4 m at 1:100 + 2 x 10
-    dlg.size_combo.setCurrentIndex(dlg.size_combo.findData("custom"))
-    dlg.ratio_combo.setCurrentIndex(dlg.ratio_combo.findData("free"))
-    dlg.w_box.setValue(500.0)
-    dlg.h_box.setValue(250.0)
-    dlg.accept()
-    again = ExportSvgDialog(None, settings=st, selection_available=True)
-    assert again.paper() == {"area": "selection", "size": (500.0, 250.0)}
-    assert again.ratio_combo.currentData() == "free"
-    sunny = ExportSvgDialog(None, shadows_available=True, settings=st)
-    sunny.face_buttons["full"].setChecked(True)
-    assert sunny.shadows_box.isEnabled()
-    assert sunny.options()["shadows"] is True
-    for d in (dlg, again, sunny):
-        d.deleteLater()
-
+    m = _svg(shadows=True, selection=True)
+    for key, value in [
+        ("area", "2"),
+        ("view_size", "1"),
+        ("paper_ratio", "0"),
+        ("width", "500"),
+        ("height", "250"),
+        ("fill", "2"),
+        ("shadows", "1"),
+    ]:
+        m.receive(key, value)
+    opts = _opts(m)
+    builder = SvgBuilder(lambda fast=True: [], lambda **o: [])
+    text, _ = builder.build(opts["faces"], opts["paper"], preview=True)
+    w, h, rgba = preview_pixels(text)
+    assert (w, h, len(rgba)) == (800, 400, 800 * 400 * 4)
+    assert _opts(_svg(prefs=_saved(m), shadows=True, selection=True)) == opts
 
 
 # ---- Framing: drag and wheel on the preview ---------------------------------
@@ -1315,321 +1204,114 @@ def test_the_builder_frames_only_what_the_screen_shows():
     assert not SvgBuilder(lambda: [], lambda **o: []).can_frame()
 
 
-def test_dragging_and_turning_the_wheel_on_the_preview_frame_it(tmp_path):
-    from PySide6.QtCore import QPoint, QPointF, Qt
-    from PySide6.QtGui import QWheelEvent
-    from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QApplication
-    from views.export_svg_dialog import ExportSvgDialog
-    from views.svg_export import NO_FRAME
-    from formats.svg_out import svg_text
-
-    def build(options, sheet, preview=False):
-        return svg_text([("VISTA", np.array([(0, 0, 4, 0), (4, 0, 4, 2)],
-                                            float))])
-
-    dlg = ExportSvgDialog(None, build, screen_mm=(200.0, 100.0),
-                          can_frame=True, selection_available=True,
-                          settings=_settings(tmp_path))
-    dlg.show()
-    dlg._refresh_preview()
-    QApplication.processEvents()
-    page = dlg.preview._page
-    assert page.width() > 0
-    assert dlg.paper().get("frame") is None          # the view as it is
-    assert not dlg.frame_reset.isEnabled()
-    # Drag a quarter of the sheet to the right: the framing goes left.
-    start = page.center().toPoint()
-    end = start + QPoint(round(page.width() / 4), 0)
-    QTest.mousePress(dlg.preview, Qt.LeftButton, Qt.NoModifier, start)
-    QTest.mouseMove(dlg.preview, end)
-    QTest.mouseRelease(dlg.preview, Qt.LeftButton, Qt.NoModifier, end)
-    px, py, zoom = dlg.paper()["frame"]
-    assert px == pytest.approx(-0.25, abs=0.02)
-    assert py == pytest.approx(0.0, abs=1e-6) and zoom == 1.0
-    assert dlg.frame_reset.isEnabled()
-    # The wheel, one notch in: 15 % closer.
-    pos = QPointF(page.center())
-    wheel = QWheelEvent(pos, dlg.preview.mapToGlobal(pos), QPoint(0, 0),
-                        QPoint(0, 120), Qt.NoButton, Qt.NoModifier,
-                        Qt.NoScrollPhase, False)
-    QApplication.sendEvent(dlg.preview, wheel)
-    assert dlg.paper()["frame"][2] == pytest.approx(1.15)
-    dlg.frame_reset.click()
-    assert dlg.paper().get("frame") is None
-    assert dlg._frame == NO_FRAME
-    # Another part, or no way to reframe: no framing at all.
-    dlg.face_buttons["full"].setChecked(True)
-    dlg.area_combo.setCurrentIndex(dlg.area_combo.findData("selection"))
-    assert dlg.area_combo.currentData() == "selection"
-    assert not dlg.preview._framing
-    plain = ExportSvgDialog(None, build, settings=_settings(tmp_path))
-    plain.show()
-    assert not plain.preview._framing
-    assert not plain.frame_reset.isVisible()
-    for d in (dlg, plain):
-        d.close()
-        d.deleteLater()
+def test_drag_and_zoom_reframe_only_the_current_view():
+    m = _svg(selection=True)
+    m.move_frame(0.25, 0, 1)
+    m.move_frame(0, 0, 1.15)
+    assert _opts(m)["paper"]["frame"] == pytest.approx([-0.25, 0, 1.15])
+    m.receive("framed", "0")
+    assert "frame" not in _opts(m)["paper"]
+    m.receive("area", "2")
+    m.move_frame(1, 1, 2)
+    assert "frame" not in _opts(m)["paper"]
 
 
 # ---- Composition guides over the preview ------------------------------------
 
-@pytest.mark.parametrize("key,fracs", [("thirds", (1 / 3, 2 / 3)),
-                                       ("golden", (0.382, 0.618)),
-                                       ("grid", (0.25, 0.5, 0.75))])
-def test_each_guide_falls_where_it_should(key, fracs):
-    from PySide6.QtCore import QRectF, Qt
-    from PySide6.QtGui import QImage, QPainter
-    from views.export_svg_dialog import draw_guides
-    img = QImage(301, 201, QImage.Format_ARGB32)
-    img.fill(Qt.black)
-    page = QRectF(0, 0, 300, 200)
-    p = QPainter(img)
-    draw_guides(p, page, key)
-    p.end()
-    # A row that no horizontal guide crosses: only the upright ones light.
-    lit = [x for x in range(1, 300) if img.pixelColor(x, 90).red() > 150]
-    for f in fracs:
-        assert any(abs(x - f * 300) <= 1.5 for x in lit), (key, f, lit)
-    # Nothing far from them.
-    assert all(any(abs(x - f * 300) <= 3 for f in fracs) for x in lit)
 
-
-def test_the_guides_are_chosen_remembered_and_never_exported(tmp_path):
-    from views.export_svg_dialog import GUIDES, ExportSvgDialog
-    from formats.svg_out import svg_text
-    texts = []
-
-    def build(options, sheet, preview=False):
-        text = svg_text([("VISTA", np.array([(0, 0, 4, 0)], float))])
-        texts.append(text)
-        return text
-
-    st = _settings(tmp_path)
-    dlg = ExportSvgDialog(None, build, settings=st)
-    keys = [dlg.guides_combo.itemData(i)
-            for i in range(dlg.guides_combo.count())]
-    assert keys == list(GUIDES) and dlg.preview._guides == "thirds"
-    dlg.guides_combo.setCurrentIndex(dlg.guides_combo.findData("golden"))
-    assert dlg.preview._guides == "golden"
-    dlg._refresh_preview()
-    assert texts and "golden" not in texts[-1]
-    # The sheet the export writes is the same with or without guides.
-    without = svg_text([("VISTA", np.array([(0, 0, 4, 0)], float))])[0]
-    assert texts[-1][0] == without
-    dlg.accept()
-    again = ExportSvgDialog(None, build, settings=st)
-    assert again.guides_combo.currentData() == "golden"
-    assert again.preview._guides == "golden"
-    for d in (dlg, again):
-        d.deleteLater()
+def test_preview_guides_persist_without_changing_export():
+    m = _svg()
+    assert len(_rows(m)["svg_guides"][7]) == 6
+    opts = m.options_json()
+    m.receive("svg_guides", "2")
+    assert m.options_json() == opts
+    assert _svg(prefs=_saved(m)).preview_block()[1] == "Golden section"
 
 
 # ---- The basic dialog --------------------------------------------------------
 
-def test_the_basic_dialog_is_the_one_to_begin_with(tmp_path):
-    """Compact, one column, no preview: what to export — the picture of the
-    view (chosen), materials with or without textures or the default
-    colour — and the size like the screen, its millimetres shown but not
-    editable."""
-    from PySide6.QtCore import QSettings
-    from views.export_svg_dialog import ExportSvgDialog
-    fresh = QSettings(str(tmp_path / "nuevo.ini"), QSettings.IniFormat)
-    dlg = ExportSvgDialog(None, lambda *a, **k: ("", 0),
-                          screen_mm=(278.0, 162.0), settings=fresh)
-    dlg.show()
-    assert not dlg.is_advanced() and not dlg.advanced_box.isChecked()
-    assert dlg.basic_page.isVisible() and not dlg.advanced_page.isVisible()
-    assert list(dlg.basic_buttons) == ["view", "full", "colours", "default"]
-    assert dlg.basic_buttons["view"].isChecked()
-    assert dlg.basic_size.currentData() == "screen"
-    assert (dlg.basic_w.value(), dlg.basic_h.value()) == (278.0, 162.0)
-    assert not dlg.basic_w.isEnabled() and not dlg.basic_h.isEnabled()
-    assert dlg.options()["image"] is True
-    assert dlg.paper() == {"area": "view", "size": "screen"}
-    dlg.basic_buttons["colours"].setChecked(True)
-    assert dlg.options()["textures"] is False
-    dlg.basic_buttons["default"].setChecked(True)
-    assert dlg.options()["materials"] is False
-    dlg.close()
-    dlg.deleteLater()
+
+def test_first_export_has_basic_choices_and_read_only_screen_size():
+    m = _svg(prefs={})
+    rows = _rows(m)
+    assert rows["advanced"][4] == 0 and len(rows["basic_fill"][7]) == 4
+    assert [rows[k][4] for k in ("width", "height")] == [278.0, 162.0]
+    assert all(rows[k][8] for k in ("width", "height"))
+    assert _opts(m)["faces"] == {"image": True}
+    m.receive("basic_fill", "2")
+    assert not _opts(m)["faces"]["textures"]
+    m.receive("basic_fill", "3")
+    assert not _opts(m)["faces"]["materials"]
 
 
-def test_custom_mm_starts_from_the_screen_and_the_lock_keeps_its_shape(
-        tmp_path):
-    from views.export_svg_dialog import ExportSvgDialog
-    dlg = ExportSvgDialog(None, screen_mm=(278.0, 162.0),
-                          settings=_settings(tmp_path, advanced=False))
-    dlg.basic_size.setCurrentIndex(dlg.basic_size.findData("custom"))
-    assert dlg.basic_w.isEnabled() and dlg.basic_h.isEnabled()
-    assert (dlg.basic_w.value(), dlg.basic_h.value()) == (278.0, 162.0)
-    assert dlg.basic_lock.isChecked()
-    dlg.basic_w.setValue(556.0)
-    assert dlg.paper()["size"] == (556.0, 324.0)      # the same shape
-    dlg.basic_lock.setChecked(False)
-    dlg.basic_h.setValue(100.0)
-    assert dlg.paper()["size"] == (556.0, 100.0)      # free to distort
-    dlg.basic_lock.setChecked(True)                   # this shape now
-    dlg.basic_w.setValue(278.0)
-    assert dlg.paper()["size"] == (278.0, 50.0)
-    dlg.basic_size.setCurrentIndex(dlg.basic_size.findData("screen"))
-    assert dlg.paper()["size"] == "screen"
-    assert (dlg.basic_w.value(), dlg.basic_h.value()) == (278.0, 162.0)
-    assert not dlg.basic_w.isEnabled()
-    dlg.deleteLater()
+def test_basic_custom_dimensions_lock_the_current_ratio():
+    m = _svg(advanced=False)
+    m.receive("view_size", "1")
+    for key, value, size in [
+        ("width", "556", [556, 324]),
+        ("basic_lock", "0", [556, 324]),
+        ("height", "100", [556, 100]),
+        ("basic_lock", "1", [556, 100]),
+        ("width", "278", [278, 50]),
+        ("view_size", "0", "screen"),
+    ]:
+        m.receive(key, value)
+        assert _opts(m)["paper"]["size"] == size
 
 
-def test_advanced_options_open_the_full_dialog_and_carry_the_choice(
-        tmp_path):
-    from views.export_svg_dialog import ExportSvgDialog
-    st = _settings(tmp_path, advanced=False)
-    dlg = ExportSvgDialog(None, lambda *a, **k: ("", 0),
-                          screen_mm=(278.0, 162.0), settings=st)
-    dlg.show()
-    dlg.basic_buttons["view"].setChecked(True)
-    dlg.basic_size.setCurrentIndex(dlg.basic_size.findData("custom"))
-    dlg.basic_lock.setChecked(False)
-    dlg.basic_w.setValue(300.0)
-    dlg.basic_h.setValue(200.0)
-    dlg.advanced_box.setChecked(True)
-    assert dlg.is_advanced()
-    assert dlg.advanced_page.isVisible() and not dlg.basic_page.isVisible()
-    assert dlg.face_buttons["view"].isChecked()
-    assert dlg.paper()["size"] == (300.0, 200.0)
-    assert dlg.paper()["area"] == "view"
-    # Back: the basic dialog takes what the advanced one says.
-    dlg.face_buttons["colours"].setChecked(True)
-    dlg.size_combo.setCurrentIndex(dlg.size_combo.findData("screen"))
-    dlg.advanced_box.setChecked(False)
-    assert not dlg.is_advanced() and dlg.basic_page.isVisible()
-    assert dlg.basic_buttons["colours"].isChecked()
-    assert dlg.paper() == {"area": "view", "size": "screen"}
-    dlg.advanced_box.setChecked(True)                 # lines only: no such
-    dlg.face_buttons["none"].setChecked(True)         # basic choice
-    dlg.advanced_box.setChecked(False)
-    assert dlg.basic_buttons["full"].isChecked()
-    # The mode is remembered.
-    dlg.advanced_box.setChecked(True)
-    dlg.accept()
-    again = ExportSvgDialog(None, settings=st)
-    assert again.is_advanced()
-    dlg.close()
-    for d in (dlg, again):
-        d.deleteLater()
+def test_basic_and_advanced_share_face_choice_and_dimensions():
+    m = _svg(advanced=False)
+    for key, value in [
+        ("view_size", "1"),
+        ("basic_lock", "0"),
+        ("width", "300"),
+        ("height", "200"),
+        ("advanced", "1"),
+    ]:
+        m.receive(key, value)
+    assert _opts(m)["paper"] == {"area": "view", "size": [300.0, 200.0]}
+    m.receive("fill", "3")
+    m.receive("advanced", "0")
+    assert _rows(m)["basic_fill"][4] == 2
+    m.receive("advanced", "1")
+    m.receive("fill", "0")
+    m.receive("advanced", "0")
+    assert _rows(m)["basic_fill"][4] == 1
+    m.receive("advanced", "1")
+    assert _rows(_svg(prefs=_saved(m)))["advanced"][4] == 1
 
 
-def test_the_basic_dialog_works_nothing_out_before_export(tmp_path):
-    from views.export_svg_dialog import ExportSvgDialog
-    calls = []
-    dlg = ExportSvgDialog(None, lambda *a, **k: calls.append(1) or ("", 0),
-                          settings=_settings(tmp_path, advanced=False))
-    dlg.show()
-    dlg.basic_buttons["view"].setChecked(True)
-    dlg.basic_size.setCurrentIndex(dlg.basic_size.findData("custom"))
-    from PySide6.QtWidgets import QApplication
-    QApplication.processEvents()
-    assert not dlg._timer.isActive() and calls == []
-    dlg.close()
-    dlg.deleteLater()
+def test_basic_svg_never_schedules_a_preview():
+    m = _svg(advanced=False)
+    m.receive("view_size", "1")
+    assert not m.preview_enabled and m.preview_ticket("new page") is None
 
 
-
-def test_both_dialogs_begin_with_the_picture_of_the_view(tmp_path):
-    from PySide6.QtCore import QSettings
-    from views.export_svg_dialog import ExportSvgDialog
-    for advanced in (False, True):
-        fresh = QSettings(str(tmp_path / f"nuevo-{advanced}.ini"),
-                          QSettings.IniFormat)
-        dlg = ExportSvgDialog(None, screen_mm=(278.0, 162.0), settings=fresh,
-                              advanced=advanced)
-        assert dlg.is_advanced() is advanced
-        assert dlg.basic_buttons["view"].isChecked()
-        assert dlg.face_buttons["view"].isChecked()
-        assert dlg.options()["image"] is True
-        dlg.deleteLater()
-
-
-def test_switching_mode_keeps_the_dialog_centred_and_on_screen(tmp_path):
-    """Basic to advanced and back: the dialog grows and shrinks about the
-    middle of its window and stays wholly on the screen."""
-    from PySide6.QtWidgets import QApplication, QWidget
-    from views.export_svg_dialog import ExportSvgDialog
-    host = QWidget()
-    host.resize(1200, 800)
-    host.show()
-    dlg = ExportSvgDialog(host, lambda *a, **k: ("", 0),
-                          screen_mm=(278.0, 162.0),
-                          settings=_settings(tmp_path, advanced=False))
-    dlg.show()
-    QApplication.processEvents()
-    avail = dlg.screen().availableGeometry()
-    centre = host.frameGeometry().center()
-    for on in (True, False):
-        dlg.advanced_box.setChecked(on)
-        QApplication.processEvents()
-        g = dlg.frameGeometry()
-        if g.width() <= avail.width() and g.height() <= avail.height():
-            assert avail.contains(g)
-        wanted = g.translated(centre - g.center())
-        if avail.contains(wanted):                     # room to centre it
-            assert (g.center() - centre).manhattanLength() <= 2
-    dlg.close()
-    host.close()
-    for w in (dlg, host):
-        w.deleteLater()
+def test_both_modes_start_with_a_picture():
+    for advanced in (True, False):
+        assert _opts(_svg(advanced=advanced))["faces"] == {"image": True}
 
 
 # ---- Scenes ------------------------------------------------------------------
 
-def test_the_scene_row_is_there_only_with_scenes(tmp_path):
-    from views.export_svg_dialog import ExportSvgDialog
-    plain = ExportSvgDialog(None, lambda *a, **k: ("", 0),
-                            settings=_settings(tmp_path))
-    plain.show()
-    assert not plain.scene_combo.isVisibleTo(plain)
-    plain.advanced_box.setChecked(False)
-    assert not plain.basic_scene.isVisibleTo(plain)
-    assert plain.scene_index() is None
-    calls, builds = [], []
 
-    def on_scene(index):
-        calls.append(index)
-        build = (lambda *a, **k: builds.append(index) or ("", 0))
-        return build
-
-    dlg = ExportSvgDialog(None, lambda *a, **k: ("", 0),
-                          settings=_settings(tmp_path),
-                          scenes=["Plan", "Facade"], on_scene=on_scene)
-    dlg.show()
-    assert dlg.scene_combo.isVisibleTo(dlg)
-    assert [dlg.scene_combo.itemText(i)
-            for i in range(dlg.scene_combo.count())][1:] == ["Plan", "Facade"]
-    assert dlg.scene_index() is None and calls == []
-    dlg._frame = (0.2, 0.1, 2.0)
-    dlg.scene_combo.setCurrentIndex(2)
-    assert calls == [1] and dlg.scene_index() == 1
-    assert dlg._frame == (0, 0, 1)                 # framed afresh
-    dlg._timer.stop()
-    dlg._refresh_preview()
-    assert builds == [1]                           # the scene's builder
-    # The quick dialog has the same choice: it keeps the scene, and a
-    # scene chosen there is the advanced dialog's too.
-    dlg.advanced_box.setChecked(False)
-    assert dlg.basic_scene.isVisibleTo(dlg)
-    assert calls == [1] and dlg.basic_scene.currentIndex() == 2
-    dlg.basic_scene.setCurrentIndex(1)
-    assert calls == [1, 0] and dlg.scene_index() == 0
-    dlg.basic_scene.setCurrentIndex(0)
-    assert calls == [1, 0, None] and dlg.scene_index() is None
-    for d in (plain, dlg):
-        d.close()
-        d.deleteLater()
+def test_svg_scene_selection_is_shared_by_both_modes_and_resets_framing():
+    assert _svg().field("svg_scene") is None
+    calls = []
+    m = _svg(scenes=["Plan", "Facade"], switch=calls.append)
+    assert _rows(m)["svg_scene"][7][1:] == ["Plan", "Facade"]
+    m.move_frame(0.2, 0.1, 2)
+    m.receive("svg_scene", "2")
+    assert "frame" not in _opts(m)["paper"]
+    m.receive("advanced", "0")
+    assert _rows(m)["svg_scene"][4] == 2
+    m.receive("svg_scene", "1")
+    m.receive("svg_scene", "0")
+    assert calls == [1, 0, None]
 
 
 def test_a_scene_is_exported_and_the_view_comes_back(tmp_path, monkeypatch):
     from core.saved_views import SavedView
-    from views import export_svg_dialog
-    from views import main_window as mw
     from views.main_window import MainWindow
     win = MainWindow()
     try:
@@ -1652,22 +1334,34 @@ def test_a_scene_is_exported_and_the_view_comes_back(tmp_path, monkeypatch):
         vp.camera.yaw = yaw
         win._saved_version = vp.scene.version          # nothing to save
 
-        def ask(parent, *a, scenes=None, on_scene=None, **k):
-            assert scenes == ["Sin muebles"]
-            on_scene(0)
-            assert not mob.visible                     # shown meanwhile
-            return True, {"textures": True, "as_view": True}, None
+        def choose(model):
+            assert _rows(model)["svg_scene"][7][-1] == "Sin muebles"
+            model.receive("svg_scene", "1")
+            assert not mob.visible
 
-        monkeypatch.setattr(export_svg_dialog, "ask_svg_options", ask)
-        monkeypatch.setattr(mw.file_dialogs, "getSaveFileName",
-                            lambda *a, **k: (str(tmp_path / "escena"), ""))
-        win._on_export_view_svg()
+        from views import chrome_sheet
+        from PySide6.QtCore import QSettings
+
+        settings = QSettings()
+        original_mode = settings.value("export_svg/v5/advanced")
+        form = win._on_export_view_svg()
+        ctx = chrome_sheet.Ctx(win, None)
+        model = chrome_sheet.current(win).build(ctx).forms()[1]
+        model.receive("advanced", "1")
+        choose(model)
+        form.set("destination", str(tmp_path / "cancelled.svg"))
+        chrome_sheet.close(win)
+        assert mob.visible and vp.camera.yaw == yaw
+        assert not (tmp_path / "cancelled.svg").exists()
+        assert settings.value("export_svg/v5/advanced") == original_mode
+
+        _export_sheet(win, tmp_path / "escena", scene=choose)
         _root, layers = _layers(tmp_path / "escena.svg")
         names = " ".join(layers)
         assert "Muros" in names and "Mobiliario" not in names
         # The view as it was, and the document still unchanged.
         assert mob.visible and vp.camera.yaw == yaw
-        assert vp.scene.version == win._saved_version
+        assert vp.scene.content_version == win._saved_version
     finally:
         win._saved_version = win.viewport.scene.version
         win.close()
@@ -1740,7 +1434,7 @@ def test_the_picture_of_the_selection_shows_the_selection_alone():
             {"image": True}, {"area": "selection", "size": None})
         assert seen == [(True, False)]               # the other one hidden
         assert not a.hidden and not b.hidden
-        assert vp.scene.version == win._saved_version
+        assert vp.scene.content_version == win._saved_version
     finally:
         win._saved_version = win.viewport.scene.version
         win.close()

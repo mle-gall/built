@@ -115,6 +115,7 @@ pub fn build() -> muda::Result<Menus> {
           &item("save_as", "Save As…", Some("super+shift+KeyS")),
           &item("save_copy", "Save a Copy…", Some("super+alt+KeyS")),
           &item("export_image", "Export Image…", None),
+          &item("export_view_svg", "Export Current View as SVG…", None),
           &item("delivery_export", "Export…", None),
           &item("export_igz", "Save a Copy as IngeTrazo (.igz)…", None),
           &PredefinedMenuItem::separator(),

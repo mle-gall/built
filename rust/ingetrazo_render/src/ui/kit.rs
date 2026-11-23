@@ -1516,6 +1516,27 @@ pub fn catalogue_grid(width: f32, ideal: f32) -> (usize, egui::Vec2) {
     (columns, vec2(card, card * 10. / 16.))
 }
 
+fn svg_guide_divisions(guide: &str) -> &'static [f32] {
+    match guide {
+        "Thirds" => &[1. / 3., 2. / 3.],
+        "Golden section" => &[0.382, 0.618],
+        "Grid" => &[0.25, 0.5, 0.75],
+        _ => &[],
+    }
+}
+
+#[cfg(test)]
+mod svg_guides {
+    use super::svg_guide_divisions;
+
+    #[test]
+    fn thirds() { assert_eq!(svg_guide_divisions("Thirds"), &[1./3., 2./3.]); }
+    #[test]
+    fn golden() { assert_eq!(svg_guide_divisions("Golden section"), &[0.382, 0.618]); }
+    #[test]
+    fn grid() { assert_eq!(svg_guide_divisions("Grid"), &[0.25, 0.5, 0.75]); }
+}
+
 /// Fit the entire exported page in its well. Guides are chrome overlays.
 pub fn svg_preview(ui: &mut egui::Ui, texture: Option<&egui::TextureHandle>, guide: &str,
                    size: egui::Vec2) -> Option<(f32, f32, f32)> {
@@ -1534,13 +1555,7 @@ pub fn svg_preview(ui: &mut egui::Ui, texture: Option<&egui::TextureHandle>, gui
         painter.line_segment(points, Stroke::new(2., WELL.gamma_multiply(0.55)));
         painter.line_segment(points, Stroke::new(1., BRIGHT.gamma_multiply(0.8)));
     };
-    let divisions: &[f32] = match guide {
-        "Thirds" => &[1. / 3., 2. / 3.],
-        "Golden section" => &[0.382, 0.618],
-        "Grid" => &[0.25, 0.5, 0.75],
-        _ => &[],
-    };
-    for &p in divisions {
+    for &p in svg_guide_divisions(guide) {
         line(vec2(0., p), vec2(1., p));
         line(vec2(p, 0.), vec2(p, 1.));
     }

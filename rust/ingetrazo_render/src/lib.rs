@@ -2927,6 +2927,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<ui::operation_form::OperationForm>()?;
     m.add_function(wrap_pyfunction!(sheet_host::start_backdrop, m)?)?;
     m.add_function(wrap_pyfunction!(sheet_host::show_delivery_form, m)?)?;
+    m.add_function(wrap_pyfunction!(sheet_host::show_view_export, m)?)?;
     m.add_class::<units_start::UnitsDraft>()?;
     m.add_class::<preferences::PreferencesView>()?;
     m.add_class::<preferences::RestartPreferences>()?;

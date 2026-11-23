@@ -18,14 +18,14 @@ pytest.importorskip("manifold3d")
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QSettings, Qt                 # noqa: E402
 from PySide6.QtWidgets import QApplication              # noqa: E402
 
 from core import progress as P                         # noqa: E402
 from core import vista_caras as VC                      # noqa: E402
 from core.vista_caras import FaceFill                   # noqa: E402
 from tests.test_view_faces_cost import _scene           # noqa: E402
-from views import export_svg_dialog as D                # noqa: E402
+from views import chrome_dialogs, wgpu_deliveries
+from tests.test_export_view_svg import _export_sheet
 
 
 def _app():
@@ -132,66 +132,51 @@ def test_every_stretch_of_the_work_is_heard(monkeypatch):
 
 # ---- The bar ----------------------------------------------------------------
 
-def _bars(monkeypatch, cancel_after=None, watch=None):
-    """Bars that record what they were told; Cancel pressed once they have
-    shown ``cancel_after`` values (``None``: never)."""
+
+def _bars(monkeypatch, cancel_after=None, original=chrome_dialogs.Job):
     made = []
 
-    class Bar(D.QProgressDialog):
-        def __init__(self, *a):
-            super().__init__(*a)
+    class ObservedJob(original):
+        def __init__(self, *a, **kw):
+            super().__init__(*a, **kw)
             self.values = []
-            self.held = []
             made.append(self)
 
-        def setValue(self, v):
-            self.values.append(v)
-            super().setValue(v)
+        def update(self, fraction, phase=None):
+            self.values.append(fraction)
+            super().update(fraction, phase)
+            if cancel_after is not None and len(self.values) > cancel_after:
+                self.cancel()
 
-        def wasCanceled(self):
-            if watch is not None:
-                self.held.append(watch.updatesEnabled())
-            return cancel_after is not None and len(self.values) > cancel_after
-
-    monkeypatch.setattr(D, "QProgressDialog", Bar)
+    monkeypatch.setattr(chrome_dialogs, "Job", ObservedJob)
     return made
 
 
 def test_a_small_model_never_sees_the_bar(monkeypatch):
-    _app()
+    from types import SimpleNamespace
+
+    win = SimpleNamespace(viewport=SimpleNamespace(history=object()))
     made = _bars(monkeypatch)
-    monkeypatch.setattr(P, "REPORT_EVERY", 0.0)
-    with D.faces_progress(None):
+    with wgpu_deliveries.svg_progress(win, win.viewport.history, "SVG"):
         VC._visible_parts(_faces(20))
     assert made == []
 
 
 def test_cancel_on_the_bar_raises_and_puts_everything_back(monkeypatch):
-    from PySide6.QtWidgets import QWidget
-    _app()
-    view = QWidget()
-    made = _bars(monkeypatch, cancel_after=3, watch=view)
+    from types import SimpleNamespace
+
+    win = SimpleNamespace(viewport=SimpleNamespace(history=object()))
+    made = _bars(monkeypatch, cancel_after=3)
     monkeypatch.setattr(P, "REPORT_EVERY", 0.0)
-    monkeypatch.setattr(D, "PROGRESS_AFTER", 0.0)
-    QApplication.setOverrideCursor(Qt.WaitCursor)        # the export's own
-    try:
-        with pytest.raises(D.SvgCancelled):
-            with D.faces_progress(None, view):
-                VC._visible_parts(_faces())
-        # The arrow over Cancel is gone, the work's wait cursor is back.
-        assert QApplication.overrideCursor().shape() == Qt.WaitCursor
-    finally:
-        QApplication.restoreOverrideCursor()
-    assert QApplication.overrideCursor() is None
+    monkeypatch.setattr(wgpu_deliveries, "PREVIEW_JOB_DELAY", 0.0)
+    with pytest.raises(InterruptedError):
+        with wgpu_deliveries.svg_progress(win, win.viewport.history, "SVG"):
+            for n in range(10):
+                P.tick(n / 10)
     assert len(made) == 1
-    bar = made[0]
-    assert bar.windowModality() == Qt.WindowModal
-    assert len(bar.values) == 4 and bar.values == sorted(bar.values)
-    # The view painted nothing meanwhile, and paints again after.
-    assert bar.held and not any(bar.held)
-    assert view.updatesEnabled()
-    assert not bar.isVisible()
-    assert P._report is None
+    assert len(made[0].values) == 4 and made[0].values == sorted(made[0].values)
+    assert made[0].cancelled and not win._chrome_jobs
+    assert P._report is None and QApplication.overrideCursor() is None
 
 
 def _window_with_faces():
@@ -209,25 +194,16 @@ def _window_with_faces():
     return win
 
 
-def _export(win, monkeypatch, path):
-    from views import main_window as mw
-    monkeypatch.setattr(D, "ask_svg_options", lambda parent, *a, **k: (
-        True, {"materials": True, "textures": True, "as_view": True}, None))
-    monkeypatch.setattr(mw.file_dialogs, "getSaveFileName",
-                        lambda *a, **k: (str(path), ""))
-    win._on_export_view_svg()
-
-
 def test_cancel_stops_the_export_and_writes_nothing(tmp_path, monkeypatch):
     _app()
     win = _window_with_faces()
     try:
-        made = _bars(monkeypatch, cancel_after=0, watch=win.viewport)
+        made = _bars(monkeypatch, cancel_after=0)
         monkeypatch.setattr(P, "REPORT_EVERY", 0.0)
-        monkeypatch.setattr(D, "PROGRESS_AFTER", 0.0)
-        _export(win, monkeypatch, tmp_path / "vista.svg")
+        monkeypatch.setattr(wgpu_deliveries, "PREVIEW_JOB_DELAY", 0.0)
+        _export_sheet(win, tmp_path / "vista.svg")
         assert not (tmp_path / "vista.svg").exists()
-        assert len(made) == 1 and made[0].held == [False]
+        assert len(made) == 1 and made[0].cancelled and not win._chrome_jobs
         assert win.statusBar().currentMessage() == "SVG export cancelled"
         assert win.viewport.updatesEnabled()
         assert QApplication.overrideCursor() is None
@@ -240,13 +216,13 @@ def test_the_bar_left_alone_writes_the_svg_as_before(tmp_path, monkeypatch):
     _app()
     win = _window_with_faces()
     try:
-        _export(win, monkeypatch, tmp_path / "antes.svg")
+        _export_sheet(win, tmp_path / "antes.svg")
         made = _bars(monkeypatch)
         monkeypatch.setattr(P, "REPORT_EVERY", 0.0)
-        monkeypatch.setattr(D, "PROGRESS_AFTER", 0.0)
+        monkeypatch.setattr(wgpu_deliveries, "PREVIEW_JOB_DELAY", 0.0)
         win2 = _window_with_faces()
         try:
-            _export(win2, monkeypatch, tmp_path / "con-barra.svg")
+            _export_sheet(win2, tmp_path / "con-barra.svg")
         finally:
             win2._saved_version = win2.viewport.scene.version
             win2.close()
@@ -299,33 +275,15 @@ def test_cancel_on_a_slow_preview_turns_the_preview_off(monkeypatch):
 
 
 def test_a_preview_does_not_start_inside_another(tmp_path, monkeypatch):
-    """The bar lets the events through while a preview works: the preview
-    timer, firing then, started a second one inside the first."""
-    _app()
-    settings = QSettings(str(tmp_path / "svg.ini"), QSettings.IniFormat)
-    built, inside = [], []
+    from tests.test_export_view_svg import _svg
 
-    def build(options, paper=None, preview=False):
-        built.append(preview)
-        if len(built) == 1:
-            dlg._refresh_preview()             # the timer, meanwhile
-            inside.append(len(built))
-        return "<svg/>", 0
-
-    dlg = D.ExportSvgDialog(None, build, settings=settings, advanced=True)
-    try:
-        dlg.preview_box.setChecked(True)
-        dlg._timer.stop()
-        built.clear()
-        dlg._refresh_preview()
-        assert inside == [1] and built == [True]
-        # The one asked for meanwhile comes after.
-        assert dlg._timer.isActive()
-        dlg._timer.stop()
-        dlg._refresh_preview()
-        assert built == [True, True]
-    finally:
-        dlg.deleteLater()
+    model = _svg()
+    first = model.preview_ticket("first")
+    assert model.begin_preview(first)
+    assert model.preview_ticket("edit while rendering") is None
+    assert not model.begin_preview(first) and not model.finish_preview(first, "")
+    next_ticket = model.preview_ticket("edit while rendering")
+    assert model.begin_preview(next_ticket) and model.finish_preview(next_ticket, "")
 
 
 def test_cancel_stops_the_composer_frame_export(tmp_path, monkeypatch):
@@ -349,23 +307,18 @@ def test_cancel_stops_the_composer_frame_export(tmp_path, monkeypatch):
 
         monkeypatch.setattr(C, "FrameItem", Item)
         monkeypatch.setattr(comp, "_selected_item", lambda: Item())
-        monkeypatch.setattr(D, "ask_svg_options", lambda parent, *a, **k: (
-            True, {"materials": True, "textures": True, "as_view": True},
-            None))
-        monkeypatch.setattr(C.file_dialogs, "getSaveFileName",
-                            lambda *a, **k: (str(tmp_path / "marco"), ""))
-        made = _bars(monkeypatch, cancel_after=0, watch=win.viewport)
+        made = _bars(monkeypatch, cancel_after=0)
         monkeypatch.setattr(P, "REPORT_EVERY", 0.0)
-        monkeypatch.setattr(D, "PROGRESS_AFTER", 0.0)
-        comp._on_export_svg()
-        assert len(made) == 1 and made[0].held == [False]
+        monkeypatch.setattr(wgpu_deliveries, "PREVIEW_JOB_DELAY", 0.0)
+        _export_sheet(win, tmp_path / "marco", opener=comp._on_export_svg)
+        assert len(made) == 1 and made[0].cancelled and not win._chrome_jobs
         assert not (tmp_path / "marco.svg").exists()
-        assert comp.statusBar().currentMessage() == "SVG export cancelled"
+        assert win.statusBar().currentMessage() == "SVG export cancelled"
         assert win.viewport.updatesEnabled()
         assert QApplication.overrideCursor() is None
         # Left alone, the bar lets it write the frame.
         made = _bars(monkeypatch)
-        comp._on_export_svg()
+        _export_sheet(win, tmp_path / "marco", opener=comp._on_export_svg)
         assert len(made) == 1 and (tmp_path / "marco.svg").exists()
     finally:
         comp.close()

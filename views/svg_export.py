@@ -100,6 +100,8 @@ def pictured_alone(scene):
             _set_hidden(e, False)
         _dirty_group_chunks(scene)
         scene.version += 1
+        # Both redraws were temporary. Keep the document’s saved content revision.
+        scene.view_version += 2
 
 
 @contextmanager
@@ -312,7 +314,7 @@ class SvgBuilder:
                 or sheet.get("area") != "view"):
             return None
         size = sheet.get("size")
-        if not isinstance(size, tuple) or not self.screen_mm:
+        if not isinstance(size, (tuple, list)) or not self.screen_mm:
             return None
         want = float(size[0]) / max(float(size[1]), 1e-9)
         have = float(self.screen_mm[0]) / max(float(self.screen_mm[1]), 1e-9)
@@ -406,3 +408,89 @@ def preview_pixels(text):
     finally:
         painter.end()
     return image.width(), image.height(), bytes(image.constBits())
+
+
+def open_view_export(win, frame_builder=None):
+    """Open the one-off Export sheet. Sheets can supply a frame's SvgBuilder."""
+    import json
+    from pathlib import Path
+    from PySide6.QtCore import QIODevice, QSaveFile, QSettings
+    from core.i18n import tr
+    from core.saved_views import SavedView
+    from core.sun import scene_sun_direction
+    from ingetrazo_render import SvgOptions, show_view_export
+    from views import chrome_dialogs
+    from views.wgpu_deliveries import svg_progress
+
+    viewport = win._active_view()
+    scene, history = viewport.scene, win.viewport.history
+    scenes = list(scene.saved_views) if frame_builder is None else []
+    builder = frame_builder or win.view_svg_builder()
+    before = SavedView.capture("", scene, viewport.camera) if scenes else None
+    scene_selected = False
+
+    def switch(index):
+        nonlocal builder, scene_selected
+        if index is None and not scene_selected:
+            return
+        (before if index is None else scenes[index]).apply(scene, viewport.camera)
+        scene_selected = index is not None
+        scene.bump_view()
+        viewport.update()
+        if win.viewport.history is history:
+            builder = win.view_svg_builder()
+
+    settings = QSettings()
+    settings.beginGroup("export_svg/v5")
+    prefs = {key: settings.value(key) for key in settings.childKeys()}
+    svg = SvgOptions.current_view(
+        json.dumps(prefs, default=str),
+        builder.screen_mm,
+        scene.show_axes,
+        scene_sun_direction(scene) is not None,
+        bool(scene.selection),
+        [v.name for v in scenes],
+        frame_builder.scale_n if frame_builder else None,
+        switch if scenes else None,
+    )
+
+    def draw(preview=False):
+        opts = json.loads(svg.options_json())
+        return builder.build(opts["faces"], opts["paper"], preview=preview)
+
+    def preview(ticket):
+        with svg_progress(
+            win, history, "SVG preview", lambda: not form.closed and svg.preview_current(ticket)
+        ):
+            text, _ = draw(preview=True)
+        svg.preview_header(ticket, text[:1024])
+        return preview_pixels(text)
+
+    def done(answer, values):
+        try:
+            if answer == "export" and win.viewport.history is history:
+                path = Path(svg.destination(values["destination"]))
+                with svg_progress(win, history, "Export SVG"):
+                    text, count = draw()
+                data = text.encode("utf-8")
+                output = QSaveFile(str(path))
+                if (
+                    not output.open(QIODevice.WriteOnly)
+                    or output.write(data) != len(data)
+                    or not output.commit()
+                ):
+                    raise OSError(output.errorString())
+                for key, value in json.loads(svg.view_preferences()).items():
+                    settings.setValue(key, value)
+                win.statusBar().showMessage(
+                    tr("Exported {n} lines to {name}", n=count, name=path), 5000
+                )
+        except InterruptedError:
+            win.statusBar().showMessage(tr("SVG export cancelled"), 5000)
+        except (OSError, ValueError, RuntimeError) as exc:
+            chrome_dialogs.notify(win, tr("Export SVG failed"), str(exc), tone="error")
+        finally:
+            switch(None)
+
+    form = show_view_export(win, svg, done, preview)
+    return form
