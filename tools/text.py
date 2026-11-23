@@ -26,6 +26,7 @@ class TextTool(AxisMagnet, Tool):
         "suggests the length, area or coordinates of what you click.")
 
     def __init__(self) -> None:
+        self._attachment = None
         self.anchor: QVector3D | None = None
         self.hover_point: QVector3D | None = None
         self._default_text: str = ""
@@ -41,6 +42,7 @@ class TextTool(AxisMagnet, Tool):
         self.hover_point = None
 
     def _reset(self) -> None:
+        self._attachment = None
         self.anchor = None
         self.start_point = None
         self.work_plane = None
@@ -52,6 +54,8 @@ class TextTool(AxisMagnet, Tool):
 
     def on_click(self, ctx: ToolContext) -> None:
         if self.anchor is None:
+            from core.annotation_anchor import picked_attachment
+            self._attachment = picked_attachment(ctx)
             self.anchor = QVector3D(ctx.world)
             self.start_point = self.anchor
             self._default_text = self._describe(ctx)
@@ -60,12 +64,13 @@ class TextTool(AxisMagnet, Tool):
         offset = ctx.world - self.anchor
         anchor = QVector3D(self.anchor)
         viewport = ctx.viewport
+        attachment = self._attachment
 
         def place(text):
             # Answered now (Qt) or on a later turn (the chrome's form).
             if text is not None and text.strip():
                 viewport.history.execute(AddTextLabelCommand(
-                    TextLabel(anchor, offset, text.strip())))
+                    TextLabel(anchor, offset, text.strip(), attachment=attachment)))
             viewport.update()
         default = self._default_text
         self._reset()

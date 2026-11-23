@@ -9,6 +9,7 @@ engine so drawing tools can lock onto it — that is its whole purpose.
 """
 from __future__ import annotations
 
+from core.doc_model import Record, record_fields
 from ingetrazo_core import Vec3 as QVector3D
 
 # Half-length used when a conceptually infinite guide line needs segment form
@@ -16,7 +17,8 @@ from ingetrazo_core import Vec3 as QVector3D
 GUIDE_HALF_LEN = 1.0e4
 
 
-class Guide:
+@record_fields("point", "direction", "origin", "layer")
+class Guide(Record):
     """A construction guide: an infinite line (``point`` + ``direction``) or,
     when ``direction`` is None, a guide point.
 
@@ -93,7 +95,8 @@ class Guide:
                    layer=data.get("layer") or None)
 
 
-class GuideCircle:
+@record_fields("center", "normal", "radius", "layer", "origin")
+class GuideCircle(Record):
     """A construction guide that is a PERFECT circle: centre, the plane it
     lies on (a unit normal) and its radius.
 

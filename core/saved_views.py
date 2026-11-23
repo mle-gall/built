@@ -14,10 +14,13 @@ that carry eye/target/up cameras (e.g. .skp) convert once at import time.
 """
 from __future__ import annotations
 
+from core.doc_model import Record, record_fields
+
 from core.history import Command, CommandRejected
 
 
-class SavedView:
+@record_fields('name', 'navigator_view', 'folder', 'target', 'distance', 'yaw', 'pitch', 'fov_deg', 'perspective', 'two_point', 'hidden_layers', 'hidden_folders', 'style', 'section', 'georef', 'shadows', 'hidden_objects', 'hidden_shown', 'lens')
+class SavedView(Record):
     """A named camera + layer-visibility snapshot."""
 
     def __init__(self, name: str, target=(0.0, 0.0, 0.0), distance: float = 20.0,
@@ -154,7 +157,8 @@ class SavedView:
         and the folder). ``style``: as in :meth:`capture`."""
         fresh = SavedView.capture(self.name, scene, camera, style)
         fresh.folder = self.folder
-        self.__dict__.update(fresh.__dict__)
+        for field in self._record_fields:
+            setattr(self, field, getattr(fresh, field))
 
     def apply(self, scene, camera, put_style=None) -> None:
         """Recall the view: camera first, then the layer-visibility state.
@@ -391,6 +395,8 @@ class RenameSceneCommand(Command):
 
     keeps_paint = True
 
+    doc_undo = True
+
     def __init__(self, view, name: str) -> None:
         self.view = view
         self.name = name
@@ -418,6 +424,8 @@ class MoveSceneCommand(Command):
     order of the scene tabs and the panel, and what the document saves."""
 
     keeps_paint = True
+
+    doc_undo = True
 
     def __init__(self, view, index: int) -> None:
         self.view = view

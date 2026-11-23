@@ -414,7 +414,7 @@ class ChangeFeed:
     def __init__(self, history):
         self._history = weakref.ref(history)
         self._steps: deque[Step] = deque(maxlen=self.maxlen)
-        self._subscribers = []
+        self._subscribers = history._native.subscribers if history._native is not None else []
         self._pending = None
         self._depth = 0
         self.unsubscribe = history.add_listener(before=self._before,

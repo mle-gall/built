@@ -9,18 +9,31 @@ lives in ``Scene.text_labels`` and is drawn as a screen-space overlay.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from core.doc_model import Record, record_fields
 
 from ingetrazo_core import Vec3 as QVector3D
 
 
-@dataclass(eq=False)
-class TextLabel:
-    anchor: QVector3D
-    offset: QVector3D          # displacement from the anchor to the label
-    text: str
-    #: Layer (tag) the label lives on; ``None`` = default layer.
-    layer: str | None = None
+@record_fields("_anchor", "offset", "text", "layer", "attachment")
+class TextLabel(Record):
+    def __init__(self, anchor, offset, text, layer=None, attachment=None):
+        self._anchor = anchor
+        self.offset = offset
+        self.text = text
+        self.layer = layer
+        self.attachment = attachment
+
+    @property
+    def anchor(self):
+        if self.attachment is not None:
+            point = self.attachment.position()
+            if point is not None:
+                self._anchor = point
+        return self._anchor
+
+    @anchor.setter
+    def anchor(self, value):
+        self._anchor = value
 
     def position(self) -> QVector3D:
         """Where the label text floats (anchor + offset)."""
@@ -28,16 +41,21 @@ class TextLabel:
 
     # ---- Serialisation ------------------------------------------------------
     def to_dict(self) -> dict:
+        binding = self.attachment.archive() if self.attachment is not None else None
         return {
             "anchor": [self.anchor.x(), self.anchor.y(), self.anchor.z()],
             "offset": [self.offset.x(), self.offset.y(), self.offset.z()],
             "text": self.text,
+            **({"attachment": binding} if binding else {}),
             **({"layer": self.layer} if self.layer else {}),
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "TextLabel":
-        return cls(QVector3D(*data.get("anchor", [0, 0, 0])),
+    def from_dict(cls, data: dict, scene=None) -> "TextLabel":
+        from core.annotation_anchor import Attachment
+        point = QVector3D(*data.get("anchor", [0, 0, 0]))
+        binding = Attachment.restore(scene, data.get("attachment"), point) if scene is not None else None
+        return cls(point,
                    QVector3D(*data.get("offset", [0, 0, 0])),
                    data.get("text", ""),
-                   layer=data.get("layer") or None)
+                   layer=data.get("layer") or None, attachment=binding)

@@ -188,6 +188,9 @@ fn write_attr(py: Python<'_>, me: &Bound<'_, PyAny>, k: Key, a: u16, value: &Bou
 }
 
 fn handle_key(obj: &Bound<'_, PyAny>) -> PyResult<Key> {
+    if let Ok(r) = obj.cast::<DocRecord>() {
+        return Ok(r.get().key);
+    }
     if let Ok(p) = obj.cast::<PyPlacement>() {
         return Ok(p.get().key);
     }
@@ -198,6 +201,37 @@ fn handle_key(obj: &Bound<'_, PyAny>) -> PyResult<Key> {
         return Ok(m.get().key);
     }
     Err(PyTypeError::new_err(format!("{} is not a document handle", obj.get_type().name()?)))
+}
+
+/// Identity for an annotation, saved view, sheet or sheet item. Its
+/// named fields use the same value storage and journal as scene tables.
+#[pyclass(module = "ingetrazo_core", subclass, frozen)]
+pub struct DocRecord {
+    key: Key,
+}
+
+impl Drop for DocRecord {
+    fn drop(&mut self) {
+        handle_dropped(self.key);
+    }
+}
+
+#[pymethods]
+impl DocRecord {
+    #[new]
+    #[pyo3(signature = (*_args, **_kwargs))]
+    fn new(_args: &Bound<'_, PyTuple>, _kwargs: Option<&Bound<'_, PyDict>>) -> Self {
+        drain_pending();
+        Self { key: lock().alloc(Kind::Record) }
+    }
+
+    fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
+        traverse_node(self.key, &visit)
+    }
+
+    fn __clear__(&self) {
+        clear_node(self.key);
+    }
 }
 
 /// A class attribute that keeps an instance's value in the document
@@ -2403,6 +2437,7 @@ fn doc_stats(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
     out.set_item("roots", live[Kind::Root as usize])?;
     out.set_item("placements", live[Kind::Placement as usize])?;
     out.set_item("tags", live[Kind::Tag as usize])?;
+    out.set_item("records", live[Kind::Record as usize])?;
     out.set_item("materials", live[Kind::Material as usize])?;
     out.set_item("slots", slots)?;
     out.set_item("free", free)?;
@@ -2440,6 +2475,9 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(doc_set_track_hook, m)?)?;
     m.add_function(wrap_pyfunction!(doc_set_refill_hook, m)?)?;
     m.add_function(wrap_pyfunction!(doc_attr_changed, m)?)?;
+    m.add_class::<super::anchor::ElementAnchor>()?;
+    m.add_class::<super::history::DocumentHistory>()?;
+    m.add_class::<DocRecord>()?;
     m.add_class::<DocAttr>()?;
     m.add_function(wrap_pyfunction!(doc_walk, m)?)?;
     m.add_function(wrap_pyfunction!(doc_tree, m)?)?;

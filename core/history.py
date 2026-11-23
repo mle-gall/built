@@ -243,10 +243,15 @@ class History:
     def __init__(self, scene) -> None:
         self.scene = scene
         self._listeners = []
-        self.revision = 0
-        self._changes = deque(maxlen=256)
-        self.undo_stack: list[Command] = []
-        self.redo_stack: list[Command] = []
+        self._native = _doc.NATIVE.DocumentHistory() if _doc.ENABLED else None
+        if self._native is None:
+            self._revision = 0
+            self._changes = deque(maxlen=256)
+            self.undo_stack = []
+            self.redo_stack = []
+        else:
+            self.undo_stack = self._native.undo
+            self.redo_stack = self._native.redo
         #: Message describing the last rolled-back failure (UI may flash it).
         self.last_error: Optional[str] = None
         #: Why the last command declined to happen (:class:`CommandRejected`).
@@ -312,10 +317,16 @@ class History:
                         logging.getLogger("ingetrazo.history").exception(
                             "Command listener failed (%s)", phase)
 
+    @property
+    def revision(self):
+        return self._native.revision if self._native is not None else self._revision
+
     def changes_since(self, revision=0):
         """Bounded command journal; not a geometric diff or a persisted log."""
         if type(revision) is not int or revision < 0 or revision > self.revision:
             raise ValueError("revision must be between zero and the current revision")
+        if self._native is not None:
+            return self._native.changes_since(revision)
         floor = self._changes[0]["revision"] - 1 if self._changes else self.revision
         return {"revision": self.revision, "complete": revision >= floor,
                 "changes": [dict(c) for c in self._changes if c["revision"] > revision]}
@@ -344,9 +355,13 @@ class History:
             ran = (not self.last_error and not self.last_rejected
                    if phase == "execute" else bool(result))
             if ran:
-                self.revision += 1
-                self._changes.append({"revision": self.revision, "phase": phase,
-                                      "command": getattr(cmd, "history_name", type(cmd).__name__)})
+                name = getattr(cmd, "history_name", type(cmd).__name__)
+                if self._native is not None:
+                    self._native.advance(phase, name)
+                else:
+                    self._revision += 1
+                    self._changes.append({"revision": self.revision, "phase": phase,
+                                          "command": name})
             return result
         finally:
             self._notify(listeners, 1, cmd, phase, ran)
@@ -499,11 +514,14 @@ class History:
             cmd._occurrences = tuple(level["session"] for level in self.scene._edit_stack
                                      if level.get("affine"))
         self._keep_paint_cv(cmd, before)
-        self.undo_stack.append(cmd)
-        cap = int(getattr(self, "max_steps", 0) or 0)
-        if cap > 0 and len(self.undo_stack) > cap:
-            del self.undo_stack[:len(self.undo_stack) - cap]
-        self.redo_stack.clear()
+        cap = max(0, int(self.max_steps or 0))
+        if self._native is not None:
+            self._native.push(cmd, cap)
+        else:
+            self.undo_stack.append(cmd)
+            if cap and len(self.undo_stack) > cap:
+                del self.undo_stack[:len(self.undo_stack) - cap]
+            self.redo_stack.clear()
         self._rebind_dimensions()
 
     def _rebind_dimensions(self) -> None:
@@ -2381,6 +2399,8 @@ class AddDimensionCommand(Command):
 
     keeps_rows = True
 
+    doc_undo = True
+
     def __init__(self, dimension) -> None:
         self.dimension = dimension
 
@@ -2398,6 +2418,13 @@ class AddDimensionCommand(Command):
 
 class DeleteDimensionsCommand(Command):
     """Remove a set of dimensions from ``scene.dimensions``."""
+
+    doc_undo = True
+
+    def doc_after(self, scene, phase):
+        if phase == "redo":
+            scene.selection.difference_update(self._dims)
+        scene.version += 1
 
     def __init__(self, dimensions) -> None:
         self._dims = list(dimensions)
@@ -2423,6 +2450,13 @@ class AddTextLabelCommand(Command):
 
     keeps_rows = True
 
+    doc_undo = True
+
+    def doc_after(self, scene, phase):
+        if phase == "undo":
+            scene.selection.discard(self.label)
+        scene.version += 1
+
     def __init__(self, label) -> None:
         self.label = label
 
@@ -2443,6 +2477,8 @@ class MoveTextLabelsCommand(Command):
     text behaviour)."""
 
     keeps_paint = True
+
+    doc_undo = True
 
     def __init__(self, labels, delta) -> None:
         self._labels = list(labels)
@@ -2466,6 +2502,8 @@ class MoveGuidesCommand(Command):
 
     keeps_paint = True
     keeps_rows = True
+
+    doc_undo = True
 
     def __init__(self, guides, delta) -> None:
         self._guides = list(guides)
@@ -2497,6 +2535,8 @@ class RotateGuidesCommand(Command):
 
     keeps_paint = True
     keeps_rows = True
+
+    doc_undo = True
 
     def __init__(self, guides, centre: QVector3D, axis: QVector3D,
                  deg: float) -> None:
@@ -2550,6 +2590,8 @@ class MoveDimensionsCommand(Command):
 
     keeps_paint = True
 
+    doc_undo = True
+
     def __init__(self, modes: dict, delta) -> None:
         self._modes = dict(modes)
         self._delta = QVector3D(delta)
@@ -2584,6 +2626,8 @@ class MoveDimensionsCommand(Command):
 class EditTextLabelCommand(Command):
     """Change the text of a leader-text annotation."""
 
+    doc_undo = True
+
     def __init__(self, label, text: str) -> None:
         self.label = label
         self._new = text
@@ -2602,6 +2646,8 @@ class EditDimensionTextCommand(Command):
     """Change a dimension's custom text (``None`` = back to the measured
     value) — a double-click on the dimension text."""
 
+    doc_undo = True
+
     def __init__(self, dim, text) -> None:
         self.dim = dim
         self._new = text or None
@@ -2618,6 +2664,13 @@ class EditDimensionTextCommand(Command):
 
 class DeleteTextLabelsCommand(Command):
     """Remove a set of text labels from ``scene.text_labels``."""
+
+    doc_undo = True
+
+    def doc_after(self, scene, phase):
+        if phase == "redo":
+            scene.selection.difference_update(self._labels)
+        scene.version += 1
 
     def __init__(self, labels) -> None:
         self._labels = list(labels)
@@ -2644,6 +2697,13 @@ class AddGuideCommand(Command):
     keeps_paint = True
     keeps_rows = True
 
+    doc_undo = True
+
+    def doc_after(self, scene, phase):
+        if phase == "undo":
+            scene.selection.discard(self.guide)
+        scene.version += 1
+
     def __init__(self, guide) -> None:
         self.guide = guide
 
@@ -2660,6 +2720,16 @@ class AddGuideCommand(Command):
 class PlaceSectionPlaneCommand(Command):
     """Place a section plane. The new plane immediately becomes
     the ACTIVE cut of the context; undo restores the previous one."""
+
+    doc_undo = True
+
+    def doc_after(self, scene, phase):
+        if phase == "redo":
+            scene.selection.clear()
+            scene.selection.add(self.plane)
+        else:
+            scene.selection.discard(self.plane)
+        scene.bump_sections()
 
     def __init__(self, plane) -> None:
         self.plane = plane
@@ -2687,6 +2757,13 @@ class DeleteSectionPlanesCommand(Command):
     """Remove section planes; undo restores them at their positions with
     their active state."""
 
+    doc_undo = True
+
+    def doc_after(self, scene, phase):
+        if phase == "redo":
+            scene.selection.difference_update(self._planes)
+        scene.bump_sections()
+
     def __init__(self, planes) -> None:
         self._planes = list(planes)
         self._restore: list[tuple[int, object]] = []
@@ -2709,6 +2786,11 @@ class DeleteSectionPlanesCommand(Command):
 class ReverseSectionPlaneCommand(Command):
     """Reverse: flip which side the plane hides."""
 
+    doc_undo = True
+
+    def doc_after(self, scene, phase):
+        scene.bump_sections()
+
     def __init__(self, plane) -> None:
         self.plane = plane
 
@@ -2724,6 +2806,11 @@ class ReverseSectionPlaneCommand(Command):
 class SetActiveSectionCommand(Command):
     """Make ``plane`` the active cut (or ``None`` to deactivate) — the
     Active Cut toggle / double-click."""
+
+    doc_undo = True
+
+    def doc_after(self, scene, phase):
+        scene.bump_sections()
 
     def __init__(self, plane) -> None:
         self.plane = plane
@@ -2745,6 +2832,13 @@ class SetSectionModeCommand(Command):
     """One section plane's mode, from the Browser: whether it CUTS
     (it becomes the active cut — or none is) and whether its FRAME shows.
     Cut and frame, cut only, frame only, or off — one undo step."""
+
+    doc_undo = True
+
+    def doc_after(self, scene, phase):
+        if phase == "redo" and self.plane.hidden:
+            scene.selection.discard(self.plane)
+        scene.bump_sections()
 
     def __init__(self, plane, cut: bool, frame: bool) -> None:
         self.plane = plane
@@ -2776,6 +2870,11 @@ class SetSectionFillCommand(Command):
     """One section plane's own fill — pattern, colour, hatch spacing —
     over the style's. ``fill=None`` goes back to the style's fill."""
 
+    doc_undo = True
+
+    def doc_after(self, scene, phase):
+        scene.bump_sections()
+
     def __init__(self, plane, fill) -> None:
         self.plane = plane
         self.fill = dict(fill) if fill else None
@@ -2796,6 +2895,11 @@ class RenameSectionPlaneCommand(Command):
     """A section plane's name and symbol (the symbol reads on its frame and
     in the sheets' section marks)."""
 
+    doc_undo = True
+
+    def doc_after(self, scene, phase):
+        scene.bump_sections()
+
     def __init__(self, plane, name: str, symbol: str) -> None:
         self.plane = plane
         self.name = name
@@ -2815,6 +2919,8 @@ class RenameSectionPlaneCommand(Command):
 class AddSheetCommand(Command):
     """A new sheet at the end of the set."""
 
+    doc_undo = True
+
     def __init__(self, sheet) -> None:
         self.sheet = sheet
 
@@ -2831,6 +2937,8 @@ class AddSheetCommand(Command):
 class PlaceViewCommand(Command):
     """A view frame placed on a sheet — a scene dropped on it in the
     Browser. One undo step."""
+
+    doc_undo = True
 
     def __init__(self, sheet, frame) -> None:
         self.sheet = sheet
@@ -2849,6 +2957,8 @@ class PlaceViewCommand(Command):
 class MoveSheetCommand(Command):
     """A sheet to another place in the set: the order the strip shows,
     the atlas prints and {hoja} counts."""
+
+    doc_undo = True
 
     def __init__(self, sheet, index: int) -> None:
         self.sheet = sheet
@@ -2874,6 +2984,13 @@ class CreatePlanCommand(Command):
     plane at the cut height (made the active cut), a scene looking down on
     it in parallel projection, and — optionally — a sheet with that scene in
     a view frame."""
+
+    doc_undo = True
+
+    def doc_after(self, scene, phase):
+        if phase == "undo":
+            scene.selection.discard(self.plane)
+        scene.version += 1
 
     def __init__(self, plane, view, sheet=None,
                  add_plane: bool = True) -> None:
@@ -2946,6 +3063,8 @@ class AddSceneCommand(Command):
     undo takes it away again. Renamed in
     :class:`core.saved_views.RenameSceneCommand`."""
 
+    doc_undo = True
+
     def __init__(self, view, index: Optional[int] = None) -> None:
         self.view = view
         self.index = index
@@ -2969,6 +3088,8 @@ class DeleteScenesCommand(Command):
     """Delete saved scenes, several at once (#280); undo puts each back in
     its place in the list."""
 
+    doc_undo = True
+
     def __init__(self, views) -> None:
         self.views = list(views)
         self._at: list = []
@@ -2990,6 +3111,8 @@ class UpdateSceneCommand(Command):
     """Update a scene from the live view, keeping its name; undo gives it
     back what it remembered before (#1158)."""
 
+    doc_undo = True
+
     def __init__(self, view, camera, style=None) -> None:
         self.view = view
         self.camera = camera
@@ -3000,16 +3123,18 @@ class UpdateSceneCommand(Command):
         self._after: Optional[dict] = None
 
     def do(self, scene) -> None:
-        self._before = dict(self.view.__dict__)
+        self._before = {k: getattr(self.view, k) for k in self.view._record_fields}
         if self._after is None:          # redo puts back the same capture
             self.view.recapture(scene, self.camera, self.style)
-            self._after = dict(self.view.__dict__)
+            self._after = {k: getattr(self.view, k) for k in self.view._record_fields}
         else:
-            self.view.__dict__.update(self._after)
+            for k, value in self._after.items():
+                setattr(self.view, k, value)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        self.view.__dict__.update(self._before)
+        for k, value in self._before.items():
+            setattr(self.view, k, value)
         scene.version += 1
 
 
@@ -3020,6 +3145,8 @@ class SceneTreeCommand(Command):
     whether anything changed (False: rejected, nothing to undo). Undo puts
     back the order of the scenes, their folders and the folder tree; redo
     puts back what the change left, without running it again."""
+
+    doc_undo = True
 
     def __init__(self, change) -> None:
         self.change = change
@@ -3049,6 +3176,11 @@ class MoveSectionPlanesCommand(Command):
 
     keeps_paint = True
 
+    doc_undo = True
+
+    def doc_after(self, scene, phase):
+        scene.bump_sections()
+
     def __init__(self, planes, delta: QVector3D) -> None:
         self._planes = list(planes)
         self.delta = QVector3D(delta)
@@ -3067,6 +3199,11 @@ class MoveSectionPlanesCommand(Command):
 class RotateSectionPlanesCommand(Command):
     """Rotate section planes about ``centre``/``axis`` (the Rotate tool):
     the origin orbits and the normal turns."""
+
+    doc_undo = True
+
+    def doc_after(self, scene, phase):
+        scene.bump_sections()
 
     def __init__(self, planes, centre: QVector3D, axis: QVector3D,
                  deg: float) -> None:
@@ -3098,6 +3235,8 @@ class ChangeGuideCommand(Command):
     keeps_paint = True
     keeps_rows = True
 
+    doc_undo = True
+
     def __init__(self, guide, direction) -> None:
         self.guide = guide
         self.new = QVector3D(direction).normalized()
@@ -3118,6 +3257,13 @@ class DeleteGuidesCommand(Command):
 
     keeps_paint = True
     keeps_rows = True
+
+    doc_undo = True
+
+    def doc_after(self, scene, phase):
+        if phase == "redo":
+            scene.selection.difference_update(self._guides)
+        scene.version += 1
 
     def __init__(self, guides) -> None:
         self._guides = list(guides)
@@ -3146,6 +3292,16 @@ class AddImagePlaneCommand(Command):
     command creates that layer when missing and takes it back on undo, so
     importing and undoing leaves the document exactly as it was.
     """
+
+    doc_undo = True
+
+    def doc_after(self, scene, phase):
+        if phase == "redo":
+            scene.selection.clear()
+            scene.selection.add(self.image)
+        else:
+            scene.selection.discard(self.image)
+        scene.version += 1
 
     def __init__(self, image) -> None:
         self.image = image
@@ -3180,6 +3336,13 @@ class DeleteImagePlanesCommand(Command):
     """Remove reference images (Delete / the Eraser). Positions are restored
     so undo puts each one back where it sat in the stacking order."""
 
+    doc_undo = True
+
+    def doc_after(self, scene, phase):
+        if phase == "redo":
+            scene.selection.difference_update(self._images)
+        scene.version += 1
+
     def __init__(self, images) -> None:
         self._images = list(images)
         self._restore: list[tuple[int, object]] = []
@@ -3204,6 +3367,8 @@ class TransformImagePlaneCommand(Command):
     scaling, moving and rotating it. Callers compute the new frame (e.g.
     ``ImagePlane.scaled``) and hand it over; the command only swaps it in, so
     every way of reshaping an image shares one reversible operation."""
+
+    doc_undo = True
 
     def __init__(self, image, origin=None, u=None, v=None) -> None:
         from ingetrazo_core import Vec3 as QVector3D
@@ -3243,6 +3408,8 @@ class SetImagePlaneOpacityCommand(Command):
     """Fade a reference image (a scan you trace over, an orthomosaic under
     the model) — one undoable step."""
 
+    doc_undo = True
+
     def __init__(self, image, opacity: float) -> None:
         self.image = image
         self.opacity = max(0.0, min(1.0, float(opacity)))
@@ -3263,6 +3430,8 @@ class MoveImagePlanesCommand(Command):
     resize or turn the picture by accident."""
 
     keeps_paint = True
+
+    doc_undo = True
 
     def __init__(self, images, delta: QVector3D) -> None:
         self._images = list(images)
@@ -3286,6 +3455,8 @@ class RotateImagePlanesCommand(Command):
     its size and its proportions and simply faces a new way. Rotating about an
     axis off the image's own plane tilts it, which is how a facade photo gets
     stood up against a wall."""
+
+    doc_undo = True
 
     def __init__(self, images, centre: QVector3D, axis: QVector3D,
                  deg: float) -> None:
@@ -3318,6 +3489,8 @@ class ScaleImagePlanesCommand(Command):
     factor mirrors the image through the anchor, as it does for geometry.
     """
 
+    doc_undo = True
+
     def __init__(self, images, anchor: QVector3D, factor, axes=None) -> None:
         self._images = list(images)
         self.axes = axes
@@ -3343,6 +3516,13 @@ class ScaleImagePlanesCommand(Command):
 
 class AddGeoPathCommand(Command):
     """Add a traced georef path to ``scene.geo_paths`` (Track G)."""
+
+    doc_undo = True
+
+    def doc_after(self, scene, phase):
+        if phase == "undo":
+            scene.selection.discard(self.path)
+        scene.version += 1
 
     def __init__(self, path) -> None:
         self.path = path
@@ -3404,6 +3584,9 @@ class AddGeoPointsCommand(Command):
     document), the datum travels with the command so undo restores the
     previous one."""
 
+    def doc_undo(self, scene):
+        return self._datum is None
+
     def __init__(self, points, datum=None) -> None:
         self._points = list(points)
         self._datum = datum
@@ -3428,6 +3611,8 @@ class AddGeoPointsCommand(Command):
 class DeleteGeoPointsCommand(Command):
     """Remove survey points from ``scene.geo_points``."""
 
+    doc_undo = True
+
     def __init__(self, points) -> None:
         self._points = list(points)
         self._restore: list[tuple[int, object]] = []
@@ -3448,6 +3633,13 @@ class DeleteGeoPointsCommand(Command):
 
 class DeleteGeoPathsCommand(Command):
     """Remove georef paths from ``scene.geo_paths``."""
+
+    doc_undo = True
+
+    def doc_after(self, scene, phase):
+        if phase == "redo":
+            scene.selection.difference_update(self._paths)
+        scene.version += 1
 
     def __init__(self, paths) -> None:
         self._paths = list(paths)
@@ -3471,6 +3663,8 @@ class DeleteGeoPathsCommand(Command):
 class ToggleGeoPathClosedCommand(Command):
     """Flip open ↔ closed (loop) on a set of georef paths."""
 
+    doc_undo = True
+
     def __init__(self, paths) -> None:
         self._paths = list(paths)
 
@@ -3490,6 +3684,13 @@ class SetGeoPathSurfaceCommand(Command):
     restores the prior mode and closed flag. Built triangles are recomputed
     outside (they depend on the DEM), so they're just cleared here.
     """
+
+    doc_undo = True
+
+    def doc_after(self, scene, phase):
+        for p in self._paths:
+            p._surface_tris = None
+        scene.version += 1
 
     def __init__(self, paths, mode) -> None:
         self.mode = mode
@@ -3515,6 +3716,8 @@ class SetGeoPathSurfaceCommand(Command):
 
 class MoveGeoPathNodeCommand(Command):
     """Move one node of a georef path to a new position (undoable)."""
+
+    doc_undo = True
 
     def __init__(self, path, index, new_point) -> None:
         from ingetrazo_core import Vec3 as QVector3D

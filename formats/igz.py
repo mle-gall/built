@@ -945,6 +945,8 @@ def prepare_scene_steps(scene, mesh_steps=None, *, stream=None, large=None):
             {"a": [d.a.x(), d.a.y(), d.a.z()],
              "b": [d.b.x(), d.b.y(), d.b.z()],
              "offset": [d.offset.x(), d.offset.y(), d.offset.z()],
+             **{name: data for name in ("attachment_a", "attachment_b")
+                if (ref := getattr(d, name, None)) and (data := ref.archive())},
              **({"axis": d.axis} if getattr(d, "axis", None) else {}),
              **({"layer": d.layer} if getattr(d, "layer", None) else {}),
              **({"text": d.text} if getattr(d, "text", None) else {})}
@@ -2130,6 +2132,9 @@ def _load_into_inner(scene, path: Path, progress=None, link_meshes=None) -> None
             QVector3D(*raw["a"]), QVector3D(*raw["b"]),
             QVector3D(*raw["offset"]), layer=raw.get("layer") or None,
             text=raw.get("text") or None, axis=raw.get("axis") or None)
+        from core.annotation_anchor import Attachment
+        for field, pos in (("attachment_a", dim.a), ("attachment_b", dim.b)):
+            setattr(dim, field, Attachment.restore(scene, raw.get(field), pos))
         dim.bind(scene)         # the vertex at that spot is the one snapped to
         scene.dimensions.append(dim)
 
@@ -2210,7 +2215,7 @@ def _load_into_inner(scene, path: Path, progress=None, link_meshes=None) -> None
 
     from core.textlabel import TextLabel
     for raw in payload.get("text_labels", []):
-        scene.text_labels.append(TextLabel.from_dict(raw))
+        scene.text_labels.append(TextLabel.from_dict(raw, scene))
 
     from core.guide import guide_from_dict
     scene.guides.clear()

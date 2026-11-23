@@ -86,6 +86,11 @@ def group_dump(g):
 
 def dump(scene):
     return json.loads(json.dumps({
+        "views": [v.to_dict() for v in scene.saved_views],
+        "sheets": [s.to_dict() for s in scene.compositions],
+        "annotations": [t.to_dict() for t in scene.text_labels],
+        "dimensions": [(d.a.toTuple(), d.b.toTuple(), d.offset.toTuple(), d.text)
+                       for d in scene.dimensions],
         "groups": [group_dump(g) for g in scene.groups],
         "layers": [dict({f: getattr(ly, f) for f in TAG_FIELDS},
                         **{"dict": ly.to_dict()}) for ly in scene.layers],
@@ -423,6 +428,46 @@ def geometry_steps():
     return out
 
 
+def presentation_steps(scene, steps):
+    from core.annotation_anchor import Attachment
+    from core.composition import Composicion, MarcoVista, TextoItem
+    from core.dimension import Dimension
+    from core.history import (AddDimensionCommand, AddSceneCommand, AddSheetCommand,
+                              AddTextLabelCommand, EditDimensionTextCommand,
+                              MoveTextLabelsCommand, PlaceViewCommand)
+    from core.saved_views import RenameSceneCommand, SavedView
+    from core.textlabel import TextLabel
+
+    h = History(scene)
+    h.feed.subscribe(lambda step: steps.append(step_record(step)))
+    owner = next(g for g in scene.groups if g.uid == "classic")
+    face = owner.mesh.faces[0]
+    p = sum(face.vertices, QVector3D()) / len(face.vertices)
+    label = TextLabel(p, QVector3D(0, 0, 1), "Face", layer="Tag 0",
+                      attachment=Attachment.capture(scene, face, owner, p))
+    dim = Dimension(face.vertices[0], face.vertices[1], QVector3D(0, 1, 0), layer="Tag 0")
+    sheet = Composicion(texts=[TextoItem(text="Plan notes")])
+    view = SavedView("Plan", hidden_objects=["classic"], hidden_layers=["Tag 2"],
+                     section={"active": None}, style={"profiles": True})
+    edits = [AddDimensionCommand(dim), AddTextLabelCommand(label), AddSceneCommand(view),
+             AddSheetCommand(sheet), PlaceViewCommand(sheet, MarcoVista(view_key="scene:Plan")),
+             RenameSceneCommand(view, "Floor"), MoveTextLabelsCommand([label], QVector3D(1, 1, 0)),
+             EditDimensionTextCommand(dim, "Length <>")]
+    states = []
+    for cmd in edits:
+        h.execute(cmd)
+        assert not h.last_error, h.last_error
+        if doc_model.ENABLED:
+            assert cmd._doc_txn is not None
+        states.append(dump(scene))
+    for action in (h.undo, h.redo):
+        for _ in edits:
+            assert action()
+            states.append(dump(scene))
+    assert sheet.frames[0].view_key == "scene:Floor"
+    return states
+
+
 def main(work: Path):
     initial_scene = build()
     # The prototype table in existing files interns geometry. Two entries
@@ -443,10 +488,12 @@ def main(work: Path):
     assert child.layer == "Tag 2" and original.children[0].layer == "Tag 0"
     assert history.undo() and not child.hidden
     assert history.redo() and child.hidden
+    presentation_feed = []
+    presentation = presentation_steps(initial_scene, presentation_feed)
     initial = saved(initial_scene, work, "initial")
     scene = build()
     h = History(scene)
-    steps = []
+    steps = list(presentation_feed)
     h.feed.subscribe(lambda s: steps.append(step_record(s)))
     states = [dump(scene)]
     a = scene.groups[0]
@@ -486,6 +533,7 @@ def main(work: Path):
     states.append(dump(scene))
     h.redo()
     states.append(dump(scene))
+    states.extend(presentation)
     states.extend(slice_two(scene, h))
     states.extend(structural_steps(steps))
     # Rotate a mirrored, non-uniformly scaled occurrence and edit through

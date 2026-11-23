@@ -4,6 +4,8 @@
 and the text–line gap set from the panel."""
 from __future__ import annotations
 
+from dataclasses import asdict, replace
+
 from core.composition import Composicion, CotaItem
 
 PX = 20
@@ -49,7 +51,7 @@ def test_flip_turns_a_vertical_label_but_keeps_its_side():
     from views.composer import cota_text_layout
     plain = CotaItem(dx_mm=0.0, dy_mm=40.0, sep_mm=0.0, text="88",
                      text_mm=5.0, offset_mm=1.0, ends="none")
-    flipped = CotaItem(**{**plain.__dict__, "text_flip": True})
+    flipped = replace(plain, text_flip=True)
     assert cota_text_layout(plain) == ("above", -90.0)
     assert cota_text_layout(flipped) == ("below", 90.0)
 
@@ -139,9 +141,9 @@ def test_ticking_show_unit_changes_nothing_else(monkeypatch):
             comp.canvas.clearSelection()
             item.setSelected(True)
             comp.on_selection_changed()
-            before = dict(ct.__dict__)
+            before = asdict(ct)
             comp.cota_show_unit.setChecked(not ct.show_unit)
-            changed = {k for k in before if before[k] != ct.__dict__[k]}
+            changed = {k for k in before if before[k] != getattr(ct, k)}
             assert changed == {"show_unit"}, changed
         comp.cota_sep.setValue(-12.0)              # a real edit still lands
         assert fine.sep_mm == -12.0

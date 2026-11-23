@@ -15,6 +15,8 @@ the whole point of the track (real plans and cross-sections on the sheets).
 """
 from __future__ import annotations
 
+from core.doc_model import Record, record_fields
+
 from ingetrazo_core import Vec3 as QVector3D
 
 _last_uid = 0
@@ -86,7 +88,8 @@ def next_symbol(planes) -> str:
         i += 1
 
 
-class SectionPlane:
+@record_fields('point', 'normal', 'name', 'symbol', 'active', 'uid', 'hidden', 'fill', 'layer')
+class SectionPlane(Record):
     """Origin + unit normal (+ name/symbol). ``active`` = the cutting one;
     ``hidden`` = its frame is not drawn (nor picked) — the cut, if it is
     the active one, stays. Hidden and inactive is a plane switched off."""

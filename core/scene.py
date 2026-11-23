@@ -1198,7 +1198,12 @@ if _dm.ENABLED:
     #: defaults still apply: ``__init__`` assigns them through these).
     ROOT_TABLES = ("active_layer", "layer_folders", "folder_parents",
                    "folder_visibility", "layer_folder_uids",
-                   "layer_folder_names", "plugin_data")
+                   "layer_folder_names", "plugin_data",
+                   "dimensions", "text_labels", "dimension_style", "saved_views",
+                   "scene_folders", "scene_folder_parents", "compositions",
+                   "guides", "image_planes", "geo_points", "geo_paths",
+                   "custom_scales", "section_planes", "show_section_planes",
+                   "show_section_cuts")
     for _name in ROOT_TABLES:
         setattr(Scene, _name, _root_table(_name, _name != "active_layer"))
     del _name

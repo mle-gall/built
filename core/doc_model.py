@@ -536,6 +536,41 @@ def attribute(name: str, track: bool = True):
     return NATIVE.DocAttr(name, track=track)
 
 
+class Record(NATIVE.DocRecord if ENABLED else object):
+    """Python editor handle for a document record."""
+
+    __slots__ = ()
+
+    def __copy__(self):
+        out = type(self).__new__(type(self))
+        for name in self._record_fields:
+            setattr(out, name, getattr(self, name))
+        if hasattr(self, "__dict__"):
+            out.__dict__.update(self.__dict__)
+        return out
+
+    def __deepcopy__(self, memo):
+        from copy import deepcopy
+        out = type(self).__new__(type(self))
+        memo[id(self)] = out
+        for name in self._record_fields:
+            setattr(out, name, deepcopy(getattr(self, name), memo))
+        if hasattr(self, "__dict__"):
+            out.__dict__.update(deepcopy(self.__dict__, memo))
+        return out
+
+
+def record_fields(*names):
+    """Bind the editor's declared fields to native journalled values."""
+    def bind(cls):
+        cls._record_fields = names or tuple(cls.__dataclass_fields__)
+        if ENABLED:
+            for name in cls._record_fields:
+                setattr(cls, name, attribute(name))
+        return cls
+    return bind
+
+
 # ----------------------------------------------------------- transactions
 
 def begin() -> int:

@@ -17,10 +17,12 @@ from __future__ import annotations
 
 import math
 
+from core.doc_model import Record, record_fields
 from ingetrazo_core import Vec3 as QVector3D
 
 
-class GeoPath:
+@record_fields("points", "closed", "name", "surface")
+class GeoPath(Record):
     """An ordered polyline of local-metre nodes (a road, boundary, alignment)."""
 
     def __init__(self, points, closed: bool = False, name: str = "",

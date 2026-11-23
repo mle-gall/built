@@ -149,9 +149,9 @@ def scoped(scene, record):
     if doc_model.ENABLED:
         # The tables kept on the scene's root (tag folders, active tag,
         # plugin data, materials, kept components) come with the copy.
-        tables = {name: deepcopy(getattr(scene, name)) for name in (
-            "active_layer", "layer_folders", "folder_parents", "folder_visibility",
-            "layer_folder_uids", "layer_folder_names", "plugin_data")}
+        from core.scene import ROOT_TABLES
+        tables = {name: copy(getattr(scene, name)) for name in ROOT_TABLES}
+        tables["plugin_data"] = deepcopy(scene.plugin_data)
         materials = scene.materials.copy()
         kept = list(getattr(scene, "kept_components", []) or [])
         out._root = doc_model.new_scene_root()

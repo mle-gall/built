@@ -46,6 +46,7 @@ class DimensionTool(AxisMagnet, Tool):
         # Read by the viewport for the work plane / snap engine (mirrors ``a``).
         self.start_point: QVector3D | None = None
         self.work_plane: tuple[QVector3D, QVector3D] | None = None
+        self._attachment_a = self._attachment_b = None
         self._vp = None
         # Last placement the free cursor asked for, and the one a held Shift
         # froze: ``(unit offset direction, axis)``.
@@ -110,6 +111,8 @@ class DimensionTool(AxisMagnet, Tool):
                 self.start_point = self.a
                 self._free = self._hold = None
                 return
+            from core.annotation_anchor import picked_attachment
+            self._attachment_a = picked_attachment(ctx)
             self.a = QVector3D(p)
             self.start_point = self.a
             return
@@ -117,6 +120,8 @@ class DimensionTool(AxisMagnet, Tool):
             p = self._frontal(ctx, p)
             if (p - self.a).length() < 1e-6:
                 return  # need two distinct endpoints
+            from core.annotation_anchor import picked_attachment
+            self._attachment_b = picked_attachment(ctx) if p == ctx.world else None
             self.b = QVector3D(p)
             self._free = self._hold = None
             # A Shift held through the endpoint click locked the a–b
@@ -126,7 +131,9 @@ class DimensionTool(AxisMagnet, Tool):
             return
         # Third click: place the dimension where the cursor asks — aligned,
         # or linear along an axis when pulled past the ends (issue #50).
-        ctx.viewport.history.execute(AddDimensionCommand(self._proposed(p)))
+        dim = self._proposed(p)
+        dim.attachment_a, dim.attachment_b = self._attachment_a, self._attachment_b
+        ctx.viewport.history.execute(AddDimensionCommand(dim))
         self._reset()
         ctx.viewport.update()
 
@@ -208,6 +215,7 @@ class DimensionTool(AxisMagnet, Tool):
         return lv * t, None
 
     def _reset(self) -> None:
+        self._attachment_a = self._attachment_b = None
         self.a = None
         self.b = None
         self.start_point = None
