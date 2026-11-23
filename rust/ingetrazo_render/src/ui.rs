@@ -1887,7 +1887,16 @@ impl Ui {
                                 // is held, a quiet dot on the rows above (after the name).
                                 let marks_w = if file_state.is_some() { 10.0 } else { 0.0 } + if n.mark == 2 { 10.0 } else { 0.0 };
                                 let right = right - marks_w;
-                                let name = if n.active && n.row != 5 { format!("✎ {}", n.name) } else { n.name.clone() };
+                                if n.active && n.row != 5 {
+                                    let icon = Rect::from_center_size(pos2(tx + 6., cy), vec2(12., 12.));
+                                    if let Some(line) = self_icons.get("line") {
+                                        egui::Image::new(line).tint(DIM).paint_at(ui, icon);
+                                    } else {
+                                        ui.painter().line_segment([icon.left_bottom(), icon.right_top()], Stroke::new(1.5_f32, DIM));
+                                    }
+                                    tx += icon.width() + SPACE_XS;
+                                }
+                                let name = n.name.clone();
                                 let full = name.clone();
                                 let g = ui.painter().layout_job(one_line(name, font, ink, right - tx));
                                 let name_w = g.size().x;

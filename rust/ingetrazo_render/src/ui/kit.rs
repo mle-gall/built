@@ -871,6 +871,7 @@ pub mod organisms {
                     if let Some(on) = visible {
                         let (rect, eye) = ui.allocate_exact_size(vec2(16., PROP_H), Sense::click());
                         paint_eye(ui, rect, *on);
+                        ui.add_space(SPACE_XS);
                         if eye.on_hover_text(format!("Show / hide {value}")).clicked() { actions.push(target.clone()); }
                     }
                     let enabled = !target.is_empty();
