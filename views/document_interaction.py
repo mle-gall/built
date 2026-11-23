@@ -13897,11 +13897,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         self._last_mouse_pos = ev.position()
         self._emit_coordinate(ev)
         _hmark("coord")
-        # Plan↔profile link (Track G): let an open profile mark the station of
-        # the route point under the cursor.
-        win = self.window()
-        if hasattr(win, "on_viewport_hover"):
-            win.on_viewport_hover(ev.position().x(), ev.position().y())
         # What the snap reads of a face under the cursor builds no lazy mesh
         # (#1092); a tool's on_hover below may keep what it picks, and a click
         # gets the real faces.

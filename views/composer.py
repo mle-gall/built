@@ -1290,11 +1290,28 @@ def paint_scalebar_mm(painter: QPainter, sb: BarraEscala) -> None:
                   align=Qt.AlignHCenter | Qt.AlignTop)
 
 
+def _nice_ticks(lo: float, hi: float, target: int = 5) -> list[float]:
+    """A short list of round tick values spanning ``[lo, hi]``."""
+    if hi <= lo:
+        return [lo]
+    raw = (hi - lo) / target
+    mag = 10 ** math.floor(math.log10(raw))
+    for m in (1, 2, 2.5, 5, 10):
+        step = m * mag
+        if raw <= step:
+            break
+    start = math.ceil(lo / step) * step
+    ticks, v = [], start
+    while v <= hi + 1e-6:
+        ticks.append(round(v, 6))
+        v += step
+    return ticks or [lo, hi]
+
+
 def chainage_step(length: float, step_m: float = 0.0) -> float:
     """The chainage step in metres: the user's, or the round one that spans
     *length* in about six marks. Shared by the profile's axis and the plan
     view's marks, so a sheet's chainages agree by construction."""
-    from views.profile_panel import _nice_ticks
     if step_m and step_m > 0:
         return float(step_m)
     ticks = _nice_ticks(0.0, length, 6)
@@ -1316,7 +1333,6 @@ def paint_perfil_mm(painter: QPainter, m: PerfilTerreno, profile,
     tinted fill, the axes. Horizontal scale 1:N (or fit to the width) and a
     vertical exaggeration (or fit to the height) — the pair every road and
     canal plan states next to the profile."""
-    from views.profile_panel import _nice_ticks
     w, h = float(m.w_mm), float(m.h_mm)
     ink = QColor(30, 36, 44)
     grey = QColor(90, 98, 110)

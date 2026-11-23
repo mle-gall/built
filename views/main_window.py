@@ -1238,12 +1238,6 @@ class MainWindow(WorksessionMixin, QMainWindow):
             panels_tb.addWidget(btn)
             self._icon_actions.append((btn, key))
 
-        # Terrain profile dock (Track G, G4) — hidden until requested.
-        from views.profile_panel import ProfileDock
-        self.profile_dock = ProfileDock(self)
-        self.addDockWidget(Qt.BottomDockWidgetArea, self.profile_dock)
-        self.profile_dock.hide()
-
     def _new_toolbar(self, title: str, object_name: str) -> QToolBar:
         """A separate, independently draggable/floatable icons-only toolbar
         (Draw, Modify, View… each move on their own)."""
@@ -2250,12 +2244,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         self._act_customize_toolbars.setVisible(
             self.testAttribute(Qt.WA_TranslucentBackground))
 
-        toggle_profile = self.profile_dock.toggleViewAction()
-        toggle_profile.setText(tr("Terrain profile"))
-        toggle_profile.setStatusTip(tr(
-            "Show or hide the panel with the terrain profile along a path."))
-        window_menu.addAction(toggle_profile)
-
+        window_menu.addAction(tr("Terrain profile"), self._on_terrain_profile)
 
         # AutoCAD's Ctrl+0 clean screen: nothing but the model, for
         # presenting. Added to the WINDOW too, so the shortcut keeps
@@ -7164,21 +7153,13 @@ class MainWindow(WorksessionMixin, QMainWindow):
         self.viewport.update()
 
     def _on_terrain_profile(self) -> None:
-        """Show the profile dock and profile the current selection (Track G)."""
+        """Open the terrain chart in the chrome's bottom bar."""
+        from views.inspector_bridge import action
         view = getattr(self._doc, "stand_in", None)
-        if getattr(view, "_ui_attached", False):
-            from views.inspector_bridge import action
-            action(self, view, '["terrain.open",null]')
+        if getattr(view, "renderer", None) is None:
+            self.statusBar().showMessage(tr("The terrain profile needs an active renderer."))
             return
-        self.profile_dock.show()
-        self.profile_dock.raise_()
-        self.profile_dock.compute_from_selection()
-
-    def on_viewport_hover(self, screen_x: float, screen_y: float) -> None:
-        """Plan→profile link: mark the station of the route point under the
-        cursor in the open profile (Track G)."""
-        if self.profile_dock.isVisible():
-            self.profile_dock.indicate_at_screen(screen_x, screen_y)
+        action(self, view, '["terrain.open",null]')
 
     # ---- Terrain-surface fill (Track G) -------------------------------------
     def _surface_dem(self, datum):
@@ -7807,7 +7788,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         vp.smartZoomRequested.connect(live(self._on_smart_zoom))
         for name in ("tray", "bim_tray", "georef_tray", "project_browser",
                      "layers_dock", "scenes_dock", "layers_toolbar",
-                     "profile_dock", "structure_dock"):
+                     "structure_dock",):
             panel = getattr(self, name, None)
             if panel is not None:
                 vp.sceneVersionChanged.connect(
