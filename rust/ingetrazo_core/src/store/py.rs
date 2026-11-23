@@ -1303,6 +1303,28 @@ impl PyMeshStore {
         Ok(existing.is_none().then(|| self.inner.key(Kind::Edge, edge)))
     }
 
+    fn cap_passes_wall(&self, face: u128, rim: Vec<[f64; 3]>, normal: [f64; 3], distance: f64) -> PyResult<bool> {
+        Ok(self.inner.cap_passes_wall(live_of(&self.inner, Kind::Face, face)?, &rim, normal, distance))
+    }
+
+    #[staticmethod]
+    fn wall_depths_crossed(walls: Vec<Vec<f64>>, distance: f64) -> bool {
+        super::push_band::passes_wall(&walls, distance)
+    }
+
+    fn push_shape_matches(&self, before: &PyStoreSnapshot) -> bool {
+        use super::commands::cell;
+        let prior = reader(&before.inner);
+        if self.counts() != before.counts() { return false; }
+        let cells = |store: &Store| {
+            let mut rows: Vec<_> = store.live_slots(Kind::Vertex).into_iter()
+                .map(|v| cell(*store.state.vpos.get(v as usize))).collect();
+            rows.sort_unstable();
+            rows
+        };
+        cells(&self.inner) == cells(&prior)
+    }
+
     fn push_band(
         &mut self,
         base: Vec<[f64; 3]>,

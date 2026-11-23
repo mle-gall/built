@@ -40,6 +40,7 @@ as the cap of the new box.
 from __future__ import annotations
 from core.element_set import ElementSet
 
+from core import doc_model
 import math
 import time
 
@@ -2435,7 +2436,49 @@ class PushPullTool(Tool):
                    "_drag_pre_oriented", "_refused", "_topped_out",
                    "extrusion")
 
-    def _mutate_many(self, scene) -> None:
+    def _mutate_many(self, scene):
+        if not doc_model.ENABLED:
+            return self._reference_mutate_many(scene)
+        from ingetrazo_core import push_secondary_faces
+        wanted = self.extrusion
+        self._mutate_or_top_out(scene)
+        lead = {k: getattr(self, k) for k in self._FACE_STATE}
+        mesh = scene.mesh
+        shapes = [_face_shape(f) for f in self._extra_faces]
+
+        def prepare(index):
+            face = self._extra_faces[index]
+            if face not in mesh.faces:
+                face = next((f for f in mesh.faces if _face_shape(f) == shapes[index]), None)
+            if face is None:
+                return None
+            orient_outward(mesh, only=(face,))
+            self.base_face = face
+            self._drag_pre_oriented = True
+            self._anchor = face.centroid()
+            self._normal = self._outward_normal(face, mesh)
+            self._attached, self._prism_cap = self._classify_base(scene)
+            self._cap_positions = self._cap_loop_positions(face)
+            self.extrusion = wanted
+            self._compute_inward_limit(scene)
+            self._clamp_extrusion()
+            return self.extrusion
+
+        def apply():
+            self._mutate_or_top_out(scene)
+            return self._refused, self._topped_out
+
+        try:
+            refused, missed = push_secondary_faces(mesh, len(shapes), wanted, _MIN_EXTRUDE,
+                                                   self._refused, prepare, apply)
+        finally:
+            for name, value in lead.items():
+                setattr(self, name, value)
+        self._refused, self._multi_missed = refused, missed
+        self._topped_out = False
+        self.extrusion = wanted
+
+    def _reference_mutate_many(self, scene) -> None:
         """A multi-face push, inside the commit's one SnapshotMutation: the
         base face first, then each other face the same signed distance along
         its OWN outward normal — every one through the single-face pipeline,
@@ -2500,7 +2543,22 @@ class PushPullTool(Tool):
     #: on a push that would otherwise do nothing at all.
     _CLAMP_TRIES = 6
 
-    def _mutate_or_top_out(self, scene) -> None:
+    def _mutate_or_top_out(self, scene):
+        if not doc_model.ENABLED:
+            return self._reference_mutate_or_top_out(scene)
+        from ingetrazo_core import push_top_out
+
+        def attempt(distance):
+            self.extrusion = distance
+            self._mutate(scene)
+            return self.extrusion, self._refused
+
+        self.extrusion, self._refused, partial = push_top_out(
+            self._target_mesh(scene), attempt, self.extrusion, _MIN_EXTRUDE, self._CLAMP_TRIES)
+        if partial:
+            self._topped_out = True
+
+    def _reference_mutate_or_top_out(self, scene) -> None:
         """Commit the push; if the guard refuses the dragged distance, commit
         the furthest one it accepts instead.
 
@@ -2580,19 +2638,29 @@ class PushPullTool(Tool):
                       if self.base_face is not None else [])
         guard = (mesh.capture_state()
                  if is_closed(mesh) and not _mesh_is_flat(mesh) else None)
-        fp_before = (_Fingerprint(mesh) if guard is not None else None)
+        store_guard = getattr(guard, "snap", None) if doc_model.ENABLED else None
+        fp_before = _Fingerprint(mesh) if guard is not None and store_guard is None else None
         self._mutate_inner(scene, preview)
         if guard is not None and not (is_closed(mesh) or _mesh_is_flat(mesh)):
             mesh.restore_state(guard)
             self._refused = True
             return
-        if (fp_before is not None and abs(self.extrusion) >= _MIN_EXTRUDE
-                and fp_before.same_now(mesh)):
-            # The rebuild digested the push back to the starting state (the
-            # known holed-face-between-levels class): geometrically a no-op.
-            # Flag it so the commit tells the user instead of failing silently.
-            self._refused = True
-            return
+        if guard is not None and abs(self.extrusion) >= _MIN_EXTRUDE:
+            from core.store_mesh import _store_of
+            store = _store_of(mesh)
+            if store_guard is not None and store is not None:
+                unchanged = store.push_shape_matches(store_guard)
+            elif fp_before is not None:
+                unchanged = fp_before.same_now(mesh)
+            else:
+                # A store operation materialised its mesh during the push.
+                unchanged = ((len(mesh.vertices), len(mesh.edges), len(mesh.faces)) == store_guard.counts()
+                             and sorted(_key(store_guard.vertex_position(k)) for k in store_guard.keys("vertex"))
+                             == sorted(_key(v.position) for v in mesh.vertices))
+            if unchanged:
+                self._refused = True
+                return
+
         self._soften_curve_facets(mesh, before_edges, before_mark)
         self._tag_moved_curves(mesh, curve_runs)
         if base_tag is not None or base_paint:
@@ -2621,7 +2689,20 @@ class PushPullTool(Tool):
                     f.attrs.update(base_paint)
 
     @staticmethod
-    def _curve_runs(mesh, face) -> list:
+    def _curve_runs(mesh, face):
+        if not doc_model.ENABLED:
+            return PushPullTool._reference_curve_runs(mesh, face)
+        from ingetrazo_core import outline_curve_runs
+        runs = []
+        for loop in (face.loop, *face.hole_loops):
+            ids = [getattr(mesh.find_edge(v, loop[(i + 1) % len(loop)]), "curve", None)
+                   for i, v in enumerate(loop)]
+            for indices, closed in outline_curve_runs(ids, True):
+                runs.append(([QVector3D(loop[i].position) for i in indices], closed))
+        return runs
+
+    @staticmethod
+    def _reference_curve_runs(mesh, face) -> list:
         """The base's curves as runs of positions: each stretch of its loops
         whose edges share one curve id (a circle is one closed run, a
         rounded rectangle four open ones). Read before the push."""
@@ -2978,6 +3059,12 @@ class PushPullTool(Tool):
         if d >= 0:
             return False
         normal = self._normal if self._normal is not None else face.normal()
+        if doc_model.ENABLED:
+            from core.store_mesh import _store_of
+            store = _store_of(scene.mesh)
+            if store is not None:
+                return store.cap_passes_wall(face.key, [p.toTuple() for p in self._cap_positions],
+                                             normal.toTuple(), d)
         rim = {_key(p) for p in self._cap_positions}
         origin = self._cap_positions[0] if self._cap_positions else None
         if origin is None:
@@ -2988,6 +3075,9 @@ class PushPullTool(Tool):
                 continue
             walls.append([QVector3D.dotProduct(origin - v, normal)
                           for v in g.vertices if _key(v) not in rim])
+        if doc_model.ENABLED:
+            from ingetrazo_core import MeshStore
+            return MeshStore.wall_depths_crossed(walls, d)
         depths = [t for w in walls for t in w]
         if not depths:
             return False

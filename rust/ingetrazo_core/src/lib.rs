@@ -51,10 +51,14 @@ mod store;
 mod scans;
 mod orient;
 mod pushscan;
+mod push_command;
 mod panic_log;
 
 #[pymodule]
 fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(push_command::push_top_out, m)?)?;
+    m.add_function(wrap_pyfunction!(push_command::push_secondary_faces, m)?)?;
+    m.add_function(wrap_pyfunction!(push_command::outline_curve_runs, m)?)?;
     m.add_class::<math::Vec3>()?;
     m.add_class::<math::Vec4>()?;
     m.add_class::<math::Matrix4>()?;
