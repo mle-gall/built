@@ -496,8 +496,9 @@ class Dimension(Record):
 
     def anchor_points(self) -> list:
         """The world positions of the anchored endpoints (0, 1 or 2)."""
-        return [p for p, an in ((self.a, self.anchor_a), (self.b, self.anchor_b))
-                if an is not None]
+        return [getattr(self, end) for end in ("a", "b")
+                if getattr(self, "anchor_" + end) is not None
+                or getattr(self, "attachment_" + end) is not None]
 
     # ---- geometry -----------------------------------------------------------
     def display_text(self, measured: str) -> str:

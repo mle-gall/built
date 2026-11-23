@@ -524,7 +524,7 @@ class Cajetin(Record):
         for k in ("x_mm", "y_mm", "z", "locked", "group_id",
                   "proyecto", "autor", "fecha", "escala", "lamina"):
             d.pop(k, None)
-        return d
+        return doc_model.plain(d)
 
 
 def _same(a, b) -> bool:
@@ -747,7 +747,7 @@ class FormaItem(Record):
     band_mm: float = 6.0         # band depth (hatch / band)
 
 
-@record_fields()
+@record_fields(extra=("hold_a",))
 @dataclass(eq=False)
 class EtiquetaItem(Record):
     """A label with a leader (the classic sheet label / leader text): a
@@ -818,7 +818,7 @@ class EtiquetaItem(Record):
         return ld
 
 
-@record_fields()
+@record_fields(extra=("hold_a",))
 @dataclass(eq=False)
 class NivelItem(Record):
     """A level mark (cota de nivel): the elevation of a point of the model
@@ -1022,7 +1022,7 @@ def readable_deg(dx_mm: float, dy_mm: float) -> float:
     return (deg + 90.0) % 180.0 - 90.0
 
 
-@record_fields()
+@record_fields(extra=("hold_a", "hold_b"))
 @dataclass
 class CotaItem(Record):
     """A sheet dimension between two measured points; the label is the REAL
@@ -1459,13 +1459,22 @@ class Composicion(Record):
                          ("niveles", self.niveles),
                          ("llamadas", self.llamadas)):
             if lst:
-                d[key] = [asdict(it) for it in lst]
+                d[key] = []
+                for item in lst:
+                    entry = asdict(item)
+                    for name, (_last, hold) in sheet_holds(item):
+                        raw = hold if isinstance(hold, dict) else hold.archive()
+                        if raw is not None:
+                            entry.setdefault("geometry_anchors", {})[name] = raw
+                            if not isinstance(hold, dict) and (point := hold.position()) is not None:
+                                entry[name + "_world"] = list(point.toTuple())
+                    d[key].append(entry)
         if self.cajetin is not None:
             d["cajetin"] = asdict(self.cajetin)
         if self.guides_v or self.guides_h:
             d["guides"] = {"v": [float(x) for x in self.guides_v],
                            "h": [float(y) for y in self.guides_h]}
-        return d
+        return doc_model.plain(d)
 
     @classmethod
     def from_dict(cls, d: dict) -> "Composicion":
@@ -1512,7 +1521,38 @@ def _build(kind, raw):
     from a newer version loads with its extra keys ignored."""
     from dataclasses import fields
     known = {f.name for f in fields(kind)}
-    return kind(**{k: v for k, v in raw.items() if k in known})
+    item = kind(**{k: v for k, v in raw.items() if k in known})
+    anchors = raw.get("geometry_anchors")
+    if not isinstance(anchors, dict):
+        return item
+    for name, source in anchors.items():
+        if name in ("a", "b") and "hold_" + name in item._record_fields:
+            point = getattr(item, name + "_world", None)
+            if point and isinstance(source, dict):
+                setattr(item, "hold_" + name, (tuple(point), source))
+    return item
+
+
+def sheet_holds(item):
+    """Only holds belonging to the current snapped point survive a manual drag."""
+    if not getattr(item, "anchor_uid", None):
+        return
+    for name in ("a", "b"):
+        hold = getattr(item, "hold_" + name, None)
+        point = getattr(item, name + "_world", None)
+        if hold is not None and point and tuple(point) == tuple(hold[0]):
+            yield name, hold
+
+
+def bind_sheet_anchors(scene):
+    from core.annotation_anchor import Attachment
+    from ingetrazo_core import Vec3
+    for sheet in scene.compositions:
+        for item in (*sheet.cotas, *sheet.etiquetas, *sheet.niveles):
+            for name, (point, raw) in sheet_holds(item):
+                if isinstance(raw, dict):
+                    ref = Attachment.restore(scene, raw, Vec3(*point))
+                    setattr(item, "hold_" + name, (point, ref) if ref is not None else None)
 
 
 def _items(kind, raw_list) -> list:
@@ -1693,6 +1733,13 @@ def expand_fields(text, frame_uid: str = "") -> str:
 class ComposerCommand:
     """Reversible operation against a Composicion."""
 
+    def journalled(self):
+        """Extension commands can opt in once all of their edits are records."""
+        return False
+
+    def restore_preview(self):
+        pass
+
     def do(self) -> None:  # pragma: no cover - interface
         raise NotImplementedError
 
@@ -1705,6 +1752,13 @@ class CompoundCommand(ComposerCommand):
 
     def __init__(self, commands) -> None:
         self.commands = list(commands)
+
+    def journalled(self):
+        return all(c.journalled() for c in self.commands)
+
+    def restore_preview(self):
+        for cmd in reversed(self.commands):
+            cmd.restore_preview()
 
     def do(self) -> None:
         for c in self.commands:
@@ -1752,6 +1806,9 @@ class AddItemCommand(ComposerCommand):
         if isinstance(self.item, LlamadaItem):
             return self.comp.llamadas
         return None
+
+    def journalled(self):
+        return isinstance(self.comp, Record)
 
     def do(self) -> None:
         lst = self._list()
@@ -1805,6 +1862,9 @@ class RemoveItemCommand(ComposerCommand):
             return self.comp.llamadas
         return None
 
+    def journalled(self):
+        return isinstance(self.comp, Record)
+
     def do(self) -> None:
         lst = self._list()
         if lst is None:
@@ -1832,6 +1892,13 @@ class EditItemCommand(ComposerCommand):
         # the caller passes the state it captured at press.
         self.before = dict(before) if before is not None else \
             {k: getattr(item, k) for k in changes}
+
+    def journalled(self):
+        return isinstance(self.item, Record) and self.after.keys() <= set(self.item._record_fields)
+
+    def restore_preview(self):
+        if self.previewed:
+            self.undo()
 
     def do(self) -> None:
         for k, v in self.after.items():
@@ -1879,12 +1946,10 @@ class ComposerHistory:
     def execute(self, cmd: ComposerCommand, notify: bool = True,
                 coalesce: bool = False) -> None:
         txn = None
-        if doc_model.ENABLED:
+        if doc_model.ENABLED and cmd.journalled():
             # A drag has already written its preview to the item. Start the
             # transaction at the press position for those explicit fields.
-            for edit in reversed(_edits_of(cmd)):
-                if edit.previewed:
-                    edit.undo()
+            cmd.restore_preview()
             depth = doc_model.begin()
             try:
                 cmd.do()
@@ -1900,8 +1965,8 @@ class ComposerHistory:
         if (coalesce and top is not None
                 and _edit_signature(top) is not None
                 and _edit_signature(top) == _edit_signature(cmd)):
-            if txn is not None and top._txn is not None:
-                top._txn = txn.compose([top._txn, txn])
+            top._txn = (txn.compose([top._txn, txn])
+                        if txn is not None and top._txn is not None else None)
             # keep top's `before`
             for t, c in zip(_edits_of(top), _edits_of(cmd)):
                 t.after = dict(c.after)

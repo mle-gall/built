@@ -347,6 +347,7 @@ class History:
                 from core.coordinate_frame import mesh_frame
                 with mesh_frame(target, frame[0], matrix=frame[1]):
                     return self._run(cmd, phase, operation)
+        self._moved_signs = []
         listeners = tuple(self._listeners)
         self._notify(listeners, 0, cmd, phase, False)
         ran = False
@@ -447,6 +448,7 @@ class History:
         # command wrote in the document too, not only in the mesh.
         depth = _doc.begin()
         self.last_txn = None
+        annotation_txn = None
         try:
             geometry = []
             replay = depth and _geometry_plan(cmd, self.scene, geometry)
@@ -465,11 +467,21 @@ class History:
             if active.__dict__.get("_instance_definition", active) not in touched:
                 snapshot = active.capture_state()
             cmd.do(self.scene)
+            self._follow_text_placements()
+            # Automatic annotation tags are created once and stay available
+            # after undo, just as a tag the user made between steps does.
+            # Publish those writes with the edit, replay only the addition.
+            if depth == 1 and isinstance(cmd, (AddDimensionCommand, AddTextLabelCommand,
+                                               AddGuideCommand)):
+                annotation_txn = _doc.commit()
+                depth = _doc.begin()
             self._tag_new_objects(objs_before, include_groups=include_groups)
             txn = _doc.commit() if depth else None
         except CommandRejected as exc:
             if depth:
                 _doc.rollback()
+            if annotation_txn is not None:
+                annotation_txn.undo()
             if snapshot is not None:
                 self.scene.mesh.restore_state(snapshot)
             self.scene.version += 1
@@ -479,6 +491,8 @@ class History:
         except Exception as exc:
             if depth:
                 _doc.rollback()
+            if annotation_txn is not None:
+                annotation_txn.undo()
             if snapshot is not None:
                 self.scene.mesh.restore_state(snapshot)
             self.scene.selection.clear()
@@ -494,7 +508,11 @@ class History:
                     mesh, = meshes
                     owner = mesh.__dict__.get("_instance_definition", mesh)
                     part.before, part.after = txn.geometry_states(owner)
-        self.last_txn = (txn, False) if txn is not None else None
+        published = txn
+        if annotation_txn is not None:
+            published = txn.compose([annotation_txn, txn]) if txn is not None else annotation_txn
+            txn = annotation_txn
+        self.last_txn = (published, False) if published is not None else None
         self._dirty_from_txn()
         # Kept only by the commands it undoes; the others drop it once the
         # feed has read it.
@@ -523,6 +541,15 @@ class History:
                 del self.undo_stack[:len(self.undo_stack) - cap]
             self.redo_stack.clear()
         self._rebind_dimensions()
+
+    def _follow_text_placements(self):
+        anchors = getattr(self.scene, "text_placement_anchors", None)
+        if anchors:
+            from core.coordinate_frame import model_frame
+            with model_frame():
+                for anchor in anchors:
+                    if anchor.follow(self.scene):
+                        self._moved_signs.append(anchor.path[-1])
 
     def _rebind_dimensions(self) -> None:
         """After every command, undo and redo: a dimension whose vertex
@@ -627,6 +654,7 @@ class History:
         self.last_txn = None
         try:
             fn()
+            self._follow_text_placements()
             txn = _doc.commit() if depth else None
         except Exception:
             if depth:
@@ -2607,9 +2635,9 @@ class MoveDimensionsCommand(Command):
                 step = step - d * QVector3D.dotProduct(step, d)
             dim.offset = dim.offset + step
         else:
-            if dim.anchor_a is None:
+            if dim.anchor_a is None and dim.attachment_a is None:
                 dim.a = dim.a + step
-            if dim.anchor_b is None:
+            if dim.anchor_b is None and dim.attachment_b is None:
                 dim.b = dim.b + step
 
     def do(self, scene) -> None:
@@ -5688,7 +5716,9 @@ class InsertGroupCommand(Command):
 
     keeps_groups = True
 
-    def __init__(self, group) -> None:
+    def __init__(self, group, attachment=None) -> None:
+        self.attachment = attachment
+        self._sign_anchor = None
         self.group = group
         self._owner: Optional[list] = None
         self._baked = False
@@ -5737,12 +5767,20 @@ class InsertGroupCommand(Command):
             owner = scene.groups
         owner.append(self.group)
         self._owner = owner
+        if self.attachment is not None:
+            from core.annotation_anchor import TextPlacementAnchor
+            self._sign_anchor = TextPlacementAnchor.create(
+                scene, scene.occurrence_path(self.group), self.attachment)
+            if self._sign_anchor is not None:
+                scene.text_placement_anchors.append(self._sign_anchor)
         scene.selection.clear()
         scene.selection.add(self.group)
         scene.version += 1
 
     def undo(self, scene) -> None:
         owner = self._owner if self._owner is not None else scene.groups
+        if self._sign_anchor is not None and self._sign_anchor in scene.text_placement_anchors:
+            scene.text_placement_anchors.remove(self._sign_anchor)
         if self.group in owner:
             owner.remove(self.group)
         scene.selection.discard(self.group)

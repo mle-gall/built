@@ -541,6 +541,14 @@ class Record(NATIVE.DocRecord if ENABLED else object):
 
     __slots__ = ()
 
+    def __reduce__(self):
+        state = dict(getattr(self, "__dict__", ()))
+        state.update(handle_state(self, self._record_fields))
+        return new_handle, (type(self),), state
+
+    def __setstate__(self, state):
+        set_handle_state(self, state)
+
     def __copy__(self):
         out = type(self).__new__(type(self))
         for name in self._record_fields:
@@ -560,10 +568,12 @@ class Record(NATIVE.DocRecord if ENABLED else object):
         return out
 
 
-def record_fields(*names):
+def record_fields(*names, extra=()):
     """Bind the editor's declared fields to native journalled values."""
     def bind(cls):
-        cls._record_fields = names or tuple(cls.__dataclass_fields__)
+        cls._record_fields = (names or tuple(cls.__dataclass_fields__)) + extra
+        for name in extra:
+            setattr(cls, name, None)
         if ENABLED:
             for name in cls._record_fields:
                 setattr(cls, name, attribute(name))

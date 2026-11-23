@@ -428,6 +428,94 @@ def geometry_steps():
     return out
 
 
+def anchor_steps(work):
+    """Three attachment kinds on the second of two nested instances."""
+    from core.annotation_anchor import Attachment
+    from core.history import MoveGroupCommand
+    from core.textlabel import TextLabel
+
+    scene = Scene()
+    mesh = Mesh()
+    face = mesh.add_face([QVector3D(0, 0, 0), QVector3D(4, 0, 0),
+                          QVector3D(0, 4, 0)])
+    for name, x in (("one", 0), ("two", 10)):
+        parent = Group(Mesh(), uid=name)
+        parent.xform = QMatrix4x4()
+        parent.xform.translate(x, 0, 0)
+        part = Group(mesh, uid="part")
+        part.xform = QMatrix4x4()
+        parent.adopt([part])
+        scene.groups.append(parent)
+    edge = mesh.find_edge(face.loop[0], face.loop[1])
+    for entity, xyz in ((face.loop[0], (10, 0, 0)), (edge, (12, 0, 0)), (face, (11, 1, 0))):
+        point = QVector3D(*xyz)
+        ref = Attachment.capture(scene, entity, part, point)
+        assert ref.binding.path == ["two", "part"]
+        scene.text_labels.append(TextLabel(point, QVector3D(0, 1, 0), ref.binding.kind, attachment=ref))
+    def positions(sc):
+        return [label.anchor.toTuple() for label in sc.text_labels]
+    history = History(scene)
+    sign = Group(Mesh(), uid="sign")
+    sign.xform = QMatrix4x4()
+    sign.text3d = {"text": "Sign"}
+    history.execute(InsertGroupCommand(sign, attachment=scene.text_labels[-1].attachment))
+    assert not history.last_error, history.last_error
+    assert history.undo() and not scene.text_placement_anchors
+    assert history.redo() and len(scene.text_placement_anchors) == 1
+    from core.composition import Composicion, CotaItem, MarcoVista
+    start_point = positions(scene)[0]
+    item = CotaItem(anchor_uid="detail", a_world=list(start_point), b_world=[0, 0, 0])
+    item.hold_a = (start_point, scene.text_labels[0].attachment)
+    scene.compositions.append(Composicion(frames=[MarcoVista(uid="detail")], cotas=[item]))
+    original = positions(scene)
+    history.execute(MoveGroupCommand(parent, QVector3D(0, 3, 0)))
+    assert sign.xform.map(QVector3D()).toTuple() == (0, 3, 0)
+    assert "sign" in history.feed.last.placements["modified"]
+    moved = positions(scene)
+    assert moved == [(x, y + 3, z) for x, y, z in original]
+    assert history.undo() and positions(scene) == original
+    assert sign.xform.map(QVector3D()).toTuple() == (0, 0, 0)
+    assert history.redo() and positions(scene) == moved
+    # A translation of the defining vertices keeps all three element keys.
+    from core.history import MoveVerticesCommand
+    scene.begin_group_edit(part)
+    vertices = [v.position for v in scene.mesh.vertices]
+    history.execute(MoveVerticesCommand(vertices, QVector3D(0, 0, 2)))
+    assert not history.last_error, history.last_error
+    raised = [(x, y, z + 2) for x, y, z in moved]
+    assert positions(scene) == raised
+    assert history.undo() and positions(scene) == moved
+    assert history.redo() and positions(scene) == raised
+    assert history.undo()
+    scene.end_group_edit()
+    assert positions(scene) == moved
+    for ext in ("igz", "built"):
+        file = work / ("anchors." + ext)
+        igz.save_scene(scene, file, backup=False)
+        back = Scene()
+        igz.load_into(back, file)
+        assert positions(back) == moved
+        again = work / ("anchors-saved-again." + ext)
+        igz.save_scene(back, again, backup=False)
+        assert again.read_bytes() == file.read_bytes()
+        cota = back.compositions[0].cotas[0]
+        assert tuple(cota.a_world) == moved[0] and cota.hold_a[1].position().toTuple() == moved[0]
+        assert all(label.attachment is not None for label in back.text_labels)
+        loaded = History(back)
+        loaded.execute(MoveGroupCommand(back.groups[1], QVector3D(0, -3, 0)))
+        assert positions(back) == original
+        assert tuple(back.compositions[0].to_dict()["cotas"][0]["a_world"]) == original[0]
+        assert back.resolve_occurrence(["sign"]).xform.map(QVector3D()).toTuple() == (0, 0, 0)
+    from core.history import AddTextLabelCommand
+    auto = TextLabel(QVector3D(), QVector3D(), "New")
+    history.execute(AddTextLabelCommand(auto))
+    tag = scene.layer(auto.layer)
+    assert tag is not None and history.undo() and scene.layer(tag.key) is tag
+    assert history.feed.last.tags["removed"] == []
+    assert history.redo() and scene.text_labels[-1] is auto
+    return moved
+
+
 def presentation_steps(scene, steps):
     from core.annotation_anchor import Attachment
     from core.composition import Composicion, MarcoVista, TextoItem
@@ -488,6 +576,7 @@ def main(work: Path):
     assert child.layer == "Tag 2" and original.children[0].layer == "Tag 0"
     assert history.undo() and not child.hidden
     assert history.redo() and child.hidden
+    anchor_steps(work)
     presentation_feed = []
     presentation = presentation_steps(initial_scene, presentation_feed)
     initial = saved(initial_scene, work, "initial")

@@ -108,6 +108,13 @@ class DimensionTool(AxisMagnet, Tool):
                     and (edge.b - edge.a).length() >= 1e-6):
                 self.a = QVector3D(edge.a)
                 self.b = QVector3D(edge.b)
+                scene = getattr(ctx.viewport, "scene", None)
+                if scene is not None:
+                    from core.annotation_anchor import Attachment, picked_edge
+                    hit, owner = picked_edge(scene, edge)
+                    if hit is not None:
+                        self._attachment_a = Attachment.capture(scene, hit, owner, self.a)
+                        self._attachment_b = Attachment.capture(scene, hit, owner, self.b)
                 self.start_point = self.a
                 self._free = self._hold = None
                 return

@@ -1056,6 +1056,10 @@ def prepare_scene_steps(scene, mesh_steps=None, *, stream=None, large=None):
     points = getattr(scene, "geo_points", None)
     if points:
         payload["geo_points"] = [p.to_dict() for p in points]
+    signs = [record for anchor in getattr(scene, "text_placement_anchors", ())
+             if (record := anchor.archive(scene)) is not None]
+    if signs:
+        payload["text_placement_anchors"] = signs
     labels = getattr(scene, "text_labels", None)
     if labels:
         payload["text_labels"] = [t.to_dict() for t in labels]
@@ -2212,6 +2216,15 @@ def _load_into_inner(scene, path: Path, progress=None, link_meshes=None) -> None
     from georef.points import GeoPoint
     for raw in payload.get("geo_points", []):
         scene.geo_points.append(GeoPoint.from_dict(raw))
+
+    from core.composition import bind_sheet_anchors
+    bind_sheet_anchors(scene)
+    from core.annotation_anchor import TextPlacementAnchor
+    scene.text_placement_anchors.clear()
+    for raw in payload.get("text_placement_anchors", []):
+        anchor = TextPlacementAnchor.restore(scene, raw)
+        if anchor is not None:
+            scene.text_placement_anchors.append(anchor)
 
     from core.textlabel import TextLabel
     for raw in payload.get("text_labels", []):

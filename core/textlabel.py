@@ -27,7 +27,7 @@ class TextLabel(Record):
     def anchor(self):
         if self.attachment is not None:
             point = self.attachment.position()
-            if point is not None:
+            if point is not None and point != self._anchor:
                 self._anchor = point
         return self._anchor
 
@@ -43,7 +43,7 @@ class TextLabel(Record):
     def to_dict(self) -> dict:
         binding = self.attachment.archive() if self.attachment is not None else None
         return {
-            "anchor": [self.anchor.x(), self.anchor.y(), self.anchor.z()],
+            "anchor": list(self.anchor.toTuple()),
             "offset": [self.offset.x(), self.offset.y(), self.offset.z()],
             "text": self.text,
             **({"attachment": binding} if binding else {}),

@@ -546,6 +546,7 @@ class ChangeFeed:
             step.placements["removed"].extend(u for i, u in roots0.items() if i not in roots1)
         step.complete = _known_placements(
             cmd, phase, step, scene, changes is not None) and step.complete
+        step.placements["modified"].extend(h._moved_signs)
         _dedupe(step.placements)
         if tags0 is not None:
             for k in tags1.keys() - tags0.keys():

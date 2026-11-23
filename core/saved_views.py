@@ -19,7 +19,10 @@ from core.doc_model import Record, record_fields
 from core.history import Command, CommandRejected
 
 
-@record_fields('name', 'navigator_view', 'folder', 'target', 'distance', 'yaw', 'pitch', 'fov_deg', 'perspective', 'two_point', 'hidden_layers', 'hidden_folders', 'style', 'section', 'georef', 'shadows', 'hidden_objects', 'hidden_shown', 'lens')
+@record_fields("name", "navigator_view", "folder", "target", "distance", "yaw",
+               "pitch", "fov_deg", "perspective", "two_point", "hidden_layers",
+               "hidden_folders", "style", "section", "georef", "shadows",
+               "hidden_objects", "hidden_shown", "lens")
 class SavedView(Record):
     """A named camera + layer-visibility snapshot."""
 
