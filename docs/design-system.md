@@ -10,7 +10,7 @@ The public Rust module `ui::tokens` owns colour values. Its palette declaration 
 
 | Role | Tokens and values |
 |---|---|
-| Surface | `SHEET` #1A1A1A, `SIDE` / `GLASS_BAR` #1F1F1F, `CARD` #242424, `CARD_HOVER` #2B2B2B, `WELL` #131313 |
+| Surface | `SHEET` #1A1A1A, `SIDE` / `GLASS_BAR` #1F1F1F, `CARD` #242424, `CARD_HOVER` #2B2B2B, `WELL` #131313, `DESK` (= `WELL`, the Sheets desk around the paper; Python reads it through `ingetrazo_render.chrome_token`) |
 | Depth | `PANEL` / `POPOVER` premultiplied grey 31 at alpha 245, `FIELD` black at 28%, `SCRIM` black at 28%. `Surface::{Bar,Panel,Pill,Raised}` supply glass, radius and shadow together. |
 | Text | `INK` #EEF1F4, `INK_2` #C9CFD6, `DIM` #A2A9B1, `FAINT` #858C94, `OFF` #5C636A, `ON_PRIMARY` graphite on the primary accent, `BRIGHT` white on dark surfaces |
 | Boundary | `EDGE` / `DIVIDER` white at 8%, `HOVER_EDGE` white at 18%, `FOCUS_RING` #6AA5FF |
@@ -62,7 +62,9 @@ Token names are unchanged, so other branches rebase cleanly. The following value
 | Molecules: fields | `field`, `search`, `number` with unit, `swatch` | Edit a name, a measurement, a local filter or a document colour. Preserve identity across frames and keep IME text in the focused editor. |
 | Molecules: formatted prose | `kit::prose` | Render formatted release-note paragraphs with heading, emphasis, code and actionable link spans. |
 | Molecules: data | `list_row`, `tree_slots`, `paint_tile` / `paint_card`, `prop_row`, `caption`, `disclosure`, `status_chip` / `badge`, `empty_state`, `progress_bar` | Reuse the row hit area and reserve slots for counts and eye/lock controls. Show label and value pairs, collapse a section such as Export details, report a state and explain an empty result in context. |
-| Organisms | `Glass` (`glass`, `popover`, `activity_capsule`), `menu` with `menu_row` and `menu_separator`, `sheet_frame`, `tree`, `toast` / `toast_stack` | Assemble a workspace, browse a hierarchy or show choices anchored to a control. Keep data and action dispatch in the owning surface. Show active work in the capsule, using a ring for unknown duration and `progress_bar` for measured progress. Stack at most three transient results. |
+| Organisms | `Glass` (`glass`, `popover`, `activity_capsule`), `menu` with `menu_row` and `menu_separator`, `sheet_frame`, `tree`, `toast` / `toast_stack`, `value_pill` | Assemble a workspace, browse a hierarchy or show choices anchored to a control. Keep data and action dispatch in the owning surface. Show active work in the capsule, using a ring for unknown duration and `progress_bar` for measured progress. Stack at most three transient results. `value_pill` is the value field on the geometry: an accent edge and a drawn caret while typing, a check on the committed value it reads back until the next action (`ui/value_field.rs`). |
+
+The tool rail (`ui/rail.rs`) lays out from the band's height alone: two columns when every row fits between the bars, three when two do not, and three that scroll only as a last resort. A tool's place is its index in its group. The model and Sheets rails share it.
 
 The About sheet uses `credits_roll` for contributor names, linked profiles and translated roles. The band pauses under the pointer and accepts wheel movement in either direction. The gallery includes a sample credit.
 
@@ -89,7 +91,7 @@ A surface may introduce a custom atom, molecule or organism when it serves the i
 2. Use shared colour, type, height, spacing, radius, motion and glass tokens. Introduce a named role in `ui/tokens.rs` if existing roles cannot express the design. Stay within the four type sizes.
 3. Respect input ownership. A press that begins on a control owns its drag and release. A viewport drag keeps ownership across chrome. A modal sheet owns keys and pointer events while open. Give fields stable focus IDs and forward text and IME input to their owner.
 4. Read its state through `state_of` and paint through `paint_state`, `paint_focus` or `paint_selected_row`, so the gallery's forced states (`specimen`) apply to it.
-5. Add a row to the molecule matrix in `ui/gallery.rs` with its applicable states: rest, hover, pressed, selected, focus and disabled. Add an organism to the organisms band. Use real-looking content, such as file names, IFC fields and units.
+5. Add a row to the molecule matrix in `ui/gallery.rs`, or place it in the surfaces band. `gallery::coverage` fails when a public kit function is missing from the gallery (non-components are listed there with a reason). with its applicable states: rest, hover, pressed, selected, focus and disabled. Add an organism to the organisms band. Use real-looking content, such as file names, IFC fields and units.
 6. Test the interaction or layout through a real caller. Run the renderer library tests and inspect a fresh gallery capture.
 
 The Font picker in the gallery's organisms band opens the same compact popover used by 3D Text, sheet text and the shared dimension and label style. The gallery example includes a recent family and a starred family. Typing filters the installed families, arrows move the selection, Enter applies and Escape cancels.
