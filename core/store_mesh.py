@@ -1250,8 +1250,6 @@ class StoreMesh(Mesh):
         below), then ``keyfn`` itself on those: Python's answer exactly."""
         if not cells:
             return []
-        pos = self._store.positions()
-        ix = np.floor(pos * 1e4).astype(np.int64)
         near = set()
         for c in cells:
             ci = [round(float(x) * (1.0 if isinstance(x, int) else 1e4))
@@ -1260,15 +1258,10 @@ class StoreMesh(Mesh):
                 for dy in (-1, 0):
                     for dz in (-1, 0):
                         near.add((ci[0] + dx, ci[1] + dy, ci[2] + dz))
-        idx = [i for i, r in enumerate(map(tuple, ix.tolist())) if r in near]
-        if not idx:
-            return []
-        keys = self._store.keys("vertex")
-        out = []
-        for i in idx:
-            if keyfn(pos[i].tolist()) in cells:
-                out.append(VertexView(self, keys[i]))
-        return out
+        near = {cell for cell in near if all(-2**63 <= x < 2**63 for x in cell)}
+        return [VertexView(self, key)
+                for key, position in self._store.vertices_in_floor_cells(near)
+                if keyfn(position) in cells]
 
     def cells_of(self, vertex_keys, keyfn) -> set:
         st = self._store

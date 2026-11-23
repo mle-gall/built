@@ -122,7 +122,12 @@ impl Store {
     /// parity mode, like `QVector3D + QVector3D`).
     pub fn move_vertex(&mut self, v: u32, delta: [f64; 3]) -> Change {
         let p = *self.state.vpos.get(v as usize);
-        let np = if self.f32_parity {
+        let np = self.translated_position(p, delta);
+        self.set_position(v, p, np)
+    }
+
+    pub(super) fn translated_position(&self, p: [f64; 3], delta: [f64; 3]) -> [f64; 3] {
+        if self.f32_parity {
             [
                 (p[0] as f32 + delta[0] as f32) as f64,
                 (p[1] as f32 + delta[1] as f32) as f64,
@@ -130,8 +135,7 @@ impl Store {
             ]
         } else {
             [p[0] + delta[0], p[1] + delta[1], p[2] + delta[2]]
-        };
-        self.set_position(v, p, np)
+        }
     }
 
     /// `Mesh.place_vertex`: put the vertex AT `position` (assigned, not

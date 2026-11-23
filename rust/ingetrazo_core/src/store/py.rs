@@ -843,6 +843,21 @@ impl PyMeshStore {
         Ok(self.inner.set_face_flags(f, flags))
     }
 
+    /// Candidate rows for position-key lookup in mesh order. Python applies
+    /// its exact decimal-rounding predicate only to this short list.
+    fn vertices_in_floor_cells(&self, near: std::collections::HashSet<[i64; 3]>)
+        -> Vec<(u128, [f64; 3])> {
+        self.inner.live_slots(Kind::Vertex).into_iter().filter_map(|v| {
+            let p = *self.inner.state.vpos.get(v as usize);
+            // Match numpy float64 -> int64 (out of range becomes i64::MIN).
+            let cell = p.map(|x| {
+                let n = (x * 1e4).floor();
+                if n >= i64::MIN as f64 && n < -(i64::MIN as f64) { n as i64 } else { i64::MIN }
+            });
+            near.contains(&cell).then(|| (self.inner.key(Kind::Vertex, v), p))
+        }).collect()
+    }
+
     /// Vertex positions (V, 3) float64, list order.
     fn positions<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
         let st = &self.inner.state;
@@ -1213,6 +1228,15 @@ impl PyMeshStore {
         ))
     }
 
+    fn prune_orphan_edges(&mut self, points: Vec<[f64; 3]>, edges: Option<Vec<u128>>,
+                          faces: Option<Vec<u128>>) -> PyResult<Vec<u128>> {
+        let removed = self.orphaned_edges_at(points, edges, faces)?;
+        for &edge in &removed {
+            self.remove_edge(edge)?;
+        }
+        Ok(removed)
+    }
+
     fn loop_inside_face(
         &self,
         face: u128,
@@ -1251,6 +1275,62 @@ impl PyMeshStore {
 
     fn curve_keys(&self, curve: i64) -> Vec<u128> {
         self.inner.curve_keys(curve)
+    }
+
+    /// Draw an edge, stamping optional attributes even on a coincident edge.
+    /// Only a new edge belongs to the command. Keep each attribute write's
+    /// revision for consumers of the protocol mesh record.
+    #[pyo3(signature = (a, b, soft, curve, layer, default_layer))]
+    fn draw_command_edge(&mut self, a: [f64; 3], b: [f64; 3], soft: Option<bool>,
+                         curve: Option<i64>, layer: Option<&str>, default_layer: &str)
+        -> PyResult<Option<u128>> {
+        let existing = self.inner.lookup(a).zip(self.inner.lookup(b))
+            .and_then(|(v, w)| self.inner.find_edge(v, w));
+        let edge = match existing {
+            Some(e) => e,
+            None => self.op(|s, ch| s.add_edge(a, b, ch))?.0,
+        };
+        if let Some(soft) = soft {
+            let flags = *self.inner.state.eflags.get(edge as usize);
+            self.inner.set_edge_flags(edge, if soft { flags | super::SOFT } else { flags & !super::SOFT });
+        }
+        if let Some(curve) = curve {
+            self.inner.set_edge_curve(edge, curve);
+        }
+        if let Some(layer) = layer {
+            self.inner.set_edge_layer(edge, (layer != default_layer).then_some(layer));
+        }
+        Ok(existing.is_none().then(|| self.inner.key(Kind::Edge, edge)))
+    }
+
+    fn move_without_join(&mut self, source: Vec<[f64; 3]>, delta: [f64; 3]) -> Option<usize> {
+        self.inner.move_without_join(&source, delta)
+    }
+
+    fn tag_curve_path(&mut self, points: Vec<[f64; 3]>, closed: bool, id: i64) -> bool {
+        self.inner.tag_curve_path(&points, closed, id)
+    }
+
+    fn explode_curves(&mut self, ids: std::collections::HashSet<i64>) -> usize {
+        for e in self.inner.state.order[1].live(&self.inner.state.slots[1]) {
+            if ids.contains(self.inner.state.ecurve.get(e as usize)) {
+                self.inner.set_edge_curve(e, -1);
+            }
+        }
+        ids.len()
+    }
+
+    fn delete_face_loop(&mut self, points: Vec<[f64; 3]>, candidates: Vec<u128>)
+        -> PyResult<(bool, Option<u128>)> {
+        let candidates = self.drawing_candidates(Kind::Face, Some(candidates))?;
+        let deleted = self.inner.delete_command_face(&points, &candidates);
+        Ok((deleted.is_some(), deleted.flatten()))
+    }
+
+    fn delete_edge_segments(&mut self, endpoints: Vec<[[f64; 3]; 2]>, candidates: Vec<u128>)
+        -> PyResult<Option<(Vec<u128>, Vec<u128>)>> {
+        let faces = self.drawing_candidates(Kind::Face, Some(candidates))?;
+        Ok(self.inner.delete_command_edges(&endpoints, &faces))
     }
 
     /// `Mesh.add_edge(a, b)`: `(key, change)`.

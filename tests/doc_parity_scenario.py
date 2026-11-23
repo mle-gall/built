@@ -380,7 +380,9 @@ def shared_assembly(work):
 def geometry_steps():
     """Compare the loose mesh, feed and replay at each command boundary."""
     from core.history import (MakeGroupCommand, ExplodeGroupCommand, SetFaceColorCommand,
-                              AddEdgeCommand, DeleteEdgesCommand)
+                              AddEdgeCommand, DeleteEdgesCommand, DeleteFaceCommand,
+                              ExplodeCurvesCommand, TagCurveCommand, PruneOrphanEdgesCommand,
+                              SnapshotCompound)
     from core.protocol import commands
 
     scene = Scene()
@@ -393,13 +395,20 @@ def geometry_steps():
             "vertices": [v.position_tuple() for v in mesh.vertices],
             "faces": [[list(v.toTuple()) for v in f.vertices] for f in mesh.faces],
             "paint": [dict(f.attrs) for f in mesh.faces],
+            "edge_flags": [(e.soft, e.curve, e.layer) for e in mesh.edges],
             "group_faces": [len(g.mesh.faces) for g in scene.groups],
             "feed": [({k: len(v) for k, v in m.created.items()},
                       {k: len(v) for k, v in m.removed.items()},
                       {k: len(v) for k, v in m.modified.items()}) for m in h.feed.last.meshes],
         }
 
-    for edit in (lambda: h.execute(AddEdgeCommand(QVector3D(4, 0, 0), QVector3D(4, 1, 0))),
+    for edit in (lambda: h.execute(AddEdgeCommand(QVector3D(4, 0, 0), QVector3D(4, 1, 0),
+                                                  curve=17, soft=True, layer="Ink")),
+                 lambda: h.execute(ExplodeCurvesCommand([mesh.edges[-1]])),
+                 lambda: h.execute(SnapshotCompound([TagCurveCommand(
+                     [QVector3D(4, 0, 0), QVector3D(4, 1, 0)], closed=False)], heal=False)),
+                 lambda: h.execute(PruneOrphanEdgesCommand([QVector3D(4, 0, 0)])),
+                 lambda: h.execute(AddEdgeCommand(QVector3D(8, 0, 0), QVector3D(8, 1, 0))),
                  lambda: h.execute(DeleteEdgesCommand([mesh.edges[-1]])),
                  lambda: h.execute(SetFaceColorCommand([mesh.faces[1]], [0., .5, 1.])),
                  lambda: commands.push_pull(h, mesh.faces[1].key, .25),
@@ -424,6 +433,13 @@ def geometry_steps():
     assert h.undo()
     out.append(state())
     assert h.redo() and keys == [edge.key for edge in mesh.edges]
+    out.append(state())
+    h.execute(DeleteFaceCommand(mesh.faces[-1]))
+    assert not h.last_error and not h.last_rejected
+    out.append(state())
+    assert h.undo()
+    out.append(state())
+    assert h.redo()
     out.append(state())
     return out
 
