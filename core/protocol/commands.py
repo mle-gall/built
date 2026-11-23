@@ -350,6 +350,29 @@ class EditTagCommand(Command):
         super().doc_after(scene, phase)
 
 
+class LinkSubsetCommand(Command):
+    def __init__(self, edit):
+        self.edit = edit
+
+    def do(self, scene):
+        self.edit.apply(scene, True)
+        scene.version += 1
+
+    def undo(self, scene):
+        self.edit.apply(scene, False)
+        scene.version += 1
+
+
+def edit_link_subset(history, placement, text):
+    from ingetrazo_core import LinkSubset
+    group, = _placements(history, [placement])
+    edit = LinkSubset.prepare(group, history.scene, text)
+    before = history.revision
+    if edit is not None:
+        history.execute(LinkSubsetCommand(edit))
+    return _answer(history, before)
+
+
 def reset_link_tags(history, path):
     from ingetrazo_core import reset_source_tags
     command = reset_source_tags(history.scene, path)
@@ -827,7 +850,7 @@ COMMANDS = {"patch_record_field": patch_record_field, "set_filing_rule": set_fil
             "explode_view": explode_view, "purge_unused": purge_unused,
             "purge_debris": purge_debris, "undo": undo, "redo": redo,
             "hide": hide, "unhide": unhide, "lock": lock, "rename_placement": rename_placement,
-            "reset_link_tags": reset_link_tags, "unlink_placements": unlink_placements, "edit_loose_geometry": edit_loose_geometry, "file_placements": file_placements, "edit_structure_node": edit_structure_node, "edit_tag": edit_tag, "set_tag": set_tag, "set_tag_state": set_tag_state, "resegment_curve": resegment_curve, "repair_solid": repair_solid,
+            "edit_link_subset": edit_link_subset, "reset_link_tags": reset_link_tags, "unlink_placements": unlink_placements, "edit_loose_geometry": edit_loose_geometry, "file_placements": file_placements, "edit_structure_node": edit_structure_node, "edit_tag": edit_tag, "set_tag": set_tag, "set_tag_state": set_tag_state, "resegment_curve": resegment_curve, "repair_solid": repair_solid,
             "rename_material": rename_material, "edit_material": edit_material,
             "duplicate_material": duplicate_material, "delete_material": delete_material,
             "delete_placements": delete_placements, "rename_component": rename_component,

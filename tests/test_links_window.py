@@ -97,7 +97,7 @@ def test_save_as_placeholder_and_reopen(win, tmp_path):
     assert _faces(g) == 2
 
 
-def test_links_tab_subset_and_agent_surface(win, tmp_path):
+def test_project_link_subset_and_agent_surface(win, tmp_path):
     from core.group import Group
     from core.scene import Scene
     from core.agent_tools import BUILTIN_TOOLS
@@ -106,16 +106,19 @@ def test_links_tab_subset_and_agent_surface(win, tmp_path):
     path = tmp_path / 'parts.igz'
     igz.save_scene(scene, path)
     win.link_igz_path(path, at=(0, 0, 0), select={'uids': [scene.groups[0].uid]})
-    panel = win.project_browser.links_panel
-    panel.refresh()
-    assert panel.tree.topLevelItemCount() == 1
-    item = panel.tree.topLevelItem(0)
-    assert item.text(1) == 'resolved'
-    assert item.text(2) == '1 UIDs'
-    assert item.text(3) == '1'
-    panel.tree.setCurrentItem(item)
-    panel.pack()
-    assert panel.tree.topLevelItem(0).text(1) == 'packed'
+    from tests.test_tree_links import _View
+    from views import wgpu_ui
+    view = _View()
+    wgpu_ui._tree(view, win)
+    key = next(k for k, n in view._ui_tree["nodes"].items() if n["kind"] == "link")
+    def inspector():
+        wgpu_ui._tree(view, win)
+        _, sections = wgpu_ui._linked_inspector(view, win, view._ui_tree, key)
+        return dict(dict(sections)["Linked file"])
+    assert inspector()["Subset"] == "1 item" and inspector()["Stable UIDs"] == "1"
+    assert view._ui_tree["nodes"][key]["path"] == str(path)
+    wgpu_ui._tree_action(win, view, "linkpack" + wgpu_ui.SEP + "n:" + key)
+    assert links.is_packed(win.viewport.scene, path)
     assert {'query_links', 'link_document', 'reload_link', 'query_project', 'set_project'} <= {t['name'] for t in BUILTIN_TOOLS}
 
 
@@ -173,3 +176,38 @@ def test_a_reloaded_link_keeps_the_layers_rows(win, tmp_path):
     assert not rebuilt
     assert {id(it) for it in panel._all_items()} == rows
     assert not panel.item_for(folder, "folder").isExpanded()
+
+
+def test_project_edits_only_the_addressed_link_subset_and_undoes_without_source(win, tmp_path, monkeypatch):
+    import json
+    from core.group import Group
+    from core.scene import Scene
+    from core.protocol import commands
+    from tests.test_tree_links import _View
+    from views import wgpu_ui as ui
+    src = Scene()
+    src.groups = [Group(name="Door"), Group(name="Window")]
+    path = tmp_path / "library.igz"
+    igz.save_scene(src, path)
+    subsets = [{"uids": [g.uid]} for g in src.groups]
+    for i in range(2):
+        win.link_igz_path(path, at=(i, 0, 0), select=subsets[0])
+    scene = win.viewport.scene
+    first, second = links.linked_groups(scene)
+    old_first, old_second = first.children[0], second.children[0]
+    view = _View()
+    ui._tree(view, win)
+    monkeypatch.setattr("views.chrome_forms.ask_text", lambda *args, done, **kw: done(json.dumps(subsets[1])))
+    ui._link_action(win, view, second, "linksubset")
+    assert first.children == [old_first] and first.children[0] is old_first
+    assert second.children[0].name == "Window" and links.link_of(second)["select"] == subsets[1]
+    updated = second.children[0]
+    path.unlink()  # undo and redo replay the captured definition
+    history = win.viewport.history
+    assert history.undo() and second.children[0] is old_second and links.link_of(second)["select"] == subsets[0]
+    assert history.redo() and second.children[0] is updated and links.link_of(second)["select"] == subsets[1]
+    assert first.children[0] is old_first
+    before = history.revision
+    with pytest.raises(ValueError):
+        commands.run(history, "edit_link_subset", placement=scene.occurrence_path(second), text='{"bad": true}')
+    assert history.revision == before and second.children[0] is updated

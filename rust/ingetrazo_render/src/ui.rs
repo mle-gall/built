@@ -2083,6 +2083,13 @@ impl Ui {
                             }
                         }
                         if col.mode.is_empty() {
+                            for (id, label) in [("linkselection", "Link selection from open file…"), ("linkregistry", "Move registry to project…")] {
+                                let item = (id.to_owned(), label.to_owned(), String::new(), String::new(), -1, true);
+                                if menu_row(ui, &item) {
+                                    actions.push(format!("{id}\u{1f}"));
+                                    close = true;
+                                }
+                            }
                             let shortcut = if cfg!(target_os = "macos") { "⇧⌘J" } else { "Ctrl+Shift+J" };
                             let item = ("revealselection".into(), "Reveal selection".into(), shortcut.into(), String::new(), -1, selection.is_some());
                             if menu_row(ui, &item) {

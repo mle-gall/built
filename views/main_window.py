@@ -4794,15 +4794,11 @@ class MainWindow(WorksessionMixin, QMainWindow):
 
     def _unlinked(self, cmd=None) -> None:
         """A link was broken or brought back (Make Unique of a link, or
-        its undo / redo): watch the sources still linked, and show the
-        tags and the Links tab as they are now."""
+        its undo / redo): watch the sources still linked, and update
+        the drawing rows."""
         self.viewport.notify_scene_changed()
         self._link_watcher().refresh()
         self._refresh_layer_views()
-        browser = getattr(self, "project_browser", None)
-        panel = getattr(browser, "links_panel", None)
-        if panel is not None:
-            panel.refresh()
 
     def _on_scale_dialog(self, group) -> None:
         tool = self._tools["scale_manager"]

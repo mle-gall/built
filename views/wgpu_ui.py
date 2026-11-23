@@ -1974,6 +1974,24 @@ def _tree_action(win, view, action) -> None:
                 rebuild()
             elif scene.selection:
                 vp.flash_status("This selection has no occurrence in the Project tree")
+        elif verb == "linkselection":
+            from ingetrazo_core import link_selection_sources
+            from views.chrome_forms import ask_choice
+            sources = link_selection_sources(win)
+            if sources:
+                def choose(path):
+                    if path in sources and win.viewport.scene is scene:
+                        win.link_igz_path(path, select={"uids": sources[path]})
+                ask_choice(win, "Link selection", "Open source document", list(sources), done=choose)
+            else:
+                vp.flash_status("Select groups in another saved, open document first")
+        elif verb == "linkregistry":
+            from core import project
+            from views.filedialogs import file_dialogs
+            path, _ = file_dialogs.getSaveFileName(win, "Move registry to project", "", "Project (*.igzproj)")
+            if path:
+                project.create(scene, path, win._current_path)
+                win._relink_done("Project registry updated")
         elif verb in ("eye", "lock") and rk == "geometry:loose":
             _core(vp, "edit_loose_geometry", field=verb)
             scene.select(e for e in list(scene.selection) if scene.entity_selectable(e))
@@ -2074,12 +2092,15 @@ def _tree_action(win, view, action) -> None:
             from core.desktop_open import reveal
             if tnode.get("path"):
                 reveal(tnode["path"])
-        elif verb in ("linkopen", "linkreload", "linkunlink", "linkrelink", "linkresettags") and linked:
+        elif verb in ("linkopen", "linkreload", "linkunlink", "linkrelink", "linkresettags", "linksubset", "linknested", "linkpack") and linked:
             gs = placements()
             if not gs:
                 return
             if verb != "linkopen" and tnode.get("via"):
                 vp.flash_status(f"{tnode.get('name')} comes inside {tnode['via']}: reload or unlink {tnode['via']}")
+                return
+            if verb in ("linksubset", "linknested") and len(gs) != 1:
+                vp.flash_status("Select one occurrence of this linked file first")
                 return
             if verb == "linkresettags":
                 _core(vp, "reset_link_tags", path=tnode["path"])
@@ -2487,11 +2508,10 @@ def _inspector(view, win) -> None:
         link = links.link_of(g)
         if link:
             state = _link_state(scene, link)
-            sel_ = link.get("select")
-            subset = "Full document" if sel_ is None else (f"{len(sel_['uids'])} items" if "uids" in sel_ else "Filtered")
+            from ingetrazo_core import link_subset_rows
             nested = link.get("include_nested", True)
             sections.append(("Linked file", [("Source", str(link.get("path", "")).rsplit("/", 1)[-1]),
-                                             ("Status", LINK_STATES.get(state, state)), ("Subset", subset),
+                                             ("Status", LINK_STATES.get(state, state)), *link_subset_rows(g),
                                              ("Nested links", "included" if nested else "source only")]))
             acts = [("linkopen", "Open source"), ("linkreload", "Reload" if state != "modified" else "Reload changes"),
                     ("linkunlink", "Unlink"), ("linkfinder", "Show in Finder")]
@@ -2499,6 +2519,8 @@ def _inspector(view, win) -> None:
             sections.append(("Actions", [("linkrelink", "Relink…"),
                                          ("linkpack", "Unpack" if state == "packed" else "Pack into this file"),
                                          ("linknested", "Source only" if nested else "Include nested links")]))
+            if links.linked_ancestor(g.owner) is None:
+                sections.append(("Actions", [("linksubset", "Edit linked subset…")]))
         if _group_qty(view, g):
             sections.append(("Quantities", _qty_rows(_group_qty(view, g))))
         export = [("IFC class", str(rec.get("class") or recipe.get("class") or "generic object")),
@@ -2592,6 +2614,15 @@ def _linked_inspector(view, win, data, key):
                   "linkunlink": "Unlink", "linkfinder": "Show in Finder", "linkrelink": "Locate…"}
         acts = [("lnk:" + v + ":" + key, labels[v]) for v in verbs.file_verbs(not top)
                 if state != "missing" or v in ("linkunlink", "linkrelink")]
+        if len(copies) == 1:
+            from ingetrazo_core import link_subset_rows
+            rows.extend(link_subset_rows(copies[0]))
+            if top and state != "missing":
+                acts.append(("lnk:linksubset:" + key, "Edit linked subset…"))
+                nested = links.link_of(copies[0]).get("include_nested", True)
+                acts.append(("lnk:linknested:" + key, "Source only" if nested else "Include nested links"))
+        if top and state != "missing":
+            acts.append(("lnk:linkpack:" + key, "Unpack" if state == "packed" else "Pack into this file"))
         if overrides and top:
             acts.append(("lnk:linkresettags:" + key, "Show tags as the source has them"))
         if state != "missing":
@@ -2643,6 +2674,24 @@ def _link_action(win, view, g, key) -> None:
             vp.notify_scene_changed()
             view._ui_insp_sig = None
             view._ui_tree_sig = None
+            return
+        if key == "linksubset":
+            import json
+            from views.chrome_forms import ask_text
+            address = scene.occurrence_path(g)
+            def accept(text):
+                if text is None or win.viewport.scene is not scene:
+                    return
+                try:
+                    result = _core(vp, "edit_link_subset", placement=address, text=text)
+                    if result and result["ok"]:
+                        win._relink_done("Linked subset updated")
+                    elif result and (result["error"] or result["rejected"]):
+                        vp.flash_status(result["error"] or result["rejected"])
+                except (KeyError, ValueError, OSError, links.LinkError) as exc:
+                    vp.flash_status(str(exc))
+            ask_text(win, "Edit linked subset", 'Full document (null), {"uids":[…]} or {"filter":{…}}',
+                     json.dumps(rec.get("select"), indent=2), done=accept, multiline=True)
             return
         if key == "linkreload":
             links.reload(scene, rec["path"])

@@ -122,7 +122,7 @@ class WorksessionMixin:
             targets = list(self.findChildren(QToolBar))
             targets += [d for d in self.findChildren(QDockWidget)
                         if d is not self.project_browser]
-            targets += [self.project_browser.outliner, self.project_browser.links_panel]
+            targets.append(self.project_browser.outliner)
             menus = self.menuBar().actions()
             targets += menus[1:]
             from core.i18n import tr

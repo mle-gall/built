@@ -426,9 +426,11 @@ def test_a_nested_link_in_the_window_is_watched_and_listed(win, tmp_path):
     host_scene.select([link])
     win._on_make_unique()
     assert watched() == [links._norm(leaf_path)]
-    panel = win.project_browser.links_panel
-    panel.refresh()
-    assert [r["path"] for r in panel.rows] == [str(leaf_path)]
+    from tests.test_tree_links import _View
+    from views import wgpu_ui
+    view = _View()
+    wgpu_ui._tree(view, win)
+    assert [n["path"] for n in view._ui_tree["nodes"].values() if n["kind"] == "link"] == [str(leaf_path)]
     win._on_undo()
     assert watched() == both
     win._on_redo()
