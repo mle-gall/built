@@ -45,7 +45,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from pathlib import Path
 
-from PySide6.QtGui import QMatrix4x4, QVector3D
+from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 # Coordinates beyond RECENTER_BEYOND_M trigger recentring — the rule every
 # importer shares (formats/recenter.py).

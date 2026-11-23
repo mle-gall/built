@@ -971,7 +971,7 @@ class BaseMapPanel(QWidget):
         self._window.viewport.reset_tiles()
 
     def _frame_camera(self, radius: float) -> None:
-        from PySide6.QtGui import QVector3D
+        from ingetrazo_core import Vec3 as QVector3D
         vp = self._window.viewport
         vp.camera.set_view("top")
         vp.camera.fit_to(QVector3D(-radius, -radius, 0.0),
@@ -6440,7 +6440,7 @@ class SurveyPointsPanel(QWidget):
         xs = [p.position.x() for p in points]
         ys = [p.position.y() for p in points]
         zs = [p.position.z() for p in points]
-        from PySide6.QtGui import QVector3D
+        from ingetrazo_core import Vec3 as QVector3D
         pad = 5.0
         self._window.viewport.camera.fit_to(
             QVector3D(min(xs) - pad, min(ys) - pad, min(zs) - pad),

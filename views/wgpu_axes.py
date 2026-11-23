@@ -1,5 +1,5 @@
 """Small axes uniform, independent of global core.axes state across documents."""
-from PySide6.QtGui import QMatrix4x4
+from ingetrazo_core import Matrix4 as QMatrix4x4
 
 
 def axes_state(scene, camera, source=None, origin=(0., 0., 0.)):

@@ -29,7 +29,7 @@ history stays clean while you still see the deformation as it happens.
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QMatrix4x4, QVector3D
+from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.group import Group, copy_group, transformed_attrs
 from core.i18n import tr
@@ -1109,7 +1109,7 @@ class MoveTool(Tool):
         position)."""
         for group in self._groups:
             if getattr(group, "xform", None) is not None:
-                from PySide6.QtGui import QMatrix4x4
+                from ingetrazo_core import Matrix4 as QMatrix4x4
                 t = QMatrix4x4()
                 t.translate(step)
                 group.xform = t * group.xform   # instance: O(1)

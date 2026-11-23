@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.dimension import Dimension
 from core.history import (
@@ -171,7 +171,7 @@ def test_is_occluded_matches_geometry():
     # A wall between the camera and the point occludes it; a point in front
     # of the wall (or with no geometry) is visible. Exercises the cached
     # NumPy Möller–Trumbore path headless (plaza.igz slowdown report).
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     from views.viewport import Viewport
 
     scene = Scene()
@@ -219,7 +219,7 @@ def test_xray_and_wireframe_let_snaps_through_faces():
     # engine must not reject a point behind a face — that is how you
     # dimension the floor of a pool through its water (Marco, 2026-09-02).
     # Shaded/hidden-line styles keep the visible-only rule.
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     from core.style import Style
     from views.viewport import Viewport
 
@@ -273,7 +273,7 @@ def test_geometry_inside_a_group_occludes_too():
     on the far side (Marco, 2026-08-27). It asks the pick index now, which
     holds every group's triangles as well.
     """
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     from core.group import Group
     from core.mesh import Mesh
     from views.viewport import Viewport
@@ -319,7 +319,7 @@ def test_world_under_cursor_uses_cached_pick():
     # Zoom-to-cursor's pick rides the cached NumPy triangles (fast wheel
     # bursts must not re-triangulate the model per event). Nearest hit wins;
     # empty space falls back to the focal plane through the camera target.
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     from views.viewport import Viewport
 
     scene = Scene()
@@ -370,7 +370,7 @@ def test_world_under_cursor_uses_cached_pick():
 # ---- Custom dimension text (double-click the value) -------------------------
 
 def test_dimension_custom_text_and_placeholder():
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     from core.dimension import Dimension
     d = Dimension(QVector3D(0, 0, 0), QVector3D(2.4, 0, 0), QVector3D(0, 1, 0))
     assert d.display_text("2.40 m") == "2.40 m"              # automatic
@@ -381,7 +381,7 @@ def test_dimension_custom_text_and_placeholder():
 
 
 def test_edit_dimension_text_command_undo_redo():
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     from core.dimension import Dimension
     from core.history import EditDimensionTextCommand, History
     from core.scene import Scene
@@ -405,7 +405,7 @@ def test_select_double_click_edits_dimension_text(monkeypatch, tmp_path):
     measured value itself returns the cota to its automatic label. The text
     survives the .igz round trip."""
     from types import SimpleNamespace
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     from PySide6.QtWidgets import QInputDialog
     from core.dimension import Dimension
     from core.history import History

@@ -8,7 +8,7 @@ from __future__ import annotations
 import math
 
 import pytest
-from PySide6.QtGui import QMatrix4x4, QVector3D
+from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.group import Group
 from core.mesh import Mesh

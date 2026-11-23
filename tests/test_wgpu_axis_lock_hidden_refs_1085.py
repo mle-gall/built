@@ -11,7 +11,8 @@ import math
 
 import pytest
 from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QMouseEvent, QVector3D as V
+from PySide6.QtGui import QMouseEvent
+from ingetrazo_core import Vec3 as V
 from PySide6.QtWidgets import QApplication
 
 from tests.test_.skp_inference_gaps import click, refresh, view  # noqa: F401

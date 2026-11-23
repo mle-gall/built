@@ -23,7 +23,7 @@ import math
 
 from core.i18n import tr
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from collections import namedtuple
 

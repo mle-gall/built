@@ -8,7 +8,8 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtGui import QGuiApplication, QImage, QVector3D
+from PySide6.QtGui import QGuiApplication, QImage
+from ingetrazo_core import Vec3 as QVector3D
 
 from georef.datum import SceneDatum
 from georef.terrain import build_mosaic, build_terrain

@@ -24,7 +24,7 @@ from core.mesh import element_identity
 import math
 from typing import Iterable, Optional, Sequence
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.geometry import Edge, Face
 from core.history import (

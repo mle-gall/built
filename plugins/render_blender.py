@@ -25,8 +25,8 @@ from pathlib import Path
 from PySide6.QtCore import (QObject, QPointF, QProcess, QProcessEnvironment,
                             QTimer, Signal,
                             QSettings, Qt)
-from PySide6.QtGui import (QColor, QFont, QPainter, QPen,
-                           QPixmap, QVector3D)
+from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPixmap
+from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,

@@ -16,7 +16,7 @@ import math
 from collections import deque
 from typing import Iterable, Optional
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.geometry import Edge, Face
 
@@ -36,7 +36,7 @@ _LINE_GAP = 1e-5
 
 
 def _key(p: QVector3D) -> tuple[float, float, float]:
-    if not isinstance(p, QVector3D):
+    if not hasattr(p, "toTuple"):
         return tuple(round(x, _KEY_DECIMALS) for x in p)
     return (round(p.x(), _KEY_DECIMALS),
             round(p.y(), _KEY_DECIMALS),

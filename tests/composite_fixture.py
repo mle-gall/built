@@ -15,7 +15,7 @@ from pathlib import Path
 def _file(path, folders, tags, count, links_to=()):
     """One .igz: ``folders`` {name: parent}, ``tags`` {tag: folder}, ``count``
     placements spread over the tags, ``links_to`` placed as linked files."""
-    from PySide6.QtGui import QMatrix4x4, QVector3D
+    from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
     from core import bim_registry, links, structure
     from core.group import Group
     from core.layers import Layer

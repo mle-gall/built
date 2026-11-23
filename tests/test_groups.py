@@ -3,7 +3,7 @@
 """Groups: isolate geometry into its own mesh so it doesn't weld to the rest."""
 from __future__ import annotations
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import (
     ExplodeGroupCommand,
@@ -159,7 +159,7 @@ def test_merge_groups_fuses_without_touching_loose_mesh():
     # "Unir grupos": the fix-my-grouping path — the selected groups fuse
     # into ONE group (instances baked to world, attrs and soft/hidden
     # flags carried) and the loose mesh never changes. Exact undo.
-    from PySide6.QtGui import QMatrix4x4, QVector3D
+    from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
     from core.group import Group
     from core.history import History, MergeGroupsCommand
     from core.mesh import Mesh

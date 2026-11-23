@@ -1,7 +1,7 @@
 """Edit-context membership and screen scaffolding shared by native captures."""
 import math
 import numpy as np
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 
 def rest_rows(groups, context):

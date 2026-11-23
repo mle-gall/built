@@ -376,7 +376,7 @@ def test_the_strip_under_the_button_wears_the_rows_colours():
     alternate tone and the selection — instead of the frame's lighter
     colour."""
     from PySide6.QtCore import QPoint
-    from PySide6.QtGui import QVector3D as V
+    from ingetrazo_core import Vec3 as V
     from PySide6.QtWidgets import QApplication
     from core.group import Group
     from core.mesh import Mesh
@@ -413,7 +413,7 @@ def test_the_strip_under_the_button_wears_the_rows_colours():
 # --- a wider panel: the columns cut short grow back ---------------------------
 
 def _long_rows(win, panel):
-    from PySide6.QtGui import QMatrix4x4, QVector3D as V
+    from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
     from core.group import Group, copy_group
     from core.mesh import Mesh
     m = Mesh()
@@ -518,7 +518,7 @@ def test_default_columns_puts_the_daily_set_back():
 
 def _copies_model(win, panel):
     """Three copies of a component and a plain group."""
-    from PySide6.QtGui import QMatrix4x4, QVector3D
+    from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
     from core.group import Group
     from core.mesh import Mesh
     mesh = Mesh()

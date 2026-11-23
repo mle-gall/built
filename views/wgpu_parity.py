@@ -84,7 +84,7 @@ def face_marks(view, faces):
             choose = getattr(view.source_viewport, '_selection_dot_colors', None)
             color = (.95, .45, .16)
             if choose:
-                from PySide6.QtGui import QVector3D
+                from ingetrazo_core import Vec3 as QVector3D
                 front, back = choose(face)
                 color = front if QVector3D.dotProduct(face.normal(), view.camera.eye()-face.vertices[0]) > 0 else back
             vertices['color'] = [*np.asarray(np.clip(np.array(color)*255, 0, 255), np.uint8), 255]
@@ -102,7 +102,7 @@ def hover_face_marks(view, face, placement=None):
     matrix (a face inside a component is stored in its part's
     coordinates), not from the pack, so it works on any placement and
     costs one face per hover change."""
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     matrix = getattr(placement, 'xform', None)
     points = [p for tri in face.triangulate() for p in tri]
     if matrix is not None:

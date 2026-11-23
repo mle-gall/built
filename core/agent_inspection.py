@@ -4,7 +4,7 @@ from collections import Counter
 from fnmatch import fnmatchcase
 import math
 
-from PySide6.QtGui import QMatrix4x4, QVector3D
+from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 from core.group import placement_points
 
 

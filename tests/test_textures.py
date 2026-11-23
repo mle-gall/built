@@ -6,7 +6,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtGui import QImage, QColor, QVector3D
+from PySide6.QtGui import QImage, QColor
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import History, SetFaceColorCommand, SetFaceTextureCommand
 from core.scene import Scene
@@ -300,7 +301,7 @@ def test_textured_obj_round_trips_the_texture(tmp_path):
 def test_planar_uv_rotation_and_scale():
     # Bigger tile size = fewer repeats; rotation turns the UV frame in-plane
     # (the usual edit-material W/H/Rot).
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
 
     from core.texture import planar_uv
 
@@ -321,7 +322,7 @@ def test_planar_uv_rotation_and_scale():
 
 
 def test_texture_rotation_round_trips_igz(tmp_path):
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
 
     from core.scene import Scene
     from formats import igz

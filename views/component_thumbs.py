@@ -159,7 +159,7 @@ def _draw(definition, size: int) -> QPixmap:
     from core.mesh import face_count, DeferredMesh
     from core.lazy_mesh import plan_of
     from formats.igz import _face_attrs_from_json
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     import numpy as np
     placements = list(_placements(definition))
     total = sum(face_count(mesh) for mesh, _m, _p in placements)

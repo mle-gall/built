@@ -41,7 +41,7 @@ import math
 from dataclasses import dataclass
 from typing import Callable, Optional
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core import _native
 from .geometry import Edge
@@ -774,6 +774,7 @@ def curve_centers_of_face(face, xform=None) -> list:
     :func:`_boundary_runs`) — the plaza's circle came from a file with
     neither."""
     out: list = []
+    translation = xform.map(QVector3D()) if xform is not None and xform.isAffine() else None
     for li, loop in enumerate([face.loop]
                               + list(getattr(face, "hole_loops", []) or [])):
         for ri, (verts, drawn) in enumerate(_boundary_runs(loop)):
@@ -784,11 +785,16 @@ def curve_centers_of_face(face, xform=None) -> list:
             if len(verts) < (3 if drawn else 5):
                 continue
             pts = [v.position for v in verts]
-            if xform is not None:
+            if translation is not None:
+                # Fit at the definition's origin so a large placement cannot
+                # change the radius or center through cancellation.
+                pts = [xform.mapVector(p) for p in pts]
+            elif xform is not None:
                 pts = [xform.map(QVector3D(p)) for p in pts]
             fit = fit_circle(pts)
             if fit is not None:
-                out.append((fit[0], fit[1], (li, ri)))
+                center = fit[0] if translation is None else fit[0] + translation
+                out.append((center, fit[1], (li, ri)))
     return out
 
 

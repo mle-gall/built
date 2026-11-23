@@ -17,7 +17,7 @@ olvidar.
 """
 from __future__ import annotations
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.edits import build_add_edges
 from core.history import (ExplodeGroupCommand, HideEdgesCommand, History,

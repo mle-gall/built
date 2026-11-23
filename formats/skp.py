@@ -172,7 +172,7 @@ def apply_payload(scene, payload, progress=None, *, consume: bool | None = None)
     SnapshotImport redo restores the built groups, without reading the payload.
     ``consume=False`` retains the input geometry explicitly."""
     import gc
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     from core.group import Group
     from core.mesh import Mesh
     from formats.dae import _add_fused
@@ -201,7 +201,7 @@ def _soften_bulk_edges(mesh, vertices, edge_map, segments, tick):
     a point's vertex during construction is not necessarily what vertex_at
     returns after a later point has claimed its cell. Cache those lookups too.
     """
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
 
     point_ids = {v.position.toTuple(): i for i, v in enumerate(vertices)}
     vertex_ids = None
@@ -238,7 +238,7 @@ def _soften_bulk_edges(mesh, vertices, edge_map, segments, tick):
 
 def _apply_payload_inner(scene, payload, progress=None, *, consume=False) -> str:
     import time
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     from core.group import Group
     from core.mesh import Mesh
     from formats.dae import _add_fused
@@ -482,7 +482,7 @@ def _apply_payload_inner(scene, payload, progress=None, *, consume=False) -> str
     # axis (#1226); otherwise turn the .skp scalar into the in-plane
     # perpendicular direction × distance here, as before.
     if payload.get("dimensions"):
-        from PySide6.QtGui import QVector3D
+        from ingetrazo_core import Vec3 as QVector3D
         from core.dimension import Dimension
         for raw in payload["dimensions"]:
             a = QVector3D(*raw["a"])
@@ -510,7 +510,7 @@ def _apply_payload_inner(scene, payload, progress=None, *, consume=False) -> str
     # joins them) — screen texts carry no label position and float at the
     # anchor itself.
     if payload.get("texts"):
-        from PySide6.QtGui import QVector3D
+        from ingetrazo_core import Vec3 as QVector3D
         from core.textlabel import TextLabel
         for raw in payload["texts"]:
             if raw.get("hidden"):
@@ -555,7 +555,7 @@ def _apply_payload_inner(scene, payload, progress=None, *, consume=False) -> str
                 # The .skp instance's transformation, kept as the
                 # group's own axes (issue #44) — its mesh stays in world
                 # coordinates. Column-major, as QMatrix4x4.data() wrote it.
-                from PySide6.QtGui import QMatrix4x4
+                from ingetrazo_core import Matrix4 as QMatrix4x4
                 m = QMatrix4x4(*[axes[c * 4 + r] for r in range(4)
                                  for c in range(4)])
                 if not m.isIdentity():

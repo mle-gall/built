@@ -37,7 +37,7 @@ from types import SimpleNamespace
 import math
 import numpy as np
 import pytest
-from PySide6.QtGui import QMatrix4x4, QVector3D
+from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 from PySide6.QtWidgets import QApplication
 from core.scene import Scene
 from core.mesh import Mesh

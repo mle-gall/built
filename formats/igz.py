@@ -57,7 +57,7 @@ from core.version import __version__
 from formats import built
 from formats.igz_stream import Fragment, SaveStream
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.dimension import Dimension
 from core.group import Group
@@ -799,7 +799,7 @@ def prepare_scene_steps(scene, mesh_steps=None, *, stream=None, large=None):
                     protos.append(None)          # reserve: recursion is depth
                     protos[idx] = yield from block(mesh)
                 values = (built.placement_values(xf) if mesh_steps is not None or getattr(stream, "built", False)
-                          else list(xf.data()))
+                          else built.compact_values(xf.data()))
                 entry = {"proto": idx, "xform": values}
                 # Group or component (issue #90): a group of groups and a
                 # copied group carry a matrix too. Written for EVERY
@@ -817,7 +817,7 @@ def prepare_scene_steps(scene, mesh_steps=None, *, stream=None, large=None):
             if axes is not None:
                 # A classic group's own axes (issue #44), column-major like
                 # "xform"; older readers ignore the key.
-                entry["axes"] = [float(x) for x in axes.data()]
+                entry["axes"] = list(axes.data())
             if getattr(g, "layer", None) is not None:
                 entry["layer"] = g.layer
             if ifc := _group_ifc_record(g):
@@ -963,7 +963,7 @@ def prepare_scene_steps(scene, mesh_steps=None, *, stream=None, large=None):
             for field in ("target", "up"):
                 point = camera.get(field)
                 if isinstance(point, (list, tuple)) and len(point) == 3:
-                    camera[field] = list(QVector3D(*point).toTuple())
+                    camera[field] = built.compact_values(point)
         payload["camera"] = camera
     # A camera holding a NaN is left out instead of refusing the save: it is
     # only the view, and the file opens framed on the model (#485). The
@@ -2026,7 +2026,7 @@ def _load_into_inner(scene, path: Path, progress=None, link_meshes=None) -> None
         # documents without one get a fresh uid, as before.
         uid = str(raw["uid"]) if raw.get("uid") else None
         if raw.get("xform") is not None and "proto" in raw:
-            from PySide6.QtGui import QMatrix4x4
+            from ingetrazo_core import Matrix4 as QMatrix4x4
             group = Group(proto_meshes[int(raw["proto"])], name=name,
                           uid=uid)
             if is_built:
@@ -2038,7 +2038,7 @@ def _load_into_inner(scene, path: Path, progress=None, link_meshes=None) -> None
             group = Group(name=name, uid=uid)
             group.mesh = read_mesh(group.mesh, raw, ("group", group.uid))
         if isinstance(raw.get("axes"), list) and len(raw["axes"]) == 16:
-            from PySide6.QtGui import QMatrix4x4
+            from ingetrazo_core import Matrix4 as QMatrix4x4
             vals = [float(x) for x in raw["axes"]]
             group.axes = QMatrix4x4(*[vals[col * 4 + row] for row in range(4)
                                       for col in range(4)])

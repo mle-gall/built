@@ -25,7 +25,9 @@ from __future__ import annotations
 import os
 from typing import Optional
 
-from PySide6.QtGui import QMatrix4x4, QVector2D
+from PySide6.QtGui import QVector2D
+from ingetrazo_core import Matrix4 as QMatrix4x4
+from views.gl_uniforms import ShaderProgram
 from PySide6.QtOpenGL import (QOpenGLFramebufferObject, QOpenGLShader,
                               QOpenGLShaderProgram, QOpenGLTexture,
                               QOpenGLVertexArrayObject)
@@ -125,7 +127,7 @@ class AmbientOcclusion:
 
     # -- resources ------------------------------------------------------------
     def _program(self, frag: str) -> QOpenGLShaderProgram:
-        prog = QOpenGLShaderProgram(self._w)
+        prog = ShaderProgram(self._w)
         ok_v = prog.addShaderFromSourceFile(QOpenGLShader.Vertex,
                                             str(self._dir / "ao.vert"))
         ok_f = prog.addShaderFromSourceFile(QOpenGLShader.Fragment,

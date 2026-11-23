@@ -6,7 +6,7 @@ With several faces or edges selected it only counted them; the usual totals
 measured with."""
 from __future__ import annotations
 
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 
 
 def test_two_faces_and_three_edges_show_their_totals():

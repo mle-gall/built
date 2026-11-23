@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import pytest
-from PySide6.QtGui import QVector3D, QVector4D
+from ingetrazo_core import Vec3 as QVector3D, Vec4 as QVector4D
 from PySide6.QtWidgets import QMessageBox
 
 from formats import skp as skp_format

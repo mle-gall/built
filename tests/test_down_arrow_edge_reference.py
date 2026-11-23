@@ -14,7 +14,8 @@ import math
 
 import pytest
 from PySide6.QtCore import QEvent, Qt
-from PySide6.QtGui import QKeyEvent, QVector3D as V
+from PySide6.QtGui import QKeyEvent
+from ingetrazo_core import Vec3 as V
 from PySide6.QtWidgets import QApplication
 
 from tests.test_.skp_inference_gaps import (  # noqa: F401 (fixture)

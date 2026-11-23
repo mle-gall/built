@@ -4,7 +4,7 @@
 2026-09-15: a strip of every shortcut at once «no es bueno»)."""
 from __future__ import annotations
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from tools.arc import ArcTool
 from tools.fillet import FilletTool

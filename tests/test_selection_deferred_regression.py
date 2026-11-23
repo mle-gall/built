@@ -1,6 +1,6 @@
 """Selecting and revealing edges must preserve deferred imported meshes."""
 import pytest
-from PySide6.QtGui import QMatrix4x4
+from ingetrazo_core import Matrix4 as QMatrix4x4
 from core import _native
 from core.mesh import Mesh, DeferredMesh
 from core.group import Group
@@ -69,7 +69,7 @@ def test_context_reuses_assemblies_sharing_an_empty_container_mesh(viewport):
     after = vp._placements_epoch()
     assert id(other) in vp._epoch_kept_tops(before, after, ctx=True)
     # Actual geometry changes must still invalidate the subtree.
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     empty.add_edge(QVector3D(1, 0, 0), QVector3D(2, 0, 0))
     vp.scene.version += 1
     changed = vp._placements_epoch()

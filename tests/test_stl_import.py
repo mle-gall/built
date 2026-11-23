@@ -7,7 +7,7 @@ import struct
 import math
 
 import pytest
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import History, SnapshotImport
 from core.orient import is_closed, signed_volume
@@ -261,7 +261,11 @@ def test_simplify_keeps_curved_facets_separate(tmp_path):
     stl_format.load_stl(scene, path, simplify_mode="all")
 
     assert len(scene.groups) == 1
-    assert segments < len(scene.groups[0].mesh.faces) < segments * 2
+    # Each planar pair becomes one quad. Adjacent strips have different
+    # normals and must stay separate even when every diagonal dissolves.
+    faces = scene.groups[0].mesh.faces
+    assert len(faces) == segments
+    assert all(len(face.vertices) == 4 for face in faces)
 
 
 def test_exploded_stl_group_can_be_simplified_as_an_undoable_edit(tmp_path):

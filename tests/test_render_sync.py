@@ -13,7 +13,8 @@ import time
 from pathlib import Path
 
 import pytest
-from PySide6.QtGui import QColor, QImage, QMatrix4x4, QVector3D as V
+from PySide6.QtGui import QColor, QImage
+from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 from PySide6.QtWidgets import QApplication
 
 if QApplication.instance() is None:

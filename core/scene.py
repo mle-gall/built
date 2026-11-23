@@ -19,7 +19,7 @@ from core.element_set import ElementSet
 from dataclasses import InitVar, dataclass, field
 from typing import Iterable
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core import layers as _layers
 from core import doc_model as _dm
@@ -592,7 +592,7 @@ class Scene:
                 # definition its copies share. The session edits a world
                 # copy, and leaving shares it back and returns the matrix
                 # up out of the parts, as for a component with no parts.
-                from PySide6.QtGui import QMatrix4x4
+                from ingetrazo_core import Matrix4 as QMatrix4x4
                 if group.mesh is proto:
                     from core.group import transformed_mesh
                     group.mesh = transformed_mesh(proto, QMatrix4x4())
@@ -654,7 +654,7 @@ class Scene:
         tree is exactly that), and walking those vertices would drag every
         placement with it.
         """
-        from PySide6.QtGui import QMatrix4x4
+        from ingetrazo_core import Matrix4 as QMatrix4x4
         xform = getattr(group, "xform", None)
         if xform is None or xform == QMatrix4x4():
             return
@@ -742,7 +742,7 @@ class Scene:
         """An assembly's axes and its parts' matrices and offsets, copied,
         to put back bit for bit: a round trip through the inverse matrix
         drifts in the last digits."""
-        from PySide6.QtGui import QMatrix4x4
+        from ingetrazo_core import Matrix4 as QMatrix4x4
         axes = getattr(group, "axes", None)
         return (None if axes is None else QMatrix4x4(axes),
                 [(c, None if c.xform is None else QMatrix4x4(c.xform),
@@ -752,7 +752,7 @@ class Scene:
     def put_parts(group, record) -> None:
         """Put back what :meth:`parts_record` copied. The list of parts is
         not touched: the commands that changed it undo that themselves."""
-        from PySide6.QtGui import QMatrix4x4
+        from ingetrazo_core import Matrix4 as QMatrix4x4
         axes, parts = record
         for child, xform, offset in parts:
             child.xform = None if xform is None else QMatrix4x4(xform)
@@ -770,7 +770,7 @@ class Scene:
         ``parts`` is :meth:`parts_record` on entry: a part the session left
         where it was gets its entry matrix back bit for bit, instead of a
         round trip through the inverse that drifts in the last digits."""
-        from PySide6.QtGui import QMatrix4x4, QVector3D
+        from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
         if (not getattr(group, "children", None) or xform is None
                 or group.xform == xform):
             return
@@ -807,7 +807,7 @@ class Scene:
 
     @staticmethod
     def _turned(m, offset) -> tuple:
-        from PySide6.QtGui import QVector3D
+        from ingetrazo_core import Vec3 as QVector3D
         v = m.mapVector(QVector3D(*offset))
         return (v.x(), v.y(), v.z())
 

@@ -1,5 +1,5 @@
 """Adapters between tool edge references, renderer visibility and the f64 query."""
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 import numpy as np
 
 from core import _native

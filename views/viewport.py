@@ -101,21 +101,9 @@ def _plog(tag: str, ms: float, extra: str = "", floor: float = 50.0) -> None:
 
 from PySide6.QtCore import (QEvent, QObject, Qt, QPointF, QRectF, QTimer,
                             Signal)
-from PySide6.QtGui import (
-    QColor,
-    QFont,
-    QFontMetrics,
-    QImage,
-    QMatrix4x4,
-    QOpenGLFunctions,
-    QPainter,
-    QPen,
-    QPolygonF,
-    QSurfaceFormat,
-    QVector2D,
-    QVector3D,
-    QVector4D,
-)
+from PySide6.QtGui import QColor, QFont, QFontMetrics, QImage, QOpenGLFunctions, QPainter, QPen, QPolygonF, QSurfaceFormat, QVector2D
+from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D, Vec4 as QVector4D
+from views.gl_uniforms import ShaderProgram
 from PySide6.QtOpenGL import (
     QOpenGLBuffer,
     QOpenGLFramebufferObject,
@@ -311,7 +299,7 @@ GL_LINES = 0x0001
 
 def _shifted_mvp(mvp, dx_ndc: float, dy_ndc: float):
     """``mvp`` nudged by a clip-space offset (sub-pixel line thickening)."""
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     m = QMatrix4x4()
     m.translate(dx_ndc, dy_ndc, 0.0)
     return m * mvp
@@ -1341,11 +1329,9 @@ _NEAREST_NATIVE = os.environ.get("INGETRAZO_NEAREST", "1") != "0"
 _NEAR_SEEN_NATIVE = os.environ.get("INGETRAZO_NEAR_SEEN", "1") != "0"
 
 
-#: Which three-argument hypot QVector3D's length here is, of those
-#: _unit_rays reproduces ("": none; None: not checked yet).
-_QV_HYPOT3 = None
-#: The C++ libraries whose ``std::hypot(x, y, z)`` _hypot3_f32 knows.
-_QV_HYPOTS = ("libstdc++", "msvc")
+# Existing native callers still accept the legacy rounding-mode argument.
+from core._native import qt_hypot
+_QV_HYPOT3 = qt_hypot()
 
 
 def _hypot3_f32(a, kind="libstdc++"):
@@ -1378,42 +1364,19 @@ def _hypot3_f32(a, kind="libstdc++"):
 
 
 def _qv_hypot3():
-    """The library of _QV_HYPOTS whose length is QVector3D's here, or None
-    — checked once against QVector3D itself, on vectors from a millimetre
-    to tens of kilometres: another C++ library may round the last bit
-    differently, and then the rays are built point by point as before."""
-    global _QV_HYPOT3
-    if _QV_HYPOT3 is None:
-        import numpy as np
-        rng = np.random.default_rng(158)
-        a = (rng.normal(size=(512, 3))
-             * 10.0 ** rng.uniform(-3, 4.5, (512, 1))).astype(np.float32)
-        a[:8, rng.integers(0, 3, 8)] = 0.0
-        want = np.array([QVector3D(*r).length() for r in a.tolist()],
-                        dtype=np.float32)
-        _QV_HYPOT3 = next((k for k in _QV_HYPOTS
-                           if (_hypot3_f32(a, k) == want).all()), "")
-    return _QV_HYPOT3 or None
+    return _QV_HYPOT3
 
 
 def _unit_rays(eye, pts):
-    """The rays ``_is_occluded`` casts from ``eye`` to each of ``pts`` (N, 3),
-    bit for bit as QVector3D builds them (float coordinates, its length,
-    its division) without making one per point — a pointer move over the
-    plant of #158 asks tens of thousands of hidden corners. Returns
-    ``(rows, D, dists)``: the points not on the eye, their unit directions
-    and distances (float64 of the float values), or None where this
-    library's length cannot be reproduced."""
+    """Binary64 unit directions and distances, in model vector operation order."""
     import numpy as np
-    kind = _qv_hypot3()
-    if not kind:
+    if not _qv_hypot3():
         return None
-    w = np.asarray(pts, dtype=np.float32).reshape(-1, 3)
-    dl = w - np.array([eye.x(), eye.y(), eye.z()], dtype=np.float32)
-    L = _hypot3_f32(dl, kind)
-    rows = np.flatnonzero(L.astype(np.float64) >= 1e-9)
-    D = (dl[rows] / L[rows, None]).astype(np.float64)
-    return rows, D, L[rows].astype(np.float64)
+    delta = np.asarray(pts, dtype=np.float64).reshape(-1, 3) - eye.toTuple()
+    x, y, z = delta.T
+    lengths = np.sqrt((x*x + y*y) + z*z)
+    rows = np.flatnonzero(lengths >= 1e-9)
+    return rows, delta[rows] / lengths[rows, None], lengths[rows]
 
 
 def _occlusion_block(o, d, v0, e1, e2):
@@ -4401,7 +4364,7 @@ class Viewport(QOpenGLWidget):
 
     # ---- Setup helpers ------------------------------------------------------
     def _compile_program(self) -> QOpenGLShaderProgram:
-        prog = QOpenGLShaderProgram(self)
+        prog = ShaderProgram(self)
         ok_v = prog.addShaderFromSourceFile(
             QOpenGLShader.Vertex, str(SHADER_DIR / "basic.vert")
         )
@@ -4413,7 +4376,7 @@ class Viewport(QOpenGLWidget):
         return prog
 
     def _compile_depth_program(self) -> QOpenGLShaderProgram:
-        prog = QOpenGLShaderProgram(self)
+        prog = ShaderProgram(self)
         ok_v = prog.addShaderFromSourceFile(
             QOpenGLShader.Vertex, str(SHADER_DIR / "depth.vert")
         )
@@ -8458,7 +8421,7 @@ class Viewport(QOpenGLWidget):
             for r in rings:
                 sizes.append(len(r))
                 pts.extend(r)
-        pos = np.array([(p.x(), p.y(), p.z()) for p in pts], np.float32)
+        pos = np.array([(p.x(), p.y(), p.z()) for p in pts], np.float64)
         try:
             out = nat.face_geometry(
                 pos, np.arange(len(pts), dtype=np.int64),

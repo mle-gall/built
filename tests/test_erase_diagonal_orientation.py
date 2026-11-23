@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Erasing a rectangle's diagonal must preserve its front and back sides."""
 import pytest
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 
 from core.edits import build_add_edge, build_add_edges
 from core.history import AddFaceCommand, EraseSelectionCommand, History

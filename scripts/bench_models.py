@@ -32,7 +32,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from PySide6.QtGui import QMatrix4x4, QVector3D  # noqa: E402
+from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D  # noqa: E402
 
 from core.group import Group  # noqa: E402
 from core.mesh import Mesh  # noqa: E402

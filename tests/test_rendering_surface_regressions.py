@@ -5,7 +5,8 @@ os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 
 import numpy as np
 import pytest
-from PySide6.QtGui import QVector3D as V, QMatrix4x4, QImage
+from PySide6.QtGui import QImage
+from ingetrazo_core import Vec3 as V, Matrix4 as QMatrix4x4
 from PySide6.QtWidgets import QApplication
 from core.mesh import Mesh
 from core.group import Group, transformed_mesh

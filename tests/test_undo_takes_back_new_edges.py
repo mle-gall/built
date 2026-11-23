@@ -9,7 +9,7 @@ outline behind as loose edges. Edges and corners that were already there —
 a shared edge, a line drawn first — must stay."""
 from __future__ import annotations
 
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 
 from core.history import (AddEdgeCommand, AddFaceCommand, CompoundCommand,
                           History, rotation_matrix)

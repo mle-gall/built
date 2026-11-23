@@ -388,7 +388,7 @@ class _Window:
     def __init__(self, vp):
         from types import MethodType
 
-        from PySide6.QtGui import QVector3D
+        from ingetrazo_core import Vec3 as QVector3D
         from views.main_window import MainWindow
         self.viewport = vp
         self._camera_pose = MethodType(MainWindow._camera_pose, self)
@@ -430,7 +430,7 @@ def test_after_moving_the_view_a_double_tap_frames_again(vp):
 def test_the_metal_view_orbits_and_pinches_too():
     from types import SimpleNamespace
 
-    from PySide6.QtGui import QMatrix4x4, QVector3D
+    from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
     from core.group import Group
     from core.mesh import Mesh
     from core.scene import Scene

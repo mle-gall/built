@@ -6,7 +6,7 @@ place, turn and scale, its layer, paint and visibility."""
 from __future__ import annotations
 
 import pytest
-from PySide6.QtGui import QMatrix4x4, QVector3D as V
+from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core.group import Group, copy_group, world_mesh
 from core.history import History, ReplaceComponentCommand

@@ -7,7 +7,7 @@ opposite side or — About Center — the middle; typed values read as factors,
 per-axis factors, absolute sizes with a unit, and negatives mirror."""
 from __future__ import annotations
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import History, ScaleVerticesCommand
 from core.scene import Scene

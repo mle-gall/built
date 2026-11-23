@@ -93,7 +93,7 @@ def test_a_burst_of_edits_refreshes_the_visible_panels_once(win, monkeypatch):
 def test_a_selection_leaves_the_in_model_lists_as_they_are(win, monkeypatch):
     """A click bumps only the view: on the plant of #158 it rebuilt the
     «In model» list and rescanned every material (over a second)."""
-    from PySide6.QtGui import QVector3D as V
+    from ingetrazo_core import Vec3 as V
     from core.group import Group
     from core.mesh import Mesh
     m = Mesh()
@@ -131,7 +131,7 @@ def test_hidden_panels_let_the_previous_document_go(win):
     release_check 10-10)."""
     import gc
     from PySide6.QtCore import QCoreApplication, QEvent
-    from PySide6.QtGui import QVector3D as V
+    from ingetrazo_core import Vec3 as V
     from core.group import Group
     from core.mesh import Mesh
     m = Mesh()
@@ -162,7 +162,7 @@ def test_hidden_panels_let_the_previous_document_go(win):
 def test_a_selection_notice_leaves_the_browser_rows_as_they_are(win, monkeypatch):
     """Its rows show what the model is: after a click (a view-only bump)
     the Browser read all 21 406 of them again on the plant of #158."""
-    from PySide6.QtGui import QVector3D as V
+    from ingetrazo_core import Vec3 as V
     from core.group import Group
     from core.mesh import Mesh
     m = Mesh()
@@ -187,7 +187,7 @@ def test_a_selection_notice_leaves_the_browser_rows_as_they_are(win, monkeypatch
 def test_a_move_leaves_the_material_swatches_as_they_are(win):
     """Moving a group changes no material: on the plant of #158 each drop
     rescanned every face paint (~0.4 s). A paint does rescan."""
-    from PySide6.QtGui import QVector3D as V
+    from ingetrazo_core import Vec3 as V
     from core.group import Group
     from core.history import MoveGroupCommand, SetFaceColorCommand
     from core.mesh import Mesh
@@ -218,7 +218,7 @@ def test_a_move_leaves_the_browser_rows_as_they_are(win, monkeypatch):
     """No row shows where a thing is: on the plant of #158 each drop read
     the 21 406 rows again. A paint does read them, and so does a Move
     when an extension's kind adds properties (they may be sizes)."""
-    from PySide6.QtGui import QVector3D as V
+    from ingetrazo_core import Vec3 as V
     from core.group import Group
     from core.history import MoveGroupCommand, SetFaceColorCommand
     from core.mesh import Mesh
@@ -284,7 +284,7 @@ def test_sliced_refresh_cannot_publish_after_replacement_or_document_switch(monk
 def test_a_geometry_edit_leaves_the_browser_rows_as_they_are(win, monkeypatch):
     """A push/pull or a drawn edge changes one mesh, not what a row shows:
     on the ride (85 000 rows) each one read them all again, 0.5–1.6 s."""
-    from PySide6.QtGui import QVector3D as V
+    from ingetrazo_core import Vec3 as V
     from core.group import Group
     from core.history import AddEdgeCommand, MoveGroupCommand, SnapshotMutation
     from core.mesh import Mesh

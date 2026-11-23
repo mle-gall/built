@@ -20,7 +20,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
 from PySide6.QtCore import QPointF, Qt  # noqa: E402
-from PySide6.QtGui import QMatrix4x4, QVector3D as V  # noqa: E402
+from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
 
 from core import links  # noqa: E402

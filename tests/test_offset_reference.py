@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import pytest
 from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QImage, QPainter, QVector3D as V
+from PySide6.QtGui import QImage, QPainter
+from ingetrazo_core import Vec3 as V
 
 from core.history import History
 from core.scene import Scene

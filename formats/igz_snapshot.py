@@ -87,7 +87,7 @@ def geometry_steps(mesh):
         holes = f.hole_loops or ()
         if len(holes) > 1:
             from core.topology import _maximal_holes
-            from PySide6.QtGui import QVector3D
+            from ingetrazo_core import Vec3 as QVector3D
             polys = [[QVector3D(v.position) for v in h] for h in holes]
             kept = {id(h) for h in _maximal_holes(polys)}
             holes = [h for h, p in zip(holes, polys) if id(p) in kept]

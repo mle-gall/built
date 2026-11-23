@@ -7,7 +7,7 @@ from __future__ import annotations
 import math
 
 from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import (
     FlipGroupsCommand,
@@ -134,7 +134,7 @@ def test_make_unique_detaches_the_instance():
     proto = Mesh()
     proto.add_face([V(0, 0), V(1, 0), V(1, 1), V(0, 1)])
     a = Group(proto, name="Poste")
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     a.xform = QMatrix4x4()
     scene.groups.append(a)
     hist.execute(MakeUniqueCommand(a))
@@ -238,7 +238,7 @@ def test_group_converts_to_component_in_place():
     # Make Component on a CLASSIC group: in-place conversion, free — the
     # mesh becomes the shared definition under an identity transform (no
     # explode detour, no geometry copied).
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     from core.group import Group
     from core.history import GroupToComponentCommand, History
     from core.mesh import Mesh

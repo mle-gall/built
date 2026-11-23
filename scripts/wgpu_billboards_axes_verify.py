@@ -8,7 +8,8 @@ import os, sys, subprocess, traceback
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from PySide6.QtCore import QTimer, QPointF, Qt
-from PySide6.QtGui import QImage, QVector3D
+from PySide6.QtGui import QImage
+from ingetrazo_core import Vec3 as QVector3D
 from types import SimpleNamespace
 import json
 from PySide6.QtWidgets import QApplication

@@ -2,7 +2,7 @@
 """An edge midpoint is still an edge source for a parallel Tape guide."""
 from types import SimpleNamespace
 from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 from core.history import History
 from core.scene import Scene
 from tools.base import ToolContext

@@ -4,7 +4,7 @@ from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
-from PySide6.QtGui import QMatrix4x4
+from ingetrazo_core import Matrix4 as QMatrix4x4
 from core.agent_inspection import InspectionTools
 from core.agent_records import RecordTools
 from core.group import Group

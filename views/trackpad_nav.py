@@ -45,7 +45,8 @@ import sys
 import time
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QInputDevice, QVector3D
+from PySide6.QtGui import QInputDevice
+from ingetrazo_core import Vec3 as QVector3D
 
 #: What a slide does: ``orbit`` | ``pan`` | ``zoom``. A finger on the touch
 #: screen orbits; two fingers on the trackpad zoom, as before 0.6.1.

@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import math
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.sun import north_vector_xy, scene_north_deg, wrap_north_deg
 from tools.base import Tool, ToolContext

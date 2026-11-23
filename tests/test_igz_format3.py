@@ -10,7 +10,8 @@ import json
 import zipfile
 
 import pytest
-from PySide6.QtGui import QImage, QMatrix4x4, QVector3D as V
+from PySide6.QtGui import QImage
+from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core.group import Group
 from core.mesh import Mesh

@@ -10,7 +10,7 @@ import copy
 import random
 
 import pytest
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 
 import core._native as _native
 from core import mesh as M
@@ -86,7 +86,7 @@ def _random_scene(rng) -> Scene:
     fill(proto, 25)
     for k in range(3):
         g = Group(proto, name=f"P{k}")
-        from PySide6.QtGui import QMatrix4x4
+        from ingetrazo_core import Matrix4 as QMatrix4x4
         x = QMatrix4x4()
         x.translate(k * 10, 0, 0)
         g.xform = x

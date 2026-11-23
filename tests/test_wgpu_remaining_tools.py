@@ -2,7 +2,7 @@
 from types import SimpleNamespace
 import pytest
 from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 from tools.base import ToolContext
 from tools.rotate import RotateTool
 from core.camera import OrbitCamera
@@ -282,7 +282,7 @@ def test_rotate_placement_preview_cancels_without_document_mutation():
     import numpy as np
     from core.group import Group
     from core.mesh import Mesh
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     from views.wgpu_scene import pack_scene
     scene, history, native, _ = prepare(RotateTool())
     mesh = Mesh()

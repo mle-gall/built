@@ -14,7 +14,7 @@ from __future__ import annotations
 import types
 
 from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QMatrix4x4, QVector3D
+from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.group import Group, copy_group, effective_material
 from core.history import (ExplodeGroupCommand, History,

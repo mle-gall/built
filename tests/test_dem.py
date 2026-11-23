@@ -9,7 +9,8 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
-from PySide6.QtGui import QColor, QGuiApplication, QImage, QVector3D
+from PySide6.QtGui import QColor, QGuiApplication, QImage
+from ingetrazo_core import Vec3 as QVector3D
 
 from georef.datum import SceneDatum
 from georef.dem import (

@@ -100,7 +100,7 @@ def test_the_plus_goes_when_the_one_copy_is_made(win):
     """Flip (like Rotate) arms Ctrl for ONE operation: once the copy is
     made the mode is off, and the cursor must say so too."""
     from types import SimpleNamespace
-    from PySide6.QtGui import QVector3D as V
+    from ingetrazo_core import Vec3 as V
     vp = win.viewport
     scene = vp.scene
     face = scene.mesh.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)])

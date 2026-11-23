@@ -11,7 +11,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import ezdxf
 import pytest
 from PySide6.QtCore import QSettings
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import QApplication, QCheckBox, QComboBox, QDialog
 
 from core.make_faces import faces_from_linework

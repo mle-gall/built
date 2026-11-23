@@ -16,7 +16,8 @@ from types import SimpleNamespace
 
 import pytest
 from PySide6.QtCore import QEvent, QPointF, Qt
-from PySide6.QtGui import QMouseEvent, QVector3D as V
+from PySide6.QtGui import QMouseEvent
+from ingetrazo_core import Vec3 as V
 from PySide6.QtWidgets import QApplication
 
 from core.mesh import Mesh

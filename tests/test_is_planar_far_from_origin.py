@@ -16,7 +16,7 @@ import math
 import random
 
 import pytest
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 
 from core.mesh import Mesh
 from core.topology import fold_nonplanar_faces, is_planar

@@ -9,7 +9,7 @@ on top of four walls came back as a full square: it covered the room
 between the walls and left the walls' top edges open."""
 from __future__ import annotations
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import History
 from core.scene import Scene

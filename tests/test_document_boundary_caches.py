@@ -42,7 +42,7 @@ def test_open_forgets_every_id_keyed_cache(tmp_path):
 
 
 def _seed_inference_references(vp):
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
 
     inference = vp.inference
     inference._hover_edge = object()
@@ -84,7 +84,7 @@ def test_new_drawing_drops_acquired_inference_references():
 
 
 def test_undo_drops_acquired_inference_references():
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
 
     from core.history import AddEdgeCommand
     from views.main_window import MainWindow

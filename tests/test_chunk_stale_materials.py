@@ -15,7 +15,8 @@ import types
 from pathlib import Path
 
 import pytest
-from PySide6.QtGui import QColor, QImage, QVector3D
+from PySide6.QtGui import QColor, QImage
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.group import Group
 from core.history import History, MoveGroupCommand, SetFaceTextureCommand
@@ -126,7 +127,7 @@ def test_repaint_alone_is_picked_up_too(images):
 def test_the_flag_reaches_nested_placements(images):
     """A nested placement's mesh renders as part of its parent, so it needs
     the same signal — scene.groups as a flat list never reached it."""
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     from core.history import _dirty_group_chunks
     scene = Scene()
     deep = Mesh()

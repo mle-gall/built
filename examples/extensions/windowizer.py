@@ -40,7 +40,7 @@ import json
 import logging
 from pathlib import Path
 
-from PySide6.QtGui import QMatrix4x4, QVector3D, QVector4D
+from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D, Vec4 as QVector4D
 
 from core.history import Command
 

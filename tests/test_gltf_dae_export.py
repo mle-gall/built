@@ -10,7 +10,8 @@ import struct
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from PySide6.QtGui import QImage, QVector3D
+from PySide6.QtGui import QImage
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import History
 from core.scene import Scene

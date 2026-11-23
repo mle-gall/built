@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import zipfile
 
-from PySide6.QtGui import QImage, QVector3D as V
+from PySide6.QtGui import QImage
+from ingetrazo_core import Vec3 as V
 
 from core.group import Group
 from core.mesh import Mesh

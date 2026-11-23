@@ -120,7 +120,7 @@ def test_a_sheet_made_through_the_bridge_is_one_undoable_step(monkeypatch):
     from core.history import AddEdgeCommand
     from plugins.ai_bridge import _Bridge
     from views.main_window import MainWindow
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     monkeypatch.setenv("INGETRAZO_AI_PORT", "0")
     win = MainWindow()
     try:

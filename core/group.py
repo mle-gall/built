@@ -267,7 +267,7 @@ class _GroupMethods:
         the vertices otherwise — and walking the vertices would move the
         group's own mesh while leaving its children behind. An identity
         transform costs nothing and closes that road."""
-        from PySide6.QtGui import QMatrix4x4
+        from ingetrazo_core import Matrix4 as QMatrix4x4
         children = list(children)
         if _dm.ENABLED and getattr(self, "_doc_key", 0):
             # One parent per placement: adopting takes a child out of the
@@ -408,7 +408,7 @@ def carry_axes(group, m) -> None:
     instance). Instances are left alone — their ``xform`` already moved."""
     if group is None or getattr(group, "xform", None) is not None:
         return
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     base = group.axes if group.axes is not None else QMatrix4x4()
     group.axes = m * base
 
@@ -433,7 +433,7 @@ def frame_axes(m):
     square to each other (a scaled or skewed placement still draws
     orthogonal axes; red first, green squared to it, blue from both — and
     a mirrored placement keeps its handedness). ``m=None`` is the world."""
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     if m is None:
         return (QVector3D(0, 0, 0), QVector3D(1, 0, 0), QVector3D(0, 1, 0),
                 QVector3D(0, 0, 1))
@@ -459,7 +459,7 @@ def make_billboard_group(image_path: str, height: float, name: str,
     """A face-me billboard group: one textured quad, ``height`` metres tall,
     anchored at ``position`` (origin by default). The viewport rotates it
     around that anchor to face the camera."""
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     mesh = Mesh()
     w = height * aspect
     p = position if position is not None else QVector3D(0, 0, 0)
@@ -483,7 +483,7 @@ def _implicit_uvw(face, tex, minv):
     inverse of the transform about to be accounted for) pins that look
     into a ``uvw`` the remap below can carry. ``None`` for a degenerate
     face, whose projection is meaningless either way."""
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
 
     from core.texture import face_uv_axes
     pts = [minv.map(p) for p in face.vertices]
@@ -734,7 +734,7 @@ def visible_placements(scene, group):
 
 
 def _copy_mesh(mesh) -> Mesh:
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     return transformed_mesh(mesh, QMatrix4x4())
 
 
@@ -935,7 +935,7 @@ def copy_group(group, delta=None, _in_definition=False, _ifc_copy_context=None):
     becomes an identity placement first — same place in the world — so the
     original and the copy hold the same mesh and an edit inside either
     shares back to both."""
-    from PySide6.QtGui import QMatrix4x4, QVector3D
+    from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
     copy_root = _ifc_copy_context is None
     if copy_root:
         _ifc_copy_context = {'groups': {}, 'openings': {}, 'copies': []}
@@ -1030,7 +1030,7 @@ def _copy_definition_mesh(mesh):
         # StoreMesh.__deepcopy__ forks the store chunks under fresh keys.
         from copy import deepcopy
         return deepcopy(mesh)
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     return transformed_mesh(mesh, QMatrix4x4())
 
 
@@ -1142,7 +1142,7 @@ def frame_from_points(positions) -> tuple:
     frame from face geometry instead and picked triangulation DIAGONALS for
     the long axis, which is how a rectangle ends up with a skew frame."""
     import numpy as np
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     world = (QVector3D(1.0, 0.0, 0.0), QVector3D(0.0, 1.0, 0.0),
              QVector3D(0.0, 0.0, 1.0))
     if positions is None or len(positions) < 3:
@@ -1258,7 +1258,7 @@ def oriented_bounds(mesh, frame=None, points=None) -> tuple:
     :func:`placement_points`, so a component with nested placements is not
     merged into one mesh just to be measured."""
     import numpy as np
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     if frame is None:
         frame = (QVector3D(1.0, 0.0, 0.0), QVector3D(0.0, 1.0, 0.0),
                  QVector3D(0.0, 0.0, 1.0))
@@ -1279,7 +1279,7 @@ def oriented_bounds(mesh, frame=None, points=None) -> tuple:
 
 def oriented_box_corners(frame, lo, hi) -> list:
     """The eight corners of an oriented box, in world coordinates."""
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     u, v, w = frame
     out = []
     for i in range(8):

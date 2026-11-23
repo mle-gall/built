@@ -9,10 +9,10 @@ os.environ['INGETRAZO_RUST'] = '1'
 os.environ['INGETRAZO_AO'] = '0'
 import numpy as np
 from PySide6.QtWidgets import QApplication
-from PySide6.QtGui import QMatrix4x4
+from ingetrazo_core import Matrix4 as QMatrix4x4
 from core.scene import Scene
 from core.history import History, MoveGroupCommand, TagGroupsCommand, InsertGroupCommand
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 from core.group import Group
 from formats.igz import load_into
 from views.wgpu_view import WgpuView

@@ -29,7 +29,7 @@ import random
 
 import numpy as np
 import pytest
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 
 import core._native as _native
 from core import mesh as M
@@ -145,7 +145,6 @@ class Run:
             next(M._KEY_NAMESPACES), pos, edges, flags, curves, layers,
             names, rings, sizes, counts, None, **S._weld_args()), [])
         assert type(self.pm) is M.Mesh and type(self.sm) is S.StoreMesh
-        self.sm._store.f32_parity = True  # exact legacy registry/cell-border oracle
         self.keys = Keys()
         pair_keys(self.keys, self.pm, self.sm)
         self.base = [[rng.randrange(-4, 4) * 0.5 for _ in range(3)]

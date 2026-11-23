@@ -8,7 +8,8 @@ texture, say the flagstone, I should be able to change the colour too".
 from __future__ import annotations
 
 import pytest
-from PySide6.QtGui import QColor, QImage, QMatrix4x4, QVector3D
+from PySide6.QtGui import QColor, QImage
+from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.group import Group
 from core.mesh import Mesh

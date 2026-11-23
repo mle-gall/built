@@ -11,7 +11,7 @@ group. Each case: do → next command → undo ×2 → redo ×2 must end where t
 first pass did, with nothing left to redo."""
 from __future__ import annotations
 
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 
 from core.group import Group
 from core.history import (ExplodeGroupCommand, GroupInContextCommand,

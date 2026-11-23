@@ -15,7 +15,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
 from PySide6.QtCore import QSettings
-from PySide6.QtGui import QVector2D, QVector3D as V
+from PySide6.QtGui import QVector2D
+from ingetrazo_core import Vec3 as V
 from PySide6.QtWidgets import QApplication, QWidget
 
 _inst = QApplication.instance()

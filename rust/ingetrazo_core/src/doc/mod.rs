@@ -108,12 +108,12 @@ fn gen_of(k: Key) -> u32 {
     (k >> 32) as u32
 }
 
-/// A placement matrix: the 16 binary32 values Qt holds (column-major, as
+/// A placement matrix: the 16 binary64 model values (column-major, as
 /// `QMatrix4x4.data()`), and for a `.built` placement the binary64 values
 /// it was read with plus their projection (`formats/built._built_source`).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Xform {
-    pub f: [f32; 16],
+    pub f: [f64; 16],
     pub src: Option<Box<([f64; 16], [f64; 16])>>,
 }
 

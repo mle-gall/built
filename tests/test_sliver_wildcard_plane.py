@@ -18,7 +18,7 @@ His document carried 304 such faces.
 """
 from __future__ import annotations
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.edits import build_add_edge
 from core.group import Group
@@ -33,8 +33,10 @@ def V(x, y, z=0.0):
 
 def test_qt_nulls_short_vectors_which_is_why_we_divide_by_hand():
     """The trap itself, pinned: if Qt ever changes, this says so."""
-    assert QVector3D(0.0, 0.0, 1e-4).normalized().length() == 1.0
-    assert QVector3D(0.0, 0.0, 1e-5).normalized().length() == 0.0
+    from PySide6.QtGui import QVector3D as QtVector
+    assert QtVector(0.0, 0.0, 1e-4).normalized().length() == 1.0
+    assert QtVector(0.0, 0.0, 1e-5).normalized().length() == 0.0
+    assert (V(0, 0, 1e-5).normalized() - V(0, 0, 1)).length() < 1e-15
 
 
 def test_a_sliver_face_still_reports_a_unit_normal():

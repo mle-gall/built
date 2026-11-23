@@ -3,7 +3,7 @@
 def test_glass_paints_translucent_and_undoes(monkeypatch):
     # The library's glass carries opacity: painting stamps it, an opaque
     # repaint clears it, and the eyedropper samples it.
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     from core.scene import Scene
     from core.history import History
     from core.history import (CompoundCommand, SetFaceColorCommand,

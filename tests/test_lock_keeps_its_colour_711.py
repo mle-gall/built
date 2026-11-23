@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.snap import (AXIS_COLORS, COLOR_EXTENSION, COLOR_REFERENCE,
                        compute_snap)

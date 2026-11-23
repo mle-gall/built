@@ -9,7 +9,8 @@ import math
 import sys
 
 import pytest
-from PySide6.QtGui import QImage, QPainter, QVector3D
+from PySide6.QtGui import QImage, QPainter
+from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import QApplication
 
 if QApplication.instance() is None:

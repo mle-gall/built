@@ -312,7 +312,7 @@ class TestAnchoredEndToEnd:
     an edited wall through the whole pipeline (snap → anchor → reproject)."""
 
     def _composer(self):
-        from PySide6.QtGui import QVector3D
+        from ingetrazo_core import Vec3 as QVector3D
         from PySide6.QtWidgets import QWidget
 
         host = QWidget()
@@ -361,7 +361,7 @@ class TestAnchoredEndToEnd:
     def _stretch(self, composer, x_from, x_to, undo=None):
         # Through the real Move command, as the user's push/move does: it
         # keeps the vertex registry (and so vertex identity) right.
-        from PySide6.QtGui import QVector3D
+        from ingetrazo_core import Vec3 as QVector3D
         from core.history import MoveVerticesCommand
         scene = composer._scene()
         if undo is not None:

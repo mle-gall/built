@@ -13,7 +13,7 @@ from __future__ import annotations
 import os
 
 import pytest
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from core.group import Group
@@ -152,7 +152,7 @@ def test_anidar_se_deshace_en_UN_paso(win):
 def test_un_grupo_con_hijos_se_anida_sin_perderlos(win):
     """Anidar un contenedor dentro de otro: el árbol crece, no se aplana.
     (Junto a otro grupo: uno solo ya no se agrupa consigo mismo, #35.)"""
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     scene = win.viewport.scene
     hondo = Mesh()
     _quad(hondo, 0.0)

@@ -11,7 +11,7 @@ from __future__ import annotations
 import os
 
 import pytest
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 
 def V(x, y, z=0.0):

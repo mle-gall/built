@@ -11,7 +11,7 @@ from __future__ import annotations
 import random
 
 import numpy as np
-from PySide6.QtGui import QMatrix4x4, QVector3D as V
+from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core.group import Group, effective_material
 from core.mesh import Mesh

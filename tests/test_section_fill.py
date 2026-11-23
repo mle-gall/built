@@ -10,7 +10,7 @@ holes left open. Every model here is generated."""
 from __future__ import annotations
 
 import numpy as np
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.mesh import Mesh
 from core.section import cut_chords, fill_triangles

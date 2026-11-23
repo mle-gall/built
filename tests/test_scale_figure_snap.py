@@ -27,7 +27,7 @@ def test_the_feet_follow_the_figures_added_and_taken_away():
     """The face-me placements are kept between pointer moves (21 406
     placements walked for two on the plant of #158): a figure added,
     taken away or made a plain group changes the feet offered."""
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
 
     from core.group import Group
     from views.main_window import MainWindow

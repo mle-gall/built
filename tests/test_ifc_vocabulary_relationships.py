@@ -1,6 +1,6 @@
 """Schema facts and user-owned metadata must survive a real IFC consumer."""
 import pytest
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 from core.scene import Scene
 from core.group import Group
 from core.materials import Material

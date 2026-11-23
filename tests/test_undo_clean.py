@@ -5,7 +5,7 @@ stray vertices left behind (the line-draw plan can't compose a clean per-op
 inverse, so it's undone by snapshot)."""
 from __future__ import annotations
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.edits import build_add_edge, build_add_edges
 from core.history import EraseSelectionCommand, History

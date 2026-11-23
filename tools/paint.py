@@ -105,14 +105,14 @@ def rename_recent(entries: list, old: str, stamp: dict) -> list:
 
 def _face_plane(face) -> tuple:
     """``(unit normal, offset)`` of the face's plane."""
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     n = face.normal()
     p = face.vertices[0] if face.vertices else QVector3D()
     return (n, QVector3D.dotProduct(n, p))
 
 
 def _same_plane(face, plane, tol: float = 1e-4) -> bool:
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     n, d = plane
     fn = face.normal()
     if abs(abs(QVector3D.dotProduct(fn, n)) - 1.0) > 1e-3:
@@ -173,7 +173,7 @@ def clicked_back_side(viewport, face, group, x: float, y: float) -> bool:
     ``group`` is what ``pick_face_any`` returned beside the face (its
     transform places the normal). A viewport without a ray (the stubs in
     tests) reads as the front."""
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     ray = getattr(viewport, "_pixel_to_ray", None)
     if ray is None:
         return False
@@ -495,7 +495,7 @@ class PaintTool(Tool):
                      if hasattr(vp, "image_plane_at") else None)
         if image is None:
             return False
-        from PySide6.QtGui import QVector3D
+        from ingetrazo_core import Vec3 as QVector3D
         tex = image.texture()
         n = image.normal()
         PaintTool.current_is_default = False

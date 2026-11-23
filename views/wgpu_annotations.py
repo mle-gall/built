@@ -35,7 +35,8 @@ from copy import copy
 
 import numpy as np
 from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QColor, QPainter, QPen, QVector3D
+from PySide6.QtGui import QColor, QPainter, QPen
+from ingetrazo_core import Vec3 as QVector3D
 
 from views.viewport import Viewport, _guide_vertices, shown_guides
 

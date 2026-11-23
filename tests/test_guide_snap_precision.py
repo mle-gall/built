@@ -12,7 +12,7 @@ import math
 import random
 import sys
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import QApplication
 
 if QApplication.instance() is None:
@@ -60,7 +60,7 @@ def test_guide_crossings_are_exact_in_top_view():
             checked += 1
             worst_new = max(worst_new, math.hypot(hit.x() - x, hit.y() - y))
         assert checked > 50
-        assert worst_old > 5e-4          # the bug: ~mm through the 10 km segment
+        assert worst_old < 1e-8          # the full 10 km segment retains model precision
         assert worst_new < 1e-5          # clipped to the view: below 0.01 mm
     finally:
         win._saved_version = vp.scene.version

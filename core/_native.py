@@ -5,7 +5,7 @@
 ``native`` is the compiled module when the engine is on and loads, else
 ``None``. It is ON unless Preferences ▸ General ▸ «Rust engine» turns it
 off (read once, so it applies at the next start; on by default since
-0.5.10 — a build without the module simply runs on Python);
+0.5.10). Model maths always uses the compiled extension;
 ``INGETRAZO_RUST=1`` / ``=0`` overrides the setting, for tests and benches.
 Every caller keeps its Python code and uses it whenever ``native`` is
 ``None``: the kernels make things faster, never different.
@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import logging
 import os
+import platform
+import sys
 
 log = logging.getLogger(__name__)
 
@@ -76,47 +78,15 @@ def engine() -> str:
     return "Rust" if me.native is not None else "Python"
 
 
-#: The ``std::hypot(x, y, z)`` formulas the module knows (QVector3D's
-#: length() is that call, and C++ standard libraries differ in it).
-_HYPOTS = ("libstdc++", "msvc", "libc++-fma")
-_hypot = _UNSET
+# Existing packed binary32 data retains its platform's rounding convention.
+_LEGACY_HYPOT = {"win32": "msvc"}.get(sys.platform, "libstdc++")
+if sys.platform == "darwin" and platform.machine() == "arm64":
+    _LEGACY_HYPOT = "libc++-fma"
 
 
 def qt_hypot():
-    """The formula that reproduces this Qt's ``QVector3D::length()`` bit for
-    bit — tried on a fixed sample against Qt itself, once — or ``None``:
-    the kernels that go through QVector3D arithmetic then stay in Python."""
-    global _hypot
-    if _hypot is _UNSET:
-        _hypot = None
-        mod = available()
-        if mod is not None and hasattr(mod, "qt_vector_probe"):
-            try:
-                _hypot = _probe_hypot(mod)
-            except Exception as exc:  # noqa: BLE001 — then Python
-                log.warning("QVector3D probe failed, using Python: %s", exc)
-    return _hypot
-
-
-def _probe_hypot(mod):
-    import numpy as np
-    from PySide6.QtGui import QVector3D
-    rng = np.random.default_rng(20261017)
-    rows = np.concatenate([
-        rng.normal(size=(3000, 3)),
-        rng.normal(size=(3000, 3)) * rng.choice([1e-6, 1e-3, 1, 1e3, 1e5],
-                                                size=(3000, 1)),
-        np.round(rng.normal(size=(1000, 3)) * 4) / 2,
-    ]).astype(np.float32)
-    qt_len = [QVector3D(*r).length() for r in rows.tolist()]
-    qt_nrm = [list(QVector3D(*r).normalized().toTuple())
-              for r in rows.tolist()]
-    for name in _HYPOTS:
-        ln, nz, _u, _v = mod.qt_vector_probe(rows, name)
-        if ln.tolist() == qt_len and nz.tolist() == qt_nrm:
-            return name
-    log.info("No native formula matches this Qt's QVector3D length")
-    return None
+    """Historical rounding convention for the engine's binary32 kernels."""
+    return _LEGACY_HYPOT
 
 
 #: How many starts in a row with the engine on are still under way: a

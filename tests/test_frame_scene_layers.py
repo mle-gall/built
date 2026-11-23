@@ -18,7 +18,7 @@ import uuid
 
 import numpy as np
 import pytest
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 from PySide6.QtWidgets import QWidget
 
 from core.group import Group

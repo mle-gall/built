@@ -3,7 +3,7 @@
 from types import SimpleNamespace
 
 import pytest
-from PySide6.QtGui import QVector3D, QMatrix4x4
+from ingetrazo_core import Vec3 as QVector3D, Matrix4 as QMatrix4x4
 
 from core.group import Group
 from core.history import (AddEdgeCommand, Command, CommandRejected, FlipFacesCommand,

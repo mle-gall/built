@@ -8,7 +8,7 @@ T-junctions/spurs, doubled lines, and a hole nested in its ring — plus the
 """
 from __future__ import annotations
 
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 
 from core.arrangement import planar_arrangement
 from core.history import AddEdgeCommand, History, RebuildPlanarFacesCommand

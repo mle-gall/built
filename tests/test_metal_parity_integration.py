@@ -3,7 +3,8 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 from PySide6.QtCore import Qt, QPointF
-from PySide6.QtGui import QVector3D, QMouseEvent
+from PySide6.QtGui import QMouseEvent
+from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import QApplication
 from PySide6.QtTest import QTest
 from core.scene import Scene
@@ -168,7 +169,7 @@ def test_native_opaque_opt_in_is_byte_identical_and_new_scene_resets(native):
 
 
 def test_matching_back_header_renders_both_sides(native):
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     from tests.test_metal_parity_raster import capture
     scene=Scene()
     face=scene.mesh.add_face([QVector3D(-.8,-.8,0),QVector3D(.8,-.8,0),

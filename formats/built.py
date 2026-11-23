@@ -36,15 +36,13 @@ def point_array(points, sink):
 
 
 def placement(values):
-    """Qt consumes float32. Retain the source doubles on its projection."""
-    from PySide6.QtGui import QMatrix4x4
+    """Read a column-major binary64 placement."""
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     import math
     values = tuple(map(float, values))
     if len(values) != 16 or not all(map(math.isfinite, values)):
         raise ValueError("Invalid Built placement transform")
-    matrix = QMatrix4x4(*(values[c * 4 + r] for r in range(4) for c in range(4)))
-    matrix._built_source = values, tuple(matrix.data())
-    return matrix
+    return QMatrix4x4(*(values[c * 4 + r] for r in range(4) for c in range(4)))
 
 
 def placement_values(matrix):
@@ -57,16 +55,21 @@ def placement_values(matrix):
 
 
 def python_vertices(mesh, points, sequential):
-    """Build on the model coordinates while Qt displays their f32 projection."""
+    """Weld binary64 coordinates directly into the Python object mesh."""
     from core.lazy_mesh import weld
-    from core.mesh import _KEY_SCALE
-    from formats.built_vertex import BuiltVertex
+    from core.mesh import Vertex, _KEY_SCALE
     positions, inverse = weld(points, sequential, precise=True)
     for point in positions.tolist():
-        vertex = BuiltVertex(point, key=next(mesh._keys))
+        vertex = Vertex(point, key=next(mesh._keys))
         mesh._registry[tuple(round(x * _KEY_SCALE) for x in point)] = vertex
         mesh.vertices.append(vertex)
     return mesh.vertices, inverse
+
+
+def compact_values(values):
+    """Coordinates representable by legacy IGZ readers."""
+    import numpy as np
+    return np.asarray(values, dtype=np.float32).tolist()
 
 
 def export_placements(scene):
@@ -84,7 +87,7 @@ def export_placements(scene):
             if links.save_as_placeholder(group, scene):
                 return
             source = np.array(placement_values(group.xform)).reshape(4, 4).T
-            target = np.array(group.xform.data()).reshape(4, 4).T
+            target = np.array(compact_values(group.xform.data())).reshape(4, 4).T
             world, exported = world @ source, exported @ target
         by_mesh.setdefault(id(group.mesh), []).append((world, exported))
         for child in group.children:

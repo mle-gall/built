@@ -6,7 +6,7 @@ stack. An aborted draw once left a quarter circle, an unsplit face and a
 duplicated edge behind (aas.igz), with the traceback swallowed by Qt."""
 from __future__ import annotations
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import AddEdgeCommand, Command, History
 from core.scene import Scene

@@ -46,7 +46,8 @@ from __future__ import annotations
 from typing import Optional
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QColor, QVector3D
+from PySide6.QtGui import QColor
+from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,

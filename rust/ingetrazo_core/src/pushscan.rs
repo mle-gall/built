@@ -10,7 +10,7 @@
 //! caller then runs unchanged on the candidates. On the ride's largest mesh
 //! (267k faces) these loops took ~25 s of a click and ~10 s of a stage.
 
-use crate::facegeom::{self, Hypot, V3};
+use crate::store::geometry::{self as facegeom, Hypot, V3};
 use crate::orient::{geom_of, Geom};
 use crate::scans::{MeshScan, FFLAGS, RINGS};
 use crate::store::keys::Kind;
@@ -157,7 +157,7 @@ pub fn scan_parallel_overlapping(
 /// Qt's operations (`crate::facegeom`'s products), its parameter `t` as the
 /// Python float it returns.
 #[inline]
-fn ray_triangle_f32(o: V3, d: V3, a: V3, b: V3, c: V3, h: Hypot) -> Option<f64> {
+fn ray_triangle(o: V3, d: V3, a: V3, b: V3, c: V3, h: Hypot) -> Option<f64> {
     const EPS: f64 = 1e-7;
     const T_MIN: f64 = 1e-6;
     let e1 = V3(b.0 - a.0, b.1 - a.1, b.2 - a.2);
@@ -195,9 +195,9 @@ fn ray_triangle_f32(o: V3, d: V3, a: V3, b: V3, c: V3, h: Hypot) -> Option<f64> 
 pub fn scan_lateral_exit(
     py: Python<'_>,
     mut scan: PyRefMut<'_, MeshScan>,
-    samples: Vec<(f32, f32, f32)>,
-    direction: (f32, f32, f32),
-    n: (f32, f32, f32),
+    samples: Vec<(f64, f64, f64)>,
+    direction: (f64, f64, f64),
+    n: (f64, f64, f64),
     skip: Option<u32>,
     hypot: &str,
     compensated: bool,
@@ -224,7 +224,7 @@ pub fn scan_lateral_exit(
                 for t in g.tris_of(f) {
                     let (a, b, c) = (g.pos[t[0] as usize], g.pos[t[1] as usize], g.pos[t[2] as usize]);
                     for &q in &qs {
-                        if let Some(tt) = ray_triangle_f32(q, d, a, b, c, h) {
+                        if let Some(tt) = ray_triangle(q, d, a, b, c, h) {
                             if tt > 1e-4 && best.is_none_or(|bb| tt < bb) {
                                 best = Some(tt);
                             }

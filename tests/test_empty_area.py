@@ -173,7 +173,7 @@ def test_plus_from_the_empty_area_starts_a_new_document(win):
 
 
 def _blank_edit(win):
-    from PySide6.QtGui import QVector3D as V
+    from ingetrazo_core import Vec3 as V
     from core.history import AddEdgeCommand
     win.viewport.history.execute(AddEdgeCommand(V(0, 0, 0), V(1, 0, 0)))
     win.viewport.notify_scene_changed()

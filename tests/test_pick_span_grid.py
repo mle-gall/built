@@ -18,7 +18,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 import views.viewport as vv
 from views.viewport import Viewport, _split_chunk_spans

@@ -2,7 +2,7 @@
 from types import SimpleNamespace
 
 import pytest
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 
 from core.group import Group
 from core.mesh import Mesh

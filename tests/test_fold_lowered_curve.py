@@ -12,7 +12,7 @@ from __future__ import annotations
 import math
 
 import numpy as np
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 
 from core.history import History, MoveVerticesCommand
 from core.scene import Scene

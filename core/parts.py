@@ -76,8 +76,17 @@ def part_size(points) -> tuple:
     best = extent(np.eye(3))
     if len(points) >= 4:
         centred = points - points.mean(axis=0)
-        _w, vecs = np.linalg.eigh(centred.T @ centred)
+        weights, vecs = np.linalg.eigh(centred.T @ centred)
         own = extent(vecs.T)
+        # A square leg has two equal transverse eigenvalues. The eigensolver
+        # can rotate those axes arbitrarily and measure across the diagonal.
+        if (weights[1] > 0 and weights[2] > 1.01 * weights[1]
+                and abs(weights[1] - weights[0]) <= 1e-10 * weights[1]):
+            from core.group import frame_from_points
+            section = centred @ vecs[:, :2]
+            u, v, _ = frame_from_points(section)
+            axes = np.array([u.toTuple()[:2], v.toTuple()[:2]])
+            own[:2] = np.ptp(section @ axes.T, axis=0)
         # The part's own axes win only when they are MUCH tighter. A splayed
         # leg or a board lying at an angle is: its own box is a fraction of
         # the diagonal one. A stepped shape square to the model (a carcass

@@ -1,6 +1,6 @@
 """Opening must retain placement bounds for the first interaction."""
 from types import SimpleNamespace
-from PySide6.QtGui import QMatrix4x4
+from ingetrazo_core import Matrix4 as QMatrix4x4
 from core.group import Group
 from core.mesh import Mesh
 from views.viewport import Viewport

@@ -11,7 +11,7 @@ the multi-region union.
 """
 from __future__ import annotations
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.cap_rebuild import rebuild_plane
 from core.mesh import Mesh
@@ -246,7 +246,7 @@ def test_rebuild_order_independent_on_overhang():
     classification reads the mesh volume, not the half-cleaned plane edges, so
     no order leaves a seam or an internal partition."""
     import itertools
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     import core.cap_rebuild as cr
     import tools.pushpull as pp
     from core.scene import Scene

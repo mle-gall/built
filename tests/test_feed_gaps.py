@@ -18,7 +18,7 @@ store on and off:
 from __future__ import annotations
 
 import pytest
-from PySide6.QtGui import QMatrix4x4, QVector3D as V
+from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core import mesh as M
 from core import store_mesh as S

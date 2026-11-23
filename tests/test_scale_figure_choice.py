@@ -11,7 +11,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
 from PySide6.QtCore import QSettings  # noqa: E402
-from PySide6.QtGui import QColor, QImage, QVector3D as V  # noqa: E402
+from PySide6.QtGui import QColor, QImage
+from ingetrazo_core import Vec3 as V
 
 from core import scale_figure as sf  # noqa: E402
 from core.group import Group, make_billboard_group  # noqa: E402

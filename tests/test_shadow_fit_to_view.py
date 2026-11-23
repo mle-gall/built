@@ -19,7 +19,8 @@ import math
 import numpy as np
 import pytest
 from PySide6.QtCore import QEventLoop, QTimer
-from PySide6.QtGui import QImage, QVector3D
+from PySide6.QtGui import QImage
+from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import QApplication
 
 _app = QApplication.instance() or QApplication([])

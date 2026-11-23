@@ -8,7 +8,7 @@ from __future__ import annotations
 import math
 
 import pytest
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.bridge import Profile, _centre, _pairs, bridge, strips
 from core.mesh import Mesh

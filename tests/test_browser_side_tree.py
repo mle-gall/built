@@ -26,7 +26,7 @@ _QUADS = [(0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6),
 
 
 def _box(at=(0.0, 0.0, 0.0), size=0.1) -> Mesh:
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     mesh = Mesh()
     x0, y0, z0 = at
     c = [QVector3D(x0 + dx * size, y0 + dy * size, z0 + dz * size)
@@ -518,7 +518,7 @@ def test_the_bar_has_no_isolate_button():
 def test_a_section_plane_row_is_deleted_too():
     """Individual elements as well as groups: a plane's row goes with
     Delete, and Ctrl+Z brings it back."""
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     from core.section import SectionPlane
     building, _tree = _building()
     win, scene, panel = _window_with(building)

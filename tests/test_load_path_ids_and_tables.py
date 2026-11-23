@@ -12,7 +12,7 @@ import random
 import uuid
 
 import numpy as np
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core import links
 from core.layers import assign_layer, layer_of

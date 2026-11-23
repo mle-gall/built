@@ -12,8 +12,8 @@ each covered once. Faces that only share an edge, or planes no other face
 covers, stay as they are."""
 from __future__ import annotations
 
-from PySide6.QtGui import QMatrix4x4
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Matrix4 as QMatrix4x4
+from ingetrazo_core import Vec3 as V
 
 from core.group import Group
 from core.history import (ExplodeGroupCommand, GroupInContextCommand,

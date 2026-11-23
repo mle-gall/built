@@ -1,6 +1,6 @@
 """Shared menu commands against a Metal document, with real Qt widgets."""
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import QApplication
 from tests.test_wgpu_mesh_tools import app
 

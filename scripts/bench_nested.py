@@ -7,7 +7,7 @@ os.environ["QT_QPA_PLATFORM"] = "xcb"
 sys.path.insert(0, os.getcwd())
 from pathlib import Path
 from PySide6.QtWidgets import QApplication
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 app = QApplication([])
 from views.main_window import MainWindow
 from core.history import MoveGroupCommand, MoveVerticesCommand

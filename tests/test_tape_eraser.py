@@ -3,7 +3,7 @@
 """Tape Measure guides + Eraser strokes: entities, commands, .igz, erase flow."""
 from __future__ import annotations
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.guide import Guide
 from core.history import (
@@ -142,7 +142,7 @@ class _GroupPickingViewport(_FakeViewport):
 
 
 def _grouped_square(scene):
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     from core.group import Group
     from core.mesh import Mesh
     g = Group(Mesh(), name="caja")

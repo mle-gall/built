@@ -17,7 +17,7 @@ def choose_origin(center, previous=ZERO):
 
 
 def point_in_frame(point, origin):
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     return QVector3D(*(v - o for v, o in zip(point, origin)))
 
 
@@ -53,7 +53,7 @@ def mesh_frame(mesh, origin):
             # A compatibility command explicitly requested Python objects.
             # Its graph and tombstones leave the tool in the caller's frame.
             from core.mesh import Vertex, _key
-            from PySide6.QtGui import QVector3D
+            from ingetrazo_core import Vec3 as QVector3D
             delta = np.subtract(origin, st.frame_origin)
             holders = list(d["_registry"].values())
             vertices = {v.key: v for v in d.get("_objmap", {}).values() if isinstance(v, Vertex)}

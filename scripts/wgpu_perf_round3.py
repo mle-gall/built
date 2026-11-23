@@ -14,7 +14,8 @@ os.environ['INGETRAZO_TEXTURE_CACHE'] = str(root / '.tmp-work/textures')
 from PySide6.QtCore import QSettings
 QSettings.setDefaultFormat(QSettings.IniFormat)
 QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, str(root / '.tmp-work/settings'))
-from PySide6.QtGui import QImage, QVector3D
+from PySide6.QtGui import QImage
+from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import QApplication
 from core.scene import Scene
 from core.section import SectionPlane

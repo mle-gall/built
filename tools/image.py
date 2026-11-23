@@ -19,7 +19,7 @@ hands over the cached path and aspect via :meth:`ImageTool.load`.
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import AddImagePlaneCommand
 from core.image_plane import ImagePlane

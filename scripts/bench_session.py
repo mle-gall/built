@@ -103,7 +103,7 @@ if cont is not None:
     win._activate_tool("select")
     # mover un hijo (traslación → atajo de los trozos)
     from core.history import MoveGroupCommand
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     child = cont.children[0]
     def move_child():
         vp.history.execute(MoveGroupCommand(child, QVector3D(0.05, 0, 0))); paint_now()

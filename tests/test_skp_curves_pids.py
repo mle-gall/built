@@ -5,7 +5,7 @@ from collections import Counter
 from pathlib import Path
 
 import pytest
-from PySide6.QtGui import QMatrix4x4
+from ingetrazo_core import Matrix4 as QMatrix4x4
 
 from core.scene import Scene
 from formats.skp import apply_payload, load_skp

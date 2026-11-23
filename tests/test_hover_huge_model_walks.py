@@ -18,7 +18,7 @@ import math
 
 import numpy as np
 import pytest
-from PySide6.QtGui import QMatrix4x4, QVector3D as V
+from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 import core._native as _native
 from core import mesh as M
@@ -193,8 +193,10 @@ def test_a_circle_edge_of_a_lazy_group_still_gives_its_centre(binary,
     found = _Vp(lazy)._center_of_group_edge(_pseudo(g, a, b))
     assert found is not None
     # The same answer as on the scene built eagerly.
-    eager = _scene()
+    eager = Scene()
+    igz.load_into(eager, tmp_path / "doc.igz")
     e = eager.groups[-1]
+    e.mesh._materialize()
     want = _Vp(eager)._center_of_group_edge(_pseudo(e, a, b))
     assert want is not None
     assert found[0].toTuple() == want[0].toTuple()

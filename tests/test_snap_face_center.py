@@ -11,7 +11,7 @@ from __future__ import annotations
 import math
 from types import SimpleNamespace
 
-from PySide6.QtGui import QMatrix4x4, QVector3D
+from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.mesh import Mesh
 from core.snap import COLOR_ON_FACE, compute_snap, face_center_of_face

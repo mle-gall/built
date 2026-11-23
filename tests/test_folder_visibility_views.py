@@ -1,6 +1,6 @@
 """A hidden tag folder hides its tags in sheets/exports, and scenes
 remember which folders were switched off."""
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core import layers as L
 from core.layers import Layer

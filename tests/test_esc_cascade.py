@@ -89,6 +89,6 @@ def test_viewport_release_constraints_reports_whether_it_did(window):
 
 
 def _square():
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     return [QVector3D(0, 0, 0), QVector3D(1, 0, 0),
             QVector3D(1, 1, 0), QVector3D(0, 1, 0)]

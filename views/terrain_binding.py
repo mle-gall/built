@@ -53,7 +53,7 @@ class ProfileBinding:
         matrix = vp.camera.projection_matrix() * vp.camera.view_matrix()
         sig = tuple(matrix.data()), view.width(), view.height()
         if sig != self.projected_sig:
-            from PySide6.QtGui import QVector3D
+            from ingetrazo_core import Vec3 as QVector3D
 
             _send(
                 view,

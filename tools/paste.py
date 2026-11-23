@@ -11,7 +11,7 @@ from __future__ import annotations
 from core.mesh import element_identity
 
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.geometry import Face as PreviewFace
 from core.group import copy_group, translated_attrs
@@ -246,7 +246,7 @@ class PasteTool(Tool):
                          for g in self._clip.get("groups", ())]
         if renamed or any(a != b for a, b in names.items()):
             from core.group import iter_placements, transformed_mesh
-            from PySide6.QtGui import QMatrix4x4
+            from ingetrazo_core import Matrix4 as QMatrix4x4
             for root in pasted_groups:
                 for g, _ in iter_placements(root):
                     g.layer = names.get(g.layer, g.layer)

@@ -19,10 +19,8 @@ import re
 from typing import Optional
 
 from PySide6.QtCore import QEvent, QPoint, QPointF, QRectF, QSize, Qt, QTimer
-from PySide6.QtGui import (QBrush, QColor, QFont, QImage, QKeySequence,
-                           QPageLayout, QPageSize, QPainter, QPalette,
-                           QPdfWriter,
-                           QPen, QShortcut, QTransform, QVector3D)
+from PySide6.QtGui import QBrush, QColor, QFont, QImage, QKeySequence, QPageLayout, QPageSize, QPainter, QPalette, QPdfWriter, QPen, QShortcut, QTransform
+from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDoubleSpinBox,
                                QFileDialog, QFormLayout, QGraphicsItem,
                                QGraphicsTextItem,
@@ -13518,7 +13516,7 @@ class ComposerWindow(QMainWindow):
         vertex and kept for the session; vertex identity survives move,
         scale and undo. True when the hold answered (moved or not), so the
         nearest-point re-snap is not needed; False leaves it to that."""
-        from PySide6.QtGui import QVector3D
+        from ingetrazo_core import Vec3 as QVector3D
         from core.dimension import resolve_vertex_anchor
         try:
             scene = self._scene()

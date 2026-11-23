@@ -1,6 +1,6 @@
 """Document-tool facade for native mesh editing; no GL picking or drawing."""
 import numpy as np
-from PySide6.QtGui import QVector3D, QMatrix4x4
+from ingetrazo_core import Vec3 as QVector3D, Matrix4 as QMatrix4x4
 from core.group import iter_placements
 
 _VIEWPORT = None

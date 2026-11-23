@@ -14,7 +14,7 @@ import sys
 
 import numpy as np
 import pytest
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 
 import core._native as _native
 from core.mesh import Mesh
@@ -31,6 +31,7 @@ def _f32(v):
 
 
 def test_qt_vector_arithmetic():
+    from PySide6.QtGui import QVector3D as QtVector
     rng = np.random.default_rng(3)
     rows = np.concatenate([
         rng.normal(size=(4000, 3)),
@@ -43,11 +44,18 @@ def test_qt_vector_arithmetic():
     ]).astype(np.float32)
     ln, nz, pu, pv = nat.qt_vector_probe(rows, HYPOT)
     for i, r in enumerate(rows.tolist()):
-        q = V(*r)
+        q = QtVector(*r)
         assert float(ln[i]) == q.length(), r
         assert nz[i].tolist() == list(q.normalized().toTuple()), r
         if q.length() > 0:
-            u, v = plane_axes(q)
+            n = q.normalized()
+            ref = QtVector(1, 0, 0)
+            u = ref - n * QtVector.dotProduct(ref, n)
+            if u.length() < .1:
+                ref = QtVector(0, 1, 0)
+                u = ref - n * QtVector.dotProduct(ref, n)
+            u = u.normalized()
+            v = QtVector.crossProduct(n, u).normalized()
             assert pu[i].tolist() == list(u.toTuple()), r
             assert pv[i].tolist() == list(v.toTuple()), r
 
@@ -160,7 +168,7 @@ def test_face_geometry_is_the_python_one(seed, monkeypatch):
     faces += [Face([a, b, c]), Face([a, b]), Face([a, b, a, b])]
     vid = {v.key: i for i, v in enumerate(m.vertices)}
     pos = np.array([v.position.toTuple() for v in m.vertices],
-                   dtype=np.float32)
+                   dtype=np.float64)
     corners, sizes, counts = [], [], []
     for f in faces:
         rings = [f.loop] + f.hole_loops

@@ -10,7 +10,7 @@ looked-at stretch is from the eye."""
 from __future__ import annotations
 
 import numpy as np
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 
 from core.guide import Guide
 from views.viewport import _guide_vertices

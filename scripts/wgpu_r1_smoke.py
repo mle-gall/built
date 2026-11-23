@@ -8,7 +8,8 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QColor, QPainter, QVector3D
+from PySide6.QtGui import QColor, QPainter
+from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import QApplication, QWidget
 from core.mesh import Mesh
 from core.group import Group

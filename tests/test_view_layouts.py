@@ -12,7 +12,8 @@ import sys
 
 import pytest
 from PySide6.QtCore import QPointF
-from PySide6.QtGui import QEnterEvent, QVector3D as V
+from PySide6.QtGui import QEnterEvent
+from ingetrazo_core import Vec3 as V
 from PySide6.QtWidgets import QApplication
 
 if QApplication.instance() is None:

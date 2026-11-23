@@ -8,7 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from PySide6.QtGui import QImage, QMatrix4x4, QVector3D
+from PySide6.QtGui import QImage
+from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.history import History, SetFaceColorCommand
 from core.group import Group
@@ -138,7 +139,7 @@ def test_skp_export_instances_share_one_definition(tmp_path):
     """Three component instances sharing a prototype mesh export as ONE
     definition + three placements — the geometry is stored once, not
     duplicated per instance."""
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     from core.mesh import Mesh
     scene = Scene()
     proto = Mesh()
@@ -163,7 +164,7 @@ def test_skp_export_roundtrip_instances(tmp_path):
     instances come back as groups at their original world positions —
     the strongest check that the placement matrix convention matches
     ``skp_openskp._matrix`` (and therefore real .skp files)."""
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     from core.group import world_mesh
     from core.mesh import Mesh
     from formats import skp as skp_format

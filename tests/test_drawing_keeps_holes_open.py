@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import math
 
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 
 from core.history import History, _point_in_tri
 from core.scene import Scene

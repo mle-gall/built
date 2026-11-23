@@ -19,7 +19,7 @@ import math
 from types import SimpleNamespace
 
 import pytest
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 
 from core import snap
 from core.topology import segment_intersection

@@ -46,7 +46,7 @@ def test_profile_width_and_dash_defaults():
 def test_section_plane_keeps_gl_half_space_and_resets():
     from core.scene import Scene
     from core.section import SectionPlane
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     scene = Scene()
     plane = SectionPlane(QVector3D(2, 3, 4), QVector3D(1, 0, 0), active=True)
     scene.section_planes.append(plane)

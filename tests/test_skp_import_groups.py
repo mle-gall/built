@@ -17,7 +17,7 @@ from pathlib import Path
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
-from PySide6.QtGui import QMatrix4x4  # noqa: E402
+from ingetrazo_core import Matrix4 as QMatrix4x4
 
 pytest.importorskip("openskp")
 

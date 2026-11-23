@@ -9,7 +9,7 @@ the panel was folded about an edge)."""
 from __future__ import annotations
 
 import pytest
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 
 from core.history import (AddFaceCommand, History,
                           MoveVerticesCommand, RotateVerticesCommand)

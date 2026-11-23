@@ -12,7 +12,7 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtGui import QVector3D  # noqa: E402
+from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 if QApplication.instance() is None:
@@ -80,7 +80,7 @@ def test_open_restores_the_authors_view_and_new_resets_it(tmp_path):
 
 def test_the_loader_reports_progress(tmp_path):
     """Issue #59: opening a document reports milestones for the bar."""
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     from core.group import Group
     from core.mesh import Mesh
     scene = Scene()

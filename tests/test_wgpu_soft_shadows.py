@@ -16,7 +16,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import numpy as np
 import pytest
 from PySide6.QtCore import QSettings
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 from PySide6.QtWidgets import QApplication, QWidget
 
 _app = QApplication.instance() or QApplication([])
@@ -136,7 +136,7 @@ def test_a_level_widens_the_penumbra_on_metal(native):
     """The wall's shadow on the floor: at the strongest level many more
     pixels sit between full shade and full sun than with the crisp map,
     and the core of the shadow stays as dark."""
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     from views.wgpu_scene import pack_scene
     scene = _wall_scene()
     pack_scene(scene).upload(native)

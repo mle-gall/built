@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import pytest
 from PySide6.QtCore import QEvent, QPoint, QPointF, Qt
-from PySide6.QtGui import QKeyEvent, QMouseEvent, QVector3D
+from PySide6.QtGui import QKeyEvent, QMouseEvent
+from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import QApplication
 
 from core.orient import is_closed, signed_volume

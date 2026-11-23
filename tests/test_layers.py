@@ -3,7 +3,7 @@
 """Layers / tags (Fase 6): visibility, locking, assignment, persistence."""
 from __future__ import annotations
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.layers import DEFAULT_LAYER, Layer, assign_layer, layer_of
 from core.scene import Scene
@@ -108,7 +108,7 @@ def test_annotations_take_layers_like_any_entity(tmp_path):
     "Anotaciones" layer shows a clean model — no need to duplicate the
     fountain, Marco 2026-09-02), unselectable when locked, and the layer
     survives the .igz round trip."""
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     from core.camera import OrbitCamera
     from core.dimension import Dimension
     from core.saved_views import SavedView
@@ -164,7 +164,8 @@ def test_hidden_layer_hides_annotations_from_picks():
     """The pick paths honour the layer: a leader text or a cota on a hidden
     (or locked) layer is not under the cursor, exactly like a face."""
     import os
-    from PySide6.QtGui import QFont, QFontMetrics, QVector3D
+    from PySide6.QtGui import QFont, QFontMetrics
+    from ingetrazo_core import Vec3 as QVector3D
     from PySide6.QtWidgets import QApplication
     from core.dimension import Dimension
     from core.textlabel import TextLabel
@@ -219,7 +220,7 @@ def test_layers_tray_assigns_and_releases_annotations(monkeypatch):
     deleting that layer sends them back to the default one."""
     import os
     from PySide6.QtCore import Qt
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     from PySide6.QtWidgets import QApplication, QMessageBox
     monkeypatch.setattr(QMessageBox, "question",
                         staticmethod(lambda *a, **k: QMessageBox.Yes))

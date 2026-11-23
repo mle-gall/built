@@ -5,7 +5,8 @@ import zipfile
 
 import numpy as np
 import pytest
-from PySide6.QtGui import QColor, QImage, QVector3D as V
+from PySide6.QtGui import QColor, QImage
+from ingetrazo_core import Vec3 as V
 
 from core.group import Group
 from core.history import RestampMaterialCommand

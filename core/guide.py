@@ -9,7 +9,7 @@ engine so drawing tools can lock onto it — that is its whole purpose.
 """
 from __future__ import annotations
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 # Half-length used when a conceptually infinite guide line needs segment form
 # (render clipping and snap both work on segments).

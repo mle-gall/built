@@ -247,7 +247,7 @@ def test_a_level_mark_on_an_elevation_knows_its_height(monkeypatch):
     """«¿Sería posible que detectase la altura? Sería un puntazo para no
     tener tú que anotarlo» (21:20). In an elevation the page's rows ARE the
     model's heights, so even a click that snapped to nothing knows."""
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     from views.composer import ComposerWindow
     from views.main_window import MainWindow
     monkeypatch.setattr(ComposerWindow, "render_frame", lambda self, f: None)
@@ -296,7 +296,7 @@ def _sheet_with_circles():
     at (2, 3) — what a plan shows face-on — and a Ø1 m one standing up in
     the XZ plane, which a plan sees edge-on. The frame is a plan at 1:50."""
     import math
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     from PySide6.QtWidgets import QWidget
     from tests.test_composer_canvas import _FakeViewport
     from views.composer import ComposerWindow

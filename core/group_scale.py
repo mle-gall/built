@@ -8,7 +8,7 @@ one its selection box follows: a group rotated and then made a component
 has an identity ``xform`` and all its turn in ``axes``."""
 from __future__ import annotations
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.group import frame_axes, group_frame
 
@@ -45,7 +45,7 @@ def _exact_command(group, center, factor, axes):
     """``ScaleGroupCommand`` whose undo puts the saved matrices back as they
     were: undoing by the inverse factor leaves float32 residue that piles up
     over repeated edits (2 → undo → 2 → undo drifted to 0.999998)."""
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     from core.history import ScaleGroupCommand
 
     class _ExactScale(ScaleGroupCommand):

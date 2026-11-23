@@ -3,7 +3,7 @@
 """Heal: drop a redundant 'mother' face left overlapping its own subdivisions."""
 from __future__ import annotations
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.mesh import Mesh
 from core.topology import heal_overlapping_faces
@@ -128,7 +128,7 @@ def test_heal_skips_import_scale_meshes():
     import time
     from core import topology
     from core.mesh import Mesh
-    from PySide6.QtGui import QVector3D as V
+    from ingetrazo_core import Vec3 as V
     m = Mesh()
     m.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)])
     real_faces = list(m.faces)

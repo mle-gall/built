@@ -20,7 +20,7 @@ import random
 
 import numpy as np
 import pytest
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 
 import core._native as _native
 from core import lazy_mesh
@@ -312,7 +312,6 @@ def test_moves_rekey_like_the_mesh(seed, explicit_store_meshes):
     rng = random.Random(100 + seed)
     blk = crowded_block(rng, n_points=120, n_edges=90, n_faces=30)
     store = store_of_block(blk)
-    store.f32_parity = True  # adversarial cell-border oracle uses QVector3D
     m = build_mesh(*blk)
     compare_weld(store, m)
     keys = [store.key_at("vertex", i) for i in range(len(m.vertices))]
@@ -383,7 +382,6 @@ def test_snapshot_restore_is_capture_restore(seed, explicit_store_meshes):
     rng = random.Random(200 + seed)
     blk = crowded_block(rng, n_points=120, n_edges=90, n_faces=30)
     store = store_of_block(blk)
-    store.f32_parity = True  # adversarial cell-border oracle uses QVector3D
     m = build_mesh(*blk)
     keys = [store.key_at("vertex", i) for i in range(len(m.vertices))]
     ops = list(_random_ops(rng, len(m.vertices), 60))

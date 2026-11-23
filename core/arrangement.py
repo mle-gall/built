@@ -28,7 +28,7 @@ from __future__ import annotations
 import math
 from typing import Optional
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 # Position quantisation (~0.1 mm at metre scale) — coincident points within this
 # collapse to one vertex, matching the rest of the engine's welding tolerance.

@@ -121,5 +121,5 @@ def test_composer_style_combo_lists_the_presets():
 
 
 def _v(x, y, z=0.0):
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     return QVector3D(x, y, z)

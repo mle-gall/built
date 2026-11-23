@@ -149,13 +149,11 @@ hiddenimports += ['truststore']
 # Copy/Paste between windows (#76): imported lazily by the viewport and
 # the main window.
 hiddenimports += ['formats.clip']
-# The optional native kernels (rust/ingetrazo_core, built with maturin):
-# shipped when the build environment has them installed, and simply
-# absent otherwise (core._native falls back to Python).
+# Binary64 model values and the acceleration kernels share one extension.
 import importlib.util as _ilu
-hiddenimports += ['core._native']
-if _ilu.find_spec('ingetrazo_core') is not None:
-    hiddenimports += ['ingetrazo_core']
+if _ilu.find_spec('ingetrazo_core') is None:
+    raise SystemExit("Build ingetrazo_core before packaging the application")
+hiddenimports += ['core._native', 'ingetrazo_core']
 # Revit family import (File > Import > Revit family): formats.rfa loads the
 # native reader through importlib, which static analysis cannot follow.
 hiddenimports += ['formats.rfa']

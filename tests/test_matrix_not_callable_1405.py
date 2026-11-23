@@ -10,7 +10,7 @@ copied (``transformed_attrs``) and when a part's points were measured
 from __future__ import annotations
 
 import pytest
-from PySide6.QtGui import QMatrix4x4, QVector3D as V
+from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core.group import Group, transformed_attrs, transformed_mesh
 from core.mesh import Mesh

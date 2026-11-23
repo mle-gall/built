@@ -12,7 +12,8 @@ from types import SimpleNamespace
 
 import pytest
 from PySide6.QtCore import QEvent, Qt, QTimer
-from PySide6.QtGui import QKeyEvent, QVector3D
+from PySide6.QtGui import QKeyEvent
+from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from views import chrome_dialogs as cd

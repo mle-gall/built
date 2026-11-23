@@ -23,7 +23,7 @@ never focused), a text field (it keeps its letters, as it must).
 """
 import pytest
 from PySide6.QtCore import QPointF, Qt, QTimer
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (QAbstractItemView, QApplication, QLineEdit,
                                QMenu, QProgressDialog, QPushButton)

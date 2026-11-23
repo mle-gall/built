@@ -6,7 +6,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import History
 from core.scene import Scene
@@ -159,7 +159,7 @@ def test_copy_paste_group():
 def test_copy_paste_instance_shares_prototype():
     from core.group import Group
     from core.mesh import Mesh
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     scene = Scene()
     vp = _VP(scene, History(scene), None)
     proto = Mesh()
@@ -245,7 +245,7 @@ def test_planar_texture_preview_rides_with_the_drag():
     # the projection into an anchored uvw: evaluating it at the OFFSET
     # vertices reproduces the texture exactly as it looked at the original
     # spot. (Group previews ride in the scratch VBOs, UVs already baked.)
-    from PySide6.QtGui import QVector3D as Q
+    from ingetrazo_core import Vec3 as Q
     scene = Scene()
     vp = _VP(scene, History(scene), None)
     f = scene.mesh.add_face([V(1, 1), V(3, 1), V(3, 3), V(1, 3)])
@@ -358,7 +358,7 @@ def test_copy_paste_container_whose_own_mesh_is_empty():
     so copy_selection returned False and the old clipboard stayed."""
     from core.group import Group, placement_points
     from core.mesh import Mesh
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     scene = Scene()
     vp = _VP(scene, History(scene), {"faces": [], "edges": [],
                                      "groups": [], "ref": V(99, 99, 0)})
@@ -385,7 +385,7 @@ def test_a_face_pasted_over_another_merges_with_it():
     one lay over it as a second face; like a rectangle drawn there, it now
     splits the plane into its regions."""
     from types import SimpleNamespace
-    from PySide6.QtGui import QVector3D as V
+    from ingetrazo_core import Vec3 as V
     from core.history import History
     from core.scene import Scene
     from tools.paste import PasteTool

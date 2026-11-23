@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import math
 
-from PySide6.QtGui import QMatrix4x4, QVector3D
+from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 from core.camera_point import CameraPoint
 
 
@@ -348,7 +348,7 @@ class OrbitCamera:
             up = QVector3D(sign * math.cos(self.yaw),
                            sign * math.sin(self.yaw), 0.0)
         if self.roll_deg and self._level_forward() is None:
-            from PySide6.QtGui import QQuaternion
+            from ingetrazo_core import Quaternion as QQuaternion
             up = QQuaternion.fromAxisAndAngle(f, self.roll_deg).rotatedVector(up)
         return up
 
@@ -642,7 +642,7 @@ class OrbitCamera:
         pitch turn about the view's horizontal axis, so the horizon stays
         level (no roll) and the distance to the target never changes.
         """
-        from PySide6.QtGui import QQuaternion
+        from ingetrazo_core import Quaternion as QQuaternion
 
         if not all(math.isfinite(c) for c in (pivot.x(), pivot.y(), pivot.z())):
             self.orbit(dx_pixels, dy_pixels, viewport_h)  # about the target
@@ -892,7 +892,7 @@ class OrbitCamera:
         on screen, then walk the distance in until its wider half-span sits
         at ``1 / margin`` of the window — never past a corner reaching the
         camera."""
-        from PySide6.QtGui import QVector4D
+        from ingetrazo_core import Vec4 as QVector4D
         goal = 1.0 / margin
         t = math.tan(math.radians(self.fov_deg) / 2.0)
         for _ in range(8):

@@ -263,7 +263,7 @@ def test_textured_import_carries_real_uvs(tmp_path):
     file's own UVs are kept as a world→UV affine map, the two export
     triangles fuse back into one quad, and evaluating the map at the corners
     reproduces the original texture coordinates."""
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     from core.texture import affine_uv
 
     def V(x, y, z=0.0):
@@ -379,7 +379,7 @@ def test_repeated_components_share_one_prototype(tmp_path, monkeypatch):
     assert len({id(g.mesh) for g in inst}) == 1        # ONE shared prototype
     assert len(inst[0].mesh.faces) == 1                # fused quad, local coords
     # world positions come from the transforms
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     origins = sorted(round(g.xform.map(QVector3D(0, 0, 0)).x(), 3)
                      for g in inst)
     assert origins == [0.0, 10.0, 20.0]
@@ -419,7 +419,7 @@ def test_repeated_components_share_one_prototype(tmp_path, monkeypatch):
 def test_instance_edit_flows_make_unique():
     """Entering an instance materializes it (make unique); exploding an
     instance lands its geometry at the WORLD position."""
-    from PySide6.QtGui import QMatrix4x4, QVector3D
+    from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
     from core.group import Group
     from core.mesh import Mesh
     from core.history import History, ExplodeGroupCommand
@@ -455,7 +455,7 @@ def test_instance_edit_flows_make_unique():
 
 def _lines_dae(tmp_path, with_face=True):
     """A floor square (optional) plus a node of loose ``<lines>`` and a
-    ``<linestrips>``, as SketchUp writes a drawing's 2D lines (#633)."""
+    ``<linestrips>``, as .skp writes a drawing's 2D lines (#633)."""
     face_geom = """
     <geometry id="sq"><mesh>
       <source id="sq-pos">
@@ -526,11 +526,11 @@ def _tree(g):
 
 
 def test_nested_groups_keep_their_structure(tmp_path):
-    """A small model exported as groups of groups (SketchUp: «geometries»
+    """A small model exported as groups of groups (.skp: «geometries»
     holding «closed» — a circle and a rectangle — and «lines») comes back
     as the same tree with the same names, each piece of geometry in its own
     group, instead of melting into the loose mesh."""
-    from PySide6.QtGui import QVector3D
+    from ingetrazo_core import Vec3 as QVector3D
     from core.group import group_frame, world_mesh
 
     scene = Scene()

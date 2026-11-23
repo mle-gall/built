@@ -14,7 +14,8 @@ into the VCB.
 from __future__ import annotations
 
 from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QColor, QPainter, QPen, QVector3D
+from PySide6.QtGui import QColor, QPainter, QPen
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.edits import build_add_edges
 from core.i18n import tr

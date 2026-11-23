@@ -10,7 +10,7 @@ from __future__ import annotations
 import struct
 import xml.etree.ElementTree as ET
 
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 
 from core.scene import Scene
 

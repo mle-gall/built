@@ -7,7 +7,7 @@ Walls with thickness: offsetting a face's boundary inward splits it into a ring
 """
 from __future__ import annotations
 
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import AddFaceCommand, CompoundCommand, DeleteFaceCommand, History
 from core.scene import Scene

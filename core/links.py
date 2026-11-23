@@ -209,7 +209,7 @@ def load_source(path, select=None, *, include_nested=True, link_meshes=None):
         from core.group import Group
         from core.insert import is_scale_figure
         from core.mesh import Mesh
-        from PySide6.QtGui import QMatrix4x4
+        from ingetrazo_core import Matrix4 as QMatrix4x4
         validate_select(select)
         groups = [g for g in src.groups if not is_scale_figure(g)]
         mesh = src.mesh
@@ -240,7 +240,7 @@ def load_source(path, select=None, *, include_nested=True, link_meshes=None):
         from core.group import Group
         comp = Group(name=stem(path))
     if comp.xform is None:
-        from PySide6.QtGui import QMatrix4x4
+        from ingetrazo_core import Matrix4 as QMatrix4x4
         comp.xform = QMatrix4x4()
     comp.component = True
     return comp, tags, materials
@@ -675,7 +675,7 @@ def _populate(placement, source, *, reconcile=False, selection=None):
     Return the changed mesh bindings if every placement kept its draw state.
     """
     from copy import deepcopy
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     from core.purge import iter_groups
     previous = {g.uid: g for g in iter_groups(placement.children)} if reconcile else {}
 
@@ -767,7 +767,7 @@ def copy_parts(source, copy) -> list:
     left as it was: :func:`copy_group` turned the classic parts of a copied
     component into identity placements, which a link's parts must not be."""
     from copy import deepcopy
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     from core.group import new_uid
     uids = {}
 
@@ -855,7 +855,7 @@ def unlinked_copy(placement, pairs=None, nested=None):
     ``nested``, a list, receives ``(old, new, part_pairs)`` for each file
     linked inside that stays a link, ``part_pairs`` the ``(old, new)`` of
     its parts as copied (else they go to ``pairs``)."""
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     from copy import deepcopy
     meshes: dict = {}
     if pairs is None:

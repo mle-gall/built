@@ -14,7 +14,7 @@ from __future__ import annotations
 import struct
 
 import pytest
-from PySide6.QtGui import QVector3D
+from ingetrazo_core import Vec3 as QVector3D
 
 from core.camera import OrbitCamera
 from core.ndof import (NdofSample, NdofSettings, apply_ndof, from_hid,

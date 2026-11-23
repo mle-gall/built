@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import os
 
-from PySide6.QtGui import QMatrix4x4
+from ingetrazo_core import Matrix4 as QMatrix4x4
 
 
 def _module():
@@ -167,14 +167,6 @@ def _make(key, which, data, src):
     return m
 
 
-try:
-    from shiboken6 import Shiboken as _shiboken
-    _created_by_python = _shiboken.createdByPython
-except ImportError:  # pragma: no cover - PySide6 always ships it
-    def _created_by_python(_value):
-        return False
-
-
 def _bind(value, key, which):
     """A matrix assigned to a placement → ``(view, data, built source)``.
 
@@ -183,9 +175,7 @@ def _bind(value, key, which):
     ``g.xform is m`` still holds, as with the Python attribute. A view
     already bound elsewhere is copied: one matrix names one placement."""
     t = type(value)
-    if t is QMatrix4x4 and _created_by_python(value):
-        # (A matrix Qt made, an operator's result, cannot change class:
-        # shiboken never ran the subclass's __init__ on it. Copied below.)
+    if t is QMatrix4x4:
         value.__class__ = PlacedMatrix
     elif t is PlacedMatrix:
         if value.__dict__.get("_doc_bind") not in (None, (key, which)):
@@ -201,7 +191,7 @@ def _bind(value, key, which):
     else:
         # 16 numbers, column-major as ``QMatrix4x4.data()`` gives them.
         try:
-            data = [float(v) for v in value]
+            data = [float(v) for v in (value.data() if hasattr(value, "data") else value)]
         except (TypeError, ValueError):
             data = ()
         if len(data) != 16:

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 import pytest
-from PySide6.QtGui import QVector3D as V
+from ingetrazo_core import Vec3 as V
 
 from core.bim import face_set_volume
 from core.solids import solid_report
@@ -211,7 +211,7 @@ def test_partition_between_boxes():
 
 
 def test_transformed_solid_operands():
-    from PySide6.QtGui import QMatrix4x4
+    from ingetrazo_core import Matrix4 as QMatrix4x4
     from core.group import Group, world_mesh
     from core.solids import solid_volume
 
