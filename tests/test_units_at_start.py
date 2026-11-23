@@ -66,7 +66,7 @@ def choose(win, profile, *, dont_ask=False, accept=True):
     ("millimetric", {"length": "mm", "precision": 0}, "1235 mm"),
     ("imperial", {"length": "ft-in-frac", "precision": 2}, "4'5/8\""),
 ])
-def test_each_choice_sets_the_new_document(win, monkeypatch, profile,
+def test_each_choice_sets_the_new_document(win, profile,
                                            expected, shown):
     row, preview = choose(win, list(units.PROFILES).index(profile))
     assert len(row[7]) == 5 and row[4] == 0
@@ -79,7 +79,7 @@ def test_each_choice_sets_the_new_document(win, monkeypatch, profile,
     assert scene.units == expected
 
 
-def test_metres_mean_square_and_cubic_metres_and_degrees(win, monkeypatch):
+def test_metres_mean_square_and_cubic_metres_and_degrees(win):
     choose(win, 0)
     assert units.fmt_area(2.0) == "2.00 m²"
     assert units.fmt_volume(2.0) == "2.000 m³"
@@ -108,15 +108,17 @@ def test_centimetres_are_shown_in_order_and_follow_in_cm2_cm3(win):
     assert units.fmt_volume(2e-6) == "2.000 cm³"
 
 
-def test_closing_the_question_changes_nothing(win, monkeypatch):
-    choose(win, 3, accept=False)
+@pytest.mark.parametrize("dont_ask", [False, True])
+def test_closing_the_question_changes_nothing(win, dont_ask):
+    choose(win, 3, dont_ask=dont_ask, accept=False)
+    assert units.ask_at_start() == (not dont_ask)
     assert win.viewport.scene.units == {"length": "m", "precision": 2}
     assert units.new_document_units() == {"length": "m", "precision": 2}
 
 
 # ---- «Don't show this at startup» and back on ---------------------------------
 
-def test_dont_show_again(win, monkeypatch):
+def test_dont_show_again(win):
     choose(win, 2, dont_ask=True)
     assert win.viewport.scene.units["length"] == "mm"
     assert not units.ask_at_start()
@@ -124,20 +126,19 @@ def test_dont_show_again(win, monkeypatch):
     assert chrome_forms.current(win) is None
 
 
-def test_preferences_turn_it_back_on(win, monkeypatch):
-    from views.preferences_dialog import PreferencesDialog
+def test_preferences_turn_it_back_on(win):
+    from tests.units_chrome import edit_unit, units_row
+    from views.settings_sheet import Env
     units.set_ask_at_start(False)
-    dlg = PreferencesDialog(win)
-    assert dlg._units_at_start.isChecked() is False
-    dlg._units_at_start.setChecked(True)
-    dlg._units_for_new.setChecked(False)
-    dlg.accept()
+    assert not units_row(win, "ask_start").value(Env(win))
+    edit_unit(win, "ask_start", 1)
+    edit_unit(win, "for_new", 0)
     assert units.ask_at_start() is True
     row, _ = choose(win, 0)
     assert row[4] == 0
 
 
-def test_a_document_already_open_is_not_asked_about(win, monkeypatch, tmp_path):
+def test_a_document_already_open_is_not_asked_about(win, tmp_path):
     win._current_path = tmp_path / "plano.igz"          # opened from argv
     win.offer_units_at_start()
     assert chrome_forms.current(win) is None
@@ -149,7 +150,7 @@ def test_a_document_already_open_is_not_asked_about(win, monkeypatch, tmp_path):
 
 # ---- Ctrl+U -------------------------------------------------------------------------
 
-def test_ctrl_u_opens_the_units_page(win, monkeypatch):
+def test_ctrl_u_opens_the_units_page(win):
     from views import chrome_sheet
     act = win._act_units
     assert act.shortcut() == QKeySequence("Ctrl+U")
@@ -160,7 +161,7 @@ def test_ctrl_u_opens_the_units_page(win, monkeypatch):
     assert chrome_sheet.current(win).section == "units"
 
 
-def test_custom_leads_to_the_units_panel(win, monkeypatch):
+def test_custom_leads_to_the_units_panel(win):
     choose(win, 4)
     form = chrome_forms.current(win)
     assert rows(form)["for_new"][4] == 1
@@ -179,7 +180,7 @@ def test_custom_leads_to_the_units_panel(win, monkeypatch):
     assert units.fmt_area(12.345) == "12,35 m²"
 
 
-def test_custom_cancelled_changes_nothing(win, monkeypatch):
+def test_custom_cancelled_changes_nothing(win):
     choose(win, 4)
     form = chrome_forms.current(win)
     form.receive("length", str(units.UNIT_CHOICES.index("cm")))

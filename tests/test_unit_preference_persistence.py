@@ -12,7 +12,8 @@ from PySide6.QtWidgets import QWidget
 from core import units
 from core.scene import Scene
 from formats import igz
-from views.preferences_dialog import PreferencesDialog
+from views.settings_sheet import Env, SettingsSheet
+from tests.units_chrome import edit_unit, units_row
 
 
 CM = {"length": "cm", "precision": 2}
@@ -50,22 +51,36 @@ class _Viewport:
         self.notifications += 1
 
 
-def _dialog(settings):
+def _window(settings):
     window = QWidget()
     window.viewport = _Viewport(settings)
-    return window, PreferencesDialog(window)
+    return window
 
 
-def _choose(panel, settings):
-    panel.set_settings(settings)
+def _choose(window, settings):
+    edit_unit(window, "length", units.UNIT_CHOICES.index(settings["length"]))
+    edit_unit(window, "precision", settings["precision"])
+    if "area" in settings:
+        edit_unit(window, "area", units.AREA_CHOICES.index(settings["area"]) + 1)
+        edit_unit(window, "area_precision", settings["area_precision"])
+
+
+def _edit_autosave(window):
+    env = Env(window)
+    row = next(r for _, _, rows in SettingsSheet().groups(env, "general") for r in rows
+               if r.id == "autosave_min")
+    row.put(env, row.value(env) + 1)
+
+
+def _for_new(window):
+    return bool(units_row(window, "for_new").value(Env(window)))
 
 
 @pytest.mark.parametrize("chosen", [METRES, {**METRES, "length": "cm"},
                                     {"length": "mm", "precision": 1}])
 def test_changed_units_remain_the_default_when_the_open_model_differs(chosen):
-    window, dialog = _dialog({"length": "ft", "precision": 2})
-    _choose(dialog._units_panel, chosen)
-    dialog.accept()
+    window = _window({"length": "ft", "precision": 2})
+    _choose(window, chosen)
 
     # Applying the document's units must also remember the still-enabled
     # new-document choice; it cannot be inferred from the old units matching.
@@ -79,11 +94,10 @@ def test_changed_units_remain_the_default_when_the_open_model_differs(chosen):
 
 
 def test_accepting_unrelated_preferences_does_not_restore_a_stale_default():
-    window, dialog = _dialog(CM)
+    window = _window(CM)
     # Another window can change the global default while this dialog is open.
     units.remember_new_document_units(METRES)
-    dialog._autosave_min.setValue(dialog._autosave_min.value() + 1)
-    dialog.accept()
+    _edit_autosave(window)
 
     assert units.new_document_units() == METRES
     assert window.viewport.scene.units == CM
@@ -91,70 +105,67 @@ def test_accepting_unrelated_preferences_does_not_restore_a_stale_default():
 
 
 def test_document_only_choice_is_remembered_after_reopening_preferences():
-    window, dialog = _dialog(CM)
-    dialog._units_for_new.setChecked(False)
-    _choose(dialog._units_panel, METRES)
-    dialog.accept()
+    window = _window(CM)
+    edit_unit(window, "for_new", 0)
+    _choose(window, METRES)
     assert window.viewport.scene.units == METRES
     assert units.new_document_units() == CM
 
     # Match the saved default here: equality used to re-enable the checkbox.
-    reopened_window, reopened = _dialog(CM)
-    assert not reopened._units_for_new.isChecked()
-    _choose(reopened._units_panel, {"length": "mm", "precision": 0})
-    reopened.accept()
+    reopened_window = _window(CM)
+    assert not _for_new(reopened_window)
+    _choose(reopened_window, {"length": "mm", "precision": 0})
     assert reopened_window.viewport.scene.units["length"] == "mm"
     assert units.new_document_units() == CM
 
 
 def test_unrelated_preferences_do_not_reenable_a_newer_document_only_choice():
-    stale_window, stale = _dialog(CM)
-    other_window, other = _dialog(CM)
-    other._units_for_new.setChecked(False)
-    other.accept()
-    stale._autosave_min.setValue(stale._autosave_min.value() + 1)
-    stale.accept()
+    stale_window = _window(CM)
+    other_window = _window(CM)
+    edit_unit(other_window, "for_new", 0)
+    _edit_autosave(stale_window)
 
-    final_window, final = _dialog(CM)
-    assert not final._units_for_new.isChecked()
-    final.reject()
+    final_window = _window(CM)
+    assert not _for_new(final_window)
     assert units.new_document_units() == CM
 
 
 def test_explicitly_enabling_defaults_remembers_unchanged_document_units():
-    window, dialog = _dialog(CM)
-    dialog._units_for_new.setChecked(False)
-    dialog.accept()
+    window = _window(CM)
+    edit_unit(window, "for_new", 0)
 
-    other_window, other = _dialog(METRES)
-    assert not other._units_for_new.isChecked()
-    other._units_for_new.setChecked(True)
-    other.accept()
+    other_window = _window(METRES)
+    assert not _for_new(other_window)
+    edit_unit(other_window, "for_new", 1)
     assert other_window.viewport.scene.units == METRES
     assert units.new_document_units() == METRES
 
 
 def test_cancel_does_not_change_units_or_the_document_only_choice():
-    window, dialog = _dialog(CM)
-    dialog._units_for_new.setChecked(False)
-    dialog.accept()
+    window = _window(CM)
+    edit_unit(window, "for_new", 0)
 
-    other_window, cancelled = _dialog(CM)
-    cancelled._units_for_new.setChecked(True)
-    _choose(cancelled._units_panel, METRES)
-    cancelled.reject()
+    from views import chrome_forms, units_question
+    other_window = _window(CM)
+    other_window._documents, other_window._tool_actions = [], {}
+    units_question.offer_at_start(other_window)
+    form = chrome_forms.current(other_window)
+    form.receive("profile", "4")
+    form.press("ok")
+    form = chrome_forms.current(other_window)
+    form.receive("for_new", "1")
+    form.receive("length", "0")
+    form.press("cancel")
     assert units.new_document_units() == CM
     assert other_window.viewport.scene.units == CM
-    final_window, final = _dialog(CM)
-    assert not final._units_for_new.isChecked()
-    final.reject()
+    final_window = _window(CM)
+    assert not _for_new(final_window)
 
 
 def test_independent_length_and_area_units_roundtrip_in_the_model(tmp_path):
     chosen = {**METRES, "length": "cm"}
-    window, dialog = _dialog({"length": "mm", "precision": 0})
-    _choose(dialog._units_panel, chosen)
-    dialog.accept()
+    window = _window({"length": "mm", "precision": 0})
+    _choose(window, chosen)
     path = tmp_path / "independent-units.igz"
     igz.save_scene(window.viewport.scene, path)
 
@@ -172,9 +183,8 @@ def test_independent_length_and_area_units_roundtrip_in_the_model(tmp_path):
 
 
 def test_document_unit_changes_notify_the_window():
-    window, dialog = _dialog(CM)
+    window = _window(CM)
     original_version = window.viewport.scene.version
-    _choose(dialog._units_panel, METRES)
-    dialog.accept()
+    edit_unit(window, "profile", 2)
     assert window.viewport.scene.version == original_version + 1
     assert window.viewport.notifications == 1

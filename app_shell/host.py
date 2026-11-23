@@ -607,6 +607,9 @@ class Host:
 
     def close(self):
         from app_shell import windows
+        from views import chrome_forms
+        chrome_forms.close_all(self.window)
+        self.window._release_check = None
         windows.unregister(self)
         for doc in list(self.window._documents):
             view = doc.stand_in

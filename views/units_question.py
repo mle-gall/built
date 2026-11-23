@@ -12,7 +12,7 @@ from views.settings_apply import _UNITS_FOR_NEW_KEY, apply_document_units
 
 class UnitsQuestion(chrome_forms.Form):
     def __init__(self, model, done):
-        super().__init__(tr("Units"), [], key="start_units", width=520, on_done=done)
+        super().__init__(tr("Units"), [], key="start_units", width=520, note=tr(model.note), on_done=done)
         self.model = model
 
     def receive(self, fid, raw):
@@ -21,23 +21,30 @@ class UnitsQuestion(chrome_forms.Form):
 
     def wire(self):
         seq, title, note, width, _, buttons = super().wire()
-        settings = json.loads(self.model.settings())
-        length = settings["length"]
-        auto = tuple(tr("By the length ({unit})", unit=units.UNITS[fn(length)].symbol)
-                     for fn in (units.area_unit_for, units.volume_unit_for))
-        rows = self.model.rows(tr, units.unit_label, units.preview_text(settings), auto, units.FRACTION_LABELS)
-        return seq, title, note, width, rows, buttons
+        return seq, title, note, width, model_rows(self.model), buttons
+
+
+def model_rows(model):
+    settings = json.loads(model.settings())
+    length = settings["length"]
+    auto = tuple(tr("By the length ({unit})", unit=units.UNITS[fn(length)].symbol)
+                 for fn in (units.area_unit_for, units.volume_unit_for))
+    return model.rows(tr, units.unit_label, units.preview_text(settings), auto, units.FRACTION_LABELS)
+
+
+def draft(scene):
+    from ingetrazo_render import UnitsDraft
+    return UnitsDraft(json.dumps(units.new_document_units()), json.dumps(units.model_units_of(scene)),
+                      json.dumps(units.PROFILES), [units.UNIT_CHOICES, units.AREA_CHOICES,
+                                                  units.VOLUME_CHOICES, units.ANGLE_CHOICES])
 
 
 def offer_at_start(window):
-    from ingetrazo_render import UnitsDraft
     if not units.ask_at_start():
         return
     view = window.viewport
     scene = view.scene
-    model = UnitsDraft(json.dumps(units.new_document_units()), json.dumps(units.model_units_of(scene)),
-                       json.dumps(units.PROFILES), [units.UNIT_CHOICES, units.AREA_CHOICES,
-                                                   units.VOLUME_CHOICES, units.ANGLE_CHOICES])
+    model = draft(scene)
 
     def done(answer, _):
         if window.viewport is not view or view.scene is not scene:

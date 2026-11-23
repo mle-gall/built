@@ -11949,6 +11949,8 @@ class MainWindow(WorksessionMixin, QMainWindow):
         if not self._confirm_quit():
             event.ignore()
             return
+        _forms.close_all(self)
+        self._release_check = None
         self.persist_worksession()
         # A clean goodbye: whatever the user decided (save or discard), this
         # session's recovery slots no longer speak for anyone.

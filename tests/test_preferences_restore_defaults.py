@@ -184,14 +184,25 @@ def test_cancel_after_restore_touches_nothing(settings_file):
     assert win.viewport.edit_rest_mode == "hide"
 
 
-def test_restore_does_not_copy_the_document_units_to_new_documents(settings_file):
-    st = _fresh(settings_file)
-    st.setValue("units/use_for_new_documents", "0")
-    st.sync()
-    dlg = PreferencesDialog(_Win())
-    dlg.restore_defaults()
-    assert dlg._units_for_new.isChecked()
-    assert dlg._units_for_new_explicit is False
+def test_restore_does_not_copy_the_document_units_to_new_documents(tmp_path):
+    QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, str(tmp_path))
+    from core import units
+    from views.main_window import MainWindow
+    from views.settings_sheet import SettingsSheet
+    win = MainWindow(defer_extensions=True)
+    try:
+        units.apply_units(win.viewport.scene, {"length": "ft", "precision": 2})
+        units.remember_new_document_units({"length": "cm", "precision": 1})
+        QSettings().setValue("units/use_for_new_documents", "0")
+        units.set_ask_at_start(False)
+        SettingsSheet().restore_defaults(win)
+        assert QSettings().value("units/use_for_new_documents") == "1"
+        assert units.ask_at_start()
+        assert units.new_document_units() == {"length": "cm", "precision": 1}
+        assert win.viewport.scene.units == {"length": "ft", "precision": 2}
+    finally:
+        win._saved_version = win.viewport.scene.version
+        win.close()
 
 
 def test_the_button_asks_first(settings_file, monkeypatch):

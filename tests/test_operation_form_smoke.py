@@ -114,7 +114,8 @@ def test_native_first_run_custom_units(tmp_path):
     settings.sync()
     steps = tmp_path / "commands"
     steps.write_text("wait 700\nmenu home\nwait 200\nmenu new\nwait 300\nstate\n"
-                     "key enter\nwait 300\nstate\nkey enter\nwait 300\nstate\nquit\n")
+                     "key enter\nwait 300\nstate\nkey enter\nwait 300\nstate\n"
+                     "menu units\nwait 300\nstate\nkey escape\nwait 300\nstate\nquit\n")
     home = tmp_path / "home"
     home.mkdir()
     result = run([str(BIN), "--root", str(ROOT), "--new-instance", "--script", str(steps)],
@@ -125,6 +126,7 @@ def test_native_first_run_custom_units(tmp_path):
     assert result.returncode == 0 and len(states) >= 3, log
     assert [s["form_open"] for s in states[:3]] == [True, True, False], log
     assert all(s["errors"] == 0 and not s["blocked_widgets"] for s in states), log
+    assert [s["large_sheet"] for s in states[3:5]] == ["settings", ""], log
     assert not states[2]["dirty"]
     settings.sync()
     assert json.loads(settings.value("units/new_document")) == custom

@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Host bindings for the update worker, its activity notice and release sheet."""
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future
+import threading
 import sys
 
 from PySide6.QtCore import QSettings, QTimer
@@ -42,15 +43,22 @@ def start_check(window, quiet=False, fetch=None, current=__version__):
     installed = getattr(sys, "frozen", False) or (chrome_sheet.in_shell() and hasattr(sys, "_MEIPASS"))
     if quiet and not update_check.should_check_at_start(settings, frozen=installed):
         return
-    pool = ThreadPoolExecutor(max_workers=1)
-    result = pool.submit(fetch or update_check.fetch_latest)
-    pool.shutdown(wait=False)
+    result = Future()
+
+    def worker():
+        try:
+            result.set_result((fetch or update_check.fetch_latest)())
+        except Exception as exc:
+            result.set_exception(exc)
+
+    threading.Thread(target=worker, daemon=True).start()
     window._release_check = result
 
     def present(model):
         if window._release_check is not result:
             return
-        busy = chrome_dialogs.modal(window) or QApplication.activeModalWidget() is not None
+        busy = (chrome_dialogs.modal(window) or QApplication.activeModalWidget() is not None
+                or chrome_dialogs.async_host(window) is None)
         mode = model.presentation(busy)
         if mode == "wait":
             QTimer.singleShot(_RETRY_MS, window, lambda: present(model))

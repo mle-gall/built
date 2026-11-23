@@ -134,6 +134,7 @@ pub fn build() -> muda::Result<Menus> {
           &PredefinedMenuItem::separator(),
           &item("move_to_window", "Move Project to New Window", None),
           &PredefinedMenuItem::separator(),
+          &item("units", "Units…", Some("super+KeyU")),
           &item("extensions", "Extension Manager…", None),
           &item("cutlist", "Cut list…", None),
           &item("library", "Library", Some("super+shift+KeyL"))],

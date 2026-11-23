@@ -329,6 +329,12 @@ def current(win):
     return stack[-1] if stack else None
 
 
+def close_all(win):
+    """Release the window's input guards while its host is still alive."""
+    for form in reversed(list(forms(win))):
+        form.close()
+
+
 def show(parent, form: Form) -> str:
     """Post a form model, or cancel the operation if its host is unavailable."""
     from views import chrome_dialogs

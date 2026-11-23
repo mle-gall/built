@@ -61,7 +61,9 @@ fn profile(value: &Value, profiles: &Value) -> usize {
 }
 
 fn decode(raw: &str) -> PyResult<Value> {
-    serde_json::from_str(raw).map_err(|e| PyValueError::new_err(e.to_string()))
+    serde_json::from_str::<serde_json::Map<String, Value>>(raw)
+        .map(Value::Object)
+        .map_err(|e| PyValueError::new_err(e.to_string()))
 }
 
 #[pymethods]
@@ -75,6 +77,9 @@ impl UnitsDraft {
     ) -> PyResult<Self> {
         let defaults = decode(defaults)?;
         let profiles = decode(profiles)?;
+        if !PRESETS[..4].iter().all(|name| profiles[*name].is_object()) {
+            return Err(PyValueError::new_err("Missing unit profile"));
+        }
         for index in [1, 2] {
             codes[index].insert(0, "auto".into());
         }
@@ -91,6 +96,23 @@ impl UnitsDraft {
         })
     }
 
+    fn edit_document(&mut self, for_new: bool, ask_again: bool) {
+        self.custom = true;
+        self.for_new = for_new;
+        self.ask_again = ask_again;
+        self.draft = self.document.clone();
+        self.selected = profile(&self.draft, &self.profiles);
+    }
+
+    #[getter]
+    fn note(&self) -> &'static str {
+        if self.custom {
+            ""
+        } else {
+            "Which units do you work in? Lengths, areas, volumes and angles will be shown and typed in them. You can change this at any time in Preferences ▸ Units (Ctrl+U)."
+        }
+    }
+
     fn settings(&self) -> String {
         self.draft.to_string()
     }
@@ -101,9 +123,7 @@ impl UnitsDraft {
             return "cancel";
         }
         if !self.custom && self.selected == 4 {
-            self.custom = true;
-            self.draft = self.document.clone();
-            self.selected = profile(&self.draft, &self.profiles);
+            self.edit_document(true, self.ask_again);
             "custom"
         } else {
             "apply"
@@ -268,9 +288,12 @@ impl UnitsDraft {
                     } else {
                         "Decimals"
                     })?,
-                    value.min(options.len() - 1),
+                    value.min(options.len().saturating_sub(1)),
                     options,
                 );
+                if fraction {
+                    row.9 = t("The smallest fraction of an inch shown")?;
+                }
                 if i == 1 && code == "auto" {
                     row.8 = DISABLED;
                 }

@@ -686,127 +686,40 @@ def _scene_changed(env) -> None:
         vp.update()
 
 
-def _units_now(env) -> dict:
-    from core import units
-    return units.model_units_of(env.scene)
-
-
-def _units_raw(s: dict) -> dict:
-    """``s`` as the units panel holds it: every key, defaults spelled out."""
-    from core import units
-    raw = {"length": s["length"], "precision": s["precision"]}
-    for key in ("area", "volume", "volume_precision", "angle", "angle_precision", "decimal"):
-        raw[key] = units.unit_setting(key, s)
-    if raw["area"] != "auto":
-        raw["area_precision"] = units.unit_setting("area_precision", s)
-    return raw
-
-
-def _units_put(env, key, value) -> None:
-    """One units row changed: the document's units, at once (and those of
-    new documents, when they follow)."""
-    from core import units
-    from views.settings_apply import _UNITS_FOR_NEW_KEY
-    s = _units_now(env)
-    if key == "profile":
-        if value not in units.PROFILES:
-            return
-        chosen = units.with_profile(s, value)
-    else:
-        raw = _units_raw(s)
-        if key == "length":
-            frac_before = raw["length"] in ("in-frac", "ft-in-frac")
-            raw["length"] = value
-            if (value in ("in-frac", "ft-in-frac")) != frac_before:
-                raw["precision"] = min(4, raw["precision"])
-        elif key == "area":
-            raw["area_precision"] = units.unit_setting("area_precision", s)
-            raw["area"] = value
-            if value == "auto":
-                raw.pop("area_precision", None)
-        else:
-            raw[key] = value
-        chosen = units.model_units_of({"units": raw})
-    if not _p().apply_document_units(env.win, chosen):
-        return
-    if _b(env.st.value(_UNITS_FOR_NEW_KEY, "1")):
-        env.st.setValue(_UNITS_FOR_NEW_KEY, "1")
-        units.remember_new_document_units(chosen)
-
-
 def _units(env) -> list:
+    import json
     from core import units
-    from views.settings_apply import _UNITS_FOR_NEW_KEY
+    from views import units_question
+    from views.settings_apply import _UNITS_FOR_NEW_KEY, apply_document_units
 
-    def g(key):
-        return lambda env: units.unit_setting(key, _units_now(env))
+    def current(env):
+        model = units_question.draft(env.scene)
+        model.edit_document(_b(env.st.value(_UNITS_FOR_NEW_KEY, "1")), units.ask_at_start())
+        return model
 
-    def frac(env):
-        return _units_now(env)["length"] in ("in-frac", "ft-in-frac")
+    def put(env, key, value):
+        model = current(env)
+        model.receive(key, str(int(value)))
+        if key == "ask_again":
+            units.set_ask_at_start(model.ask_again)
+            return
+        chosen = json.loads(model.settings())
+        if key == "for_new":
+            env.st.setValue(_UNITS_FOR_NEW_KEY, "1" if model.for_new else "0")
+            env.st.sync()
+        elif not apply_document_units(env.win, chosen):
+            return
+        if model.for_new:
+            units.remember_new_document_units(chosen)
 
-    def by_length(kind):
-        def opts(env):
-            length = _units_now(env)["length"]
-            unit = (units.area_unit_for if kind == "area" else units.volume_unit_for)(length)
-            first = tr("By the length ({unit})", unit=units.UNITS[unit].symbol)
-            choices = units.AREA_CHOICES if kind == "area" else units.VOLUME_CHOICES
-            return [("auto", first)] + [(c, units.unit_label(c)) for c in choices]
-        return opts
-
-    def for_new_put(env, v):
-        env.st.setValue(_UNITS_FOR_NEW_KEY, "1" if v else "0")
-        if v:
-            units.remember_new_document_units(_units_now(env))
-        env.st.sync()
-
-    def preview(env):
-        return units.preview_text(_units_now(env)).replace("\n", "   ·   ")
-
-    def ask_put(env, v):
-        from core.units import set_ask_at_start
-        set_ask_at_start(bool(v))
-
-    def ask_get(env):
-        from core.units import ask_at_start
-        return ask_at_start()
-
-    shown = [
-        Row("u_profile", "choice", tr("Profile"), lambda env: units.profile_of(_units_now(env)),
-            lambda env, v: _units_put(env, "profile", v),
-            options=[(n, tr(label)) for n, label in units.PROFILE_LABELS.items()], words="metric imperial"),
-        Row("u_length", "choice", tr("Length"), g("length"), lambda env, v: _units_put(env, "length", v),
-            options=[(c, units.unit_label(c)) for c in units.UNIT_CHOICES]),
-        Row("u_precision", "number", tr("Decimals"), g("precision"),
-            lambda env, v: _units_put(env, "precision", int(v)), lo=0, hi=6,
-            visible=lambda env: not frac(env), words="precision"),
-        Row("u_fraction", "choice", tr("Smallest fraction"), g("precision"),
-            lambda env, v: _units_put(env, "precision", int(v)),
-            options=list(enumerate(units.FRACTION_LABELS)), visible=frac, words="precision inch",
-            tip=tr("The smallest fraction of an inch shown")),
-        Row("u_area", "choice", tr("Area"), g("area"), lambda env, v: _units_put(env, "area", v),
-            options=by_length("area")),
-        Row("u_area_precision", "number", tr("Area decimals"), g("area_precision"),
-            lambda env, v: _units_put(env, "area_precision", int(v)), lo=0, hi=6,
-            enabled=lambda env: units.unit_setting("area", _units_now(env)) != "auto"),
-        Row("u_volume", "choice", tr("Volume"), g("volume"), lambda env, v: _units_put(env, "volume", v),
-            options=by_length("volume")),
-        Row("u_volume_precision", "number", tr("Volume decimals"), g("volume_precision"),
-            lambda env, v: _units_put(env, "volume_precision", int(v)), lo=0, hi=6),
-        Row("u_angle", "choice", tr("Angle"), g("angle"), lambda env, v: _units_put(env, "angle", v),
-            options=[(c, units.unit_label(c)) for c in units.ANGLE_CHOICES]),
-        Row("u_angle_precision", "number", tr("Angle decimals"), g("angle_precision"),
-            lambda env, v: _units_put(env, "angle_precision", int(v)), lo=0, hi=6),
-        Row("u_decimal", "choice", tr("Decimal separator"), g("decimal"),
-            lambda env, v: _units_put(env, "decimal", v),
-            options=[(".", tr("Point (1.25)")), (",", tr("Comma (1,25)"))],
-            tip=tr("How numbers are shown. Typing takes both: «1,20» and «1.20» are the same.")),
-        Row("u_preview", "text", tr("Preview"), preview),
-    ]
-    beyond = [
-        Row("u_for_new", "check", tr("Also use for new documents"),
-            _key(_UNITS_FOR_NEW_KEY, "1", bool), for_new_put),
-        Row("u_ask_start", "check", tr("Ask which units to use at startup"), ask_get, ask_put, default=True),
-    ]
+    shown, beyond = [], []
+    for key, kind, label, text, value, _, _, options, flags, tip in units_question.model_rows(current(env)):
+        rid = "u_ask_start" if key == "ask_again" else "u_" + key
+        val = text if kind == "text" else int(value)
+        row = Row(rid, kind, label, lambda env, v=val: v,
+                  None if kind == "text" else lambda env, v, k=key: put(env, k, v),
+                  options=list(enumerate(options)), enabled=not flags & cf.DISABLED, tip=tip)
+        (beyond if key in ("for_new", "ask_again") else shown).append(row)
     return [("units", tr("Units of this model"), shown), ("unitsnew", tr("New documents"), beyond)]
 
 
@@ -1473,6 +1386,10 @@ class SettingsSheet(chrome_sheet.Provider):
                 for r in rows:
                     if r.default is not _NO and r.put is not None and r.value(Env(win)) != r.default:
                         self.apply(r, r.default)
+        from core import units
+        from views.settings_apply import _UNITS_FOR_NEW_KEY
+        Env(win).st.setValue(_UNITS_FOR_NEW_KEY, "1")
+        units.set_ask_at_start(True)
         chrome_sheet.refresh(win)
 
     def closed(self, ctx) -> None:
