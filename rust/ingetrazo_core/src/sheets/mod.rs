@@ -7,7 +7,11 @@
 //! - `model`: typed views of the sheet records in the document;
 //! - `page`: the page display list the renderer paints.
 
+pub mod display;
 pub mod drawing;
+pub mod items;
+pub mod metrics;
+pub mod paint;
 pub mod model;
 pub mod page;
 pub mod py;

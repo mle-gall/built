@@ -154,6 +154,13 @@ pub fn page_json(s: &Sheet) -> Json {
             if let Some((k, v)) = extra {
                 o[k] = v;
             }
+            if let Some(ops) = &i.display {
+                o["display"] = super::paint::ops_json(ops);
+                if let Some(b) = super::paint::bounds(ops) {
+                    // The ink box on the page: what a click picks.
+                    o["bounds"] = json!([i.rect[0] + b[0], i.rect[1] + b[1], b[2] - b[0], b[3] - b[1]]);
+                }
+            }
             o
         })
         .collect();

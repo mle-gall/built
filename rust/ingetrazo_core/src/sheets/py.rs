@@ -94,5 +94,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     svg::register(m)?;
     model::register(m)?;
     page::register(m)?;
+    super::display::register(m)?;
     Ok(())
 }

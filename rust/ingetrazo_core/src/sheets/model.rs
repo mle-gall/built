@@ -133,6 +133,28 @@ impl ItemKind {
         ("llamadas", ItemKind::Callout),
     ];
 
+    /// The kind of a `core.composition` record class.
+    pub fn of_class(class: &str) -> Option<ItemKind> {
+        Some(match class {
+            "MarcoVista" => ItemKind::Frame,
+            "TextoItem" => ItemKind::Text,
+            "Cajetin" => ItemKind::TitleBlock,
+            "ImagenItem" => ItemKind::Image,
+            "BarraEscala" => ItemKind::ScaleBar,
+            "FlechaNorte" => ItemKind::North,
+            "Leyenda" => ItemKind::Legend,
+            "FormaItem" => ItemKind::Shape,
+            "CotaItem" => ItemKind::Dimension,
+            "CotaAngularItem" => ItemKind::AngularDimension,
+            "CotaRadialItem" => ItemKind::RadialDimension,
+            "EtiquetaItem" => ItemKind::Label,
+            "PerfilTerreno" => ItemKind::Profile,
+            "NivelItem" => ItemKind::Level,
+            "LlamadaItem" => ItemKind::Callout,
+            _ => return None,
+        })
+    }
+
     pub fn name(self) -> &'static str {
         match self {
             ItemKind::Frame => "frame",
@@ -153,10 +175,10 @@ impl ItemKind {
         }
     }
 
-    /// Whether the native page moves and resizes it today (the rest keep
-    /// their own geometry rules in the classic editor).
+    /// Whether the native page resizes it by its box (every kind moves).
     pub fn native_edit(self) -> bool {
-        matches!(self, ItemKind::Frame | ItemKind::Text | ItemKind::TitleBlock | ItemKind::Image)
+        matches!(self, ItemKind::Frame | ItemKind::Text | ItemKind::TitleBlock | ItemKind::Image
+                 | ItemKind::Shape | ItemKind::Callout)
     }
 }
 
@@ -170,6 +192,9 @@ pub struct Item {
     pub locked: bool,
     pub hidden: bool,
     pub fields: Fields,
+    /// What its painter draws (item-local mm), for the kinds painted from
+    /// the display list (`sheets::items`).
+    pub display: Option<Vec<super::paint::Op>>,
 }
 
 #[derive(Clone, Debug)]
@@ -182,7 +207,7 @@ pub struct Sheet {
     pub items: Vec<Item>,
 }
 
-fn read_fields(key: Key) -> PyResult<Fields> {
+pub fn read_fields(key: Key) -> PyResult<Fields> {
     let d = doc::lock();
     let node = d.need(key).map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
     Ok(Fields(node.attrs.iter().map(|(a, v)| (doc::attr_name(*a).to_string(), v.clone())).collect()))
@@ -216,6 +241,8 @@ fn read_item(handle: &Bound<'_, PyAny>, kind: ItemKind) -> PyResult<Item> {
         }
         _ => f.opt_num("h_mm").or_else(|| computed(handle, "h_mm")).unwrap_or(10.0),
     };
+    let extra = super::display::extra(handle.py(), handle, kind, &f)?;
+    let display = super::display::paint(kind, &f, &extra);
     Ok(Item {
         key,
         kind,
@@ -224,6 +251,7 @@ fn read_item(handle: &Bound<'_, PyAny>, kind: ItemKind) -> PyResult<Item> {
         locked: f.flag("locked", false),
         hidden: f.flag("hidden", false),
         fields: f,
+        display,
     })
 }
 
