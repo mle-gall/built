@@ -268,6 +268,21 @@ def test_sheet_list_add_duplicate_rename_reorder_delete(host):
     assert host.view.renderer.last("ui_set_sheet_prompt")[0].startswith("Delete")
     _act(host, "answer\x1fdel\x1f")
     assert [c.name for c in comps] == [first, comps[1].name] and len(comps) == 2
+    # Every verb is a step of the document's history.
+    ws._undo()
+    assert len(comps) == 3 and comps[2].name == "Record set"         # the deletion undone
+    ws._undo()                                                        # down
+    ws._undo()                                                        # up
+    assert comps[2].name == "Record set"
+    ws._undo()                                                        # the rename
+    assert "Record set" not in [c.name for c in comps]
+    ws._undo()                                                        # the duplicate
+    ws._undo()                                                        # the new sheet
+    assert [c.name for c in comps] == [first]
+    host.view.draw_frame()
+    assert ws.composer.comp is comps[0]                               # the open sheet came back
+    ws._undo(redo=True)
+    assert len(comps) == 2
     _act(host, "open\x1f0")
     assert ws.composer.comp is comps[0]
     rows = host.view.renderer.last("ui_set_sheet_list")[0]

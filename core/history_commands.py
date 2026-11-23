@@ -1896,6 +1896,48 @@ class SheetCommand(Command):
         scene.version += 1
 
 
+class InsertSheetCommand(Command):
+    """A sheet put into the set at ``index`` (the end when None): a new
+    one, a duplicate after its source. One undo step."""
+
+    doc_undo = True
+
+    def __init__(self, sheet, index=None) -> None:
+        self.sheet = sheet
+        self.index = index
+
+    def do(self, scene) -> None:
+        _presentation.add_item(scene.compositions, self.sheet)
+        if self.index is not None:
+            _presentation.move_item(scene.compositions, self.sheet, self.index, True, False)
+        scene.version += 1
+
+    def undo(self, scene) -> None:
+        _presentation.remove_item(scene.compositions, self.sheet)
+        scene.version += 1
+
+
+class RemoveSheetCommand(Command):
+    """A sheet taken out of the set, views and all; undo puts it back where
+    it was."""
+
+    doc_undo = True
+
+    def __init__(self, sheet) -> None:
+        self.sheet = sheet
+        self._index = None
+
+    def do(self, scene) -> None:
+        self._index = list(scene.compositions).index(self.sheet)
+        _presentation.remove_item(scene.compositions, self.sheet)
+        scene.version += 1
+
+    def undo(self, scene) -> None:
+        _presentation.add_item(scene.compositions, self.sheet)
+        _presentation.move_item(scene.compositions, self.sheet, self._index, True, False)
+        scene.version += 1
+
+
 class MoveSheetCommand(Command):
     """A sheet to another place in the set: the order the strip shows,
     the atlas prints and {hoja} counts."""
