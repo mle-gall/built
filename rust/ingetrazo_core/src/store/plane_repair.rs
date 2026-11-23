@@ -12,7 +12,8 @@ use pyo3::{
 type Obj<'py> = Bound<'py, PyAny>;
 type Ring = Vec<(f64, f64)>;
 
-fn cycle<'py>(ring: &Obj<'py>) -> PyResult<Bound<'py, PyTuple>> {
+#[pyfunction]
+pub(crate) fn plane_cycle<'py>(ring: &Obj<'py>) -> PyResult<Bound<'py, PyTuple>> {
     let py = ring.py();
     let mut keys = Vec::new();
     for p in ring.try_iter()? {
@@ -57,10 +58,10 @@ pub(crate) fn plane_fingerprint<'py>(faces: &Obj<'py>) -> PyResult<Bound<'py, Py
         let holes = f
             .get_item(1)?
             .try_iter()?
-            .map(|h| cycle(&h?))
+            .map(|h| plane_cycle(&h?))
             .collect::<PyResult<Vec<_>>>()?;
         rows.push((
-            cycle(&f.get_item(0)?)?,
+            plane_cycle(&f.get_item(0)?)?,
             PyFrozenSet::new(f.py(), holes)?,
             f.get_item(2)?,
         ));

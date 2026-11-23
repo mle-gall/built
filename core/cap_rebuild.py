@@ -35,7 +35,7 @@ import sys
 from collections import defaultdict
 from typing import Optional
 
-from ingetrazo_core import Vec3 as QVector3D
+from ingetrazo_core import Vec3 as QVector3D, plane_cycle as _canon_loop
 
 from core.arrangement import (
     _TOL,
@@ -442,9 +442,6 @@ def rebuild_plane(mesh, origin: QVector3D, normal: QVector3D,
         d = p - origin
         return (QVector3D.dotProduct(d, u), QVector3D.dotProduct(d, v))
 
-    def to3d(xy):
-        return origin + u * xy[0] + v * xy[1]
-
     from core._native import qt_hypot
     from core.store_mesh import EdgeView, StoreMesh
     native = isinstance(mesh, StoreMesh) and qt_hypot()
@@ -593,169 +590,19 @@ def rebuild_plane(mesh, origin: QVector3D, normal: QVector3D,
                      winding_mask(skin_polys, p), winding_mask(fresh_polys, p))
                     for _, _, p in samples]
 
-    from core import doc_model
-    if doc_model.ENABLED:
-        from ingetrazo_core import rebuild_region_faces
+    from ingetrazo_core import rebuild_region_faces
 
-        def region_outlines(regions, creases):
-            if native:
-                loops = mesh._store.snapshot().trace_cap_outlines(regions, creases, _TOL)
-                if loops is not None:
-                    return _nest_outlines(loops)
-            return _union_outline(regions, creases)
-
-        return rebuild_region_faces(
-            origin, normal, (u, v), samples, coverage, plane_edges, keep_mode, removing,
-            op, cache, _SAMPLE_OFF, _ON_PLANE, _TOL / 2, ray_parity_outside, rng,
-            packed, region_outlines)
-
-    # Group boundary regions by which side holds the material — each group is
-    # unioned separately because its faces wind the other way (outward points
-    # toward the empty side). Partition and sheet regions form extra groups.
-    #
-    # When material reads the *same* on both sides, parity is blind there (a
-    # void still walled in by an untrimmed neighbouring plane, or coincident
-    # face pairs cancelling its crossings) and coverage decides:
-    # - covered by this push's ``fresh`` faces in a *single* winding → the op
-    #   declares the region boundary; the fresh normal points to the emptied
-    #   side. Two opposite fresh windings = a collapsed coincident pair (a
-    #   flush-landed fin) — debris, drop.
-    # - otherwise covered by a pre-existing face → the user's structure
-    #   survives: an interior partition (Ctrl-slab, shared wall) when material
-    #   reads both sides, a free sheet (a plan's flat floor) when neither.
-    # - covered by nothing → phantom; no face.
-    solid_by_side: dict = {True: [], False: []}  # material on +side / on -side
-    partitions: list = []
-    sheets: list = []
-    for (outer_xy, holes_xy, ip_xy), (old, skin, fresh_mask) in zip(samples, coverage):
-        ip = to3d(ip_xy)
-        mat_plus = ray_parity_outside(
-            ip + normal * _SAMPLE_OFF, normal, None, rng,
-            packed=packed) is False
-        mat_minus = ray_parity_outside(
-            ip - normal * _SAMPLE_OFF, -normal, None, rng,
-            packed=packed) is False
-        if mat_plus != mat_minus:
-            solid_by_side[mat_plus].append((outer_xy, holes_xy))
-            continue
-        decl = 0 if keep_mode else fresh_mask
-        if mat_plus:  # material on both sides
-            if removing and decl in (1, 2):
-                # One fresh winding covers the spot: the carve declares which
-                # side emptied (parity can be blind to a void still walled in
-                # by an untrimmed neighbouring plane).
-                solid_by_side[decl == 2].append((outer_xy, holes_xy))
-            elif (not removing and not keep_mode
-                    and ((skin & 1 and decl & 2) or (skin & 2 and decl & 1))):
-                # The strip is inside the solid now, and so is its outline:
-                # the old crease along its rim (a riser's top edge) is the
-                # op's seam from here on, free to dissolve when the next
-                # round rebuilds the plane beside it (fuzz prism seed 80).
-                rim = [(to3d(loop[i]), to3d(loop[(i + 1) % len(loop)]))
-                       for loop in (outer_xy, *holes_xy)
-                       for i in range(len(loop))]
-                if op is not None:
-                    op.extend(rim)
-                if cache is not None:
-                    cache.dropped.extend(rim)
-            elif (not removing or not decl) and (old or (keep_mode and fresh_mask)):
-                # Existing structure — or, in keep mode, the stack's own fresh
-                # quad cutting through solid interior: a Ctrl-stack grown into
-                # the body lays brand-new divisions where no face existed.
-                partitions.append((outer_xy, holes_xy))
-        else:         # material on neither side
-            if not removing and decl in (1, 2):
-                # An outward sweep envelops old boundary faces that still
-                # count in parity ("void below" misread): its own quad
-                # declares the new material side.
-                solid_by_side[decl == 2].append((outer_xy, holes_xy))
-            elif not decl and old:
-                sheets.append((outer_xy, holes_xy))
-            # otherwise: op debris (a flush-landed cap or collapsed fin)
-
-    # Creases: plane edges a non-coplanar face stands on. The union must keep a
-    # boundary there (a roof stays split over its dividing wall). Stored as 2D
-    # segments — the union tests lie-on geometrically, since the arrangement
-    # may have split these edges at crossings.
-    #
-    # With ``op`` (the push's own naive faces), plane edges incident to *no*
-    # op face are the user's hand-drawn subdivisions (a diagonal splitting a
-    # wall) and survive the union too — only the op's seams (the stacked
-    # strip's belt, the mouth ring) dissolve. ``op=None`` keeps the plain
-    # dissolve-everything semantics for direct callers.
-    # ``op`` = the push's own rim *segments* (3D position pairs, captured at
-    # fixpoint entry — they outlive the op faces, which earlier rounds may
-    # replace). A plane edge lying on one is the op's seam (a flush landing's
-    # contact line, a strip belt — possibly split since) and may dissolve;
-    # any other face-bearing plane edge is the user's structure and survives
-    # the union (A.4). ``op=None`` keeps the plain dissolve-everything
-    # semantics for direct callers.
-    op_rim_segs: list = []
-    if op is not None:
-        for a3, b3 in op:
-            if _on_plane(a3, origin, normal) and _on_plane(b3, origin, normal):
-                op_rim_segs.append((to2d(a3), to2d(b3)))
-
-    def _on_op_rim(e) -> bool:
-        ea, eb = to2d(e.a), to2d(e.b)
-        return any(_on_seg2(ea, a, b) and _on_seg2(eb, a, b)
-                   for a, b in op_rim_segs)
-
-    def _parts_paint(e) -> bool:
-        """The edge parts two faces painted differently: the line between
-        two coloured quadrants, even where the push's rim runs along it.
-        Dissolved, one paint took the whole plane (#649: a quadrant pulled
-        up and pushed back level turned the four of them green)."""
-        attrs = [f.attrs or {} for f in e.faces]
-        return any(a != attrs[0] for a in attrs[1:])
-
-    keep_segs: list = []
-    for e in plane_edges:
-        if any(abs(QVector3D.dotProduct(_fnormal(f), normal)) < 0.999
-               for f in e.faces):
-            keep_segs.append((to2d(e.a), to2d(e.b)))
-        elif op is not None and e.faces and (not _on_op_rim(e)
-                                             or _parts_paint(e)):
-            keep_segs.append((to2d(e.a), to2d(e.b)))
-
-    def outlines(regions):
+    def region_outlines(regions, creases):
         if native:
-            loops = mesh._store.snapshot().trace_cap_outlines(regions, keep_segs, _TOL)
+            loops = mesh._store.snapshot().trace_cap_outlines(regions, creases, _TOL)
             if loops is not None:
                 return _nest_outlines(loops)
-        return _union_outline(regions, keep_segs)
+        return _union_outline(regions, creases)
 
-    result = []
-    for mat_plus, regions in solid_by_side.items():
-        if not regions:
-            continue
-        for outer, holes in outlines(regions):
-            # CCW in (u, v) gives a +normal face; flip when the material is on
-            # the +side so the face points outward (toward the empty side).
-            if mat_plus:
-                outer = list(reversed(outer))
-                holes = [list(reversed(h)) for h in holes]
-            result.append(
-                ([to3d(p) for p in outer],
-                 [[to3d(p) for p in h] for h in holes], False)
-            )
-    if partitions:
-        # Interior partitions have no outward side; keep the arrangement's
-        # winding (orientation leaves them as-is anyway).
-        for outer, holes in outlines(partitions):
-            result.append(
-                ([to3d(p) for p in outer],
-                 [[to3d(p) for p in h] for h in holes], True)
-            )
-    if sheets:
-        # Free sheets (flat drawing attached to the solid) — not boundary, not
-        # partition; they survive the rebuild as plain faces.
-        for outer, holes in outlines(sheets):
-            result.append(
-                ([to3d(p) for p in outer],
-                 [[to3d(p) for p in h] for h in holes], False)
-            )
-    return result
+    return rebuild_region_faces(
+        origin, normal, (u, v), samples, coverage, plane_edges, keep_mode, removing,
+        op, cache, _SAMPLE_OFF, _ON_PLANE, _TOL / 2, ray_parity_outside, rng,
+        packed, region_outlines)
 
 
 def _coplanar_on(face, origin, normal, cache=None) -> bool:
@@ -766,22 +613,10 @@ def _coplanar_on(face, origin, normal, cache=None) -> bool:
     return _on_plane(fc, origin, normal)
 
 
-def _canon_loop(loop) -> tuple:
-    """Canonical form of a vertex-position cycle: rotated so the smallest key
-    leads. Winding is preserved (an orientation flip is a real change)."""
-    keys = [(round(p.x() / 1e-4), round(p.y() / 1e-4), round(p.z() / 1e-4))
-            for p in loop]
-    i = min(range(len(keys)), key=lambda j: keys[j])
-    return tuple(keys[i:] + keys[:i])
-
-
 def _canon_faces(faces_as_loops) -> frozenset:
-    """Order-free fingerprint of a set of faces given as ``(outer, holes,
-    is_partition)``."""
-    return frozenset(
-        (_canon_loop(outer), frozenset(_canon_loop(h) for h in holes), interior)
-        for outer, holes, interior in faces_as_loops
-    )
+    """Winding-sensitive, rotation-independent fingerprint of a rebuilt plane."""
+    from ingetrazo_core import plane_fingerprint
+    return plane_fingerprint(faces_as_loops)
 
 
 def apply_rebuild(mesh, origin: QVector3D, normal: QVector3D,
@@ -810,77 +645,12 @@ def apply_rebuild(mesh, origin: QVector3D, normal: QVector3D,
     normal = normal.normalized()
     rebuilt = rebuild_plane(mesh, origin, normal, fresh, keep_mode, removing,
                             op, cache)
-    from core import doc_model
-    if doc_model.ENABLED:
-        from ingetrazo_core import install_rebuilt_plane
-        changed = install_rebuilt_plane(mesh, origin, normal, rebuilt, cache, _ON_PLANE,
-                                        _replace_plane_store, _region_test_point, plane_basis)
-        if changed and prune:
-            prune_plane_debris(mesh, origin, normal)
-        return changed
-    if rebuilt is None:
-        return False
-    scope = cache.scope(mesh) if cache is not None else None
-    old = [f for f in (mesh.faces if scope is None else scope[0])
-           if _coplanar_on(f, origin, normal, cache)]
-    if _canon_faces(rebuilt) == _canon_faces(
-        [(list(f.vertices), [list(h) for h in f.holes], f.interior)
-         for f in old]
-    ):
-        return False  # plane already in its rebuilt form — stable
-    if cache is not None:
-        # From here the mesh changes, so the memoised parity set is stale.
-        # (Per-face memos stay valid: faces are replaced, never mutated.)
-        cache.token += 1
-    # Region inheritance: a new face takes the attrs (material, future BIM
-    # tag) of the old face whose interior contains its interior point — the
-    # face it is the continuation of. Captured before the removal.
-    u, v = plane_basis(normal)
-
-    def to2d(p):
-        d = p - origin
-        return (QVector3D.dotProduct(d, u), QVector3D.dotProduct(d, v))
-
-    donors = [
-        ([to2d(p) for p in f.vertices],
-         [[to2d(p) for p in h] for h in f.holes], dict(f.attrs))
-        for f in old if f.attrs
-    ]
-    from core.store_mesh import FaceView, StoreMesh, _fallback
-    replacements = None
-    if isinstance(mesh, StoreMesh):
-        from core.topology import _maximal_holes
-        caps = []
-        for outer, holes, interior in rebuilt:
-            rings = [outer, *(_maximal_holes(holes) if len(holes) > 1 else holes)]
-            caps.append(([[p.toTuple() for p in ring] for ring in rings], interior))
-        try:
-            keys, _change = mesh._store.replace_plane_faces([f.key for f in old], caps)
-        except _fallback():
-            pass  # Replay through remove_face/add_face below.
-        else:
-            replacements = [FaceView(mesh, k) for k in keys]
-            mesh._dirty()
-    if replacements is None:
-        for f in old:
-            mesh.remove_face(f)
-    for index, (outer, holes, interior) in enumerate(rebuilt):
-        if replacements is None:
-            nf = mesh.add_face(outer, holes or None)
-            nf.interior = interior
-        else:
-            nf = replacements[index]
-        if donors:
-            ip = _region_test_point([to2d(p) for p in outer],
-                                    [[to2d(p) for p in h] for h in (holes or [])])
-            for o_xy, hs_xy, attrs in donors:
-                if _point_in_polygon(ip, o_xy) and not any(
-                        _point_in_polygon(ip, h) for h in hs_xy):
-                    nf.attrs = dict(attrs)
-                    break
-    if prune:
+    from ingetrazo_core import install_rebuilt_plane
+    changed = install_rebuilt_plane(mesh, origin, normal, rebuilt, cache, _ON_PLANE,
+                                    _replace_plane_store, _region_test_point, plane_basis)
+    if changed and prune:
         prune_plane_debris(mesh, origin, normal)
-    return True
+    return changed
 
 
 def _replace_plane_store(mesh, old, rebuilt):
@@ -914,28 +684,8 @@ def prune_plane_debris(mesh, origin: QVector3D, normal: QVector3D) -> None:
         if any(change.removed.values()):
             mesh._dirty()
         return
-    from core import doc_model
-    if doc_model.ENABLED:
-        from ingetrazo_core import prune_object_plane
-        return prune_object_plane(mesh, origin, normal, _ON_PLANE)
-    for e in list(mesh.edges):
-        if (not e.faces
-                and _on_plane(e.a, origin, normal)
-                and _on_plane(e.b, origin, normal)):
-            mesh.remove_edge(e)
-    # Only vertices no face loop references either — deregistering a vertex a
-    # loop still holds would make later welds mint a duplicate object at the
-    # same position, silently severing that face's adjacency.
-    referenced = {
-        lv for f in mesh.faces for lp in (f.loop, *f.hole_loops) for lv in lp
-    }
-    # The kernel's targeted drop (list order kept, the registry cleaned by
-    # identity): what this loop did by hand on the list and the registry,
-    # which a store-backed mesh can only do by becoming Python objects.
-    orphans = [v for v in mesh.vertices
-               if not v.edges and v not in referenced]
-    if orphans:
-        mesh.drop_orphan_vertices(orphans)
+    from ingetrazo_core import prune_object_plane
+    prune_object_plane(mesh, origin, normal, _ON_PLANE)
 
 
 def plane_key(point: QVector3D, normal: QVector3D):
