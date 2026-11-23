@@ -317,8 +317,13 @@ def build(win, view=None, sel=None, *, locked_image=None, locked_group=None) -> 
     if sel and view is not None:
         from views import wgpu_ui
         from PySide6.QtGui import QKeySequence
-        one(Verb("revealselection", "Reveal selection", lambda: wgpu_ui._tree_action(win, view, "revealselection" + wgpu_ui.SEP),
-                 QKeySequence("Ctrl+Shift+J").toString(QKeySequence.NativeText)))
+        reveal = Verb("revealselection", "Reveal selection", lambda: wgpu_ui._tree_action(win, view, "revealselection" + wgpu_ui.SEP),
+                      QKeySequence("Ctrl+Shift+J").toString(QKeySequence.NativeText))
+        zoom = next((r for r in rows if any(v.id == "zoom" for v in r.verbs)), None)
+        if zoom:
+            zoom.verbs.append(reveal)
+        else:
+            one(reveal)
     menu.rows = [r for r in rows if r.verbs]
     return menu
 

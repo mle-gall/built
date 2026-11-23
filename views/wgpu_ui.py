@@ -1972,6 +1972,8 @@ def _tree_action(win, view, action) -> None:
                 view._ui_mode = view._ui_filter = ""
                 view.renderer.ui_reveal_row(target)
                 rebuild()
+            elif scene.selection:
+                vp.flash_status("This selection has no occurrence in the Project tree")
         elif verb in ("eye", "lock") and rk == "geometry:loose":
             _core(vp, "edit_loose_geometry", field=verb)
             scene.select(e for e in list(scene.selection) if scene.entity_selectable(e))
