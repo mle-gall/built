@@ -151,7 +151,7 @@ fn read_attr<'py>(py: Python<'py>, me: &Bound<'py, PyAny>, k: Key, a: u16, track
         let mut d = lock();
         let same = d.serial == serial;
         match d.node_mut(k) {
-            Some(n) if same && n.attr_view(a).is_none() => {
+            Some(n) if (same || n.attr(a) == Some(&v)) && n.attr_view(a).is_none() => {
                 n.attr_views.push((a, keep));
                 None
             }
@@ -2000,12 +2000,14 @@ fn record_names<'py>(py: Python<'py>, d: &super::Doc, keys: &[Key], into: &mut V
 }
 
 fn changes_dict<'py>(py: Python<'py>, ops: &[Op], inverse: bool, root: Option<Key>) -> PyResult<Bound<'py, PyDict>> {
+    let records;
     let scene: Vec<&'static str>;
     let registry: [Vec<String>; 3];
     let groups: Vec<Vec<Result<Py<PyAny>, String>>> = {
         let d = lock();
         let mut c = d.changes(ops, inverse, root);
         scene = c.scene_modified.clone();
+        records = c.records_modified.iter().filter_map(|&k| d.handle_ref(py, k).map(|h| (k, h))).collect::<Vec<_>>();
         registry = [
             std::mem::take(&mut c.materials_created),
             std::mem::take(&mut c.materials_removed),
@@ -2051,6 +2053,26 @@ fn changes_dict<'py>(py: Python<'py>, ops: &[Op], inverse: bool, root: Option<Ke
     out.set_item("materials", m)?;
     let sc = PyDict::new(py);
     sc.set_item("modified", scene)?;
+    let record_keys = PyDict::new(py);
+    for (key, handle) in records {
+        let ty = handle.bind(py).get_type();
+        let module = ty.getattr("__module__")?.extract::<String>()?;
+        let family = match module.as_str() {
+            "core.composition" => "sheets",
+            "core.saved_views" => "views",
+            _ => "annotations",
+        };
+        let list = match record_keys.get_item(family)? {
+            Some(list) => list.cast_into::<PyList>()?,
+            None => {
+                let list = PyList::empty(py);
+                record_keys.set_item(family, &list)?;
+                list
+            }
+        };
+        list.append(key)?;
+    }
+    sc.set_item("records", record_keys)?;
     out.set_item("scene", sc)?;
     Ok(out)
 }
@@ -2063,7 +2085,7 @@ impl PyTransaction {
 
     /// Fold committed entry, edit and exit steps into one occurrence edit.
     #[staticmethod]
-    fn compose(py: Python<'_>, steps: Vec<Py<PyTransaction>>) -> PyResult<Self> {
+    pub(super) fn compose(py: Python<'_>, steps: Vec<Py<PyTransaction>>) -> PyResult<Self> {
         let mut result = Self { ops: Vec::new(), pins: Vec::new(), geometry: Vec::new() };
         for step in steps {
             let step = step.bind(py).try_borrow()?;
@@ -2079,6 +2101,15 @@ impl PyTransaction {
     /// Store face tools expose the same snapshots as their public change record.
     fn geometry_states(&self, py: Python<'_>, mesh: &Bound<'_, PyAny>) -> Option<(Py<PyAny>, Py<PyAny>)> {
         self.geometry.iter().find_map(|edit| edit.states(py, mesh))
+    }
+
+    fn replay_editor(&self, py: Python<'_>, command: &Bound<'_, PyAny>, scene: &Bound<'_, PyAny>, undo: bool) -> PyResult<()> {
+        self.run(py, undo)?;
+        if let Err(error) = command.call_method1("doc_after", (scene, if undo { "undo" } else { "redo" })) {
+            self.run(py, !undo)?;
+            return Err(error);
+        }
+        Ok(())
     }
 
     /// Put back what the step wrote (newest first).
@@ -2154,7 +2185,7 @@ impl PyTransaction {
 }
 
 impl PyTransaction {
-    fn run(&self, py: Python<'_>, backwards: bool) -> PyResult<()> {
+    pub(super) fn run(&self, py: Python<'_>, backwards: bool) -> PyResult<()> {
         if backwards {
             for edit in self.geometry.iter().rev() {
                 edit.apply(py, true)?;
@@ -2522,6 +2553,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(doc_attr_changed, m)?)?;
     m.add_class::<super::anchor::ElementAnchor>()?;
     m.add_class::<super::history::DocumentHistory>()?;
+    m.add_class::<super::feed::FeedReaders>()?;
     m.add_class::<DocRecord>()?;
     m.add_class::<DocAttr>()?;
     m.add_function(wrap_pyfunction!(doc_walk, m)?)?;

@@ -363,6 +363,10 @@ class _StoreSession(MeshCommand):
         self.replay.undo(scene)
         scene.version += 1
 
+    def doc_after(self, scene, phase):
+        OccurrenceCommands(self.inner).doc_after(scene, phase)
+        scene.version += 1
+
     def bind_transaction(self, txn):
         edits = [getattr(c, "_doc_txn", None) for c in self.inner]
         if all(edit is not None for edit in edits):
@@ -384,33 +388,31 @@ def record_leave(history, level, share):
     edited = group.mesh
     mark = level.get("undo_mark", len(history.undo_stack))
     mark = min(mark, len(history.undo_stack))
+    if history._native is not None and "session" in level:
+        mark = history._native.group_start(level["session"])
     shared = edited.capture_state() != state0
     entry = level.get("entry_transaction")
     from core import doc_model
     changed_parts = parts is not None and len(history.undo_stack) > mark
-    if entry is not None and not doc_model.NATIVE.doc_depth() and (shared or changed_parts):
-        inner = history.undo_stack[mark:]
+    if not (shared or changed_parts):
+        restore_sharing(group, proto, xform, parts=parts)
+        return shared
+    inner = history.undo_stack[mark:]
+    if entry is not None and not doc_model.NATIVE.doc_depth():
         step = _StoreSession(share, parts, inner, shared, entry)
+    elif parts is not None:
+        step = ReshareAssemblyCommand(group, proto, xform, edited, state0, parts, inner)
+    else:
+        step = ReshareInstanceCommand(group, proto, xform, edited, inner)
+    if history._native is not None:
+        history._native.close_group(history, mark, step)
+    else:
         del history.undo_stack[mark:]
-        history.execute(step)
+        try:
+            history.execute(step)
+        except BaseException:
+            history.undo_stack.extend(inner)
+            raise
         if history.last_error or history.last_rejected:
             history.undo_stack.extend(inner)
-        return shared
-    if parts is not None and (shared
-                              or len(history.undo_stack) > mark):
-        # An assembly: what ran inside was recorded with its matrix
-        # down in the parts, so it folds into the step that brings
-        # the matrix back — a part deleted or moved undoes in place.
-        inner = history.undo_stack[mark:]
-        del history.undo_stack[mark:]
-        history.execute(ReshareAssemblyCommand(
-            group, proto, xform, edited, state0, parts, inner))
-    elif not shared:
-        # Nothing ran: an assembly's parts go back bit for bit.
-        restore_sharing(group, proto, xform, parts=parts)
-    else:
-        inner = history.undo_stack[mark:]
-        del history.undo_stack[mark:]
-        history.execute(ReshareInstanceCommand(
-            group, proto, xform, edited, inner))
     return shared

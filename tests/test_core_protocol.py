@@ -247,10 +247,14 @@ def test_since_and_the_ring():
               delta=[0, 0, 0.1])
     got = h.feed.since(1)
     assert got["complete"] and [s.revision for s in got["steps"]] == [2, 3]
-    h.feed._steps.popleft()
+    for _ in range(h.feed.maxlen - 2):
+        if h.undo_stack:
+            h.undo()
+        else:
+            h.redo()
     assert not h.feed.since(0)["complete"] and h.feed.since(1)["complete"]
     with pytest.raises(ValueError):
-        h.feed.since(99)
+        h.feed.since(h.revision + 1)
     # JSON-safe, keys as strings.
     text = json.dumps(Q.feed(h, 0), allow_nan=False)
     assert '"steps"' in text

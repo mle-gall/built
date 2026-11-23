@@ -2,6 +2,7 @@
 //! Per-document history. Stack entries are host commands while some tools
 //! still implement Python inverses. Existing scripting clients edit these
 //! lists directly when folding a group-edit session or cancelling a preview.
+use super::py::PyTransaction;
 use std::collections::VecDeque;
 
 use pyo3::class::gc::{PyTraverseError, PyVisit};
@@ -18,6 +19,7 @@ pub struct DocumentHistory {
     subscribers: Py<PyList>,
     #[pyo3(get)]
     revision: u64,
+    steps: VecDeque<(u64, Py<PyAny>)>,
     journal: VecDeque<(u64, String, String)>,
 }
 
@@ -30,18 +32,315 @@ impl DocumentHistory {
             redo: PyList::empty(py).unbind(),
             subscribers: PyList::empty(py).unbind(),
             revision: 0,
+            steps: VecDeque::new(),
             journal: VecDeque::new(),
         }
+    }
+
+    #[staticmethod]
+    fn execute(
+        py: Python<'_>,
+        host: &Bound<'_, PyAny>,
+        cmd: &Bound<'_, PyAny>,
+        tag_objects: &Bound<'_, PyAny>,
+    ) -> PyResult<()> {
+        super::execute::execute(py, host, cmd, tag_objects)
     }
 
     fn push(&self, py: Python<'_>, command: &Bound<'_, PyAny>, limit: usize) -> PyResult<()> {
         let undo = self.undo.bind(py);
         undo.append(command)?;
         if limit > 0 && undo.len() > limit {
-            undo.del_slice(0, undo.len() - limit)?;
+            // While editing, the whole open suffix will count as one entry.
+            // Retention must never discard its earliest transaction.
+            let mut logical_len = undo.len();
+            if let Ok(path) = command.getattr("_occurrences") {
+                if path.len()? > 0 {
+                    logical_len = self.group_start(py, &path.get_item(0)?)? + 1;
+                }
+            }
+            undo.del_slice(0, logical_len.saturating_sub(limit))?;
         }
         let redo = self.redo.bind(py);
         redo.del_slice(0, redo.len())
+    }
+
+    /// Compose the contiguous suffix belonging to this edit context. Construct
+    /// the replacement before touching the list, including for nested groups.
+    fn fold_occurrence(
+        &self,
+        py: Python<'_>,
+        session: &Bound<'_, PyAny>,
+        factory: &Bound<'_, PyAny>,
+    ) -> PyResult<()> {
+        let stack = self.undo.bind(py);
+        let end = stack.len();
+        let start = self.group_start(py, session)?;
+        if end - start < 2 {
+            return Ok(());
+        }
+        let parts = stack.get_slice(start, end);
+        let group = factory.call1((&parts,))?;
+        group.setattr("_occurrences", parts.get_item(0)?.getattr("_occurrences")?)?;
+        let mut records = Vec::new();
+        for cmd in parts.iter() {
+            if let Ok(txn) = cmd
+                .getattr("_doc_txn")
+                .and_then(|t| Ok(t.extract::<Py<PyTransaction>>()?))
+            {
+                records.push(txn);
+            } else {
+                break;
+            }
+        }
+        if records.len() == parts.len() {
+            group.setattr("_doc_txn", PyTransaction::compose(py, records)?)?;
+        }
+        stack.set_slice(start, end, PyList::new(py, [group])?.as_any())
+    }
+
+    fn group_start(&self, py: Python<'_>, session: &Bound<'_, PyAny>) -> PyResult<usize> {
+        let stack = self.undo.bind(py);
+        let mut start = stack.len();
+        while start > 0 {
+            let cmd = stack.get_item(start - 1)?;
+            if !cmd.hasattr("_occurrences")? || !cmd.getattr("_occurrences")?.contains(session)? {
+                break;
+            }
+            start -= 1;
+        }
+        Ok(start)
+    }
+
+    fn close_group(
+        slf: PyRef<'_, Self>,
+        py: Python<'_>,
+        host: &Bound<'_, PyAny>,
+        start: usize,
+        command: &Bound<'_, PyAny>,
+    ) -> PyResult<()> {
+        let stack = slf.undo.bind(py).clone();
+        drop(slf);
+        let end = stack.len();
+        let parts = stack.get_slice(start, end);
+        stack.del_slice(start, end)?;
+        let result = host.call_method1("execute", (command,));
+        if result.is_err()
+            || host.getattr("last_error")?.is_truthy()?
+            || host.getattr("last_rejected")?.is_truthy()?
+        {
+            stack.call_method1("extend", (parts,))?;
+        }
+        result.map(|_| ())
+    }
+
+    /// Release the History borrow before host code (including extension
+    /// inverses) runs. A failed dispatch restores the source stack.
+    fn replay(
+        slf: PyRef<'_, Self>,
+        py: Python<'_>,
+        host: &Bound<'_, PyAny>,
+        undo: bool,
+        sheet: bool,
+    ) -> PyResult<()> {
+        let (source, dest) = if undo {
+            (&slf.undo, &slf.redo)
+        } else {
+            (&slf.redo, &slf.undo)
+        };
+        let source = source.bind(py).clone();
+        let dest = dest.bind(py).clone();
+        drop(slf);
+        let cmd = source.call_method0("pop")?;
+
+        let result: PyResult<()> = (|| {
+            let record = cmd.getattr(if sheet { "_txn" } else { "_doc_txn" });
+            if let Some(txn) = record.ok().filter(|v| !v.is_none()) {
+                py.import("core.doc_model")?.call_method0("flush")?;
+                if sheet {
+                    txn.cast::<PyTransaction>()?.try_borrow()?.run(py, undo)?;
+                } else {
+                    let scene = host.getattr("scene")?;
+                    host.call_method1(
+                        "_in_command_mesh",
+                        (&cmd, txn.getattr("replay_editor")?, &cmd, scene, undo),
+                    )?;
+                    host.setattr("last_txn", (txn, undo))?;
+                }
+            } else if let Some(group) = cmd.getattr_opt("_mixed_group")? {
+                let doc = py.import("core.doc_model")?;
+                doc.call_method0("flush")?;
+                host.call_method1(
+                    "_in_command_mesh",
+                    (
+                        &cmd,
+                        group.getattr(if undo { "undo" } else { "do" })?,
+                        host.getattr("scene")?,
+                    ),
+                )?;
+                doc.call_method0("flush")?;
+                host.setattr("last_txn", (cmd.getattr("_group_diff")?, undo))?;
+            } else if sheet {
+                cmd.call_method0(if undo { "undo" } else { "do" })?;
+            } else {
+                host.call_method1("_reference_replay", (&cmd, undo))?;
+            }
+            Ok(())
+        })();
+        if let Err(err) = result {
+            source.append(cmd)?;
+            return Err(err);
+        }
+        dest.append(cmd)
+    }
+
+    /// Mixed occurrence spans enter the tool's original mesh frame for
+    /// each native record or extension inverse. Undo completed parts on error.
+    #[staticmethod]
+    fn replay_group(
+        group: &Bound<'_, PyAny>,
+        scene: &Bound<'_, PyAny>,
+        undo: bool,
+        hooks_only: bool,
+    ) -> PyResult<()> {
+        let parts = group.getattr("commands")?.cast_into::<PyList>()?;
+        let dispatch = |cmd: &Bound<'_, PyAny>, backwards: bool| -> PyResult<()> {
+            let phase = if backwards { "undo" } else { "redo" };
+            let frame = group.getattr("_in_frame")?;
+            if hooks_only {
+                frame.call1((scene, cmd, cmd.getattr("doc_after")?, scene, phase))?;
+            } else if let Some(txn) = cmd.getattr_opt("_doc_txn")?.filter(|v| !v.is_none()) {
+                scene.py().import("core.doc_model")?.call_method0("flush")?;
+                frame.call1((
+                    scene,
+                    cmd,
+                    txn.getattr("replay_editor")?,
+                    cmd,
+                    scene,
+                    backwards,
+                ))?;
+            } else if let Some(mixed) = cmd.getattr_opt("_mixed_group")? {
+                frame.call1((
+                    scene,
+                    cmd,
+                    mixed.getattr(if backwards { "undo" } else { "do" })?,
+                    scene,
+                ))?;
+            } else {
+                frame.call1((
+                    scene,
+                    cmd,
+                    cmd.getattr(if backwards { "undo" } else { "do" })?,
+                    scene,
+                ))?;
+            }
+            Ok(())
+        };
+        for i in 0..parts.len() {
+            let index = |j| if undo { parts.len() - 1 - j } else { j };
+            if let Err(error) = dispatch(&parts.get_item(index(i))?, undo) {
+                if !hooks_only {
+                    for j in (0..i).rev() {
+                        dispatch(&parts.get_item(index(j))?, !undo)?;
+                    }
+                }
+                return Err(error);
+            }
+        }
+        Ok(())
+    }
+
+    fn push_sheet(&self, py: Python<'_>, cmd: &Bound<'_, PyAny>, coalesce: bool) -> PyResult<()> {
+        let stack = self.undo.bind(py);
+        if coalesce && !stack.is_empty() {
+            let api = py.import("core.composition")?;
+            let signature = api.getattr("_edit_signature")?;
+            let top = stack.get_item(stack.len() - 1)?;
+            let fields = signature.call1((&top,))?;
+            if !fields.is_none() && fields.eq(signature.call1((cmd,))?)? {
+                let old = top.getattr("_txn")?;
+                let new = cmd.getattr("_txn")?;
+                let combined = if old.is_none() || new.is_none() {
+                    py.None()
+                } else {
+                    Py::new(
+                        py,
+                        PyTransaction::compose(py, vec![old.extract()?, new.extract()?])?,
+                    )?
+                    .into_any()
+                };
+                let edits = api.getattr("_edits_of")?;
+                for (first, last) in edits
+                    .call1((&top,))?
+                    .try_iter()?
+                    .zip(edits.call1((cmd,))?.try_iter()?)
+                {
+                    first?.setattr("after", last?.getattr("after")?.call_method0("copy")?)?;
+                }
+                top.setattr("_txn", combined)?;
+                return self.redo.bind(py).call_method0("clear").map(|_| ());
+            }
+        }
+        self.push(py, cmd, 0)
+    }
+
+    /// Drop the mutable History borrow before invoking arbitrary subscribers.
+    fn publish(
+        mut slf: PyRefMut<'_, Self>,
+        py: Python<'_>,
+        step: &Bound<'_, PyAny>,
+    ) -> PyResult<()> {
+        let revision = slf.revision;
+        let expired = (slf.steps.len() == 256).then(|| slf.steps.pop_front());
+        slf.steps.push_back((revision, step.clone().unbind()));
+        let subscribers = slf.subscribers.bind(py).to_tuple();
+        drop(slf);
+        drop(expired);
+        for entry in subscribers.iter() {
+            let callback = entry.get_item(0)?;
+            if let Err(err) = callback.call1((step,)) {
+                let logger = py
+                    .import("logging")?
+                    .call_method1("getLogger", ("ingetrazo.protocol",))?;
+                logger.call_method1(
+                    "error",
+                    ("Change feed subscriber failed: %s", err.to_string()),
+                )?;
+            }
+        }
+        Ok(())
+    }
+
+    fn feed_since<'py>(&self, py: Python<'py>, since: u64) -> PyResult<Bound<'py, PyDict>> {
+        let result = PyDict::new(py);
+        let floor = self.steps.front().map_or(self.revision, |(r, _)| r - 1);
+        let steps = PyList::empty(py);
+        for (_, step) in self.steps.iter().filter(|(r, _)| *r > since) {
+            steps.append(step)?;
+        }
+        result.set_item("complete", since >= floor)?;
+        result.set_item("revision", self.revision)?;
+        result.set_item("steps", steps)?;
+        Ok(result)
+    }
+
+    fn feed_step(&self, py: Python<'_>, revision: Option<u64>) -> Option<Py<PyAny>> {
+        self.steps
+            .iter()
+            .rev()
+            .find(|(r, _)| revision.is_none_or(|rev| rev == *r))
+            .map(|(_, step)| step.clone_ref(py))
+    }
+
+    #[staticmethod]
+    fn build_step<'py>(
+        py: Python<'py>,
+        history: &Bound<'py, PyAny>,
+        cmd: &Bound<'py, PyAny>,
+        phase: &str,
+        tokens: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        super::feed::build(py, history, cmd, phase, tokens)
     }
 
     fn advance(&mut self, phase: String, command: String) {
@@ -73,6 +372,9 @@ impl DocumentHistory {
     }
 
     fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
+        for (_, step) in &self.steps {
+            visit.call(step)?;
+        }
         visit.call(&self.undo)?;
         visit.call(&self.redo)?;
         visit.call(&self.subscribers)

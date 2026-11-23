@@ -1234,6 +1234,11 @@ def _snap_dropped_loose(vp):
     return drops
 
 
+def _context_stamp(vp):
+    feed = getattr(getattr(vp, "history", None), "feed", None)
+    return getattr(vp.scene, "content_version", None), feed.readers.stamp() if feed else 0
+
+
 def _ctx_changed(vp, before):
     """``History.context_changed`` (stub viewports in tests have no
     history, or one without it)."""
@@ -19753,7 +19758,7 @@ class Viewport(QOpenGLWidget):
         was_instance = (getattr(group, "xform", None) is not None
                         and (bool(getattr(group, "component", True))
                              or not getattr(group, "children", None)))
-        before = getattr(self.scene, "content_version", None)
+        before = _context_stamp(self)
         self.scene.begin_group_edit(group)
         _ctx_changed(self, before)
         self._edit_undo_mark = len(self.history.undo_stack)
@@ -19855,7 +19860,7 @@ class Viewport(QOpenGLWidget):
             self._leave_group_edit(todos=False)
         level = self.scene._edit_stack[-1] if self.scene._edit_stack else {}
         share = level.pop("share", None)
-        before = getattr(self.scene, "content_version", None)
+        before = _context_stamp(self)
         if todos:
             self.scene.end_group_edit()
         else:

@@ -521,6 +521,12 @@ class SolidOperationCommand(Command):
         self._home = None
         self._selection = None
 
+    doc_undo = True
+
+    def doc_after(self, scene, phase):
+        scene.selection = set(self._selection if phase == "undo" else self.created)
+        scene.version += 1
+
     def prepare(self) -> None:
         """Run the boolean now, so a :class:`SolidError` reaches the caller
         (``History.execute`` swallows what ``do`` raises)."""

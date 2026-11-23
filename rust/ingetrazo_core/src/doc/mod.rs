@@ -27,6 +27,8 @@ use definition::DefinitionRef;
 use std::sync::Arc;
 mod anchor;
 mod history;
+mod feed;
+mod execute;
 pub mod py;
 pub mod value;
 
@@ -626,6 +628,7 @@ pub struct Doc {
     /// Every write (journalled or not) bumps this: a cheap "anything
     /// changed?" for caches keyed on the document.
     pub serial: u64,
+    pub reader_epochs: FastMap<Key, u64>,
     /// Set while a journal is replayed (undo, redo, rollback): the tree
     /// invariant was checked when it was recorded.
     pub replaying: bool,
@@ -814,6 +817,7 @@ impl Doc {
         if s.gen != u32::MAX {
             self.free.push(slot as u32);
         }
+        if node.kind == Kind::Root { self.reader_epochs.remove(&k); }
         self.live[node.kind as usize] -= 1;
         self.serial += 1;
         for v in node.views.iter_mut() {
@@ -1057,6 +1061,35 @@ impl Doc {
         }
     }
 
+    /// Track writes to reachable model data. Constructing a detached paste
+    /// candidate or releasing a temporary record cannot invalidate a panel.
+    fn note_reader_write(&mut self, mut key: Key) {
+        if self.reader_epochs.is_empty() { return; }
+        // The usual case is a single parent. Shared ownership can occur in
+        // compatibility mode, including cycles, so bound both traversals.
+        for _ in 0..self.slots.len() {
+            if let Some(epoch) = self.reader_epochs.get_mut(&key) {
+                *epoch = self.serial;
+                return;
+            }
+            let Some(node) = self.node(key) else { return };
+            match node.owners.as_slice() {
+                [] => return,
+                [parent] => key = *parent,
+                parents => {
+                    let mut pending = parents.to_vec();
+                    let mut seen = FastSet::default();
+                    while let Some(k) = pending.pop() {
+                        if !seen.insert(k) { continue; }
+                        if let Some(epoch) = self.reader_epochs.get_mut(&k) { *epoch = self.serial; }
+                        else if let Some(n) = self.node(k) { pending.extend_from_slice(&n.owners); }
+                    }
+                    return;
+                }
+            }
+        }
+    }
+
     pub fn write(&mut self, py: Python<'_>, k: Key, f: Field, v: FVal, trash: &mut Trash) -> Result<FVal, String> {
         let layout_parent = if matches!(f, Field::Definition | Field::Xform | Field::Axes | Field::Component) {
             self.node(k).and_then(|n| n.owners.first().copied())
@@ -1066,6 +1099,10 @@ impl Doc {
         }
         let journal = self.journal_open() && !self.open.as_ref().is_some_and(|o| o.born.contains(&k));
         let new = if journal { Some(v.clone()) } else { None };
+        let changed = match (&f, &v) {
+            (Field::Attr(a), FVal::Val(value)) => self.node(k).and_then(|n| n.attr(*a)) != value.as_ref(),
+            _ => true,
+        };
         let replaying = self.replaying;
         let mut refill = None;
         let old = {
@@ -1101,6 +1138,7 @@ impl Doc {
             self.assembly_changed(parent);
         }
         self.serial += 1;
+        if changed { self.note_reader_write(k); }
         if let Some(new) = new {
             self.pin(py, k);
             let o = self.open.as_mut().expect("open");
@@ -1166,6 +1204,7 @@ impl Doc {
             }
         }
         self.serial += 1;
+        for &k in keys { self.note_reader_write(k); }
         if !jkeys.is_empty() {
             for &k in &jkeys {
                 self.pin(py, k);
@@ -1268,6 +1307,7 @@ impl Doc {
         self.add_owner(py, k, owner);
         if list == ListId::Children { self.assembly_changed(owner); }
         self.serial += 1;
+        self.note_reader_write(owner);
         self.journal_list(py, Op::Ins { owner, list, at, k }, &[owner, k]);
         Ok(())
     }
@@ -1287,6 +1327,7 @@ impl Doc {
         self.drop_owner(k, owner, trash);
         if list == ListId::Children { self.assembly_changed(owner); }
         self.serial += 1;
+        self.note_reader_write(owner);
         Ok(k)
     }
 
@@ -1319,6 +1360,7 @@ impl Doc {
         }
         if list == ListId::Children { self.assembly_changed(owner); }
         self.serial += 1;
+        self.note_reader_write(owner);
         Ok(())
     }
 
@@ -1373,6 +1415,7 @@ impl Doc {
             self.drop_owner(*k, owner, trash);
         }
         self.serial += 1;
+        self.note_reader_write(owner);
         Ok(())
     }
 
@@ -1496,6 +1539,7 @@ pub struct Changes {
     pub materials_modified: Vec<Key>,
     /// Attributes written on the scene root (tag folders, the active tag,
     /// plugin data), by name.
+    pub records_modified: Vec<Key>,
     pub scene_modified: Vec<&'static str>,
     /// Registry names added, taken out, or given another material.
     pub materials_created: Vec<String>,
@@ -1546,10 +1590,13 @@ impl Doc {
             });
             *e += by;
         };
+        let mut records = Vec::new();
+        let mut seen_records = FastSet::default();
         let mut scene_mod: Vec<&'static str> = Vec::new();
         let mut field_written = |k: Key, f: Field, modified: &mut Vec<Key>, tags_mod: &mut Vec<Key>, mats_mod: &mut Vec<Key>| {
             match self.node(k).map(|n| n.kind) {
                 Some(Kind::Placement) => modified.push(k),
+                Some(Kind::Record) if seen_records.insert(k) => records.push(k),
                 Some(Kind::Tag) => tags_mod.push(k),
                 Some(Kind::Material) => mats_mod.push(k),
                 Some(Kind::Root) if root.is_none_or(|r| r == k) => {
@@ -1636,6 +1683,7 @@ impl Doc {
         c.tags_modified = self.unique_named(tags_mod, &mut FastSet::default());
         c.materials_modified = self.unique_named(mats_mod, &mut FastSet::default());
         c.scene_modified = scene_mod;
+        c.records_modified = records;
         // The registry: names that came, went, or now name another material.
         for (owner, first) in reg {
             let last = &reg_new[&owner];

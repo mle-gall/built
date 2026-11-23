@@ -178,6 +178,8 @@ class _EnsureStructureLayers(EnsureLayersCommand):
 
 
 class _MoveTag(Command):
+    doc_undo = True
+
     def __init__(self, layer, folder):
         self.layer, self.folder = layer, folder
 

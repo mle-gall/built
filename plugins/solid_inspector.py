@@ -736,8 +736,8 @@ class SolidInspectorPanel(QWidget):
     def _inspected_key(self):
         """Geometry/context plus every inspected mesh's mutation token.
 
-        History.rows_cv deliberately ignores some edits; it is not a solid
-        validity token. Store writes can also bypass Mesh.revision entirely.
+        Browser rows can stay valid across geometry edits. Store writes
+        can also bypass Mesh.revision entirely.
         Walk objects, never their elements, to detect same-count edits.
         """
         scene = self._viewport.scene

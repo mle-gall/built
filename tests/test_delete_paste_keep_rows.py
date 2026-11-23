@@ -477,12 +477,15 @@ def test_the_materials_panel_reads_only_the_meshes_that_came():
             vp.history.execute(InsertGroupCommand(pasted))
             assert colours() == start
             assert read == [id(pasted.mesh)]            # the new one only
-            # A paint is not a groups-only change: everything is read again.
+            # A keyed paint invalidates only the mesh that owns the faces.
             read.clear()
             vp.history.execute(SetFaceColorCommand(
                 list(plain[0].mesh.faces), (0.9, 0.1, 0.1)))
             assert (0.9, 0.1, 0.1) in colours()
-            assert len(read) > 1
+            if getattr(plain[0].mesh, "_store", None) is not None:
+                assert read == [id(plain[0].mesh)]
+            else:
+                assert len(read) > 1
         finally:
             cm.face_attrs = real
     finally:
@@ -555,12 +558,14 @@ def test_only_groups_only_commands_carry_the_groups_mark_forward():
         vp, gs, box, plain, glass = _scene(win)
         h = vp.history
         cv = lambda: vp.scene.content_version            # noqa: E731
-        h.groups_cv["x"] = cv()
+        h.feed.readers.mark("mesh_paint", cv())
         h.execute(DeleteGroupCommand(gs[0]))
         h.execute(CompoundCommand([InsertGroupCommand(copy_group(gs[1]))]))
         h.undo()
-        assert h.groups_cv["x"] == cv()
+        assert h.feed.readers.current("mesh_paint", cv())
         h.execute(SetFaceColorCommand(list(plain[0].mesh.faces), (1, 0, 0)))
-        assert h.groups_cv["x"] != cv()
+        from core.protocol.keys import mesh_key
+        assert (not h.feed.readers.current("mesh_paint", cv())
+                or mesh_key(plain[0].mesh) in h.feed.readers.dirty_paint_meshes())
     finally:
         _close(win)

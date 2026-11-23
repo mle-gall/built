@@ -88,7 +88,7 @@ def test_two_squares_side_by_side_share_the_edge():
 
 
 def test_a_move_that_lands_nowhere_is_not_checked(monkeypatch):
-    import core.history as history
+    import core.history_commands as history
     sc, h = _box()
     calls = []
     monkeypatch.setattr(history, "defects_near",

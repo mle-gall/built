@@ -1352,7 +1352,7 @@ class OutlinerPanel(QWidget):
         old_key = getattr(self, "_rows_key", None)
         hist = getattr(self._window.viewport, "history", None)
         # Only groups put in or taken out since the rows were last read
-        # (a Delete, a Paste, their undo — History.groups_cv): their rows
+        # (a Delete, a Paste, their undo): their rows
         # come and go, the others stay as they are — but for the copies
         # count of a component that gained or lost one.
         groups_only = (rows_if_changed and old_key is not None
@@ -1361,8 +1361,7 @@ class OutlinerPanel(QWidget):
                        and old_key[1] == rows_key[1]
                        and old_key[3:] == rows_key[3:]
                        and hist is not None
-                       and getattr(hist, "groups_cv", {}).get("rows")
-                       == rows_key[0])
+                       and hist.feed.current("row_groups", rows_key[0]))
         # Only a group opened or closed since (History.context_changed):
         # what a row shows changes for the groups on the open path, old and
         # new, and for the copies of a component whose count moved (its
@@ -1375,8 +1374,7 @@ class OutlinerPanel(QWidget):
                     and old_key[1:3] == rows_key[1:3]
                     and old_key[4:] == rows_key[4:]
                     and hist is not None
-                    and getattr(hist, "groups_cv", {}).get("rows")
-                    == rows_key[0])
+                    and hist.feed.current("row_groups", rows_key[0]))
         patched = rebuilt = False
         if shape != self._shape:
             order_same = (self._shape is not None
@@ -1388,21 +1386,30 @@ class OutlinerPanel(QWidget):
                 rebuilt = True
             self._shape = shape
             self._struct_shape = struct
-        # Nor does a Move (History.rows_cv) — unless an extension's kind
+        # Nor does a Move — unless an extension's kind
         # adds properties to the rows, which may well be sizes.
         moved_only = (old_key is not None and not self._kind_providers
                       and old_key[1:] == rows_key[1:]
-                      and getattr(hist, "rows_cv", None) == rows_key[0])
+                      and hist is not None and rows_key[0] is not None
+                      and hist.feed.current("rows", rows_key[0]))
         if (not rows_if_changed or rows_key[0] is None
-                or (rows_key != old_key and not moved_only)):
+                or (not moved_only and (rows_key != old_key or (hist is not None
+                    and not hist.feed.current("rows", rows_key[0]))))):
             if ctx_only:
                 self._update_some_rows(scene, set(old_key[3])
                                        | set(rows_key[3]))
             elif not patched and not rebuilt:
-                self._update_rows(scene)
-            if hist is not None:
-                hist.rows_cv = rows_key[0]
-                hist.groups_cv["rows"] = rows_key[0]
+                if (hist is not None and rows_if_changed and not self._kind_providers
+                        and old_key is not None and old_key[1:] == rows_key[1:]
+                        and hist.feed.current("row_edits", rows_key[0])):
+                    changed = set(hist.feed.readers.dirty_row_uids())
+                    self._update_some_rows(scene, {k for k, g in self._groups.items() if g.uid in changed})
+                else:
+                    self._update_rows(scene)
+            if hist is not None and rows_key[0] is not None:
+                hist.feed.readers.mark("rows", rows_key[0])
+                hist.feed.readers.mark("row_edits", rows_key[0])
+                hist.feed.readers.mark("row_groups", rows_key[0])
         self._rows_key = rows_key
         self._sync_sections(scene)
         self._paint_heads(scene)

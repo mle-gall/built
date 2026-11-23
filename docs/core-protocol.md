@@ -26,7 +26,7 @@ Consumers today and planned:
 |---|---|---|
 | Metal view's incremental update (`views/wgpu_updates.py`) | which meshes a step changed, and their element records | **built**: geometry steps come from the feed (§6.1) |
 | Agent / MCP bridge (`plugins/ai_bridge.py`) | the feed, queries by key | **built**: 7 tools (§5) |
-| Outliner / Structure panels (`views/outliner.py`, Structure dock) | placements, tags, materials by key; `complete` | planned: they keep their content-version caches (`History.rows_cv`, `structure_cv`) for now |
+| Outliner / Structure panels (`views/outliner.py`, Structure dock) | placements, tags, materials by key; `complete` | feed subscriber tracks valid scans and dirty placement and mesh keys |
 | egui UI (`ui/egui-spike`) | everything above, in process | planned: subscribe to `history.feed`; later the same records from a Rust-side history |
 
 ## 1. Commands
@@ -293,6 +293,12 @@ cut, `face` pairs only, when the group had no nested placements (with
 them, the source is a merged world copy no one can name). Python-mesh
 runs report no copies.
 
+On the native document, an in-process step also exposes `scene_fields`
+for changed root tables and `records` for field edits to existing
+annotation, saved-view and sheet records. The latter maps `annotations`,
+`views` and `sheets` to session-local document keys for the families
+affected. The JSON representation remains the shape in §4.1.
+
 ### 4.2 Delivery
 
 - `history.feed.subscribe(fn)` → `fn(step)` after every step, synchronously
@@ -355,19 +361,20 @@ pack). The feed names the mesh the undo ran on, which gets rebaked
 (`test_renderer_undo_after_leaving_the_group_rebakes_it`). Every
 `tests/test_wgpu_updates.py` test passes unchanged.
 
-### 6.2 Outliner / Structure panels (planned)
+### 6.2 Browser, Materials, Structure and BIM
 
-They rebuild from content versions today (`History.rows_cv`,
-`structure_cv`, `groups_cv`). The feed's `placements` / `tags` /
-`materials` with `complete` are what they would patch rows from. `complete =
-False` keeps today's full rebuild.
+A synchronous feed subscriber maintains the scan marks used by these panels.
+The Browser can refresh renamed rows by placement UID. Materials evicts the
+cached swatches for repainted store meshes by mesh key. Incomplete steps and
+revision gaps invalidate the scans. Content versions and the native write
+serial also detect changes between published steps. Group entry and exit
+carry forward only the scans that can reuse their rows or mesh data.
 
 ### 6.3 egui UI (planned)
 
 In process, the egui layer subscribes to `history.feed`, issues §1 commands
-and §3 queries, and never holds a Python element. When History itself moves
-to Rust, the same `Step` / `MeshChange` shapes come from there. The store's
-records already are Rust (`edit::Change`).
+and §3 queries, and never holds a Python element. Rust History publishes the same
+`Step` and `MeshChange` shapes using the store records from `edit::Change`.
 
 ## 7. Limits of this first version
 
