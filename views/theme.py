@@ -604,21 +604,6 @@ class _Follower(QObject):
 _follower: _Follower | None = None
 
 
-def apply_accent(app) -> None:
-    """Repaint what wears the accent after Preferences changed it."""
-    from views import icons
-    icons.clear_cursor_cache()
-    if _applied in SHEET_THEMES:        # its hovers wear the accent
-        _set_app_sheet(app, app_sheet(_applied))
-    _restyle()
-    _redraw_icons(app)
-    for top in app.topLevelWidgets():
-        refresh = getattr(top, "_refresh_toolbar_icons", None)
-        if callable(refresh):
-            refresh()
-        top.update()
-
-
 # The app-wide sheet this module last set. Another one (an extension's) is
 # never replaced or cleared: only ours is ours to change.
 _app_sheet = ""
@@ -643,7 +628,7 @@ def _system_scheme(app) -> Qt.ColorScheme:
 
 
 def apply_theme(app, mode: str | None = None) -> bool:
-    """Set the palette for ``mode`` (default: the saved one). Returns True
+    """Set the widget palette for ``mode`` (dark by default). Returns True
     when the dark palette was applied."""
     global _follower
     mode = DARK if mode is None else mode

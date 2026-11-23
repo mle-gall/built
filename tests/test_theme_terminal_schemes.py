@@ -75,7 +75,6 @@ def test_a_new_theme_applies_its_own_shades(app, mode):
 
 def test_the_accent_reaches_a_new_themes_sheet(app):
     theme.apply_theme(app, theme.SOLARIZED)
-    theme.apply_accent(app)
     assert "106, 165, 255" in app.styleSheet()
     assert theme.SOLARIZED_COLOURS["raised"] in app.styleSheet()
 

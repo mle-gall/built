@@ -26,8 +26,7 @@
       {"id": "look_sens", "kind": "number", "label": "Mouse-look sensitivity", "lo": 1, "hi": 100, "default": 25, "tip": "How fast a drag turns the head in First Person", "words": "first person walk"}
     ]],
     ["touch", "Trackpad", [
-      {"id": "trackpad_slide", "kind": "choice", "label": "Two-finger slide on the trackpad", "options": [["orbit", "Orbits the view"], ["pan", "Pans the view"], ["zoom", "Zooms the view"]], "default": "zoom"},
-      {"id": "trackpad_inertia", "kind": "check", "label": "Keep moving after the fingers lift (inertia)", "default": true}
+      {"id": "trackpad_slide", "kind": "choice", "label": "Two-finger slide on the trackpad", "options": [["orbit", "Orbits the view"], ["pan", "Pans the view"], ["zoom", "Zooms the view"]], "default": "zoom"}
     ]],
     ["tools", "Tools", [
       {"id": "cursor_style", "kind": "choice", "label": "Tool cursor", "options": [["tool", "The tool's icon"], ["crosshair", "Crosshair"], ["arrow", "Arrow"]], "default": "tool"},

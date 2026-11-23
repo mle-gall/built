@@ -469,6 +469,59 @@ impl PreferencesView {
         self.note = None;
     }
 
+    // Host actions supply stable keys, translated labels, menu paths and the OS's
+    // display strings for current and factory bindings.
+    fn keyboard(
+        &self,
+        actions: Vec<(String, String, String, String, String)>,
+        tr: &Bound<'_, PyAny>,
+    ) -> PyResult<String> {
+        let t = |label: &str| tr.call1((label,))?.extract::<String>();
+        let query = self.query.to_lowercase();
+        let words: Vec<_> = query.split_whitespace().collect();
+        let change = t("Change keys…")?;
+        let clear = t("Clear")?;
+        let default = t("Default")?;
+        let none = t("none")?;
+        let menu = json!([["change", change], ["clear", clear], ["default", default]]);
+        let mut items = Vec::new();
+        let mut detail = Vec::new();
+        for (key, name, path, keys, factory) in actions {
+            let id = format!("sc:{key}");
+            if self.kb_focus.as_deref() == Some(&id) {
+                detail.push(json!({"kind":"heading","text":name}));
+                detail.push(json!({"kind":"kv","rows":[
+                    [t("Menu")?, if path.is_empty() { "—" } else { &path }, ""],
+                    [t("Keys")?, if keys.is_empty() { &none } else { &keys }, ""],
+                    [default, if factory.is_empty() { &none } else { &factory }, ""]
+                ]}));
+                detail.push(json!({"kind":"buttons","buttons":[
+                    {"id":"kb_clear","label":clear}, {"id":"kb_default","label":default},
+                    {"id":"kb_change","label":change,"key":"↩","role":1}]}));
+            }
+            if !words.is_empty() {
+                let text = format!("{name} {path} {keys}").to_lowercase();
+                if !words.iter().all(|word| text.contains(word)) {
+                    continue;
+                }
+            }
+            items.push(json!({"id":id,"label":name,"sub":path,"right":keys,"menu":menu}));
+        }
+        let count = items.len();
+        let mut content = Vec::new();
+        if !words.is_empty() && count > 0 {
+            content.push(json!({"kind":"caption","text":t("Keyboard")?,"right":count.to_string()}));
+        }
+        content.push(json!({"kind":"rows","id":"keyboard","items":items}));
+        if words.is_empty() {
+            content.push(json!({"kind":"buttons","align":"left","buttons":[
+                {"id":"kb_export","label":t("Export…")?},
+                {"id":"kb_import","label":t("Import…")?},
+                {"id":"kb_reset_all","label":t("Restore all defaults")?}]}));
+        }
+        Ok(json!({"count":count,"content":content,"detail":detail}).to_string())
+    }
+
     fn take_focus(&mut self) -> bool {
         std::mem::take(&mut self.focus)
     }

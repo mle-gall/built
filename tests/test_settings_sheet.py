@@ -128,7 +128,8 @@ def test_side_picks_a_section(win):
     assert captions(sheet) == ["Mouse", "Trackpad", "Tools"]
     got = fields(sheet)
     assert {"invert_wheel", "invert_orbit", "look_sens", "trackpad_slide",
-            "trackpad_inertia", "cursor_style", "ask_section"} <= set(got)
+            "cursor_style", "ask_section"} <= set(got)
+    assert "trackpad_inertia" not in got
     # Field ids are unique in the whole sheet.
     ids = [r[0] for b in sheet["content"]["blocks"] if b["kind"] == "fields" for r in b["fields"]]
     assert len(ids) == len(set(ids))

@@ -38,9 +38,7 @@ def test_the_accent_repaint_leaves_the_panels_and_menus_alive():
         _settle(app)
         assert any(isinstance(w, QMenu) for w in app.topLevelWidgets())
         for _ in range(3):
-            theme.apply_accent(app)
-            _settle(app)
-            theme.apply_accent(app)
+            theme._redraw_icons(app)
             _settle(app)
         win._saved_version = win.viewport.scene.version
         assert win.open_path(DOC)               # Styles/Shadows refresh
@@ -79,7 +77,7 @@ def test_the_accent_still_repaints_what_carries_an_icon_key():
         from PySide6.QtGui import QIcon
         act.setIcon(QIcon())
         btn.setIcon(QIcon())
-        theme.apply_accent(app)
+        theme._redraw_icons(app)
         _settle(app)
         assert not image(act).isNull() and image(btn) == image(act)
         assert image(act) == tool_icon("line").pixmap(32, 32).toImage()

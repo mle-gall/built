@@ -521,14 +521,15 @@ class ShellWindow(QObject):
         self._shared_components = {}
         self._active_file = None
         self._session_unsaved_doc = None
+        from core.i18n import tr
         for key, tool in self._tools.items():
             shortcut = getattr(tool, "shortcut", "") or ""
             if key == "select":
                 shortcut = "Space"          # bound by MainWindow, not the tool
-            action = QAction(getattr(tool, "name", key), self)
-            action.setObjectName("tool_" + key)
+            action = QAction(tr(getattr(tool, "name", key)), self)
             action.setCheckable(True)
-            action.setShortcut(shortcut)
+            alternate = getattr(tool, "shortcut_alt", None)
+            action.setShortcuts([QKeySequence(s) for s in (shortcut, alternate) if s])
             action.triggered.connect(lambda checked=False, k=key: self._activate_tool(k))
             self._tool_actions[key] = action
         from views.shortcuts import remember_defaults, apply_user_shortcuts
@@ -698,9 +699,6 @@ class ShellWindow(QObject):
 
     def window(self):
         return self
-
-    def findChildren(self, *_args, **_kwargs):
-        return []
 
     def windowHandle(self):
         return _WindowHandle(self._host)

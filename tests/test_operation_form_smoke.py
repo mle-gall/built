@@ -186,7 +186,9 @@ def test_native_about_copies_diagnostics(tmp_path):
               if line.startswith("[built] state ")]
     assert result.returncode == 0 and [s["large_sheet"] for s in states[:2]] == ["about", "start"], log
     assert not any(s["errors"] or s["blocked_widgets"] for s in states), log
-    assert copied.exists() and "Window: 1000x720" in copied.read_text(), log
+    assert copied.exists(), log
+    report = copied.read_text()
+    assert "Window: 1000x720" in report and "Renderer: wgpu (" in report, report
 
 
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),

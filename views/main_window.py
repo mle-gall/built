@@ -5281,13 +5281,9 @@ class MainWindow(WorksessionMixin, QMainWindow):
         self.viewport.scene.show_axes = bool(on)
         self.viewport.update()
 
-    def prompt_section_name(self, plane) -> None:
-        """The post-placement prompt: name + symbol (cancel keeps
-        the defaults; the placement itself is already committed). «Don't
-        ask again» keeps the defaults from then on — many users never name
-        a section (issue #62, @pacaeiro); Preferences ▸ General turns the
-        prompt back on."""
-        if str(QSettings().value("section/ask_name", "1")) == "0":
+    def prompt_section_name(self, plane, *, automatic=True) -> None:
+        """Ask for the section label. A cancelled placement keeps its defaults."""
+        if automatic and str(QSettings().value("section/ask_name", "1")) == "0":
             return
         from ingetrazo_render import OperationForm
         from core.history import RenameSectionPlaneCommand
@@ -5306,7 +5302,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
                 QSettings().setValue("section/ask_name", "0")
 
         chrome_forms.show(self, chrome_forms.OperationForm(
-            tr("Name Section Plane"), OperationForm.section(plane.name, plane.symbol), apply))
+            tr("Name Section Plane"), OperationForm.section(plane.name, plane.symbol, automatic), apply))
 
     def _selected_section_planes(self) -> list:
         from core.section import SectionPlane
@@ -5816,7 +5812,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             # Rafael, 50:45: «no sé cómo cambiarle el 1 por AA o BB». The
             # prompt only ever appeared the moment a plane was placed.
             menu.addAction(tr("Name and symbol…"),
-                           lambda p=sec_planes[0]: self.prompt_section_name(p))
+                           lambda p=sec_planes[0]: self.prompt_section_name(p, automatic=False))
             menu.addSeparator()
 
         from core.image_plane import ImagePlane

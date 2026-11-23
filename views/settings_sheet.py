@@ -3,7 +3,7 @@
 2026-11-23 review, the Preferences of the Built window.
 
 Sections on the left, in two groups: **Built · this Mac** (General,
-Navigation, Display, 3D mouse, Import, Keyboard, AI assistant, Engine),
+Navigation, Display, 3D mouse, Import and Keyboard),
 kept in QSettings, and **This model** (Units, Dimension style, Location &
 north), kept in the document and saved with it. A search lists the
 matching rows of every section, each under its section's name, so nothing
@@ -305,11 +305,6 @@ def _navigation(env) -> list:
     from views import trackpad_nav
     p = _p()
 
-    def slides(env, trackpad=None, inertia=None):
-        p.apply_slides(env.win,
-                       trackpad_nav.load_slide_mode() if trackpad is None else trackpad,
-                       trackpad_nav.load_inertia() if inertia is None else inertia, env.st)
-        env.st.sync()
     mouse = [
         Binding("invert_wheel", _key("nav/invert_wheel", "0", bool),
             lambda env, v: (p.apply_invert_wheel(env.win, v, env.st), env.st.sync())),
@@ -320,9 +315,7 @@ def _navigation(env) -> list:
     ]
     touch = [
         Binding("trackpad_slide", lambda env: trackpad_nav.load_slide_mode(),
-            lambda env, v: slides(env, trackpad=v)),
-        Binding("trackpad_inertia", lambda env: trackpad_nav.load_inertia(),
-            lambda env, v: slides(env, inertia=v)),
+            lambda env, v: (p.apply_slides(env.win, v, env.st), env.st.sync())),
     ]
     tools = [
         Binding("cursor_style", lambda env: _gkey("cursor_style", "tool")(env).lower(),
@@ -780,7 +773,8 @@ class SettingsSheet(chrome_sheet.Provider):
         s = chrome_sheet.Sheet(self.id, tr("Settings"), width=1100)
         s.search(tr("Search settings"))
         query = self.state.query.strip().lower()
-        hits = self._hits(env, query) if query else None
+        keyboard = self._keyboard_snapshot() if query or self.section == "keyboard" else None
+        hits = self._hits(env, query, keyboard["count"]) if query else None
         for scope, caption in ((MAC, tr("Built · this Mac")), (MODEL, tr("This model"))):
             s.side_caption(caption)
             for sid, label, sc in SECTIONS:
@@ -788,14 +782,14 @@ class SettingsSheet(chrome_sheet.Provider):
                     continue
                 right = ""
                 if hits is not None:
-                    n = len(hits.get(sid, ()))
+                    n = hits.get(sid, 0) if sid == "keyboard" else len(hits.get(sid, ()))
                     right = str(n) if n else ""
                 s.side_item(sid, tr(label), on=hits is None and sid == self.section, right=right,
                             dim=hits is not None and not right)
         if hits is not None:
-            self._search_pane(s, env, hits)
+            self._search_pane(s, env, hits, keyboard)
         else:
-            self._section_pane(s, env)
+            self._section_pane(s, env, keyboard)
         s.footer([("restore", tr("Restore defaults"))],
                  tr("Changes apply at once") + " · " + tr("esc back to the model"))
         if self.kb_focus and (self.section == "keyboard" or hits is not None):
@@ -810,7 +804,7 @@ class SettingsSheet(chrome_sheet.Provider):
             text, tone = self.state.note
             c.text(text, tone=tone)
 
-    def _section_pane(self, s, env) -> None:
+    def _section_pane(self, s, env, keyboard) -> None:
         sid = self.section
         title, scope, subtitle = self.state.heading()
         sub = tr(subtitle)
@@ -819,7 +813,7 @@ class SettingsSheet(chrome_sheet.Provider):
         c = s.content(tr(title), sub)
         self._top(c)
         if sid == "keyboard":
-            self._keyboard(s, c, env, "")
+            self._keyboard(s, c, keyboard)
             return
         for gid, caption, rows in self.groups(env, sid):
             if not any(r.on("visible", env) for r in rows):
@@ -831,15 +825,14 @@ class SettingsSheet(chrome_sheet.Provider):
                        chrome_sheet.verb("ndof_save", tr("Save profile…")),
                        chrome_sheet.verb("ndof_reset", tr("Reset to defaults"))], align="left")
 
-    def _hits(self, env, query) -> dict:
-        """{section: [(group caption, [Row])] or [action]} matching every word."""
+    def _hits(self, env, query, keyboard_count) -> dict:
+        """{section: [(group caption, [Row])] or keyboard count} matching every word."""
         words = query.split()
         out: dict = {}
         for sid, label, _scope in SECTIONS:
             if sid == "keyboard":
-                acts = [a for a in self.actions() if all(w in self._action_text(a) for w in words)]
-                if acts:
-                    out[sid] = acts
+                if keyboard_count:
+                    out[sid] = keyboard_count
                 continue
             found = []
             for gid, caption, rows in self.groups(env, sid):
@@ -851,9 +844,9 @@ class SettingsSheet(chrome_sheet.Provider):
                 out[sid] = found
         return out
 
-    def _search_pane(self, s, env, hits) -> None:
+    def _search_pane(self, s, env, hits, keyboard) -> None:
         n = sum(len(rows) for sid, groups in hits.items() if sid != "keyboard" for _g, _c, rows in groups)
-        n += len(hits.get("keyboard", ()))
+        n += hits.get("keyboard", 0)
         c = s.content(tr("Results for “{q}”", q=self.state.query.strip()),
                       tr("{n} matching settings in every section", n=n),
                       empty=tr("No setting matches “{q}”.", q=self.state.query.strip()))
@@ -862,7 +855,7 @@ class SettingsSheet(chrome_sheet.Provider):
             if sid not in hits:
                 continue
             if sid == "keyboard":
-                self._keyboard(s, c, env, self.state.query.strip().lower(), caption=tr(label))
+                self._keyboard(s, c, keyboard)
                 continue
             for gid, caption, rows in hits[sid]:
                 c.caption(f"{tr(label)} · {caption}" if caption != tr(label) else tr(label))
@@ -888,49 +881,25 @@ class SettingsSheet(chrome_sheet.Provider):
                 self._paths = {}
         return self._paths
 
-    def _action_text(self, act) -> str:
-        from views.shortcuts import _plain, action_key
-        return " ".join((_plain(act.text()), self.paths().get(action_key(act), ""),
-                         _keys_text(act.shortcuts()))).lower()
+    def _keyboard_snapshot(self):
+        from views.shortcuts import _plain, action_key, default_shortcuts
+        paths = self.paths()
+        actions = []
+        for act in self.actions():
+            key = action_key(act)
+            actions.append((key, _plain(act.text()), paths.get(key, ""),
+                            _keys_text(act.shortcuts()), _keys_text(default_shortcuts(act))))
+        return json.loads(self.state.keyboard(actions, tr))
 
     def _action(self, item):
         from views.shortcuts import action_key
         key = item[3:] if item and item.startswith("sc:") else None
         return next((a for a in self.actions() if action_key(a) == key), None) if key else None
 
-    def _keyboard(self, s, c, env, query, caption="") -> None:
-        from views.shortcuts import _plain, action_key
-        acts = self.actions()
-        if not acts:
-            c.text(tr("The keyboard shortcuts are set in the classic app for now."))
-            return
-        if query:
-            words = query.split()
-            acts = [a for a in acts if all(w in self._action_text(a) for w in words)]
-        if caption:
-            c.caption(caption, right=str(len(acts)))
-        items = [chrome_sheet.item("sc:" + action_key(a), _plain(a.text()),
-                                   sub=self.paths().get(action_key(a), ""), right=_keys_text(a.shortcuts()),
-                                   menu=[("change", tr("Change keys…")), ("clear", tr("Clear")),
-                                         ("default", tr("Default"))])
-                 for a in acts]
-        c.rows(items, id="keyboard")
-        if not query:
-            c.buttons([chrome_sheet.verb("kb_export", tr("Export…")),
-                       chrome_sheet.verb("kb_import", tr("Import…")),
-                       chrome_sheet.verb("kb_reset_all", tr("Restore all defaults"))], align="left")
-        act = self._action(self.kb_focus)
-        d = s.detail(width=320, empty=tr("Pick a command to change its keys."))
-        if act is None:
-            return
-        from views.shortcuts import default_shortcuts
-        d.heading(_plain(act.text()))
-        d.kv([(tr("Menu"), self.paths().get(action_key(act), "") or "—"),
-              (tr("Keys"), _keys_text(act.shortcuts()) or tr("none")),
-              (tr("Default"), _keys_text(default_shortcuts(act)) or tr("none"))])
-        d.buttons([chrome_sheet.verb("kb_clear", tr("Clear")),
-                   chrome_sheet.verb("kb_default", tr("Default")),
-                   chrome_sheet.verb("kb_change", tr("Change keys…"), key="↩", primary=True)])
+    def _keyboard(self, sheet, content, keyboard):
+        content.blocks.extend(keyboard["content"])
+        detail = sheet.detail(width=320, empty=tr("Pick a command to change its keys."))
+        detail.blocks.extend(keyboard["detail"])
 
     def _assign(self, act, seqs, ask=True) -> None:
         """The panel's ``assign``: give ``act`` these keys, taking them from
@@ -1013,9 +982,8 @@ class SettingsSheet(chrome_sheet.Provider):
                 self._ndof_verb(arg)
             elif arg == "restore":
                 self._confirm(tr("Restore defaults"),
-                              tr("Puts the settings of Built on this Mac back to how Built comes. The "
-                                 "language, the AI Assistant, the keyboard shortcuts and the settings "
-                                 "of this model stay as they are."),
+                              tr("Restore default application settings? This keeps your language, "
+                                 "keyboard shortcuts and model settings."),
                               tr("Restore defaults"), lambda: self.restore_defaults(ctx.win))
 
     def _kb_verb(self, verb) -> None:
@@ -1142,8 +1110,8 @@ class SettingsSheet(chrome_sheet.Provider):
     # -- restore defaults ---------------------------------------------------------------
     def restore_defaults(self, win) -> None:
         """Every Built setting with a default back to it (the dialog's
-        Restore defaults, applied at once). Left alone: the language, the
-        AI Assistant, the keyboard shortcuts and this model's settings."""
+        Restore defaults, applied at once). Language, keyboard shortcuts and
+        model settings keep their values."""
         self._win = win
         for sid, _label, scope in SECTIONS:
             if scope != MAC or sid == "keyboard":

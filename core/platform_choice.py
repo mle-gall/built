@@ -16,7 +16,7 @@ import os
 import re
 from pathlib import Path
 
-#: Preference values (the General setting ``platform``).
+#: Platform identifiers used by the classic launcher.
 AUTO, WAYLAND, XCB = "auto", "wayland", "xcb"
 
 

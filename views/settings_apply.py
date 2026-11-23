@@ -110,16 +110,12 @@ def apply_invert_orbit(window, on: bool, st=None) -> None:
         v._invert_orbit_y = bool(on)
 
 
-def apply_slides(window, trackpad: str, inertia: bool,
-                 st=None) -> None:
-    """The trackpad's two-finger slide, the touch screen's one-finger
-    slide and the inertia after the fingers lift."""
+def apply_slides(window, trackpad: str, st=None) -> None:
+    """Apply the trackpad gesture to each open viewport."""
     st = st if st is not None else QSettings()
     st.setValue("nav/trackpad_slide", trackpad)
-    st.setValue("nav/trackpad_inertia", "1" if inertia else "0")
     for v in viewports_of(window):
         v._trackpad_slide = trackpad
-        v._trackpad_inertia = bool(inertia)
 
 
 def apply_cursor_style(window, style: str, st=None) -> None:

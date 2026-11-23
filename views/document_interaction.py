@@ -2215,7 +2215,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         self._invert_orbit_y = _load_invert_orbit_y()
         from views import trackpad_nav
         self._trackpad_slide = trackpad_nav.load_slide_mode()
-        self._trackpad_inertia = trackpad_nav.load_inertia()
         self._msaa = 4
         self._soft_shadows = _load_soft_shadows()
 
