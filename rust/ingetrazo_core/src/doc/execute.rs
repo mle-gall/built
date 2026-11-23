@@ -19,6 +19,8 @@ pub(super) fn execute<'py>(
     let api = py.import("core.history_commands")?;
     let doc = py.import("core.doc_model")?;
     let scene = host.getattr("scene")?;
+    let document = scene.getattr("_root")?.getattr("_doc_key")?.extract::<super::Key>()?;
+    let _writer = super::Writer::acquire(py, Some(document))?;
     let active = scene.getattr("mesh")?;
     let parts = PyList::empty(py);
     let mutation = api.getattr("SnapshotMutation")?;
@@ -37,7 +39,7 @@ pub(super) fn execute<'py>(
     {
         return execute_mixed(py, host, cmd, tag_objects);
     }
-    let depth: usize = doc.call_method0("begin")?.extract()?;
+    let depth: usize = doc.call_method1("begin", (document,))?.extract()?;
     let mut rollback = None;
     let mut annotation = None;
     let result = (|| {
@@ -49,9 +51,6 @@ pub(super) fn execute<'py>(
             let part = pair.get_item(0)?;
             part.setattr("_journal_geometry", replay && depth == 1)?;
             let staged = part.is_instance(&mutation)? && !part.getattr("after")?.is_none();
-            if depth == 0 {
-                continue;
-            }
             for mesh in pair.get_item(1)?.try_iter()? {
                 let mesh = mesh?;
                 let initial = if staged {
@@ -80,16 +79,12 @@ pub(super) fn execute<'py>(
         // Auto-created annotation tags survive undo but belong to the published diff.
         if !tag_objects.is_none() && depth == 1 && cmd.is_instance(&auto_tags)? {
             annotation = Some(doc.call_method0("commit")?);
-            doc.call_method0("begin")?;
+            doc.call_method1("begin", (document,))?;
         }
         if !tag_objects.is_none() {
             tag_objects.call0()?;
         }
-        if depth > 0 {
-            doc.call_method0("commit")
-        } else {
-            Ok(py.None().into_bound(py))
-        }
+        doc.call_method0("commit")
     })();
     let txn = match result {
         Ok(txn) => txn,
@@ -158,6 +153,7 @@ fn execute_mixed(
     let finished = group.getattr("commands")?.cast_into::<PyList>()?;
     let mut records = Vec::new();
     let scene = host.getattr("scene")?;
+    let document = scene.getattr("_root")?.getattr("_doc_key")?;
     let result: PyResult<()> = (|| {
         for part in cmd.getattr("commands")?.try_iter()? {
             let part = part?;
@@ -171,7 +167,7 @@ fn execute_mixed(
         }
         if !tags.is_none() {
             let doc = py.import("core.doc_model")?;
-            doc.call_method0("begin")?;
+            doc.call_method1("begin", (document,))?;
             let tail = host
                 .call_method0("_follow_text_placements")
                 .and_then(|_| tags.call0())

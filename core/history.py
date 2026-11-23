@@ -371,5 +371,4 @@ class History:
             self.scene.mesh = current
 
     def clear(self) -> None:
-        self.undo_stack.clear()
-        self.redo_stack.clear()
+        self._native.clear_stacks()

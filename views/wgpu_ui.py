@@ -496,6 +496,15 @@ def chrome_frame(view):
     return cpu, gpu, 0.0
 
 
+def _sync_units(view, history):
+    revision = (history, history._native.units_revision)
+    if getattr(view, "_ui_units_sent", None) != revision:
+        from core import units
+        unit = units.model_units_of(history.scene)["length"]
+        view.renderer.ui_set_units(units.length_suffix(unit).strip() or unit)
+        view._ui_units_sent = revision
+
+
 def before_frame(view) -> None:
     """Mirror the window's state into the chrome (cheap: a few dict reads)."""
     if not getattr(view, "_ui_attached", False):
@@ -525,10 +534,7 @@ def before_frame(view) -> None:
     if timer is not None and timer.isActive():
         hint = getattr(bar, "_msg", None).text() if getattr(bar, "_msg", None) is not None else hint
     view.renderer.ui_set_status(name, hint)
-    if not getattr(view, "_ui_units_sent", False):
-        from core import units
-        view.renderer.ui_set_units(units.length_suffix(units.model_unit()).strip() or units.model_unit())
-        view._ui_units_sent = True
+    _sync_units(view, win.viewport.history)
     _cursor_value(view, win)
     _selection(view, win, active)
     _cluster(view, win)

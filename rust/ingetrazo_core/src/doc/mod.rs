@@ -29,6 +29,7 @@ mod anchor;
 mod history;
 mod paint;
 mod restamp;
+mod settings;
 mod feed;
 mod execute;
 mod file_view;
@@ -594,6 +595,7 @@ pub enum Op {
 
 /// The open transaction (one at a time; nested `begin`s are savepoints).
 pub struct Open {
+    document: Option<Key>,
     pub thread: ThreadId,
     pub ops: Vec<Op>,
     /// Start of each nested level's ops (`marks[0] == 0`).
@@ -610,6 +612,37 @@ pub struct Open {
     pub pins: Vec<Py<PyAny>>,
 }
 
+/// Reserve the journal across callbacks, including gaps between compound parts.
+pub(super) struct Writer;
+
+impl Writer {
+    fn acquire(py: Python<'_>, document: Option<Key>) -> PyResult<Self> {
+        {
+            let mut doc = lock();
+            if doc.accepts_writer(document) {
+                let entry = doc.writer.get_or_insert((std::thread::current().id(), document, 0));
+                entry.1 = entry.1.or(document);
+                entry.2 += 1;
+                return Ok(Self);
+            }
+        }
+        let reason = py.import("core.history_commands")?.getattr("CommandRejected")?
+            .call1(("Another document transaction is active.",))?;
+        Err(PyErr::from_value(reason))
+    }
+}
+
+impl Drop for Writer {
+    fn drop(&mut self) {
+        let mut doc = lock();
+        let (_, _, count) = doc.writer.as_mut().expect("writer reserved");
+        *count -= 1;
+        if *count == 0 {
+            doc.writer = None;
+        }
+    }
+}
+
 /// Python references to release once the lock is gone.
 #[derive(Default)]
 pub struct Trash(pub Vec<Py<PyAny>>, Vec<Arc<DefinitionRef>>);
@@ -624,6 +657,7 @@ impl Trash {
 
 #[derive(Default)]
 pub struct Doc {
+    writer: Option<(ThreadId, Option<Key>, usize)>,
     pub slots: Vec<Slot>,
     pub free: Vec<u32>,
     pub live: [usize; 5],
@@ -896,17 +930,30 @@ impl Doc {
         }
     }
 
-    pub fn begin(&mut self) -> usize {
+    fn accepts_writer(&self, document: Option<Key>) -> bool {
+        let matches = |thread: ThreadId, owner: Option<Key>| {
+            thread == std::thread::current().id()
+                && (document.is_none() || owner.is_none() || owner == document)
+        };
+        self.open.as_ref().is_none_or(|o| matches(o.thread, o.document))
+            && self.writer.as_ref().is_none_or(|(thread, owner, _)| matches(*thread, *owner))
+    }
+
+    pub fn begin(&mut self, document: Option<Key>) -> Option<usize> {
+        if !self.accepts_writer(document) {
+            return None;
+        }
         let here = std::thread::current().id();
         match &mut self.open {
-            Some(o) if o.thread == here => {
+            Some(o) => {
+                o.document = o.document.or(document);
                 o.marks.push(o.ops.len());
-                o.marks.len()
+                Some(o.marks.len())
             }
-            Some(_) => 0, // another thread's transaction: this one is not journalled
             None => {
                 self.open = Some(Open {
                     thread: here,
+                    document,
                     ops: Vec::new(),
                     marks: vec![0],
                     index: FastMap::default(),
@@ -914,7 +961,7 @@ impl Doc {
                     born: FastSet::default(),
                     pins: Vec::new(),
                 });
-                1
+                Some(1)
             }
         }
     }
