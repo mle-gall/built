@@ -1349,6 +1349,16 @@ def _non_finite_where(node, path: str = "scene") -> str:
 @contextmanager
 def _atomic_output(path):
     """Publish only a closed, complete file; simultaneous saves own separate temps."""
+    output = getattr(native_io(), "AtomicDocument", None)
+    if output:
+        stage = output(path)
+        try:
+            with open(stage.fileno(), "wb", closefd=False) as target:
+                yield target
+            stage.publish()
+        finally:
+            stage.discard()
+        return
     from uuid import uuid4
 
     tmp = path.with_name(f".{uuid4().hex}.part")
@@ -1363,7 +1373,14 @@ def _atomic_output(path):
 
 def _write_atomic(path: Path, data: bytes | Fragment) -> None:
     with _atomic_output(path) as dest:
-        if isinstance(data, Fragment):
+        writer = getattr(native_io(), "igz_write_plain", None)
+        if writer:
+            if isinstance(data, Fragment):
+                data.file.flush()
+                writer(dest.fileno(), None, (data.file.fileno(), data.offset, data.size))
+            else:
+                writer(dest.fileno(), data, None)
+        elif isinstance(data, Fragment):
             for chunk in data.chunks():
                 dest.write(chunk)
         else:

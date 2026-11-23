@@ -86,6 +86,21 @@ def test_native_zip64_headers(tmp_path, monkeypatch):
     assert (tmp_path / "native").read_bytes() == (tmp_path / "reference").read_bytes()
 
 
+def test_overlapping_saves_publish_only_their_own_complete_file(tmp_path):
+    path = tmp_path / "drawing.igz"
+    path.write_bytes(b"original")
+    with pytest.raises(RuntimeError, match="cancel"):
+        with igz._atomic_output(path) as first:
+            first.write(b"unfinished")
+            with igz._atomic_output(path) as second:
+                second.write(b"complete")
+                assert path.read_bytes() == b"original"
+            assert path.read_bytes() == b"complete"
+            raise RuntimeError("cancel")
+    assert path.read_bytes() == b"complete"
+    assert list(tmp_path.iterdir()) == [path]
+
+
 def test_nested_link_progress_and_cancellation(composite):
     phases = []
     host = composite["host"]

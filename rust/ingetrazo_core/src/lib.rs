@@ -125,6 +125,10 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     #[cfg(unix)]
     m.add_function(wrap_pyfunction!(file_archive::igz_write_zip, m)?)?;
     #[cfg(unix)]
+    m.add_class::<file_archive::AtomicDocument>()?;
+    #[cfg(unix)]
+    m.add_function(wrap_pyfunction!(file_archive::igz_write_plain, m)?)?;
+    #[cfg(unix)]
     m.add_function(wrap_pyfunction!(file_archive::igz_read_member, m)?)?;
     #[cfg(unix)]
     m.add_class::<file_archive::DocumentReader>()?;
