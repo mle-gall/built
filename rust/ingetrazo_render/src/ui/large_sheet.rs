@@ -548,6 +548,13 @@ impl Draw<'_> {
                     picture(ui, r, self.icons.get(&b.icon), &b.hex, 10);
                     ui.add_space(SPACE_M);
                 }
+                "svg_preview" => {
+                    let w = ui.available_width().max(1.);
+                    if let Some((dx, dy, zoom)) = kit::svg_preview(ui, self.icons.get(&b.icon),
+                            &b.text, vec2(w, w)) {
+                        self.out.push(format!("svg_frame{SEP}{dx}{SEP}{dy}{SEP}{zoom}"));
+                    }
+                }
                 "table" => {
                     let columns = b.cells.first().map_or(1, |r| r.len().max(1));
                     let column_width = (ui.available_width() / columns as f32 - SPACE_L).max(55.0);

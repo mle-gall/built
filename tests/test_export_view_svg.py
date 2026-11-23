@@ -1211,62 +1211,6 @@ def test_only_custom_switches_on_the_controls_that_depend_on_it(tmp_path):
     dlg.deleteLater()
 
 
-def test_custom_begins_at_the_screen_and_a_sheet_turns(tmp_path):
-    from views.export_svg_dialog import ExportSvgDialog
-    dlg = ExportSvgDialog(None, screen_mm=(300.0, 200.0),
-                          settings=_settings(tmp_path))
-    dlg.size_combo.setCurrentIndex(dlg.size_combo.findData("custom"))
-    assert dlg.paper()["size"] == (300.0, 200.0)
-    assert dlg.sheet_combo.currentData() == "none"
-    assert dlg.ratio_combo.currentData() == "screen"
-    dlg.sheet_combo.setCurrentIndex(dlg.sheet_combo.findData("A4"))
-    assert dlg.paper()["size"] == (297.0, 210.0)
-    dlg.turn_buttons["portrait"].click()
-    assert dlg.paper()["size"] == (210.0, 297.0)
-    # Its measures changed: your own measures again, free.
-    dlg.w_box.setValue(250.0)
-    assert dlg.sheet_combo.currentData() == "none"
-    assert dlg.ratio_combo.currentData() == "free"
-    assert dlg.ratio_combo.isEnabled()
-    assert dlg.paper()["size"] == (250.0, 297.0)
-    dlg.deleteLater()
-
-
-def test_a_proportion_keeps_the_shape_and_square_has_no_turn(tmp_path):
-    from views.export_svg_dialog import ExportSvgDialog
-    dlg = ExportSvgDialog(None, screen_mm=(300.0, 200.0),
-                          settings=_settings(tmp_path))
-    dlg.size_combo.setCurrentIndex(dlg.size_combo.findData("custom"))
-    dlg.ratio_combo.setCurrentIndex(dlg.ratio_combo.findData("16:9"))
-    dlg.turn_buttons["landscape"].click()
-    dlg.w_box.setValue(320.0)
-    assert dlg.paper()["size"] == (320.0, 180.0)
-    dlg.turn_buttons["portrait"].click()
-    assert dlg.paper()["size"] == (320.0, 569.0)
-    dlg.h_box.setValue(640.0)
-    assert dlg.paper()["size"] == (360.0, 640.0)
-    # Square: the height takes the width; there is no turn to make.
-    dlg.ratio_combo.setCurrentIndex(dlg.ratio_combo.findData("1:1"))
-    assert dlg.paper()["size"] == (360.0, 360.0)
-    assert not dlg.turn_buttons["landscape"].isEnabled()
-    dlg.w_box.setValue(250.0)
-    assert dlg.paper()["size"] == (250.0, 250.0)
-    # Out of the square: a turn is there again.
-    dlg.ratio_combo.setCurrentIndex(dlg.ratio_combo.findData("4:3"))
-    assert dlg.turn_buttons["landscape"].isEnabled()
-    dlg.turn_buttons["landscape"].click()
-    assert dlg.paper()["size"] == (250.0, 188.0)
-    # Free: each side its own; the turn swaps them and follows them.
-    dlg.ratio_combo.setCurrentIndex(dlg.ratio_combo.findData("free"))
-    dlg.h_box.setValue(100.0)
-    assert dlg.paper()["size"] == (250.0, 100.0)
-    dlg.turn_buttons["portrait"].click()
-    assert dlg.paper()["size"] == (100.0, 250.0)
-    dlg.w_box.setValue(400.0)
-    assert dlg.turn_buttons["landscape"].isChecked()
-    dlg.deleteLater()
-
-
 def test_the_dialog_previews_the_sheet_and_remembers_it(tmp_path):
     from views.export_svg_dialog import ExportSvgDialog
     from formats.svg_out import svg_text

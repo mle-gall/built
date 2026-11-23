@@ -207,7 +207,7 @@ def _write_view(model, record, path, camera, view, svg_picture, screen_mm):
     from views.svg_export import framed
     frame = opts.get("frame")
     with framed(cam, frame) if frame else nullcontext():
-        _write_drawing(model, path, cam, view.name if view else "VISTA", record, svg_picture, screen_mm)
+        return _write_drawing(model, path, cam, view.name if view else "VISTA", record, svg_picture, screen_mm)
 
 
 def _write_drawing(model, path, cam, label, record, svg_picture, screen_mm):
@@ -245,10 +245,18 @@ def _write_drawing(model, path, cam, label, record, svg_picture, screen_mm):
         crop = view_rect(cam) if opts.get("frame") or opts.get("paper") == "screen" else None
         text, _ = svg_text(groups, scale_n=opts.get("scale", 100), faces=fills, image=image,
                            paper=paper, window=crop, line_colours=(faces or {}).get("materials", True))
+        if path is None:
+            return text
         path.write_text(text, encoding="utf-8")
     else:
         from formats.dxf_out import save_dxf_layers
         save_dxf_layers(path, groups, solids, texts)
+
+
+def preview_svg(scene, record, *, camera, svg_picture=None, screen_mm=None):
+    """Render the first output page with the delivery writer, entirely in memory."""
+    view = _chosen(scene.saved_views, record["options"].get("names"))[0] if record["scope"] == "scenes" else None
+    return _write_view(scoped(scene, record), record, None, camera, view, svg_picture, screen_mm)
 
 
 def write_steps(scene, record, *, camera=None, pdf_writer=None, svg_picture=None, screen_mm=None, project_directory=None):

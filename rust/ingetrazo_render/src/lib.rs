@@ -2873,6 +2873,7 @@ mod about;
 mod sheet_host;
 /// The Sheets workspace's page, native (docs/rust-sheets.md).
 pub mod sheet_page;
+mod svg_options;
 
 /// Start an orthographic ray on the plane through the camera, aligned with the point.
 #[pyfunction]
@@ -2934,6 +2935,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<about::AboutReview>()?;
     m.add_class::<release::ReleaseReview>()?;
     m.add_class::<ui::command_palette::CommandCanvas>()?;
+    m.add_class::<svg_options::SvgOptions>()?;
     m.add_function(wrap_pyfunction!(commands::command_registry, m)?)?;
     m.add_function(wrap_pyfunction!(commands::command_description, m)?)?;
     m.add_function(wrap_pyfunction!(commands::shortcut_conflicts, m)?)?;
