@@ -30,6 +30,12 @@ def test_every_contributor_in_authors_is_in_the_credits():
     handles = set(re.findall(r"github\.com/([\w.-]+)\)", authors))
     links = {link.rsplit("/", 1)[-1] for _, _, link, _ in AboutReview.contributors() if link}
     assert not handles - links - {"tuxiasumari"}
+    sheet = About()
+    ctx = SimpleNamespace(win=SimpleNamespace())
+    sheet.build(ctx)
+    sheet.act(ctx, "verb", ["authors"])
+    expanded = sheet.build(ctx).wire()["content"]["blocks"]
+    assert any("Later contributors may add their names below." == b.get("text") for b in expanded)
 
 
 def test_every_credit_line_is_translated():

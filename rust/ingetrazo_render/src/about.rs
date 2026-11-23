@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Release diagnostics, localized credits and About actions.
 use pyo3::{exceptions::PyValueError, prelude::*};
 use serde_json::{json, Value};
@@ -22,7 +23,7 @@ pub fn sheet(data: &Value, copied: bool, t: impl Fn(&str) -> PyResult<String>) -
         people.push(json!({"name":name,"role":t(role)?,"verb":if link.is_empty() {String::new()} else {format!("person-{i}")},"starred":starred}));
     }
     let thanks = t("Thanks as well to all the authors of the extensions catalogue")?;
-    let blocks = json!([
+    let mut blocks = json!([
         {"kind":"text","text":t("Free 3D modeler for architecture, engineering and 3D design.")?},
         {"kind":"text","text":format!("{} Marco Sumari Tellez · {}",t("Created by")?,t("Civil Engineer — Arequipa, Peru")?)},
         {"kind":"text","text":"Built is based on IngeTrazo and distributed under GPL-3.0-or-later."},
@@ -32,8 +33,25 @@ pub fn sheet(data: &Value, copied: bool, t: impl Fn(&str) -> PyResult<String>) -
         {"kind":"caption","text":t("With contributions from")?},
         {"kind":"credits","credits":people},
         {"kind":"prose","spans":[{"text":thanks,"link":"catalogue"}]},
-        {"kind":"text","text":t("And thanks to everyone who tries Built and reports what they find.")?}
+        {"kind":"text","text":t("And thanks to everyone who tries Built and reports what they find.")?},
+        {"kind":"buttons","align":"left","buttons":[{"id":"authors","label":"AUTHORS"}]}
     ]);
+    if data["authors"] == true {
+        let rows = blocks.as_array_mut().unwrap();
+        for paragraph in include_str!("../../../AUTHORS").split("\n\n") {
+            let mut lines = paragraph
+                .lines()
+                .map(str::trim)
+                .filter(|s| !s.is_empty() && !s.chars().all(|c| c == '-'));
+            if let Some(name) = lines.next() {
+                rows.push(json!({"kind":"caption","text":name}));
+                let text = lines.collect::<Vec<_>>().join(" ");
+                if !text.is_empty() {
+                    rows.push(json!({"kind":"text","text":text}));
+                }
+            }
+        }
+    }
     Ok(
         json!({"id":"about","title":t("About Built")?,"width":900,"content":{"title":"Built","sub":data["build"],"blocks":blocks}}),
     )
@@ -128,6 +146,16 @@ impl AboutReview {
     }
     fn acknowledge(&mut self) {
         self.last_copy = Some(Instant::now());
+    }
+    fn action(&mut self, verb: &str) -> Option<(&'static str, String)> {
+        match verb {
+            "copy" => Some(("copy", self.info.clone())),
+            "authors" => {
+                self.data["authors"] = json!(self.data["authors"] != true);
+                None
+            }
+            _ => Self::link(verb).map(|url| ("open", url.to_owned())),
+        }
     }
     #[staticmethod]
     fn link(verb: &str) -> Option<&'static str> {

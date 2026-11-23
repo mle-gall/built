@@ -82,16 +82,20 @@ class About(chrome_sheet.Provider):
     def act(self, ctx, verb, args):
         if verb != "verb" or not args or self.review is None:
             return
-        if args[0] == "copy":
+        action = self.review.action(args[0])
+        if action is None:
+            return
+        kind, value = action
+        if kind == "copy":
             from PySide6.QtCore import QTimer
-            if not _copy(self.review.info):
+            if not _copy(value):
                 return
             self.review.acknowledge()
             QTimer.singleShot(1510, lambda: chrome_sheet.refresh(ctx.win)
                               if chrome_sheet.current(ctx.win) is self else None)
-        elif url := self.review.link(args[0]):
+        elif kind == "open":
             import webbrowser
-            webbrowser.open(url)
+            webbrowser.open(value)
 
 
 class CutList(chrome_sheet.Provider):
