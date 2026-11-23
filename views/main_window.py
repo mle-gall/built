@@ -1158,8 +1158,6 @@ class MainWindow(WorksessionMixin, QMainWindow):
         self.tray = Tray(self)
         self.bim_tray = BimTray(self)
         self.georef_tray = GeorefTray(self)
-        from views.structure_panel import StructureDock
-        self.structure_dock = StructureDock(self)
         from views.outliner import ProjectBrowser
         self.project_browser = ProjectBrowser(self)
         from views.layers_panel import LayersDock
@@ -1176,17 +1174,14 @@ class MainWindow(WorksessionMixin, QMainWindow):
         # The tabs show only an icon each (the name is their tooltip): the
         # name heads the panel instead, in place of the dock's own title
         # bar — _style_dock_tabs puts the header there. Scenes (#1158) has
-        # no panel icon of its own yet: its thumbnails view's. Structure
-        # has none either: it gets its initial (_settle_tab_icons).
+        # no panel icon of its own yet: its thumbnails view's.
         for dock, key in ((self.tray, "panel_properties"),
                           (self.bim_tray, "panel_bim"),
                           (self.georef_tray, "panel_terrain"),
                           (self.project_browser, "panel_browser"),
                           (self.layers_dock, "layers_panel"),
-                          (self.scenes_dock, "scenes_thumbs"),
-                          (self.structure_dock, None)):
-            if key is not None:
-                self.set_dock_icon(dock, key)
+                          (self.scenes_dock, "scenes_thumbs")):
+            self.set_dock_icon(dock, key)
             dock.setTitleBarWidget(QWidget(dock))
         self.tray.raise_()
         self._build_sidebar_handle()
@@ -2411,11 +2406,6 @@ class MainWindow(WorksessionMixin, QMainWindow):
         (``DEFAULT_HIDDEN_TRAYS``)."""
         hidden = self._hidden_tray_names(st)
         self._seat_new_trays()
-        known = st.value("ui/known_trays", []) or []
-        if self.structure_dock.objectName() not in known:
-            self.removeDockWidget(self.structure_dock)
-            self.addDockWidget(Qt.RightDockWidgetArea, self.structure_dock)
-            self.tabifyDockWidget(self.tray, self.structure_dock)
         docks = self._sidebar_docks()
         for d in docks:
             self._keep_docked(d)
@@ -2569,8 +2559,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
     #: Properties first, the model's tree next, then the workspaces.
     def _default_tray_order(self) -> list:
         return [self.tray, self.project_browser, self.layers_dock,
-                self.scenes_dock, self.bim_tray, self.georef_tray,
-                self.structure_dock]
+                self.scenes_dock, self.bim_tray, self.georef_tray]
 
     def _lay_out_trays(self) -> None:
         """The trays in their factory place: every one on the right, tabbed
@@ -2725,7 +2714,6 @@ class MainWindow(WorksessionMixin, QMainWindow):
                             getattr(self, "georef_tray", None),
                             getattr(self, "project_browser", None),
                             getattr(self, "layers_dock", None),
-                            getattr(self, "structure_dock", None),
                             getattr(self, "scenes_dock", None),
                             *getattr(self, "_extension_docks", ()))
                 if d is not None]
@@ -7723,8 +7711,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         vp.projectionChanged.connect(live(self._sync_projection_buttons))
         vp.smartZoomRequested.connect(live(self._on_smart_zoom))
         for name in ("tray", "bim_tray", "georef_tray", "project_browser",
-                     "layers_dock", "scenes_dock",
-                     "structure_dock",):
+                     "layers_dock", "scenes_dock"):
             panel = getattr(self, name, None)
             if panel is not None:
                 vp.sceneVersionChanged.connect(

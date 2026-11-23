@@ -901,17 +901,14 @@ class _Tree(SideTree):
 
     def mimeTypes(self):
         from views.composer import SCENE_MIME
-        from views.structure_panel import PLACEMENT_MIME
-        return [SCENE_MIME, PLACEMENT_MIME]
+        return [SCENE_MIME]
 
     def mimeData(self, items):
         from PySide6.QtCore import QMimeData
         from views.composer import SCENE_MIME
-        from views.structure_panel import PLACEMENT_MIME
         groups = [g for item in items if (g := self._panel._group_of(item)) is not None]
         data = QMimeData()
         data.setData(SCENE_MIME, "\n".join(g.name for g in groups).encode())
-        data.setData(PLACEMENT_MIME, "\n".join(g.uid for g in groups).encode())
         return data
 
     def drop_target(self, pos):

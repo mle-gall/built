@@ -159,9 +159,7 @@ def test_seated_behind_layers_even_with_extension_tabs_saved_after_it(win):
     dock.show()
     _app.processEvents()
     # The row in tab order, Properties aside (tabifiedDockWidgets).
-    # (The fork's Structure tab sits in the row too; it is not the point.)
-    row = [d.objectName() for d in win.tabifiedDockWidgets(win.tray)
-           if d.objectName() != "StructureDock"]
+    row = [d.objectName() for d in win.tabifiedDockWidgets(win.tray)]
     at = row.index("tray_layers")
     assert row[at:at + 4] == ["tray_layers", "tray_scenes",
                               "extension_one", "extension_two"]

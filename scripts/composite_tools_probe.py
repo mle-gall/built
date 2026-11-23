@@ -134,7 +134,6 @@ igz.save_scene(host, folder / "host.igz")
 del source, host
 from views import prompts
 from views.layers_panel import LayersPanel
-from views.structure_panel import StructureDock
 from views.tray import PartsPanel, EntityInfoPanel, ScenesPanel
 from views.extension_api import ExtensionApp
 from plugins import solid_inspector
@@ -166,8 +165,6 @@ for cls, method in (
     (LayersPanel, "_refresh_after_change"),
     (LayersPanel, "_count_slice"),
     (LayersPanel, "refresh"),
-    (StructureDock, "on_scene_changed"),
-    (StructureDock, "refresh"),
     (PartsPanel, "refresh"),
     (PartsPanel, "on_scene_changed"),
     (EntityInfoPanel, "refresh"),
@@ -208,7 +205,6 @@ if panels_open:
         panel.parentWidget()._btn.setChecked(False)
     for dock in (
         win.layers_dock,
-        win.structure_dock,
         win.tray,
         win.scenes_dock,
         win._solid_inspector_dock,
@@ -271,13 +267,10 @@ def record(kind, action):
     frame_ms = (frames[0] - t) * 1000 if frames else None
     revisions = vp.history.revision - revision
     if revisions and panels_open:
-        # Layers debounces counts for 300 ms. Structure builds in slices.
+        # Layers debounces counts for 300 ms.
         settle(0.35)
         deadline = clock() + 5
-        while (
-            win.layers_dock.panel._count_timer.isActive()
-            or win.structure_dock._pending_refresh is not None
-        ) and clock() < deadline:
+        while win.layers_dock.panel._count_timer.isActive() and clock() < deadline:
             settle(0.015)
     measurements.append(
         dict(
@@ -407,7 +400,6 @@ results.update(
             win.tray.entity_info,
             win.scenes_dock.panel,
             win.layers_dock.panel,
-            win.structure_dock,
             win._solid_inspector,
         )
     },

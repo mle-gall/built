@@ -58,15 +58,12 @@ def test_shared_menus_and_dock_selection(monkeypatch):
         browser._items[id(group)].setSelected(False)
         browser._items[id(group)].setSelected(True)
         assert group in scene.selection
-        dock = win.structure_dock
-        monkeypatch.setattr(dock, 'isVisible', lambda: True)
-        dock.visibility(True)
-        dock.refresh()
-        dock.review.setExpanded(True)
-        row = dock.review.child(0)
+        from tests.test_tree_links import _View
+        from views import wgpu_ui
+        tree = _View()
+        wgpu_ui._tree(tree, win)
         scene.clear_selection()
-        row.setSelected(True)
-        dock.clicked(row, 0)
+        wgpu_ui._tree_action(win, tree, f"item{wgpu_ui.SEP}i:{group.uid}")
         assert group in scene.selection
         dialog = ScaleDialog(win, group)
         dialog.fields[0].setText('2')

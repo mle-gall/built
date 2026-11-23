@@ -4229,17 +4229,26 @@ class EntityInfoPanel(QWidget):
 
     def _refile(self):
         from core import bim_registry, structure
-        from views.structure_panel import execute, pick_node
-        vp = self._window.viewport
-        uids = [g.uid for g in vp.scene.selection if isinstance(g, Group)]
-        key = pick_node(self, bim_registry.get(vp.scene))
-        if key:
-            try:
-                execute(vp, structure.file(vp.scene, uids, key))
-            except ValueError as exc:
-                QMessageBox.warning(self, tr("Structure"), str(exc))
-        self.refresh()
+        from core.protocol import commands
+        from ingetrazo_core import filing_choices
+        from views.chrome_forms import ask_choice
 
+        vp = self._window.viewport
+        scene = vp.scene
+        targets = [scene.occurrence_path(g) for g in scene.selection if isinstance(g, Group)]
+        choices = filing_choices(structure._nodes(bim_registry.get(scene)))
+
+        def picked(label):
+            if label in choices and self._window.viewport.scene is scene:
+                try:
+                    commands.run(vp.history, "file_placements", placements=targets, node=choices[label])
+                    vp.refresh_after_edit()
+                except (KeyError, ValueError) as exc:
+                    vp.flash_status(str(exc))
+            self.refresh()
+
+        if choices and targets:
+            ask_choice(self._window, tr("Re-file under…"), tr("Structure"), list(choices), done=picked)
 
     # ---- Name field ---------------------------------------------------------
     def _refresh_name(self, sel: list) -> None:

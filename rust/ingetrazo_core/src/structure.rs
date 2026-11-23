@@ -69,6 +69,49 @@ pub(crate) fn structure_lineage(nodes: &Obj<'_>, key: &Obj<'_>) -> PyResult<Vec<
     Ok(path)
 }
 
+/// Choice labels must still identify one node when siblings have the same name.
+#[pyfunction]
+pub(crate) fn filing_choices(
+    nodes: &Obj<'_>,
+) -> PyResult<std::collections::BTreeMap<String, String>> {
+    let mut choices = std::collections::BTreeMap::<String, String>::new();
+    let mut paths = Vec::new();
+    let mut duplicate = HashSet::new();
+    let mut seen = HashSet::new();
+    for (key, _) in items(nodes)? {
+        let path = structure_lineage(nodes, &key)?;
+        let mut labels = Vec::new();
+        for ancestor in path {
+            let node = nodes.get_item(ancestor)?;
+            if node.contains("source")? {
+                labels.clear();
+                break;
+            }
+            labels.push(node.get_item("name")?.extract::<String>()?);
+        }
+        if !labels.is_empty() {
+            let label = labels.join(" › ");
+            if !seen.insert(label.clone()) {
+                duplicate.insert(label.clone());
+            }
+            paths.push((label, key.extract::<String>()?));
+        }
+    }
+    for (label, key) in paths {
+        let label = if duplicate.contains(&label) {
+            let mut qualified = format!("{label} ({key})");
+            while seen.contains(&qualified) || choices.contains_key(&qualified) {
+                qualified.push('·');
+            }
+            qualified
+        } else {
+            label
+        };
+        choices.insert(label, key);
+    }
+    Ok(choices)
+}
+
 type Entry = (Py<PyAny>, Option<String>, bool);
 #[pyclass(module = "ingetrazo_core")]
 pub(crate) struct StructurePlacements {

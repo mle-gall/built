@@ -11,8 +11,8 @@ from views import wgpu_ui
 
 
 class Project:
-    def __init__(self, *tags):
-        self.scene = Scene()
+    def __init__(self, *tags, scene=None):
+        self.scene = scene if scene is not None else Scene()
         self.scene.layers.extend(tags)
         self.win = _Win(self.scene)
         self.view = _View()

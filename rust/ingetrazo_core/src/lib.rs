@@ -216,6 +216,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(structure::apply_folder_parents, m)?)?;
     m.add_function(wrap_pyfunction!(structure::restore_structure_folders, m)?)?;
     m.add_class::<structure::StructurePlacements>()?;
+    m.add_function(wrap_pyfunction!(structure::filing_choices, m)?)?;
     m.add_function(wrap_pyfunction!(structure::structure_lineage, m)?)?;
     m.add_function(wrap_pyfunction!(structure::structure_targets, m)?)?;
     m.add_function(wrap_pyfunction!(structure::plan_filing, m)?)?;

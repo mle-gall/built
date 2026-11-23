@@ -1,254 +1,204 @@
-"""Maxence, 2026-11-10: viewport, Outliner and Entity Info file through one history."""
-from types import SimpleNamespace
-
+"""Filing, recipe editing, and bootstrap through the Project tree and protocol."""
 import pytest
-from PySide6.QtCore import QMimeData, Qt
-from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QMainWindow, QMessageBox
+from PySide6.QtWidgets import QMainWindow
 
 from core import bim_registry, facets, structure
 from core.agent_facets import set_display
 from core.group import Group
-from core.history import History
 from core.layers import Layer
+from core.protocol import commands
+from tests.test_project_drawing_filters import Project
 from tests.test_structure import model
-from views.composer import SCENE_MIME
-from views.structure_panel import BootstrapDialog, RecipeDialog, StructureDock
-from views.tray import EntityInfoPanel
+from views import wgpu_ui
 
 
 @pytest.fixture
 def panel():
     scene, registry, filed, loose = model()
-    registry['structure']['active'] = 'sections'
-    structure.file(scene, [filed.uid], 'sections').do(scene)
-    window = QMainWindow()
-    vp = window.viewport = SimpleNamespace(scene=scene, history=History(scene), update=lambda: None)
-    dock = StructureDock(window)
-    vp.refresh_after_edit = dock.on_scene_changed
-    window.addDockWidget(Qt.RightDockWidgetArea, dock)
-    window.resize(600, 600)
-    window.show()
-    QApplication.processEvents()
-    dock.refresh()
-    yield dock, filed, loose
-    window.close()
-    window.deleteLater()
+    registry["structure"]["active"] = "sections"
+    structure.file(scene, [filed.uid], "sections").do(scene)
+    project = Project(scene=scene)
+    project.rows()
+    return project, filed, loose
 
 
 def test_tree_click_isolate_restore_and_colour(panel):
-    dock, filed, loose = panel
-    ride = dock.items['ride']
-    assert ride.text(1) == '1' and ride.text(2) == '1'
-    assert dock.items['sections'].font(0).bold()
-    dock.tree.expandAll()
-    row = dock.tree.visualItemRect(ride).center()
-    QTest.mouseClick(dock.tree.viewport(), Qt.LeftButton, pos=row)
-    assert dock.vp.scene.selection == {filed}
-    set_display(dock.vp, color_by='structure')
-    assert dock.vp.view_tint == {filed.uid: facets.palette('ride')}
-    QTest.mouseDClick(dock.tree.viewport(), Qt.LeftButton, pos=row)
-    assert dock.vp.scene._navigator_allowed == {filed.uid}
-    assert not dock.vp.scene.entity_selectable(loose)
-    dock.show_all()
-    assert dock.vp.scene._navigator_allowed is None
-    assert dock.vp.view_tint == {filed.uid: facets.palette('ride')}
+    p, filed, loose = panel
+    rows = p.action("node", "n:ride")
+    assert rows["n:ride"][1][1:3] == [1, 1]
+    assert p.scene.selection == {filed}
+    set_display(p.win.viewport, color_by="structure")
+    assert p.win.viewport.view_tint == {filed.uid: facets.palette("ride")}
+    p.action("isolate", "n:ride")
+    assert not p.scene.entity_selectable(loose)
+    p.action("showall", "")
+    assert p.scene._navigator_allowed is None
+    assert p.win.viewport.view_tint == {filed.uid: facets.palette("ride")}
 
 
 def test_drop_names_and_undo(panel):
-    dock, _, loose = panel
-    data = QMimeData()
-    data.setData(SCENE_MIME, loose.name.encode())
-    assert dock.file_drop(data, 'sections')
-    assert structure.node_of(loose) == 'sections'
-    assert loose.layer == 'Track Sections' and loose.ifc['class'] == 'IfcMember'
-    assert len(dock.vp.history.undo_stack) == 1
-    dock.vp.history.undo()
+    p, _, loose = panel
+    p.action("fileitem", f"i:{loose.uid}" + wgpu_ui.SEP + "sections")
+    assert structure.node_of(loose) == "sections"
+    assert loose.layer == "Track Sections" and loose.ifc["class"] == "IfcMember"
+    assert len(p.win.viewport.history.undo_stack) == 1
+    p.win.viewport.history.undo()
     assert loose.layer is None and loose.ifc is None and structure.node_of(loose) is None
 
 
-def test_refusal_shows_linked_uid(panel, monkeypatch):
-    dock, _, loose = panel
-    loose.ext = {'link': {'path': 'linked.igz'}}
-    errors = []
-    monkeypatch.setattr(QMessageBox, 'warning', lambda _, title, error: errors.append(error))
-    dock.vp.scene.select([loose])
-    dock.tree.setCurrentItem(dock.items['sections'])
-    dock.file_button.click()
-    assert 'Linked' in errors[0] and loose.uid in errors[0]
-    assert not dock.vp.history.undo_stack
+def test_refusal_shows_linked_uid(panel):
+    p, _, loose = panel
+    loose.ext = {"link": {"path": "linked.igz"}}
+    with pytest.raises(ValueError, match=loose.uid):
+        commands.run(p.win.viewport.history, "file_placements", placements=[loose.uid], node="sections")
+    assert not p.win.viewport.history.undo_stack
 
 
-def test_unsorted_pages_select_and_file(panel):
-    dock, _, loose = panel
-    dock.vp.scene.groups.extend(Group(name=str(i)) for i in range(201))
-    dock.vp.scene.version += 1
-    dock.refresh()
-    review = dock.review
-    assert dock.tree.topLevelItem(dock.tree.topLevelItemCount() - 1) is review
-    assert review.text(1) == '202' and review.childCount() == 0
-    review.setExpanded(True)
-    assert review.childCount() == 201
-    row = review.child(0)
-    assert row.text(0) == loose.name
-    row.setSelected(True)
-    dock.clicked(row, 0)
-    assert dock.vp.scene.selection == {loose}
-    dock.clicked(dock.more, 0)
-    assert review.childCount() == 202 and dock.more is None
-    assert dock.file_drop(dock.tree.mimeData([row]), 'ref')
-    assert structure.node_of(loose) == 'ref'
+def test_unsorted_pages_select_and_file(panel, monkeypatch):
+    p, _, loose = panel
+    monkeypatch.setattr(wgpu_ui, "ROW_CAP", 200)
+    p.scene.groups.extend(Group(name=str(i)) for i in range(201))
+    p.scene.version += 1
+    rows = p.rows()
+    assert rows["n:"][1][1] == 202
+    rows = p.action("toggle", "n:")
+    assert sum(k.startswith("i:") for k in rows if k[2:] != panel[1].uid) == 200
+    p.action("item", f"i:{loose.uid}")
+    assert p.scene.selection == {loose}
+    more = next(k for k in rows if k.startswith("m:"))
+    rows = p.action("loose", more)
+    assert more not in rows
+    p.action("fileitem", f"i:{loose.uid}" + wgpu_ui.SEP + "ref")
+    assert structure.node_of(loose) == "ref"
 
 
 def test_recipe_validation_and_atomic_resync(panel):
-    dock, filed, _ = panel
-    dialog = RecipeDialog(dock, dock.vp, 'sections')
-    dialog.cls.addItem('BadClass')
-    dialog.cls.setCurrentText('BadClass')
-    dialog.submit()
-    assert 'unknown class' in dialog.error.text()
-    assert dock.vp.history.undo_stack == [] and filed.ifc['class'] == 'IfcMember'
-    dialog.cls.setCurrentText('IfcColumn')
-    dialog.status.setCurrentText('EXISTING')
-    dialog.submit()
-    assert dialog.result() == dialog.DialogCode.Accepted
-    assert filed.ifc['class'] == 'IfcColumn'
-    assert filed.ifc['psets']['Pset_ColumnCommon']['Status']['value'] == 'EXISTING'
-    assert len(dock.vp.history.undo_stack) == 1
-    dock.vp.history.undo()
-    reg = bim_registry.get(dock.vp.scene)
-    assert structure.resolve(reg, 'sections')['class'] == filed.ifc['class'] == 'IfcMember'
+    p, filed, _ = panel
+    history = p.win.viewport.history
+    old = bim_registry.get(p.scene)["structure"]["nodes"]["sections"]["recipe"]
+    with pytest.raises(ValueError, match="unknown class"):
+        commands.run(history, "set_filing_rule", node="sections", expected=old, recipe={**old, "class": "BadClass"})
+    assert history.undo_stack == [] and filed.ifc["class"] == "IfcMember"
+    new = {**old, "class": "IfcColumn", "psets": {"Pset_ColumnCommon": {"Status": {"kind": "enum", "value": "EXISTING"}}}}
+    commands.run(history, "set_filing_rule", node="sections", expected=old, recipe=new)
+    assert filed.ifc["class"] == "IfcColumn"
+    assert filed.ifc["psets"]["Pset_ColumnCommon"]["Status"]["value"] == "EXISTING"
+    assert len(history.undo_stack) == 1 and history.undo()
+    assert structure.resolve(bim_registry.get(p.scene), "sections")["class"] == filed.ifc["class"] == "IfcMember"
 
 
 def test_bootstrap_proposal_is_undoable(panel):
-    dock, _, loose = panel
-    scene = dock.vp.scene
-    registry = bim_registry.get(scene)
-    scene.layers.append(Layer('Survey'))
-    loose.layer = 'Survey'
-    dialog = BootstrapDialog(dock, dock.vp)
+    p, _, loose = panel
+    registry = bim_registry.get(p.scene)
+    p.scene.layers.append(Layer("Survey"))
+    loose.layer = "Survey"
+    p.action("propose", "")
     assert not structure.node_of(loose)
-    dialog.submit()
-    assert dialog.result() == dialog.DialogCode.Accepted
-    assert structure.node_of(loose) == 'layer:' + scene.layer('Survey').uid
-    assert len(dock.vp.history.undo_stack) == 1
-    dock.vp.history.undo()
-    assert bim_registry.get(scene) == registry and not structure.node_of(loose)
+    p.action("prompt", "yes")
+    assert structure.node_of(loose) == "layer:" + p.scene.layer("Survey").uid
+    assert len(p.win.viewport.history.undo_stack) == 1 and p.win.viewport.history.undo()
+    assert bim_registry.get(p.scene) == registry and not structure.node_of(loose)
 
 
 def test_entity_info_refiles_and_intercepts_tag(panel, monkeypatch):
-    dock, filed, _ = panel
-    scene = dock.vp.scene
-    scene.select([filed])
-    info = EntityInfoPanel(dock.window_owner)
-    info.refresh()
-    assert info._structure_path.text() == 'Ride › Track › Sections'
-    monkeypatch.setattr('views.structure_panel.pick_node', lambda *_: 'ref')
-    info._refile_button.click()
-    assert info._structure_path.text() == 'Ride › Reference'
-    monkeypatch.setattr('views.structure_panel.pick_node', lambda *_: None)
-    info._layer_box.setCurrentIndex(info._layer_box.findData('Track Sections'))
-    assert filed.layer == 'Reference' and info._layer_box.currentData() == 'Reference'
-    assert len(dock.vp.history.undo_stack) == 1
-
-
-def test_hidden_changes_coalesce_in_one_membership_pass(panel, monkeypatch):
-    dock, _, _ = panel
-    calls = []
-    original = structure._memberships
-    def counted(*args):
-        calls.append(True)
-        yield from original(*args)
-    monkeypatch.setattr(structure, '_memberships', counted)
-    dock.hide()
-    for _ in range(3):
-        dock.vp.scene.version += 1
-        dock.on_scene_changed()
-        dock.refresh()
-    assert not calls and not dock.timer.isActive()
-    dock.show()
-    for _ in range(60):                 # a loaded machine delays the deferred slice
-        QTest.qWait(50)
-        if calls:
-            break
-    assert len(calls) == 1
-    dock.vp.scene.bump_view()
-    dock.refresh()
-    assert len(calls) == 1
-
-
-def test_outliner_group_drag_creates_visible_layer():
-    from views.main_window import MainWindow
-    from views.structure_panel import PLACEMENT_MIME
-    window = MainWindow()
+    from views.tray import EntityInfoPanel
+    p, filed, _ = panel
+    window = QMainWindow()
+    window.viewport = p.win.viewport
     try:
-        vp = window.viewport
-        scene = vp.scene
-        group = Group(name='Beam')
-        scene.groups.append(group)
-        scene.plugin_data['bim_registry'] = {'structure': {'nodes': {
-            'beams': {'name': 'Beams', 'order': 0, 'parent': None}}}}
-        browser = window.project_browser.outliner
-        browser.refresh()
-        data = browser.tree.mimeData([browser._items[id(group)]])
-        assert bytes(data.data(SCENE_MIME)).decode() == 'Beam'
-        assert bytes(data.data(PLACEMENT_MIME)).decode() == group.uid
-        assert window.structure_dock.file_drop(data, 'beams')
-        QApplication.processEvents()
-        assert ('layer', 'Beams', 0) in window.layers_dock.panel.display_outline()
+        p.scene.select([filed])
+        info = EntityInfoPanel(window)
+        info.refresh()
+        assert info._structure_path.text() == "Ride › Track › Sections"
+        monkeypatch.setattr("views.chrome_forms.ask_choice", lambda *a, done: done("Ride › Reference"))
+        info._refile_button.click()
+        assert info._structure_path.text() == "Ride › Reference"
+        monkeypatch.setattr("views.chrome_forms.ask_choice", lambda *a, done: done(None))
+        info._layer_box.setCurrentIndex(info._layer_box.findData("Track Sections"))
+        assert filed.layer == "Reference" and info._layer_box.currentData() == "Reference"
+        assert len(p.win.viewport.history.undo_stack) == 1
     finally:
-        window._saved_version = window.viewport.scene.version
         window.close()
 
 
-def test_delete_occupied_leaf_refiles_in_one_step(panel, monkeypatch):
-    dock, filed, _ = panel
-    monkeypatch.setattr(QMessageBox, 'question', lambda *_: QMessageBox.Yes)
-    dock.delete('sections')
-    assert structure.node_of(filed) == 'track' and filed.layer == 'Track'
-    assert 'sections' not in bim_registry.get(dock.vp.scene)['structure']['nodes']
-    dock.vp.history.undo()
-    assert structure.node_of(filed) == 'sections' and filed.layer == 'Track Sections'
+def test_hidden_changes_coalesce_in_one_membership_pass(panel, monkeypatch):
+    p, _, _ = panel
+    from core import link_structure
+    calls = []
+    original = link_structure.Tree
+    def counted(*args):
+        calls.append(True)
+        return original(*args)
+    monkeypatch.setattr(link_structure, "Tree", counted)
+    for _ in range(3):
+        p.scene.version += 1
+    assert not calls
+    p.rows()
+    p.scene.bump_view()
+    p.rows()
+    assert calls == [True]
+
+
+def test_outliner_group_drag_creates_visible_layer():
+    p = Project()
+    group = Group(name="Beam")
+    p.scene.groups.append(group)
+    p.scene.plugin_data["bim_registry"] = {"structure": {"nodes": {
+        "beams": {"name": "Beams", "order": 0, "parent": None}}}}
+    p.rows()
+    p.action("fileitem", "i:" + group.uid + wgpu_ui.SEP + "beams")
+    assert p.scene.layer("Beams").visible and group.layer == "Beams"
+
+
+def test_delete_occupied_leaf_refiles_in_one_step(panel):
+    p, filed, _ = panel
+    p.action("delete", "n:sections")
+    p.action("prompt", "yes")
+    assert structure.node_of(filed) == "track" and filed.layer == "Track"
+    assert "sections" not in bim_registry.get(p.scene)["structure"]["nodes"]
+    p.win.viewport.history.undo()
+    assert structure.node_of(filed) == "sections" and filed.layer == "Track Sections"
 
 
 def test_mounted_rows_and_exact_nested_members(panel):
-    from tests.controller_surface import ControllerSurface as Viewport
-    dock, filed, loose = panel
-    leaf = Group(name='Local')
+    p, filed, loose = panel
+    leaf = Group(name="Local")
     loose.children = [leaf]
-    leaf.ext = {'structure': {'node': 'sections'}}
-    source = 'ref/Supplier.igz'
-    link = Group(name='Supplier')
-    link.ext = {'link': {'path': source}}
-    scene = dock.vp.scene
-    scene.groups.append(link)
-    registry = scene.plugin_data['bim_registry']
-    registry['structure']['nodes']['mount'] = dict(name='Supplier', parent=None, order=1,
-                                                 source=source, mount=True)
-    scene.version += 1
-    dock.refresh()
-    assert dock.items['mount'].font(0).italic() and 'Supplier' in dock.items['mount'].text(0)
-    dock.clicked(dock.items['sections'], 0)
-    assert scene.selection == {filed, leaf}
-    view = Viewport()
-    try:
-        view.scene = scene
-        assert {g.uid for g in view._selected_group_placements()} == {filed.uid, leaf.uid}
-    finally:
-        view.close()
-    dock.display('sections')
-    assert scene._navigator_allowed == {filed.uid, leaf.uid}
+    leaf.ext = {"structure": {"node": "sections"}}
+    link = Group(name="Supplier")
+    link.ext = {"link": {"path": "ref/Supplier.igz"}}
+    p.scene.groups.append(link)
+    p.scene.version += 1
+    assert any(name == "Supplier.igz" for name, state in p.rows().values())
+    p.action("node", "n:sections")
+    assert p.scene.selection == {filed, leaf}
+    p.action("isolate", "n:sections")
+    assert p.scene.entity_selectable(filed) and p.scene.entity_selectable(leaf)
 
 
 def test_drawing_preserves_structure_rows(panel):
     from core.history import AddEdgeCommand
-    from ingetrazo_core import Vec3 as QVector3D
-    dock, _, _ = panel
-    row = dock.items['ride']
-    history = dock.vp.history
-    history.execute(AddEdgeCommand(QVector3D(), QVector3D(1, 0, 0)))
+    from ingetrazo_core import Vec3
+    p, _, _ = panel
+    tree = p.view._ui_tree["tree"]
+    history = p.win.viewport.history
+    history.execute(AddEdgeCommand(Vec3(), Vec3(1, 0, 0)))
     for step in (lambda: None, history.undo, history.redo):
         step()
-        dock.on_scene_changed()
-        dock.refresh()
-        assert dock.items['ride'] is row
+        p.rows()
+        assert p.view._ui_tree["tree"] is tree
+
+
+def test_filing_choices_distinguish_siblings_and_exclude_mounted_descendants():
+    from ingetrazo_core import filing_choices
+    nodes = {
+        "a": {"name": "Floor", "parent": None},
+        "b": {"name": "Floor", "parent": None},
+        "c": {"name": "Floor (a)", "parent": None},
+        "source": {"name": "Linked", "parent": None, "source": "source.igz"},
+        "child": {"name": "Walls", "parent": "source"},
+    }
+    choices = filing_choices(nodes)
+    assert list(choices.values()).count("c") == 1
+    assert set(choices.values()) == {"a", "b", "c"}
+    assert choices["Floor (a)"] == "c"
