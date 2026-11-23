@@ -84,13 +84,13 @@ def push_pull(history, face, distance, keep_base=False):
     """Push or pull a face (key) by ``distance`` along its normal: the
     Push/Pull tool locked on the face, the distance typed, committed —
     clamped where the tool clamps (a push stopped at an opposite face)."""
-    from tools.pushpull import PushPullTool
+    from core.push_pull import PushPullOperation
     (f,) = _need(history.scene.mesh, "face", [face])
     from core.coordinate_frame import ZERO, choose_origin, mesh_frame
     st = store_of(history.scene.mesh)
     origin = choose_origin(st.face_positions(f.key)[0][0]) if st is not None else ZERO
     with mesh_frame(history.scene.mesh, origin):
-        return _push_face(history, f, distance, keep_base, PushPullTool())
+        return _push_face(history, f, distance, keep_base, PushPullOperation())
 
 
 def _push_face(history, f, distance, keep_base, tool):

@@ -461,8 +461,8 @@ def test_segment_prefilter_is_a_superset(store, seed):
 def test_parallel_overlap_prefilter_and_lateral_exit(store, seed, oracle):
     """The parallel-overlap candidates hold every face the inward limit and
     the levels can take; the lateral exit is the Python loop's, exactly."""
-    from tools.pushpull import (_loops_overlap_2d, _project_loop_2d,
-                                _ray_triangle)
+    from core.orient import _ray_triangle
+    from core.push_pull import _loops_overlap_2d, _project_loop_2d
     rng = random.Random(seed)
     m = _scene(store, seed)
     O.orient_outward(m)
