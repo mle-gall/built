@@ -1105,10 +1105,7 @@ pub struct FontPicker {
 
 impl FontPicker {
     pub fn new(mut choice: FontChoice) -> Self {
-        #[cfg(target_os = "macos")]
         let families = super::system_fonts::families();
-        #[cfg(not(target_os = "macos"))]
-        let families = Vec::new();
         if choice.font.is_empty() {
             choice.font = families
                 .iter()
@@ -1284,7 +1281,6 @@ impl FontPicker {
                         &self.choice.text
                     };
                     let bounds = Rect::from_min_max(pos2(mid.x, rect.top()), rect.max);
-                    #[cfg(target_os = "macos")]
                     if !self.previews.contains_key(name) {
                         if let Some(image) = super::system_fonts::sample(
                             name,

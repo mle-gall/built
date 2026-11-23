@@ -36,6 +36,10 @@ pub mod tokens;
 pub mod kit;
 #[cfg(target_os = "macos")]
 mod system_fonts;
+#[cfg(any(not(target_os = "macos"), test))]
+mod host_fonts;
+#[cfg(not(target_os = "macos"))]
+use host_fonts as system_fonts;
 mod gallery;
 pub mod command_palette;
 /// The tool rail's deterministic layout (two columns, three, then scroll).
