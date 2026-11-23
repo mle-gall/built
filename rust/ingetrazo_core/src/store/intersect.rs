@@ -140,7 +140,12 @@ impl Polygon {
 #[pyo3::pyclass(module = "ingetrazo_core", name = "IntersectionPolygon", frozen)]
 pub(super) struct PyPolygon {
     poly: Polygon,
-    h: Hypot,
+    pub(super) h: Hypot,
+}
+
+impl PyPolygon {
+    pub(super) fn face_normal(&self) -> V3 { self.poly.normal }
+    pub(super) fn has_holes(&self) -> bool { self.poly.rings.len() > 1 }
 }
 
 #[pyo3::pymethods]
@@ -149,6 +154,11 @@ impl PyPolygon {
     fn from_rings(rings: WorldRings, hypot: &str) -> pyo3::PyResult<Option<Self>> {
         let h = crate::hypot_of(hypot)?;
         Ok(Polygon::from_rings(&rings, |p| p, h).map(|poly| Self { poly, h }))
+    }
+
+    fn replace_regions(&self, mesh: &pyo3::Bound<'_,pyo3::PyAny>, face: &pyo3::Bound<'_,pyo3::PyAny>,
+                       regions: &pyo3::Bound<'_,pyo3::PyAny>, copy: &pyo3::Bound<'_,pyo3::PyAny>) -> pyo3::PyResult<()> {
+        super::intersection_edit::replace_regions(self,mesh,face,regions,copy)
     }
 
     #[getter]
@@ -167,7 +177,7 @@ impl PyPolygon {
         out
     }
 
-    fn in_hole(&self, point: [f64; 3]) -> bool {
+    pub(super) fn in_hole(&self, point: [f64; 3]) -> bool {
         let p = V3(point[0], point[1], point[2]);
         let xy = [
             p.dot(self.poly.axes.0, self.h),
@@ -180,7 +190,7 @@ impl PyPolygon {
             .any(|ring| super::drawing_face::inside(xy, ring, true))
     }
 
-    fn clip(&self, a: [f64; 3], b: [f64; 3]) -> Vec<Segment> {
+    pub(super) fn clip(&self, a: [f64; 3], b: [f64; 3]) -> Vec<Segment> {
         let (p, q) = (V3(a[0], a[1], a[2]), V3(b[0], b[1], b[2]));
         let poly = &self.poly;
         let h = self.h;

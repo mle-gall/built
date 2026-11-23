@@ -22,6 +22,7 @@ pub mod access;
 pub mod bevel;
 pub mod fillet;
 mod fillet_incidence;
+pub(crate) mod intersection_edit;
 pub mod build;
 mod changes;
 pub mod cow;

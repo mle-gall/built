@@ -58,6 +58,7 @@ mod panic_log;
 #[pymodule]
 fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(push_command::rebuild_push_planes, m)?)?;
+    m.add_function(wrap_pyfunction!(store::intersection_edit::partition_intersections, m)?)?;
     m.add_function(wrap_pyfunction!(push_guard::guarded_push, m)?)?;
     m.add_function(wrap_pyfunction!(push_guard::translate_prism_cap, m)?)?;
     m.add_function(wrap_pyfunction!(push_guard::push_region, m)?)?;
