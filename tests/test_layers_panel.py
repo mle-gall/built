@@ -721,6 +721,20 @@ def test_folder_row_shows_hides_and_counts(win):
     assert panel.item_for("A").text(5) == "1"
 
 
+def test_sorting_keeps_the_default_layer_first(win):
+    panel = win.layers_dock.panel
+    scene = win.viewport.scene
+    scene.layers += [Layer("zeta"), Layer("alfa")]
+    panel.refresh()
+    for order in (Qt.AscendingOrder, Qt.DescendingOrder):
+        panel.tree.sortByColumn(0, order)
+        names = [panel.tree.topLevelItem(i).text(0)
+                 for i in range(panel.tree.topLevelItemCount())]
+        assert names[0] == DEFAULT_LAYER
+        assert names[1:] == (["alfa", "zeta"] if order == Qt.AscendingOrder
+                             else ["zeta", "alfa"])
+
+
 def test_filter_hides_what_does_not_match(win):
     panel = win.layers_dock.panel
     scene = win.viewport.scene
@@ -941,11 +955,6 @@ def test_the_target_header_ends_the_isolation(win):
     assert not scene.layer("B").visible
     panel._on_header_clicked(COL_ISOLATE)
     assert scene.layer("B").visible
-    # Isolating from the toolbar's drop-down is the same isolation.
-    win.layers_toolbar.combo.toggle("B", "isolate")
-    assert panel.isolated_layers() == {"B"}
-    win.layers_toolbar.combo.toggle("B", "isolate")
-    assert all(ly.visible for ly in scene.layers)
 
 
 def test_expand_button_folds_and_unfolds_every_folder(win):
@@ -1936,6 +1945,21 @@ def _layer_rows(panel):
             if panel._key(panel.tree.topLevelItem(i))[0] == "layer"]
 
 
+def test_names_sort_with_their_numbers_read_as_numbers(win):
+    from PySide6.QtCore import QSettings
+    from views.layers_panel import LayersPanel, natural_key
+    QSettings().remove(LayersPanel.SORT_KEY)
+    assert natural_key("Capa 2") < natural_key("Capa 10")
+    assert natural_key("planta 9") < natural_key("Planta 12")
+    panel = win.layers_dock.panel
+    scene = win.viewport.scene
+    scene.layers += [Layer("Capa 10"), Layer("Capa 2"), Layer("Capa 1"),
+                     Layer("Alzado")]
+    panel.refresh()
+    assert _layer_rows(panel) == [DEFAULT_LAYER, "Alzado", "Capa 1",
+                                  "Capa 2", "Capa 10"]
+
+
 def test_sort_by_order_created_from_the_options_menu(win):
     from PySide6.QtCore import QSettings
     from views.layers_panel import LayersPanel
@@ -2340,36 +2364,6 @@ def test_a_scene_change_rebuilds_after_the_event_loop_not_inside_it(win):
         assert calls == []                  # not from inside paint nor a signal
         _app.processEvents()
         assert len(calls) == 1              # one rebuild for the burst
-    finally:
-        _stop_counting(panel, real)
-
-
-def test_an_assign_layer_from_the_bar_rebuilds_only_after_the_list_closes(win):
-    """Picking a layer in the toolbar's list with groups selected is the
-    reported crash: the list rebuilt itself inside its own ``activated``.
-    The command lands at once, the rows follow once the loop is back."""
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers += [Layer("A"), Layer("B")]
-    g = Group(Mesh(), name="g")
-    g.layer = "A"
-    scene.groups.append(g)
-    panel.refresh()
-    combo = win.layers_toolbar.combo
-    scene.select([g])
-    combo.refresh()
-    calls, real = _count_rebuilds(panel)
-    try:
-        i = combo.findText("B")
-        combo.setCurrentIndex(i)
-        combo.activated.emit(i)
-        assert layer_of(g) == "B"           # the command landed
-        assert calls == []                  # the list was still closing
-        _app.processEvents()
-        # The layers are the ones drawn: the next turn may only mark the
-        # selection and recount, without clearing the rows.
-        assert len(calls) <= 1
-        assert "B" in _shown(panel)         # and the rows follow
     finally:
         _stop_counting(panel, real)
 

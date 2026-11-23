@@ -109,25 +109,3 @@ def test_no_panel_keeps_an_old_theme(win, modes):
         theme.apply_theme(app, m)
         app.processEvents()
     assert _stale(app, win) == []
-
-
-@pytest.mark.parametrize("then", [theme.DARK, theme.SLATE])
-def test_the_layers_drop_down_takes_the_new_ink(win, then):
-    """Round 20: the closed Layers drop-down kept Light's dark eye and
-    padlock on Dark and Slate — its rows are drawn once per set of layers."""
-    app = QApplication.instance()
-    combo = win.layers_toolbar.combo
-    combo.refresh()
-    assert combo.count() > 0
-    def eye_and_padlock():
-        # The row icon holds eye, padlock and swatch side by side: the
-        # swatch (white for Layer 0) is left out.
-        from views.layers_toolbar import _SWATCH_X
-        size = combo.iconSize()
-        pm = combo.itemIcon(0).pixmap(size)
-        return _lightest(pm.copy(0, 0, _SWATCH_X - 6, pm.height()))
-    before = eye_and_padlock()
-    theme.apply_theme(app, then)
-    win._refresh_toolbar_icons()
-    after = eye_and_padlock()
-    assert before < 100 < 150 < after

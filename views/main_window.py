@@ -1195,13 +1195,6 @@ class MainWindow(WorksessionMixin, QMainWindow):
         # _keys_back_to_view).
         QApplication.instance().focusChanged.connect(self._keys_back_to_view)
         # (The panels follow the viewport's changes: see _wire_viewport.)
-        # The Layers toolbar: the layer drop-down and the quick layer
-        # actions, working through the Layers tab's panel.
-        from views.layers_toolbar import LayersToolbar
-        layers_tb = self._new_toolbar(tr("Layers"), "layers")
-        self.toolbars["layers"] = layers_tb
-        self.layers_toolbar = LayersToolbar(self, layers_tb)
-
         # Styles, Shadows and Dimension style hang OFF THE TOOLBAR as
         # dropdown panels (user: the lateral bar was drowning, and floating
         # windows felt loose — "¿no hay forma de integrarlo en el
@@ -1601,9 +1594,6 @@ class MainWindow(WorksessionMixin, QMainWindow):
                           "outliner", None)
         if browser is not None:
             browser.refresh_icons()
-        bar = getattr(self, "layers_toolbar", None)
-        if bar is not None:
-            bar.refresh_icons()
 
     def changeEvent(self, event) -> None:
         # Qt posts these when the OS/Qt theme (palette) flips at runtime.
@@ -7732,7 +7722,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         vp.projectionChanged.connect(live(self._sync_projection_buttons))
         vp.smartZoomRequested.connect(live(self._on_smart_zoom))
         for name in ("tray", "bim_tray", "georef_tray", "project_browser",
-                     "layers_dock", "scenes_dock", "layers_toolbar",
+                     "layers_dock", "scenes_dock",
                      "structure_dock",):
             panel = getattr(self, name, None)
             if panel is not None:
