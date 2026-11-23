@@ -1379,6 +1379,10 @@ def _unit_rays(eye, pts):
     return rows, delta[rows] / lengths[rows, None], lengths[rows]
 
 
+# Barycentric roundoff on a shared triangle edge can reject both faces.
+_BARY_EPS = 1e-14
+
+
 def _occlusion_block(o, d, v0, e1, e2):
     """``Viewport._occluded_many``'s NumPy block: the nearest accepted hit
     of each ray ``d`` (r,3) from ``o`` on the triangles (inf: none)."""
@@ -1395,7 +1399,7 @@ def _occlusion_block(o, d, v0, e1, e2):
     u = np.einsum("nj,rnj->rn", s, p) * inv
     v = (d @ q.T) * inv
     t = uq[None, :] * inv
-    hit = (ok & (u >= 0.0) & (u <= 1.0) & (v >= 0.0) & (u + v <= 1.0)
+    hit = (ok & (u >= -_BARY_EPS) & (u <= 1.0 + _BARY_EPS) & (v >= -_BARY_EPS) & (u + v <= 1.0 + _BARY_EPS)
            & (t > 1e-6))
     return np.where(hit, t, np.inf).min(axis=1)
 
@@ -1553,7 +1557,7 @@ def _moller_trumbore(o, d, v0, e1, e2):
     q = np.cross(s, e1)
     v = (q @ d) * inv
     t = np.einsum("ij,ij->i", e2, q) * inv
-    hit = (ok & (u >= 0.0) & (u <= 1.0) & (v >= 0.0) & (u + v <= 1.0)
+    hit = (ok & (u >= -_BARY_EPS) & (u <= 1.0 + _BARY_EPS) & (v >= -_BARY_EPS) & (u + v <= 1.0 + _BARY_EPS)
            & (t > 1e-6))
     return t, hit
 
@@ -2012,11 +2016,11 @@ def _ray_triangle(
     f = 1.0 / a
     s = origin - v0
     u = f * QVector3D.dotProduct(s, h)
-    if u < 0.0 or u > 1.0:
+    if u < -_BARY_EPS or u > 1.0 + _BARY_EPS:
         return None
     q = QVector3D.crossProduct(s, e1)
     v = f * QVector3D.dotProduct(direction, q)
-    if v < 0.0 or u + v > 1.0:
+    if v < -_BARY_EPS or u + v > 1.0 + _BARY_EPS:
         return None
     t = f * QVector3D.dotProduct(e2, q)
     if t < eps:
@@ -19080,8 +19084,8 @@ class Viewport(QOpenGLWidget):
                 u = np.einsum("nj,rnj->rn", s, p) * inv
                 v = (d @ q.T) * inv
                 t = uq[None, :] * inv
-                hit = (ok & (u >= 0.0) & (u <= 1.0) & (v >= 0.0)
-                       & (u + v <= 1.0) & (t > 1e-6))
+                hit = (ok & (u >= -_BARY_EPS) & (u <= 1.0 + _BARY_EPS) & (v >= -_BARY_EPS)
+                       & (u + v <= 1.0 + _BARY_EPS) & (t > 1e-6))
                 tm = np.where(hit, t, np.inf).min(axis=1)
                 best[r] = np.minimum(best[r], tm)
         if whole is not None:
