@@ -1404,25 +1404,29 @@ impl Ui {
                                   if self.review { 1 } else { 0 }, true);
                     if menu_row(ui, &review) { toggle_review = true; }
                     ui.add_space(SPACE_XS);
-                    for (si, (title, items)) in self.view_menu.iter().enumerate() {
-                        if si > 0 { ui.add_space(SPACE_XS); }
-                        caption_at(ui, title, 12.0);
-                        let icons_only = items.iter().all(|i| self.icons.contains_key(&i.3));
-                        if icons_only {
-                            ui.horizontal_wrapped(|ui| {
-                                for item in items {
-                                    if item_button(ui, item, self.icons.get(&item.3)) { clicked = Some(item.0.clone()); }
-                                }
-                            });
-                        } else {
-                            for item in items {
-                                if menu_row(ui, item) {
-                                    clicked = Some(item.0.clone());
-                                    close = item.4 < 0;
+                    egui::ScrollArea::vertical().id_salt("view command groups")
+                        .max_height((self.screen.bottom() - a.bottom() - 90.).max(ROW_H * 3.))
+                        .show(ui, |ui| {
+                            for (si, (title, items)) in self.view_menu.iter().enumerate() {
+                                if si > 0 { ui.add_space(SPACE_XS); }
+                                caption_at(ui, title, 12.0);
+                                let icons_only = items.iter().all(|i| self.icons.contains_key(&i.3));
+                                if icons_only {
+                                    ui.horizontal_wrapped(|ui| {
+                                        for item in items {
+                                            if item_button(ui, item, self.icons.get(&item.3)) { clicked = Some(item.0.clone()); close = true; }
+                                        }
+                                    });
+                                } else {
+                                    for item in items {
+                                        if menu_row(ui, item) {
+                                            clicked = Some(item.0.clone());
+                                            close = item.4 < 0;
+                                        }
+                                    }
                                 }
                             }
-                        }
-                    }
+                        });
                 });
             });
         if close { self.view_open = false; }
@@ -2754,8 +2758,8 @@ fn menu_button(ui: &mut egui::Ui, label: &str, open: bool) -> Option<Rect> {
 
 /// A hairline between groups in a bar.
 fn bar_divider(ui: &mut egui::Ui) {
-    let (r, _) = ui.allocate_exact_size(vec2(9.0, 28.0), Sense::hover());
-    ui.painter().vline(r.center().x, r.y_range().shrink(7.0), Stroke::new(1.0_f32, EDGE));
+    let (r, _) = ui.allocate_exact_size(vec2(SPACE_M, BUTTON_H), Sense::hover());
+    ui.painter().vline(r.center().x, r.y_range().shrink(5.), Stroke::new(1.0_f32, OFF));
 }
 
 /// A text command in a bar, 28 high, 8 pt padding.
