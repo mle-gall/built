@@ -35,6 +35,26 @@ def open_panel(win, key):
     return False
 
 
+def show_utility(win, key, model):
+    """Publish or replace one utility for this document, keeping its zoom and position."""
+    from views.chrome_dialogs import view_of
+    view = view_of(win)
+    if not getattr(view, "_ui_attached", False):
+        return None
+    sync(view, win)
+    bindings = getattr(view, "_plugin_bindings", {})
+    binding = next((b for b in bindings.values() if b.key == key), None)
+    if binding is None:
+        binding = Binding(win, key, lambda *_: model, view)
+        bindings[binding.instance] = binding
+    else:
+        binding.model = model
+    binding.invalidate()
+    binding.push()
+    view.renderer.ui_plugin_open(binding.instance)
+    return binding
+
+
 class Binding:
     def __init__(self, win, key, factory, view):
         self.key = key

@@ -403,6 +403,8 @@ impl Gallery {
         let page = vec2(CONTROL_H * 3., CONTROL_H * 2.);
         let rect = Rect::from_min_size(pos2(at.x + name_w, y), page);
         put(ui, rect, across(), |ui| { svg_preview(ui, None, "Thirds", page); });
+        let image = Rect::from_min_size(rect.right_top() + vec2(SPACE_M, 0.), vec2(CONTROL_H * 7., page.y));
+        put(ui, image, down(), |ui| render_preview(ui, None, vec2(image.width(), CONTROL_H)));
         y + page.y + SPACE_S
     }
 

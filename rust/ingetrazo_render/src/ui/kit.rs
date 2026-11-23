@@ -1595,6 +1595,45 @@ pub fn svg_preview(ui: &mut egui::Ui, texture: Option<&egui::TextureHandle>, gui
     (drag != egui::Vec2::ZERO || wheel != 0.).then(|| (drag.x, drag.y, (wheel / 300.).exp()))
 }
 
+/// Fit, inspect at native resolution, or zoom around the pointer in a render.
+pub fn render_preview(ui: &mut egui::Ui, texture: Option<&egui::TextureHandle>, size: egui::Vec2) {
+    let pixels = texture.map_or(vec2(64., 40.), |t| t.size_vec2());
+    let id = ui.make_persistent_id(("render zoom", pixels.x.to_bits(), pixels.y.to_bits()));
+    let (mut zoom, mut pan): (Option<f32>, egui::Vec2) = ui.data(|d| d.get_temp(id)).unwrap_or_default();
+    ui.horizontal(|ui| {
+        if quiet(ui, "Fit to window").clicked() {
+            zoom = None;
+            pan = egui::Vec2::ZERO;
+        }
+        if quiet(ui, "100 %").clicked() {
+            zoom = Some(1. / ui.ctx().pixels_per_point());
+            pan = egui::Vec2::ZERO;
+        }
+    });
+    let (well, response) = ui.allocate_exact_size(size, Sense::drag());
+    let fit = (size / pixels).min_elem();
+    let scale = zoom.unwrap_or(fit);
+    if response.hovered() {
+        let scroll = ui.input_mut(|i| std::mem::take(&mut i.smooth_scroll_delta.y));
+        if let Some(pointer) = response.hover_pos().filter(|_| scroll != 0.) {
+            let next = (scale * (scroll / 240.).exp()).clamp(0.02, 16.);
+            let offset = pointer - well.center();
+            pan = offset - (offset - pan) * (next / scale);
+            zoom = Some(next);
+        }
+    }
+    pan += response.drag_delta();
+    let page = Rect::from_center_size(well.center() + pan, pixels * zoom.unwrap_or(fit));
+    let painter = ui.painter_at(well);
+    painter.rect_filled(well, R_CONTROL, WELL);
+    if let Some(tex) = texture {
+        painter.image(tex.id(), page, Rect::from_min_max(Pos2::ZERO, pos2(1., 1.)), egui::Color32::WHITE);
+    } else {
+        painter.rect_filled(page.shrink(SPACE_XS), R_INSET, SWATCH_FALLBACK);
+    }
+    ui.data_mut(|d| d.insert_temp(id, (zoom, pan)));
+}
+
 /// A catalogue fact may contain an entire licence or a long local path.
 pub fn catalogue_fact(ui: &mut egui::Ui, label: &str, value: &str) -> Rect {
     let w = ui.available_width();

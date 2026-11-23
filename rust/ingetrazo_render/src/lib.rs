@@ -2875,6 +2875,7 @@ mod sheet_host;
 pub mod sheet_page;
 mod camera_inspector;
 mod registry_editor;
+mod render_result;
 mod font_lengths;
 mod svg_options;
 /// Sheet items' display lists on the page.
@@ -2945,6 +2946,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<ui::command_palette::CommandCanvas>()?;
     m.add_class::<camera_inspector::CameraInspector>()?;
     m.add_class::<registry_editor::RegistryEditor>()?;
+    m.add_class::<render_result::RenderResult>()?;
     m.add_function(wrap_pyfunction!(font_lengths::font_length, m)?)?;
     m.add_class::<svg_options::SvgOptions>()?;
     m.add_function(wrap_pyfunction!(commands::command_registry, m)?)?;
