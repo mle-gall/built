@@ -610,6 +610,8 @@ class ShellWindow(QObject):
         if doc is old:
             return
         if old is not None and old.viewport is not None:
+            from views.inspector_bridge import leave_camera
+            leave_camera(old)
             try:
                 old.viewport.set_active_tool(None)
                 old.viewport.end_group_edit()

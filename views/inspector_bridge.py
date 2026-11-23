@@ -122,8 +122,9 @@ def sync(view, win):
         )
     c = None
     if getattr(view, "_camera_inspector", False):
-        cam = vp.camera
+        cam = win._active_view().camera
         marked = _marked(win)
+        bound = view._camera_inspector.observe(cam, vp.scene, marked)
         eye, target = cam.eye(), cam.target
         c = dict(
             cam.lens_dict(),
@@ -134,6 +135,8 @@ def sync(view, win):
             eye=[eye.x(), eye.y(), eye.z()],
             target=[target.x(), target.y(), target.z()],
             saved=marked is not None,
+            bound=bound, advanced=view._camera_inspector.advanced,
+            custom_sensor=view._camera_inspector.custom_sensor,
             scene=marked.name if marked else "Current view",
         )
     if (b, c) != getattr(view, "_panel_live", None):
@@ -145,13 +148,41 @@ def sync(view, win):
         terrain.sync(view, vp)
 
 
+def leave_camera(doc):
+    view = getattr(doc, "stand_in", None) or getattr(doc, "viewport", None)
+    inspector = getattr(view, "_camera_inspector", None)
+    if inspector:
+        inspector.clear()
+        view._camera_inspector = None
+
+
+def open_camera(win, target=None):
+    from ingetrazo_render import CameraInspector
+    view = getattr(win._doc, "stand_in", None) or win.viewport
+    from PySide6.QtCore import QSettings
+    leave_camera(win._doc)
+    inspector = CameraInspector()
+    inspector.advanced = QSettings().value("camera_settings/advanced", False, type=bool)
+    inspector.bind(win._active_view().camera, target)
+    view._camera_inspector = inspector
+    view.update()
+    return inspector
+
+
 def _camera(win, view, key, v):
     from core.camera_point import CameraPoint
     from core.camera import FOV_RANGE
 
-    vp, cam = win.viewport, win.viewport.camera
-    if key in ("open", "close"):
-        view._camera_inspector = key == "open"
+    vp, cam = win.viewport, win._active_view().camera
+    if key == "open":
+        return open_camera(win)
+    inspector = getattr(view, "_camera_inspector", None)
+    if inspector is None:
+        return
+    inspector.observe(cam, vp.scene, _marked(win))
+    if key == "close":
+        inspector.clear()
+        view._camera_inspector = None
     elif key == "update":
         marked = _marked(win)
         if marked and marked.name == v:
@@ -164,6 +195,14 @@ def _camera(win, view, key, v):
         cam.fov_deg = min(
             FOV_RANGE[1], max(FOV_RANGE[0], cam.fov_for_focal(v) if key == "focal" else v)
         )
+    elif key == "advanced":
+        from PySide6.QtCore import QSettings
+        inspector.advanced = v
+        QSettings().setValue("camera_settings/advanced", v)
+    elif key == "sensor":
+        inspector.custom_sensor = v is None
+        if v is not None:
+            cam.set_sensor(v)
     elif key.startswith("sensor"):
         size = list(cam.sensor_size())
         size[int(key[-1])] = v
@@ -175,6 +214,7 @@ def _camera(win, view, key, v):
         cam.place(*(CameraPoint(*p) for p in pts))
     elif key in ("frame_aspect", "shift_x", "shift_y", "roll_deg", "clip_near", "clip_far"):
         cam.apply_lens({**cam.lens_dict(), key: v or None})
+    inspector.applied(cam, vp.scene)
     vp.update()
 
 

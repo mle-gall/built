@@ -1,6 +1,6 @@
 # Plugin panels
 
-The native Built shell and the Qt app with the Metal chrome draw the same egui panels. Select **Plugins** in the right dock, then select a panel. A dock panel replaces the project tree. A utility panel opens above the bottom bar and has its own resize handle and Close button. The native Plugins menu opens the bundled panels directly. In the classic app, existing tools and `setup(app)` supply the Qt interface.
+The native Built shell and the Qt app with the Metal chrome draw the same egui panels. Select **Plugins** in the right dock, then select a panel. A dock panel replaces the project tree. A utility panel opens above the bottom bar and has its own resize handle and Close button. The native Plugins menu opens the bundled panels directly. The Console and Blender render preview use these utilities wherever the native chrome is attached. The classic Blender settings dock still supplies its own light controls.
 
 ## Register a panel
 
@@ -34,7 +34,7 @@ class Counter:
 create_panel = Counter
 ```
 
-Use `utility` for a console or other wide output. Section IDs must be unique in a panel. Control IDs are unique across all its sections. Reserve IDs beginning with an underscore for the host. Every item accepts a plain-text label and an optional `enabled` flag.
+Use `utility` for a console or other wide output. Section IDs must be unique in a panel. Control IDs are unique across all its sections. Reserve IDs beginning with an underscore for the host. A utility model can set `notify_close = True` to receive `event("_panel", "closed", None)` when its Close button is pressed. Every item accepts a plain-text label and an optional `enabled` flag.
 
 ## Controls in version 1
 

@@ -2390,8 +2390,15 @@ impl Renderer {
         if let Some(ui)=self.ui.as_mut() { ui.set_catalog_info(filename,tree,counts)?; }
         Ok(())
     }
-    fn ui_set_style_catalog(&mut self, owner: usize, lines: Vec<String>) {
-        if let Some(ui)=self.ui.as_mut() { ui.style_catalog(owner,lines); }
+    #[pyo3(signature = (owner, lines, patterns=None))]
+    fn ui_set_style_catalog(&mut self, owner: usize, lines: Vec<String>, patterns: Option<&Bound<'_, PyAny>>) -> PyResult<()> {
+        if let Some(ui) = self.ui.as_mut() {
+            let patterns = if let Some(dict) = patterns.filter(|d| !d.is_empty().unwrap_or(true)) {
+                dict.py().import("json")?.call_method1("dumps",(dict,))?.extract()?
+            } else { String::new() };
+            ui.style_catalog(owner, lines, patterns);
+        }
+        Ok(())
     }
     #[pyo3(signature=(name, origin, scene=None, mount=None))]
     fn ui_set_host_context(&mut self, name: String, origin: [f64; 3], scene: Option<&Bound<'_, PyAny>>, mount: Option<&Bound<'_, PyAny>>) -> PyResult<()> {
@@ -2878,6 +2885,10 @@ mod about;
 mod sheet_host;
 /// The Sheets workspace's page, native (docs/rust-sheets.md).
 pub mod sheet_page;
+mod camera_inspector;
+mod registry_editor;
+mod render_result;
+mod font_lengths;
 mod svg_options;
 /// Sheet items' display lists on the page.
 pub mod sheet_display;
@@ -2945,6 +2956,10 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<about::AboutReview>()?;
     m.add_class::<release::ReleaseReview>()?;
     m.add_class::<ui::command_palette::CommandCanvas>()?;
+    m.add_class::<camera_inspector::CameraInspector>()?;
+    m.add_class::<registry_editor::RegistryEditor>()?;
+    m.add_class::<render_result::RenderResult>()?;
+    m.add_function(wrap_pyfunction!(font_lengths::font_length, m)?)?;
     m.add_class::<svg_options::SvgOptions>()?;
     m.add_function(wrap_pyfunction!(commands::command_registry, m)?)?;
     m.add_function(wrap_pyfunction!(commands::command_description, m)?)?;

@@ -3,9 +3,9 @@
 import json
 from copy import deepcopy
 from PySide6.QtWidgets import (QDialog, QDialogButtonBox, QFormLayout, QComboBox,
-    QLineEdit, QPlainTextEdit, QLabel, QPushButton, QFileDialog, QInputDialog,
+    QLineEdit, QPlainTextEdit, QLabel, QPushButton, QInputDialog,
     QTableWidget, QListWidget)
-from core import record, bim_registry
+from core import record
 from core.ifc_tables import TABLES, IFC_CLASSES, STATUS, predefined_types, common_pset
 
 
@@ -180,55 +180,3 @@ class RecordDialog(QDialog):
         if self._fresh:
             patch['class'] = full['class']
         return patch
-
-
-class RegistryDialog(QDialog):
-    def __init__(self, parent, registry):
-        super().__init__(parent)
-        self.setWindowTitle('Project registry')
-        self.resize(640, 650)
-        self.value = None
-        form = QFormLayout(self)
-        self.editor = QPlainTextEdit(json.dumps(registry, indent=2, ensure_ascii=False))
-        form.addRow(self.editor)
-        add = QPushButton('New classification namespace…'); form.addRow(add)
-        add.clicked.connect(self.add_namespace)
-        csv = QPushButton('Import classification codes CSV…'); form.addRow(csv)
-        csv.clicked.connect(self.import_csv)
-        self.error = QLabel(); self.error.setWordWrap(True); form.addRow(self.error)
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.submit); buttons.rejected.connect(self.reject); form.addRow(buttons)
-
-    def add_namespace(self):
-        key, ok = QInputDialog.getText(self, 'Namespace', 'Registry key')
-        if not ok or not key: return
-        name, ok = QInputDialog.getText(self, 'Namespace', 'Name')
-        if not ok: return
-        try:
-            value = json.loads(self.editor.toPlainText())
-            if key in value['classification_systems']: raise ValueError('Key already exists')
-            value = bim_registry.add_system(value, key, {'name': name, 'edition': '', 'source': '', 'description': ''}, classification=True)
-            self.editor.setPlainText(json.dumps(value, indent=2))
-        except (ValueError, KeyError, TypeError) as exc: self.error.setText(str(exc))
-
-    def import_csv(self):
-        try:
-            value = json.loads(self.editor.toPlainText())
-            key, ok = QInputDialog.getItem(self, 'CSV', 'Classification system', list(value['classification_systems']), editable=False)
-            if not ok: return
-            path, _ = QFileDialog.getOpenFileName(self, 'Codes CSV', '', 'CSV (*.csv)')
-            if not path: return
-            with open(path, encoding='utf-8-sig', newline='') as stream:
-                value = bim_registry.import_codes_csv(value, key, stream.read())
-            self.editor.setPlainText(json.dumps(value, indent=2))
-        except (OSError, ValueError, KeyError, TypeError) as exc: self.error.setText(str(exc))
-
-    def submit(self):
-        try:
-            value = json.loads(self.editor.toPlainText())
-            errors = bim_registry.validate(value)
-            if errors: raise ValueError('\n'.join(errors))
-        except (ValueError, TypeError) as exc:
-            self.error.setText(str(exc)); return
-        self.value = value
-        self.accept()

@@ -36,6 +36,10 @@ pub mod tokens;
 pub mod kit;
 #[cfg(target_os = "macos")]
 mod system_fonts;
+#[cfg(any(not(target_os = "macos"), test))]
+mod host_fonts;
+#[cfg(not(target_os = "macos"))]
+use host_fonts as system_fonts;
 mod gallery;
 pub mod command_palette;
 /// The tool rail's deterministic layout (two columns, three, then scroll).
@@ -467,10 +471,11 @@ impl Ui {
         if let Some(col)=self.column.as_mut(){col.overview=lens::Overview::read(filename,tree,counts)?;}
         Ok(())
     }
-    pub fn style_catalog(&mut self, owner: usize, lines: Vec<String>) {
+    pub fn style_catalog(&mut self, owner: usize, lines: Vec<String>, patterns: String) {
         if let Some(col)=self.column.as_mut() {
             if col.styles.owner != owner { col.styles = Default::default(); col.styles.owner=owner; col.proposal_dismissed=false; col.highlighted=None; col.issue_at=None; }
             col.styles.lines=lines;
+            col.styles.set_patterns(patterns);
         }
     }
     pub fn set_export_focus(&mut self, node: Option<String>, placements: Vec<Vec<String>>) {
@@ -1302,6 +1307,7 @@ impl Ui {
                                 ui.painter().hline(r.x_range().shrink(6.0), r.center().y, Stroke::new(1.0_f32, EDGE));
                                 let mut rows: Vec<(&str, String)> = vec![("scene:camera", "Camera inspector…".into()), ("scene:add", "Add scene from this view".into())];
                                 if let Some(c) = &current {
+                                    rows.push(("scene:editcamera", format!("Edit camera of “{c}”…")));
                                     rows.push(("scene:update", format!("Update “{c}” from this view")));
                                     rows.push(("scene:duplicate", format!("Duplicate “{c}”")));
                                     rows.push(("scene:rename", format!("Rename “{c}”…")));

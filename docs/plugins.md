@@ -322,10 +322,10 @@ with it:
   and look at the model again. Render with Blender and Levels live here.
   Keep it narrow-friendly: controls that shrink, sections that fold
   (`views/fold_section.py`), no fixed widths.
-- **A dialog or a window of your own** (a `QDialog`, any Qt window, from a
+- **A native utility** — for wide output such as the Python Console and the Blender image preview. Both are bound to the open document. See [Plugin panels](plugin-panels.md).
+- **A classic dialog or a window of your own** (a `QDialog`, any Qt window, from a
   tool or a menu entry) — for what is opened, used and closed, or needs
-  room: a report, a console, an image. Model Info, the Python Console and
-  the render's image viewer do this. Parent it to `app.window`, make it
+  room, as in the classic Model Info report. Parent it to `app.window`, make it
   non-modal unless it must block, and reuse one instance.
 - **Only a menu entry or a tool** — for one-shot commands.
 - **A workspace** (below) — when the extension has a document of its own

@@ -276,6 +276,11 @@ impl Panels {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.small_button("Close").clicked() {
                         self.utility = None;
+                        self.sequence += 1;
+                        let event = json!({"api":1,"plugin":p.plugin,"panel":p.panel,"instance":id,
+                            "document":p.document,"revision":p.revision,"event_id":self.sequence,
+                            "control":"_panel","event":"closed","value":null});
+                        actions.push(format!("plugin:{event}"));
                     }
                 });
             }
@@ -480,21 +485,9 @@ fn draw_item(
                 .or_insert_with(|| load_png(ui.ctx(), path))
             {
                 Ok(tex) => {
-                    let zoom_id = ui.make_persistent_id("full_size");
-                    let mut full = ui.data(|d| d.get_temp::<bool>(zoom_id)).unwrap_or(false);
-                    if ui.checkbox(&mut full, "Actual size").changed() {
-                        ui.data_mut(|d| d.insert_temp(zoom_id, full));
-                    }
-                    if full {
-                        egui::ScrollArea::both()
-                            .id_salt("image")
-                            .max_height(300.)
-                            .show(ui, |ui| {
-                                ui.add(egui::Image::new(&*tex).fit_to_exact_size(tex.size_vec2()));
-                            });
-                    } else {
-                        ui.add(egui::Image::new(&*tex).max_width(ui.available_width()));
-                    }
+                    let width = ui.available_width();
+                    let height = (width * tex.size_vec2().y / tex.size_vec2().x).clamp(60., 300.);
+                    super::kit::render_preview(ui, Some(tex), vec2(width, height));
                 }
                 Err(e) => {
                     ui.label(e.as_str());

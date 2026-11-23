@@ -364,7 +364,7 @@ def test_an_edit_command_leaves_the_new_letters_pristine():
     assert text_is_pristine(g)                # the old letters come back intact
 
 
-def test_edit_3d_text_refuses_a_text_edited_by_hand():
+def test_edit_3d_text_refuses_a_text_edited_by_hand(monkeypatch):
     from types import SimpleNamespace
     from views.main_window import MainWindow
 
@@ -378,8 +378,8 @@ def test_edit_3d_text_refuses_a_text_edited_by_hand():
         viewport=SimpleNamespace(
             scene=scene, history=History(scene),
             flash_status=lambda msg, ms=0: flashed.append(msg)),
-        _selected_text3d=lambda: g,
-        _text3d_dialog=lambda params=None: opened.append(params) or None)
+        _selected_text3d=lambda: g)
+    monkeypatch.setattr("views.font_picker.text3d", lambda *args: opened.append(args))
     MainWindow._on_edit_3d_text(win, g)
     assert flashed and not opened
 

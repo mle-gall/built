@@ -976,7 +976,7 @@ def _tree(view, win, *, discover=False):
         from PySide6.QtCore import QSettings
         view.renderer.ui_set_tree_sort(max(0, QSettings().value("ui/project_tree_sort", 0, type=int)))
         view._ui_sort_loaded = True
-    view.renderer.ui_set_style_catalog(id(scene), [*L.LINETYPES, *(L.CUSTOM_LINETYPE + key for key in scene.line_types)])
+    view.renderer.ui_set_style_catalog(id(scene), [*L.LINETYPES, *(L.CUSTOM_LINETYPE + key for key in scene.line_types)], scene.hatch_patterns)
     view.renderer.ui_set_lens(lens)
     view.renderer.ui_set_mode({"library": "Library"}.get(mode, ""))
     view.renderer.ui_set_issues(bool(view.__dict__.get("_ui_issues", False)))
@@ -1647,6 +1647,19 @@ def _tree_action(win, view, action) -> None:
             _core(vp, "patch_record_field", **json.loads(rk))
             vp.notify_scene_changed()
             rebuild()
+        elif verb == "importpat":
+            from core.i18n import tr
+            from ingetrazo_core import import_hatch_file
+            from views.filedialogs import file_dialogs
+            path, _ = file_dialogs.getOpenFileName(win, "Import hatch patterns", "", "Pattern files (*.pat)")
+            if path and win.viewport.scene is scene:
+                try:
+                    count = import_hatch_file(vp.history, path)
+                    vp.flash_status(tr("{n} hatch patterns imported from {name}", n=count, name=Path(path).name))
+                    rebuild()
+                    vp.notify_scene_changed()
+                except (OSError, ValueError) as exc:
+                    vp.flash_status(str(exc))
         elif verb == "drawingpatch":
             import json
             targets, patch = json.loads(rk)
@@ -2543,6 +2556,10 @@ def _run(win, actions, source_view=None) -> None:
         if kind == "sheets":
             from views import wgpu_sheets
             wgpu_sheets.action(win, arg)
+            continue
+        if (kind, arg) == ("tab", "scene:editcamera"):
+            from views.inspector_bridge import _marked
+            win.edit_scene_camera(_marked(win))
             continue
         if kind == "panel" or (kind, arg) in (("act", "camera"), ("tab", "scene:camera")):
             from views import inspector_bridge

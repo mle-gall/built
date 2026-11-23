@@ -25,20 +25,16 @@ from pathlib import Path
 from PySide6.QtCore import (QObject, QPointF, QProcess, QProcessEnvironment,
                             QTimer, Signal,
                             QSettings, Qt)
-from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPixmap
+from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QComboBox,
-    QDialog,
     QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
     QFrame,
-    QGraphicsPixmapItem,
-    QGraphicsScene,
-    QGraphicsView,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -48,7 +44,6 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QScrollArea,
-    QSizePolicy,
     QSlider,
     QSpinBox,
     QToolButton,
@@ -124,98 +119,11 @@ def _kelvin_name(k: int) -> str:
 
 # ---- A larger look at the image -------------------------------------------------
 
-class _ZoomView(QGraphicsView):
-    """The finished image: the wheel zooms around the cursor, a drag pans."""
-
-    def __init__(self, pixmap: QPixmap, parent=None) -> None:
-        super().__init__(parent)
-        self.setScene(QGraphicsScene(self))
-        self._item = QGraphicsPixmapItem(pixmap)
-        self._item.setTransformationMode(Qt.SmoothTransformation)
-        self.scene().addItem(self._item)
-        self.setDragMode(QGraphicsView.ScrollHandDrag)
-        self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
-        self.setRenderHint(QPainter.SmoothPixmapTransform)
-        self.setBackgroundBrush(Qt.darkGray)
-
-    def fit(self) -> None:
-        self.fitInView(self._item, Qt.KeepAspectRatio)
-
-    def actual_size(self) -> None:
-        self.resetTransform()
-
-    def wheelEvent(self, ev) -> None:
-        step = 1.25 if ev.angleDelta().y() > 0 else 0.8
-        scale = self.transform().m11() * step
-        if 0.02 < scale < 16.0:
-            self.scale(step, step)
-
-
-class ImageViewer(QDialog):
-    """A larger look at a render: fit, 100 %, zoom and pan — and, with
-    «Sync with the view», the image that follows the camera."""
-
-    def __init__(self, path: Path, save, parent=None, folder=None,
-                 sync=None) -> None:
-        super().__init__(parent)
-        self.resize(1200, 800)
-        lay = QVBoxLayout(self)
-        self.view = _ZoomView(QPixmap(), self)
-        lay.addWidget(self.view, 1)
-        row = QHBoxLayout()
-        buttons = [(tr("Fit to window"), self.view.fit),
-                   (tr("100 %"), self.view.actual_size),
-                   (tr("Save image…"), save)]
-        if folder is not None:
-            buttons.append((tr("Open folder"), folder))
-        for label, slot in buttons:
-            b = QPushButton(label)
-            b.clicked.connect(slot)
-            row.addWidget(b)
-        self.sync_box = QCheckBox(tr("Sync with the view"))
-        self.sync_box.setToolTip(tr(
-            "Stop moving in the model and a quick draft of what you see is "
-            "rendered here by itself; «Render» still makes the final image"))
-        if sync is not None:
-            self.sync_box.toggled.connect(sync)
-        else:
-            self.sync_box.setVisible(False)
-        row.addWidget(self.sync_box)
-        self.info = QLabel()
-        # The status gives way on a narrow window, never the buttons.
-        self.info.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
-        self.info.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        row.addWidget(self.info, 1)
-        close = QPushButton(tr("Close"))
-        close.clicked.connect(self.close)
-        row.addWidget(close)
-        lay.addLayout(row)
-        self._shown_size = None
-        self.set_image(path)
-
-    def set_image(self, path: Path, note: str = "") -> None:
-        """Show ``path``; the zoom stays unless the picture changed size."""
-        pix = QPixmap(str(path))
-        self.view._item.setPixmap(pix)
-        self.view.scene().setSceneRect(self.view._item.boundingRect())
-        self.setWindowTitle(tr("Render") + f" — {path.name}")
-        self.info.setText((note + " · " if note else "") + tr(
-            "Wheel: zoom · drag: move · {w} × {h} px",
-            w=pix.width(), h=pix.height()))
-        size = (pix.width(), pix.height())
-        if self.isVisible() and size != self._shown_size:
-            self.view.fit()
-        self._shown_size = size
-
-    def set_note(self, note: str) -> None:
-        pix = self.view._item.pixmap()
-        self.info.setText((note + " · " if note else "") + tr(
-            "Wheel: zoom · drag: move · {w} × {h} px",
-            w=pix.width(), h=pix.height()))
-
-    def showEvent(self, ev) -> None:
-        super().showEvent(ev)
-        self.view.fit()
+def _render_result(app, path, following, save, folder, follow):
+    from ingetrazo_render import RenderResult
+    from core.plugin_panels import show_utility
+    return show_utility(app.window, app.key + ".result",
+                        RenderResult(str(path), following, save, folder, follow))
 
 
 # ---- Clicking a light into place ----------------------------------------------
@@ -1106,39 +1014,16 @@ class RenderPanel(QWidget):
             + ("\n\n" + tail if tail else "")).replace("\n", "<br>"))
 
     def _open_viewer(self) -> None:
-        """The image in its own window — one, reused: a second render
-        replaces the picture instead of piling up windows."""
-        if self._image is None:
-            return
-        old = self._viewer
-        if old is not None:
-            old.destroyed.disconnect(self._forget_viewer)
-            old.close()
-        self._viewer = ImageViewer(self._image, self._save_image,
-                                   self.window(), folder=self._open_folder,
-                                   sync=self.set_sync)
-        self._viewer.sync_box.blockSignals(True)
-        self._viewer.sync_box.setChecked(self._sync.active)
-        self._viewer.sync_box.blockSignals(False)
-        self._viewer.setAttribute(Qt.WA_DeleteOnClose)
-        self._viewer.destroyed.connect(self._forget_viewer)
-        self._viewer.show()
-        self._viewer.raise_()
-
-    def _forget_viewer(self, *_a) -> None:
-        self._viewer = None
-        # The synced image lives in that window: closing it ends the sync.
-        if self._sync.active:
-            self._sync_box.setChecked(False)
+        if self._image is not None:
+            self._viewer = _render_result(self.app, self._image, self._sync.active, self._save_image,
+                                          self._open_folder, self.set_sync)
 
     # ---- Sync with the view ----------------------------------------------
     def set_sync(self, on: bool) -> None:
-        for box in (self._sync_box,
-                    getattr(self._viewer, "sync_box", None)):
-            if box is not None and box.isChecked() != on:
-                box.blockSignals(True)
-                box.setChecked(on)
-                box.blockSignals(False)
+        if self._sync_box.isChecked() != on:
+            self._sync_box.blockSignals(True)
+            self._sync_box.setChecked(on)
+            self._sync_box.blockSignals(False)
         if on and self._found is None:
             self._sync_box.setChecked(False)
             return
@@ -1147,7 +1032,7 @@ class RenderPanel(QWidget):
         else:
             self._sync.stop()
             if self._viewer is not None:
-                self._viewer.set_note("")
+                self._viewer.invalidate()
 
     def _sync_scene_key(self):
         """What the loaded scene depends on besides the camera: the model
@@ -1165,11 +1050,14 @@ class RenderPanel(QWidget):
         if self._viewer is None:
             self._open_viewer()
         else:
-            self._viewer.set_image(self._image, tr("In sync"))
+            self._viewer.model.path = str(self._image)
+            self._viewer.model.note = tr("In sync")
+            self._viewer.invalidate()
 
     def _sync_state(self, text: str) -> None:
         if self._viewer is not None:
-            self._viewer.set_note(text)
+            self._viewer.model.note = text
+            self._viewer.invalidate()
         if self._proc is None:
             self._status.setText(text)
 
@@ -1324,6 +1212,7 @@ class BlenderPanel:
             result.append(item("button", "cancel", "Cancel render"))
         if self.image:
             result.extend([item("image", "preview", path=str(self.image)),
+                           item("button", "preview_result", "Open preview…"),
                            item("button", "save", "Save PNG…"),
                            field("sync", "Follow camera", "toggle", self.sync_timer.isActive())])
         if self.lines:
@@ -1375,12 +1264,21 @@ class BlenderPanel:
             self._render()
         elif control == "cancel" and self.job:
             self.job.cancel()
+        elif control == "preview_result" and self.image:
+            self._show_result()
         elif control == "save" and self.image:
             import shutil
             from views.filedialogs import file_dialogs
             path, _ = file_dialogs.getSaveFileName(self.app.window, "Save image", "render.png", "PNG (*.png)")
             if path:
                 shutil.copyfile(self.image, path)
+
+    def _show_result(self):
+        if self.app.scene is self.scene:
+            _render_result(self.app, self.image, self.sync_timer.isActive(),
+                           lambda: self.event("save", "invoke", None),
+                           lambda: open_url(self.image.parent),
+                           lambda on: self.event("sync", "commit", on))
 
     def _pick(self, control):
         def picked(point, on_face):
@@ -1483,6 +1381,8 @@ class BlenderPanel:
         self.proc.deleteLater()
         self.proc = self.job = None
         self.invalidate()
+        if ok:
+            self._show_result()
 
 
 create_panel = BlenderPanel

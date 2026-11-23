@@ -5,13 +5,13 @@ from PySide6.QtCore import QSettings
 from views import chrome_dialogs
 
 
-def show(win, title, text, family, bold, italic, size, unit, done, *, depth=None, editable=False, bounds=(4, 96)):
+def show(win, title, text, family, bold, italic, size, unit, done, *, depth=None, editable=False, bounds=(4, 96), lengths=None):
     view = chrome_dialogs.view_of(win)
     if not getattr(view, "_ui_attached", False):
         return False
     settings = QSettings()
     draft = dict(title=title, text=text, font=family, bold=bold, italic=italic,
-                 height=size, unit=unit, editable=editable, thickness=depth, minimum=bounds[0], maximum=bounds[1])
+                 height=size, unit=unit, editable=editable, thickness=depth, lengths=lengths, minimum=bounds[0], maximum=bounds[1])
     for key in ("recent", "favourites"):
         draft[key] = settings.value("fonts/" + key, [], type=list)
     view.renderer.ui_font_picker(json.dumps(draft))
@@ -44,15 +44,14 @@ def text3d(win, params, done):
                          units.metres_from_number(p["height"], unit),
                          units.metres_from_number(p["thickness"], unit)))
 
+    shown = [units.localized(units.format_length(draft[k], unit, units.fine_precision()))
+             for k in ("height", "thickness")]
     if not show(win, tr("3D Text"), draft["text"], draft["font"], draft["bold"], draft["italic"],
                 units.length_number(draft["height"], unit), units.length_suffix(unit), apply,
                 depth=units.length_number(draft["thickness"], unit), editable=True,
-                bounds=(units.length_number(0.001, unit), units.length_number(1000., unit))):
-        if hasattr(win, "_host"):
-            return
-        choice = win._text3d_dialog(params)
-        if choice:
-            done(choice)
+                bounds=(units.length_number(0.001, unit), units.length_number(1000., unit)),
+                lengths=dict(unit=unit, text=shown)):
+        win.viewport.flash_status(tr("3D Text requires the native view."), 3000)
 
 
 def annotation(win):

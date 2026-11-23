@@ -1083,6 +1083,8 @@ pub struct FontChoice {
     pub italic: bool,
     pub height: f64,
     pub thickness: Option<f64>,
+    #[serde(default)]
+    pub lengths: Option<crate::font_lengths::FontLengths>,
     pub unit: String,
     pub minimum: f64,
     pub maximum: f64,
@@ -1103,10 +1105,7 @@ pub struct FontPicker {
 
 impl FontPicker {
     pub fn new(mut choice: FontChoice) -> Self {
-        #[cfg(target_os = "macos")]
         let families = super::system_fonts::families();
-        #[cfg(not(target_os = "macos"))]
-        let families = Vec::new();
         if choice.font.is_empty() {
             choice.font = families
                 .iter()
@@ -1282,7 +1281,6 @@ impl FontPicker {
                         &self.choice.text
                     };
                     let bounds = Rect::from_min_max(pos2(mid.x, rect.top()), rect.max);
-                    #[cfg(target_os = "macos")]
                     if !self.previews.contains_key(name) {
                         if let Some(image) = super::system_fonts::sample(
                             name,
@@ -1317,23 +1315,33 @@ impl FontPicker {
             toggle(ui, &mut self.choice.bold, "Bold");
             toggle(ui, &mut self.choice.italic, "Italic");
             ui.label("Size");
-            ui.add(
-                number(&mut self.choice.height, &self.choice.unit)
-                    .range(self.choice.minimum..=self.choice.maximum),
-            );
+            if let Some(lengths) = &mut self.choice.lengths {
+                lengths.edit(0, ui, &mut self.choice.height, self.choice.minimum, self.choice.maximum);
+            } else {
+                ui.add(number(&mut self.choice.height, &self.choice.unit).range(self.choice.minimum..=self.choice.maximum));
+            }
         });
         if let Some(depth) = &mut self.choice.thickness {
             ui.horizontal(|ui| {
                 ui.label("Extrusion");
-                ui.add(number(depth, &self.choice.unit).range(0.0..=self.choice.maximum));
+                if let Some(lengths) = &mut self.choice.lengths {
+                    lengths.edit(1, ui, depth, 0., self.choice.maximum);
+                } else {
+                    ui.add(number(depth, &self.choice.unit).range(0.0..=self.choice.maximum));
+                }
             });
         }
+        let length_error = self.choice.lengths.as_ref().and_then(|draft| draft.error());
+        if let Some(message) = length_error {
+            caption_plain(ui, message);
+        }
+        let lengths_valid = length_error.is_none();
         let mut answer = None;
         ui.horizontal(|ui| {
             if quiet(ui, "Cancel").clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
                 answer = Some(false);
             }
-            let valid = rows.contains(&self.choice.font)
+            let valid = lengths_valid && rows.contains(&self.choice.font)
                 && (!self.choice.editable || !self.choice.text.trim().is_empty());
             ui.add_enabled_ui(valid, |ui| {
                 if sheet_button(ui, "Apply", "↩", 1) || valid && ui.input(|i| i.key_pressed(Key::Enter)) {
@@ -1488,6 +1496,7 @@ mod font_picker_tests {
             minimum: 6.,
             maximum: 28.,
             thickness: None,
+            lengths: None,
             unit: " pt".into(),
             editable: false,
             recent: vec!["C".into()],
@@ -1580,6 +1589,45 @@ pub fn svg_preview(ui: &mut egui::Ui, texture: Option<&egui::TextureHandle>, gui
         ui.input_mut(|i| std::mem::take(&mut i.smooth_scroll_delta.y))
     } else { 0. };
     (drag != egui::Vec2::ZERO || wheel != 0.).then(|| (drag.x, drag.y, (wheel / 300.).exp()))
+}
+
+/// Fit, inspect at native resolution, or zoom around the pointer in a render.
+pub fn render_preview(ui: &mut egui::Ui, texture: Option<&egui::TextureHandle>, size: egui::Vec2) {
+    let pixels = texture.map_or(vec2(64., 40.), |t| t.size_vec2());
+    let id = ui.make_persistent_id(("render zoom", pixels.x.to_bits(), pixels.y.to_bits()));
+    let (mut zoom, mut pan): (Option<f32>, egui::Vec2) = ui.data(|d| d.get_temp(id)).unwrap_or_default();
+    ui.horizontal(|ui| {
+        if quiet(ui, "Fit to window").clicked() {
+            zoom = None;
+            pan = egui::Vec2::ZERO;
+        }
+        if quiet(ui, "100 %").clicked() {
+            zoom = Some(1. / ui.ctx().pixels_per_point());
+            pan = egui::Vec2::ZERO;
+        }
+    });
+    let (well, response) = ui.allocate_exact_size(size, Sense::drag());
+    let fit = (size / pixels).min_elem();
+    let scale = zoom.unwrap_or(fit);
+    if response.hovered() {
+        let scroll = ui.input_mut(|i| std::mem::take(&mut i.smooth_scroll_delta.y));
+        if let Some(pointer) = response.hover_pos().filter(|_| scroll != 0.) {
+            let next = (scale * (scroll / 240.).exp()).clamp(0.02, 16.);
+            let offset = pointer - well.center();
+            pan = offset - (offset - pan) * (next / scale);
+            zoom = Some(next);
+        }
+    }
+    pan += response.drag_delta();
+    let page = Rect::from_center_size(well.center() + pan, pixels * zoom.unwrap_or(fit));
+    let painter = ui.painter_at(well);
+    painter.rect_filled(well, R_CONTROL, WELL);
+    if let Some(tex) = texture {
+        painter.image(tex.id(), page, Rect::from_min_max(Pos2::ZERO, pos2(1., 1.)), BRIGHT);
+    } else {
+        painter.rect_filled(page.shrink(SPACE_XS), R_INSET, SWATCH_FALLBACK);
+    }
+    ui.data_mut(|d| d.insert_temp(id, (zoom, pan)));
 }
 
 /// A catalogue fact may contain an entire licence or a long local path.
@@ -1801,7 +1849,7 @@ pub(super) fn fit(ui: &egui::Ui, text: &str, font: egui::FontId, color: Color32,
 pub const HATCH_KEYS: &str = include_str!("assets/hatches.txt");
 
 mod hatch;
-pub(super) use hatch::{hatch_override, PaperMarks};
+pub(super) use hatch::{hatch_override, imported_hatch, PaperMarks};
 
 pub fn hatch_sample(ui: &egui::Ui, rect: Rect, key: &str, custom: Option<&PaperMarks>) {
     let painter = ui.painter();

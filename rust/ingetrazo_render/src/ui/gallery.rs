@@ -403,6 +403,8 @@ impl Gallery {
         let page = vec2(CONTROL_H * 3., CONTROL_H * 2.);
         let rect = Rect::from_min_size(pos2(at.x + name_w, y), page);
         put(ui, rect, across(), |ui| { svg_preview(ui, None, "Thirds", page); });
+        let image = Rect::from_min_size(rect.right_top() + vec2(SPACE_M, 0.), vec2(CONTROL_H * 7., page.y));
+        put(ui, image, down(), |ui| render_preview(ui, None, vec2(image.width(), CONTROL_H)));
         y + page.y + SPACE_S
     }
 
@@ -499,7 +501,7 @@ impl Gallery {
             if quiet(ui, "Font picker…").clicked() {
                 self.font_picker = Some(FontPicker::new(FontChoice {
                     title: "Sheet text".into(), text: "Ground floor".into(), font: "Helvetica".into(),
-                    bold: false, italic: false, height: 14., thickness: None,
+                    bold: false, italic: false, height: 14., thickness: None, lengths: None,
                     minimum: 4., maximum: 96., unit: " pt".into(), editable: true,
                     recent: vec!["Helvetica".into()], favourites: vec!["Georgia".into()],
                 }));

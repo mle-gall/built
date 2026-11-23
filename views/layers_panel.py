@@ -3752,25 +3752,15 @@ class LayersPanel(QWidget):
         """Bring the patterns of the pattern file ``path`` into the document
         (``Scene.hatch_patterns``; one of the same name is replaced).
         Returns how many came in — 0 when the file holds none it can read."""
-        from pathlib import Path
-        from core.hatches import parse_pat
+        from ingetrazo_core import import_hatch_file
         try:
-            data = Path(path).read_bytes()[:self.PAT_MAX_BYTES]
-        except OSError:
+            count = import_hatch_file(self._window.viewport.history, path)
+        except (OSError, ValueError):
             return 0
-        try:
-            text = data.decode("utf-8")
-        except UnicodeDecodeError:
-            text = data.decode("latin-1")
-        found = parse_pat(text)
-        if not found:
-            return 0
-        scene = self._scene()
-        patterns = dict(getattr(scene, "hatch_patterns", None) or {})
-        patterns.update(found)
-        scene.hatch_patterns = patterns
-        self._touch()
-        return len(found)
+        if count:
+            self._window.viewport.notify_scene_changed()
+            self._refresh_after_change()
+        return count
 
     def export_pat_file(self, path) -> int:
         """Write every pattern drawn only with lines — the built-in ones

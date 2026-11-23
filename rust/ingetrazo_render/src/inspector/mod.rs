@@ -365,7 +365,11 @@ impl Panels {
                 send(out, "camera.close", Value::Null);
             }
         });
-        ui.weak(label(&c["scene"]));
+        if c["bound"] == true {
+            kit::caption_plain(ui, &format!("Editing scene · {}", label(&c["scene"])));
+        } else {
+            kit::caption_plain(ui, "Current view");
+        }
         ui.add_space(7.);
         ui.strong("Lens and frame");
         ui.add_space(4.);
@@ -391,24 +395,53 @@ impl Panels {
                 .selected_text("Choose…")
                 .show_ui(ui, |ui| {
                     self.popup_layers.push(ui.layer_id().id);
-                    for mm in [18, 24, 35, 50, 85, 135] {
+                    for mm in [14, 18, 24, 28, 35, 50, 85, 105, 135] {
                         if ui.button(format!("{mm} mm")).clicked() {
                             send(out, "camera.focal", json!(mm));
                         }
                     }
                 });
-            for (i, name) in ["Sensor width (mm)", "Sensor height (mm)"]
+            let sensors = [
+                ("Full Frame", [36., 24.]),
+                ("APS-C", [23.6, 15.6]),
+                ("Micro 4/3", [17.3, 13.]),
+                ("Super 35", [24.9, 18.7]),
+            ];
+            let custom = c["custom_sensor"] == true;
+            let selected = sensors
                 .iter()
-                .enumerate()
-            {
-                number(
-                    ui,
-                    &format!("camera.sensor{i}"),
-                    name,
-                    &c["sensor"][i],
-                    1.0..=100.0,
-                    out,
-                );
+                .find(|(_, dims)| c["sensor"] == json!(dims) && !custom)
+                .map_or("Custom", |(name, _)| *name);
+            egui::ComboBox::from_label("Sensor")
+                .selected_text(selected)
+                .show_ui(ui, |ui| {
+                    self.popup_layers.push(ui.layer_id().id);
+                    for (name, dims) in sensors {
+                        if ui.selectable_label(selected == name, name).clicked() {
+                            send(out, "camera.sensor", json!(dims));
+                        }
+                    }
+                    if ui
+                        .selectable_label(selected == "Custom", "Custom")
+                        .clicked()
+                    {
+                        send(out, "camera.sensor", Value::Null);
+                    }
+                });
+            if selected == "Custom" {
+                for (i, name) in ["Sensor width (mm)", "Sensor height (mm)"]
+                    .iter()
+                    .enumerate()
+                {
+                    number(
+                        ui,
+                        &format!("camera.sensor{i}"),
+                        name,
+                        &c["sensor"][i],
+                        1.0..=100.0,
+                        out,
+                    );
+                }
             }
         });
         let aspect = c["frame_aspect"].as_f64().unwrap_or_default();
@@ -424,6 +457,9 @@ impl Panels {
                     ("Window", 0.),
                     ("16:9", 16. / 9.),
                     ("4:3", 4. / 3.),
+                    ("3:2", 1.5),
+                    ("A (√2:1)", std::f64::consts::SQRT_2),
+                    ("2.39:1", 2.39),
                     ("1:1", 1.),
                     ("9:16", 9. / 16.),
                 ] {
@@ -432,7 +468,19 @@ impl Panels {
                     }
                 }
             });
-        ui.collapsing("Advanced", |ui| {
+        number(
+            ui,
+            "camera.shift_y",
+            "Vertical shift",
+            &c["shift_y"],
+            -1.0..=1.0,
+            out,
+        );
+        let mut advanced = c["advanced"] == true;
+        if ui.checkbox(&mut advanced, "Advanced options").changed() {
+            send(out, "camera.advanced", json!(advanced));
+        }
+        if advanced {
             for key in ["eye", "target"] {
                 for (i, axis) in ["X", "Y", "Z"].iter().enumerate() {
                     number(
@@ -449,7 +497,6 @@ impl Panels {
                 ("fov", "Vertical FOV (°)", 1., 120.),
                 ("roll_deg", "Roll (°)", -180., 180.),
                 ("shift_x", "Horizontal shift", -1., 1.),
-                ("shift_y", "Vertical shift", -1., 1.),
                 ("clip_near", "Near clip (0 = auto)", 0., 1e9),
                 ("clip_far", "Far clip (0 = auto)", 0., 1e9),
             ] {
@@ -459,7 +506,7 @@ impl Panels {
                     |ui| number(ui, &format!("camera.{key}"), name, &c[key], lo..=hi, out),
                 );
             }
-        });
+        }
         ui.horizontal(|ui| {
             if ui.button("Reset lens").clicked() {
                 send(out, "camera.reset", Value::Null);

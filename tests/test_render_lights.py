@@ -257,19 +257,28 @@ def test_the_panel_sets_temperature_aim_and_sun(window):
     assert panel.app.document_data({})["sun_scale"] == 1.5
 
 
-def test_a_finished_render_opens_its_own_window(window, tmp_path):
+def attach_render_surface(window, monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+    view = SimpleNamespace(_ui_attached=True, renderer=Mock(), update=lambda: None)
+    monkeypatch.setattr(window._doc, "stand_in", view)
+    return view
+
+
+def test_a_finished_render_reuses_the_image_utility(window, tmp_path, monkeypatch):
     from PySide6.QtGui import QImage
+    view = attach_render_surface(window, monkeypatch)
     panel = _panel(window)
     panel._work = tmp_path
     img = QImage(64, 40, QImage.Format_RGB32)
     img.fill(0x336699)
     img.save(str(tmp_path / "render.png"))
     panel._finished(0, None)
-    assert panel._viewer is not None and panel._viewer.isVisible()
     first = panel._viewer
-    panel._finished(0, None)                         # a second render…
-    assert panel._viewer is not first                # …reuses one window
-    panel._viewer.close()
+    assert first.model.slot == "utility" and first.model.path == str(tmp_path / "render.png")
+    panel._finished(0, None)
+    assert panel._viewer is first and view.renderer.ui_plugin_open.call_count == 2
+    assert view.renderer.ui_plugin_open.call_args.args == (first.instance,)
 
 
 def test_the_sun_strength_reaches_the_job(tmp_path):
@@ -305,23 +314,27 @@ def test_the_panel_never_scrolls_sideways(window):
     assert area.widget().minimumSizeHint().width() < 260
 
 
-def test_save_and_open_folder_live_in_the_image_window(window, tmp_path):
+def test_save_and_open_folder_live_in_the_image_utility(window, tmp_path, monkeypatch):
     from PySide6.QtGui import QImage
-    from PySide6.QtWidgets import QPushButton
+    from unittest.mock import Mock
+    attach_render_surface(window, monkeypatch)
     panel = _panel(window)
     panel._work = tmp_path
     img = QImage(32, 20, QImage.Format_RGB32)
     img.fill(0x808080)
     img.save(str(tmp_path / "render.png"))
+    save, folder = Mock(), Mock()
+    monkeypatch.setattr(panel, "_save_image", save)
+    monkeypatch.setattr(panel, "_open_folder", folder)
     panel._finished(0, None)
-    labels = {b.text() for b in panel._viewer.findChildren(QPushButton)}
-    import importlib
-    mod = importlib.import_module(type(panel).__module__)
-    assert {mod.tr("Save image…"), mod.tr("Open folder")} <= labels
-    tray = {b.text() for b in panel.findChildren(QPushButton)}
-    assert mod.tr("Save image…") not in tray and mod.tr("Open folder") not in tray
-    assert "href" in panel._status.text()            # a link back to it
-    panel._viewer.close()
+    model = panel._viewer.model
+    controls = {i["id"] for s in model.sections() for i in s["items"]}
+    assert {"image", "save", "folder", "follow"} <= controls
+    model.event("save", "invoke", None)
+    model.event("folder", "invoke", None)
+    save.assert_called_once()
+    folder.assert_called_once()
+    assert "href" in panel._status.text()
 
 
 def test_change_date_and_time_drops_the_shadows_panel(window, monkeypatch):

@@ -543,3 +543,121 @@ Host.state = bevel_state
     assert applied["revision"] == start["revision"]+1 and applied["faces"] > start["faces"]
     assert done["tool"] != "FilletTool" and done["curve"] is None
     assert all(not s["errors"] and not s["blocked_widgets"] for s in states)
+
+
+@pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
+                    reason="requires a built window and BUILT_WINDOW_TESTS=1")
+def test_camera_registry_text_and_plugin_utilities(tmp_path):
+    """Use renderer verbs for controls without a native menu-script spelling."""
+    from PySide6.QtGui import QImage
+    from core.scene import Scene
+    from formats.igz import save_scene
+
+    initial = tmp_path / "empty.built"
+    save_scene(Scene(), initial)
+    image = tmp_path / "render.png"
+    thumb = QImage(90, 40, QImage.Format_RGB32)
+    thumb.fill(0x557788)
+    assert thumb.save(str(image))
+    marker = tmp_path / "preview-closed"
+    venv = fixture_venv(tmp_path, f"""from app_shell.host import Host
+from core import bim_registry
+from ingetrazo_render import RenderResult
+from core.plugin_panels import show_utility
+from views import chrome_sheet, wgpu_ui
+from pathlib import Path
+menu, state = Host.menu, Host.state
+def fixture_menu(self, command):
+    if command == "fixture-camera":
+        wgpu_ui._run(self.window, ["tab:scene:add", "tab:scene:editcamera"])
+    elif command == "fixture-shift":
+        wgpu_ui._run(self.window, ['panel:["camera.shift_y",0.25]'])
+    elif command == "fixture-close-camera":
+        wgpu_ui._run(self.window, ['panel:["camera.close",null]'])
+    elif command == "fixture-registry":
+        chrome_sheet.action(self.window, chrome_sheet.SEP.join(["library","tab","registry"]))
+    elif command == "fixture-namespace":
+        for args in (["v","registry_key","survey"],["v","registry_name","Survey"],["verb","registry_add"]):
+            chrome_sheet.action(self.window, chrome_sheet.SEP.join(["library",*args]))
+    elif command == "fixture-apply":
+        chrome_sheet.action(self.window, chrome_sheet.SEP.join(["library","verb","registry_apply"]))
+    elif command == "fixture-text":
+        self.window._act_3dtext.trigger()
+    elif command == "fixture-preview":
+        show_utility(self.window, "test.result", RenderResult({str(image)!r}, False, lambda: None,
+                     lambda: None, lambda on: Path({str(marker)!r}).write_text(str(on))))
+    else:
+        return menu(self, command)
+    self.request_frame()
+def fixture_state(self):
+    lines = next((b.model.lines for b in getattr(self.view, "_plugin_bindings", {{}}).values()
+                  if b.key == "python_console"), [])
+    cam = getattr(self.view, "_camera_inspector", None)
+    saved = self.window._scene_tabs.marked_view()
+    group = getattr(self.viewport.active_tool, "_group", None)
+    selected_font = (getattr(group, "text3d", None) or {{}}).get("font")
+    return dict(state(self), selected_font=selected_font, bound=bool(cam and cam.observe(self.viewport.camera, self.viewport.scene, saved)),
+                camera_open=bool(cam), saved_shift=None if saved is None else saved.lens.get("shift_y"),
+                namespace="survey" in bim_registry.get(self.viewport.scene)["classification_systems"],
+                font=bool(getattr(self.view, "_font_done", None)), console=lines,
+                utility=self.renderer.ui_area_rect("plugin_utility"))
+Host.menu, Host.state = fixture_menu, fixture_state
+""")
+    steps = tmp_path / "steps"
+    steps.write_text("""wait 800
+key escape
+menu fixture-camera
+wait 250
+state
+menu fixture-shift
+menu fixture-close-camera
+wait 300
+state
+menu library
+wait 350
+menu fixture-registry
+wait 300
+menu fixture-namespace
+wait 150
+state
+menu fixture-apply
+wait 400
+state
+menu fixture-text
+wait 400
+state
+key enter
+wait 400
+state
+key escape
+menu panel:python_console
+wait 500
+type 40+2
+key enter cmd
+wait 350
+state
+click 933 591
+wait 220
+menu fixture-preview
+wait 500
+state
+click 933 591
+wait 280
+quit
+""")
+    result = run([str(BIN), "--root", str(ROOT), "--venv", str(venv), "--new-instance",
+                  "--size", "1280x800", "--script", str(steps), str(initial)],
+                 env=dict(os.environ, BUILT_ANSWERS="cmd-d"), capture_output=True, text=True, timeout=60)
+    log = result.stdout + result.stderr
+    assert result.returncode == 0 and "Traceback" not in log, log
+    states = [json.loads(line.removeprefix("[built] state ")) for line in log.splitlines()
+              if line.startswith("[built] state ")]
+    camera, edited, draft, applied, picker, placed, console, preview = states[:8]
+    assert camera["bound"] and edited["saved_shift"] == .25 and not edited["camera_open"], log
+    assert draft["large_sheet"] == "library" and not draft["namespace"], log
+    assert applied["namespace"] and not applied["large_sheet"], log
+    assert picker["font"] and not placed["font"] and placed["tool"] == "PlaceGroupTool", log
+    assert placed["selected_font"], log
+    assert "42" in console["console"] and preview["utility"], log
+    assert marker.read_text() == "False", log
+    assert all(not s["errors"] and not s["blocked_widgets"] for s in states), log

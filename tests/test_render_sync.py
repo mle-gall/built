@@ -185,7 +185,9 @@ def _run(seconds, until=None):
 
 @pytest.mark.slow
 @pytest.mark.skipif(not HAS_BLENDER, reason="no Blender on this machine")
-def test_a_real_blender_follows_the_camera_when_it_rests(window):
+def test_a_real_blender_follows_the_camera_when_it_rests(window, monkeypatch):
+    from tests.test_render_lights import attach_render_surface
+    attach_render_surface(window, monkeypatch)
     panel = _panels(window)[0]
     _box(window.viewport.scene)
     window.viewport.scene.version += 1
@@ -193,13 +195,13 @@ def test_a_real_blender_follows_the_camera_when_it_rests(window):
     panel._sync.image.connect(images.append)
     panel._sync_box.setChecked(True)
     assert _run(120, lambda: len(images) >= 1), "no first draft"
-    assert panel._viewer is not None and panel._viewer.sync_box.isChecked()
+    assert panel._viewer is not None and panel._viewer.model.following
     _run(1.5)
     assert len(images) == 1                        # at rest: nothing new
     window.viewport.camera.yaw += 0.7
     assert _run(60, lambda: len(images) >= 2), "no draft after moving"
     assert images[-1].is_file() and images[-1] != images[0]
-    panel._viewer.close()
+    panel._viewer.model.event("_panel", "closed", None)
     _run(0.5)
     assert not panel._sync.active and not panel._sync_box.isChecked()
     assert panel._sync._proc is None

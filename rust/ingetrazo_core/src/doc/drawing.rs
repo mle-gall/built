@@ -334,6 +334,17 @@ fn drawing_value(py: Python<'_>, field: &str, input: &str) -> PyResult<(Field, F
         {
             ("linetype", Value::Str(input.to_string()))
         }
+        "hatch_angle" | "hatch_scale" => {
+            let n = input.parse::<f64>().ok().filter(|v| v.is_finite())
+                .ok_or_else(|| PyValueError::new_err("Expected a finite hatch angle or scale"))?;
+            if field == "hatch_angle" {
+                ("hatch_angle", Value::Float(n.rem_euclid(360.)))
+            } else if (0.05..=20.).contains(&n) {
+                ("hatch_scale", Value::Float(n))
+            } else {
+                return Err(PyValueError::new_err("Hatch scale must be between 0.05 and 20"));
+            }
+        }
         "hatch" if input.is_empty() => ("hatch", Value::None),
         "hatch"
             if py

@@ -51,12 +51,24 @@ use std::collections::BTreeMap;
 pub(super) struct StyleEditor {
     pub owner: usize,
     pub lines: Vec<String>,
+    pattern_source: String,
+    patterns: BTreeMap<String, serde_json::Value>,
+    hatch_filter: String,
+    samples: BTreeMap<String, Option<kit::PaperMarks>>,
     // Tag keys, not row labels: two filing nodes can refer to one tag.
     selected: BTreeMap<String, (String, Vec<String>)>,
     patch: BTreeMap<String, String>,
 }
 
 impl StyleEditor {
+    pub fn set_patterns(&mut self, source: String) {
+        if self.pattern_source != source {
+            self.patterns = serde_json::from_str(&source).unwrap_or_default();
+            self.pattern_source = source;
+            self.samples.clear();
+        }
+    }
+
     pub fn selected(&self, n: &Node) -> bool {
         n.cells
             .get(5)
@@ -97,6 +109,9 @@ impl StyleEditor {
             .show(ui, |ui| {
                 ui.spacing_mut().item_spacing.y = super::SPACE_XS;
                 self.fields(ui);
+                if kit::quiet(ui, "Import hatch patterns…").clicked() {
+                    actions.push("importpat\u{1f}".into());
+                }
             });
         self.apply_row(ui, actions);
         true
@@ -119,8 +134,6 @@ impl StyleEditor {
                 .collect::<Vec<_>>()
                 .join(", "),
         );
-        let mut hatch = vec![String::new()];
-        hatch.extend(kit::HATCH_KEYS.lines().map(str::to_owned));
         let weights: Vec<String> = [
             "auto", "0.13", "0.18", "0.25", "0.35", "0.50", "0.70", "1.00",
         ]
@@ -129,7 +142,9 @@ impl StyleEditor {
         for (index, field, name, choices) in [
             (6, "cut_weight", "Cut weight (mm)", weights.clone()),
             (0, "color", "Colour", vec![]),
-            (4, "hatch", "Hatch", hatch),
+            (4, "hatch", "Hatch", vec![]),
+            (8, "hatch_angle", "Hatch angle (°)", vec![]),
+            (9, "hatch_scale", "Hatch scale", vec![]),
             (2, "weight", "Projection weight (mm)", weights),
             (1, "linetype", "Line type", self.lines.clone()),
             (3, "print", "Print", vec!["0".into(), "1".into()]),
@@ -151,7 +166,29 @@ impl StyleEditor {
                 .or((!mixed).then_some(first))
                 .map(str::to_owned);
             kit::property_control(ui, name, |ui| {
-                if field == "color" {
+                if field == "hatch" {
+                    if let Some(chosen) = self.pick_hatch(ui, current.as_deref()) {
+                        self.patch.insert(field.into(), chosen);
+                    }
+                } else if matches!(field, "hatch_angle" | "hatch_scale") {
+                    let angle = field == "hatch_angle";
+                    let mut value = current
+                        .as_deref()
+                        .and_then(|v| v.parse::<f64>().ok())
+                        .unwrap_or(if angle { 0. } else { 1. });
+                    if ui
+                        .add(
+                            kit::number(&mut value, if angle { "°" } else { "×" })
+                                .range(if angle { -360.0..=360.0 } else { 0.05..=20.0 }),
+                        )
+                        .changed()
+                    {
+                        self.patch.insert(field.into(), value.to_string());
+                    }
+                    if current.is_none() {
+                        kit::caption_plain(ui, "Mixed");
+                    }
+                } else if field == "color" {
                     let mut color = current
                         .as_deref()
                         .and_then(parse_hex)
@@ -191,6 +228,67 @@ impl StyleEditor {
                 }
             });
         }
+    }
+
+    fn pick_hatch(&mut self, ui: &mut egui::Ui, current: Option<&str>) -> Option<String> {
+        let label = |key: &str| {
+            if key.is_empty() {
+                "Automatic".into()
+            } else {
+                key.trim_start_matches("pat:").replace('_', " ")
+            }
+        };
+        let mut choice = None;
+        egui::ComboBox::from_id_salt("drawing hatch")
+            .width(ui.available_width().min(168.))
+            .selected_text(current.map(label).unwrap_or_else(|| "Mixed".into()))
+            .show_ui(ui, |ui| {
+                ui.add(kit::search(&mut self.hatch_filter, "Find a hatch"));
+                let query = self.hatch_filter.trim().to_lowercase();
+                let imported = self
+                    .patterns
+                    .iter()
+                    .map(|(k, v)| (format!("pat:{k}"), Some(v)));
+                let standard = std::iter::once("")
+                    .chain(kit::HATCH_KEYS.lines())
+                    .map(|k| (k.to_owned(), None));
+                for (key, pattern) in imported.chain(standard) {
+                    let text = label(&key);
+                    let description = pattern.and_then(|p| p["label"].as_str()).unwrap_or("");
+                    if !text.to_lowercase().contains(&query)
+                        && !description.to_lowercase().contains(&query)
+                    {
+                        continue;
+                    }
+                    let (rect, row) = kit::list_row(ui, super::ROW_H, current == Some(&key));
+                    if ui.is_rect_visible(rect) {
+                        let sample = egui::Rect::from_center_size(
+                            rect.left_center() + egui::vec2(22., 0.),
+                            egui::vec2(36., 14.),
+                        );
+                        let marks = pattern.and_then(|p| {
+                            self.samples
+                                .entry(key.clone())
+                                .or_insert_with(|| kit::imported_hatch(&p["families"]))
+                                .as_ref()
+                        });
+                        kit::hatch_sample(ui, sample, &key, marks);
+                        ui.painter().text(
+                            rect.left_center() + egui::vec2(46., 0.),
+                            egui::Align2::LEFT_CENTER,
+                            text,
+                            super::body(),
+                            super::INK,
+                        );
+                    }
+                    if row.on_hover_text(description).clicked() {
+                        choice = Some(key);
+                        self.hatch_filter.clear();
+                        ui.close_menu();
+                    }
+                }
+            });
+        choice
     }
 
     fn apply_row(&mut self, ui: &mut egui::Ui, actions: &mut Vec<String>) {

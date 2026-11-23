@@ -5,80 +5,63 @@ designing 3D-printed parts in millimetres was asked for the text height
 and extrusion in metres. The parameters it returns stay in metres."""
 from __future__ import annotations
 
-import os
+import json
+from types import SimpleNamespace
+from unittest.mock import Mock
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+import pytest
 
-from tests.qt_window_lifetime import close_window
-import pytest  # noqa: E402
-from PySide6.QtWidgets import (QApplication, QDialog,  # noqa: E402
-                               QDoubleSpinBox)
-
-_app = QApplication.instance() or QApplication([])
+from core import units
+from core.scene import Scene
+from ingetrazo_render import font_length
+from views import font_picker
 
 
-def _run_dialog(monkeypatch, unit, typed, params=None):
-    """Open the dialog in a ``unit`` document, note what the two length
-    boxes show, type ``typed`` (height, thickness) and accept."""
-    from core.units import apply_units
-    from views.main_window import MainWindow
-    win = MainWindow()
-    seen = {}
-
-    def fake_exec(dlg):
-        boxes = dlg.findChildren(QDoubleSpinBox)
-        seen["boxes"] = [b.text() for b in boxes]
-        for box, text in zip(boxes, typed):      # typed, as a user does
-            box.lineEdit().setText(text)
-            box.interpretText()
-        return QDialog.Accepted
-
+def exercise_picker(unit, typed, params=None, precision=2, changes=None, cancel=False):
+    scene = Scene()
+    scene.units = {"length": unit, "precision": precision}
+    view = SimpleNamespace(_ui_attached=True, renderer=Mock(), update=lambda: None)
+    win = SimpleNamespace(viewport=SimpleNamespace(scene=scene), _doc=SimpleNamespace(stand_in=view))
+    applied = []
+    previous = units._SCENE
     try:
-        apply_units(win.viewport.scene, {"length": unit, "precision": 1})
-        monkeypatch.setattr(QDialog, "exec", fake_exec)
-        out = win._text3d_dialog(params)
+        units.bind_scene(scene)
+        font_picker.text3d(win, params, applied.append)
+        draft = json.loads(view.renderer.ui_font_picker.call_args.args[0])
+        choice = dict(draft, **(changes or {}))
+        for key, low, text in zip(("height", "thickness"), (draft["minimum"], 0.), typed):
+            if text is not None:
+                choice[key] = font_length(text, unit, low, draft["maximum"])
+        font_picker.answer(win, "" if cancel else json.dumps(choice))
+        return draft, applied
     finally:
-        win._saved_version = win.viewport.scene.version
-        close_window(win)
-    return seen["boxes"], out
+        units.bind_scene(previous)
 
 
-def test_a_millimetre_model_asks_for_millimetres(monkeypatch):
-    boxes, out = _run_dialog(monkeypatch, "mm", ("120", "8"))
-    assert [b.replace(" ", "") for b in boxes] == ["250.0mm", "50.0mm"]
-    assert out["height"] == pytest.approx(0.12)
-    assert out["thickness"] == pytest.approx(0.008)
+def test_a_millimetre_model_asks_for_millimetres():
+    draft, (out,) = exercise_picker("mm", ("120", "8"), precision=0)
+    assert draft["lengths"]["text"] == ["250 mm", "50 mm"]
+    assert out["height"] == pytest.approx(.12) and out["thickness"] == pytest.approx(.008)
 
 
-def test_editing_shows_the_text_in_the_model_unit(monkeypatch):
-    boxes, out = _run_dialog(monkeypatch, "cm", ("30", "2"),
-                             params={"text": "A", "height": 0.5,
-                                     "thickness": 0.1})
-    assert [b.replace(" ", "") for b in boxes] == ["50.0cm", "10.0cm"]
-    assert out["height"] == pytest.approx(0.30)
+def test_editing_shows_the_text_in_the_model_unit():
+    draft, (out,) = exercise_picker("cm", ("30", "2"), {"text":"A", "height":.5, "thickness":.1})
+    assert draft["height"] == 50 and draft["thickness"] == 10 and draft["unit"].strip() == "cm"
+    assert out["height"] == pytest.approx(.3)
 
 
-def test_a_metre_model_is_as_before(monkeypatch):
-    boxes, out = _run_dialog(monkeypatch, "m", ("0.4", "0.02"))
-    assert [b.replace(" ", "") for b in boxes] == ["0.3m", "0.1m"] or \
-        boxes[0].startswith("0.25")
-    assert out["height"] == pytest.approx(0.4)
+def test_a_metre_model_is_as_before():
+    draft, (out,) = exercise_picker("m", (".4", ".02"))
+    assert draft["lengths"]["text"] == ["0.250 m", "0.050 m"]
+    assert out["height"] == pytest.approx(.4)
 
 
-def test_classic_insert_uses_qt_font_control(monkeypatch):
-    from PySide6.QtWidgets import QFontComboBox
-    from views.main_window import MainWindow
-    win = MainWindow()
-    seen = []
+def test_cancel_does_not_start_placement():
+    draft, applied = exercise_picker("m", (None, None), cancel=True)
+    assert draft["editable"] and not applied
 
-    def cancel(dialog):
-        seen.append(dialog.findChild(QFontComboBox).currentFont().family())
-        return QDialog.Rejected
 
-    try:
-        monkeypatch.setattr(QDialog, "exec", cancel)
-        win._on_insert_3d_text()
-        assert seen and seen[0]
-    finally:
-        win._saved_version = win.viewport.scene.version
-        close_window(win)
+@pytest.mark.parametrize("typed", ["2 m²", "-2", "very tall", "1001 m"])
+def test_invalid_lengths_cannot_apply(typed):
+    with pytest.raises(ValueError):
+        font_length(typed, "m", .001, 1000.)

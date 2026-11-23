@@ -507,6 +507,25 @@ def test_drawing_lens_sends_native_style_fields_and_catalog(ui):
     assert "dashed" in view.renderer.calls["ui_set_style_catalog"][1]
 
 
+def test_imported_hatch_angle_and_scale_are_undoable_in_drawing(ui, tmp_path, monkeypatch):
+    import json
+    from views.filedialogs import file_dialogs
+    scene, win, view, rows, act = ui
+    path = tmp_path / "survey.pat"
+    path.write_text("*SURVEY,Site survey\n45,0,0,0,2,3,-1")
+    monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *_: (str(path), "PAT"))
+    act("lens", "1")
+    act("importpat", "")
+    assert view.renderer.calls["ui_set_style_catalog"][2]["SURVEY"]["label"] == "Site survey"
+    tag = scene.layer("Paths")
+    old = (tag.hatch, tag.hatch_angle, tag.hatch_scale)
+    act("drawingpatch", json.dumps([[tag.key], {"hatch":"pat:SURVEY", "hatch_angle":"-45", "hatch_scale":"2"}]))
+    assert (tag.hatch, tag.hatch_angle, tag.hatch_scale) == ("pat:SURVEY", 315., 2.)
+    assert win.viewport.history.undo() and (tag.hatch, tag.hatch_angle, tag.hatch_scale) == old
+    assert win.viewport.history.undo() and "SURVEY" not in scene.hatch_patterns
+    assert win.viewport.history.redo() and "SURVEY" in scene.hatch_patterns
+
+
 @pytest.mark.parametrize("operation", ["group", "insert", "paste", "link", "group_selection"])
 def test_created_placement_inherits_the_active_node_in_its_creation_step(ui, site, operation):
     from core import bim_registry, links, structure

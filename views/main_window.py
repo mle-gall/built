@@ -1873,7 +1873,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         camera_menu.addAction(self._act_field_of_view)
         # Camera Settings: the camera by the numbers — eye and target,
         # focal length, roll, frame shift, clipping and the picture's frame
-        # (views/camera_panel.py). A tool window that stays open.
+        # The native sidebar follows the active camera.
         self._act_camera_settings = QAction(
             tool_icon("camera_settings"), tr("Camera Settings…"), self)
         self._icon_actions.append((self._act_camera_settings,
@@ -7301,35 +7301,14 @@ class MainWindow(WorksessionMixin, QMainWindow):
                           float(cam.fov_deg), lo, hi, 1, done=apply, suffix="°")
 
     def _show_camera_settings(self):
-        """Camera ▸ Camera Settings…: one window, kept, raised if open —
-        on the live view (it stops editing a scene, if it was)."""
-        view = getattr(self._doc, "stand_in", None)
-        if getattr(view, "_ui_attached", False):
-            from views.inspector_bridge import action
-            action(self, view, '["camera.open",null]')
-            return None
-        dlg = getattr(self, "_camera_settings", None)
-        if dlg is None:
-            from views.camera_panel import CameraSettingsDialog
-            dlg = self._camera_settings = CameraSettingsDialog(self)
-        dlg.stop_editing_scene()
-        dlg.present()               # whole, in the middle of the screen
-        return dlg
+        from views.inspector_bridge import open_camera
+        return open_camera(self)
 
-    def edit_scene_camera(self, view) -> None:
-        """A scene's right-click ▸ Camera Settings…: show the scene and
-        open the camera settings on it — what is changed there is kept in
-        the scene."""
-        if view is None:
-            return
-        self.tray.scenes.show_view(view)
-        row = getattr(self, "_scene_tabs", None)
-        if row is not None:
-            row.mark_view(view)
-        dlg = self._show_camera_settings()
-        if dlg is not None:
-            dlg.refresh()
-            dlg.edit_scene(view)
+    def edit_scene_camera(self, view):
+        from views.inspector_bridge import open_camera
+        if view is not None:
+            self.tray.scenes.show_view(view)
+            return open_camera(self, view)
 
     def _reset_camera_home(self) -> None:
         """A new drawing opens on the default view (iso, 20 m out), not on
@@ -7737,6 +7716,8 @@ class MainWindow(WorksessionMixin, QMainWindow):
         self._enter_document(doc)
 
     def _leave_document(self, doc, picture: bool = True) -> None:
+        from views.inspector_bridge import leave_camera
+        leave_camera(doc)
         vp = doc.viewport
         if vp is None:
             return
@@ -9614,82 +9595,6 @@ class MainWindow(WorksessionMixin, QMainWindow):
         from views.wgpu_library import open_library
         open_library(self, "components", scope="s:online")
 
-    def _text3d_dialog(self, params=None):
-        """The 3D Text dialog (text, font, bold, italic, height,
-        thickness) → the parameters dict, or ``None`` when cancelled or
-        blank. ``params`` pre-fills it (editing an existing text).
-
-        Height and thickness are kept in METRES, the model's unit (Marco,
-        2026-09-20), and shown and typed in the DOCUMENT's units like every
-        other readout (#287: a millimetre model showed them in metres) — a
-        bare «20» is 20 mm there, «2cm» is 2 cm anywhere. No low ceiling:
-        Rafael typed «20» for the extrusion and a 10 m cap refused it
-        (2026-09-16, f000845) — the cap was the fault, not the unit."""
-        from PySide6.QtWidgets import (QCheckBox, QDialog, QDialogButtonBox,
-                                       QFontComboBox, QFormLayout, QLineEdit)
-        from PySide6.QtGui import QFont
-        from core.text3d import text_params
-        from views.length_field import LengthSpinBox
-        params = params or {}
-        dlg = QDialog(self)
-        dlg.setWindowTitle(tr("3D Text"))
-        form = QFormLayout(dlg)
-        text_edit = QLineEdit(params.get("text") or tr("Built"))
-        text_edit.selectAll()
-        form.addRow(tr("Text:"), text_edit)
-        font_box = QFontComboBox()
-        if params.get("font"):
-            font_box.setCurrentFont(QFont(params["font"]))
-        form.addRow(tr("Font:"), font_box)
-        bold_check = QCheckBox()
-        bold_check.setChecked(bool(params.get("bold", True)))
-        form.addRow(tr("Bold:"), bold_check)
-        italic_check = QCheckBox()
-        italic_check.setChecked(bool(params.get("italic", False)))
-        form.addRow(tr("Italic:"), italic_check)
-        # The Text box previews the letters (#1017): the chosen font, bold
-        # and italic, a little larger than the dialog's own text so the
-        # font's details read. Not the model height — that is in metres.
-        base_size = text_edit.font().pointSizeF()
-
-        def preview_font(*_):
-            f = QFont(font_box.currentFont())
-            f.setBold(bold_check.isChecked())
-            f.setItalic(italic_check.isChecked())
-            if base_size > 0:
-                f.setPointSizeF(base_size * 1.5)
-            text_edit.setFont(f)
-
-        font_box.currentFontChanged.connect(preview_font)
-        bold_check.toggled.connect(preview_font)
-        italic_check.toggled.connect(preview_font)
-        preview_font()
-        height_spin = LengthSpinBox(minimum=0.001, maximum=1000.0)
-        height_spin.setValue(float(params.get("height", 0.25)))
-        form.addRow(tr("Height:"), height_spin)
-        depth_spin = LengthSpinBox(minimum=0.0, maximum=1000.0)
-        depth_spin.setValue(float(params.get("thickness", 0.05)))
-        depth_spin.setToolTip(tr("0 leaves flat faces (no extrusion)"))
-        form.addRow(tr("Extruded:"), depth_spin)
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok
-                                   | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(dlg.accept)
-        buttons.rejected.connect(dlg.reject)
-        form.addRow(buttons)
-        try:
-            if dlg.exec() != QDialog.Accepted:
-                return None
-            text = text_edit.text().strip()
-            if not text:
-                return None
-            return text_params(
-                text, font_box.currentFont().family(), bold_check.isChecked(),
-                italic_check.isChecked(), height_spin.value(),
-                depth_spin.value())
-        finally:
-            dlg.deleteLater()
-
-    @_repeatable("3D Text")
     def _on_insert_3d_text(self) -> None:
         """3D Text: the dialog generates REAL extruded geometry —
         a container group with ONE GROUP PER LETTER, editable later from
