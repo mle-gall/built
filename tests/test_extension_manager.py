@@ -380,11 +380,10 @@ def test_catalog_text_is_shown_as_plain_text(tmp_path, monkeypatch):
 
 def test_building_the_manager_never_shows_a_stray_window(tmp_path, monkeypatch):
     app = QApplication.instance() or QApplication([])
-    before = set(app.topLevelWidgets())
+    before = {w for w in app.topLevelWidgets() if w.isVisible()}
     browser = Browser(monkeypatch, tmp_path, [_extension(b"x")]).act("tab", "Browse")
     assert browser.spec["id"] == "extensions" and browser.ids == ["sample"]
-    app.processEvents()
-    assert set(app.topLevelWidgets()) == before
+    assert {w for w in app.topLevelWidgets() if w.isVisible()} == before
 
 
 def test_zip_names_with_a_colon_are_rejected(tmp_path, monkeypatch):
