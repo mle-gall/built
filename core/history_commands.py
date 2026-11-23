@@ -4042,46 +4042,9 @@ class MakeGroupCommand(MeshCommand):
         # share the definition through the existing prototype machinery.
         self._component = component
         self._name = name
-        if _doc.ENABLED:
-            from ingetrazo_core import GroupGeometry
-            self._geometry = GroupGeometry(faces, edges)
-            self.snapshot = self.group = None
-            return
-        faces = list(faces)
-        # Attrs (colour, texture, layer, IFC tag) must travel into the group's
-        # fresh mesh with each face — grouping a painted set used to strip it.
-        self._face_loops = [
-            ([QVector3D(v) for v in f.vertices],
-             [[QVector3D(v) for v in h] for h in f.holes],
-             dict(f.attrs))
-            for f in faces
-        ]
-        self._edge_ends = [(QVector3D(e.a), QVector3D(e.b)) for e in edges]
-        # Edge flags must travel into the group's fresh mesh: without them,
-        # grouping a smooth cylinder suddenly shows every facet seam (soft
-        # edges hidden in the loose mesh, visible in the group), its rims stop
-        # selecting as whole curves, and a HIDDEN edge comes back from the
-        # dead — «oculté una arista, agrupo el dibujo y la arista vuelve a
-        # aparecer» (Marco, 2026-09-10). They travel as one tuple now, so the
-        # next flag added to an edge cannot be forgotten here.
-        self._flagged: list = []
-
-        def note(e):
-            if e is not None and not edge_is_plain(e):
-                self._flagged.append(
-                    (QVector3D(e.a), QVector3D(e.b), edge_flags(e)))
-
-        for f in faces:
-            for lp in (f.loop, *f.hole_loops):
-                n = len(lp)
-                for i in range(n):
-                    va, vb = lp[i], lp[(i + 1) % n]
-                    note(next((k for k in va.edges if k.other(va) == vb),
-                              None))
-        for e in edges:
-            note(e)
-        self.snapshot: Optional[dict] = None
-        self.group: Optional[Group] = None
+        from ingetrazo_core import GroupGeometry
+        self._geometry = GroupGeometry(faces, edges)
+        self.snapshot = self.group = None
 
     def do(self, scene) -> None:
         m = scene.mesh
@@ -4101,115 +4064,11 @@ class MakeGroupCommand(MeshCommand):
         scene.version += 1
 
     def _build(self, scene) -> Group:
-        if _doc.ENABLED:
-            return self._geometry.build(scene, self._component, self._name)
-        # The group is a fresh copy built from the captured positions. A
-        # COMPONENT shifts them into local coordinates around the origin.
-        origin = QVector3D(0.0, 0.0, 0.0)
-        # Made inside a turned group, the new one lines up with THAT
-        # context's axes (issue #44): its origin is the lowest
-        # corner measured along them, not along the world's.
-        frame = getattr(scene, "drawing_frame", None)
-        pts = [p for loop, holes, _a in self._face_loops
-               for lst in (loop, *holes) for p in lst]
-        pts += [p for pair in self._edge_ends for p in pair]
-        rot = None
-        if frame is not None and pts:
-            from core.group import frame_axes
-            fo, fx, fy, fz = frame_axes(frame)
-
-            def loc(p):
-                d = QVector3D(p) - fo
-                return (QVector3D.dotProduct(d, fx), QVector3D.dotProduct(d, fy),
-                        QVector3D.dotProduct(d, fz))
-            ls = [loc(p) for p in pts]
-            lo = (min(q[0] for q in ls), min(q[1] for q in ls),
-                  min(q[2] for q in ls))
-            corner = fo + fx * lo[0] + fy * lo[1] + fz * lo[2]
-            rot = (fx, fy, fz)
-        if self._component and pts:
-            if rot is not None:
-                origin = corner
-            else:
-                origin = QVector3D(min(p.x() for p in pts),
-                                   min(p.y() for p in pts),
-                                   min(p.z() for p in pts))
-
-        def L(p):
-            if self._component and rot is not None:
-                d = QVector3D(p) - origin       # into the context's axes
-                return QVector3D(QVector3D.dotProduct(d, rot[0]),
-                                 QVector3D.dotProduct(d, rot[1]),
-                                 QVector3D.dotProduct(d, rot[2]))
-            return QVector3D(p) - origin
-
-        gmesh = Mesh()
-        for loop, holes, attrs in self._face_loops:
-            gf = gmesh.add_face([L(p) for p in loop],
-                                [[L(p) for p in h] for h in holes] or None)
-            if attrs:
-                gf.attrs.update(attrs)
-        for a, b in self._edge_ends:
-            la, lb = L(a), L(b)
-            if _key(la) == _key(lb):
-                continue        # a zero-length edge is no edge (#341)
-            gmesh.add_edge(la, lb)
-        for a, b, flags in self._flagged:
-            va, vb = gmesh.vertex_at(L(a)), gmesh.vertex_at(L(b))
-            e = (gmesh.find_edge(va, vb)
-                 if va is not None and vb is not None else None)
-            if e is not None:
-                stamp_edge_flags(e, flags)
-        group = Group(gmesh, name=self._name)
-        if self._component:
-            from ingetrazo_core import Matrix4 as QMatrix4x4
-            if rot is not None:
-                from core.axes import frame_matrix
-                group.xform = frame_matrix(origin, *rot)
-            else:
-                t = QMatrix4x4()
-                t.translate(origin)
-                group.xform = t
-        elif rot is not None:
-            from core.axes import frame_matrix
-            group.axes = frame_matrix(corner, *rot)
-        if scene.__dict__.get("_groups_owner") is not None and getattr(scene.mesh, "_instance_definition", None) is not None:
-            inverse, _ = scene.mesh._store.tool_placement().inverted()
-            if group.xform is None:
-                from core.group import carry_axes, transformed_mesh
-                group.mesh = transformed_mesh(group.mesh, inverse)
-                carry_axes(group, inverse)
-            else:
-                group.xform = inverse * group.xform
-        return group
+        return self._geometry.build(scene, self._component, self._name)
 
     def _take_off_loose(self, scene) -> None:
         m = scene.mesh
-        if _doc.ENABLED:
-            return self._geometry.take_off(m, scene.selection.discard)
-        # Remove the grouped geometry from the loose mesh.
-        face_keysets = [frozenset(_key(p) for p in loop)
-                        for loop, _h, _a in self._face_loops]
-        for f in list(m.faces):
-            if frozenset(_key(p) for p in f.vertices) in face_keysets:
-                m.remove_face(f)
-                scene.selection.discard(f)
-        grouped = {_key(p) for loop, holes, _a in self._face_loops
-                   for lst in (loop, *holes) for p in lst}
-        sel_edges = {frozenset((_key(a), _key(b))) for a, b in self._edge_ends}
-        for e in list(m.edges):
-            ek = frozenset((_key(e.a), _key(e.b)))
-            if not e.faces and (ek in sel_edges or
-                                (_key(e.a) in grouped and _key(e.b) in grouped)):
-                m.remove_edge(e)
-                scene.selection.discard(e)
-        # The corners only the grouped geometry used are left behind by the
-        # removals above — they do not cascade on purpose — so a box handed
-        # to a component left eight invisible vertices in the loose mesh,
-        # still in the position registry, ready to catch the next thing
-        # drawn there. Sweep them in the same step: the snapshot below takes
-        # them back on undo.
-        m.purge_debris()
+        return self._geometry.take_off(m, scene.selection.discard)
 
     def undo(self, scene) -> None:
         if self.group in scene.groups:
@@ -4234,58 +4093,22 @@ class MakeUniqueCommand(Command):
         self.group = group
         self._rename = rename
         self._prior = None
-        if _doc.ENABLED:
-            return
-        self._name = None
-        self._proto = None
-        self._xform = None
-        self._children = None
-        self._axes = None
-        self._component = True
 
     def do(self, scene) -> None:
-        if _doc.ENABLED:
-            from ingetrazo_core import make_placement_unique
-            self._prior = make_placement_unique(scene, self.group, self._rename, True)
-            if self._prior is not None:
-                scene.version += 1
-            return
-        if self.group.ext and self.group.ext.get("link"):
-            return          # a linked file stays its source's (make_unique)
-        self._proto = self.group.mesh
-        self._xform = self.group.xform
-        self._children = self.group.children
-        self._axes = self.group.axes
-        self._component = self.group.component
-        self._name = self.group.name
-        if self._rename and self.group.name:
-            from core.kept_components import names_in_use, numbered_name
-            taken = names_in_use(scene, skip=self.group)
-            if self.group.name in taken:
-                self.group.name = numbered_name(self.group.name, taken)
-        self.group.make_unique()
-        scene.version += 1
+        from ingetrazo_core import make_placement_unique
+        self._prior = make_placement_unique(scene, self.group, self._rename, True)
+        if self._prior is not None:
+            scene.version += 1
 
     def bind_transaction(self, txn):
         super().bind_transaction(txn)
         self._prior = None
 
     def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            from ingetrazo_core import restore_unique_placement
-            if self._prior is not None:
-                restore_unique_placement(self.group, self._prior)
-                scene.version += 1
-            return
-        if self._proto is None:
-            return
-        self.group.mesh = self._proto
-        self.group.xform = self._xform
-        self.group.children = self._children or []
-        self.group.axes = self._axes
-        self.group.component = self._component
-        self.group.name = self._name
-        scene.version += 1
+        from ingetrazo_core import restore_unique_placement
+        if self._prior is not None:
+            restore_unique_placement(self.group, self._prior)
+            scene.version += 1
 
 
 def _move_holds(scene, placements, moved) -> None:
@@ -5418,33 +5241,9 @@ class ExplodeGroupCommand(MeshCommand):
         # composes with the parent's (a shared prototype is never touched),
         # and an unpainted child takes the parent's paint, as its default
         # faces were already drawn with it.
-        if _doc.ENABLED:
-            from ingetrazo_core import lift_placements
-            self._lifted = lift_placements(scene.groups, g, self.index)
-            kids = [row[0] for row in self._lifted]
-        else:
-            kids = list(getattr(g, "children", None) or [])
-            self._lifted = [(c, c.xform, c.mesh, c.material, c.axes,
-                             c.explode_offset) for c in kids]
-            for c in kids:
-                # Free of its component, a part keeps where an exploded view put
-                # it; there is no longer anything to reassemble it into.
-                c.explode_offset = None
-                if P is not None:
-                    if c.xform is not None:
-                        c.xform = P * c.xform
-                    else:
-                        from core.group import carry_axes, transformed_mesh
-                        c.mesh = transformed_mesh(c.mesh, P)
-                        carry_axes(c, P)          # its axes come out with it
-                if c.material is None and paint:
-                    c.material = {k: (dict(v) if isinstance(v, dict) else v)
-                                  for k, v in paint.items()}
-            scene.groups.remove(g)
-            # One parent per placement: what comes out leaves the group (undo
-            # gives it back).
-            g.children = []
-            scene.groups[self.index:self.index] = kids
+        from ingetrazo_core import lift_placements
+        self._lifted = lift_placements(scene.groups, g, self.index)
+        kids = [row[0] for row in self._lifted]
         scene.selection.discard(g)
         if kids:
             scene.selection = set(kids)   # select what came out
@@ -5463,8 +5262,6 @@ class ExplodeGroupCommand(MeshCommand):
         return True
 
     def _geometry(self, scene, m, g, P, paint) -> None:
-        from core.group import placed_face_paint
-        from core.materials import effective_attrs
         from core.store_mesh import StoreState
         from core import store_parts
         inverse, invertible = P.inverted() if P is not None else (None, False)
@@ -5481,44 +5278,9 @@ class ExplodeGroupCommand(MeshCommand):
                 self._after = m.capture_state()
             return
 
-        if _doc.ENABLED:
-            from ingetrazo_core import explode_object_geometry
-            before = list(m.faces)
-            added = explode_object_geometry(m, g.mesh, P, paint, inverse, invertible)
-        else:
-            def W(p):
-                # Instance prototypes hold LOCAL coords — explode in world.
-                return P.map(p) if P is not None else QVector3D(p)
-
-            before = list(m.faces) if m.faces else []
-            added: list = []
-            for f in g.mesh.faces:
-                nf = m.add_face([W(v) for v in f.vertices],
-                                [[W(v) for v in h] for h in f.holes] or None)
-                added.append(nf)
-                # What the face showed inside is what it keeps outside: its own
-                # paint, or — a default face — the group's on BOTH sides
-                # (issue #47: the back used to fall back to default).
-                drawn = effective_attrs(dict(f.attrs or {}), paint)
-                if invertible:
-                    drawn = placed_face_paint(drawn, f, inverse)
-                for key, val in drawn.items():
-                    nf.attrs[key] = dict(val) if isinstance(val, dict) else val
-            for e in g.mesh.edges:
-                v0, v1 = m.vertex_at(W(e.a)), m.vertex_at(W(e.b))
-                if v0 is None or v1 is None or m.find_edge(v0, v1) is None:
-                    m.add_edge(W(e.a), W(e.b))
-            # Edge flags travel back out of the group (the mirror of
-            # MakeGroupCommand): an exploded cylinder must stay smooth, its rims
-            # keep selecting as whole curves, and a hidden edge stay hidden.
-            for e in g.mesh.edges:
-                if edge_is_plain(e):
-                    continue
-                v0, v1 = m.vertex_at(W(e.a)), m.vertex_at(W(e.b))
-                k = (m.find_edge(v0, v1)
-                     if v0 is not None and v1 is not None else None)
-                if k is not None:
-                    stamp_edge_flags(k, edge_flags(e))
+        from ingetrazo_core import explode_object_geometry
+        before = list(m.faces)
+        added = explode_object_geometry(m, g.mesh, P, paint, inverse, invertible)
         m.resplit_curves()
         # A face that lands on faces already there merges with them, as a
         # pasted one does (#73): two boxes that touch share ONE wall instead
@@ -5527,15 +5289,8 @@ class ExplodeGroupCommand(MeshCommand):
         self.copies = []
 
     def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            from ingetrazo_core import lower_placements
-            lower_placements(scene.groups, self._lifted)
-        else:
-            for c, xform, mesh, material, axes, offset in self._lifted:
-                if c in scene.groups:
-                    scene.groups.remove(c)
-                c.xform, c.mesh, c.material, c.axes = xform, mesh, material, axes
-                c.explode_offset = offset
+        from ingetrazo_core import lower_placements
+        lower_placements(scene.groups, self._lifted)
         scene.mesh.restore_state(self.snapshot)
         self.group.children = [c for c, *_rest in self._lifted]
         scene.groups.insert(self.index, self.group)
