@@ -32,6 +32,9 @@ pub const FULL: u32 = 16;
 
 pub struct Dialog {
     pub seq: String,
+    /// What every action starts with: `dlg:<seq>` for a modal form,
+    /// `lsheet:<sheet id>` for the fields of a large sheet (ui/large_sheet.rs).
+    pub(super) prefix: String,
     title: String,
     note: String,
     width: f32,
@@ -51,13 +54,13 @@ pub struct Dialog {
 }
 
 impl Dialog {
-    fn new(seq: String) -> Self {
-        Dialog { seq, title: String::new(), note: String::new(), width: 420.0, fields: Vec::new(),
+    pub(super) fn new(seq: String) -> Self {
+        Dialog { prefix: format!("dlg:{seq}"), seq, title: String::new(), note: String::new(), width: 420.0, fields: Vec::new(),
                  buttons: Vec::new(), page: 0, bufs: HashMap::new(), sent: HashMap::new(),
                  focus_pending: true, tab_focus: false, choice_open: None, color_open: None }
     }
 
-    fn update(&mut self, title: String, note: String, width: f32, fields: Vec<Field>, buttons: Vec<Button>) {
+    pub(super) fn update(&mut self, title: String, note: String, width: f32, fields: Vec<Field>, buttons: Vec<Button>) {
         for f in &fields {
             if f.1 == "edit" || f.1 == "number" {
                 if self.sent.get(&f.0) != Some(&f.3) {
@@ -77,8 +80,8 @@ impl Dialog {
 
     fn act(&self, kind: &str, id: &str, value: Option<&str>) -> String {
         match value {
-            Some(v) => format!("dlg:{}\u{1f}{kind}\u{1f}{id}\u{1f}{v}", self.seq),
-            None => format!("dlg:{}\u{1f}{kind}\u{1f}{id}", self.seq),
+            Some(v) => format!("{}\u{1f}{kind}\u{1f}{id}\u{1f}{v}", self.prefix),
+            None => format!("{}\u{1f}{kind}\u{1f}{id}", self.prefix),
         }
     }
 
@@ -218,12 +221,13 @@ fn label_cell(ui: &mut egui::Ui, label: &str, tip: &str, w: f32, h: f32, enabled
     if !tip.is_empty() { resp.on_hover_text(tip); }
 }
 
-fn fields(ui: &mut egui::Ui, d: &mut Dialog, out: &mut Vec<String>) {
+pub(super) fn fields(ui: &mut egui::Ui, d: &mut Dialog, out: &mut Vec<String>) {
     let label_w = (ui.available_width() * 0.40).clamp(110.0, 220.0);
     let mut page = 0usize;
     let mut has_pages = false;
     let mut focus_done = false;
     let seq = d.seq.clone();
+    let prefix = d.prefix.clone();
     let fields = d.fields.clone();
     for f in &fields {
         let (id, kind, label, text, value, min, max, options, flags, tip) =
@@ -280,7 +284,7 @@ fn fields(ui: &mut egui::Ui, d: &mut Dialog, out: &mut Vec<String>) {
                         state.store(ui.ctx(), resp.id);
                     }
                     if *buf != before {
-                        out.push(format!("dlg:{seq}\u{1f}v\u{1f}{id}\u{1f}{buf}"));
+                        out.push(format!("{prefix}\u{1f}v\u{1f}{id}\u{1f}{buf}"));
                     }
                 });
             }
@@ -293,7 +297,7 @@ fn fields(ui: &mut egui::Ui, d: &mut Dialog, out: &mut Vec<String>) {
                 if resp_clicked && enabled {
                     let v = if value > 0.5 { 0 } else { 1 };
                     if let Some(fm) = d.fields.iter_mut().find(|x| &x.0 == id) { fm.4 = v as f64; }
-                    out.push(format!("dlg:{seq}\u{1f}v\u{1f}{id}\u{1f}{v}"));
+                    out.push(format!("{prefix}\u{1f}v\u{1f}{id}\u{1f}{v}"));
                 }
             }
             "choice" => {
@@ -323,7 +327,7 @@ fn fields(ui: &mut egui::Ui, d: &mut Dialog, out: &mut Vec<String>) {
                                             if j as f64 == value { 1 } else { -1 }, true);
                                 if menu_row(ui, &item) {
                                     if let Some(fm) = d.fields.iter_mut().find(|x| &x.0 == id) { fm.4 = j as f64; }
-                                    out.push(format!("dlg:{seq}\u{1f}v\u{1f}{id}\u{1f}{j}"));
+                                    out.push(format!("{prefix}\u{1f}v\u{1f}{id}\u{1f}{j}"));
                                     d.choice_open = None;
                                 }
                             }
@@ -346,7 +350,7 @@ fn fields(ui: &mut egui::Ui, d: &mut Dialog, out: &mut Vec<String>) {
                             v = (min + t * span).round();
                             if v != value {
                                 if let Some(fm) = d.fields.iter_mut().find(|x| &x.0 == id) { fm.4 = v; }
-                                out.push(format!("dlg:{seq}\u{1f}v\u{1f}{id}\u{1f}{v}"));
+                                out.push(format!("{prefix}\u{1f}v\u{1f}{id}\u{1f}{v}"));
                             }
                         }
                     }
@@ -396,7 +400,7 @@ fn fields(ui: &mut egui::Ui, d: &mut Dialog, out: &mut Vec<String>) {
                     d.color_open = None;
                     if let Some(hex) = applied {
                         if let Some(fm) = d.fields.iter_mut().find(|x| &x.0 == id) { fm.3 = hex.clone(); }
-                        out.push(format!("dlg:{seq}\u{1f}v\u{1f}{id}\u{1f}{hex}"));
+                        out.push(format!("{prefix}\u{1f}v\u{1f}{id}\u{1f}{hex}"));
                     }
                 }
             }
@@ -417,14 +421,14 @@ fn fields(ui: &mut egui::Ui, d: &mut Dialog, out: &mut Vec<String>) {
                     let g = ui.painter().layout_job(job);
                     ui.painter().galley(pos2(r.min.x + 6.0, r.center().y - g.size().y / 2.0), g, INK);
                     ui.add_space(6.0);
-                    if enabled && chip_button(ui, &choose) { out.push(format!("dlg:{seq}\u{1f}b\u{1f}{id}")); }
+                    if enabled && chip_button(ui, &choose) { out.push(format!("{prefix}\u{1f}b\u{1f}{id}")); }
                 });
             }
             "button" => {
                 ui.horizontal(|ui| {
                     if !full { ui.add_space(label_w); }
                     let clicked = chip_button(ui, label);
-                    if clicked && enabled { out.push(format!("dlg:{seq}\u{1f}b\u{1f}{id}")); }
+                    if clicked && enabled { out.push(format!("{prefix}\u{1f}b\u{1f}{id}")); }
                     if !text.is_empty() {
                         ui.add_space(8.0);
                         ui.label(egui::RichText::new(text).font(meta()).color(FAINT));

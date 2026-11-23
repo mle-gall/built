@@ -485,6 +485,8 @@ def chrome_frame(view):
         _chrome_form(view, win)
         from views import wgpu_start
         wgpu_start.before_frame(view, win)
+        from views import chrome_sheet
+        chrome_sheet.before_frame(view, win)
     cpu, gpu = renderer.render()
     after_frame(view)
     return cpu, gpu, 0.0
@@ -503,6 +505,8 @@ def before_frame(view) -> None:
     _chrome_form(view, win)
     from views import wgpu_start
     wgpu_start.before_frame(view, win)
+    from views import chrome_sheet
+    chrome_sheet.before_frame(view, win)
     if not view._ui_tools_sent and win._tool_actions:
         _send_tools(view, win)
     eyedropper = getattr(win, "_act_eyedropper", None)
@@ -523,7 +527,6 @@ def before_frame(view) -> None:
         view._ui_units_sent = True
     _cursor_value(view, win)
     _selection(view, win, active)
-    _palette(view, win, active)
     _cluster(view, win)
     _form(view, win)
     from views import wgpu_deliveries
@@ -1490,6 +1493,11 @@ def _current_material_name():
     return getattr(mat, "name", None)
 
 
+def _active_tool_id(win) -> str:
+    """The checked tool of the window ("paint", "select", …) or ""."""
+    return next((k for k, a in getattr(win, "_tool_actions", {}).items() if a.isChecked()), "")
+
+
 def _palette(view, win, active) -> None:
     """With Paint active: the model's named materials as a strip."""
     items = []
@@ -2281,7 +2289,8 @@ def _inspector(view, win) -> None:
     sel_sig = (len(sel), id(sel[0]) if sel else 0, id(sel[-1]) if sel else 0)
     node_focus = focus[0] if focus and focus[1] == sel_sig else None
     sig = (id(scene), scene.content_version, sel_sig, node_focus, getattr(view, "_ui_tree_sig", None) is not None,
-           view.__dict__.get("_ui_mat_focus"), view.__dict__.get("_ui_mode"))
+           view.__dict__.get("_ui_mat_focus"), view.__dict__.get("_ui_mode"),
+           _current_material_name(), _active_tool_id(win))
     if sig == getattr(view, "_ui_insp_sig", None):
         return
     view._ui_insp_sig = sig
@@ -2291,8 +2300,8 @@ def _inspector(view, win) -> None:
     registry = bim_registry.get(scene)
     nodes = structure._nodes(registry)
     data = getattr(view, "_ui_tree", None) or {}
-    if view.__dict__.get("_ui_mode") == "library":
-        from views import wgpu_library
+    from views import wgpu_library
+    if wgpu_library.inspector_key(view, win) is not None:
         got = wgpu_library.inspector(view, win)
         if got is not None:
             view.renderer.ui_set_inspector(*got)
@@ -2739,6 +2748,10 @@ def _run(win, actions) -> None:
                 win._doc._missing_link_banner = ""
             chrome_dialogs._repaint(win)
             continue
+        if kind == "lsheet":
+            from views import chrome_sheet
+            chrome_sheet.action(win, arg)
+            continue
         if kind == "start":
             from views import wgpu_start
             wgpu_start.action(win, arg)
@@ -2768,7 +2781,11 @@ def _run(win, actions) -> None:
             view = getattr(getattr(win, "_doc", None), "stand_in", None)
             _tree_action(win, view, arg)
         elif kind == "pal":
-            _paint_with(win, arg)
+            from views import wgpu_library
+            wgpu_library.paint_from_strip(win, arg)
+        elif kind == "libsheet":
+            from views import wgpu_library
+            wgpu_library.open_library(win, arg or None)
         elif kind == "lib":
             from views import wgpu_library
             wgpu_library.action(win, getattr(getattr(win, "_doc", None), "stand_in", None), arg)
@@ -3046,7 +3063,8 @@ _KEYS = {Qt.Key_Escape: "Escape", Qt.Key_Return: "Enter", Qt.Key_Enter: "Enter",
          Qt.Key_Backspace: "Backspace", Qt.Key_Delete: "Delete", Qt.Key_Tab: "Tab",
          Qt.Key_Up: "ArrowUp", Qt.Key_Down: "ArrowDown", Qt.Key_Left: "ArrowLeft",
          Qt.Key_Right: "ArrowRight", Qt.Key_Home: "Home", Qt.Key_End: "End",
-         Qt.Key_A: "A", Qt.Key_C: "C", Qt.Key_V: "V", Qt.Key_X: "X", Qt.Key_Z: "Z"}
+         Qt.Key_A: "A", Qt.Key_C: "C", Qt.Key_V: "V", Qt.Key_X: "X", Qt.Key_Z: "Z",
+         Qt.Key_F: "F"}
 
 
 def _opens_commands(event) -> bool:
@@ -3107,6 +3125,11 @@ def claims_key(view, event) -> bool:
     from views import wgpu_start
     if wgpu_start.claims_key(view, event):
         return True
+    from views import chrome_sheet
+    large = chrome_sheet.claims_key(view, event)
+    if large is not None:
+        # The large sheet owns every key but the window's ⌘ shortcuts.
+        return large or _opens_commands(event)
     if _problem_key(view, event):
         return True
     if _opens_commands(event):
@@ -3130,6 +3153,9 @@ def key(view, event, pressed: bool) -> bool:
             view.renderer.ui_open_commands()
             view.update()
         return True
+    from views import chrome_sheet
+    if chrome_sheet.claims_key(view, event) is False:
+        return False
     from views import wgpu_sheets
     sheets = wgpu_sheets.shown(view)
     step = 0 if sheets else _problem_key(view, event)

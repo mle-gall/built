@@ -24,6 +24,9 @@ mod tabs;
 mod context_menu;
 
 mod tree_cols;
+/// The large sheet over the dimmed model: Library, start page, Settings
+/// (views/chrome_sheet.py, docs/ui-patterns.md).
+pub mod large_sheet;
 
 pub mod tokens;
 pub mod kit;
@@ -147,6 +150,8 @@ pub struct Ui {
     strip: tabs::Strip,
     /// The right-click menu over the model (ui/context_menu.rs).
     ctx_menu: Option<context_menu::Menu>,
+    /// The large sheet (ui/large_sheet.rs): over everything under the top bar.
+    lsheet: large_sheet::LargeSheet,
 }
 
 /// A sheet: title, body, tone (question, info, warning, error) and its
@@ -318,6 +323,7 @@ impl Ui {
             sheets: Default::default(),
             strip: Default::default(),
             ctx_menu: None,
+            lsheet: Default::default(),
         }
     }
 
@@ -522,6 +528,9 @@ impl Ui {
     pub fn claims_key(&self, name: &str) -> bool {
         if self.gallery.is_some() { return true; }
         if name == "Escape" && (self.strip.menus_open() || self.plugin_popup_open() || self.panels.data["terrain"].is_object()) { return true; }
+        // The large sheet owns every key while it is up (Python keeps the
+        // window's ⌘ shortcuts, views/chrome_sheet.py).
+        if self.lsheet.open { return true; }
         if self.sheets.shown && !self.home.shown { return self.sheets_claims_key(name); }
         let filing = self.column.as_ref().is_some_and(|c| c.filing.is_some() || c.row_menu.is_some() || !c.mode.is_empty()
             || c.kind_menu.is_some() || c.head_menu.is_some() || c.prompt.is_some());
@@ -564,6 +573,7 @@ impl Ui {
             if pressed { self.ctx_menu = None; self.strip.close_menus(); }
             return true;
         }
+        if self.lsheet.open && !self.cmd_open { return self.lsheet_key(name, pressed, mods); }
         if self.sheets.shown && !self.home.shown { return self.sheets_key(name, pressed, mods); }
         if name == "Escape" && self.panels.data["terrain"].is_object() && !self.ctx.wants_keyboard_input() {
             if pressed { self.actions.push(r#"panel:["terrain.close",null]"#.into()); }
@@ -633,6 +643,12 @@ impl Ui {
     }
     pub fn ime_rect(&self) -> Option<(f32, f32, f32, f32)> { self.ime_rect }
     pub fn text(&mut self, text: String) -> bool {
+        if self.lsheet.open && self.sheet.is_none() && self.dialog.is_none() && !self.cmd_open
+            && !self.ctx.wants_keyboard_input() {
+            // Type anywhere on the large sheet: it goes to its search.
+            self.lsheet.type_text(&text);
+            return true;
+        }
         if !self.ctx.wants_keyboard_input() {
             return false;
         }
@@ -998,6 +1014,15 @@ impl Ui {
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing = vec2(4.0, 0.0);
                         for (id, name, hex, icon, active) in &self.palette_items {
+                            // "-": a rule between the model's and the recent ones;
+                            // no id: the current material's name.
+                            if id == "-" { bar_divider(ui); continue; }
+                            if id.is_empty() {
+                                ui.add_space(4.0);
+                                ui.label(egui::RichText::new(name).font(body()).color(INK));
+                                ui.add_space(4.0);
+                                continue;
+                            }
                             let (r, resp) = ui.allocate_exact_size(vec2(28.0, 28.0), Sense::click());
                             let inner = r.shrink(3.0);
                             if let Some(tex) = self.icons.get(icon) {
@@ -1013,9 +1038,9 @@ impl Ui {
                             }
                             if resp.on_hover_text(name).clicked() { clicked = Some(format!("pal:{id}")); }
                         }
-                        bar_divider(ui);
-                        if text_button(ui, "Library", "All materials, in the dock", true) {
-                            clicked = Some("tree:mode\u{1f}library".into());
+                        if self.palette_items.last().is_some_and(|i| i.0 != "-" && !i.0.is_empty()) { bar_divider(ui); }
+                        if text_button(ui, "Browse all…", "Every material: the Library", true) {
+                            clicked = Some("libsheet:materials".into());
                         }
                     });
                 });
@@ -1406,9 +1431,9 @@ impl Ui {
                     ui.set_max_width(W - 20.0);
                     ui.set_height(height - 20.0);
                     ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
-                    // Header: the dock's places (Project | Library) as one
-                    // switch, Project's mode (Problems) with its way back,
-                    // then the issues toggle and the structure menu.
+                    // Header: Project, its mode (Problems) with its way back,
+                    // then the issues toggle and the structure menu. (The
+                    // Library is a sheet now, ui/large_sheet.rs.)
                     let in_library = col.mode == "Library";
                     if self.panels.data["camera"].is_object() {
                         egui::ScrollArea::vertical().id_salt("camera inspector").show(ui, |ui| self.panels.camera(ui,&mut cmds));
@@ -1416,14 +1441,21 @@ impl Ui {
                     }
                     ui.horizontal(|ui| {
                         ui.set_min_height(28.0);
+                        // Project, or Plugins when there are some (the Library is
+                        // a sheet now, ui/large_sheet.rs).
                         let has_plugins = self.plugins.available();
-                        let at = if self.plugins.showing { 2 } else { usize::from(in_library) };
-                        let labels: &[&str] = if has_plugins { &["Project", "Library", "Plugins"] } else { &["Project", "Library"] };
-                        match library::segmented(ui, labels, at, if has_plugins { 204. } else { 150. }) {
-                            Some(0) => { self.plugins.showing = false; actions.push("mode\u{1f}".into()); }
-                            Some(1) => { self.plugins.showing = false; actions.push("mode\u{1f}library".into()); }
-                            Some(2) => self.plugins.showing = true,
-                            _=>{}
+                        if has_plugins {
+                            let at = usize::from(self.plugins.showing);
+                            match library::segmented(ui, &["Project", "Plugins"], at, 150.) {
+                                Some(0) => { self.plugins.showing = false; actions.push("mode\u{1f}".into()); }
+                                Some(1) => self.plugins.showing = true,
+                                _ => {}
+                            }
+                        } else {
+                            ui.add_space(4.0);
+                            let (pr, presp) = ui.allocate_exact_size(vec2(58.0, 28.0), Sense::click());
+                            ui.painter().text(pr.left_center(), egui::Align2::LEFT_CENTER, "Project", strong(13.0), INK);
+                            if presp.clicked() && !col.mode.is_empty() { actions.push("mode\u{1f}".into()); }
                         }
                         if self.plugins.showing { return; }
                         if !col.mode.is_empty() && !in_library && library::caption_mode(ui, &col.mode) {
@@ -2313,8 +2345,9 @@ impl Ui {
             self.actions.extend(acts);
             self.context_menu(ctx, screen);
             }
+            if !start { self.large_sheet(ctx, screen); }
             self.command_palette(ctx, screen);
-            if !self.review && !start && !self.sheets.shown { self.selection_more(ctx); }
+            if !self.review && !start && !self.sheets.shown && !self.lsheet.open { self.selection_more(ctx); }
             self.dialog_popup(ctx, screen);
             self.jobs_chip(ctx, screen);
             self.sheet_popup(ctx, screen);
@@ -2347,7 +2380,8 @@ impl Ui {
                      ("dock_grip", work && model && self.column.is_some()),
                      ("insp_color", work && model && self.column.as_ref().is_some_and(|c| c.edits.contains_key("\u{1d}pick")))];
         let sheet_areas = if start { [("", false); 4] } else { self.sheets_areas() };
-        self.hit = shown.iter().chain(sheet_areas.iter())
+        let large = if start { [("", false); 3] } else { self.lsheet_areas() };
+        self.hit = shown.iter().chain(sheet_areas.iter()).chain(large.iter())
             .filter(|(_, on)| *on)
             .filter_map(|(n, _)| ctx.memory(|m| m.area_rect(egui::Id::new(*n))))
             .collect();

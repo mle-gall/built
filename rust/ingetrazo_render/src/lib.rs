@@ -2366,6 +2366,23 @@ impl Renderer {
     fn ui_start_key(&mut self, name: &str, text: &str) -> bool {
         self.ui.as_mut().is_some_and(|ui| ui.start_key(name, text))
     }
+    /// The large sheet (views/chrome_sheet.py): the whole sheet as JSON
+    /// (ui/large_sheet.rs `Spec`); "" closes it.
+    fn ui_set_large_sheet(&mut self, spec: &str) -> PyResult<()> {
+        match self.ui.as_mut() {
+            Some(ui) => ui.set_large_sheet(spec).map_err(pyo3::exceptions::PyValueError::new_err),
+            None => Ok(()),
+        }
+    }
+    fn ui_large_sheet_shown(&self) -> bool { self.ui.as_ref().is_some_and(|ui| ui.large_sheet_shown()) }
+    /// (sheet id, focused item, search text) as the chrome holds them.
+    fn ui_large_sheet_state(&self) -> (String, String, String) {
+        self.ui.as_ref().map(|ui| ui.large_sheet_state()).unwrap_or_default()
+    }
+    /// The sheet's rectangle as last drawn (points), for captures.
+    fn ui_large_sheet_rect(&self) -> Option<(f32, f32, f32, f32)> {
+        self.ui.as_ref().and_then(|ui| ui.large_sheet_rect())
+    }
     fn ui_open_commands(&mut self) {
         if let Some(ui) = self.ui.as_mut() { ui.open_commands(); }
     }
