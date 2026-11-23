@@ -55,6 +55,7 @@ enum Row {
     Quiet,
     Field,
     Number,
+    Slider,
     Choice,
     Toggle,
     Segmented,
@@ -63,7 +64,7 @@ enum Row {
     MenuRow,
     Tile,
 }
-const ROWS: [(&str, Row); 14] = [
+const ROWS: [(&str, Row); 15] = [
     ("Primary button", Row::Primary),
     ("Button", Row::Secondary),
     ("Destructive", Row::Destructive),
@@ -71,6 +72,7 @@ const ROWS: [(&str, Row); 14] = [
     ("Quiet, icon button", Row::Quiet),
     ("Text field", Row::Field),
     ("Number with unit", Row::Number),
+    ("Percent slider", Row::Slider),
     ("Choice", Row::Choice),
     ("Switch", Row::Toggle),
     ("Segmented", Row::Segmented),
@@ -390,6 +392,12 @@ impl Gallery {
             }
             Row::Field => {
                 ui.add(search(&mut cell.text, "Name").desired_width(ui.available_width()));
+            }
+            Row::Slider => {
+                ui.spacing_mut().slider_width = (ui.available_width() - 42.).max(18.);
+                if let Some(v) = percent_slider(ui, ui.id().with("slider"), cell.number.min(100.), 100.) {
+                    cell.number = v;
+                }
             }
             Row::Number => {
                 ui.add(number(&mut cell.number, " mm").speed(10.));

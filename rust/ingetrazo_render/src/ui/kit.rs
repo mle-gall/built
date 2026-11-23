@@ -665,6 +665,20 @@ pub mod molecules {
         *value = (*value).min(labels.len() - 1);
         egui::ComboBox::from_id_salt(id).show_index(ui, value, labels.len(), |i| labels[i]);
     }
+    /// Keep a drag's value local until release so the edit makes one undo step.
+    pub fn percent_slider(ui: &mut egui::Ui, id: egui::Id, committed: f64, max: f64) -> Option<f64> {
+        let mut value = ui.data(|d| d.get_temp::<f64>(id)).unwrap_or(committed);
+        let r = ui.add(egui::Slider::new(&mut value, 0.0..=max).step_by(1.0).suffix("%"));
+        if r.is_pointer_button_down_on() {
+            ui.data_mut(|d| d.insert_temp(id, value));
+        }
+        if r.drag_stopped() || (r.changed() && !r.is_pointer_button_down_on()) {
+            ui.data_mut(|d| d.remove::<f64>(id));
+            if value != committed { return Some(value); }
+        }
+        None
+    }
+
     pub fn progress(fraction: f32) -> egui::ProgressBar {
         egui::ProgressBar::new(fraction).fill(INK_2)
     }
@@ -1261,5 +1275,49 @@ mod font_picker_tests {
         assert_eq!(picker.matches(), ["A"]);
         picker.filter = "unknown".into();
         assert_eq!(picker.step(&picker.matches(), true), None);
+    }
+}
+
+#[cfg(test)]
+mod slider_tests {
+    use super::*;
+    use egui::{Event, PointerButton};
+
+    #[test]
+    fn dragging_a_material_slider_commits_once_on_release() {
+        let ctx = egui::Context::default();
+        let id = egui::Id::new("opacity-test");
+        let mut time = 0.0;
+        let mut frame = |events| {
+            time += 0.1;
+            let mut edit = None;
+            let input = egui::RawInput {
+                time: Some(time),
+                events,
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(300.0, 100.0))),
+                ..Default::default()
+            };
+            let _ = ctx.run(input, |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    ui.spacing_mut().slider_width = 140.0;
+                    edit = percent_slider(ui, id, 10.0, 100.0);
+                });
+            });
+            edit
+        };
+        let button = |x, pressed| Event::PointerButton {
+            pos: pos2(x, 17.0), button: PointerButton::Primary, pressed,
+            modifiers: egui::Modifiers::NONE,
+        };
+        assert_eq!(frame(vec![]), None);
+        assert_eq!(frame(vec![Event::PointerMoved(pos2(30.0, 17.0)), button(30.0, true)]), None);
+        for x in [65.0, 90.0, 110.0] {
+            assert_eq!(frame(vec![Event::PointerMoved(pos2(x, 17.0))]), None);
+        }
+        let draft = ctx.data(|d| d.get_temp::<f64>(id)).unwrap();
+        assert!(draft > 60.0);
+        assert_eq!(frame(vec![button(110.0, false)]), Some(draft));
+        assert_eq!(ctx.data(|d| d.get_temp::<f64>(id)), None);
+        assert_eq!(frame(vec![]), None);
     }
 }

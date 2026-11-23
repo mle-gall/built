@@ -222,18 +222,6 @@ class Provider:
         pass
 
 
-#: Inspector encodings ui.rs draws (inspector_rows): a field, a switch, a swatch.
-_ED = "\x1d"
-
-
-def _choice(id_, options, at) -> str:
-    return f"{_ED}choice{_ED}{id_}{_ED}{'|'.join(options)}{_ED}{at}"
-
-
-def _swatch(id_, hexc) -> str:
-    return f"{_ED}color{_ED}{id_}{_ED}{hexc}"
-
-
 def _file_stem(path) -> str:
     return re.sub(r"^[0-9a-f]{12,}-", "", str(path).replace("\\", "/").rsplit("/", 1)[-1])
 
@@ -366,7 +354,10 @@ class MaterialsProvider(Provider):
                 from views.wgpu_ui import _paint_with
                 _paint_with(ctx.win, f"m:{name}" if kind == "lk" else key)
         elif verb == "edit" and kind == "m":
+            set_mode(ctx.view, ctx.win, "")
             ctx.view._ui_mat_focus = key
+            if hasattr(ctx.view.renderer, "ui_show_inspector"):
+                ctx.view.renderer.ui_show_inspector()
         elif verb == "select" and kind in ("m", "lk"):
             n = select_material_uses(ctx, name)
             ctx.flash(f"{n} selected wearing {name}" if n else f"Nothing in the open context wears {name}")
@@ -390,8 +381,7 @@ class MaterialsProvider(Provider):
             if mat is not None:
                 mine = _settings_json(_MINE_KEY, [])
                 mine = [e for e in mine if not (e.get("type") in (self.id, "colours") and e.get("name") == name)]
-                mine.append({"type": self.id, "name": name, "color": list(mat.color) if mat.color else None,
-                             "texture": dict(mat.texture) if mat.texture else None, "opacity": mat.opacity})
+                mine.append({"type": self.id, **mat.to_dict()})
                 _store_json(_MINE_KEY, mine)
                 _state(ctx.view)["mine_rev"] += 1
                 ctx.flash(f"{name} is in My library, for every project")
@@ -433,7 +423,6 @@ class MaterialsProvider(Provider):
             ctx.view._ui_mat_focus = None
 
     def inspector(self, ctx, item):
-        from views.wgpu_ui import _edit
         key = item["key"]
         if key.startswith("uc:"):
             n = item.get("uses", 0)
@@ -447,38 +436,8 @@ class MaterialsProvider(Provider):
         mat = ctx.scene.materials.get(item["name"])
         if mat is None:
             return None
-        name = mat.name
-        tex = mat.texture or {}
-        image = bool(tex.get("path"))
-        rows = [("Name", _edit(f"libmat:name:{name}", name)),
-                ("Base", _choice(f"libmat:base:{name}", ["Colour", "Image"], 1 if image else 0))]
-        acts = [(f"lib:apply:{key}", "Paint with it"), (f"lib:select:{key}", "Select uses")]
-        if image:
-            rows += [("Image", _file_stem(tex["path"])),
-                     ("Tile (m)", _edit(f"libmat:tile:{name}",
-                                        f"{tex.get('sw', 1):g} × {tex.get('sh', tex.get('sw', 1)):g}"))]
-            acts.append((f"lib:image:{key}", "Other image…"))
-        else:
-            rows.append(("Colour", _swatch(f"libmat:color:{name}", _hex(mat.color) or "#cccccc")))
-        pbr = mat.pbr or {}
-        surface = []
-        for channel, label, map_key in PBR_ROWS:
-            value = pbr.get(channel)
-            surface.append((label, _edit(f"libmat:{channel}:{name}", "" if value is None else f"{float(value):g}")))
-            if pbr.get(map_key):
-                surface.append((f"{label} map", _file_stem(pbr[map_key].get("path", ""))))
-        maps = [(f"lib:map:{key}:{m}" if not pbr.get(m) else f"lib:unmap:{key}:{m}",
-                 (f"{label} map…" if not pbr.get(m) else f"Clear {label.lower()} map"))
-                for _c, label, m in PBR_ROWS]
-        opacity = 100 if mat.opacity is None else round(mat.opacity * 100)
-        look = [("Opacity (%)", _edit(f"libmat:opacity:{name}", f"{opacity}")),
-                ("Finish", str(mat.finish or "from the name")),
-                ("Used by", f"{item.get('uses', 0)} object" + ("s" if item.get("uses", 0) != 1 else ""))]
-        more = [(f"lib:duplicate:{key}", "Duplicate"), (f"lib:keep:{key}", "Add to My library"),
-                (f"lib:delete:{key}", "Delete…")]
-        return name, [("Material", rows), ("Actions", acts),
-                      ("Surface · PBR (empty = off)", surface), ("Actions", maps),
-                      ("Look", look), ("Actions", more)]
+        from ingetrazo_core import material_inspector
+        return material_inspector(mat, item.get("uses", 0))
 
     def edit(self, ctx, item, field, text):
         name = item["name"]
@@ -508,6 +467,9 @@ class MaterialsProvider(Provider):
             if w <= 0 or h <= 0:
                 raise ValueError("A tile is larger than zero")
             ctx.core("edit_material", name=name, tile=[w, h])
+        elif field == "pbr" or field.startswith("percent_"):
+            from ingetrazo_core import material_surface_input
+            ctx.core("set_material_pbr", name=name, **material_surface_input(field, text))
         elif field == "opacity":
             v = float(text.rstrip("%"))
             if not 0 <= v <= 100:
@@ -879,14 +841,11 @@ class LibrarySheet(_chrome_sheet().Provider):
     """The Library on the large sheet (option B of the 2026-11-23 review):
     types as tabs, scopes and categories on the side (the linked files'
     materials read-only), 96-pt tiles, the focused item's details and
-    editor on the right. Painting itself is the palette strip's (C)."""
+    model usage on the right. The inspector edits the chosen material."""
     id = "library"
 
     def __init__(self, view):
         self.view = view
-        self._pending = {}          # editor values typed, not applied yet
-        self._pending_item = None
-        self._timer = None
 
     def signature(self, ctx):
         win = ctx.win
@@ -1020,11 +979,9 @@ class LibrarySheet(_chrome_sheet().Provider):
                        cs.verb("select", "Select uses"), cs.verb("name", f"Name these ({k})")], align="fill")
             return
         if kind == "m":
-            mat = scene.materials.get(e["name"])
-            if mat is not None:
-                self._editor(d, ctx, e, mat)
-            d.buttons([cs.verb("apply", "Paint with it", key="↩", primary=True), cs.verb("select", "Select uses")],
-                      align="fill")
+            d.kv([("Used by", f"{e['uses']} object" + ("s" if e["uses"] != 1 else ""))])
+            d.buttons([cs.verb("apply", "Paint with it", key="↩", primary=True),
+                       cs.verb("edit", "Edit in inspector"), cs.verb("select", "Select uses")], align="fill")
             d.buttons([cs.verb("duplicate", "Duplicate", quiet=True), cs.verb("keep", "Add to My library", quiet=True),
                        cs.verb("delete", "Delete…", quiet=True)], align="left")
             return
@@ -1060,117 +1017,6 @@ class LibrarySheet(_chrome_sheet().Provider):
         if e["key"].startswith("cm:"):
             more = [v for v in ("rename", "keepfile", "unkeepfile", "delete") if v in e["verbs"]]
             d.buttons([cs.verb(v, {"rename": "Rename…"}.get(v, VERBS[v]), quiet=True) for v in more], align="left")
-
-    def _editor(self, d, ctx, e, mat):
-        """The material's editor: base, colour or image and tile, surface,
-        opacity. Edits apply as they are made (sliders when they settle)."""
-        from views.chrome_forms import Field, Form
-        p = self._pending
-        tex = mat.texture or {}
-        image = bool(tex.get("path"))
-        pbr = mat.pbr or {}
-        fields = [Field("mat.base", "choice", "Base", "image" if image else "colour",
-                        options=[("colour", "Colour"), ("image", "Image")])]
-        if image:
-            fields += [Field("mat.image", "path", "Image", _file_stem(tex["path"])),
-                       Field("mat.tw", "number", "Tile width", p.get("mat.tw", tex.get("sw", 1.0)), lo=0.001, hi=1e4,
-                             decimals=3, suffix="m"),
-                       Field("mat.th", "number", "Tile height", p.get("mat.th", tex.get("sh", tex.get("sw", 1.0))),
-                             lo=0.001, hi=1e4, decimals=3, suffix="m")]
-        else:
-            fields.append(Field("mat.color", "color", "Colour", _hex(mat.color) or "#cccccc"))
-        on = any(pbr.get(c) is not None for c, _l, _m in PBR_ROWS)
-        fields.append(Field("mat.pbr", "check", "", on, row_label="Surface", tip="Metallic, roughness, normal and occlusion"))
-        fields[-1].label = "PBR surface"
-        if on:
-            for channel, label, map_key in PBR_ROWS:
-                v = pbr.get(channel)
-                pct = p.get(f"mat.{channel}", 0 if v is None else round(float(v) * 100))
-                hi = 200 if channel == "normal_scale" else 100
-                fields.append(Field(f"mat.{channel}", "slider", label, pct, lo=0, hi=hi, suffix="%"))
-                if pbr.get(map_key):
-                    fields.append(Field(f"mat.unmap.{map_key}", "button", f"Clear {label.lower()} map",
-                                        note=_file_stem(pbr[map_key].get("path", ""))))
-                else:
-                    fields.append(Field(f"mat.map.{map_key}", "button", f"{label} map…"))
-        opacity = 100 if mat.opacity is None else round(mat.opacity * 100)
-        fields.append(Field("mat.opacity", "slider", "Opacity", p.get("mat.opacity", opacity), lo=0, hi=100, suffix="%"))
-        fields.append(Field("mat.name", "button", "Rename…", note=mat.name))
-        form = Form("", fields, on_change=lambda f, fid, v: self._edit(ctx, e, fid, v),
-                    on_button=lambda f, fid: self._button(ctx, e, fid))
-        d.kv([("Used by", f"{e['uses']} object" + ("s" if e["uses"] != 1 else ""))])
-        d.fields(form, id="editor")
-
-    def _edit(self, ctx, e, fid, value):
-        prov = provider("materials")
-        lctx = Ctx(ctx.win, self.view)
-        name = e["name"]
-        if fid == "mat.base":
-            prov.edit(lctx, e, "base", "Image" if value == "image" else "Colour")
-        elif fid == "mat.color":
-            prov.edit(lctx, e, "color", str(value))
-        elif fid == "mat.pbr":
-            if value:
-                lctx.core("set_material_pbr", name=name, metallic=0.0, roughness=0.5)
-            else:
-                lctx.core("set_material_pbr", name=name, **{c: None for c, _l, _m in PBR_ROWS})
-        elif fid in ("mat.tw", "mat.th", "mat.opacity") or fid[4:] in {c for c, _l, _m in PBR_ROWS}:
-            self._pending[fid] = value
-            self._later(ctx, e)
-
-    def _later(self, ctx, e):
-        """Number fields and sliders apply when they settle (one undo step,
-        not one per keystroke or pixel)."""
-        from PySide6.QtCore import QTimer
-        if self._timer is None:
-            self._timer = QTimer(singleShot=True)
-            self._timer.setInterval(350)
-            self._timer.timeout.connect(self._settled)
-        self._pending_item = e
-        self._pending_ctx = ctx
-        self._timer.start()
-
-    def _settled(self):
-        if self._pending_item is not None:
-            self._apply(self._pending_ctx, self._pending_item)
-
-    def _apply(self, ctx, e):
-        p, self._pending = self._pending, {}
-        if not p:
-            return
-        lctx = Ctx(ctx.win, self.view)
-        name = e["name"]
-        mat = lctx.scene.materials.get(name)
-        if mat is None:
-            return
-        try:
-            if "mat.tw" in p or "mat.th" in p:
-                tex = mat.texture or {}
-                w = float(p.get("mat.tw", tex.get("sw", 1.0)))
-                h = float(p.get("mat.th", tex.get("sh", w)))
-                if w > 0 and h > 0:
-                    lctx.core("edit_material", name=name, tile=[w, h])
-            if "mat.opacity" in p:
-                lctx.core("edit_material", name=name, opacity=float(p["mat.opacity"]) / 100.0)
-            values = {k[4:]: float(v) / 100.0 for k, v in p.items() if k[4:] in {c for c, _l, _m in PBR_ROWS}}
-            if values:
-                lctx.core("set_material_pbr", name=name, **values)
-        except (KeyError, ValueError) as exc:
-            lctx.flash(str(exc).strip("'\""))
-        refresh(ctx.win)
-
-    def _button(self, ctx, e, fid):
-        prov = provider("materials")
-        lctx = Ctx(ctx.win, self.view)
-        if fid == "mat.image":
-            prov.run(lctx, "image", e)
-        elif fid.startswith("mat.map."):
-            prov.run(lctx, "map", e, fid[len("mat.map."):])
-        elif fid.startswith("mat.unmap."):
-            prov.run(lctx, "unmap", e, fid[len("mat.unmap."):])
-        elif fid == "mat.name":
-            self._rename(ctx, e)
-        refresh(ctx.win)
 
     def _rename(self, ctx, e):
         from views import chrome_forms
@@ -1249,16 +1095,9 @@ class LibrarySheet(_chrome_sheet().Provider):
         prov.run(lctx, verb, e)
         if verb == "duplicate":
             st["force_focus"] = True
-        if verb == "apply":
-            # Painting (or placing) happens in the model: the sheet goes.
+        if verb == "apply" or (verb == "edit" and prov.id == "materials"):
+            # Painting, placing and the material inspector use the model workspace.
             _chrome_sheet().close(win)
-
-    def closed(self, ctx):
-        # What was typed or dragged last still applies.
-        if self._timer is not None and self._timer.isActive():
-            self._timer.stop()
-            if self._pending_item is not None:
-                self._apply(ctx, self._pending_item)
 
 def refresh(win) -> None:
     _chrome_sheet().refresh(win)
@@ -1501,6 +1340,8 @@ def action(win, view, arg) -> None:
         arg = verb + SEP + rest
     verb, _, rest = arg.partition(SEP)
     key, _, extra = rest.partition(SEP)
+    if verb in ("map", "unmap") and not extra:
+        key, _, extra = key.rpartition(":")
     st = _state(view)
     ctx = Ctx(win, view)
     try:

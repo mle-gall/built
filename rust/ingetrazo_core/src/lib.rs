@@ -251,6 +251,8 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(assembly_inspector::plan_part_edit, m)?)?;
     m.add_function(wrap_pyfunction!(material_library::bundled_materials, m)?)?;
     m.add_function(wrap_pyfunction!(material_library::pick_library_paint, m)?)?;
+    m.add_function(wrap_pyfunction!(material_library::material_inspector, m)?)?;
+    m.add_function(wrap_pyfunction!(material_library::material_surface_input, m)?)?;
     m.add_class::<project_sheets::ProjectSheets>()?;
     m.add_function(wrap_pyfunction!(project_tree::project_context_rows, m)?)?;
     m.add_function(wrap_pyfunction!(structure::file_created_placement, m)?)?;

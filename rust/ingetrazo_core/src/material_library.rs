@@ -168,3 +168,185 @@ pub(crate) fn pick_library_paint(
     brush.setattr("current_is_default", false)?;
     Ok(true)
 }
+
+/// The material editor's fields and actions belong to the Project inspector.
+type Sections = Vec<(String, Vec<(String, String)>)>;
+
+#[pyfunction]
+pub(crate) fn material_inspector(
+    mat: &Bound<'_, PyAny>,
+    uses: usize,
+) -> PyResult<(String, Sections)> {
+    let name: String = mat.getattr("name")?.extract()?;
+    let key = format!("m:{name}");
+    let attr = |field| mat.getattr(field);
+    let data: Value = serde_json::from_str(
+        &mat.py()
+            .import("json")?
+            .call_method1("dumps", (mat.call_method0("to_dict")?,))?
+            .extract::<String>()?,
+    )
+    .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+    let field = |kind: &str, id: &str, value: &str| {
+        format!("\u{1d}{kind}\u{1d}libmat:{id}:{name}\u{1d}{value}")
+    };
+    let act = |verb: &str, label: &str| (format!("lib:{verb}:{key}"), label.to_owned());
+    let tex = &data["texture"];
+    let image = tex["path"].as_str().filter(|s| !s.is_empty());
+    let switch = |id, labels: &str, on: bool| {
+        field("choice", id, &format!("{labels}\u{1d}{}", u8::from(on)))
+    };
+    let mut base = vec![
+        ("Name".into(), field("edit", "name", &name)),
+        (
+            "Base".into(),
+            switch("base", "Colour|Image", image.is_some()),
+        ),
+    ];
+    let mut actions = vec![act("apply", "Paint with it"), act("select", "Select uses")];
+    if let Some(path) = image {
+        base.push((
+            "Image".into(),
+            path.rsplit(['/', '\\']).next().unwrap_or(path).into(),
+        ));
+        let w = tex["sw"].as_f64().unwrap_or(1.);
+        base.push((
+            "Tile (m)".into(),
+            field(
+                "edit",
+                "tile",
+                &format!("{w} × {}", tex["sh"].as_f64().unwrap_or(w)),
+            ),
+        ));
+        actions.push(act("image", "Other image…"));
+    }
+    let color: Option<(f64, f64, f64)> = attr("color")?.extract()?;
+    let (r, g, b) = color.unwrap_or(if image.is_some() {
+        (1., 1., 1.)
+    } else {
+        (0.8, 0.8, 0.8)
+    });
+    let hex = format!(
+        "#{:02x}{:02x}{:02x}",
+        (r * 255.) as u8,
+        (g * 255.) as u8,
+        (b * 255.) as u8
+    );
+    base.push((
+        if image.is_some() { "Tint" } else { "Colour" }.into(),
+        field("color", "color", &hex),
+    ));
+    let pbr = &data["pbr"];
+    let enabled = pbr.as_object().is_some_and(|m| !m.is_empty());
+    let mut surface = vec![("PBR surface".into(), switch("pbr", "Off|On", enabled))];
+    let mut maps = vec![];
+    if enabled {
+        for (id, caption, map, limit) in [
+            ("metallic", "Metallic", "metallic_map", 100),
+            ("roughness", "Roughness", "roughness_map", 100),
+            ("normal_scale", "Normal", "normal_map", 200),
+            ("ao_strength", "Occlusion", "ao_map", 100),
+        ] {
+            let val = (pbr[id].as_f64().unwrap_or(0.) * 100.).round();
+            surface.push((
+                caption.into(),
+                field(
+                    "slider",
+                    &format!("percent_{id}"),
+                    &format!("{val}\u{1d}{limit}"),
+                ),
+            ));
+            let has_map = pbr[map]["path"].is_string();
+            let verb = if has_map { "unmap" } else { "map" };
+            let label = if has_map {
+                format!("Clear {} map", caption.to_lowercase())
+            } else {
+                format!("{caption} map…")
+            };
+            maps.push((format!("lib:{verb}:{key}:{map}"), label));
+            if let Some(path) = pbr[map]["path"].as_str() {
+                surface.push((
+                    format!("{caption} map"),
+                    path.rsplit(['/', '\\']).next().unwrap_or(path).into(),
+                ));
+            }
+        }
+    }
+    let opacity = (data["opacity"].as_f64().unwrap_or(1.) * 100.).round();
+    let mut sections = vec![
+        ("Material".into(), base),
+        ("Actions".into(), actions),
+        ("Surface".into(), surface),
+    ];
+    if !maps.is_empty() {
+        sections.push(("Actions".into(), maps));
+    }
+    sections.push((
+        "Look".into(),
+        vec![
+            (
+                "Opacity".into(),
+                field("slider", "opacity", &format!("{opacity}\u{1d}100")),
+            ),
+            (
+                "Finish".into(),
+                data["finish"].as_str().unwrap_or("from the name").into(),
+            ),
+            (
+                "Used by".into(),
+                format!("{uses} object{}", if uses == 1 { "" } else { "s" }),
+            ),
+        ],
+    ));
+    sections.push((
+        "Actions".into(),
+        vec![
+            act("duplicate", "Duplicate"),
+            act("keep", "Add to My library"),
+            act("delete", "Delete…"),
+        ],
+    ));
+    Ok((name, sections))
+}
+
+#[pyfunction]
+pub(crate) fn material_surface_input<'py>(
+    py: Python<'py>,
+    field: &str,
+    text: &str,
+) -> PyResult<Bound<'py, PyDict>> {
+    let fields = PyDict::new(py);
+    if field == "pbr" {
+        if text == "On" {
+            fields.set_item("metallic", 0.)?;
+            fields.set_item("roughness", 0.5)?;
+        } else if text == "Off" {
+            for key in py
+                .import("core.material_commands")?
+                .getattr("PBR_KEYS")?
+                .try_iter()?
+            {
+                fields.set_item(key?, py.None())?;
+            }
+        } else {
+            return Err(pyo3::exceptions::PyValueError::new_err("Choose On or Off"));
+        }
+    } else if let Some(key) = field.strip_prefix("percent_") {
+        let max = match key {
+            "metallic" | "roughness" | "ao_strength" => 100.,
+            "normal_scale" => 200.,
+            _ => {
+                return Err(pyo3::exceptions::PyValueError::new_err(
+                    "Unknown surface control",
+                ))
+            }
+        };
+        let val = text
+            .parse::<f64>()
+            .ok()
+            .filter(|v| (0.0..=max).contains(v))
+            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("Invalid surface percentage"))?;
+        fields.set_item(key, val / 100.)?;
+    }
+    Ok(fields)
+}

@@ -454,6 +454,7 @@ impl Ui {
             col.prompt = (!title.is_empty()).then_some((title, body, buttons));
         }
     }
+    pub fn show_inspector(&mut self) { self.review = false; }
     pub fn set_inspector(&mut self, title: String, sections: Vec<(String, Vec<(String, String)>)>) {
         if let Some(col) = self.column.as_mut() {
             if col.inspector_title != title || col.inspector != sections {
@@ -2654,6 +2655,22 @@ fn doc_tab(ui: &mut egui::Ui, name: &str, active: bool, dirty: bool) -> Option<b
 fn inspector_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std::collections::HashMap<String, String>,
                   actions: &mut Vec<String>) {
     for (label, value) in rows {
+        if let Some(rest) = value.strip_prefix("\u{1d}slider\u{1d}") {
+            let mut parts = rest.split('\u{1d}');
+            let id = parts.next().unwrap_or_default();
+            let committed = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0.);
+            let max = parts.next().and_then(|s| s.parse().ok()).unwrap_or(100.);
+            ui.horizontal(|ui| {
+                ui.add_space(SPACE_S);
+                let (r, _) = ui.allocate_exact_size(vec2(88., CONTROL_H), Sense::hover());
+                ui.painter().text(r.left_center(), egui::Align2::LEFT_CENTER, label, meta(), DIM);
+                ui.spacing_mut().slider_width = (ui.available_width() - 60.).max(30.);
+                if let Some(v) = kit::percent_slider(ui, ui.make_persistent_id(id), committed, max) {
+                    actions.push(format!("edit\u{1f}{id}\u{1f}{v}"));
+                }
+            });
+            continue;
+        }
         // "\u{1d}choice\u{1d}<id>\u{1d}A|B\u{1d}<at>": a switch (the material's base).
         if let Some(rest) = value.strip_prefix("\u{1d}choice\u{1d}") {
             let parts: Vec<&str> = rest.split('\u{1d}').collect();

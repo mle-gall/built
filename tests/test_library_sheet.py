@@ -154,32 +154,29 @@ def test_scopes_categories_search_and_sort(win):
 
 def test_the_editor_applies_edits_and_sliders_when_they_settle(win, monkeypatch):
     L.open_library(win)
-    sh = frame(win)
-    form = next(b for b in detail(sh) if b["kind"] == "fields")
-    ids = [f[0] for f in form["fields"]]
-    assert ids[:3] == ["mat.base", "mat.color", "mat.pbr"] and "mat.opacity" in ids and "mat.name" in ids
+    assert not any(b["kind"] == "fields" for b in detail(frame(win)))
+    act(win, "verb", "edit")
+    view = win._view_
+    assert not cs.shown(win) and L.inspector_key(view, win) == "m:Beech"
     sc = win.viewport.scene
-    act(win, "v", "mat.color", "#336699")                             # the picker's Apply
+    title, sections = L.inspector(view, win)
+    assert title == "Beech" and {"Name", "Colour", "Base"} <= dict(sections[0][1]).keys()
+    L.edit_field(win, view, "color:Beech", "#336699")
     assert L._hex(sc.materials["Beech"].color) == "#336699"
-    act(win, "v", "mat.pbr", "1")                                     # PBR on: its sliders come
-    sh = frame(win)
-    ids = [f[0] for f in next(b for b in detail(sh) if b["kind"] == "fields")["fields"]]
-    assert "mat.roughness" in ids and "mat.map.roughness_map" in ids
-    assert sc.materials["Beech"].pbr == {"metallic": 0.0, "roughness": 0.5}
-    prov = L._sheet_provider(win._view_)
-    for v in ("40", "55", "62"):                                      # a drag: one step when it settles
-        act(win, "v", "mat.roughness", v)
-    sh = frame(win)
-    slider = next(f for b in detail(sh) if b["kind"] == "fields" for f in b["fields"] if f[0] == "mat.roughness")
-    assert slider[4] == 62.0                                          # shows what is dragged meanwhile
-    assert sc.materials["Beech"].pbr["roughness"] == 0.5
-    prov._timer.timeout.emit()
-    assert sc.materials["Beech"].pbr["roughness"] == pytest.approx(0.62)
+    L.edit_field(win, view, "pbr:Beech", "On")
+    assert sc.materials["Beech"].pbr == {"metallic": 0., "roughness": .5}
+    rows = dict(L.inspector(view,win)[1])["Surface"]
+    assert "slider" in dict(rows)["Roughness"]
+    before = win.viewport.history.revision
+    L.edit_field(win, view, "percent_roughness:Beech", "62")
+    assert win.viewport.history.revision == before + 1
+    assert sc.materials["Beech"].pbr["roughness"] == pytest.approx(.62)
     picked = []
-    monkeypatch.setattr(L, "_pick_image", lambda w, title: (picked.append(title), None)[1])
-    act(win, "v", "mat.base", "1")                                    # Image: asks for a picture
-    assert picked == ["Base image"]
-    act(win, "v", "mat.pbr", "0")
+    monkeypatch.setattr(L, "_pick_image", lambda w, title: picked.append(title))
+    L.edit_field(win, view, "base:Beech", "Image")
+    L.action(win, view, "map:m:Beech:roughness_map")
+    assert picked == ["Base image", "Roughness map"]
+    L.edit_field(win, view, "pbr:Beech", "Off")
     assert sc.materials["Beech"].pbr is None
 
 
