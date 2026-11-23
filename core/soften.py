@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import math
 
+from core import doc_model
 from core.group import Group
 from core.history import MeshCommand
 from core.mesh import Edge, Face
@@ -141,6 +142,37 @@ class SoftenByAngleCommand(MeshCommand):
         return angle <= self.angle + 1e-5
 
     def prepare(self) -> list:
+        if not doc_model.ENABLED:
+            return self._reference_prepare()
+        from core.store_mesh import FaceView, _hypot, _store_of
+        from ingetrazo_core import MeshStore
+        changes = []
+        for mesh, keys in self.targets.items():
+            store = _store_of(mesh)
+            options = (self.angle, self.coplanar, self.harden, self.smooth)
+            if store is not None:
+                def matches(a, b):
+                    return _smooth_signature(FaceView(mesh, a)) == _smooth_signature(FaceView(mesh, b))
+
+                planned = store.plan_softening(set(keys), *options, None if self.materials else matches, _hypot())
+            else:
+                faces = {}
+                rows = []
+                for e in mesh.edges:
+                    if e.key in keys and len(e.faces) == 2:
+                        a, b = e.faces
+                        faces[a.key], faces[b.key] = a, b
+                        rows.append((e.key, (bool(e.soft), bool(getattr(e, "flat", False))), (a.key, b.key)))
+
+                def matches(a, b):
+                    return _smooth_signature(faces[a]) == _smooth_signature(faces[b])
+
+                planned = MeshStore.plan_object_softening(rows, *options, None if self.materials else matches,
+                                                          lambda k: faces[k].normal().toTuple())
+            changes.extend((mesh, key, old, new) for key, old, new in planned)
+        return changes
+
+    def _reference_prepare(self) -> list:
         changes = []
         for mesh, keys in self.targets.items():
             normals = {}
@@ -157,6 +189,22 @@ class SoftenByAngleCommand(MeshCommand):
         return changes
 
     def _apply(self, scene, after: bool) -> None:
+        if doc_model.ENABLED:
+            from core.store_mesh import _store_of
+            from ingetrazo_core import MeshStore
+            by_mesh = {}
+            for mesh, key, old, new in self.changes:
+                by_mesh.setdefault(mesh, []).append((key, old, new))
+            for mesh, rows in by_mesh.items():
+                store = _store_of(mesh)
+                if store is None:
+                    MeshStore.apply_object_softening(mesh.edges, rows, after)
+                else:
+                    store.apply_softening(rows, after)
+                mesh.mark_modified()
+            if by_mesh:
+                scene.version += 1
+            return
         by_mesh: dict = {}
         for mesh, key, old, new in self.changes:
             by_mesh.setdefault(id(mesh), (mesh, {}))[1][key] = new if after else old

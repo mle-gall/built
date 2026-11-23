@@ -2036,6 +2036,132 @@ impl PyMeshStore {
         Ok(self.op(|s, ch| { s.relink_vertices(&vs, ch); Ok(()) })?.1)
     }
 
+    fn plan_softening(
+        &self,
+        keys: &Bound<'_, PyAny>,
+        angle: f64,
+        coplanar: bool,
+        harden: bool,
+        smooth: bool,
+        matches: &Bound<'_, PyAny>,
+        hypot: &str,
+    ) -> PyResult<Vec<super::soften::Change<u128>>> {
+        let store = &self.inner;
+        let h = crate::hypot_of(hypot)?;
+        let mut selected = std::collections::HashSet::new();
+        for key in keys.try_iter()? {
+            if let Ok(k) = key?.extract::<u128>() {
+                selected.insert(k);
+            }
+        }
+        let rows = store.live_slots(Kind::Edge).into_iter().filter_map(|e| {
+            let key = store.key(Kind::Edge, e);
+            if !selected.contains(&key) {
+                return None;
+            }
+            let &[a, b] = store.edge_faces(e) else {
+                return None;
+            };
+            let bits = *store.state.eflags.get(e as usize);
+            Some((
+                e,
+                (bits & super::SOFT != 0, bits & super::FLAT != 0),
+                [a, b],
+            ))
+        });
+        let opts = super::soften::Options {
+            angle,
+            coplanar,
+            harden,
+            smooth,
+        };
+        let changes = opts.plan(
+            rows,
+            |a, b| {
+                Ok::<_, PyErr>(
+                    matches.is_none()
+                        || matches
+                            .call1((store.key(Kind::Face, a), store.key(Kind::Face, b)))?
+                            .is_truthy()?,
+                )
+            },
+            |f| Ok(store.face_normal(f, h).into()),
+        )?;
+        Ok(changes
+            .into_iter()
+            .map(|(e, b, a)| (store.key(Kind::Edge, e), b, a))
+            .collect())
+    }
+
+    #[staticmethod]
+    fn plan_object_softening(
+        rows: Vec<super::soften::Edge<i128>>,
+        angle: f64,
+        coplanar: bool,
+        harden: bool,
+        smooth: bool,
+        matches: &Bound<'_, PyAny>,
+        normal: &Bound<'_, PyAny>,
+    ) -> PyResult<Vec<super::soften::Change<i128>>> {
+        let opts = super::soften::Options {
+            angle,
+            coplanar,
+            harden,
+            smooth,
+        };
+        opts.plan(
+            rows,
+            |a, b| Ok(matches.is_none() || matches.call1((a, b))?.is_truthy()?),
+            |f| normal.call1((f,))?.extract(),
+        )
+    }
+
+    fn apply_softening(&mut self, rows: Vec<super::soften::Change<u128>>, after: bool) {
+        for (key, old, new) in rows {
+            let Some(e) = self.inner.slot(Kind::Edge, key) else {
+                continue;
+            };
+            let (soft, flat) = if after { new } else { old };
+            let current = *self.inner.state.eflags.get(e as usize);
+            // Observable store revision advances once per facade field write.
+            let bits = if soft {
+                current | super::SOFT
+            } else {
+                current & !super::SOFT
+            };
+            self.inner.set_edge_flags(e, bits);
+            self.inner.set_edge_flags(
+                e,
+                if flat {
+                    bits | super::FLAT
+                } else {
+                    bits & !super::FLAT
+                },
+            );
+        }
+    }
+
+    #[staticmethod]
+    fn apply_object_softening(
+        edges: &Bound<'_, PyAny>,
+        rows: Vec<super::soften::Change<i128>>,
+        after: bool,
+    ) -> PyResult<()> {
+        let wanted: std::collections::HashMap<_, _> = rows
+            .into_iter()
+            .map(|(k, b, a)| (k, if after { a } else { b }))
+            .collect();
+        for e in edges.try_iter()? {
+            let e = e?;
+            let key: i128 = e.getattr("key")?.extract()?;
+            if let Some(&(soft, flat)) = wanted.get(&key) {
+                e.setattr("soft", soft)?;
+                e.setattr("flat", flat)?;
+            }
+        }
+        Ok(())
+    }
+
     #[staticmethod]
     fn bevel_face_curve(
         origin: [f64; 3],

@@ -399,7 +399,7 @@ def geometry_steps(work):
             "faces": [[list(v.toTuple()) for v in f.vertices] for f in mesh.faces],
             "holes": [[[v.toTuple() for v in ring] for ring in f.holes] for f in mesh.faces],
             "paint": [dict(f.attrs) for f in mesh.faces],
-            "edge_flags": [(e.soft, e.curve, e.layer) for e in mesh.edges],
+            "edge_flags": [(e.soft, e.flat, e.curve, e.layer) for e in mesh.edges],
             "group_faces": [len(g.mesh.faces) for g in scene.groups],
             "feed": [({k: len(v) for k, v in m.created.items()},
                       {k: len(v) for k, v in m.removed.items()},
@@ -546,6 +546,18 @@ def geometry_steps(work):
     assert h.undo()
     out.append(state())
     assert h.redo()
+    out.append(state())
+    from core.soften import SoftenByAngleCommand
+    p, q = QVector3D(930, 0, 0), QVector3D(932, 0, 0)
+    mesh.add_face([p, q, QVector3D(930, 1, 0)])
+    mesh.add_face([q, p, QVector3D(930, -1, .5)])
+    seam = mesh.find_edge(mesh.vertex_at(p), mesh.vertex_at(q))
+    h.execute(SoftenByAngleCommand({mesh: {seam.key}}, 30, smooth=False))
+    assert (seam.soft, seam.flat) == (True, True)
+    out.append(state())
+    assert h.undo() and (seam.soft, seam.flat) == (False, False)
+    out.append(state())
+    assert h.redo() and (seam.soft, seam.flat) == (True, True)
     out.append(state())
     # Refused joins preserve the last published change and the exact mesh.
     refused = rectangle(600, 0, 2, 2)
