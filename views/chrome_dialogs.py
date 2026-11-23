@@ -116,6 +116,15 @@ def live(parent):
     return view
 
 
+def async_host(parent):
+    """Resolve an unanswered model's host, including an offscreen Qt window."""
+    win = window_of(parent)
+    if live(parent) is not None or (not in_shell() and
+            QGuiApplication.platformName() in ("offscreen", "minimal")):
+        return win
+    return None
+
+
 def _inside_view_area(widget, win) -> bool:
     """A panel of the window (docked, even hidden), not a dialog of its own."""
     w = widget
@@ -214,41 +223,16 @@ def ask(parent, title: str, text: str, buttons, *, default=None, cancel=None,
 
 def ask_later(parent, title: str, text: str, buttons, done, *, default=None,
               cancel=None, discard=None, tone: str = "question") -> None:
-    """:func:`ask` without blocking: ``done(answer)`` runs once the sheet
-    is answered (a later turn of the loop), or at once with the answer of
-    a Qt question box when the chrome is not on screen."""
-    view = live(parent)
-    if view is None:
-        if in_shell():
-            done(cancel)                # no Qt box can show in the shell
-            return
-        done(_qt_ask(parent, title, text, buttons, default, cancel, discard, tone))
+    """Post a question and deliver its answer to the continuation."""
+    win = async_host(parent)
+    if win is None:
+        print(f"Built could not show the question: {title}", file=sys.stderr)
+        done(cancel)
         return
-    win = window_of(parent)
     sheet = _Sheet(title, text, tone, _roles(buttons, default, cancel, discard),
                    default, cancel, discard, False)
     sheet.done = done
     _push(win, sheet)
-
-
-def _qt_ask(parent, title, text, buttons, default, cancel, discard, tone):
-    """The Qt box :func:`ask_later` falls back to: same buttons, same ids."""
-    icon = {"question": QMessageBox.Question, "warning": QMessageBox.Warning,
-            "error": QMessageBox.Critical}.get(tone, QMessageBox.Information)
-    box = QMessageBox(icon, title, text, QMessageBox.NoButton, parent)
-    box.setOption(QMessageBox.Option.DontUseNativeDialog, True)
-    made = {}
-    for bid, label in buttons:
-        role = (QMessageBox.RejectRole if bid == cancel else
-                QMessageBox.DestructiveRole if bid == discard else QMessageBox.AcceptRole)
-        made[bid] = box.addButton(label, role)
-    if default in made:
-        box.setDefaultButton(made[default])
-    if cancel in made:
-        box.setEscapeButton(made[cancel])
-    box.exec()
-    clicked = box.clickedButton()
-    return next((bid for bid, b in made.items() if b is clicked), cancel)
 
 
 @dataclass

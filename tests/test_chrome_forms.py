@@ -245,26 +245,15 @@ def test_without_the_chrome_prompts_are_qt_and_answer_inline(monkeypatch):
     assert got == ["x!", 3, None, "b"]
 
 
-def test_the_qt_fallback_runs_the_same_form(monkeypatch):
+def test_offscreen_form_reports_edited_values(win, monkeypatch):
+    monkeypatch.setattr(cd, "live", lambda parent: None)
     answers = []
     form = cf.Form("Soften", [cf.Field("angle", "number", "Angle", 20, lo=0, hi=180),
                               cf.Field("smooth", "check", "Smooth normals", False)],
                    on_done=lambda a, v: answers.append((a, v)))
 
-    def answer():
-        dlg = next((w for w in QApplication.topLevelWidgets()
-                    if isinstance(w, QDialog) and w.isVisible() and w.windowTitle() == "Soften"), None)
-        if dlg is None:
-            QTimer.singleShot(50, answer)
-            return
-        from PySide6.QtWidgets import QCheckBox, QDialogButtonBox, QSpinBox
-        dlg.findChild(QSpinBox).setValue(45)
-        dlg.findChild(QCheckBox).setChecked(True)
-        box = dlg.findChild(QDialogButtonBox)
-        ok = next(b for b in box.buttons() if b.text() == "OK")
-        ok.click()
-    QTimer.singleShot(50, answer)
-    assert cf.show(None, form) == "qt"
+    assert cf.show(win, form) == "chrome"
+    chrome(win, dlg(form, "v", "angle", "45"), dlg(form, "v", "smooth", "1"), dlg(form, "b", "ok"))
     assert answers == [("ok", {"angle": 45, "smooth": True})]
 
 
@@ -293,20 +282,12 @@ def test_ask_later_answers_through_the_sheet(win):
     assert got == ["whole"] and not cd.modal(win)
 
 
-def test_ask_later_without_the_chrome_asks_qt_inline(monkeypatch):
-    def answer():
-        boxes = [w for w in QApplication.topLevelWidgets() if isinstance(w, QMessageBox) and w.isVisible()]
-        if not boxes:
-            QTimer.singleShot(50, answer)
-            return
-        box = boxes[-1]
-        whole = [b for b in box.buttons() if b.text().replace("&", "") == "Whole model"]
-        (whole[0] if whole else box.buttons()[0]).click()
-    QTimer.singleShot(50, answer)
+def test_ask_later_without_a_host_cancels(capsys):
     got = []
     cd.ask_later(None, "Export", "Which?", [("cancel", "Cancel"), ("whole", "Whole model")],
                  got.append, default="whole", cancel="cancel")
-    assert got == ["whole"]
+    assert got == ["cancel"]
+    assert "Export" in capsys.readouterr().err
 
 
 def test_a_form_in_the_shell_with_no_chrome_cancels_instead_of_a_qt_dialog(monkeypatch):
