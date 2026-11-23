@@ -3720,7 +3720,7 @@ def run_stitch(mesh, seedkeys: set, new_faces: Optional[set] = None,
     # includes a face this operation created (so user diagonals survive).
     from core.store_mesh import FaceView, _hypot, _store_of
     start = 0
-    while _doc.ENABLED and (store := _store_of(mesh)) is not None:
+    while (store := _store_of(mesh)) is not None:
         fresh = None if new_faces is None else {f.key for f in new_faces}
         match = store.stitch_region(list(seedkeys or ()), fresh, start, _hypot())
         if match is None:
