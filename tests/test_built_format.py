@@ -160,3 +160,29 @@ def test_legacy_float32_weld_threshold_is_preserved(monkeypatch):
     precise, _ = store_mesh.store_from_source(source, precise=True)
     assert legacy.counts() == (1, 0, 0)
     assert precise.counts() == (2, 1, 0)
+
+
+@pytest.mark.parametrize("precise", [False, True])
+def test_native_point_columns_match_reference_and_world_displacement(precise, monkeypatch):
+    from types import SimpleNamespace
+    from formats.native_io import native_io
+
+    if not hasattr(native_io(), "igz_points"):
+        pytest.skip("native point codec unavailable")
+    rng = np.random.default_rng(852)
+    world = np.eye(4)
+    world[:3, :] = rng.uniform(-170, 170, (3, 4))
+    transforms = [(np.eye(4), np.eye(4)), (world, world.astype("f").astype("d"))]
+    points = rng.normal(size=(20000, 3)) * [500000, 2000, 0.1]
+    for coords in (points.astype("f"), points, points.astype("f").astype("d")):
+        results = []
+        for mode in ("0", "1"):
+            monkeypatch.setenv("INGETRAZO_RUST_IO", mode)
+            sink = SimpleNamespace(built=precise, compatibility=not precise,
+                                   current_placements=transforms, displacement_mm=0.0)
+            encoded = built.point_array(coords, sink)
+            results.append((encoded, sink.displacement_mm))
+        (old, before), (new, after) = results
+        assert old.dtype == new.dtype
+        assert old.tobytes() == new.tobytes()
+        assert after == pytest.approx(before, rel=1e-13)

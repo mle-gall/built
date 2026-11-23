@@ -22,6 +22,19 @@ def point_array(points, sink):
     from formats.igz import NonFiniteDocumentError
 
     points = np.asarray(points).reshape(-1, 3)
+    from formats.native_io import native_io
+    encode = getattr(native_io(), "igz_points", None)
+    if encode and points.dtype in (np.dtype("<f4"), np.dtype("<f8")):
+        report = getattr(sink, "compatibility", False)
+        placements = sink.current_placements if report else ()
+        try:
+            result, mm = encode(np.ascontiguousarray(points), getattr(sink, "built", False),
+                                placements)
+        except ValueError as exc:
+            raise NonFiniteDocumentError("geometry") from exc
+        if report:
+            sink.displacement_mm = max(sink.displacement_mm, mm)
+        return result
     compact = points.astype("<f4", copy=False)
     if not np.isfinite(points).all():
         raise NonFiniteDocumentError("geometry")

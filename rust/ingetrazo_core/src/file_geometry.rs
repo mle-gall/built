@@ -3,7 +3,7 @@
 //! ring corners already follow file order in the parser's position array.
 use crate::doc::value::Value;
 use crate::jsondoc::Block;
-use numpy::{IntoPyArray, PyArrayMethods};
+use numpy::{IntoPyArray, PyArrayMethods, PyUntypedArrayMethods};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
@@ -93,4 +93,104 @@ pub fn source(py: Python<'_>, block: Block) -> PyResult<Bound<'_, PyAny>> {
     out.set_item("face_attr", block.face_attr.into_pyarray(py))?;
     out.set_item("sequential", small)?;
     Ok(out.into_any())
+}
+
+/// Select the Built/IGZ precision and measure the largest world-space
+/// displacement across every placement before a compatibility export.
+#[pyfunction]
+pub fn igz_points<'py>(
+    py: Python<'py>,
+    points: &Bound<'py, PyAny>,
+    precise: bool,
+    placements: Vec<(
+        numpy::PyReadonlyArray2<'py, f64>,
+        numpy::PyReadonlyArray2<'py, f64>,
+    )>,
+) -> PyResult<(Bound<'py, PyAny>, f64)> {
+    let transforms = placements
+        .into_iter()
+        .map(|(source, target)| {
+            fn affine(m: numpy::PyReadonlyArray2<'_, f64>) -> PyResult<[[f64; 4]; 3]> {
+                let a = m.as_array();
+                if a.shape() != [4, 4] {
+                    return Err(PyValueError::new_err("invalid placement shape"));
+                }
+                Ok(std::array::from_fn(|r| std::array::from_fn(|c| a[[r, c]])))
+            }
+            let a = affine(source)?;
+            let b = affine(target)?;
+            let delta: [[f64; 4]; 3] =
+                std::array::from_fn(|r| std::array::from_fn(|c| a[r][c] - b[r][c]));
+            Ok((a, delta, a != b))
+        })
+        .collect::<PyResult<Vec<_>>>()?;
+    let single = points.extract::<numpy::PyReadonlyArray2<'_, f32>>().ok();
+    let double = if single.is_none() {
+        Some(points.extract::<numpy::PyReadonlyArray2<'_, f64>>()?)
+    } else {
+        None
+    };
+    if single.as_ref().is_some_and(|a| a.shape()[1] != 3)
+        || double.as_ref().is_some_and(|a| a.shape()[1] != 3)
+    {
+        return Err(PyValueError::new_err("expected an N by 3 position array"));
+    }
+    let single = single.as_ref().map(|p| p.as_slice()).transpose()?;
+    let double = double.as_ref().map(|p| p.as_slice()).transpose()?;
+    let len = single.map_or_else(|| double.expect("f64 points").len(), <[f32]>::len);
+    let mut compact = Vec::new();
+    let mut exact = true;
+    let mut maximum: f64 = 0.;
+    for start in (0..len).step_by(3 * 16384) {
+        let end = (start + 3 * 16384).min(len);
+        // Copy just this tile while Python owns the GIL. The native worker
+        // can scan it without borrowing a potentially mutable NumPy buffer.
+        let tile: Vec<f64> = match single {
+            Some(a) => a[start..end].iter().map(|&v| v as f64).collect(),
+            None => double.expect("f64 points")[start..end].to_vec(),
+        };
+        py.detach(|| -> PyResult<()> {
+            for xyz in tile.chunks_exact(3) {
+                let p = [xyz[0], xyz[1], xyz[2]];
+                let q = p.map(|x| x as f32);
+                if p.iter().any(|x| !x.is_finite())
+                    || (!precise && q.iter().any(|x| !x.is_finite()))
+                {
+                    return Err(PyValueError::new_err("non-finite point"));
+                }
+                if single.is_none() && (!precise || exact) {
+                    compact.extend(q);
+                }
+                let q = q.map(f64::from);
+                let same = p == q;
+                exact &= same;
+                for (m, change, moved) in &transforms {
+                    if same && !moved {
+                        continue;
+                    }
+                    let mut sum = 0.;
+                    for r in 0..3 {
+                        let mut d = (p[0] - q[0]) * m[r][0]
+                            + (p[1] - q[1]) * m[r][1]
+                            + (p[2] - q[2]) * m[r][2];
+                        if *moved {
+                            d += q[0] * change[r][0]
+                                + q[1] * change[r][1]
+                                + q[2] * change[r][2]
+                                + change[r][3];
+                        }
+                        sum += d * d;
+                    }
+                    maximum = maximum.max(sum.sqrt());
+                }
+            }
+            Ok(())
+        })?;
+    }
+    let out = if single.is_some() || (precise && !exact) {
+        points.clone()
+    } else {
+        compact.into_pyarray(py).reshape([len / 3, 3])?.into_any()
+    };
+    Ok((out, maximum * 1000.))
 }
