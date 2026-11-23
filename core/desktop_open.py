@@ -69,3 +69,21 @@ def open_url(target) -> bool:
             pass
     from PySide6.QtGui import QDesktopServices
     return QDesktopServices.openUrl(url)
+
+
+def reveal(path) -> bool:
+    """Show ``path`` selected in the desktop's file manager (Finder's
+    «Show in Finder»); elsewhere open its folder."""
+    p = Path(path)
+    try:
+        if sys.platform == "darwin" and p.exists():
+            subprocess.Popen(["open", "-R", str(p)], stdin=subprocess.DEVNULL,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return True
+        if sys.platform.startswith("win") and p.exists():
+            subprocess.Popen(["explorer", "/select,", str(p)])
+            return True
+    except OSError:
+        pass
+    folder = p.parent
+    return open_url(folder) if folder.exists() else False

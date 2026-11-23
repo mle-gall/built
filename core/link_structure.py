@@ -9,20 +9,26 @@ stems at the top level, and it misses the items of a link inside a link.
 The tree therefore mounts every linked file from what is current:
 
 * the host's own nodes (registry nodes without ``source``), in their order;
-* then one «Linked files» root, holding one row per linked file placed in
-  the host (``link:<stem>``);
+* then one root row per linked file (``link:<stem>``), typed as a file
+  (tree A + C, docs/ui-decisions.md, 2026-11-23). Nested links are roots
+  too, each file once, marked ``via`` the file that places it
+  (``link:A/link:C`` via A), right after it: every file sits at one
+  predictable place, as in Navisworks' and Solibri's model trees. A file
+  placed through two parents (or by the host and by a linked file) is one
+  row, the shortest chain's; the other chains' parts are counted there;
 * under a file's row, that file's own structure as the file has it (the
   host's ``plugin_data["links"][path]["structure"]``, refreshed on every
-  reload), then its own «Linked files» (``link:<stem>/linked``) holding
-  the files it links, recursively (``link:A/link:C``). A nested file's
-  structure is the one its parent file mounted (``link:C/…`` nodes in the
-  parent's structure);
+  reload). A nested file's structure is the one its parent file mounted
+  (``link:C/…`` nodes in the parent's structure). When that structure has
+  one top node («Ride» in Ride.igz), the node is merged into the file row:
+  its children and items hang from the row, so the tree never reads
+  "Ride › Ride";
 * a file without a structure shows its tag folders and tags instead, as
-  the host mirrors them («A / C / …»).
+  the host mirrors them («A / C / …»), merged the same way when there is
+  one top folder.
 
-Host first, then Linked files: what you work on comes before what you only
-reference (the order of Revit's Project Browser and of the Tags panel, where
-«Linked files» is one folder among the host's).
+Host first, then the files: what you work on comes before what you only
+reference (the order of Revit's Project Browser).
 
 Every placement belongs to at most one display node: the host's own by
 their ``structure.node``; a linked file's placement to the file's row; a
@@ -38,8 +44,11 @@ from collections import defaultdict
 
 from core import links, structure
 
-LINKED = "linked"          # the root «Linked files» row
+LINKED = "linked"          # the former «Linked files» row (keys stay read-only)
 LINKED_NAME = links.LINKED_FOLDER
+#: A file row's states (dot colours in the dock): found, changed on disk
+#: since it was read, not found, or packed into this document.
+STATES = ("resolved", "modified", "missing", "packed")
 
 
 def mount_key(stems) -> str:
@@ -107,8 +116,12 @@ def walk(scene):
 
 class Tree:
     """``nodes``: display key → {name, parent, order, kind ("host",
-    "linked", "link", "node", "tag", "tagfolder"), path, stems, recipe,
-    tag (host tag key or None), folder (host folder key or None)};
+    "link", "node", "tag", "tagfolder"), path, stems, recipe,
+    tag (host tag key or None), folder (host folder key or None)}; a file
+    row ("link") adds ``via`` (the stem of the file placing it, None for
+    the host's own links), ``folders`` (every host folder its chains
+    mirror it in) and ``merged`` (the name of its single top node, folded
+    into the row, or None);
     ``children``: key → ordered child keys (None: the roots);
     ``member``: id(group) → key; ``direct``: key → groups;
     ``links``: link-row key → the link placements it stands for;
@@ -119,14 +132,31 @@ class Tree:
         self.nodes, self.direct = {}, defaultdict(list)
         self.member, self.links = {}, defaultdict(list)
         self.unfiled, self.tables, self._mk = [], {}, {}
+        #: Keys standing for another row: a merged single top node → its
+        #: file row; a second chain to a file already shown → its row.
+        self.alias = {}
         self._host(registry)
         placements = list(walk(scene))
         files = {}
         for g, chain, inner, root in placements:
             if inner != chain:
                 files.setdefault(tuple(s for s, _p in inner), inner)
-        for stems, inner in sorted(files.items(), key=lambda kv: len(kv[0])):
-            self._file(stems, inner[-1][1])
+        seen = list(files)                        # depth first: a file, then what it links
+        shown = {}                                # normalised path → canonical stems
+        for stems, inner in sorted(files.items(), key=lambda kv: (len(kv[0]), seen.index(kv[0]))):
+            path = inner[-1][1]
+            first = shown.get(path)
+            if first is None:
+                shown[path] = stems
+                self._file(stems, path)
+            else:
+                self._same_file(stems, first)
+        # Files after the host's roots, each right after the file placing it.
+        rank = {stems: n for n, stems in enumerate(seen)}
+        files_in_order = sorted((k for k, n in self.nodes.items() if n["kind"] == "link"),
+                                key=lambda k: rank.get(self.nodes[k]["stems"], 0))
+        for n, k in enumerate(files_in_order):
+            self.nodes[k]["order"] = self._host_roots + 1 + n
         recipes = {k: n["recipe"] for k, n in self.nodes.items()}
         for g, chain, inner, root in placements:
             key = self._membership(g, chain, inner, root)
@@ -160,21 +190,29 @@ class Tree:
         self._host_roots = max((n["order"] for n in self.nodes.values() if n["parent"] is None), default=-1)
 
     # -- linked files ------------------------------------------------------
-    def _linked_folder(self, stems):
-        """The «Linked files» row holding ``stems``'s links."""
-        key = LINKED if not stems else mount_key(stems) + "/" + LINKED
-        if key not in self.nodes:
-            parent = None if not stems else mount_key(stems)
-            order = self._host_roots + 1 if not stems else 1 << 20
-            self.nodes[key] = dict(name=LINKED_NAME, parent=parent, order=order, kind="linked", path=None,
-                                   stems=tuple(stems), recipe={}, tag=None, folder=None)
+    def resolve(self, key):
+        """The row a display key stands for (aliases followed)."""
+        seen = 0
+        while key in self.alias and seen < 64:
+            key, seen = self.alias[key], seen + 1
         return key
+
+    def _same_file(self, stems, first):
+        """A second chain to a file already shown: its placements and parts
+        count on the first chain's row, and its folder joins the row's."""
+        key, canon = mount_key(stems), mount_key(first)
+        self.alias[key] = canon
+        self.tables[stems] = self.tables.get(first, {})
+        base = links.SEP.join(stems)
+        if base not in self.nodes[canon]["folders"]:
+            self.nodes[canon]["folders"].append(base)
 
     def _file(self, stems, path):
         key = mount_key(stems)
         base = links.SEP.join(stems)              # the file's tag folder in the host
-        self.nodes[key] = dict(name=stems[-1], parent=self._linked_folder(stems[:-1]), order=len(self.nodes),
-                               kind="link", path=path, stems=stems, recipe={}, tag=None, folder=base)
+        self.nodes[key] = dict(name=stems[-1], parent=None, order=len(self.nodes),
+                               kind="link", path=path, stems=stems, recipe={}, tag=None, folder=base,
+                               via=stems[-2] if len(stems) > 1 else None, folders=[base], merged=None)
         if len(stems) == 1:
             entry = links.registry(self.scene).get(path)
             table = (entry or {}).get("structure") or {}
@@ -183,13 +221,22 @@ class Tree:
         self.tables[stems] = table
         own = _own(table)
         pre = key + "/"
+        tops = [k for k, n in own.items() if n.get("parent") not in own]
+        single = tops[0] if len(tops) == 1 else None
         for k, n in own.items():
             recipe = dict(n.get("recipe") or n.get("source_recipe") or {})
             tag = recipe.get("tag")
             host_tag = base + links.SEP + tag if tag else None
             if host_tag is not None and self.scene.layer_by_key(host_tag) is None:
                 host_tag = None
-            parent = pre + n["parent"] if n.get("parent") in own else key
+            if k == single:
+                # One top node: it is the file («Ride» in Ride.igz). Merge
+                # it into the row; its children and items hang from the row.
+                self.alias[pre + k] = key
+                self.nodes[key].update(merged=n.get("name") or k, recipe=recipe, tag=host_tag)
+                continue
+            parent = n.get("parent")
+            parent = key if parent not in own or parent == single else pre + parent
             self.nodes[pre + k] = dict(name=n.get("name") or k, parent=parent, order=n.get("order", 0), kind="node",
                                        path=path, stems=stems, recipe=recipe, tag=host_tag, folder=None)
         if not own:
@@ -210,16 +257,31 @@ class Tree:
                 folders[c] = f
                 todo.append(c)
         pre = key + "/"
+        mine = [ly for ly in scene.layers
+                if ly.key.startswith(base + links.SEP) and (ly.folder == base or ly.folder in folders)]
+        tops = [f for f, parent in folders.items() if parent == base]
+        # The file's «Untagged» tag (its loose geometry) does not count as a
+        # second top: one top folder is still the file itself.
+        untagged = base + links.SEP + "Untagged"
+        single = tops[0] if len(tops) == 1 and not any(ly.folder == base and ly.key != untagged
+                                                        for ly in mine) else None
+
+        def under(f):
+            return key if f in (base, single) else pre + "tf:" + f
         for n, (f, parent) in enumerate(folders.items()):
             label = folder_label(scene, f) or f
             label = label[len(base) + len(links.SEP):] if label.startswith(base + links.SEP) else label
-            self.nodes[pre + "tf:" + f] = dict(name=label, parent=key if parent == base else pre + "tf:" + parent,
+            if f == single:
+                self.alias[pre + "tf:" + f] = key
+                self.nodes[key]["merged"] = label
+                continue
+            self.nodes[pre + "tf:" + f] = dict(name=label, parent=under(parent),
                                                order=n, kind="tagfolder", path=path, stems=stems, recipe={},
                                                tag=None, folder=f)
         for n, ly in enumerate(scene.layers):
             if not ly.key.startswith(base + links.SEP) or not (ly.folder == base or ly.folder in folders):
                 continue
-            parent = key if ly.folder == base else pre + "tf:" + ly.folder
+            parent = under(ly.folder)
             self.nodes[pre + "tag:" + ly.key] = dict(name=ly.name or ly.key, parent=parent, order=1000 + n,
                                                     kind="tag", path=path, stems=stems,
                                                     recipe={"tag": ly.key}, tag=ly.key, folder=None)
@@ -229,7 +291,7 @@ class Tree:
         if inner != chain:                         # a link placement: its file's row
             key = self._mk.get(inner)
             if key is None:
-                key = self._mk[inner] = mount_key(tuple(s for s, _p in inner))
+                key = self._mk[inner] = self.resolve(mount_key(tuple(s for s, _p in inner)))
             self.links[key].append(g)
             return key
         own = structure.node_of(g)
@@ -237,9 +299,11 @@ class Tree:
             return own if own in self.nodes else None
         mk = self._mk.get(chain)
         if mk is None:
-            mk = self._mk[chain] = mount_key(tuple(s for s, _p in chain))
-        if own is not None and mk + "/" + own in self.nodes:
-            return mk + "/" + own
+            mk = self._mk[chain] = self.resolve(mount_key(tuple(s for s, _p in chain)))
+        if own is not None:
+            k = self.resolve(mk + "/" + own)
+            if k in self.nodes:
+                return k
         layer = getattr(g, "layer", None)
         if root and layer and mk + "/tag:" + layer in self.nodes:
             return mk + "/tag:" + layer
@@ -269,13 +333,29 @@ class Tree:
     def file_tags(self, key):
         """Host tag keys of the linked file (or files) a row stands for."""
         node = self.nodes.get(key)
-        if node is None:
+        if node is None or node["kind"] != "link":
             return []
-        if node["kind"] == "linked":
-            bases = [self.nodes[c]["folder"] for c in self.children.get(key, ()) if self.nodes[c]["kind"] == "link"]
-        elif node["kind"] == "link":
-            bases = [node["folder"]]
-        else:
-            return []
+        bases = node["folders"]
         pre = tuple(b + links.SEP for b in bases)
         return [ly.key for ly in self.scene.layers if pre and ly.key.startswith(pre)]
+
+
+def file_state(scene, path, nested=False) -> str:
+    """A linked file's state for its row (one of ``STATES``), read without
+    touching the host's link registry (``links._entry`` adds entries). A
+    nested file has no entry of its own: it is missing when its file is,
+    else it is as current as the file placing it was when read."""
+    from pathlib import Path
+    if not path:
+        return "missing"
+    reg = links.registry(scene)
+    entry = reg.get(links._norm(path))
+    entry = entry if isinstance(entry, dict) else {}
+    if entry.get("packed"):
+        return "packed"
+    p = Path(path)
+    if not p.is_file():
+        return "missing"
+    if nested and "loaded_mtime_ns" not in entry:
+        return "resolved"
+    return "modified" if p.stat().st_mtime_ns != entry.get("loaded_mtime_ns") else "resolved"

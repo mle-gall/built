@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""The Project tree with linked files (ui/tree-links, 2026-11-22), on a
-synthetic composite (tests/composite_fixture.py): a host linking A and B,
-A linking C and D, A with 20 000 placements. Each linked file's structure
-nests under its row with its items counted there; one root order; a link
-row selects its placement; item lists are paged; eye and lock work on
+"""The Project tree with linked files (ui/tree-links, 2026-11-22; files as
+roots since tree A + C, 2026-11-23), on a synthetic composite
+(tests/composite_fixture.py): a host linking A and B, A linking C and D, A
+with 20 000 placements. Each linked file is a root row with its structure
+under it (a single top node merged into the row) and its items counted
+there; nested files are roots too, "via" their parent; a link row selects
+its placement; item lists are paged; eye and lock work on
 mounted nodes and undo; Isolate works on host groups, link rows, mounted
 nodes and mixed selections, and Show all restores what was there."""
 from __future__ import annotations
@@ -87,35 +89,37 @@ def _key(view, name):
     return next(k for k, n in view._ui_tree["nodes"].items() if n["name"] == name)
 
 
-def test_linked_structures_nest_under_their_link_rows_with_their_counts(ui):
+def test_linked_files_are_roots_with_their_structures_and_counts(ui):
     scene, win, view, rows, act = ui
     tree = view._ui_tree["tree"]
     counts = view._ui_tree["counts"]
-    # One root order: the host's own nodes, then Linked files.
-    assert [tree.nodes[k]["name"] for k in tree.children[None]] == ["Site works", "Linked files"]
-    assert [tree.nodes[k]["name"] for k in tree.children["linked"]] == ["A", "B"]
-    # Nested links sit under A's own Linked files, never at the top.
-    assert tree.nodes["link:A/link:C"]["parent"] == "link:A/linked"
-    assert tree.nodes["link:A/link:D"]["parent"] == "link:A/linked"
-    assert not any(k in tree.children[None] for k in ("link:C", "link:D"))
-    # A's own structure comes before its Linked files.
+    # One root order: the host's own nodes, then every file once, each
+    # nested file right after the file placing it.
+    assert [tree.nodes[k]["name"] for k in tree.children[None]] == ["Site works", "A", "C", "D", "B"]
+    assert [tree.nodes[k]["via"] for k in tree.children[None][1:]] == [None, "A", "A", None]
+    assert "linked" not in tree.nodes and not any(n["kind"] == "linked" for n in tree.nodes.values())
+    # A's single top node «Ride» is merged into A's row: no "A › Ride".
     names = [tree.nodes[k]["name"] for k in tree.children["link:A"]]
-    assert names == ["Ride", "Linked files"]
+    assert names == ["Track", "Supports", "Fasteners"]
+    assert tree.nodes["link:A"]["merged"] == "Ride"
+    assert tree.nodes["link:A/link:C"]["merged"] == "Stairs"
     # Items are counted where they belong; the link placements are the rows.
-    assert counts["link:A"] == BIG + 600 + 900
+    assert counts["link:A"] == BIG
     assert counts["link:A/link:C"] == 600 and counts["link:A/link:D"] == 900
-    assert counts["link:B"] == 3000 and counts["linked"] == BIG + 600 + 900 + 3000
+    assert counts["link:B"] == 3000
     assert counts[_key(view, "Rails")] == BIG // 5
     assert counts[_key(view, "Flights")] == 300 and counts[_key(view, "Toilets")] == 300
     assert counts[_key(view, "Site works")] == 50
     assert not view._ui_tree["unfiled"]
-    # The rows: link rows read "Reference" and explain it.
+    # The rows: a file row is typed (file icon with its state), named by
+    # its file, nested ones say which file places them.
     r = {x["key"]: x for x in rows()}
-    assert r["n:link:A"]["name"] == "A ↗" and r["n:link:A"]["kind"] == "Reference"
     wu = __import__("views.wgpu_ui", fromlist=["x"])
-    raw = {t[0]: t[2] for t, _n in view.renderer.calls["ui_set_tree"][0]}
-    assert "linked file" in raw["n:link:A"].split(wu.TIP)[1]
-    assert "no IFC class" in raw[f"n:{_key(view, 'Paths')}"].split(wu.TIP)[1]
+    raw = {t[0]: t for t, _n in view.renderer.calls["ui_set_tree"][0]}
+    assert r["n:link:A"]["name"] == "A.igz" and raw["n:link:A"][4] == "file:resolved"
+    assert raw["n:link:A/link:C"][3] == "via A" and raw["n:link:A"][3] == ""
+    assert "linked file" in raw["n:link:A"][2].split(wu.TIP)[1]
+    assert "no IFC class" in raw[f"n:{_key(view, 'Paths')}"][2].split(wu.TIP)[1]
 
 
 def test_bootstrap_mounts_only_the_hosts_own_links(ui):
@@ -139,11 +143,13 @@ def test_a_link_row_selects_its_placement_and_inspects_the_file(ui):
     assert took < 0.5, took
     wu._inspector(view, win)
     title, sections = view.renderer.calls["ui_set_inspector"]
-    assert title == "A"
+    assert title == "A.igz"
     info = dict(dict(sections)["Linked file"])
-    assert info["What"].startswith("Reference") and info["File"] == "A.igz" and info["Items"] == str(BIG + 1500)
+    assert info["What"].startswith("Linked file") and info["File"] == "A.igz" and info["Items"] == str(BIG)
+    assert info["Status"] == "Up to date" and info["Top node"] == "Ride"
     actions = [label for name, acts in sections if name == "Actions" for _id, label in acts]
-    assert {"Open source", "Reload", "Hide", "Isolate", "Select contents"} <= set(actions)
+    assert actions[:4] == ["Open source", "Reload", "Unlink", "Show in Finder"]
+    assert "Select contents" in actions
     # A node inside the file selects nothing and is described instead.
     act("node", "n:" + _key(view, "Rails"))
     assert not scene.selection
@@ -159,7 +165,7 @@ def test_expanding_is_paged_and_cheap(ui):
     scene, win, view, rows, act = ui
     import views.wgpu_ui as wu
     t = time.perf_counter()
-    for name in (None, "Ride", "Track", "Rails"):
+    for name in (None, "Track", "Rails"):
         got = act("toggle", "n:link:A" if name is None else "n:" + _key(view, name))
     took = time.perf_counter() - t
     assert took < 1.0, took
@@ -178,7 +184,7 @@ def test_eye_and_lock_on_mounted_nodes_write_overrides_and_undo(ui):
     from core import layers as L, links
     scene, win, view, rows, act = ui
     rails = _key(view, "Rails")
-    view._ui_exp.update({"n:link:A", "n:" + _key(view, "Ride"), "n:" + _key(view, "Track")})
+    view._ui_exp.update({"n:link:A", "n:" + _key(view, "Track")})
     tag = scene.layer("A / Rails")
     entry = links.registry(scene)[next(p for p in links.registry(scene) if p.endswith("A.igz"))]
     assert next(r for r in rows() if r["key"] == "n:" + rails)["eye"] == 1
