@@ -24,44 +24,30 @@ impl V3 {
         V3(self.0 / s, self.1 / s, self.2 / s)
     }
     #[inline]
-    pub fn dot(self, o: V3, h: Hypot) -> f64 {
-        if h == Hypot::LibCxxFma {
-            self.2.mul_add(o.2, self.0.mul_add(o.0, self.1 * o.1))
-        } else {
-            self.0 * o.0 + self.1 * o.1 + self.2 * o.2
-        }
+    pub fn dot(self, other: V3, _h: Hypot) -> f64 {
+        self.vector().dot(other.vector())
     }
-    #[inline]
-    pub fn cross(self, o: V3, h: Hypot) -> V3 {
-        if h == Hypot::LibCxxFma {
-            return V3(
-                self.1.mul_add(o.2, -(self.2 * o.1)),
-                self.2.mul_add(o.0, -(self.0 * o.2)),
-                self.0.mul_add(o.1, -(self.1 * o.0)),
-            );
-        }
-        V3(
-            self.1 * o.2 - self.2 * o.1,
-            self.2 * o.0 - self.0 * o.2,
-            self.0 * o.1 - self.1 * o.0,
-        )
+
+    pub fn cross(self, other: V3, _h: Hypot) -> V3 {
+        V3::from_vector(self.vector().cross(other.vector()))
+    }
+
+    fn vector(self) -> glam::DVec3 {
+        glam::DVec3::new(self.0, self.1, self.2)
+    }
+
+    fn from_vector(v: glam::DVec3) -> Self {
+        Self(v.x, v.y, v.z)
     }
 }
 
 #[inline]
 pub fn length(v: V3, _h: Hypot) -> f64 {
-    v.0.hypot(v.1).hypot(v.2)
+    v.vector().length()
 }
 
-pub fn normalized(v: V3, h: Hypot) -> V3 {
-    let len = length(v, h);
-    if len == 1.0 {
-        v
-    } else if len <= 1e-5 {
-        V3(0.0, 0.0, 0.0)
-    } else {
-        V3(v.0 / len, v.1 / len, v.2 / len)
-    }
+pub fn normalized(v: V3, _h: Hypot) -> V3 {
+    V3::from_vector(v.vector().normalize_or_zero())
 }
 
 /// `core.triangulate.plane_axes`.
@@ -83,21 +69,7 @@ pub fn face_normal(pos: &[V3], outer: &[u32], h: Hypot) -> V3 {
 }
 
 pub(crate) fn face_normal_length(pos: &[V3], outer: &[u32], h: Hypot) -> (V3, f64) {
-    let m = outer.len();
-    if m < 3 {
-        return (V3(0.0, 0.0, 1.0), 0.0);
-    }
-    let (mut nx, mut ny, mut nz) = (0.0f64, 0.0f64, 0.0f64);
-    for k in 0..m {
-        let c = pos[outer[k] as usize];
-        let n = pos[outer[(k + 1) % m] as usize];
-        let (x0, y0, z0) = (c.0, c.1, c.2);
-        let (x1, y1, z1) = (n.0, n.1, n.2);
-        nx += (y0 - y1) * (z0 + z1);
-        ny += (z0 - z1) * (x0 + x1);
-        nz += (x0 - x1) * (y0 + y1);
-    }
-    let raw = V3(nx, ny, nz);
+    let raw = newell(pos, outer);
     let len = length(raw, h);
     if len < 1e-9 {
         (V3(0.0, 0.0, 1.0), len)
@@ -167,4 +139,62 @@ pub(crate) fn triangles(pos: &[V3], rings: &[&[u32]], normal: V3, h: Hypot) -> V
         tris.push([master[t[0]], master[t[1]], master[t[2]]]);
     }
     tris
+}
+
+fn newell(pos: &[V3], outer: &[u32]) -> V3 {
+    let m = outer.len();
+    let (mut nx, mut ny, mut nz) = (0.0f64, 0.0f64, 0.0f64);
+    for k in 0..m {
+        let c = pos[outer[k] as usize];
+        let n = pos[outer[(k + 1) % m] as usize];
+        let (x0, y0, z0) = (c.0, c.1, c.2);
+        let (x1, y1, z1) = (n.0, n.1, n.2);
+        nx += (y0 - y1) * (z0 + z1);
+        ny += (z0 - z1) * (x0 + x1);
+        nz += (x0 - x1) * (y0 + y1);
+    }
+    V3(nx, ny, nz)
+}
+
+impl From<V3> for [f64; 3] {
+    fn from(v: V3) -> Self {
+        [v.0, v.1, v.2]
+    }
+}
+
+pub(crate) fn face_geometry(
+    pos: &[V3],
+    rings: &[&[u32]],
+    h: Hypot,
+    compensated: bool,
+) -> crate::facegeom::FaceGeom<V3, f64> {
+    let outer = rings[0];
+    let raw = newell(pos, outer);
+    let ln = length(raw, h);
+    let normal = if ln > 1e-9 {
+        raw.div(ln)
+    } else {
+        V3(0., 0., 1.)
+    };
+    let unit = if ln > 1e-9 {
+        normalized(raw, h)
+    } else {
+        normal
+    };
+    let valid = outer.len() >= 3;
+    let tris = if valid {
+        triangles(pos, rings, normal, h)
+    } else {
+        Vec::new()
+    };
+    let tris_unit =
+        (valid && unit.vector() != normal.vector()).then(|| triangles(pos, rings, unit, h));
+    crate::facegeom::FaceGeom {
+        normal,
+        unit,
+        ln,
+        tris,
+        tris_unit,
+        centroid: valid.then(|| face_centroid(pos, outer, compensated)),
+    }
 }

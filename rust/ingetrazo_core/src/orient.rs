@@ -11,9 +11,7 @@
 //! around each query, not the rays.
 //!
 //! Everything a decision reads is reproduced here bit for bit:
-//! - the face geometry Python computes through `QVector3D` (float32, Qt's
-//!   order, this Qt's `length()` formula and fused products —
-//!   `crate::facegeom`): `Face.normal()`, `centroid()`, `triangulate()`,
+//! - binary64 model geometry shared with the store: `Face.normal()`, `centroid()`, `triangulate()`,
 //!   `_interior_probe`, `_on_face`, `_basis`, the jittered directions;
 //! - the jitter itself: Python's `random.Random(seed)` (MT19937 seeded by
 //!   `init_by_array`, `random()` = `genrand_res53`, `uniform`), one stream
@@ -36,7 +34,7 @@
 //! on, the rest of the chunk is judged again at the corrected offsets. The
 //! result is the sequential loop's whatever the predictions.
 
-use crate::facegeom::{self, Hypot, V3};
+use crate::store::geometry::{self as facegeom, face_centroid, face_normal, plane_basis, Hypot, V3};
 use crate::scans::{MeshScan, EFACES, FFLAGS, RINGS};
 use crate::store::keys::{split_key, Kind, NONE};
 use pyo3::prelude::*;
@@ -53,7 +51,7 @@ fn lap(what: &str, t: &mut std::time::Instant) {
     *t = std::time::Instant::now();
 }
 
-// ---- float32 vector arithmetic as QVector3D does it ------------------------
+// ---- Binary64 model arithmetic ---------------------------------------------
 
 #[inline]
 fn add(a: V3, b: V3) -> V3 {
@@ -64,11 +62,11 @@ fn sub(a: V3, b: V3) -> V3 {
     V3(a.0 - b.0, a.1 - b.1, a.2 - b.2)
 }
 #[inline]
-fn mul(a: V3, s: f32) -> V3 {
+fn mul(a: V3, s: f64) -> V3 {
     V3(a.0 * s, a.1 * s, a.2 * s)
 }
 #[inline]
-fn div(a: V3, s: f32) -> V3 {
+fn div(a: V3, s: f64) -> V3 {
     V3(a.0 / s, a.1 / s, a.2 / s)
 }
 #[inline]
@@ -95,58 +93,13 @@ pub struct Geom {
     pub tris: Vec<[u32; 3]>,
 }
 
-/// `Face.normal()`: Newell in doubles over the float32 corners, rounded to
-/// a `QVector3D`, divided by its own length (not `normalized()`), or
-/// `(0, 0, 1)` under three corners or below a length of 1e-9.
-pub fn face_normal(pos: &[V3], outer: &[u32], h: Hypot) -> V3 {
-    face_normal_length(pos, outer, h).0
-}
-
-pub(crate) fn face_normal_length(pos: &[V3], outer: &[u32], h: Hypot) -> (V3, f32) {
-    let m = outer.len();
-    if m < 3 {
-        return (V3(0.0, 0.0, 1.0), 0.0);
-    }
-    let (mut nx, mut ny, mut nz) = (0.0f64, 0.0f64, 0.0f64);
-    for k in 0..m {
-        let c = pos[outer[k] as usize];
-        let n = pos[outer[(k + 1) % m] as usize];
-        let (x0, y0, z0) = (c.0 as f64, c.1 as f64, c.2 as f64);
-        let (x1, y1, z1) = (n.0 as f64, n.1 as f64, n.2 as f64);
-        nx += (y0 - y1) * (z0 + z1);
-        ny += (z0 - z1) * (x0 + x1);
-        nz += (x0 - x1) * (y0 + y1);
-    }
-    let raw = V3(nx as f32, ny as f32, nz as f32);
-    let len = facegeom::length(raw, h);
-    if (len as f64) < 1e-9 {
-        (V3(0.0, 0.0, 1.0), len)
-    } else {
-        (div(raw, len), len)
-    }
-}
-
-/// `Face.centroid()`: Python's `sum()` of the float32 coordinates as
-/// doubles, divided by the count, rounded to a `QVector3D`.
-pub fn face_centroid(pos: &[V3], outer: &[u32], compensated: bool) -> V3 {
-    let n = outer.len();
-    if n == 0 {
-        return V3(0.0, 0.0, 0.0);
-    }
-    let c = n as f64;
-    let x = facegeom::py_sum(outer.iter().map(|&i| pos[i as usize].0 as f64), compensated) / c;
-    let y = facegeom::py_sum(outer.iter().map(|&i| pos[i as usize].1 as f64), compensated) / c;
-    let z = facegeom::py_sum(outer.iter().map(|&i| pos[i as usize].2 as f64), compensated) / c;
-    V3(x as f32, y as f32, z as f32)
-}
-
 impl Geom {
     /// Every face's geometry, in parallel.
     pub fn of(scan: &MeshScan, h: Hypot, compensated: bool) -> Geom {
         let pos: Vec<V3> = scan
             .positions()
             .iter()
-            .map(|p| V3(p[0] as f32, p[1] as f32, p[2] as f32))
+            .map(|p| V3(p[0], p[1], p[2]))
             .collect();
         let nf = scan.n_faces();
         let per: Vec<(V3, V3, Vec<[u32; 3]>)> = (0..nf)
@@ -188,18 +141,6 @@ impl Geom {
 }
 
 /// `core.arrangement.plane_basis(normal)`.
-pub(crate) fn plane_basis(normal: V3, h: Hypot) -> (V3, V3) {
-    let n = facegeom::normalized(normal, h);
-    let mut r = V3(1.0, 0.0, 0.0);
-    if (r.dot(n, h) as f64).abs() > 0.9 {
-        r = V3(0.0, 1.0, 0.0);
-    }
-    let u = facegeom::normalized(sub(r, mul(n, r.dot(n, h))), h);
-    let v = facegeom::normalized(n.cross(u, h), h);
-    (u, v)
-}
-
-/// `core.arrangement._point_in_polygon((0.0, 0.0), poly)`.
 fn origin_in_polygon(poly: &[(f64, f64)]) -> bool {
     let (x, y) = (0.0f64, 0.0f64);
     let mut inside = false;
@@ -255,7 +196,7 @@ fn interior_probe(g: &Geom, f: usize, rings: &[&[u32]]) -> V3 {
         return g.centroid[f];
     }
     let mut best = 0usize;
-    let mut best_key = 0.0f32;
+    let mut best_key = 0.0f64;
     for (k, t) in tris.iter().enumerate() {
         let (a, b, c) = (g.pos[t[0] as usize], g.pos[t[1] as usize], g.pos[t[2] as usize]);
         let cr = sub(b, a).cross(sub(c, a), h);
@@ -667,8 +608,8 @@ impl<'a> Ctx<'a> {
         let v = facegeom::normalized(n.cross(u, h), h);
         out[0] = f64s(n);
         for k in 1..self.rays {
-            let a = draws[2 * (k - 1)] as f32;
-            let b = draws[2 * (k - 1) + 1] as f32;
+            let a = draws[2 * (k - 1)];
+            let b = draws[2 * (k - 1) + 1];
             out[k] = f64s(facegeom::normalized(add(add(n, mul(u, a)), mul(v, b)), h));
         }
     }
@@ -1171,7 +1112,7 @@ pub fn scan_face_geometry(
     mut scan: PyRefMut<'_, MeshScan>,
     hypot: &str,
     compensated: bool,
-) -> PyResult<(Vec<(f32, f32, f32)>, Vec<(f32, f32, f32)>, Vec<Vec<[(f32, f32, f32); 3]>>)> {
+) -> PyResult<(Vec<(f64, f64, f64)>, Vec<(f64, f64, f64)>, Vec<Vec<[(f64, f64, f64); 3]>>)> {
     let g = geom_of(py, &mut scan, hypot, compensated)?;
     let nf = g.normal.len();
     let p = |i: u32| {
@@ -1192,7 +1133,7 @@ pub fn scan_face_probes(
     mut scan: PyRefMut<'_, MeshScan>,
     hypot: &str,
     compensated: bool,
-) -> PyResult<Vec<(f32, f32, f32)>> {
+) -> PyResult<Vec<(f64, f64, f64)>> {
     let g = geom_of(py, &mut scan, hypot, compensated)?;
     let s: &MeshScan = &scan;
     Ok((0..g.normal.len())

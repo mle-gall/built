@@ -182,7 +182,7 @@ def _geometry(mesh, plan):
     hit = d.get("_deferred_geom")
     if hit is None:
         hit = d["_deferred_geom"] = _native.native.face_geometry(
-            plan.pos.astype(np.float32), plan.corners, plan.ring_sizes,
+            np.asarray(plan.pos, np.float64), plan.corners, plan.ring_sizes,
             plan.ring_counts, _native.qt_hypot(),
             sys.version_info >= (3, 12))
     return hit
@@ -298,29 +298,19 @@ def fingerprint(mesh, plan, table, face_attr):
             soft, hid)
 
 
-def _qt_dot(a, b):
-    """Broadcast Qt float32 dot products, preserving the platform's FMA."""
-    a, b = np.broadcast_arrays(np.asarray(a, np.float32), np.asarray(b, np.float32))
-    if _native.qt_hypot() == "libc++-fma":
-        return _native.native.qt_dot_pairs(
-            np.ascontiguousarray(a.reshape(-1, 3)),
-            np.ascontiguousarray(b.reshape(-1, 3)),
-            _native.qt_hypot()).reshape(a.shape[:-1])
+def _model_dot(a, b):
+    a, b = np.asarray(a, np.float64), np.asarray(b, np.float64)
     return (a[..., 0] * b[..., 0] + a[..., 1] * b[..., 1]) + a[..., 2] * b[..., 2]
 
 
 def shade_factors(vp, vecs):
-    """``vp._shade_factor`` of each row of ``vecs`` (N,3) float32 — Qt's
-    normalized() from the kernel, the float32 dot with the light, then the
-    same float rounding (``np.rint`` ties to even, as ``round``)."""
-    n = len(vecs)
-    if not n:
-        return np.zeros(0)
-    ln, unit, _u, _v = _native.native.qt_vector_probe(
-        np.ascontiguousarray(vecs, dtype=np.float32), _native.qt_hypot())
-    d = np.abs(_qt_dot(unit, vp._LIGHT.toTuple()))
-    f = np.rint((0.62 + 0.38 * d.astype(np.float64)) * 32.0) / 32.0
-    return np.where(ln.astype(np.float64) < 1e-9, 0.84375, f)
+    """Apply the viewport's binary64 normal and light calculation to each row."""
+    vecs = np.asarray(vecs, np.float64)
+    lengths = np.sqrt(_model_dot(vecs, vecs))
+    inverse = np.divide(1., lengths, out=np.zeros_like(lengths), where=lengths > 0)
+    unit = vecs * inverse[:, None]
+    d = np.abs(_model_dot(unit, vp._LIGHT.toTuple()))
+    return np.where(lengths < 1e-9, 0.84375, np.rint((0.62 + 0.38 * d) * 32.) / 32.)
 
 
 def shaded_colors(base, shade):
@@ -408,13 +398,13 @@ def _smooth_stream(vp, plan, normal, unit, tfa, tva, col_a, f_rgb,
     if not len(tfa) or not np.any(smooth & (np.diff(plan.ef_start) > 1)):
         return None
     normals, mask = _native.native.smooth_corner_normals(
-        np.ascontiguousarray(plan.pos, dtype=np.float32), normal, unit,
+        np.ascontiguousarray(plan.pos, dtype=np.float32), normal.astype(np.float32), unit.astype(np.float32),
         plan.corners, plan.ring_sizes, plan.ring_counts, plan.edges,
         smooth, plan.ef_start, plan.ef_face, tva, tfa, _native.qt_hypot())
     normals = normals.reshape(-1, 3, 3)
     mask = mask.reshape(-1, 3) & plain[tfa, None]
     if np.any(mask):
-        d = np.abs(_qt_dot(normals[mask], vp._LIGHT.toTuple())).astype(np.float64)
+        d = np.abs(_model_dot(normals[mask], vp._LIGHT.toTuple())).astype(np.float64)
         shade = 0.62 + 0.38 * d
         base = np.broadcast_to(bases[fk[tfa], None, :], normals.shape)[mask]
         col_a[:, :, 3:][mask] = np.minimum(1.0, base * shade[:, None])
@@ -558,22 +548,22 @@ def _bake(vp, mesh, paint, msig):
     bcode = np.full(nf, -1, dtype=np.int64)       # face → back bucket
     b_rgb = np.zeros((nf, 3), dtype=np.float64)
     bnames: dict = {}                             # code → bucket key
-    nbits_a = normal.view(np.uint32).reshape(nf, 3) if nf else \
-        np.zeros((0, 3), np.uint32)
+    nbits_a = normal.view(np.uint64).reshape(nf, 3) if nf else \
+        np.zeros((0, 3), np.uint64)
 
     def uv_maps(faces_ix, tex_of_key):
         """Per face of ``faces_ix``, its world→UV map (texture of its key,
         the plain normal): once per distinct pair. ``(gu, cu, gv, cv)``
         arrays, one row per face."""
-        pairs = np.concatenate([fk[faces_ix][:, None].astype(np.uint32),
+        pairs = np.concatenate([fk[faces_ix][:, None].astype(np.uint64),
                                 nbits_a[faces_ix]], axis=1)
         u, inv = np.unique(pairs, axis=0, return_inverse=True)
-        gu = np.empty((len(u), 3), np.float32)
-        gv = np.empty((len(u), 3), np.float32)
+        gu = np.empty((len(u), 3), np.float64)
+        gv = np.empty((len(u), 3), np.float64)
         cu = np.empty(len(u))
         cv = np.empty(len(u))
         for j, r in enumerate(u):
-            n = QVector3D(*r[1:].astype(np.uint32).view(np.float32).tolist())
+            n = QVector3D(*r[1:].astype(np.uint64).view(np.float64).tolist())
             m = face_uv_axes(tex_of_key[int(r[0])], n)
             gu[j], cu[j], gv[j], cv[j] = m[0].toTuple(), m[1], \
                 m[2].toTuple(), m[3]
@@ -593,9 +583,9 @@ def _bake(vp, mesh, paint, msig):
             mi = tm[rows]
             P = tpb[rows]
             g = gu[mi][:, None, :]
-            du = _qt_dot(P, g)
+            du = _model_dot(P, g)
             g = gv[mi][:, None, :]
-            dv = _qt_dot(P, g)
+            dv = _model_dot(P, g)
             uv[rows, :, 0] = (du.astype(np.float64)
                               + cu[mi][:, None]).astype(np.float32)
             uv[rows, :, 1] = (dv.astype(np.float64)

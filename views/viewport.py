@@ -8424,7 +8424,7 @@ class Viewport(QOpenGLWidget):
             for r in rings:
                 sizes.append(len(r))
                 pts.extend(r)
-        pos = np.array([(p.x(), p.y(), p.z()) for p in pts], np.float32)
+        pos = np.array([(p.x(), p.y(), p.z()) for p in pts], np.float64)
         try:
             out = nat.face_geometry(
                 pos, np.arange(len(pts), dtype=np.int64),

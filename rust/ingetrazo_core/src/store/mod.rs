@@ -30,7 +30,7 @@ mod drawing_face;
 mod drawing_plane;
 mod drawing_edges;
 pub mod edit;
-mod geometry;
+pub(crate) mod geometry;
 mod frame;
 pub mod explode;
 pub mod keys;

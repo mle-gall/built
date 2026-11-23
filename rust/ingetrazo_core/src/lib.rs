@@ -630,25 +630,51 @@ fn qt_vector_probe<'py>(
 #[pyfunction]
 fn face_geometry<'py>(
     py: Python<'py>,
-    pos: PyReadonlyArray2<'_, f32>,
+    pos: &Bound<'py, PyAny>,
     corners: PyReadonlyArray1<'_, i64>,
     ring_sizes: PyReadonlyArray1<'_, i64>,
     ring_counts: PyReadonlyArray1<'_, i64>,
     hypot: &str,
     compensated_sum: bool,
-) -> PyResult<(Bound<'py, PyArray2<f32>>, Bound<'py, PyArray1<f32>>,
-               Bound<'py, PyArray2<f32>>, Bound<'py, PyArray2<u32>>,
-               Bound<'py, PyArray1<u32>>, Bound<'py, PyArray2<f32>>,
-               Bound<'py, PyArray2<u32>>, Bound<'py, PyArray1<u32>>)> {
+) -> PyResult<Bound<'py, PyAny>> {
+    if let Ok(p) = pos.extract::<PyReadonlyArray2<'_, f64>>() {
+        let output = face_geometry_arrays(py, p, corners, ring_sizes, ring_counts, hypot, compensated_sum,
+            store::geometry::V3, store::geometry::face_geometry, f64::NAN)?;
+        Ok(output.into_pyobject(py)?.into_any())
+    } else {
+        let output = face_geometry_arrays(py, pos.extract()?, corners, ring_sizes, ring_counts, hypot, compensated_sum,
+            facegeom::V3, facegeom::face_geometry, f32::NAN)?;
+        Ok(output.into_pyobject(py)?.into_any())
+    }
+}
+
+fn face_geometry_arrays<'py, T, V>(
+    py: Python<'py>,
+    pos: PyReadonlyArray2<'_, T>,
+    corners: PyReadonlyArray1<'_, i64>,
+    ring_sizes: PyReadonlyArray1<'_, i64>,
+    ring_counts: PyReadonlyArray1<'_, i64>,
+    hypot: &str,
+    compensated_sum: bool,
+    vector: impl Fn(T, T, T) -> V + Send + Sync,
+    geometry: impl Fn(&[V], &[&[u32]], facegeom::Hypot, bool) -> facegeom::FaceGeom<V, T> + Send + Sync,
+    nan: T,
+) -> PyResult<(Bound<'py, PyArray2<T>>, Bound<'py, PyArray1<T>>,
+               Bound<'py, PyArray2<T>>, Bound<'py, PyArray2<u32>>,
+               Bound<'py, PyArray1<u32>>, Bound<'py, PyArray2<T>>,
+               Bound<'py, PyArray2<u32>>, Bound<'py, PyArray1<u32>>)>
+where T: numpy::Element + Copy + Send + Sync, V: Into<[T;3]> + Copy + Send + Sync
+{
     use rayon::prelude::*;
     let h = hypot_of(hypot)?;
     let p = pos.as_array();
+    if p.ncols() != 3 { return Err(pyo3::exceptions::PyValueError::new_err("expected three coordinates")); }
     let corners = corners.as_array();
     let sizes = ring_sizes.as_array();
     let counts = ring_counts.as_array();
     let done = py.detach(|| -> Result<_, &'static str> {
-        let pts: Vec<facegeom::V3> = (0..p.shape()[0])
-            .map(|i| facegeom::V3(p[[i, 0]], p[[i, 1]], p[[i, 2]])).collect();
+        let pts: Vec<V> = (0..p.shape()[0])
+            .map(|i| vector(p[[i, 0]], p[[i, 1]], p[[i, 2]])).collect();
         let nv = pts.len() as i64;
         let corners: Vec<u32> = corners.iter().map(|&c| {
             if c < 0 || c >= nv { u32::MAX } else { c as u32 }
@@ -661,6 +687,7 @@ fn face_geometry<'py>(
         let mut acc = 0usize;
         for &s in sizes.iter() {
             ring_start.push(acc);
+            if s < 0 { return Err("negative ring size"); }
             acc += s as usize;
         }
         ring_start.push(acc);
@@ -671,16 +698,17 @@ fn face_geometry<'py>(
         let mut r = 0usize;
         for &c in counts.iter() {
             face_ring.push(r);
+            if c <= 0 { return Err("face needs a ring"); }
             r += c as usize;
         }
         face_ring.push(r);
         if r != sizes.len() {
             return Err("ring counts");
         }
-        let geoms: Vec<facegeom::FaceGeom> = (0..counts.len()).into_par_iter().map(|f| {
+        let geoms: Vec<facegeom::FaceGeom<V, T>> = (0..counts.len()).into_par_iter().map(|f| {
             let rings: Vec<&[u32]> = (face_ring[f]..face_ring[f + 1])
                 .map(|k| &corners[ring_start[k]..ring_start[k + 1]]).collect();
-            facegeom::face_geometry(&pts, &rings, h, compensated_sum)
+            geometry(&pts, &rings, h, compensated_sum)
         }).collect();
         let nf = geoms.len();
         let mut normal = Vec::with_capacity(3 * nf);
@@ -692,16 +720,16 @@ fn face_geometry<'py>(
         let mut tris_u = Vec::new();
         let mut tri_face_u = Vec::new();
         for (f, g) in geoms.into_iter().enumerate() {
-            unit.extend_from_slice(&[g.unit.0, g.unit.1, g.unit.2]);
+            unit.extend_from_slice(&g.unit.into());
             for t in g.tris_unit.as_ref().unwrap_or(&g.tris) {
                 tris_u.extend_from_slice(&t[..]);
                 tri_face_u.push(f as u32);
             }
-            normal.extend_from_slice(&[g.normal.0, g.normal.1, g.normal.2]);
+            normal.extend_from_slice(&g.normal.into());
             ln.push(g.ln);
             match g.centroid {
-                Some(c) => cen.extend_from_slice(&[c.0, c.1, c.2]),
-                None => cen.extend_from_slice(&[f32::NAN; 3]),
+                Some(c) => cen.extend_from_slice(&c.into()),
+                None => cen.extend_from_slice(&[nan; 3]),
             }
             for t in g.tris {
                 tris.extend_from_slice(&t[..]);

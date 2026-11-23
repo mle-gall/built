@@ -675,16 +675,16 @@ pub(crate) fn is_convex(poly: &[(f64, f64)]) -> bool {
 }
 
 /// One face's geometry. `rings`: its rings as vertex indices, outer first.
-pub struct FaceGeom {
-    pub normal: V3,
-    pub ln: f32,
-    pub centroid: Option<V3>,
+pub struct FaceGeom<V = V3, S = f32> {
+    pub normal: V,
+    pub ln: S,
+    pub centroid: Option<V>,
     /// Corner vertex indices, three per triangle.
     pub tris: Vec<[u32; 3]>,
     /// The viewport's `_normal_of` (Qt's `normalized()`, not a division)
     /// and `_tris_of` (triangulated with it): what textured and two-side
     /// faces are drawn with. `None`: the same triangles as `tris`.
-    pub unit: V3,
+    pub unit: V,
     pub tris_unit: Option<Vec<[u32; 3]>>,
 }
 
@@ -811,4 +811,8 @@ mod resident_tests {
             assert_eq!(earcut_impl(&points, &holes, true), earcut(&points, &holes));
         }
     }
+}
+
+impl From<V3> for [f32; 3] {
+    fn from(v: V3) -> Self { [v.0, v.1, v.2] }
 }
