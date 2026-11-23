@@ -2414,29 +2414,14 @@ class AddGeoPointsCommand(Command):
         self._prev_datum = None
 
     def do(self, scene) -> None:
-        if _doc.ENABLED:
-            if self._datum is not None:
-                self._prev_datum = scene.georef
-                scene.georef = self._datum
-            _definitions.append_members(scene.geo_points, self._points)
-            scene.version += 1
-            return
         if self._datum is not None:
             self._prev_datum = scene.georef
             scene.georef = self._datum
-        scene.geo_points.extend(self._points)
+        _definitions.append_members(scene.geo_points, self._points)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            _definitions.remove_members(scene.geo_points, self._points)
-            if self._datum is not None:
-                scene.georef = self._prev_datum
-            scene.version += 1
-            return
-        for p in self._points:
-            if p in scene.geo_points:
-                scene.geo_points.remove(p)
+        _definitions.remove_members(scene.geo_points, self._points)
         if self._datum is not None:
             scene.georef = self._prev_datum
         scene.version += 1
@@ -3832,30 +3817,8 @@ class UnlinkCommand(Command):
     def _first(self, scene) -> None:
         """The first run: copy, then fill the files linked inside."""
         from core import links
-        if _doc.ENABLED:
-            self._before, self._after, nested = _definitions.unlink_placements(
-                scene, self.groups, self._FIELDS, self._pairs)
-        else:
-            from core.kept_components import names_in_use, numbered_name
-            self._before = [{k: getattr(g, k) for k in self._FIELDS}
-                            for g in self.groups]
-            self._after = []
-            nested = []
-            for g in self.groups:
-                inner: list = []
-                mesh, children, ext = links.unlinked_copy(g, self._pairs, inner)
-                nested.append((links.link_of(g)["path"], inner))
-                name = g.name
-                if name:
-                    taken = names_in_use(scene, skip=g)
-                    taken.update(a["name"] for a in self._after)
-                    if name in taken:
-                        name = numbered_name(name, taken)
-                self._after.append(dict(mesh=mesh, children=children,
-                                        ext=ext, name=name, component=True))
-            for g, after in zip(self.groups, self._after):
-                for k, v in after.items():
-                    setattr(g, k, v)
+        self._before, self._after, nested = _definitions.unlink_placements(
+            scene, self.groups, self._FIELDS, self._pairs)
         host = getattr(scene, "_project_host_path", None)
         for outer, inner in nested:
             for old, new, part_pairs in inner:
@@ -3912,12 +3875,7 @@ class UnlinkCommand(Command):
             self._tags_before = _TagState(scene)
             self._first(scene)
         else:
-            if _doc.ENABLED:
-                _definitions.restore_definitions(self.groups, self._after)
-            else:
-                for g, after in zip(self.groups, self._after):
-                    for k, v in after.items():
-                        setattr(g, k, v)
+            _definitions.restore_definitions(self.groups, self._after)
             self._tags_before.go(scene, self._tags_after)
         _move_holds(scene, self.groups, {id(a): b for a, b in self._pairs})
         gone = live - set(links.sources(scene))
@@ -3939,12 +3897,7 @@ class UnlinkCommand(Command):
     def undo(self, scene) -> None:
         if self._before is None:
             return
-        if _doc.ENABLED:
-            _definitions.restore_definitions(self.groups, self._before)
-        else:
-            for g, before in zip(self.groups, self._before):
-                for k, v in before.items():
-                    setattr(g, k, v)
+        _definitions.restore_definitions(self.groups, self._before)
         _move_holds(scene, self.groups, {id(b): a for a, b in self._pairs})
         self._tags_after.go(scene, self._tags_before)
         if self._errors and isinstance(getattr(scene, "link_errors", None), dict):
@@ -4050,21 +4003,11 @@ class AddKeptComponentsCommand(Command):
         self.templates = list(templates)
 
     def do(self, scene) -> None:
-        if _doc.ENABLED:
-            _definitions.append_members(scene.kept_components, self.templates)
-            scene.version += 1
-            return
-        scene.kept_components.extend(self.templates)
+        _definitions.append_members(scene.kept_components, self.templates)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            _definitions.remove_members(scene.kept_components, self.templates)
-            scene.version += 1
-            return
-        for t in self.templates:
-            if t in scene.kept_components:
-                scene.kept_components.remove(t)
+        _definitions.remove_members(scene.kept_components, self.templates)
         scene.version += 1
 
 
@@ -4171,26 +4114,11 @@ class EditText3DCommand(Command):
         self._old: Optional[tuple] = None
 
     def do(self, scene) -> None:
-        if _doc.ENABLED:
-            self._old = _definitions.rebuild_letter_placement(self.group, self.params, self._old)
-            scene.version += 1
-            return
-        from core.text3d import rebuild_text_group, text_state
-        g = self.group
-        if self._old is None:
-            self._old = (g.children, g.text3d, g.name)
-        g.children = rebuild_text_group(g, self.params)
-        g.text3d = text_state(self.params, g.children)
-        g.name = self.params["text"].strip()[:24] or g.name
+        self._old = _definitions.rebuild_letter_placement(self.group, self.params, self._old)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            _definitions.restore_letter_placement(self.group, self._old)
-            scene.version += 1
-            return
-        g = self.group
-        g.children, g.text3d, g.name = self._old
+        _definitions.restore_letter_placement(self.group, self._old)
         scene.version += 1
 
 
@@ -4397,30 +4325,13 @@ class LockCommand(Command):
         scene.version += 1
 
     def do(self, scene) -> None:
-        if _doc.ENABLED:
-            self._prev = _definitions.lock_placements(self._groups, self._locked)
-            if self._locked:
-                _unselect(scene, self._groups)
-            scene.version += 1
-            return
-        prev = _bulk_set(self._groups, "locked", self._locked)
-        if prev is not None:
-            self._prev = prev
-        else:
-            self._prev = [bool(getattr(g, "locked", False)) for g in self._groups]
-            for g in self._groups:
-                g.locked = self._locked
+        self._prev = _definitions.lock_placements(self._groups, self._locked)
         if self._locked:
             _unselect(scene, self._groups)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            _definitions.restore_locks(self._groups, self._prev)
-            scene.version += 1
-            return
-        for g, prev in zip(self._groups, self._prev):
-            g.locked = prev
+        _definitions.restore_locks(self._groups, self._prev)
         scene.version += 1
 
 
@@ -4506,20 +4417,11 @@ class SetGroupMaterialCommand(Command):
         self._old = None
 
     def do(self, scene) -> None:
-        if _doc.ENABLED:
-            self._old = _definitions.set_placement_field(self.group, "material", self.material)
-            scene.version += 1
-            return
-        self._old = getattr(self.group, "material", None)
-        self.group.material = self.material
+        self._old = _definitions.set_placement_field(self.group, "material", self.material)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            _definitions.set_placement_field(self.group, "material", self._old)
-            scene.version += 1
-            return
-        self.group.material = self._old
+        _definitions.set_placement_field(self.group, "material", self._old)
         scene.version += 1
 
 
@@ -4820,20 +4722,11 @@ class RenameGroupCommand(Command):
         self.old: Optional[str] = None
 
     def do(self, scene) -> None:
-        if _doc.ENABLED:
-            self.old = _definitions.set_placement_field(self.group, "name", self.name)
-            scene.version += 1
-            return
-        self.old = self.group.name
-        self.group.name = self.name
+        self.old = _definitions.set_placement_field(self.group, "name", self.name)
         scene.version += 1
 
     def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            _definitions.set_placement_field(self.group, "name", self.old)
-            scene.version += 1
-            return
-        self.group.name = self.old
+        _definitions.set_placement_field(self.group, "name", self.old)
         scene.version += 1
 
 
@@ -5091,17 +4984,7 @@ def group_owner_list(scene, group):
     """The list ``group`` lives in: ``scene.groups`` at the root, or the
     ``children`` of the container that owns it, however deep. ``None`` when
     the group is not in the scene at all."""
-    if _doc.ENABLED:
-        return _definitions.group_owner(scene, group)
-    if group in scene.groups:
-        return scene.groups
-    from core.group import iter_placements
-    for top in scene.groups:
-        for pg, _m in iter_placements(top):
-            kids = getattr(pg, "children", None)
-            if kids and group in kids:
-                return kids
-    return None
+    return _definitions.group_owner(scene, group)
 
 
 class DeleteGroupCommand(Command):
@@ -5129,37 +5012,13 @@ class DeleteGroupCommand(Command):
         scene.version += 1
 
     def do(self, scene) -> None:
-        if _doc.ENABLED:
-            self._owner, self.index = _definitions.delete_placement(scene, self.group)
-            scene.selection.discard(self.group)
-            scene.mesh.purge_debris()
-            scene.version += 1
-            return
-        owner = group_owner_list(scene, self.group)
-        if owner is None:
-            raise ValueError("group is not in the scene")
-        self._owner = owner
-        self.index = owner.index(self.group)
-        owner.remove(self.group)
+        self._owner, self.index = _definitions.delete_placement(scene, self.group)
         scene.selection.discard(self.group)
-        # Deleting a group is the moment the user expects the loose mesh to
-        # be the loose mesh again: whatever left a vertex with nothing on it
-        # — a grouping, an operation that removed geometry without sweeping —
-        # no edge draws it, no face holds it, and the position registry still
-        # hands it to whatever is drawn there next. It is not part of the
-        # group being removed (its own mesh travels with it, undo restores it
-        # whole), so sweeping it here cannot lose anything the user can see
-        # or undo back to.
         scene.mesh.purge_debris()
         scene.version += 1
 
     def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            _definitions.restore_placement(scene.groups, self._owner, self.index, self.group)
-            scene.version += 1
-            return
-        owner = self._owner if self._owner is not None else scene.groups
-        owner.insert(min(self.index or 0, len(owner)), self.group)
+        _definitions.restore_placement(scene.groups, self._owner, self.index, self.group)
         scene.version += 1
 
 
