@@ -3,11 +3,10 @@
 """Read-only packed coordinate protocol for the internal SKP payload."""
 
 class PointRows:
-    """List-compatible coordinate rows sharing one packed float32 array.
+    """List-compatible coordinate rows sharing one packed array.
 
     Faces keep slices of the transformed array instead of allocating a list
-    and three Python floats per corner. Reading a row returns the same Python
-    float values as the former float32 → float64 → tolist conversion. Repr
+    and three Python floats per corner. Reading a row preserves its precision. Repr
     deliberately remains the list repr used by prototype deduplication.
     """
 
@@ -57,7 +56,10 @@ def flatten_rings(rings, size):
     scalar welding, whose vertex order can differ from bulk welding.
     """
     import numpy as np
-    out = np.empty((size, 3), dtype=np.float32)
+    if not isinstance(rings, (list, tuple)):
+        rings = tuple(rings)
+    packed_f32 = all(isinstance(r, PointRows) and r._array.dtype == np.float32 for r in rings)
+    out = np.empty((size, 3), dtype=np.float32 if packed_f32 else np.float64)
     offset = 0
     source = span = None
 

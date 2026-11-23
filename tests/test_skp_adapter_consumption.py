@@ -176,8 +176,8 @@ def test_packed_soft_segments_preserve_endpoint_bits_repr_and_pickle(transformed
     assert actual[-1] == expected[-1]
     assert actual[::-1] == expected[::-1]
     assert bits(pickle.loads(pickle.dumps(actual))) == bits(expected)
-    assert sum(c.nbytes for c in actual.chunks) == len(expected) * 24
-    assert all(c.dtype == np.float32 and not c.flags.writeable for c in actual.chunks)
+    assert sum(c.nbytes for c in actual.chunks) == len(expected) * 48
+    assert all(c.dtype == np.float64 and not c.flags.writeable for c in actual.chunks)
 
 
 def test_one_use_flattened_geometry_is_released_before_next_group(monkeypatch):

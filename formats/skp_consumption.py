@@ -217,10 +217,9 @@ class FlatGeometry:
 
 
 class SoftSegments:
-    """Ordered endpoint pairs backed by float32 chunks, with Python-float reads.
+    """Ordered endpoint pairs backed by packed model coordinates.
 
-    Import coordinates are already quantized to float32. Keeping that storage
-    avoids six Python floats and three tuples per soft edge. Iteration and repr
+    Sharing the array avoids six Python floats and three tuples per soft edge. Iteration and repr
     preserve the former tuple/list representation used by prototype deduplication.
     """
 

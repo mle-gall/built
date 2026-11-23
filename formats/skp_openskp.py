@@ -688,17 +688,14 @@ def _defn_geom(defn):
 
 
 def _world_points(pos_m, xform):
-    """``pos_m`` (local metres) transformed by the QMatrix4x4 ``xform``, as a
-    sequence of ``[x, y, z]`` rows. Float32-quantized so the payload carries the
-    same values a ``Vertex`` will store — welding and soft-edge matching key
-    on those."""
+    """Transform local metres to packed model coordinates at source precision."""
     import numpy as np
     if xform.isIdentity():
         world = pos_m
     else:
         m = np.array(xform.data(), dtype=np.float64).reshape(4, 4, order="F")
         world = pos_m @ m[:3, :3].T + m[:3, 3]
-    return _PointRows(world.astype(np.float32))
+    return _PointRows(world)
 
 
 def _face_entry(face, wl, raw_l, s0, s1, holes_sl, attr_map,
@@ -1025,8 +1022,7 @@ def _soft_edge_segments(defn, xform, out) -> None:
 
     The flagged endpoints (local metres) are cached on the definition as one
     array — an instanced component pays the edge filter once, and each
-    placement is a single matrix multiply (float32-quantized like the face
-    corners, so the soft keys match the welded vertex positions)."""
+    placement uses the same binary64 transform as the face corners."""
     import numpy as np
     arr = getattr(defn, "_soft_arr", None)
     if arr is None:
@@ -1046,14 +1042,13 @@ def _soft_edge_segments(defn, xform, out) -> None:
     if not len(arr):
         return
     if isinstance(out, SoftSegments):
-        # Same arithmetic and final quantization as _world_points, without
-        # expanding the endpoint array into millions of Python floats.
+        # Match _world_points without expanding the endpoint array into Python floats.
         if xform.isIdentity():
             world = arr
         else:
             m = np.array(xform.data(), dtype=np.float64).reshape(4, 4, order="F")
             world = arr @ m[:3, :3].T + m[:3, 3]
-        out.add(world.astype(np.float32))
+        out.add(world)
         return
     wl = _world_points(arr, xform)
     for i in range(0, len(wl), 2):

@@ -17,7 +17,7 @@ def _original_points(points, transform):
     else:
         matrix = np.array(transform.data(), dtype=np.float64).reshape(4, 4, order="F")
         world = points @ matrix[:3, :3].T + matrix[:3, 3]
-    return world.astype(np.float32).astype(np.float64).tolist()
+    return world.tolist()
 
 
 @pytest.mark.parametrize("transformed", [False, True])
@@ -53,7 +53,7 @@ def test_retained_coordinate_storage_is_bounded():
         rows = adapter._world_points(points, QMatrix4x4())
         retained, _peak = tracemalloc.get_traced_memory()
         # Former list-of-lists uses over 150 bytes per coordinate row.
-        # Allow over twice the packed 12-byte row cost, including bookkeeping.
+        # Allow for the packed 24-byte row and bookkeeping.
         assert retained < 32 * len(points)
         assert len(rows) == len(points)
     finally:
