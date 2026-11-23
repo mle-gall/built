@@ -817,16 +817,19 @@ def prepare_scene_steps(scene, mesh_steps=None, *, stream=None, large=None, prog
     geom = stream if stream is not None else ({} if large else None)
     placements = built.export_placements(scene) if getattr(stream, "compatibility", False) else None
 
-    def block(m):
+    def file_block(m):
         if placements is not None:
             stream.current_placements = placements.get(id(m), ())
-        if mesh_steps is not None:
-            return (yield from mesh_steps(m))
         block = _mesh_json(m, geom)
         if stream is not None:
             for key, value in block.items():
                 block[key] = _spool_json(value, stream)
         return block
+
+    def block(m):
+        if mesh_steps is not None:
+            return (yield from mesh_steps(m))
+        return file_block(m)
 
     payload = yield from block(mesh)
     groups = getattr(scene, "groups", None)
@@ -844,7 +847,18 @@ def prepare_scene_steps(scene, mesh_steps=None, *, stream=None, large=None, prog
         io = native_io()
         precise = mesh_steps is not None or getattr(stream, "built", False)
 
+        writer_type = getattr(io, "FileGroupWriter", None)
+        writer = None
+        if writer_type and mesh_steps is None and getattr(scene, "_root", None) is not None:
+            destination = stream.destination if getattr(stream, "compatibility", False) else None
+            writer = writer_type(scene, file_block, precise, destination)
+            protos = writer.protos
+
         def _entry(g):
+            if writer is not None:
+                row = writer.entry(g)
+                yield
+                return row
             direct = io is not None and getattr(g, "_doc_key", 0)
             xf = g._file_xform(precise) if direct else getattr(g, "xform", None)
             # A linked file (unpacked) is saved as an empty placement with

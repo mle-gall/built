@@ -143,6 +143,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(file_json::igz_encode_json, m)?)?;
     m.add_class::<file_json::FileMatrix>()?;
     m.add_class::<file_groups::FileGroups>()?;
+    m.add_class::<file_groups::FileGroupWriter>()?;
     m.add_function(wrap_pyfunction!(file_geometry::igz_points, m)?)?;
     m.add_function(wrap_pyfunction!(igz::igz_read_geometry, m)?)?;
     // Unit tests link without libpython; this line made the test binary

@@ -2,7 +2,7 @@
 //! Build document placements from their file records. The host supplies
 //! mesh handles (including shared linked definitions) and legacy identities.
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyFloat, PyInt, PyList, PyTuple};
+use pyo3::types::{PyDict, PyFloat, PyInt, PyIterator, PyList, PyTuple};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[pyclass(frozen)]
@@ -180,5 +180,151 @@ impl FileGroups {
             }
         }
         Ok((roots, library))
+    }
+}
+
+/// A document-wide prototype table maintained across incremental saves.
+/// Snapshot generators can still yield between root placements.
+#[pyclass]
+pub struct FileGroupWriter {
+    scene: Py<PyAny>,
+    block: Py<PyAny>,
+    ifc: Py<PyAny>,
+    links: Py<PyAny>,
+    empty: Py<PyAny>,
+    protos: Py<PyList>,
+    indices: std::collections::HashMap<usize, usize>,
+    precise: bool,
+    destination: Option<Py<PyAny>>,
+}
+
+#[pymethods]
+impl FileGroupWriter {
+    #[new]
+    #[pyo3(signature=(scene, block, precise, destination=None))]
+    fn new(
+        py: Python<'_>,
+        scene: Py<PyAny>,
+        block: Py<PyAny>,
+        precise: bool,
+        destination: Option<Py<PyAny>>,
+    ) -> PyResult<Self> {
+        let igz = py.import("formats.igz")?;
+        Ok(Self {
+            scene,
+            block,
+            precise,
+            destination,
+            indices: Default::default(),
+            protos: PyList::empty(py).unbind(),
+            ifc: igz.getattr("_group_ifc_record")?.unbind(),
+            empty: igz.getattr("_empty_mesh")?.unbind(),
+            links: py.import("core.links")?.into_any().unbind(),
+        })
+    }
+    #[getter]
+    fn protos<'py>(&self, py: Python<'py>) -> Bound<'py, PyList> {
+        self.protos.bind(py).clone()
+    }
+
+    fn entry<'py>(
+        &mut self,
+        py: Python<'py>,
+        group: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, PyDict>> {
+        let (entry, branch) = self.record(py, group)?;
+        let mut pending = Vec::from_iter(branch);
+        let mut ancestors = std::collections::HashSet::from([group.as_ptr() as usize]);
+        while let Some((id, output, children)) = pending.last_mut() {
+            let Some(child) = children.next() else {
+                ancestors.remove(id);
+                pending.pop();
+                continue;
+            };
+            let child = child?;
+            let id = child.as_ptr() as usize;
+            if ancestors.contains(&id) {
+                return Err(pyo3::exceptions::PyRecursionError::new_err(
+                    "cyclic placement hierarchy",
+                ));
+            }
+            let (row, branch) = self.record(py, &child)?;
+            output.append(row)?;
+            if let Some(branch) = branch {
+                ancestors.insert(id);
+                pending.push(branch);
+            }
+        }
+        Ok(entry)
+    }
+}
+
+impl FileGroupWriter {
+    fn record<'py>(
+        &mut self,
+        py: Python<'py>,
+        group: &Bound<'py, PyAny>,
+    ) -> PyResult<(
+        Bound<'py, PyDict>,
+        Option<(usize, Bound<'py, PyList>, Bound<'py, PyIterator>)>,
+    )> {
+        let matrix = group.call_method1("_file_xform", (self.precise,))?;
+        let links = self.links.bind(py);
+        let placeholder = !matrix.is_none()
+            && links
+                .call_method1("save_as_placeholder", (group, self.scene.bind(py)))?
+                .is_truthy()?;
+        let mesh = if placeholder {
+            self.empty.bind(py).call0()?
+        } else {
+            group.getattr("mesh")?
+        };
+        let entry = if matrix.is_none() {
+            self.block.bind(py).call1((mesh,))?.cast_into::<PyDict>()?
+        } else {
+            let id = mesh.as_ptr() as usize;
+            let index = match self.indices.get(&id) {
+                Some(&i) => i,
+                None => {
+                    let protos = self.protos.bind(py);
+                    let i = protos.len();
+                    protos.append(self.block.bind(py).call1((mesh,))?)?;
+                    self.indices.insert(id, i);
+                    i
+                }
+            };
+            let row = PyDict::new(py);
+            row.set_item("proto", index)?;
+            row.set_item("xform", matrix)?;
+            row.set_item("component", group.getattr("component")?.is_truthy()?)?;
+            row
+        };
+        let ifc = self.ifc.bind(py).call1((group,))?;
+        let ifc = if ifc.is_truthy()? { Some(ifc) } else { None };
+        entry.call_method1("update", (group.call_method1("_file_fields", (ifc,))?,))?;
+        if let Some(dest) = &self.destination {
+            if links.call_method1("link_of", (group,))?.is_truthy()? {
+                let ext = entry
+                    .get_item("ext")?
+                    .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err("ext"))?;
+                let record = ext.get_item(links.getattr("LINK_KEY")?)?;
+                record.call_method1("pop", ("rel", py.None()))?;
+                let fields = links
+                    .call_method1("_link_record", (record.get_item("path")?, dest.bind(py)))?;
+                record.call_method1("update", (fields,))?;
+            }
+        }
+        if !placeholder {
+            let children = group.getattr("children")?;
+            if children.is_truthy()? {
+                let rows = PyList::empty(py);
+                entry.set_item("children", &rows)?;
+                return Ok((
+                    entry,
+                    Some((group.as_ptr() as usize, rows, children.try_iter()?)),
+                ));
+            }
+        }
+        Ok((entry, None))
     }
 }
