@@ -660,6 +660,9 @@ impl Ui {
         let ctx = self.ctx.clone();
         self.page.set_image(&ctx, key, w, h, rgba);
     }
+    pub fn page_command(&mut self, name: &str) -> bool {
+        self.page.command(name, &mut self.actions)
+    }
     pub fn page_key(&mut self, name: &str, mods: u8) -> bool {
         self.page.key(name, mods, &mut self.actions)
     }

@@ -2138,6 +2138,11 @@ impl Renderer {
     fn page_key(&mut self, name: &str, modifiers: u8) -> bool {
         self.ui.as_mut().is_some_and(|ui| ui.page_key(name, modifiers))
     }
+    /// A sheet command on the page's selection: ``group``, ``ungroup``,
+    /// ``copy_style``, ``paste_style`` (its edits come back as actions).
+    fn page_command(&mut self, name: &str) -> bool {
+        self.ui.as_mut().is_some_and(|ui| ui.page_command(name))
+    }
     /// Scroll pans; with ``zoom`` it zooms about (x, y) instead.
     fn page_wheel(&mut self, x: f32, y: f32, dx: f32, dy: f32, zoom: bool) {
         if let Some(ui) = self.ui.as_mut() {

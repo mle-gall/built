@@ -500,6 +500,7 @@ class Workspace:
     # ---- One frame ---------------------------------------------------------------------
     def before_frame(self, view) -> None:
         renderer = view.renderer
+        self._keep_a_sheet()
         self._send_page(renderer)
         self._send_contents(renderer)
         self._send(renderer, view)
@@ -646,12 +647,15 @@ class Workspace:
         elif verb == "open":
             comp.show_sheet(int(rest))
         elif verb == "add":
-            comp._on_comp_add()
+            self._add_sheet()
         elif verb == "dup":
-            comp.duplicate_sheet(int(rest), show=True)
+            self._duplicate_sheet(int(rest))
         elif verb == "rename":
             i, _, name = rest.partition(SEP)
-            comp.rename_sheet(int(i), name)
+            name = name.strip()
+            if 0 <= int(i) < len(comps) and name and comps[int(i)].name != name:
+                self._edit([(comps[int(i)], {"name": name})])
+                comp._reload_comp_combo()
         elif verb in ("up", "down"):
             i = int(rest)
             j = i + (-1 if verb == "up" else 1)
@@ -664,7 +668,7 @@ class Workspace:
             if 0 <= i < len(comps) and len(comps) > 1:
                 self._pending = ("del", i)
                 self._prompt = (f"Delete “{comps[i].name}”?",
-                                "Its views, texts and dimensions go with it. Undo cannot bring it back.",
+                                "Its views, texts and dimensions go with it. Undo brings it back.",
                                 None, [("del", "Delete"), ("cancel", "Cancel")])
         elif verb == "answer":
             self._answer(*rest.split(SEP, 1)) if SEP in rest else self._answer(rest, "")
@@ -684,7 +688,67 @@ class Workspace:
             return
         what, arg = pending
         if what == "del" and bid == "del":
-            self.composer.delete_sheet(arg, confirm=False)
+            self._delete_sheet(arg)
+
+    # ---- The sheet list, as steps of the document's history ------------------------------------
+    def _sheets(self):
+        return self.composer._scene().compositions
+
+    def _history(self):
+        return self.composer._window.viewport.history
+
+    def _show(self, index: int) -> None:
+        comp = self.composer
+        comp._reload_comp_combo()
+        index = max(0, min(index, len(self._sheets()) - 1))
+        if self._sheets()[index] is not comp.comp:
+            comp._on_comp_switched(index)
+
+    def _add_sheet(self) -> None:
+        """A new sheet at the end, from the default template when there is one."""
+        from core.composition import Composicion
+        from core.history import InsertSheetCommand
+        from core.i18n import tr
+        comp, sheets = self.composer, self._sheets()
+        default = comp.default_template_name()
+        new = comp._composition_from_template(default) if default else None
+        if new is None:
+            new = Composicion()
+            new.frames.append(new.default_frame())
+        new.name = tr("Sheet {n}", n=len(sheets) + 1)
+        self._history().execute(InsertSheetCommand(new))
+        self._show(len(sheets) - 1)
+
+    def _duplicate_sheet(self, index: int) -> None:
+        from core.composition import Composicion
+        from core.history import InsertSheetCommand
+        from core.i18n import tr
+        sheets = self._sheets()
+        if not 0 <= index < len(sheets):
+            return
+        src = sheets[index]
+        dup = Composicion.from_dict(src.to_dict())
+        dup.name = src.name + tr(" (copy)")
+        self._history().execute(InsertSheetCommand(dup, index + 1))
+        self._show(index + 1)
+
+    def _delete_sheet(self, index: int) -> None:
+        from core.history import RemoveSheetCommand
+        sheets = self._sheets()
+        if not 0 <= index < len(sheets) or len(sheets) <= 1:
+            return
+        current = self.composer.comp is sheets[index]
+        self._history().execute(RemoveSheetCommand(sheets[index]))
+        if current:
+            self._show(index)
+        else:
+            self.composer._reload_comp_combo()
+
+    def _keep_a_sheet(self) -> None:
+        """An undo or redo took the open sheet away: its neighbour shows."""
+        sheets = self._sheets()
+        if self.composer.comp not in sheets and len(sheets):
+            self._show(0)
 
 
     # ---- The escape hatch ----------------------------------------------------------------
@@ -869,6 +933,10 @@ class Workspace:
                 (seqs(QKeySequence.Redo, "Ctrl+Shift+Z"), lambda: self._undo(redo=True)),
                 (seqs(QKeySequence.Delete, Qt.Key_Backspace, Qt.Key_Delete), self._delete),
                 (seqs("Ctrl+D"), self._duplicate), (seqs("Ctrl+L"), lock),
+                (seqs("Ctrl+G"), lambda: self.view.renderer.page_command("group")),
+                (seqs("Ctrl+Shift+G"), lambda: self.view.renderer.page_command("ungroup")),
+                (seqs("Ctrl+Shift+C"), lambda: self.view.renderer.page_command("copy_style")),
+                (seqs("Ctrl+Shift+V"), lambda: self.view.renderer.page_command("paste_style")),
                 (seqs("Ctrl+PgUp"), lambda: comp.step_sheet(-1)),
                 (seqs("Ctrl+PgDown"), lambda: comp.step_sheet(1)),
                 (seqs("Ctrl+Tab", "Meta+Tab", "Ctrl+Shift+Tab"), model),

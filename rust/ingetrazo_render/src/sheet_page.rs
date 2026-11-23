@@ -140,6 +140,10 @@ pub struct Page {
     pub cursor: &'static str,
     /// Where the pointer is on the paper, for the bottom bar.
     pub pointer_mm: Option<[f64; 2]>,
+    /// The look Copy style took: the kind and its fields.
+    style_clip: Option<(String, serde_json::Map<String, J>)>,
+    /// A passing word for the bottom bar (style copied, grouped…).
+    flash: Option<(&'static str, std::time::Instant)>,
 }
 
 fn hex(s: &str, fallback: Color32) -> Color32 {
@@ -226,6 +230,11 @@ impl Page {
     }
     /// What the page does now, for the bottom bar.
     pub fn hint(&self) -> &'static str {
+        if let Some((text, at)) = self.flash {
+            if at.elapsed().as_secs_f32() < 3.0 {
+                return text;
+            }
+        }
         match (&self.drag, self.tool.as_str()) {
             (Some(Drag::Move { .. }), _) => "Edges snap to the margins, guides and other items; ⌥ moves freely.",
             (Some(Drag::Resize { .. }), _) => "Edges snap to the margins, guides and other items; ⌥ resizes freely.",
@@ -391,7 +400,7 @@ impl Page {
                 self.drag = Some(Drag::Pending { at: p, key, add: shift });
                 if let Some(k) = key {
                     if !self.selection.contains(&k) && !shift {
-                        self.selection = vec![k];
+                        self.selection = self.with_groups(vec![k]);
                         out.push(self.select_action());
                     }
                 }
@@ -478,7 +487,7 @@ impl Page {
                                     self.selection.push(k);
                                 }
                             }
-                            Some(k) => self.selection = vec![k],
+                            Some(k) => self.selection = self.with_groups(vec![k]),
                             None if !add => self.selection.clear(),
                             None => {}
                         }
@@ -543,6 +552,97 @@ impl Page {
         }
         out.push(Self::rects_action(&moved));
         true
+    }
+
+    /// A fresh group id (32 hex digits).
+    fn new_group_id() -> String {
+        use std::hash::{BuildHasher, Hasher};
+        let mut out = String::new();
+        for i in 0..2u64 {
+            let mut h = std::collections::hash_map::RandomState::new().build_hasher();
+            h.write_u64(i);
+            h.write_u128(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos()));
+            out.push_str(&format!("{:016x}", h.finish()));
+        }
+        out
+    }
+
+    fn set_many(edits: &[(u64, J)]) -> String {
+        let parts: Vec<String> = edits.iter().map(|(k, v)| format!("{k}\u{1f}{v}")).collect();
+        format!("sheets:set_many\u{1f}{}", parts.join("\u{1f}"))
+    }
+
+    /// The selection's sheet commands: ``group``, ``ungroup``,
+    /// ``copy_style``, ``paste_style``. Edits leave as one ``set_many``.
+    pub fn command(&mut self, name: &str, out: &mut Vec<String>) -> bool {
+        let Some(doc) = self.doc.as_ref() else { return false };
+        let selected: Vec<&Item> = self.selection.iter().filter_map(|k| doc.items.iter().find(|i| i.key == *k)).collect();
+        let field = |i: &Item, f: &str| i.data["fields"][f].clone();
+        match name {
+            "group" => {
+                let members: Vec<&Item> = selected.iter().copied().filter(|i| i.kind != "titleblock").collect();
+                if members.len() < 2 {
+                    self.flash = Some(("Select two or more items to group them.", std::time::Instant::now()));
+                    return true;
+                }
+                let gid = Self::new_group_id();
+                out.push(Self::set_many(&members.iter().map(|i| (i.key, serde_json::json!({"group_id": gid}))).collect::<Vec<_>>()));
+                self.flash = Some(("Grouped: they select and move together.", std::time::Instant::now()));
+            }
+            "ungroup" => {
+                let gids: Vec<J> = selected.iter().map(|i| field(i, "group_id")).filter(|g| g.as_str().is_some_and(|s| !s.is_empty())).collect();
+                if gids.is_empty() {
+                    return true;
+                }
+                let members: Vec<(u64, J)> = doc.items.iter().filter(|i| gids.contains(&field(i, "group_id")))
+                    .map(|i| (i.key, serde_json::json!({"group_id": ""}))).collect();
+                out.push(Self::set_many(&members));
+                self.flash = Some(("Ungrouped.", std::time::Instant::now()));
+            }
+            "copy_style" => {
+                let Some(i) = selected.first() else { return false };
+                let fields = crate::sheet_inspector::style_fields(&i.kind);
+                if fields.is_empty() {
+                    self.flash = Some(("This item has no style to copy.", std::time::Instant::now()));
+                    return true;
+                }
+                let look = fields.iter().filter(|f| i.data["fields"].get(**f).is_some())
+                    .map(|f| (f.to_string(), field(i, f))).collect();
+                self.style_clip = Some((i.kind.clone(), look));
+                self.flash = Some(("Style copied: select items of the same kind and paste it.", std::time::Instant::now()));
+            }
+            "paste_style" => {
+                let Some((kind, look)) = &self.style_clip else { return false };
+                let edits: Vec<(u64, J)> = selected.iter().filter(|i| &i.kind == kind && !i.locked).filter_map(|i| {
+                    let changes: serde_json::Map<String, J> = look.iter()
+                        .filter(|(k, v)| &i.data["fields"][k.as_str()] != *v).map(|(k, v)| (k.clone(), v.clone())).collect();
+                    (!changes.is_empty()).then(|| (i.key, J::Object(changes)))
+                }).collect();
+                if edits.is_empty() {
+                    if selected.iter().all(|i| &i.kind != kind) && !selected.is_empty() {
+                        self.flash = Some(("That item is of another kind: the style does not apply.", std::time::Instant::now()));
+                    }
+                    return true;
+                }
+                out.push(Self::set_many(&edits));
+            }
+            _ => return false,
+        }
+        true
+    }
+
+    /// The selection with each picked item's group around it.
+    fn with_groups(&self, keys: Vec<u64>) -> Vec<u64> {
+        let Some(doc) = self.doc.as_ref() else { return keys };
+        let gids: Vec<&str> = keys.iter().filter_map(|k| doc.items.iter().find(|i| i.key == *k))
+            .filter_map(|i| i.data["fields"]["group_id"].as_str()).filter(|g| !g.is_empty()).collect();
+        let mut out = keys.clone();
+        for i in &doc.items {
+            if !out.contains(&i.key) && i.data["fields"]["group_id"].as_str().is_some_and(|g| gids.contains(&g)) {
+                out.push(i.key);
+            }
+        }
+        out
     }
 
     fn select_action(&self) -> String {
@@ -892,6 +992,36 @@ mod tests {
         assert_eq!(out, vec!["sheets:rects\u{1f}2:30.0000:190.0000:180.0000:6.0000".to_string()]);
         assert!(p.key("Escape", 0, &mut out));
         assert!(p.selection.is_empty());
+    }
+
+    #[test]
+    fn group_selects_together_and_style_pastes_on_its_kind() {
+        let mut p = page();
+        let mut out = vec![];
+        p.set_selection(vec![1, 2]);
+        assert!(p.command("group", &mut out));
+        let a = out.pop().unwrap();
+        assert!(a.starts_with("sheets:set_many\u{1f}1\u{1f}{\"group_id\":\"") && a.contains("\u{1f}2\u{1f}"), "{a}");
+        // The document says they are grouped: a click on one takes both.
+        let grouped = p.raw.replacen("\"editable\":true,\"frame\":{}}", "\"editable\":true,\"frame\":{},\"fields\":{\"group_id\":\"g\",\"style\":\"vectorial\"}}", 1)
+            .replace("\"text\":{}}", "\"text\":{},\"fields\":{\"group_id\":\"g\"}}");
+        p.set(grouped);
+        p.set_selection(vec![]);
+        let q = at(&p, 50.0, 50.0);
+        p.pointer("press", q, 1, 0, &mut out);
+        p.pointer("release", q, 1, 0, &mut out);
+        assert_eq!(p.selection, vec![1, 2]);
+        out.clear();
+        assert!(p.command("ungroup", &mut out));
+        assert!(out[0].contains("{\"group_id\":\"\"}"));
+        // Copy a frame's look, paste it on the other frame (locked: no), on a text (another kind: no).
+        p.set_selection(vec![1]);
+        assert!(p.command("copy_style", &mut out));
+        out.clear();
+        p.set_selection(vec![2]);
+        assert!(p.command("paste_style", &mut out));
+        assert!(out.is_empty());
+        assert!(p.hint().contains("another kind"));
     }
 
     #[test]
