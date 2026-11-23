@@ -10,7 +10,6 @@
 use super::model::Fields;
 use crate::doc::value::Value;
 use glam::{DMat4, DQuat, DVec3};
-use std::f64::consts::PI;
 
 const NEAR_FLOOR: f64 = 4e-4;
 const FAR_PER_DISTANCE: f64 = 4.0;

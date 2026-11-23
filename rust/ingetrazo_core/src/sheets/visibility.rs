@@ -18,6 +18,9 @@ use crate::doc::{self, value::Value, Data, Key};
 use pyo3::prelude::*;
 use std::collections::{HashMap, HashSet};
 
+/// `core.layers.DEFAULT_LAYER`.
+pub const DEFAULT_LAYER: &str = "Layer 0";
+
 /// What a view says about visibility (None: the document's own state).
 #[derive(Default, Clone, Debug)]
 pub struct ViewState {
@@ -57,68 +60,88 @@ fn dict_str<'a>(v: Option<&'a Value>) -> HashMap<&'a str, &'a Value> {
     }
 }
 
+/// The tags of the document as a frame's view shows them: each tag's
+/// effective visibility (its switch or the view's, printable, its folder
+/// chain) and lock, owned so it outlives the document lock.
+pub struct Tags {
+    /// Key → (shown, locked).
+    tags: HashMap<String, (bool, bool)>,
+}
+
+impl Tags {
+    pub fn read(d: &doc::Doc, root: Key, view: &ViewState) -> PyResult<Tags> {
+        let rn = d.need(root).map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
+        let attr = |name: &str| doc::attr_id(name).ok().and_then(|a| rn.attr(a));
+        let flags = dict_str(attr("folder_visibility"));
+        let parents = dict_str(attr("folder_parents"));
+        let folder_visible = |start: &str| -> bool {
+            let mut key = Some(start.to_string());
+            let mut seen = HashSet::new();
+            while let Some(k) = key.filter(|k| !k.is_empty() && !seen.contains(k)) {
+                seen.insert(k.clone());
+                let on = match &view.hidden_folders {
+                    Some(off) => !off.contains(&k),
+                    None => !matches!(flags.get(k.as_str()), Some(Value::Bool(false) | Value::Int(0) | Value::None)),
+                };
+                if !on {
+                    return false;
+                }
+                key = match parents.get(k.as_str()) {
+                    Some(Value::Str(p)) => Some(p.clone()),
+                    _ => None,
+                };
+            }
+            true
+        };
+        let printable = doc::attr_id("printable").ok();
+        let mut tags = HashMap::new();
+        let mut folders = HashMap::new();
+        for &t in &rn.tags {
+            let Some(node) = d.node(t) else { continue };
+            let Data::Tag(tag) = &node.data else { continue };
+            let Some(k) = tag.key.as_deref() else { continue };
+            let prints = !matches!(printable.and_then(|a| node.attr(a)), Some(Value::Bool(false)));
+            let on = match &view.hidden_tags {
+                Some(off) => !off.contains(k),
+                None => tag.visible,
+            };
+            let folder = tag.folder.clone().unwrap_or_default();
+            let open = *folders.entry(folder.clone()).or_insert_with(|| folder_visible(&folder));
+            tags.insert(k.to_string(), (on && prints && open, tag.locked));
+        }
+        Ok(Tags { tags })
+    }
+    /// Whether a tag shows (an unknown tag does, as the default).
+    pub fn shown(&self, key: &str) -> bool {
+        self.tags.get(key).is_none_or(|t| t.0)
+    }
+    /// A known tag that is hidden or locked (`visible_placements`'s blocking).
+    pub fn blocking(&self, key: &str) -> bool {
+        self.tags.get(key).is_some_and(|t| !t.0 || t.1)
+    }
+}
+
+/// Hide on a placement as the frame's view has it.
+pub fn own_hidden(p: &doc::PlacementData, view: &ViewState) -> bool {
+    match &view.hidden_objects {
+        Some(set) => p.uid.as_deref().is_some_and(|u| set.contains(u)),
+        None => p.hidden,
+    }
+}
+
 /// For each placement under `roots` (the scene's top level), in `doc_tree`
 /// order: its key and whether the frame hides it. A placement listed twice
 /// (a shared child) keeps the last answer, as the composer's lookup did.
 pub fn hidden(root: Key, roots: &[Key], view: &ViewState) -> PyResult<HashMap<Key, bool>> {
     let d = doc::lock();
-    let rn = d.need(root).map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
-    let attr = |name: &str| doc::attr_id(name).ok().and_then(|a| rn.attr(a));
-    let flags = dict_str(attr("folder_visibility"));
-    let parents = dict_str(attr("folder_parents"));
-    let folder_visible = |start: &str| -> bool {
-        let mut key = Some(start.to_string());
-        let mut seen = HashSet::new();
-        while let Some(k) = key.filter(|k| !k.is_empty() && !seen.contains(k)) {
-            seen.insert(k.clone());
-            let on = match &view.hidden_folders {
-                Some(off) => !off.contains(&k),
-                None => !matches!(flags.get(k.as_str()), Some(Value::Bool(false) | Value::Int(0) | Value::None)),
-            };
-            if !on {
-                return false;
-            }
-            key = match parents.get(k.as_str()) {
-                Some(Value::Str(p)) => Some(p.clone()),
-                _ => None,
-            };
-        }
-        true
-    };
-    let printable = doc::attr_id("printable").ok();
-    let mut tags: HashMap<&str, (bool, bool, Option<&str>)> = HashMap::new();
-    for &t in &rn.tags {
-        let Some(node) = d.node(t) else { continue };
-        if let Data::Tag(tag) = &node.data {
-            if let Some(k) = tag.key.as_deref() {
-                let prints = !matches!(printable.and_then(|a| node.attr(a)), Some(Value::Bool(false)));
-                tags.insert(k, (tag.visible, prints, tag.folder.as_deref()));
-            }
-        }
-    }
-    let tag_visible = |key: &str| -> bool {
-        match tags.get(key) {
-            None => true,
-            Some((visible, prints, folder)) => {
-                let on = match &view.hidden_tags {
-                    Some(off) => !off.contains(key),
-                    None => *visible,
-                };
-                on && *prints && folder_visible(folder.unwrap_or(""))
-            }
-        }
-    };
+    let tags = Tags::read(&d, root, view)?;
     let mut out = HashMap::new();
     let mut stack: Vec<(Key, bool)> = roots.iter().rev().map(|k| (*k, false)).collect();
     while let Some((k, parent_hidden)) = stack.pop() {
         let Some(n) = d.node(k) else { continue };
         let Data::Placement(p) = &n.data else { continue };
-        let own = match &view.hidden_objects {
-            Some(set) => p.uid.as_deref().is_some_and(|u| set.contains(u)),
-            None => p.hidden,
-        };
-        let tag = p.tag.as_deref().filter(|t| !t.is_empty()).unwrap_or("Layer 0");
-        let h = parent_hidden || own || !tag_visible(tag);
+        let tag = p.tag.as_deref().filter(|t| !t.is_empty()).unwrap_or(DEFAULT_LAYER);
+        let h = parent_hidden || own_hidden(p, view) || !tags.shown(tag);
         out.insert(k, h);
         for &c in n.children.iter().rev() {
             stack.push((c, h));

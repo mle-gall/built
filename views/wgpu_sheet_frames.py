@@ -1,9 +1,12 @@
-"""A sheet frame's picture rendered straight into the native page.
+"""A sheet frame's content for the native page.
 
 Glue only (docs/python-glue.md). The frame's camera
-(``sheet_frame_camera``) and what it shows (``sheet_frame_hidden``) come
-from the document in Rust. The renderer draws into a texture the page keeps
-(``page_frame_render``), with no read-back. The live scene and camera are
+(``sheet_frame_camera``), what it shows (``sheet_frame_hidden``) and the
+geometry its vector pass draws (``sheet_frame_geometry``, read from the
+mesh stores) come from the document in Rust. A shaded frame is drawn by
+the renderer into a texture the page keeps (``page_frame_render``), with no
+read-back. A vector frame's lines come from the hidden-line pass
+(``core.hlr.hlr_drawing``, its kernel in Rust) over that geometry. The live scene and camera are
 never touched: what the frame's saved view changes besides visibility
 (style, section, shadows, base map) is read through :class:`FrameScene`, so
 the style payload gets the frame's values. The composer's
@@ -201,3 +204,31 @@ def render(view_widget, frame, key) -> bool:
         edge_px=pen_px(getattr(frame, "pen_edge_mm", 0.18), RENDER_DPI),
         profile_px=pen_px(getattr(frame, "pen_profile_mm", 0.35), RENDER_DPI))
     return True
+
+
+def drawing(source, frame):
+    """A vector frame's lines in paper mm, frame-local, and their kinds
+    (``core.hlr`` KIND_*), or None when its saved view is gone."""
+    from core._native import qt_hypot
+    from core.composition import model_height_for_frame
+    from core.hlr import hlr_drawing
+    scene = source.scene
+    view = saved_view(scene, frame)
+    if view is False:
+        return None
+    facade = frame_scene(scene, frame, view)
+    camera = frame_camera(source.camera, frame, view, scene)
+    geometry, _tags = NATIVE.sheet_frame_geometry(scene._root, list(scene.groups), scene.loose_mesh,
+                                                  view or None, qt_hypot() or "libc++-fma")
+    d = hlr_drawing(facade, camera, geometry=geometry, profiles=bool(getattr(frame, "profiles", True)),
+                    fills=(getattr(frame, "cut_fill", "solid") or "solid") != "none",
+                    hidden=bool(getattr(frame, "hidden_lines", False)))
+    model_h = model_height_for_frame(frame.h_mm, frame.scale_n)
+    k = frame.h_mm / model_h                       # paper mm per metre
+    half_h = model_h / 2.0
+    half_w = half_h * (frame.w_mm / frame.h_mm)
+    segs = np.asarray(d.segs, float).reshape(-1, 4)
+    out = np.empty_like(segs)
+    out[:, 0::2] = (segs[:, 0::2] + half_w) * k
+    out[:, 1::2] = (half_h - segs[:, 1::2]) * k
+    return out, np.asarray(d.kinds, np.int8)

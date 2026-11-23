@@ -53,6 +53,13 @@ _CURSORS = {"": Qt.ArrowCursor, "move": Qt.SizeAllCursor, "grab": Qt.OpenHandCur
             "zoom": Qt.CrossCursor, "resize_h": Qt.SizeHorCursor, "resize_v": Qt.SizeVerCursor,
             "resize_nwse": Qt.SizeFDiagCursor, "resize_nesw": Qt.SizeBDiagCursor}
 
+#: A frame's fields its content depends on (the rest only moves, titles or
+#: decorates it): a change, from the page or an undo, works it out again.
+_CONTENT_FIELDS = ("w_mm", "h_mm", "scale_n", "view_key", "style", "paper_bg", "cam_target",
+                   "cam_yaw", "cam_pitch", "perspective", "cam_distance", "cam_fov", "shadows",
+                   "sun_hour", "rot_deg", "pen_cut_mm", "pen_profile_mm", "pen_edge_mm", "profiles",
+                   "hidden_lines", "layer_colours", "cut_fill", "cut_fill_color", "cut_fill_by_layer")
+
 #: Keys that stay the window's in the workspace (save, open, new, close,
 #: quit, preferences): everything else is the page's.
 _WINDOW_KEYS = ("Ctrl+S", "Ctrl+Shift+S", "Ctrl+O", "Ctrl+N", "Ctrl+W", "Ctrl+Q",
@@ -231,7 +238,7 @@ class Workspace:
         self.view = None
         self._sent = {}
         self._page = None               # the snapshot the page has
-        self._content = {}              # frame key → the cache entry it shows
+        self._content = {}              # frame key → the fields its content was made from
         self._tried = {}                # frame key → the page a render was tried on
         self._more = False              # frames still to render after this turn
         self._selection = None          # the keys the page and the composer agree on
@@ -343,10 +350,11 @@ class Workspace:
         return {"views": views, "styles": styles}
 
     def _send_contents(self, renderer) -> None:
-        """Each frame's content: a shaded frame rendered by the renderer
-        straight into its page texture (views/wgpu_sheet_frames.py), the
-        vector pass's lines (paper mm in the frame) as the composer has
-        them. A frame without any is done, one per turn."""
+        """Each frame's content (views/wgpu_sheet_frames.py): a shaded
+        frame rendered straight into its page texture, a vector frame's
+        hidden-line drawing as line sets (paper mm in the frame). A frame
+        the page holds nothing for is done, one per turn."""
+        import numpy as np
         from views import wgpu_sheet_frames
         comp = self.composer
         serial = self._page                # tried again once the sheet changed
@@ -354,43 +362,30 @@ class Workspace:
         self._more = False
         for frame in list(comp.comp.frames):
             key = frame._doc_key
-            fid = id(frame)
-            if not (frame.style == "vectorial" and not comp.frame_is_perspective(frame)):
-                if renderer.page_has_content(key) or self._tried.get(key) == serial:
-                    continue
-                if rendered:
-                    self._more = True          # the next turn renders it
-                    continue
-                self._tried[key] = serial
-                rendered = True
-                try:
+            sig = tuple(repr(getattr(frame, f, None)) for f in _CONTENT_FIELDS)
+            if self._content.get(key, sig) != sig:  # the window on the model changed (undo too)
+                renderer.page_frame_forget(key)
+                self._tried.pop(key, None)
+            self._content[key] = sig
+            if renderer.page_has_content(key) or self._tried.get(key) == serial:
+                continue
+            if rendered:
+                self._more = True              # the next turn draws it
+                continue
+            self._tried[key] = serial
+            rendered = True
+            try:
+                if frame.style == "vectorial" and not comp.frame_is_perspective(frame):
+                    got = wgpu_sheet_frames.drawing(self.view.source_viewport, frame)
+                    if got is not None:
+                        segs, kinds = got
+                        renderer.page_frame_lines(key, np.ascontiguousarray(segs, np.float32),
+                                                  np.ascontiguousarray(kinds, np.uint8))
+                else:
                     wgpu_sheet_frames.render(self.view, frame, key)
-                except Exception:  # noqa: BLE001 — a view that cannot render stays empty
-                    import traceback
-                    traceback.print_exc()
-                continue
-            lines = comp.hlr_cache.get(fid)
-            if lines is None and self._tried.get(key) != serial:
-                if rendered:
-                    self._more = True          # the next turn draws it
-                    continue
-                self._tried[key] = serial
-                rendered = True
-                try:
-                    comp.render_frame(frame)
-                except Exception:  # noqa: BLE001 — a view that cannot draw stays empty
-                    import traceback
-                    traceback.print_exc()
-                lines = comp.hlr_cache.get(fid)
-            if lines is None or self._content.get(key) is lines:
-                continue
-            self._content[key] = lines
-            import numpy as np
-            kinds = comp.hlr_kinds.get(fid)
-            segs = np.ascontiguousarray(np.asarray(lines, dtype=np.float32).reshape(-1, 4))
-            kinds = (np.zeros(len(segs), dtype=np.uint8) if kinds is None
-                     else np.ascontiguousarray(np.asarray(kinds, dtype=np.uint8)))
-            renderer.page_frame_lines(key, segs, kinds)
+            except Exception:  # noqa: BLE001 — a view that cannot draw stays empty
+                import traceback
+                traceback.print_exc()
 
     def _models(self) -> dict:
         comp = self.composer.comp

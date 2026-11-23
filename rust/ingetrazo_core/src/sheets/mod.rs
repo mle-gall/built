@@ -10,6 +10,7 @@
 pub mod camera;
 pub mod display;
 pub mod drawing;
+pub mod geometry;
 pub mod items;
 pub mod items_b;
 pub mod metrics;

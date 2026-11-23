@@ -243,10 +243,13 @@ def test_frames_show_the_vector_pass_and_the_renders(host, monkeypatch):
     from views.composer import ComposerWindow
 
     def render(self, frame):
-        assert frame.style == "vectorial"             # the shaded frames never come here
-        self.hlr_cache[id(frame)] = np.array([[0, 0, 10, 0], [0, 0, 0, 5]], float)
-        self.hlr_kinds[id(frame)] = np.array([0, 1], np.int8)
+        raise AssertionError("the composer draws no frame for the page")
     monkeypatch.setattr(ComposerWindow, "render_frame", render)
+
+    def drawing(source, frame):
+        assert frame.style == "vectorial"
+        return np.array([[0, 0, 10, 0], [0, 0, 0, 5]], float), np.array([0, 1], np.int8)
+    monkeypatch.setattr(wgpu_sheet_frames, "drawing", drawing)
     shaded = []
 
     def native(view, frame, key):
@@ -270,6 +273,12 @@ def test_frames_show_the_vector_pass_and_the_renders(host, monkeypatch):
     _run_actions(host, f"sheets:refresh\x1f{iso._doc_key}")         # Update view: rendered again
     host.view.draw_frame()
     assert rec.last("page_frame_forget") == (iso._doc_key,) and shaded == [iso, iso]
+    iso.scale_n = 200.0                      # its window changed outside the page (an undo)
+    host.view.draw_frame()
+    assert shaded == [iso, iso, iso]
+    iso.x_mm += 5.0                          # moved only: the picture stays
+    host.view.draw_frame()
+    assert shaded == [iso, iso, iso]
 
 
 
