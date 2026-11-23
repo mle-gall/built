@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import math
 
+import ingetrazo_core as native
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 from core.camera_point import CameraPoint
 
@@ -621,13 +622,8 @@ class OrbitCamera:
         (Preferences ▸ Invert vertical orbit); the convention itself lives
         here.
         """
-        scale = math.pi / max(viewport_h, 1)
-        self.yaw -= dx_pixels * scale
-        # Clamp to just shy of poles to avoid the up-vector singularity.
-        self.pitch = max(
-            min(self.pitch + dy_pixels * scale, math.radians(89.0)),
-            math.radians(-89.0),
-        )
+        self.yaw, self.pitch = native.orbit_angles(
+            self.yaw, self.pitch, dx_pixels, dy_pixels, viewport_h)
 
     def orbit_about(self, pivot: QVector3D, dx_pixels: float,
                     dy_pixels: float, viewport_h: int) -> None:
@@ -642,35 +638,11 @@ class OrbitCamera:
         pitch turn about the view's horizontal axis, so the horizon stays
         level (no roll) and the distance to the target never changes.
         """
-        from ingetrazo_core import Quaternion as QQuaternion
-
-        if not all(math.isfinite(c) for c in (pivot.x(), pivot.y(), pivot.z())):
-            self.orbit(dx_pixels, dy_pixels, viewport_h)  # about the target
-            return
-        old_yaw, old_pitch = self.yaw, self.pitch
-        old_target = CameraPoint(self.target)
-        self.orbit(dx_pixels, dy_pixels, viewport_h)     # the angles, clamped
-        d_yaw = self.yaw - old_yaw
-        d_pitch = self.pitch - old_pitch
-        if abs(d_yaw) < 1e-12 and abs(d_pitch) < 1e-12:
-            return
-        z = QVector3D(0.0, 0.0, 1.0)
-        rot_yaw = QQuaternion.fromAxisAndAngle(z, math.degrees(d_yaw))
-        # the eye's direction from the target after the yaw turn; raising
-        # its elevation is a turn about (offset x Z), right-handed
-        cp = math.cos(old_pitch)
-        offset = QVector3D(cp * math.cos(self.yaw), cp * math.sin(self.yaw),
-                           math.sin(old_pitch))
-        axis = QVector3D.crossProduct(offset, z)
-        if axis.length() < 1e-9:
-            rot = rot_yaw
-        else:
-            rot = QQuaternion.fromAxisAndAngle(
-                axis.normalized(), math.degrees(d_pitch)) * rot_yaw
-        self.target = CameraPoint(pivot) + rot.rotatedVector(self.target - pivot)
+        old_yaw, old_pitch, old_target = self.yaw, self.pitch, self.target
+        self.orbit(dx_pixels, dy_pixels, viewport_h)
+        self.target = native.orbit_target(
+            old_target, pivot, old_yaw, old_pitch, self.yaw, self.pitch)
         if not self.is_finite():
-            # A pivot so far away that the turn overflowed: keep the pose the
-            # gesture had, never a NaN one (#485).
             self.yaw, self.pitch, self.target = old_yaw, old_pitch, old_target
 
     def pan(self, dx_pixels: float, dy_pixels: float, viewport_h: int,
@@ -684,33 +656,17 @@ class OrbitCamera:
         the orbit target, which zooming in shrinks to 2 cm: at full zoom a
         wall metres away barely moved (Alejandro Limón, #184). Parallel
         views scale the same at every depth and ignore it."""
-        cp = math.cos(self.pitch)
-        sp = math.sin(self.pitch)
-        cy = math.cos(self.yaw)
-        sy = math.sin(self.yaw)
-        # View direction (eye → target): the eye sits at
-        # target + distance·(cp·cy, cp·sy, sp), so forward is its negation.
-        # Using +that vector flipped screen-right, inverting horizontal pan.
-        forward = QVector3D(-cp * cy, -cp * sy, -sp)
-        right = QVector3D.crossProduct(forward, self.up_vector()).normalized()
-        screen_up = QVector3D.crossProduct(right, forward).normalized()
         span = self.distance
         if (self.perspective and depth is not None and math.isfinite(depth)
                 and depth > 1e-6):
             span = depth
-        world_per_pixel = (
-            2.0
-            * span
-            * math.tan(math.radians(self.fov_deg) / 2.0)
-            / max(viewport_h, 1)
-        )
-        self.target = self.target - right * (dx_pixels * world_per_pixel)
-        self.target = self.target + screen_up * (dy_pixels * world_per_pixel)
+        self.target = native.pan_target(
+            self.target, self.up_vector(), self.yaw, self.pitch, span, self.fov_deg,
+            dx_pixels, dy_pixels, viewport_h)
 
     def zoom(self, steps: float) -> None:
-        factor = 0.9 ** steps
-        self.distance = max(self.min_distance(),
-                            min(self.distance * factor, MAX_DISTANCE))
+        self.distance = native.zoom_distance(
+            self.distance, steps, self.min_distance(), MAX_DISTANCE)
 
     def zoom_to(self, steps: float, focus: QVector3D,
                 min_step: float = 0.0) -> None:
@@ -736,27 +692,10 @@ class OrbitCamera:
         if steps < 0 and (eye_before - focus).length() >= MAX_DISTANCE:
             self.zoom(steps)
             return
-        factor = 0.9 ** steps
-        new_distance = max(self.min_distance(focus),
-                           min(self.distance * factor, MAX_DISTANCE))
-        if steps < 0 and self.distance > 0.0:
-            # the frame grows only as much as the distance could
-            factor = min(factor, new_distance / self.distance)
-        before = (CameraPoint(self.target), self.distance)
-        self.target = CameraPoint(focus) + (self.target - focus) * factor
-        self.distance = new_distance
-        if steps < 0 and min_step > 0.0 and new_distance < MAX_DISTANCE:
-            moved = (self.eye() - eye_before).length()
-            if moved < min_step:
-                # The eye backs off along the view by growing the DISTANCE,
-                # the target staying on what you look at — the same eye as
-                # pushing the target back, but the distance keeps meaning
-                # how far the model is. Pushing the target left a 2 cm
-                # distance tens of metres out after a deep zoom-in, and the
-                # near plane derived from it (0.4 mm) made every surface
-                # less than a metre from another flicker (#579).
-                self.distance = min(MAX_DISTANCE,
-                                    self.distance + (min_step - moved))
+        before = self.target, self.distance
+        self.target, self.distance = native.zoom_focus(
+            self.target, focus, eye_before, self.yaw, self.pitch, self.distance,
+            steps, self.min_distance(focus), MAX_DISTANCE, min_step)
         if not self.is_finite():
             self.target, self.distance = before
 
