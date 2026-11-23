@@ -156,7 +156,7 @@ def _window(view):
 def attach(view) -> None:
     """Called once the view has its renderer."""
     renderer = view.renderer
-    if not ENABLED or getattr(view, "_ui_attached", False) or not hasattr(renderer, "ui_enable"):
+    if getattr(view, "_ui_attached", False):
         return
     win = _window(view)
     if win is None:

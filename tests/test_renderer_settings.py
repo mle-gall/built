@@ -18,7 +18,7 @@ def test_adapter_probe(monkeypatch, fails):
     def renderer(*args):
         if fails:
             raise ValueError('no Metal adapter')
-        return object()
+        return SimpleNamespace(ui_enable=lambda font: None)
     monkeypatch.setattr('views.wgpu_surface.window_handles', lambda widget: (1, {}))
     monkeypatch.setitem(sys.modules, 'ingetrazo_render', SimpleNamespace(Renderer=renderer))
     cap = rs._probe_local()
@@ -28,13 +28,23 @@ def test_adapter_probe(monkeypatch, fails):
         assert 'no Metal adapter' in cap.reason
 
 
+def test_missing_chrome_rejects_renderer(monkeypatch):
+    import sys
+    from types import SimpleNamespace
+    monkeypatch.setattr('views.wgpu_surface.window_handles', lambda widget: (1, {}))
+    monkeypatch.setitem(sys.modules, 'ingetrazo_render', SimpleNamespace(Renderer=lambda *args: object()))
+    result = rs._probe_local()
+    assert not result.available
+    assert 'ui_enable' in result.reason
+
+
 @pytest.mark.parametrize('platform', ['linux', 'win32'])
 def test_probes_the_native_surface_on_each_platform(monkeypatch, platform):
     import sys
     from types import SimpleNamespace
     monkeypatch.setattr(sys, 'platform', platform)
     monkeypatch.setattr('views.wgpu_surface.window_handles', lambda widget: (1, {}))
-    monkeypatch.setitem(sys.modules, 'ingetrazo_render', SimpleNamespace(Renderer=lambda *args: object()))
+    monkeypatch.setitem(sys.modules, 'ingetrazo_render', SimpleNamespace(Renderer=lambda *args: SimpleNamespace(ui_enable=lambda font: None)))
     assert rs._probe_local().available
 
 
