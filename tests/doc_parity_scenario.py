@@ -559,6 +559,24 @@ def geometry_steps(work):
     out.append(state())
     assert h.redo() and (seam.soft, seam.flat) == (True, True)
     out.append(state())
+    from core.history import (SetFaceOpacityCommand, SetFaceTextureCommand,
+                              SetFaceBackCommand, SetFaceMaterialTagCommand)
+    from core.materials import Material
+    painted = list(seam.faces)
+    painted[0].attrs["back"] = True
+    swatch = Material("Parity blue", color=(.2, .35, .55), pbr={"roughness": .3})
+    for stamp in (SetFaceColorCommand(painted, swatch.color),
+                  SetFaceOpacityCommand(painted, .65),
+                  SetFaceTextureCommand(painted, {"sw": 1., "sh": 2.}),
+                  SetFaceBackCommand(painted, [{"color": [.8, .2, .1]}, None]),
+                  SetFaceMaterialTagCommand(painted, swatch.name, swatch)):
+        h.execute(stamp)
+        assert not h.last_error and not h.last_rejected
+        out.append(state())
+        assert h.undo()
+        out.append(state())
+        assert h.redo()
+        out.append(state())
     # Refused joins preserve the last published change and the exact mesh.
     refused = rectangle(600, 0, 2, 2)
     mesh.add_face(refused)
