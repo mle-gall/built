@@ -29,6 +29,7 @@ mod anchor;
 mod history;
 mod paint;
 mod restamp;
+mod settings;
 mod feed;
 mod execute;
 mod file_view;

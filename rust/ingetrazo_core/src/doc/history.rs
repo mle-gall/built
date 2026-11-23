@@ -58,6 +58,8 @@ pub struct DocumentHistory {
     subscribers: Py<PyList>,
     #[pyo3(get)]
     revision: u64,
+    #[pyo3(get)]
+    units_revision: u64,
     steps: VecDeque<(u64, Py<PyAny>)>,
     journal: VecDeque<(u64, String, String)>,
 }
@@ -71,6 +73,7 @@ impl DocumentHistory {
             redo: PyList::empty(py).unbind(),
             subscribers: PyList::empty(py).unbind(),
             revision: 0,
+            units_revision: 0,
             steps: VecDeque::new(),
             journal: VecDeque::new(),
         }
@@ -327,6 +330,14 @@ impl DocumentHistory {
         self.push(py, cmd, 0)
     }
 
+    fn clear_stacks(&mut self, py: Python<'_>) -> PyResult<()> {
+        self.undo.bind(py).call_method0("clear")?;
+        self.redo.bind(py).call_method0("clear")?;
+        // Opening into an existing scene retains its History and renderer.
+        self.units_revision += 1;
+        Ok(())
+    }
+
     /// Drop the mutable History borrow before invoking arbitrary subscribers.
     fn publish(
         mut slf: PyRefMut<'_, Self>,
@@ -334,6 +345,9 @@ impl DocumentHistory {
         step: &Bound<'_, PyAny>,
     ) -> PyResult<()> {
         let revision = slf.revision;
+        if step.getattr("scene_fields")?.contains("units")? {
+            slf.units_revision += 1;
+        }
         let expired = (slf.steps.len() == 256).then(|| slf.steps.pop_front());
         slf.steps.push_back((revision, step.clone().unbind()));
         let subscribers = slf.subscribers.bind(py).to_tuple();
