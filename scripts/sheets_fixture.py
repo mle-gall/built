@@ -28,6 +28,35 @@ def _box(mesh, x0, y0, z0, x1, y1, z1):
         mesh.add_face([p[i] for i in loop])
 
 
+def _every_kind(comp) -> None:
+    """One item of every kind the sheet holds, below the views."""
+    from core.composition import (BarraEscala, CotaAngularItem, CotaItem, CotaRadialItem,
+                                  EtiquetaItem, FlechaNorte, FormaItem, ImagenItem, Leyenda,
+                                  LlamadaItem, NivelItem, PerfilTerreno)
+    comp.scalebars.append(BarraEscala(x_mm=215, y_mm=185, scale_n=100.0))
+    comp.nortes.append(FlechaNorte(x_mm=380, y_mm=180, size_mm=22, angle_deg=20))
+    comp.leyendas.append(Leyenda(x_mm=320, y_mm=185, w_mm=50, title="Capas",
+                                 rows=["Muros", "Losa"],
+                                 swatches={"Muros": {"color": [0.8, 0.3, 0.2]},
+                                           "Losa": {"linetype": "dashed"}}))
+    comp.shapes.append(FormaItem(kind="rect", x_mm=20, y_mm=205, w_mm=30, h_mm=18, radius_mm=3,
+                                 fill=True))
+    comp.shapes.append(FormaItem(kind="terreno", x_mm=60, y_mm=210, w_mm=50, h_mm=6,
+                                 ground="hatch"))
+    comp.cotas.append(CotaItem(x_mm=40, y_mm=172, dx_mm=120, dy_mm=0, sep_mm=-4, scale_n=100.0))
+    comp.cotas_ang.append(CotaAngularItem(x_mm=150, y_mm=245, ax_mm=30, ay_mm=0, bx_mm=10,
+                                          by_mm=-20))
+    comp.cotas_rad.append(CotaRadialItem(x_mm=130, y_mm=60, radius_mm=12, kind="diameter",
+                                         angle_deg=30))
+    comp.etiquetas.append(EtiquetaItem(x_mm=120, y_mm=215, w_mm=40, text="Losa de cimentación",
+                                       ax_mm=-15, ay_mm=-30))
+    comp.niveles.append(NivelItem(x_mm=250, y_mm=150, z_m=3.2, text="N.P.T. {z}"))
+    comp.llamadas.append(LlamadaItem(x_mm=260, y_mm=60, w_mm=40, h_mm=30, number="2",
+                                     sheet="A-02"))
+    comp.perfiles.append(PerfilTerreno(x_mm=20, y_mm=230, w_mm=110, h_mm=45))
+    comp.images.append(ImagenItem(x_mm=60, y_mm=258, w_mm=30, h_mm=20, path=""))
+
+
 def build(path: Path) -> None:
     from PySide6.QtWidgets import QApplication
     QApplication.instance() or QApplication([])
@@ -49,6 +78,8 @@ def build(path: Path) -> None:
                                   view_key="scene:Iso", style="style:Architectural"))
     comp.texts.append(TextoItem(x_mm=20, y_mm=190, w_mm=180, text="Ground floor and massing",
                                 size_pt=18.0, bold=True))
+    if os.environ.get("SHEETS_FIXTURE_ALL_KINDS"):
+        _every_kind(comp)
     comp.cajetin = comp.default_cajetin()
     comp.cajetin.set_field("PROYECTO", "Sheets fixture")
     scene.compositions.append(comp)

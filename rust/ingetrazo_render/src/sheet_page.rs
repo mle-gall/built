@@ -13,7 +13,7 @@
 //! as actions (`sheets:rects`, `sheets:place`, `sheets:select`), one per
 //! gesture, which views/wgpu_sheets.py runs through the sheet's history.
 
-use crate::ui::tokens::{ACCENT, CONTACT, FAINT, TYPE_META, WELL};
+use crate::ui::tokens::{ACCENT, CONTACT, DESK, FAINT, TYPE_META};
 use egui::{pos2, vec2, Align2, Color32, FontId, Pos2, Rect, Stroke};
 use serde_json::Value as J;
 use std::collections::HashMap;
@@ -40,6 +40,8 @@ pub struct Item {
     pub hidden: bool,
     pub editable: bool,
     pub data: J,
+    /// The ink box on the page (mm) of an item drawn from its display list.
+    pub bounds: Option<[f64; 4]>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -66,6 +68,9 @@ impl Snapshot {
                 locked: i["locked"].as_bool().unwrap_or(false),
                 hidden: i["hidden"].as_bool().unwrap_or(false),
                 editable: i["editable"].as_bool().unwrap_or(false),
+                bounds: i["bounds"].as_array().filter(|b| b.len() == 4)
+                    .map(|b| [b[0].as_f64().unwrap_or(0.0), b[1].as_f64().unwrap_or(0.0),
+                              b[2].as_f64().unwrap_or(0.0), b[3].as_f64().unwrap_or(0.0)]),
                 data: i.clone(),
             })
         }).collect();
@@ -121,6 +126,8 @@ pub struct Page {
     preview: HashMap<u64, [f64; 4]>,
     /// Where each text block was laid out last (mm): what a click hits.
     text_h: HashMap<u64, f64>,
+    /// The pictures image items show, loaded from their files.
+    pictures: crate::sheet_display::Pictures,
     /// The tool from the rail (the composer's mode names).
     pub tool: String,
     /// The cursor the page asks for.
@@ -211,6 +218,19 @@ impl Page {
     pub fn request_zoom(&mut self, percent: f32) {
         self.zoom_to = Some(percent.clamp(1.0, 1600.0));
     }
+    /// What the page does now, for the bottom bar.
+    pub fn hint(&self) -> &'static str {
+        match (&self.drag, self.tool.as_str()) {
+            (Some(Drag::Move { .. }), _) => "Edges snap to the margins, guides and other items; ⌥ moves freely.",
+            (Some(Drag::Resize { .. }), _) => "Edges snap to the margins, guides and other items; ⌥ resizes freely.",
+            (Some(Drag::Place { .. }), _) => "Release to place the view, at the scale that fits.",
+            (_, "pan") => "Drag to move the sheet. Scroll pans, ⌘-scroll zooms.",
+            (_, "zoom") | (_, "zoom_ventana") => "Click to zoom in, ⌥-click to zoom out.",
+            (_, "vista") => "Drag a rectangle to place a model view.",
+            _ if !self.selection.is_empty() => "Drag to move, the handles resize. Arrows nudge 1 mm, ⇧ 10 mm, ⌥ 0.1 mm. Esc clears.",
+            _ => "Click an item to select it, ⇧-click to add. Drag to move it.",
+        }
+    }
     pub fn zoom_percent(&self) -> f32 {
         self.zoom / PT_PER_MM * 100.0
     }
@@ -254,12 +274,22 @@ impl Page {
         r
     }
 
+    /// What an item covers on the page now: its ink when its painter says,
+    /// else its box (a gesture's preview moves either).
+    fn ink_of(&self, i: &Item) -> [f64; 4] {
+        let r = self.rect_of(i);
+        match i.bounds {
+            Some(b) => [b[0] + r[0] - i.rect[0], b[1] + r[1] - i.rect[1], b[2], b[3]],
+            None => r,
+        }
+    }
+
     /// The topmost visible item under ``mm``.
     fn hit(&self, mm: [f64; 2]) -> Option<u64> {
         let doc = self.doc.as_ref()?;
         let pad = (3.0 / self.zoom.max(1e-6)) as f64;
         doc.items.iter().rev().filter(|i| !i.hidden).find(|i| {
-            let r = self.rect_of(i);
+            let r = self.ink_of(i);
             let (x0, x1) = (r[0].min(r[0] + r[2]) - pad, r[0].max(r[0] + r[2]) + pad);
             let (y0, y1) = (r[1].min(r[1] + r[3]) - pad, r[1].max(r[1] + r[3]) + pad);
             mm[0] >= x0 && mm[0] <= x1 && mm[1] >= y0 && mm[1] <= y1
@@ -525,7 +555,7 @@ impl Page {
     /// chrome leaves it (fit and zoom work in it).
     pub fn paint(&mut self, ctx: &egui::Context, screen: Rect, free: Rect) {
         let painter = ctx.layer_painter(egui::LayerId::background());
-        painter.rect_filled(screen, 0.0, WELL);
+        painter.rect_filled(screen, 0.0, DESK);
         let Some(doc) = self.doc.clone() else { return };
         let (pw, ph) = (doc.size[0] as f32, doc.size[1] as f32);
         if let Some(width_only) = self.fit.take() {
@@ -576,12 +606,9 @@ impl Page {
                 "frame" => self.paint_frame(&painter, item, rect),
                 "text" => self.paint_text(&painter, ctx, item, rect),
                 "titleblock" => self.paint_title_block(&painter, item, rect),
-                "shape" => self.paint_shape(&painter, item, rect),
                 _ => {
-                    // Not drawn natively yet: its place on the sheet, and what it is.
-                    dashed_rect(&painter, rect, GUIDE_ON_PAPER);
-                    painter.text(rect.left_top() + vec2(2.0, 2.0), Align2::LEFT_TOP, &item.kind,
-                                 FontId::proportional(TYPE_META), FAINT);
+                    let place = crate::sheet_display::Place { origin: rect.min, zoom: self.zoom };
+                    crate::sheet_display::paint(&painter, ctx, &mut self.pictures, &item.data["display"], place);
                 }
             }
         }
@@ -589,13 +616,13 @@ impl Page {
         let painter = ctx.layer_painter(egui::LayerId::background()).with_clip_rect(screen);
         if let Some(h) = self.hover.filter(|h| !self.selection.contains(h)) {
             if let Some(i) = self.item(h) {
-                painter.rect_stroke(self.screen_rect(self.rect_of(i)), 0, Stroke::new(1.0_f32, ACCENT.gamma_multiply(0.5)), egui::StrokeKind::Outside);
+                painter.rect_stroke(self.screen_rect(self.ink_of(i)), 0, Stroke::new(1.0_f32, ACCENT.gamma_multiply(0.5)), egui::StrokeKind::Outside);
             }
         }
         let single = self.selection.len() == 1;
         for k in &self.selection {
             let Some(i) = self.item(*k) else { continue };
-            let r = self.screen_rect(self.rect_of(i));
+            let r = self.screen_rect(self.ink_of(i));
             painter.rect_stroke(r, 0, Stroke::new(1.5_f32, ACCENT), egui::StrokeKind::Outside);
             if single && !i.locked && i.editable {
                 let only_width = i.kind == "text";
@@ -748,42 +775,6 @@ impl Page {
         painter.rect_stroke(rect, 0, border, egui::StrokeKind::Middle);
         if t["double_border"].as_bool().unwrap_or(false) {
             painter.rect_stroke(rect.shrink(1.2 * z), 0, Stroke::new(grid.width, line), egui::StrokeKind::Middle);
-        }
-    }
-
-    fn paint_shape(&self, painter: &egui::Painter, item: &Item, rect: Rect) {
-        let s = &item.data["shape"];
-        let z = self.zoom;
-        let stroke = Stroke::new((s["stroke_mm"].as_f64().unwrap_or(0.35) as f32 * z).max(0.6),
-                                 hex(s["color"].as_str().unwrap_or(""), INK_ON_PAPER));
-        let fill = if s["fill"].as_bool().unwrap_or(false) { hex(s["fill_color"].as_str().unwrap_or(""), Color32::WHITE) } else { Color32::TRANSPARENT };
-        let invert = s["invert"].as_bool().unwrap_or(false);
-        let (a, b) = if invert { (rect.left_bottom(), rect.right_top()) } else { (rect.left_top(), rect.right_bottom()) };
-        match s["shape"].as_str().unwrap_or("rect") {
-            "linea" | "terreno" => { painter.line_segment([a, b], stroke); }
-            "flecha" => {
-                painter.line_segment([a, b], stroke);
-                let d = (b - a).normalized();
-                let n = vec2(-d.y, d.x);
-                let head = 3.0 * z;
-                painter.add(egui::Shape::convex_polygon(vec![b, b - d * head + n * head * 0.4, b - d * head - n * head * 0.4], stroke.color, Stroke::NONE));
-            }
-            "elipse" => {
-                painter.add(egui::Shape::ellipse_filled(rect.center(), rect.size() / 2.0, fill));
-                painter.add(egui::Shape::ellipse_stroke(rect.center(), rect.size() / 2.0, stroke));
-            }
-            "poligono" => {
-                let n = s["sides"].as_i64().unwrap_or(6).clamp(3, 24) as usize;
-                let pts: Vec<Pos2> = (0..n).map(|k| {
-                    let t = std::f32::consts::TAU * k as f32 / n as f32 - std::f32::consts::FRAC_PI_2;
-                    rect.center() + vec2(t.cos() * rect.width() / 2.0, t.sin() * rect.height() / 2.0)
-                }).collect();
-                painter.add(egui::Shape::convex_polygon(pts, fill, stroke));
-            }
-            _ => {
-                let r = (s["radius_mm"].as_f64().unwrap_or(0.0) as f32 * z).min(255.0) as u8;
-                painter.rect(rect, r, fill, stroke, egui::StrokeKind::Middle);
-            }
         }
     }
 }

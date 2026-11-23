@@ -318,7 +318,10 @@ class Workspace:
     # ---- The page (ingetrazo_core sheets::page → ingetrazo_render ui/page.rs) ------
     def _send_page(self, renderer) -> None:
         import ingetrazo_core as NATIVE
-        page = NATIVE.sheet_page_json(self.composer.comp)
+        comp = self.composer
+        # Terrain profiles: the composer samples the ground under their path.
+        profiles = {m._doc_key: comp.profile_for(m) for m in comp.comp.perfiles} or None
+        page = NATIVE.sheet_page_json(comp.comp, profiles)
         if page != self._page:
             self._page = page
             renderer.page_set(page)
@@ -668,9 +671,7 @@ class Workspace:
             scale = "No scale" if getattr(frame, "perspective", False) else format_scale(frame.scale_n)
         mode = comp.tool_mode if comp.tool_mode in NATIVE_TOOLS else "select"
         tool = comp.TOOL_NAMES.get(mode, mode)
-        hint = comp.statusBar().currentMessage()
-        if not hint:
-            hint = next((tip for m, _i, tip, _d in comp.TOOLS if m == mode), "")
+        hint = comp.statusBar().currentMessage()   # a passing message; the page says the rest
         renderer = getattr(self.view, "renderer", None)
         at = renderer.page_pointer_mm() if renderer is not None else None
         cursor = f"x: {at[0]:.1f} mm  y: {at[1]:.1f} mm" if at else ""

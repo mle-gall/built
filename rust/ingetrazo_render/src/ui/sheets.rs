@@ -434,6 +434,8 @@ impl Ui {
     fn sheets_bottom(&mut self, ctx: &egui::Context, screen: Rect, retract: f32) {
         let mut out: Vec<String> = Vec::new();
         let tool_icon = self.sheets.tools.iter().flatten().find(|t| t.id == self.sheets.active).and_then(|t| t.icon.clone());
+        // A passing message from Python (an export done) wins; else the page says what it does.
+        let hint = if self.sheets.hint.is_empty() { self.page.hint().to_string() } else { self.sheets.hint.clone() };
         let s = &mut self.sheets;
         // Same place and id as the model's bar: the band above it is the same.
         egui::Area::new(egui::Id::new("bottom"))
@@ -470,7 +472,7 @@ impl Ui {
                         let cursor = ui.painter().layout_no_wrap(s.cursor.clone(), meta(), FAINT);
                         let right_w = cursor.size().x + 16.0 + 9.0 + 64.0 + 4.0 + 40.0;
                         let room = (ui.available_width() - right_w - 8.0).max(40.0);
-                        let mut job = egui::text::LayoutJob::single_section(s.hint.clone(), egui::TextFormat {
+                        let mut job = egui::text::LayoutJob::single_section(hint.clone(), egui::TextFormat {
                             font_id: body(), color: DIM, ..Default::default() });
                         job.wrap.max_width = room;
                         job.wrap.max_rows = 1;
