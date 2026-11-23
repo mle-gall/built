@@ -517,7 +517,11 @@ def geometry_steps(work):
     # The cap and both wall rings share the outer push/pull transaction.
     sheet = mesh.add_face(rectangle(800, 0, 5, 5), [rectangle(801, 1, 1, 1)])
     sheet.attrs["color"] = [0.2, 0.7, 0.4]
+    store = getattr(mesh, "_store", None)
+    version, serial, revision = scene.version, mesh._mut_serial, getattr(store, "revision", 0)
     assert commands.push_pull(h, sheet.key, 1.)["ok"]
+    band_revisions = [scene.version - version, mesh._mut_serial - serial,
+                      getattr(store, "revision", 0) - revision]
     out.append(state())
     face_ids = [f.key for f in mesh.faces]
     assert h.undo()
@@ -538,7 +542,8 @@ def geometry_steps(work):
         path = work / f"edited-geometry.{ext}"
         igz.save_scene(scene, path, backup=False)
         archives[ext] = hashlib.sha256(path.read_bytes()).hexdigest()
-    return {"states": out, "archive_hashes": archives, "draw_revisions": draw_revisions, "rejection": rejection}
+    return {"states": out, "archive_hashes": archives, "draw_revisions": draw_revisions,
+            "band_revisions": band_revisions, "rejection": rejection}
 
 
 def anchor_steps(work):
