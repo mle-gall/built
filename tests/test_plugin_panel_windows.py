@@ -61,7 +61,7 @@ def test_qt_metal_uses_native_panels():
     from core.plugin_panels import open_panel
     from views.main_window import MainWindow
     if QGuiApplication.platformName() != "cocoa" or os.environ.get("INGETRAZO_WGPU") != "1":
-        pytest.skip("run with QT_QPA_PLATFORM=cocoa INGETRAZO_WGPU=1 BUILT_UI=1")
+        pytest.skip("run with QT_QPA_PLATFORM=cocoa INGETRAZO_WGPU=1")
     win = MainWindow()
     try:
         win.show()

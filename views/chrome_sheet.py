@@ -4,7 +4,7 @@ or set something bigger than a menu — the Library, the start page,
 Settings; later the one-off Export, the Extension Manager, About.
 
 ``rust/ingetrazo_render/src/ui/large_sheet.rs`` draws it in the Metal
-frame (the Qt app with ``BUILT_UI=1`` and the native ``built`` shell
+frame (the Qt app and the native ``built`` shell
 alike): a sheet hung under the top bar over the dimmed, blurred model, with
 a header (title, tabs, verbs, menus, search, close), a side list, a content
 pane, an optional detail pane and an optional footer. The pattern and its
@@ -55,8 +55,8 @@ key but the window's ⌘ shortcuts (⌘K, ⌘O, ⌘W, ⌘Q…). Esc closes the
 innermost thing (a menu, a field, the search text), then the sheet; the
 model's view gets the keyboard back.
 
-Where the chrome cannot draw (``BUILT_UI=0``, the GL view, offscreen test
-runs) :func:`open` returns False and the caller shows its Qt fallback.
+The host can install a provider offscreen with :func:`present`. Interactive
+hosts release an undrawn sheet and report the missing frame.
 """
 from __future__ import annotations
 
@@ -64,7 +64,7 @@ import json
 import sys
 
 SEP = "\x1f"
-#: Asked for and not drawn this long after: the provider's fallback runs.
+#: Asked for and not drawn this long after: close the sheet.
 WATCHDOG_MS = 2000
 
 
@@ -251,7 +251,7 @@ class Sheet:
 class Provider:
     """One surface on the sheet. Override :meth:`build` and :meth:`act`."""
     id = ""
-    #: Run :meth:`fallback` when no frame drew the sheet in time.
+    #: Close the sheet if no frame draws it in time.
     watchdog = True
 
     def build(self, ctx) -> Sheet:

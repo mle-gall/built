@@ -12,11 +12,8 @@ Two surfaces, both drawn by ``rust/ingetrazo_render/src/ui.rs``:
   progress and Cancel when the work can stop. Notices fade below it.
   The capsule retains recent results and notice actions.
 
-Everything here falls back to Qt (returns ``None``, or a real
-``QProgressDialog``) when the chrome is not on screen to answer: the UI
-off (``BUILT_UI=0``), headless and test runs (offscreen platform, window
-never shown), a Qt modal dialog already up, a parent that is not the main
-window, or no frame drawn within :data:`WATCHDOG_MS` of posting.
+Custom questions use the sheet and cancel when there is no frame.
+Standard message-box wrappers still have Qt callers.
 
 Blocking answers
 ----------------
@@ -41,8 +38,7 @@ blocking call works there too. Forms (``views/chrome_forms.py``) and
 :func:`ask_later` never block at all: they take a continuation
 (``done(answer)``) that the chrome's click calls on a later turn, so the
 window's ordinary input (typing into a field) keeps flowing through the
-host while they are up. With no chrome on screen they fall back to a Qt
-dialog run inline (``done`` has run when they return).
+host while they are up.
 """
 from __future__ import annotations
 
@@ -55,9 +51,9 @@ from PySide6.QtCore import QEvent, QEventLoop, QObject, QTimer, Signal
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QApplication, QMessageBox, QWidget
 
-#: A sheet nobody has seen drawn this long after posting goes to Qt instead.
+#: Cancel if the sheet has still not been drawn after this interval.
 WATCHDOG_MS = 1500
-_FALLBACK = object()
+_UNDRAWN = object()
 _ids = itertools.count(1)
 
 
@@ -89,7 +85,7 @@ def view_of(win):
 
 def live(parent):
     """The Metal view whose chrome can show a sheet for ``parent`` now,
-    or ``None`` (then the caller uses Qt)."""
+    or ``None`` if a blocking question cannot be drawn."""
     if QGuiApplication.platformName() in ("offscreen", "minimal"):
         return None
     win = window_of(parent)
@@ -176,8 +172,7 @@ def _roles(buttons, default, cancel, discard):
 def ask(parent, title: str, text: str, buttons, *, default=None, cancel=None,
         discard=None, tone: str = "question", checklist=None):
     """Show a sheet and wait for its answer: the id of the button chosen,
-    or ``cancel``'s id on Esc. ``None`` when the chrome cannot show it, and
-    the caller then asks with Qt.
+    or ``cancel``'s id on Esc or a missing frame.
 
     ``buttons``: [(id, label)] in reading order. ``default`` answers Enter,
     ``cancel`` answers Esc, ``discard`` answers ⌘D and sits apart on the
@@ -197,10 +192,10 @@ def ask(parent, title: str, text: str, buttons, *, default=None, cancel=None,
 
     def watchdog():
         # Nothing drew the sheet (no frame came: the window was covered,
-        # the surface lost): Qt asks instead, so the caller is never stuck.
+        # the surface lost): release the caller.
         if not sheet.shown and getattr(view, "_ui_frames", 0) == frames \
                 and sheet.answer is None:
-            sheet.answer = _FALLBACK
+            sheet.answer = _UNDRAWN
             loop.quit()
 
     dog = QTimer(singleShot=True)
@@ -212,7 +207,7 @@ def ask(parent, title: str, text: str, buttons, *, default=None, cancel=None,
     finally:
         dog.stop()
         _pop(win, sheet)
-    if sheet.answer is _FALLBACK:
+    if sheet.answer is _UNDRAWN:
         win.viewport.flash_status(f"Built could not draw the question: {title}")
         return cancel
     if sheet.answer is None:

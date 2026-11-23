@@ -1,10 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""The start page (views/wgpu_start.py): a large sheet (views/chrome_sheet.py)
-drawn by the Built chrome when it can, the Qt Home dialog when it cannot;
-what it sends the sheet; what its actions do. Offscreen there is no Metal
-frame: ``available`` is forced and a stand-in renderer records the sheet's
-JSON (the layout, Esc and the arrow keys are tested in Rust,
-ui/large_sheet.rs)."""
+"""Exercise the Start provider and its actions with an offscreen chrome renderer."""
 from __future__ import annotations
 
 import json

@@ -433,7 +433,7 @@ def test_right_click_inside_the_selection_keeps_it(host, kinds, monkeypatch):
 
 
 def test_with_the_chrome_the_menu_goes_to_it(host, kinds, monkeypatch):
-    """The chrome's path (native app, BUILT_UI=1): WgpuView's right-click
+    """The chrome's path (native and Qt hosts): WgpuView's right-click
     hands the rows to the renderer, and ctx:<id> runs the verb."""
     from views import wgpu_ui
     box = kinds["group"][0]

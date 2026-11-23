@@ -1518,7 +1518,7 @@ class MetalView(ViewNavigation):
         if source is None:
             return
         point = event.pos()
-        # With the chrome on (the native app, or BUILT_UI=1), the menu is the
+        # With the chrome on (the native app, or the Qt host), the menu is the
         # chrome's: only the verbs for what was hit (docs/context-menu.md).
         # A right-click on the chrome itself is the chrome's own.
         from views import context_menu

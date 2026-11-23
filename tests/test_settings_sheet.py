@@ -2,7 +2,7 @@
 """Settings as a large sheet (views/settings_sheet.py): its sections and
 their two groups, the search across every section, changes applied at
 once (QSettings for Built, the document for This model), the 3D mouse and
-keyboard sections, and the Qt dialog where the chrome cannot draw.
+keyboard sections, and offscreen command dispatch.
 
 Offscreen there is no Metal frame: ``chrome_sheet.available`` is forced
 and a stand-in renderer records what the sheet sends."""

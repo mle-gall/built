@@ -15,7 +15,7 @@ draws them and reports ``ctx:<id>``. Nothing here implements a command:
   ``_on_intersect_faces(mode)``…), the one the classic QMenu, the menu bar
   and the selection bar call.
 
-The classic app with ``BUILT_UI=0`` keeps
+Some Qt-host callers still use
 ``MainWindow.show_viewport_context_menu`` (a QMenu).
 """
 from __future__ import annotations
@@ -713,7 +713,7 @@ def action(win, view, vid) -> bool:
 
 def chrome_menu_available(view) -> bool:
     """Whether this view's chrome draws the right-click menu (the native
-    shell, or the Qt app with BUILT_UI=1 on Metal)."""
+    shell, or the Qt app on Metal)."""
     renderer = getattr(view, "renderer", None)
     return (getattr(view, "_ui_attached", False)
             and hasattr(renderer, "ui_set_context_menu") and hasattr(renderer, "ui_over_chrome"))

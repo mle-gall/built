@@ -20,14 +20,13 @@ its model, its tools and its undo; only where it is seen changes:
   mirror the composer's own panel widgets, so every edit goes through the
   slot the Qt panel uses (undo, re-render, cache invalidation).
 
-It works the same in the Qt app (``BUILT_UI`` on, Metal) and in the native
+It works the same in the Qt app (Metal) and in the native
 ``built`` shell (app_shell/), where Qt is an offscreen library: no Qt
 widget is ever shown (the shell's own guard, app_shell/qt_host.py, closes
 any window the composer would still open, and its file pickers are the
 native panels). Deleting a sheet is asked in the dock. What the dock does
 not cover yet opens in the classic sheet editor (the Qt window in the Qt
-app, the classic app from the shell). With ``BUILT_UI=0`` (or the GL view)
-the composer stays the Qt window it always was.
+app, the classic app from the shell).
 
 The long-term plan ports sheets to Rust (docs/rust-port-plan.md, R3 / S3):
 this adapter is deliberately thin, and the composer's model and logic stay

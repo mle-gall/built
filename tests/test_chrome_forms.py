@@ -12,9 +12,9 @@ import sys
 import types
 
 import pytest
-from PySide6.QtCore import QEvent, Qt, QTimer
+from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QKeyEvent
-from PySide6.QtWidgets import QApplication, QDialog, QInputDialog, QMessageBox
+from PySide6.QtWidgets import QApplication, QInputDialog
 
 from views import chrome_dialogs as cd
 from views import chrome_forms as cf

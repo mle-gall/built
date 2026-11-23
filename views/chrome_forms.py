@@ -11,11 +11,8 @@ widgets and no Qt event loop of its own (see ``views/chrome_dialogs.py``,
   reports every edit (Python always holds what is on screen) and the
   button pressed; ``on_done(answer, values)`` then runs, on a later turn
   of whichever loop drives the window. No nested ``exec()`` anywhere.
-* When the chrome is not on screen (``BUILT_UI=0``, the classic app,
-  headless tests, a parent that is a Qt dialog) the same form runs as a
-  Qt dialog built from its fields (:func:`_qt_exec`), inline: ``on_done``
-  has run when :func:`show` returns. Callers that keep a richer Qt
-  dialog (Preferences) ask :func:`available` first and open that.
+* Offscreen Qt hosts expose the same form model. A missing host or a
+  failed frame cancels the form and reports the failure.
 
 So a caller writes its continuation once::
 
@@ -170,7 +167,7 @@ class Form:
             _repaint(self.win)
 
     def receive(self, fid, raw: str) -> None:
-        """An edit from the chrome (or the Qt fallback): typed into its value."""
+        """An edit from the chrome: typed into its value."""
         f = self.field(fid)
         if f is None:
             return
@@ -352,9 +349,7 @@ def _repaint(win) -> None:
 
 
 def _watch(view, win, form) -> None:
-    """The sheet's watchdog: no frame drew the form in time (the window
-    covered, the surface lost) → it runs as a Qt dialog instead. Never in
-    the shell, which has no Qt dialog to fall back to."""
+    """Cancel a form that was never drawn."""
     from views import chrome_dialogs
     if chrome_dialogs.in_shell():
         return
