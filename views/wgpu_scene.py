@@ -284,7 +284,7 @@ def _placement_state(scene):
     from core.group import effective_material
     from core.layers import object_layer
     from core.materials import material_sig
-    from views.viewport import _paint_of
+    from views.document_interaction import _paint_of
     vp = SimpleNamespace(scene=scene)
     visibility, paints = {}, {}
 
@@ -359,7 +359,7 @@ def _placement_records(scene, roots, vp, state):
     """Read the tree from the Rust
     document in one call (``doc_tree``): handles, parents, f64 matrices and
     Hide flags as arrays, no attribute read per placement for them."""
-    from views.viewport import DocumentInteraction
+    from views.document_interaction import DocumentInteraction
     from core import doc_model
     handles, parent, local, has, own_hidden = doc_model.NATIVE.doc_tree(roots)
     world, defined = _doc_worlds(local, has, parent)
@@ -414,7 +414,7 @@ def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=Tru
         resource = None
     begin = perf_counter()
     state = _placement_state(scene)
-    from views.viewport import _paint_of, DocumentInteraction
+    from views.document_interaction import _paint_of, DocumentInteraction
     vp = SimpleNamespace(scene=scene)
     texture_ids = {}
     meshes, lookup, rows, uids, paints = [], {}, [], [], []

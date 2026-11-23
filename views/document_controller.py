@@ -1,6 +1,6 @@
 """Document editing over a Metal window supplied by either application."""
 from views.view_host import WidgetShim
-from views.viewport import DocumentInteraction
+from views.document_interaction import DocumentInteraction
 
 
 class DocumentController(DocumentInteraction, WidgetShim):
@@ -23,6 +23,16 @@ class DocumentController(DocumentInteraction, WidgetShim):
 
     def mapFromGlobal(self, point):
         return self.keys_stand_in.mapFromGlobal(point)
+
+    def reset_texture_cache(self):
+        self.reset_document_caches()
+        self.update()
+
+    def _depth_world_at(self, x, y):
+        display = self.keys_stand_in
+        if display is not None and display.renderer is not None:
+            return display._depth_world_at(x, y)
+        return None
 
     def upload_terrain(self, terrain):
         self._reference_revision = getattr(self, '_reference_revision', 0) + 1

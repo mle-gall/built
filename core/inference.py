@@ -40,7 +40,7 @@ from core.snap import COLOR_NONE, SnapResult, compute_snap
 def _no_snap_fast() -> bool:
     """The viewport's ``INGETRAZO_NO_SNAP_FAST`` switch (batched occlusion
     off, for A/B timing), read at call time to avoid a circular import."""
-    from views import viewport as _viewport
+    from views import document_interaction as _viewport
     return bool(getattr(_viewport, "_NO_SNAP_FAST", False))
 
 

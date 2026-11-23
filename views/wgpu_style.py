@@ -15,7 +15,7 @@ def style_payload(scene, override=None, *, horizon=2.0, scale=1.0, edit_rest_fad
     Preferences level (#1281)."""
     style = override or getattr(scene, 'display_style', None) or Style()
     result = style.to_dict()
-    from views.viewport import edit_fade_color
+    from views.document_interaction import edit_fade_color
     result['fade'] = float(edit_rest_fade)
     result['fade_color'] = edit_fade_color(style.background)
     result['back_color'] = effective_back_color(style, scene)
@@ -59,7 +59,7 @@ def sun_payload(scene, *, override=None, soft_shadows=0, camera=None):
     import datetime
     import os
     from core import sun
-    from views.viewport import DocumentInteraction, SOFT_SHADOW_SPREAD
+    from views.document_interaction import DocumentInteraction, SOFT_SHADOW_SPREAD
     result = dict(shadows=False, sun_direction=(0., 0., 1.),
                   shadow_darkness=0.55, ground_shadows=True,
                   shadow_soft=0.0)

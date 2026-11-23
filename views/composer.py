@@ -10804,7 +10804,7 @@ class ComposerWindow(QMainWindow):
         paper). ``orbit`` is the older two-state spelling."""
         mode = mode or ("orbit" if orbit else "pan")
         frame = item.model
-        from views.viewport import _load_invert_orbit_y
+        from views.document_interaction import _load_invert_orbit_y
         self._view_drag = {"item": item, "orbit": mode == "orbit",
                            "mode": mode,
                            "invert_y": _load_invert_orbit_y(),

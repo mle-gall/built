@@ -2434,7 +2434,7 @@ class OutlinerPanel(QWidget):
         from core.section import effective_fill
         from core.units import fmt_len
         from views import prompts
-        from views.viewport import _parse_length_field
+        from views.document_interaction import _parse_length_field
         _p, _c, spacing = effective_fill(
             plane, getattr(self._scene(), "display_style", None))
         text, ok = prompts.get_text(self, tr("Hatch spacing"),
@@ -3944,7 +3944,7 @@ class OutlinerPanel(QWidget):
                                        QFormLayout)
         from core.composition import format_scale, parse_scale
         from core.units import fmt_len
-        from views.viewport import _parse_length_field
+        from views.document_interaction import _parse_length_field
         dlg = QDialog(self)
         dlg.setWindowTitle(tr("Plan of {name}", name=group.name))
         form = QFormLayout(dlg)

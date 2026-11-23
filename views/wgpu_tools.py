@@ -235,7 +235,7 @@ class NativeTools(MeshToolAccess):
 
     def key(self, event):
         if self.mode == 'mesh':
-            from views.viewport import DocumentInteraction
+            from views.document_interaction import DocumentInteraction
             self._value_buffer = self.value_buffer
             if DocumentInteraction._handle_value_key(self, event):
                 self.value_buffer = self._value_buffer
@@ -248,7 +248,7 @@ class NativeTools(MeshToolAccess):
         return False
 
     def _current_token_tail(self):
-        from views.viewport import DocumentInteraction
+        from views.document_interaction import DocumentInteraction
         return DocumentInteraction._current_token_tail(self)
 
     def _array_pending(self):
@@ -266,7 +266,7 @@ class NativeTools(MeshToolAccess):
             signal.emit(value)
 
     def _parse_value_buffer(self, *args, **kwargs):
-        from views.viewport import DocumentInteraction
+        from views.document_interaction import DocumentInteraction
         return DocumentInteraction._parse_value_buffer(*args, **kwargs)
 
     def write_rows(self, rows):
@@ -358,11 +358,11 @@ class NativeTools(MeshToolAccess):
 
     def pick_guide(self, x, y):
         # These shared projection-only pickers never read GL caches.
-        from views.viewport import DocumentInteraction
+        from views.document_interaction import DocumentInteraction
         return DocumentInteraction.pick_guide(self, x, y) if self.scene is not None else None
 
     def pick_axis(self, x, y):
-        from views.viewport import DocumentInteraction
+        from views.document_interaction import DocumentInteraction
         return DocumentInteraction.pick_axis(self, x, y) if self.scene is not None else None
 
     def width(self):

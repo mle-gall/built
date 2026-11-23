@@ -336,7 +336,7 @@ def surface(index, row, origin, direction, limit=float('inf')):
 def surface_hit(index, row, origin, direction, limit=float('inf')):
     """:func:`surface` and the unit normal of the triangle it hit, from the
     same candidates: ``(point, normal)`` or ``None``."""
-    from views.viewport import _moller_trumbore
+    from views.document_interaction import _moller_trumbore
     rows = np.asarray(row, np.int64).reshape(-1)
     rows = rows[(rows >= 0) & (rows < len(index.packed.instances))]
     rows = rows[(index.packed.instances['info'][rows, 2] & 129) == 0]
@@ -359,7 +359,7 @@ def packed_surface(packed, row, origin, direction):
     (seconds on the ride) and dropped on edits and at open; the orbit pivot
     and the zoom fell back to the middle of the model meanwhile, so the view
     turned about a point nowhere near the cursor."""
-    from views.viewport import _moller_trumbore
+    from views.document_interaction import _moller_trumbore
     if row is None or not 0 <= int(row) < len(packed.instances):
         return None
     info = packed.instances['info'][int(row)]
@@ -500,7 +500,7 @@ def _screen_rows(index, packed, mvp, width, height, x, y, radius, rows):
 
 
 def context_hit(view, context, x, y):
-    from views.viewport import _moller_trumbore
+    from views.document_interaction import _moller_trumbore
     index = view.inference_index
     rows = np.asarray(view._rows_for_group(context), np.int64)
     flags = view.packed.instances['info'][rows, 2]
@@ -592,7 +592,7 @@ def nearby_edges(index, packed, camera, width, height, x, y, *,
 
 def scene_edges(view):
     """Guides, guide points and selectable image borders using GL clipping."""
-    from views.viewport import DocumentInteraction, shown_guides
+    from views.document_interaction import DocumentInteraction, shown_guides
     result = []
     tool = getattr(getattr(view, 'tools', None), 'tool', None)
     moving = getattr(tool, 'moving_guide_ids', lambda: ())()
@@ -621,7 +621,7 @@ def reference_edge(index, view, x, y, radius_px=None):
     edges = nearby_edges(index, view.packed, view.camera, view.width(), view.height(),
                          x, y, radius_px=radius, cap=48,
                          edit_group=view.scene.edit_group)
-    from views.viewport import DocumentInteraction
+    from views.document_interaction import DocumentInteraction
     for edge in edges:
         pa, pb = view._world_to_pixel(edge.a), view._world_to_pixel(edge.b)
         if pa is None or pb is None:
@@ -849,7 +849,7 @@ def snap(index, row, view, x, y, *, work_point=..., **options):
     options.setdefault('are_occluded', hidden_many)
     options.setdefault('face_under_cursor', on_face)
     # Like GL's _pixel_projector: one matrix per query, not per candidate.
-    from views.viewport import DocumentInteraction
+    from views.document_interaction import DocumentInteraction
     mvp = view.camera.projection_matrix() * view.camera.view_matrix()
     project = lambda p: DocumentInteraction._world_to_pixel(view, p, mvp)
     project.snap_projection = (mvp.data(), (view.width(), view.height()))
@@ -948,7 +948,7 @@ def on_surface(index, view, row, point, project=None):
 def _front_at(index, view, x, y, rows, mvp):
     """``(point, unit normal, row)`` of the front surface at pixel
     ``(x, y)``, asked of the placements whose screen box holds the pixel."""
-    from views.viewport import _moller_trumbore
+    from views.document_interaction import _moller_trumbore
     origin, direction = view._pixel_to_ray(x, y)
     if origin is None or direction is None:
         return None
@@ -996,7 +996,7 @@ def face_crossing(index, view, x, y, row, point, normal, rows, project, context)
     face's — the two really meet there, in view. A view knows triangles,
     not faces: a plane stands for the face (two coplanar faces meeting the
     same third one meet it along the same line)."""
-    from views.viewport import DocumentInteraction, _active_cut, _moller_trumbore
+    from views.document_interaction import DocumentInteraction, _active_cut, _moller_trumbore
     if _active_cut(view.scene) is not None:
         return None
     origin, direction = view._pixel_to_ray(x, y)
@@ -1081,7 +1081,7 @@ def start_edges(index, view, start, rows):
     cached = getattr(index, 'start_edges_cache', None)
     if cached is not None and cached[0] == key:
         return cached[1]
-    from views.viewport import DocumentInteraction
+    from views.document_interaction import DocumentInteraction
     pixel = DocumentInteraction._world_to_pixel(view, start, mvp)
     found = []
     if pixel is not None:
@@ -1123,7 +1123,7 @@ def _acquire(engine, view, edges, on_face, point, face_normal,
                        and e.distance <= reach
                        and (e.b - e.a).lengthSquared() > 1e-18),
                       key=lambda e: e.distance)
-        from views.viewport import DocumentInteraction
+        from views.document_interaction import DocumentInteraction
         for e in near[:3]:
             delta = e.b - e.a
             foot = DocumentInteraction._project_to_lock_line(view, e.a, delta, x, y)
@@ -1157,7 +1157,7 @@ def face_centers_near(view, x, y, on_face, project, *, acquire=False):
     selected faces near it."""
     from core.mesh import Face, face_count
     from core.snap import face_center_of_face
-    from views.viewport import DocumentInteraction
+    from views.document_interaction import DocumentInteraction
     reach = DocumentInteraction.POINT_INFERENCE_PX
     tools = getattr(view, 'tools', None)
     tool = getattr(tools, 'tool', None)

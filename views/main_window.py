@@ -8150,7 +8150,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         _axes.sync(getattr(vp.scene, "drawing_frame", None))
         self._forget_panel_caches()
         # View preferences changed while this tab was in the back.
-        from views.viewport import _load_edit_rest_mode
+        from views.document_interaction import _load_edit_rest_mode
         vp.set_edit_rest_mode(_load_edit_rest_mode())
         self._activate_tool("select")
         self._forget_coordinate()

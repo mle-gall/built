@@ -131,7 +131,7 @@ class TapeMeasureTool(Tool):
         """Picking T over a line starts its guide without a first click."""
         from PySide6.QtCore import QPointF
         from PySide6.QtGui import QCursor
-        from views.viewport import _HoverEvent
+        from views.document_interaction import _HoverEvent
         if self.start_point is not None or self._mode != "line":
             return False
         pixel = viewport.mapFromGlobal(QCursor.pos())

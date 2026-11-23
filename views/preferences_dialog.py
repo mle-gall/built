@@ -637,7 +637,7 @@ class PreferencesDialog(QDialog):
 
         # Soft sun shadows (#1281): off by default, they cost the graphics
         # card more on every frame while the sun casts shadows.
-        from views.viewport import SOFT_SHADOW_SPREAD
+        from views.document_interaction import SOFT_SHADOW_SPREAD
         row = QHBoxLayout()
         self._soft_shadows = QCheckBox(tr("Soft sun shadows"))
         self._soft_shadows.setToolTip(tr(
@@ -1322,7 +1322,7 @@ class PreferencesDialog(QDialog):
         if self._glass is not None:
             self._glass.setChecked(True)
         pick(self._rest, "fade")
-        from views.viewport import EDIT_REST_FADE
+        from views.document_interaction import EDIT_REST_FADE
         self._rest_fade.setValue(round(EDIT_REST_FADE * 100))
         self._autosave.setChecked(True)
         self._autosave_min.setValue(5)

@@ -420,7 +420,7 @@ def _box_source(viewport, pg):
     xf = getattr(pg, "xform", None)
     if xf is None or getattr(pg, "mesh", None) is None:
         return viewport._group_chunk(pg), None, None
-    from views.viewport import _paint_of, _placed_maps, _proto_wrapper
+    from views.document_interaction import _paint_of, _placed_maps, _proto_wrapper
     base = viewport._group_chunk(
         _proto_wrapper(viewport, pg.mesh, _paint_of(viewport, pg)))
     cur = (getattr(viewport, "_inst_chunks", None) or {}).get(id(pg))
@@ -494,7 +494,7 @@ def _placement_side(viewport, pg, rect):
         ch = viewport._group_chunk(pg)
         tp = None
     else:
-        from views.viewport import _paint_of, _placed_maps, _proto_wrapper
+        from views.document_interaction import _paint_of, _placed_maps, _proto_wrapper
         ch = viewport._group_chunk(
             _proto_wrapper(viewport, pg.mesh, _paint_of(viewport, pg)))
         tp = _placed_maps(xf)[2]

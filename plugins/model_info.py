@@ -51,8 +51,8 @@ from core.units import fmt_area, fmt_volume
 
 def _fmt_len(metres: float, style: dict) -> str:
     """A length in the document's dimension style (Viewport's formatter)."""
-    from views.viewport import Viewport
-    return Viewport._format_dim_value(metres, style)
+    from views.document_controller import DocumentController
+    return DocumentController._format_dim_value(metres, style)
 
 
 def _collect_stats(scene) -> dict:

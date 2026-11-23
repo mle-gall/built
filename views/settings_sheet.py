@@ -402,7 +402,7 @@ def _navigation(env) -> list:
 
 
 def _display(env) -> list:
-    from views.viewport import EDIT_REST_FADE, SOFT_SHADOW_SPREAD
+    from views.document_interaction import EDIT_REST_FADE, SOFT_SHADOW_SPREAD
     p = _p()
 
     def msaa(env):

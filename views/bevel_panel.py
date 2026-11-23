@@ -235,8 +235,8 @@ class BevelPanel(QFrame):
     def _amount_typed(self) -> None:
         if self._syncing:
             return
-        from views.viewport import Viewport
-        value = Viewport._parse_value_buffer(self.amount.text())
+        from views.document_controller import DocumentController
+        value = DocumentController._parse_value_buffer(self.amount.text())
         if isinstance(value, (int, float)) and value > 0:
             self.tool.set_size(self._viewport, float(value))
         self.sync()

@@ -38,7 +38,7 @@ from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QColor, QPainter, QPen
 from ingetrazo_core import Vec3 as QVector3D
 
-from views.viewport import DocumentInteraction, _guide_vertices, shown_guides
+from views.document_interaction import DocumentInteraction, _guide_vertices, shown_guides
 
 
 class AnnotationLayout:

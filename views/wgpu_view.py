@@ -843,7 +843,7 @@ class MetalView(ViewNavigation):
         if (source is None or packed is None or not len(packed.instances)
                 or self.tools.mode == 'mesh' or getattr(self, 'preview_faces', None)):
             return
-        from views.viewport import DocumentInteraction
+        from views.document_interaction import DocumentInteraction
         try:
             refused = DocumentInteraction._depth_fit_refused(source)
         except Exception:
@@ -857,7 +857,7 @@ class MetalView(ViewNavigation):
         """R3c-2a: reuse GL's frame, brackets and symbols at Metal's size."""
         from types import SimpleNamespace
         from PySide6.QtGui import QPainter
-        from views.viewport import DocumentInteraction
+        from views.document_interaction import DocumentInteraction
         context = SimpleNamespace(scene=self.scene, camera=self.camera,
                                   width=self.width, height=self.height)
         context.section_plane_frame = lambda sp: DocumentInteraction.section_plane_frame(context, sp)
@@ -1096,7 +1096,7 @@ class MetalView(ViewNavigation):
             inference._dwell_on(point)
         self.sync_selection()
         self.hover_ms = (time.perf_counter()-start)*1000
-        from views.viewport import _PERF, _plog
+        from views.document_interaction import _PERF, _plog
         if _PERF:
             _plog("hover", self.hover_ms, extra="renderer=wgpu id-local", floor=0.)
         self.update()
@@ -1129,7 +1129,7 @@ class MetalView(ViewNavigation):
         hidden_geometry(self)
 
     def _group_obb(self, group):
-        from views.viewport import DocumentInteraction
+        from views.document_interaction import DocumentInteraction
         shared = self._shared.__dict__
         boxes = shared.setdefault('_container_boxes', {})
         if group not in boxes:
@@ -1161,11 +1161,11 @@ class MetalView(ViewNavigation):
                 self._container_box_rows[group] = rows
 
     def _edit_group_box_corners(self):
-        from views.viewport import DocumentInteraction
+        from views.document_interaction import DocumentInteraction
         return DocumentInteraction._edit_group_box_corners(self)
 
     def edit_group_box_contains_pixel(self, x, y):
-        from views.viewport import DocumentInteraction
+        from views.document_interaction import DocumentInteraction
         return DocumentInteraction.edit_group_box_contains_pixel(self, x, y)
 
     def _leave_edit_on_empty_click(self, x, y, modifiers):
@@ -1411,7 +1411,7 @@ class MetalView(ViewNavigation):
             self.tools.hover(event)
         elif event.buttons() & Qt.LeftButton and (self.tools.mode == 'select' or mode == 'zoom_window'):
             from views import wgpu_overlay
-            from views.viewport import DocumentInteraction
+            from views.document_interaction import DocumentInteraction
             zoom = mode == 'zoom_window'
             # GL shows a selection box only past the drag threshold (a
             # click that jitters a pixel is no box); Zoom Window at once.
@@ -1550,7 +1550,7 @@ class MetalView(ViewNavigation):
         self.update()
 
     def _is_triple_click(self, event):
-        from views.viewport import DocumentInteraction
+        from views.document_interaction import DocumentInteraction
         return DocumentInteraction._is_triple_click(self, event)
 
     def event(self, event):
@@ -1569,7 +1569,7 @@ class MetalView(ViewNavigation):
                 return True
         if event.type() == QEvent.ShortcutOverride and hasattr(self, 'tools'):
             mode = self.tools.sync()
-            from views.viewport import DocumentInteraction
+            from views.document_interaction import DocumentInteraction
             target = self.tools if mode == 'mesh' else self.source_viewport
             if target is not None:
                 buffer = self.tools.value_buffer if mode == 'mesh' else target._value_buffer
@@ -1670,7 +1670,7 @@ class MetalView(ViewNavigation):
         return point if seen == 'hit' else None
 
     def _orbit_pivot_at(self, x, y):
-        from views.viewport import _ray_aabb_span
+        from views.document_interaction import _ray_aabb_span
         seen, point = self._depth_world_at(x, y)
         if seen == 'hit':
             return point
@@ -1683,7 +1683,7 @@ class MetalView(ViewNavigation):
 
     @_tool_frame
     def wheelEvent(self, event):
-        from views.viewport import DocumentInteraction
+        from views.document_interaction import DocumentInteraction
         self._invert_wheel = getattr(self.source_viewport, '_invert_wheel', False)
         DocumentInteraction.wheelEvent(self, event)
         self.update()
