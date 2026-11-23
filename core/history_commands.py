@@ -3,7 +3,8 @@
 """Model editing commands and their Python reference inverses."""
 from __future__ import annotations
 
-from ingetrazo_core import placement_edits as _placements, presentation as _presentation
+from ingetrazo_core import (definition_edits as _definitions, placement_edits as _placements,
+                            presentation as _presentation)
 
 from abc import ABC, abstractmethod
 from collections import Counter
@@ -4627,12 +4628,19 @@ class ReplaceComponentCommand(Command):
 
     def __init__(self, targets, source) -> None:
         self.source = source
-        self.targets = [g for g in targets
-                        if g is not source and g.is_component()
-                        and g.mesh is not source.mesh]
+        if _doc.ENABLED:
+            self.targets = _definitions.replacement_targets(targets, source)
+        else:
+            self.targets = [g for g in targets
+                            if g is not source and g.is_component()
+                            and g.mesh is not source.mesh]
         self._before: list = []
 
     def do(self, scene) -> None:
+        if _doc.ENABLED:
+            self._before = _definitions.replace_definitions(self.targets, self.source, self._SHARED, _doc.ENABLED)
+            scene.version += 1
+            return
         import copy
         from core.group import copy_group
         from ingetrazo_core import Matrix4 as QMatrix4x4
@@ -4664,6 +4672,10 @@ class ReplaceComponentCommand(Command):
         scene.version += 1
 
     def undo(self, scene) -> None:
+        if _doc.ENABLED:
+            _definitions.restore_definitions(self.targets, self._before)
+            scene.version += 1
+            return
         for g, before in zip(self.targets, self._before):
             for k, v in before.items():
                 setattr(g, k, v)
@@ -4686,6 +4698,10 @@ class KeepComponentCommand(Command):
         self._index = None
 
     def do(self, scene) -> None:
+        if _doc.ENABLED:
+            self._template, self._index = _definitions.keep_template(scene, self.instance, self.keep, self._template)
+            scene.version += 1
+            return
         from core.kept_components import kept_template, make_template
         current = kept_template(scene, self.instance.mesh)
         if self.keep and current is None:
@@ -4701,6 +4717,10 @@ class KeepComponentCommand(Command):
         scene.version += 1
 
     def undo(self, scene) -> None:
+        if _doc.ENABLED:
+            _definitions.restore_template(scene.kept_components, self._template, self.keep, self._index)
+            scene.version += 1
+            return
         if self._template is not None:
             if self.keep:
                 scene.kept_components.remove(self._template)
@@ -5240,6 +5260,14 @@ class MergeGroupsCommand(Command):
         self._merged = None
 
     def do(self, scene) -> None:
+        if _doc.ENABLED:
+            if self._merged is None:
+                self._merged = _definitions.merge_group_geometry(self._groups)
+            self._indices = _definitions.replace_roots(scene.groups, self._groups, self._merged, scene.selection.discard)
+            scene.selection.clear()
+            scene.selection.add(self._merged)
+            scene.version += 1
+            return
         import numpy as np
         from core.group import Group, world_mesh
         from core.mesh import Mesh
