@@ -476,3 +476,38 @@ def test_transparent_export_preserves_the_interactive_background(native, antiali
     assert rgba[0, 0, 3] == 0
     assert rgba[32, 32, 3] == 255
     np.testing.assert_array_equal(capture(native), live)
+
+
+def test_export_shadow_map_resolves_the_ground_shadow_edge(native):
+    from ingetrazo_core import Matrix4
+
+    vertices, indices, bounds, commands, rows = synthetic_pack(alpha=255)
+    vertices["pos"][:, :2] *= .45
+    vertices["pos"][:, 2] += .75
+    bounds[0, 0, :3] = [-.36, -.36, .35]
+    bounds[0, 1, :3] = [.36, .36, .75]
+    native.set_scene(tuple(x.view(np.uint8).ravel() for x in
+                           (vertices, indices, bounds, commands)), rows.view(np.uint8).ravel())
+    view = Matrix4()
+    view.translate(0, 0, -3)
+    projection = Matrix4()
+    projection.ortho(-1, 1, -1, 1, .1, 10)
+    light = Matrix4()
+    light.ortho(-64, 64, -64, 64, -4, 4)
+    light.rotate(30, 0, 1, 0)
+    style = dict(shadows=True, shadow_matrix=light.data(), sun_direction=(-.5,0,.866),
+                 ground_shadows=True, shadow_darkness=.15, edges=False, sky=False,
+                 background=(1.,1.,1.))
+    def frame(sharp):
+        pixels = native.render_image(256, 256, view.data(), projection.data(), style,
+                                     sharp_shadows=sharp)
+        return np.frombuffer(bytes(pixels), np.uint8).reshape(256, 256, 4)
+
+    normal = frame(False)
+    sharp = frame(True)
+    # Count penumbra pixels on the white ground beside the elevated red quad.
+    def transition(image):
+        r, g, b = image[128, :, :3].T
+        return np.count_nonzero((r == g) & (g == b) & (r > 65) & (r < 245))
+    assert 0 < transition(sharp) < transition(normal)
+    np.testing.assert_array_equal(normal, frame(False))

@@ -921,6 +921,7 @@ class MetalView(ViewNavigation):
             pixels = bytes(self.renderer.render_image(
                 width_px, height_px, tuple(view.data()), tuple(projection.data()), payload,
                 rows.view(np.uint8).reshape(-1),
+                **({'sharp_shadows': True} if sharp_shadows and payload['shadows'] else {}),
                 # A far clip set by hand; otherwise reverse-Z reaches to
                 # infinity (stand-in renderers need not know the flag).
                 **({'far_clip': True} if getattr(camera, 'clip_far', None) is not None else {})))

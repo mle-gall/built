@@ -527,7 +527,7 @@ impl Renderer {
             &[0; 256],
             wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
         );
-        let sun = sun::Sun::new(&device, format);
+        let sun = sun::Sun::new(&device, format, sun::LIVE_SIZE);
         let look = style::Style::new(&device);
         let preview = preview::Preview::new(&device, format, &camera, &look.buffer, 0);
         let face_marks = preview::Preview::new(&device, format, &camera, &look.buffer, 1);
@@ -1366,10 +1366,10 @@ impl Renderer {
     }
     /// Render with resident geometry and textures into isolated sheet targets.
     /// Surface configuration and interactive attachments are never replaced.
-    #[pyo3(signature = (width, height, view, projection, style, instances=None, far_clip=false))]
+    #[pyo3(signature = (width, height, view, projection, style, instances=None, far_clip=false, sharp_shadows=false))]
     fn render_image(&mut self, width: u32, height: u32, view: Vec<f32>,
                     projection: Vec<f32>, style: &Bound<'_, PyAny>, instances: Option<PyReadonlyArray1<'_, u8>>,
-                    far_clip: bool) -> PyResult<Vec<u8>> {
+                    far_clip: bool, sharp_shadows: bool) -> PyResult<Vec<u8>> {
         if width == 0 || height == 0 || width > self.device.limits().max_texture_dimension_2d
             || height > self.device.limits().max_texture_dimension_2d {
             return Err(PyValueError::new_err("invalid offscreen dimensions"));
@@ -1387,6 +1387,11 @@ impl Renderer {
                 return Err(PyValueError::new_err("capture rows may only change visibility and tint"));
             }
         }
+        let shadow_size = if sharp_shadows {
+            sun::EXPORT_SIZE.min(self.device.limits().max_texture_dimension_2d)
+        } else {
+            sun::LIVE_SIZE
+        };
         let format = self.config.format;
         let mut aa = antialias::Antialias::new(&self.device, format, &self.look.buffer, width, height);
         let mut transparency = xray::Xray::new(&self.device, format, width, height);
@@ -1406,7 +1411,7 @@ impl Renderer {
         // Keep the original resources alive until the transaction has completed.
         let old_aa = std::mem::replace(&mut self.aa, aa);
         let old_transparency = std::mem::replace(&mut self.transparency, transparency);
-        let old_sun = std::mem::replace(&mut self.sun, sun::Sun::new(&self.device, format));
+        let old_sun = std::mem::replace(&mut self.sun, sun::Sun::new(&self.device, format, shadow_size));
         let old_ao = std::mem::replace(&mut self.ao, ao::AmbientOcclusion::new(&self.device, format));
         let old_overlay = std::mem::replace(&mut self.overlay, overlay::Overlay::new(&self.device, format));
         let old_color = std::mem::replace(&mut self.offscreen, texture(&self.device, width, height, format));
