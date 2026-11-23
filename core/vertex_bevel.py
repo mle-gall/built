@@ -27,50 +27,19 @@ The result is a :class:`core.fillet.FilletPlan`, applied in one go by
 from __future__ import annotations
 
 import math
+import sys
 
-from ingetrazo_core import Vec3 as QVector3D
+from ingetrazo_core import MeshStore, Vec3 as QVector3D
 
-from core.fillet import (CIRCULAR, MIN_ANGLE_DEG, PLANE_TOL, FilletPlan,
-                         _exponent, _facing, _fmt, _same, _unit)
-from core import doc_model
+from core.fillet import (CIRCULAR, MIN_ANGLE_DEG, FilletPlan,
+                         _exponent, _fmt, _unit)
 from core.i18n import tr
 from core.mesh import edge_flags
 
 
 def _face_curve(origin, ua, ub, r, segments):
-    if doc_model.ENABLED:
-        from ingetrazo_core import MeshStore
-        points = MeshStore.bevel_face_curve(origin.toTuple(), ua.toTuple(), ub.toTuple(), r, segments)
-        return [QVector3D(*p) for p in points]
-    """Points from ``origin + ua`` to ``origin + ub``: the corner's curve in
-    the face of the two edges ``ua`` and ``ub`` (vectors from the corner
-    to the cut points)."""
-    e = 2.0 / r
-    pts = []
-    for k in range(segments + 1):
-        if k == 0:
-            xa, xb = 0.0, 1.0
-        elif k == segments:
-            xa, xb = 1.0, 0.0
-        else:
-            ang = math.pi / 2.0 * k / segments
-            xa, xb = math.sin(ang) ** e, math.cos(ang) ** e
-        pts.append(origin + ua * (1.0 - xa) + ub * (1.0 - xb))
-    return pts
-
-
-def _cap_point(origin, us, lambdas, r):
-    """A point of the three-edge cap at barycentric ``lambdas`` (one per
-    cut edge ``us``): ``origin + Σ (1 − X)·u`` with ``Σ X^r = 2``. The
-    weights go through sin² so the sides land on the face curves' own
-    spacing."""
-    s = [math.sin(lam * math.pi / 2.0) ** 2 for lam in lambdas]
-    total = sum(s)
-    out = QVector3D(origin)
-    for u, si in zip(us, s):
-        x = max(0.0, 1.0 - si / total) ** (1.0 / r)
-        out += u * (1.0 - x)
-    return out
+    points = MeshStore.bevel_face_curve(origin.toTuple(), ua.toTuple(), ub.toTuple(), r, segments)
+    return [QVector3D(*p) for p in points]
 
 
 def plan_vertex_bevel(mesh, vertices, size: float, segments: int = 8,
@@ -86,9 +55,9 @@ def plan_vertex_bevel(mesh, vertices, size: float, segments: int = 8,
     if not 0.0 < profile < 1.0:
         return tr("The profile must be between 0 and 1.")
     segments = max(int(segments), 1)
+    from core.store_mesh import _hypot
     store = getattr(mesh, "_store", None)
     if store is not None and hasattr(store, "plan_vertex_bevel"):
-        from core.store_mesh import _hypot
         from core.fillet import _store_round_plan
         hypot = _hypot()
         if hypot:
@@ -194,42 +163,15 @@ def plan_vertex_bevel(mesh, vertices, size: float, segments: int = 8,
         out = QVector3D()
         for f in faces:
             out += f.normal()
-        if doc_model.ENABLED:
-            from ingetrazo_core import MeshStore
-            from core.store_mesh import _hypot
-            import sys
-            try:
-                patches, soft = MeshStore.bevel_corner(
-                    v.position.toTuple(), [cut[(v.key, e.key)].toTuple() for e in v.edges],
-                    [[p.toTuple() for p in row] for row in face_curves], out.toTuple(),
-                    segments, r, _hypot(), sys.version_info >= (3, 12))
-            except ValueError as exc:
-                return tr(str(exc), p=_fmt(v.position))
-            plan.patches.extend([QVector3D(*p) for p in row] for row in patches)
-            plan.soft.extend((QVector3D(*a), QVector3D(*b)) for a, b in soft)
-        else:
-            tips = [v.position + cut[(v.key, e.key)] for e in v.edges]
-            centre = QVector3D()
-            for p in tips:
-                centre += p
-            centre /= float(len(tips))
-            sign = 1.0 if QVector3D.dotProduct(out, v.position - centre) >= 0 else -1.0
-            if len(v.edges) == 3:
-                cap, soft = _three_edge_cap(v, cut, face_curves, r, segments, sign)
-                if cap is None:
-                    return tr("Could not close the corner at {p}.",
-                              p=_fmt(v.position))
-                plan.patches.extend(cap)
-                plan.soft.extend(soft)
-            else:
-                if segments > 1:
-                    return tr("More than three rounded edges meet at {p}.",
-                              p=_fmt(v.position))
-                poly = _flat_polygon(tips, out)
-                if poly is None:
-                    return tr("The corner at {p} is not flat enough to cut.",
-                              p=_fmt(v.position))
-                plan.patches.append(_facing(poly, v.position, sign))
+        try:
+            patches, soft = MeshStore.bevel_corner(
+                v.position.toTuple(), [cut[(v.key, e.key)].toTuple() for e in v.edges],
+                [[p.toTuple() for p in row] for row in face_curves], out.toTuple(),
+                segments, r, _hypot(), sys.version_info >= (3, 12))
+        except ValueError as exc:
+            return tr(str(exc), p=_fmt(v.position))
+        plan.patches.extend([QVector3D(*p) for p in row] for row in patches)
+        plan.soft.extend((QVector3D(*a), QVector3D(*b)) for a, b in soft)
 
     # Old edges go; the shortened ones keep their flags.
     seen = set()
@@ -246,84 +188,3 @@ def plan_vertex_bevel(mesh, vertices, size: float, segments: int = 8,
                   else QVector3D(b.position))
             plan.flags.append((pa, pb, edge_flags(e)))
     return plan
-
-
-def _three_edge_cap(v, cut, face_curves, r, segments, sign):
-    """Triangles of the cap at a three-edge corner. Its sides ARE the face
-    curves, so it closes watertight; the inside follows
-    :func:`_cap_point`."""
-    n = segments
-    edges = list(v.edges)
-    us = [cut[(v.key, e.key)] for e in edges]
-    tips = [v.position + u for u in us]
-
-    def arc(i, j):
-        """The face curve from tip ``i`` to tip ``j``."""
-        for pts in face_curves:
-            if _same(pts[0], tips[i]) and _same(pts[-1], tips[j]):
-                return pts
-            if _same(pts[-1], tips[i]) and _same(pts[0], tips[j]):
-                return list(reversed(pts))
-        return None
-    ab, bc, ac = arc(0, 1), arc(1, 2), arc(0, 2)
-    if ab is None or bc is None or ac is None:
-        return None, None
-    grid: dict[tuple[int, int], QVector3D] = {}
-    for i in range(n + 1):
-        for j in range(n + 1 - i):
-            k = n - i - j
-            if k == 0:
-                grid[(i, j)] = ab[j]
-            elif i == 0:
-                grid[(i, j)] = bc[k]
-            elif j == 0:
-                grid[(i, j)] = ac[k]
-            else:
-                grid[(i, j)] = _cap_point(v.position, us,
-                                          (i / n, j / n, k / n), r)
-    tris = []
-    for i in range(n):
-        for j in range(n - i):
-            tris.append(_facing([grid[(i, j)], grid[(i + 1, j)],
-                                 grid[(i, j + 1)]], v.position, sign))
-            if i + j + 1 < n:
-                tris.append(_facing([grid[(i + 1, j)], grid[(i + 1, j + 1)],
-                                     grid[(i, j + 1)]], v.position, sign))
-    soft = []
-    for (i, j), p in grid.items():
-        for di, dj in ((1, 0), (0, 1), (-1, 1)):
-            q = grid.get((i + di, j + dj))
-            if q is None:
-                continue
-            ka, kb = n - i - j, n - (i + di) - (j + dj)
-            along_side = ((i == 0 and i + di == 0) or (j == 0 and j + dj == 0)
-                          or (ka == 0 and kb == 0))
-            if not along_side:
-                soft.append((p, q))
-    return tris, soft
-
-
-def _flat_polygon(points, normal):
-    """``points`` ordered around ``normal`` — or None when they do not lie
-    in one plane."""
-    n = _unit(normal)
-    if n is None:
-        return None
-    c = QVector3D()
-    for p in points:
-        c += p
-    c /= float(len(points))
-    span = max((p - c).length() for p in points) or 1.0
-    for p in points:
-        if abs(QVector3D.dotProduct(p - c, n)) > PLANE_TOL * 10 * max(1.0, span):
-            return None
-    ref = _unit(points[0] - c)
-    if ref is None:
-        return None
-    side = QVector3D.crossProduct(n, ref)
-
-    def angle(p):
-        d = p - c
-        return math.atan2(QVector3D.dotProduct(d, side),
-                          QVector3D.dotProduct(d, ref))
-    return sorted((QVector3D(p) for p in points), key=angle)
