@@ -1487,7 +1487,7 @@ impl PyMeshStore {
                         let mut mask = std::iter::once(true).chain(keep);
                         rings.retain(|_| mask.next() == Some(true));
                     }
-                    dirty += rings.iter().map(Vec::len).sum::<usize>();
+                    dirty += 1 + rings.iter().map(Vec::len).sum::<usize>();
                     let (new,_) = self.op(|s,ch| s.add_face(&rings,ch))?;
                     remainder.push(self.inner.key(Kind::Face,new));
                 }

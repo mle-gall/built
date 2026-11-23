@@ -449,9 +449,12 @@ def geometry_steps(work):
     def rectangle(x, y, w, height):
         return [QVector3D(a, b, 0) for a, b in
                 ((x,y), (x+w,y), (x+w,y+height), (x,y+height))]
+    draw_revisions = []
     for rect, paint in [((10,0,8,8), {"color":[.2,.4,.6]}),
                         ((12,2,1,1), None), ((13,2,1,1), None), ((10,0,1,1), None)]:
+        serial = mesh._mut_serial
         h.execute(AddFaceCommand(rectangle(*rect), attrs=paint))
+        draw_revisions.append(mesh._mut_serial - serial)
         assert not h.last_error and not h.last_rejected
         out.append(state())
         assert h.undo()
@@ -516,7 +519,7 @@ def geometry_steps(work):
         path = work / f"edited-geometry.{ext}"
         igz.save_scene(scene, path, backup=False)
         archives[ext] = hashlib.sha256(path.read_bytes()).hexdigest()
-    return {"states": out, "archive_hashes": archives}
+    return {"states": out, "archive_hashes": archives, "draw_revisions": draw_revisions}
 
 
 def anchor_steps(work):
