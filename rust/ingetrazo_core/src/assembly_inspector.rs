@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Assembly inspector projection. Measuring an expanded assembly shares the
 //! cut-list reader's definition cache across all occurrences in the report.
-use pyo3::{prelude::*, types::PyDict};
+use pyo3::{
+    prelude::*,
+    types::{PyDict, PyList},
+};
 
 type Obj<'py> = Bound<'py, PyAny>;
 
@@ -24,6 +27,52 @@ pub(crate) fn writable(scene: &Obj<'_>, group: &Obj<'_>) -> PyResult<bool> {
         at = at.getattr("_parent")?;
     }
     Ok(true)
+}
+
+/// Provider payload shared by the Project selection and Problems. The view
+/// supplies its occurrence address, which is also returned with each verb.
+#[pyfunction]
+pub(crate) fn assembly_selection<'py>(
+    scene: &Obj<'py>,
+    group: &Obj<'py>,
+    address: &str,
+) -> PyResult<Bound<'py, PyDict>> {
+    let py = scene.py();
+    let row = PyDict::new(py);
+    let editable = writable(scene, group)?;
+    row.set_item("uid", address)?;
+    row.set_item("revision", scene.getattr("content_version")?)?;
+    row.set_item("can_split", !group.getattr("billboard")?.is_truthy()?)?;
+    let name: String = group.getattr("name")?.extract()?;
+    row.set_item("name", if name.is_empty() { "Assembly" } else { &name })?;
+    row.set_item("editable", editable)?;
+    let exploded = group.getattr("exploded")?;
+    let exploded = exploded.cast::<PyDict>().ok();
+    for (key, default) in [
+        ("mode", "outward".into_pyobject(py)?.into_any()),
+        ("factor", 0_i32.into_pyobject(py)?.into_any()),
+    ] {
+        let value = match exploded {
+            Some(d) => d.get_item(key)?.unwrap_or(default),
+            None => default,
+        };
+        row.set_item(key, value)?;
+    }
+    let children = PyList::empty(py);
+    let selection = scene.getattr("selection")?;
+    for child in group.getattr("children")?.try_iter()? {
+        let child = child?;
+        let entry = PyDict::new(py);
+        entry.set_item("uid", child.getattr("uid")?)?;
+        let name: String = child.getattr("name")?.extract()?;
+        entry.set_item("name", if name.is_empty() { "Part" } else { &name })?;
+        entry.set_item("hidden", child.getattr("hidden")?)?;
+        entry.set_item("selected", selection.contains(&child)?)?;
+        entry.set_item("editable", editable && writable(scene, &child)?)?;
+        children.append(entry)?;
+    }
+    row.set_item("children", children)?;
+    Ok(row)
 }
 
 #[pyfunction]

@@ -2450,7 +2450,7 @@ def _inspector(view, win) -> None:
             prow = [(n, f"×{k}") for n, k in parts.most_common(8)]
             if len(parts) > 8:
                 prow.append(("…", f"{len(parts) - 8} more kinds"))
-            if not hasattr(view.renderer, "ui_panel_set"):
+            if view.__dict__.get("_ui_mode") != "problems" or not hasattr(view.renderer, "ui_panel_set"):
                 sections.append(("Parts", prow))
             sections.append(("Actions", [("cutlist", "Cut list…")]))
         from ingetrazo_core import solid_inspector_sections

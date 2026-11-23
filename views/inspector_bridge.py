@@ -67,20 +67,8 @@ def _selection(view, win):
     g = _assembly(scene) if not focused else None
     parts = None
     if g is not None:
-        parts = dict(
-            uid=_record_address(scene, g),
-            revision=scene.content_version,
-            can_split=not g.billboard,
-            name=g.name or "Assembly",
-            editable=not (links.linked_ancestor(g) or scene.entity_locked(g)),
-            mode=(g.exploded or {}).get("mode", "outward"),
-            factor=(g.exploded or {}).get("factor", 0),
-            children=[
-                dict(uid=c.uid, name=c.name or "Part", hidden=c.hidden, selected=c in scene.selection,
-                     editable=not (scene.entity_locked(c) or links.linked_ancestor(c)))
-                for c in g.children
-            ],
-        )
+        from ingetrazo_core import assembly_selection
+        parts = assembly_selection(scene, g, _record_address(scene, g))
     rule = None
     node = focus[0] if focused else structure.node_of(groups[0]) if len(groups) == 1 else None
     if node:

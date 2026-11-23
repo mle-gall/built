@@ -109,6 +109,15 @@ pub(crate) fn solid_inspector_sections(
     let mut actions = Vec::new();
     let mut reasons = Vec::new();
     let writable = !locked(scene, group)?;
+    if !explicit {
+        if writable {
+            sections.push((
+                "Actions".into(),
+                vec![("solidrepair".into(), "Repair".into())],
+            ));
+        }
+        return Ok(sections);
+    }
     let mut count = 0;
     for fault in plugin
         .call_method1("problem_items", (&report,))?

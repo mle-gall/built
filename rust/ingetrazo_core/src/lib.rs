@@ -249,12 +249,13 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(scene_commands::plan_scene_command, m)?)?;
     m.add_class::<assembly_inspector::AssemblyPreview>()?;
     m.add_function(wrap_pyfunction!(assembly_inspector::part_measures, m)?)?;
+    m.add_function(wrap_pyfunction!(assembly_inspector::assembly_selection, m)?)?;
     m.add_function(wrap_pyfunction!(assembly_inspector::plan_part_edit, m)?)?;
     m.add_function(wrap_pyfunction!(material_library::bundled_materials, m)?)?;
     m.add_function(wrap_pyfunction!(material_library::pick_library_paint, m)?)?;
     m.add_function(wrap_pyfunction!(material_library::material_inspector, m)?)?;
-    m.add_function(wrap_pyfunction!(solid_inspector::solid_inspector_sections, m)?)?;
     m.add_function(wrap_pyfunction!(material_library::refresh_library_paint, m)?)?;
+    m.add_function(wrap_pyfunction!(solid_inspector::solid_inspector_sections, m)?)?;
     m.add_function(wrap_pyfunction!(solid_inspector::plan_solid_fault, m)?)?;
     m.add_function(wrap_pyfunction!(solid_inspector::solid_problem_targets, m)?)?;
     m.add_function(wrap_pyfunction!(material_library::material_surface_input, m)?)?;

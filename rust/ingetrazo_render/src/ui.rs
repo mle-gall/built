@@ -1990,6 +1990,8 @@ impl Ui {
                         ui.spacing_mut().item_spacing = vec2(0.0, SPACE_XS);
                         if col.mode.is_empty() {
                             self.panels.inspector(ui, &mut cmds);
+                        } else if col.mode == "Problems" {
+                            self.panels.assembly_problems(ui, &mut cmds);
                         }
                         if col.inspector_title.is_empty() {
                             ui.horizontal(|ui| { ui.add_space(SPACE_S); empty_state(ui, "Nothing selected"); });
