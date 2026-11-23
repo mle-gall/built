@@ -191,9 +191,19 @@ pub trait ToolHost {
     /// The camera position (which way a new vertical face looks).
     fn eye(&mut self) -> Option<P3> { None }
 
-    // Picking: host queries until picking is native.
-    fn pick(&mut self, _px: [f64; 2]) -> Option<Pick> { None }
-    fn candidates(&mut self, px: [f64; 2]) -> Vec<Pick> { self.pick(px).into_iter().collect() }
+    // Picking. The order of what a click takes is the machine's
+    // (`select::pick`); the host answers one kind of thing at a pixel,
+    // nearest first with its distance in pixels: `label_block`,
+    // `linework_edge`, `linework_groups`, `group`, `visible_edge`,
+    // `dimension`, `text_label`, `geopath`, `section_plane`, `guide`,
+    // `face`, `image_plane`, `groups_around`.
+    fn query(&mut self, _what: &str, _px: [f64; 2]) -> Vec<(Pick, f64)> { vec![] }
+    /// Whether the view answers a query kind at all (`linework`).
+    fn has(&mut self, _what: &str) -> bool { false }
+    /// An edge's point under the cursor is not hidden behind a face.
+    fn edge_clear(&mut self, _edge: u64, _px: [f64; 2]) -> bool { false }
+    /// A picture lying in front of this face at the pixel.
+    fn image_in_front(&mut self, _face: u64, _px: [f64; 2]) -> Option<Pick> { None }
     fn extension_at(&mut self, _px: [f64; 2]) -> Option<u64> { None }
     /// "2 of 3: <what> — click again for the next" (the host translates).
     fn cycle_status(&mut self, _index: usize, _count: usize, _id: u64) {}

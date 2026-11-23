@@ -27,8 +27,16 @@ impl ToolHost for Fake {
         Answer { ok: true, revision: self.token, face_delta, error: None }
     }
     fn revision(&mut self) -> u64 { self.token }
-    fn pick(&mut self, _px: [f64; 2]) -> Option<Pick> { self.picks.first().copied() }
-    fn candidates(&mut self, _px: [f64; 2]) -> Vec<Pick> { self.picks.clone() }
+    fn has(&mut self, what: &str) -> bool { what == "linework" }
+    fn query(&mut self, what: &str, _px: [f64; 2]) -> Vec<(Pick, f64)> {
+        let kind = match what {
+            "linework_edge" => PickKind::Edge,
+            "group" => PickKind::Group,
+            "face" => PickKind::Face,
+            _ => return vec![],
+        };
+        self.picks.iter().filter(|p| p.kind == kind).map(|p| (*p, 1.0)).collect()
+    }
     fn select(&mut self, ids: &[u64], mode: SelectMode, grow: Grow) {
         self.log.push(format!("select {ids:?} {} {}", mode.name(), grow.name()));
         if mode == SelectMode::Replace {
@@ -195,4 +203,31 @@ fn select_double_opens_a_group_and_bounds_a_face_then_triple_connects() {
     // and its release is no click.
     t.event(&ToolEvent::Release(px(6., 5., Mods::default(), 320.)), &mut h);
     assert_eq!(h.log.len(), 3);
+}
+
+#[test]
+fn select_cascade_takes_a_label_then_lines_then_groups_then_faces() {
+    struct Layers(Vec<(&'static str, Pick)>);
+    impl ToolHost for Layers {
+        fn run(&mut self, _c: &Command) -> Answer { Answer::default() }
+        fn has(&mut self, what: &str) -> bool { what == "linework" }
+        fn query(&mut self, what: &str, _px: [f64; 2]) -> Vec<(Pick, f64)> {
+            self.0.iter().filter(|(w, _)| *w == what).map(|(_, p)| (*p, 2.0)).collect()
+        }
+        fn image_in_front(&mut self, face: u64, _px: [f64; 2]) -> Option<Pick> {
+            (face == 9).then_some(Pick { id: 10, kind: PickKind::Other })
+        }
+    }
+    let face = Pick { id: 9, kind: PickKind::Face };
+    let group = Pick { id: 5, kind: PickKind::Group };
+    let line = Pick { id: 6, kind: PickKind::Group };
+    let mut h = Layers(vec![("face", face), ("group", group)]);
+    assert_eq!(select::pick(&mut h, [0.0, 0.0], true), Some(group));
+    h.0.push(("linework_groups", line));
+    assert_eq!(select::pick(&mut h, [0.0, 0.0], true), Some(line));
+    assert_eq!(select::pick(&mut h, [0.0, 0.0], false), Some(group));
+    assert_eq!(select::candidates(&mut h, [0.0, 0.0]).iter().map(|p| p.id).collect::<Vec<_>>(), vec![6, 5, 10]);
+    // A picture in front of the face takes the click (#426).
+    let mut h = Layers(vec![("face", face)]);
+    assert_eq!(select::pick(&mut h, [0.0, 0.0], true).map(|p| p.id), Some(10));
 }

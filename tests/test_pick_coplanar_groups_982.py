@@ -29,7 +29,6 @@ from core.group import Group  # noqa: E402
 from core.history import MakeGroupCommand  # noqa: E402
 from core.mesh import Mesh  # noqa: E402
 from tools.rust_tools import SelectTool  # noqa: E402
-from tools import select as _select_queries
 from tests.controller_surface import ControllerSurface as Viewport
 
 CENTER = (1.5, 1.2)                     # of the disc, on the wall's face
@@ -145,11 +144,11 @@ def test_the_disc_takes_the_click_from_every_camera(rot, kind, disc, lazy):
         _look(vp, P, rot, yaw, pitch, dist)
         for px in _inner_pixels(vp, P):
             assert vp.pick_group(*px) is d, (yaw, pitch, dist, px)
-            assert _select_queries.pick(vp, *px) is d, (yaw, pitch, dist, px)
+            assert SelectTool().pick_at(vp, *px) is d, (yaw, pitch, dist, px)
         # beside the disc the wall is still the pick
         beside = vp._world_to_pixel(P(0.5, 0, 0.5))
         if beside is not None:
-            assert _select_queries.pick(vp, *beside) is wall, (yaw, pitch, dist)
+            assert SelectTool().pick_at(vp, *beside) is wall, (yaw, pitch, dist)
 
 
 def test_the_parallel_camera_too():
@@ -211,11 +210,11 @@ def test_inside_the_open_disc_or_wall_the_context_decides():
     px = _inner_pixels(vp, P)[0]
     vp.begin_group_edit(d)
     assert vp.pick_group(*px) is None
-    assert _select_queries.pick(vp, *px) in vp.scene.mesh.faces
+    assert SelectTool().pick_at(vp, *px) in vp.scene.mesh.faces
     vp.end_one_group_edit()
     vp.begin_group_edit(wall)
     assert vp.pick_group(*px) is None, "the disc is outside the open wall"
-    assert _select_queries.pick(vp, *px) in vp.scene.mesh.faces
+    assert SelectTool().pick_at(vp, *px) in vp.scene.mesh.faces
     vp.end_one_group_edit()
 
 
@@ -229,10 +228,10 @@ def test_a_grouped_disc_on_a_loose_face():
     _look(vp, P, 33.3, -83.3, 17, 6)
     tool = SelectTool()
     for px in _inner_pixels(vp, P):
-        assert _select_queries.pick(vp, *px) is d
+        assert SelectTool().pick_at(vp, *px) is d
     beside = vp._world_to_pixel(P(0.5, 0, 0.5))
     assert vp.pick_group(*beside) is None
-    assert _select_queries.pick(vp, *beside) in vp.scene.mesh.faces
+    assert SelectTool().pick_at(vp, *beside) in vp.scene.mesh.faces
 
 
 def test_a_loose_face_keeps_the_click_at_the_same_size():
@@ -287,7 +286,7 @@ def test_a_child_on_its_open_parents_face_is_reachable():
     assert vp.pick_group(*px) is parent
     vp.begin_group_edit(parent)
     assert vp.pick_group(*px) is child
-    assert _select_queries.pick(vp, *px) is child
+    assert SelectTool().pick_at(vp, *px) is child
     vp.end_one_group_edit()
 
 

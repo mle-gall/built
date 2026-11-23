@@ -58,6 +58,83 @@ pub struct SelectTool {
 
 fn far(a: [f64; 2], b: [f64; 2]) -> bool { (a[0] - b[0]).hypot(a[1] - b[1]) > CYCLE_PX }
 
+/// What a click at `px` takes (`tools/select.py`'s cascade before R2.5
+/// slice 2): a label's text block; the visible line under the cursor (a
+/// loose edge, or an object of lines only, nearest first, the edge on a
+/// tie); a group, unless an edge over it is in plain sight; the edge; then
+/// [`pick_rest`]; last, the smallest object of lines whose box holds the
+/// cursor. `lines` false: past the lines (a repeated click's candidates).
+pub fn pick(host: &mut dyn ToolHost, px: [f64; 2], lines: bool) -> Option<Pick> {
+    let first = |host: &mut dyn ToolHost, what: &str| host.query(what, px).first().map(|h| h.0);
+    if let Some(label) = first(host, "label_block") {
+        return Some(label);
+    }
+    let has_linework = host.has("linework");
+    if lines && has_linework {
+        if let Some((hit, _)) = linework(host, px).first() {
+            return Some(*hit);
+        }
+    }
+    let group = first(host, "group");
+    // With the linework picks, those answered for the visible edges.
+    let edge = if has_linework { None } else { first(host, "visible_edge") };
+    if let (Some(_), Some(e)) = (group, edge) {
+        if host.edge_clear(e.id, px) {
+            return Some(e);
+        }
+    }
+    group.or(edge).or_else(|| pick_rest(host, px)).or_else(|| first(host, "groups_around"))
+}
+
+/// The visible lines within reach, nearest first: the loose edge, then the
+/// objects of lines only (a stable sort keeps the edge first on a tie).
+pub fn linework(host: &mut dyn ToolHost, px: [f64; 2]) -> Vec<(Pick, f64)> {
+    let mut found = host.query("linework_edge", px);
+    found.extend(host.query("linework_groups", px));
+    found.sort_by(|a, b| a.1.total_cmp(&b.1));
+    found
+}
+
+/// Past the lines and the groups: a dimension, a label, a geo path, a
+/// section plane (by its frame), a guide, the front face unless a picture
+/// lies in front of it (#426), last a reference image (an underlay).
+pub fn pick_rest(host: &mut dyn ToolHost, px: [f64; 2]) -> Option<Pick> {
+    for what in ["dimension", "text_label", "geopath", "section_plane", "guide"] {
+        if let Some(hit) = host.query(what, px).first() {
+            return Some(hit.0);
+        }
+    }
+    if let Some((face, _)) = host.query("face", px).first().copied() {
+        return Some(host.image_in_front(face.id, px).unwrap_or(face));
+    }
+    host.query("image_plane", px).first().map(|h| h.0)
+}
+
+/// Everything a click may select, in the order repeated clicks go through
+/// them, each once.
+pub fn candidates(host: &mut dyn ToolHost, px: [f64; 2]) -> Vec<Pick> {
+    let mut found: Vec<Pick> = Vec::new();
+    let add = |p: Option<Pick>, found: &mut Vec<Pick>| {
+        if let Some(p) = p {
+            if !found.iter().any(|q| q.id == p.id) {
+                found.push(p);
+            }
+        }
+    };
+    add(pick(host, px, true), &mut found);
+    for (hit, _) in linework(host, px) {
+        add(Some(hit), &mut found);
+    }
+    add(pick(host, px, false), &mut found);
+    let group = host.query("group", px).first().map(|h| h.0);
+    add(group, &mut found);
+    add(pick_rest(host, px), &mut found);
+    for (hit, _) in host.query("groups_around", px) {
+        add(Some(hit), &mut found);
+    }
+    found
+}
+
 impl SelectTool {
     fn note_pointer(&mut self, px: [f64; 2]) {
         if self.cycle.as_ref().is_some_and(|c| far(c.at, px)) {
@@ -71,9 +148,9 @@ impl SelectTool {
         -> (Option<Pick>, Option<Cycle>) {
         let cycle = self.cycle.take();
         if mode != SelectMode::Replace {
-            return (host.pick(px), None);
+            return (pick(host, px, true), None);
         }
-        let candidates = host.candidates(px);
+        let candidates = candidates(host, px);
         if candidates.is_empty() {
             return (None, None);
         }
@@ -127,7 +204,7 @@ impl SelectTool {
 
     fn double(&mut self, p: &Pointer, host: &mut dyn ToolHost) -> Reply {
         self.cycle = None;
-        let Some(pick) = host.pick(p.px) else { return self.click(p, host) };
+        let Some(pick) = pick(host, p.px, true) else { return self.click(p, host) };
         match pick.kind {
             PickKind::Group => host.open_placement(pick.id),
             PickKind::SectionPlane => host.host_verb("toggle_section", pick.id),
@@ -142,7 +219,7 @@ impl SelectTool {
 
     fn triple(&mut self, p: &Pointer, host: &mut dyn ToolHost) -> Reply {
         self.cycle = None;
-        match host.pick(p.px) {
+        match pick(host, p.px, true) {
             Some(pick) if matches!(pick.kind, PickKind::Face | PickKind::Edge) => {
                 host.select(&[pick.id], SelectMode::from_mods(p.mods), Grow::Connected);
                 Reply::redraw()
@@ -153,7 +230,7 @@ impl SelectTool {
 
     fn hover(&mut self, p: &Pointer, host: &mut dyn ToolHost) -> Reply {
         self.note_pointer(p.px);
-        let pick = host.pick(p.px);
+        let pick = pick(host, p.px, true);
         host.set_hover(pick.filter(|k| k.kind != PickKind::Face).map(|k| k.id));
         Reply::redraw()
     }
