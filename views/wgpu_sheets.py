@@ -1107,7 +1107,7 @@ def frame(view):
     """A frame of the workspace: the chrome's window state, the page's
     changed rectangles, then the page and the chrome."""
     import time
-    from views import wgpu_start, wgpu_ui
+    from views import chrome_sheet, wgpu_start, wgpu_ui
     ws = workspace_of(view)
     renderer = view.renderer
     start = time.perf_counter()
@@ -1115,6 +1115,7 @@ def frame(view):
     if win is not None and getattr(view, "_ui_attached", False):
         wgpu_ui._sheet_and_jobs(view, win)
         wgpu_start.before_frame(view, win)
+        chrome_sheet.before_frame(view, win)
         if not view._ui_tools_sent and win._tool_actions:
             wgpu_ui._send_tools(view, win)
         wgpu_ui._projects(view, win)

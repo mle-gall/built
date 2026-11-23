@@ -22,12 +22,13 @@ fn vs(@builtin(vertex_index) i: u32) -> Out {
 
 @fragment
 fn down(in: Out) -> @location(0) vec4<f32> {
+    let uv = (in.uv - 0.5) * step.texel.zw + 0.5;
     let h = step.texel.xy;
-    var s = textureSample(src, smp, in.uv) * 4.0;
-    s += textureSample(src, smp, in.uv - h);
-    s += textureSample(src, smp, in.uv + h);
-    s += textureSample(src, smp, in.uv + vec2<f32>(h.x, -h.y));
-    s += textureSample(src, smp, in.uv - vec2<f32>(h.x, -h.y));
+    var s = textureSample(src, smp, uv) * 4.0;
+    s += textureSample(src, smp, uv - h);
+    s += textureSample(src, smp, uv + h);
+    s += textureSample(src, smp, uv + vec2<f32>(h.x, -h.y));
+    s += textureSample(src, smp, uv - vec2<f32>(h.x, -h.y));
     return s / 8.0;
 }
 

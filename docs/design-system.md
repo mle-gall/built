@@ -12,7 +12,7 @@ The public Rust module `ui::tokens` owns colour values. Its palette declaration 
 |---|---|
 | Surface | `SHEET` #1A1A1A, `SIDE` / `GLASS_BAR` #1F1F1F, `CARD` #242424, `CARD_HOVER` #2B2B2B, `WELL` #131313 |
 | Depth | `PANEL` / `POPOVER` premultiplied grey 31 at alpha 245, `FIELD` black at 28%, `SCRIM` black at 28%. `Surface::{Bar,Panel,Pill,Raised}` supply glass, radius and shadow together. |
-| Text | `INK` #EEF1F4, `INK_2` #C9CFD6, `DIM` #A2A9B1, `FAINT` #858C94, `OFF` #5C636A, `BRIGHT` white on the accent |
+| Text | `INK` #EEF1F4, `INK_2` #C9CFD6, `DIM` #A2A9B1, `FAINT` #858C94, `OFF` #5C636A, `ON_PRIMARY` graphite on the primary accent, `BRIGHT` white on dark surfaces |
 | Boundary | `EDGE` / `DIVIDER` white at 8%, `HOVER_EDGE` white at 18%, `FOCUS_RING` #6AA5FF |
 | Controls | `CONTROL` white at 7% (rest fill of buttons and chips), `TRACK` white at 11% (progress, switch), `THUMB` white at 16% (segmented thumb) |
 | Interaction | `HOVER` white at 7%, `PRESS` white at 12%, `ACTIVE` accent at 14% (selection wash), `ACCENT_LINE` accent at 55%, `ACCENT` #6AA5FF, `PRIMARY_HOVER`, `PRIMARY_PRESS` |

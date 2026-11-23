@@ -24,6 +24,7 @@ pub struct Look {
     /// Brightest the backdrop may show (linear), soft shoulder.
     pub peak: f32,
     pub inner_shadow: f32,
+    pub vignette: f32,
 }
 
 struct Level {
@@ -41,7 +42,9 @@ pub struct Glass {
     up: wgpu::RenderPipeline,
     blur_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
-    steps: Vec<wgpu::Buffer>,
+    steps: Vec<(wgpu::Buffer, [u32; 2])>,
+    blur_scale: f32,
+    preview: Option<(egui::TextureId, wgpu::BindGroup)>,
     passes: Vec<(wgpu::BindGroup, usize, bool)>,
 }
 
@@ -125,8 +128,8 @@ fn pipeline(device: &wgpu::Device, layout: &wgpu::BindGroupLayout, module: &wgpu
 }
 
 fn step_group(device: &wgpu::Device, layout: &wgpu::BindGroupLayout, sampler: &wgpu::Sampler,
-              src: &wgpu::TextureView, src_size: [u32; 2]) -> (wgpu::BindGroup, wgpu::Buffer) {
-    let texel = [0.5 / src_size[0] as f32, 0.5 / src_size[1] as f32, 0.0, 0.0];
+              src: &wgpu::TextureView, src_size: [u32; 2], blur_scale: f32, crop: [f32; 2]) -> (wgpu::BindGroup, wgpu::Buffer) {
+    let texel = [0.5 * blur_scale / src_size[0] as f32, 0.5 * blur_scale / src_size[1] as f32, crop[0], crop[1]];
     let buf = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("glass step"), size: 16,
         usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: true,
@@ -193,6 +196,8 @@ impl Glass {
             sampler,
             steps: Vec::new(),
             passes: Vec::new(),
+            blur_scale: 1.0,
+            preview: None,
         };
         (glass, resources)
     }
@@ -230,9 +235,9 @@ impl Glass {
         let mut passes = Vec::new();
         let mut steps = Vec::new();
         for (src, src_size, target, up) in plan {
-            let (group, buf) = step_group(device, &self.blur_layout, &self.sampler, src, src_size);
+            let (group, buf) = step_group(device, &self.blur_layout, &self.sampler, src, src_size, self.blur_scale, [1.0; 2]);
             passes.push((group, target, up));
-            steps.push(buf);
+            steps.push((buf, src_size));
         }
         self.passes = passes;
         self.steps = steps;
@@ -252,18 +257,45 @@ impl Glass {
         }));
     }
 
-    /// Blur ``frame`` (the target, holding the finished model image).
-    pub fn prepare(&mut self, device: &wgpu::Device, e: &mut wgpu::CommandEncoder, frame: &wgpu::Texture,
-                   res: &mut Resources) {
+    pub fn showing_preview(&self) -> bool { self.preview.is_some() }
+
+    /// Blur the model or the centre-cropped recent preview with the same passes.
+    pub fn prepare(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, e: &mut wgpu::CommandEncoder, frame: &wgpu::Texture,
+                   res: &mut Resources, blur_scale: f32, preview: Option<(egui::TextureId, wgpu::Texture)>) {
         NEXT.store(0, Ordering::Relaxed);
         let size = [frame.width(), frame.height()];
         if size != self.size || self.copy.is_none() {
+            self.blur_scale = blur_scale;
+            self.preview = None;
             self.resize(device, size, res);
+        } else if self.blur_scale != blur_scale {
+            self.blur_scale = blur_scale;
+            self.preview = None;
+            for (uniform, [w, h]) in &self.steps {
+                let step = [0.5 * blur_scale / *w as f32, 0.5 * blur_scale / *h as f32];
+                queue.write_buffer(uniform, 0, bytemuck::cast_slice(&step));
+            }
         }
         let Some(copy) = &self.copy else { return };
-        e.copy_texture_to_texture(frame.as_image_copy(), copy.as_image_copy(),
-            wgpu::Extent3d { width: size[0], height: size[1], depth_or_array_layers: 1 });
-        for (group, target, up) in &self.passes {
+        if let Some((id, texture)) = preview {
+            if self.preview.as_ref().map(|(key, _)| *key) != Some(id) {
+                let aspect = size[0] as f32 / size[1] as f32;
+                let source = texture.width() as f32 / texture.height() as f32;
+                let crop = [(aspect / source).min(1.0), (source / aspect).min(1.0)];
+                let view = texture.create_view(&Default::default());
+                let (group, _) = step_group(device, &self.blur_layout, &self.sampler, &view,
+                    [texture.width(), texture.height()], blur_scale, crop);
+                self.preview = Some((id, group));
+            }
+        } else {
+            self.preview = None;
+        }
+        if self.preview.is_none() {
+            e.copy_texture_to_texture(frame.as_image_copy(), copy.as_image_copy(),
+                wgpu::Extent3d { width: size[0], height: size[1], depth_or_array_layers: 1 });
+        }
+        for (i, (group, target, up)) in self.passes.iter().enumerate() {
+            let group = if i == 0 { self.preview.as_ref().map_or(group, |(_, g)| g) } else { group };
             let view = if *up { &self.ups[*target].view } else { &self.levels[*target].view };
             let mut pass = e.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("glass blur"),
@@ -310,7 +342,7 @@ impl egui_wgpu::CallbackTrait for Pane {
             self.radius * ppp, screen.size_in_pixels[0] as f32, screen.size_in_pixels[1] as f32, l.saturation,
             l.tint[0], l.tint[1], l.tint[2], l.tint[3],
             l.rim[0], l.rim[1], l.rim_width, l.glow,
-            l.peak, ppp, l.inner_shadow, 0.0,
+            l.peak, ppp, l.inner_shadow, l.vignette,
         ];
         queue.write_buffer(&res.uniforms, self.slot as u64 * SLOT, bytemuck::cast_slice(&data));
         Vec::new()

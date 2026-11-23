@@ -223,7 +223,8 @@ def export_form(win, key=None, one_off=False):
         buttons.append(("save", "Save delivery"))
     form = Form("Export" if one_off else "Delivery", fields, buttons=buttons, default=buttons[-1][0],
                 on_done=done, on_change=changed, validate=check)
-    chrome_forms.show(win, form)
+    from ingetrazo_render import show_delivery_form
+    show_delivery_form(win, form, one_off)
     return form
 
 

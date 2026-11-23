@@ -65,13 +65,13 @@ wait 180
 state # filing
 menu delivery_export
 wait 180
-click 630 162
+click 630 208
 wait 150
 state # formats
 key escape
 wait 150
 state # export
 key escape
-wait 150
+wait 350
 state # model_again
 quit
