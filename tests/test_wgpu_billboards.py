@@ -92,7 +92,10 @@ def test_axes_state_toggle_context_and_export():
     frame = QMatrix4x4()
     frame.translate(2, 3, 4)
     frame.rotate(45, 0, 0, 1)
-    scene._edit_stack.append({'frame': frame})
+    group = Group(Mesh())
+    group.axes = frame
+    scene.groups.append(group)
+    scene.begin_group_edit(group)
     state = axes_state(scene, camera)
     assert state == (tuple(frame.data()), camera.distance*.008, True)
     source = SimpleNamespace(plano_style='plan', style_override=None)
