@@ -87,7 +87,11 @@ from core.topology import (
 )
 from tools.base import Tool, ToolContext, ctrl_clause
 from core.units import fmt_len
-from core import push_scans
+from core import push_scans, doc_model
+if doc_model.ENABLED:
+    from ingetrazo_core import guarded_push, push_region, push_through_face, translate_prism_cap
+else:
+    from core.push_guard_reference import guarded_push, push_region, push_through_face, translate_prism_cap
 
 
 def _project_loop_2d(loop, normal):
@@ -224,17 +228,6 @@ def _made_since(mesh, snap, kind: str):
     return push_scans.made_since(mesh, snap.snap, kind)
 
 
-class _Fingerprint:
-    """Closed-solid guard for an object mesh without a store snapshot."""
-    def __init__(self, mesh):
-        self.counts = len(mesh.faces), len(mesh.edges)
-        self.positions = [_key(v.position) for v in mesh.vertices]
-
-    def same_now(self, mesh):
-        return (self.counts == (len(mesh.faces), len(mesh.edges))
-                and sorted(self.positions) == sorted(_key(v.position) for v in mesh.vertices))
-
-
 class _FacesBefore:
     """The faces before one plane rebuild, for the two questions the
     fixpoint asks after it: which faces are new (``set(mesh.faces) -
@@ -337,41 +330,6 @@ def _swept_by_push(neighbour: Face, push_normal: QVector3D) -> bool:
         if e.length() > 1e-9 and abs(QVector3D.dotProduct(e.normalized(), n)) > 0.999:
             return True
     return False
-
-
-_RIM_SNAP = 5e-4
-# How far apart a hand-drawn face's corners may stand, along its own normal,
-# and still be read as one flat face meeting the opposite wall (#1076).
-_OUT_OF_TRUE = 2e-3
-
-
-def _onto_rim(p: QVector3D, face: Face) -> QVector3D:
-    """``p`` laid on ``face``'s outline when it lands within ``_RIM_SNAP``
-    of it: a corner of the outline first, else the nearest point of an
-    outline edge. A door a hair out of true, pushed through its wall,
-    reaches the far side with its sill a hundredth of a millimetre above
-    the floor's edge: left there, the opening's foot made a sliver and an
-    edge with three faces instead of meeting the floor (#1076)."""
-    verts = face.vertices
-    near = min(verts, key=lambda v: (v - p).lengthSquared())
-    if (near - p).length() <= _RIM_SNAP:
-        return QVector3D(near)
-    best, best_d = p, _RIM_SNAP
-    m = len(verts)
-    for i in range(m):
-        a, b = verts[i], verts[(i + 1) % m]
-        ab = b - a
-        ll = ab.lengthSquared()
-        if ll < 1e-18:
-            continue
-        t = QVector3D.dotProduct(p - a, ab) / ll
-        if not 0.0 < t < 1.0:
-            continue
-        q = a + ab * t
-        d = (q - p).length()
-        if d < best_d:
-            best, best_d = q, d
-    return best
 
 
 def _corner_dragged(face: Face, rim: set, push_normal: QVector3D) -> bool:
@@ -2515,30 +2473,12 @@ class PushPullTool(Tool):
                         and before_mark is None else None)
         curve_runs = (self._curve_runs(mesh, self.base_face)
                       if self.base_face is not None else [])
-        guard = (mesh.capture_state()
-                 if is_closed(mesh) and not _mesh_is_flat(mesh) else None)
-        store_guard = getattr(guard, "snap", None)
-        fp_before = _Fingerprint(mesh) if guard is not None and store_guard is None else None
-        self._mutate_inner(scene, preview)
-        if guard is not None and not (is_closed(mesh) or _mesh_is_flat(mesh)):
-            mesh.restore_state(guard)
-            self._refused = True
+        from core.store_mesh import _store_of
+        self._refused = guarded_push(
+            mesh, lambda: self._mutate_inner(scene, preview),
+            abs(self.extrusion) >= _MIN_EXTRUDE, is_closed, _mesh_is_flat, _store_of)
+        if self._refused:
             return
-        if guard is not None and abs(self.extrusion) >= _MIN_EXTRUDE:
-            from core.store_mesh import _store_of
-            store = _store_of(mesh)
-            if store_guard is not None and store is not None:
-                unchanged = store.push_shape_matches(store_guard)
-            elif fp_before is not None:
-                unchanged = fp_before.same_now(mesh)
-            else:
-                # A store operation materialised its mesh during the push.
-                unchanged = ((len(mesh.vertices), len(mesh.edges), len(mesh.faces)) == store_guard.counts()
-                             and sorted(_key(store_guard.vertex_position(k)) for k in store_guard.keys("vertex"))
-                             == sorted(_key(v.position) for v in mesh.vertices))
-            if unchanged:
-                self._refused = True
-                return
 
         self._soften_curve_facets(mesh, before_edges, before_mark)
         self._tag_moved_curves(mesh, curve_runs)
@@ -2647,8 +2587,8 @@ class PushPullTool(Tool):
         # (welds, T-junctions, collinear) — no coplanar-merge, nothing new is
         # added. Ctrl ("push/pull a copy") must not translate: it stacks a new
         # segment, so it takes the extrude path below with the base kept.
-        if (self._prism_cap and not self._keep_base
-                and not self._cap_passes_a_wall_vertex(scene, face, d)):
+        if translate_prism_cap(self._prism_cap, self._keep_base,
+                               lambda: self._cap_passes_a_wall_vertex(scene, face, d)):
             normal = self._normal if self._normal is not None else face.normal()
             translate_points(scene, {_key(p) for p in self._cap_positions},
                              tuple(n*d for n in normal.toTuple()) if "_store" in scene.mesh.__dict__
@@ -2730,49 +2670,11 @@ class PushPullTool(Tool):
         count = len(base)
         faces = scene.faces
         memo: dict = {}
-        kinds = [
-            _classify_edge(face, base[i], base[(i + 1) % count],
-                           scene.mesh, faces, memo)
-            for i in range(count)
-        ]
-        # Ctrl ("push/pull a copy") forces the free-extrusion semantics: the
-        # base face stays in place as a slab division and no through-hole is
-        # punched — the stacked segment and its belt of edges are the point,
-        # the classic behaviour. The solid rebuild still runs: the kept base /
-        # inward cap are interior partitions the rebuild preserves, the belt
-        # survives as crease boundaries (``keep_keys``), and an inward stack's
-        # tube quads dissolve into the boundary faces they overlap instead of
-        # festering as opposite-winding coincident pairs that corrupt later
-        # parity queries.
-        attached_any = all(kind != "free" for kind, _ in kinds)
-        attached = attached_any and not self._keep_base
-        through = (self._find_through_face(face, d, faces, mesh=scene.mesh)
-                   if attached else None)
-        # "Solid" must be a property of the REGION being pushed, not just the
-        # whole mesh: a flat drawing with a box standing elsewhere is 'not
-        # flat', but pushing one of the drawing's sheet regions must take the
-        # sheet path — the volumetric plane rebuild reads an open sheet's
-        # regions as phantoms and deletes the neighbours (xc.igz: pushing a
-        # circle∩square lens made the rest of the drawing disappear). A base
-        # whose rim (outer + hole loops) backs onto ONLY coplanar faces and
-        # whose connected component has open edges is pure sheet; any
-        # perpendicular backing (a room raised from the plan, a corner step's
-        # walls — matched even across unsplit T-junction edges, which is why
-        # this reads ``kinds`` and not raw edge sharing) keeps the solid
-        # pipeline.
-        sheet_fast = (not entry_closed
-                      and all(kind == "coplanar" for kind, _ in kinds))
-        if sheet_fast:
-            for h in base_holes:
-                m = len(h)
-                if any(_classify_edge(face, h[i], h[(i + 1) % m],
-                                      scene.mesh, faces, memo)[0] != "coplanar"
-                       for i in range(m)):
-                    sheet_fast = False
-                    break
-        if sheet_fast and _component_is_closed(scene.mesh, face):
-            sheet_fast = False
-        was_solid = not _mesh_is_flat(scene.mesh) and not sheet_fast
+        attached_any, attached, sheet_fast, was_solid, through = push_region(
+            base, base_holes, self._keep_base, entry_closed,
+            lambda a, b: _classify_edge(face, a, b, scene.mesh, faces, memo)[0],
+            lambda: self._find_through_face(face, d, faces, mesh=scene.mesh),
+            lambda: _component_is_closed(scene.mesh, face), lambda: _mesh_is_flat(scene.mesh))
         if was_solid and not entry_closed and not self._drag_pre_oriented:
             # Open mixed mesh taking the solid path: mark interior partitions
             # for the rebuild's parity (orient never flips faces here).
@@ -3036,97 +2938,10 @@ class PushPullTool(Tool):
         return commands
 
     # ---- Through-hole -------------------------------------------------------
-    def _find_through_face(self, face, d: float, faces, mesh=None):
-        """If pushing ``face`` by ``d`` along its normal reaches a face parallel
-        to it on the far side of the solid (the opposite wall), return
-        ``(far_face, back_loop)`` — the face to punch and the opening projected
-        onto it. Otherwise ``None`` (a blind recess)."""
-        fn = face.normal().normalized()
-        push = fn if d > 0 else -fn
-        origin = face.centroid()
-        best = None
-        # The far face must overlap the box the push sweeps (the face and its
-        # copy |d| along the push): only those reach the normal and the
-        # containment tests — every face's Newell normal was computed before,
-        # on every push (09-10). Grown far beyond the 1e-4 tolerances.
-        swept = list(face.vertices) + [v + push * abs(d) for v in face.vertices]
-        sx = [p.x() for p in swept]; sy = [p.y() for p in swept]
-        sz = [p.z() for p in swept]
-        mg = 0.01 + 1e-6 * max(map(abs, sx + sy + sz))
-        w0 = (min(sx) - mg, min(sy) - mg, min(sz) - mg)
-        w1 = (max(sx) + mg, max(sy) + mg, max(sz) + mg)
-        # The faces the window test below keeps, natively, in list order.
-        near = (push_scans.faces_meeting(mesh, w0, w1)
-                if mesh is not None else None)
-        for g in (faces if near is None else near):
-            if g == face:
-                continue
-            gv = g.vertices
-            if (max(p.x() for p in gv) < w0[0] or min(p.x() for p in gv) > w1[0]
-                    or max(p.y() for p in gv) < w0[1]
-                    or min(p.y() for p in gv) > w1[1]
-                    or max(p.z() for p in gv) < w0[2]
-                    or min(p.z() for p in gv) > w1[2]):
-                continue  # nowhere near what the push sweeps
-            if abs(QVector3D.dotProduct(fn, g.normal().normalized())) < 0.999:
-                continue  # not parallel
-            dist = QVector3D.dotProduct(g.centroid() - origin, push)
-            # How far each corner has to go to meet the far plane. A door a
-            # fraction of a millimetre out of true reaches it with three
-            # corners while its centroid is still short: pushed the wall's
-            # thickness, it stopped at the centroid's 1e-4 and left its cap
-            # on the far wall (#1076). Within _OUT_OF_TRUE the push meets
-            # the face as soon as any corner does.
-            # Measured to the far PLANE along the push: projected on the
-            # push, the way to the far face's centroid also counted how far
-            # to the side it lies, tenths of a millimetre on a door 1 mm out
-            # of true, and the face read as beyond the push (#1094).
-            toward = QVector3D.dotProduct(push, g.normal().normalized())
-            reach = [QVector3D.dotProduct(g.centroid() - v,
-                                          g.normal().normalized()) / toward
-                     for v in face.vertices]
-            lo, hi = min(reach), max(reach)
-            if hi - lo > _OUT_OF_TRUE:
-                lo = hi = dist
-            if dist <= 1e-4 or lo > abs(d) + 1e-4:
-                continue  # coplanar / behind / farther than the push reaches
-            # Laid ON the far face's plane, not just carried ``dist`` along:
-            # a hand-drawn door 0.2 mm out of true (one corner off its
-            # plane) arrives that far off the opposite wall, outside every
-            # 1e-4 test below -- no hole, and the cap left almost flush on
-            # the wall wrecked the solid (#1076).
-            gn = g.normal().normalized()
-            gc = g.centroid()
-            back_loop = []
-            for v in face.vertices:
-                p = v + push * dist
-                back_loop.append(_onto_rim(
-                    p - gn * QVector3D.dotProduct(p - gc, gn), g))
-            if loop_inside_face(g, back_loop):
-                if best is None or dist < best[0]:
-                    best = (dist, g, back_loop, None)
-                continue
-            # Reaching the far face with the opening on its rim — the corner
-            # piece left by a rounding arc pushed right through (Marco,
-            # 2026-09-15: «debería eliminarme ese triángulo»), a door whose
-            # sill is the floor. Not a hole: the far face is trimmed to what
-            # is left of it (the arc becomes its outline) and the cap goes.
-            # Pushed PAST the far face too, as a window's hole already was:
-            # flush-only sent a door dragged a hair beyond the wall down the
-            # blind-recess path, which poked the cap out the back and left
-            # edges with three faces (#1076). Past it only where the push
-            # leaves the material through that face (it faces along the
-            # push): a face looking back at the push belongs to something
-            # in front, which a push past it must not bite.
-            if (not lo - 1e-4 <= abs(d) <= hi + 1e-4
-                    and QVector3D.dotProduct(gn, push) <= 0):
-                continue
-            remainder = subtract_loop_from_face(g, back_loop)
-            if remainder is not None and (best is None or dist < best[0]):
-                best = (dist, g, back_loop, remainder)
-        if best is None:
-            return None
-        return best[1], best[2], best[3]
+    @staticmethod
+    def _find_through_face(face, d, faces, mesh=None):
+        return push_through_face(face, d, faces, mesh, push_scans.faces_meeting,
+                                 loop_inside_face, subtract_loop_from_face)
 
     def _through_commands(self, face, base, through, base_holes=(), faces=()):
         """Punch the far face, connect the tunnel walls and close any swept islands."""

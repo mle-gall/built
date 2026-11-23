@@ -26,7 +26,7 @@ mod changes;
 pub mod cow;
 pub mod diff;
 pub(crate) mod drawing;
-mod commands;
+pub(crate) mod commands;
 mod fold;
 mod landing;
 mod push_band;

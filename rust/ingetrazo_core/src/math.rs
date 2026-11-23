@@ -29,7 +29,7 @@ impl From<DVec3> for Vec3 {
 }
 
 // Accept legacy vectors and coordinate triples at API boundaries.
-fn xyz(obj: &Bound<'_, PyAny>) -> PyResult<DVec3> {
+pub(crate) fn xyz(obj: &Bound<'_, PyAny>) -> PyResult<DVec3> {
     if let Ok(v) = obj.cast::<Vec3>() {
         return Ok(v.borrow().v);
     }
