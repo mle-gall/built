@@ -65,6 +65,7 @@ mod weld;
 mod snap_build;
 mod snap;
 mod snap_engine;
+mod tools;
 mod inference_state;
 mod snap_curve;
 mod snap_planes;
@@ -187,6 +188,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(snap_curve::circle_tangents, m)?)?;
     m.add_function(wrap_pyfunction!(snap_curve::snap_circle, m)?)?;
     m.add_class::<inference_state::InferenceMemory>()?;
+    m.add_class::<tools::py::ToolMachine>()?;
     m.add_function(wrap_pyfunction!(snap_curve::arc_midpoint, m)?)?;
     m.add_function(wrap_pyfunction!(snap_planes::plane_cut_ray, m)?)?;
     m.add_function(wrap_pyfunction!(snap_planes::plane_alignments, m)?)?;
