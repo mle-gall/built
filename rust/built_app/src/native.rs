@@ -565,15 +565,17 @@ mod tests {
 pub fn scroll_source() -> (bool, bool, bool) {
     #[cfg(target_os = "macos")]
     if let Some(mtm) = objc2::MainThreadMarker::new() {
-        use objc2_app_kit::{NSApplication, NSEventType, NSTouchType};
+        use objc2_app_kit::{NSApplication, NSEventType};
         if let Some(e) = NSApplication::sharedApplication(mtm).currentEvent() {
             if e.r#type() == NSEventType::ScrollWheel {
                 return (
                     !e.momentumPhase().is_empty(),
-                    e.allTouches().iter().any(|t| t.r#type() == NSTouchType::Direct)
+                    // Never ask a scroll event for `allTouches`: AppKit raises
+                    // for non-touch events and the exception aborts the app
+                    // inside winit's scroll_wheel callback (crash 2026-11-23).
                     // Qt maps Cocoa device 0 to primary pointer 1. On the
                     // macOS 27 touchscreen the emulated slide uses this ID.
-                    || (objc2::available!(macos = 27.0) && e.hasPreciseScrollingDeltas() && e.deviceID() <= 1),
+                    (objc2::available!(macos = 27.0) && e.hasPreciseScrollingDeltas() && e.deviceID() <= 1),
                     e.isDirectionInvertedFromDevice(),
                 );
             }

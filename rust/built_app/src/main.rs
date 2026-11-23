@@ -855,193 +855,15 @@ impl ApplicationHandler<UserEvent> for App {
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
-        if self.win(id).is_none() {
-            return;
-        }
-        match event {
-            WindowEvent::CloseRequested => self.close_window(event_loop, id),
-            WindowEvent::Resized(size) => {
-                if size.width == 0 || size.height == 0 { return; }
-                let s = self.scale(id);
-                if let Some(w) = self.win(id) {
-                    w.host.call("resize", (size.width as f64 / s, size.height as f64 / s, s));
-                    // AppKit can stay in its live-resize loop before it
-                    // dispatches another RedrawRequested.
-                    w.host.frame();
-                }
-            }
-            WindowEvent::RedrawRequested => {
-                let drew = self.win(id).is_some_and(|w| w.host.frame().is_some());
-                if drew {
-                    self.frames += 1;
-                    if self.timings.first_frame.is_none()
-                        && (self.args.file.is_none() || self.timings.opened.is_some())
-                    {
-                        self.timings.first_frame = Some(self.timings.process.elapsed());
-                        if self.args.measure {
-                            self.report_measure();
-                            event_loop.exit();
-                        }
-                    }
-                }
-            }
-            WindowEvent::ModifiersChanged(m) => self.modifiers = m.state(),
-            WindowEvent::CursorMoved { position, .. } => {
-                let (x, y) = self.logical(id, position);
-                let m = self.mods();
-                self.pointer(id, "move", x, y, 0, m);
-            }
-            WindowEvent::CursorLeft { .. } => {
-                if let Some(w) = self.win(id) {
-                    w.host.call("pointer", ("leave", -1.0, -1.0, 0u32, 0u32, 0u32));
-                }
-            }
-            WindowEvent::MouseInput { state, button, .. } => {
-                let bit = mouse_bit(button);
-                let (x, y) = self.win(id).map_or((0.0, 0.0), |w| w.cursor);
-                let m = self.mods();
-                let kind = if state == ElementState::Pressed { "press" } else { "release" };
-                self.pointer(id, kind, x, y, bit, m);
-            }
-            WindowEvent::MouseWheel { delta, phase, .. } => {
-                let m = self.mods();
-                let s = self.scale(id);
-                if let Some(w) = self.win(id) {
-                    let (x, y) = w.cursor;
-                    let held = w.held;
-                    match delta {
-                        MouseScrollDelta::LineDelta(dx, dy) => {
-                            w.host.call("wheel", (x, y, 0.0, 0.0, dx as f64 * 120.0, dy as f64 * 120.0,
-                                                  "none", m, held, false));
-                        }
-                        MouseScrollDelta::PixelDelta(p) => {
-                            let (dx, dy) = (p.x / s, p.y / s);
-                            let (momentum, touch, natural) = native::scroll_source();
-                            if touch && !momentum {
-                                let (dx, dy) = if natural { (dx, dy) } else { (-dx, -dy) };
-                                let anchor = w.contact.map_or((x, y), |(_, p, _)| p);
-                                if w.contact.is_none() {
-                                    self.touch(id, u64::MAX, TouchPhase::Started, (x, y));
-                                }
-                                self.touch(id, u64::MAX, phase, (anchor.0 + dx, anchor.1 + dy));
-                            } else if !touch {
-                                let phase = if momentum { "momentum" } else { phase_name(phase) };
-                                self.slide(id, (x, y), (dx, dy), phase, false, natural);
-                            }
-                        }
-                    }
-                }
-                self.redraw(id);
-            }
-            WindowEvent::Touch(t) => {
-                self.touch(id, t.id, t.phase, self.logical(id, t.location));
-                self.redraw(id);
-            }
-            WindowEvent::PanGesture { delta, phase, .. } => {
-                let scale = self.scale(id);
-                if let Some(w) = self.win(id) {
-                    self.slide(
-                        id,
-                        w.cursor,
-                        (delta.x as f64 / scale, delta.y as f64 / scale),
-                        phase_name(phase),
-                        false,
-                        true,
-                    );
-                }
-                self.redraw(id);
-            }
-            WindowEvent::PinchGesture { delta, phase, .. } => {
-                if let Some(w) = self.win(id) {
-                    let (x, y) = w.cursor;
-                    if phase == TouchPhase::Started {
-                        w.host.call("gesture", ("begin", 0.0, x, y));
-                    }
-                    if delta.is_finite() && delta != 0.0 {
-                        w.host.call("gesture", ("zoom", delta, x, y));
-                    }
-                    if matches!(phase, TouchPhase::Ended | TouchPhase::Cancelled) {
-                        w.host.call("gesture", ("end", 0.0, x, y));
-                    }
-                }
-                self.redraw(id);
-            }
-            WindowEvent::RotationGesture { delta, .. } => {
-                if let Some(w) = self.win(id) {
-                    let (x, y) = w.cursor;
-                    w.host.call("gesture", ("rotate", delta as f64, x, y));
-                }
-                self.redraw(id);
-            }
-            WindowEvent::DoubleTapGesture { .. } => {
-                if let Some(w) = self.win(id) {
-                    let (x, y) = w.cursor;
-                    w.host.call("gesture", ("smart_zoom", 0.0, x, y));
-                }
-                self.redraw(id);
-            }
-            WindowEvent::KeyboardInput { event, is_synthetic, .. } => {
-                if is_synthetic {
-                    return;
-                }
-                let m = self.mods();
-                let (code, text) = keys::qt_key(&event.logical_key, event.text.as_deref(), m);
-                let pressed = event.state == ElementState::Pressed;
-                if pressed {
-                    if let Some(w) = self.win_mut(id) {
-                        w.last_key_text = Some(text.clone()).filter(|t| !t.is_empty());
-                    }
-                }
-                if code != 0 || !text.is_empty() {
-                    self.key(id, pressed, code, &text, event.repeat, m);
-                }
-            }
-            WindowEvent::Ime(Ime::Preedit(text, cursor)) => {
-                // The composition being typed (dead keys, input methods):
-                // shown in the chrome's focused field, or as the value
-                // being typed, until it commits.
-                if let Some(w) = self.win(id) {
-                    let at = cursor.map_or(text.chars().count(), |(a, _)| text[..a.min(text.len())].chars().count());
-                    w.host.call("preedit", (text, at));
-                }
-                self.redraw(id);
-            }
-            WindowEvent::Ime(Ime::Commit(text)) => {
-                // A plain key already delivered its own text; a composed
-                // one (dead keys, input methods) arrives only here.
-                let typed = self.win_mut(id).and_then(|w| w.last_key_text.take());
-                if typed.as_deref() != Some(text.as_str()) {
-                    if let Some(w) = self.win(id) {
-                        w.host.call("text", (text,));
-                    }
-                    self.redraw(id);
-                }
-            }
-            WindowEvent::Focused(on) => {
-                if on {
-                    self.focused = Some(id);
-                }
-                if let Some(w) = self.win(id) {
-                    w.host.call("focus", (on,));
-                }
-            }
-            WindowEvent::DroppedFile(path) => {
-                self.focused = Some(id);
-                self.open(&path)
-            }
-            WindowEvent::HoveredFile(path) => {
-                if let Some(w) = self.win(id) {
-                    w.host.call("drag_hover", (path.to_string_lossy().to_string(),));
-                }
-            }
-            WindowEvent::HoveredFileCancelled => {
-                if let Some(w) = self.win(id) {
-                    w.host.call("drag_hover", ("",));
-                }
-            }
-            _ => {}
+        // A panic must never cross winit's Objective-C callbacks: that aborts
+        // the whole app. Log it and keep the window alive instead.
+        let what = format!("{event:?}");
+        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.window_event_inner(event_loop, id, event)));
+        if r.is_err() {
+            eprintln!("[built] error: panic while handling {}", what.chars().take(160).collect::<String>());
         }
     }
+
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         if !self.steps.is_empty() || self.resume_at.is_some() {
@@ -1248,6 +1070,197 @@ mod profile_tests {
         assert!(!temporary(&["--new-instance", "drawing.built"]));
         for args in [&["--script", "steps"][..], &["--check"], &["--measure"], &["--gallery"]] {
             assert!(temporary(args));
+        }
+    }
+}
+
+impl App {
+    fn window_event_inner(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
+        if self.win(id).is_none() {
+            return;
+        }
+        match event {
+            WindowEvent::CloseRequested => self.close_window(event_loop, id),
+            WindowEvent::Resized(size) => {
+                if size.width == 0 || size.height == 0 { return; }
+                let s = self.scale(id);
+                if let Some(w) = self.win(id) {
+                    w.host.call("resize", (size.width as f64 / s, size.height as f64 / s, s));
+                    // AppKit can stay in its live-resize loop before it
+                    // dispatches another RedrawRequested.
+                    w.host.frame();
+                }
+            }
+            WindowEvent::RedrawRequested => {
+                let drew = self.win(id).is_some_and(|w| w.host.frame().is_some());
+                if drew {
+                    self.frames += 1;
+                    if self.timings.first_frame.is_none()
+                        && (self.args.file.is_none() || self.timings.opened.is_some())
+                    {
+                        self.timings.first_frame = Some(self.timings.process.elapsed());
+                        if self.args.measure {
+                            self.report_measure();
+                            event_loop.exit();
+                        }
+                    }
+                }
+            }
+            WindowEvent::ModifiersChanged(m) => self.modifiers = m.state(),
+            WindowEvent::CursorMoved { position, .. } => {
+                let (x, y) = self.logical(id, position);
+                let m = self.mods();
+                self.pointer(id, "move", x, y, 0, m);
+            }
+            WindowEvent::CursorLeft { .. } => {
+                if let Some(w) = self.win(id) {
+                    w.host.call("pointer", ("leave", -1.0, -1.0, 0u32, 0u32, 0u32));
+                }
+            }
+            WindowEvent::MouseInput { state, button, .. } => {
+                let bit = mouse_bit(button);
+                let (x, y) = self.win(id).map_or((0.0, 0.0), |w| w.cursor);
+                let m = self.mods();
+                let kind = if state == ElementState::Pressed { "press" } else { "release" };
+                self.pointer(id, kind, x, y, bit, m);
+            }
+            WindowEvent::MouseWheel { delta, phase, .. } => {
+                let m = self.mods();
+                let s = self.scale(id);
+                if let Some(w) = self.win(id) {
+                    let (x, y) = w.cursor;
+                    let held = w.held;
+                    match delta {
+                        MouseScrollDelta::LineDelta(dx, dy) => {
+                            w.host.call("wheel", (x, y, 0.0, 0.0, dx as f64 * 120.0, dy as f64 * 120.0,
+                                                  "none", m, held, false));
+                        }
+                        MouseScrollDelta::PixelDelta(p) => {
+                            let (dx, dy) = (p.x / s, p.y / s);
+                            let (momentum, touch, natural) = native::scroll_source();
+                            if touch && !momentum {
+                                let (dx, dy) = if natural { (dx, dy) } else { (-dx, -dy) };
+                                let anchor = w.contact.map_or((x, y), |(_, p, _)| p);
+                                if w.contact.is_none() {
+                                    self.touch(id, u64::MAX, TouchPhase::Started, (x, y));
+                                }
+                                self.touch(id, u64::MAX, phase, (anchor.0 + dx, anchor.1 + dy));
+                            } else if !touch {
+                                let phase = if momentum { "momentum" } else { phase_name(phase) };
+                                self.slide(id, (x, y), (dx, dy), phase, false, natural);
+                            }
+                        }
+                    }
+                }
+                self.redraw(id);
+            }
+            WindowEvent::Touch(t) => {
+                self.touch(id, t.id, t.phase, self.logical(id, t.location));
+                self.redraw(id);
+            }
+            WindowEvent::PanGesture { delta, phase, .. } => {
+                let scale = self.scale(id);
+                if let Some(w) = self.win(id) {
+                    self.slide(
+                        id,
+                        w.cursor,
+                        (delta.x as f64 / scale, delta.y as f64 / scale),
+                        phase_name(phase),
+                        false,
+                        true,
+                    );
+                }
+                self.redraw(id);
+            }
+            WindowEvent::PinchGesture { delta, phase, .. } => {
+                if let Some(w) = self.win(id) {
+                    let (x, y) = w.cursor;
+                    if phase == TouchPhase::Started {
+                        w.host.call("gesture", ("begin", 0.0, x, y));
+                    }
+                    if delta.is_finite() && delta != 0.0 {
+                        w.host.call("gesture", ("zoom", delta, x, y));
+                    }
+                    if matches!(phase, TouchPhase::Ended | TouchPhase::Cancelled) {
+                        w.host.call("gesture", ("end", 0.0, x, y));
+                    }
+                }
+                self.redraw(id);
+            }
+            WindowEvent::RotationGesture { delta, .. } => {
+                if let Some(w) = self.win(id) {
+                    let (x, y) = w.cursor;
+                    w.host.call("gesture", ("rotate", delta as f64, x, y));
+                }
+                self.redraw(id);
+            }
+            WindowEvent::DoubleTapGesture { .. } => {
+                if let Some(w) = self.win(id) {
+                    let (x, y) = w.cursor;
+                    w.host.call("gesture", ("smart_zoom", 0.0, x, y));
+                }
+                self.redraw(id);
+            }
+            WindowEvent::KeyboardInput { event, is_synthetic, .. } => {
+                if is_synthetic {
+                    return;
+                }
+                let m = self.mods();
+                let (code, text) = keys::qt_key(&event.logical_key, event.text.as_deref(), m);
+                let pressed = event.state == ElementState::Pressed;
+                if pressed {
+                    if let Some(w) = self.win_mut(id) {
+                        w.last_key_text = Some(text.clone()).filter(|t| !t.is_empty());
+                    }
+                }
+                if code != 0 || !text.is_empty() {
+                    self.key(id, pressed, code, &text, event.repeat, m);
+                }
+            }
+            WindowEvent::Ime(Ime::Preedit(text, cursor)) => {
+                // The composition being typed (dead keys, input methods):
+                // shown in the chrome's focused field, or as the value
+                // being typed, until it commits.
+                if let Some(w) = self.win(id) {
+                    let at = cursor.map_or(text.chars().count(), |(a, _)| text[..a.min(text.len())].chars().count());
+                    w.host.call("preedit", (text, at));
+                }
+                self.redraw(id);
+            }
+            WindowEvent::Ime(Ime::Commit(text)) => {
+                // A plain key already delivered its own text; a composed
+                // one (dead keys, input methods) arrives only here.
+                let typed = self.win_mut(id).and_then(|w| w.last_key_text.take());
+                if typed.as_deref() != Some(text.as_str()) {
+                    if let Some(w) = self.win(id) {
+                        w.host.call("text", (text,));
+                    }
+                    self.redraw(id);
+                }
+            }
+            WindowEvent::Focused(on) => {
+                if on {
+                    self.focused = Some(id);
+                }
+                if let Some(w) = self.win(id) {
+                    w.host.call("focus", (on,));
+                }
+            }
+            WindowEvent::DroppedFile(path) => {
+                self.focused = Some(id);
+                self.open(&path)
+            }
+            WindowEvent::HoveredFile(path) => {
+                if let Some(w) = self.win(id) {
+                    w.host.call("drag_hover", (path.to_string_lossy().to_string(),));
+                }
+            }
+            WindowEvent::HoveredFileCancelled => {
+                if let Some(w) = self.win(id) {
+                    w.host.call("drag_hover", ("",));
+                }
+            }
+            _ => {}
         }
     }
 }
