@@ -51,10 +51,10 @@ def weld(pos: np.ndarray, sequential: bool = False, *, precise=None):
     mesh, as positions instead of vertices (same order: the vertex list).
     ``sequential``: in the order :meth:`Mesh.vertex` called point by point
     makes them instead — the same vertices, each where its point comes.
-    By default a store uses the input precision and Qt vertices use f32.
+    The source array determines the default precision for both mesh backings.
     A format with its own precision may select it explicitly."""
     if precise is None:
-        precise = np.asarray(pos).dtype != np.float32 and _mesh._store_on()
+        precise = np.asarray(pos).dtype != np.float32
     vpos, ids, origin = _weld(pos, precise=precise)
     if sequential and len(vpos):
         order = np.argsort(origin, kind="stable")
