@@ -118,6 +118,7 @@ def command(win, name, *args):
         "reload_links": lambda: win._reload_all_links(),
         "classic": lambda: open_in_classic(win),
         "prefs": lambda: open_settings(win),
+        "library": lambda: open_library(win),
         "cut": lambda: clipboard_cut(win),
         "copy": lambda: clipboard_copy(win),
         "paste": lambda: clipboard_paste(win, in_place=False),
@@ -167,6 +168,12 @@ def command(win, name, *args):
     if fn is None:
         return None
     return fn()
+
+
+def open_library(win) -> bool:
+    """Window ▸ Library: the Library sheet (views/wgpu_library.py)."""
+    from views import wgpu_library
+    return wgpu_library.open_library(win)
 
 
 def open_settings(win) -> bool:

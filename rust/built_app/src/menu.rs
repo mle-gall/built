@@ -137,7 +137,9 @@ pub fn build() -> muda::Result<Menus> {
           &item("next_doc", "Next Project", Some("ctrl+Tab")),
           &item("prev_doc", "Previous Project", Some("ctrl+shift+Tab")),
           &PredefinedMenuItem::separator(),
-          &item("move_to_window", "Move Project to New Window", None)],
+          &item("move_to_window", "Move Project to New Window", None),
+          &PredefinedMenuItem::separator(),
+          &item("library", "Library", Some("super+shift+KeyL"))],
     )?;
     let plugins = Submenu::with_items("Plugins", true, &[
         &item("panel:python_console", "Python Console", Some("CmdOrCtrl+Shift+P")),
