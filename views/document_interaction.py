@@ -1795,37 +1795,6 @@ def _is_chord(modifiers) -> bool:
         and not (ctrl and alt)
 
 
-def _merge_mixed_numbers(fields: list) -> list:
-    """The usual ``1 1/2"``: a whole number followed by a fraction field is
-    ONE mixed number, not two fields — joined with the hyphen form. And a
-    feet field followed by inches that carry their mark is ONE length, the
-    way it is written: ``5' 3 1/2"`` → ``5'3-1/2"`` (a 5 ft × 3 in
-    rectangle is typed ``5';3"``)."""
-    out = []
-    i = 0
-    while i < len(fields):
-        f = fields[i]
-        nxt = fields[i + 1] if i + 1 < len(fields) else None
-        if (nxt is not None
-                and re.fullmatch(r"-?\d+(?:'-?\d*)?", f)
-                and re.fullmatch(r"\d+/\d+(?:mm|cm|m|in|ft|\"|')?", nxt.lower())):
-            # 1 1/2" → 1-1/2"; 1'6 1/2" → 1'6-1/2"; 1' 1/2" → 1'1/2"
-            joint = "" if f.endswith(("'", "-")) else "-"
-            out.append(f"{f}{joint}{nxt}")
-            i += 2
-            continue
-        out.append(f)
-        i += 1
-    joined = []
-    for f in out:
-        if (joined and re.fullmatch(r"-?[\d./-]+'", joined[-1])
-                and re.fullmatch(r"[\d./-]+(?:\"|in)", f.lower())):
-            joined[-1] += f
-        else:
-            joined.append(f)
-    return joined
-
-
 def _expression_fields(buffer: str) -> list:
     """The ``;`` fields of a calculation typed in the value box, each one
     starting with ``=`` (#630): ``=3/2;1+0,5`` → ``["=3/2", "=1+0,5"]``.
@@ -14933,111 +14902,15 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
     @staticmethod
     def _parse_value_buffer(buffer: str, comma_lists: bool = False):
-        """Return a float, a 2-tuple ``(w, h)`` (rectangle dimensions), a
-        3-tuple ``(dx, dy, dz)`` (delta), or ``None`` on parse error. Each tool's
-        ``on_value`` accepts the arity it understands and ignores the rest.
-        Fields may carry a unit suffix — ``m``/``cm``/``mm``, and imperial
-        ``in`` or ``"``, ``ft`` or ``'``, feet-and-inches ``1'6"``, fractions
-        ``3/4"`` (the usual forms, so a 2×4 is typed ``2";4"`` while the
-        span stays ``3.2``). Bare numbers are metres, and a leading minus is
-        kept (direction tools flip on it).
-
-        **The comma (#152).** ``;`` and whitespace always separate fields.
-        A comma is a decimal separator (``2,5`` is 2.5, ``2,5;1,2`` is
-        2.5 × 1.2 -- Spanish and Portuguese write decimals that way) --
-        EXCEPT when ``comma_lists`` is set and the entry has no ``;`` and no
-        space: then commas separate fields, so ``200,100`` is 200 × 100 as
-        usual. ``comma_lists`` is the caller's word that the tool takes
-        only several values (the Rectangle), where a lone decimal could never
-        be meant; a user who wants decimals there separates with ``;``
-        (``1,5;2,5``), which is the usual rule in comma-decimal locales.
-
-        **Calculations (#630).** An entry that starts with ``=`` is read as
-        arithmetic, one result per ``;`` field: ``=1.25*2+2.45/2``,
-        ``=3/2;=1+0,5`` (the ``=`` of the later fields may be left out).
-        Spaces are free inside it and a comma is always a decimal."""
-        from core.units import plain_marks
-        buffer = plain_marks(buffer)
-        if is_expression(buffer):
-            nums = []
-            for field in _expression_fields(buffer):
-                r = parse_units(field, "length")
-                if not r.ok:
-                    return None
-                nums.append(r.value)
-            if len(nums) == 1:
-                return nums[0]
-            return tuple(nums) if len(nums) in (2, 3) else None
-        # A comma followed by a space separates values: a decimal comma
-        # never has one after it. «1 3/8", 1 3/16"» is two lengths (#189).
-        buffer = re.sub(r",\s+", ";", buffer.strip())
-        if (comma_lists and ";" not in buffer
-                and not any(ch.isspace() for ch in buffer.strip())):
-            buffer = buffer.replace(",", " ")
-        normalized = buffer.replace(",", ".").replace(";", " ")
-        stripped = normalized.strip()
-        # Arrays after a copy: "3x" / "3*" / "*3" (external) and
-        # "/3" / "3/" (internal). Only tools with ``accepts_array`` get them.
-        m = re.fullmatch(r"(?:(\d+)\s*[x*]|[x*]\s*(\d+))", stripped.lower())
-        if m is not None:
-            return ("array", int(m.group(1) or m.group(2)), "x")
-        # "5x10m": five copies ten metres apart in one entry (#111) — the
-        # count and the spacing that would otherwise take two steps.
-        m = re.fullmatch(r"(\d+)\s*[x*]\s*(.+)", stripped.lower())
-        if m is not None:
-            step = DocumentInteraction._parse_value_buffer(m.group(2))
-            if isinstance(step, (int, float)) and not isinstance(step, bool) \
-                    and step > 0:
-                return ("array", int(m.group(1)), "x", float(step))
-            return None
-        m = re.fullmatch(r"(?:/\s*(\d+)|(\d+)\s*/)", stripped)
-        if m is not None:
-            return ("array", int(m.group(1) or m.group(2)), "/")
-        if stripped.lower().endswith("r") and ":" not in stripped:
-            import re as _re
-            m = _re.fullmatch(r"(\d+\.?\d*|\.\d+)r", stripped.lower())
-            if m is None:
-                return None
-            return ("radius", float(m.group(1)))
-        if stripped.lower().endswith("p") and ":" not in stripped:
-            # "0.3p": the profile of a bevel (0 to 1, no unit).
-            m = re.fullmatch(r"(\d+\.?\d*|\.\d+)p", stripped.lower())
-            if m is None:
-                return None
-            return ("profile", float(m.group(1)))
-        if stripped.lower().endswith("s") and ":" not in stripped:
-            # "12s": the segment count of an arc / the sides of
-            # a circle. Only tools that declare it understand.
-            import re as _re
-            m = _re.fullmatch(r"(\d+)s", stripped.lower())
-            if m is None:
-                return None
-            return ("segments", int(m.group(1)))
-        if ":" in normalized:
-            # Slope as rise:run ("3:12", "1:6") → ("ratio", degrees).
-            m = re.fullmatch(
-                r"\s*(-?(?:\d+\.?\d*|\.\d+)):(\d+\.?\d*|\.\d+)\s*", normalized)
-            if m is None:
-                return None
-            rise, run = float(m.group(1)), float(m.group(2))
-            if run <= 0 or not (math.isfinite(rise) and math.isfinite(run)):
-                return None
-            return ("ratio", math.degrees(math.atan2(rise, run)))
-        nums = []
-        # «;» is a hard separator: «5';3"» stays two values, while «5' 3"»
-        # is one length, written the usual way.
-        fields = [f for group in buffer.replace(",", ".").split(";")
-                  for f in _merge_mixed_numbers(group.split())]
-        for p in fields:
-            v = _parse_length_field(p)
-            if v is None:
-                return None
-            nums.append(v)
-        if len(nums) == 1:
-            return nums[0]
-        if len(nums) in (2, 3):
-            return tuple(nums)
-        return None
+        """The value box's text → a float, a 2-tuple ``(w, h)``, a 3-tuple
+        ``(dx, dy, dz)``, an array, radius, profile, segments or slope
+        tuple, or None (``core.units.parse_value_box``: the grammar is
+        Rust's, ``rust/ingetrazo_core/src/units.rs``). Each tool's
+        ``on_value`` takes the arity it understands. ``comma_lists``: a
+        comma separates fields when the entry has no ``;`` and no space
+        (#152)."""
+        from core.units import parse_value_box
+        return parse_value_box(buffer, comma_lists)
 
     def _array_pending(self) -> bool:
         """Whether the active tool just made a copy that «x5» would turn
