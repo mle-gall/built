@@ -178,12 +178,15 @@ def attach(view) -> None:
         view.source_viewport._chrome_owns_labels = True
 
 
-#: The dock's width for the wide column sets (Drawing, Export): about
-#: 390 pt so the headed columns never crush the names (tree C). Filing
-#: keeps the user's own width ("ui/dock_width").
+#: The dock's width for the wide column sets: about 390 pt so the headed
+#: columns never crush the names (tree C). Filing keeps the user's own
+#: width ("ui/dock_width").
 WIDE_DOCK = 390.0
-#: Column sets that widen the dock (by index: 0 Filing, 1 Drawing, 2 Export).
-WIDE_COLSETS = (1, 2)
+#: Column sets that widen the dock (by index: 0 Filing, 1 Drawing, 2
+#: Deliver). The decision named Drawing and Export; Export became Deliver
+#: (ui/deliveries), a list of deliveries with no columns, so it keeps the
+#: user's width like Filing.
+WIDE_COLSETS = (1,)
 
 
 def dock_width(colset, settings=None) -> float:

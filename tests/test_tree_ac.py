@@ -224,7 +224,7 @@ def settings(tmp_path):
     st.sync()
 
 
-def test_drawing_and_export_widen_the_dock_and_filing_returns(ui, settings):
+def test_drawing_widens_the_dock_and_filing_and_deliver_keep_the_users_width(ui, settings):
     scene, win, view, rows, act = ui
     settings.setValue("ui/dock_width", 320.0)
     seen = []
@@ -232,35 +232,37 @@ def test_drawing_and_export_widen_the_dock_and_filing_returns(ui, settings):
     for colset in (1, 2, 0):
         view._ui_colset = colset
         wu.apply_dock_width(view, settings)
-    assert seen == [wu.WIDE_DOCK, wu.WIDE_DOCK, 320.0]
-    # A width dragged in Drawing is kept for the wide sets only.
+    assert seen == [wu.WIDE_DOCK, 320.0, 320.0]
+    # A width dragged in Drawing is kept for Drawing only.
     view._ui_colset = 1
     wu.keep_dock_width(view, "430", settings)
     assert float(settings.value("ui/dock_width")) == 320.0
     assert wu.dock_width(1, settings) == 430.0 and wu.dock_width(0, settings) == 320.0
     # Never narrower than the user's own width.
     settings.setValue("ui/dock_width", 480.0)
-    assert wu.dock_width(2, settings) == 480.0
+    assert wu.dock_width(1, settings) == 480.0
 
 
 def test_colset_action_sends_the_width(ui, monkeypatch):
     scene, win, view, rows, act = ui
     seen = []
     view.renderer.ui_set_dock_width = seen.append
-    monkeypatch.setattr(wu, "dock_width", lambda colset, settings=None: 390.0 if colset else 300.0)
+    monkeypatch.setattr(wu, "dock_width", lambda colset, settings=None: 390.0 if colset == 1 else 300.0)
     act("colset", "1")
     act("colset", "0")
     assert seen == [390.0, 300.0]
     assert view.renderer.calls["ui_set_colset"] == (0,)
 
 
-def test_export_cells_carry_class_and_quantity(ui):
+def test_drawing_cells_carry_colour_line_weight_print(ui):
     scene, win, view, rows, act = ui
-    view._ui_colset = 2
+    view._ui_colset = 1
     view._ui_tree_sig = None
     wu._tree(view, win)
-    row = next(t for t, _n in view.renderer.calls["ui_set_tree"][0] if t[0] == "n:" + _key(view, "Site works"))
-    assert len(row) == 8   # key, name, kind, badge, icon + class, type, quantity
+    row = next(t for t, _n in view.renderer.calls["ui_set_tree"][0] if t[0] == "n:" + _key(view, "Paths"))
+    assert len(row) == 9   # key, name, kind, badge, icon + colour, line type, weight, print
+    file_row = next(t for t, _n in view.renderer.calls["ui_set_tree"][0] if t[0] == "n:link:Ride")
+    assert file_row[4] == "file:resolved"
 
 
 # ---- C: the inspector's verbs by kind -----------------------------------------------
