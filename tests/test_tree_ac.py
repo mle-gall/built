@@ -548,3 +548,18 @@ def test_sort_choice_is_restored_on_a_new_project_view(ui):
             settings.remove(key)
         else:
             settings.setValue(key, old)
+
+
+def test_dropped_item_uses_its_own_address_and_rejects_read_only_nodes(ui):
+    scene, win, view, _, act = ui
+    src, dest = (_key(view, name) for name in ("Paths", "Fences"))
+    item, untouched = view._ui_tree["direct"][src][:2]
+    scene.select([untouched])
+    act("fileitem", "i:" + item.uid, dest)
+    assert item in view._ui_tree["direct"][dest] and untouched in view._ui_tree["direct"][src]
+    assert win.viewport.history.undo()
+    version = win.viewport.history.revision
+    linked = view._ui_tree["direct"][_key(view, "Rails")][0]
+    act("fileitem", "i:" + item.uid, _key(view, "Rails"))
+    act("fileitem", "i:" + linked.uid, dest)
+    assert win.viewport.history.revision == version

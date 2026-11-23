@@ -2129,11 +2129,17 @@ def _tree_action(win, view, action) -> None:
             elif item() is not None:
                 _core(vp, "rename_placement", placement=address(item()), name=extra)
                 vp.update()
+        elif verb == "fileitem" and (group := item()) is not None:
+            _core(vp, "file_placements", placements=[address(group)], node=extra)
+            vp.notify_scene_changed()
+            rebuild()
         elif verb in ("file", "filehere"):
             key = node if verb == "filehere" else ident if kind == "n" else rk
             uids = [address(g) for g in scene.selection if isinstance(g, Group)]
             if uids and key:
-                execute(vp, structure.file(scene, uids, key))
+                _core(vp, "file_placements", placements=uids, node=key)
+                vp.notify_scene_changed()
+                rebuild()
                 vp.flash_status(f"Filed {len(uids)} to " + " › ".join(structure.path(bim_registry.get(scene), key)))
         elif verb == "active":
             _core(vp, "edit_structure_node", node=node, field="active", value="")

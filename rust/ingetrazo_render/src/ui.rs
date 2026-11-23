@@ -189,6 +189,7 @@ pub struct Node {
     expandable: bool,
     expanded: bool,
     selected: u32,
+    local_placement: bool,
     /// The selection, marked once (tree A): 1 this row holds it (lit), 2 a
     /// row above the one holding it (a quiet dot), 0 neither.
     mark: u8,
@@ -379,14 +380,20 @@ impl Ui {
         });
         let g = |v: &Vec<i64>, i: usize| v.get(i).copied().unwrap_or(0);
         let s = |v: &Vec<String>, i: usize| v.get(i).cloned().unwrap_or_default();
+        let mut linked_ancestors: Vec<bool> = Vec::new();
         col.nodes = rows.into_iter().map(|(t, n)| {
             let raw = s(&t, 2);
             let (kind, tip) = match raw.split_once('\u{1e}') {
                 Some((k, tip)) => (k.to_string(), tip.to_string()),
                 None => (raw, String::new()),
             };
+            linked_ancestors.truncate(g(&n, 0) as usize);
+            let key = s(&t, 0);
+            let linked = linked_ancestors.last().copied().unwrap_or(false) || key.starts_with("n:link:") || s(&t, 4) == "link";
+            linked_ancestors.push(linked);
             Node {
-            key: s(&t, 0), name: s(&t, 1), kind, tip, badge: s(&t, 3), icon: s(&t, 4),
+            local_placement: !linked && matches!(g(&n, 4), 1 | 2) && (key.starts_with("i:") || key.starts_with("c:")),
+            key, name: s(&t, 1), kind, tip, badge: s(&t, 3), icon: s(&t, 4),
             depth: g(&n, 0) as usize, count: g(&n, 1) as u32, problems: g(&n, 2) as u32, active: g(&n, 3) != 0,
             row: g(&n, 4) as u8, eye: g(&n, 5) as i8, lock: g(&n, 6) as i8, expandable: g(&n, 7) != 0,
             expanded: g(&n, 8) != 0, selected: g(&n, 9) as u32, mark: g(&n, 10) as u8,
@@ -1582,11 +1589,13 @@ impl Ui {
                                 let index = if col.mode.is_empty() { col.ordered[i] } else { i };
                                 let n = &col.nodes[index];
                                 let editable = n.row == 0 && n.key.starts_with("n:") && n.key.len() > 2 && !n.key.starts_with("n:link:");
-                                let sense = if editable { Sense::click_and_drag() } else { Sense::click() };
+                                let sense = if editable || n.local_placement { Sense::click_and_drag() } else { Sense::click() };
                                 let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_H), sense);
                                 if editable {
-                                    if resp.drag_started() { resp.dnd_set_drag_payload(drawing::DraggedNode(n.key.clone())); }
+                                    if resp.drag_started() { resp.dnd_set_drag_payload(drawing::DraggedRow::Node(n.key.clone())); }
                                     drawing::drop_on(ui, &resp, n.key.strip_prefix("n:").unwrap_or(""), &mut actions);
+                                } else if n.local_placement && resp.drag_started() {
+                                    resp.dnd_set_drag_payload(drawing::DraggedRow::Placement { key: n.key.clone(), selected: n.selected > 0 });
                                 }
                                 // Items in the selection are lit like a picked row; nodes count them.
                                 let lit = col.highlighted.as_deref() == Some(n.key.as_str()) || n.mark == 1;

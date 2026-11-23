@@ -350,6 +350,13 @@ class EditTagCommand(Command):
         super().doc_after(scene, phase)
 
 
+def file_placements(history, placements, node):
+    from core import structure
+    before = history.revision
+    history.execute(structure.file(history.scene, placements, node))
+    return _answer(history, before)
+
+
 def edit_structure_node(history, node, field, value):
     from ingetrazo_core import plan_node_edit
     before = history.revision
@@ -795,7 +802,7 @@ COMMANDS = {"patch_record_field": patch_record_field, "set_filing_rule": set_fil
             "explode_view": explode_view, "purge_unused": purge_unused,
             "purge_debris": purge_debris, "undo": undo, "redo": redo,
             "hide": hide, "unhide": unhide, "lock": lock, "rename_placement": rename_placement,
-            "edit_structure_node": edit_structure_node, "edit_tag": edit_tag, "set_tag": set_tag, "set_tag_state": set_tag_state, "resegment_curve": resegment_curve, "repair_solid": repair_solid,
+            "file_placements": file_placements, "edit_structure_node": edit_structure_node, "edit_tag": edit_tag, "set_tag": set_tag, "set_tag_state": set_tag_state, "resegment_curve": resegment_curve, "repair_solid": repair_solid,
             "rename_material": rename_material, "edit_material": edit_material,
             "duplicate_material": duplicate_material, "delete_material": delete_material,
             "delete_placements": delete_placements, "rename_component": rename_component,

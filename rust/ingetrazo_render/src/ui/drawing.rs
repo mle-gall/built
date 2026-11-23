@@ -3,7 +3,27 @@
 use super::{kit, parse_hex, Node, SWATCH_FALLBACK};
 use egui::{Color32, Pos2};
 
-pub(super) struct DraggedNode(pub String);
+pub(super) enum DraggedRow {
+    Node(String),
+    Placement { key: String, selected: bool },
+}
+
+impl DraggedRow {
+    fn action(&self, parent: &str) -> Option<String> {
+        match self {
+            Self::Node(key) if key.strip_prefix("n:") != Some(parent) => {
+                Some(format!("parent\u{1f}{key}\u{1f}{parent}"))
+            }
+            Self::Placement { selected: true, .. } if !parent.is_empty() => {
+                Some(format!("filehere\u{1f}n:{parent}"))
+            }
+            Self::Placement { key, .. } if !parent.is_empty() => {
+                Some(format!("fileitem\u{1f}{key}\u{1f}{parent}"))
+            }
+            _ => None,
+        }
+    }
+}
 
 pub(super) fn drop_on(
     ui: &egui::Ui,
@@ -11,13 +31,18 @@ pub(super) fn drop_on(
     parent: &str,
     actions: &mut Vec<String>,
 ) {
-    if target.dnd_hover_payload::<DraggedNode>().is_some() {
+    if target
+        .dnd_hover_payload::<DraggedRow>()
+        .and_then(|row| row.action(parent))
+        .is_some()
+    {
         kit::paint_focus(ui, target.rect, super::R_ROW);
     }
-    if let Some(source) = target.dnd_release_payload::<DraggedNode>() {
-        if source.0.strip_prefix("n:") != Some(parent) {
-            actions.push(format!("parent\u{1f}{}\u{1f}{parent}", source.0));
-        }
+    if let Some(action) = target
+        .dnd_release_payload::<DraggedRow>()
+        .and_then(|row| row.action(parent))
+    {
+        actions.push(action);
     }
 }
 
