@@ -185,6 +185,20 @@ def _pref_page(env, section, bindings):
     return groups
 
 
+def _ai(env):
+    from core import ai
+    from ingetrazo_render import edit_ai_connection
+
+    def binding(key, default="", **meta):
+        return Binding(key, _key(key, default),
+                       lambda env, v: edit_ai_connection(env.st, key, v, ai.detect_provider), **meta)
+
+    options = [("auto", tr("Auto (by key prefix)"))] + [(k, ai.PROVIDER_INFO[k][0]) for k in ai.PROVIDERS]
+    return _pref_page(env, "ai", [binding("ia/proveedor", "auto", options=options),
+                                  binding("ia/modelo"), binding("ia/api_key"),
+                                  binding("ia/ollama_url", "http://localhost:11434")])
+
+
 def _general(env) -> list:
     from core.i18n import LANGUAGE_NAMES, SYSTEM, available_languages
     p = _p()
@@ -608,7 +622,7 @@ def edit_location(win, *, source=None, center=None, done=None):
     chrome_sheet.refresh(win)
 
 
-_BUILDERS = {"general": _general, "navigation": _navigation, "display": _display, "ndof": _ndof,
+_BUILDERS = {"ai": _ai, "general": _general, "navigation": _navigation, "display": _display, "ndof": _ndof,
              "import": _import, "units": _units,
              "dimensions": _dimensions, "location": _location}
 
