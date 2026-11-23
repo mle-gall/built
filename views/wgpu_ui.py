@@ -3122,9 +3122,6 @@ def claims_key(view, event) -> bool:
     Escape while its popup is open)? Then no window shortcut fires."""
     if not getattr(view, "_ui_attached", False):
         return False
-    from views import wgpu_start
-    if wgpu_start.claims_key(view, event):
-        return True
     from views import chrome_sheet
     large = chrome_sheet.claims_key(view, event)
     if large is not None:
@@ -3145,9 +3142,6 @@ def key(view, event, pressed: bool) -> bool:
     """Offer a key to the chrome first. True: it was the chrome's."""
     if not getattr(view, "_ui_attached", False):
         return False
-    from views import wgpu_start
-    if wgpu_start.key(view, event, pressed):
-        return True
     if _opens_commands(event):
         if pressed:
             view.renderer.ui_open_commands()

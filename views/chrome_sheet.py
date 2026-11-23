@@ -194,9 +194,11 @@ class Sheet:
     def search(self, placeholder, key="⌘F"):
         self._search = {"placeholder": placeholder, "key": key, "text": "", "force": False}
 
-    def menu(self, id, label, options, on=""):
-        """A header menu: [(option id, label)], the checked one ``on``."""
-        self.menus.append({"id": str(id), "label": label, "on": str(on),
+    def menu(self, id, label, options, on="", left=False):
+        """A header menu: [(option id, label)], the checked one ``on``;
+        ``left``: among the verbs (a way to make something), else beside
+        the search (a way to look: sort)."""
+        self.menus.append({"id": str(id), "label": label, "on": str(on), "left": bool(left),
                            "options": [verb(o, lab) for o, lab in options]})
 
     # side
@@ -321,8 +323,9 @@ def in_shell() -> bool:
 def available(win) -> bool:
     """The chrome can draw a sheet on ``win``: the egui chrome is on and a
     Metal view will draw it (always in the ``built`` shell)."""
-    from views import wgpu_ui
-    if in_shell():
+    from views import chrome_dialogs, wgpu_ui
+    if in_shell() or getattr(chrome_dialogs, "_shell_installed", False):
+        # The native shell (or its host under test): its chrome always draws.
         return _view(win) is not None
     if not wgpu_ui.ENABLED:
         return False

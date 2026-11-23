@@ -8,11 +8,10 @@ use std::time::Instant;
 
 use egui::{pos2, vec2, Color32, CornerRadius, Margin, Pos2, Rect, Sense, Shadow, Stroke, Vec2};
 
-mod library;
+/// Small widgets shared by the dock and the forms (segmented, tabs).
+mod widgets;
 /// The chrome's modal forms (views/chrome_forms.py).
 pub mod dialog;
-/// The start page (views/wgpu_start.py): a full-window state of the chrome.
-mod start;
 /// Sheets, a workspace of the window (views/wgpu_sheets.py).
 mod sheets;
 mod activity;
@@ -135,14 +134,10 @@ pub struct Ui {
     history: Vec<ActivityRow>,
     activity_open: bool,
     link_banner: String,
-    /// The Library dock place (ui/library.rs): typed resources.
-    library: library::Library,
     /// The dock's width (points): dragged on its left edge, kept by Python.
     dock_w: f32,
     /// The pointer shape the chrome asks for ("" or "resize_h").
     cursor_shape: &'static str,
-    /// The start page: while shown it is the whole window (ui/start.rs).
-    home: start::Start,
     /// The Sheets workspace: while on, the page replaces the model (ui/sheets.rs).
     sheets: sheets::Sheets,
     /// The project tabs (ui/tabs.rs): drawn instead of the document ▾
@@ -313,13 +308,11 @@ impl Ui {
             history: Vec::new(),
             activity_open: false,
             link_banner: String::new(),
-            library: Default::default(),
             dock_w: DOCK_W,
             plugins: Default::default(),
             plugin_document: String::new(),
             background_plugins: Default::default(),
             cursor_shape: "",
-            home: Default::default(),
             sheets: Default::default(),
             strip: Default::default(),
             ctx_menu: None,
@@ -413,24 +406,13 @@ impl Ui {
     }
     pub fn set_mode(&mut self, mode: String) {
         if let Some(col) = self.column.as_mut() {
-            if mode == "Library" && col.mode != "Library" { self.library.opened(); }
             col.mode = mode;
         }
-    }
-    /// The Library's content (views/wgpu_library.py): type tabs, the active
-    /// type, grid/list, sort, menus, and the rows already filtered and sorted.
-    #[allow(clippy::too_many_arguments)]
-    pub fn set_library(&mut self, types: Vec<(String, String, u32, bool)>, active: String, view: u8, sort: String,
-                       sorts: Vec<(String, String)>, verbs: Vec<(String, String)>, type_actions: Vec<(String, String)>,
-                       empty: String, filter: String, rows: Vec<(Vec<String>, Vec<i64>)>) {
-        self.library.set(types, active, view, sort, sorts, verbs, type_actions, empty, filter, rows);
     }
     /// The dock's width as last kept (clamped to what the window allows).
     pub fn set_dock_width(&mut self, w: f32) { self.dock_w = w.clamp(DOCK_MIN_W, DOCK_MAX_W); }
     /// The pointer the chrome wants over it: "resize_h" over the dock's grip.
     pub fn cursor_shape(&self) -> &'static str { self.cursor_shape }
-    /// Opened again from elsewhere (Paint strip, ⌘K, the rail): the filter takes the keys.
-    pub fn library_opened(&mut self) { self.library.opened(); }
     pub fn set_issues(&mut self, on: bool) {
         if let Some(col) = self.column.as_mut() { col.issues = on; }
     }
@@ -531,7 +513,7 @@ impl Ui {
         // The large sheet owns every key while it is up (Python keeps the
         // window's ⌘ shortcuts, views/chrome_sheet.py).
         if self.lsheet.open { return true; }
-        if self.sheets.shown && !self.home.shown { return self.sheets_claims_key(name); }
+        if self.sheets.shown { return self.sheets_claims_key(name); }
         let filing = self.column.as_ref().is_some_and(|c| c.filing.is_some() || c.row_menu.is_some() || !c.mode.is_empty()
             || c.kind_menu.is_some() || c.head_menu.is_some() || c.prompt.is_some());
         self.sheet.is_some() || self.dialog.is_some() || self.cmd_open || (name == "Escape" && (self.view_open || self.sel_more || self.menu.is_some() || self.form.is_some() || filing
@@ -574,7 +556,7 @@ impl Ui {
             return true;
         }
         if self.lsheet.open && !self.cmd_open { return self.lsheet_key(name, pressed, mods); }
-        if self.sheets.shown && !self.home.shown { return self.sheets_key(name, pressed, mods); }
+        if self.sheets.shown { return self.sheets_key(name, pressed, mods); }
         if name == "Escape" && self.panels.data["terrain"].is_object() && !self.ctx.wants_keyboard_input() {
             if pressed { self.actions.push(r#"panel:["terrain.close",null]"#.into()); }
             return true;
@@ -585,14 +567,6 @@ impl Ui {
                 self.view_open = false; self.sel_more = false; self.menu = None;
             }
             return true;
-        }
-        if !self.plugins.showing && !(self.plugins.utility_open() && self.ctx.wants_keyboard_input())
-            && self.column.as_ref().is_some_and(|c| c.mode == "Library" && c.prompt.is_none()) && pressed {
-            if let Some(a) = self.library.key(name) {
-                if !a.is_empty() { self.actions.push(format!("lib:{a}")); }
-                if name == "Enter" { self.ctx.memory_mut(|m| m.stop_text_input()); }
-                return true;
-            }
         }
         if name == "Escape" {
             if let Some(col) = self.column.as_mut() {
@@ -1421,7 +1395,6 @@ impl Ui {
         const ROW: f32 = 22.0;
         let height = (bottom - top).max(200.0);
         let mut actions: Vec<String> = Vec::new();
-        let mut lib_actions: Vec<String> = Vec::new();
         egui::Area::new(egui::Id::new("column"))
             .fixed_pos(pos2(screen.max.x - GUT - W, top))
             .order(egui::Order::Foreground)
@@ -1446,7 +1419,7 @@ impl Ui {
                         let has_plugins = self.plugins.available();
                         if has_plugins {
                             let at = usize::from(self.plugins.showing);
-                            match library::segmented(ui, &["Project", "Plugins"], at, 150.) {
+                            match widgets::segmented(ui, &["Project", "Plugins"], at, 150.) {
                                 Some(0) => { self.plugins.showing = false; actions.push("mode\u{1f}".into()); }
                                 Some(1) => self.plugins.showing = true,
                                 _ => {}
@@ -1458,7 +1431,7 @@ impl Ui {
                             if presp.clicked() && !col.mode.is_empty() { actions.push("mode\u{1f}".into()); }
                         }
                         if self.plugins.showing { return; }
-                        if !col.mode.is_empty() && !in_library && library::caption_mode(ui, &col.mode) {
+                        if !col.mode.is_empty() && !in_library && widgets::caption_mode(ui, &col.mode) {
                             actions.push("mode\u{1f}".into());
                         }
                         if in_library { return; }
@@ -1497,7 +1470,7 @@ impl Ui {
                         // Column sets: second-level tabs over the same rows.
                         let sets: Vec<(String, String, bool)> = ["Filing", "Drawing", "Deliver"].iter()
                             .map(|l| (l.to_string(), String::new(), true)).collect();
-                        if let Some(i) = library::underline_tabs(ui, &sets, col.colset as usize) {
+                        if let Some(i) = widgets::underline_tabs(ui, &sets, col.colset as usize) {
                             if col.colset != i as u8 {
                                 col.colset = i as u8;
                                 actions.push(format!("colset\u{1f}{i}"));
@@ -1534,11 +1507,6 @@ impl Ui {
                                     });
                                 }
                             });
-                        break 'tree;
-                    }
-                    if in_library {
-                        let room = if col.inspector_title.is_empty() { ui.available_height() - 40.0 } else { ui.available_height() * 0.62 };
-                        self.library.show(ui, &self_icons, room - 70.0, &mut lib_actions);
                         break 'tree;
                     }
                     if let Some(what) = &col.filing {
@@ -1872,8 +1840,7 @@ impl Ui {
                             self.panels.inspector(ui, &mut cmds);
                         }
                         if col.inspector_title.is_empty() {
-                            let empty = if in_library { "Pick an item to see and edit it here" } else { "Nothing selected" };
-                            ui.horizontal(|ui| { ui.add_space(8.0); empty_state(ui, empty); });
+                            ui.horizontal(|ui| { ui.add_space(8.0); empty_state(ui, "Nothing selected"); });
                             return;
                         }
                         {
@@ -2140,7 +2107,6 @@ impl Ui {
                 col.edits.retain(|k, _| !k.starts_with("prompt:"));
             }
         }
-        if col.mode == "Library" { self.library.popups(ctx, &mut lib_actions); } else { self.library.menu = None; }
         // The grip on the dock's left edge: drag to resize, double-click resets.
         let mut shape = "";
         if let Some(r) = ctx.memory(|m| m.area_rect(egui::Id::new("column"))) {
@@ -2167,9 +2133,6 @@ impl Ui {
         self.cursor_shape = shape;
         for a in actions {
             self.actions.push(format!("tree:{a}"));
-        }
-        for a in lib_actions {
-            self.actions.push(format!("lib:{a}"));
         }
         self.actions.extend(cmds);
         if let Some(r) = more_at {
@@ -2306,14 +2269,9 @@ impl Ui {
         let zoom = if self.gallery.is_some() { gallery::Gallery::fit(&mut raw, screen) } else { 1.0 };
         raw.viewports.entry(egui::ViewportId::ROOT).or_default().native_pixels_per_point = Some(scale * zoom);
         let ctx = self.ctx.clone();
-        let start = self.home.shown;
         let out = ctx.run(raw, |ctx| {
             if let Some(page) = &mut self.gallery { page.show(ctx); return; }
-            if start {
-                // The whole window: only the palette, the jobs and the sheet over it.
-                self.top_groups.clear();
-                self.start_page(ctx, screen);
-            } else if self.sheets.shown {
+            if self.sheets.shown {
                 // The Sheets workspace: the window's top bar, the sheet's chrome under it.
                 self.top_bar(ctx, screen);
                 self.sheets_frame(ctx, screen);
@@ -2345,19 +2303,19 @@ impl Ui {
             self.actions.extend(acts);
             self.context_menu(ctx, screen);
             }
-            if !start { self.large_sheet(ctx, screen); }
+            self.large_sheet(ctx, screen);
             self.command_palette(ctx, screen);
-            if !self.review && !start && !self.sheets.shown && !self.lsheet.open { self.selection_more(ctx); }
+            if !self.review && !self.sheets.shown && !self.lsheet.open { self.selection_more(ctx); }
             self.dialog_popup(ctx, screen);
             self.jobs_chip(ctx, screen);
             self.sheet_popup(ctx, screen);
         });
-        let work = !self.review && !start;
+        let work = !self.review;
         // The model's own areas are not drawn in the Sheets workspace: their
         // last rects must not take the pointer there.
-        let model = !(self.sheets.shown && !start);
-        let shown = [("top", !start), ("start", start), ("palette", work && model && !self.groups.is_empty()),
-                     ("view_menu", self.view_open && !start), ("menu", self.menu.is_some() && !start), ("form", self.form.is_some() && !start),
+        let model = !self.sheets.shown;
+        let shown = [("top", true), ("palette", work && model && !self.groups.is_empty()),
+                     ("view_menu", self.view_open), ("menu", self.menu.is_some()), ("form", self.form.is_some()),
                      ("plugin_utility", work && model && self.plugins.utility_open()), ("column", work && model && self.column.is_some()), ("bottom", work),
                      ("sel_more", work && model && self.sel_more && self.selection.is_some()),
                      ("paint_strip", work && model && !self.palette_items.is_empty()),
@@ -2372,15 +2330,14 @@ impl Ui {
                      ("terrain_profile", work && model && self.panels.data["terrain"].is_object()),
                      ("jobs", !self.jobs.is_empty() || !self.history.is_empty()),
                      ("dialog", self.dialog.is_some()),
-                     ("tab_menu", !start && self.strip.menu_open()),
-                     ("tab_overflow", !start && self.strip.overflow_open()),
-                     ("ctx_menu", !start && model && self.ctx_menu.is_some()),
+                     ("tab_menu", self.strip.menu_open()),
+                     ("tab_overflow", self.strip.overflow_open()),
+                     ("ctx_menu", model && self.ctx_menu.is_some()),
                      ("sheet", self.sheet.is_some()),
-                     ("lib_menu", work && model && self.library.menu_open()),
                      ("dock_grip", work && model && self.column.is_some()),
                      ("insp_color", work && model && self.column.as_ref().is_some_and(|c| c.edits.contains_key("\u{1d}pick")))];
-        let sheet_areas = if start { [("", false); 4] } else { self.sheets_areas() };
-        let large = if start { [("", false); 3] } else { self.lsheet_areas() };
+        let sheet_areas = self.sheets_areas();
+        let large = self.lsheet_areas();
         self.hit = shown.iter().chain(sheet_areas.iter()).chain(large.iter())
             .filter(|(_, on)| *on)
             .filter_map(|(n, _)| ctx.memory(|m| m.area_rect(egui::Id::new(*n))))
@@ -2509,7 +2466,7 @@ fn inspector_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std:
                 let (lr, _) = ui.allocate_exact_size(vec2(88.0, 24.0), Sense::hover());
                 ui.painter().text(lr.left_center(), egui::Align2::LEFT_CENTER, label, egui::FontId::proportional(11.5), DIM);
                 let w = (ui.available_width() - 8.0).max(60.0);
-                if let Some(i) = library::segmented(ui, &labels, at, w) {
+                if let Some(i) = widgets::segmented(ui, &labels, at, w) {
                     if i != at { actions.push(format!("edit\u{1f}{id}\u{1f}{}", labels[i])); }
                 }
             });

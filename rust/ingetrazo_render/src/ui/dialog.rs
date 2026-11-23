@@ -177,7 +177,7 @@ impl Ui {
                         if pages.len() > 1 {
                             ui.add_space(6.0);
                             let labels: Vec<&str> = pages.iter().map(String::as_str).collect();
-                            if let Some(i) = super::library::segmented(ui, &labels, d.page, ui.available_width()) {
+                            if let Some(i) = super::widgets::segmented(ui, &labels, d.page, ui.available_width()) {
                                 if i != d.page {
                                     d.page = i;
                                     d.choice_open = None;

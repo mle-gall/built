@@ -99,7 +99,9 @@ pub struct Search { pub placeholder: String, pub text: String, pub force: bool, 
 
 #[derive(Deserialize, Default, Clone, Debug, PartialEq)]
 #[serde(default)]
-pub struct HeadMenu { pub id: String, pub label: String, pub options: Vec<Verb>, pub on: String }
+pub struct HeadMenu { pub id: String, pub label: String, pub options: Vec<Verb>, pub on: String,
+                      /// Among the verbs (From template ▾) rather than beside the search (Sort ▾).
+                      pub left: bool }
 
 #[derive(Deserialize, Default, Clone, Debug, PartialEq)]
 #[serde(default)]
@@ -531,9 +533,13 @@ impl Draw<'_> {
                 "fields" => {
                     let key = form_key(self.pane, i, b);
                     if let Some(d) = self.st.forms.get_mut(&key) {
-                        ui.spacing_mut().item_spacing = vec2(0.0, 4.0);
-                        dialog::fields(ui, d, self.out);
-                        ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
+                        let out = &mut *self.out;
+                        ui.scope(|ui| {
+                            ui.spacing_mut().item_spacing = vec2(0.0, 4.0);
+                            // Label and control stay together on a wide sheet.
+                            ui.set_max_width(ui.available_width().min(680.0));
+                            dialog::fields(ui, d, out);
+                        });
                     }
                     ui.add_space(6.0);
                 }
@@ -1142,6 +1148,12 @@ impl Ui {
             for v in &spec.verbs {
                 if button(ui, v, None) { out.push(format!("verb{SEP}{}", v.id)); }
             }
+            for m in spec.menus.iter().filter(|m| m.left) {
+                let open = st.head_menu.as_ref().is_some_and(|h| h.0 == m.id);
+                if let Some(r) = menu_button(ui, &m.label, open) {
+                    st.head_menu = if open { None } else { Some((m.id.clone(), r)) };
+                }
+            }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.spacing_mut().item_spacing = vec2(6.0, 0.0);
                 if spec.closable {
@@ -1178,7 +1190,8 @@ impl Ui {
                         ui.painter().text(pos2(fr.max.x - 8.0, fr.center().y), egui::Align2::RIGHT_CENTER, &s.key, meta(), FAINT);
                     }
                 }
-                for m in spec.menus.iter().rev() {
+                if spec.search.is_some() { ui.add_space(4.0); }
+                for m in spec.menus.iter().rev().filter(|m| !m.left) {
                     let open = st.head_menu.as_ref().is_some_and(|h| h.0 == m.id);
                     if let Some(r) = menu_button(ui, &m.label, open) {
                         st.head_menu = if open { None } else { Some((m.id.clone(), r)) };

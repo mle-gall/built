@@ -388,7 +388,7 @@ class StartSheet(_sheet_class()):
         back = can_return(win)
         s = cs.Sheet(self.id, "", closable=back, width=1180)
         s.verb("new", "New model", key="⌘N", primary=True)
-        s.menu("template", "From template", [(t[0], t[1]) for t in TEMPLATES])
+        s.menu("template", "From template", [(t[0], t[1]) for t in TEMPLATES], left=True)
         s.verb("openfile", "Open…", key="⌘O")
         s.verb("project", "New project…")
         s.search("Type to filter", key="")
@@ -609,6 +609,8 @@ def continue_info(win, back) -> dict | None:
     if back:
         doc = getattr(win, "_doc", None)
         path = getattr(doc, "path", None)
+        # As the recents hold it (resolved): one row, one picture.
+        path = Path(path).resolve() if path else None
         name = doc.display_name() if doc is not None and hasattr(doc, "display_name") else "Untitled"
         m = recent.meta(path) if path else {}
         place = " · ".join(x for x in (m.get("project", ""), _folder(path) if path else "") if x)
@@ -952,15 +954,6 @@ def before_frame(view, win) -> None:
     p = win.__dict__.get("_start_page") if win is not None else None
     if p is not None:
         p.before_frame(view)
-
-
-def claims_key(view, event) -> bool:
-    """The page is a large sheet now (views/chrome_sheet.py owns its keys)."""
-    return False
-
-
-def key(view, event, pressed: bool) -> bool:
-    return False
 
 
 def action(win, arg: str) -> None:

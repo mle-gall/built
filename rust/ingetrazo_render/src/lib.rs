@@ -2307,23 +2307,11 @@ impl Renderer {
     fn ui_set_colset(&mut self, colset: u8) {
         if let Some(ui) = self.ui.as_mut() { ui.set_colset(colset); }
     }
-    #[pyo3(signature = (types, active, view, sort, sorts, verbs, type_actions, empty, filter, rows))]
-    #[allow(clippy::too_many_arguments)]
-    fn ui_set_library(&mut self, types: Vec<(String, String, u32, bool)>, active: String, view: u8, sort: String,
-                      sorts: Vec<(String, String)>, verbs: Vec<(String, String)>, type_actions: Vec<(String, String)>,
-                      empty: String, filter: String, rows: Vec<(Vec<String>, Vec<i64>)>) {
-        if let Some(ui) = self.ui.as_mut() {
-            ui.set_library(types, active, view, sort, sorts, verbs, type_actions, empty, filter, rows);
-        }
-    }
     fn ui_set_dock_width(&mut self, width: f32) {
         if let Some(ui) = self.ui.as_mut() { ui.set_dock_width(width); }
     }
     fn ui_cursor_shape(&self) -> String {
         self.ui.as_ref().map_or(String::new(), |ui| ui.cursor_shape().to_owned())
-    }
-    fn ui_library_opened(&mut self) {
-        if let Some(ui) = self.ui.as_mut() { ui.library_opened(); }
     }
     fn ui_set_mode(&mut self, mode: String) {
         if let Some(ui) = self.ui.as_mut() { ui.set_mode(mode); }
@@ -2343,28 +2331,6 @@ impl Renderer {
     fn ui_dialog_open(&self) -> bool { self.ui.as_ref().is_some_and(|ui| ui.dialog_open()) }
     fn ui_set_form(&mut self, title: String, fields: Vec<ui::FormField>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_form(title, fields); }
-    }
-    /// The start page (views/wgpu_start.py): shown or not, and whether a
-    /// document waits behind it (Esc returns to it).
-    fn ui_show_start(&mut self, shown: bool, can_return: bool) {
-        if let Some(ui) = self.ui.as_mut() { ui.show_start(shown, can_return); }
-    }
-    fn ui_start_shown(&self) -> bool { self.ui.as_ref().is_some_and(|ui| ui.start_shown()) }
-    /// The page's rows: files ([path, name, meta, project, thumb], [pinned,
-    /// missing]); projects ([path, name, meta], [pinned, missing], files
-    /// (path, name, role)); templates (id, name, description); continue
-    /// [path, name, place, last in, problems, auto-save, thumb, open] or [];
-    /// the engine footer; side sections and bottom links as (id, label).
-    #[allow(clippy::too_many_arguments)]
-    fn ui_set_start(&mut self, files: Vec<(Vec<String>, Vec<i64>)>,
-                    projects: Vec<(Vec<String>, Vec<i64>, Vec<(String, String, String)>)>,
-                    templates: Vec<(String, String, String)>, cont: Vec<String>, footer: String,
-                    nav: Vec<(String, String)>, links: Vec<(String, String)>) {
-        if let Some(ui) = self.ui.as_mut() { ui.set_start(files, projects, templates, cont, footer, nav, links); }
-    }
-    /// A key while the page is up: the key's name and its text. True: taken.
-    fn ui_start_key(&mut self, name: &str, text: &str) -> bool {
-        self.ui.as_mut().is_some_and(|ui| ui.start_key(name, text))
     }
     /// The large sheet (views/chrome_sheet.py): the whole sheet as JSON
     /// (ui/large_sheet.rs `Spec`); "" closes it.
