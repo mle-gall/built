@@ -1815,7 +1815,7 @@ class AddItemCommand(ComposerCommand):
 
     def do(self) -> None:
         if doc_model.ENABLED:
-            self._prev = _presentation.append_sheet_item(self.comp, self.item)
+            self._prev = _presentation.append_sheet_item(self.comp, self.item, self._list())
             return
         lst = self._list()
         if lst is None:
@@ -1826,7 +1826,7 @@ class AddItemCommand(ComposerCommand):
 
     def undo(self) -> None:
         if doc_model.ENABLED:
-            _presentation.remove_sheet_item(self.comp, self.item, getattr(self, "_prev", None))
+            _presentation.remove_sheet_item(self.comp, self.item, self._list(), getattr(self, "_prev", None))
             return
         lst = self._list()
         if lst is None:
@@ -1878,7 +1878,7 @@ class RemoveItemCommand(ComposerCommand):
 
     def do(self) -> None:
         if doc_model.ENABLED:
-            _presentation.remove_sheet_item(self.comp, self.item, None)
+            _presentation.remove_sheet_item(self.comp, self.item, self._list(), None)
             return
         lst = self._list()
         if lst is None:
@@ -1888,7 +1888,7 @@ class RemoveItemCommand(ComposerCommand):
 
     def undo(self) -> None:
         if doc_model.ENABLED:
-            _presentation.append_sheet_item(self.comp, self.item)
+            _presentation.append_sheet_item(self.comp, self.item, self._list())
             return
         lst = self._list()
         if lst is None:

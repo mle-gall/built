@@ -263,10 +263,17 @@ fn remove_plan(
     restore_active(scene, old)
 }
 #[pyfunction]
-fn insert_scene(scene: &Obj<'_>, item: &Obj<'_>, at: Option<isize>) -> PyResult<()> {
+fn insert_scene(scene: &Obj<'_>, item: &Obj<'_>, at: &Obj<'_>) -> PyResult<()> {
     let views = scene.getattr("saved_views")?;
-    let n = views.len()? as isize;
-    views.call_method1("insert", (at.unwrap_or(n).clamp(0, n), item))?;
+    let n = views.len()?;
+    let index = if at.is_none() || at.gt(n)? {
+        n
+    } else if at.lt(0)? {
+        0
+    } else {
+        at.extract()?
+    };
+    views.call_method1("insert", (index, item))?;
     scene
         .py()
         .import("core.scene_folders")?
@@ -424,8 +431,12 @@ fn sheet_container<'py>(sheet: &Obj<'py>, item: &Obj<'py>) -> PyResult<Option<Ob
 }
 
 #[pyfunction]
-fn append_sheet_item<'py>(sheet: &Obj<'py>, item: &Obj<'py>) -> PyResult<Option<Obj<'py>>> {
-    if let Some(container) = sheet_container(sheet, item)? {
+fn append_sheet_item<'py>(
+    sheet: &Obj<'py>,
+    item: &Obj<'py>,
+    container: &Obj<'py>,
+) -> PyResult<Option<Obj<'py>>> {
+    if !container.is_none() {
         container.call_method1("append", (item,))?;
         Ok(None)
     } else {
@@ -435,8 +446,13 @@ fn append_sheet_item<'py>(sheet: &Obj<'py>, item: &Obj<'py>) -> PyResult<Option<
     }
 }
 #[pyfunction]
-fn remove_sheet_item(sheet: &Obj<'_>, item: &Obj<'_>, replacement: &Obj<'_>) -> PyResult<()> {
-    if let Some(container) = sheet_container(sheet, item)? {
+fn remove_sheet_item(
+    sheet: &Obj<'_>,
+    item: &Obj<'_>,
+    container: &Obj<'_>,
+    replacement: &Obj<'_>,
+) -> PyResult<()> {
+    if !container.is_none() {
         container.call_method1("remove", (item,))?;
     } else {
         sheet.setattr("cajetin", replacement)?;

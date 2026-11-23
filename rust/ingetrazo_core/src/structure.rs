@@ -200,7 +200,7 @@ pub(crate) fn structure_targets<'py>(scene: &Obj<'py>, uids: &Obj<'py>) -> PyRes
     let seen = PySet::empty(py)?;
     let mut out = Vec::new();
     for uid in addresses {
-        let group = targets.get_item(uid)?.unwrap();
+        let group = targets.as_any().get_item(uid)?;
         if !seen.contains(&group)? {
             seen.add(&group)?;
             out.push(group);
@@ -452,11 +452,10 @@ pub(crate) fn resync_filing<'py>(
     let api = py.import("core.structure")?;
     let nodes = api.call_method1("_nodes", (registry,))?;
     let chosen = PySet::new(py, list(if keys.is_none() { &nodes } else { keys })?)?;
-    if chosen
-        .iter()
-        .any(|k| matches!(nodes.contains(k), Ok(false)))
-    {
-        return Err(PyValueError::new_err("Unknown resync node"));
+    for key in chosen.iter() {
+        if !nodes.contains(key)? {
+            return Err(PyValueError::new_err("Unknown resync node"));
+        }
     }
     let batches = PyDict::new(py);
     for row in api
@@ -476,10 +475,8 @@ pub(crate) fn resync_filing<'py>(
     let report = PyDict::new(py);
     let mut commands = Vec::new();
     for (key, groups) in batches {
-        if structure_lineage(&nodes, &key)?
-            .iter()
-            .any(|k| chosen.contains(k).unwrap_or(false))
-        {
+        let lineage = structure_lineage(&nodes, &key)?;
+        if !chosen.call_method1("isdisjoint", (lineage,))?.is_truthy()? {
             commands.extend(plan_filing(
                 scene,
                 list(&groups)?,
