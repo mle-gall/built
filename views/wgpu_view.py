@@ -851,7 +851,7 @@ class MetalView(ViewNavigation):
             painter.end()
 
     def render_image(self, width_px, height_px=None, overlays=False,
-                     sharp_shadows=False):
+                     sharp_shadows=False, *, transparent=False, annotations_only=False):
         """R3c-2a: render sheet targets using this view's resident scene."""
         from copy import copy
         from PySide6.QtGui import QImage
@@ -887,6 +887,7 @@ class MetalView(ViewNavigation):
                                 edit_rest_fade=getattr(source, 'edit_rest_fade', .75),
                                 soft_shadows=getattr(source, '_soft_shadows', 0),
                                 camera=camera)
+        payload['transparent_background'] = transparent
         payload['edge_width'] = float(getattr(source, '_export_edge_px', 1))
         payload['profile_width'] = float(getattr(source, '_export_profile_px', 1))
         from views.wgpu_sections import capture_rows, geometry
@@ -933,7 +934,8 @@ class MetalView(ViewNavigation):
         if overlays:
             from views.wgpu_annotations import composite_annotations
             image = composite_annotations(image, source.scene, camera,
-                logical_size=(self.width(), self.height()), overlays=True)
+                logical_size=(self.width(), self.height()), overlays=True,
+                annotations_only=annotations_only)
         return image
         # End R3c-2a offscreen entry point.
 

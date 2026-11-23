@@ -455,3 +455,24 @@ def test_intersected_wall_occludes_loose_slab_edges(native, monkeypatch):
     for edge in outside:
         mesh.remove_edge(edge)
     assert np.any(frame() != after_erase)
+
+
+@pytest.mark.parametrize("antialias", [False, True])
+def test_transparent_export_preserves_the_interactive_background(native, antialias):
+    from ingetrazo_core import Matrix4
+
+    upload(native, alpha=255)
+    native.set_antialias(antialias)
+    view = Matrix4()
+    view.translate(0, 0, -3)
+    projection = Matrix4()
+    projection.ortho(-1, 1, -1, 1, .1, 10)
+    style = dict(sky=True, edges=False)
+    native.set_style(style)
+    live = capture(native)
+    image = native.render_image(64, 64, view.data(), projection.data(),
+                                dict(style, transparent_background=True))
+    rgba = np.frombuffer(bytes(image), np.uint8).reshape(64, 64, 4)
+    assert rgba[0, 0, 3] == 0
+    assert rgba[32, 32, 3] == 255
+    np.testing.assert_array_equal(capture(native), live)

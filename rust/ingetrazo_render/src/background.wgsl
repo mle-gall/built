@@ -7,6 +7,7 @@ struct Out { @builtin(position) position: vec4f, @location(0) y: f32 }
 }
 fn linear(c: vec3f) -> vec3f { return select(c/12.92,pow((c+0.055)/1.055,vec3f(2.4)),c>vec3f(0.04045)); }
 @fragment fn fs(i: Out) -> @location(0) vec4f {
+ if style.background.a < 0. { return vec4f(0.); }
  var c = style.background.rgb;
  if style.background.a > 0.5 {
   let hy = style.sky.a;

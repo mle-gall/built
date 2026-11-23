@@ -2296,6 +2296,37 @@ from views.view_navigation import ViewNavigation
 class DocumentInteraction(DocumentTools, ViewNavigation):
     """Editing and input shared by the document presentation hosts."""
 
+    def _render_framed_image(self, width_px, overlays, annotations_only,
+                             sharp_shadows, transparent):
+        lw, lh = max(self.width(), 1), max(self.height(), 1)
+        from core.camera import frame_rect
+        rect = frame_rect(lw, lh, getattr(self.camera, "frame_aspect",
+                                           None))
+        if rect is not None and (rect[2] < lw - 0.5
+                                 or rect[3] < lh - 0.5):
+            fx, fy, fw, fh = rect
+            aspect = self.camera.frame_aspect
+            out_w = max(int(width_px), 64)
+            out_h = max(int(round(out_w / aspect)), 1)
+            full = self.render_image(
+                max(int(round(out_w * lw / fw)), 64), None, overlays,
+                annotations_only, sharp_shadows, transparent, False)
+            if full is None:
+                return None
+            sx = full.width() / lw
+            sy = full.height() / lh
+            x = int(round(fx * sx))
+            y = int(round(fy * sy))
+            w = min(int(round(fw * sx)), full.width() - x)
+            h = min(int(round(fh * sy)), full.height() - y)
+            image = full.copy(x, y, w, h)
+            if (image.width(), image.height()) != (out_w, out_h):
+                image = image.scaled(out_w, out_h, Qt.IgnoreAspectRatio,
+                                     Qt.SmoothTransformation)
+            return image
+        return self.render_image(width_px, None, overlays, annotations_only,
+                                 sharp_shadows, transparent, False)
+
     def _configure_surface(self):
         pass
 
@@ -16402,31 +16433,8 @@ class Viewport(DocumentInteraction, QOpenGLWidget):
         lw = max(self.width(), 1)
         lh = max(self.height(), 1)
         if crop_to_frame and height_px is None:
-            from core.camera import frame_rect
-            rect = frame_rect(lw, lh, getattr(self.camera, "frame_aspect",
-                                               None))
-            if rect is not None and (rect[2] < lw - 0.5
-                                     or rect[3] < lh - 0.5):
-                fx, fy, fw, fh = rect
-                aspect = self.camera.frame_aspect
-                out_w = max(int(width_px), 64)
-                out_h = max(int(round(out_w / aspect)), 1)
-                full = self.render_image(
-                    max(int(round(out_w * lw / fw)), 64), None, overlays,
-                    annotations_only, sharp_shadows, transparent, False)
-                if full is None:
-                    return None
-                sx = full.width() / lw
-                sy = full.height() / lh
-                x = int(round(fx * sx))
-                y = int(round(fy * sy))
-                w = min(int(round(fw * sx)), full.width() - x)
-                h = min(int(round(fh * sy)), full.height() - y)
-                image = full.copy(x, y, w, h)
-                if (image.width(), image.height()) != (out_w, out_h):
-                    image = image.scaled(out_w, out_h, Qt.IgnoreAspectRatio,
-                                         Qt.SmoothTransformation)
-                return image
+            return self._render_framed_image(width_px, overlays, annotations_only,
+                                             sharp_shadows, transparent)
         width_px = max(int(width_px), 64)
         if height_px is None:
             height_px = max(int(round(width_px * lh / lw)), 64)

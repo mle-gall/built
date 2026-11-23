@@ -18,8 +18,20 @@ class DocumentController(DocumentInteraction, WidgetShim):
         display.camera = controller.camera
         return controller
 
-    def render_image(self, *args, **kwargs):
-        return self.keys_stand_in.render_image(*args, **kwargs)
+    def mapToGlobal(self, point):
+        return self.keys_stand_in.mapToGlobal(point)
+
+    def mapFromGlobal(self, point):
+        return self.keys_stand_in.mapFromGlobal(point)
+
+    def render_image(self, width_px, height_px=None, overlays=True, annotations_only=False,
+                     sharp_shadows=False, transparent=False, crop_to_frame=False):
+        if crop_to_frame and height_px is None:
+            return self._render_framed_image(width_px, overlays, annotations_only,
+                                             sharp_shadows, transparent)
+        return self.keys_stand_in.render_image(
+            width_px, height_px, overlays=overlays, sharp_shadows=sharp_shadows,
+            transparent=transparent, annotations_only=annotations_only)
 
 
 class QtViewHost:
