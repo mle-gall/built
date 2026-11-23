@@ -3015,29 +3015,7 @@ class FlipGroupsCommand(MeshCommand):
         return self.meshes()
 
     def _flip(self, scene) -> None:
-        if _doc.ENABLED:
-            _transform.flip_groups(scene, self._groups, mirror_matrix(self.centre, self.axis))
-            if _doc.ENABLED and self.doc_undo(scene):
-                _dirty_placements(self._groups)
-            else:
-                _dirty_group_chunks(scene)
-            scene.version += 1
-            return
-        m = mirror_matrix(self.centre, self.axis)
-        for g in self._groups:
-            pose = _member_placement(scene, g)
-            if pose is not None:
-                g.xform = _edit_local_transform(scene, g, m) * pose
-                continue
-            for v in list(g.mesh.vertices):
-                g.mesh.move_vertex(v, m.map(v.position) - v.position)
-            from core.group import carry_axes
-            carry_axes(g, m)                  # an involution, like the rest
-            from core.store_mesh import StoreMesh
-            if isinstance(g.mesh, StoreMesh):
-                g.mesh._store.reverse_faces(g.mesh._store.keys("face"))
-            else:
-                _reverse_faces(g.mesh.faces)
+        _transform.flip_groups(scene, self._groups, mirror_matrix(self.centre, self.axis))
         if _doc.ENABLED and self.doc_undo(scene):
             _dirty_placements(self._groups)
         else:
@@ -3126,57 +3104,17 @@ class RotateGroupCommand(GroupTransformCommand):
         self.center = QVector3D(center)
         self.axis = QVector3D(axis)
         self.degrees = degrees
-        if _doc.ENABLED:
-            self._transform = _transform.GroupTransform()
-            return
-        self._before: Optional[dict] = None
-        self._after: Optional[dict] = None
+        self._transform = _transform.GroupTransform()
 
     def _matrix(self, reverse):
         return rotation_matrix(self.center, self.axis, -self.degrees if reverse else self.degrees)
 
     def do(self, scene) -> None:
-        if _doc.ENABLED:
-            if self._transform.apply(scene, self.group, self._matrix, False, self._journal_geometry):
-                scene.version += 1
-            return
-        pose = _member_placement(scene, self.group)
-        if pose is not None:
-            m = rotation_matrix(self.center, self.axis, self.degrees)
-            self.group.xform = _edit_local_transform(scene, self.group, m) * pose
+        if self._transform.apply(scene, self.group, self._matrix, False, self._journal_geometry):
             scene.version += 1
-            return
-        gmesh = self.group.mesh
-        if self._after is not None:  # redo
-            gmesh.restore_state(self._after)
-            self.group.axes = self._axes_after
-            scene.version += 1
-            return
-        self._before = self._reference_snapshot(gmesh)
-        self._axes_before = self.group.axes
-        m = rotation_matrix(self.center, self.axis, self.degrees)
-        for v in list(gmesh.vertices):
-            gmesh.move_vertex(v, m.map(v.position) - v.position)
-        from core.group import _remap_uvws, carry_axes
-        _remap_uvws(gmesh, m)                 # the texture turns with it
-        carry_axes(self.group, m)             # and so do its axes (#44)
-        self._axes_after = self.group.axes
-        self._after = self._reference_snapshot(gmesh)
-        scene.version += 1
 
     def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            if self._transform.apply(scene, self.group, self._matrix, True, self._journal_geometry):
-                scene.version += 1
-            return
-        if getattr(self.group, "xform", None) is not None:
-            m = rotation_matrix(self.center, self.axis, -self.degrees)
-            self.group.xform = _edit_local_transform(scene, self.group, m) * self.group.xform
-            scene.version += 1
-            return
-        if self._before is not None:
-            self.group.mesh.restore_state(self._before)
-            self.group.axes = self._axes_before
+        if self._transform.apply(scene, self.group, self._matrix, True, self._journal_geometry):
             scene.version += 1
 
 
@@ -3254,58 +3192,18 @@ class ScaleGroupCommand(GroupTransformCommand):
         self.center = QVector3D(center)
         self.factor = factor
         self.axes = axes
-        if _doc.ENABLED:
-            self._transform = _transform.GroupTransform()
-            return
-        self._before: Optional[dict] = None
-        self._after: Optional[dict] = None
+        self._transform = _transform.GroupTransform()
 
     def _matrix(self, reverse):
         factor = invert_scale_factor(self.factor) if reverse else self.factor
         return scale_matrix(self.center, factor, self.axes)
 
     def do(self, scene) -> None:
-        if _doc.ENABLED:
-            if self._transform.apply(scene, self.group, self._matrix, False, self._journal_geometry):
-                scene.version += 1
-            return
-        pose = _member_placement(scene, self.group)
-        if pose is not None:
-            m = scale_matrix(self.center, self.factor, self.axes)
-            self.group.xform = _edit_local_transform(scene, self.group, m) * pose
+        if self._transform.apply(scene, self.group, self._matrix, False, self._journal_geometry):
             scene.version += 1
-            return
-        gmesh = self.group.mesh
-        if self._after is not None:  # redo
-            gmesh.restore_state(self._after)
-            self.group.axes = self._axes_after
-            scene.version += 1
-            return
-        self._before = self._reference_snapshot(gmesh)
-        self._axes_before = self.group.axes
-        m = scale_matrix(self.center, self.factor, self.axes)
-        for v in list(gmesh.vertices):
-            gmesh.move_vertex(v, m.map(v.position) - v.position)
-        from core.group import _remap_uvws, carry_axes
-        _remap_uvws(gmesh, m)                 # the texture scales with it
-        carry_axes(self.group, m)             # the origin moves with it (#44)
-        self._axes_after = self.group.axes
-        self._after = self._reference_snapshot(gmesh)
-        scene.version += 1
 
     def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            if self._transform.apply(scene, self.group, self._matrix, True, self._journal_geometry):
-                scene.version += 1
-            return
-        if getattr(self.group, "xform", None) is not None:
-            m = scale_matrix(self.center, invert_scale_factor(self.factor), self.axes)
-            self.group.xform = _edit_local_transform(scene, self.group, m) * self.group.xform
-            scene.version += 1
-            return
-        if self._before is not None:
-            self.group.mesh.restore_state(self._before)
-            self.group.axes = self._axes_before
+        if self._transform.apply(scene, self.group, self._matrix, True, self._journal_geometry):
             scene.version += 1
 
 
@@ -4335,7 +4233,6 @@ class GroupToComponentCommand(Command):
     def __init__(self, group, name=None) -> None:
         self.group = group
         self._name = name
-        self._old_name = None
 
     def do(self, scene) -> None:
         self._previous = _placements.convert_component(self.group, self._name)
@@ -5165,28 +5062,7 @@ class MoveGroupCommand(GroupTransformCommand):
         return getattr(self.group, "xform", None) is not None
 
     def _shift(self, scene, delta) -> None:
-        if _doc.ENABLED:
-            _transform.shift_group(scene, self.group, delta)
-            scene.version += 1
-            return
-        pose = _member_placement(scene, self.group)
-        if pose is not None:
-            # Component instance: compose into the transform — O(1), and the
-            # shared prototype mesh (siblings!) is never touched.
-            from ingetrazo_core import Matrix4 as QMatrix4x4
-            t = QMatrix4x4()
-            t.translate(delta)
-            self.group.xform = _edit_local_transform(scene, self.group, t) * pose
-        else:
-            from core.group import _remap_uvws
-            from ingetrazo_core import Matrix4 as QMatrix4x4
-            for v in list(self.group.mesh.vertices):
-                self.group.mesh.move_vertex(v, delta)
-            t = QMatrix4x4()
-            t.translate(delta)
-            _remap_uvws(self.group.mesh, t)   # the texture travels along
-            from core.group import carry_axes
-            carry_axes(self.group, t)         # and its axes (#44)
+        _transform.shift_group(scene, self.group, delta)
         scene.version += 1
 
     def do(self, scene) -> None:
@@ -6050,109 +5926,24 @@ class ChangeAxesCommand(MeshCommand):
     def doc_undo(self, scene) -> bool:
         # A classic group swaps its axes (a document field); an instance
         # re-expresses its definition's mesh: its own undo.
-        if _doc.ENABLED:
-            return self._axes_edit.fields_only()
-        return self._d is None
+        return self._axes_edit.fields_only()
 
     def __init__(self, group, frame) -> None:
         from ingetrazo_core import Matrix4 as QMatrix4x4
         self.group = group
         self.frame = QMatrix4x4(frame)
-        if _doc.ENABLED:
-            self._axes_edit = _transform.AxesEdit()
-            return
-        self._old_axes = None
-        self._d = None
-        self._instances: list = []
-        self._inst_axes: list = []
-        self._inst_xforms: list = []
+        self._axes_edit = _transform.AxesEdit()
 
     def geometry_meshes(self, scene):
         return (self.group.mesh,) if self.group.xform is not None else ()
 
-    def _siblings(self, scene) -> list:
-        from core.group import iter_placements
-        proto = self.group.mesh
-        out, seen = [], set()
-        for top in scene.groups:
-            for g, _m in iter_placements(top):
-                if (g.mesh is proto and getattr(g, "xform", None) is not None
-                        and id(g) not in seen):
-                    seen.add(id(g))
-                    out.append(g)
-        if id(self.group) not in seen:
-            out.append(self.group)
-        return out
-
-    @staticmethod
-    def _reexpress(group, d) -> None:
-        """Map the definition's geometry (and nested placements) by ``d``."""
-        from core.group import transformed_mesh
-        proto = group.mesh
-        moved = transformed_mesh(proto, d)
-        proto.restore_state(moved.capture_state())
-        for child in getattr(group, "children", None) or []:
-            if child.xform is not None:
-                child.xform = d * child.xform
-
     def do(self, scene) -> None:
-        if _doc.ENABLED:
-            if self._axes_edit.apply(scene, self.group, self.frame):
-                scene.version += 1
-            return
-        g = self.group
-        if getattr(g, "xform", None) is None:
-            self._old_axes = g.axes
-            g.axes = self._copy(self.frame)
+        if self._axes_edit.apply(scene, self.group, self.frame):
             scene.version += 1
-            return
-        inv, ok = self.frame.inverted()
-        if not ok:
-            return
-        self._d = inv * g.xform
-        d_inv, ok2 = self._d.inverted()
-        if not ok2:
-            self._d = None
-            return
-        self._instances = self._siblings(scene)
-        self._reexpress(g, self._d)
-        # An instance's frame is ``xform · axes``: axes it carried from its
-        # classic-group days would turn the new frame again (#484), so the
-        # re-expressed definition's own axes are the instances' now.
-        self._inst_axes = [inst.axes for inst in self._instances]
-        self._inst_xforms = [self._copy(inst.xform) for inst in self._instances]
-        for inst in self._instances:
-            inst.xform = inst.xform * d_inv
-            inst.axes = None
-        scene.version += 1
 
     def undo(self, scene) -> None:
-        if _doc.ENABLED:
-            if self._axes_edit.undo(self.group):
-                scene.version += 1
-            return
-        g = self.group
-        if getattr(g, "xform", None) is None and self._d is None:
-            g.axes = self._old_axes
+        if self._axes_edit.undo(self.group):
             scene.version += 1
-            return
-        if self._d is None:
-            return
-        d_inv, _ok = self._d.inverted()
-        self._reexpress(g, d_inv)
-        # The placements as they were, not ``xform · d`` again: that product
-        # came back 6e-8 off, and undo should leave exactly what was there.
-        for inst, axes, xform in zip(self._instances, self._inst_axes,
-                                     self._inst_xforms):
-            inst.xform = self._copy(xform)
-            inst.axes = axes
-        scene.version += 1
-
-    @staticmethod
-    def _copy(m):
-        from ingetrazo_core import Matrix4 as QMatrix4x4
-        return QMatrix4x4(m)
-
 
 class SetStructureNodeCommand(Command):
     """Membership belongs to a placement, including ones without an IFC record."""
