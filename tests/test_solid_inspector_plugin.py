@@ -21,31 +21,13 @@ elif not isinstance(_inst, QApplication):
     pytest.skip("a non-widget QGuiApplication is already active",
                 allow_module_level=True)
 
+from tests.solid_fixture import _box, _top
 from core.group import Group                                      # noqa: E402
 from core.mesh import Mesh                                        # noqa: E402
 from core.scene import Scene                                      # noqa: E402
 from plugins.solid_inspector import (                             # noqa: E402
     SolidInspectorDialog, SolidInspectorPanel, SolidInspectorTool,
     inspect_mesh)
-
-
-def _box(mesh, x0=0.0, y0=0.0, z0=0.0, dx=2.0, dy=2.0, dz=2.0,
-         skip_top=False):
-    """An axis-aligned box with consistent outward windings (the floor is
-    clockwise seen from above — the showcase-script lesson)."""
-    P = QVector3D
-    x1, y1, z1 = x0 + dx, y0 + dy, z0 + dz
-    quads = [
-        [P(x0, y1, z0), P(x1, y1, z0), P(x1, y0, z0), P(x0, y0, z0)],
-        [P(x0, y0, z0), P(x1, y0, z0), P(x1, y0, z1), P(x0, y0, z1)],
-        [P(x1, y0, z0), P(x1, y1, z0), P(x1, y1, z1), P(x1, y0, z1)],
-        [P(x1, y1, z0), P(x0, y1, z0), P(x0, y1, z1), P(x1, y1, z1)],
-        [P(x0, y1, z0), P(x0, y0, z0), P(x0, y0, z1), P(x0, y1, z1)],
-    ]
-    if not skip_top:
-        quads.append([P(x0, y0, z1), P(x1, y0, z1), P(x1, y1, z1),
-                      P(x0, y1, z1)])
-    return [mesh.add_face(q) for q in quads]
 
 
 # ---- Diagnosis ------------------------------------------------------------
@@ -192,11 +174,6 @@ from core.orient import signed_volume                             # noqa: E402
 from plugins.solid_inspector import (                             # noqa: E402
     RepairSolidsCommand, _problem_text, internal_faces, is_sound,
     problem_items, repair_mesh, reversed_faces)
-
-
-def _top(mesh, z=2.0):
-    return next(f for f in mesh.faces
-                if all(abs(v.position.z() - z) < 1e-6 for v in f.loop))
 
 
 def _two_rooms(mesh):
@@ -423,27 +400,6 @@ def test_undo_gives_back_the_partition_marks(win):
     assert wall.interior is True
 
 
-def test_dialog_repairs_a_group_without_entering_it(win):
-    scene = win.viewport.scene
-    _box(scene.mesh, skip_top=True)            # loose, broken, not chosen
-    g = Group(Mesh(), name="Caja rota")
-    _box(g.mesh, skip_top=True)
-    scene.groups.append(g)
-    dlg = SolidInspectorDialog(win.viewport)
-    dlg.show()
-    i = _row(dlg, "Caja rota")
-    dlg._table.setCurrentCell(i, 0)
-    done = dlg.repair()
-    assert done["holes"] == 1
-    assert is_sound(inspect_mesh(g.mesh))
-    assert len(inspect_mesh(scene.mesh)["open"]) == 4   # loose untouched
-    assert dlg._table.currentRow() == i        # the choice survives refresh
-    assert "✔" in dlg._table.item(i, 2).text()
-    win.viewport.history.undo()
-    assert len(inspect_mesh(g.mesh)["open"]) == 4
-    dlg.close()
-
-
 def test_repair_all_is_one_step_and_skips_sound_rows(win):
     scene = win.viewport.scene
     _box(scene.mesh, skip_top=True)
@@ -462,21 +418,6 @@ def test_repair_all_is_one_step_and_skips_sound_rows(win):
     for name in ("Loose geometry", "A", "B"):
         assert dlg._table.item(_row(dlg, name), 2).text().startswith("✔")
     assert dlg.repair_all() is None            # nothing left to repair
-    dlg.close()
-
-
-def test_status_says_reversed_on_a_closed_wrong_box(win):
-    g = Group(Mesh(), name="Al revés")
-    _box(g.mesh)
-    _top(g.mesh).loop.reverse()
-    win.viewport.scene.groups.append(g)
-    dlg = SolidInspectorDialog(win.viewport)
-    dlg.show()
-    i = _row(dlg, "Al revés")
-    assert dlg._table.item(i, 2).text() == "✘ faces reversed"
-    # Closed, but a reversed face makes the signed sum lie (8 m³ read as
-    # 2.667): no volume until it is turned.
-    assert dlg._table.item(i, 4).text() == "—"
     dlg.close()
 
 
@@ -553,22 +494,6 @@ def test_nested_pieces_are_listed_and_repaired(win):
     assert 28.0 < vp.camera.target.y() < 33.0  # through both placements
     assert dlg.repair()["holes"] == 1
     assert is_sound(inspect_mesh(piece.mesh))
-    dlg.close()
-
-
-def test_instances_of_one_component_are_listed_once(win):
-    shared = Mesh()
-    _box(shared, skip_top=True)
-    a, b = Group(shared, name="Silla"), Group(shared, name="Silla#2")
-    for g, x in ((a, 0.0), (b, 5.0)):
-        g.xform = QMatrix4x4()
-        g.xform.translate(x, 0.0, 0.0)
-    win.viewport.scene.groups += [a, b]
-    dlg = SolidInspectorDialog(win.viewport)
-    dlg.show()
-    names = [dlg._table.item(i, 0).text()
-             for i in range(dlg._table.rowCount())]
-    assert "Silla" in names and "Silla#2" not in names
     dlg.close()
 
 
@@ -706,20 +631,6 @@ def test_previous_goes_back_and_wraps(win):
     assert dlg.previous_problem()["kind"] == "stray"   # from the end
     assert dlg.previous_problem()["kind"] == "open"
     assert dlg.next_problem()["kind"] == "stray"
-    dlg.close()
-
-
-def test_unrepairable_problem_is_shown_with_its_reason(win):
-    scene = win.viewport.scene
-    _box(scene.mesh)
-    _box(scene.mesh, x0=2.0, z0=2.0)
-    dlg = SolidInspectorDialog(win.viewport)
-    dlg.show()
-    dlg._table.setCurrentCell(0, 0)
-    assert dlg.next_problem()["kind"] == "over"
-    assert dlg._fix_btn.isEnabled() is False
-    assert "separate the solids" in dlg._problem_label.text()
-    assert dlg.repair_current() is None
     dlg.close()
 
 

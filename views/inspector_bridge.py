@@ -50,6 +50,7 @@ def _selection(view, win):
     if sig == getattr(view, "_panel_selection_sig", None):
         return
     view._panel_selection_sig = sig
+    view._assembly_drag = None
     groups = [g for g in sel if isinstance(g, Group) and not focused]
     records = []
     schema = "IFC4"
@@ -66,17 +67,8 @@ def _selection(view, win):
     g = _assembly(scene) if not focused else None
     parts = None
     if g is not None:
-        parts = dict(
-            uid=g.uid,
-            name=g.name or "Assembly",
-            editable=not (links.linked_ancestor(g) or g.locked),
-            mode=(g.exploded or {}).get("mode", "outward"),
-            factor=(g.exploded or {}).get("factor", 0),
-            children=[
-                dict(uid=c.uid, name=c.name or "Part", hidden=c.hidden, selected=c in scene.selection)
-                for c in g.children
-            ],
-        )
+        from ingetrazo_core import assembly_selection
+        parts = assembly_selection(scene, g, _record_address(scene, g))
     rule = None
     node = focus[0] if focused else structure.node_of(groups[0]) if len(groups) == 1 else None
     if node:
@@ -251,32 +243,55 @@ def action(win, view, payload):
                 vp.notify_scene_changed()
         elif surface == "parts":
             g = _assembly(vp.scene)
+            address = _record_address(vp.scene, g) if g is not None else None
+            if verb == "measure":
+                if g is not None and v == [address, vp.scene.content_version]:
+                    from ingetrazo_core import part_measures
+                    _send(view, "partMeasures", {"target": v, "rows": part_measures(g)})
+                return
             if verb == "report":
-                if g is not None and g.uid == v:
+                if g is not None and address == v:
                     from views.report_sheets import show
                     show(win, "cutlist")
                 return
             uid = v if verb == "split" else v[0]
-            if g is None or g.uid != uid or links.linked_ancestor(g) or g.locked:
+            if g is None or address != uid or links.linked_ancestor(g) or vp.scene.entity_locked(g):
                 return
-            if verb == "select":
-                child = next((c for c in g.children if c.uid == v[1]), None)
-                if child is None or child.hidden:
+            if verb == "preview":
+                from ingetrazo_core import AssemblyPreview
+                if view.packed is not None:
+                    drag = getattr(view, "_assembly_drag", None)
+                    if drag is None:
+                        drag = view._assembly_drag = AssemblyPreview(vp.scene, g, view.packed, view.uid_rows, v[2])
+                    view.renderer.preview_parts(drag.offsets(v[1]))
+                    view.update()
+                return
+            if verb in ("explode", "cancel") and getattr(view, "_assembly_drag", None) is not None:
+                view._assembly_drag = None
+                view.renderer.preview_parts([])
+            if verb == "cancel":
+                view.update()
+                return
+            if verb in ("select", "select_many"):
+                requested = {v[1]} if verb == "select" else set(v[1])
+                picks = [c for c in g.children if c.uid in requested and not c.hidden
+                         and vp.scene.entity_selectable(c)]
+                if len(picks) != len(requested):
                     return
                 if vp.scene.edit_group is not g:
                     vp.begin_group_edit(g)
                 if vp.scene.edit_group is g:
-                    vp.scene.select([child])
+                    vp.scene.select(picks)
                     vp.scene.bump_view()
                     view.update()
                 return
             if vp.scene.edit_group is g and verb in ("explode", "split"):
                 vp.end_group_edit()
                 vp.scene.select([g])
-            if verb == "visible":
-                child = next((c for c in g.children if c.uid == v[1]), None)
-                if child and not child.locked and not links.linked_ancestor(child):
-                    commands.run(vp.history, "unhide" if v[2] else "hide", placements=[vp.scene.occurrence_path(child)])
+            if verb in ("visible", "rename"):
+                args = {"visible": v[2]} if verb == "visible" else {"name": v[2]}
+                commands.run(vp.history, "edit_assembly_part", placement=vp.scene.occurrence_path(g),
+                             child=v[1], **args)
             elif verb == "split":
                 commands.run(vp.history, "split_into_pieces", placement=vp.scene.occurrence_path(g))
             elif verb == "explode":

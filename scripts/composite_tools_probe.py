@@ -134,7 +134,7 @@ igz.save_scene(host, folder / "host.igz")
 del source, host
 from views import prompts
 from views.layers_panel import LayersPanel
-from views.tray import PartsPanel, EntityInfoPanel, ScenesPanel
+from views.tray import EntityInfoPanel, ScenesPanel
 from views.extension_api import ExtensionApp
 from plugins import solid_inspector
 from functools import wraps
@@ -165,8 +165,6 @@ for cls, method in (
     (LayersPanel, "_refresh_after_change"),
     (LayersPanel, "_count_slice"),
     (LayersPanel, "refresh"),
-    (PartsPanel, "refresh"),
-    (PartsPanel, "on_scene_changed"),
     (EntityInfoPanel, "refresh"),
     (ScenesPanel, "refresh"),
     (solid_inspector.SolidInspectorPanel, "refresh"),
@@ -213,7 +211,7 @@ if panels_open:
         dock.move(win.screen().availableGeometry().topLeft())
         dock.show()
     settle(1)
-    win.tray.widget().ensureWidgetVisible(win.tray.parts)
+    win.tray.widget().ensureWidgetVisible(win.tray.entity_info)
     settle(0.5)
 prompts.get_multiline_text = lambda *args: ("Construction", True)
 results = {}
@@ -396,7 +394,6 @@ results.update(
     visible_panels={
         type(p).__name__: not p.visibleRegion().isEmpty()
         for p in (
-            win.tray.parts,
             win.tray.entity_info,
             win.scenes_dock.panel,
             win.layers_dock.panel,

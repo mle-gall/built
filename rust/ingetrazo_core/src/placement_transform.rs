@@ -255,7 +255,7 @@ impl AxesEdit {
     }
 }
 
-fn offset(kid: &Obj<'_>) -> PyResult<glam::DVec3> {
+pub(crate) fn offset(kid: &Obj<'_>) -> PyResult<glam::DVec3> {
     let old = kid.getattr("explode_offset")?;
     if old.is_truthy()? {
         xyz(&old)
@@ -265,7 +265,7 @@ fn offset(kid: &Obj<'_>) -> PyResult<glam::DVec3> {
 }
 
 #[pyfunction]
-fn assembled_centres(container: &Obj<'_>) -> PyResult<Vec<Vec3>> {
+pub(crate) fn assembled_centres(container: &Obj<'_>) -> PyResult<Vec<Vec3>> {
     let points = container
         .py()
         .import("core.parts")?
@@ -286,7 +286,7 @@ fn assembled_centres(container: &Obj<'_>) -> PyResult<Vec<Vec3>> {
     Ok(result)
 }
 #[pyfunction]
-fn explode_offsets(centres: Vec<Obj<'_>>, factor: f64, mode: &str) -> PyResult<Vec<Vec3>> {
+pub(crate) fn explode_offsets(centres: Vec<Obj<'_>>, factor: f64, mode: &str) -> PyResult<Vec<Vec3>> {
     let centres = centres.iter().map(xyz).collect::<PyResult<Vec<_>>>()?;
     let Some(&first) = centres.first() else {
         return Ok(Vec::new());

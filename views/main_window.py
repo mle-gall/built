@@ -6886,28 +6886,10 @@ class MainWindow(WorksessionMixin, QMainWindow):
         view = self._selected_scene()
         if view is None:
             return
-        from core.saved_views import SavedView
-        views = self.viewport.scene.saved_views
-        taken = {v.name for v in views}
-        base = view.name + tr(" (copy)")
-        name, n = base, 2
-        while name in taken:
-            name, n = f"{base} {n}", n + 1
-        copy = SavedView.from_dict(view.to_dict())
-        copy.name = name
-        from core.history import AddSceneCommand          # undoable (#1158)
-        self.tray.scenes._begin_own()        # the other pictures stay
-        self.viewport.history.execute(
-            AddSceneCommand(copy, views.index(view) + 1))
-        self._scene_changed_in_list(copy)
-        self.statusBar().showMessage(
-            tr("Scene '{name}' added", name=name), 2000)
-
-    def _scene_changed_in_list(self, current) -> None:
-        """Refresh the panel keeping ``current`` the current row."""
-        panel = self.tray.scenes
-        panel.select_view(current)
-        panel._touch()
+        copy = self.tray.scenes.duplicate_view(view)
+        if copy is not None:
+            self.statusBar().showMessage(
+                tr("Scene '{name}' added", name=copy.name), 2000)
 
     def _on_scene_delete(self) -> None:
         panel = self.tray.scenes

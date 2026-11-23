@@ -152,32 +152,6 @@ def _paint_loose_face(w, panel, rgb, name):
     return face
 
 
-def test_the_name_field_renames_the_active_material(window):
-    panel = _panel(window)
-    face = _paint_loose_face(window, panel, (0.1, 0.4, 0.9), "Azul")
-    assert panel._name_edit.text() == "Azul"
-    panel._name_edit.setText("Fachada norte")
-    panel._on_name_edited()
-    scene = window.viewport.scene
-    assert face.attrs["mat"] == "Fachada norte"
-    assert "Azul" not in scene.materials
-    assert PaintTool.current_material.name == "Fachada norte"
-    assert panel._name_edit.text() == "Fachada norte"
-    assert window.viewport.history.undo()
-    assert face.attrs["mat"] == "Azul"
-
-
-def test_the_name_field_refuses_a_name_already_taken(window):
-    panel = _panel(window)
-    _paint_loose_face(window, panel, (0.9, 0.1, 0.1), "Rojo")
-    face = _paint_loose_face(window, panel, (0.1, 0.4, 0.9), "Azul")
-    panel._name_edit.setText("Rojo")
-    panel._on_name_edited()
-    assert face.attrs["mat"] == "Azul"
-    assert panel._name_edit.text() == "Azul"          # field put back
-    assert window.viewport.scene.materials["Rojo"].color == (0.9, 0.1, 0.1)
-
-
 def test_naming_a_swatch_not_yet_in_the_model_names_the_next_paint(window):
     panel = _panel(window)
     panel._apply_color((0.3, 0.6, 0.3), name="RAL 6011 Reseda green")

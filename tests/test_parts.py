@@ -1,10 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""The Parts tray: a component's parts, measured like a cut list."""
+"""Assembly geometry and the cut list report."""
 from __future__ import annotations
 
 import pytest
-from PySide6.QtCore import Qt
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 from PySide6.QtWidgets import QApplication
 
@@ -151,49 +150,6 @@ def _window_with(group):
     return win, scene
 
 
-def test_the_tray_lists_selects_hides_and_renames_parts():
-    stool = _stool()
-    win, scene = _window_with(stool)
-    panel = win.tray.parts
-    panel.refresh()
-    tree = panel.tree
-    assert tree.topLevelItemCount() == 3
-    assert [tree.topLevelItem(i).text(0) for i in range(3)] == [
-        "seat", "leg A", "leg B"]
-
-    panel._on_clicked(tree.topLevelItem(1), 0)     # the Outliner's click
-    assert scene.edit_group is stool
-    assert scene.selection == {stool.children[1]}
-    panel.refresh()
-    assert tree.topLevelItemCount() == 3           # still listed inside it
-
-    tree.topLevelItem(2).setCheckState(0, Qt.Unchecked)
-    assert stool.children[2].hidden
-    tree.topLevelItem(0).setText(0, "Seat board")
-    assert stool.children[0].name == "Seat board"
-    win.viewport.history.undo()
-    assert stool.children[0].name == "seat"
-    win.viewport.history.undo()
-    assert not stool.children[2].hidden
-    win._saved_version = scene.version
-
-
-def test_a_plain_group_offers_to_split():
-    mesh = _box(0.1, 0.1, 0.1)
-    for f in _box(0.1, 0.1, 0.1, at=(1, 0, 0)).faces:
-        mesh.add_face(f.vertices)
-    group = Group(mesh, name="two blocks")
-    win, scene = _window_with(group)
-    panel = win.tray.parts
-    panel.refresh()
-    assert not panel.tree.isVisibleTo(panel)
-    assert panel._split_btn.isEnabled()
-    panel._on_split()
-    assert [k.name for k in group.children] == ["Piece 1", "Piece 2"]
-    assert panel.tree.topLevelItemCount() == 2
-    win._saved_version = scene.version
-
-
 def test_copy_cut_list_fills_the_clipboard():
     win, scene = _window_with(_stool())
     from views import chrome_sheet
@@ -205,101 +161,6 @@ def test_copy_cut_list_fills_the_clipboard():
     lines = QApplication.clipboard().text().splitlines()
     assert len(lines) == 3 and lines[1].startswith("2\t")
     assert len(lines[0].split("\t")) == 6
-    win._saved_version = scene.version
-
-
-def _many_parts(n: int = 20) -> Group:
-    kids = [_part(_box(0.1, 0.1, 0.1, at=(i * 0.2, 0, 0)), f"Piece {i + 1}")
-            for i in range(n)]
-    cab = Group(name="cabinet")
-    cab.adopt(kids)
-    return cab
-
-
-def test_the_list_updates_in_place_and_keeps_its_scroll():
-    """A click on a row below the fourteenth must not throw the list back
-    to its top: the refresh it triggers updates rows, it does not rebuild."""
-    cab = _many_parts()
-    win, scene = _window_with(cab)
-    win.show()
-    panel = win.tray.parts
-    panel.refresh()
-    tree = panel.tree
-    _app.processEvents()
-    tree.scrollToBottom()
-    before = tree.verticalScrollBar().value()
-    assert before > 0
-    row = tree.topLevelItem(17)
-    panel._on_clicked(row, 0)
-    win.tray.on_scene_changed()
-    _app.processEvents()
-    assert tree.topLevelItem(17) is row
-    assert tree.verticalScrollBar().value() == before
-    assert scene.selection == {cab.children[17]}
-    win._saved_version = scene.version
-
-
-def test_a_part_selected_in_the_canvas_scrolls_into_view():
-    cab = _many_parts()
-    win, scene = _window_with(cab)
-    win.show()
-    panel = win.tray.parts
-    panel.refresh()
-    tree = panel.tree
-    _app.processEvents()
-    scene.begin_group_edit(cab)
-    scene.selection.add(cab.children[19])
-    scene.version += 1
-    win.tray.on_scene_changed()
-    _app.processEvents()
-    last = tree.topLevelItem(19)
-    assert last.isSelected()
-    assert tree.viewport().rect().contains(tree.visualItemRect(last).center())
-    scene.end_group_edit()
-    win._saved_version = scene.version
-
-
-def test_all_parts_visible_shows_every_hidden_part():
-    cab = _many_parts(4)
-    win, scene = _window_with(cab)
-    panel = win.tray.parts
-    panel.refresh()
-    panel.tree.topLevelItem(1).setCheckState(0, Qt.Unchecked)
-    panel.tree.topLevelItem(2).setCheckState(0, Qt.Unchecked)
-    assert panel._all_visible.checkState() == Qt.PartiallyChecked
-    panel._all_visible.click()
-    assert not any(k.hidden for k in cab.children)
-    assert panel._all_visible.checkState() == Qt.Checked
-    win.viewport.history.undo()
-    assert sum(k.hidden for k in cab.children) == 2
-    win._saved_version = scene.version
-
-
-def test_a_rename_survives_a_refresh_while_typing():
-    from PySide6.QtTest import QTest
-    cab = _many_parts(3)
-    win, scene = _window_with(cab)
-    win.show()
-    panel = win.tray.parts
-    panel.refresh()
-    item = panel.tree.topLevelItem(2)
-    panel.tree.editItem(item, 0)
-    _app.processEvents()
-    win.tray.on_scene_changed()                 # an edit elsewhere lands
-    _app.processEvents()
-    # The tree's own line editor, looked up AFTER the refresh: the focus
-    # widget is whatever window is active, which in a full offscreen run can
-    # be another test's viewport («'Viewport' object has no attribute
-    # 'setText'», CI 30-09).
-    from PySide6.QtWidgets import QLineEdit
-    editors = [w for w in panel.tree.viewport().findChildren(QLineEdit)
-               if w.isVisible()]
-    assert len(editors) == 1
-    editor = editors[0]
-    editor.setText("Right side wall")
-    QTest.keyClick(editor, Qt.Key_Return)
-    _app.processEvents()
-    assert cab.children[2].name == "Right side wall"
     win._saved_version = scene.version
 
 
@@ -347,34 +208,6 @@ def test_a_part_with_no_thickness_is_a_surface_not_a_zero_board():
     lines = text.splitlines()
     assert lines[1].split("\t")[-1] == "18"            # the shelf
     assert lines[2].split("\t")[-1] == "surface"       # the skin
-
-
-def test_the_tray_shows_a_surface_as_an_area():
-    holder = Group(name="unit")
-    holder.adopt([_part(_sheet(0.6, 0.135), "skin"),
-                  _part(_box(0.6, 0.4, 0.018), "shelf")])
-    win, scene = _window_with(holder)
-    panel = win.tray.parts
-    panel.refresh()
-    assert panel.tree.topLevelItem(0).text(1).endswith("surface")
-    assert "×" in panel.tree.topLevelItem(1).text(1)
-    assert not panel.tree.topLevelItem(1).text(1).endswith("surface")
-    win._saved_version = scene.version
-
-
-def test_clipped_parts_wait_to_measure_the_selected_group(monkeypatch):
-    from PySide6.QtGui import QRegion
-    win, scene = _window_with(_stool())
-    panel = win.tray.parts
-    calls = []
-    monkeypatch.setattr(win, 'isVisible', lambda: True)
-    monkeypatch.setattr(panel, 'visibleRegion', QRegion)
-    monkeypatch.setattr(panel, '_row', lambda part: calls.append(part))
-    panel.on_scene_changed()
-    assert panel._stale and not calls
-    monkeypatch.undo()
-    panel.refresh()
-    assert len(panel._rows) == 3
 
 
 def _copies(n=40):
@@ -434,26 +267,6 @@ def test_shared_reading_gives_the_rows_reading_one_by_one_gave():
     # And the size follows each copy's scale.
     assert together[0]["size"][0] == pytest.approx(1.6, abs=1e-6)
     assert together[10]["size"][0] == pytest.approx(1.8, abs=1e-6)
-
-
-def test_the_tray_reads_a_shared_definition_once_per_refresh(monkeypatch):
-    from core import parts
-    holder = _copies(30)
-    win, scene = _window_with(holder)
-    panel = win.tray.parts
-    seen = []
-    real = parts._mesh_paint_areas
-
-    def spy(mesh, cache=None):
-        seen.append(cache is not None and ("paint", id(mesh)) in cache)
-        return real(mesh, cache)
-
-    monkeypatch.setattr(parts, "_mesh_paint_areas", spy)
-    panel._cache.clear()
-    panel.refresh()
-    assert panel.tree.topLevelItemCount() == 30
-    assert seen.count(False) == 1 and len(seen) == 30
-    win._saved_version = scene.version
 
 
 def test_parts_read_lazy_shared_prototypes_without_building(monkeypatch, tmp_path):

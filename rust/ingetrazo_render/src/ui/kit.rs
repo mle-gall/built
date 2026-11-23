@@ -377,7 +377,7 @@ pub mod molecules {
     /// to the tree). Not to be confused with [`underline_tabs`], which
     /// navigate the sections of one panel.
     pub fn segmented(ui: &mut egui::Ui, labels: &[&str], at: usize, width: f32) -> Option<usize> {
-        let (track, _) = ui.allocate_exact_size(vec2(width, CONTROL_H), Sense::hover());
+        let (track, control) = ui.allocate_exact_size(vec2(width, CONTROL_H), Sense::hover());
         let forced = specimen_state(ui);
         let off = forced == Some(State::Off) || !ui.is_enabled();
         ui.painter()
@@ -391,7 +391,7 @@ pub mod molecules {
                 pos2(track.min.x + 2.0 + i as f32 * seg_w, track.min.y + 2.0),
                 vec2(seg_w, CONTROL_H - 4.0),
             );
-            let resp = ui.interact(r, ui.id().with(("seg", i)), Sense::click());
+            let resp = ui.interact(r, control.id.with(i), Sense::click());
             let on = i == at;
             let st = match forced {
                 Some(s) if Some(i) == first_other && s != State::On => s,
@@ -665,6 +665,26 @@ pub mod molecules {
         *value = (*value).min(labels.len() - 1);
         egui::ComboBox::from_id_salt(id).show_index(ui, value, labels.len(), |i| labels[i]);
     }
+    /// Keep a drag's value local until release so the edit makes one undo step.
+    pub fn percent_slider(ui: &mut egui::Ui, id: egui::Id, committed: f64, max: f64) -> Option<f64> {
+        let mut value = ui.data(|d| d.get_temp::<f64>(id)).unwrap_or(committed);
+        let r = ui.add(
+            egui::Slider::new(&mut value, 0.0..=max)
+                .step_by(1.0)
+                .suffix("%"),
+        );
+        if r.is_pointer_button_down_on() {
+            ui.data_mut(|d| d.insert_temp(id, value));
+        }
+        if r.drag_stopped() || (r.changed() && !r.is_pointer_button_down_on()) {
+            ui.data_mut(|d| d.remove::<f64>(id));
+            if value != committed {
+                return Some(value);
+            }
+        }
+        None
+    }
+
     pub fn progress(fraction: f32) -> egui::ProgressBar {
         egui::ProgressBar::new(fraction).fill(INK_2)
     }
@@ -1463,4 +1483,111 @@ pub fn site_pin(painter:&egui::Painter, center:Pos2, label:&str) {
     let pos=center+vec2(SPACE_M,SPACE_XS);
     painter.rect_filled(Rect::from_min_size(pos,text.size()).expand(SPACE_XS),R_INSET,PANEL);
     painter.galley(pos,text,INK);
+}
+
+#[cfg(test)]
+mod interaction_tests {
+    use super::*;
+    use egui::{Event, PointerButton};
+
+    #[test]
+    fn material_base_and_surface_switches_receive_independent_clicks() {
+        let ctx = egui::Context::default();
+        let mut fonts = egui::FontDefinitions::empty();
+        fonts.font_data.insert(
+            "Inter".into(),
+            egui::FontData::from_static(include_bytes!(
+                "../../../../resources/fonts/inter/Inter-Regular.ttf"
+            ))
+            .into(),
+        );
+        for family in [
+            egui::FontFamily::Proportional,
+            egui::FontFamily::Name("medium".into()),
+        ] {
+            fonts.families.insert(family, vec!["Inter".into()]);
+        }
+        ctx.set_fonts(fonts);
+        let frame = |events| {
+            let mut hit = [None, None];
+            let input = egui::RawInput {
+                events,
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(320., 180.))),
+                ..Default::default()
+            };
+            let _ = ctx.run(input, |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    hit[0] = segmented(ui, &["Colour", "Image"], 0, 180.);
+                    hit[1] = segmented(ui, &["Off", "On"], 1, 180.);
+                });
+            });
+            hit
+        };
+        frame(vec![]);
+        for (pos, expected) in [
+            (pos2(145., 18.), [Some(1), None]),
+            (pos2(36., 18. + super::CONTROL_H + 3.), [None, Some(0)]),
+        ] {
+            for pressed in [true, false] {
+                let hit = frame(vec![
+                    Event::PointerMoved(pos),
+                    Event::PointerButton {
+                        pos,
+                        pressed,
+                        button: PointerButton::Primary,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ]);
+                if !pressed {
+                    assert_eq!(hit, expected);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn dragging_a_material_slider_commits_once_on_release() {
+        let ctx = egui::Context::default();
+        let id = egui::Id::new("opacity-test");
+        let mut time = 0.0;
+        let mut frame = |events| {
+            time += 0.1;
+            let mut edit = None;
+            let input = egui::RawInput {
+                time: Some(time),
+                events,
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(300.0, 100.0))),
+                ..Default::default()
+            };
+            let _ = ctx.run(input, |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    ui.spacing_mut().slider_width = 140.0;
+                    edit = percent_slider(ui, id, 10.0, 100.0);
+                });
+            });
+            edit
+        };
+        let button = |x, pressed| Event::PointerButton {
+            pos: pos2(x, 17.0),
+            button: PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        };
+        assert_eq!(frame(vec![]), None);
+        assert_eq!(
+            frame(vec![
+                Event::PointerMoved(pos2(30.0, 17.0)),
+                button(30.0, true)
+            ]),
+            None
+        );
+        for x in [65.0, 90.0, 110.0] {
+            assert_eq!(frame(vec![Event::PointerMoved(pos2(x, 17.0))]), None);
+        }
+        let draft = ctx.data(|d| d.get_temp::<f64>(id)).unwrap();
+        assert!(draft > 60.0);
+        assert_eq!(frame(vec![button(110.0, false)]), Some(draft));
+        assert_eq!(ctx.data(|d| d.get_temp::<f64>(id)), None);
+        assert_eq!(frame(vec![]), None);
+    }
 }

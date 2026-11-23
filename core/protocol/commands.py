@@ -430,6 +430,38 @@ def file_placements(history, placements, node):
     return _answer(history, before)
 
 
+def edit_assembly_part(history, placement, child=None, visible=None, name=None):
+    from ingetrazo_core import plan_part_edit
+    group, = _placements(history, [placement])
+    before = history.revision
+    command = plan_part_edit(history.scene, group, child, visible, name)
+    if command is not None:
+        history.execute(command)
+    return _answer(history, before)
+
+
+def edit_visibility_set(history, verb, key="", name=""):
+    from ingetrazo_core import visibility_set_command
+    before = history.revision
+    command = visibility_set_command(history.scene, verb, key, name)
+    if command is not None:
+        history.execute(command)
+    return _answer(history, before)
+
+
+def edit_saved_scene(history, verb, **args):
+    from ingetrazo_core import plan_scene_command
+    before = history.revision
+    command = plan_scene_command(history.scene, verb, **args)
+    if command is None:
+        return {"ok": False, "step": None, "error": None, "rejected": None}
+    history.execute(command)
+    result = _answer(history, before)
+    if result["ok"] and verb in ("add", "duplicate"):
+        result["index"] = history.scene.saved_views.index(command.view)
+    return result
+
+
 def edit_structure_node(history, node, field, value):
     from ingetrazo_core import plan_node_edit
     before = history.revision
@@ -534,14 +566,16 @@ def resegment_curve(history, edge, segments):
     return _answer(history, before)
 
 
-def repair_solid(history, placement):
+def repair_solid(history, placement, fault=None):
     """Repair what has one right answer in a placement's (uid) mesh, shared
     by its copies: stray edges, duplicated faces, flat holes, partitions,
     reversed faces (the Solid Inspector's ``RepairSolidsCommand``). The
     counts come back as ``repaired``."""
-    from plugins.solid_inspector import RepairSolidsCommand
-    g, = _placements(history, [placement])
-    cmd = RepairSolidsCommand([g.mesh])
+    from ingetrazo_core import plan_solid_fault
+    group = _placements(history, [placement])[0] if placement is not None else None
+    cmd = plan_solid_fault(history.scene, group, fault)
+    if cmd is None:
+        return {"ok": False, "step": None, "error": None, "rejected": None, "repaired": {}}
     before = history.revision
     history.execute(cmd)
     out = _answer(history, before)
@@ -915,7 +949,7 @@ COMMANDS = {"set_location": set_location, "set_model_units": set_model_units, "s
             "explode_view": explode_view, "purge_unused": purge_unused,
             "purge_debris": purge_debris, "undo": undo, "redo": redo,
             "hide": hide, "unhide": unhide, "lock": lock, "rename_placement": rename_placement,
-            "edit_link_subset": edit_link_subset, "reset_link_tags": reset_link_tags, "unlink_placements": unlink_placements, "edit_section_plane": edit_section_plane, "edit_loose_geometry": edit_loose_geometry, "file_placements": file_placements, "edit_structure_node": edit_structure_node, "edit_tag": edit_tag, "set_tag": set_tag, "set_tag_state": set_tag_state, "resegment_curve": resegment_curve, "repair_solid": repair_solid,
+            "edit_assembly_part": edit_assembly_part, "edit_visibility_set": edit_visibility_set, "edit_saved_scene": edit_saved_scene, "edit_link_subset": edit_link_subset, "reset_link_tags": reset_link_tags, "unlink_placements": unlink_placements, "edit_section_plane": edit_section_plane, "edit_loose_geometry": edit_loose_geometry, "file_placements": file_placements, "edit_structure_node": edit_structure_node, "edit_tag": edit_tag, "set_tag": set_tag, "set_tag_state": set_tag_state, "resegment_curve": resegment_curve, "repair_solid": repair_solid,
             "rename_material": rename_material, "edit_material": edit_material,
             "duplicate_material": duplicate_material, "delete_material": delete_material,
             "delete_placements": delete_placements, "rename_component": rename_component,
