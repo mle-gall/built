@@ -3718,11 +3718,32 @@ def run_stitch(mesh, seedkeys: set, new_faces: Optional[set] = None,
     # Phase 3 — coplanar-merge, seeded to the operation. Fuses the whole coplanar
     # component (every shared edge, any number of faces) at once, but only when it
     # includes a face this operation created (so user diagonals survive).
+    from core.store_mesh import FaceView, _hypot, _store_of
+    start = 0
+    while _doc.ENABLED and (store := _store_of(mesh)) is not None:
+        fresh = None if new_faces is None else {f.key for f in new_faces}
+        match = store.stitch_region(list(seedkeys or ()), fresh, start, _hypot())
+        if match is None:
+            return
+        start, keys = match
+        component = {FaceView(mesh, k) for k in keys}
+        region = mesh.dissolve_coplanar_region(component)
+        if region is not None:
+            if new_faces is not None:
+                new_faces.difference_update(component)
+                new_faces.add(region)
+            start = 0
+    _merge_object_regions(mesh, seedkeys, new_faces, start)
+
+
+def _merge_object_regions(mesh, seedkeys, new_faces, start):
     while True:
         merged = False
         ncache: dict = {}
         scache: dict = {}
-        for f0 in list(mesh.faces):
+        faces = list(mesh.faces)[start:]
+        start = 0
+        for f0 in faces:
             comp = _coplanar_component(mesh, f0, seedkeys, ncache, scache)
             if len(comp) < 2:
                 continue

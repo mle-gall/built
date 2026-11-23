@@ -56,6 +56,7 @@ mod panic_log;
 
 #[pymodule]
 fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(push_command::rebuild_push_planes, m)?)?;
     m.add_function(wrap_pyfunction!(push_command::push_top_out, m)?)?;
     m.add_function(wrap_pyfunction!(push_command::push_secondary_faces, m)?)?;
     m.add_function(wrap_pyfunction!(push_command::outline_curve_runs, m)?)?;

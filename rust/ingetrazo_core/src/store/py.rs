@@ -1303,6 +1303,22 @@ impl PyMeshStore {
         Ok(existing.is_none().then(|| self.inner.key(Kind::Edge, edge)))
     }
 
+    #[staticmethod]
+    #[pyo3(signature=(points, edges, bounds, tolerance))]
+    fn stitch_junctions(points: PyReadonlyArray2<'_, f64>, edges: PyReadonlyArray2<'_, i64>,
+                        bounds: Option<[[f64; 3]; 2]>, tolerance: f64) -> PyResult<Vec<(usize,usize)>> {
+        if edges.shape()[1] != 2 { return Err(PyValueError::new_err("edges need two indices")); }
+        let edges = edges.as_slice().map_err(|_| PyValueError::new_err("edges must be contiguous"))?;
+        super::stitch_command::junctions(triples(&points)?, edges.as_chunks::<2>().0, bounds, tolerance)
+            .map_err(PyValueError::new_err)
+    }
+
+    #[pyo3(signature=(seeds, fresh, start, hypot))]
+    fn stitch_region(&self, seeds: Vec<[f64; 3]>, fresh: Option<std::collections::HashSet<u128>>, start: usize, hypot: &str)
+        -> PyResult<Option<(usize, Vec<u128>)>> {
+        Ok(self.inner.stitch_region(seeds, fresh, start, crate::hypot_of(hypot)?))
+    }
+
     fn cap_passes_wall(&self, face: u128, rim: Vec<[f64; 3]>, normal: [f64; 3], distance: f64) -> PyResult<bool> {
         Ok(self.inner.cap_passes_wall(live_of(&self.inner, Kind::Face, face)?, &rim, normal, distance))
     }

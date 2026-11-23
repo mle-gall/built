@@ -102,3 +102,51 @@ pub fn outline_curve_runs(ids: Vec<Option<i64>>, from_break: bool) -> Vec<(Vec<u
     }
     runs
 }
+
+/// Rebuild one representative per canonical plane in sorted order. Changes to
+/// an earlier plane are visible when classifying the next plane in the round.
+#[pyfunction]
+pub fn rebuild_push_planes(collect: &Bound<'_, PyAny>, apply: &Bound<'_, PyAny>) -> PyResult<()> {
+    use crate::math::Vec3;
+    use glam::DVec3;
+    use std::collections::BTreeMap;
+    for round in 0..4 {
+        let planes = collect.call1((round,))?;
+        let mut unique = BTreeMap::new();
+        for pair in planes.try_iter()? {
+            let pair = pair?;
+            let (origin, normal): (PyRef<'_, Vec3>, PyRef<'_, Vec3>) = pair.extract()?;
+            let mut n = DVec3::from_array(normal.coords()).normalize_or_zero();
+            let mut axis = 0;
+            for i in 1..3 {
+                if n[i].abs() > n[axis].abs() {
+                    axis = i;
+                }
+            }
+            if n[axis] < 0. {
+                n = -n;
+            }
+            let offset = n.dot(DVec3::from_array(origin.coords()));
+            // Python round(x, 3) rounds the original binary64 value. Convert
+            // the rounded bits into monotonically ordered integer keys.
+            let key = [n.x, n.y, n.z, offset].map(|x| {
+                let x = format!("{x:.3}").parse::<f64>().unwrap();
+                let bits = if x == 0. { 0 } else { x.to_bits() };
+                if bits >> 63 == 1 {
+                    !bits
+                } else {
+                    bits ^ (1u64 << 63)
+                }
+            });
+            unique.entry(key).or_insert(pair.clone());
+        }
+        let mut changed = false;
+        for pair in unique.into_values() {
+            changed |= apply.call1((pair,))?.is_truthy()?;
+        }
+        if !changed {
+            break;
+        }
+    }
+    Ok(())
+}

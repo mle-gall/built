@@ -3169,6 +3169,39 @@ class PushPullTool(Tool):
         # entries stay valid. Without it each plane visit re-ran Newell over
         # the whole mesh — 76k normals per drag frame on the barbecue.
         cache = RebuildCache()
+        if doc_model.ENABLED:
+            from ingetrazo_core import rebuild_push_planes
+
+            def planes(round_index):
+                nonlocal fresh
+                if round_index:
+                    fresh = {f for f in fresh if f in mesh.faces}
+                cache.seed_faces = ElementSet(fresh)
+                candidates = list(seam_planes(mesh, fresh))
+                candidates.extend(crack_planes(mesh, _faces_window(fresh)))
+                candidates.extend(_seam_planes_along(mesh, cache.dropped))
+                cache.dropped = []
+                return candidates
+
+            def rebuild(pair):
+                origin, normal = pair
+                before = _FacesBefore(mesh)
+                changed = apply_rebuild(mesh, origin, normal, fresh, keep_mode,
+                                        removing, op=op_rims, cache=cache)
+                if changed:
+                    fresh.update({f for f in before.new_faces(mesh) if not before.kept(f, fresh)})
+                return changed
+
+            rebuild_push_planes(planes, rebuild)
+        else:
+            PushPullTool._reference_plane_rounds(mesh, fresh, keep_mode, removing, op_rims, cache)
+        # The dissolved seams can leave redundant collinear vertices on the
+        # rebuilt faces' borders (the old cap ring's corners); one more
+        # connectivity pass collapses them. No merge — rebuild already did.
+        run_stitch(mesh, seedkeys, None, coplanar_merge=False)
+
+    @staticmethod
+    def _reference_plane_rounds(mesh, fresh, keep_mode, removing, op_rims, cache):
         for _ in range(4):  # converges in 1-2 rounds; hard cap for safety
             # The op's own faces name the solids it may touch, so the plane
             # scans narrow to them instead of walking the whole group.
@@ -3208,10 +3241,6 @@ class PushPullTool(Tool):
             if not changed:
                 break
             fresh = {f for f in fresh if f in mesh.faces}
-        # The dissolved seams can leave redundant collinear vertices on the
-        # rebuilt faces' borders (the old cap ring's corners); one more
-        # connectivity pass collapses them. No merge — rebuild already did.
-        run_stitch(mesh, seedkeys, None, coplanar_merge=False)
 
     def _extrude_commands(self, face, base, top, base_holes, top_holes, count, attached):
         """Build the cap between the outer rim edges and the inner and outer walls."""
