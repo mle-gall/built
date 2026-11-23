@@ -403,15 +403,6 @@ fn tone(t: &str) -> Color32 {
     }
 }
 
-/// One line (or `rows` lines) of text cut to `width`.
-fn fit(ui: &egui::Ui, text: &str, font: egui::FontId, color: Color32, width: f32, rows: usize) -> Arc<egui::Galley> {
-    let mut job = egui::text::LayoutJob::single_section(text.to_owned(), egui::TextFormat { font_id: font, color, ..Default::default() });
-    job.wrap.max_width = width.max(10.0);
-    job.wrap.max_rows = rows;
-    job.wrap.break_anywhere = rows == 1;
-    ui.painter().layout_job(job)
-}
-
 /// A picture: the texture cropped to fill (cover), a colour, or a quiet box.
 fn picture(ui: &egui::Ui, r: Rect, tex: Option<&egui::TextureHandle>, hex: &str, radius: u8) {
     let cr = CornerRadius::same(radius);

@@ -317,3 +317,26 @@ def test_native_online_catalogue_places_the_credited_component(tmp_path):
     scene = Scene()
     load_into(scene, saved)
     assert any((g.ext or {}).get("catalogue", {}).get("autor") == "Ana" for g in scene.groups), log
+
+
+@pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
+                    reason="requires a built window and BUILT_WINDOW_TESTS=1")
+def test_native_f3_finds_and_runs_a_misspelled_command(tmp_path):
+    from core.scene import Scene
+    from formats.igz import save_scene
+    path = tmp_path / "empty.built"
+    save_scene(Scene(), path)
+    steps = tmp_path / "f3"
+    steps.write_text("wait 600\nkey escape\nkey f3\nwait 250\ntype cut lsit\nwait 300\n"
+                     "key enter\nwait 350\nstate\nkey escape\nwait 300\nstate\nquit\n")
+    home = tmp_path / "home"
+    home.mkdir()
+    result = run([str(BIN), "--root", str(ROOT), "--venv", str(ROOT / ".venv"),
+                  "--new-instance", "--size", "1000x720", "--script", str(steps), str(path)],
+                 env=dict(os.environ, BUILT_ANSWERS="escape"), home=home,
+                 settings=tmp_path / "profile", capture_output=True, text=True, timeout=45)
+    log = result.stdout + result.stderr
+    states = [json.loads(line.removeprefix("[built] state ")) for line in log.splitlines()
+              if line.startswith("[built] state ")]
+    assert result.returncode == 0 and [s["large_sheet"] for s in states[:2]] == ["cutlist", ""], log
+    assert all(not s["errors"] and not s["blocked_widgets"] for s in states), log

@@ -6,7 +6,7 @@ use super::{kit::*, tokens::*};
 use egui::{pos2, vec2, Align2, Color32, Pos2, Rect, Sense, Stroke};
 
 /// The board, in points; the Qt host scales it to fit.
-const BOARD: egui::Vec2 = vec2(1280., 800.);
+const BOARD: egui::Vec2 = vec2(1280., 1000.);
 const STATES: [(&str, State); 6] = [
     ("Rest", State::Idle),
     ("Hover", State::Hover),
@@ -61,9 +61,10 @@ enum Row {
     Tabs,
     ListRow,
     MenuRow,
+    CommandRow,
     Tile,
 }
-const ROWS: [(&str, Row); 14] = [
+const ROWS: [(&str, Row); 15] = [
     ("Primary button", Row::Primary),
     ("Button", Row::Secondary),
     ("Destructive", Row::Destructive),
@@ -77,6 +78,7 @@ const ROWS: [(&str, Row); 14] = [
     ("Underline tabs", Row::Tabs),
     ("List and tree row", Row::ListRow),
     ("Menu row", Row::MenuRow),
+    ("Command result", Row::CommandRow),
     ("Tile", Row::Tile),
 ];
 
@@ -84,7 +86,7 @@ impl Row {
     /// Whether the state exists for the component; "—" otherwise.
     fn has(self, st: State) -> bool {
         match st {
-            State::On => matches!(self, Row::Toggle | Row::ListRow | Row::MenuRow | Row::Tile),
+            State::On => matches!(self, Row::Toggle | Row::ListRow | Row::MenuRow | Row::CommandRow | Row::Tile),
             State::Press => !matches!(self, Row::Field),
             State::Focus => !matches!(self, Row::MenuRow),
             _ => true,
@@ -435,6 +437,9 @@ impl Gallery {
                     ui.painter().text(r.left_center() + vec2(20., 0.), Align2::LEFT_CENTER, "Walls", body(), ink);
                     ui.painter().text(r.right_center() - vec2(8., 0.), Align2::RIGHT_CENTER, "6", meta(), if st == State::Off { OFF } else { DIM });
                 });
+            }
+            Row::CommandRow => {
+                command_row(ui, "Undo", "Edit", "⌘Z", st != State::Off, st == State::On);
             }
             Row::MenuRow => {
                 ui.vertical(|ui| {

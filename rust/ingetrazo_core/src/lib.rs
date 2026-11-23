@@ -14,6 +14,7 @@ use pyo3::types::PyBytes;
 
 mod math;
 mod navigation;
+mod command_search;
 mod location;
 mod boxes;
 mod doc;
@@ -76,6 +77,11 @@ mod panic_log;
 
 #[pymodule]
 fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<command_search::SearchItem>()?;
+    m.add_function(wrap_pyfunction!(command_search::damerau_levenshtein, m)?)?;
+    m.add_function(wrap_pyfunction!(command_search::rank_commands, m)?)?;
+    m.add_function(wrap_pyfunction!(command_search::command_score, m)?)?;
+    m.add_function(wrap_pyfunction!(command_search::fuzzy_errors, m)?)?;
     m.add_class::<location::LocationDraft>()?;
     m.add_class::<location::LocationEdit>()?;
     m.add_function(wrap_pyfunction!(location::zone_for_lon, m)?)?;

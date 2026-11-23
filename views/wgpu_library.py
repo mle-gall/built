@@ -1411,7 +1411,6 @@ def install(win) -> None:
     comp.triggered.connect(lambda: open_library(win, "components"))
     win._act_library_components = comp
     win._lib_actions = acts
-    win._ui_commands = None
     _register_icon()
 
 
