@@ -73,8 +73,6 @@ impl Overlay {
         self.ensure(d, w, h);
         self.upload_region(q, 0, 0, w, h, rgba);
     }
-    /// The image's size, if it has one.
-    pub fn size(&self) -> Option<(u32, u32)> { self.image.as_ref().map(|v| (v.2, v.3)) }
     /// Give the layer a ``w`` × ``h`` image (kept when it already is that size).
     pub fn ensure(&mut self, d: &wgpu::Device, w: u32, h: u32) {
         if self.image.as_ref().map(|v| (v.2, v.3)) != Some((w, h)) {
@@ -106,9 +104,9 @@ impl Overlay {
             self.image = Some((texture, group, w, h));
         }
     }
-    /// Replace the ``w`` × ``h`` rectangle at ``x``, ``y`` of the image (the
-    /// sheets workspace re-renders only what changed). False when it does
-    /// not fit the image or the pixels do not match the rectangle.
+    /// Replace the ``w`` × ``h`` rectangle at ``x``, ``y`` of the image.
+    /// False when it does not fit the image or the pixels do not match the
+    /// rectangle.
     pub fn upload_region(&mut self, q: &wgpu::Queue, x: u32, y: u32, w: u32, h: u32, rgba: &[u8]) -> bool {
         let Some((texture, _, iw, ih)) = self.image.as_ref() else { return false };
         if w == 0 || h == 0 || x + w > *iw || y + h > *ih || rgba.len() as u64 != w as u64 * h as u64 * 4 {
@@ -135,8 +133,6 @@ impl Overlay {
         );
         true
     }
-    /// Drop the image (the layer draws nothing until the next upload).
-    pub fn clear(&mut self) { self.image = None; }
     pub fn draw(&self, e: &mut wgpu::CommandEncoder, color: &wgpu::TextureView, w: u32, h: u32, queries: Option<&wgpu::QuerySet>) {
         if let Some((_, group, iw, ih)) = &self.image {
             if (*iw, *ih) != (w, h) {

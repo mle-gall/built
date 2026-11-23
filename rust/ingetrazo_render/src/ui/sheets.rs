@@ -18,7 +18,7 @@ pub type SheetRow = (String, String, bool);
 pub struct Sheets {
     pub shown: bool,
     tools: Vec<Vec<Tool>>,
-    active: String,
+    pub(super) active: String,
     list: Vec<SheetRow>,
     /// Inline rename: the row and the text being typed.
     renaming: Option<(usize, String)>,
@@ -608,6 +608,34 @@ fn sheet_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std::col
         });
     }
 }
+
+
+// ---- The page (sheet_page.rs) --------------------------------------------------
+impl Ui {
+    /// The part of the window the Sheets chrome leaves the page (the rail,
+    /// the dock, the top and bottom bars as last laid out).
+    pub(super) fn page_free(&self, ctx: &egui::Context, screen: Rect) -> Rect {
+        let area = |n: &str| ctx.memory(|m| m.area_rect(egui::Id::new(n)));
+        let left = area("sheets_rail").map_or(80.0, |r| r.right());
+        let right = area("sheets_dock").map_or(screen.right() - DOCK_W - 16.0, |r| r.left());
+        let top = area("top").map_or(TOP_H, |r| r.bottom());
+        let bottom = area("bottom").map_or(screen.bottom() - BOT_H, |r| r.top());
+        Rect::from_min_max(pos2(left + GUT, top + GUT), pos2((right - GUT).max(left + 80.0), (bottom - GUT).max(top + 80.0)))
+    }
+    /// A pointer event the chrome left to the page; returns the cursor it wants.
+    pub fn page_pointer(&mut self, kind: &str, x: f32, y: f32, button: u8, mods: u8) -> &'static str {
+        self.page.pointer(kind, pos2(x, y), button, mods, &mut self.actions);
+        self.page.cursor
+    }
+    pub fn page_image(&mut self, key: u64, w: usize, h: usize, rgba: &[u8]) {
+        let ctx = self.ctx.clone();
+        self.page.set_image(&ctx, key, w, h, rgba);
+    }
+    pub fn page_key(&mut self, name: &str, mods: u8) -> bool {
+        self.page.key(name, mods, &mut self.actions)
+    }
+}
+
 
 #[cfg(test)]
 mod tests {
