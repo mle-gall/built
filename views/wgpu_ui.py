@@ -497,6 +497,8 @@ def before_frame(view) -> None:
     win = _window(view)
     if win is None:
         return
+    from core import plugin_panels
+    plugin_panels.sync(view, win)
     _sheet_and_jobs(view, win)
     _chrome_form(view, win)
     from views import wgpu_start
@@ -2708,6 +2710,10 @@ def _run(win, actions) -> None:
             continue
         if chrome_dialogs.modal(win):
             continue    # a click queued before the sheet came up
+        if kind == "plugin":
+            from core.plugin_panels import dispatch
+            dispatch(win, arg)
+            continue
         if kind == "activity":
             row = next((r for r in chrome_dialogs.history(win) if r.id == arg), None)
             if row and row.action:

@@ -62,6 +62,7 @@ class LoadedPlugin:
     #: The module's ``setup(app)`` (views.extension_api), or None — a plugin
     #: may have tools, a setup, or both.
     setup: object = None
+    panel: object = None
 
 
 @dataclass
@@ -181,7 +182,7 @@ def _import_by_path(stem: str, file: Path):
     return mod
 
 
-def discover_plugins(dirs=None):
+def discover_plugins(dirs=None, *, panels_only=False):
     """Scan ``dirs`` (default :func:`plugin_dirs`) and load every plugin.
 
     Returns ``(plugins, errors)`` and never raises: each failing candidate
@@ -209,7 +210,10 @@ def discover_plugins(dirs=None):
                 continue
             try:
                 mod = _import_by_path(stem, file)
-                tools = [
+                panel = getattr(mod, "create_panel", None)
+                if panels_only and not callable(panel):
+                    continue
+                tools = [] if panels_only else [
                     obj() for _n, obj in inspect.getmembers(mod,
                                                             inspect.isclass)
                     if (issubclass(obj, Tool) and obj is not Tool
@@ -228,8 +232,8 @@ def discover_plugins(dirs=None):
                 continue
             if not callable(setup):
                 setup = None
-            if tools or setup is not None:
-                plugins.append(LoadedPlugin(stem, file, tools, setup))
+            if tools or setup is not None or callable(panel):
+                plugins.append(LoadedPlugin(stem, file, tools, setup, panel if callable(panel) else None))
                 for t in tools:
                     log.info("loaded plugin tool %r from %s", t.name, file)
     return plugins, errors

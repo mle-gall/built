@@ -3801,6 +3801,8 @@ class MainWindow(WorksessionMixin, QMainWindow):
         anchor = self._ext_anchor
         bars_before = set(self.findChildren(QToolBar))
         plugins, errors = discover_plugins()
+        from core.plugin_panels import install
+        install(self, plugins)
         from core.extension_manager import extension_startup_state
         self._extension_startup_state = extension_startup_state()
 

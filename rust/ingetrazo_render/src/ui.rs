@@ -16,6 +16,7 @@ mod start;
 /// Sheets, a workspace of the window (views/wgpu_sheets.py).
 mod sheets;
 mod activity;
+mod plugins;
 pub use activity::ActivityRow;
 /// Project tabs in the top bar (views/wgpu_tabs.py).
 mod tabs;
@@ -180,6 +181,9 @@ pub struct Form {
 }
 
 pub struct Ui {
+    plugins: plugins::Panels,
+    plugin_document: String,
+    background_plugins: std::collections::HashMap<String, plugins::Panels>,
     ctx: egui::Context,
     painter: egui_wgpu::Renderer,
     start: Instant,
@@ -477,6 +481,9 @@ impl Ui {
             link_banner: String::new(),
             library: Default::default(),
             dock_w: DOCK_W,
+            plugins: Default::default(),
+            plugin_document: String::new(),
+            background_plugins: Default::default(),
             cursor_shape: "",
             home: Default::default(),
             sheets: Default::default(),
@@ -657,6 +664,19 @@ impl Ui {
         self.ctx.memory_mut(|m| m.stop_text_input());
         self.sheet = Some(Sheet { title, body, tone, buttons });
     }
+    pub fn plugin_panel(&mut self, raw: &str) -> Result<(), String> { self.plugins.set(raw) }
+    pub fn plugin_open(&mut self, id: &str) { self.plugins.open(id); }
+    pub fn plugin_document(&mut self, document: String, live: &[String]) {
+        if self.plugin_document != document {
+            let next = self.background_plugins.remove(&document).unwrap_or_default();
+            let previous = std::mem::replace(&mut self.plugins, next);
+            let old_id = std::mem::replace(&mut self.plugin_document, document);
+            if live.contains(&old_id) {
+                self.background_plugins.insert(old_id, previous);
+            }
+        }
+        self.background_plugins.retain(|key, _| live.contains(key));
+    }
     pub fn set_jobs(&mut self, jobs: Vec<Job>) { self.jobs = jobs; }
     pub fn set_tabs(&mut self, tabs: Vec<Vec<Item>>) { self.tabs = tabs; }
     pub fn set_delivery(&mut self, active: String, unfiled: u32, problems: u32) {
@@ -671,7 +691,7 @@ impl Ui {
     /// Keyboard ownership: the chrome takes a key only while one of its
     /// fields has focus, or Escape while one of its popups is open.
     pub fn claims_key(&self, name: &str) -> bool {
-        if name == "Escape" && self.strip.menus_open() { return true; }
+        if name == "Escape" && (self.strip.menus_open() || self.plugin_popup_open()) { return true; }
         if self.sheets.shown && !self.home.shown { return self.sheets_claims_key(name); }
         let filing = self.column.as_ref().is_some_and(|c| c.filing.is_some() || c.row_menu.is_some() || !c.mode.is_empty()
             || c.kind_menu.is_some() || c.head_menu.is_some() || c.prompt.is_some());
@@ -684,6 +704,10 @@ impl Ui {
         // reaches what is under it.
         if self.sheet.is_some() { return true; }
         if self.dialog.is_some() { return self.dialog_key(name, pressed, mods); }
+        if name == "Escape" && self.plugin_popup_open() {
+            if pressed { self.ctx.memory_mut(|m| m.close_popup()); }
+            return true;
+        }
         if self.cmd_open && pressed {
             match name {
                 "Escape" => { self.cmd_open = false; self.ctx.memory_mut(|m| m.stop_text_input()); return true; }
@@ -712,7 +736,8 @@ impl Ui {
             }
             return true;
         }
-        if self.column.as_ref().is_some_and(|c| c.mode == "Library" && c.prompt.is_none()) && pressed {
+        if !self.plugins.showing && !(self.plugins.utility_open() && self.ctx.wants_keyboard_input())
+            && self.column.as_ref().is_some_and(|c| c.mode == "Library" && c.prompt.is_none()) && pressed {
             if let Some(a) = self.library.key(name) {
                 if !a.is_empty() { self.actions.push(format!("lib:{a}")); }
                 if name == "Enter" { self.ctx.memory_mut(|m| m.stop_text_input()); }
@@ -795,7 +820,15 @@ impl Ui {
     pub fn repaint_after_ms(&self) -> Option<f64> { self.repaint_ms }
 
     /// Only the interactive chrome takes the pointer; labels pass it through.
-    fn over_chrome(&self, pos: Pos2) -> bool { self.hit.iter().any(|r| r.contains(pos)) }
+    fn plugin_popup_open(&self) -> bool {
+        (self.plugins.showing || self.plugins.utility_open()) && self.ctx.memory(|m| m.any_popup_open())
+    }
+
+    fn over_chrome(&self, pos: Pos2) -> bool {
+        // A choice or colour picker can extend beyond its parent panel.
+        // Its next outside click dismisses it before the model takes input.
+        self.plugin_popup_open() || self.hit.iter().any(|r| r.contains(pos))
+    }
     /// Is (x, y) on the interactive chrome (a right-click there is the
     /// chrome's, not the model's)?
     pub fn over_chrome_at(&self, x: f32, y: f32) -> bool { self.over_chrome(pos2(x, y)) }
@@ -1534,12 +1567,16 @@ impl Ui {
                     let in_library = col.mode == "Library";
                     ui.horizontal(|ui| {
                         ui.set_min_height(28.0);
-                        let at = if in_library { 1 } else { 0 };
-                        match library::segmented(ui, &["Project", "Library"], at, 150.0) {
-                            Some(0) if in_library || !col.mode.is_empty() => actions.push("mode\u{1f}".into()),
-                            Some(1) if !in_library => actions.push("mode\u{1f}library".into()),
-                            _ => {}
+                        let has_plugins = self.plugins.available();
+                        let at = if self.plugins.showing { 2 } else { usize::from(in_library) };
+                        let labels: &[&str] = if has_plugins { &["Project", "Library", "Plugins"] } else { &["Project", "Library"] };
+                        match library::segmented(ui, labels, at, if has_plugins { 204. } else { 150. }) {
+                            Some(0) => { self.plugins.showing = false; actions.push("mode\u{1f}".into()); }
+                            Some(1) => { self.plugins.showing = false; actions.push("mode\u{1f}library".into()); }
+                            Some(2) => self.plugins.showing = true,
+                            _=>{}
                         }
+                        if self.plugins.showing { return; }
                         if !col.mode.is_empty() && !in_library && library::caption_mode(ui, &col.mode) {
                             actions.push("mode\u{1f}".into());
                         }
@@ -1562,6 +1599,10 @@ impl Ui {
                             }
                         });
                     });
+                    if self.plugins.showing {
+                        self.plugins.dock(ui, &mut cmds);
+                        return;
+                    }
                     if !self.link_banner.is_empty() {
                         ui.add_space(6.0);
                         ui.horizontal_wrapped(|ui| {
@@ -2398,6 +2439,7 @@ impl Ui {
             if !self.review {
                 self.palette(ctx, screen);
                 self.right_column(ctx, screen);
+                self.plugins.utility(ctx, screen, self.dock_w, &mut self.actions);
                 self.bottom_bar(ctx, screen);
                 self.paint_strip(ctx, screen);
             }
@@ -2421,7 +2463,7 @@ impl Ui {
         let model = !(self.sheets.shown && !start);
         let shown = [("top", !start), ("start", start), ("palette", work && model && !self.groups.is_empty()),
                      ("view_menu", self.view_open && !start), ("menu", self.menu.is_some() && !start), ("form", self.form.is_some() && !start),
-                     ("column", work && model && self.column.is_some()), ("bottom", work),
+                     ("plugin_utility", work && model && self.plugins.utility_open()), ("column", work && model && self.column.is_some()), ("bottom", work),
                      ("sel_more", work && model && self.sel_more && self.selection.is_some()),
                      ("paint_strip", work && model && !self.palette_items.is_empty()),
                      ("commands", self.cmd_open),

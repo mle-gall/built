@@ -479,6 +479,9 @@ class ShellWindow(QObject):
         if "_saved_version" not in vars(ShellWindow):
             borrow_main_window()
         self._host = host
+        from core.extensions import discover_plugins
+        from core.plugin_panels import install
+        install(self, discover_plugins(panels_only=True)[0])
         self._tools = build_tools()
         self._tool_actions = {}
         self._nav_actions = {}

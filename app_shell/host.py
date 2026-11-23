@@ -574,6 +574,9 @@ class Host:
         out = None
         if kind == "tool":
             self._guard("tool", w._activate_tool, arg)
+        elif kind == "panel":
+            from core.plugin_panels import open_panel
+            self._guard("open panel", open_panel, w, arg)
         elif action == "undo":
             self._guard("undo", w._on_undo)
         elif action == "redo":
