@@ -963,8 +963,20 @@ impl Doc {
     fn apply_ops(&mut self, py: Python<'_>, ops: &[Op], backwards: bool, trash: &mut Trash) -> Result<(), String> {
         let mut run = |d: &mut Doc, op: &Op| -> Result<(), String> {
             match (op, backwards) {
-                (Op::Set { k, f, old, .. }, true) => d.write(py, *k, *f, old.clone(), trash).map(|_| ()),
-                (Op::Set { k, f, new, .. }, false) => d.write(py, *k, *f, new.clone(), trash).map(|_| ()),
+                (Op::Set { k, f, old, new }, undo) => {
+                    let (from, to) = if undo { (new, old) } else { (old, new) };
+                    let node = d.need(*k)?;
+                    let value = match (node.kind, f, from, to) {
+                        (Kind::Root, Field::Attr(id), FVal::Val(Some(before)), FVal::Val(Some(after))) => {
+                            match node.attr(*id) {
+                                Some(current) => FVal::Val(Some(value::replay_table(current, before, after))),
+                                None => to.clone(),
+                            }
+                        }
+                        _ => to.clone(),
+                    };
+                    d.write(py, *k, *f, value, trash).map(|_| ())
+                }
                 (Op::SetMany { f, keys, old, .. }, true) => {
                     for (k, o) in keys.iter().zip(old.iter()).rev() {
                         d.write(py, *k, *f, o.clone(), trash)?;

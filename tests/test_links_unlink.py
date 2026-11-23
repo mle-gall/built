@@ -841,3 +841,15 @@ def test_a_link_read_back_from_the_file_unlinks_too(tmp_path, monkeypatch, packe
     igz.load_into(again, path)
     (mine,) = [g for g in again.groups if g.uid == link.uid]
     assert not links.is_linked(mine) and _look(mine) == look
+
+
+def test_undo_leaves_independent_root_table_edits_in_place(tmp_path):
+    host, link, other, _src = _host(tmp_path)
+    h = History(host)
+    h.execute(UnlinkCommand([link, other]))
+    host.plugin_data["unrelated"] = {"revision": 7}
+    host.layer_folders.append("Independent folder")
+    for step in (h.undo, h.redo):
+        assert step()
+        assert host.plugin_data["unrelated"] == {"revision": 7}
+        assert "Independent folder" in host.layer_folders
