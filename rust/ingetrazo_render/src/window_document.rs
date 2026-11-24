@@ -47,6 +47,23 @@ const TOOLS: &[(&str, &str, &str)] = &[
     ("look_around", "tools.walkthrough", "LookAroundTool"),
     ("first_person", "tools.walkthrough", "FirstPersonTool"),
 ];
+// These controllers are registered after the solid-tool family in a window.
+const EXTRA_TOOLS: &[(&str, &str, &str)] = &[
+    ("change_axes", "tools.change_axes", "ChangeAxesTool"),
+    ("scale_manager", "tools.scale_manager", "ScaleManagerTool"),
+];
+
+/// Let the coverage audit read the same fixed entries without constructing
+/// tools or opening a document. Solid tools publish their own ordered family.
+#[pyfunction]
+fn window_tool_types() -> Vec<(&'static str, &'static str)> {
+    TOOLS
+        .iter()
+        .chain(EXTRA_TOOLS)
+        .map(|&(key, _, name)| (key, name))
+        .collect()
+}
+
 #[pyfunction]
 pub fn build_tools(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
     let tools = PyDict::new(py);
@@ -71,15 +88,9 @@ pub fn build_tools(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
         let (key, class): (String, Bound<PyAny>) = pair?.extract()?;
         add(&key, class)?;
     }
-    add(
-        "change_axes",
-        py.import("tools.change_axes")?.getattr("ChangeAxesTool")?,
-    )?;
-    add(
-        "scale_manager",
-        py.import("tools.scale_manager")?
-            .getattr("ScaleManagerTool")?,
-    )?;
+    for &(key, module, name) in EXTRA_TOOLS {
+        add(key, py.import(module)?.getattr(name)?)?;
+    }
     Ok(tools)
 }
 
@@ -425,6 +436,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
         PyTuple::new(m.py(), CAMERA_FIELDS)?,
     )?;
     m.add_function(wrap_pyfunction!(build_tools, m)?)?;
+    m.add_function(wrap_pyfunction!(window_tool_types, m)?)?;
     m.add_function(wrap_pyfunction!(document_blank, m)?)?;
     m.add_function(wrap_pyfunction!(document_dirty, m)?)?;
     m.add_function(wrap_pyfunction!(saved_content, m)?)?;
