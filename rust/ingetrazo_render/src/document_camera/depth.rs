@@ -265,7 +265,7 @@ fn navigation_detail(v: &Obj, mvp: &Obj, mode: &str) -> PyResult<bool> {
     if pool.is_none()
         || pool.get_item(1)?.len()? < 2000
         || !matches!(mode, "shaded" | "textures" | "monochrome")
-        || !v.getattr("scene")?.getattr("edit_group")?.is_none()?
+        || !v.getattr("scene")?.getattr("edit_group")?.is_none()
         || v.getattr("scene")?.getattr("selection")?.is_truthy()?
     {
         v.setattr("_nav_detail_until", 0.)?;

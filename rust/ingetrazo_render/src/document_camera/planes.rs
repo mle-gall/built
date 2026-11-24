@@ -36,8 +36,9 @@ fn planar_camera<'py>(v: &Obj<'py>, cursor: &Obj<'py>) -> PyResult<Obj<'py>> {
     ];
     let kw = pyo3::types::PyDict::new(py);
     kw.set_item("allow_grazing", true)?;
-    let hit =
-        |o: &Obj, d: &Obj, n: &Obj| v.call_method("_ray_plane", (o, d, &origin, n), Some(&kw));
+    let hit = |o: &Obj<'py>, d: &Obj<'py>, n: &Obj<'py>| {
+        v.call_method("_ray_plane", (o, d, &origin, n), Some(&kw))
+    };
     let perspective = cam.getattr("perspective")?.is_truthy()?;
     let mut depths = [None; 3];
     for (i, n) in normals.iter().enumerate() {
