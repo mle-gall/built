@@ -641,14 +641,6 @@ class OutlinerPanel(QWidget):
                                         self._expand_or_collapse)
         self._expand_btn.setIcon(node_icon("layers_expand"))
         bar.addWidget(self._expand_btn)
-        # Order: the document's or by layer. A way of reading the
-        # tree — the model is left as it is, so drag, rename and isolate go
-        # on working on the same groups.
-        self._order_btn = _tool_button("", tr(
-            "Order the rows: as the model holds them or by layer"),
-            self._open_order_menu)
-        self._order_btn.setIcon(node_icon("layers_order"))
-        bar.addWidget(self._order_btn)
         lay.addLayout(bar)
         self.tree = _Tree(self)
         self.tree.setColumnCount(9)
@@ -802,7 +794,6 @@ class OutlinerPanel(QWidget):
         hi.setIcon(COL_LOCK, node_icon("lock"))
         hi.setIcon(COL_ISOLATE, isolate_icon(False))
         self._rename_btn.setIcon(node_icon("layers_rename"))
-        self._order_btn.setIcon(node_icon("layers_order"))
         self._update_expand_button()
         root = getattr(self, "_root", None)
         if root is not None:
@@ -1436,26 +1427,6 @@ class OutlinerPanel(QWidget):
     #: The ways to order the rows, in menu order: (key, label).
     ORDERS = (("document", "Document order"),
               ("layer", "Order by layer"))
-
-    def _fill_order_actions(self, menu) -> None:
-        from PySide6.QtGui import QActionGroup
-        group = QActionGroup(menu)
-        for key, label in self.ORDERS:
-            act = menu.addAction(tr(label))
-            act.setCheckable(True)
-            act.setChecked(self.order_by == key)
-            # A choice, not a switch: the menu closes on it even when it is
-            # one of the ones that stay open for the columns.
-            act.setProperty("close", True)
-            group.addAction(act)
-            act.triggered.connect(lambda _c=False, k=key: self.set_order_by(k))
-
-    def _open_order_menu(self) -> None:
-        from PySide6.QtWidgets import QMenu
-        b = self._order_btn
-        menu = QMenu(b)
-        self._fill_order_actions(menu)
-        menu.exec(b.mapToGlobal(b.rect().bottomLeft()))
 
     def _layer_outline(self, scene) -> list:
         """The layers and their folders as the Layers tab lists them now —
@@ -2525,10 +2496,7 @@ class OutlinerPanel(QWidget):
         return menu
 
     def _on_header_menu(self, pos) -> None:
-        """Every column there is to show, and how the rows are ordered."""
         menu = self._columns_menu()
-        menu.addSeparator()
-        self._fill_order_actions(menu)
         menu.exec(self.tree.header().mapToGlobal(pos))
 
     def _on_columns_button(self) -> None:
