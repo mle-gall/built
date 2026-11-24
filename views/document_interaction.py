@@ -1414,18 +1414,7 @@ def _ray_triangle(
 
 
 def _point_to_segment_distance_2d(p, a, b) -> float:
-    ax, ay = a
-    bx, by = b
-    px, py = p
-    dx = bx - ax
-    dy = by - ay
-    if dx == 0.0 and dy == 0.0:
-        return math.hypot(px - ax, py - ay)
-    t = ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)
-    t = max(0.0, min(1.0, t))
-    qx = ax + t * dx
-    qy = ay + t * dy
-    return math.hypot(px - qx, py - qy)
+    return ingetrazo_render.point_segment_distance(p, a, b)
 
 
 # ---- Viewport --------------------------------------------------------------
@@ -2207,41 +2196,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
     def image_plane_at(self, screen_x: float, screen_y: float,
                        selectable_only: bool = False):
-        """The topmost reference image under the cursor, or ``None``.
-
-        Casts the pixel ray at each image's plane and keeps the hit whose
-        ``(u, v)`` falls inside the rectangle, nearest first. Later images win
-        ties, matching the order they are painted in.
-
-        ``selectable_only`` is what separates the two callers. Picking honours
-        the image's own lock; the work-plane inference does NOT — a locked
-        scan is exactly the one you have finished aligning and now want to
-        draw on, so it must keep offering its plane while refusing clicks.
-        """
-        images = getattr(self.scene, "image_planes", None)
-        if not images:
-            return None
-        origin, direction = self._pixel_to_ray(screen_x, screen_y)
-        if origin is None or direction is None:
-            return None
-        best, best_t = None, float("inf")
-        for im in images:
-            if not self.scene.entity_visible(im):
-                continue
-            if selectable_only and (getattr(im, "locked", False)
-                                    or not self.scene.entity_selectable(im)):
-                continue
-            n = im.normal()
-            denom = QVector3D.dotProduct(n, direction)
-            if abs(denom) < 1e-9:
-                continue
-            t = QVector3D.dotProduct(n, im.center() - origin) / denom
-            if t < 0.0 or t > best_t:
-                continue
-            fu, fv = im.project(origin + direction * t)
-            if im.contains_uv(fu, fv):
-                best, best_t = im, t
-        return best
+        return ingetrazo_render.image_plane_at(self, screen_x, screen_y, selectable_only)
 
     def pick_image_plane(self, screen_x: float, screen_y: float):
         """Selection entry point: like :meth:`image_plane_at` but skipping
@@ -2250,96 +2205,13 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return self.image_plane_at(screen_x, screen_y, selectable_only=True)
 
     def image_in_front_of(self, face, screen_x: float, screen_y: float):
-        """A selectable reference image under the cursor that lies strictly
-        NEARER than ``face`` along the pixel ray, or ``None``. An image is
-        an underlay — a face on its plane, or above it, still wins the
-        click — but one behind it must not: with the top of a box hidden,
-        its bottom took every click meant for the image lying on top
-        (#426)."""
-        image = self.pick_image_plane(screen_x, screen_y)
-        if image is None or face is None:
-            return None
-        origin, direction = self._pixel_to_ray(screen_x, screen_y)
-        if origin is None or direction is None:
-            return None
-        verts = getattr(face, "vertices", None) or []
-        if not verts:
-            return None
-        n = face.normal()
-        denom = QVector3D.dotProduct(n, direction)
-        if abs(denom) < 1e-9:
-            return None
-        t_face = QVector3D.dotProduct(n, verts[0] - origin) / denom
-        ni = image.normal()
-        di = QVector3D.dotProduct(ni, direction)
-        if abs(di) < 1e-9:
-            return None
-        t_img = QVector3D.dotProduct(ni, image.center() - origin) / di
-        if 0.0 <= t_img < t_face - max(1e-4, 1e-5 * abs(t_face)):
-            return image
-        return None
+        return ingetrazo_render.image_in_front_of(self, face, screen_x, screen_y)
 
     def pick_locked_image_plane(self, screen_x: float, screen_y: float):
-        """The right-click's last resort: a LOCKED image under the cursor
-        (its layer still visible and unlocked). A locked image refuses
-        clicks by design, but the context menu is the only door back to
-        Unlock / Delete — the usual place to offer Unlock.
-        Without this a locked scan could never be selected again (Marco,
-        2026-09-14, the orthomosaic that arrives locked)."""
-        images = getattr(self.scene, "image_planes", None)
-        if not images:
-            return None
-        origin, direction = self._pixel_to_ray(screen_x, screen_y)
-        if origin is None or direction is None:
-            return None
-        best, best_t = None, float("inf")
-        for im in images:
-            if not getattr(im, "locked", False):
-                continue
-            if not self.scene.entity_visible(im) or not self.scene.entity_selectable(im):
-                continue
-            n = im.normal()
-            denom = QVector3D.dotProduct(n, direction)
-            if abs(denom) < 1e-9:
-                continue
-            t = QVector3D.dotProduct(n, im.center() - origin) / denom
-            if t < 0.0 or t > best_t:
-                continue
-            fu, fv = im.project(origin + direction * t)
-            if im.contains_uv(fu, fv):
-                best, best_t = im, t
-        return best
+        return ingetrazo_render.pick_locked_image_plane(self, screen_x, screen_y)
 
     def pick_locked_group(self, screen_x: float, screen_y: float):
-        """The right-click's door back to a LOCKED group or component: the
-        one whose face is the front-most thing under the cursor (drawn,
-        its layer visible and unlocked), or ``None``. A locked group
-        refuses every click by design, so the context menu is the only
-        place left to offer Unlock (#782)."""
-        origin, direction = self._pixel_to_ray(screen_x, screen_y)
-        if origin is None or direction is None:
-            return None
-        import numpy as np
-        idx = self._pick_index(near=DocumentInteraction._ray_near(self, screen_x, screen_y))
-        if idx is None:
-            return None
-        hits = DocumentInteraction._face_hits(self, idx, origin, direction, "vis")
-        ingetrazo_core.drop_past_cut(self, hits, origin, direction)
-        if hits is None or not len(hits.t):
-            return None
-        front = DocumentInteraction._smallest_at_front(self, hits, origin, direction)
-        if not len(front):
-            return None
-        owner = hits.owner(int(front[0]))
-        for g in (owner, getattr(owner, "owner", None)):
-            if (g is not None and getattr(g, "locked", False)
-                    and hasattr(g, "children")):
-                visible, layer_locked = self.scene._layer_state(g)
-                if (visible and not layer_locked
-                        and self.scene.entity_visible(g)):
-                    return g
-                return None
-        return None
+        return ingetrazo_render.pick_locked_group(self, screen_x, screen_y)
 
     def _draw_image_outlines(self, painter: QPainter) -> None:
         """Border of each reference image: faint normally, selection orange
@@ -4451,104 +4323,14 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return ingetrazo_core.pick_edge_distance(self, screen_x, screen_y, visible_only, which, hidden)
 
     def pick_dimension(self, screen_x: float, screen_y: float):
-        """Return the dimension whose lines (extension + dimension line) are
-        closest to the cursor within the pick threshold, or ``None``."""
-        dims = getattr(self.scene, "dimensions", None)
-        if not dims:
-            return None
-        best = None
-        best_d = self.pick_threshold_px
-        for dim in dims:
-            if not self.scene.entity_selectable(dim):   # hidden / locked
-                continue
-            ap, bp = dim.line_points()
-            for s, e in ((dim.a, ap), (dim.b, bp), (ap, bp)):
-                ps = self._world_to_pixel(s)
-                pe = self._world_to_pixel(e)
-                if ps is None or pe is None:
-                    continue
-                d = _point_to_segment_distance_2d((screen_x, screen_y), ps, pe)
-                if d < best_d:
-                    best_d = d
-                    best = dim
-        return best
+        return ingetrazo_render.pick_dimension(self, screen_x, screen_y)
 
     def pick_text_label(self, screen_x: float, screen_y: float,
                         rect_only: bool = False):
-        """Return the leader-text label under the cursor, or ``None``.
-
-        A click anywhere on the drawn text block (same font-metrics layout
-        as ``_draw_text_labels``) is a hit — the glyphs are what the user
-        aims at. Failing that, the label position and the leader line count
-        within the pick threshold. ``rect_only`` restricts to the text
-        block: the block overdraws all geometry, so that hit outranks edge
-        and face picks, while the (thin) leader keeps normal priority."""
-        labels = getattr(self.scene, "text_labels", None)
-        if not labels:
-            return None
-        style = getattr(self.scene, "dimension_style", {})
-        font = QFont(style.get("font_family", ""))
-        font.setPointSize(int(style.get("font_size", 9)))
-        font.setBold(style.get("font_bold", True))
-        font.setItalic(style.get("font_italic", False))
-        # Measured on THIS widget, as the painter that draws the labels
-        # does: bare QFontMetrics(font) reads the primary screen's DPI, and
-        # on a scaled display the glyph box it gave missed the letters
-        # (Marco, 2026-09-23: the eraser only took a text by its leader).
-        if NATIVE:
-            fm = font
-        else:
-            from PySide6.QtGui import QPaintDevice
-            fm = QFontMetrics(font, self) if isinstance(self, QPaintDevice) else QFontMetrics(font)
-        best, best_d = None, self.pick_threshold_px * 2.0
-        for lab in labels:
-            if not self.scene.entity_selectable(lab):   # hidden / locked
-                continue
-            pp = self._world_to_pixel(lab.position())
-            if pp is None:
-                continue
-            pa = self._world_to_pixel(lab.anchor)
-            # The text block: lines start at _text_block_x(...), first
-            # baseline at pp.y - 4, one fm.height() apart (mirror of
-            # _draw_text_labels).
-            lines = lab.text.splitlines() or [""]
-            x0 = self._text_block_x(
-                pp, pa, max(fm.horizontalAdvance(ln) for ln in lines))
-            for i, line in enumerate(lines):
-                base = pp[1] - 4 + i * fm.height()
-                if (x0 - 3 <= screen_x <= x0 + fm.horizontalAdvance(line) + 3
-                        and base - fm.ascent() - 3 <= screen_y
-                        <= base + fm.descent() + 3):
-                    return lab
-            if rect_only:
-                continue
-            d = math.hypot(pp[0] - screen_x, pp[1] - screen_y)
-            if pa is not None:
-                d = min(d, _point_to_segment_distance_2d(
-                    (screen_x, screen_y), pa, pp))
-            if d < best_d:
-                best_d = d
-                best = lab
-        return None if rect_only else best
+        return ingetrazo_render.pick_text_label(self, screen_x, screen_y, rect_only)
 
     def pick_geopath(self, screen_x: float, screen_y: float):
-        """Return the georef path whose polyline is closest to the cursor within
-        the pick threshold, or ``None`` (Track G)."""
-        paths = getattr(self.scene, "geo_paths", None)
-        if not paths:
-            return None
-        best, best_d = None, self.pick_threshold_px
-        for path in paths:
-            for a, b in path.segments():
-                pa = self._world_to_pixel(self.drape(a))
-                pb = self._world_to_pixel(self.drape(b))
-                if pa is None or pb is None:
-                    continue
-                d = _point_to_segment_distance_2d((screen_x, screen_y), pa, pb)
-                if d < best_d:
-                    best_d = d
-                    best = path
-        return best
+        return ingetrazo_render.pick_geopath(self, screen_x, screen_y)
 
     @classmethod
     def _tool_busy_for_delete(cls, tool) -> bool:
@@ -4735,258 +4517,16 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return shown_guides(self.scene)
 
     def _circle_pick_distance(self, g, screen_x: float, screen_y: float):
-        """Screen distance from the cursor to a guide circle's rim, or None
-        when it cannot be projected. Sampling is display-only; the stored
-        circle stays analytic."""
-        pts = []
-        for p in g.sample_points(64):
-            px = self._world_to_pixel(p)
-            if px is None:
-                return None            # part of the circle is behind the eye
-            pts.append(px)
-        best = float("inf")
-        n = len(pts)
-        for i in range(n):
-            d = _point_to_segment_distance_2d((screen_x, screen_y),
-                                              pts[i], pts[(i + 1) % n])
-            if d < best:
-                best = d
-        return best
+        return ingetrazo_render.circle_pick_distance(self, g, screen_x, screen_y)
 
     def pick_guide(self, screen_x: float, screen_y: float):
-        """Return the construction guide nearest the cursor within the pick
-        threshold, or ``None`` (for the Eraser). One on a hidden or
-        locked layer is not there to pick."""
-        selectable = getattr(self.scene, "entity_selectable", None)
-        guides = [g for g in getattr(self.scene, "guides", None) or ()
-                  if selectable is None or selectable(g)]
-        if not guides:
-            return None
-        best, best_d = None, self.pick_threshold_px
-        for g in guides:
-            if getattr(g, "is_circle", False):
-                d = self._circle_pick_distance(g, screen_x, screen_y)
-                if d is not None and d < best_d:
-                    best_d = d
-                    best = g
-                continue
-            seg = self._clip_segment_front(*g.segment())
-            if seg is None:
-                continue
-            pa = self._world_to_pixel(seg[0])
-            pb = self._world_to_pixel(seg[1])
-            if pa is None or pb is None:
-                continue
-            d = _point_to_segment_distance_2d((screen_x, screen_y), pa, pb)
-            if d < best_d:
-                best_d = d
-                best = g
-        return best
+        return ingetrazo_render.pick_guide(self, screen_x, screen_y)
 
     def pick_vertex(self, screen_x: float, screen_y: float):
-        """Return the scene vertex (corner) closest to the cursor within the
-        pick threshold, or ``None``. Used to acquire a corner as a 'from point'
-        reference while drawing. Occluded vertices are ignored (tested in
-        ascending screen distance, so the nearest visible corner wins — the
-        same answer the old per-edge scan produced)."""
-        import numpy as np
-        nat = (self._lazy_native() if hasattr(self, "_lazy_native")
-               else None)
-        if nat is not None:
-            return self._pick_vertex_unbaked(screen_x, screen_y, nat)
-        idx = self._pick_index(near=("px", screen_x, screen_y))
-        # On the projections the viewport already caches per camera pose
-        # (this runs on EVERY hover now — encouraged points): one numpy
-        # distance pass, no re-projection of the model per mouse move.
-        xs, ys, oks = [], [], []
-        n = 0
-        ledge = getattr(self, "_ledge_screen", None)      # stub VPs in tests
-        lp = ledge() if ledge is not None else None
-        if lp is None and idx.edge_a is not None and len(idx.edge_a):
-            ax, ay, oka = self._project_px(idx.edge_a)
-            bx, by, okb = self._project_px(idx.edge_b)
-            lp = (ax, ay, bx, by, oka & okb)
-        if lp is not None:
-            ax, ay, bx, by, ok = lp
-            xs += [ax, bx]; ys += [ay, by]; oks += [ok, ok]
-            n = len(idx.edges)
-        m = 0
-        gp = self._gedge_screen()
-        if gp is not None:
-            # Group corners too — dimensioning/drawing over an imported
-            # reference model needs its vertices as 'from points'.
-            ax, ay, bx, by, ok = gp
-            xs += [ax, bx]; ys += [ay, by]; oks += [ok, ok]
-            m = len(idx.gedge_a)
-        if not xs:
-            return None
-        # The concatenation is the same until the scene or camera moves.
-        ckey = (id(lp), id(gp), n, m)
-        cat = getattr(self, "_vertex_px_cache", None)
-        if cat is None or cat[0] != ckey:
-            cat = (ckey, np.concatenate(xs), np.concatenate(ys), np.concatenate(oks))
-            self._vertex_px_cache = cat
-        _c, px, py, ok = cat
-        d = np.where(ok, np.hypot(px - screen_x, py - screen_y), np.inf)
-        cand = np.where(d < self.pick_threshold_px)[0]
-
-        def vertex_of(i):
-            if i < 2 * n:
-                e = idx.edges[int(i) % n]
-                return e.a if i < n else e.b
-            j = int(i) - 2 * n
-            arr = idx.gedge_a if j < m else idx.gedge_b
-            p = arr[j % m]
-            return QVector3D(p[0], p[1], p[2])
-        order = cand[np.argsort(d[cand])]
-        if not len(order):
-            return None
-        # A corner only an edge that draws nothing holds is not on screen:
-        # acquiring it as a from-point is how a phantom point gets into the
-        # next face (the same rule the snap scene applies to the edges).
-        snap_ok = None if n == 0 else getattr(idx, "edge_snap", None)
-        if snap_ok is not None:
-            order = np.asarray([i for i in order
-                                if i >= 2 * n or snap_ok[int(i) % n]],
-                               dtype=order.dtype)
-            if not len(order):
-                return None
-        # The nearest one, alone first (usually the answer); then the
-        # rest in batches of 8, 16, 32… sharing one occlusion pass, as the
-        # snap engine reads its candidates. One ray per candidate, in turn,
-        # took minutes a pointer move over a dense mesh whose hundreds of
-        # nearby corners were nearly all hidden (a 128 788-face STL in #158).
-        # A corner shared by several edges comes once per end: asked once
-        # (the same point, the same answer), in batches of at most 1 024 —
-        # zoomed out over the plant of #158 some 65 000 hidden corners lay
-        # under the cursor, and a batch of 32 768 rays built ~1.4 GB of box
-        # tests and took 7 s.
-        first = vertex_of(order[0])
-        if not self._is_occluded(first):
-            return first
-        if len(order) > 1:
-            # Each point once, where it first comes (the nearest of its
-            # copies on screen): the same answer as asking every copy.
-            xyz = np.empty((len(order), 3))
-            for lo_i, hi_i, arr, base in (
-                    (0, n, idx.edge_a, 0), (n, 2 * n, idx.edge_b, n),
-                    (2 * n, 2 * n + m, idx.gedge_a, 2 * n),
-                    (2 * n + m, 2 * n + 2 * m, idx.gedge_b, 2 * n + m)):
-                w = np.flatnonzero((order >= lo_i) & (order < hi_i))
-                if len(w):
-                    xyz[w] = arr[order[w] - base]
-            _u, at = np.unique(xyz, axis=0, return_index=True)
-            at.sort()
-            order = order[at]
-        many = getattr(self, "_occluded_many", None)
-        k, size = 1, 8
-        while k < len(order):
-            batch = [vertex_of(i) for i in order[k:k + size]]
-            hidden = (many(batch) if many is not None
-                      else [self._is_occluded(v) for v in batch])
-            for v, h in zip(batch, hidden):
-                if not h:
-                    return v
-            k += size
-            size = min(size * 2, 1024)
-        return None
+        return ingetrazo_render.pick_vertex(self, screen_x, screen_y)
 
     def _pick_vertex_unbaked(self, screen_x, screen_y, nat):
-        """``pick_vertex`` with the lazy placements' corners from the
-        native engine, none of them baked (#158): the loose edges' and the
-        fixed placements' corners as the index holds them, every lazy
-        placement's as its bake would hold them, at the same pixels —
-        nearest first, the hidden ones left out, as there."""
-        import numpy as np
-        iset, snap, _vis = nat
-        idx = self._pick_index(near="skip")
-        thr = self.pick_threshold_px
-        parts = []                       # (px, py, in front, points)
-        ledge = getattr(self, "_ledge_screen", None)
-        lp = ledge() if ledge is not None else None
-        if lp is None and idx.edge_a is not None and len(idx.edge_a):
-            ax, ay, oka = self._project_px(idx.edge_a)
-            bx, by, okb = self._project_px(idx.edge_b)
-            lp = (ax, ay, bx, by, oka & okb)
-        if lp is not None:
-            ax, ay, bx, by, ok = lp
-            # Corners only an edge that draws nothing holds are not on
-            # screen (see pick_vertex).
-            snap_ok = getattr(idx, "edge_snap", None)
-            if snap_ok is not None:
-                ok = ok & snap_ok
-            parts += [(ax, ay, ok, idx.edge_a), (bx, by, ok, idx.edge_b)]
-        fx = getattr(idx, "gedge_fixed", None)
-        m = fx[1] if fx is not None else 0
-        gp = self._gedge_screen() if m else None
-        if gp is not None:
-            # The fixed placements' edges lead the index's; the lazy ones
-            # it holds now are among those the engine answers for.
-            ax, ay, bx, by, ok = gp
-            parts += [(ax[:m], ay[:m], ok[:m], idx.gedge_a[:m]),
-                      (bx[:m], by[:m], ok[:m], idx.gedge_b[:m])]
-        # What the frame shows in front of a corner hides it: zoomed out
-        # over the plant of #158 some 800 000 corners of the copies lay
-        # under the cursor, nearly all hidden, and a ray each took 15 s.
-        # The rule that kept such placements out of the index unbaked (see
-        # _pick_materialize), per corner at its own pixel. A corner whose
-        # pixel and the 8 around it all show something nearer is not to be
-        # seen on screen, even where an ideal ray to its very point grazes
-        # past (a post rising beside it, seen from afar): one such corner
-        # in 109 cursor positions over that plant, left for another a pixel
-        # away. Whatever comes back is still a ray's visible answer.
-        seen = self._depth_limits(float(screen_x), float(screen_y), thr)
-        ds, ps = [], []
-        for x, y, ok, pts in parts:
-            k, d = _px_near(x, y, ok, screen_x, screen_y, thr, pts, seen)
-            if len(k):
-                ds.append(d)
-                ps.append(pts[k])
-        if len(snap):
-            M = self._np_mvp()
-            pl, _e, _n, xyz, rx, ry = iset.corners_near(
-                snap, np.ascontiguousarray(M.T).ravel().tolist(),
-                float(self.width()), float(self.height()),
-                float(screen_x), float(screen_y), thr * (1.0 + 1e-9) + 1e-9,
-                seen)
-            if len(pl):
-                d = np.hypot(rx - screen_x, ry - screen_y)
-                k = np.flatnonzero(d < thr)
-                if len(k):
-                    ds.append(d[k])
-                    ps.append(xyz[k])
-        if not ds:
-            return None
-        d = np.concatenate(ds)
-        pts = np.concatenate(ps)[np.argsort(d, kind="stable")]
-        at = self._first_clear(pts)
-        if at is not None:
-            return QVector3D(*pts[at].tolist()) if at >= 0 else None
-        first = QVector3D(*pts[0].tolist())
-        if not self._is_occluded(first):
-            return first
-        if len(pts) > 1:
-            # Each point once, where it first comes (see pick_vertex): a
-            # stable sort by x, y, z puts the copies of a point together,
-            # the first first (np.unique by rows took 6 ms on 11 000).
-            by = np.lexsort((pts[:, 2], pts[:, 1], pts[:, 0]))
-            srt = pts[by]
-            lead = np.ones(len(srt), dtype=bool)
-            lead[1:] = (srt[1:] != srt[:-1]).any(axis=1)
-            pts = pts[np.sort(by[lead])]
-        # Batches of 8, 32, 128… up to 1 024: with the rays this cheap the
-        # calls were the cost (~0.4 ms each, 13 over the 7 000 corners a
-        # roof hides near the cursor over the plant of #158).
-        k, size = 1, 8
-        while k < len(pts):
-            batch = pts[k:k + size]
-            seen_at = np.flatnonzero(~np.array(self._occluded_many(batch),
-                                               dtype=bool))
-            if len(seen_at):
-                return QVector3D(*batch[seen_at[0]].tolist())
-            k += size
-            size = min(size * 4, 1024)
-        return None
+        return ingetrazo_render.pick_vertex_unbaked(self, screen_x, screen_y, nat)
 
     def hlr_geometry(self, tags: bool = False):
         return ingetrazo_render.hlr_geometry(self, tags)
@@ -5044,31 +4584,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return ingetrazo_core.occluded_many_now(self, worlds)
 
     def pick_face(self, screen_x: float, screen_y: float):
-        """Return the face the cursor ray hits, or ``None``.
-
-        Normally that's the front-most face. But when several *coplanar* faces
-        overlap at the cursor — e.g. a small rectangle drawn on a larger face
-        that didn't subdivide it — the ray hits them at the same depth. In that
-        case prefer the smallest one, so push/pull and select grab the inner
-        face the user is pointing at instead of the big face behind it (the
-        old behaviour silently pushed the whole face)."""
-        origin, direction = self._pixel_to_ray(screen_x, screen_y)
-        if origin is None or direction is None:
-            return None
-        import numpy as np
-        idx = self._pick_index(near=DocumentInteraction._ray_near(self, screen_x, screen_y))
-        hits = self._hover_hits(idx, origin, direction)
-        if hits is None or not len(hits.t):
-            return None
-        face_t = np.where(hits.loose, hits.t, np.inf)
-        best_t = face_t.min()
-        if not np.isfinite(best_t):
-            return None
-        eps = self._coplanar_eps(origin, direction, float(best_t))
-        cand = np.where(face_t <= best_t + eps)[0]
-        if len(cand) == 1:
-            return hits.ent(int(cand[0]))[0]
-        return hits.ent(int(cand[np.argmin(hits.area[cand])]))[0]
+        return ingetrazo_render.pick_face(self, screen_x, screen_y)
 
     def pick_face_any(self, screen_x: float, screen_y: float):
         """Front-most face under the cursor across the loose mesh **and** every
@@ -5088,61 +4604,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return face, owner
 
     def _face_any(self, screen_x: float, screen_y: float, which: str):
-        """``pick_face_any`` behind ``which`` (see :meth:`_face_hits`):
-        ``(face, owner, placement, mesh)``, memoised per variant."""
-        if which == "infer" and (
-                self.scene.edit_group is None
-                or bool(getattr(self, "_rest_is_hidden",
-                                lambda: False)())):
-            # At the root (and with the rest hidden) there is nothing outside
-            # the context to widen to: the same faces answer, and the hover
-            # pays for one ray pass, not two.
-            return DocumentInteraction._face_any(self, screen_x, screen_y, "sel")
-        idx = self._pick_index(near=DocumentInteraction._ray_near(self, screen_x, screen_y))
-        nat = (self._lazy_native() if hasattr(self, "_lazy_native")
-               else None)
-        try:
-            cam = self.camera
-            from views.array_bake import reading_now
-            key = (which, round(screen_x, 2), round(screen_y, 2), id(idx),
-                   cam.yaw, cam.pitch, cam.distance, cam.perspective,
-                   cam.target.x(), cam.target.y(), cam.target.z(),
-                   self.width(), self.height(), reading_now())
-        except AttributeError:            # a bare stand-in (tests): no memo
-            key = None
-        slot = ("_face_any_memo" if which == "sel"
-                else "_face_infer_memo")
-        cached = getattr(self, slot, None)
-        # Keyed by the index itself, not its id(): a rebuilt index can be
-        # given the address of the one it replaced.
-        if (key is not None and cached is not None and cached[0] == key
-                and len(cached) > 3 and cached[2] is idx
-                and cached[3] is nat):
-            return cached[1]
-        result = (None, None, None, None)
-        origin, direction = self._pixel_to_ray(screen_x, screen_y)
-        if origin is not None and direction is not None:
-            import numpy as np
-            hits = (self._hover_hits(idx, origin, direction) if which == "sel"
-                    else self._infer_hits(idx, origin, direction))
-            if hits is not None and len(hits.t):
-                face_t = hits.t
-                best_t = face_t.min()
-                if np.isfinite(best_t):
-                    eps = self._coplanar_eps(origin, direction, float(best_t))
-                    cand = np.where(face_t <= best_t + eps)[0]
-                    if len(cand) == 1:
-                        chosen = int(cand[0])
-                    else:
-                        chosen = int(cand[np.argmin(hits.area[cand])])
-                    face, owner = hits.ent(chosen)
-                    place = hits.place(chosen)
-                    mesh = (getattr(place, "mesh", None)
-                            if place is not None else self.scene.mesh)
-                    result = (face, owner, place, mesh)
-        if key is not None:
-            setattr(self, slot, (key, result, idx, nat))
-        return result
+        return ingetrazo_render.face_any(self, screen_x, screen_y, which)
 
     def pick_face_inference(self, screen_x: float, screen_y: float):
         """The face the SNAP ENGINE may read under the cursor as
@@ -5172,141 +4634,10 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return face, place
 
     def _smallest_at_front(self, hits, origin, direction):
-        """Rows of ``hits`` a ray pick lands on: of the faces at the nearest
-        depth (see :meth:`_coplanar_eps`), the smallest, with those of the
-        same area up to float noise. Empty when nothing was hit. The same
-        tiebreak as :meth:`pick_face`, for the picks that answer an object."""
-        import numpy as np
-        nearest = float(hits.t.min())
-        if not np.isfinite(nearest):
-            return np.empty(0, np.intp)
-        eps = self._coplanar_eps(origin, direction, nearest)
-        cand = np.flatnonzero(hits.t <= nearest + eps)
-        area = hits.area[cand]
-        return cand[area <= float(area.min()) * (1.0 + 1e-6)]
+        return ingetrazo_render.smallest_at_front(self, hits, origin, direction)
 
     def pick_group(self, screen_x: float, screen_y: float):
-        """The group whose geometry the cursor hits (front-most face, or nearest
-        edge for a group that's only lines), or ``None``. Faces sharing a plane
-        go to the smallest, as in :meth:`pick_face`: a disc grouped on a wall
-        group's face lies at the wall's depth to the last float (#982)."""
-        if (self.scene.edit_group is not None
-                and not getattr(self.scene.edit_group, "children", None)):
-            return None                     # inside a plain group: its content
-        origin, direction = self._pixel_to_ray(screen_x, screen_y)
-        if origin is not None and direction is not None:
-            import numpy as np
-            best = None  # (t, group)
-            idx = self._pick_index(near=DocumentInteraction._ray_near(self, screen_x, screen_y))
-            loose_t = np.inf
-            hits = self._hover_hits(idx, origin, direction)
-            if hits is not None and len(hits.t):
-                loose_t = float(np.where(hits.loose, hits.t, np.inf).min())
-                if np.isfinite(np.where(hits.loose, np.inf, hits.t).min()):
-                    # A loose face in FRONT hides the group: what the cursor
-                    # shows is that face, and every caller asks for the group
-                    # it can see (#276, #363, #378 — a loose box before a
-                    # component could not be clicked). So does a loose face
-                    # ON a group's face, unless the group's is the smaller
-                    # (#982); at the same size the loose one is the target.
-                    front = DocumentInteraction._smallest_at_front(self, hits, origin,
-                                                        direction)
-                    best = (float(hits.t[front].min()),
-                            None if hits.loose[front].any()
-                            else hits.owner(int(front[0])))
-            faces_answer = best
-            for g in self._context_placements():
-                # The figure test first: it is an attribute, the layer test
-                # walks tags — asked of every placement on every hover it
-                # cost ~90 ms on 21 406 placements (issue #158).
-                if not getattr(g, "billboard", False):
-                    continue
-                if not self.scene.entity_selectable(g):
-                    continue                    # hidden or locked layer
-                if True:
-                    quad = self._billboard_quad(g)
-                    if quad is not None:
-                        c = quad[0]
-                        for tri in ((c[0], c[1], c[2]), (c[0], c[2], c[3])):
-                            t = _ray_triangle(origin, direction, *tri)
-                            if t is not None and (best is None or t < best[0]):
-                                best = (t, self._owner_of(g))
-            if best is not None:
-                if best is faces_answer:
-                    return best[1]
-                # A figure: a loose face in front of it or on it hides it.
-                eps = self._coplanar_eps(origin, direction, best[0])
-                if np.isfinite(loose_t) and loose_t <= best[0] + eps:
-                    return None
-                return best[1]
-        # Edge fallback (cursor over empty space, or a lines-only group):
-        # screen-space distance to every group hard edge, batched over the
-        # cached projected arrays — the Python per-edge walk took ~300 ms per
-        # mouse move against a 300k-edge imported model.
-        import numpy as np
-        best_d = self.pick_threshold_px
-        best_g = None
-        nat = (self._lazy_native() if hasattr(self, "_lazy_native")
-               else None)
-        if nat is not None:
-            best_d, best_g = self._pick_group_edge_unbaked(
-                screen_x, screen_y, nat)
-        else:
-            # The index first, then its projection (see
-            # _nearby_group_edges).
-            idx = self._pick_index(near=("px", screen_x, screen_y))
-            proj = self._gedge_screen()
-        if nat is None and proj is not None:
-            ax, ay, bx, by, ok = proj
-            if ok.any():
-                dx, dy = bx - ax, by - ay
-                l2 = dx * dx + dy * dy
-                safe = np.where(l2 > 1e-12, l2, 1.0)
-                t = np.clip(((screen_x - ax) * dx
-                             + (screen_y - ay) * dy) / safe, 0.0, 1.0)
-                d = np.hypot(ax + t * dx - screen_x,
-                             ay + t * dy - screen_y)
-                # The index also carries the edges of the model OUTSIDE the
-                # open group (snap targets); those cannot be picked.
-                sel = getattr(idx, "gedge_sel", None)
-                if sel is not None:
-                    ok = ok & sel
-                d = np.where(ok, d, np.inf)
-                # Only an edge the user can SEE takes the click: the far
-                # edge of a slab, hidden behind a loose box standing on it,
-                # lies a few pixels from a click on that box and handed the
-                # slab the selection. The nearest visible one decides.
-                near = np.where(d < best_d)[0]
-                for i in near[np.argsort(d[near])]:
-                    a = QVector3D(*idx.gedge_a[i])
-                    p = a + (QVector3D(*idx.gedge_b[i]) - a) * float(t[i])
-                    if not self._is_occluded(p):
-                        best_d = float(d[i])
-                        best_g = idx.gedge_groups[int(idx.gedge_gi[i])]
-                        break
-        # Billboard outlines: clicking a figure exactly on its snapped feet
-        # point lands ON the quad's boundary, which the ray-triangle test
-        # rejects — the outline proximity test catches it.
-        for g in self._placements():
-            if not getattr(g, "billboard", False):
-                continue
-            if not self.scene.entity_selectable(g):
-                continue
-            quad = self._billboard_quad(g)
-            if quad is None:
-                continue
-            c = quad[0]
-            for i, j in ((0, 1), (1, 2), (2, 3), (3, 0)):
-                pa = self._world_to_pixel(c[i])
-                pb = self._world_to_pixel(c[j])
-                if pa is None or pb is None:
-                    continue
-                d2 = _point_to_segment_distance_2d(
-                    (screen_x, screen_y), pa, pb)
-                if d2 < best_d:
-                    best_d = d2
-                    best_g = self._owner_of(g)
-        return best_g
+        return ingetrazo_render.pick_group(self, screen_x, screen_y)
 
     def _pointer_for_tool(self, key, plus=False):
         factory = getattr(getattr(self, "_host", None), "tool_cursor", None)
