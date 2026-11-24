@@ -9,6 +9,9 @@ import os
 import shutil
 import sys
 
+from examples.extensions import windowizer
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
@@ -55,7 +58,7 @@ def _wall(vp):
 
 
 def _windowize(win, monkeypatch, **params):
-    mod = _mod()
+    mod = windowizer
     vp = win.viewport
     face = _wall(vp)
     vp.scene.selection.clear()
@@ -69,9 +72,8 @@ def _windowize(win, monkeypatch, **params):
     return mod, vp, wins[0]
 
 
-@pytest.mark.classic_pending
-def test_a_face_on_a_wall_becomes_a_window_in_one_undo(win, monkeypatch):
-    mod, vp, g = _windowize(win, monkeypatch, rows="1", cols="2")
+def test_a_face_on_a_wall_becomes_a_window_in_one_undo(native_window, monkeypatch):
+    mod, vp, g = _windowize(native_window, monkeypatch, rows="1", cols="2")
     assert g.ifc["class"] == "IfcWindow"
     names = sorted(c.name for c in g.children)
     assert names == ["Frame", "Glass 1", "Glass 2"]
@@ -82,26 +84,23 @@ def test_a_face_on_a_wall_becomes_a_window_in_one_undo(win, monkeypatch):
     assert g in vp.scene.groups
 
 
-@pytest.mark.classic_pending
-def test_retagging_in_bim_keeps_the_window_editable(win, monkeypatch):
-    mod, vp, g = _windowize(win, monkeypatch)
+def test_retagging_in_bim_keeps_the_window_editable(native_window, monkeypatch):
+    mod, vp, g = _windowize(native_window, monkeypatch)
     g.ifc = {"class": "IfcWindow", "name": "V-01"}     # what the BIM panel does
     assert mod.window_data(g) is not None
 
 
-@pytest.mark.classic_pending
-def test_copies_keep_their_own_parameters(win, monkeypatch):
+def test_copies_keep_their_own_parameters(native_window, monkeypatch):
     from core.group import copy_group
-    mod, vp, g = _windowize(win, monkeypatch)
+    mod, vp, g = _windowize(native_window, monkeypatch)
     c = copy_group(g)
     assert mod.window_data(c) == mod.window_data(g)
     c.ext[mod.KEY]["params"]["rows"] = "5"
     assert mod.window_data(g)["params"]["rows"] != "5"
 
 
-@pytest.mark.classic_pending
-def test_edit_rebuilds_in_place(win, monkeypatch):
-    mod, vp, g = _windowize(win, monkeypatch, rows="1", cols="1")
+def test_edit_rebuilds_in_place(native_window, monkeypatch):
+    mod, vp, g = _windowize(native_window, monkeypatch, rows="1", cols="1")
     vp.scene.selection.clear()
     vp.scene.selection.add(g)
     monkeypatch.setattr(mod.WindowizerDialog, "ask", classmethod(
@@ -112,11 +111,10 @@ def test_edit_rebuilds_in_place(win, monkeypatch):
     assert sum(c.name.startswith("Glass") for c in g.children) == 1
 
 
-@pytest.mark.classic_pending
-def test_a_saved_window_reopens_editable(win, monkeypatch, tmp_path):
+def test_a_saved_window_reopens_editable(native_window, monkeypatch, tmp_path):
     from core.scene import Scene
     from formats import igz
-    mod, vp, g = _windowize(win, monkeypatch)
+    mod, vp, g = _windowize(native_window, monkeypatch)
     path = tmp_path / "wall.igz"
     igz.save_scene(vp.scene, path)
     again = Scene()
@@ -126,9 +124,8 @@ def test_a_saved_window_reopens_editable(win, monkeypatch, tmp_path):
     assert wins[0].ext[mod.KEY]["params"] == g.ext[mod.KEY]["params"]
 
 
-@pytest.mark.classic_pending
-def test_erase_closes_the_wall_again(win, monkeypatch):
-    mod, vp, g = _windowize(win, monkeypatch)
+def test_erase_closes_the_wall_again(native_window, monkeypatch):
+    mod, vp, g = _windowize(native_window, monkeypatch)
     vp.scene.selection.clear()
     vp.scene.selection.add(g)
     mod.erase(vp)
