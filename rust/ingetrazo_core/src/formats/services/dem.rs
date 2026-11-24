@@ -15,14 +15,18 @@ fn bilinear(field: &Obj<'_>, px: f64, py: f64) -> PyResult<f64> {
     if h == 0 || w == 0 {
         return Err(PyValueError::new_err("empty elevation field"));
     }
+    // Survey and sheet profiles must round each operation in the DEM's dtype.
+    if let Ok(grid) = field.extract::<numpy::PyReadonlyArray2<f32>>() {
+        return Ok(crate::sheets::profile::bilinear(&grid.as_array(), px, py));
+    }
     let (fx, fy) = (px - px.floor(), py - py.floor());
     let x = (px.floor() as usize).min(w - 1);
     let y = (py.floor() as usize).min(h - 1);
-    let at = |x, y| field.get_item((y, x))?.extract::<f64>();
+    let at = |x, y| field.get_item((y, x));
     let right = (x + 1).min(w - 1);
     let below = (y + 1).min(h - 1);
-    Ok((at(x, y)? * (1. - fx) + at(right, y)? * fx) * (1. - fy)
-        + (at(x, below)? * (1. - fx) + at(right, below)? * fx) * fy)
+    let row = |y| -> PyResult<_> { at(x, y)?.mul(1. - fx)?.add(at(right, y)?.mul(fx)?) };
+    row(y)?.mul(1. - fy)?.add(row(below)?.mul(fy)?)?.extract()
 }
 #[pyfunction]
 fn pixel_in_tile(lat: f64, lon: f64, zoom: i32) -> (i64, i64, f64, f64) {
