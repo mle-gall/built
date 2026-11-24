@@ -437,6 +437,43 @@ impl AnnotationCanvas {
         out
     }
 
+    fn text(&mut self, text: &str, at: (f64, f64), anchor: &str, ink: Color) -> PyResult<()> {
+        let tree = self
+            .state
+            .font
+            .text_tree(text, at, (self.width, self.height), anchor, ink)
+            .ok_or_else(|| PyValueError::new_err("invalid annotation text"))?;
+        let transform = self.scale();
+        let bounds = tree.root().abs_stroke_bounding_box();
+        self.mark_logical(bounds, 2.);
+        resvg::render(&tree, transform, &mut self.target()?.as_mut());
+        Ok(())
+    }
+
+    /// A solid or dashed pen as `QPen(color, width[, Qt.DashLine])` sets it.
+    fn pen(&mut self, color: Color, width: f32, dashed: bool) {
+        self.state.pen = Some(color);
+        self.state.stroke = Stroke {
+            width,
+            line_cap: LineCap::Square,
+            line_join: LineJoin::Bevel,
+            dash: if dashed { StrokeDash::new(vec![4. * width, 2. * width], 0.) } else { None },
+            ..Default::default()
+        };
+    }
+
+    fn line(&mut self, a: (f64, f64), b: (f64, f64)) -> PyResult<()> {
+        let mut path = PathBuilder::new();
+        path.move_to(a.0 as f32, a.1 as f32);
+        path.line_to(b.0 as f32, b.1 as f32);
+        self.path(path.finish(), false)
+    }
+
+    fn circle(&mut self, (x, y): (f64, f64), r: f64) -> PyResult<()> {
+        let rect = Rect::from_xywh((x - r) as f32, (y - r) as f32, (2. * r) as f32, (2. * r) as f32);
+        self.path(rect.and_then(PathBuilder::from_oval), true)
+    }
+
     fn scale(&self) -> Transform {
         let factor = self.size.width() as f32 / self.width as f32;
         Transform::from_scale(factor, factor)
@@ -705,13 +742,97 @@ impl AnnotationCanvas {
         } else {
             (value.cast::<pyo3::types::PyString>()?.to_str()?, "start")
         };
-        let tree = font
-            .text_tree(text, (x, y), (self.width, self.height), anchor, ink)
-            .ok_or_else(|| PyValueError::new_err("invalid annotation text"))?;
-        let transform = self.scale();
-        let ink = tree.root().abs_stroke_bounding_box();
-        self.mark_logical(ink, 2.);
-        resvg::render(&tree, transform, &mut self.target()?.as_mut());
+        self.text(text, (x, y), anchor, ink)
+    }
+    /// A snap's marker (formerly views/wgpu_overlay.draw_snap_indicator):
+    /// the dashed guides (projected and clipped, logical pixels, with their
+    /// colours), a white halo under the kind's glyph in ``rgb`` at ``at``,
+    /// and the label beside it, haloed too. Axis snaps draw nothing.
+    #[pyo3(signature=(kind, at, rgb, guides=Vec::new(), label=None))]
+    fn draw_snap(
+        &mut self,
+        kind: &str,
+        at: (f64, f64),
+        rgb: (f64, f64, f64),
+        guides: Vec<((f64, f64), (f64, f64), (f64, f64, f64))>,
+        label: Option<&str>,
+    ) -> PyResult<()> {
+        if matches!(kind, "axis_inference" | "axis") {
+            return Ok(());
+        }
+        let (r, g, b) = rgb;
+        let color = Color::fromRgbF(r, g, b, 1.);
+        for (a, z, (gr, gg, gb)) in guides {
+            self.pen(Color::fromRgbF(gr, gg, gb, 0.9), 2., true);
+            self.line(a, z)?;
+        }
+        let halo = Color([255, 255, 255, 230]);
+        let tint = |a| Some(Color::fromRgbF(r, g, b, a));
+        let (px, py) = at;
+        self.state.brush = tint(0.30);
+        // Halo, then the marker: (pen colour, width, brush) per pass.
+        let passes = |inner: Option<Color>| [(halo, 4.5, None), (color, 2.6, inner)];
+        match kind {
+            "intersection" => {
+                for (pen, width, _) in passes(None) {
+                    self.pen(pen, width, false);
+                    self.line((px - 8., py - 8.), (px + 8., py + 8.))?;
+                    self.line((px - 8., py + 8.), (px + 8., py - 8.))?;
+                }
+            }
+            "center" => {
+                for (pen, width, brush) in passes(tint(0.85)) {
+                    self.pen(pen, width, false);
+                    self.state.brush = brush;
+                    self.circle((px, py), 6.5)?;
+                }
+            }
+            "endpoint" | "origin" | "component_origin" | "on_edge" | "on_axis" | "intersection_edge"
+            | "intersection_face" | "on_line" | "extension" | "from_point" | "aligned" | "tangent" => {
+                let rect = Rect::from_xywh((px - 7.) as f32, (py - 7.) as f32, 14., 14.).map(PathBuilder::from_rect);
+                for (pen, width, brush) in passes(tint(0.30)) {
+                    self.pen(pen, width, false);
+                    self.state.brush = brush;
+                    self.path(rect.clone(), true)?;
+                }
+            }
+            "midpoint" | "arc_midpoint" => {
+                let mut diamond = PathBuilder::new();
+                diamond.move_to(px as f32, (py - 9.) as f32);
+                diamond.line_to((px + 9.) as f32, py as f32);
+                diamond.line_to(px as f32, (py + 9.) as f32);
+                diamond.line_to((px - 9.) as f32, py as f32);
+                diamond.close();
+                let diamond = diamond.finish();
+                for (pen, width, brush) in passes(tint(0.30)) {
+                    self.pen(pen, width, false);
+                    self.state.brush = brush;
+                    self.path(diamond.clone(), true)?;
+                }
+            }
+            "on_face" | "close" | "reference" | "through_point" | "perp_face" => {
+                let radius = match kind {
+                    "on_face" => 5.5,
+                    "close" => 9.,
+                    _ => 6.5,
+                };
+                // The brush stays the translucent tint under both rings.
+                for (pen, width, _) in passes(None) {
+                    self.pen(pen, width, false);
+                    self.circle((px, py), radius)?;
+                }
+            }
+            _ => {}
+        }
+        if let Some(label) = label.filter(|l| !l.is_empty()) {
+            let mut font = AnnotationFont::default();
+            font.size = 9. * 96. / 72.;
+            self.state.font = font;
+            self.pen(Color([255, 255, 255, 220]), 1., false);
+            self.text(label, (px + 11., py + 17.), "start", Color([255, 255, 255, 220]))?;
+            self.pen(color, 1., false);
+            self.text(label, (px + 10., py + 16.), "start", color)?;
+        }
         Ok(())
     }
     fn composite<'py>(
