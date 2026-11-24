@@ -274,7 +274,7 @@ impl SnapQuery {
     }
 
     /// Return only directions from edges actually containing the segment start.
-    fn starting_edges(&self, py: Python<'_>, p: P) -> Vec<usize> {
+    pub(crate) fn starting_edges(&self, py: Python<'_>, p: P) -> Vec<usize> {
         self.scan(py, || {
             self.edges
                 .iter()
@@ -383,7 +383,7 @@ impl SnapQuery {
     /// The ray-to-line projection is renderer-defined. Ask for it only when
     /// a foreshortened edge passes the fallback collinearity test on screen.
     #[pyo3(signature=(s,world,radius,projector,normal))]
-    fn extensions(
+    pub(crate) fn extensions(
         &self,
         py: Python<'_>,
         s: P,
@@ -464,7 +464,7 @@ impl SnapQuery {
             .collect())
     }
     #[pyo3(signature=(radius,line=None,forward=None,circles=None))]
-    fn crossings(
+    pub(crate) fn crossings(
         &self,
         py: Python<'_>,
         radius: f64,
@@ -552,7 +552,7 @@ impl SnapQuery {
         })
     }
 
-    fn rim(
+    pub(crate) fn rim(
         &self,
         circle: crate::snap_curve::Circle,
         p: P,
@@ -570,7 +570,7 @@ impl SnapQuery {
     /// Keep projected segment candidates in this frame. Only the nearest
     /// visible segment's ordinal crosses back to the Python topology facade.
     #[pyo3(signature=(radius,rims,projector,visibility,include_ends,skip_clipped,exclude=None,batch_visibility=true))]
-    fn target(
+    pub(crate) fn target(
         &self,
         py: Python<'_>,
         radius: f64,
@@ -674,7 +674,7 @@ impl SnapQuery {
         Ok(None)
     }
 }
-fn contains([a, b]: [P; 2], p: P) -> bool {
+pub(crate) fn contains([a, b]: [P; 2], p: P) -> bool {
     let ab = sub(b, a);
     let l = dot(ab, ab);
     if l < 1e-12 {

@@ -601,6 +601,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(snap::inputs::edge_tag, m)?)?;
     m.add_function(wrap_pyfunction!(snap::inputs::edge_columns, m)?)?;
     m.add_function(wrap_pyfunction!(snap::inputs::point_inputs, m)?)?;
+    m.add_class::<snap_engine::services::FrameState>()?;
     m.add_class::<snap_visibility::PointVisibility>()?;
     m.add_function(wrap_pyfunction!(snap_visibility::first_visible, m)?)?;
     m.add_function(wrap_pyfunction!(snap_visibility::resolve_points, m)?)?;

@@ -891,4 +891,5 @@ def compute_snap(
     from core.snap_query import make_query
     query = make_query(scene.edges, world_to_pixel, candidate_pixel)
     from core.snap_frame import SnapFrame
-    return kernel.resolve_snap(query, SnapFrame(options, query))
+    frame = SnapFrame(options, query)
+    return kernel.resolve_snap(query, frame, frame.state)
