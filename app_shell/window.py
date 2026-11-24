@@ -897,9 +897,10 @@ class ShellWindow(WindowDocumentCommands, object if NATIVE else QObject):
         self._on_toggle_eyedropper(False)
 
     def _set_survey_capture(self, datum, lo, hi):
-        from georef.tiles import DEFAULT_SOURCE_ID, PRESETS, TileLayer
+        from georef.tiles import TileLayer
+        from ingetrazo_render import selected_tile_source
         scene = self.viewport.scene
-        layer = scene.tile_layer or TileLayer(PRESETS[DEFAULT_SOURCE_ID])
+        layer = scene.tile_layer or TileLayer(selected_tile_source())
         layer.capture_bounds(datum, lo.x(), lo.y(), hi.x(), hi.y())
         scene.tile_layer = layer
         self.viewport.reset_tiles()

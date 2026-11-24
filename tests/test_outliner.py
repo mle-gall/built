@@ -16,28 +16,8 @@ from ingetrazo_core import Vec3 as QVector3D
 from core import outliner
 from core.group import Group
 from core.mesh import Mesh
-from tests.shell_isolation import restore_shell_patches  # noqa: F401
+from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
 from tests.test_project_occurrences import _building, _group, _random_tree
-
-
-def _window_with(*groups):
-    from views.main_window import MainWindow
-    win = MainWindow()
-    scene = win.viewport.scene
-    scene.groups[:] = groups        # without the template's scale figure
-    scene.version += 1
-    panel = win.project_browser.outliner
-    panel.refresh()
-    return win, scene, panel
-
-
-def _close(win):
-    win.viewport.scene.end_group_edit()
-    win._saved_version = win.viewport.scene.version
-
-
-def _row(panel, group):
-    return panel._items[id(group)]
 
 
 def _filing_project(*roots):
@@ -146,48 +126,60 @@ def test_the_scenes_panel_rename_no_longer_orphans_sheet_views(native_host):
         assert not outliner.is_orphan(win.viewport.scene, page.frames[0])
 
 
-@pytest.mark.classic_pending
+def _kinds(project):
+    project.rows()
+    return {text[0]: text[2] for text, _ in project.view.renderer.calls["ui_set_tree"][0]}
+
+
 def test_an_extension_names_its_groups_in_the_type_column():
     from views.extension_api import ExtensionApp
     building, tree = _building()
     tree.ext = {"stairs": {"steps": 14}}
-    win, scene, panel = _window_with(building, tree)
-    app = ExtensionApp(win, "stairs")
+    project = _filing_project(building, tree)
+    app = ExtensionApp(project.win, "stairs")
     app.add_outliner_kind(lambda g: {
         "type": "Stair", "props": [("Steps", g.ext["stairs"]["steps"])]}
         if "stairs" in (g.ext or {}) else None)
-    from views.outliner import COL_TYPE
-    row = _row(panel, tree)
-    assert row.text(COL_TYPE) == "Stair"
-    assert row.toolTip(COL_TYPE) == "Steps: 14"
-    assert _row(panel, building).text(COL_TYPE) == "Group"   # not its own
-    panel.search.setText("stair")
-    assert not row.isHidden() and _row(panel, building).isHidden()
-    _close(win)
+    rows = _kinds(project)
+    assert rows["i:" + tree.uid].split("\x1e") == ["Stair", "Steps: 14"]
+    assert rows["i:" + building.uid] == "Group"
+    filtered = project.action("filter", "stair")
+    assert "i:" + tree.uid in filtered and "i:" + building.uid not in filtered
 
 
-@pytest.mark.classic_pending
 def test_a_failing_kind_provider_is_skipped():
     building, tree = _building()
-    win, scene, panel = _window_with(building, tree)
-    win._outliner_kinds = [lambda g: 1 / 0,
-                           lambda g: {"type": "Thing"}]
-    panel._shape = None
-    panel.refresh()
-    from views.outliner import COL_TYPE
-    assert _row(panel, tree).text(COL_TYPE) == "Thing"
+    project = _filing_project(building, tree)
+    project.win._outliner_kinds = [lambda g: 1 / 0, lambda g: {"type": "Thing"}]
+    assert _kinds(project)["i:" + tree.uid] == "Thing"
     assert outliner.custom_kind(tree, [lambda g: None]) is None
     assert outliner.custom_kind(tree, [lambda g: {"props": []}]) is None
-    _close(win)
 
 
-@pytest.mark.classic_pending
-def test_a_plan_of_a_group_is_a_cut_a_scene_and_a_sheet_in_one_step():
+def _plan(win, target, *, height=None, sheet=True, scale=100):
+    from views import chrome_forms, wgpu_ui
+    verb, prefix = ("groupplan", "i:") if height is not None else ("cutview", "section:")
+    wgpu_ui._tree_action(win, win.view, wgpu_ui.SEP.join((verb, prefix + str(target.uid))))
+    form = chrome_forms.current(win)
+    assert form is not None
+    if height is not None:
+        form.receive("height", str(height))
+    form.receive("scale", str(scale))
+    form.receive("sheet", str(int(sheet)))
+    form.receive("open_sheet", "0")
+    form.press("ok")
+    return win.viewport.scene.saved_views[-1]
+
+
+def test_a_plan_of_a_group_is_a_cut_a_scene_and_a_sheet_in_one_step(native_question_host):
     building, tree = _building()
     level2 = building.children[1]                 # its wall stands on z = 3
-    win, scene, panel = _window_with(building, tree)
+    win = native_question_host.window
+    scene = win.viewport.scene
+    scene.groups[:] = [building, tree]
+    scene.version += 1
     planes0, views0 = len(scene.section_planes), len(scene.saved_views)
-    view = panel.create_plan(level2, 1.2, sheet=True, scale=50.0)
+    view = _plan(win, level2, height=1.2, sheet=True, scale=50.0)
     assert view is not None and view.name == "Plan Level 2"
     plane = scene.section_planes[-1]
     assert scene.active_section() is plane
@@ -204,31 +196,33 @@ def test_a_plan_of_a_group_is_a_cut_a_scene_and_a_sheet_in_one_step():
     assert len(scene.section_planes) == planes0
     assert len(scene.saved_views) == views0
     assert sheet not in scene.compositions
-    _close(win)
 
 
-@pytest.mark.classic_pending
-def test_a_second_plan_gets_its_own_name_and_no_sheet_when_asked():
+def test_a_second_plan_gets_its_own_name_and_no_sheet_when_asked(native_question_host):
     building, tree = _building()
-    win, scene, panel = _window_with(building, tree)
+    win = native_question_host.window
+    scene = win.viewport.scene
+    scene.groups[:] = [building, tree]
+    scene.version += 1
     sheets0 = len(scene.compositions)
-    panel.create_plan(building, 1.2, sheet=False)
-    second = panel.create_plan(building, 1.5, sheet=False)
+    _plan(win, building, height=1.2, sheet=False)
+    second = _plan(win, building, height=1.5, sheet=False)
     assert second.name == "Plan Building 2"
     assert len(scene.compositions) == sheets0
-    _close(win)
 
 
-@pytest.mark.classic_pending
-def test_a_view_of_a_vertical_cut_looks_at_it_square_on():
+def test_a_view_of_a_vertical_cut_looks_at_it_square_on(native_question_host):
     building, tree = _building()
-    win, scene, panel = _window_with(building, tree)
+    win = native_question_host.window
+    scene = win.viewport.scene
+    scene.groups[:] = [building, tree]
+    scene.version += 1
     from core.section import SectionPlane
     cut = SectionPlane(QVector3D(4, 3, 0), QVector3D(1, 0, 0),
                        name="Cross section", symbol="C")
     scene.section_planes[:] = [cut]
     planes = list(scene.section_planes)
-    view = panel.create_cut_view(cut, sheet=True, scale=50.0)
+    view = _plan(win, cut, sheet=True, scale=50.0)
     assert view.name == "Cross section"
     assert scene.section_planes == planes            # no plane added
     assert scene.active_section() is cut
@@ -242,21 +236,21 @@ def test_a_view_of_a_vertical_cut_looks_at_it_square_on():
     win.viewport.history.undo()
     assert scene.section_planes == planes             # the cut stays
     assert sheet not in scene.compositions
-    _close(win)
 
 
-@pytest.mark.classic_pending
-def test_a_horizontal_cut_gives_a_plan():
+def test_a_horizontal_cut_gives_a_plan(native_question_host):
     building, tree = _building()
-    win, scene, panel = _window_with(building, tree)
+    win = native_question_host.window
+    scene = win.viewport.scene
+    scene.groups[:] = [building, tree]
+    scene.version += 1
     from core.section import SectionPlane
     cut = SectionPlane(QVector3D(0, 0, 1.4), QVector3D(0, 0, 1),
                        symbol="A")
     scene.section_planes[:] = [cut]
-    view = panel.create_cut_view(cut, sheet=False)
+    view = _plan(win, cut, sheet=False)
     assert view.name == "Section A"
     assert abs(view.pitch - math.radians(90.0)) < 1e-9
-    _close(win)
 
 
 def test_export_all_pdf_can_take_only_some_sheets(tmp_path, native_host):
