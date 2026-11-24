@@ -90,6 +90,8 @@ impl ProjectSheets {
 
     fn refresh(&mut self, scene: &Bound<'_, PyAny>) -> PyResult<u64> {
         let root = scene.getattr("_root")?.getattr("_doc_key")?.extract()?;
+        // Publish in-place saved-view and frame edits before sampling the revision.
+        scene.py().import("core.doc_model")?.call_method0("flush")?;
         let serial = doc::lock().serial;
         if self.read != Some((root, serial)) {
             let catalog = Catalog::read(scene)?;

@@ -1096,25 +1096,6 @@ def install(win) -> None:
     comp.triggered.connect(lambda: open_library(win, "components"))
     win._act_library_components = comp
     win._lib_actions = acts
-    _register_icon()
-
-
-def _register_icon() -> None:
-    """The rail's Components glyph: a box, drawn like the other tool icons."""
-    from views import icons
-    if "components" in icons._DRAW:
-        return
-    from core.input_types import QPointF
-
-    def draw(p, _ink):
-        top = [QPointF(24, 8), QPointF(39, 16), QPointF(24, 24), QPointF(9, 16)]
-        p.drawPolygon(top)
-        p.drawLine(QPointF(9, 16), QPointF(9, 32))
-        p.drawLine(QPointF(39, 16), QPointF(39, 32))
-        p.drawLine(QPointF(24, 24), QPointF(24, 40))
-        p.drawLine(QPointF(9, 32), QPointF(24, 40))
-        p.drawLine(QPointF(39, 32), QPointF(24, 40))
-    icons._DRAW["components"] = draw
 
 
 # ---- the palette strip (Paint's fast path) --------------------------------------------

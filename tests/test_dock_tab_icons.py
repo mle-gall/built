@@ -716,18 +716,9 @@ def test_the_initial_of_a_panel_without_icon_follows_the_theme(win):
 
 
 def test_the_initial_is_drawn_with_the_weight_of_the_other_icons():
-    """Its frame as thin as theirs: fewer inked pixels than at full weight."""
+    """Its frame as thin as theirs: two pixels across at 48 px, where the
+    full-weight frame took three or four."""
     from views import icons
-
-    def inked(icon):
-        img = _image(icon)
-        return sum(1 for x in range(img.width()) for y in range(img.height())
-                   if img.pixelColor(x, y).alpha() > 60)
-    thin = inked(icons.letter_icon("Zeta"))
-    stroke = icons.ICON_STROKE
-    icons.ICON_STROKE = 1.0
-    try:
-        full = inked(icons.letter_icon("Zeta"))
-    finally:
-        icons.ICON_STROKE = stroke
-    assert thin < full
+    img = _image(icons.letter_icon("Zeta"))
+    run = [x for x in range(4, 14) if img.pixelColor(x, 24).alpha() > 60]
+    assert run == [8, 9]

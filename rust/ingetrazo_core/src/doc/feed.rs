@@ -143,6 +143,7 @@ pub struct FeedReaders {
     root: Option<super::Key>,
     #[pyo3(get)]
     revision: u64,
+    browser_version: i64,
     dirty_paint: HashSet<String>,
     dirty_rows: HashSet<String>,
 }
@@ -193,6 +194,16 @@ impl FeedReaders {
 
     fn current(&self, py: Python<'_>, reader: &str, version: i64) -> PyResult<bool> {
         Ok(self.scans.get(reader) == Some(&(version, self.stamp(py)?)))
+    }
+
+    /// Each pane can cache its own projection against this shared membership revision.
+    fn browser_version(&mut self, py: Python<'_>, version: i64) -> PyResult<i64> {
+        // Avoid flushing bound containers on a frame with no document edits.
+        if self.scans.get("browser").map(|stamp| stamp.0) != Some(version) {
+            self.mark(py, "browser".into(), version)?;
+            self.browser_version = version;
+        }
+        Ok(self.browser_version)
     }
 
     fn context_changed(
@@ -280,6 +291,13 @@ impl FeedReaders {
                         && !registry
                 }
                 "mesh_paint" => (paint || groups || keyed_paint) && !registry,
+                "browser" => !membership && !tag_changes && !registry && (
+                    (command == "MoveGroupCommand" && paint) ||
+                    (!modified && matches!(command.as_str(),
+                        "SnapshotMutation" | "SnapshotCompound" | "MoveVerticesCommand"
+                        | "AddEdgeCommand" | "AddFaceCommand" | "EraseSelectionCommand"
+                        | "DeleteEdgesCommand" | "DeleteFaceCommand"))
+                ),
                 "structure" => {
                     !modified
                         && !tag_changes
