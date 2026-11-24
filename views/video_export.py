@@ -79,7 +79,8 @@ def export_video(window, path, width, height, fps, progress=None):
 def run_export(window):
     from ingetrazo_render import OperationForm
     from core.scene_animation import video_seconds
-    from views import chrome_dialogs, chrome_forms
+    from views import chrome_dialogs
+    from ingetrazo_render import chrome_forms
     from views.filedialogs import file_dialogs
 
     vp = window.viewport

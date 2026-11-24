@@ -285,7 +285,7 @@ fn ask_simplify_mesh(win: &Bound<'_, PyAny>) -> PyResult<()> {
     )?;
     kw.set_item("done", done)?;
     kw.set_item("suffix", "°")?;
-    py.import("views.chrome_forms")?.getattr("ask_number")?.call((win,
+    py.import("ingetrazo_render.chrome_forms")?.getattr("ask_number")?.call((win,
         translated(py, "Simplify Mesh", None)?,
         translated(py, "Maximum facet angle in degrees (0 = coplanar only; higher values may change rounded geometry):", None)?,
         1.0, 0.0, 5.0, 2), Some(&kw))?;

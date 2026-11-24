@@ -1681,7 +1681,7 @@ impl LibrarySheet {
         let kw = PyDict::new(py);
         kw.set_item("text", e.get_item("name")?)?;
         kw.set_item("done", done)?;
-        py.import("views.chrome_forms")?.getattr("ask_text")?.call((ctx.getattr("win")?, title, "Name:"), Some(&kw))?;
+        py.import("ingetrazo_render.chrome_forms")?.getattr("ask_text")?.call((ctx.getattr("win")?, title, "Name:"), Some(&kw))?;
         Ok(())
     }
 

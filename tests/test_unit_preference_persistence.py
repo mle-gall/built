@@ -145,7 +145,7 @@ def test_cancel_does_not_change_units_or_the_document_only_choice():
     window = _window(CM)
     edit_unit(window, "for_new", 0)
 
-    from views import chrome_forms, units_question
+    from ingetrazo_render import chrome_forms, units_question
     other_window = _window(CM)
     other_window._documents, other_window._tool_actions = [], {}
     units_question.offer_at_start(other_window)

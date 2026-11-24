@@ -34,7 +34,7 @@ In the ``built`` shell
 The shell (``rust/built_app``) owns the event loop. ``app_shell.modal``
 gives :func:`ask` a ``live`` that knows the shell's view and a
 ``QEventLoop`` whose ``exec()`` turns the shell's modal pump, so the
-blocking call works there too. Forms (``views/chrome_forms.py``) and
+blocking call works there too. Forms (``rust/ingetrazo_render/src/forms_host.rs``) and
 :func:`ask_later` never block at all: they take a continuation
 (``done(answer)``) that the chrome's click calls on a later turn, so the
 window's ordinary input (typing into a field) keeps flowing through the
@@ -548,7 +548,7 @@ def _form_up(win) -> bool:
 
 
 def engage(win) -> None:
-    """Hold the window as a sheet does (views/chrome_forms.py)."""
+    """Hold the window as a sheet does (rust/ingetrazo_render/src/forms_host.rs)."""
     _Guard.engage(win)
 
 

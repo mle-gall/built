@@ -207,7 +207,7 @@ def export(view, monkeypatch):
     """Export image as the menu runs it, its file dialog answered: ``run``
     ticks the box as told and returns the file read back. ``seen`` holds the
     dialog as the user found it."""
-    from views import chrome_forms
+    from ingetrazo_render import chrome_forms
     from views.filedialogs import file_dialogs
     win, vp, folder = view
     seen = {}

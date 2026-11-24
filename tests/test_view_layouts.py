@@ -17,7 +17,7 @@ def arrange(layout="four", **state):
 
 
 def test_picker_uses_the_document_layout_and_cancel_leaves_it_alone(native_host, monkeypatch):
-    from views import chrome_forms
+    from ingetrazo_render import chrome_forms
     win = native_host.window
     assert win._doc.view_layout == "single" and win.view.peers() == []
     choices = {}

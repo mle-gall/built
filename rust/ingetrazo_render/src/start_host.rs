@@ -991,7 +991,7 @@ fn new_model(py: Python<'_>, win: &Bound<'_, PyAny>, ask_units: bool) -> PyResul
     win.call_method0("_on_new")?;
     hide(win)?;
     if ask_units {
-        py.import("views.units_question")?.call_method1("offer_at_start", (win,))?;
+        py.import("ingetrazo_render.units_question")?.call_method1("offer_at_start", (win,))?;
     }
     Ok(())
 }

@@ -330,7 +330,7 @@ fn make_component(win: &Bound<'_, PyAny>) -> PyResult<()> {
         fallback: suggestion,
     };
     kw.set_item("done", Py::new(py, done)?)?;
-    py.import("views.chrome_forms")?.getattr("ask_text")?.call(
+    py.import("ingetrazo_render.chrome_forms")?.getattr("ask_text")?.call(
         (
             win,
             translated(py, "Make Component", None)?,

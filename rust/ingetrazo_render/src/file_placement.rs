@@ -262,7 +262,7 @@ fn ask_mesh_units(
             open_tab,
         ),
     )?;
-    let forms = py.import("views.chrome_forms")?;
+    let forms = py.import("ingetrazo_render.chrome_forms")?;
     let form = forms.call_method1(
         "OperationForm",
         (
@@ -361,7 +361,7 @@ fn image_export_form(win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> PyResul
             path,
         ),
     )?;
-    let forms = py.import("views.chrome_forms")?;
+    let forms = py.import("ingetrazo_render.chrome_forms")?;
     forms.call_method1(
         "show",
         (
@@ -503,7 +503,7 @@ fn choose_billboard(win: &Bound<'_, PyAny>) -> PyResult<()> {
             ),
         )?,
     )?;
-    py.import("views.chrome_forms")?
+    py.import("ingetrazo_render.chrome_forms")?
         .getattr("ask_number")?
         .call(
             (

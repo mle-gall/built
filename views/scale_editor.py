@@ -25,7 +25,7 @@ def ask_scale(window, group, done=None) -> None:
         if done:
             done()
         return
-    from views.chrome_forms import Field, Form, show
+    from ingetrazo_render.chrome_forms import Field, Form, show
     def refresh(form):
         for axis, value in zip("xyz", group_scale(group)):
             form.set(axis, _fmt(value))

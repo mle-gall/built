@@ -127,7 +127,7 @@ def test_a_classic_group_opened_takes_the_new_group_as_a_child(native_host):
 
 
 def test_make_component_inside_an_open_group(native_host):
-    from views import chrome_forms
+    from ingetrazo_render import chrome_forms
     win = _window(native_host)
     scene = win.viewport.scene
     muro, a, b = _open_wall(win)
@@ -200,7 +200,7 @@ def test_the_browser_groups_rows_inside_their_group(native_host):
 
 
 def test_the_browser_makes_a_component_of_one_row(native_host):
-    from views import chrome_forms
+    from ingetrazo_render import chrome_forms
     win = _window(native_host)
     scene = win.viewport.scene
     a = Group(_quad(), name="A")

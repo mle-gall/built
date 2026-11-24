@@ -17,7 +17,7 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from core import units
 from core.scene import Scene
 from formats import igz
-from views import chrome_forms
+from ingetrazo_render import chrome_forms
 from ingetrazo_render import chrome_sheet as cs
 from ingetrazo_render import settings_sheet as ss
 

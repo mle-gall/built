@@ -121,7 +121,7 @@ fn choose_replacement(win: &Bound<'_, PyAny>) -> PyResult<()> {
     )?;
     let args = PyDict::new(py);
     args.set_item("n", targets.len())?;
-    py.import("views.chrome_forms")?
+    py.import("ingetrazo_render.chrome_forms")?
         .getattr("ask_choice")?
         .call(
             (

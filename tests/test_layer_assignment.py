@@ -70,7 +70,7 @@ def test_inspector_tag_field_single_mixed_and_empty_selection(native_host):
 
 
 def tag_form(host):
-    from views import chrome_forms
+    from ingetrazo_render import chrome_forms
     from ingetrazo_render import context_menu_build, context_menu_run
     win = host.window
     menu = context_menu_build(win, host.view)
@@ -80,7 +80,7 @@ def tag_form(host):
 
 
 def test_right_click_tag_choice_and_new_tag(native_host):
-    from views import chrome_forms
+    from ingetrazo_render import chrome_forms
     scene = native_host.viewport.scene
     scene.layers.append(Layer("Muros"))
     group = Group(name="Box")

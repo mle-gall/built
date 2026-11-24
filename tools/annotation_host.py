@@ -40,7 +40,7 @@ class TextTool(_AnnotationTool):
     def host_text_prompt(self, vp, args):
         from core.i18n import tr
         from core.protocol.commands import run
-        from views import chrome_forms
+        from ingetrazo_render import chrome_forms
         self.work_plane = None
         def place(text):
             if text and text.strip():

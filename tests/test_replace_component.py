@@ -623,7 +623,7 @@ def test_no_question_while_a_copy_remains(monkeypatch):
 
 
 def test_rename_reaches_every_copy_and_the_kept_template(monkeypatch):
-    from views import chrome_forms
+    from ingetrazo_render import chrome_forms
     from core.history import KeepComponentCommand
     win, scene, sillas, mesas = _window_with_model()
     try:

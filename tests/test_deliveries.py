@@ -57,7 +57,7 @@ def test_reopen(tmp_path, ext):
 
 
 def test_queue_keep_cancel(tmp_path, monkeypatch):
-    from views import chrome_forms
+    from ingetrazo_render import chrome_forms
     scene = _tagged_wall_scene()
     vp = SimpleNamespace(history=History(scene), scene=scene, camera=OrbitCamera())
     win = SimpleNamespace(viewport=vp)

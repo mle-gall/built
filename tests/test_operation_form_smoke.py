@@ -763,7 +763,7 @@ def dispatch(self, command):
             scene.version+=1
         wgpu_ui._tree_action(self.window,self.view,wgpu_ui.SEP.join(("mergetag","preview-tag:Merge me")))
     elif command=="fixture-finish-merge":
-        from views import chrome_forms
+        from ingetrazo_render import chrome_forms
         form=chrome_forms.current(self.window)
         options=form.field("item").keys()
         form.receive("item",str(next(i for i, label in enumerate(options) if label.endswith("Paths"))))
@@ -808,7 +808,7 @@ def dispatch(self, command):
 def facts(self):
     scene=self.viewport.scene
     from views.chrome_dialogs import current_sheet
-    from views import chrome_forms
+    from ingetrazo_render import chrome_forms
     choice=chrome_forms.current(self.window)
     question=current_sheet(self.window)
     paths=scene.layer("Paths")

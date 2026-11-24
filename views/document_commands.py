@@ -121,7 +121,7 @@ class WindowDocumentCommands:
         return native.edit_text(self, group)
 
     def _assign_new_layer(self):
-        from views.chrome_forms import ask_text
+        from ingetrazo_render.chrome_forms import ask_text
         scene = self.viewport.scene
 
         def assign(answer):
@@ -193,7 +193,7 @@ class WindowDocumentCommands:
 
     def _ask_field_of_view(self):
         from core.camera import FOV_RANGE
-        from views.chrome_forms import ask_number
+        from ingetrazo_render.chrome_forms import ask_number
         view = self._active_view()
         cam = view.camera
         if not cam.perspective:
@@ -214,14 +214,14 @@ class WindowDocumentCommands:
 
     def rename_component(self, definition):
         from functools import partial
-        from views.chrome_forms import ask_text
+        from ingetrazo_render.chrome_forms import ask_text
         ask_text(self, tr("Rename Component"), tr("Component name:"), text=definition.name or "",
                  done=partial(native.name_definition, self, self.viewport.scene, definition))
 
     def prompt_section_name(self, plane, *, automatic=True):
         from functools import partial
         from core.settings import settings
-        from views import chrome_forms
+        from ingetrazo_render import chrome_forms
         if automatic and str(settings().value("section/ask_name", "1")) == "0":
             return
         chrome_forms.show(self, chrome_forms.OperationForm(
@@ -230,7 +230,7 @@ class WindowDocumentCommands:
 
     def _on_soften_edges(self) -> None:
         from core.settings import settings
-        from views import chrome_forms
+        from ingetrazo_render import chrome_forms
         view = self.viewport
         scene = view.scene
         if not scene.selection:

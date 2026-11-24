@@ -46,7 +46,7 @@ def test_alignment_anchors_and_frames_the_import_then_undo(host, tmp_path, monke
 
 
 def test_survey_csv_utm_form_cancel_and_apply(host, tmp_path, monkeypatch):
-    from views import chrome_forms
+    from ingetrazo_render import chrome_forms
     path = tmp_path / "survey.csv"
     path.write_text("A,5000000,500000,100,tree\nB,5000001,500002,103,curb\n")
     pick(monkeypatch, path)

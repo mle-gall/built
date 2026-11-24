@@ -23,7 +23,7 @@ fn module(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
 }
 
 fn cf(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("views.chrome_forms")
+    py.import("ingetrazo_render.chrome_forms")
 }
 
 fn chrome(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
@@ -1210,9 +1210,9 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     sub.add("_PENDING", m.getattr("RestartPreferences")?.call0()?)?;
     sub.add("_NO", py.import("builtins")?.getattr("object")?.call0()?)?;
     sub.add("_north_cmd", py.None())?;
-    // `cf`: the forms module the sheet's questions use, looked up when read
-    // (tests replace its `show`).
-    sub.add_function(wrap_pyfunction!(module_getattr, &sub)?)?;
+    // `cf`: the forms module the rows are drawn as (the same module object,
+    // so a test replacing `cf.show` replaces `chrome_forms.show`).
+    sub.add("cf", m.getattr("chrome_forms")?)?;
     sub.add_class::<SettingsSheet>()?;
     crate::settings_rows::register(&sub)?;
     for f in [wrap_pyfunction!(show, &sub)?, wrap_pyfunction!(edit_location, &sub)?, wrap_pyfunction!(_parse_keys, &sub)?, wrap_pyfunction!(_keys_text, &sub)?] {
@@ -1223,12 +1223,3 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     Ok(())
 }
 
-/// `settings_sheet.cf` is `views.chrome_forms` (PEP 562).
-#[pyfunction]
-#[pyo3(name = "__getattr__")]
-fn module_getattr<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {
-    if name == "cf" {
-        return Ok(cf(py)?.into_any());
-    }
-    Err(pyo3::exceptions::PyAttributeError::new_err(format!("module 'settings_sheet' has no attribute '{name}'")))
-}

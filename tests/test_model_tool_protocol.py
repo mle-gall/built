@@ -52,7 +52,8 @@ def test_scale_form_keeps_other_axes_and_allows_undo_past_the_placement(monkeypa
     from types import SimpleNamespace
     from core.group_scale import group_scale
     from core.history import InsertGroupCommand
-    from views import chrome_dialogs, chrome_forms
+    from views import chrome_dialogs
+    from ingetrazo_render import chrome_forms
     from views.scale_dialog import ask_scale
 
     vp = _Vp(Scene())

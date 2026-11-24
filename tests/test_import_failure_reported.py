@@ -81,7 +81,7 @@ def _menu_import(win, path, monkeypatch):
     answered."""
     monkeypatch.setattr(file_dialogs, "getOpenFileName",
                         lambda *_a, **_k: (str(path), ""))
-    monkeypatch.setattr("views.chrome_forms.show", lambda _, form: form.press("ok"))
+    monkeypatch.setattr("ingetrazo_render.chrome_forms.show", lambda _, form: form.press("ok"))
     kind = "glb" if path.suffix == ".gltf" else path.suffix[1:]
     win.run_command("import:" + kind)
 

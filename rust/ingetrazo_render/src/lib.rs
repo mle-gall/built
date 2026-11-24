@@ -75,6 +75,7 @@ mod settings_rows;
 mod settings_host;
 mod library_host;
 mod start_host;
+mod forms_host;
 pub mod ui;
 mod host_context;
 mod inspector;
@@ -2790,7 +2791,7 @@ impl Renderer {
     fn ui_set_palette(&mut self, items: Vec<(String, String, String, String, bool)>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_palette(items); }
     }
-    /// A modal form (views/chrome_forms.py); an empty `seq` closes it.
+    /// A modal form (rust/ingetrazo_render/src/forms_host.rs); an empty `seq` closes it.
     #[pyo3(signature = (seq, title="".to_string(), note="".to_string(), width=420.0, fields=Vec::new(), buttons=Vec::new()))]
     fn ui_set_dialog(&mut self, seq: String, title: String, note: String, width: f32,
                      fields: Vec<ui::dialog::Field>, buttons: Vec<ui::dialog::Button>) {
@@ -3302,6 +3303,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     shell_events::register(m)?;
     deliveries_host::register(m)?;
     sheet_runtime::register(m)?;
+    forms_host::register(m)?;
     native_view_actions::register(m)?;
     plugin_workspace::register(m)?;
     m.add_class::<link_watch::LinkWatch>()?;

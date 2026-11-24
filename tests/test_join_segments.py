@@ -15,7 +15,7 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from ingetrazo_core import Vec3 as QVector3D
-from views import chrome_forms
+from ingetrazo_render import chrome_forms
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 from core.edits import divide_edges, join_edges, join_preview

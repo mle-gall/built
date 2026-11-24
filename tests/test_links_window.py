@@ -120,7 +120,7 @@ def test_project_link_subset_and_agent_surface(win, tmp_path):
 @pytest.mark.parametrize("choice", [True, False, None])
 def test_link_document_action_shows_nested_choice(win, tmp_path, monkeypatch, choice):
     from core.i18n import tr
-    from views import chrome_forms
+    from ingetrazo_render import chrome_forms
     from views.filedialogs import file_dialogs
 
     path = _source(tmp_path / "building.igz")
@@ -180,7 +180,7 @@ def test_project_edits_only_the_addressed_link_subset_and_undoes_without_source(
     old_first, old_second = first.children[0], second.children[0]
     view = _View()
     ui._tree(view, win)
-    monkeypatch.setattr("views.chrome_forms.ask_text", lambda *args, done, **kw: done(json.dumps(subsets[1])))
+    monkeypatch.setattr("ingetrazo_render.chrome_forms.ask_text", lambda *args, done, **kw: done(json.dumps(subsets[1])))
     ui._link_action(win, view, second, "linksubset")
     assert first.children == [old_first] and first.children[0] is old_first
     assert second.children[0].name == "Window" and links.link_of(second)["select"] == subsets[1]
@@ -202,7 +202,8 @@ def test_link_selection_header_preserves_occurrence_and_nested_choice(win, tmp_p
     from core.group import Group
     from core.scene import Scene
     from tests.test_tree_links import _View
-    from views import chrome_forms, wgpu_ui
+    from views import wgpu_ui
+    from ingetrazo_render import chrome_forms
 
     source = Scene()
     g = Group(name="Panel")

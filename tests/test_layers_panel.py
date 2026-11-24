@@ -109,7 +109,7 @@ def test_the_target_header_ends_the_isolation(native_host):
 
 def test_merge_tag_moves_carriers_in_one_step_and_rejects_a_replaced_target(native_host, monkeypatch):
     from tests.native_tree import action
-    from views import chrome_forms
+    from ingetrazo_render import chrome_forms
     scene = native_host.viewport.scene
     scene.layers.extend([Layer("A"), Layer("B")])
     face = _square(scene.mesh)

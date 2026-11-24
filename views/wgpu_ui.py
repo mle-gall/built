@@ -324,10 +324,10 @@ def _sheet_and_jobs(view, win) -> None:
 
 
 def _chrome_form(view, win) -> None:
-    """The form on top, if any (views/chrome_forms.py)."""
+    """The form on top, if any (rust/ingetrazo_render/src/forms_host.rs)."""
     if not hasattr(view.renderer, "ui_set_dialog"):
         return
-    from views import chrome_forms
+    from ingetrazo_render import chrome_forms
     chrome_forms.before_frame(view, win)
 
 
@@ -1357,7 +1357,7 @@ def _tree_action(win, view, action) -> None:
             rebuild()
         elif verb == "batchrename":
             from ingetrazo_core import browser_rename
-            from views import chrome_forms
+            from ingetrazo_render import chrome_forms
             model = browser_rename(scene, rk)
             if model is not None:
                 single = model.single_row()
@@ -1448,7 +1448,7 @@ def _tree_action(win, view, action) -> None:
                     win.tray.scenes.activate_view(scene.saved_views[index])
         elif verb == "linkselection":
             from ingetrazo_core import link_selection_sources
-            from views.chrome_forms import ask_choice
+            from ingetrazo_render.chrome_forms import ask_choice
             sources = link_selection_sources(win)
             if sources:
                 def choose(path):
@@ -2292,7 +2292,7 @@ def _link_action(win, view, g, key) -> None:
             return
         if key == "linksubset":
             import json
-            from views.chrome_forms import ask_text
+            from ingetrazo_render.chrome_forms import ask_text
             address = scene.occurrence_path(g)
             def accept(text):
                 if text is None or win.viewport.scene is not scene:
@@ -2502,7 +2502,7 @@ def _run(win, actions, source_view=None) -> None:
             continue
         if kind == "dlg":
             if chrome_dialogs.current_sheet(win) is None:
-                from views import chrome_forms
+                from ingetrazo_render import chrome_forms
                 chrome_forms.action(win, arg)
             continue
         if chrome_dialogs.modal(win):

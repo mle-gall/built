@@ -501,7 +501,7 @@ class Host:
             return True
         if self._modal():
             if cd.current_sheet(self.window) is None and cd._form_up(self.window):
-                # A form on the chrome (views/chrome_forms.py): its fields
+                # A form on the chrome (rust/ingetrazo_render/src/forms_host.rs): its fields
                 # type, Enter and Esc answer it; nothing else hears keys.
                 from views import wgpu_ui
                 ev = KeyEvent(pressed, key, modifiers, text, repeat)
@@ -658,7 +658,7 @@ class Host:
                     from views.wgpu_ui import free_area
                     self.viewport.camera.fit_box(*bounds, free=None if w._doc.model_views.visible else free_area(w))
         elif kind == "verb" and arg in _VERBS:
-            # The ported prompts (views/chrome_forms.py), by name: the
+            # The ported prompts (rust/ingetrazo_render/src/forms_host.rs), by name: the
             # window's registered document handlers.
             self._guard(f"verb {arg}", getattr(w, _VERBS[arg]))
         else:
@@ -672,7 +672,7 @@ class Host:
     def close(self):
         from app_shell import windows
         from ingetrazo_render import chrome_sheet
-        from views import chrome_forms
+        from ingetrazo_render import chrome_forms
         if self._device is not None:
             self.focus(False)
         chrome_sheet.close(self.window)

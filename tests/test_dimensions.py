@@ -406,7 +406,7 @@ def test_select_double_click_edits_dimension_text(monkeypatch, tmp_path):
     survives the .igz round trip."""
     from types import SimpleNamespace
     from ingetrazo_core import Vec3 as QVector3D
-    from views import chrome_forms
+    from ingetrazo_render import chrome_forms
     from core.dimension import Dimension
     from core.history import History
     from core.scene import Scene

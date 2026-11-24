@@ -54,7 +54,7 @@ def run(kind, steps):
     dialogs = []
     call_dialog = lambda *args, **kwargs: kwargs["done"]("Label")
     schedule = lambda delay, callback: callback()
-    with patch("views.chrome_forms.ask_text", side_effect=call_dialog), \
+    with patch("ingetrazo_render.chrome_forms.ask_text", side_effect=call_dialog), \
          patch("PySide6.QtCore.QTimer.singleShot", side_effect=schedule), \
          patch.object(ScaleManagerTool, "_run", staticmethod(lambda vp, g: dialogs.append(g.name))):
         if kind != "scale_manager":

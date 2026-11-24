@@ -54,7 +54,7 @@ fn divide_selected(win: &Bound<'_, PyAny>) -> PyResult<()> {
             (wrap_pyfunction!(divide_answer, py)?, win, mesh, edges),
         )?,
     )?;
-    py.import("views.chrome_forms")?
+    py.import("ingetrazo_render.chrome_forms")?
         .getattr("ask_number")?
         .call(
             (
@@ -247,7 +247,7 @@ fn join_segments(win: &Bound<'_, PyAny>) -> PyResult<()> {
     if !verdicts.is_truthy()? {
         return status(win, "No collinear segments to join.", 0);
     }
-    let forms = py.import("views.chrome_forms")?;
+    let forms = py.import("ingetrazo_render.chrome_forms")?;
     let matrix = placement(&scene)?;
     let mut points = Vec::new();
     let mut counts = [0usize; 5];

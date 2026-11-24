@@ -101,7 +101,7 @@ pub fn show_view_export<'py>(
     write: Py<PyAny>,
     preview: Py<PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let forms = py.import("views.chrome_forms")?;
+    let forms = py.import("ingetrazo_render.chrome_forms")?;
     let field = PyDict::new(py);
     field.set_item("pick", "save")?;
     field.set_item("filters", "SVG (*.svg)")?;

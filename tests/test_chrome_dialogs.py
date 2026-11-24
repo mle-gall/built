@@ -205,7 +205,7 @@ def test_information_call_sites_post_toasts(win, tmp_path, monkeypatch, method, 
     assert cd.history(win)[0].title == title
     if method == "_on_insert_faceme_image":
         # The opacity notice leaves the height question available.
-        from views import chrome_forms
+        from ingetrazo_render import chrome_forms
         form = chrome_forms.current(win)
         assert form.title == title
         form.press("cancel")

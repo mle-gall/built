@@ -213,7 +213,7 @@ fn choose_link_contents(
             ),
         )?,
     )?;
-    py.import("views.chrome_forms")?
+    py.import("ingetrazo_render.chrome_forms")?
         .getattr("ask_choice")?
         .call(
             (
