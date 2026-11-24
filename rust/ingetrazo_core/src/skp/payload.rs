@@ -6,9 +6,9 @@ use crate::math::{xyz, Vec3};
 use pyo3::{
     exceptions::PyValueError,
     prelude::*,
-    types::{PyDict, PyList},
+    types::{PyDict, PyList, PyTuple},
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 type Obj<'p> = Bound<'p, PyAny>;
 fn point<'p>(p: &Obj<'p>) -> PyResult<Obj<'p>> {
     if p.hasattr("x")? {
@@ -61,6 +61,13 @@ fn edge<'p>(mesh: &Obj<'p>, a: &Obj<'p>, b: &Obj<'p>) -> PyResult<Option<Obj<'p>
         return Ok(None);
     }
     Ok(Some(mesh.call_method1("find_edge", (a, b))?).filter(|e| !e.is_none()))
+}
+fn coordinate_key(point: &Obj<'_>) -> Option<[u64; 3]> {
+    if !point.is_exact_instance_of::<PyTuple>() && !point.is_exact_instance_of::<PyList>() {
+        return None;
+    }
+    let xyz: [f64; 3] = point.extract().ok()?;
+    Some(xyz.map(|v| if v == 0. { 0 } else { v.to_bits() }))
 }
 #[pyfunction]
 pub fn skp_soften_bulk(
@@ -231,12 +238,23 @@ fn faces<'p>(mesh: &Obj<'p>, input: &Obj<'p>, soft: &Obj<'p>, tick: &Obj<'p>) ->
             py.import("formats.fuse")?
                 .call_method1("soften_smooth_edges", (mesh,))?;
         } else {
+            let mut marked = HashSet::new();
             for (i, row) in soft.try_iter()?.enumerate() {
                 if i % 4096 == 0 {
                     tick.call0()?;
+                    marked.clear();
                 }
                 let row = row?;
-                if let Some(e) = edge(mesh, &row.get_item(0)?, &row.get_item(1)?)? {
+                let a = row.get_item(0)?;
+                let b = row.get_item(1)?;
+                // Faces supply flags independently, including both directions of
+                // a shared edge. Welding and marking that edge once is sufficient.
+                if let (Some(a), Some(b)) = (coordinate_key(&a), coordinate_key(&b)) {
+                    if !marked.insert((a.min(b), a.max(b))) {
+                        continue;
+                    }
+                }
+                if let Some(e) = edge(mesh, &a, &b)? {
                     e.setattr("soft", true)?;
                 }
             }
