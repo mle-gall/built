@@ -53,6 +53,7 @@ mod first_person_host_api;
 mod flip_host_api;
 mod follow_me_host_api;
 mod move_host_api;
+mod north_tool_api;
 mod offset_host_api;
 mod paint_host_api;
 mod planar_machine_api;
@@ -193,6 +194,7 @@ fn registration(module: &str, name: &str) -> Option<(&'static [Method], &'static
             stringify!(tape_measure_tool_api),
         ),
         ("tools.flip_host", "FlipHost") => (flip_host_api::METHODS, stringify!(flip_host_api)),
+        ("tools.north_host", "NorthTool") => (north_tool_api::METHODS, stringify!(north_tool_api)),
         ("tools.pushpull", "PushPullTool") => (pushpull::METHODS, stringify!(pushpull)),
         _ => return None,
     })
@@ -275,6 +277,7 @@ pub fn register_tool_adapter<'py>(cls: &Obj<'py>) -> Reply<'py> {
 
 mod curve_functions;
 mod move_functions;
+mod north_functions;
 mod offset_functions;
 mod paint_functions;
 mod selection;
@@ -290,6 +293,7 @@ pub fn register_tool_functions(namespace: &Bound<'_, PyDict>) -> PyResult<()> {
         "tools.select_host" => selection::METHODS,
         "tools.paint_host" => paint_functions::METHODS,
         "tools.offset_host" => offset_functions::METHODS,
+        "tools.north_host" => north_functions::METHODS,
         "tools.move_host" => move_functions::METHODS,
         "tools.walkthrough_host" => walk_functions::METHODS,
         "tools.rust_tools" => curve_functions::METHODS,
