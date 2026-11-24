@@ -45,6 +45,7 @@ fn unpack<'py, const N: usize>(value: &Obj<'py>) -> PyResult<[Obj<'py>; N]> {
 mod annotation_tool_api;
 mod arc_base_api;
 mod arc_tool_api;
+mod axis_magnet_api;
 mod center_arc_tool_api;
 mod change_axes_tool_api;
 mod dimension_tool_api;
@@ -56,6 +57,7 @@ mod flip_host_api;
 mod follow_me_host_api;
 mod freehand_tool_api;
 mod geo_path_tool_api;
+mod host_api;
 mod image_tool_api;
 mod line_tool_api;
 mod move_host_api;
@@ -65,6 +67,7 @@ mod paint_host_api;
 mod paste_host_api;
 mod place_group_host_api;
 mod planar_machine_api;
+mod plane_lock_api;
 mod position_camera_host_api;
 mod protractor_base_api;
 mod protractor_host_api;
@@ -75,6 +78,7 @@ mod rectangle_tool_api;
 mod rotate_host_api;
 mod rotate_tool_api;
 mod rotated_rectangle_tool_api;
+mod rust_tool_api;
 mod scale;
 mod scale_manager_tool_api;
 mod section_plane_tool_api;
@@ -233,6 +237,10 @@ fn registration(module: &str, name: &str) -> Option<(&'static [Method], &'static
             change_axes_tool_api::METHODS,
             stringify!(change_axes_tool_api),
         ),
+        ("tools.base", "AxisMagnet") => (axis_magnet_api::METHODS, stringify!(axis_magnet_api)),
+        ("tools.base", "PlaneLock") => (plane_lock_api::METHODS, stringify!(plane_lock_api)),
+        ("tools.rust_tool_base", "RustTool") => (rust_tool_api::METHODS, stringify!(rust_tool_api)),
+        ("tools.rust_tool_base", "_Host") => (host_api::METHODS, stringify!(host_api)),
         ("tools.pushpull", "PushPullTool") => (pushpull::METHODS, stringify!(pushpull)),
         _ => return None,
     })
@@ -314,11 +322,13 @@ pub fn register_tool_adapter<'py>(cls: &Obj<'py>) -> Reply<'py> {
 }
 
 mod curve_functions;
+mod drawing_functions;
 mod move_functions;
 mod north_functions;
 mod offset_functions;
 mod paint_functions;
 mod selection;
+mod tool_functions;
 mod walk_functions;
 #[pyfunction]
 pub fn register_tool_functions(namespace: &Bound<'_, PyDict>) -> PyResult<()> {
@@ -329,11 +339,13 @@ pub fn register_tool_functions(namespace: &Bound<'_, PyDict>) -> PyResult<()> {
         .extract()?;
     let methods = match module.as_str() {
         "tools.select_host" => selection::METHODS,
+        "tools.base" => drawing_functions::METHODS,
         "tools.paint_host" => paint_functions::METHODS,
         "tools.offset_host" => offset_functions::METHODS,
         "tools.north_host" => north_functions::METHODS,
         "tools.move_host" => move_functions::METHODS,
         "tools.walkthrough_host" => walk_functions::METHODS,
+        "tools.rust_tool_base" => tool_functions::METHODS,
         "tools.rust_tools" => curve_functions::METHODS,
         _ => {
             return Err(pyo3::exceptions::PyValueError::new_err(format!(
