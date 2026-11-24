@@ -53,6 +53,7 @@ mod fillet_host_api;
 mod first_person_host_api;
 mod flip_host_api;
 mod follow_me_host_api;
+mod geo_path_tool_api;
 mod move_host_api;
 mod north_tool_api;
 mod offset_host_api;
@@ -206,6 +207,9 @@ fn registration(module: &str, name: &str) -> Option<(&'static [Method], &'static
             section_plane_tool_api::METHODS,
             stringify!(section_plane_tool_api),
         ),
+        ("tools.geopath_host", "GeoPathTool") => {
+            (geo_path_tool_api::METHODS, stringify!(geo_path_tool_api))
+        }
         ("tools.pushpull", "PushPullTool") => (pushpull::METHODS, stringify!(pushpull)),
         _ => return None,
     })
