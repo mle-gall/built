@@ -12,6 +12,7 @@ mod component_replacement;
 mod component_rows;
 mod context_pick;
 mod context_placements;
+mod section_display;
 mod inspection_edits;
 mod context_edits;
 mod native_view_actions;
@@ -3233,6 +3234,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     close_documents::register(m)?;
     m.add_class::<component_rows::ComponentRows>()?;
     m.add_function(wrap_pyfunction!(context_placements::pick_candidates, m)?)?;
+    section_display::register(m)?;
     m.add_function(wrap_pyfunction!(context_placements::context_placements, m)?)?;
     m.add_function(wrap_pyfunction!(context_pick::context_pick, m)?)?;
     m.add_function(wrap_pyfunction!(component_rows::select_component_instances, m)?)?;
