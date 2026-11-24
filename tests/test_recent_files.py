@@ -15,11 +15,39 @@ if QApplication.instance() is None:
     QApplication([])
 
 
+def _reset():
+    for key in ("home/recent_files", "recent_files", "home/last_file", "home/meta"):
+        QSettings().remove(key)
+
+
+def test_old_recents_are_read_once_and_clearing_stays_cleared(tmp_path):
+    """The plain path list older builds kept is the list until the first
+    write, which drops it; Clear list then cannot bring it back."""
+    from core import recent
+    _reset()
+    old, pinned, new = (tmp_path / f"{n}.igz" for n in ("old", "pinned", "new"))
+    for p in (old, pinned, new):
+        p.write_text("{}")
+    QSettings().setValue("recent_files", [str(old), str(pinned)])
+    assert [r["path"] for r in recent.entries()] == [str(old), str(pinned)]
+    assert recent.menu() == [str(old), str(pinned)]
+    recent.remember(pinned, pinned=True)
+    recent.remember(new)
+    assert not QSettings().contains("recent_files")
+    assert recent.menu() == [str(pinned.resolve()), str(new.resolve()), str(old)]
+    recent.clear()
+    assert recent.menu() == [str(pinned.resolve())]                # a pin stays
+    assert not QSettings().value("home/last_file", "")
+    QSettings().setValue("recent_files", [str(old)])                # an older build wrote it
+    assert recent.menu() == [str(pinned.resolve())]
+    _reset()
+
+
 def test_recent_list_is_ordered_deduplicated_and_capped(tmp_path):
     from views.main_window import MainWindow
     win = MainWindow()
     try:
-        QSettings().setValue("recent_files", [])
+        _reset()
         docs = []
         for i in range(12):
             p = tmp_path / f"doc{i}.igz"
@@ -42,6 +70,6 @@ def test_recent_list_is_ordered_deduplicated_and_capped(tmp_path):
         assert any("doc9.igz" in t for t in labels)
         assert any("Clear" in t or "Limpiar" in t for t in labels)
     finally:
-        QSettings().setValue("recent_files", [])
+        _reset()
         win._saved_version = win.viewport.scene.version
         win.close()

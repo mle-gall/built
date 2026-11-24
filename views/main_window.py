@@ -8839,10 +8839,10 @@ class MainWindow(WorksessionMixin, QMainWindow):
 
     @staticmethod
     def _recent_paths() -> list:
-        raw = QSettings().value("recent_files", []) or []
-        if isinstance(raw, str):
-            raw = [raw]
-        return [str(x) for x in raw if str(x).strip()]
+        """File ▸ Open Recent: the recent documents still there (core.recent,
+        the start page's list)."""
+        from core import recent as home_recent
+        return home_recent.menu(limit=MainWindow._RECENT_MAX)
 
     def _remember_recent(self, path, doc=None) -> None:
         """Put ``path`` at the top of File ▸ Open Recent (native documents
@@ -8854,15 +8854,11 @@ class MainWindow(WorksessionMixin, QMainWindow):
         # What the start page shows of it: project, links, problems…
         from views import wgpu_start
         wgpu_start.note(self, path, doc=doc)
-        key = str(Path(path).resolve())
-        recent = [x for x in self._recent_paths() if x != key]
-        recent.insert(0, key)
-        QSettings().setValue("recent_files", recent[: self._RECENT_MAX])
 
     def _fill_recent_menu(self) -> None:
         menu = self._recent_menu
         menu.clear()
-        alive = [x for x in self._recent_paths() if Path(x).exists()]
+        alive = self._recent_paths()
         if not alive:
             none = menu.addAction(tr("(no recent documents)"))
             none.setEnabled(False)
@@ -8874,8 +8870,8 @@ class MainWindow(WorksessionMixin, QMainWindow):
             act.triggered.connect(lambda _c=False, q=p: self._open_recent(q))
         menu.addSeparator()
         clear = menu.addAction(tr("Clear list"))
-        clear.triggered.connect(
-            lambda: QSettings().setValue("recent_files", []))
+        from core import recent as home_recent
+        clear.triggered.connect(lambda: home_recent.clear())
 
     def _open_recent(self, path: Path) -> None:
         if not path.exists():

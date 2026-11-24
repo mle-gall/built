@@ -1,12 +1,15 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Document-owned repeatable exports. Writers receive a scoped model view."""
+import json
 from copy import copy, deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from uuid import uuid4
 
-FORMATS = ("ifc", "dxf", "glb", "obj", "dae", "svg", "pdf", "stl")
+from ingetrazo_core import delivery_error, delivery_formats
+
+FORMATS = tuple(delivery_formats())
 
 
 def records(scene):
@@ -14,45 +17,11 @@ def records(scene):
 
 
 def validate(record):
-    fmt = record.get("format")
-    if fmt not in FORMATS:
-        raise ValueError("Choose an export format")
-    for field in ("name", "destination"):
-        if not isinstance(record.get(field), str) or not record[field].strip():
-            raise ValueError(f"Enter a {field}")
-    scope = record.get("scope", "whole")
-    allowed = ["sheets"] if fmt == "pdf" else ["whole", "visible", "selection", "node"]
-    if fmt in ("dxf", "svg"):
-        allowed.append("scenes")
-    if scope not in allowed:
-        raise ValueError(f"{fmt.upper()} requires one of {', '.join(allowed)}")
-    if scope == "node" and not record.get("node"):
-        raise ValueError("Choose a project node")
-    suffix = Path(record["destination"]).suffix.lower()
-    if suffix != "." + fmt:
-        raise ValueError(f"Choose a destination ending in .{fmt}")
-    opts = record.get("options", {})
-    if not isinstance(opts, dict):
-        raise ValueError("Options must be an object")
-    names = opts.get("names", [])
-    if not isinstance(names, list) or any(not isinstance(name, str) for name in names):
-        raise ValueError("Scene and sheet names must be a list of names")
-    if fmt == "svg":
-        paper = opts.get("paper")
-        if paper is not None and paper != "screen" and not (
-                isinstance(paper, list) and len(paper) == 2 and
-                all(isinstance(n, (int, float)) and n > 0 for n in paper)):
-            raise ValueError("Choose screen size or a positive paper width and height")
-        frame = opts.get("frame")
-        if frame is not None and not (isinstance(frame, list) and len(frame) == 3 and
-                all(isinstance(n, (float, int)) for n in frame) and frame[2] > 0):
-            raise ValueError("Framing takes horizontal pan, vertical pan, and positive zoom")
-        if opts.get("picture") and scope != "visible":
-            raise ValueError("Choose Visible for a picture of the viewport")
-        if "faces" in opts and not isinstance(opts["faces"], dict):
-            raise ValueError("SVG face options must be an object")
-    if fmt == "stl" and opts.get("unit", "mm") not in ("mm", "cm", "m", "in", "ft"):
-        raise ValueError("Choose a supported STL unit")
+    """Raise ValueError with what makes ``record`` no delivery
+    (rust/ingetrazo_core/src/delivery_form.rs)."""
+    error = delivery_error(json.dumps(record, default=str))
+    if error:
+        raise ValueError(error)
 
 
 def _store(history, key, values):

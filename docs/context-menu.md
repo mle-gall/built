@@ -111,17 +111,24 @@ Isolate is left out: it shows placements, and loose geometry has none.
 | header | `n items` · `g groups, f faces, e edges` | `leaf.built ↗` · Linked file · read-only · path | `Stringer-02` · in leaf.built ↗ · read-only | `Dimension` · `4.00 m` / `Text` · “first words” | `Guide line` / `Guide point` | `Nothing here` · Model *(or the group being edited)* |
 | 1 | Repeat … | Repeat … *(greyed)* | Repeat … *(greyed)* | Repeat … | Repeat … | Repeat … |
 | 2 | Hide | Select contents | Select its linked file | Edit text… | Delete guide | Paste here *(if something is copied)* |
-| 3 | Isolate | Hide | Isolate | Zoom to \| Reveal selection | Delete all guides | Select all |
-| 4 | Zoom to \| Reveal selection | Isolate | Zoom to \| Reveal selection | | Zoom to \| Reveal selection | Unhide all |
-| 5 | File to… | Lock *(the placement's own padlock)* | Edit source | | | Show all *(if isolated)* |
-| 6 | Make group \| Make component… | Zoom to \| Reveal selection | Reload | | | Zoom extents |
-| 7 | Reverse faces \| Orient faces *(if faces)* | Edit source | | | | Delete all guides *(if any)* |
+| 3 | Isolate | Hide | Hide | Zoom to \| Reveal selection | Delete all guides | Select all |
+| 4 | Zoom to \| Reveal selection | Isolate | Isolate | | Zoom to \| Reveal selection | Unhide all |
+| 5 | File to… | Lock *(the placement's own padlock)* | Zoom to \| Reveal selection | | | Show all *(if isolated)* |
+| 6 | Make group \| Make component… | Zoom to \| Reveal selection | Edit source | | | Zoom extents |
+| 7 | Reverse faces \| Orient faces *(if faces)* | Edit source | Reload | | | Delete all guides *(if any)* |
 | 8 | Intersect: Model \| Selection \| Context | Reload | | | | |
 | 9 | Soften / Smooth edges… | Include nested files *(check)* | | | | |
 | 10 | Flip along: Red \| Green \| Blue | | | | | |
 
 Hide is not offered on texts, dimensions or guides: Edit ▸ Hide does not
-act on them (`MainWindow._hideable`).
+act on them (`MainWindow._hideable`). On a part inside a linked file it
+hides this document's view of the part, as the tree's eye does, and edits
+nothing in the source.
+
+The rows, labels, keys and checks of every kind come from one table,
+`rust/ingetrazo_render/src/verbs.rs`. The inspector offers the same entries
+(same ids and labels; a few shorter chip names: Edit, Group, Component), and
+a linked file's tree row takes its file verbs from it too.
 
 ### Other hits
 

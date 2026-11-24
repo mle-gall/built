@@ -2,35 +2,6 @@
 //! the existing recent-file worker. Export reuses the delivery form's model.
 use pyo3::{exceptions::PyInterruptedError, prelude::*, types::PyDict};
 
-#[pyfunction]
-pub fn start_backdrop(
-    open_document: bool,
-    last: String,
-    recents: &Bound<'_, PyAny>,
-    thumbnail: &Bound<'_, PyAny>,
-    sheet: &Bound<'_, PyAny>,
-) -> PyResult<String> {
-    if open_document {
-        return Ok(String::new());
-    }
-    // Pinning changes the display order. Try the actual last document first,
-    // then the other cached file previews, independently of the search filter.
-    let mut paths = vec![last];
-    for item in recents.try_iter()? {
-        let path = item?.get_item("path")?.extract::<String>()?;
-        if path != paths[0] {
-            paths.push(path);
-        }
-    }
-    for path in paths.into_iter().filter(|p| !p.is_empty()) {
-        let key: String = thumbnail.call1((sheet, path))?.extract()?;
-        if !key.is_empty() {
-            return Ok(key);
-        }
-    }
-    Ok(String::new())
-}
-
 #[pyclass]
 pub struct ExportSheet {
     form: Py<PyAny>,

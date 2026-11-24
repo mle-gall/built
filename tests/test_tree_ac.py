@@ -294,8 +294,11 @@ class _Action:
 
 
 def _verbs(win, sel):
-    labels = ["Hide", "Explode Group", "Make Group", "Make Component…"] + wu.MORE
-    win._ui_edit_actions = {lb: _Action(lb) for lb in labels}
+    """The inspector's verb labels, from the verb source (views/verbs.py),
+    for a window whose every Edit verb is available."""
+    for name in ("_hideable", "_makes_faces", "_bridgeable", "_replacement_choices"):
+        setattr(win, name, lambda sel: True)
+    win._single_textured_face = lambda: None
     return {label for _id, label, _k, _run, _on, _more in wu._commands(win, sel)}
 
 
@@ -316,7 +319,7 @@ def test_inspector_verbs_follow_the_selection_kind(ui):
     for sel in ([part], [link]):
         got = _verbs(win, sel)
         assert {"Isolate", "Hide"} <= got and not got & editing, got
-        assert not got & {"Reverse Faces", "Soften / Smooth Edges"}, got
+        assert not got & {"Reverse faces", "Soften / Smooth edges…"}, got
     # This document's own group: the full set.
     assert {"File to…", "Isolate", "Hide", "Edit", "Explode", "Component"} <= _verbs(win, [own])
     # Raw geometry: a group can be made, never a component, never filed.
