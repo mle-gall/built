@@ -1,0 +1,10 @@
+{
+"missing": [
+  {"result":null,"undo":0,"dialogs":[],"band":[],"groups":0,"edges":0,"dimensions":[],"texts":[],"paths":[],"images":[],"sections":[],"north":0.0},
+  {"result":false,"undo":0,"dialogs":[],"band":[],"groups":0,"edges":0,"dimensions":[],"texts":[],"paths":[],"images":[],"sections":[],"north":0.0}],
+"open": [
+  {"result":null,"undo":0,"dialogs":[],"band":[],"groups":0,"edges":0,"dimensions":[],"texts":[],"paths":[],"images":[],"sections":[],"north":0.0},
+  {"result":null,"undo":0,"dialogs":["A"],"band":[],"groups":0,"edges":0,"dimensions":[],"texts":[],"paths":[],"images":[],"sections":[],"north":0.0},
+  {"result":false,"undo":0,"dialogs":["A"],"band":[],"groups":0,"edges":0,"dimensions":[],"texts":[],"paths":[],"images":[],"sections":[],"north":0.0},
+  {"result":null,"undo":0,"dialogs":["A"],"band":[],"groups":0,"edges":0,"dimensions":[],"texts":[],"paths":[],"images":[],"sections":[],"north":0.0}]
+}

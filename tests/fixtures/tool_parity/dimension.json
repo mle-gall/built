@@ -1,0 +1,14 @@
+{
+"place": [
+  {"result":null,"undo":0,"dialogs":[],"band":[],"groups":0,"edges":0,"dimensions":[],"texts":[],"paths":[],"images":[],"sections":[],"north":0.0},
+  {"result":null,"undo":0,"dialogs":[],"band":[[[0.0,0.0,0.0],[2.0,1.0,0.0]]],"groups":0,"edges":0,"dimensions":[],"texts":[],"paths":[],"images":[],"sections":[],"north":0.0},
+  {"result":null,"undo":0,"dialogs":[],"band":[[[0.0,0.0,0.0],[0.0,0.0,0.0]],[[2.0,1.0,0.0],[2.0,1.0,0.0]],[[0.0,0.0,0.0],[2.0,1.0,0.0]]],"groups":0,"edges":0,"dimensions":[],"texts":[],"paths":[],"images":[],"sections":[],"north":0.0},
+  {"result":null,"undo":0,"dialogs":[],"band":[[[0.0,0.0,0.0],[0.0,3.0,0.0]],[[2.0,1.0,0.0],[2.0,3.0,0.0]],[[0.0,3.0,0.0],[2.0,3.0,0.0]]],"groups":0,"edges":0,"dimensions":[],"texts":[],"paths":[],"images":[],"sections":[],"north":0.0},
+  {"result":null,"undo":1,"dialogs":[],"band":[],"groups":0,"edges":0,"dimensions":[[[0.0,0.0,0.0],[2.0,1.0,0.0],[0.0,3.0,0.0],"x"]],"texts":[],"paths":[],"images":[],"sections":[],"north":0.0},
+  {"result":null,"undo":0,"dialogs":[],"band":[],"groups":0,"edges":0,"dimensions":[],"texts":[],"paths":[],"images":[],"sections":[],"north":0.0}],
+"degenerate": [
+  {"result":null,"undo":0,"dialogs":[],"band":[],"groups":0,"edges":0,"dimensions":[],"texts":[],"paths":[],"images":[],"sections":[],"north":0.0},
+  {"result":null,"undo":0,"dialogs":[],"band":[],"groups":0,"edges":0,"dimensions":[],"texts":[],"paths":[],"images":[],"sections":[],"north":0.0},
+  {"result":null,"undo":0,"dialogs":[],"band":[[[0.0,0.0,0.0],[2.0,1.0,0.0]]],"groups":0,"edges":0,"dimensions":[],"texts":[],"paths":[],"images":[],"sections":[],"north":0.0},
+  {"result":null,"undo":0,"dialogs":[],"band":[],"groups":0,"edges":0,"dimensions":[],"texts":[],"paths":[],"images":[],"sections":[],"north":0.0}]
+}

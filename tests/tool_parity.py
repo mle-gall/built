@@ -1560,6 +1560,13 @@ def record(which=("line", "select", "rectangle", "move", "circle", "rotated_rect
     if "change_axes" in which:
         cases = {name: run_change_axes(steps) for name, steps in CHANGE_AXES_SCENARIOS.items()}
         (FIXTURES / "change_axes.json").write_text(_compact(cases))
+    from tests import remaining_tool_parity as remaining
+    for kind in set(which).intersection(remaining.CASES):
+        cases = {name: remaining.run(kind, steps) for name, steps in remaining.CASES[kind].items()}
+        (FIXTURES / f"{kind}.json").write_text(_compact(cases))
+    if "solid_tools" in which:
+        cases = {name: remaining.run_solid(*args) for name, args in remaining.solid_cases().items()}
+        (FIXTURES / "solid_tools.json").write_text(_compact(cases))
     if "followme" in which:
         cases = {name: run_followme(steps) for name, steps in FOLLOWME_SCENARIOS.items()}
         (FIXTURES / "followme.json").write_text(_compact(cases))
