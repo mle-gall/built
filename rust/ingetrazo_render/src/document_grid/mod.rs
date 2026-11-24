@@ -20,6 +20,7 @@ fn subdivide(
     offset: usize,
     depth: usize,
     target: usize,
+    single: bool,
     cells: &mut Vec<Cell>,
 ) {
     let mut lo = DVec3::splat(f64::INFINITY);
@@ -28,14 +29,33 @@ fn subdivide(
         lo = lo.min(tris[i].centre);
         hi = hi.max(tris[i].centre);
     }
-    let span = (hi - lo).max(DVec3::splat(1e-9));
-    let mean = (span.x.ln() + span.y.ln() + span.z.ln()) / 3.;
-    let n = (span / mean.exp() * (order.len() as f64 / target as f64).powf(1. / 3.))
+    // Centroid extents, weights and the subtraction from the cell origin
+    // retain the input precision. Dividing the int64 bin counts by their
+    // widths promotes the final scale to f64 in both cases.
+    let bins = (order.len() as f64 / target as f64).powf(1. / 3.);
+    let (span, counts) = if single {
+        let extent = (hi.as_vec3() - lo.as_vec3()).max(glam::Vec3::splat(1e-9));
+        let log_mean = (extent.x.ln() + extent.y.ln() + extent.z.ln()) / 3.;
+        (
+            extent.as_dvec3(),
+            (extent / log_mean.exp() * bins as f32).as_dvec3(),
+        )
+    } else {
+        let extent = (hi - lo).max(DVec3::splat(1e-9));
+        let log_mean = (extent.x.ln() + extent.y.ln() + extent.z.ln()) / 3.;
+        (extent, extent / log_mean.exp() * bins)
+    };
+    let n = counts
         .to_array()
         .map(|v| v.round_ties_even().max(1.) as i64);
     let scale = DVec3::from_array(n.map(|i| i as f64)) / span;
     let key = |i: usize| {
-        let c = ((tris[i].centre - lo) * scale).to_array();
+        let delta = if single {
+            (tris[i].centre.as_vec3() - lo.as_vec3()).as_dvec3()
+        } else {
+            tris[i].centre - lo
+        };
+        let c = (delta * scale).to_array();
         let at = |axis: usize| (c[axis] as i64).min(n[axis] - 1);
         at(0)
             .wrapping_mul(n[1])
@@ -53,7 +73,7 @@ fn subdivide(
         }
         let part = &mut order[start..end];
         if part.len() > 2 * target && depth < 3 {
-            subdivide(tris, part, offset + start, depth + 1, target, cells);
+            subdivide(tris, part, offset + start, depth + 1, target, single, cells);
         } else {
             let mut lo = DVec3::splat(f64::INFINITY);
             let mut hi = -lo;
@@ -95,6 +115,7 @@ fn split_chunk_spans<'py>(chunk: &Obj<'py>, depth: usize, force: bool) -> PyResu
     let target = h.getattr("_SPAN_CELL_TRIS")?.extract::<usize>()?.max(1);
     // Form endpoints and centroids in the input dtype before comparing in f64.
     let centre = v.add(e.add(&f)?.div(3.)?)?;
+    let single = centre.getattr("dtype")?.getattr("name")?.eq("float32")?;
     let a = v.add(&e)?;
     let b = v.add(&f)?;
     let arrays = [&centre, &v, &a, &b].map(|a| a.extract::<PyArrayLike2<f64, AllowTypeChange>>());
@@ -121,7 +142,7 @@ fn split_chunk_spans<'py>(chunk: &Obj<'py>, depth: usize, force: bool) -> PyResu
     let (order, cells) = py.detach(move || {
         let mut order = (0..n).collect::<Vec<_>>();
         let mut cells = Vec::new();
-        subdivide(&tris, &mut order, 0, depth, target, &mut cells);
+        subdivide(&tris, &mut order, 0, depth, target, single, &mut cells);
         (order, cells)
     });
     let order = order.into_pyarray(py);
