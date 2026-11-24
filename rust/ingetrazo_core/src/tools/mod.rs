@@ -12,6 +12,7 @@ mod rotate;
 pub mod gesture;
 pub mod line;
 pub mod move_tool;
+pub mod push_pull;
 pub mod plane;
 pub mod preview;
 pub mod rectangle;
@@ -346,6 +347,7 @@ pub fn new_tool(kind: &str) -> Option<Box<dyn Tool>> {
         "pie" => Some(Box::new(arc::CenterArcTool::pie())),
         "rotate" => Some(Box::new(rotate::Rotate::default())),
         "scale" => Some(Box::new(scale_tool::ScaleTool::default())),
+        "pushpull" => Some(Box::new(push_pull::PushPull::default())),
         "move" => Some(Box::new(move_tool::MoveTool::default())),
         _ => None,
     }

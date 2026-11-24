@@ -152,14 +152,6 @@ def _made_since(mesh, snap, kind: str):
 # vertex-by-vertex and degenerate the wall quads. Treated as a no-op push.
 _MIN_EXTRUDE = 2e-4
 
-#: Below this many pixels between press and release, the "drag" was a
-#: jittery click, not a stroke: the release belongs to the click-click
-#: rhythm and must not commit. Same release-vs-click disambiguation as
-#: Follow Me (tools/followme.py), same threshold.
-_DRAG_PX = 6.0
-
-
-
 
 def _paint_of(face) -> dict:
     """The base face's paint, ready to stamp on the geometry a push creates.
@@ -220,12 +212,8 @@ class PushPullOperation:
         # the neighbours — the classic way to stack floors.
         self._keep_base: bool = False
         # A Ctrl TAP hands the operation over to the modifier: the starting
-        # face stays put on THIS push, which is then spent (the classic
-        # one-shot modifier, like Copy in Move). `_ctrl_used` remembers that
-        # Ctrl was held when the gesture began, so its release does not
-        # toggle the mode on the way out.
+        # face stays put on THIS push, which is then spent (the one-shot modifier).
         self._keep_mode: bool = False
-        self._ctrl_used: bool = False
         # Deepest allowed inward push (positive, along −normal), computed at
         # drag start; None = unbounded. The "Offset limited to" clamp.
         self._limit_in: float | None = None
@@ -326,17 +314,6 @@ class PushPullOperation:
         # (the BIM-grade guard); _commit surfaces it in the status bar.
         self._refused: bool = False
         self._topped_out: bool = False
-        # One "too small to commit" hint per drag: a click that does nothing
-        # with no word reads as a broken tool, but repeating it on every tiny
-        # click is its own annoyance. Cleared in _reset, so each drag gets one.
-        self._tiny_hint_shown: bool = False
-        # ---- Press-drag-release --------------------------------------------
-        # Where the press landed and where the cursor is now (screen px):
-        # the release compares the two to tell a stroke from a jittery click.
-        # Drags armed without a real press — the hot-retype replay, the test
-        # harness — leave both None, and on_release copes by doing nothing.
-        self._press_screen: tuple | None = None
-        self._last_screen: tuple | None = None
         # ---- Drag preview -----------------------------------------------
         # A free face and a Ctrl-copy show the naive sweep as an overlay — cap
         # plus wall quads, nothing touched in the mesh. An attached face is
@@ -955,9 +932,6 @@ class PushPullOperation:
         self._infer_cache = None       # per-drag projected-vertex candidates
         self._infer_boxes = None       # ... and where they fall on screen
         self._refused = False
-        self._tiny_hint_shown = False
-        self._press_screen = None
-        self._last_screen = None
         self._light_faces = []
         self._light_rings = []
         self._last = None             # the retype window closes with the drag
