@@ -190,7 +190,7 @@ pub fn format_length(metres: f64, units: &str, decimals: i64, show_unit: bool) -
             let mut feet = py_floordiv(total_in, 12.0) as i128;
             let mut inches = total_in - (feet as f64) * 12.0;
             if u == "ft-in" {
-                if crate::pyfloat::round(inches, n) >= 12.0 {
+                if crate::model::pyfloat::round(inches, n) >= 12.0 {
                     feet += 1;
                     inches = 0.0;
                 }
@@ -223,7 +223,7 @@ pub fn format_signed_level(metres: f64, units: &str, decimals: i64) -> String {
     let d = decimals.max(0) as usize;
     let v = metres;
     if u == "m" {
-        if crate::pyfloat::round(v, d) == 0.0 {
+        if crate::model::pyfloat::round(v, d) == 0.0 {
             return format!("±{:.d$}", 0.0);
         }
         if !v.is_finite() {
