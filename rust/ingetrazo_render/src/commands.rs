@@ -407,14 +407,16 @@ pub fn command_registry(
             ),
         );
     }
-    // Reports are also available on platforms without a system menu bar.
+    // These sheets also open from the registry on hosts without a system menu bar.
     if menu.iter().all(|r| r.0.starts_with("extension:")) {
-        for (id, label) in [
-            ("about", "About Built"),
-            ("cutlist", "Cut list"),
-            ("extensions", "Extension Manager"),
+        for (id, label, key) in [
+            ("about", "About Built", ""),
+            ("cutlist", "Cut list", ""),
+            ("extensions", "Extension Manager", ""),
+            ("prefs", "Settings…", "Ctrl+,"),
+            ("units", "Units…", "Ctrl+U"),
         ] {
-            menu.push((id.into(), "Window".into(), label.into(), String::new()));
+            menu.push((id.into(), "Window".into(), label.into(), key.into()));
         }
     }
     // Platform actions (for example Hide Built) keep their factory bindings.

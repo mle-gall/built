@@ -19,7 +19,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
-from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
+from tests.native_tree import action
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 from core import _native, links  # noqa: E402
 from core.group import Group, copy_group, iter_placements  # noqa: E402
@@ -30,8 +31,6 @@ from core.mesh import DeferredMesh, Mesh  # noqa: E402
 from core.purge import iter_groups  # noqa: E402
 from core.scene import Scene  # noqa: E402
 from formats import igz  # noqa: E402
-
-_app = QApplication.instance() or QApplication([])
 
 
 # ---- a small source -------------------------------------------------------
@@ -412,7 +411,8 @@ def test_a_nested_file_that_cannot_be_read_keeps_what_it_showed(tmp_path):
     assert _parts(link)[0].owner is link
 
 
-def test_a_nested_link_in_the_window_is_watched_and_listed(win, tmp_path):
+def test_a_nested_link_in_the_window_is_watched_and_listed(native_host, tmp_path):
+    win = native_host.window
     host_scene = win.viewport.scene
     _h, _l, _o, mid_path, leaf_path = _nested_host(tmp_path)
     link = links.make_link(host_scene, mid_path, host_path=tmp_path / "host.igz")
@@ -646,19 +646,6 @@ def test_the_nested_files_copies_of_their_tags_go(tmp_path):
 
 # ---- 3. the window ---------------------------------------------------------
 
-@pytest.fixture
-def win(monkeypatch, tmp_path, private_settings):
-    monkeypatch.setenv("INGETRAZO_AUTOSAVE_DIR", str(tmp_path / "autosave"))
-    from views.main_window import MainWindow
-    w = MainWindow()
-    monkeypatch.setattr(QMessageBox, "exec", lambda box: 0)
-    yield w
-    for d in w.documents():
-        d.saved_content = d.viewport.scene.content_version
-    w._saved_version = w.viewport.scene.version
-    w.close()
-
-
 def _place(win, tmp_path):
     src = _source(tmp_path / "Site.igz")
     scene = win.viewport.scene
@@ -671,7 +658,8 @@ def _place(win, tmp_path):
     return scene, link, other, src
 
 
-def test_make_unique_on_a_link_unlinks_it(win, tmp_path, monkeypatch):
+def test_make_unique_on_a_link_unlinks_it(native_host, tmp_path, monkeypatch):
+    win = native_host.window
     scene, link, other, src = _place(win, tmp_path)
     vp = win.viewport
     shown = []
@@ -694,7 +682,8 @@ def test_make_unique_on_a_link_unlinks_it(win, tmp_path, monkeypatch):
     assert_own(link, [other])
 
 
-def test_the_last_placement_is_no_longer_watched(win, tmp_path):
+def test_the_last_placement_is_no_longer_watched(native_host, tmp_path):
+    win = native_host.window
     scene, link, other, src = _place(win, tmp_path)
     scene.groups.remove(other)
     scene.version += 1
@@ -710,7 +699,8 @@ def test_the_last_placement_is_no_longer_watched(win, tmp_path):
     assert watcher.paths == []
 
 
-def test_make_unique_of_what_holds_a_link_keeps_the_link(win, tmp_path):
+def test_make_unique_of_what_holds_a_link_keeps_the_link(native_host, tmp_path):
+    win = native_host.window
     scene, link, other, src = _place(win, tmp_path)
     holder = Group(Mesh(), name="holder")
     holder.adopt([link])
@@ -723,7 +713,8 @@ def test_make_unique_of_what_holds_a_link_keeps_the_link(win, tmp_path):
     assert_live(inner, src)
 
 
-def test_make_unique_from_the_browser_unlinks_too(win, tmp_path, monkeypatch):
+def test_make_unique_from_the_browser_unlinks_too(native_host, tmp_path, monkeypatch):
+    win = native_host.window
     scene, link, other, src = _place(win, tmp_path)
     plain = Group(_square(x=40), name="Silla")
     plain.xform = QMatrix4x4()
@@ -732,10 +723,10 @@ def test_make_unique_from_the_browser_unlinks_too(win, tmp_path, monkeypatch):
     vp = win.viewport
     shown = []
     monkeypatch.setattr(vp, "flash_status", lambda text, *a: shown.append(text))
-    panel = win.project_browser.outliner
+    scene.select([link, plain])
     look, proto = _look(link), plain.mesh
     steps = len(vp.history.undo_stack)
-    assert panel.make_unique_rows([link, plain])
+    action(native_host, "unique", "i:" + plain.uid)
     assert len(vp.history.undo_stack) == steps + 1          # one step
     assert_own(link, [other])
     assert _look(link) == look and plain.mesh is not proto

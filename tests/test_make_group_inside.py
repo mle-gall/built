@@ -8,6 +8,7 @@ from __future__ import annotations
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 
+from tests.native_tree import action, group_rows
 from core import outliner
 from core.group import Group, copy_group, world_mesh
 from core.mesh import Mesh
@@ -38,20 +39,6 @@ def _points(group, groups):
             else v.position
         out.append((round(p.x(), 6), round(p.y(), 6), round(p.z(), 6)))
     return sorted(out)
-
-
-def _tree_window():
-    """A window on an empty model (it starts with a scale figure)."""
-    from views.main_window import MainWindow
-    win = MainWindow()
-    win.viewport.scene.groups.clear()
-    win.viewport.scene.version += 1
-    return win
-
-
-def _tree_close(win):
-    win._saved_version = win.viewport.scene.version
-    win.close()
 
 
 def _window(native_host):
@@ -197,86 +184,47 @@ def test_at_the_model_nothing_changes(native_host):
 
 # --- the Browser's right-click ------------------------------------------------
 
-def _browser(win):
-    panel = win.project_browser.outliner
-    panel.refresh()
-    return panel
+def test_the_browser_groups_rows_inside_their_group(native_host):
+    win = _window(native_host)
+    scene = win.viewport.scene
+    a, b = _placed("A", 2.0), _placed("B", 4.0)
+    muro = Group(_quad(size=8.0), name="Muro")
+    muro.xform = QMatrix4x4()
+    muro.component = False
+    muro.children = [a, b]
+    scene.groups.append(muro)
+    scene.select([a, b])
+    action(native_host, "group", "i:" + a.uid)
+    assert scene.groups == [muro]
+    assert len(muro.children) == 1 and muro.children[0].children == [a, b]
 
 
-def test_the_browser_groups_rows_inside_their_group():
-    win = _tree_window()
-    try:
-        scene = win.viewport.scene
-        a, b = _placed("A", 2.0), _placed("B", 4.0)
-        muro = Group(_quad(size=8.0), name="Muro")
-        muro.xform = QMatrix4x4()
-        muro.component = False
-        muro.children = [a, b]
-        scene.groups.append(muro)
-        panel = _browser(win)
-        panel.make_from_rows([a, b], "group")
-        assert scene.groups == [muro]
-        assert len(muro.children) == 1 and muro.children[0].children == [a, b]
-    finally:
-        _tree_close(win)
-
-
-def test_the_browser_makes_a_component_of_one_row():
+def test_the_browser_makes_a_component_of_one_row(native_host):
     from views import chrome_forms
-    win = _tree_window()
-    try:
-        scene = win.viewport.scene
-        a = Group(_quad(), name="A")
-        scene.groups.append(a)
-        panel = _browser(win)
-        panel.make_from_rows([a], "component")
-        form = chrome_forms.current(win)
-        form.receive("text", "Pieza")
-        form.press("ok")
-        assert scene.groups[0].is_component()
-        assert scene.groups[0].name == "Pieza"
-    finally:
-        _tree_close(win)
+    win = _window(native_host)
+    scene = win.viewport.scene
+    a = Group(_quad(), name="A")
+    scene.groups.append(a)
+    scene.select([a])
+    action(native_host, "component", "i:" + a.uid)
+    form = chrome_forms.current(win)
+    form.receive("text", "Pieza")
+    form.press("ok")
+    assert scene.groups[0].is_component()
+    assert scene.groups[0].name == "Pieza"
 
 
-def _menu_texts(panel, item):
-    """The texts of the row's right-click menu, read while it is open and
-    then closed (a modal menu would wait for a click no test makes)."""
-    from PySide6.QtCore import QTimer
-    from PySide6.QtWidgets import QApplication
-    texts = []
-
-    def read():
-        menu = QApplication.activePopupWidget()
-        if menu is None:
-            QTimer.singleShot(10, read)
-            return
-        texts.extend(act.text() for act in menu.actions())
-        menu.close()
-    QTimer.singleShot(0, read)
-    panel._on_context_menu(panel.tree.visualItemRect(item).center())
-    return texts
-
-
-def test_the_browser_menu_offers_both():
+def test_the_browser_menu_offers_both(native_host):
     from core.i18n import tr
-    win = _tree_window()
-    try:
-        scene = win.viewport.scene
-        a, b = _placed("A", 0.0), _placed("B", 3.0)
-        scene.groups.extend([a, b])
-        panel = _browser(win)
-        top = panel.tree.topLevelItem(0)
-        item = top.child(0)
-        panel.tree.setCurrentItem(item)
-        texts = _menu_texts(panel, item)
-        assert tr("Make Component") in texts
-        assert tr("Make Group") not in texts       # one row: nothing to group
-        for i in range(top.childCount()):
-            top.child(i).setSelected(True)
-        assert tr("Make Group") in _menu_texts(panel, item)
-    finally:
-        _tree_close(win)
+    win = _window(native_host)
+    scene = win.viewport.scene
+    a, b = _placed("A", 0.0), _placed("B", 3.0)
+    scene.groups.extend([a, b])
+    texts = group_rows(native_host, a)
+    assert tr("Make Component") in texts
+    assert tr("Make Group") not in texts
+    scene.select([a, b])
+    assert tr("Make Group") in group_rows(native_host, a)
 
 
 # --- Explode inside an open group ---------------------------------------------
@@ -328,163 +276,113 @@ def test_explode_inside_a_component_still_refuses(native_host):
 
 # --- when the rows cannot be grouped, say why ---------------------------------
 
-def _menu_entry(panel, item, text):
-    """The row menu's action called ``text`` (enabled and tooltip), read
-    while the menu is open."""
-    from PySide6.QtCore import QTimer
-    from PySide6.QtWidgets import QApplication
-    found = {}
-
-    def read():
-        menu = QApplication.activePopupWidget()
-        if menu is None:
-            QTimer.singleShot(10, read)
-            return
-        for act in menu.actions():
-            if act.text() == text:
-                found["enabled"] = act.isEnabled()
-                found["tip"] = act.toolTip()
-        menu.close()
-    QTimer.singleShot(0, read)
-    panel._on_context_menu(panel.tree.visualItemRect(item).center())
-    return found
-
-
-def test_locked_rows_grey_out_make_group_and_say_why():
+def test_locked_rows_grey_out_make_group_and_say_why(native_host):
     from core.i18n import tr
-    win = _tree_window()
-    try:
-        scene = win.viewport.scene
-        a, b = _placed("A", 0.0), _placed("B", 3.0)
-        a.locked = True
-        scene.groups.extend([a, b])
-        panel = _browser(win)
-        top = panel.tree.topLevelItem(0)
-        for i in range(top.childCount()):
-            top.child(i).setSelected(True)
-        why = tr("Locked or hidden rows cannot be grouped: unlock or show "
-                 "them first")
-        entry = _menu_entry(panel, top.child(1), tr("Make Group"))
-        assert entry == {"enabled": False, "tip": why}
-        said = []
-        win.viewport.flash_status = lambda text, *a_, **k: said.append(text)
-        panel.make_from_rows([a, b], "group")
-        assert said == [why]
-        assert len(scene.groups) == 2                 # nothing grouped
-    finally:
-        _tree_close(win)
+    win = _window(native_host)
+    scene = win.viewport.scene
+    a, b = _placed("A", 0.0), _placed("B", 3.0)
+    a.locked = True
+    scene.groups.extend([a, b])
+    scene.select([a, b])
+    why = tr("Locked or hidden rows cannot be grouped: unlock or show "
+             "them first")
+    assert group_rows(native_host, b)[tr("Make Group")] == why
+    said = []
+    win.viewport.flash_status = lambda text, *a_, **k: said.append(text)
+    scene.select([a, b])
+    action(native_host, "group", "i:" + a.uid)
+    assert said == [why]
+    assert len(scene.groups) == 2                 # nothing grouped
 
 
-def test_rows_from_different_groups_say_so():
+def test_rows_from_different_groups_say_so(native_host):
     from core.i18n import tr
-    win = _tree_window()
-    try:
-        scene = win.viewport.scene
-        a, b = _placed("A", 0.0), _placed("B", 3.0)
-        muro = Group(_quad(size=8.0), name="Muro")
-        muro.xform = QMatrix4x4()
-        muro.component = False
-        muro.children = [b]
-        scene.groups.extend([a, muro])
-        panel = _browser(win)
-        said = []
-        win.viewport.flash_status = lambda text, *a_, **k: said.append(text)
-        panel.make_from_rows([a, b], "group")
-        assert said == [tr("Choose rows inside the same group to group "
-                           "them")]
-    finally:
-        _tree_close(win)
+    win = _window(native_host)
+    scene = win.viewport.scene
+    a, b = _placed("A", 0.0), _placed("B", 3.0)
+    muro = Group(_quad(size=8.0), name="Muro")
+    muro.xform = QMatrix4x4()
+    muro.component = False
+    muro.children = [b]
+    scene.groups.extend([a, muro])
+    said = []
+    win.viewport.flash_status = lambda text, *a_, **k: said.append(text)
+    scene.select([a, b])
+    action(native_host, "group", "i:" + a.uid)
+    assert said == [tr("Choose rows inside the same group to group "
+                       "them")]
 
 
-def test_rows_inside_a_component_grey_out_make_group_and_say_why():
+def test_rows_inside_a_component_grey_out_make_group_and_say_why(native_host):
     """The report: two rows inside an open component, Make Group did
     nothing — it is refused there, now greyed with the reason."""
     from core.i18n import tr
-    win = _tree_window()
-    try:
-        scene = win.viewport.scene
-        a, b = _placed("A", 0.0), _placed("B", 3.0)
-        comp = Group(_quad(size=8.0), name="Mueble")
-        comp.xform = QMatrix4x4()
-        comp.children = [a, b]                      # a component of groups
-        scene.groups.append(comp)
-        assert comp.is_component()
-        win.viewport.begin_group_edit(comp)         # open, as in the report
-        panel = _browser(win)
-        item_a, item_b = panel._items[id(a)], panel._items[id(b)]
-        item_a.setSelected(True)
-        item_b.setSelected(True)
-        why = tr("Components keep their parts: Make Unique first to change "
-                 "what is inside one")
-        assert _menu_entry(panel, item_b, tr("Make Group")) == {
-            "enabled": False, "tip": why}
-        assert _menu_entry(panel, item_b, tr("Make Component")) == {
-            "enabled": False, "tip": why}
-        said = []
-        win.viewport.flash_status = lambda text, *a_, **k: said.append(text)
-        panel.make_from_rows([a, b], "group")
-        assert said == [why] and comp.children == [a, b]
-    finally:
-        _tree_close(win)
+    win = _window(native_host)
+    scene = win.viewport.scene
+    a, b = _placed("A", 0.0), _placed("B", 3.0)
+    comp = Group(_quad(size=8.0), name="Mueble")
+    comp.xform = QMatrix4x4()
+    comp.children = [a, b]                      # a component of groups
+    scene.groups.append(comp)
+    assert comp.is_component()
+    win.viewport.begin_group_edit(comp)         # open, as in the report
+    scene.select([a, b])
+    why = tr("Components keep their parts: Make Unique first to change "
+             "what is inside one")
+    assert group_rows(native_host, b)[tr("Make Group")] == why
+    assert group_rows(native_host, b)[tr("Make Component")] == why
+    said = []
+    win.viewport.flash_status = lambda text, *a_, **k: said.append(text)
+    scene.select([a, b])
+    action(native_host, "group", "i:" + a.uid)
+    assert said == [why] and comp.children == [a, b]
 
 
 # --- Explode from the Browser ---------------------------------------------------
 
-def test_the_browser_explodes_each_kind_as_it_should_in_one_step():
+def test_the_browser_explodes_each_kind_as_it_should_in_one_step(native_host):
     """A component holding groups leaves the groups; a group of groups
     leaves the inner groups; a plain group leaves its geometry loose — all
     the chosen rows at once, one undo step."""
-    win = _tree_window()
-    try:
-        scene = win.viewport.scene
-        p1, p2 = _placed("P1", 0.0), _placed("P2", 1.5)
-        comp = Group(_quad(size=3.0), name="Mueble")
-        comp.xform = QMatrix4x4()
-        comp.children = [p1, p2]                    # a component of groups
-        q1 = _placed("Q1", 6.0)
-        holder = Group(Mesh(), name="Conjunto")
-        holder.xform = QMatrix4x4()
-        holder.component = False
-        holder.children = [q1]                      # a group of groups
-        plain = Group(_quad(x=10.0), name="Losa")   # a plain group
-        scene.groups.extend([comp, holder, plain])
-        scene.version += 1
-        loose_before = len(scene.mesh.faces)
-        panel = _browser(win)
-        steps = len(win.viewport.history.undo_stack)
-        panel.make_from_rows([comp, holder, plain], "explode")
-        names = sorted(g.name for g in scene.groups)
-        assert names == ["P1", "P2", "Q1"]
-        assert len(scene.mesh.faces) == loose_before + 2   # Mueble's, Losa's
-        assert len(win.viewport.history.undo_stack) == steps + 1
-        win.viewport.history.undo()
-        assert sorted(g.name for g in scene.groups) == \
-            ["Conjunto", "Losa", "Mueble"]
-        assert len(scene.mesh.faces) == loose_before
-    finally:
-        _tree_close(win)
+    win = _window(native_host)
+    scene = win.viewport.scene
+    p1, p2 = _placed("P1", 0.0), _placed("P2", 1.5)
+    comp = Group(_quad(size=3.0), name="Mueble")
+    comp.xform = QMatrix4x4()
+    comp.children = [p1, p2]                    # a component of groups
+    q1 = _placed("Q1", 6.0)
+    holder = Group(Mesh(), name="Conjunto")
+    holder.xform = QMatrix4x4()
+    holder.component = False
+    holder.children = [q1]                      # a group of groups
+    plain = Group(_quad(x=10.0), name="Losa")   # a plain group
+    scene.groups.extend([comp, holder, plain])
+    scene.version += 1
+    loose_before = len(scene.mesh.faces)
+    steps = len(win.viewport.history.undo_stack)
+    scene.select([comp, holder, plain])
+    action(native_host, "explode", "i:" + comp.uid)
+    names = sorted(g.name for g in scene.groups)
+    assert names == ["P1", "P2", "Q1"]
+    assert len(scene.mesh.faces) == loose_before + 2   # Mueble's, Losa's
+    assert len(win.viewport.history.undo_stack) == steps + 1
+    win.viewport.history.undo()
+    assert sorted(g.name for g in scene.groups) == \
+        ["Conjunto", "Losa", "Mueble"]
+    assert len(scene.mesh.faces) == loose_before
 
 
-def test_explode_is_in_the_row_menu_and_greyed_inside_a_component():
+def test_explode_is_in_the_row_menu_and_greyed_inside_a_component(native_host):
     from core.i18n import tr
-    win = _tree_window()
-    try:
-        scene = win.viewport.scene
-        a, b = _placed("A", 0.0), _placed("B", 3.0)
-        comp = Group(_quad(size=8.0), name="Mueble")
-        comp.xform = QMatrix4x4()
-        comp.children = [a, b]
-        plain = Group(_quad(x=12.0), name="Losa")
-        scene.groups.extend([comp, plain])
-        scene.version += 1
-        panel = _browser(win)
-        entry = _menu_entry(panel, panel._items[id(plain)],
-                            tr("Explode Group"))
-        assert entry["enabled"]
-        panel._items[id(comp)].setExpanded(True)
-        entry = _menu_entry(panel, panel._items[id(a)], tr("Explode Group"))
-        assert entry["enabled"] is False
-        assert entry["tip"] == tr("Components keep their parts: Make Unique "
-                                  "first to change what is inside one")
-    finally:
-        _tree_close(win)
+    win = _window(native_host)
+    scene = win.viewport.scene
+    a, b = _placed("A", 0.0), _placed("B", 3.0)
+    comp = Group(_quad(size=8.0), name="Mueble")
+    comp.xform = QMatrix4x4()
+    comp.children = [a, b]
+    plain = Group(_quad(x=12.0), name="Losa")
+    scene.groups.extend([comp, plain])
+    scene.version += 1
+    assert group_rows(native_host, plain)[tr("Explode Group")] == ""
+    assert group_rows(native_host, a)[tr("Explode Group")] == tr("Components keep their parts: Make Unique "
+                              "first to change what is inside one")

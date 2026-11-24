@@ -27,6 +27,7 @@ mod recovery_commands;
 mod model_visibility;
 mod model_clipboard;
 mod group_edit;
+mod tree_grouping;
 mod document_starter;
 mod scene_navigation;
 mod window_services;
@@ -43,6 +44,7 @@ mod verbs;
 pub mod ui;
 mod host_context;
 mod inspector;
+mod inspector_geometry;
 mod glass;
 mod axes;
 mod sections;
@@ -2522,6 +2524,9 @@ impl Renderer {
     fn ui_set_options(&mut self, options: Vec<(String, String, String, u8)>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_options(options); }
     }
+    fn ui_set_tree_group_rows(&mut self, key: String, rows: Vec<(String, String, String)>) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_tree_group_rows(key, rows); }
+    }
     fn ui_set_tree(&mut self, rows: Vec<(Vec<String>, Vec<i64>)>, unfiled: u32) {
         if let Some(ui) = self.ui.as_mut() { ui.set_tree(rows, unfiled); }
     }
@@ -3228,6 +3233,11 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(commands::leave_navigation, m)?)?;
     m.add_function(wrap_pyfunction!(commands::view_shortcut, m)?)?;
     m.add("build_commit", env!("BUILT_COMMIT"))?;
+    m.add_function(wrap_pyfunction!(inspector_geometry::inspector_totals, m)?)?;
+    m.add_function(wrap_pyfunction!(inspector_geometry::inspector_curve, m)?)?;
+    m.add_function(wrap_pyfunction!(inspector_geometry::inspector_rename, m)?)?;
+    m.add_function(wrap_pyfunction!(tree_grouping::tree_group_rows, m)?)?;
+    m.add_function(wrap_pyfunction!(tree_grouping::tree_group_action, m)?)?;
     m.add_function(wrap_pyfunction!(model_escape, m)?)?;
     m.add_function(wrap_pyfunction!(context_targets, m)?)?;
     m.add_function(wrap_pyfunction!(parallel_annotation_ray, m)?)?;

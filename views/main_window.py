@@ -3225,16 +3225,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         """Window ▸ Preferences: the scattered QSettings in one dialog."""
         self.open_preferences()
 
-    def offer_units_at_start(self) -> None:
-        """The units question at startup, while the document is still the
-        new, untouched one (a file opened from the command line has its
-        own units and is never asked about)."""
-        if (self._current_path is not None
-                or self.viewport.scene.version != self._saved_version):
-            return
-        from views.units_question import offer_at_start
-        offer_at_start(self)
-
     def _on_set_language(self, code: str) -> None:
         """Persist the chosen UI language (applied on next start).
 
