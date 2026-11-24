@@ -408,7 +408,7 @@ pub fn command_registry(
         );
     }
     // Reports are also available on platforms without a system menu bar.
-    if menu.is_empty() {
+    if menu.iter().all(|r| r.0.starts_with("extension:")) {
         for (id, label) in [
             ("about", "About Built"),
             ("cutlist", "Cut list"),
@@ -430,7 +430,15 @@ pub fn command_registry(
             menu.push((entry.id.into(), entry.path.into(), entry.label.into(), default.into()));
         }
     }
-    for (menu_id, path, name, shortcut) in menu {
+    menu.sort_by_key(|row| row.0.starts_with("extension:"));
+    for (menu_id, path, name, mut shortcut) in menu {
+        if menu_id.starts_with("extension:") && !shortcut.is_empty() {
+            let normalized = |key: &str| crate::shortcut_text::shortcut_text(key).map(|seq|seq.0);
+            let key=normalized(&shortcut);
+            if rows.values().flat_map(|r| &r.3).any(|other| normalized(other)==key) {
+                shortcut.clear();
+            }
+        }
         let id = if let Some(key) = menu_id.strip_prefix("view:") {
             format!("view:view_{key}")
         } else if COMMANDS.iter().any(|c| c.id == menu_id) {

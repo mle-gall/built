@@ -194,7 +194,11 @@ impl NativeMenuCommand {
 
 fn collect(menu: &NSMenu, trail: &mut Vec<String>, out: &mut Vec<NativeMenuCommand>) {
     menu.update();
-    for item in menu.itemArray().iter() {
+    for (index, item) in menu.itemArray().iter().enumerate() {
+        // The per-window Rust extension registry supplies these commands directly.
+        if trail.as_slice() == ["Plugins"] && index >= 2 {
+            continue;
+        }
         if item.isSeparatorItem() || item.isHidden() {
             continue;
         }

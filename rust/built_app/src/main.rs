@@ -250,6 +250,8 @@ struct App {
     /// The recent files the File menu shows, as last sent.
     #[cfg(target_os = "macos")]
     recent_sig: Option<Vec<String>>,
+    #[cfg(target_os = "macos")]
+    extension_sig: Option<(WindowId,(u64,u64))>,
     /// Files given on the command line: AppKit hands them to the Open
     /// With hook too (as odoc), which must not open them a second time.
     cli_files: Vec<PathBuf>,
@@ -842,6 +844,23 @@ impl App {
             }
         }
         #[cfg(target_os = "macos")]
+        if self.front() == Some(id) {
+            if let (Some(menus), Some((rest, transitions, similar))) =
+                    (&self._menus, self.win(id)?.host.model_menu_state()) {
+                menus.reflect_model_checks(&rest, transitions, similar);
+            }
+            let previous=self.extension_sig.filter(|(owner,_)| *owner==id).map(|(_,stamp)|stamp);
+            if let Some((stamp,rows))=self.win(id)?.host.extension_updates(previous) {
+                if let Some(menus)=&self._menus {
+                    if let Err(err)=menus.set_extensions(&rows){
+                        eprintln!("[built] extension menus: {err}");
+                    } else {
+                        self.extension_sig=Some((id,stamp));
+                    }
+                }
+            }
+        }
+        #[cfg(target_os = "macos")]
         if let Some(recent) = extra.recent {
             if self.recent_sig.as_ref() != Some(&recent) {
                 if let Some(m) = &self._menus {
@@ -1118,6 +1137,8 @@ fn main() {
         pending_opens: Vec::new(),
         #[cfg(target_os = "macos")]
         recent_sig: None,
+        #[cfg(target_os = "macos")]
+        extension_sig: None,
         cli_files: Vec::new(),
         started: false,
     };

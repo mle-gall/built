@@ -98,6 +98,8 @@ def command(win, name, *args):
         from views.wgpu_deliveries import export_form
         return export_form(win, one_off=True)
     kind, _, arg = name.partition(":")
+    if kind == "extension":
+        return win._extension_menus.trigger(name)
     table = {
         "new": lambda: new_model(win),
         "new_window": lambda: new_window(win),
@@ -383,8 +385,7 @@ def _install_open(win, path, bar, result, *, initial_frame=None):
     from core import autosave
     scene, packed, tracker, tree = result
     doc = win._doc
-    if grid := getattr(doc, "model_views", None):
-        grid.suspend()
+    doc.model_views.suspend(doc)
     history = doc.viewport.history
     history.scene = scene
     doc.viewport.set_document(scene, history)
@@ -395,9 +396,7 @@ def _install_open(win, path, bar, result, *, initial_frame=None):
 
 def _finish_open(win, path, recovered, slot, bar, cb, prepared=None, initial_aspect=None):
     from views import chrome_dialogs as cd
-    if grid := getattr(win._doc, "model_views", None):
-        grid.suspend()
-        grid.poses.clear()
+    win._doc.model_views.restore(win._doc)
     host, vp, view = win._host, win._doc.viewport, win.view
     import gc
     gc.set_threshold(win.GC_THRESHOLD0, 10, 10)
@@ -423,11 +422,6 @@ def _finish_open(win, path, recovered, slot, bar, cb, prepared=None, initial_asp
                     camera.fit_box(*bounds, free=(-1., area[1], 1., area[3]) if area else None)
                 finally:
                     camera.aspect = aspect
-    if vp.scene.views_home:
-        from app_shell.model_views import for_document
-        layout = for_document(win._doc).layout
-        layout.restore(vp.scene.views_home)
-        win._doc.view_layout = layout.layout
     win._current_path = path
     if prepared is None:
         win._remember_recent(path)

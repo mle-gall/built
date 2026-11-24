@@ -34,6 +34,7 @@ from PySide6.QtCore import QEvent, QObject, Qt, Signal
 
 from app_shell.command_action import ShellAction
 from views.view_host import MISSING
+from views.document_commands import WindowDocumentCommands
 
 
 class _Label:
@@ -352,7 +353,11 @@ _OWN = {"viewport", "documents", "active_document", "activate_document",
         "_update_title", "_update_tab", "_refresh_scene_tabs", "setWindowTitle",
         "_on_save", "_on_save_as", "_do_save", "_on_export_igz", "_document_picture",
         "_show_empty_area", "_leave_empty_area", "_dismiss_home", "_on_new_window",
-        "_sync_foreign_clipboard", "_on_open", "_open_recent", "_fill_recent_menu"}
+        "_sync_foreign_clipboard", "_on_open", "_open_recent", "_fill_recent_menu",
+        # Optional per-instance attachments and QWidget probes. A lookup
+        # before installation must not load the Classic window class.
+        "_host_window", "_doc_area", "_lib_installed", "_mac_chrome",
+        "_panel_view", "_vcb_name", "_vcb_value", "isWindow"}
 
 #: What a borrowed method may reach for that the shell has nothing for:
 #: answered with a no-op, as a window with that panel closed would.
@@ -407,25 +412,26 @@ def _doc_attr(name):
     return property(get, put)
 
 
-class ShellWindow(QObject):
+class ShellWindow(WindowDocumentCommands, QObject):
 
     def __init__(self, host):
         super().__init__()
-        if "_saved_version" not in vars(ShellWindow):
-            borrow_main_window()
         self._host = host
         from core.extensions import discover_plugins
         from core.plugin_panels import install
         from core.extension_manager import extension_startup_state
         self._extension_startup_state = extension_startup_state()
-        plugins, errors = discover_plugins(panels_only=True)
+        plugins, errors = discover_plugins()
+        from ingetrazo_render import ExtensionMenus
+        self._extension_menus = ExtensionMenus()
+        self._pending_extensions = plugins
         install(self, plugins)
-        self._running_extensions = {p.stem for p in plugins}
+        self._running_extensions = {p.stem for p in plugins if p.panel}
         self._extension_load_errors = {e.stem: {"error": e.error, "path": str(e.path)} for e in errors}
         from ingetrazo_core import WindowCommands
         self._command_store = WindowCommands()
         self._command_actions = {}
-        from views.main_window import build_tools
+        from ingetrazo_render import build_tools
         self._tools = build_tools()
         self._act_eyedropper = ShellAction(self, "Sample material", checkable=True,
                                            toggled=self._on_toggle_eyedropper)
@@ -475,6 +481,16 @@ class ShellWindow(QObject):
         self._act_bridge = self._registry_actions["menu:bridge"]
         self._act_make_faces = self._registry_actions["menu:make_faces"]
         self._act_3dtext = self._registry_actions["menu:text3d"]
+
+    def _setup_autosave(self):
+        self._configure_recovery(self._autosave_timer)
+
+    @property
+    def _last_command(self):
+        return self._command_store.last_command
+
+    def _remember_command(self, label, run):
+        self._command_store.remember(label, run)
 
     def childEvent(self, event):
         # A plugin may attach an action or an entire submenu to this QObject.
@@ -529,11 +545,11 @@ class ShellWindow(QObject):
     def new_document(self, activate: bool = True):
         """A new, empty project with its own controller and view, right of
         the one in front."""
-        from views.documents import Document
+        from app_shell.model_views import ShellDocument
         from views.document_controller import DocumentController
         from app_shell.view import ShellView
         host = self._host
-        doc = Document()
+        doc = ShellDocument()
         doc.untitled_no = self._free_untitled_no() if self._documents else 1
         vp = DocumentController(host)
         try:
@@ -572,8 +588,8 @@ class ShellWindow(QObject):
         if doc is old:
             return
         self.scene_player.cancel()
-        if grid := getattr(old, "model_views", None):
-            grid.suspend()
+        if old is not None:
+            old.model_views.suspend(old)
         if old is not None and old.viewport is not None:
             from views.inspector_bridge import leave_camera
             leave_camera(old)
@@ -638,8 +654,7 @@ class ShellWindow(QObject):
         from core import autosave
         if doc not in self._documents:
             return
-        if grid := getattr(doc, "model_views", None):
-            grid.suspend()
+        doc.model_views.suspend(doc)
         self._release_document_watch(doc)
         self._documents.remove(doc)
         from app_shell import project
@@ -663,8 +678,8 @@ class ShellWindow(QObject):
 
     def bind(self, viewport, view):
         """The first document (Host.__init__ made its controller and view)."""
-        from views.documents import Document
-        doc = Document()
+        from app_shell.model_views import ShellDocument
+        doc = ShellDocument()
         doc.viewport = viewport
         doc.stand_in = view
         doc._renderer_wgpu = True
@@ -712,27 +727,15 @@ class ShellWindow(QObject):
         choose(self)
 
     def set_view_layout(self, key):
-        from app_shell.model_views import for_document
-        for_document(self._doc).choose(key)
+        self._doc.model_views.choose(self._doc, key)
 
     def _views_dict(self, doc):
-        grid = getattr(doc, "model_views", None)
-        return grid.layout.archive() if grid else None
-
-    def _fit_model_bounds(self, bounds):
-        from views.wgpu_ui import free_area
-        grid = getattr(self._doc, "model_views", None)
-        if grid and grid.visible:
-            for display in grid.displays.values():
-                display.source_viewport.camera.fit_box(*bounds)
-        else:
-            self.viewport.camera.fit_box(*bounds, free=free_area(self))
-        self._host.request_frame()
+        return doc.model_views.archive()
 
     def _on_zoom_extents(self):
         bounds = self._extents_bounds()
         if bounds is not None:
-            self._fit_model_bounds(bounds)
+            self._doc.model_views.fit_bounds(self, bounds)
 
     def _on_zoom_selection(self):
         from core.i18n import tr
@@ -740,13 +743,10 @@ class ShellWindow(QObject):
         if bounds[0] is None:
             self.statusBar().showMessage(tr("Nothing selected"), 2500)
         else:
-            self._fit_model_bounds(bounds)
+            self._doc.model_views.fit_bounds(self, bounds)
 
     def _maximize_model_view(self):
-        grid = getattr(self._doc, "model_views", None)
-        if grid is not None:
-            grid.layout.toggle_maximized()
-            self._host.request_frame()
+        self._doc.model_views.maximize(self._doc)
 
     def active_style(self):
         return self.viewport._view_style()
@@ -761,11 +761,7 @@ class ShellWindow(QObject):
         return vp.view_style
 
     def keep_other_views_style(self):
-        if grid := getattr(self._doc, "model_views", None):
-            style = self._doc.viewport.scene.display_style
-            for number, display in grid.displays.items():
-                if number != 1 and display.source_viewport.view_style is None and style is not None:
-                    display.source_viewport.view_style = style.copy()
+        self._doc.model_views.preserve_peer_styles(self._doc)
 
     def set_active_style(self, style):
         if self.viewport is self._doc.viewport:
@@ -969,10 +965,6 @@ class ShellWindow(QObject):
         from app_shell import files
         return files.import_progress(self, title, monotonic=monotonic)
 
-    def _parse_skp_threaded(self, skp, cb):
-        from views.main_window import MainWindow
-        return MainWindow._parse_skp_threaded(self, skp, cb)
-
     def _parse_stl_threaded(self, path, scale, simplify_mode, cb, report=None):
         from app_shell import files
         from formats.stl import parse_stl
@@ -990,16 +982,3 @@ class ShellWindow(QObject):
     def _open_recent(self, path):
         from app_shell import files
         return files.open_path(self, path)
-
-
-#: MainWindow methods that only reach ``self.viewport`` and ``self._doc``:
-#: borrowed eagerly (the rest come on demand, see ``ShellWindow.__getattr__``).
-_FROM_MAIN_WINDOW = ("_CAMERA_FIELDS", "_apply_camera_dict", "_apply_camera_home",
-                     "_on_undo", "_on_redo", "_extents_bounds",
-                     "_figure_bounds", "_image_bounds",
-                     "_saved_version", "_is_dirty", "_doc_is_blank", "_free_untitled_no")
-
-
-def borrow_main_window():
-    for name in _FROM_MAIN_WINDOW:
-        _lazy(name)

@@ -1,4 +1,4 @@
-"""Generate the Metal audit from the built-in MainWindow registry."""
+"""Generate the Metal audit from the built-in window registry and transient tools."""
 import ast
 from pathlib import Path
 import re
@@ -6,19 +6,8 @@ import re
 
 def registry(root):
     tree = ast.parse((root / 'views/main_window.py').read_text())
-    result = {}
-    factory = next(f for f in tree.body if isinstance(f, ast.FunctionDef) and f.name == "build_tools")
-    for node in ast.walk(factory):
-        if not isinstance(node, ast.Assign):
-            continue
-        for target in node.targets:
-            if isinstance(target, ast.Name) and target.id == 'tools' and isinstance(node.value, ast.Dict):
-                result.update((key.value, value.func.id)
-                              for key, value in zip(node.value.keys, node.value.values))
-            if (isinstance(target, ast.Subscript) and isinstance(target.value, ast.Name)
-                    and target.value.id == 'tools' and isinstance(target.slice, ast.Constant)
-                    and isinstance(node.value, ast.Call)):
-                result[target.slice.value] = node.value.func.id
+    from ingetrazo_render import window_tool_types
+    result = dict(window_tool_types())
     # Tools handed straight to set_active_tool (component placement after
     # Insert / Link / the tray) have no toolbar key: they are listed under
     # their class name in snake case.

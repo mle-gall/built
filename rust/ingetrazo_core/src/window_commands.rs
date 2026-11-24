@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 #[pyclass(module = "ingetrazo_core")]
 pub struct WindowCommands {
     next_id: u64,
+    last: Option<(String, Py<PyAny>)>,
     actions: BTreeMap<u64, Py<WindowCommand>>,
     plugin_keys: BTreeMap<u32, Py<PyAny>>,
 }
@@ -16,6 +17,32 @@ impl WindowCommands {
     #[new]
     fn new() -> Self {
         Self::default()
+    }
+    fn remember(&mut self, label: String, callback: Py<PyAny>) {
+        self.last = Some((label, callback));
+    }
+    #[getter]
+    fn last_command(&self, py: Python<'_>) -> Option<(String, Py<PyAny>)> {
+        self.last
+            .as_ref()
+            .map(|(label, run)| (label.clone(), run.clone_ref(py)))
+    }
+    fn __traverse__(&self, visit: pyo3::PyVisit<'_>) -> Result<(), pyo3::PyTraverseError> {
+        if let Some((_, callback)) = &self.last {
+            visit.call(callback)?;
+        }
+        for action in self.plugin_keys.values() {
+            visit.call(action)?;
+        }
+        for action in self.actions.values() {
+            visit.call(action)?;
+        }
+        Ok(())
+    }
+    fn __clear__(&mut self) {
+        self.last = None;
+        self.plugin_keys.clear();
+        self.actions.clear();
     }
     fn add(
         &mut self,
@@ -87,6 +114,9 @@ pub struct WindowCommand {
 impl WindowCommand {
     fn text(&self) -> &str {
         &self.label
+    }
+    fn setText(&mut self, label: String) {
+        self.label = label;
     }
     fn objectName(&self) -> &str {
         &self.name

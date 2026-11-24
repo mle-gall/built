@@ -104,6 +104,9 @@ class Host:
         viewport.set_active_tool(None)
         modal.install(self)
         files.install(self.window)
+        from ingetrazo_render import setup_extension_menus
+        setup_extension_menus(self.window, self.window.__dict__.pop("_pending_extensions"))
+        self.window._extension_menus.refresh(self.window)
         from app_shell import windows
         windows.register(self)
         guard = qt_host.widget_guard()
@@ -265,6 +268,7 @@ class Host:
         ``(frame_wanted, wake_in_ms or None, cursor or None, title or None)``."""
         qt_host.pump()
         self._guard("window timers", self.timers.run_due)
+        self.window._extension_menus.refresh(self.window)
         pending = self.window.__dict__.get("_pending_open")
         if pending and time.monotonic() >= pending.next_poll:
             pending.next_poll = time.monotonic() + 0.032
@@ -353,8 +357,8 @@ class Host:
                 version = scene.version
                 view.set_scene(scene)
                 view._shell_resident_version = version
-            grid = getattr(self.window._doc, "model_views", None)
-            out = grid.frame() if grid is not None else view.draw_frame()
+            doc = self.window._doc
+            out = doc.model_views.frame(doc)
             if out is not None:
                 self._picture_seen = True
             return out
@@ -423,27 +427,8 @@ class Host:
         return cd.modal(self.window)
 
     def _pane_input(self, kind, method, event, held):
-        grid = getattr(self.window._doc, "model_views", None)
-        if grid is None or not grid.visible:
-            return self.view
-        if self._modal():
-            grid.layout.cancel()
-            return self.view
-        from views.wgpu_view import _ui_claims
-        if not grid.layout.captured and _ui_claims(self.view, method, event):
-            return None
-        pos = event.position()
-        primary = getattr(event, "button", lambda: None)()
-        cursor = grid.layout.divider(kind, pos.x(), pos.y(), getattr(primary, "value", 0) == 1, grid.snap_pixels)
-        if cursor:
-            self.cursor_changed(cursor)
-            return None
-        hit = grid.pointer(kind, pos.x(), pos.y(), held)
-        if hit is None:
-            return None
-        pane, x, y = hit
-        event.set_local_position(x, y)
-        return pane
+        doc = self.window._doc
+        return doc.model_views.route(doc, kind, method, event, held)
 
     def pointer(self, kind, x, y, button=0, held=0, modifiers=0, timestamp=0):
         from app_shell.events import ContextMenuEvent, MouseEvent
@@ -525,8 +510,8 @@ class Host:
                     self._guard("job key", cd.job_key, self.window, ev)
             self.request_frame()
             return True
-        grid = getattr(self.window._doc, "model_views", None)
-        if pressed and key == Qt.Key_Escape and grid and grid.layout.cancel_divider():
+        doc = self.window._doc
+        if pressed and key == Qt.Key_Escape and doc.model_views.cancel_divider():
             self.request_frame()
             return True
         if pressed and key == Qt.Key_Escape and self.window.scene_player.is_active():
@@ -534,25 +519,17 @@ class Host:
             return True
         if pressed:
             override = ShortcutOverride(key, modifiers, text, repeat)
-            if grid and grid.visible:
-                from views import wgpu_ui
-                if wgpu_ui.claims_key(view, override):
-                    override.accept()
-                else:
-                    self._guard("shortcut override", self.viewport.keys_stand_in.event, override)
-            else:
-                self._guard("shortcut override", view.event, override)
+            target = doc.model_views.key_view(doc, "event", override)
+            if target is not None:
+                self._guard("shortcut override", target.event, override)
             if not override.isAccepted() and not repeat and self._shortcut(key, modifiers):
                 self.request_frame()
                 return True
         ev = KeyEvent(pressed, key, modifiers, text, repeat)
-        if grid is not None and grid.visible:
-            from views.wgpu_view import _ui_claims
-            if _ui_claims(view, "keyPressEvent" if pressed else "keyReleaseEvent", ev):
-                self.request_frame()
-                return True
-            view = self.viewport.keys_stand_in
-        self._guard("key", view.keyPressEvent if pressed else view.keyReleaseEvent, ev)
+        method = "keyPressEvent" if pressed else "keyReleaseEvent"
+        target = doc.model_views.key_view(doc, method, ev)
+        if target is not None:
+            self._guard("key", getattr(target, method), ev)
         self.request_frame()
         return True
 
@@ -644,9 +621,7 @@ class Host:
             self._device.button.disconnect(self.window._on_ndof_button)
             self._device = None
         if not on:
-            grid = getattr(self.window._doc, "model_views", None)
-            if grid is not None:
-                grid.layout.cancel()
+            self.window._doc.model_views.cancel()
             self.input_state.focus_lost()
             self._guard("focus out", self.view.focusOutEvent, None)
 
@@ -675,8 +650,7 @@ class Host:
                 bounds = w._extents_bounds()
                 if bounds:
                     from views.wgpu_ui import free_area
-                    grid = getattr(w._doc, "model_views", None)
-                    self.viewport.camera.fit_box(*bounds, free=None if grid and grid.visible else free_area(w))
+                    self.viewport.camera.fit_box(*bounds, free=None if w._doc.model_views.visible else free_area(w))
         elif kind == "verb" and arg in _VERBS:
             # The ported prompts (views/chrome_forms.py), by name: the
             # window's own MainWindow methods, borrowed.
@@ -702,10 +676,10 @@ class Host:
             from app_shell.legacy_actions import close
             close(self.window)
         self.window.scene_player.cancel()
+        self.window._extension_menus.clear()
         self.timers.cancel_all()
         for doc in list(self.window._documents):
-            if grid := getattr(doc, "model_views", None):
-                grid.suspend()
+            doc.model_views.suspend(doc)
             self.window._release_document_watch(doc)
             view = doc.stand_in
             if view is not None:
@@ -734,8 +708,8 @@ class Host:
             "filter": self.view.__dict__.get("_ui_filter", ""),
             "qt_modules": sorted(name for name in sys.modules if name.split(".")[0] in ("PySide6", "shiboken6")),
             "model_layout": win._doc.view_layout,
-            "model_pane": grid.layout.active if (grid := getattr(win._doc, "model_views", None)) else 1,
-            "model_dividers": grid.layout.shares if grid else None,
+            "model_pane": win._doc.model_views.active,
+            "model_dividers": win._doc.model_views.shares,
             "view_targets": getattr(self.renderer, "target_count", 0),
             "dock_lens": self.view.__dict__.get("_ui_lens", 0),
             "dock_mode": self.view.__dict__.get("_ui_mode", ""),

@@ -1,4 +1,6 @@
 //! Pane identities stay stable across layouts, so each camera survives a rearrangement.
+mod session;
+pub(crate) use session::DocumentViews;
 use pyo3::{exceptions::PyValueError, prelude::*};
 
 type Columns = &'static [&'static [usize]];

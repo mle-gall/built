@@ -158,6 +158,7 @@ impl Panel {
 }
 #[derive(Default)]
 pub(super) struct Panels {
+    pub(super) commands: Vec<crate::extension_menu::Row>,
     models: Vec<Panel>,
     dock: Option<String>,
     utility: Option<String>,
@@ -204,12 +205,22 @@ impl Panels {
         }
     }
     pub(super) fn available(&self) -> bool {
-        !self.models.is_empty()
+        !self.models.is_empty() || !self.commands.is_empty()
     }
     pub(super) fn utility_open(&self) -> bool {
         self.utility.is_some()
     }
     pub(super) fn dock(&mut self, ui: &mut egui::Ui, actions: &mut Vec<String>) {
+        let mut last_path: Option<&[String]> = None;
+        for (id, path, label, key, mark, enabled) in &self.commands {
+            if last_path != Some(path) && !path.is_empty() {
+                super::kit::caption_plain(ui, &path.join(" ▸ "));
+            }
+            last_path = Some(path);
+            if label.is_empty() { ui.separator(); continue; }
+            let row = (id.clone(), label.clone(), key.clone(), String::new(), *mark, *enabled);
+            if super::kit::menu_row(ui, &row) { actions.push(id.clone()); }
+        }
         let mut open = None;
         ui.horizontal_wrapped(|ui| {
             for p in &self.models {

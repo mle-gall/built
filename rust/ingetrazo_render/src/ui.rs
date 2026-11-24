@@ -621,6 +621,7 @@ impl Ui {
         self.ctx.memory_mut(|m| m.stop_text_input());
         self.sheet = Some(Sheet { title, body, tone, buttons });
     }
+    pub fn extension_menu(&mut self, rows: Vec<crate::extension_menu::Row>) { self.plugins.commands = rows; }
     pub fn plugin_panel(&mut self, raw: &str) -> Result<(), String> { self.plugins.set(raw) }
     pub fn plugin_open(&mut self, id: &str) { self.plugins.open(id); }
     pub fn plugin_document(&mut self, document: String, live: &[String]) {
