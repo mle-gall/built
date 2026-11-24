@@ -544,13 +544,9 @@ impl Renderer {
     #[pyo3(signature = (window, width, height, scale, *, display=0, platform=""))]
     fn new(window: usize, width: u32, height: u32, scale: f64, display: usize, platform: &str) -> PyResult<Self> {
         let instance = crate::backend::instance();
-        let surface = if window == 0 && platform == "offscreen" {
-            None
-        } else {
-            Some(backend::surface(&instance, window, display, platform)?)
-        };
+        let surface = backend::surface(&instance, window, display, platform)?;
         let a = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-            compatible_surface: surface.as_ref(),
+            compatible_surface: Some(&surface),
             ..Default::default()
         }))
         .ok_or_else(|| PyValueError::new_err("no supported GPU backend for this window"))?;
@@ -569,14 +565,13 @@ impl Renderer {
             None,
         ))
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        let (format, alpha_mode) = if let Some(surface) = &surface {
-            let caps = surface.get_capabilities(&a);
-            let format = caps.formats.iter().copied().find(|f| f.is_srgb())
-                .ok_or_else(|| PyValueError::new_err("no sRGB surface"))?;
-            (format, caps.alpha_modes[0])
-        } else {
-            (wgpu::TextureFormat::Bgra8UnormSrgb, wgpu::CompositeAlphaMode::Auto)
-        };
+        let caps = surface.get_capabilities(&a);
+        let format = caps
+            .formats
+            .iter()
+            .copied()
+            .find(|f| f.is_srgb())
+            .ok_or_else(|| PyValueError::new_err("no sRGB surface"))?;
         let w = ((width as f64 * scale) as u32).max(1);
         let h = ((height as f64 * scale) as u32).max(1);
         let config = wgpu::SurfaceConfiguration {
@@ -586,10 +581,10 @@ impl Renderer {
             height: h,
             present_mode: wgpu::PresentMode::AutoNoVsync,
             desired_maximum_frame_latency: 2,
-            alpha_mode,
+            alpha_mode: caps.alpha_modes[0],
             view_formats: vec![format.remove_srgb_suffix()],
         };
-        if let Some(surface) = &surface { surface.configure(&device, &config); }
+        surface.configure(&device, &config);
         // Blend and resolve model colors in display space. UI paints through the sRGB view.
         let format = format.remove_srgb_suffix();
         let camera = buffer(
@@ -839,7 +834,7 @@ impl Renderer {
             last_cpu: 0.,
             last_acquire: 0.,
             frame_stages: [0.; 5],
-            surface,
+            surface: Some(surface),
             device,
             queue,
             config,

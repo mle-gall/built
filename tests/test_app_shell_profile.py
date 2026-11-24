@@ -10,10 +10,10 @@ import pytest
 
 
 def test_pytest_requires_isolation(monkeypatch):
-    from app_shell import profile
+    from app_shell import qt_host
     monkeypatch.delenv("BUILT_SETTINGS_DIR", raising=False)
     with pytest.raises(RuntimeError, match="isolated shell profile"):
-        profile.start()
+        qt_host.start()
 
 
 @pytest.mark.parametrize("mode", ["directory", "environment", "temporary"])
@@ -22,20 +22,21 @@ def test_isolated_profiles(tmp_path, mode):
     script = """
         import sys
         from pathlib import Path
-        from app_shell import profile
+        from PySide6.QtCore import QSettings, QStandardPaths
+        from app_shell import qt_host
         mode, root = sys.argv[1], Path(sys.argv[2])
         if mode == "temporary":
             # Exercise the offscreen host's automatic temporary profile in isolation.
             import os
             os.environ.pop("BUILT_SETTINGS_DIR")
-        folder = profile.start(str(root / "explicit") if mode == "directory" else None,
+        folder = qt_host.start(str(root / "explicit") if mode == "directory" else None,
                                temporary=mode != "directory")
         from core.settings import settings as product_settings
         from ingetrazo_core import NativeSettings
         assert isinstance(product_settings(), NativeSettings)
-        product_settings().setValue("profile_probe", mode)
-        assert NativeSettings(folder).value("profile_probe") == mode
-        assert (Path(folder) / "IngeTrazo/IngeTrazo.ini").is_file()
+        assert QStandardPaths.isTestModeEnabled()
+        assert QSettings.defaultFormat() == QSettings.IniFormat
+        assert Path(QSettings().fileName()).is_relative_to(folder)
         if mode == "directory":
             assert Path(folder) == root / "explicit"
         elif mode == "environment":
@@ -51,17 +52,21 @@ def test_native_launches_share_an_isolated_profile(tmp_path):
     script = """
         import sys
         from pathlib import Path
+        from PySide6.QtCore import QSettings
         def exchange():
             from core import general_settings, settings
             from ingetrazo_core import NativeSettings
-            st = settings.settings()
+            st = QSettings()
             user = settings.settings()
             assert isinstance(user, NativeSettings) == (sys.argv[1] == "native")
+            assert st.format() == QSettings.IniFormat
+            assert Path(st.fileName()).is_relative_to(sys.argv[4])
             assert st.value("recent_files", [], type=list) == ([sys.argv[2]] if sys.argv[2] else [])
             assert general_settings.value("test_profile", "initial") == (sys.argv[2] or "initial")
             general_settings.set_value("test_profile", sys.argv[3])
             user.setValue("recent_files", [sys.argv[3]])
             user.sync()
+            assert st.status() == QSettings.NoError
         from app_shell.host import Host
         host = Host(0, 1280, 800, 2)
         assert Path(host.settings_dir) == Path(sys.argv[4])
@@ -82,7 +87,7 @@ def test_native_defaults_read_and_write_the_product_domain(tmp_path):
     prefs = tmp_path / "Library/Preferences"
     prefs.mkdir(parents=True)
     plist = prefs / "com.ingetrazo.IngeTrazo.plist"
-    plist.write_bytes(plistlib.dumps({"isolation_marker": str(tmp_path), "recent_files": ["seed.built"], "General.autosave": "0", "shortcuts.x·y": "F9", "unknown": b"old widget state"}))
+    plist.write_bytes(plistlib.dumps({"recent_files": ["seed.built"], "General.autosave": "0", "shortcuts.x·y": "F9", "unknown": b"old widget state"}))
     (prefs / "com.builtprofileprobe.Probe.plist").write_bytes(plistlib.dumps({"home": str(tmp_path)}))
     dylib = tmp_path / "preferences.dylib"
     source = Path(__file__).parent / "fixtures/shell/fake_preferences.c"
@@ -90,7 +95,22 @@ def test_native_defaults_read_and_write_the_product_domain(tmp_path):
     subprocess.run(["clang", "-dynamiclib", source, "-framework", "CoreFoundation", "-o", dylib], check=True)
     script = """
         from pathlib import Path
+        from PySide6.QtCore import QCoreApplication, QSettings, QStandardPaths
+        QCoreApplication.setOrganizationName("BuiltProfileProbe")
+        QCoreApplication.setApplicationName("Probe")
+        assert QSettings().value("home") == str(Path.home())
+        QCoreApplication.setOrganizationName("IngeTrazo")
+        QCoreApplication.setApplicationName("IngeTrazo")
+        st = QSettings()
+        assert st.format() == QSettings.NativeFormat
+        assert Path(st.fileName()) == Path.home() / "Library/Preferences/com.ingetrazo.IngeTrazo.plist"
+        assert not QStandardPaths.isTestModeEnabled()
+        for loc in (QStandardPaths.AppDataLocation, QStandardPaths.CacheLocation):
+            assert Path(QStandardPaths.writableLocation(loc)).resolve().is_relative_to(Path.home() / "Library")
+        assert st.value("recent_files") == ["seed.built"]
         import os
+        # The successful probe above established that CFPreferences is
+        # interposed into this test's container before selecting the domain.
         os.environ.pop("BUILT_SETTINGS_DIR")
         from ingetrazo_core import NativeSettings
         store = NativeSettings()
@@ -100,12 +120,12 @@ def test_native_defaults_read_and_write_the_product_domain(tmp_path):
         assert store.childKeys() == ["x.y"]
         assert store.value("x.y") == "F9"
         store.endGroup()
-        # The seed is unique to the interposed temporary preference domain.
-        assert store.value("isolation_marker") == str(Path.home())
         store.setValue("recent_files", ["last.built"])
         store.setValue("new/foo.bar·baz", 9)
         store.sync()
-        assert store.value("new/foo.bar·baz") == 9
+        st.sync()
+        assert st.value("new/foo.bar·baz") == 9
+        assert st.status() == QSettings.NoError
     """
     isolated_launch.run([sys.executable, "-c", textwrap.dedent(script)], home=tmp_path,
                         env=dict(os.environ, DYLD_INSERT_LIBRARIES=str(dylib)), check=True, timeout=45)
@@ -156,46 +176,3 @@ def test_native_processes_merge_independent_keys_without_qt(tmp_path):
     for k in ("keyboard", "navigation"):
         for i in range(30):
             assert store.value(f"{k}/{i}", type=int) == i
-
-
-def test_collected_tests_and_children_inherit_private_directories():
-    import subprocess
-    probe = """
-import os
-from pathlib import Path
-from ingetrazo_core import NativeSettings
-home = Path.home()
-assert home == Path(os.environ['CFFIXED_USER_HOME'])
-assert home.parent.name.startswith('built-pytest-')
-profile = Path(os.environ['BUILT_SETTINGS_DIR'])
-assert profile.is_relative_to(home.parent)
-assert Path(os.environ['XDG_DATA_HOME']).is_relative_to(home.parent)
-NativeSettings().setValue('isolation/child_process', str(home))
-assert NativeSettings(profile).value('isolation/child_process') == str(home)
-"""
-    subprocess.run([sys.executable, "-c", probe], check=True, timeout=20)
-
-
-def test_session_guard_rejects_a_changed_plist(tmp_path, monkeypatch):
-    from types import SimpleNamespace
-    from tests import conftest
-
-    probe = tmp_path / "test-domain.plist"
-    probe.write_bytes(b"seed")
-    baseline = probe.stat().st_mtime_ns
-    monkeypatch.setattr(conftest, "_real_preferences_before", baseline)
-    monkeypatch.setattr(conftest, "preferences_mtime", lambda: probe.stat().st_mtime_ns)
-    session = SimpleNamespace(config=SimpleNamespace())
-    conftest.pytest_sessionfinish(session, 0)
-    os.utime(probe, ns=(baseline, baseline + 2_000_000_000))
-    with pytest.raises(pytest.exit.Exception, match="plist changed") as failure:
-        conftest.pytest_sessionfinish(session, 0)
-    assert failure.value.returncode == pytest.ExitCode.TESTS_FAILED
-
-
-def test_bootstrap_module_can_load_before_the_native_engine_is_on_sys_path():
-    import subprocess
-
-    root = Path(__file__).resolve().parents[1]
-    program = "import sys; from app_shell import host; assert 'core' not in sys.modules"
-    subprocess.run([sys.executable, "-S", "-c", program], cwd=root, check=True)
