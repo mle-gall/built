@@ -310,7 +310,10 @@ class ShellWindow(WindowDocumentCommands, QObject):
         from core.plugin_panels import install
         from core.extension_manager import extension_startup_state
         self._extension_startup_state = extension_startup_state()
-        plugins, errors = discover_plugins()
+        plugins, errors = discover_plugins(native_panels={
+            "render_blender": "plugins._blender_panel", "python_console": "plugins.python_console",
+            "ai_assistant": None, "ai_bridge": None, "model_info": None, "solid_inspector": None,
+        })
         from ingetrazo_render import ExtensionMenus
         self._extension_menus = ExtensionMenus()
         self._pending_extensions = plugins

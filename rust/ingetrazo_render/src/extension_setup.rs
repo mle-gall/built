@@ -3,7 +3,7 @@ use pyo3::{
     prelude::*,
     types::{PyDict, PyList},
 };
-use std::path::{Path, PathBuf};
+
 
 #[pyclass(unsendable)]
 struct ToolEntry {
@@ -25,33 +25,14 @@ impl ToolEntry {
 #[pyfunction]
 pub fn setup_extension_menus(win: &Bound<'_, PyAny>, plugins: &Bound<'_, PyList>) -> PyResult<()> {
     let py = win.py();
-    let bundled = py
-        .import("core.paths")?
-        .call_method0("app_root")?
-        .extract::<PathBuf>()?
-        .join("plugins");
     let menus = win.getattr("_extension_menus")?;
     let app_class = py.import("views.extension_api")?.getattr("ExtensionApp")?;
     let tr = py.import("core.i18n")?.getattr("tr")?;
     let weak = py.import("weakref")?.call_method1("ref", (win,))?;
     for plug in plugins {
         let owner = plug.getattr("stem")?.extract::<String>()?;
-        let path = plug.getattr("path")?.extract::<PathBuf>()?;
-        // These shipped modules register Classic widget panels eagerly.
-        // The two shipped native utilities already have panel commands.
-        if path.parent() == Some(Path::new(&bundled))
-            && matches!(
-                owner.as_str(),
-                "ai_assistant"
-                    | "ai_bridge"
-                    | "model_info"
-                    | "solid_inspector"
-                    | "python_console"
-                    | "render_blender"
-            )
-        {
-            continue;
-        }
+        // Bundled native panels have their own command in the shell.
+        if plug.getattr("setup")?.is_none() && plug.getattr("tools")?.len()? == 0 { continue; }
         let app = app_class.call1((win, &owner))?;
         let setup = || -> PyResult<()> {
             let hook = plug.getattr("setup")?;
@@ -78,7 +59,7 @@ pub fn setup_extension_menus(win: &Bound<'_, PyAny>, plugins: &Bound<'_, PyList>
             menus.call_method1("discard", (&owner,))?;
             app.call_method0("remove_agent_tools")?;
             let details = PyDict::new(py);
-            details.set_item("path", path.to_string_lossy())?;
+            details.set_item("path", plug.getattr("path")?.str()?)?;
             details.set_item("error", error.to_string())?;
             win.getattr("_extension_load_errors")?
                 .set_item(owner, details)?;
