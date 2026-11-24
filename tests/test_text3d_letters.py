@@ -172,7 +172,7 @@ def test_select_double_click_on_a_text_enters_it_like_any_group():
 
 
 def test_edit_3d_text_reaches_the_container_from_a_letter_inside(native_host, monkeypatch):
-    from views import context_menu
+    from ingetrazo_render import context_menu_build, context_menu_run
     scene = native_host.viewport.scene
     text = make_text_group(text_params("Ab", "Sans"))
     scene.groups.append(text)
@@ -181,9 +181,9 @@ def test_edit_3d_text_reaches_the_container_from_a_letter_inside(native_host, mo
     for parent, picked in [(text, text.children[1]), (None, text)]:
         scene.edit_group = parent
         scene.select([picked])
-        menu = context_menu.build(native_host.window, native_host.view)
+        menu = context_menu_build(native_host.window, native_host.view)
         assert native_host.window._selected_text3d() is text and menu.find("edittext3d").enabled
-        assert context_menu.run(native_host.window, native_host.view, menu.kind, "edittext3d", menu.sel)
+        assert context_menu_run(native_host.window, native_host.view, menu.kind, "edittext3d", menu.sel)
         assert opened[-1] == text.text3d
     scene.select([Group(name="caja")])
     assert native_host.window._selected_text3d() is None
@@ -364,7 +364,7 @@ def test_an_edit_command_leaves_the_new_letters_pristine():
 
 
 def test_edit_3d_text_refuses_a_text_edited_by_hand(native_host, monkeypatch):
-    from views import context_menu
+    from ingetrazo_render import context_menu_build, context_menu_run
     scene = native_host.viewport.scene
     group = make_text_group(text_params("Ab", "Sans"))
     scene.groups.append(group)
@@ -373,7 +373,7 @@ def test_edit_3d_text_refuses_a_text_edited_by_hand(native_host, monkeypatch):
     flashed, opened = [], []
     monkeypatch.setattr(native_host.viewport, "flash_status", lambda msg, ms: flashed.append(msg))
     monkeypatch.setattr("views.font_picker.text3d", lambda *args: opened.append(args))
-    menu = context_menu.build(native_host.window, native_host.view)
+    menu = context_menu_build(native_host.window, native_host.view)
     edit = menu.find("edittext3d")
     assert edit and not edit.enabled and "edited by hand" in edit.label
     native_host.window._on_edit_3d_text(group)

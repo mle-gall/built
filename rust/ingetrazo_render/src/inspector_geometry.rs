@@ -150,9 +150,7 @@ pub fn inspector_rename(vp: &Bound<'_, PyAny>, uid: &str, text: &str) -> PyResul
     {
         return Ok(());
     }
-    let verbs = vp.py().import("views.verbs")?;
-    let kind = verbs.call_method1("kind_of", (&scene, &sel))?;
-    if !super::verbs::verbs_name_editable(&kind.extract::<String>()?) {
+    if !super::verbs::verbs_name_editable(&super::viewport_menu::kind_of(&scene, &sel)?) {
         return Ok(());
     }
     let path = scene.call_method1("occurrence_path", (&group,))?;

@@ -136,7 +136,7 @@ class WidgetShim(object if NATIVE else QObject):
     def event(self, e):
         # Qt's own events (queued calls of QTimer.singleShot(0, self, fn),
         # child events) still need QObject's handler; the shell's value
-        # events (app_shell.events) end here, unclaimed.
+        # events (shell_events.rs) end here, unclaimed.
         if NATIVE:
             return False
         from PySide6.QtCore import QEvent

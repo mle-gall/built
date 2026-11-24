@@ -374,7 +374,7 @@ def chrome_frame(view):
         _chrome_form(view, win)
         from views import wgpu_start
         wgpu_start.before_frame(view, win)
-        from views import chrome_sheet
+        from ingetrazo_render import chrome_sheet
         chrome_sheet.before_frame(view, win)
     cpu, gpu = renderer.render()
     after_frame(view)
@@ -405,7 +405,7 @@ def before_frame(view) -> None:
     _chrome_form(view, win)
     from views import wgpu_start
     wgpu_start.before_frame(view, win)
-    from views import chrome_sheet
+    from ingetrazo_render import chrome_sheet
     chrome_sheet.before_frame(view, win)
     if not view._ui_tools_sent and win._tool_actions:
         _send_tools(view, win)
@@ -426,13 +426,13 @@ def before_frame(view) -> None:
     _selection(view, win, active)
     _cluster(view, win)
     _form(view, win)
-    from views import wgpu_deliveries
-    wgpu_deliveries.bind(win)
+    from ingetrazo_render import bind_deliveries
+    bind_deliveries(win)
     from views import wgpu_library
     wgpu_library.before_frame(view, win)
     _sync_project_rows(view, win)
-    from views import inspector_bridge
-    inspector_bridge.sync(view, win)
+    from ingetrazo_render import inspector_sync
+    inspector_sync(view, win)
     _tabs(view, win)
     _projects(view, win)
     from views import wgpu_tabs
@@ -603,17 +603,10 @@ def _selection(view, win, active) -> None:
 
 def _commands(win, sel):
     """(id, label, shortcut, run, enabled, in More) for the inspector's
-    verbs: the verb source's (views/verbs.py, verbs.rs), the very entries
-    the right-click menu offers this selection, run the same way."""
-    import json
-    from views import context_menu, verbs
-    view = getattr(getattr(win, "_doc", None), "stand_in", None)
-    facts = verbs.facts(win.viewport.scene, sel, win, view)
-    kind = verbs.verbs_kind(json.dumps(facts))
-    sel = list(sel)
-    return [(vid, label, key, (lambda vid=vid: context_menu.run(win, view, kind, vid, sel, facts=facts)),
-             enabled, more)
-            for vid, label, key, enabled, more in verbs.verbs_inspector(json.dumps(facts))]
+    verbs: the verb source's (verbs.rs), the very entries the right-click
+    menu offers this selection, run the same way (viewport_menu.rs)."""
+    from ingetrazo_render import inspector_verbs
+    return inspector_verbs(win, list(sel))
 
 
 def _show_all(vp) -> None:
@@ -1223,7 +1216,7 @@ def _tree_action(win, view, action) -> None:
             nk = key.partition(":")[2]
             if nk:
                 _select(win, _tree_groups(view, nk))
-            from views.report_sheets import show
+            from ingetrazo_render import show_report_sheet as show
             show(win, "cutlist")
         elif verb == "insp" and key.startswith("lib:"):
             from views import wgpu_library
@@ -2097,17 +2090,17 @@ def _inspector(view, win) -> None:
     from ingetrazo_render import inspector_tag_row
     tag_row = inspector_tag_row(scene)
     groups = [g for g in sel if isinstance(g, Group)]
-    from views import verbs
-    sel_kind = verbs.kind_of(scene, sel)
+    from ingetrazo_render import selection_kind, verbs_name_editable, verbs_offered, verbs_read_only
+    sel_kind = selection_kind(scene, sel)
     if len(sel) == 1 and groups:
         g = groups[0]
         rec = g.ifc or {}
         key = data.get("node_of", {}).get(id(g)) or structure.node_of(g)
         filed_ok = key in nodes
         recipe = data.get("recipes", {}).get(key, {})
-        name_cell = _edit(f"groupname:{g.uid}", g.name or "") if verbs.name_editable(sel_kind) else (g.name or "")
+        name_cell = _edit(f"groupname:{g.uid}", g.name or "") if verbs_name_editable(sel_kind) else (g.name or "")
         rows = [("Name", name_cell), *tag_row]
-        if verbs.read_only(sel_kind):
+        if verbs_read_only(sel_kind):
             rows.append(("Edits", "Read-only here"))
         if g.is_component():
             same = sum(1 for o, _s, _r in structure._placements(scene) if o.mesh is g.mesh)
@@ -2121,7 +2114,7 @@ def _inspector(view, win) -> None:
         else:
             needs = [("Status", _status_text(rec) or "Missing")]
         sections = [("Item", rows), ("What it needs", needs)]
-        if rec.get("class") and verbs.offers(sel_kind, "status"):
+        if rec.get("class") and verbs_offered(sel_kind, "status"):
             sections.append(("Actions", [("status:" + v, v.capitalize()) for v in STATUS_CHOICES]))
         if sel_kind == "linked_part":
             sections.append(("Actions", [("linkfile", "Select its linked file"), ("linkopen", "Edit source")]))
@@ -2136,7 +2129,7 @@ def _inspector(view, win) -> None:
             sections.append(("Actions", [("cutlist", "Cut list…")]))
         from ingetrazo_core import solid_inspector_sections
         solid = solid_inspector_sections(scene, g, view.__dict__.get("_ui_lens") == 2)
-        if solid and not verbs.offers(sel_kind, "repair"):
+        if solid and not verbs_offered(sel_kind, "repair"):
             solid = [s_ for s_ in solid if s_[0] != "Actions"]
         if solid:
             sections += solid
@@ -2200,7 +2193,7 @@ def _inspector(view, win) -> None:
         from ingetrazo_render import inspector_totals
         rows.extend(inspector_totals(scene, sel))
     missing = sum(1 for g in groups if (g.ifc or {}).get("class") and not structure._has_status(g.ifc or {}))
-    if missing and verbs.offers(sel_kind, "status"):
+    if missing and verbs_offered(sel_kind, "status"):
         sections.append(("Status", [("Missing on", f"{missing} items")]))
         sections.append(("Actions", [("status:" + v, "All " + v.lower()) for v in STATUS_CHOICES]))
     if groups:
@@ -2251,9 +2244,9 @@ def _linked_inspector(view, win, data, key):
             rows.insert(2, ("Via", " › ".join(stems[:-1])))
         if node.get("merged"):
             rows.append(("Top node", node["merged"]))
-        # The file verbs first (the verb source, views/verbs.py), then what any row offers.
-        from views import verbs
-        acts = [("lnk:" + v + ":" + key, label) for v, label in verbs.file_verb_rows(not top, state)]
+        # The file verbs first (the verb source, verbs.rs), then what any row offers.
+        from ingetrazo_render import verbs_file
+        acts = [("lnk:" + v + ":" + key, label) for v, label in verbs_file(not top, state)]
         if len(copies) == 1:
             from ingetrazo_core import link_subset_rows
             rows.extend(link_subset_rows(copies[0]))
@@ -2555,7 +2548,7 @@ def _run(win, actions, source_view=None) -> None:
             chrome_dialogs._repaint(win)
             continue
         if kind == "lsheet":
-            from views import chrome_sheet
+            from ingetrazo_render import chrome_sheet
             chrome_sheet.action(win, arg)
             continue
         if kind == "start":
@@ -2567,12 +2560,12 @@ def _run(win, actions, source_view=None) -> None:
             wgpu_sheets.action(win, arg)
             continue
         if (kind, arg) == ("tab", "scene:editcamera"):
-            from views.inspector_bridge import _marked
-            win.edit_scene_camera(_marked(win))
+            from ingetrazo_render import marked_view
+            win.edit_scene_camera(marked_view(win))
             continue
         if kind == "panel" or (kind, arg) in (("act", "camera"), ("tab", "scene:camera")):
-            from views import inspector_bridge
-            inspector_bridge.action(win, win._doc.stand_in, arg if kind == "panel" else '["camera.open",null]')
+            from ingetrazo_render import inspector_action
+            inspector_action(win, win._doc.stand_in, arg if kind == "panel" else '["camera.open",null]')
             continue
         if kind == "tool":
             view = getattr(getattr(win, "_doc", None), "stand_in", None)
@@ -2613,8 +2606,8 @@ def _run(win, actions, source_view=None) -> None:
             from views import wgpu_tabs
             wgpu_tabs.action(win, getattr(getattr(win, "_doc", None), "stand_in", None), arg)
         elif kind == "ctx":
-            from views import context_menu
-            context_menu.action(win, getattr(getattr(win, "_doc", None), "stand_in", None), arg)
+            from ingetrazo_render import context_menu_action
+            context_menu_action(win, getattr(getattr(win, "_doc", None), "stand_in", None), arg)
         elif kind == "tab":
             view = getattr(getattr(win, "_doc", None), "stand_in", None)
             if arg == "model":
@@ -2696,8 +2689,8 @@ def _run(win, actions, source_view=None) -> None:
             elif arg == "active" and data.get("active"):
                 _select(win, _tree_groups(view, data["active"]))
             else:
-                from views import wgpu_deliveries
-                wgpu_deliveries.action(win, view, arg)
+                from ingetrazo_render import delivery_action
+                delivery_action(win, view, arg)
         elif kind == "act" and arg.startswith("form-"):
             view = getattr(getattr(win, "_doc", None), "stand_in", None)
             if view is not None:
@@ -2970,7 +2963,7 @@ def claims_key(view, event) -> bool:
     Escape while its popup is open)? Then no window shortcut fires."""
     if not getattr(view, "_ui_attached", False):
         return False
-    from views import chrome_sheet
+    from ingetrazo_render import chrome_sheet
     large = chrome_sheet.claims_key(view, event)
     if large is not None:
         # The large sheet owns every key but the window's ⌘ shortcuts.
@@ -2997,7 +2990,7 @@ def key(view, event, pressed: bool) -> bool:
             view.renderer.ui_open_commands()
             view.update()
         return True
-    from views import chrome_sheet
+    from ingetrazo_render import chrome_sheet
     if chrome_sheet.claims_key(view, event) is False:
         return False
     from views import wgpu_sheets

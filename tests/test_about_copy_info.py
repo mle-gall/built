@@ -8,7 +8,7 @@ import pytest
 from PySide6.QtWidgets import QApplication
 
 from core.i18n import current_language, set_language
-from views.report_sheets import About, about_review
+from ingetrazo_render import AboutSheet as About, about_review
 from types import SimpleNamespace
 
 _app = QApplication.instance() or QApplication([])

@@ -10,7 +10,7 @@ import pytest
 from PySide6.QtCore import Qt
 from ingetrazo_core import Vec3 as QVector3D
 
-from app_shell.events import KeyEvent, ShortcutOverride
+from ingetrazo_render import KeyEvent, ShortcutOverride
 from tests.controller_surface import ControllerSurface as Viewport
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 

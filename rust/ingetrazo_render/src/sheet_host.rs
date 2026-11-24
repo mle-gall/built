@@ -59,7 +59,7 @@ impl PreviewTask {
             }
         }
         if !form.getattr("closed")?.is_truthy()? {
-            py.import("views.chrome_sheet")?
+            py.import("ingetrazo_render.chrome_sheet")?
                 .call_method1("refresh", (win,))?;
         }
         Ok(())
@@ -86,7 +86,7 @@ pub fn show_delivery_form(
             render_preview,
         },
     )?;
-    py.import("views.chrome_sheet")?
+    py.import("ingetrazo_render.chrome_sheet")?
         .call_method1("open", (win, sheet))?;
     Ok(())
 }
@@ -147,7 +147,7 @@ impl ExportSheet {
 
     fn build<'py>(&self, py: Python<'py>, ctx: &Bound<'_, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         let form = self.form.bind(py);
-        let chrome = py.import("views.chrome_sheet")?;
+        let chrome = py.import("ingetrazo_render.chrome_sheet")?;
         let options = PyDict::new(py);
         let svg = self.svg.bind(py);
         let is_svg = svg.borrow().is_current_view()
@@ -265,7 +265,7 @@ impl ExportSheet {
                 let form = self.form.bind(py);
                 form.call_method1("press", (button,))?;
                 if form.getattr("closed")?.is_truthy()? {
-                    py.import("views.chrome_sheet")?
+                    py.import("ingetrazo_render.chrome_sheet")?
                         .call_method1("close", (ctx.getattr("win")?,))?;
                 }
             }

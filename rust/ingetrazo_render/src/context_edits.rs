@@ -257,7 +257,7 @@ fn section_action(win: &Bound<'_, PyAny>, verb: &str) -> PyResult<()> {
 }
 
 #[pyfunction]
-fn context_lock(vp: &Bound<'_, PyAny>, groups: Vec<Bound<'_, PyAny>>, lock: bool) -> PyResult<()> {
+pub(crate) fn context_lock(vp: &Bound<'_, PyAny>, groups: Vec<Bound<'_, PyAny>>, lock: bool) -> PyResult<()> {
     let scene = vp.getattr("scene")?;
     if scene.getattr("worksession_read_only").is_ok_and(|v| v.is_truthy().unwrap_or(false)) { return Ok(()); }
     let py = vp.py();
