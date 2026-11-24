@@ -15,16 +15,9 @@ tests/test_make_group_selection.py for the paths that accept.
 """
 from __future__ import annotations
 
-import os
-import sys
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication  # noqa: E402
-
-if QApplication.instance() is None:
-    QApplication(sys.argv[:1])
 
 import pytest  # noqa: E402
 from PySide6.QtWidgets import QMessageBox  # noqa: E402
@@ -57,9 +50,8 @@ def V(x, y, z=0.0):
     return QVector3D(float(x), float(y), float(z))
 
 
-def _win_with_a_group_and_loose_geometry():
-    from views.main_window import MainWindow
-    win = MainWindow()
+def _win_with_a_group_and_loose_geometry(native_host):
+    win = native_host.window
     scene = win.viewport.scene
     hist = win.viewport.history
     hist.execute(AddFaceCommand([V(0, 0), V(1, 0), V(1, 1), V(0, 1)]))
@@ -69,64 +61,52 @@ def _win_with_a_group_and_loose_geometry():
     return win, scene
 
 
-def test_grouping_a_group_with_loose_geometry_NESTS_it(cancels):
+def test_grouping_a_group_with_loose_geometry_NESTS_it(native_host, cancels):
     """Esto se negaba, y con razón mientras entrar a un contenedor lo
     horneaba. Con la pila de contextos (2026-09-11) ya no: agrupar una cara
     suelta junto a un grupo mete la cara en la malla del contenedor nuevo y
     el grupo pasa a ser su hijo — lo habitual."""
-    win, scene = _win_with_a_group_and_loose_geometry()
-    try:
-        antes = list(scene.groups)
-        sueltas = len(scene.mesh.faces)
-        scene.selection.clear()
-        scene.selection.update(set(scene.mesh.faces) | set(scene.groups))
-        win._on_make_group()
-        assert cancels["count"] == 0, "ya no hay nada que preguntar"
-        nuevos = [g for g in scene.groups if g not in antes]
-        assert len(nuevos) == 1
-        padre = nuevos[0]
-        assert padre.children == antes, "el grupo viejo es ahora su hijo"
-        assert len(padre.mesh.faces) == 1        # la cara suelta
-        assert len(scene.mesh.faces) == sueltas - 1
-    finally:
-        win._saved_version = scene.version      # closeEvent asks otherwise
-        win.close()
+    win, scene = _win_with_a_group_and_loose_geometry(native_host)
+    antes = list(scene.groups)
+    sueltas = len(scene.mesh.faces)
+    scene.selection.clear()
+    scene.selection.update(set(scene.mesh.faces) | set(scene.groups))
+    win._on_make_group()
+    assert cancels["count"] == 0, "ya no hay nada que preguntar"
+    nuevos = [g for g in scene.groups if g not in antes]
+    assert len(nuevos) == 1
+    padre = nuevos[0]
+    assert padre.children == antes, "el grupo viejo es ahora su hijo"
+    assert len(padre.mesh.faces) == 1        # la cara suelta
+    assert len(scene.mesh.faces) == sueltas - 1
 
 
-def test_grouping_only_loose_geometry_still_works():
-    win, scene = _win_with_a_group_and_loose_geometry()
-    try:
-        before = len(scene.groups)
-        scene.selection.clear()
-        scene.selection.update(scene.mesh.faces)
-        win._on_make_group()
-        assert len(scene.groups) == before + 1
-    finally:
-        win._saved_version = scene.version
-        win.close()
+def test_grouping_only_loose_geometry_still_works(native_host):
+    win, scene = _win_with_a_group_and_loose_geometry(native_host)
+    before = len(scene.groups)
+    scene.selection.clear()
+    scene.selection.update(scene.mesh.faces)
+    win._on_make_group()
+    assert len(scene.groups) == before + 1
 
 
-def test_component_from_loose_geometry_plus_a_group_holds_both(monkeypatch):
+def test_component_from_loose_geometry_plus_a_group_holds_both(native_host, monkeypatch):
     """It used to refuse; since issue #90 it makes ONE component holding the
     loose geometry and the group, still a group inside."""
     from views import chrome_forms
-    win, scene = _win_with_a_group_and_loose_geometry()
-    try:
-        # the scale figure (a face-me billboard) never goes inside
-        inner = [g for g in scene.groups
-                 if not getattr(g, "billboard", False)]
-        before = len(scene.groups)
-        scene.selection.clear()
-        scene.selection.update(set(scene.mesh.faces) | set(scene.groups))
-        win._on_make_component()
-        form = chrome_forms.current(win)
-        form.receive("text", "Banca")
-        form.press("ok")
-        assert len(scene.groups) == before - len(inner) + 1
-        comp = [g for g in scene.groups if g not in inner
-                and not getattr(g, "billboard", False)][0]
-        assert comp.is_component() and comp.name == "Banca"
-        assert comp.children == inner and not scene.mesh.faces
-    finally:
-        win._saved_version = scene.version
-        win.close()
+    win, scene = _win_with_a_group_and_loose_geometry(native_host)
+    # the scale figure (a face-me billboard) never goes inside
+    inner = [g for g in scene.groups
+             if not getattr(g, "billboard", False)]
+    before = len(scene.groups)
+    scene.selection.clear()
+    scene.selection.update(set(scene.mesh.faces) | set(scene.groups))
+    win._on_make_component()
+    form = chrome_forms.current(win)
+    form.receive("text", "Banca")
+    form.press("ok")
+    assert len(scene.groups) == before - len(inner) + 1
+    comp = [g for g in scene.groups if g not in inner
+            and not getattr(g, "billboard", False)][0]
+    assert comp.is_component() and comp.name == "Banca"
+    assert comp.children == inner and not scene.mesh.faces

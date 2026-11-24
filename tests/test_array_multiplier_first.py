@@ -6,27 +6,20 @@ The X only entered the value box after a digit, because bare X is the Text
 shortcut (#20) — and the window's shortcut took it before the viewport saw
 the key. Right after a Move or Rotate copy, while «3x» / «/3» would lay an
 array, a bare X now opens the value box; anywhere else it is still Text.
-Real key events through a shown window, so the shortcut map is in play.
+Keys go through the native host and its shortcut map.
 """
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from PySide6.QtCore import QPointF, Qt  # noqa: E402
 from ingetrazo_core import Vec3 as V
-from PySide6.QtTest import QTest  # noqa: E402
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from tools.base import ToolContext  # noqa: E402
 
 
-def _window():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    win.show()
-    QApplication.processEvents()
+def _window(native_host):
+    win = native_host.window
     vp = win.viewport
     face = vp.scene.mesh.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0),
                                    V(0, 1, 0)])
@@ -38,6 +31,13 @@ def _window():
 def _ctx(vp, x, y):
     return ToolContext(viewport=vp, world=V(x, y, 0), screen=QPointF(0, 0),
                        modifiers=Qt.NoModifier, snap=None)
+
+
+def _key(vp, key, text=None):
+    if text is None:
+        text = chr(key) if key < 128 else ""
+    vp._host.key(True, int(key), 0, text)
+    vp._host.key(False, int(key), 0, text)
 
 
 def _xs(vp):
@@ -57,93 +57,65 @@ def _move_copy(win, vp, face):
 
 
 def _type(vp, text):
-    QTest.keyClicks(vp.keys_stand_in, text)
-    QTest.keyClick(vp.keys_stand_in, Qt.Key_Return)
-    QApplication.processEvents()
+    for char in text:
+        _key(vp, ord(char.upper()), char)
+    _key(vp, Qt.Key_Return)
 
 
-def _close(win):
-    win._saved_version = win.viewport.scene.version
-    win.close()
+def test_x5_after_a_move_copy_lays_five_copies(native_host):
+    win, vp, face = _window(native_host)
+    tool = _move_copy(win, vp, face)
+    _type(vp, "x5")
+    assert vp.active_tool is tool                   # not the Text tool
+    assert _xs(vp) == [0.0, 2.0, 4.0, 6.0, 8.0, 10.0]
 
 
-def test_x5_after_a_move_copy_lays_five_copies():
-    win, vp, face = _window()
-    try:
-        tool = _move_copy(win, vp, face)
-        _type(vp, "x5")
-        assert vp.active_tool is tool                   # not the Text tool
-        assert _xs(vp) == [0.0, 2.0, 4.0, 6.0, 8.0, 10.0]
-    finally:
-        _close(win)
+def test_5x_still_works(native_host):
+    win, vp, face = _window(native_host)
+    tool = _move_copy(win, vp, face)
+    _type(vp, "5x")
+    assert vp.active_tool is tool
+    assert _xs(vp) == [0.0, 2.0, 4.0, 6.0, 8.0, 10.0]
 
 
-def test_5x_still_works():
-    win, vp, face = _window()
-    try:
-        tool = _move_copy(win, vp, face)
-        _type(vp, "5x")
-        assert vp.active_tool is tool
-        assert _xs(vp) == [0.0, 2.0, 4.0, 6.0, 8.0, 10.0]
-    finally:
-        _close(win)
+def test_bare_x_without_a_copy_is_still_the_text_tool(native_host):
+    win, vp, face = _window(native_host)
+    win._activate_tool("move")
+    move = vp.active_tool
+    _key(vp, Qt.Key_X)
+    assert vp.active_tool is not move
+    assert type(vp.active_tool).__name__ == "TextTool"
 
 
-def test_bare_x_without_a_copy_is_still_the_text_tool():
-    win, vp, face = _window()
-    try:
-        win._activate_tool("move")
-        move = vp.active_tool
-        QTest.keyClick(vp.keys_stand_in, Qt.Key_X)
-        QApplication.processEvents()
-        assert vp.active_tool is not move
-        assert type(vp.active_tool).__name__ == "TextTool"
-    finally:
-        _close(win)
+def test_once_the_array_window_closes_x_is_text_again(native_host):
+    win, vp, face = _window(native_host)
+    tool = _move_copy(win, vp, face)
+    tool.on_click(_ctx(vp, 5, 5))                   # a click ends the window
+    assert not tool.array_pending(vp)
+    _key(vp, Qt.Key_X)
+    assert type(vp.active_tool).__name__ == "TextTool"
 
 
-def test_once_the_array_window_closes_x_is_text_again():
-    win, vp, face = _window()
-    try:
-        tool = _move_copy(win, vp, face)
-        tool.on_click(_ctx(vp, 5, 5))                   # a click ends the window
-        assert not tool.array_pending(vp)
-        QTest.keyClick(vp.keys_stand_in, Qt.Key_X)
-        QApplication.processEvents()
-        assert type(vp.active_tool).__name__ == "TextTool"
-    finally:
-        _close(win)
-
-
-def test_esc_right_after_a_copy_closes_the_array_window():
+def test_esc_right_after_a_copy_closes_the_array_window(native_host):
     """The Esc cascade gains one step, only right after a copy: the first
     Esc with an empty value box closes the array window — X is Text again —
     and the selection is left alone for the next Esc."""
-    win, vp, face = _window()
-    try:
-        tool = _move_copy(win, vp, face)
-        assert tool.array_pending(vp)
-        QTest.keyClick(vp.keys_stand_in, Qt.Key_Escape)
-        QApplication.processEvents()
-        assert not tool.array_pending(vp)
-        assert vp.scene.selection                       # still selected
-        QTest.keyClick(vp.keys_stand_in, Qt.Key_X)
-        QApplication.processEvents()
-        assert type(vp.active_tool).__name__ == "TextTool"
-    finally:
-        _close(win)
+    win, vp, face = _window(native_host)
+    tool = _move_copy(win, vp, face)
+    assert tool.array_pending(vp)
+    _key(vp, Qt.Key_Escape)
+    assert not tool.array_pending(vp)
+    assert vp.scene.selection                       # still selected
+    _key(vp, Qt.Key_X)
+    assert type(vp.active_tool).__name__ == "TextTool"
 
 
-def test_x_then_esc_esc_then_x_is_text():
+def test_x_then_esc_esc_then_x_is_text(native_host):
     """A stray X: the first Esc empties the value box, the second closes
     the array window, and the next X is the Text tool."""
-    win, vp, face = _window()
-    try:
-        _move_copy(win, vp, face)
-        for key in (Qt.Key_X, Qt.Key_Escape, Qt.Key_Escape, Qt.Key_X):
-            QTest.keyClick(vp.keys_stand_in, key)
-            QApplication.processEvents()
-        assert type(vp.active_tool).__name__ == "TextTool"
-        assert _xs(vp) == [0.0, 2.0]                    # the copy stays
-    finally:
-        _close(win)
+    win, vp, face = _window(native_host)
+    _move_copy(win, vp, face)
+    for key in (Qt.Key_X, Qt.Key_Escape, Qt.Key_Escape, Qt.Key_X):
+        _key(vp, key)
+    assert type(vp.active_tool).__name__ == "TextTool"
+    assert _xs(vp) == [0.0, 2.0]                    # the copy stays

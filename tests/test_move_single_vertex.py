@@ -9,14 +9,11 @@ on the plane of a face the drag itself was bending, the vertex followed
 the cursor, the face tilted, and the next hover read a different plane."""
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QMouseEvent
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication
 
 from core.history import History
 from core.scene import Scene
@@ -24,7 +21,6 @@ from core.snap import SnapResult
 from tools.base import ToolContext
 from tools.move import MoveTool
 
-_app = QApplication.instance() or QApplication([])
 
 P = [V(0, 0, 0), V(3, 0, 0), V(3, 4, 0), V(0, 4, 0),
      V(0, 0, 2.6), V(3, 0, 2.6), V(3, 4, 2.6), V(0, 4, 2.6)]
@@ -151,23 +147,14 @@ def test_the_faces_in_motion_are_the_ones_on_the_grabbed_corner():
 
 # ---- the drag, in a real viewport -----------------------------------------
 
-def _window():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    win.resize(1000, 700)
-    win.show()
-    _app.processEvents()
+def _window(native_host):
+    win = native_host.window
+    native_host.resize(1000, 700, 1.0)
     vp = win.viewport
     _box(vp.scene)
     vp.scene.version += 1
-    _app.processEvents()
     win._activate_tool("move")
     return win, vp
-
-
-def _close(win, vp):
-    win._saved_version = vp.scene.version
-    win.close()
 
 
 def _hover(vp, x, y):
@@ -185,31 +172,25 @@ def _click(vp, x, y):
         Qt.LeftButton, Qt.NoModifier))
 
 
-def test_in_the_viewport_a_corner_grabs_one_vertex():
-    win, vp = _window()
-    try:
-        x, y = vp._world_to_pixel(P[6])
-        assert _hover(vp, x, y)[0] == "endpoint"
-        _click(vp, x, y)
-        assert _grabbed(vp.active_tool) == [(3.0, 4.0, 2.6)]
-    finally:
-        _close(win, vp)
+def test_in_the_viewport_a_corner_grabs_one_vertex(native_host):
+    win, vp = _window(native_host)
+    x, y = vp._world_to_pixel(P[6])
+    assert _hover(vp, x, y)[0] == "endpoint"
+    _click(vp, x, y)
+    assert _grabbed(vp.active_tool) == [(3.0, 4.0, 2.6)]
 
 
-def test_the_drag_reads_the_same_point_coming_and_going():
+def test_the_drag_reads_the_same_point_coming_and_going(native_host):
     """The tremble: the point under a pixel depended on where the bent
     face stood after the previous hover. Now each pixel gives one point,
     whichever way the mouse came."""
-    win, vp = _window()
-    try:
-        x, y = vp._world_to_pixel(P[6])
-        _click(vp, x, y)
-        path = [(x + 3 * i, y - 4 * i) for i in range(12)]
-        going = [_hover(vp, *p) for p in path]
-        coming = [_hover(vp, *p) for p in reversed(path)][::-1]
-        assert going == coming
-        assert not any(kind == "on_face" for kind, _p in going + coming)
-        still = {_hover(vp, x + 25, y - 30) for _ in range(5)}
-        assert len(still) == 1
-    finally:
-        _close(win, vp)
+    win, vp = _window(native_host)
+    x, y = vp._world_to_pixel(P[6])
+    _click(vp, x, y)
+    path = [(x + 3 * i, y - 4 * i) for i in range(12)]
+    going = [_hover(vp, *p) for p in path]
+    coming = [_hover(vp, *p) for p in reversed(path)][::-1]
+    assert going == coming
+    assert not any(kind == "on_face" for kind, _p in going + coming)
+    still = {_hover(vp, x + 25, y - 30) for _ in range(5)}
+    assert len(still) == 1

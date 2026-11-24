@@ -3146,9 +3146,9 @@ fn parallel_annotation_ray(eye: [f64; 3], forward: [f64; 3], point: [f64; 3]) ->
 }
 
 /// Document state comes from the controller. Headless views have no dock to unwind.
-#[pyfunction(signature = (busy, selected, editing, renderer=None))]
-fn model_escape(busy: bool, selected: bool, editing: bool, mut renderer: Option<PyRefMut<'_, Renderer>>) -> &'static str {
-    ui::Ui::model_escape(renderer.as_mut().and_then(|r| r.ui.as_mut()), busy, selected, editing)
+#[pyfunction(signature = (busy, selected, editing, renderer=None, array_pending=false))]
+fn model_escape(busy: bool, selected: bool, editing: bool, mut renderer: Option<PyRefMut<'_, Renderer>>, array_pending: bool) -> &'static str {
+    ui::Ui::model_escape(renderer.as_mut().and_then(|r| r.ui.as_mut()), busy, array_pending, selected, editing)
 }
 
 /// A context click on a selected item addresses its selection. A miss addresses the background.

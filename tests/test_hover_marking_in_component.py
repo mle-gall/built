@@ -8,9 +8,9 @@ placed and exploded it appeared metres from the real part."""
 from __future__ import annotations
 
 import numpy as np
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from PySide6.QtCore import QPointF, Qt
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
 
 from core.group import Group, world_mesh
 from core.history import ExplodeViewCommand
@@ -18,7 +18,6 @@ from core.mesh import Mesh
 from tools.base import ToolContext
 from tools.paint import PaintTool
 
-_app = QApplication.instance() or QApplication([])
 
 _QUADS = ((0, 2, 3, 1), (4, 5, 7, 6), (0, 1, 5, 4),
           (2, 6, 7, 3), (0, 4, 6, 2), (1, 3, 7, 5))
@@ -36,11 +35,9 @@ def _cube(at) -> Group:
     return g
 
 
-def _window_with_a_placed_exploded_component():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    win.resize(1200, 800)
-    win.show()
+def _window_with_a_placed_exploded_component(native_host):
+    win = native_host.window
+    native_host.resize(1200, 800, 1.0)
     vp = win.viewport
     box = Group(name="box")
     box.adopt([_cube((0, 0, 0)), _cube((-3, 0, 0)), _cube((3, 0, 0)),
@@ -84,41 +81,33 @@ def _mark_positions(face, placement=None):
     return marks.view(VERTEX)['pos']
 
 
-def test_the_paint_hover_marking_lies_on_the_part_it_is_over():
-    win, vp = _window_with_a_placed_exploded_component()
-    try:
-        tool = PaintTool()
-        checked = 0
-        for x, y, _face, _placement in _probe(vp):
-            # The eyedropper (Alt) marks the one face it samples; the bucket
-            # marks the closed component whole, as its click paints it.
-            tool.on_hover(_ctx(vp, x, y, Qt.AltModifier))
-            face, placement = vp._hover_entity, vp._hover_placement
-            assert face is not None and placement is not None
-            marking = _mark_positions(face, placement)
-            lo, hi = _bounds(world_mesh(placement))
-            assert np.all(marking.min(axis=0) >= lo - 1e-3)
-            assert np.all(marking.max(axis=0) <= hi + 1e-3)
-            checked += 1
-        assert checked >= 8
-    finally:
-        win._saved_version = vp.scene.version
-        win.close()
+def test_the_paint_hover_marking_lies_on_the_part_it_is_over(native_host):
+    win, vp = _window_with_a_placed_exploded_component(native_host)
+    tool = PaintTool()
+    checked = 0
+    for x, y, _face, _placement in _probe(vp):
+        # The eyedropper (Alt) marks the one face it samples; the bucket
+        # marks the closed component whole, as its click paints it.
+        tool.on_hover(_ctx(vp, x, y, Qt.AltModifier))
+        face, placement = vp._hover_entity, vp._hover_placement
+        assert face is not None and placement is not None
+        marking = _mark_positions(face, placement)
+        lo, hi = _bounds(world_mesh(placement))
+        assert np.all(marking.min(axis=0) >= lo - 1e-3)
+        assert np.all(marking.max(axis=0) <= hi + 1e-3)
+        checked += 1
+    assert checked >= 8
 
 
-def test_without_the_placement_the_marking_is_where_the_part_would_be_unplaced():
+def test_without_the_placement_the_marking_is_where_the_part_would_be_unplaced(native_host):
     """What the fix corrects: the same face, built from its own coordinates
     alone, is far from the part on screen."""
-    win, vp = _window_with_a_placed_exploded_component()
-    try:
-        _x, _y, face, placement = next(_probe(vp))
-        bare = _mark_positions(face, None)
-        lo, hi = _bounds(world_mesh(placement))
-        assert not np.all(bare.min(axis=0) >= lo - 1e-3) \
-            or not np.all(bare.max(axis=0) <= hi + 1e-3)
-    finally:
-        win._saved_version = vp.scene.version
-        win.close()
+    win, vp = _window_with_a_placed_exploded_component(native_host)
+    _x, _y, face, placement = next(_probe(vp))
+    bare = _mark_positions(face, None)
+    lo, hi = _bounds(world_mesh(placement))
+    assert not np.all(bare.min(axis=0) >= lo - 1e-3) \
+        or not np.all(bare.max(axis=0) <= hi + 1e-3)
 
 
 def test_a_loose_face_needs_no_placement():
@@ -130,14 +119,10 @@ def test_a_loose_face_needs_no_placement():
     assert data.max(axis=0).tolist() == [1.0, 1.0, 0.0]
 
 
-def test_hovering_the_same_face_through_another_placement_updates_the_marking():
-    win, vp = _window_with_a_placed_exploded_component()
-    try:
-        _x, _y, face, placement = next(_probe(vp))
-        vp.set_hover(face, placement)
-        other = type("Placement", (), {"xform": QMatrix4x4()})()
-        vp.set_hover(face, other)
-        assert vp._hover_placement is other
-    finally:
-        win._saved_version = vp.scene.version
-        win.close()
+def test_hovering_the_same_face_through_another_placement_updates_the_marking(native_host):
+    win, vp = _window_with_a_placed_exploded_component(native_host)
+    _x, _y, face, placement = next(_probe(vp))
+    vp.set_hover(face, placement)
+    other = type("Placement", (), {"xform": QMatrix4x4()})()
+    vp.set_hover(face, other)
+    assert vp._hover_placement is other

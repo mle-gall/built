@@ -6,17 +6,16 @@ parts. What is drawn inside reaches every copy, each at its own place, and
 undo takes it all back with the assembly's matrix where it was."""
 from __future__ import annotations
 
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
 from PySide6.QtCore import QPointF, Qt
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
-from PySide6.QtWidgets import QApplication
 
 from core.edits import build_add_edge
 from core.group import Group
 from core.mesh import Mesh
 from core.scene import Scene
 
-_app = QApplication.instance() or QApplication([])
 Z = 9.0
 
 
@@ -61,17 +60,11 @@ def _drawn(scene):
     return seen
 
 
-def _window(*groups):
-    from views.main_window import MainWindow
-    win = MainWindow()
+def _window(native_host, *groups):
+    win = native_host.window
     win.viewport.scene.groups.extend(groups)
     win.viewport.scene.version += 1
     return win, win.viewport, win.viewport.scene
-
-
-def _close(win):
-    win._saved_version = win.viewport.scene.version
-    win.close()
 
 
 def _draw(vp, a, b):
@@ -79,113 +72,95 @@ def _draw(vp, a, b):
 
 
 @pytest.mark.parametrize("own_faces", [True, False])
-def test_a_line_drawn_in_an_assembly_reaches_every_copy(own_faces):
+def test_a_line_drawn_in_an_assembly_reaches_every_copy(native_host, own_faces):
     a, b = _assembly(own_faces)
-    win, vp, scene = _window(a, b)
-    try:
-        vp.begin_group_edit(a)
-        _draw(vp, V(10, 0, Z), V(11, 0, Z))
-        vp.end_group_edit()
-        assert _drawn(scene) == {"A": {10.0, 11.0}, "B": {20.0, 21.0}}
-        assert a.mesh is b.mesh
-        assert a.xform == _at(10.0) and b.xform == _at(20.0)
-    finally:
-        _close(win)
+    win, vp, scene = _window(native_host, a, b)
+    vp.begin_group_edit(a)
+    _draw(vp, V(10, 0, Z), V(11, 0, Z))
+    vp.end_group_edit()
+    assert _drawn(scene) == {"A": {10.0, 11.0}, "B": {20.0, 21.0}}
+    assert a.mesh is b.mesh
+    assert a.xform == _at(10.0) and b.xform == _at(20.0)
 
 
-def test_a_turned_assembly_keeps_its_parts_where_they_are():
+def test_a_turned_assembly_keeps_its_parts_where_they_are(native_host):
     a, b = _assembly(True, turn=90.0)
-    win, vp, scene = _window(a, b)
+    win, vp, scene = _window(native_host, a, b)
     corners = sorted((round(p.x(), 3), round(p.y(), 3)) for g, m in
                      scene.placements() if g.name == "part"
                      for p in (m.map(v.position) for v in g.mesh.vertices))
-    try:
-        vp.begin_group_edit(a)
-        _draw(vp, V(10, 0, Z), V(10, 1, Z))
-        vp.end_group_edit()
-        after = sorted((round(p.x(), 3), round(p.y(), 3)) for g, m in
-                       scene.placements() if g.name == "part"
-                       for p in (m.map(v.position) for v in g.mesh.vertices))
-        assert after == corners
-        assert a.mesh is b.mesh and a.xform == _at(10.0, 90.0)
-    finally:
-        _close(win)
+    vp.begin_group_edit(a)
+    _draw(vp, V(10, 0, Z), V(10, 1, Z))
+    vp.end_group_edit()
+    after = sorted((round(p.x(), 3), round(p.y(), 3)) for g, m in
+                   scene.placements() if g.name == "part"
+                   for p in (m.map(v.position) for v in g.mesh.vertices))
+    assert after == corners
+    assert a.mesh is b.mesh and a.xform == _at(10.0, 90.0)
 
 
 @pytest.mark.parametrize("own_faces", [True, False])
-def test_undo_and_redo_are_one_step_and_keep_the_copies_shared(own_faces):
+def test_undo_and_redo_are_one_step_and_keep_the_copies_shared(native_host, own_faces):
     a, b = _assembly(own_faces)
-    win, vp, scene = _window(a, b)
+    win, vp, scene = _window(native_host, a, b)
     steps = len(vp.history.undo_stack)
-    try:
-        vp.begin_group_edit(a)
-        _draw(vp, V(10, 0, Z), V(11, 0, Z))
-        vp.end_group_edit()
-        assert len(vp.history.undo_stack) == steps + 1
-        vp.history.undo()
-        assert _drawn(scene) == {}
-        assert a.mesh is b.mesh and a.xform == _at(10.0)
-        assert a.children[0].xform == QMatrix4x4()
-        vp.history.redo()
-        assert _drawn(scene) == {"A": {10.0, 11.0}, "B": {20.0, 21.0}}
-        assert a.xform == _at(10.0)
-        assert a.children[0].xform == QMatrix4x4()
-    finally:
-        _close(win)
+    vp.begin_group_edit(a)
+    _draw(vp, V(10, 0, Z), V(11, 0, Z))
+    vp.end_group_edit()
+    assert len(vp.history.undo_stack) == steps + 1
+    vp.history.undo()
+    assert _drawn(scene) == {}
+    assert a.mesh is b.mesh and a.xform == _at(10.0)
+    assert a.children[0].xform == QMatrix4x4()
+    vp.history.redo()
+    assert _drawn(scene) == {"A": {10.0, 11.0}, "B": {20.0, 21.0}}
+    assert a.xform == _at(10.0)
+    assert a.children[0].xform == QMatrix4x4()
 
 
-def test_opening_an_assembly_and_leaving_changes_nothing():
+def test_opening_an_assembly_and_leaving_changes_nothing(native_host):
     a, b = _assembly(False)
-    win, vp, _scene = _window(a, b)
+    win, vp, _scene = _window(native_host, a, b)
     mesh = a.mesh
     steps = len(vp.history.undo_stack)
-    try:
-        vp.begin_group_edit(a)
-        vp.end_group_edit()
-        assert a.mesh is mesh and a.xform == _at(10.0) and a.axes is None
-        assert a.children[0].xform == QMatrix4x4()
-        assert len(vp.history.undo_stack) == steps
-    finally:
-        _close(win)
+    vp.begin_group_edit(a)
+    vp.end_group_edit()
+    assert a.mesh is mesh and a.xform == _at(10.0) and a.axes is None
+    assert a.children[0].xform == QMatrix4x4()
+    assert len(vp.history.undo_stack) == steps
 
 
-def test_a_shared_part_opened_inside_an_assembly_still_shares():
+def test_a_shared_part_opened_inside_an_assembly_still_shares(native_host):
     a, b = _assembly(True)
-    win, vp, scene = _window(a, b)
-    try:
-        vp.begin_group_edit(a)
-        vp.begin_group_edit(a.children[0])
-        _draw(vp, V(10, 0, Z), V(11, 0, Z))
-        vp.end_group_edit()
-        assert _drawn(scene)["part"] == {10.0, 11.0, 20.0, 21.0}
-        assert a.xform == _at(10.0) and a.children[0].xform == QMatrix4x4()
-        assert a.children[0].mesh is b.children[0].mesh
-    finally:
-        _close(win)
+    win, vp, scene = _window(native_host, a, b)
+    vp.begin_group_edit(a)
+    vp.begin_group_edit(a.children[0])
+    _draw(vp, V(10, 0, Z), V(11, 0, Z))
+    vp.end_group_edit()
+    assert _drawn(scene)["part"] == {10.0, 11.0, 20.0, 21.0}
+    assert a.xform == _at(10.0) and a.children[0].xform == QMatrix4x4()
+    assert a.children[0].mesh is b.children[0].mesh
 
 
-def test_a_part_and_its_assembly_edited_together_undo_as_one_step():
+def test_a_part_and_its_assembly_edited_together_undo_as_one_step(native_host):
     a, b = _assembly(True)
-    win, vp, scene = _window(a, b)
+    win, vp, scene = _window(native_host, a, b)
     steps = len(vp.history.undo_stack)
-    try:
-        vp.begin_group_edit(a)
-        _draw(vp, V(10, 0, Z), V(11, 0, Z))
-        vp.begin_group_edit(a.children[0])
-        _draw(vp, V(12, 0, Z), V(13, 0, Z))
-        vp.end_group_edit()
-        full = {"A": {10.0, 11.0}, "B": {20.0, 21.0},
-                "part": {12.0, 13.0, 22.0, 23.0}}
-        assert _drawn(scene) == full
-        assert len(vp.history.undo_stack) == steps + 1
-        vp.history.undo()
-        assert _drawn(scene) == {}
-        assert a.xform == _at(10.0) and a.children[0].xform == QMatrix4x4()
-        vp.history.redo()
-        assert _drawn(scene) == full
-        assert a.xform == _at(10.0) and a.children[0].xform == QMatrix4x4()
-    finally:
-        _close(win)
+    vp.begin_group_edit(a)
+    _draw(vp, V(10, 0, Z), V(11, 0, Z))
+    vp.begin_group_edit(a.children[0])
+    _draw(vp, V(12, 0, Z), V(13, 0, Z))
+    vp.end_group_edit()
+    full = {"A": {10.0, 11.0}, "B": {20.0, 21.0},
+            "part": {12.0, 13.0, 22.0, 23.0}}
+    assert _drawn(scene) == full
+    assert len(vp.history.undo_stack) == steps + 1
+    vp.history.undo()
+    assert _drawn(scene) == {}
+    assert a.xform == _at(10.0) and a.children[0].xform == QMatrix4x4()
+    vp.history.redo()
+    assert _drawn(scene) == full
+    assert a.xform == _at(10.0) and a.children[0].xform == QMatrix4x4()
 
 
 def _parts_at(scene):
@@ -218,7 +193,7 @@ def _explode(win, vp, a):
 
 @pytest.mark.parametrize("turn", [0.0, 90.0])
 @pytest.mark.parametrize("edit", [_move, _delete, _draw_and_delete, _explode])
-def test_parts_changed_inside_an_assembly_undo_and_redo_in_place(edit, turn):
+def test_parts_changed_inside_an_assembly_undo_and_redo_in_place(native_host, edit, turn):
     """Deleting, moving or exploding a part happens with the matrix down in
     the parts; leaving brings it back up. Undo used to restore a deleted
     part with the matrix still in it, so it landed one placement away."""
@@ -231,42 +206,36 @@ def test_parts_changed_inside_an_assembly_undo_and_redo_in_place(edit, turn):
             sub.xform.translate(0, 0, 3)
             part.mesh = Mesh()
             part.adopt([sub])
-    win, vp, scene = _window(a, b)
+    win, vp, scene = _window(native_host, a, b)
     start, drawn0 = _parts_at(scene), _drawn(scene)
     parts0 = [QMatrix4x4(c.xform) for c in a.children]
     steps = len(vp.history.undo_stack)
-    try:
-        vp.begin_group_edit(a)
-        edit(win, vp, a)
-        vp.end_group_edit()
-        left, drawn1 = _parts_at(scene), _drawn(scene)
-        assert len(vp.history.undo_stack) == steps + 1
+    vp.begin_group_edit(a)
+    edit(win, vp, a)
+    vp.end_group_edit()
+    left, drawn1 = _parts_at(scene), _drawn(scene)
+    assert len(vp.history.undo_stack) == steps + 1
+    assert a.xform == _at(10.0, turn) and a.mesh is b.mesh
+    for _ in range(2):
+        vp.history.undo()
+        assert (_parts_at(scene), _drawn(scene)) == (start, drawn0)
+        assert a.xform == _at(10.0, turn)
+        assert [QMatrix4x4(c.xform) for c in a.children] == parts0
+        assert a.mesh is b.mesh
+        vp.history.redo()
+        assert (_parts_at(scene), _drawn(scene)) == (left, drawn1)
         assert a.xform == _at(10.0, turn) and a.mesh is b.mesh
-        for _ in range(2):
-            vp.history.undo()
-            assert (_parts_at(scene), _drawn(scene)) == (start, drawn0)
-            assert a.xform == _at(10.0, turn)
-            assert [QMatrix4x4(c.xform) for c in a.children] == parts0
-            assert a.mesh is b.mesh
-            vp.history.redo()
-            assert (_parts_at(scene), _drawn(scene)) == (left, drawn1)
-            assert a.xform == _at(10.0, turn) and a.mesh is b.mesh
-    finally:
-        _close(win)
 
 
-def test_a_copied_group_of_parts_is_made_unique_on_the_way_in():
+def test_a_copied_group_of_parts_is_made_unique_on_the_way_in(native_host):
     a, b = _assembly(True)
     a.component = b.component = False
-    win, vp, scene = _window(a, b)
-    try:
-        vp.begin_group_edit(a)
-        _draw(vp, V(10, 0, Z), V(11, 0, Z))
-        vp.end_group_edit()
-        assert _drawn(scene) == {"A": {10.0, 11.0}}
-        assert a.mesh is not b.mesh
-    finally:
-        _close(win)
+    win, vp, scene = _window(native_host, a, b)
+    vp.begin_group_edit(a)
+    _draw(vp, V(10, 0, Z), V(11, 0, Z))
+    vp.end_group_edit()
+    assert _drawn(scene) == {"A": {10.0, 11.0}}
+    assert a.mesh is not b.mesh
 
 
 def test_an_assembly_placed_once_has_nothing_to_share_back():
@@ -368,9 +337,9 @@ def _expected(scene, drawn_in, points):
             for m in _world_of(scene, drawn_in.mesh) for p in local}
 
 
-def test_a_line_drawn_two_levels_deep_reaches_every_copy_in_its_own_frame():
+def test_a_line_drawn_two_levels_deep_reaches_every_copy_in_its_own_frame(native_host):
     tops = _deep()
-    win, vp, scene = _window(*tops)
+    win, vp, scene = _window(native_host, *tops)
     r1 = tops[0]
     target = r1.children[1]              # the mirrored copy in the turned one
     p, q = V(11, 3, Z), V(12, 4, Z)
@@ -378,32 +347,29 @@ def test_a_line_drawn_two_levels_deep_reaches_every_copy_in_its_own_frame():
     assert len(want) == 8                # four copies, two ends each
     start = _matrices(tops)
     steps = len(vp.history.undo_stack)
-    try:
-        vp.begin_group_edit(r1)
-        vp.begin_group_edit(target)
-        _draw(vp, p, q)
-        vp.end_group_edit()
-        assert scene.edit_group is None
+    vp.begin_group_edit(r1)
+    vp.begin_group_edit(target)
+    _draw(vp, p, q)
+    vp.end_group_edit()
+    assert scene.edit_group is None
+    assert _drawn_xy(scene) == want
+    assert _matrices(tops) == start
+    assert len(vp.history.undo_stack) == steps + 1
+    inner = target.mesh
+    assert all(a.mesh is inner for r in tops for a in r.children)
+    for _ in range(2):
+        vp.history.undo()
+        assert _drawn_xy(scene) == set()
+        assert _matrices(tops) == start
+        vp.history.redo()
         assert _drawn_xy(scene) == want
         assert _matrices(tops) == start
-        assert len(vp.history.undo_stack) == steps + 1
-        inner = target.mesh
         assert all(a.mesh is inner for r in tops for a in r.children)
-        for _ in range(2):
-            vp.history.undo()
-            assert _drawn_xy(scene) == set()
-            assert _matrices(tops) == start
-            vp.history.redo()
-            assert _drawn_xy(scene) == want
-            assert _matrices(tops) == start
-            assert all(a.mesh is inner for r in tops for a in r.children)
-    finally:
-        _close(win)
 
 
-def test_esc_level_by_level_from_two_deep_folds_into_one_step():
+def test_esc_level_by_level_from_two_deep_folds_into_one_step(native_host):
     tops = _deep()
-    win, vp, scene = _window(*tops)
+    win, vp, scene = _window(native_host, *tops)
     r2 = tops[1]                         # the mirrored outer copy
     target = r2.children[0]
     p, q = V(-12, 7, Z), V(-12, 8, Z)
@@ -412,54 +378,48 @@ def test_esc_level_by_level_from_two_deep_folds_into_one_step():
     want_outer = _expected(scene, r2, [p2, q2])
     start = _matrices(tops)
     steps = len(vp.history.undo_stack)
-    try:
-        vp.begin_group_edit(r2)
-        _draw(vp, p2, q2)                # on the outer assembly's own geometry
-        vp.begin_group_edit(target)
-        _draw(vp, p, q)
-        vp.end_one_group_edit()          # Esc: up to the outer assembly
-        assert scene.edit_group is r2
-        vp.end_one_group_edit()          # Esc: out
-        assert scene.edit_group is None
-        assert _drawn_xy(scene) == want_inner | want_outer
-        assert _matrices(tops) == start
-        assert len(vp.history.undo_stack) == steps + 1
-        vp.history.undo()
-        assert _drawn_xy(scene) == set()
-        assert _matrices(tops) == start
-        vp.history.redo()
-        assert _drawn_xy(scene) == want_inner | want_outer
-        assert _matrices(tops) == start
-    finally:
-        _close(win)
+    vp.begin_group_edit(r2)
+    _draw(vp, p2, q2)                # on the outer assembly's own geometry
+    vp.begin_group_edit(target)
+    _draw(vp, p, q)
+    vp.end_one_group_edit()          # Esc: up to the outer assembly
+    assert scene.edit_group is r2
+    vp.end_one_group_edit()          # Esc: out
+    assert scene.edit_group is None
+    assert _drawn_xy(scene) == want_inner | want_outer
+    assert _matrices(tops) == start
+    assert len(vp.history.undo_stack) == steps + 1
+    vp.history.undo()
+    assert _drawn_xy(scene) == set()
+    assert _matrices(tops) == start
+    vp.history.redo()
+    assert _drawn_xy(scene) == want_inner | want_outer
+    assert _matrices(tops) == start
 
 
 @pytest.mark.parametrize("edit", ["delete", "move"])
-def test_a_part_changed_two_levels_deep_undoes_in_place(edit):
+def test_a_part_changed_two_levels_deep_undoes_in_place(native_host, edit):
     from core.history import DeleteGroupCommand, MoveGroupCommand
     tops = _deep()
-    win, vp, scene = _window(*tops)
+    win, vp, scene = _window(native_host, *tops)
     r2 = tops[1]
     target = r2.children[1]              # mirrored in mirrored
     start, parts0 = _matrices(tops), _parts_at(scene)
-    try:
-        vp.begin_group_edit(r2)
-        vp.begin_group_edit(target)
-        if edit == "delete":
-            vp.history.execute(DeleteGroupCommand(target.children[0]))
-        else:
-            vp.history.execute(MoveGroupCommand(target.children[0], V(0, 5, 0)))
-        vp.end_group_edit()
-        left = _parts_at(scene)
-        assert left != parts0
-        for _ in range(2):
-            vp.history.undo()
-            assert _parts_at(scene) == parts0
-            assert _matrices(tops) == start
-            vp.history.redo()
-            assert _parts_at(scene) == left
-    finally:
-        _close(win)
+    vp.begin_group_edit(r2)
+    vp.begin_group_edit(target)
+    if edit == "delete":
+        vp.history.execute(DeleteGroupCommand(target.children[0]))
+    else:
+        vp.history.execute(MoveGroupCommand(target.children[0], V(0, 5, 0)))
+    vp.end_group_edit()
+    left = _parts_at(scene)
+    assert left != parts0
+    for _ in range(2):
+        vp.history.undo()
+        assert _parts_at(scene) == parts0
+        assert _matrices(tops) == start
+        vp.history.redo()
+        assert _parts_at(scene) == left
 
 
 # ---- The Metal view follows without a repack -------------------------------
@@ -496,9 +456,9 @@ class _Metal:
 
 
 def test_metal_follows_a_shared_assembly_edit_and_its_undo_incrementally(
-        monkeypatch):
+        native_host, monkeypatch):
     a, b = _assembly(True, turn=90.0)
-    win, vp, scene = _window(a, b)
+    win, vp, scene = _window(native_host, a, b)
     metal = _Metal(vp, monkeypatch)
     try:
         vp.begin_group_edit(a)
@@ -514,13 +474,12 @@ def test_metal_follows_a_shared_assembly_edit_and_its_undo_incrementally(
         metal.settle()
     finally:
         metal.close()
-        _close(win)
 
 
 def test_metal_follows_a_deep_shared_edit_and_its_undo_incrementally(
-        monkeypatch):
+        native_host, monkeypatch):
     tops = _deep()
-    win, vp, scene = _window(*tops)
+    win, vp, scene = _window(native_host, *tops)
     metal = _Metal(vp, monkeypatch)
     try:
         vp.begin_group_edit(tops[0])
@@ -539,16 +498,15 @@ def test_metal_follows_a_deep_shared_edit_and_its_undo_incrementally(
         metal.settle()
     finally:
         metal.close()
-        _close(win)
 
 
 def test_metal_follows_a_part_deleted_in_an_assembly_without_a_repack(
-        monkeypatch):
+        native_host, monkeypatch):
     """A part deleted inside: no row swap covers it, so the rows are
     rescanned — but nothing is packed again."""
     from core.history import DeleteGroupCommand
     a, b = _assembly(True, turn=90.0)
-    win, vp, scene = _window(a, b)
+    win, vp, scene = _window(native_host, a, b)
     metal = _Metal(vp, monkeypatch)
     try:
         vp.begin_group_edit(a)
@@ -563,12 +521,11 @@ def test_metal_follows_a_part_deleted_in_an_assembly_without_a_repack(
         metal.settle(local=False)
     finally:
         metal.close()
-        _close(win)
 
 
 # ---- What stays as it was on trunk -----------------------------------------
 
-def test_a_linked_assembly_stays_read_only(tmp_path, monkeypatch):
+def test_a_linked_assembly_stays_read_only(native_host, tmp_path, monkeypatch):
     """Parts of a linked file are edited in their own document: going into
     a copy of a link, or a part of it, offers the file and enters nothing."""
     from views import chrome_dialogs
@@ -582,32 +539,29 @@ def test_a_linked_assembly_stays_read_only(tmp_path, monkeypatch):
     src.groups.append(asm)
     path = tmp_path / "Site.igz"
     igz.save_scene(src, path)
-    win, vp, scene = _window()
-    try:
-        link = links.make_link(scene, path, host_path=tmp_path / "host.igz")
-        copy = links.make_link(scene, path, host_path=tmp_path / "host.igz")
-        copy.xform.translate(20, 0, 0)
-        scene.groups.extend([link, copy])
-        scene.version += 1
-        asked = []
-        def cancel(parent, title, text, buttons, **options):
-            asked.append(title)
-            return options["cancel"]
+    win, vp, scene = _window(native_host)
+    link = links.make_link(scene, path, host_path=tmp_path / "host.igz")
+    copy = links.make_link(scene, path, host_path=tmp_path / "host.igz")
+    copy.xform.translate(20, 0, 0)
+    scene.groups.extend([link, copy])
+    scene.version += 1
+    asked = []
+    def cancel(parent, title, text, buttons, **options):
+        asked.append(title)
+        return options["cancel"]
 
-        monkeypatch.setattr(chrome_dialogs, "ask", cancel)
-        before = _matrices(scene.groups)
-        meshes = [g.mesh for g, _m in scene.placements()]
-        steps = len(vp.history.undo_stack)
-        from core.purge import iter_groups
-        for g in list(iter_groups([link, copy])):
-            vp.begin_group_edit(g)
-            assert scene.edit_group is None
-        assert asked and all(path.name in title for title in asked)
-        assert _matrices(scene.groups) == before
-        assert [g.mesh for g, _m in scene.placements()] == meshes
-        assert len(vp.history.undo_stack) == steps
-    finally:
-        _close(win)
+    monkeypatch.setattr(chrome_dialogs, "ask", cancel)
+    before = _matrices(scene.groups)
+    meshes = [g.mesh for g, _m in scene.placements()]
+    steps = len(vp.history.undo_stack)
+    from core.purge import iter_groups
+    for g in list(iter_groups([link, copy])):
+        vp.begin_group_edit(g)
+        assert scene.edit_group is None
+    assert asked and all(path.name in title for title in asked)
+    assert _matrices(scene.groups) == before
+    assert [g.mesh for g, _m in scene.placements()] == meshes
+    assert len(vp.history.undo_stack) == steps
 
 
 # ---- Faces, scaled parents and inference, two levels deep ------------------
@@ -637,13 +591,13 @@ def _loop(vp, points):
 
 @pytest.mark.parametrize("build", [_deep, _deep_scaled])
 @pytest.mark.parametrize("shape", ["line", "face"])
-def test_a_line_or_a_face_drawn_two_deep_reaches_every_copy(build, shape):
+def test_a_line_or_a_face_drawn_two_deep_reaches_every_copy(native_host, build, shape):
     """A new loose line, or a closed loop that makes a face, drawn inside
     one copy of an assembly inside another — the parents turned, mirrored
     or stretched unevenly — lands in every copy in its own frame, and
     undoes and redoes as one step with every matrix as it was."""
     tops = build()
-    win, vp, scene = _window(*tops)
+    win, vp, scene = _window(native_host, *tops)
     target = tops[1].children[1]            # mirrored in mirrored
     pts = ([V(-11, 3, Z), V(-12, 4, Z)] if shape == "line" else
            [V(-11, 3, Z), V(-10, 3, Z), V(-10, 4, Z), V(-11, 4, Z)])
@@ -653,52 +607,46 @@ def test_a_line_or_a_face_drawn_two_deep_reaches_every_copy(build, shape):
     faces0 = len(inner.faces)
     start = _matrices(tops)
     steps = len(vp.history.undo_stack)
-    try:
-        vp.begin_group_edit(tops[1])
-        vp.begin_group_edit(target)
-        if shape == "line":
-            _draw(vp, *pts)
-        else:
-            _loop(vp, pts)
-        vp.end_group_edit()
-        added = 1 if shape == "face" else 0
+    vp.begin_group_edit(tops[1])
+    vp.begin_group_edit(target)
+    if shape == "line":
+        _draw(vp, *pts)
+    else:
+        _loop(vp, pts)
+    vp.end_group_edit()
+    added = 1 if shape == "face" else 0
+    assert _drawn_xy(scene) == want
+    assert len(inner.faces) == faces0 + added
+    assert all(a.mesh is inner for r in tops for a in r.children)
+    assert _matrices(tops) == start
+    assert len(vp.history.undo_stack) == steps + 1
+    for _ in range(2):
+        vp.history.undo()
+        assert _drawn_xy(scene) == set()
+        assert len(inner.faces) == faces0
+        assert _matrices(tops) == start
+        vp.history.redo()
         assert _drawn_xy(scene) == want
         assert len(inner.faces) == faces0 + added
-        assert all(a.mesh is inner for r in tops for a in r.children)
         assert _matrices(tops) == start
-        assert len(vp.history.undo_stack) == steps + 1
-        for _ in range(2):
-            vp.history.undo()
-            assert _drawn_xy(scene) == set()
-            assert len(inner.faces) == faces0
-            assert _matrices(tops) == start
-            vp.history.redo()
-            assert _drawn_xy(scene) == want
-            assert len(inner.faces) == faces0 + added
-            assert _matrices(tops) == start
-    finally:
-        _close(win)
 
 
 @pytest.mark.parametrize("build", [_deep, _deep_scaled])
-def test_inference_inside_a_nested_copy_finds_its_parts_where_they_stand(build):
+def test_inference_inside_a_nested_copy_finds_its_parts_where_they_stand(native_host, build):
     """Inside a copy, two levels down, the cursor over a corner of the part
     it holds snaps to that corner where the part is drawn in the world —
     not where the definition or another copy would put it."""
     from core.purge import iter_groups
     tops = build()
-    win, vp, scene = _window(*tops)
-    win.show()
-    win.resize(1200, 800)
+    win, vp, scene = _window(native_host, *tops)
+    native_host.resize(1200, 800, 1.0)
     target = tops[0].children[0]            # turned in turned (stretched)
     part = target.children[0]
     try:
         vp.camera.set_view("iso")
         vp.begin_group_edit(tops[0])
         vp.begin_group_edit(target)
-        _app.processEvents()
         win._activate_tool("line")
-        _app.processEvents()
         world = next(m for g, m in scene.placements() if g is part)
         corners = [world.map(v.position) for v in part.mesh.vertices]
         # The top corner nearest the iso eye (+X, −Y, +Z): in sight.
@@ -712,4 +660,3 @@ def test_inference_inside_a_nested_copy_finds_its_parts_where_they_stand(build):
         assert all(g.xform is not None for g in iter_groups(tops))
     finally:
         vp.end_group_edit()
-        _close(win)

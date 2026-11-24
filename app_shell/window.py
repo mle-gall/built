@@ -684,8 +684,7 @@ class ShellWindow(WindowDocumentCommands, QObject):
         for k, action in self._tool_actions.items():
             action.setChecked(k == key)
         name = getattr(tool, "name", key)
-        hint = getattr(tool, "description", "") or ""
-        self._status.showMessage(f"{name} — {hint}" if hint else name)
+        self._update_status_hint()
         # What Repeat (⇧R, the right-click's first row) runs again, as
         # MainWindow._activate_tool records it.
         if key not in ("select", "texture_position", "change_axes", "scale_manager"):

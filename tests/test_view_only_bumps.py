@@ -8,22 +8,17 @@ second a click. A view-only bump (``Scene.bump_view``) now leaves what the
 model IS alone and refreshes only what shows the selection."""
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
-from PySide6.QtWidgets import QApplication  # noqa: E402
-
-_app = QApplication.instance() or QApplication([])
 
 
-def _window():
+def _window(native_host):
     from core.group import Group
     from core.mesh import Mesh
-    from views.main_window import MainWindow
-    win = MainWindow()
-    win.resize(800, 600)
+
+    win = native_host.window
+    native_host.resize(800, 600, 1.0)
     m = Mesh()
     m.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)])
     vp = win.viewport
@@ -38,21 +33,13 @@ def _window():
     return win
 
 
-def _close(win):
-    win._saved_version = win.viewport.scene.version
-    win.close()
-
-
-def test_a_selection_keeps_the_pick_index():
-    win = _window()
-    try:
-        vp = win.viewport
-        idx = vp._pick_index()
-        cv = vp.scene.content_version
-        vp.scene.select([vp.scene.groups[1]])
-        assert vp.scene.content_version == cv
-        assert vp._pick_index() is idx
-        vp.scene.version += 1                       # an edit: a new one
-        assert vp._pick_index() is not idx
-    finally:
-        _close(win)
+def test_a_selection_keeps_the_pick_index(native_host):
+    win = _window(native_host)
+    vp = win.viewport
+    idx = vp._pick_index()
+    cv = vp.scene.content_version
+    vp.scene.select([vp.scene.groups[1]])
+    assert vp.scene.content_version == cv
+    assert vp._pick_index() is idx
+    vp.scene.version += 1                       # an edit: a new one
+    assert vp._pick_index() is not idx

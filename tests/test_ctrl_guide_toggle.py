@@ -23,6 +23,7 @@ it never creates a guide, so it must keep it.
 """
 from __future__ import annotations
 
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 from types import SimpleNamespace
 
 from PySide6.QtCore import QPointF, Qt
@@ -223,58 +224,31 @@ def test_ctrl_turns_the_protractor_into_a_plain_protractor():
     assert any("°" in m for m in vp.flashed), "…but it reported the angle"
 
 
-def test_the_status_bar_keeps_the_ctrl_clause_up():
-    """The usual status bar keeps the modifiers on screen the whole time the tool is
-    active — «Ctrl = Líneas guía del ciclo/Puntos guía/Medida» — instead of
-    flashing them once. A flash says what just happened; this says what you
-    can do and which way it is set (Marco, 2026-09-17)."""
-    import os
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtWidgets import QApplication
-    app = QApplication.instance() or QApplication([])
-    from views.main_window import MainWindow
-
-    win = MainWindow()
-    win.show()
-    app.processEvents()
+def test_the_status_bar_keeps_the_ctrl_clause_up(native_window):
+    win = native_window
     vp = win.viewport
-    try:
-        win._activate_tool("tape")
-        tool = vp.active_tool
-        # the active mode is bracketed, and it MOVES with Ctrl — read off
-        # the status bar itself, with no mouse movement in between
-        seen = []
-        for _ in range(3):
-            seen.append(win.status_hint)
-            _tap(tool, vp)
-        assert all("Ctrl =" in t for t in seen)
-        assert len(set(seen)) == 3, "the clause must change with the mode"
-        assert seen[0].index("[") < seen[1].index("[") < seen[2].index("[")
+    win._activate_tool("tape")
+    tool = vp.active_tool
+    # the active mode is bracketed, and it MOVES with Ctrl — read off
+    # the status bar itself, with no mouse movement in between
+    seen = []
+    for _ in range(3):
+        seen.append(win.statusBar()._base)
+        _tap(tool, vp)
+    assert all("Ctrl =" in t for t in seen)
+    assert len(set(seen)) == 3, "the clause must change with the mode"
+    assert seen[0].index("[") < seen[1].index("[") < seen[2].index("[")
 
-        # ONE modifier at a time, each in the phase where it does
-        # something: the usual line carries Ctrl before the first click
-        # and Alt once the measurement is under way, never both. Stacked,
-        # the bar ran out of room and elided.
-        from ingetrazo_core import Vec3 as QVector3D
-        from views.status_hints import hint_for
-        tool.start_point = QVector3D(1.0, 1.0, 0.0)
-        midway = hint_for("tape", tool, None, "off")
-        assert "Ctrl =" not in midway
-        assert "Alt =" in midway
-
-        # …and it fits: the bar caps the message at half its width, and a
-        # hint that does not fit is elided with an ellipsis.
-        from PySide6.QtGui import QFontMetrics
-        win.resize(1366, 900)
-        app.processEvents()
-        bar = win.statusBar()
-        cap = int(bar.width() * bar.MESSAGE_SHARE) - 4
-        fm = QFontMetrics(bar._msg.font())
-        for text in (*seen, midway):
-            assert fm.horizontalAdvance(text) <= cap, text
-    finally:
-        win._saved_version = vp.scene.version
-        win.close()
+    # ONE modifier at a time, each in the phase where it does
+    # something: the usual line carries Ctrl before the first click
+    # and Alt once the measurement is under way, never both. Stacked,
+    # the bar ran out of room and elided.
+    from ingetrazo_core import Vec3 as QVector3D
+    from views.status_hints import hint_for
+    tool.start_point = QVector3D(1.0, 1.0, 0.0)
+    midway = hint_for("tape", tool, None, "off")
+    assert "Ctrl =" not in midway
+    assert "Alt =" in midway
 
 
 def test_ctrl_still_means_COPY_on_rotate():

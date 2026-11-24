@@ -24,20 +24,15 @@ the press had found nothing to capture.
 from __future__ import annotations
 
 import math
-import os
 from types import SimpleNamespace
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
 from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QMouseEvent
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
 
 from core.snap import compute_snap
-
-_app = QApplication.instance() or QApplication([])
 
 
 def V(x, y, z=0.0):
@@ -54,12 +49,9 @@ CAMERAS = [("iso", None, None), ("obl-a", -30, 12), ("obl-b", -75, 55),
            ("obl-c", 20, 25), ("obl-d", 160, 40)]
 
 
-def _scene():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    win.show()
-    win.resize(1600, 900)
-    _app.processEvents()
+def _scene(native_host):
+    win = native_host.window
+    native_host.resize(1600, 900, 1.0)
     vp = win.viewport
     for x, y, z in DASHES:
         vp.scene.mesh.add_edge(V(x, y, z), V(x + 0.4, y, z))
@@ -76,7 +68,6 @@ def _camera(vp, name, yaw, pitch):
         vp.camera.pitch = math.radians(pitch)
     vp.camera.distance = 10.0
     vp.camera.target = V(0, 0, 0.5)
-    _app.processEvents()
 
 
 def _hover(vp, world):
@@ -94,61 +85,49 @@ def _lock(vp, axis):
 
 
 @pytest.mark.parametrize("cam", CAMERAS, ids=[c[0] for c in CAMERAS])
-def test_every_dash_is_found_under_the_x_lock_on_either_side(cam):
-    win, vp = _scene()
-    try:
-        _camera(vp, *cam)
-        _lock(vp, "x")
-        for x, y, z in DASHES + [(0.0, 0.0, 0.0)]:
-            _hover(vp, V(x, y, z))
-            s = vp.last_snap
-            assert s.kind in ("from_point", "origin"), (x, y, z, s.kind)
-            assert s.point.x() == pytest.approx(x, abs=1e-5), (x, y, z)
-            assert s.point.y() == pytest.approx(INICIO.y(), abs=1e-5)
-            assert s.point.z() == pytest.approx(INICIO.z(), abs=1e-5)
-    finally:
-        win._saved_version = vp.scene.version
-        win.close()
+def test_every_dash_is_found_under_the_x_lock_on_either_side(native_host, cam):
+    win, vp = _scene(native_host)
+    _camera(vp, *cam)
+    _lock(vp, "x")
+    for x, y, z in DASHES + [(0.0, 0.0, 0.0)]:
+        _hover(vp, V(x, y, z))
+        s = vp.last_snap
+        assert s.kind in ("from_point", "origin"), (x, y, z, s.kind)
+        assert s.point.x() == pytest.approx(x, abs=1e-5), (x, y, z)
+        assert s.point.y() == pytest.approx(INICIO.y(), abs=1e-5)
+        assert s.point.z() == pytest.approx(INICIO.z(), abs=1e-5)
 
 
 @pytest.mark.parametrize("cam", CAMERAS, ids=[c[0] for c in CAMERAS])
-def test_under_the_z_lock_the_dashes_at_the_starts_own_level_show_too(cam):
-    win, vp = _scene()
-    try:
-        _camera(vp, *cam)
-        _lock(vp, "z")
-        for x, y, z in DASHES:
-            _hover(vp, V(x, y, z))
-            s = vp.last_snap
-            assert s.kind == "from_point", (x, y, z, s.kind)
-            assert s.point.z() == pytest.approx(z, abs=1e-5), (x, y, z)
-            assert s.point.x() == pytest.approx(INICIO.x(), abs=1e-5)
-            # …and the guide runs from the dash to the foot, so a dash at the
-            # start's own height reads as «level with it».
-            assert s.guide is not None
-            assert (s.guide[0] - V(x, y, z)).length() < 1e-5
-    finally:
-        win._saved_version = vp.scene.version
-        win.close()
+def test_under_the_z_lock_the_dashes_at_the_starts_own_level_show_too(native_host, cam):
+    win, vp = _scene(native_host)
+    _camera(vp, *cam)
+    _lock(vp, "z")
+    for x, y, z in DASHES:
+        _hover(vp, V(x, y, z))
+        s = vp.last_snap
+        assert s.kind == "from_point", (x, y, z, s.kind)
+        assert s.point.z() == pytest.approx(z, abs=1e-5), (x, y, z)
+        assert s.point.x() == pytest.approx(INICIO.x(), abs=1e-5)
+        # …and the guide runs from the dash to the foot, so a dash at the
+        # start's own height reads as «level with it».
+        assert s.guide is not None
+        assert (s.guide[0] - V(x, y, z)).length() < 1e-5
 
 
-def test_clicking_the_level_foot_at_the_start_draws_nothing_and_breaks_nothing():
-    win, vp = _scene()
-    try:
-        _camera(vp, "iso", None, None)
-        _lock(vp, "z")
-        px = _hover(vp, V(-1.0, 0.0, 0.0))          # a dash at the start's level
-        assert vp.last_snap.kind == "from_point"
-        assert (vp.last_snap.point - INICIO).length() < 1e-6
-        edges = len(vp.scene.mesh.edges)
-        vp._dispatch_tool_click(QMouseEvent(
-            QMouseEvent.MouseButtonPress, QPointF(*px),
-            Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
-        assert len(vp.scene.mesh.edges) == edges          # no zero-length edge
-        assert (vp.active_tool.start_point - INICIO).length() < 1e-6  # still drawing
-    finally:
-        win._saved_version = vp.scene.version
-        win.close()
+def test_clicking_the_level_foot_at_the_start_draws_nothing_and_breaks_nothing(native_host):
+    win, vp = _scene(native_host)
+    _camera(vp, "iso", None, None)
+    _lock(vp, "z")
+    px = _hover(vp, V(-1.0, 0.0, 0.0))          # a dash at the start's level
+    assert vp.last_snap.kind == "from_point"
+    assert (vp.last_snap.point - INICIO).length() < 1e-6
+    edges = len(vp.scene.mesh.edges)
+    vp._dispatch_tool_click(QMouseEvent(
+        QMouseEvent.MouseButtonPress, QPointF(*px),
+        Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
+    assert len(vp.scene.mesh.edges) == edges          # no zero-length edge
+    assert (vp.active_tool.start_point - INICIO).length() < 1e-6  # still drawing
 
 
 # ---- (4) Shift held over a soft axis cue: the rule that had no snaps ---------
@@ -279,15 +258,11 @@ def test_reference_edge_lock_aligns_points_to_diagonal_vectors(
 
 # ---- (5) L again resets the Line -------------------------------------------
 
-def test_pressing_the_tools_key_again_releases_the_first_point():
-    win, vp = _scene()
-    try:
-        _camera(vp, "iso", None, None)
-        _lock(vp, "x")
-        assert vp.active_tool.start_point is not None
-        win._activate_tool("line")
-        assert vp.active_tool.start_point is None
-        assert vp.axis_lock is None
-    finally:
-        win._saved_version = vp.scene.version
-        win.close()
+def test_pressing_the_tools_key_again_releases_the_first_point(native_host):
+    win, vp = _scene(native_host)
+    _camera(vp, "iso", None, None)
+    _lock(vp, "x")
+    assert vp.active_tool.start_point is not None
+    win._activate_tool("line")
+    assert vp.active_tool.start_point is None
+    assert vp.axis_lock is None

@@ -2747,8 +2747,6 @@
  "The tabs on the left of the page: drag any tab there, or back to the right.": "Các tab ở bên trái trang: kéo bất kỳ tab nào vào đó hoặc quay lại bên phải.",
  "Browser": "Trình duyệt",
  "Properties and the Browser open, the other panels closed, all on the right in the factory order.": "Thuộc tính và Trình duyệt mở, các bảng khác đóng, tất cả đều ở bên phải theo thứ tự xuất xưởng.",
- "Restore default toolbars": "Đặt lại thanh công cụ mặc định",
- "Every toolbar back in its factory place and order, the hidden ones shown again. The panels stay as they are.": "Mọi thanh công cụ đều trở lại vị trí và trật tự ban đầu, những thanh công cụ ẩn lại hiển thị. Các tấm vẫn giữ nguyên như cũ.",
  "{n} attempts in a row failed — stopping here. Rephrase the request or type \"continue\" to let it try again.": "{n} lần thử liên tiếp không thành công — dừng ở đây. Viết lại yêu cầu hoặc nhập \"tiếp tục\" để yêu cầu thử lại.",
  "The local server is loading the model — the first answer takes longer.": "Máy chủ cục bộ đang tải mô hình — câu trả lời đầu tiên mất nhiều thời gian hơn.",
  "{model} is a small model and often fails at writing code. A code model works much better, e.g. {suggested} (ollama pull {suggested}).": "{model} là một mô hình nhỏ và thường thất bại trong việc viết mã. Một mô hình mã hoạt động tốt hơn nhiều, ví dụ: {suggested} (kéo olma {suggested}).",

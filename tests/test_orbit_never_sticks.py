@@ -5,21 +5,18 @@ the press until its release; when that release was lost, every mouse move
 orbited the view, whatever tool was picked."""
 from __future__ import annotations
 
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from PySide6.QtCore import QPoint
-from PySide6.QtWidgets import QApplication
-
-_app = QApplication.instance() or QApplication([])
 
 
-def _window():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    win.viewport.resize(800, 600)
+def _window(native_host):
+    win = native_host.window
+    native_host.resize(800, 600, 1.0)
     return win
 
 
-def test_picking_a_tool_ends_a_camera_drag():
-    win = _window()
+def test_picking_a_tool_ends_a_camera_drag(native_host):
+    win = _window(native_host)
     vp = win.viewport
     vp.set_nav_mode("orbit")
     vp._last_pos = QPoint(100, 100)
@@ -28,7 +25,5 @@ def test_picking_a_tool_ends_a_camera_drag():
     # Leave no closed window holding Paint: until it is collected it sits
     # in the Alt-tap watcher and can take a later test's tap.
     win._activate_tool("select")
-    win._saved_version = vp.scene.version
-    win.close()
 
 

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import math
 
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
@@ -45,9 +46,8 @@ def test_face_plane_world_follows_the_instance_transform():
     assert abs(c.y() + 1.0) < 1e-6 and abs(c.x() - 3.5) < 1e-6
 
 
-def _viewport_with_instance():
-    from views.main_window import MainWindow
-    win = MainWindow()
+def _viewport_with_instance(native_host):
+    win = native_host.window
     vp = win.viewport
     scene = vp.scene
     proto = Mesh()
@@ -59,7 +59,7 @@ def _viewport_with_instance():
     a.xform, b.xform = QMatrix4x4(), xb
     scene.groups += [a, b]
     scene.version += 1
-    vp.resize(800, 600)
+    native_host.resize(800, 600, 1.0)
     cam = vp.camera
     cam.perspective = True
     cam.yaw, cam.pitch = math.radians(35.0), math.radians(35.0)
@@ -68,52 +68,44 @@ def _viewport_with_instance():
     return win, vp, faces[1], b
 
 
-def test_work_plane_over_an_instance_face_is_the_placed_copy():
-    win, vp, top, b = _viewport_with_instance()
-    try:
-        if not vp._pick_index().entities:
-            pytest.skip("no pick index offscreen")
-        px = vp._world_to_pixel(V(3.5, 0.5, 1.0))
-        assert px is not None
-        face, grp = vp.pick_face_any(px[0], px[1])
-        assert grp == b and face == top
-        from tools.rust_tools import SelectTool
-        vp.active_tool = SelectTool()
-        point, normal = vp._current_work_plane(cursor=(px[0], px[1]))
-        assert (point - V(3.5, 0.5, 1.0)).length() < 1e-6
-        assert abs(abs(normal.z()) - 1.0) < 1e-6
-        # memo: the same cursor and view answer without a second search
-        assert vp.pick_face_any(px[0], px[1]) == (face, grp)
-    finally:
-        win._saved_version = vp.scene.version
-        win.close()
+def test_work_plane_over_an_instance_face_is_the_placed_copy(native_host):
+    win, vp, top, b = _viewport_with_instance(native_host)
+    if not vp._pick_index().entities:
+        pytest.skip("no pick index offscreen")
+    px = vp._world_to_pixel(V(3.5, 0.5, 1.0))
+    assert px is not None
+    face, grp = vp.pick_face_any(px[0], px[1])
+    assert grp == b and face == top
+    from tools.rust_tools import SelectTool
+    vp.active_tool = SelectTool()
+    point, normal = vp._current_work_plane(cursor=(px[0], px[1]))
+    assert (point - V(3.5, 0.5, 1.0)).length() < 1e-6
+    assert abs(abs(normal.z()) - 1.0) < 1e-6
+    # memo: the same cursor and view answer without a second search
+    assert vp.pick_face_any(px[0], px[1]) == (face, grp)
 
 
-def test_second_point_lands_on_the_face_under_the_cursor_unless_axis():
-    win, vp, top, b = _viewport_with_instance()
-    try:
-        if not vp._pick_index().entities:
-            pytest.skip("no pick index offscreen")
-        from tools.move import MoveTool
-        tool = MoveTool()
-        vp.active_tool = tool
-        tool.start_point = V(0.5, 0.5, 1.0)        # grabbed on A's top
-        px = vp._world_to_pixel(V(3.5, 0.5, 1.0))  # aiming at B's top
-        point, normal = vp._current_work_plane(cursor=(px[0], px[1]))
-        hit = vp._world_from_pixel(px[0], px[1])
-        assert abs(hit.z() - 1.0) < 1e-6           # ON B's top face
-        assert abs(abs(normal.z()) - 1.0) < 1e-6
-        # the moved object's own faces never attract: select B and aim at it
-        vp.scene.selection.add(b)
-        point2, _n2 = vp._current_work_plane(cursor=(px[0], px[1]))
-        assert point2 == tool.start_point or abs(point2.z() - 1.0) > 1e-6 \
-            or point2 is not point
-        vp.scene.selection.clear()
-        # an axis-aligned heading keeps the start-point plane (draw upward)
-        tool.start_point = V(3.5, 0.5, 2.0)        # right above B's top
-        px_up = vp._world_to_pixel(V(3.5, 0.5, 4.0))
-        pt3, n3 = vp._current_work_plane(cursor=(px_up[0], px_up[1]))
-        assert pt3 == tool.start_point
-    finally:
-        win._saved_version = vp.scene.version
-        win.close()
+def test_second_point_lands_on_the_face_under_the_cursor_unless_axis(native_host):
+    win, vp, top, b = _viewport_with_instance(native_host)
+    if not vp._pick_index().entities:
+        pytest.skip("no pick index offscreen")
+    from tools.move import MoveTool
+    tool = MoveTool()
+    vp.active_tool = tool
+    tool.start_point = V(0.5, 0.5, 1.0)        # grabbed on A's top
+    px = vp._world_to_pixel(V(3.5, 0.5, 1.0))  # aiming at B's top
+    point, normal = vp._current_work_plane(cursor=(px[0], px[1]))
+    hit = vp._world_from_pixel(px[0], px[1])
+    assert abs(hit.z() - 1.0) < 1e-6           # ON B's top face
+    assert abs(abs(normal.z()) - 1.0) < 1e-6
+    # the moved object's own faces never attract: select B and aim at it
+    vp.scene.selection.add(b)
+    point2, _n2 = vp._current_work_plane(cursor=(px[0], px[1]))
+    assert point2 == tool.start_point or abs(point2.z() - 1.0) > 1e-6 \
+        or point2 is not point
+    vp.scene.selection.clear()
+    # an axis-aligned heading keeps the start-point plane (draw upward)
+    tool.start_point = V(3.5, 0.5, 2.0)        # right above B's top
+    px_up = vp._world_to_pixel(V(3.5, 0.5, 4.0))
+    pt3, n3 = vp._current_work_plane(cursor=(px_up[0], px_up[1]))
+    assert pt3 == tool.start_point

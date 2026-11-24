@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import math
 
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
 from ingetrazo_core import Vec3 as QVector3D
 
@@ -28,9 +29,8 @@ def _box(mesh, s=1.0):
     return [mesh.add_face([pts[i] for i in q]) for q in quads]
 
 
-def _window():
-    from views.main_window import MainWindow
-    win = MainWindow()
+def _window(native_host):
+    win = native_host.window
     vp = win.viewport
     box = Group(Mesh(), name="Bloque")
     _box(box.mesh)
@@ -39,7 +39,7 @@ def _window():
     on_top = vp.scene.mesh.add_edge(V(0.2, 0.5, 1.0), V(0.8, 0.5, 1.0))
     below = vp.scene.mesh.add_edge(V(0.2, 0.5, -0.3), V(0.8, 0.5, -0.3))
     vp.scene.version += 1
-    vp.resize(800, 600)
+    native_host.resize(800, 600, 1.0)
     cam = vp.camera
     cam.perspective = True
     cam.yaw, cam.pitch = math.radians(20.0), math.radians(55.0)   # from above
@@ -48,35 +48,27 @@ def _window():
     return win, vp, box, on_top, below
 
 
-def test_a_line_on_a_group_face_is_picked_before_the_group():
-    win, vp, box, on_top, below = _window()
-    try:
-        if not vp._pick_index().entities:
-            pytest.skip("no pick index offscreen")
-        tool = SelectTool()
-        px = vp._world_to_pixel(V(0.5, 0.5, 1.0))          # on the line
-        assert px is not None
-        assert vp.pick_group(px[0], px[1]) is box            # the group IS there
-        assert SelectTool().pick_at(vp, px[0], px[1]) == on_top        # …but the line wins
-        px2 = vp._world_to_pixel(V(0.5, 0.15, 1.0))         # face, away from it
-        assert SelectTool().pick_at(vp, px2[0], px2[1]) is box
-    finally:
-        win._saved_version = vp.scene.version
-        win.close()
+def test_a_line_on_a_group_face_is_picked_before_the_group(native_host):
+    win, vp, box, on_top, below = _window(native_host)
+    if not vp._pick_index().entities:
+        pytest.skip("no pick index offscreen")
+    tool = SelectTool()
+    px = vp._world_to_pixel(V(0.5, 0.5, 1.0))          # on the line
+    assert px is not None
+    assert vp.pick_group(px[0], px[1]) is box            # the group IS there
+    assert SelectTool().pick_at(vp, px[0], px[1]) == on_top        # …but the line wins
+    px2 = vp._world_to_pixel(V(0.5, 0.15, 1.0))         # face, away from it
+    assert SelectTool().pick_at(vp, px2[0], px2[1]) is box
 
 
-def test_a_line_hidden_behind_the_group_does_not_steal_the_click():
-    win, vp, box, on_top, below = _window()
-    try:
-        if not vp._pick_index().entities:
-            pytest.skip("no pick index offscreen")
-        vp.scene.mesh.remove_edge(on_top)
-        vp.scene.version += 1
-        px = vp._world_to_pixel(V(0.5, 0.5, -0.3))          # over the hidden line
-        pick = SelectTool().pick_at(vp, px[0], px[1])
-        assert pick is box or not isinstance(pick, Edge)
-        p = vp.edge_point_under_cursor(below, px[0], px[1])
-        assert p is not None and vp._is_occluded(p)
-    finally:
-        win._saved_version = vp.scene.version
-        win.close()
+def test_a_line_hidden_behind_the_group_does_not_steal_the_click(native_host):
+    win, vp, box, on_top, below = _window(native_host)
+    if not vp._pick_index().entities:
+        pytest.skip("no pick index offscreen")
+    vp.scene.mesh.remove_edge(on_top)
+    vp.scene.version += 1
+    px = vp._world_to_pixel(V(0.5, 0.5, -0.3))          # over the hidden line
+    pick = SelectTool().pick_at(vp, px[0], px[1])
+    assert pick is box or not isinstance(pick, Edge)
+    p = vp.edge_point_under_cursor(below, px[0], px[1])
+    assert p is not None and vp._is_occluded(p)

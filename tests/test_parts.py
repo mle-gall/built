@@ -3,16 +3,15 @@
 """Assembly geometry and the cut list report."""
 from __future__ import annotations
 
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
 
 from core.group import Group
 from core.mesh import Mesh
 from core.parts import (cut_list, cut_list_text, part_material,
                         part_points, part_rows, part_size)
 
-_app = QApplication.instance() or QApplication([])
 
 _QUADS = ((0, 2, 3, 1), (4, 5, 7, 6), (0, 1, 5, 4),
           (2, 6, 7, 3), (0, 4, 6, 2), (1, 3, 7, 5))
@@ -139,9 +138,8 @@ def test_names_sort_naturally():
         "Piece 1", "Piece 2", "Piece 10"]
 
 
-def _window_with(group):
-    from views.main_window import MainWindow
-    win = MainWindow()
+def _window_with(native_host, group):
+    win = native_host.window
     scene = win.viewport.scene
     scene.groups.append(group)
     scene.selection.clear()
@@ -150,15 +148,19 @@ def _window_with(group):
     return win, scene
 
 
-def test_copy_cut_list_fills_the_clipboard():
-    win, scene = _window_with(_stool())
+def test_copy_cut_list_fills_the_clipboard(native_host, monkeypatch):
+    win, scene = _window_with(native_host, _stool())
     from views import chrome_sheet
     ctx = chrome_sheet.Ctx(win, win._doc.stand_in)
-    win._on_cut_list()
+    from app_shell import native
+    clipboard = {}
+    monkeypatch.setattr(chrome_sheet, "in_shell", lambda: True)
+    monkeypatch.setattr(native, "pasteboard_write", clipboard.update)
+    native_host.menu("cutlist")
     sheet = chrome_sheet.current(win)
     sheet.build(ctx)
     sheet.act(ctx, "verb", ["copy"])
-    lines = QApplication.clipboard().text().splitlines()
+    lines = clipboard["public.utf8-plain-text"].decode().splitlines()
     assert len(lines) == 3 and lines[1].startswith("2\t")
     assert len(lines[0].split("\t")) == 6
     win._saved_version = scene.version

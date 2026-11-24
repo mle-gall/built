@@ -8,23 +8,19 @@ Components list) changed the SELECTION, and every selection change bumped
 is not editing: only a change of the document may make it dirty."""
 from __future__ import annotations
 
-from pathlib import Path
-
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
-
-_app = QApplication.instance() or QApplication([])
 
 
 @pytest.fixture
 def doc(tmp_path):
     from core.group import Group
     from core.mesh import Mesh
-    from views.main_window import MainWindow
+    from core.scene import Scene
+    from formats.igz import save_scene
 
-    w0 = MainWindow()
-    scene = w0.viewport.scene
+    scene = Scene()
     for i in range(6):
         m = Mesh()
         x = i * 3.0
@@ -33,76 +29,60 @@ def doc(tmp_path):
         scene.groups.append(Group(m, name=f"B{i}"))
     scene.version += 1
     path = tmp_path / "plan.built"
-    w0._do_save(path)
-    w0._saved_version = scene.version
-    w0.close()
+    save_scene(scene, path, backup=False)
     return path
 
 
-def _window(path):
-    from views.main_window import MainWindow
-
-    win = MainWindow()
+def _window(native_host, path):
+    win = native_host.window
     assert win.open_path(path)
     return win
 
 
-def test_selection_after_ctrl_s_does_not_ask_to_save_again(doc):
-    win = _window(doc)
+def test_selection_after_ctrl_s_does_not_ask_to_save_again(native_host, doc):
+    win = _window(native_host, doc)
     scene = win.viewport.scene
-    try:
-        figure = scene.groups[0]                  # the scale figure travels with it
-        scene.select([figure])
-        win._on_delete_selection()                # erase it: a real edit
-        assert win._is_dirty()
-        win._on_save()                            # Ctrl+S
-        assert not win._is_dirty()
-        # what a user does before closing: click empty space, click an
-        # object, Ctrl+Shift+I, Esc
-        scene.clear_selection()
-        scene.select([scene.groups[0]])
-        scene.select([], mode="replace")
-        scene.invert_selection()
-        scene.clear_selection()
-        assert not win._is_dirty(), "a selection made the saved drawing 'modified'"
-        assert "*" not in win.windowTitle()
+    figure = scene.groups[0]                  # a group from the saved file
+    scene.select([figure])
+    win._on_delete_selection()                # erase it: a real edit
+    assert win._is_dirty()
+    win._on_save()                            # Ctrl+S
+    assert not win._is_dirty()
+    # what a user does before closing: click empty space, click an
+    # object, Ctrl+Shift+I, Esc
+    scene.clear_selection()
+    scene.select([scene.groups[0]])
+    scene.select([], mode="replace")
+    scene.invert_selection()
+    scene.clear_selection()
+    assert not win._is_dirty(), "a selection made the saved drawing 'modified'"
+    assert "*" not in native_host._title
 
-        # the inverse: a real edit after the save does make it dirty
-        scene.select([scene.groups[0]])
-        win._on_delete_selection()
-        assert win._is_dirty()
-    finally:
-        win._confirm_discard = lambda *a, **k: True   # never a modal on close
-        win.close()
+    # the inverse: a real edit after the save does make it dirty
+    scene.select([scene.groups[0]])
+    win._on_delete_selection()
+    assert win._is_dirty()
 
 
-def test_selection_keeps_bumping_the_render_version(doc):
+def test_selection_keeps_bumping_the_render_version(native_host, doc):
     """The GL colour caches key on scene.version: a selection must still
     bump it, only not count as an edit."""
-    win = _window(doc)
+    win = _window(native_host, doc)
     scene = win.viewport.scene
-    try:
-        before, content = scene.version, scene.content_version
-        scene.select([scene.groups[0]])
-        assert scene.version == before + 1
-        assert scene.content_version == content
-    finally:
-        win._confirm_discard = lambda *a, **k: True   # never a modal on close
-        win.close()
+    before, content = scene.version, scene.content_version
+    scene.select([scene.groups[0]])
+    assert scene.version == before + 1
+    assert scene.content_version == content
 
 
-def test_marking_saved_with_scene_version_still_means_clean(doc):
+def test_marking_saved_with_scene_version_still_means_clean(native_host, doc):
     """Every caller (and 100+ tests) marks "saved" by assigning the scene
     version; after selections that must still read as clean."""
-    win = _window(doc)
+    win = _window(native_host, doc)
     scene = win.viewport.scene
-    try:
-        scene.select([scene.groups[0]])
-        scene.clear_selection()
-        win._saved_version = scene.version
-        assert not win._is_dirty()
-        win._saved_version = -1                   # "never saved" stays dirty
-        assert win._is_dirty()
-    finally:
-        win._confirm_discard = lambda *a, **k: True   # never a modal on close
-        win.close()
+    scene.select([scene.groups[0]])
+    scene.clear_selection()
+    win._saved_version = scene.version
+    assert not win._is_dirty()
+    win._saved_version = -1                   # "never saved" stays dirty
+    assert win._is_dirty()

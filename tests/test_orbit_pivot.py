@@ -9,12 +9,11 @@ from __future__ import annotations
 
 import math
 
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QMouseEvent
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication
 
-_app = QApplication.instance() or QApplication([])
 
 W, H = 800, 600
 
@@ -50,13 +49,13 @@ def _screen(vp, p: V):
     return ((ndc.x() + 1.0) * 0.5 * vp.width(), (1.0 - ndc.y()) * 0.5 * vp.height())
 
 
-def _window_far_box():
+def _window_far_box(native_host):
     """A 10 m box at (500, 500), the camera aimed a little beside it: the
     target is NOT on the box, as after a pan or a zoom elsewhere."""
-    from views.main_window import MainWindow
-    win = MainWindow()
+
+    win = native_host.window
     vp = win.viewport
-    vp.resize(W, H)
+    native_host.resize(W, H, 1.0)
     vp.scene.mesh = type(vp.scene.mesh)()
     vp.scene.groups = []
     _box(vp.scene, 495, 495, 0, 505, 505, 10)
@@ -69,49 +68,33 @@ def _window_far_box():
     return win, vp
 
 
-def _close(win):
-    win._saved_version = win.viewport.scene.version
-    win.close()
+def test_the_orbit_tool_drag_turns_about_the_same_pivot(native_host):
+    win, vp = _window_far_box(native_host)
+    vp.set_nav_mode("orbit")
+    box_corner = V(505, 495, 10)
+    sx, sy = _screen(vp, box_corner)
+    pivot = vp._orbit_pivot_at(sx, sy)
+    _drag(vp, sx, sy, sx - 90, sy + 40, Qt.LeftButton)
+    ax, ay = _screen(vp, pivot)
+    assert abs(ax - sx) < 1.5 and abs(ay - sy) < 1.5
 
 
-def test_the_orbit_tool_drag_turns_about_the_same_pivot():
-    win, vp = _window_far_box()
-    try:
-        vp.set_nav_mode("orbit")
-        box_corner = V(505, 495, 10)
-        sx, sy = _screen(vp, box_corner)
-        pivot = vp._orbit_pivot_at(sx, sy)
-        _drag(vp, sx, sy, sx - 90, sy + 40, Qt.LeftButton)
-        ax, ay = _screen(vp, pivot)
-        assert abs(ax - sx) < 1.5 and abs(ay - sy) < 1.5
-    finally:
-        _close(win)
+def test_over_empty_sky_it_turns_about_the_middle_of_the_model_not_the_origin(native_host):
+    win, vp = _window_far_box(native_host)
+    vp.camera.target = V(500, 500, 5)        # the box in the middle
+    pivot = vp._orbit_pivot_at(5, 5)          # a corner: sky
+    assert (pivot - V(500, 500, 5)).length() < 12.0, pivot
+    assert pivot.length() > 600, "it pivoted on the world origin"
 
 
-def test_over_empty_sky_it_turns_about_the_middle_of_the_model_not_the_origin():
-    win, vp = _window_far_box()
-    try:
-        vp.camera.target = V(500, 500, 5)        # the box in the middle
-        pivot = vp._orbit_pivot_at(5, 5)          # a corner: sky
-        assert (pivot - V(500, 500, 5)).length() < 12.0, pivot
-        assert pivot.length() > 600, "it pivoted on the world origin"
-    finally:
-        _close(win)
-
-
-def test_an_empty_scene_turns_about_the_target():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    vp = win.viewport
-    try:
-        vp.resize(W, H)
-        vp.scene.mesh = type(vp.scene.mesh)()
-        vp.scene.groups = []
-        vp.scene.version += 1
-        vp.camera.target = V(3, 4, 5)
-        assert vp._orbit_pivot_at(W / 2, H / 2) == V(3, 4, 5)
-    finally:
-        _close(win)
+def test_an_empty_scene_turns_about_the_target(native_host):
+    vp = native_host.window.viewport
+    native_host.resize(W, H, 1.0)
+    vp.scene.mesh = type(vp.scene.mesh)()
+    vp.scene.groups = []
+    vp.scene.version += 1
+    vp.camera.target = V(3, 4, 5)
+    assert vp._orbit_pivot_at(W / 2, H / 2) == V(3, 4, 5)
 
 
 def test_orbit_about_keeps_distance_level_horizon_and_the_pivot():

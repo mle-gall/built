@@ -703,8 +703,9 @@ impl Ui {
     }
 
     /// Called only after the transient chrome and focused field declined Esc.
-    pub fn model_escape(chrome: Option<&mut Self>, busy: bool, selected: bool, editing: bool) -> &'static str {
+    pub fn model_escape(chrome: Option<&mut Self>, busy: bool, array_pending: bool, selected: bool, editing: bool) -> &'static str {
         if busy { return "tool"; }
+        if array_pending { return "array"; }
         if selected { return "selection"; }
         if editing { return "edit"; }
         let Some(ui) = chrome else { return "" };
@@ -2907,13 +2908,13 @@ fn native_input_owners_unwind_in_order() {
     assert!(ui.ctx.memory(|m| m.has_focus(filter)));
     assert!(ui.key("Escape", true, 0));
     assert!(!ui.ctx.memory(|m| m.has_focus(filter)));
-    assert_eq!(Ui::model_escape(Some(&mut ui), true, true, true), "tool");
-    assert_eq!(Ui::model_escape(Some(&mut ui), false, true, true), "selection");
-    assert_eq!(Ui::model_escape(Some(&mut ui), false, false, true), "edit");
-    assert_eq!(Ui::model_escape(Some(&mut ui), false, false, false), "dock");
+    assert_eq!(Ui::model_escape(Some(&mut ui), true, false, true, true), "tool");
+    assert_eq!(Ui::model_escape(Some(&mut ui), false, false, true, true), "selection");
+    assert_eq!(Ui::model_escape(Some(&mut ui), false, false, false, true), "edit");
+    assert_eq!(Ui::model_escape(Some(&mut ui), false, false, false, false), "dock");
     assert_eq!(ui.take_actions(), ["tree:lens\u{1f}0"]);
     assert!(ui.review);
-    Ui::model_escape(Some(&mut ui), false, false, false);
+    Ui::model_escape(Some(&mut ui), false, false, false, false);
     assert!(!ui.review);
 
 }
@@ -2966,7 +2967,7 @@ fn the_free_area_leaves_out_the_panels_and_review_frees_them() {
     assert_eq!(ui.take_actions(), ["review:1"]);
     let [x0, y0, x1, _] = ui.free_ndc().unwrap();
     assert_eq!((x0, y0, x1), (-1., -1., 1.));
-    assert_eq!(Ui::model_escape(Some(&mut ui), false, false, false), "");
+    assert_eq!(Ui::model_escape(Some(&mut ui), false, false, false, false), "");
     assert_eq!(ui.take_actions(), ["review:0"]);
 }
 

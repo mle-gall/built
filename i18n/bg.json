@@ -2888,8 +2888,6 @@
  "The tabs on the left of the page: drag any tab there, or back to the right.": "Разделите отляво на страницата: плъзнете произволен раздел там или го върнете вдясно.",
  "Browser": "Браузър",
  "Properties and the Browser open, the other panels closed, all on the right in the factory order.": "Панелите „Свойства“ и „Браузър“ са отворени, останалите са затворени; всички са вдясно в първоначалния ред.",
- "Restore default toolbars": "Възстановяване на лентите с инструменти по подразбиране",
- "Every toolbar back in its factory place and order, the hidden ones shown again. The panels stay as they are.": "Всяка лента с инструменти се връща на първоначалното си място и в първоначалния ред; скритите ленти отново се показват. Панелите остават непроменени.",
  "{n} attempts in a row failed — stopping here. Rephrase the request or type \"continue\" to let it try again.": "{n} последователни опита бяха неуспешни — спиране. Преформулирайте заявката или въведете „continue“, за да опитате отново.",
  "The local server is loading the model — the first answer takes longer.": "Локалният сървър зарежда модела — първият отговор ще отнеме повече време.",
  "{model} is a small model and often fails at writing code. A code model works much better, e.g. {suggested} (ollama pull {suggested}).": "{model} е малък модел и често допуска грешки при писане на код. Модел, специализиран за програмиране, ще се справи по-добре, например {suggested} (ollama pull {suggested}).",

@@ -19,19 +19,14 @@ off the wall the cursor was on.
 from __future__ import annotations
 
 import math
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QMouseEvent
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
 
 from core.scene import Scene
 from core.snap import AXIS_COLORS, COLOR_ENDPOINT, compute_snap
-
-_app = QApplication.instance() or QApplication([])
 
 
 def V(x, y, z=0.0):
@@ -157,13 +152,11 @@ def test_a_line_piercing_the_face_offers_its_piercing_point():
 
 # ---- Rafael's room, through the real viewport ---------------------------------
 
-def _room(win_on_front=True):
+def _room(native_host, win_on_front=True):
     """An 8 × 5 × 3 room open above, a 1.5 × 1.2 window on the front wall."""
-    from views.main_window import MainWindow
-    win = MainWindow()
-    win.show()
-    win.resize(1600, 900)
-    _app.processEvents()
+
+    win = native_host.window
+    native_host.resize(1600, 900, 1.0)
     vp = win.viewport
     m = vp.scene.mesh
     W, D, H = 8.0, 5.0, 3.0
@@ -193,64 +186,54 @@ def _click(vp, px):
         Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
 
 
-def test_the_window_on_the_next_wall_starts_level_with_the_first_one():
-    win, vp = _room()
-    try:
-        cam = vp.camera
-        cam.target = V(6, 2.5, 1.5)
-        cam.distance = 16.0
-        cam.pitch = math.radians(18.0)
-        cam.yaw = math.radians(-55.0)                  # front and right walls in view
-        vp.update()
-        _app.processEvents()
-        win._activate_tool("rectangle")
-        vp.encourage_point(V(3.5, 0, 2.2))             # the first window's top corner
-        faces_before = len(vp.scene.mesh.faces)
-        # Along the right wall, 3 cm above the height: the tip says level.
-        px = _hover(vp, V(8, 2.5, 2.23))
+def test_the_window_on_the_next_wall_starts_level_with_the_first_one(native_host):
+    win, vp = _room(native_host)
+    cam = vp.camera
+    cam.target = V(6, 2.5, 1.5)
+    cam.distance = 16.0
+    cam.pitch = math.radians(18.0)
+    cam.yaw = math.radians(-55.0)                  # front and right walls in view
+    vp.update()
+    win._activate_tool("rectangle")
+    vp.encourage_point(V(3.5, 0, 2.2))             # the first window's top corner
+    faces_before = len(vp.scene.mesh.faces)
+    # Along the right wall, 3 cm above the height: the tip says level.
+    px = _hover(vp, V(8, 2.5, 2.23))
+    s = vp.last_snap
+    assert s.kind == "aligned" and s.axis == "z", s.kind
+    assert abs(s.point.x() - 8.0) < 1e-6 and abs(s.point.z() - 2.2) < 1e-6
+    _click(vp, px)
+    far = _hover(vp, V(8, 4.0, 1.0))
+    _click(vp, far)
+    assert len(vp.scene.mesh.faces) == faces_before + 1
+    # The window, not the wall it was cut out of: the wall's plane is
+    # rebuilt after a rectangle (#538), so the list order says nothing.
+    new = next(f for f in vp.scene.mesh.faces
+               if not f.holes and len(f.vertices) == 4
+               and {round(v.x(), 6) for v in f.vertices} == {8.0}
+               and max(v.y() for v in f.vertices) < 5.0 - 1e-6)
+    zs = sorted({round(v.z(), 6) for v in new.vertices})
+    xs = {round(v.x(), 6) for v in new.vertices}
+    assert xs == {8.0}, xs                          # on the right wall
+    assert zs[-1] == 2.2, zs                        # its top level with the first
+
+
+def test_the_opposite_wall_too_where_no_axis_line_reaches(native_host):
+    win, vp = _room(native_host)
+    cam = vp.camera
+    cam.target = V(4, 2.5, 1.5)
+    cam.distance = 14.0
+    cam.pitch = math.radians(35.0)
+    cam.yaw = math.radians(-100.0)                 # looking in over the front wall
+    vp.update()
+    win._activate_tool("rectangle")
+    vp.encourage_point(V(3.5, 0, 2.2))
+    for x in (1.2, 4.0, 6.8):
+        _hover(vp, V(x, 5, 2.22))
         s = vp.last_snap
-        assert s.kind == "aligned" and s.axis == "z", s.kind
-        assert abs(s.point.x() - 8.0) < 1e-6 and abs(s.point.z() - 2.2) < 1e-6
-        _click(vp, px)
-        far = _hover(vp, V(8, 4.0, 1.0))
-        _click(vp, far)
-        assert len(vp.scene.mesh.faces) == faces_before + 1
-        # The window, not the wall it was cut out of: the wall's plane is
-        # rebuilt after a rectangle (#538), so the list order says nothing.
-        new = next(f for f in vp.scene.mesh.faces
-                   if not f.holes and len(f.vertices) == 4
-                   and {round(v.x(), 6) for v in f.vertices} == {8.0}
-                   and max(v.y() for v in f.vertices) < 5.0 - 1e-6)
-        zs = sorted({round(v.z(), 6) for v in new.vertices})
-        xs = {round(v.x(), 6) for v in new.vertices}
-        assert xs == {8.0}, xs                          # on the right wall
-        assert zs[-1] == 2.2, zs                        # its top level with the first
-    finally:
-        win._saved_version = vp.scene.version
-        win.close()
-
-
-def test_the_opposite_wall_too_where_no_axis_line_reaches():
-    win, vp = _room()
-    try:
-        cam = vp.camera
-        cam.target = V(4, 2.5, 1.5)
-        cam.distance = 14.0
-        cam.pitch = math.radians(35.0)
-        cam.yaw = math.radians(-100.0)                 # looking in over the front wall
-        vp.update()
-        _app.processEvents()
-        win._activate_tool("rectangle")
-        vp.encourage_point(V(3.5, 0, 2.2))
-        for x in (1.2, 4.0, 6.8):
-            _hover(vp, V(x, 5, 2.22))
-            s = vp.last_snap
-            assert s.kind == "aligned", (x, s.kind)
-            assert abs(s.point.y() - 5.0) < 1e-6 and abs(s.point.z() - 2.2) < 1e-6
-        # Well off the height: nothing but the wall. (Off its middle too:
-        # (4, 5, 1.5) is the wall's centre, which offers «Face center».)
-        _hover(vp, V(6.0, 5, 1.0))
-        assert vp.last_snap.kind == "on_face"
-    finally:
-        win._saved_version = vp.scene.version
-        win.close()
+        assert s.kind == "aligned", (x, s.kind)
+        assert abs(s.point.y() - 5.0) < 1e-6 and abs(s.point.z() - 2.2) < 1e-6
+    # Well off the height: nothing but the wall. (Off its middle too:
+    # (4, 5, 1.5) is the wall's centre, which offers «Face center».)
+    _hover(vp, V(6.0, 5, 1.0))
+    assert vp.last_snap.kind == "on_face"

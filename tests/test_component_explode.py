@@ -5,6 +5,7 @@ Components keep their parts: the menu's Explode asks for Make Unique first
 inside one, as Make Group does. The command itself, run inside an assembly
 (a component holding components), still has to undo in place: the assembly's
 matrix was down in its parts when it ran, and comes back up on leaving."""
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 import pytest
 
@@ -39,7 +40,7 @@ def model(copies=True):
     return [parent] + ([peer] if peer else []), parent, peer, target, child
 
 
-def _window(groups):
+def _tree_window(groups):
     from views.main_window import MainWindow
     win = MainWindow()
     vp = win.viewport
@@ -48,57 +49,62 @@ def _window(groups):
     return win, vp
 
 
-def _close(win):
+def _tree_close(win):
     win._saved_version = win.viewport.scene.version
     win.close()
 
 
+def _window(native_host, groups):
+    win = native_host.window
+    vp = win.viewport
+    vp.scene.groups[:] = groups
+    vp.scene.version += 1
+    return win, vp
+
+
 @pytest.mark.parametrize('copies', [False, True])
-def test_explode_in_an_assembly_preserves_placement_and_undoes_in_place(copies):
+def test_explode_in_an_assembly_preserves_placement_and_undoes_in_place(native_host, copies):
     """Left the way the app leaves, through the viewport: with copies, the
     assembly's matrix comes back up out of its parts on leaving, and the
     explode undoes inside the step that does it."""
     groups, parent, peer, target, child = model(copies)
-    win, vp = _window(groups)
+    win, vp = _window(native_host, groups)
     scene, hist = vp.scene, vp.history
     before = [points(g) for g in scene.groups]
     entry = QMatrix4x4(target.xform)
     counterpart = peer.children[0].children[0] if peer else None
     if counterpart:
         counterpart.ifc = {"name": "Peer child"}
-    try:
-        vp.begin_group_edit(parent)
-        win._execute_make(ExplodeGroupCommand(target))
-        assert hist.last_error is None and hist.last_rejected is None
-        assert parent.children == [child]
-        assert [points(g) for g in scene.groups] == before
-        if peer:
-            assert len(peer.children) == 1
-            if getattr(scene.mesh, "_instance_definition", None) is parent.mesh:
-                assert peer.children[0] is counterpart
-                assert counterpart.ifc["name"] == "Peer child"
-                assert not peer.children[0].children
-                assert peer.children[0].mesh is child.mesh
-            else:
-                assert peer.children[0].children
-        vp.end_group_edit()
-        assert [points(g) for g in scene.groups] == before
-        assert hist.undo()
-        assert parent.children == [target]
-        assert [points(g) for g in scene.groups] == before
-        if peer:
-            assert target.xform == entry and parent.mesh is peer.mesh
-        assert hist.redo()
-        assert parent.children == [child]
-        assert [points(g) for g in scene.groups] == before
-    finally:
-        _close(win)
+    vp.begin_group_edit(parent)
+    win._execute_make(ExplodeGroupCommand(target))
+    assert hist.last_error is None and hist.last_rejected is None
+    assert parent.children == [child]
+    assert [points(g) for g in scene.groups] == before
+    if peer:
+        assert len(peer.children) == 1
+        if getattr(scene.mesh, "_instance_definition", None) is parent.mesh:
+            assert peer.children[0] is counterpart
+            assert counterpart.ifc["name"] == "Peer child"
+            assert not peer.children[0].children
+            assert peer.children[0].mesh is child.mesh
+        else:
+            assert peer.children[0].children
+    vp.end_group_edit()
+    assert [points(g) for g in scene.groups] == before
+    assert hist.undo()
+    assert parent.children == [target]
+    assert [points(g) for g in scene.groups] == before
+    if peer:
+        assert target.xform == entry and parent.mesh is peer.mesh
+    assert hist.redo()
+    assert parent.children == [child]
+    assert [points(g) for g in scene.groups] == before
 
 
 @pytest.mark.parametrize('copies', [False, True])
 def test_the_menu_explode_inside_a_component_asks_for_make_unique(copies):
     groups, parent, peer, target, child = model(copies)
-    win, vp = _window(groups)
+    win, vp = _tree_window(groups)
     try:
         vp.begin_group_edit(parent)
         vp.scene.selection = {target}
@@ -109,4 +115,4 @@ def test_the_menu_explode_inside_a_component_asks_for_make_unique(copies):
         panel = win.project_browser.outliner
         assert panel.make_refusal([target])
     finally:
-        _close(win)
+        _tree_close(win)
