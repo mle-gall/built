@@ -5,48 +5,15 @@ fresh profile gets; OK saves that, Cancel still touches nothing, and the
 language, the AI Assistant and the shortcuts stay as they were."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-import pytest
-from PySide6.QtCore import QSettings
-from PySide6.QtWidgets import QApplication, QWidget
-
-_inst = QApplication.instance()
-if _inst is None:
-    _app = QApplication([])
-elif not isinstance(_inst, QApplication):
-    pytest.skip("a non-widget QGuiApplication is already active",
-                allow_module_level=True)
-
-from tests.preferences_chrome import Controls, settings_file
+from core.settings import settings
+from tests.preferences_chrome import Controls
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from views import chrome_forms
 
-class _Win(QWidget):
-    def __init__(self):
-        super().__init__()
 
-        class _VP:
-            edit_rest_mode = "hide"
-
-            def set_edit_rest_mode(self, mode):
-                self.edit_rest_mode = mode
-
-        self._documents, self._tool_actions = [], {}
-        self.viewport = _VP()
-        self._rest_actions = {}
-        self.viewport.edit_rest_fade = 0.75
-        self.viewport.set_edit_rest_fade = lambda v: setattr(self.viewport, "edit_rest_fade", v)
-
-
-def _fresh(path):
-    return QSettings(str(path), QSettings.IniFormat)
-
-
-def _customised(path):
+def _customised():
     """A profile someone has tuned: nothing at its default."""
-    st = _fresh(path)
+    st = settings()
     st.setValue("General/autosave", "0")
     st.setValue("General/autosave_min", 30)
     st.setValue("General/backup", "0")
@@ -73,24 +40,24 @@ def confirmation(ui):
     return chrome_forms.current(ui.ctx.win)
 
 
-def test_the_tab_picture_option_is_saved_and_restored(settings_file):
-    ui = Controls(_Win(), "general")
+def test_the_tab_picture_option_is_saved_and_restored(native_host):
+    ui = Controls(native_host.window, "general")
     assert ui.value("hover_picture")
     ui.set("hover_picture", False)
-    assert _fresh(settings_file).value("tabs/hover_picture") == "0"
-    reopened = Controls(_Win(), "general")
+    assert settings().value("tabs/hover_picture") == "0"
+    reopened = Controls(native_host.window, "general")
     assert not reopened.value("hover_picture")
     reopened.restore()
     assert reopened.value("hover_picture")
 
 
-def test_the_dialog_has_a_restore_defaults_button(settings_file):
-    footer = Controls(_Win(), "general").wire()["footer"]
+def test_the_dialog_has_a_restore_defaults_button(native_host):
+    footer = Controls(native_host.window, "general").wire()["footer"]
     assert [v["id"] for v in footer["links"]] == ["restore"]
 
 
-def test_ok_stays_the_highlighted_button_after_restoring(settings_file):
-    ui = Controls(_Win(), "general")
+def test_ok_stays_the_highlighted_button_after_restoring(native_host):
+    ui = Controls(native_host.window, "general")
     form = confirmation(ui)
     assert form.default == "ok"
     form.press("ok")
@@ -98,10 +65,10 @@ def test_ok_stays_the_highlighted_button_after_restoring(settings_file):
     assert not ui.wire().get("default_verb")
 
 
-def test_restore_puts_every_control_back_to_its_default(settings_file):
+def test_restore_puts_every_control_back_to_its_default(native_host):
     from core.ndof import AXES
-    _customised(settings_file)
-    ui = Controls(_Win(), "import")
+    _customised()
+    ui = Controls(native_host.window, "import")
     assert ui.value("dxf_unit") == "in"
     assert not ui.select("general").value("autosave")
     ui.select("display").set("rest_mode", "fade")
@@ -129,12 +96,12 @@ def test_restore_puts_every_control_back_to_its_default(settings_file):
     ui.sheet.closed(ui.ctx)
 
 
-def test_ok_saves_the_defaults_and_keeps_language_and_ai(settings_file):
-    _customised(settings_file)
-    win = _Win()
+def test_ok_saves_the_defaults_and_keeps_language_and_ai(native_host):
+    _customised()
+    win = native_host.window
     ui = Controls(win, "general")
     confirmation(ui).press("ok")
-    st = _fresh(settings_file)
+    st = settings()
     assert st.value("General/autosave") == "1"
     assert int(st.value("General/autosave_min")) == 5
     assert int(st.value("General/undo_steps")) == 200
@@ -147,39 +114,36 @@ def test_ok_saves_the_defaults_and_keeps_language_and_ai(settings_file):
     assert st.value("ia/modelo") == "my-model"
 
 
-def test_cancel_after_restore_touches_nothing(settings_file):
-    _customised(settings_file)
-    win = _Win()
+def test_cancel_after_restore_touches_nothing(native_host):
+    _customised()
+    win = native_host.window
+    win.viewport.set_edit_rest_mode("hide")
     confirmation(Controls(win, "general")).press("cancel")
-    st = _fresh(settings_file)
+    st = settings()
     assert st.value("import/obj_unit") == "ft"
     assert st.value("General/autosave") == "0"
     assert win.viewport.edit_rest_mode == "hide"
 
 
-def test_restore_does_not_copy_the_document_units_to_new_documents(tmp_path, private_settings):
+def test_restore_does_not_copy_the_document_units_to_new_documents(native_host):
     from core import units
-    from views.main_window import MainWindow
     from views.settings_sheet import SettingsSheet
-    win = MainWindow(defer_extensions=True)
-    try:
-        units.apply_units(win.viewport.scene, {"length": "ft", "precision": 2})
-        units.remember_new_document_units({"length": "cm", "precision": 1})
-        QSettings().setValue("units/use_for_new_documents", "0")
-        units.set_ask_at_start(False)
-        SettingsSheet().restore_defaults(win)
-        assert QSettings().value("units/use_for_new_documents") == "1"
-        assert units.ask_at_start()
-        assert units.new_document_units() == {"length": "cm", "precision": 1}
-        assert win.viewport.scene.units == {"length": "ft", "precision": 2}
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+
+    win = native_host.window
+    units.apply_units(win.viewport.scene, {"length": "ft", "precision": 2})
+    units.remember_new_document_units({"length": "cm", "precision": 1})
+    settings().setValue("units/use_for_new_documents", "0")
+    units.set_ask_at_start(False)
+    SettingsSheet().restore_defaults(win)
+    assert settings().value("units/use_for_new_documents") == "1"
+    assert units.ask_at_start()
+    assert units.new_document_units() == {"length": "cm", "precision": 1}
+    assert win.viewport.scene.units == {"length": "ft", "precision": 2}
 
 
-def test_the_button_asks_first(settings_file):
-    _customised(settings_file)
-    ui = Controls(_Win(), "import")
+def test_the_button_asks_first(native_host):
+    _customised()
+    ui = Controls(native_host.window, "import")
     form = confirmation(ui)
     assert ui.value("dxf_unit") == "in"
     form.press("cancel")

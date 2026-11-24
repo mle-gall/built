@@ -6,41 +6,18 @@ imperial, with
 Window ▸ Units… on Ctrl+U."""
 from __future__ import annotations
 
-import sys
-
 import pytest
-from PySide6.QtGui import QKeySequence
-from PySide6.QtWidgets import QApplication
 
-if QApplication.instance() is None:
-    QApplication(sys.argv[:1])
-
-from core import units  # noqa: E402
-from views import chrome_forms  # noqa: E402
-
-
-@pytest.fixture(autouse=True)
-def clean_settings():
-    units.set_ask_at_start(True)
-    units.remember_new_document_units(units.DEFAULT_MODEL_UNITS)
-    yield
-    units.set_ask_at_start(True)
-    units.remember_new_document_units(units.DEFAULT_MODEL_UNITS)
-
-
-def _close(win):
-    win._saved_version = win.viewport.scene.version
-    win.close()
+from core import units
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
+from views import chrome_forms, units_question
 
 
 @pytest.fixture
-def win():
-    from views.main_window import MainWindow
-    w = MainWindow()
-    w.show()
-    QApplication.processEvents()
-    yield w
-    _close(w)
+def win(native_host):
+    units.set_ask_at_start(True)
+    units.remember_new_document_units(units.DEFAULT_MODEL_UNITS)
+    return native_host.window
 
 
 def rows(form):
@@ -48,7 +25,7 @@ def rows(form):
 
 
 def choose(win, profile, *, dont_ask=False, accept=True):
-    win.offer_units_at_start()
+    units_question.offer_at_start(win)
     form = chrome_forms.current(win)
     before = rows(form)["profile"]
     form.receive("profile", str(profile))
@@ -76,7 +53,7 @@ def test_each_choice_sets_the_new_document(win, profile,
     assert scene.version == win._saved_version         # nothing to save
     assert units.new_document_units() == expected      # and every new one
     win._on_new()
-    assert scene.units == expected
+    assert win.viewport.scene.units == expected
 
 
 def test_metres_mean_square_and_cubic_metres_and_degrees(win):
@@ -90,7 +67,7 @@ def test_the_last_choice_is_preselected_next_time(win):
     for length, precision, index in [("mm", 0, 2), ("cm", 1, 1), ("cm", 3, 4)]:
         settings = {"length": length, "precision": precision}
         units.remember_new_document_units(settings)
-        win.offer_units_at_start()
+        units_question.offer_at_start(win)
         form = chrome_forms.current(win)
         assert rows(form)["profile"][4] == index
         assert rows(form)["preview"][3] == units.preview_text(settings)
@@ -122,7 +99,7 @@ def test_dont_show_again(win):
     choose(win, 2, dont_ask=True)
     assert win.viewport.scene.units["length"] == "mm"
     assert not units.ask_at_start()
-    win.offer_units_at_start()
+    units_question.offer_at_start(win)
     assert chrome_forms.current(win) is None
 
 
@@ -139,24 +116,29 @@ def test_preferences_turn_it_back_on(win):
 
 
 def test_a_document_already_open_is_not_asked_about(win, tmp_path):
-    win._current_path = tmp_path / "plano.igz"          # opened from argv
-    win.offer_units_at_start()
-    assert chrome_forms.current(win) is None
-    win._current_path = None
-    win.viewport.scene.version += 1                     # already drawn on
-    win.offer_units_at_start()
-    assert chrome_forms.current(win) is None
+    from app_shell import files
+    from core.scene import Scene
+    from formats import igz
+    from ingetrazo_core import Vec3
+    from views import wgpu_start
+
+    path = tmp_path / "plano.igz"
+    igz.save_scene(Scene(), path)
+    assert files.open_path(win, path)
+    assert chrome_forms.current(win) is None and not wgpu_start.shown(win)
+    win.new_document()
+    win.viewport.scene.add_edge(Vec3(0, 0, 0), Vec3(1, 0, 0))
+    files.cold_start(win)
+    assert chrome_forms.current(win) is None and not wgpu_start.shown(win)
 
 
 # ---- Ctrl+U -------------------------------------------------------------------------
 
 def test_ctrl_u_opens_the_units_page(win):
     from views import chrome_sheet
-    act = win._act_units
-    assert act.shortcut() == QKeySequence("Ctrl+U")
-    others = [a for a in win.findChildren(type(act))
-              if a is not act and QKeySequence("Ctrl+U") in a.shortcuts()]
-    assert others == []                                 # nobody else has it
+    from views.shortcuts import collect_actions, action_keys
+    act = win._registry_actions["menu:units"]
+    assert [a for a in collect_actions(win) if "Ctrl+U" in action_keys(a)] == [act]
     act.trigger()
     assert chrome_sheet.current(win).section == "units"
 
