@@ -1946,6 +1946,20 @@ impl PyMeshStore {
         self.inner.erase_soft_seams()
     }
 
+    #[staticmethod]
+    #[pyo3(signature = (mesh, segments, cascade_faces=true))]
+    fn command_delete_edges(mesh: &Bound<'_, PyAny>, segments: Vec<[[f64;3];2]>, cascade_faces: bool)
+        -> PyResult<Option<(Vec<u128>,Vec<u128>,u32)>> {
+        Ok(super::command_facade::command_delete_edges(mesh, segments, cascade_faces)?
+            .map(|r| (r.edges, r.faces, r.dirty)))
+    }
+
+    #[staticmethod]
+    fn command_delete_face(mesh: &Bound<'_, PyAny>, outer: Vec<[f64;3]>)
+        -> PyResult<Option<(Option<u128>,u32)>> {
+        Ok(super::command_facade::command_delete_face(mesh, outer)?.map(|r| (r.face, r.dirty)))
+    }
+
     fn delete_face_loop(&mut self, points: Vec<[f64; 3]>, candidates: Vec<u128>)
         -> PyResult<(bool, Option<u128>)> {
         let candidates = self.drawing_candidates(Kind::Face, Some(candidates))?;

@@ -142,3 +142,131 @@ pub(crate) fn command_add_face(
         hole_swaps,
     }))
 }
+
+type Point = [f64; 3];
+type Segment = [Point; 2];
+
+fn key_window(points: &[Point]) -> ((f64, f64, f64), (f64, f64, f64)) {
+    let mut lo = points[0];
+    let mut hi = lo;
+    for p in &points[1..] {
+        for i in 0..3 {
+            lo[i] = lo[i].min(p[i]);
+            hi[i] = hi[i].max(p[i]);
+        }
+    }
+    let size = lo.into_iter().chain(hi).map(f64::abs).fold(0.0, f64::max);
+    let pad = 2e-4 + size * 1e-6;
+    (lo.map(|n| n - pad).into(), hi.map(|n| n + pad).into())
+}
+
+enum Candidates<'a> {
+    Loop(&'a [Point]),
+    Segments(&'a [Segment]),
+}
+
+fn candidate_keys(mesh: &Bound<'_, PyAny>, selection: Candidates<'_>) -> PyResult<Vec<u128>> {
+    let use_scan = match selection {
+        Candidates::Loop(points) => !points.is_empty(),
+        Candidates::Segments(segments) => (1..=256).contains(&segments.len()),
+    };
+    if use_scan {
+        let scan = mesh
+            .py()
+            .import("core.scan_index")?
+            .call_method1("scan", (mesh,))?;
+        if !scan.is_none() {
+            let native = scan.getattr("native")?;
+            let rows: Vec<u32> = match selection {
+                Candidates::Loop(points) => native
+                    .call_method1("faces_within", key_window(points))?
+                    .extract()?,
+                Candidates::Segments(segments) => {
+                    let mut found = std::collections::BTreeSet::new();
+                    for segment in segments {
+                        let hits: Vec<u32> = native
+                            .call_method1("faces_meeting", key_window(segment))?
+                            .extract()?;
+                        found.extend(hits);
+                    }
+                    found.into_iter().collect()
+                }
+            };
+            return native.call_method1("keys_at", ("face", rows))?.extract();
+        }
+    }
+    mesh.getattr("_store")?
+        .call_method1("keys", ("face",))?
+        .extract()
+}
+
+pub(crate) struct RemovedEdges {
+    pub(crate) edges: Vec<u128>,
+    pub(crate) faces: Vec<u128>,
+    pub(crate) dirty: u32,
+}
+
+pub(crate) fn command_delete_edges(
+    mesh: &Bound<'_, PyAny>,
+    segments: Vec<Segment>,
+    cascade_faces: bool,
+) -> PyResult<Option<RemovedEdges>> {
+    if store_hypot(mesh)?.is_none() {
+        return Ok(None);
+    }
+    let segments = segments
+        .into_iter()
+        .map(|[a, b]| Ok([input_point(mesh, a)?, input_point(mesh, b)?]))
+        .collect::<PyResult<Vec<_>>>()?;
+    let faces = if cascade_faces {
+        candidate_keys(mesh, Candidates::Segments(&segments))?
+    } else {
+        Vec::new()
+    };
+    let result: Option<(Vec<u128>, Vec<u128>)> = mesh
+        .getattr("_store")?
+        .call_method1("delete_edge_segments", (segments, faces))?
+        .extract()?;
+    let Some((edges, faces)) = result else {
+        return Ok(None);
+    };
+    let dirty = u32::try_from(edges.len() + faces.len())
+        .map_err(|_| pyo3::exceptions::PyOverflowError::new_err("erase exceeds dirty count"))?;
+    mesh.call_method1("_dirty", (dirty,))?;
+    Ok(Some(RemovedEdges {
+        edges,
+        faces,
+        dirty,
+    }))
+}
+
+pub(crate) struct RemovedFace {
+    pub(crate) face: Option<u128>,
+    pub(crate) dirty: u32,
+}
+
+pub(crate) fn command_delete_face(
+    mesh: &Bound<'_, PyAny>,
+    outer: Vec<Point>,
+) -> PyResult<Option<RemovedFace>> {
+    if store_hypot(mesh)?.is_none() {
+        return Ok(None);
+    }
+    let outer = outer
+        .into_iter()
+        .map(|p| input_point(mesh, p))
+        .collect::<PyResult<Vec<_>>>()?;
+    let faces = candidate_keys(mesh, Candidates::Loop(&outer))?;
+    let (handled, face): (bool, Option<u128>) = mesh
+        .getattr("_store")?
+        .call_method1("delete_face_loop", (outer, faces))?
+        .extract()?;
+    if !handled {
+        return Ok(None);
+    }
+    let dirty = u32::from(face.is_some());
+    if dirty != 0 {
+        mesh.call_method1("_dirty", (dirty,))?;
+    }
+    Ok(Some(RemovedFace { face, dirty }))
+}
