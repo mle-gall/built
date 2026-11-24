@@ -124,7 +124,7 @@ def import_orthophoto(window) -> None:
 
 
 def import_alignment(window):
-    from georef.geoimport import load_features
+    from ingetrazo_core import open_alignment
     from ingetrazo_render import place_alignment
 
     name, _ = file_dialogs.getOpenFileName(window, tr("Import georef"), "",
@@ -133,7 +133,7 @@ def import_alignment(window):
         return
     path = Path(name)
     try:
-        count = place_alignment(window, load_features(path))
+        count = place_alignment(window, open_alignment(path))
     except Exception as exc:  # XML, KMZ and JSON readers have distinct parse errors.
         _dialogs.critical(window, tr("Import failed"), str(exc))
         return

@@ -15,8 +15,7 @@ formats (SHP/DXF, usually UTM) are a later addition that needs CRS support.
 from __future__ import annotations
 
 import json
-import xml.etree.ElementTree as ET
-import zipfile
+from ingetrazo_core import parse_kml, parse_kmz
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -29,10 +28,6 @@ class GeoFeature:
     name: str = ""
 
 
-def _local(tag: str) -> str:
-    return tag.rsplit("}", 1)[-1]
-
-
 def _drop_closing_dup(points, closed):
     """A closed ring repeats its first vertex last — drop it (GeoPath closes it)."""
     if closed and len(points) > 1:
@@ -40,64 +35,6 @@ def _drop_closing_dup(points, closed):
         if abs(a[0] - b[0]) < 1e-9 and abs(a[1] - b[1]) < 1e-9:
             return points[:-1]
     return points
-
-
-def _parse_coords(text: str) -> list[tuple[float, float]]:
-    """KML ``coordinates`` text: whitespace-separated ``lon,lat[,alt]`` → (lat, lon)."""
-    out = []
-    for tok in text.split():
-        parts = tok.split(",")
-        if len(parts) >= 2:
-            try:
-                out.append((float(parts[1]), float(parts[0])))
-            except ValueError:
-                continue
-    return out
-
-
-def _first_coords(elem) -> list[tuple[float, float]]:
-    for d in elem.iter():
-        if _local(d.tag) == "coordinates" and d.text:
-            return _parse_coords(d.text)
-    return []
-
-
-def parse_kml(text: str) -> list[GeoFeature]:
-    """Parse KML text into features (LineString → open, Polygon → closed)."""
-    try:
-        root = ET.fromstring(text)
-    except ET.ParseError:
-        return []
-    feats = []
-    for pm in root.iter():
-        if _local(pm.tag) != "Placemark":
-            continue
-        name = ""
-        for ch in pm:
-            if _local(ch.tag) == "name" and ch.text:
-                name = ch.text.strip()
-        for geom in pm.iter():
-            lt = _local(geom.tag)
-            if lt == "LineString":
-                pts = _first_coords(geom)
-                if len(pts) >= 2:
-                    feats.append(GeoFeature(pts, False, name))
-            elif lt == "Polygon":
-                pts = _drop_closing_dup(_first_coords(geom), True)
-                if len(pts) >= 3:
-                    feats.append(GeoFeature(pts, True, name))
-    return feats
-
-
-def parse_kmz(path: Path) -> list[GeoFeature]:
-    """Parse a KMZ (zipped KML): the archive's first ``.kml`` entry."""
-    from core import zip_limits
-    with zipfile.ZipFile(path) as zf:
-        names = [n for n in zf.namelist() if n.lower().endswith(".kml")]
-        if not names:
-            return []
-        name = "doc.kml" if "doc.kml" in names else names[0]
-        return parse_kml(zip_limits.read(zf, name).decode("utf-8", "replace"))
 
 
 def parse_geojson(text: str) -> list[GeoFeature]:

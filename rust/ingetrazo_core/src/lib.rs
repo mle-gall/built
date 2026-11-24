@@ -111,10 +111,12 @@ mod object_merge;
 mod panic_log;
 mod sheets;
 mod stl;
+mod alignment;
 
 #[pymodule]
 fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     stl::register(m)?;
+    alignment::register(m)?;
     screen::register(m)?;
     scene_animation::register(m)?;
     survey_pixels::register(m)?;
