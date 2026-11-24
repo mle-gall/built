@@ -1096,8 +1096,9 @@ Host.menu, Host.state = drive, inspect
                  env=dict(os.environ, BUILT_ANSWERS="cmd-d"), capture_output=True, text=True, timeout=45)
     log = result.stdout + result.stderr
     assert result.returncode == 0 and "Traceback" not in log, log
-    selected, closed = [json.loads(line.removeprefix("[built] state ")) for line in log.splitlines()
-                        if line.startswith("[built] state ")]
+    states = [json.loads(line.removeprefix("[built] state ")) for line in log.splitlines()
+              if line.startswith("[built] state ")]
+    selected, closed = states[:2]
     assert (selected["context"], selected["tagged_faces"]) == ("Wall assembly", 6), log
     assert closed["context"] == "" and not closed["tagged_faces"], log
     assert all(not s["errors"] and not s["blocked_widgets"] for s in (selected, closed)), log

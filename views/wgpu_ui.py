@@ -428,10 +428,9 @@ def before_frame(view) -> None:
     _form(view, win)
     from views import wgpu_deliveries
     wgpu_deliveries.bind(win)
-    _sync_project_rows(view, win)
     from views import wgpu_library
     wgpu_library.before_frame(view, win)
-    _inspector(view, win)
+    _sync_project_rows(view, win)
     from views import inspector_bridge
     inspector_bridge.sync(view, win)
     _tabs(view, win)
@@ -769,6 +768,7 @@ def _sync_project_rows(view, win):
     _tree(view, win)
     if view.__dict__.get("_ui_lens") == 1 and view.renderer.ui_tick_tag_counts(win.viewport.history):
         view.update()
+    _inspector(view, win)
 
 
 def _tree(view, win, *, discover=False):

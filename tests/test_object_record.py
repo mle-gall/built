@@ -232,7 +232,14 @@ def test_first_inspection_is_lazy_and_measuring_catches_up(native_host, monkeypa
     assert measure(native_host).count == 1
     assert calls == [1]
     assert vp.history.undo()
-    inspector(native_host, [group])
+    from tests.test_tree_links import _View
+    from views.wgpu_ui import _sync_project_rows
+    view = _View()
+    view.renderer.ui_project_hidden = lambda: True
+    _sync_project_rows(view, native_host.window)
+    assert calls == [1]
+    view.renderer.ui_project_hidden = lambda: False
+    _sync_project_rows(view, native_host.window)
     assert calls == [1, 1] and vp.scene._inspector_takeoff.count == 0
 
 
