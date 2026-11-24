@@ -74,123 +74,44 @@ fn item(id: &str, text: &str, accel: Option<&str>) -> MenuItem {
 
 /// The File menu's imports: (command, label). The command is
 /// `import:<suffix>` (app_shell.imports).
-pub const IMPORTS: &[(&str, &str)] = &[
-    ("import:skp", ".skp…"),
-    ("import:dae", "COLLADA (.dae)…"),
-    ("import:dxf", "DXF (.dxf)…"),
-    ("import:dwg", "DWG (.dwg)…"),
-    ("import:rfa", "Revit family (.rfa)…"),
-    ("import:glb", "glTF (.glb, .gltf)…"),
-    ("import:igz", "Built or IngeTrazo model, as a group…"),
-];
+pub use ingetrazo_render::desktop_menu_model::IMPORTS;
 
 pub fn build() -> muda::Result<Menus> {
+    use ingetrazo_render::desktop_menu_model::{Row, GROUPS};
     let bar = Menu::new();
-    let app = Submenu::with_items(
-        "Built",
-        true,
-        &[
-            &item("about", "About Built", None),
-            &PredefinedMenuItem::separator(),
-            &item("prefs", "Settings…", Some("super+Comma")),
-            &PredefinedMenuItem::separator(),
-            &PredefinedMenuItem::services(None),
-            &PredefinedMenuItem::separator(),
-            &PredefinedMenuItem::hide(None),
-            &PredefinedMenuItem::hide_others(None),
-            &PredefinedMenuItem::show_all(None),
-            &PredefinedMenuItem::separator(),
-            &item("quit", "Quit Built", Some("super+KeyQ")),
-        ],
-    )?;
     let recent = Submenu::with_items("Open Recent", true, &[&MenuItem::new(EMPTY_RECENT, false, None)])?;
-    let imports: Vec<MenuItem> = IMPORTS.iter().map(|(id, label)| item(id, label, None)).collect();
-    let import_refs: Vec<&dyn muda::IsMenuItem> = imports.iter().map(|i| i as &dyn muda::IsMenuItem).collect();
-    let import = Submenu::with_items("Import", true, &import_refs)?;
-    let file = Submenu::with_items(
-        "File",
-        true,
-        &[&item("new", "New", Some("super+KeyN")),
-          &item("new_window", "New Window", Some("super+shift+KeyN")),
-          &item("open", "Open…", Some("super+KeyO")),
-          &recent,
-          &item("home", "Start Page", None),
-          &PredefinedMenuItem::separator(),
-          &item("close_tab", "Close Project", Some("super+KeyW")),
-          &item("close", "Close Window", Some("super+shift+KeyW")),
-          &PredefinedMenuItem::separator(),
-          &item("save", "Save", Some("super+KeyS")),
-          &item("save_as", "Save As…", Some("super+shift+KeyS")),
-          &item("save_copy", "Save a Copy…", Some("super+alt+KeyS")),
-          &item("export_image", "Export Image…", None),
-          &item("export_view_svg", "Export Current View as SVG…", None),
-          &item("delivery_export", "Export…", None),
-          &item("export_igz", "Save a Copy as IngeTrazo (.igz)…", None),
-          &PredefinedMenuItem::separator(),
-          &import,
-          &item("link", "Link a Document…", None),
-          &item("reload_links", "Reload Linked Files", None)],
-    )?;
-    let edit = Submenu::with_items(
-        "Edit",
-        true,
-        &[&item("undo", "Undo", Some("super+KeyZ")),
-          &item("redo", "Redo", Some("super+shift+KeyZ")),
-          &PredefinedMenuItem::separator(),
-          &item("cut", "Cut", Some("super+KeyX")),
-          &item("copy", "Copy", Some("super+KeyC")),
-          &item("paste", "Paste", Some("super+KeyV")),
-          &item("paste_in_place", "Paste in Place", Some("super+alt+KeyV")),
-          &PredefinedMenuItem::separator(),
-          &item("soften", "Soften / Smooth Edges…", None),
-          &item("select_all", "Select All", Some("super+KeyA")),
-          &item("select_none", "Select None", Some("super+KeyT"))],
-    )?;
-    let view = Submenu::with_items(
-        "Camera",
-        true,
-        &[&item("zoom_extents", "Zoom Extents", Some("super+shift+KeyE")),
-          &PredefinedMenuItem::separator(),
-          &item("view:iso", "Iso", None), &item("view:top", "Top", None),
-          &item("view:front", "Front", None), &item("view:right", "Right", None),
-          &PredefinedMenuItem::separator(),
-          &PredefinedMenuItem::fullscreen(None)],
-    )?;
-    let tools = Submenu::with_items(
-        "Tools",
-        true,
-        &[&item("tool:select", "Select", None), &item("tool:line", "Line", None),
-          &item("tool:rectangle", "Rectangle", None), &item("tool:circle", "Circle", None),
-          &item("tool:pushpull", "Push/Pull", None), &item("tool:move", "Move", None),
-          &item("tool:rotate", "Rotate", None), &item("tool:offset", "Offset", None),
-          &item("tool:tape", "Tape Measure", None), &item("tool:eraser", "Eraser", None),
-          &item("tool:paint", "Paint", None)],
-    )?;
-    let window = Submenu::with_items(
-        "Window",
-        true,
-        &[&PredefinedMenuItem::minimize(None), &PredefinedMenuItem::maximize(None),
-          &PredefinedMenuItem::separator(),
-          &item("next_doc", "Next Project", Some("ctrl+Tab")),
-          &item("prev_doc", "Previous Project", Some("ctrl+shift+Tab")),
-          &PredefinedMenuItem::separator(),
-          &item("move_to_window", "Move Project to New Window", None),
-          &PredefinedMenuItem::separator(),
-          &item("units", "Units…", Some("super+KeyU")),
-          &item("extensions", "Extension Manager…", None),
-          &item("cutlist", "Cut list…", None),
-          &item("library", "Library", Some("super+shift+KeyL"))],
-    )?;
-    let plugins = Submenu::with_items("Plugins", true, &[
-        &item("panel:python_console", "Python Console", Some("CmdOrCtrl+Shift+P")),
-        &item("panel:render_blender", "Blender Render", None),
-    ])?;
-    let help = Submenu::with_items("Help", true, &[&item("check_updates", "Check for Updates…", None)])?;
-    let draw = Submenu::new("Draw", true);
-    let mut groups = std::collections::HashMap::from([
-        ("File", file.clone()), ("File ▸ Import", import.clone()), ("Edit", edit.clone()), ("Camera", view.clone()),
-        ("Plugins", plugins.clone()), ("Window", window.clone()), ("Draw", draw.clone()), ("Tools", tools.clone()), ("Help", help.clone()),
-    ]);
+    let import = Submenu::new("Import", true);
+    for &(id, label) in IMPORTS {
+        import.append(&item(id, label, None))?;
+    }
+    let mut groups = std::collections::HashMap::from([("File ▸ Import", import.clone())]);
+    for &(name, rows) in GROUPS {
+        let sub = Submenu::new(name, true);
+        for row in rows {
+            match *row {
+                Row::Command(id, label, accel) => sub.append(&item(id, label, accel))?,
+                Row::Recent => sub.append(&recent)?,
+                Row::Imports => sub.append(&import)?,
+                Row::Separator => sub.append(&PredefinedMenuItem::separator())?,
+                Row::System(role) => {
+                    let item = match role {
+                        "services" => PredefinedMenuItem::services(None),
+                        "hide" => PredefinedMenuItem::hide(None),
+                        "hide_others" => PredefinedMenuItem::hide_others(None),
+                        "show_all" => PredefinedMenuItem::show_all(None),
+                        "fullscreen" => PredefinedMenuItem::fullscreen(None),
+                        "minimize" => PredefinedMenuItem::minimize(None),
+                        "maximize" => PredefinedMenuItem::maximize(None),
+                        _ => unreachable!("unknown system menu role {role}"),
+                    };
+                    sub.append(&item)?;
+                }
+            }
+        }
+        groups.insert(name, sub);
+    }
+    let plugins = groups["Plugins"].clone();
+    let window = groups["Window"].clone();
     let mut model_checks = Vec::new();
     for entry in ingetrazo_render::model_menu::entries() {
         if let Some((parent, label)) = entry.path.split_once(" ▸ ") {
@@ -208,7 +129,7 @@ pub fn build() -> muda::Result<Menus> {
             groups[entry.path].append(&item(entry.id, entry.label, None))?;
         }
     }
-    bar.append_items(&[&app, &file, &edit, &view, &draw, &tools, &plugins, &window, &help])?;
+    for &(name, _) in GROUPS { bar.append(&groups[name])?; }
     #[cfg(target_os = "macos")]
     {
         bar.init_for_nsapp();

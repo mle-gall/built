@@ -1,32 +1,24 @@
-"""Capture the Rust chrome from a Qt-owned Metal view using synthetic records."""
+"""Capture native Built chrome from synthetic design-system records."""
 import argparse
 import json
 import os
 from pathlib import Path
-from isolated_launch import isolate_script
+import subprocess
 import time
 
-from PySide6.QtCore import QSettings, Qt
-from PySide6.QtGui import QColor, QImage
-from PySide6.QtWidgets import QApplication, QWidget
-from ingetrazo_render import Renderer
 
-
-def capture(prefix, directory):
-    QSettings.setDefaultFormat(QSettings.IniFormat)
-    for scope in (QSettings.UserScope, QSettings.SystemScope):
-        QSettings.setPath(QSettings.IniFormat, scope, os.environ["BUILT_SETTINGS_DIR"])
-    if prefix == "gallery":
-        capture_gallery(directory)
-        return
-    app = QApplication([])
-    window = QWidget()
-    window.resize(1280, 800)
-    window.setAttribute(Qt.WA_NativeWindow)
-    window.show()
-    app.processEvents()
-    r = Renderer(int(window.winId()), 1280, 800, 1.)
+def capture_surface(r, prefix, directory):
     import numpy as np
+    from ingetrazo_render import archive_picture_png
+    directory = Path(directory)
+
+    def save(pixels, name):
+        h, w, _ = pixels.shape
+        image = archive_picture_png(w, h, pixels.tobytes())
+        if image is None:
+            raise ValueError(f"blank capture: {name}")
+        (directory / f"{name}.png").write_bytes(image)
+
     blank = lambda n: np.zeros(n, dtype=np.uint8)
     r.set_scene((blank(28), blank(4), blank(32), blank(40)), blank(80))
     r.ui_enable(str(Path(__file__).resolve().parents[1] / "resources/fonts/inter"))
@@ -40,10 +32,9 @@ def capture(prefix, directory):
         r.render(True)
         pixels = bytes(r.take_capture())
         assert len(pixels) == 1280 * 800 * 4
-        img = QImage(pixels, 1280, 800, QImage.Format_RGBA8888)
-        if not img.save(str(directory / f"{name}.png")):
-            raise OSError(name)
-        return img.copy()
+        image = np.frombuffer(pixels, dtype=np.uint8).reshape(800, 1280, 4)
+        save(image, name)
+        return image
 
     r.ui_set_large_sheet(json.dumps(start_sheet()))
     shot(f"{prefix}-start")
@@ -71,12 +62,12 @@ def capture(prefix, directory):
     tab_end = max(left + width for left, _, width, _ in tabs)
     for name, rect in [("dock", (x, y, w, h)), ("tree", (x, y, w, min(h, 280))),
                        ("tabs", (round(tx), round(ty), round(tab_end - tx), round(th)))]:
-        if not image.copy(*rect).save(str(directory / f"{prefix}-{name}.png")):
-            raise OSError(name)
+        left, top, width, height = rect
+        save(image[top:top + height, left:left + width], f"{prefix}-{name}")
     # Open "Export details" with a real click: it is the lowest text line in the dock.
     lowest = None
     for row in range(y + h - 8, y + 40, -1):
-        if any(QColor(image.pixel(col, row)).lightness() > 75 for col in range(x + 8, x + 140)):
+        if any((int(max(rgb)) + int(min(rgb))) / 2 > 75 for rgb in image[row, x + 8:x + 140, :3]):
             lowest = row
             break
     if lowest is not None:
@@ -87,9 +78,8 @@ def capture(prefix, directory):
         for _ in range(6):  # let the disclosure finish opening
             time.sleep(0.05)
             r.render(True)
-    shot(f"{prefix}-inspector-full")
-    full = QImage(str(directory / f"{prefix}-inspector-full.png"))
-    full.copy(x, y, w, h).save(str(directory / f"{prefix}-inspector.png"))
+    full = shot(f"{prefix}-inspector-full")
+    save(full[y:y+h, x:x+w], f"{prefix}-inspector")
     r.ui_set_large_sheet(json.dumps(library_sheet()))
     shot(f"{prefix}-library")
     from types import SimpleNamespace
@@ -110,7 +100,7 @@ def capture(prefix, directory):
     shot(f"{prefix}-sheet")
 
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 
 
 def start_sheet():
@@ -183,6 +173,13 @@ if __name__ == "__main__":
     args = parser.parse_args()
     dest = Path(__file__).resolve().parents[1] / args.dest
     dest.mkdir(parents=True, exist_ok=True)
+    from isolated_launch import isolate_script
     isolate_script()
     os.environ.pop("BUILT_GALLERY", None)
-    capture(args.prefix, dest)
+    if args.prefix == "gallery":
+        capture_gallery(dest)
+    else:
+        root = Path(__file__).resolve().parents[1]
+        binary = os.environ.get("BUILT_BIN", root / "rust/built_app/target/release/built")
+        subprocess.run([binary, "--capture-design-system", args.prefix, dest], check=True,
+                       env=dict(os.environ, BUILT_BACKGROUND="1"))

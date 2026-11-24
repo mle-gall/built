@@ -90,8 +90,10 @@ pub fn surface_handles(
     })
 }
 
+enum Batch<'a> { Probe, Pdf(&'a PdfExport), Design(&'a str, &'a str) }
+
 struct BatchWindow<'a> {
-    job: Option<&'a PdfExport>,
+    job: Batch<'a>,
     status: i32,
 }
 
@@ -104,9 +106,20 @@ impl winit::application::ApplicationHandler for BatchWindow<'_> {
                 .with_inner_size(winit::dpi::LogicalSize::new(1280., 800.));
             let window = events.create_window(attrs).map_err(|e| e.to_string())?;
             let surface = surface_handles(&window)?;
+            if let Batch::Design(prefix, directory) = self.job {
+                return Python::attach(|py| -> PyResult<i32> {
+                    let renderer = py.import("ingetrazo_render")?.getattr("Renderer")?;
+                    let kwargs = pyo3::types::PyDict::new(py);
+                    kwargs.set_item("display", surface.1)?;
+                    kwargs.set_item("platform", surface.2)?;
+                    let renderer = renderer.call((surface.0, 1280, 800, 1.0), Some(&kwargs))?;
+                    py.import("scripts.design_system_capture")?.call_method1("capture_surface", (renderer, prefix, directory))?;
+                    Ok(0)
+                }).map_err(|err| { Python::attach(|py| err.print(py)); "design capture failed".to_string() });
+            }
             let host = python::Host::new(surface, 1280., 800., window.scale_factor(), None, true)
                 .map_err(|e| e.to_string())?;
-            if let Some(job) = self.job {
+            if let Batch::Pdf(job) = self.job {
                 write_pdf(job, &host).map_err(|e| e.to_string())
             } else {
                 let renderer = host.call0("attach_surface");
@@ -133,7 +146,7 @@ impl winit::application::ApplicationHandler for BatchWindow<'_> {
     }
 }
 
-fn run_batch(job: Option<&PdfExport>) -> Result<i32, String> {
+fn run_batch(job: Batch<'_>) -> Result<i32, String> {
     let layout = python::Layout::find(None, None);
     python::start(&layout).map_err(|e| e.to_string())?;
     let mut builder = winit::event_loop::EventLoop::builder();
@@ -212,8 +225,15 @@ pub fn register_launcher() {
             }
         }
     }
+    if let [flag, prefix, dest] = args.as_slice() {
+        if flag == "--capture-design-system" && matches!(prefix.as_str(), "before" | "after") {
+            std::process::exit(run_batch(Batch::Design(prefix, dest)).unwrap_or_else(|err| {
+                eprintln!("built: {err}"); 1
+            }));
+        }
+    }
     if args == ["--probe-gpu"] {
-        let available = matches!(run_batch(None), Ok(0));
+        let available = matches!(run_batch(Batch::Probe), Ok(0));
         println!("{{\"available\":{available}}}");
         std::process::exit(0);
     }
@@ -271,7 +291,7 @@ pub fn register_launcher() {
             eprintln!("built: no such file: {}", job.input.display());
             std::process::exit(2);
         }
-        Ok(Some(job)) => std::process::exit(run_batch(Some(&job)).unwrap_or_else(|error| {
+        Ok(Some(job)) => std::process::exit(run_batch(Batch::Pdf(&job)).unwrap_or_else(|error| {
             eprintln!("built: PDF export failed: {error}");
             1
         })),

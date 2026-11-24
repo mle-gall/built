@@ -195,6 +195,7 @@ pub struct Ui {
     pub page: crate::sheet_page::Page,
     /// The project tabs (ui/tabs.rs): drawn instead of the document ▾
     /// once Python sends them.
+    menu_hits: Vec<Rect>,
     strip: tabs::Strip,
     /// The right-click menu over the model (ui/context_menu.rs).
     ctx_menu: Option<context_menu::Menu>,
@@ -374,7 +375,7 @@ impl Ui {
             cursor_shape: "",
             sheets: Default::default(),
             page: Default::default(),
-            strip: Default::default(),
+            menu_hits: Vec::new(), strip: Default::default(),
             ctx_menu: None,
             lsheet: Default::default(),
         }
@@ -781,7 +782,7 @@ impl Ui {
     /// fields has focus, or Escape while one of its popups is open.
     pub fn claims_key(&self, name: &str, mods: u8) -> bool {
         if self.gallery.is_some() || self.font_picker.is_some() { return true; }
-        if name == "Escape" && (self.ctx_menu.is_some() || self.strip.menus_open() || self.egui_popup_open() || self.panels.data["terrain"].is_object()) { return true; }
+        if name == "Escape" && (self.menu_hits.len() > 1 || self.ctx_menu.is_some() || self.strip.menus_open() || self.egui_popup_open() || self.panels.data["terrain"].is_object()) { return true; }
         // The large sheet owns every key while it is up (Python keeps the
         // window's ⌘ shortcuts, sheet_runtime.rs).
         if self.lsheet.open { return true; }
@@ -803,6 +804,10 @@ impl Ui {
         // The sheet's keys are answered in Python (Enter, Esc, ⌘D); none
         // reaches what is under it.
         if self.sheet.is_some() { return true; }
+        if name == "Escape" && self.menu_hits.len() > 1 {
+            self.events.push(egui::Event::Key { key: egui::Key::Escape, physical_key: None, pressed, repeat: false, modifiers: mods_from(mods) });
+            return true;
+        }
         if name == "Escape" && self.egui_popup_open() {
             if pressed { self.ctx.memory_mut(|m| m.close_popup()); }
             return true;
@@ -1039,7 +1044,7 @@ impl Ui {
     fn over_chrome(&self, pos: Pos2) -> bool {
         // A choice or colour picker can extend beyond its parent panel.
         // Its next outside click dismisses it before the model takes input.
-        self.font_picker.is_some() || self.egui_popup_open() || self.hit.iter().any(|r| r.contains(pos))
+        self.menu_hits.len() > 1 || self.menu_hits.iter().any(|r| r.contains(pos)) || self.font_picker.is_some() || self.egui_popup_open() || self.hit.iter().any(|r| r.contains(pos))
             || self.ctx.layer_id_at(pos).is_some_and(|layer| self.panels.popup_layers.contains(&layer.id))
     }
     /// Is (x, y) on the interactive chrome (a right-click there is the
@@ -1159,13 +1164,24 @@ impl Ui {
         self.cluster_buttons.clear();
         let sheet_up = self.lsheet.open;
         let lights = self.projects.as_ref().map_or(86.0, |p| p.0);
+        #[cfg(any(target_os="linux", windows))]
+        egui::Area::new("desktop_menu".into()).fixed_pos(Pos2::ZERO).order(egui::Order::Foreground)
+            .show(ctx, |ui| {
+                egui::Frame::NONE.fill(ctx.style().visuals.panel_fill).show(ui, |ui| {
+                    ui.set_min_size(vec2(screen.width(), MENU_H));
+                    self.menu_hits = crate::desktop_menu::show(ui, &self.plugins.commands,
+                        self.sheet.is_none() && self.dialog.is_none() && self.form.is_none() && self.jobs.is_empty());
+                    self.cluster_buttons.extend(crate::desktop_menu::take_buttons());
+                    self.menu_hits.push(ui.min_rect());
+                });
+            });
         egui::Area::new(egui::Id::new("top"))
-            .fixed_pos(Pos2::ZERO)
+            .fixed_pos(pos2(0.0, MENU_H))
             .order(egui::Order::Foreground)
             .show(ctx, |ui| {
                 glass(Surface::Bar).inner_margin(Margin { left: lights as i8, right: 8, top: 6, bottom: 6 }).show(ui, |ui| {
                     ui.set_width(screen.width() - lights - 8.0);
-                    ui.set_height(TOP_H - 12.0);
+                    ui.set_height(TOP_H - MENU_H - 12.0);
                     ui.spacing_mut().interact_size.y = 28.0;
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing = vec2(SPACE_XS, 0.0);
@@ -1266,7 +1282,7 @@ impl Ui {
     /// the window, as a title bar does)?
     pub fn top_empty(&self, x: f32, y: f32) -> bool {
         let p = pos2(x, y);
-        !self.dismissible_menu_open() && self.gallery.is_none() && y <= TOP_H && !self.top_groups.iter().any(|r| r.contains(p))
+        !self.menu_hits.iter().any(|r| r.contains(p)) && !self.dismissible_menu_open() && self.gallery.is_none() && y <= TOP_H && !self.top_groups.iter().any(|r| r.contains(p))
             && !((!self.lsheet.open || !self.jobs.is_empty()) && self.ctx.memory(|m| m.area_rect(egui::Id::new("jobs"))).is_some_and(|r| (!self.jobs.is_empty() || !self.history.is_empty()) && r.contains(p)))
             && !(self.projects.is_none() && x < 86.0)
     }

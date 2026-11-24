@@ -5,7 +5,7 @@ use crate::native::Input;
 use gtk::prelude::*;
 use pyo3::prelude::*;
 
-pub fn pump(py: Python<'_>, timeout_ms: f64) -> PyResult<Vec<Input>> {
+pub fn pump(py: Python<'_>, view: usize, timeout_ms: f64) -> PyResult<Vec<Input>> {
     let modal = py.import("app_shell.modal")?;
     let host = modal.call_method0("host")?;
     let win = host.getattr("window")?;
@@ -20,6 +20,13 @@ pub fn pump(py: Python<'_>, timeout_ms: f64) -> PyResult<Vec<Input>> {
                 timeout_ms.clamp(0., 16.) as u64
             ))
         });
+        #[cfg(target_os = "linux")]
+        {
+            let scale = host.getattr("scale")?.extract()?;
+            let mods = host.getattr("input_state")?.getattr("modifiers")?.extract()?;
+            return Ok(crate::linux_pointer::progress(view, scale, mods));
+        }
+        #[cfg(not(target_os = "linux"))]
         return Ok(Vec::new());
     }
     // Scripted answers are sent after the sheet has painted a few frames.
