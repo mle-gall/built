@@ -17,7 +17,10 @@ glam = "0.29"
 egui = { version = "0.31.1", default-features = false }
 egui-wgpu = { version = "0.31.1", default-features = false }
 pulldown-cmark = { version = "0.13", default-features = false }
-image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "bmp", "tga", "pnm", "ico"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "bmp", "tga", "pnm", "ico", "tiff", "gif"] }
+
+flate2 = "1"
+resvg = "0.45"
 
 [features]
 extension-module = ["pyo3/extension-module"]
@@ -39,3 +42,5 @@ syn = { version = "2", features = ["full", "visit"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation = "0.9"
+core-graphics = "0.23"
+foreign-types = "0.5"

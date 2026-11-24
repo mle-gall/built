@@ -1,7 +1,6 @@
 """Upload the document's display-only imagery into the shared wgpu scene."""
 import numpy as np
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QImage
+from ingetrazo_render import fit_reference_rgba, reference_texture
 
 
 def _vertices(positions, uvs, origin, triangles=None):
@@ -15,14 +14,12 @@ def _vertices(positions, uvs, origin, triangles=None):
 def _texture(image, fallback, limit):
     if image is None or image.isNull():
         return 1, 1, np.array((*fallback, 255), np.uint8)
-    if max(image.width(), image.height()) > limit:
-        image = image.scaled(limit, limit, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+    # Tile, terrain and survey providers still hand over a QImage.
+    from PySide6.QtGui import QImage
     image = image.convertToFormat(QImage.Format_RGBA8888)
-    return image.width(), image.height(), np.frombuffer(bytes(image.constBits()), np.uint8)
-
-
-def preview_texture(path, limit):
-    return _texture(QImage(path).mirrored(), (245, 242, 236), limit)
+    if max(image.width(), image.height()) <= limit:
+        return image.width(), image.height(), np.frombuffer(bytes(image.constBits()), np.uint8)
+    return fit_reference_rgba(image.width(), image.height(), bytes(image.constBits()), limit)
 
 
 def sync(view, style):
@@ -97,14 +94,13 @@ def sync(view, style):
             corners = tuple(p.toTuple() for p in plane.corners())
             key = f'image/{i}'
             if changed(key, (plane.path, revision, corners, plane.opacity, fade)):
-                image = QImage(plane.path)
-                if image.isNull():
+                texture = reference_texture(plane.path, renderer.max_texture_size())
+                if texture is None:
                     del layers[key]
                     continue
                 geometry = _vertices(corners, [(0, 1), (1, 1), (1, 0), (0, 0)],
                                      origin, [0, 1, 2, 0, 2, 3])
-                upload(key, geometry, image, opacity=plane.opacity, fade=fade,
-                       depth=plane.opacity >= .999)
+                updates.append((key, geometry, *texture, plane.opacity, fade, plane.opacity >= .999))
     if updates or (cached and list(cached[1]) != list(layers)):
         renderer.set_reference_layers(list(layers), updates)
     shared._reference_cache = (scope, layers) if layers else None

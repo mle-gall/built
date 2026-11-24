@@ -19,6 +19,8 @@ mod references;
 mod sun;
 mod shadow_fit;
 mod textures;
+pub mod tool_cursors;
+mod image_assets;
 mod material_textures;
 // R-look: isolated style and background passes.
 mod style;
@@ -1364,19 +1366,18 @@ impl Renderer {
     fn max_texture_size(&self) -> u32 { self.device.limits().max_texture_dimension_2d }
 
     /// World-space tool feedback, cleared on commit/cancel.
-    #[pyo3(signature = (triangles, edges, runs=Vec::new(), load=None))]
-    fn set_preview_mesh(&mut self, triangles: PyReadonlyArray1<'_, u8>, edges: PyReadonlyArray1<'_, u8>,
-                        runs: Vec<preview_texture::Run<'_>>, load: Option<&Bound<'_, PyAny>>) -> PyResult<()> {
+    #[pyo3(signature = (triangles, edges, runs=Vec::new()))]
+    fn set_preview_mesh(&mut self, py: Python<'_>, triangles: PyReadonlyArray1<'_, u8>, edges: PyReadonlyArray1<'_, u8>,
+                        runs: Vec<preview_texture::Run<'_>>) -> PyResult<()> {
         let (triangles, edges) = (triangles.as_slice()?, edges.as_slice()?);
         preview::Preview::validate(triangles, edges).map_err(PyValueError::new_err)?;
         if runs.is_empty() {
             self.preview.textures = None;
         } else {
-            let loader = load.ok_or_else(|| PyValueError::new_err("preview image loader required"))?;
             let format = self.config.format.remove_srgb_suffix();
             let layout = self.preview.layout();
             self.preview.textures.get_or_insert_with(|| preview_texture::TexturedPreview::new(self.samples.clone(), &self.device, format, &layout))
-                .upload(&self.device, &self.queue, runs, loader)?;
+                .upload(py, &self.device, &self.queue, runs)?;
         }
         self.preview.upload_validated(&self.device, triangles, edges);
         Ok(())
@@ -2933,6 +2934,13 @@ fn context_targets(hit: bool, selection: &Bound<'_, PyAny>) -> PyResult<Vec<Py<P
 
 #[pymodule]
 pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(tool_cursors::tool_cursor_name, m)?)?;
+    m.add_function(wrap_pyfunction!(tool_cursors::tool_cursor_art, m)?)?;
+    m.add_function(wrap_pyfunction!(image_assets::reference_texture, m)?)?;
+    m.add_function(wrap_pyfunction!(image_assets::fit_reference_rgba, m)?)?;
+    m.add_function(wrap_pyfunction!(image_assets::swatch_pixels, m)?)?;
+    m.add_function(wrap_pyfunction!(image_assets::svg_preview, m)?)?;
+    m.add_function(wrap_pyfunction!(image_assets::raster_dimensions, m)?)?;
     m.add_function(wrap_pyfunction!(material_textures::material_texture_array, m)?)?;
     navigation::register(m)?;
     m.add_function(wrap_pyfunction!(preferences::msaa_levels,m)?)?;

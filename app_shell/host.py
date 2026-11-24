@@ -194,7 +194,16 @@ class Host:
         if left < 0 or left > msec:
             self._wake_timer.start(msec)
 
+    @staticmethod
+    def tool_cursor(key, plus=False):
+        from core import general_settings
+        from ingetrazo_render import tool_cursor_name
+        return tool_cursor_name(key, plus, str(general_settings.value("cursor_style", "tool")))
+
     def cursor_changed(self, cursor):
+        if isinstance(cursor, str):
+            self._cursor = cursor
+            return
         try:
             shape = cursor.shape() if hasattr(cursor, "shape") else cursor
             value = int(getattr(shape, "value", shape))
