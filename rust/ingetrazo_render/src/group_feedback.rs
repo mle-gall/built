@@ -3,16 +3,20 @@
 //! bake's visible index ranges, two-sided materials and nested placements.
 //! Only the translation uniform changes during the gesture.
 use glam::{Mat3, Mat4, Vec3};
-use numpy::{IntoPyArray, PyArrayMethods};
-use pyo3::{exceptions::PyValueError, prelude::*, types::PyBytes};
+use numpy::{IntoPyArray, PyArrayMethods, PyReadonlyArray1};
+use pyo3::{exceptions::PyValueError, prelude::*};
 use std::collections::BTreeMap;
 
 fn invalid() -> PyErr {
     PyValueError::new_err("invalid clipboard scene pack")
 }
 
-fn bytes<'py>(pack: &Bound<'py, PyAny>, name: &str) -> PyResult<Bound<'py, PyBytes>> {
-    Ok(pack.getattr(name)?.call_method0("tobytes")?.cast_into()?)
+fn bytes<'py>(pack: &Bound<'py, PyAny>, name: &str) -> PyResult<PyReadonlyArray1<'py, u8>> {
+    Ok(pack
+        .getattr(name)?
+        .call_method1("view", ("uint8",))?
+        .call_method0("ravel")?
+        .extract()?)
 }
 fn record<const N: usize>(data: &[u8], index: usize) -> PyResult<&[u8; N]> {
     data.chunks_exact(N)
@@ -63,7 +67,7 @@ impl Geometry<'_> {
         i: usize,
     ) -> PyResult<Corner> {
         let (index, vertex) = self.vertex(command, i)?;
-        let front = u32::from_le_bytes(vertex[24..28].try_into().unwrap()).to_le_bytes();
+        let front: [u8; 4] = vertex[24..28].try_into().unwrap();
         let mut c = Corner {
             p: placement.world.transform_point3(vec3(vertex)),
             n: (placement.normals * vec3(&vertex[12..])).normalize_or_zero(),
@@ -189,15 +193,16 @@ pub fn upload(
     let faces = bytes(pack, "commands")?;
     let edges = bytes(pack, "edge_commands")?;
     let geo = Geometry {
-        vertices: vertices.as_bytes(),
-        indices: indices.as_bytes(),
-        materials: materials.as_bytes(),
+        vertices: vertices.as_slice()?,
+        indices: indices.as_slice()?,
+        materials: materials.as_slice()?,
         textures: pack.getattr("texture_paths")?.extract()?,
     };
     let origin: [f64; 3] = pack.getattr("origin")?.extract()?;
     let shift = glam::DVec3::from(origin) - glam::DVec3::from(frame);
     let mut output = Output::default();
-    for row in instances.as_bytes().chunks_exact(80) {
+    let (faces, edges) = (faces.as_slice()?, edges.as_slice()?);
+    for row in instances.as_slice()?.chunks_exact(80) {
         let flags = word(row, 72);
         if flags & 1 != 0 {
             continue;
@@ -224,9 +229,9 @@ pub fn upload(
             &geo,
             &placement,
             record(geo.materials, code)?,
-            record(faces.as_bytes(), code)?,
+            record(faces, code)?,
         )?;
-        let cmd = record(edges.as_bytes(), code)?;
+        let cmd = record(edges, code)?;
         for i in 0..word(cmd, 0) as usize {
             let (_, v) = geo.vertex(cmd, i)?;
             push(
