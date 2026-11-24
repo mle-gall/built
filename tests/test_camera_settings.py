@@ -329,11 +329,13 @@ def test_export_image_tall_frame(monkeypatch):
 
 def test_export_image_menu_crops_to_the_frame(monkeypatch, tmp_path, native_host):
     from unittest.mock import Mock
-    from ingetrazo_render import SurveyRaster
+    # The menu's save still takes a QImage (shell lane, views/document_commands).
+    from PySide6.QtGui import QImage
     from views import chrome_forms
     from views.filedialogs import file_dialogs
     win = native_host.window
-    image = SurveyRaster(16, 9, bytes((0, 0, 0, 255)) * (16 * 9))
+    image = QImage(16, 9, QImage.Format_RGB32)
+    image.fill(0)
     render = Mock(return_value=image)
     monkeypatch.setattr(win._active_view(), "render_image", render)
     monkeypatch.setattr(file_dialogs, "getSaveFileName",
