@@ -1,61 +1,11 @@
-"""The whole open path of a document in the Metal (wgpu) view, as JSON.
+"""Measure a native window opening a document, editing nested geometry and computing takeoff.
 
-Usage (from the checkout whose code is measured):
-    <venv python> scripts/open_path_probe.py <file.igz> <out.json> [--edit] [--takeoff]
-        [--perf] [--size WxH] [--no-on-top] [--timeout SECONDS]
-    <venv python> scripts/open_path_probe.py --summarise <out.json> <run.json>...
+    scripts/open_path_probe.py model.built /tmp/open.json --edit --takeoff
+    scripts/open_path_probe.py --summarise /tmp/summary.json /tmp/open*.json
 
-The probe starts the real application (``main.main``) as an extra window
-(``--new-window``: no single-instance handover to a running IngeTrazo), with
-a throwaway QSettings folder and autosave folder, the Metal view and the
-Rust engine forced on by environment, and opens the file through the real
-``MainWindow.open_path`` route a double-click takes. It only observes: thin
-wrappers around the functions below record wall-clock times.
-
-Fields (seconds unless the name says otherwise; ``t_*`` are offsets from
-``open_path`` being called, the click):
-- ``load``: ``formats.igz.load_into`` (JSON + ``geom/`` decode into the scene).
-- ``pack``: ``pack_scene`` of the opening document (the call made under the bar).
-- ``upload``: ``WgpuView._upload`` of that pack (renderer upload).
-- ``first_frame``: click → the window accepts the first presented frame of
-  this document (``MainWindow._drain_document_startup``, which is what
-  releases the after-picture work). ``events.first_presented`` is the first
-  frame the view presented after the upload; the window ignores frames
-  presented while the opening is still under its bar.
-- ``snap_index_ready``: first frame → ``WgpuView.inference_index`` set.
-  ``snap_index_build`` is the worker's own ``prepare`` time.
-- ``max_main_thread_gap_ms``: a 10 ms main-thread QTimer from the click
-  until the index is ready: the longest interval between two ticks.
-  ``max_main_thread_gap_after_first_frame_ms`` is the same after the picture
-  (what hover and orbit feel while the index builds); ``top_gaps`` lists the
-  five worst with their end time.
-- ``rss_peak_mb`` (process peak, ``ru_maxrss``, read when the index is
-  ready), ``rss_after_mb`` (resident then), ``rss_after_load_mb``;
-  ``rss_peak_end_mb`` is the peak after the edit and takeoff too.
-- ``--edit``: ``first_edit`` — a small leaf group nested in the model is
-  opened (``Viewport.begin_group_edit`` down its path, ``enter_group``) and
-  one of its faces moved 1 cm along its normal with ``MoveVerticesCommand``
-  through ``History.execute`` (the Move tool's command): time from the
-  command until the frame presented after the view took the change in.
-- ``--takeoff``: ``takeoff`` — ``core.bim.collect_objects`` with a fresh
-  memo (the BIM tray's entry), run after the open and the edit: what a user
-  asking for the takeoff after opening waits for. Lazy plans the pack built
-  are warm by then, so it is not a cold-process takeoff.
-
-The window stays above other windows without being activated: macOS stops
-presenting a covered window, and the first frame would then wait for the
-user to uncover it. ``timeline`` samples the window's exposure once a
-second; a note in ``notes`` marks a run whose window was covered between the
-upload and the first frame (its first_frame is not valid).
-
-Also recorded: git SHA, ``os.getloadavg()`` at start/first frame/end, the
-engine (Rust/Python), the ``ingetrazo_core``/``ingetrazo_render`` module
-paths, the packed instance count. Wall clocks only (cProfile on Python 3.13
-samples every thread and inflates costs).
-
-The document is never saved; autosave writes into a temporary folder and
-``core.autosave.pending`` is patched so a recovery slot never stops the open
-on a question. The process ends with ``os._exit`` once the JSON is written.
+An isolated script plugin times the document reader, scene pack, GPU upload,
+first presentation and inference index. A winit timer measures main-thread
+gaps. Edits exist only in the private process and are never saved.
 """
 from __future__ import annotations
 
@@ -79,7 +29,7 @@ TIMING_FIELDS = ("load", "pack", "upload", "first_frame", "snap_index_ready",
 INFO_FIELDS = ("probe_version", "file", "file_mb", "options", "git_sha",
                "git_dirty", "date", "machine", "load_average", "rust_engine",
                "modules", "window_size", "view_size", "events", "notes")
-PROBE_VERSION = 1
+PROBE_VERSION = 2
 
 
 # --- pieces the test exercises without a window ----------------------------
@@ -241,7 +191,7 @@ class Probe:
         self.gap_timer = None
         self.set_scene_log: list = []
         self.timeline: list = []
-        self.temp_folders: list = []
+        self.next_call = None
         self.frames: list = []
         self.pack_calls: list = []
         self.done = False
@@ -260,8 +210,9 @@ class Probe:
         from formats import igz
         import views.wgpu_view as wv
         import views.wgpu_inference as wi
-        from views.main_window import MainWindow
-        from core import autosave
+        from app_shell.host import Host
+        from app_shell.view import ShellView
+        from views import wgpu_scene
         probe = self
 
         load_into = igz.load_into
@@ -278,7 +229,7 @@ class Probe:
                     probe.result["rss_after_load_mb"] = rss_now_mb()
         igz.load_into = timed_load
 
-        pack_scene = wv.pack_scene
+        pack_scene = wgpu_scene.pack_scene
 
         def timed_pack(scene, *a, **k):
             start = time.perf_counter()
@@ -291,9 +242,9 @@ class Probe:
                 probe.result["packed_instances"] = int(len(packed.instances))
                 probe.event("pack_done")
             return packed
-        wv.pack_scene = timed_pack
+        wv.pack_scene = wgpu_scene.pack_scene = timed_pack
 
-        upload = wv.WgpuView._upload
+        upload = ShellView._upload
 
         def timed_upload(view, *a, **k):
             start = time.perf_counter()
@@ -306,9 +257,9 @@ class Probe:
                         and getattr(view, "renderer", None) is not None):
                     probe.result["upload"] = time.perf_counter() - start
                     probe.event("upload_done")
-        wv.WgpuView._upload = timed_upload
+        ShellView._upload = timed_upload
 
-        set_scene = wv.WgpuView.set_scene
+        set_scene = ShellView.set_scene
 
         def logged_set_scene(view, *a, **k):
             start = time.perf_counter()
@@ -318,16 +269,16 @@ class Probe:
             finally:
                 probe.set_scene_log.append(
                     (start, time.perf_counter(), len(probe.pack_calls) > n_packs))
-        wv.WgpuView.set_scene = logged_set_scene
+        ShellView.set_scene = logged_set_scene
 
-        present = wv.WgpuView._present_frame
+        present = ShellView._present_frame
 
         def counted_present(view, *a, **k):
             out = present(view, *a, **k)
             if out is not None and view is probe.display():
                 probe.on_frame()
             return out
-        wv.WgpuView._present_frame = counted_present
+        ShellView._present_frame = counted_present
 
         prepare = wi.prepare
 
@@ -344,64 +295,21 @@ class Probe:
                             start - probe.t_open, 4)
         wi.prepare = timed_prepare
 
-        drain = MainWindow._drain_document_startup
+        open_path = Host.open_path
+        def timed_open(host, path):
+            if Path(path).resolve() == probe.path and probe.t_open is None:
+                probe.start(host.window)
+            return open_path(host, path)
+        Host.open_path = timed_open
 
-        def timed_drain(window, doc):
-            if probe.t_open is not None and probe.t_first_frame is None \
-                    and getattr(doc, "_resident_scene_ready", False):
-                handle = window.windowHandle()
-                probe.result["exposed_at_first_frame"] = bool(
-                    handle is not None and handle.isExposed())
-                probe.t_first_frame = time.perf_counter()
-                probe.result["first_frame"] = probe.t_first_frame - probe.t_open
-                probe.event("first_frame")
-                probe.result["load_average"]["first_frame"] = list(os.getloadavg())
-            return drain(window, doc)
-        MainWindow._drain_document_startup = timed_drain
-
-        open_path = MainWindow.open_path
-
-        def timed_open(window, path, *a, **k):
-            if probe.t_open is None and Path(path) == probe.path:
-                probe.start(window)
-            return open_path(window, path, *a, **k)
-        MainWindow.open_path = timed_open
-
-        init = MainWindow.__init__
-
-        def init_window(window, *a, **k):
-            init(window, *a, **k)
-            probe.window = window
-            w, h = probe.options["size"]
-            window.resize(w, h)
-            if probe.options.get("on_top", True):
-                # macOS stops presenting a window another app covers (Qt
-                # marks it not exposed): the first frame then waits for the
-                # user to uncover it. Above the others, never activated, so
-                # it takes no keyboard focus from what the user is doing.
-                from PySide6.QtCore import Qt
-                window.setWindowFlag(Qt.WindowStaysOnTopHint, True)
-                window.setAttribute(Qt.WA_ShowWithoutActivating, True)
-        MainWindow.__init__ = init_window
-
-        # Autosave never writes beside the user's files nor asks to recover.
-        folder = Path(tempfile.mkdtemp(prefix="ingetrazo-probe-autosave-"))
-        self.temp_folders.append(folder)
-        autosave.autosave_dir = lambda: folder
-        autosave.pending = lambda *a, **k: None
-
-    # the clock --------------------------------------------------------------
     def start(self, window):
-        from PySide6.QtCore import QTimer, Qt
-        self.t_open = time.perf_counter()
-        self.result["load_average"]["open"] = list(os.getloadavg())
-        self.gap_last = self.t_open
-        timer = QTimer(window)
-        timer.setTimerType(Qt.PreciseTimer)
-        timer.setInterval(10)
-        timer.timeout.connect(self.tick)
-        timer.start()
-        self.gap_timer = timer
+        self.window = window
+        self.t_open = self.gap_last = time.perf_counter()
+        self.gap_timer = window._host.timers.timer(self.tick, 10, True)
+        self.gap_timer.start()
+
+    def later(self, ms, fn):
+        self.next_call = (time.perf_counter() + ms / 1000, fn)
 
     def display(self):
         doc = getattr(self.window, "_doc", None)
@@ -409,21 +317,22 @@ class Probe:
 
     def tick(self):
         t = time.perf_counter()
+        if self.t_index is not None:
+            if self.next_call and t >= self.next_call[0]:
+                _, callback = self.next_call
+                self.next_call = None
+                callback()
+            return
         gap = (t - self.gap_last) * 1000
         self.gap_last = t
         self.gaps.append((gap, t - self.t_open, self.t_first_frame is not None))
         display = self.display()
         if t - getattr(self, "_last_state", 0) >= 1.0 and len(self.timeline) < 600:
             # Once a second: is the view on screen and presenting?
-            from PySide6.QtGui import QGuiApplication
             self._last_state = t
-            handle = self.window.windowHandle()
             doc = getattr(self.window, "_doc", None)
             self.timeline.append({
                 "t": round(t - self.t_open, 2),
-                "exposed": bool(handle is not None and handle.isExposed()),
-                "active": bool(self.window.isActiveWindow()),
-                "app_state": int(QGuiApplication.applicationState().value),
                 "view_visible": bool(display is not None and display.isVisible()),
                 "awaiting_picture": bool(getattr(doc, "_awaiting_picture", False)),
                 "frames": len(self.frames)})
@@ -432,19 +341,20 @@ class Probe:
             self.t_index = t
             self.result["snap_index_ready"] = t - self.t_first_frame
             self.event("snap_index_ready")
-            self.gap_timer.stop()
             self.summarise_gaps()
             self.result["rss_after_mb"] = rss_now_mb()
             self.result["rss_peak_mb"] = rss_peak_mb()
-            from PySide6.QtCore import QTimer
-            QTimer.singleShot(1000, self.window, self.after_index)
+            self.later(1000, self.after_index)
 
     def on_frame(self, *_):
         t = time.perf_counter()
         self.frames.append(t)
-        if self.t_open is not None and "first_presented" not in self.result["events"] \
-                and self.result["upload"] is not None:
+        if (self.t_open is not None and self.t_first_frame is None
+                and self.result["upload"] is not None and self.window._doc.same_file(self.path)):
+            self.t_first_frame = t
+            self.result["first_frame"] = t - self.t_open
             self.event("first_presented")
+            self.result["load_average"]["first_frame"] = list(os.getloadavg())
 
     def summarise_gaps(self):
         if not self.gaps:
@@ -467,7 +377,7 @@ class Probe:
                                         display.devicePixelRatioF()]
             self.result["renderer_adapter"] = getattr(
                 getattr(display, "renderer", None), "adapter", None)
-        self.result["window_size"] = [self.window.width(), self.window.height()]
+        self.result["window_size"] = [self.window._host.width, self.window._host.height]
         doc = getattr(self.window, "_doc", None)
         self.result["after_picture_jobs_left"] = len(getattr(doc, "_after_picture", []) or [])
         steps = []
@@ -479,18 +389,16 @@ class Probe:
         self.run_steps(steps)
 
     def run_steps(self, steps):
-        from PySide6.QtCore import QTimer
         if not steps:
             return
         step, rest = steps[0], steps[1:]
-        step(lambda: QTimer.singleShot(200, self.window, lambda: self.run_steps(rest)))
+        step(lambda: self.later(200, lambda: self.run_steps(rest)))
 
     def wait_view(self, since, done, timeout=120.0):
         """Call ``done(t_frame, repacked)`` at the first frame presented
         after a ``set_scene`` that started after ``since`` has finished (or
         at the first frame after ``since`` when no ``set_scene`` came within
         two seconds)."""
-        from PySide6.QtCore import QTimer
 
         def poll():
             now = time.perf_counter()
@@ -507,7 +415,7 @@ class Probe:
                     return done(frames[0], False, "frame only")
             if now - since > timeout:
                 return done(None, None, "timeout")
-            QTimer.singleShot(5, self.window, poll)
+            self.later(5, poll)
         poll()
 
     def run_edit(self, next_step):
@@ -538,8 +446,7 @@ class Probe:
                 self.result["enter_group"] = t_frame - t_enter
             self.result["enter_group_path"] = how
             self.result["enter_group_repacked"] = repacked
-            from PySide6.QtCore import QTimer
-            QTimer.singleShot(500, self.window, edit)
+            self.later(500, edit)
 
         def edit():
             from core.history import CommandRejected
@@ -593,25 +500,10 @@ class Probe:
         self.done = True
         if self.result["max_main_thread_gap_ms"] is None:
             self.summarise_gaps()
-        # Covered between the upload and the first frame: the frame waited
-        # for the window, not for the application.
-        uploaded = self.result["events"].get("upload_done")
-        first = self.result["first_frame"]
-        hidden = [e["t"] for e in self.timeline if not e["exposed"]
-                  and uploaded is not None and e["t"] > uploaded
-                  and (first is None or e["t"] < first)]
-        if hidden or self.result.get("exposed_at_first_frame") is False:
-            self.result["notes"].append(
-                f"window not exposed (covered or off screen) at {len(hidden)} "
-                f"one-second samples between upload and first frame: "
-                f"first_frame and snap_index_ready are not valid")
         self.result["frames_presented"] = len(self.frames)
         self.result["timeline"] = self.timeline
         write_result(self.result, self.out)
         print(f"[probe] wrote {self.out}", flush=True)
-        import shutil
-        for folder in self.temp_folders:
-            shutil.rmtree(folder, ignore_errors=True)
         os._exit(code)
 
     def watchdog(self, seconds):
@@ -671,7 +563,7 @@ def parse_args(argv):
     parser.add_argument("--size", default="1600x1000",
                         help="main window size, WxH (default 1600x1000)")
     parser.add_argument("--no-on-top", action="store_true",
-                        help="do not keep the window above the others")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--timeout", type=float, default=900.0,
                         help="write what was measured and stop after this many seconds")
     return parser.parse_args(argv)
@@ -688,32 +580,37 @@ def main(argv=None) -> int:
     path = args.file.expanduser().resolve()
     w, h = (int(v) for v in args.size.lower().split("x"))
     options = {"edit": args.edit, "takeoff": args.takeoff, "perf": args.perf,
-               "size": [w, h], "on_top": not args.no_on_top}
-    os.environ["INGETRAZO_WGPU"] = "1"
-    os.environ["INGETRAZO_RUST"] = "1"
-    if args.perf:
-        os.environ["INGETRAZO_PERF"] = "1"
-        os.environ["INGETRAZO_PERF_LOG"] = str(args.out.with_suffix(".perf.log"))
-    sys.path.insert(0, str(REPO))
-    from scripts.isolated_launch import isolate_script
-    isolate_script()
-    os.chdir(REPO)
-    from app_shell.qt_host import configure_settings
-    configure_settings(os.environ["BUILT_SETTINGS_DIR"])
-    probe = Probe(path, args.out.resolve(), options)
-    probe.result["core_file"] = __import__("core").__file__
+               "size": [w, h]}
+    from scripts.isolated_launch import run
+    with tempfile.TemporaryDirectory(prefix="built-open-probe-") as folder:
+        profile = Path(folder) / "profile"
+        plugins = profile / "data" / "ingetrazo" / "plugins"
+        plugins.mkdir(parents=True)
+        (plugins / "open_probe.py").write_text(
+            "from scripts.open_path_probe import install_probe as setup\n")
+        report = Path(folder) / "probe.json"
+        env = dict(os.environ, BUILT_OPEN_PROBE=json.dumps(
+            [str(path), str(report), options, args.timeout]))
+        if args.perf:
+            env.update(INGETRAZO_PERF="1", INGETRAZO_PERF_LOG=str(args.out.resolve().with_suffix(".perf.log")))
+        result = run([REPO / "rust/built_app/target/release/built", "--new-instance",
+                      "--root", REPO, "--venv", REPO / ".venv", "--size", args.size, path],
+                     settings=profile, env=env, timeout=args.timeout + 30)
+        if report.is_file():
+            write_result(json.loads(report.read_text()), args.out.resolve())
+        else:
+            print("Native probe exited without a measurement", file=sys.stderr)
+            return result.returncode or 1
+        return result.returncode
+
+
+def install_probe(app):
+    path, out, options, timeout = json.loads(os.environ["BUILT_OPEN_PROBE"])
+    probe = Probe(Path(path), Path(out), options)
     probe.install()
-    probe.watchdog(args.timeout)
-    import main as app_main
-    sys.argv = ["main.py", "--new-window", str(path)]
-    try:
-        app_main.main()
-    finally:
-        # The event loop ended without the probe finishing (window closed).
-        probe.result["notes"].append("application exited before the probe finished")
-        probe.write_and_exit(1)
-    return 0
+    probe.watchdog(timeout)
 
 
 if __name__ == "__main__":
+    sys.path.insert(0, str(REPO))
     sys.exit(main())
