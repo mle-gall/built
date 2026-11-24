@@ -31,6 +31,15 @@ GROUPS = {g: json.loads(gzip.decompress((FIXTURES / f"goldens_{g}.json.gz").read
 CASES = [(g, name, make) for g in GROUPS for name, make in cases(g)]
 
 
+@pytest.fixture(autouse=True)
+def _no_field_context():
+    """The goldens were recorded with no sheet's fields in force ({escala}
+    reads nothing): a sheet another test left current must not fill them."""
+    from core.composition import set_field_context
+    set_field_context()
+    yield
+
+
 def _seg_dist(p, a, b):
     ax, ay = a
     bx, by = b

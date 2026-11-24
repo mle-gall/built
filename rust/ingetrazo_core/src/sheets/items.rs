@@ -435,7 +435,12 @@ pub fn paint_image(p: &mut Painter, f: &Fields, readable: bool) {
     let r = [0.0, 0.0, w, h];
     if readable {
         p.save();
-        p.image(r, &f.text("path", ""));
+        // The file and, for the writers, how the item shows it.
+        let look = super::picture::Look {
+            fit: f.text("fit", "stretch"), shape: f.text("shape", "rect"), radius_mm: f.num("radius_mm", 0.0),
+            feather_mm: f.num("feather_mm", 0.0), opacity: f.num("opacity", 1.0), w_mm: w, h_mm: h,
+        };
+        p.image(r, &format!("{}\u{1f}{}", f.text("path", ""), look.json()));
         p.restore();
         if f.flag("border", false) {
             p.set_pen(Pen::new(Rgba::parse(&f.text("border_color", "#282e36")), f.num("border_mm", 0.3).max(0.1)));

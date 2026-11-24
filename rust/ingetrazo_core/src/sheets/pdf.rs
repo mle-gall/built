@@ -559,10 +559,7 @@ pub fn document(pages: &[Page], pictures: &HashMap<String, Picture>) -> Vec<u8> 
                 let pic = match pictures.get(source) {
                     Some(p) => Some(p),
                     None => {
-                        file = image::open(source).ok().map(|im| {
-                            let im = im.to_rgba8();
-                            Picture { w: im.width(), h: im.height(), rgba: im.into_raw() }
-                        });
+                        file = load_picture(source);
                         file.as_ref()
                     }
                 };
@@ -644,6 +641,20 @@ pub fn pages_of(py: Python<'_>, comps: &[Bound<'_, PyAny>], contents: Option<&Bo
                 doc_path: Option<&Bound<'_, PyAny>>) -> PyResult<Vec<Page>> {
     py.import("core.doc_model")?.call_method0("flush")?;
     let composition = py.import("core.composition")?;
+    // The field context is set per sheet and put back after: it is the
+    // caller's (the page's sheet), never left on the last sheet written.
+    let ctx = composition.getattr("_FIELD_CTX")?;
+    let before = ctx.call_method0("copy")?;
+    let pages = pages_in(py, &composition, comps, contents, profiles, scene, doc_path);
+    ctx.call_method0("clear")?;
+    ctx.call_method1("update", (before,))?;
+    pages
+}
+
+#[allow(clippy::too_many_arguments)]
+fn pages_in(py: Python<'_>, composition: &Bound<'_, PyModule>, comps: &[Bound<'_, PyAny>],
+            contents: Option<&Bound<'_, PyDict>>, profiles: Option<&Bound<'_, PyAny>>,
+            scene: Option<&Bound<'_, PyAny>>, doc_path: Option<&Bound<'_, PyAny>>) -> PyResult<Vec<Page>> {
     let mut pages = Vec::new();
     let total = comps.len();
     for (index, comp) in comps.iter().enumerate() {
@@ -710,4 +721,18 @@ pub fn pictures_of(pictures: Option<&Bound<'_, PyDict>>) -> PyResult<HashMap<Str
         }
     }
     Ok(pics)
+}
+
+/// The picture an image op names that is not handed in: an image item's
+/// file, composited as the item shows it (sheets::picture).
+pub fn load_picture(source: &str) -> Option<Picture> {
+    let (path, look) = super::picture::split_source(source);
+    let im = image::open(path).ok()?.to_rgba8();
+    let (w, h) = (im.width(), im.height());
+    let raw = im.into_raw();
+    let (w, h, rgba) = match look {
+        Some(l) => super::picture::composite(&raw, w, h, &l),
+        None => (w, h, raw),
+    };
+    Some(Picture { w, h, rgba })
 }

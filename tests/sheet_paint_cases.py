@@ -113,6 +113,8 @@ def _frame_drawing(seed: int):
 #: What fills each frame case: ``(missing, (segs, kinds, fills) or None,
 #: (w_px, h_px) or None)``.
 FRAME_CONTENT = {}
+#: The layer styles of a case: ``(tags per segment, {tag: line_styles row})``.
+FRAME_STYLES = {}
 
 
 def cases_d():
@@ -161,16 +163,34 @@ def cases_d():
             scale_mm=3.5, scale_n=50.0)
     add("frame-scale-text", (None, _frame_drawing(21), None), show_scale=True, scale_text="Escala {n}",
         scale_n=25.0)
+    # Layer by layer: each tag with its colour, weight, cut weight and line type.
+    styles = {"Muros": ((0.8, 0.2, 0.1), "continuous", 0.5, 0.9, None, None),
+              "Ejes": ((0.2, 0.4, 0.9), "center", None, None, None, None),
+              "Rejas": (None, "dashed", 0.25, None, None, None),
+              "Propio": (None, "custom:gas", None, 0.3, (2.0, 0.5, 0.2, 0.5), None),
+              "Layer 0": (None, "continuous", None, None, None, None)}
+    for i, pens in enumerate(((0.18, 0.35, 0.5), (0.13, 0.25, 0.7))):
+        segs, kinds, fills = _frame_drawing(30 + i)
+        tags = [("Muros", "Ejes", "Rejas", "Propio", "Layer 0", "Desconocida")[k % 6] for k in range(len(segs))]
+        add(f"frame-layers-{i}", (None, (segs, kinds, fills), None), hidden_lines=True,
+            pen_edge_mm=pens[0], pen_profile_mm=pens[1], pen_cut_mm=pens[2])
+        FRAME_STYLES[f"frame-layers-{i}"] = (tags, styles)
     return out
 
 
 def frame_content(name: str):
     """The content of a frame case as sheet_frame_display takes it."""
+    from core.layers import LINETYPES
     missing, drawing, image = FRAME_CONTENT[name]
     out = {"missing": missing, "image": image}
     if drawing is not None:
         segs, kinds, fills = drawing
         out.update(segs=segs, kinds=kinds, fills=fills)
+    if name in FRAME_STYLES:
+        tags, styles = FRAME_STYLES[name]
+        out["tags"] = tags
+        out["styles"] = {t: (st[0], st[2], st[3], list(st[4] if st[4] is not None else LINETYPES.get(st[1], ())))
+                         for t, st in styles.items()}
     return out
 
 
@@ -305,7 +325,8 @@ def python_ops(item, name: str = ""):
         if drawing is not None:
             segs, kinds, fills = drawing
         img = QImage(image[0], image[1], QImage.Format_RGB32) if image is not None else None
-        c.paint_frame_mm(p, item, img, hlr=segs, kinds=kinds, fills=fills, missing=missing)
+        c.paint_frame_mm(p, item, img, hlr=segs, kinds=kinds, fills=fills, missing=missing,
+                         styles=FRAME_STYLES.get(name))
     elif kind == "PerfilTerreno":
         profile, path_name, message = profile_of(name)
         c.paint_perfil_mm(p, item, profile, path_name, message)

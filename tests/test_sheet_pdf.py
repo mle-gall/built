@@ -195,3 +195,26 @@ def test_the_image_export_draws_the_same_page(tmp_path):
     jpg = tmp_path / "sheet.jpg"
     NATIVE.sheet_image(str(jpg), a, 50.0, contents, {f"frame:{shaded._doc_key}": (w, h, rgba.tobytes())})
     assert jpg.read_bytes()[:2] == b"\xff\xd8"
+
+
+def test_an_image_item_shows_its_shape_and_opacity_in_the_files(tmp_path):
+    """sheets::picture: an image item cut to an ellipse at half opacity
+    leaves its box's corners paper and blends its middle with the paper."""
+    from PySide6.QtGui import QImage
+    from core.composition import Composicion, ImagenItem
+    pic = tmp_path / "red.png"
+    img = QImage(400, 200, QImage.Format_RGB32)
+    img.fill(0xffff0000)
+    img.save(str(pic))
+    comp = Composicion(name="I", paper="A4", landscape=True)
+    comp.images.append(ImagenItem(x_mm=20, y_mm=20, w_mm=80, h_mm=40, path=str(pic), shape="ellipse", opacity=0.5))
+    out = tmp_path / "i.png"
+    NATIVE.sheet_image(str(out), comp, 100.0)
+    got = QImage(str(out))
+    px = lambda x, y: got.pixelColor(int(x * 100 / 25.4), int(y * 100 / 25.4))  # noqa: E731
+    assert px(21, 21).name() == "#ffffff"                           # a corner: cut away
+    mid = px(60, 40)
+    assert mid.red() == 255 and 120 <= mid.green() <= 135          # half red on white
+    NATIVE.sheet_pdf(str(tmp_path / "i.pdf"), [comp])
+    doc = pymupdf.open(str(tmp_path / "i.pdf"))
+    assert len(doc[0].get_images(full=True)) == 1

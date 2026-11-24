@@ -39,6 +39,49 @@ pub struct FrameContent {
     /// A shaded frame's picture: its pixel size and where the writer finds
     /// it (`frame:<key>`).
     pub image: Option<(u32, u32, String)>,
+    /// The tag each segment is inked with, and how each tag inks
+    /// (`line_styles`): drawn layer by layer when given.
+    pub tags: Option<Vec<String>>,
+    pub styles: Vec<(String, LayerStyle)>,
+}
+
+/// How a layer's lines are inked (`core.layers.line_styles`, its line type
+/// resolved to a dash pattern in paper mm).
+#[derive(Default, Clone, Debug)]
+pub struct LayerStyle {
+    pub rgb: Option<[f64; 3]>,
+    pub weight: Option<f64>,
+    pub cut_weight: Option<f64>,
+    pub pattern: Vec<f64>,
+}
+
+/// `_layer_pen`: the class pen with a layer's own line on it — a shade
+/// darker than its colour, its weight, its dash pattern in paper mm; a
+/// hidden line stays dashed, a cut keeps the cut's pen with the layer's
+/// cut weight.
+pub fn layer_pen(base: &Pen, style: Option<&LayerStyle>, kind: i8) -> Pen {
+    let Some(st) = style else { return base.clone() };
+    if kind == KIND_CUT {
+        return match st.cut_weight {
+            Some(w) => Pen { width: w.max(0.05), ..base.clone() },
+            None => base.clone(),
+        };
+    }
+    let mut pen = base.clone();
+    if let Some([r, g, b]) = st.rgb {
+        pen.color = Rgba::from_f(r * 0.8, g * 0.8, b * 0.8);
+    }
+    if let Some(w) = st.weight {
+        pen.width = w.max(0.05);
+    }
+    let w = pen.width.max(0.05);
+    if kind == KIND_HIDDEN {
+        pen.dash = vec![1.5 / w, 0.8 / w];
+    } else if !st.pattern.is_empty() {
+        pen.cap = Cap::Flat;
+        pen.dash = st.pattern.iter().map(|d| d.max(0.05) / w).collect();
+    }
+    pen
 }
 
 fn or(s: String, default: &str) -> String {
@@ -70,22 +113,47 @@ pub fn hatch_pen_mm(f: &Fields) -> f64 {
     (0.7 * f.num("pen_edge_mm", 0.18)).max(0.03)
 }
 
-/// `_paint_hlr_lines_mm` without layer styles or a budget: thin → profile
-/// → cut, the heavy lines on top.
-fn paint_lines(p: &mut Painter, f: &Fields, segs: &[[f64; 4]], kinds: Option<&[i8]>) {
-    let groups: Vec<(i8, Vec<[f64; 4]>)> = match kinds.filter(|k| k.len() == segs.len()) {
-        None => vec![(KIND_EDGE, segs.to_vec())],
-        Some(k) => [KIND_HIDDEN, KIND_EDGE, KIND_PROFILE, KIND_CUT].iter()
-            .map(|&kind| (kind, segs.iter().zip(k).filter(|(_, &c)| c == kind).map(|(s, _)| *s).collect()))
-            .collect(),
+/// `_paint_hlr_lines_mm` (no budget): thin → profile → cut, the heavy lines
+/// on top; with layer styles, each class layer by layer (in the order the
+/// layers first appear) with its own pen.
+fn paint_lines(p: &mut Painter, f: &Fields, c: &FrameContent, segs: &[[f64; 4]]) {
+    let kinds = c.kinds.as_deref().filter(|k| k.len() == segs.len());
+    let Some(k) = kinds else {
+        p.set_pen(vector_pen(f, KIND_EDGE));
+        for s in segs {
+            p.line(s[0], s[1], s[2], s[3]);
+        }
+        return;
     };
-    for (kind, rows) in groups {
-        if rows.is_empty() {
+    let tags = c.tags.as_deref().filter(|t| t.len() == segs.len());
+    for kind in [KIND_HIDDEN, KIND_EDGE, KIND_PROFILE, KIND_CUT] {
+        let idx: Vec<usize> = (0..segs.len()).filter(|&i| k[i] == kind).collect();
+        if idx.is_empty() {
             continue;
         }
-        p.set_pen(vector_pen(f, kind));
-        for s in rows {
-            p.line(s[0], s[1], s[2], s[3]);
+        let base = vector_pen(f, kind);
+        match tags {
+            None => {
+                p.set_pen(base);
+                for &i in &idx {
+                    p.line(segs[i][0], segs[i][1], segs[i][2], segs[i][3]);
+                }
+            }
+            Some(t) => {
+                let mut order: Vec<&str> = Vec::new();
+                for &i in &idx {
+                    if !order.contains(&t[i].as_str()) {
+                        order.push(&t[i]);
+                    }
+                }
+                for tag in order {
+                    let style = c.styles.iter().find(|(n, _)| n == tag).map(|(_, s)| s);
+                    p.set_pen(layer_pen(&base, style, kind));
+                    for &i in idx.iter().filter(|&&i| t[i] == tag) {
+                        p.line(segs[i][0], segs[i][1], segs[i][2], segs[i][3]);
+                    }
+                }
+            }
         }
     }
 }
@@ -275,6 +343,19 @@ fn paint_scale_label(p: &mut Painter, f: &Fields, x: &Extra) {
     p.restore();
 }
 
+/// A vector frame's drawing alone (its cut fills and lines, clipped to the
+/// frame): what the page draws for it under the overlay.
+pub fn paint_vector_content(p: &mut Painter, f: &Fields, c: &FrameContent) {
+    let r = [0.0, 0.0, f.num("w_mm", 100.0), f.num("h_mm", 100.0)];
+    if let Some(segs) = c.segs.as_ref().filter(|s| !s.is_empty()) {
+        p.save();
+        p.clip_rect(r);
+        paint_cut_fills(p, f, &c.fills);
+        paint_lines(p, f, c, segs);
+        p.restore();
+    }
+}
+
 /// `paint_frame_mm` (printed: no screen-only guide). ``x``: the title's
 /// strings (`title`, `subtitle`, `scale`, `number`, `sheet`), the scale
 /// label and the translated notices (`placeholder`).
@@ -302,7 +383,7 @@ pub fn paint_frame(p: &mut Painter, f: &Fields, x: &Extra, c: &FrameContent) {
                 p.save();
                 p.clip_rect(r);
                 paint_cut_fills(p, f, &c.fills);
-                paint_lines(p, f, segs, c.kinds.as_deref());
+                paint_lines(p, f, c, segs);
                 p.restore();
             }
             _ => placeholder(p),

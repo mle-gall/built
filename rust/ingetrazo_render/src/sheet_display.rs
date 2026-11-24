@@ -46,7 +46,9 @@ pub struct Pictures {
 impl Pictures {
     fn get(&mut self, ctx: &egui::Context, path: &str) -> Option<egui::TextureId> {
         self.loaded.entry(path.to_string()).or_insert_with(|| {
-            let img = image::open(path).ok()?;
+            // An image item's source carries its look after a ␟ (for the writers).
+            let file = path.split('\u{1f}').next().unwrap_or(path);
+            let img = image::open(file).ok()?;
             let img = if img.width().max(img.height()) > 2048 { img.thumbnail(2048, 2048) } else { img };
             let rgba = img.to_rgba8();
             let size = [rgba.width() as usize, rgba.height() as usize];

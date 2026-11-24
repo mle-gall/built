@@ -104,5 +104,10 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(super::dxf::sheet_dxf_ltypes, m)?)?;
     m.add_function(wrap_pyfunction!(super::raster::sheet_image, m)?)?;
     m.add_function(wrap_pyfunction!(super::create::sheet_new_item, m)?)?;
+    m.add_function(wrap_pyfunction!(super::create::sheet_new_cota, m)?)?;
+    m.add_function(wrap_pyfunction!(super::create::sheet_new_chain_total, m)?)?;
+    m.add_function(wrap_pyfunction!(super::create::sheet_new_radial, m)?)?;
+    m.add_function(wrap_pyfunction!(super::create::sheet_new_angular, m)?)?;
+    m.add_function(wrap_pyfunction!(super::create::sheet_new_image, m)?)?;
     Ok(())
 }

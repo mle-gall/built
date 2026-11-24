@@ -2108,22 +2108,33 @@ impl Renderer {
     fn page_clear(&mut self) {
         if let Some(ui) = self.ui.as_mut() { ui.page.clear(); }
     }
-    /// A frame's line drawing: ``segs`` (N,4) paper mm in the frame,
-    /// ``kinds`` (N,) 0 edge, 1 profile, 2 cut, 3 hidden.
-    fn page_frame_lines(&mut self, key: u64, segs: numpy::PyReadonlyArray2<'_, f32>,
-                        kinds: PyReadonlyArray1<'_, u8>) -> PyResult<()> {
-        let a = segs.as_array();
-        let kinds = kinds.as_slice()?.to_vec();
-        if a.nrows() != kinds.len() || (a.nrows() > 0 && a.ncols() != 4) {
-            return Err(PyValueError::new_err("segs (N,4) and kinds (N,) must agree"));
-        }
-        let segs = (0..a.nrows()).map(|i| [a[[i, 0]], a[[i, 1]], a[[i, 2]], a[[i, 3]]]).collect();
-        if let Some(ui) = self.ui.as_mut() { ui.page.set_lines(key, segs, kinds); }
+    /// A vector frame's drawing as a display list (JSON, frame-local mm).
+    fn page_frame_ops(&mut self, key: u64, ops: &str) -> PyResult<()> {
+        let v: serde_json::Value = serde_json::from_str(ops).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        if let Some(ui) = self.ui.as_mut() { ui.page.set_ops(key, v); }
         Ok(())
     }
     /// Open the page's text editor on text item ``key``.
     fn page_edit_text(&mut self, key: u64) {
         if let Some(ui) = self.ui.as_mut() { ui.page_edit_text(key); }
+    }
+    /// What frame ``key`` offers the drawing tools: points (M,2) page mm
+    /// with their model points (M,3), edges (E,4) with theirs (E,6).
+    #[pyo3(signature = (key, points, world, edges, edge_world, circles=Vec::new()))]
+    fn page_frame_snaps(&mut self, key: u64, points: Vec<f64>, world: Vec<f64>, edges: Vec<f64>, edge_world: Vec<f64>,
+                        circles: Vec<f64>) {
+        let s = crate::sheet_tools::FrameSnaps {
+            points: points.chunks_exact(2).map(|c| [c[0], c[1]]).collect(),
+            world: world.chunks_exact(3).map(|c| [c[0], c[1], c[2]]).collect(),
+            edges: edges.chunks_exact(4).map(|c| [c[0], c[1], c[2], c[3]]).collect(),
+            edge_world: edge_world.chunks_exact(6).map(|c| [[c[0], c[1], c[2]], [c[3], c[4], c[5]]]).collect(),
+            circles: circles.chunks_exact(3).map(|c| [c[0], c[1], c[2]]).collect(),
+        };
+        if let Some(ui) = self.ui.as_mut() { ui.page.snaps.insert(key, s); }
+    }
+    /// How far apart a baseline run's rows sit (the document's dimension style).
+    fn page_set_run_step(&mut self, mm: f64) {
+        if let Some(ui) = self.ui.as_mut() { ui.page.run_step = mm; }
     }
     fn page_frame_forget(&mut self, key: u64) {
         if let Some(ui) = self.ui.as_mut() { ui.page.forget_content(key); }
@@ -2902,6 +2913,7 @@ mod library_view;
 mod scene_photo;
 /// The Sheets workspace's page, native (docs/rust-sheets.md).
 pub mod sheet_page;
+pub mod sheet_tools;
 mod camera_inspector;
 mod registry_editor;
 mod render_result;
