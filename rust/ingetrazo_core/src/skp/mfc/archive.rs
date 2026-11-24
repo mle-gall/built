@@ -44,6 +44,28 @@ fn header(data: &[u8]) -> Result<(u16, usize, u32), String> {
     Ok((version, at, 0))
 }
 
+#[pyclass(dict)]
+struct Archive;
+
+#[pymethods]
+impl Archive {
+    fn alloc(slf: &Bound<'_, Self>, entry: &Bound<'_, PyAny>) -> PyResult<u32> {
+        let slot = slf.getattr("next_slot")?.extract::<u32>()?;
+        slf.getattr("slots")?.set_item(slot, entry)?;
+        slf.setattr("next_slot", slot + 1)?;
+        Ok(slot)
+    }
+
+    #[pyo3(signature=(r,expect=None))]
+    fn read_object<'py>(
+        slf: &Bound<'py, Self>,
+        r: &Bound<'py, SkpArchiveCursor>,
+        expect: Option<&Bound<'py, PyAny>>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        skp_mfc_object(slf.py(), slf.as_any(), r, expect)
+    }
+}
+
 fn archive<'py>(
     legacy: &Bound<'py, PyAny>,
     bytes: &Bound<'py, PyBytes>,
@@ -51,16 +73,113 @@ fn archive<'py>(
     base: u32,
     start: usize,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let ar = legacy.call_method1("_Archive", (bytes, version))?;
-    ar.getattr("readers")?
-        .call_method1("update", (legacy.getattr("_READERS")?,))?;
+    let py = bytes.py();
+    let ar = Bound::new(py, Archive)?.into_any();
+    ar.setattr("data", bytes)?;
+    ar.setattr("ver", version)?;
+    ar.setattr("has_pid", version >= 17)?;
+    ar.setattr(
+        "r",
+        Bound::new(py, SkpArchiveCursor::new(bytes.clone().unbind(), start))?,
+    )?;
+    for field in ["slots", "class_slot", "class_schema"] {
+        ar.setattr(field, PyDict::new(py))?;
+    }
+    for field in ["burns", "burn_stack", "inline_stack"] {
+        ar.setattr(field, PyList::empty(py))?;
+    }
+    for field in [
+        "current_class",
+        "current_obj_slot",
+        "current_loop",
+        "annot_watermark",
+    ] {
+        ar.setattr(field, py.None())?;
+    }
+    ar.setattr("in_entity_list", false)?;
+    ar.setattr("_as_item", false)?;
+    ar.setattr("cum_delta", 0)?;
+    ar.setattr(
+        "readers",
+        legacy.getattr("_READERS")?.cast::<PyDict>()?.copy()?,
+    )?;
     ar.setattr("next_slot", base)?;
     ar.setattr("walk_base", base)?;
-    ar.getattr("r")?.setattr("pos", start)?;
     Ok(ar)
 }
 
 impl<'a, 'py> Entity<'a, 'py> {
+    fn layer_at(&self, bytes: &[u8], probe: bool) -> PyResult<bool> {
+        let Some(tag) = bytes.get(..2).map(|b| u16::from_le_bytes([b[0], b[1]])) else {
+            return Ok(false);
+        };
+        if tag == 0xffff {
+            return Ok(bytes.get(4..12) == Some(b"\x06\0CLayer"));
+        }
+        if probe && tag & 0x8000 != 0 {
+            return Ok(true);
+        }
+        let slot = self
+            .ar
+            .getattr("class_slot")?
+            .call_method1("get", ("CLayer",))?
+            .extract::<Option<u32>>()?;
+        Ok(slot.is_some_and(|s| super::definitions::class_at(bytes, 0, s)))
+    }
+    fn trailing_layers(&self, list: &Bound<'py, PyList>, probe: bool) -> PyResult<()> {
+        loop {
+            let prefix = self.r.borrow().peek(self.py, 12);
+            let bytes = prefix.as_bytes();
+            if bytes.starts_with(&[0, 0]) {
+                self.skip(2)?;
+                continue;
+            }
+            if !self.layer_at(bytes, probe)? {
+                return Ok(());
+            }
+            let rec = self.object(Some("CLayer"))?;
+            if !rec.get_item(2)?.is_none() {
+                if probe {
+                    list.append(rec.get_item(0)?)?;
+                } else {
+                    list.append((rec.get_item(0)?, rec.get_item(2)?))?;
+                }
+            }
+        }
+    }
+    pub(super) fn layer_extension(&self) -> PyResult<()> {
+        let prefix = self.r.borrow().peek(self.py, 28);
+        let bytes = prefix.as_bytes();
+        if bytes.starts_with(&[0; 12]) && bytes.len() >= 18 && self.layer_at(&bytes[16..], true)? {
+            self.skip(16)?;
+        }
+        let prefix = self.r.borrow().peek(self.py, 4);
+        let bytes = prefix.as_bytes();
+        let Some(slot) = self
+            .ar
+            .getattr("current_obj_slot")?
+            .extract::<Option<u32>>()?
+        else {
+            return Ok(());
+        };
+        if bytes.len() == 4 {
+            let a = u16::from_le_bytes([bytes[0], bytes[1]]);
+            let b = u16::from_le_bytes([bytes[2], bytes[3]]);
+            if (1..0x7fff).contains(&a) && (1..0x7fff).contains(&b) && u32::from(a) != slot {
+                let slots = self.ar.getattr("slots")?.cast_into::<PyDict>()?;
+                for id in [a, b] {
+                    let Some(row) = slots.get_item(id)? else {
+                        return Ok(());
+                    };
+                    if !row.get_item(0)?.eq("obj")? || !row.get_item(1)?.eq("CLayer")? {
+                        return Ok(());
+                    }
+                }
+                self.skip(2)?;
+            }
+        }
+        Ok(())
+    }
     fn layer_count(&self) -> PyResult<u32> {
         self.skip(4)?;
         if self.ver >= 17 {
@@ -95,11 +214,7 @@ impl<'a, 'py> Entity<'a, 'py> {
         for _ in 0..n {
             slots.append(self.object(Some("CLayer"))?.get_item(0)?)?;
         }
-        let args = PyDict::new(self.py);
-        args.set_item("slots_out", &slots)?;
-        args.set_item("unmatched_class_ref", true)?;
-        self.ar
-            .call_method("_collect_trailing_layers", (self.r,), Some(&args))?;
+        self.trailing_layers(&slots, true)?;
         let anchor = self.object(None)?;
         if !anchor.get_item(1)?.eq("premodel")? {
             return Err(self.error("expected an active layer reference"));
@@ -152,10 +267,7 @@ impl<'a, 'py> Entity<'a, 'py> {
                 layers.append((rec.get_item(0)?, item))?;
             }
         }
-        let args = PyDict::new(self.py);
-        args.set_item("layers_out", &layers)?;
-        self.ar
-            .call_method("_collect_trailing_layers", (self.r,), Some(&args))?;
+        self.trailing_layers(&layers, false)?;
         if !self.object(None)?.get_item(1)?.eq("CLayer")? {
             return Err(self.error("invalid definition list anchor"));
         }

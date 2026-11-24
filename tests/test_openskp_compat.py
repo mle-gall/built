@@ -241,3 +241,11 @@ def test_legacy_file_with_one_layer_and_no_definitions(tmp_path):
     assert doc["layer_id_to_name"] == {41: "Layer0"}
     assert list(doc["defs_dict"]) == ["ROOT"]
     assert not doc["defs_dict"]["ROOT"]["builder"].faces
+
+    # An unrecognised scene-list schema can still contain the older
+    # self-contained page trailer. It records exactly one hidden layer.
+    tail = b"CViewPage" + _utf16("Old balcony") + _utf16("")
+    tail += struct.pack("<IHHHI", 0xc20, 0, 0, 41, 1)
+    fixture.write_bytes(header + objects + tail)
+    assert legacy.full_parse_legacy(str(fixture))["pages"] == [
+        {"name": "Old balcony", "hidden_layer_ids": [41]}]

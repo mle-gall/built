@@ -16,6 +16,75 @@ fn number_or_none<'py>(v: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     })
 }
 
+fn attribute_text(value: &Bound<'_, PyAny>) -> PyResult<String> {
+    if value.is_none() {
+        return Ok(String::new());
+    }
+    if value.is_instance_of::<PyList>() || value.is_instance_of::<PyTuple>() {
+        let values = value
+            .try_iter()?
+            .map(|v| attribute_text(&v?))
+            .collect::<PyResult<Vec<_>>>()?;
+        return Ok(values.join(","));
+    }
+    value.str()?.extract()
+}
+
+fn attributes<'py>(container: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
+    let result = PyDict::new(container.py());
+    if let Ok(d) = container.cast::<PyDict>() {
+        if let Some(children) = d.get_item("children")? {
+            for child in children.try_iter()? {
+                let Ok(row) = child?.get_item(1)?.cast_into::<PyDict>() else {
+                    continue;
+                };
+                if let Some(name) = row.get_item("name")?.filter(|n| !n.is_none()) {
+                    if name.is_truthy()? {
+                        let entries = row
+                            .get_item("entries")?
+                            .map(|v| v.cast_into::<PyDict>())
+                            .transpose()?;
+                        result.set_item(
+                            name,
+                            match entries {
+                                Some(items) => items.copy()?,
+                                None => PyDict::new(container.py()),
+                            },
+                        )?;
+                    }
+                }
+            }
+        }
+    }
+    Ok(result)
+}
+
+fn builder<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+    let record = py.import("types")?.getattr("SimpleNamespace")?.call0()?;
+    for name in [
+        "vertices",
+        "edges",
+        "edge_flags",
+        "edge_layers",
+        "edge_curves",
+        "arc_curves",
+        "faces",
+    ] {
+        record.setattr(name, PyDict::new(py))?;
+    }
+    for name in [
+        "instances",
+        "section_planes",
+        "texts",
+        "dimensions",
+        "construction_lines",
+        "construction_points",
+    ] {
+        record.setattr(name, PyList::empty(py))?;
+    }
+    Ok(record)
+}
+
 fn edge(
     b: &Bound<'_, PyAny>,
     id: &Bound<'_, PyAny>,
@@ -75,7 +144,6 @@ pub(super) fn fill(
 ) -> PyResult<()> {
     let py = b.py();
     let list = py.get_type::<PyList>();
-    let legacy = py.import("openskp.legacy")?;
     for item in ents.try_iter()? {
         let item = item?;
         let slot = item.get_item(0)?;
@@ -196,16 +264,10 @@ pub(super) fn fill(
                 row.set_item("children", PyList::empty(py))?;
                 let properties = PyDict::new(py);
                 if !image {
-                    let attrs = legacy.call_method1(
-                        "_extract_legacy_attribute_dictionaries",
-                        (val(&v, "attrs")?,),
-                    )?;
-                    if let Some(map) = attrs.cast::<PyDict>()?.get_item("dynamic_attributes")? {
+                    let attrs = attributes(&val(&v, "attrs")?)?;
+                    if let Some(map) = attrs.get_item("dynamic_attributes")? {
                         for (k, value) in map.cast::<PyDict>()? {
-                            properties.set_item(
-                                k,
-                                legacy.call_method1("_stringify_attr_value", (value,))?,
-                            )?;
+                            properties.set_item(k, attribute_text(&value)?)?;
                         }
                     }
                     row.set_item("attribute_dictionaries", attrs)?;
@@ -384,8 +446,6 @@ pub(super) fn read_legacy<'py>(
         colors.set_item("Layer0", (136, 136, 136))?;
         hidden.set_item("Layer0", false)?;
     }
-    let legacy = py.import("openskp.legacy")?;
-    let builder = legacy.getattr("_Builder")?;
     let mut images = HashSet::new();
     for (_, rec) in &slots {
         if rec.get_item(1)?.eq("CImage")? {
@@ -403,7 +463,7 @@ pub(super) fn read_legacy<'py>(
         let Ok(v) = rec.get_item(2)?.cast_into::<PyDict>() else {
             continue;
         };
-        let b = builder.call0()?;
+        let b = builder(py)?;
         fill(&b, &v.as_any().get_item("ents")?, &slots)?;
         let d = PyDict::new(py);
         for field in ["guid", "name", "is_group", "shadows_face_sun"] {
@@ -414,7 +474,7 @@ pub(super) fn read_legacy<'py>(
         d.set_item("builder", b)?;
         defs.set_item(slot, d)?;
     }
-    let b = builder.call0()?;
+    let b = builder(py)?;
     fill(&b, &root, &slots)?;
     let d = PyDict::new(py);
     d.set_item("guid", "ROOT")?;
@@ -428,27 +488,10 @@ pub(super) fn read_legacy<'py>(
             dims.append(d)?;
         }
     }
-    let pages = (|| -> PyResult<Bound<PyAny>> {
-        let pages = legacy.call_method1("_read_page_list", (&bytes, &ar))?;
-        if pages.is_none() {
-            legacy.call_method1("_scan_pages", (&bytes, &ar))
-        } else {
-            Ok(pages)
-        }
-    })()
-    .or_else(|e| {
-        // An unreadable optional camera does not invalidate the geometry.
-        let recoverable = py.get_type::<pyo3::exceptions::PyValueError>();
-        if e.is_instance(py, &recoverable)
-            || e.is_instance_of::<pyo3::exceptions::PyIndexError>(py)
-            || e.is_instance(py, &legacy.getattr("LegacyParseError")?)
-            || e.is_instance(py, &py.import("struct")?.getattr("error")?)
-        {
-            Ok(PyList::empty(py).into_any())
-        } else {
-            Err(e)
-        }
-    })?;
+    let pages = match super::pages::page_list(&bytes, &ar)? {
+        Some(pages) => pages,
+        None => super::pages::scan(&bytes, &ar, &names)?,
+    };
     let doc = PyDict::new(py);
     doc.set_item("version", version)?;
     doc.set_item("dimensions", dims)?;

@@ -155,6 +155,20 @@ enum Tag {
     Class(u32),
     Object(u32),
 }
+fn walker_slot(archive: &Bound<'_, PyAny>, slot: u32) -> PyResult<Option<i64>> {
+    let mut walker = i64::from(slot);
+    for band in archive.getattr("burns")?.try_iter()? {
+        let (start, width) = band?.extract::<(i64, i64)>()?;
+        if i64::from(slot) < start {
+            break;
+        }
+        if i64::from(slot) < start + width {
+            return Ok(None);
+        }
+        walker -= width;
+    }
+    Ok(Some(walker))
+}
 fn tag(r: &mut SkpArchiveCursor, py: Python<'_>) -> PyResult<Tag> {
     Ok(match r.u16(py)? {
         0 => Tag::Null,
@@ -214,17 +228,9 @@ pub fn skp_mfc_object<'py>(
                 .into_any())
         }
         Tag::Object(slot) => {
-            let mut walker = i64::from(slot);
-            for band in archive.getattr("burns")?.try_iter()? {
-                let (start, width) = band?.extract::<(i64, i64)>()?;
-                if i64::from(slot) < start {
-                    break;
-                }
-                if i64::from(slot) < start + width {
-                    return Ok((slot, "reserved", py.None()).into_pyobject(py)?.into_any());
-                }
-                walker -= width;
-            }
+            let Some(walker) = walker_slot(archive, slot)? else {
+                return Ok((slot, "reserved", py.None()).into_pyobject(py)?.into_any());
+            };
             if let Some(entry) = slots.get_item(walker)? {
                 if entry.get_item(0)?.eq("class")? {
                     return Err(fail("back-reference to a class"));
@@ -641,9 +647,16 @@ impl<'a, 'py> Entity<'a, 'py> {
                     let burn = parent.zip(expected).map_or(0, |(a, b)| a - b);
                     if (1..=4096).contains(&burn) && !self.ar.getattr("annot_watermark")?.is_none()
                     {
-                        self.py
-                            .import("openskp.legacy")?
-                            .call_method1("_register_burn", (self.ar, burn))?;
+                        let watermark = self.ar.getattr("annot_watermark")?.extract::<i64>()?;
+                        self.ar
+                            .getattr("burns")?
+                            .call_method1("append", ((watermark + delta, burn),))?;
+                        self.ar.setattr("cum_delta", delta + burn)?;
+                        self.ar.setattr("annot_watermark", self.py.None())?;
+                        let credits = self.ar.getattr("burn_stack")?;
+                        if credits.is_truthy()? {
+                            credits.set_item(-1, credits.get_item(-1)?.extract::<u32>()? + 1)?;
+                        }
                     } else {
                         self.r.borrow_mut().pos = start;
                         return Err(self.error("edge-use does not reference its loop"));
@@ -875,11 +888,7 @@ impl<'a, 'py> Entity<'a, 'py> {
                     )?;
                     self.string()?;
                     self.skip(if self.ver < 4 { 17 } else { 21 })?;
-                    self.ar.call_method1("_skip_clayer_colour_ext", (self.r,))?;
-                    self.ar.call_method1(
-                        "_skip_clayer_parent_ref",
-                        (self.r, self.ar.getattr("current_obj_slot")?),
-                    )?;
+                    self.layer_extension()?;
                 }
                 if self.ver == 19 && self.r.borrow().peek(self.py, 2).as_bytes() == [0, 0] {
                     self.skip(2)?;

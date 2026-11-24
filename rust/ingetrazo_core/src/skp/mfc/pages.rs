@@ -4,7 +4,7 @@ use pyo3::{
     prelude::*,
     types::{PyBytes, PyDict, PyList},
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 struct Input<'a>(&'a [u8]);
 impl<'a> Input<'a> {
@@ -278,6 +278,123 @@ fn decode(data: &[u8], start: usize, version: u16) -> Option<Vec<Page>> {
         .map(|_| page(&mut r, &mut table, version))
         .collect::<Option<Vec<_>>>()?;
     matches!(r.tag()?, PageTag::Object(_) | PageTag::Null).then_some(pages)
+}
+
+// Older page trailers can be recovered locally even when the full page
+// list contains an unknown schema. Accept only the two validated layouts.
+struct TailClasses {
+    slots: HashMap<u32, String>,
+    base: u32,
+    next: u32,
+}
+impl TailClasses {
+    fn skip_ref(&mut self, r: &mut Input, name: &str, version: u16) -> Option<()> {
+        let tag = r.u16()?;
+        if tag == 0xffff {
+            r.u16()?;
+            let len = r.u16()? as usize;
+            if r.take(len)? != name.as_bytes() {
+                return None;
+            }
+            if !self.slots.values().any(|v| v == name) {
+                self.slots.insert(self.next, name.to_owned());
+                self.next += 1;
+            }
+        } else if tag & 0x8000 != 0 {
+            let id = u32::from(tag & 0x7fff);
+            match self.slots.get(&id) {
+                Some(actual) if actual == name => (),
+                Some(_) => return None,
+                None if (self.base..self.next).contains(&id) => return None,
+                None => {
+                    self.slots.insert(id, name.to_owned());
+                }
+            }
+        } else {
+            return Some(());
+        }
+        if name == "CCamera" {
+            r.take(139)?;
+            r.string()?;
+            r.take(if version >= 6 { 33 } else { 10 })?;
+        } else {
+            r.take(4)?;
+            let len = r.u32()?;
+            r.take(len as usize)?;
+        }
+        Some(())
+    }
+}
+
+pub(super) fn scan<'py>(
+    data: &Bound<'py, PyBytes>,
+    ar: &Bound<'py, PyAny>,
+    layers: &Bound<'py, PyDict>,
+) -> PyResult<Bound<'py, PyList>> {
+    let py = ar.py();
+    let start = ar.getattr("r")?.getattr("pos")?.extract()?;
+    let version = ar.getattr("ver")?.extract()?;
+    let layers: HashSet<u32> = layers
+        .keys()
+        .iter()
+        .map(|id| id.extract())
+        .collect::<PyResult<_>>()?;
+    let mut classes = TailClasses {
+        slots: ar
+            .getattr("class_slot")?
+            .cast::<PyDict>()?
+            .iter()
+            .map(|(name, slot)| Ok((slot.extract()?, name.extract()?)))
+            .collect::<PyResult<_>>()?,
+        base: ar.getattr("walk_base")?.extract()?,
+        next: ar.getattr("next_slot")?.extract()?,
+    };
+    let tail = data.as_bytes().get(start..).unwrap_or_default();
+    let pages = py.detach(move || {
+        tail.windows(4)
+            .enumerate()
+            .filter_map(|(at, marker)| {
+                if marker[..3] != [255, 254, 255] || !(1..=40).contains(&marker[3]) {
+                    return None;
+                }
+                let mut r = Input(&tail[at..]);
+                let name = r.string()?;
+                if r.take(4)? != [255, 254, 255, 0] {
+                    return None;
+                }
+                let flags = r.u32()?;
+                if !matches!(flags, 0xc00 | 0xc20) {
+                    return None;
+                }
+                classes.skip_ref(&mut r, "CCamera", version)?;
+                classes.skip_ref(&mut r, "CDib", version)?;
+                let mut hidden = Vec::new();
+                if flags == 0xc20 {
+                    loop {
+                        let mut probe = Input(r.0);
+                        let id = u32::from(probe.u16()?);
+                        if !layers.contains(&id) {
+                            break;
+                        }
+                        hidden.push(id);
+                        r = probe;
+                    }
+                    if r.u32()? != 1 {
+                        return None;
+                    }
+                }
+                Some((name, hidden))
+            })
+            .collect::<Vec<_>>()
+    });
+    let out = PyList::empty(py);
+    for (name, hidden) in pages {
+        let row = PyDict::new(py);
+        row.set_item("name", name)?;
+        row.set_item("hidden_layer_ids", hidden)?;
+        out.append(row)?;
+    }
+    Ok(out)
 }
 
 #[pyfunction]

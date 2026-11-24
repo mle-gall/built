@@ -184,10 +184,9 @@ impl<'a, 'py> Entity<'a, 'py> {
         if count > 5_000_000 {
             return Err(self.error("invalid definition entity count"));
         }
-        let legacy = self.py.import("openskp.legacy")?;
         out.set_item(
             "ents",
-            legacy.call_method1("_read_entity_list", (self.ar, self.r, count, "def"))?,
+            super::archive::entities(self.ar, self.r, count as usize, "def")?,
         )?;
         let mut nrel = self.u32()?;
         if nrel > 100_000 {
@@ -257,11 +256,21 @@ pub(super) fn skp_mfc_entities<'py>(
         .cast_into::<PyDict>()?;
     while ents.len() < count {
         let p = r.borrow().pos;
-        if !inline.is_empty()
-            && inline.len() + ents.len() >= count
-            && !inline.contains(legacy.call_method1("_peek_backref", (ar, r))?)?
-        {
-            break;
+        if !inline.is_empty() && inline.len() + ents.len() >= count {
+            let prefix = r.borrow().peek(py, 6);
+            let bytes = prefix.as_bytes();
+            let raw = match u16_at(bytes, 0) {
+                Some(0x7fff) => u32_at(bytes, 2).filter(|n| n & 0x80000000 == 0),
+                Some(n @ 1..=0x7ffe) => Some(u32::from(n)),
+                _ => None,
+            };
+            if !inline.contains(
+                raw.map(|n| super::walker_slot(ar, n))
+                    .transpose()?
+                    .flatten(),
+            )? {
+                break;
+            }
         }
         let prefix = r.borrow().peek(py, 25);
         if owner == "def"
