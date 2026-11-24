@@ -293,11 +293,9 @@ class Host:
         sooner(qt_host.next_timer_ms())
         if getattr(view, "_inference_future", None) is not None or getattr(view, "_inference_queued", False):
             sooner(33)
-        # File changes of linked documents arrive as Qt posted events,
-        # which winit does not see: look for them once a second.
         watch = self.window.__dict__.get("_links_watch")
-        if watch is not None and getattr(watch, "_fs", None) is not None and watch._fs.files():
-            sooner(1000)
+        if watch is not None:
+            sooner(watch.poll())
         if self._after_picture and self._picture_seen:
             fn = self._after_picture.pop(0)
             self._guard("after picture", fn)

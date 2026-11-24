@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -55,24 +56,28 @@ def _faces(g):
     return sum(len(p.mesh.faces) for p, _m in iter_placements(g))
 
 
-def test_link_place_and_reload_when_the_source_changes(win, tmp_path):
+def _wait_for_reload(win, scene):
+    import time
+    watcher = win._link_watcher()
+    deadline = time.monotonic() + 10
+    while _faces(links.linked_groups(scene)[0]) != 3 and time.monotonic() < deadline:
+        delay = watcher.poll()
+        assert delay is not None
+        time.sleep(min(delay / 1000, 0.05))
+
+
+def test_link_place_and_reload_when_the_source_changes(native_window, tmp_path):
+    win = native_window
     src = _source(tmp_path / "Site.igz", faces=1)
     win.link_igz_path(src, at=(0, 0, 0))
     scene = win.viewport.scene
     (g,) = links.linked_groups(scene)
     assert _faces(g) == 1
     assert scene.layer("Site / Wood") is not None
-    assert str(src.resolve()) in win._link_watcher()._fs.files()
+    assert src.resolve() in win._link_watcher().paths
     # The source changes on disk (another tab's save, another app).
     _source(src, faces=3)
-    watcher = win._link_watcher()
-    watcher._changed(str(src.resolve()))
-    # The settle timer is armed; what it runs when it fires reloads the
-    # link. Fired here rather than waited for: on a loaded machine under
-    # pytest-xdist four settle periods of wall time were not enough.
-    assert watcher._timer.isActive()
-    watcher._timer.stop()
-    watcher._flush()
+    _wait_for_reload(win, scene)
     (g,) = links.linked_groups(scene)
     assert _faces(g) == 3
 
@@ -176,11 +181,7 @@ def test_a_reloaded_link_keeps_the_layers_rows(win, tmp_path):
     original = type(panel).refresh
     panel.refresh = lambda *a, **k: (rebuilt.append(1), original(panel, *a, **k))
     _source(src, faces=3)                     # same tags, more geometry
-    watcher = win._link_watcher()
-    watcher._changed(str(src.resolve()))
-    assert watcher._timer.isActive()          # fired, not waited for (see above)
-    watcher._timer.stop()
-    watcher._flush()
+    _wait_for_reload(win, scene)
     _settle()                                 # what the reload deferred
     (g,) = links.linked_groups(scene)
     assert _faces(g) == 3

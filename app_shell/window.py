@@ -847,6 +847,9 @@ class ShellWindow(WindowDocumentCommands, QObject):
         import_points(self)
 
 
+    def _wake_link_watch(self):
+        self._host.request_frame()
+
     def workspace(self):
         return self._workspace
 

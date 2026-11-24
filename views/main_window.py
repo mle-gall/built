@@ -1232,6 +1232,18 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
                 if tip and tip not in act.toolTip():
                     act.setToolTip(f"{act.toolTip()}\n{tip}")
 
+    def _wake_link_watch(self):
+        timer = self.__dict__.get("_link_poll_timer")
+        if timer is None:
+            timer = self._link_poll_timer = QTimer(self, singleShot=True)
+            timer.timeout.connect(self._poll_links)
+        timer.start(0)
+
+    def _poll_links(self):
+        delay = self._link_watcher().poll()
+        if delay is not None:
+            self._link_poll_timer.start(delay)
+
     def _sync_projection_buttons(self, mode: str) -> None:
         act = self._projection_actions.get(mode)
         if act is not None and not act.isChecked():
