@@ -196,8 +196,8 @@ def test_capture_keeps_cutout_flag_and_camera_independence():
 
 
 def test_blank_discards_previous_billboard_row_cache():
-    from views.wgpu_view import WgpuView
-    view = WgpuView()
+    from tests.headless_gpu import HeadlessView
+    view = HeadlessView()
     try:
         view.set_scene(Scene(groups=[figure(), figure()]))
         assert len(view._billboards.ids) == 2

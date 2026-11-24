@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Headless wall-clock pack split and content oracle, without cProfile overhead.
 
-Run with the worktree's PYTHONPATH and QT_QPA_PLATFORM=offscreen. An optional
+Run with the worktree's PYTHONPATH. An optional
 --reference-source (a saved wgpu_scene.py) measures the old Python preparation
 against the same native wheel. Digests stream bytes to avoid an extra resident
 vertex allocation. The document is read only; recovery prompts are disabled.
@@ -17,7 +17,6 @@ import sys
 import time
 
 import numpy as np
-from PySide6.QtWidgets import QApplication
 
 
 def digest(value):
@@ -30,7 +29,6 @@ def main():
     parser.add_argument('out', type=Path)
     parser.add_argument('--reference-source', type=Path)
     args = parser.parse_args()
-    app = QApplication([])
     from core import autosave, _native
     from core.scene import Scene
     from formats.igz import load_into

@@ -759,12 +759,10 @@ fn arm_watchdog(win: &Bound<'_, PyAny>, st: &Bound<'_, SheetState>) -> PyResult<
     if shell(py)? || !watched {
         return Ok(());
     }
-    let platform: String = py.import("PySide6.QtGui")?.getattr("QGuiApplication")?.call_method0("platformName")?.extract()?;
-    if platform == "offscreen" || platform == "minimal" {
-        return Ok(());
-    }
+    // Off the shell (tests and probes) the sheet's timers are the window's.
+    let Ok(queue) = win.getattr("_host").and_then(|host| host.getattr("timers")) else { return Ok(()) };
     let dog = Py::new(py, Watchdog { win: win.clone().unbind(), st: st.clone().unbind() })?;
-    py.import("PySide6.QtCore")?.getattr("QTimer")?.call_method1("singleShot", (WATCHDOG_MS, dog))?;
+    queue.call_method1("later", (win, WATCHDOG_MS, dog))?;
     Ok(())
 }
 
@@ -845,8 +843,8 @@ pub fn close(win: &Bound<'_, PyAny>) -> PyResult<()> {
     repaint(win);
     if let Some(view) = view_of(win) {
         if !shell(py)? {
-            let focus = Py::new(py, FocusView { view: view.unbind() })?;
-            py.import("PySide6.QtCore")?.getattr("QTimer")?.call_method1("singleShot", (0, focus))?;
+            // Focus goes back to the view at once: no toolkit loop to wait for.
+            Py::new(py, FocusView { view: view.unbind() })?.bind(py).call0()?;
         }
     }
     Ok(())

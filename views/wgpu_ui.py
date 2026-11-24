@@ -126,8 +126,6 @@ def _send_tools(view, win) -> None:
         view.renderer.ui_set_tools(groups, disabled)
     else:
         view.renderer.ui_set_tools(groups)
-    if "_host" not in vars(win):
-        _hide_widget_chrome(view, win)
     icons = []
     from views.view_commands import entries
     for group, _, _, _, key in entries():
@@ -148,63 +146,6 @@ LIGHTS_ROOM = 86.0
 TOP_H = 40.0
 
 
-def _hide_widget_chrome(view, win):
-    # Full bleed: the palette replaces every tool bar.
-    from PySide6.QtWidgets import QToolBar
-    for bar in win.findChildren(QToolBar):
-        bar.hide()
-    _merge_title_row(win)
-    _one_theme(win)
-    # Full bleed: the right column stands in for the docks; they stay
-    # reachable from the Window menu until it covers all they do.
-    from PySide6.QtWidgets import QDockWidget
-    for dock in win.findChildren(QDockWidget):
-        # Only the side panels; never a dock that holds the view itself.
-        if dock.isAncestorOf(view) or win.dockWidgetArea(dock) not in (
-                Qt.RightDockWidgetArea, Qt.LeftDockWidgetArea):
-            continue
-        dock.hide()
-    # The hint and the measurements now live in the chrome: their Qt
-    # copies keep their state but take no room.
-    status = win.statusBar()
-    for w in (getattr(status, "_msg", None), getattr(win, "_vcb_name", None),
-              getattr(win, "_vcb_value", None)):
-        if w is not None:
-            w.setMaximumWidth(0)
-
-
-def _merge_title_row(win) -> None:
-    """No title row at all (Maxence 2026-11-22: "can't we get rid of it?"):
-    the model reaches the window's top edge; the project tabs are a glass
-    capsule after the window buttons, on the top row of the chrome; the
-    buttons sit centred on that row."""
-    chrome = getattr(win, "_mac_chrome", None)
-    bar = getattr(win, "_project_tabs", None)
-    if bar is not None:
-        bar.hide()
-        bar.setMaximumHeight(0)
-    area = getattr(win, "_doc_area", None)
-    if area is not None and area.layout() is not None:
-        area.layout().setContentsMargins(0, 0, 0, 0)
-    if chrome is None:
-        return
-    from PySide6.QtCore import QPoint
-
-    def fit():
-        from views.mac_glass import _window_alive
-        if not _window_alive(win):
-            return
-        if win.windowState() & Qt.WindowFullScreen:
-            chrome._glass.place_lights(None)
-            return
-        view = getattr(getattr(win, "_doc", None), "stand_in", None)
-        top = view.mapTo(win, QPoint(0, 0)).y() if view is not None else 0
-        chrome._glass.place_lights(top + TOP_H / 2)     # the top bar's centre
-    chrome.fit_lights = fit
-    later(win, 0, fit)
-    later(win, 400, fit)
-
-
 def _project_action(win, arg) -> None:
     bar = getattr(win, "_project_tabs", None)
     if bar is None:
@@ -221,36 +162,6 @@ def _project_action(win, arg) -> None:
         doc = bar.tabs.tabData(int(arg))
         if doc is not None:
             bar.activated.emit(doc)
-
-
-#: The title row in the chrome's graphite (tokens in ui.rs): Maxence
-#: 2026-11-22, "3 different themes: black top/bottom bar, blue bottom bar,
-#: grey UI". The bottom Qt rows go; this row stays (it holds the window
-#: buttons) and takes the same colours and capsule tabs.
-_TITLE_SHEET = """
-#document_area { background: #16191D; }
-#project_tab_bar::tab { background: transparent; color: #C9CFD6; border: none;
-    border-radius: 14px; padding: 5px 14px; margin: 0 2px; min-height: 18px; }
-#project_tab_bar::tab:hover { background: rgba(255,255,255,18); color: #EEF1F4; }
-#project_tab_bar::tab:selected { background: rgba(106,165,255,61); color: #FFFFFF; }
-#project_views, #project_tab_new { border: none; border-radius: 14px; }
-#project_views:hover, #project_tab_new:hover { background: rgba(255,255,255,18); }
-"""
-
-
-def _one_theme(win) -> None:
-    area = getattr(win, "_doc_area", None)
-    if area is not None:
-        area.setStyleSheet(_TITLE_SHEET)
-    status = win.statusBar()
-    if status is not None:
-        status.hide()
-    # The side panels' pull handles: nothing to pull with the docks hidden.
-    from PySide6.QtWidgets import QWidget
-    for name in ("sidebar_handle", "left_sidebar_handle"):
-        for w in win.findChildren(QWidget, name):
-            w.hide()
-            w.setMaximumSize(0, 0)
 
 
 def _tabs(view, win) -> None:
@@ -1076,21 +987,13 @@ from contextlib import contextmanager
 
 @contextmanager
 def _wait_cursor(viewport):
-    from core.input_types import NATIVE, Qt
-    if NATIVE:
-        previous = viewport.cursor()
-        viewport.setCursor(Qt.WaitCursor)
-        try:
-            yield
-        finally:
-            viewport.setCursor(previous)
-    else:
-        from PySide6.QtWidgets import QApplication
-        QApplication.setOverrideCursor(Qt.WaitCursor)
-        try:
-            yield
-        finally:
-            QApplication.restoreOverrideCursor()
+    from core.input_types import Qt
+    previous = viewport.cursor()
+    viewport.setCursor(Qt.WaitCursor)
+    try:
+        yield
+    finally:
+        viewport.setCursor(previous)
 
 
 def _measure(view, win, auto=False) -> None:
@@ -2409,15 +2312,6 @@ def _set_status(win, groups, value) -> None:
     if commands:
         execute(win.viewport, CompoundCommand(commands))
         win.viewport.flash_status(f"Status {value.capitalize()} on {len(commands)} item" + ("s" if len(commands) != 1 else ""))
-
-
-def _dock(win, names) -> None:
-    from PySide6.QtWidgets import QDockWidget
-    for dock in win.findChildren(QDockWidget):
-        if any(n in dock.windowTitle() for n in names):
-            dock.show()
-            dock.raise_()
-            return
 
 
 def _file_to(win, n: int) -> None:

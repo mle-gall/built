@@ -23,14 +23,12 @@ class Primitive:
 
 def rasterize(primitives, width, height, scale, annotations=None):
     """The primitives on a fresh annotation canvas, as a straight-alpha
-    QImage at physical resolution (scripts and tests read its pixels)."""
-    from ingetrazo_render import AnnotationCanvas
-    from PySide6.QtGui import QImage
+    ``RgbaImage`` at physical resolution (scripts and tests read its pixels)."""
+    from ingetrazo_render import AnnotationCanvas, RgbaImage
     w, h = max(1, int(width * scale)), max(1, int(height * scale))
     canvas = AnnotationCanvas(w, h, float(width))
     paint_layer(canvas, primitives, annotations)
-    rgba = canvas.composite(bytes(w * h * 4))
-    image = QImage(rgba, w, h, w * 4, QImage.Format_RGBA8888).copy()
+    image = RgbaImage(w, h, canvas.composite(bytes(w * h * 4)))
     image.setDevicePixelRatio(scale)
     return image
 
@@ -58,8 +56,8 @@ def _colour(c):
 
 
 def pixels(image):
-    """Borrow contiguous RGBA storage; the caller retains the image on upload."""
-    return np.frombuffer(image.constBits(), dtype=np.uint8)
+    """The image's straight RGBA bytes as a flat array."""
+    return np.frombuffer(image.rgba(), dtype=np.uint8)
 
 
 def snap_glyph(point, kind, color="#00dfff"):

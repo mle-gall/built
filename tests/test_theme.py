@@ -79,57 +79,6 @@ def test_retired_neutral_accent_is_ignored():
     assert theme.accent_color().name() == "#6aa5ff"
 
 
-def test_the_active_tool_is_only_a_thin_outline(app):
-    """Round 12: the active tool is a thin quiet outline with nothing
-    inside, as IngeTrazo always had it (a fill, round 7, was too loud)."""
-    from views.icons import tool_icon
-    win = QMainWindow()
-    tb = QToolBar(win)
-    tb.setIconSize(QSize(24, 24))
-    win.addToolBar(tb)
-    act = tb.addAction(tool_icon("select"), "")
-    act.setCheckable(True)
-    act.setChecked(True)
-    win.resize(300, 120)
-    win.show()
-    app.processEvents()
-    btn = tb.widgetForAction(act)
-    img = btn.grab().toImage()
-    bar = tb.grab().toImage()
-    close_window(win)
-    outline = theme.active_tool_colour()
-    mid_y = img.height() // 2
-    edge = img.pixelColor(0, mid_y)
-    assert abs(edge.lightness() - outline.lightness()) <= 12, edge.name()
-    # Inside, clear of the icon: the bar's own background, no fill.
-    inside = img.pixelColor(3, mid_y)
-    background = bar.pixelColor(bar.width() - 2, bar.height() // 2)
-    # (Transparent where the stylesheet leaves the bar to show through;
-    # the bar's gradient where Fusion paints it.)
-    assert inside.alpha() < 10 or abs(
-        inside.lightness() - background.lightness()) <= 8, (inside.name(), background.name())
-
-
-def test_icons_are_inked_in_a_soft_grey(app):
-    """Round 7: the icons' lines were the text colour, near white or near
-    black; now a very light or very dark grey, a step softer."""
-    from views.icons import _ink
-    ink = _ink()
-    assert ink == theme.icon_ink()
-    text = app.palette().color(QPalette.WindowText)
-    window = app.palette().color(QPalette.Window)
-    # Softer than the text, still far from the background.
-    assert abs(ink.lightness() - window.lightness()) \
-        < abs(text.lightness() - window.lightness())
-    assert abs(ink.lightness() - window.lightness()) > 100
-    assert 25 < ink.lightness() < 230
-
-
-def test_cursors_keep_the_full_contrast_ink(app):
-    from views.icons import _text_ink
-    assert _text_ink() == app.palette().color(QPalette.WindowText)
-
-
 def test_separators_are_the_grip_s_grey_line(app):
     """Round 10: the separators between groups of tools are the same thin
     grey line as the grip (Fusion drew a two-tone groove)."""
@@ -179,25 +128,3 @@ def test_dark_icons_have_a_reference_contrast():
     assert 1.6 <= _contrast(grip, window) <= 2.4
 
 
-def _ink_pixels(icon, size=48) -> int:
-    img = icon.pixmap(size, size).toImage()
-    return sum(1 for x in range(img.width()) for y in range(img.height())
-               if img.pixelColor(x, y).alpha() > 128)
-
-
-def test_toolbar_icons_are_drawn_with_fine_lines(app):
-    """Round 14: the icons' lines read heavy (1.5-2 px at 24 px); they are
-    drawn at 65 % of their written width. The atlas keeps the thinned
-    drawings: at full weight Line inked 152 or more pixels at 48 px."""
-    from views import icons
-    assert _ink_pixels(icons.tool_icon("line")) <= 130
-    assert _ink_pixels(icons.tool_icon("move")) <= 215
-
-
-def test_the_overflow_chevron_keeps_its_weight(app):
-    # Thinned, the 16 px chevron faded to a grey blank again.
-    from views import icons
-    img = icons.tool_icon("overflow_h").pixmap(48, 48).toImage()
-    # A full-weight stroke: some column holds three opaque pixels in a run.
-    runs = [sum(1 for y in range(48) if img.pixelColor(x, y).alpha() > 200) for x in range(48)]
-    assert max(runs) >= 3

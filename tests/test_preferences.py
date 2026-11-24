@@ -109,13 +109,11 @@ def test_dialog_reloads_saved_values(settings_file):
 
 
 def test_toolbar_sizes_are_fixed_even_with_old_keys(settings_file):
-    from views.icons import DEFAULT_TOOLBAR_ICON_PX
     st = _fresh(settings_file)
     st.setValue("ui/toolbar_icon_px", 40)
     st.setValue("ui/large_toolbar_icons", "1")
     with pytest.raises(KeyError):
         Controls(_Win(), "general").row("icon_px")
-    assert DEFAULT_TOOLBAR_ICON_PX == 24
     assert st.value("ui/large_toolbar_icons") == "1"
 
 
