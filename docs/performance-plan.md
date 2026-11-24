@@ -2941,7 +2941,7 @@ Native denotes routed, not exhaustive parity acceptance.
 | followme | FollowMeTool | native | pick_edge, pick_face, rubber_band_lines |
 | fillet | FilletTool | native | rubber_band_lines |
 | texture_position | TexturePositionTool | native | shared viewport / tool base |
-| paint | PaintTool | native | pick_face_any |
+| paint | PaintTool | native | Rust state machine, pick_face_any |
 | dimension | DimensionTool | native | rubber_band_lines |
 | eraser | EraserTool | native | pick_dimension, pick_edge, pick_geopath, pick_guide, rubber_band_lines |
 | tape | TapeMeasureTool | native | _world_to_pixel, pick_axis, pick_edge, pick_edge_any, pick_guide, rubber_band_lines |

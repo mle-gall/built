@@ -50,3 +50,12 @@ class ProtocolTools:
         out = run(self._viewport.history, "offset_outline", distance=distance, **source)
         self._viewport.update()
         return {**out, "step": out["step"].to_json() if out["step"] else None}
+
+    def _tool_paint_material(self, placement=None, mesh=None, faces=(), seed=None, material=None,
+                             color=None, texture=None, opacity=None, default=False, back=False, plane=None):
+        from core.protocol.commands import run
+        out = run(self._viewport.history, "paint_material", placement=placement, mesh=mesh, faces=faces,
+                  seed=seed, material=material, color=color, texture=texture, opacity=opacity,
+                  default=default, back=back, plane=plane)
+        self._viewport.update()
+        return {**out, "step": out["step"].to_json() if out["step"] else None}

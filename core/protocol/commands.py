@@ -114,6 +114,58 @@ def _push_face(history, f, distance, keep_base, tool):
     return _answer(history, before)
 
 
+def paint_material(history, *, placement=None, mesh=None, faces=(), seed=None, material=None,
+                   color=None, texture=None, opacity=None, default=False, back=False, plane=None,
+                   _picked_placement=None):
+    """Paint one placement or a list of keyed mesh faces in one history step."""
+    from core.materials import Material
+    from core.material_commands import material_for_paint
+    from core.paint_ops import build_paint
+    from core.protocol.keys import resolve_mesh
+    from ingetrazo_core import Vec3
+    if (placement is None) == (not faces):
+        raise ValueError("paint_material needs a placement or faces")
+    group, target_mesh, targets, clicked = None, None, [], None
+    if placement is not None:
+        # A viewport may supply a transient placement belonging to its own
+        # editing context. Its UID must match the target sent by the machine.
+        if _picked_placement is not None and _picked_placement.uid == placement:
+            group = _picked_placement
+        else:
+            group, = _placements(history, [placement])
+    else:
+        target_mesh = resolve_mesh(history.scene, mesh)
+        targets = _need(target_mesh, "face", faces)
+        clicked = _need(target_mesh, "face", [seed])[0] if seed is not None else targets[0]
+    mat = None
+    if isinstance(material, str):
+        mat = _material(history, material)
+        if color is None and texture is None:
+            color, texture = mat.color, mat.texture
+        if opacity is None:
+            opacity = mat.opacity
+    elif material is not None:
+        mat = Material.from_dict(material)
+    if color is None and texture is None and mat is not None:
+        color, texture = mat.color, mat.texture
+        if opacity is None:
+            opacity = mat.opacity
+    if color is not None and (len(color) != 3 or not all(0 <= c <= 1 for c in color)):
+        raise ValueError("paint colour needs three components from zero to one")
+    if opacity is not None and not 0 <= opacity <= 1:
+        raise ValueError("paint opacity must be between zero and one")
+    if color is None and texture is None and not default:
+        raise ValueError("paint_material needs a colour, texture, or default")
+    if mat is None and not default:
+        mat = material_for_paint(history.scene, color=color, texture=texture, opacity=opacity)
+    source_plane = (Vec3(*plane[0]), float(plane[1])) if plane is not None else None
+    cmd = build_paint(target_mesh, targets, clicked, group, back, default,
+                      color, texture, opacity, mat, source_plane)
+    before = history.revision
+    history.execute(cmd)
+    return _answer(history, before)
+
+
 def offset_outline(history, distance, face=None, points=None, normal=None, closed=False, eye=None):
     """Offset one keyed face or a coplanar edge path, in model coordinates."""
     import math
@@ -1287,7 +1339,7 @@ COMMANDS = {"set_location": set_location, "set_model_units": set_model_units, "s
             "add_guide_circle": add_guide_circle, "add_arc": add_arc,
             "move_placements": move_placements, "copy_placements": copy_placements,
             "move_selection": move_selection, "scale_selection": scale_selection,
-            "rotate_selection": rotate_selection, "offset_outline": offset_outline,
+            "rotate_selection": rotate_selection, "offset_outline": offset_outline, "paint_material": paint_material,
             "divide_edges": divide_edges, "join_edges": join_edges,
             "move_vertices": move_vertices, "erase": erase,
             "reverse_faces": reverse_faces, "push_pull": push_pull, "orient_faces": orient_faces,

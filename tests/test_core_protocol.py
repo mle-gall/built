@@ -550,3 +550,20 @@ def test_offset_uses_the_face_key_and_model_frame_for_a_distant_path():
     coordinates = {v.position.toTuple() for v in scene.mesh.vertices}
     assert (start, .25, 0) in coordinates and (start + 1.75, 1, 0) in coordinates
     assert history.undo() and len(scene.mesh.vertices) == 4
+
+
+def test_paint_material_uses_named_recipe_on_the_requested_side_and_preserves_it_on_undo():
+    from core.protocol.commands import run
+    from core.materials import Material
+    from core.scene import Scene
+    from core.history import History
+    from ingetrazo_core import Vec3
+    scene = Scene()
+    history = History(scene)
+    face = scene.mesh.add_face([Vec3(), Vec3(2, 0, 0), Vec3(0, 2, 0)])
+    scene.materials["Blue glass"] = Material("Blue glass", color=(.1, .2, .8), opacity=.4)
+    assert run(history, "paint_material", faces=[str(face.key)], material="Blue glass", back=True)["ok"]
+    assert "color" not in face.attrs and face.attrs["back"]["opacity"] == .4
+    assert face.attrs["back"]["mat"] == "Blue glass"
+    assert history.undo() and dict(face.attrs) == {}
+    assert "Blue glass" in scene.materials

@@ -299,3 +299,14 @@ BUILTIN_TOOLS.append(dict(
         "points": {"type": "array", "items": _VECTOR}, "normal": _VECTOR,
         "closed": {"type": "boolean"}, "eye": _VECTOR,
     }, required=["distance"], oneOf=[{"required": ["face"]}, {"required": ["points", "normal"]}])))
+
+BUILTIN_TOOLS.append(dict(
+    name="paint_material", mutates=True,
+    description="Paint a placement or named faces with a material, or restore the default on one side.",
+    inputSchema=dict(type="object", properties={
+        "placement": _OCCURRENCE, "mesh": {"type": "string"}, "faces": _KEYS,
+        "seed": {"type": "string"}, "material": {"oneOf": [{"type": "string"}, {"type": "object"}]},
+        "color": _VECTOR, "texture": {"type": "object"}, "opacity": {"type": "number"},
+        "default": {"type": "boolean"}, "back": {"type": "boolean"},
+        "plane": {"type": "array", "description": "Source texture plane [normal, signed offset]."}
+    }, oneOf=[{"required": ["placement"]}, {"required": ["faces"]}])))

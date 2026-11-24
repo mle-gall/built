@@ -66,6 +66,11 @@ class _Host:
     def run(self, name, args):
         from core.protocol.commands import run
         args = json.loads(args)
+        if name == "paint_material":
+            # Painting a closed, lazy group needs no topology or face count.
+            answer = run(self.vp.history, name, **args,
+                         _picked_placement=getattr(self.tool, "_container", None))
+            return answer["ok"], self.revision(), 0, answer.get("error")
         for key in ("a", "b", "eye", "anchor", "center"):
             if args.get(key) is not None:
                 args[key] = self._model(args[key])
@@ -1754,3 +1759,12 @@ from tools.offset_host import OffsetHost, _run_from_edge, _run_from_edges
 class OffsetTool(OffsetHost, RustTool):
     kind = "offset"
     uses_snap = OffsetHost.uses_snap
+
+
+from tools.paint_host import (PaintHost, DEFAULT_FACE_COLOR, RECENT_MAX, recent_key,
+                              push_recent, rename_recent, clicked_back_side)
+from core.paint_ops import _face_plane, _surface_commands, _texture_commands
+
+
+class PaintTool(PaintHost, RustTool):
+    kind = "paint"
