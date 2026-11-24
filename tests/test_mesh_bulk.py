@@ -121,7 +121,7 @@ def _reference_bulk_weld(mesh, points):
         keys = [tuple(round(x * _KEY_SCALE) for x in p) for p in points]
         registry = set(map(tuple, mesh._store.registry()[0].tolist()))
     else:
-        points = [QVector3D(*p) for p in np.asarray(points, dtype=np.float32).tolist()]
+        points = [QVector3D(*p) for p in np.asarray(points, dtype=np.float64).tolist()]
         keys = [_key(p) for p in points]
         registry = mesh._registry
     first = {}
@@ -152,7 +152,9 @@ def _reference_bulk_weld(mesh, points):
 
 @pytest.mark.parametrize("seed", range(24))
 @pytest.mark.parametrize("existing", [False, True])
-def test_bulk_weld_preserves_exact_order_at_cell_boundaries(seed, existing):
+@pytest.mark.parametrize("store", [False, True])
+def test_bulk_weld_preserves_exact_order_at_cell_boundaries(seed, existing, store, monkeypatch):
+    monkeypatch.setenv("INGETRAZO_STORE", "1" if store else "0")
     rng = np.random.default_rng(seed)
     offsets = np.array([0, 1e-6, -1e-6, 4.9e-5, 5.1e-5, 9.9e-5, 1.01e-4])
     points = rng.integers(-3, 4, size=(180, 3)) * 0.5

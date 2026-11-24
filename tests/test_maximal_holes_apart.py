@@ -7,7 +7,6 @@ import random
 import pytest
 from ingetrazo_core import Vec3 as V
 
-from core import topology
 from core.topology import _HolesApart, _loop_inside_loop, _maximal_holes
 
 
@@ -46,15 +45,13 @@ def ring(cx, cy, r, n=6, z=0.0, tilt=0.0, reverse=False, rng=None):
     return pts[::-1] if reverse else pts
 
 
-def test_a_plate_of_holes_side_by_side_triangulates_nothing(monkeypatch):
+def test_a_plate_of_holes_side_by_side_triangulates_nothing():
     holes = [ring(float(x), float(y), 0.1 + 0.001 * (x + 7 * y))
              for x in range(8) for y in range(8)]
-    calls = []
-    real = _loop_inside_loop
-    monkeypatch.setattr(topology, "_loop_inside_loop",
-                        lambda *a: calls.append(1) or real(*a))
-    assert len(_maximal_holes(holes)) == len(holes)
-    assert not calls
+    bounds = _HolesApart(holes)
+    for i in range(len(holes)):
+        assert bounds.maybe_around(i, V(0, 0, 1), list(range(len(holes)))) == [i]
+    assert _maximal_holes(holes) == holes
 
 
 def test_a_nested_hole_is_still_dropped():
@@ -64,15 +61,11 @@ def test_a_nested_hole_is_still_dropped():
     assert _maximal_holes([small, far, big]) == [far, big]
 
 
-def test_a_hole_touching_a_bigger_one_is_asked(monkeypatch):
+def test_a_hole_touching_a_bigger_one_is_asked():
     big = ring(0.0, 0.0, 1.0)
-    near = ring(1.05, 0.0, 0.05)     # just outside: boxes within the margin?
-    calls = []
-    real = _loop_inside_loop
-    monkeypatch.setattr(topology, "_loop_inside_loop",
-                        lambda *a: calls.append(1) or real(*a))
+    near = ring(1.05, 0.0, 0.05)
+    assert _HolesApart([big, near]).maybe_around(1, V(0, 0, 1), [0]) == [0]
     assert plain_answer([big, near]) == _maximal_holes([big, near])
-    assert calls
 
 
 def test_loops_off_the_plane_are_seen_along_the_normal():

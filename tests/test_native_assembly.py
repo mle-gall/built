@@ -6,7 +6,7 @@ from core.group import Group
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.test_native_inspector_panels import host, run  # noqa: F401
 from tests.test_parts import _box, _copies, _part, _sheet, _stool
-from views import inspector_bridge
+from ingetrazo_render import inspector_selection
 
 
 def select(host, group):
@@ -17,10 +17,12 @@ def select(host, group):
 
 
 def snapshot(host, monkeypatch):
+    import json
     data = {}
-    monkeypatch.setattr(inspector_bridge, "_send", lambda _view, key, value: data.update({key: value}))
+    monkeypatch.setattr(host.view, "renderer", SimpleNamespace(
+        ui_panel_set=lambda key, value: data.update({key: json.loads(value)})))
     host.view._panel_selection_sig = None
-    inspector_bridge._selection(host.view, host.window)
+    inspector_selection(host.view, host.window)
     return data
 
 
@@ -32,7 +34,7 @@ def test_the_tray_lists_selects_hides_and_renames_parts(host, monkeypatch):
     seat, a, b = assembly.children
     run(host, "parts.select", [assembly.uid, a.uid])
     assert scene.edit_group is assembly and scene.selection == {a}
-    inspector_bridge._selection(host.view, host.window)
+    inspector_selection(host.view, host.window)
     assert len(data["selection"]["parts"]["children"]) == 3
     run(host, "parts.visible", [assembly.uid, b.uid, False])
     run(host, "parts.rename", [assembly.uid, seat.uid, "Seat board"])
@@ -52,7 +54,7 @@ def test_a_plain_group_offers_to_split(host, monkeypatch):
     parts = data["selection"]["parts"]
     assert parts["children"] == [] and parts["can_split"]
     run(host, "parts.split", group.uid)
-    inspector_bridge._selection(host.view, host.window)
+    inspector_selection(host.view, host.window)
     assert [c["name"] for c in data["selection"]["parts"]["children"]] == ["Piece 1", "Piece 2"]
 
 

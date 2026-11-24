@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from views import context_menu
+from ingetrazo_render import context_menu_build, context_menu_run
 from core.group import Group  # noqa: E402
 from core.history import NativeCommand  # noqa: E402
 from core.layers import Layer  # noqa: E402
@@ -48,9 +48,9 @@ def test_lock_locks_every_selected_group_in_one_step(win):
     scene = win.viewport.scene
     a, b = _group(scene, "muro"), _group(scene, "losa", 4)
     scene.select([a, b])
-    menu = context_menu.build(win)
+    menu = context_menu_build(win)
     assert menu.find("lock").enabled
-    assert context_menu.run(win, None, menu.kind, "lock", menu.sel)
+    assert context_menu_run(win, None, menu.kind, "lock", menu.sel)
     assert a.locked and b.locked
     assert a not in scene.selection and b not in scene.selection
     assert win.viewport.history.undo()           # one step for both
@@ -62,7 +62,7 @@ def test_lock_leaves_the_edit_of_the_group_it_locks(win):
     g = _group(scene, "muro")
     win.viewport.begin_group_edit(g)
     assert scene.edit_group is g
-    context_menu.run(win, None, "group", "lock", [g])
+    context_menu_run(win, None, "group", "lock", [g])
     assert scene.edit_group is None and g.locked
 
 
@@ -70,7 +70,7 @@ def test_no_lock_entry_without_a_group(win):
     scene = win.viewport.scene
     face = scene.mesh.add_face([V(0, 0), V(1, 0), V(1, 1), V(0, 1)])
     scene.select([face])
-    assert context_menu.build(win).find("lock") is None
+    assert context_menu_build(win).find("lock") is None
 
 
 def test_the_locked_group_under_the_cursor_is_found_and_unlocked(win):
@@ -84,9 +84,9 @@ def test_the_locked_group_under_the_cursor_is_found_and_unlocked(win):
     assert vp.pick_locked_group(*px) is g         # but the menu finds it
     empty = vp._world_to_pixel(V(3, 1, 0))
     assert vp.pick_locked_group(*empty) is None   # off the group
-    menu = context_menu.build(win, locked_group=g)
+    menu = context_menu_build(win, locked_group=g)
     assert menu.find("unlockgroup").label == "Unlock “muro”"
-    assert context_menu.run(win, None, menu.kind, "unlockgroup", menu.sel, locked_group=g)
+    assert context_menu_run(win, None, menu.kind, "unlockgroup", menu.sel, locked_group=g)
     assert not g.locked and g in scene.selection
     assert vp.history.undo()                       # undoable
     assert g.locked

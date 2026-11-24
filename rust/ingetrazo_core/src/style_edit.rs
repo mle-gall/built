@@ -123,9 +123,8 @@ pub fn edit_line_type(history: &Bound<'_, PyAny>, verb: &str, draft: &str) -> Py
         serde_json::from_str(draft).map_err(|e| PyValueError::new_err(e.to_string()))?;
     let py = history.py();
     let scene = history.getattr("scene")?;
-    let layers = py.import("core.layers")?;
     if verb == "ink" {
-        if !layers.getattr("LINETYPES")?.contains(&d.name)? {
+        if crate::linetypes::builtin(&d.name).is_none() {
             return Err(PyValueError::new_err("Unknown standard line type"));
         }
         let colors = scene
@@ -176,24 +175,21 @@ pub fn edit_line_type(history: &Bound<'_, PyAny>, verb: &str, draft: &str) -> Py
                     "Invalid line type pattern or text size",
                 ));
             }
-            let pieces = layers.call_method1("clean_pattern", (d.pieces,))?;
-            if pieces.is_none() {
+            let Some(pieces) = crate::linetypes::clean_values(&d.pieces) else {
                 return Err(PyValueError::new_err(
                     "Enter a dash and a negative gap in millimetres",
                 ));
-            }
-            let with_text = layers.call_method1("with_text", (&pieces, d.text, d.text_size))?;
-            let drawn = layers.call_method1("clean_pattern", (with_text.get_item(0)?,))?;
-            if drawn.is_none() {
+            };
+            let (drawn, spec) = crate::linetypes::with_text(py, &pieces, &d.text, d.text_size)?;
+            let Some(drawn) = crate::linetypes::clean_values(&drawn) else {
                 return Err(PyValueError::new_err("The text gap is too large"));
-            }
+            };
             let entry = PyDict::new(py);
             entry.set_item("label", name)?;
             entry.set_item("pieces", pieces)?;
             entry.set_item("pattern", drawn)?;
-            let spec = with_text.get_item(1)?;
-            if !spec.is_none() {
-                entry.call_method1("update", (spec,))?;
+            if let Some(spec) = spec {
+                entry.update(crate::linetypes::spec_dict(py, &spec)?.as_mapping())?;
             }
             if let Some(rgb) = d.color {
                 if !rgb.iter().all(|v| (0.0..=1.0).contains(v)) {
@@ -235,7 +231,7 @@ pub fn import_line_file(
     let py = history.py();
     let text = crate::hatch_file::read_pattern(path)?;
     let layers = py.import("core.layers")?;
-    let parsed = layers.call_method1("parse_lin", (text,))?;
+    let (found, skipped) = crate::linetypes::py_parse_lin(py, &text)?;
     let scene = history.getattr("scene")?;
     let work = py.import("types")?.getattr("SimpleNamespace")?.call0()?;
     work.setattr(
@@ -243,12 +239,12 @@ pub fn import_line_file(
         scene.getattr("line_types")?.cast_into::<PyDict>()?.copy()?,
     )?;
     let count = layers
-        .call_method1("load_line_types", (&work, parsed.get_item(0)?))?
+        .call_method1("load_line_types", (&work, found))?
         .extract()?;
     let mut edit = StyleEdit::new("Import line types");
     edit.stage(&scene, "line_types", &work.getattr("line_types")?)?;
     edit.submit(history)?;
-    Ok((count, parsed.get_item(1)?.extract()?))
+    Ok((count, skipped))
 }
 
 #[derive(Default, Deserialize)]

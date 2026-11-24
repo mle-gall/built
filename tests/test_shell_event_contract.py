@@ -3,7 +3,7 @@ import ast
 from pathlib import Path
 import re
 
-from app_shell import events
+import ingetrazo_render as events
 
 
 def test_shell_event_methods():

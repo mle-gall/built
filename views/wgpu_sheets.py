@@ -1379,7 +1379,8 @@ def frame(view):
     """A frame of the workspace: the chrome's window state, the page's
     snapshot and frame contents, then the page and the chrome."""
     import time
-    from views import chrome_sheet, wgpu_start, wgpu_ui
+    from ingetrazo_render import chrome_sheet
+    from views import wgpu_start, wgpu_ui
     ws = workspace_of(view)
     renderer = view.renderer
     start = time.perf_counter()

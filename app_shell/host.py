@@ -437,7 +437,7 @@ class Host:
         return doc.model_views.route(doc, kind, method, event, held)
 
     def pointer(self, kind, x, y, button=0, held=0, modifiers=0, timestamp=0):
-        from app_shell.events import ContextMenuEvent, MouseEvent
+        from ingetrazo_render import ContextMenuEvent, MouseEvent
         self.input_state.pointer(x, y, held, modifiers)
         if kind in ("press", "double"):
             self.window.scene_player.stop()
@@ -460,7 +460,7 @@ class Host:
 
     def wheel(self, x, y, pixel_dx, pixel_dy, angle_dx, angle_dy, phase="none",
               modifiers=0, held=0, inverted=True, touch_screen=False):
-        from app_shell.events import WheelEvent
+        from ingetrazo_render import WheelEvent
         self.input_state.pointer(x, y, held, modifiers)
         if self._modal():
             return
@@ -472,7 +472,7 @@ class Host:
         self.request_frame()
 
     def gesture(self, kind, value, x, y, modifiers=0):
-        from app_shell.events import NativeGestureEvent
+        from ingetrazo_render import NativeGestureEvent
         self.input_state.pointer(x, y, self.input_state.buttons, modifiers)
         if self._modal():
             return
@@ -489,7 +489,7 @@ class Host:
         (the tools' letters), else the view's key handler. While a sheet
         or an exclusive job holds the window, only they hear keys."""
         from core.input_types import Qt
-        from app_shell.events import KeyEvent, ShortcutOverride
+        from ingetrazo_render import KeyEvent, ShortcutOverride
         from views import chrome_dialogs as cd
         self.input_state.modifiers = modifiers
         view = self.view
@@ -671,7 +671,8 @@ class Host:
 
     def close(self):
         from app_shell import windows
-        from views import chrome_forms, chrome_sheet
+        from ingetrazo_render import chrome_sheet
+        from views import chrome_forms
         if self._device is not None:
             self.focus(False)
         chrome_sheet.close(self.window)

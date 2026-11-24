@@ -3,13 +3,14 @@ import math
 
 from ingetrazo_core import Vec3
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
-from views import chrome_forms, context_menu, view_commands
+from views import chrome_forms, view_commands
+from ingetrazo_render import context_menu_build, context_menu_run
 
 
 def invoke(win, verb):
-    menu = context_menu.build(win, win.view)
+    menu = context_menu_build(win, win.view)
     assert menu.find(verb) is not None, menu.ids()
-    assert context_menu.run(win, win.view, menu.kind, verb, menu.sel, facts=menu.facts)
+    assert context_menu_run(win, win.view, menu.kind, verb, menu.sel, facts=menu.facts)
 
 
 def test_reference_image_forms_keep_aspect_undo_and_reject_stale_answers(native_window, monkeypatch):

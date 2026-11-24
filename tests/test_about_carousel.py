@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from ingetrazo_render import AboutReview
 
 from core.i18n import tr
-from views.report_sheets import About
+from ingetrazo_render import AboutSheet as About
 
 
 def test_everyone_is_in_the_credits(monkeypatch):

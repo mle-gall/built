@@ -142,13 +142,10 @@ pub fn sheet_command_scope<'py>(win: &Bound<'py, PyAny>) -> PyResult<Bound<'py, 
     owner.setattr("_registry_actions", &registry)?;
     let paths = PyDict::new(py);
     owner.setattr("_command_paths", &paths)?;
-    let action_type = py
-        .import("app_shell.command_action")?
-        .getattr("ShellAction")?;
     let tr = py.import("core.i18n")?.getattr("tr")?;
     let bind =
         |id: &str, label: &str, path: &str, tip: &str, keys: &[&str], tool: bool| -> PyResult<()> {
-            let action = action_type.call1((&owner, tr.call1((label,))?))?;
+            let action = crate::shell_commands::make(&owner, &tr.call1((label,))?, None, None, false, true)?;
             let key = format!("sheet:{id}");
             action.call_method1("setObjectName", (&key,))?;
             action.call_method1("setProperty", ("statusTip", tr.call1((tip,))?))?;
