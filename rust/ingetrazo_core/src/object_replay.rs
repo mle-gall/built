@@ -240,5 +240,15 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     sub.add_function(wrap_pyfunction!(undo_edge, &sub)?)?;
     sub.add_function(wrap_pyfunction!(explode_curves, &sub)?)?;
     sub.add_function(wrap_pyfunction!(restore_curves, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_relink::relink_vertices, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_relink::relink_edge, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_relink::relink_face, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_relink::relink_hole, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_vertices::probe_vertex, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_vertices::vertex, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_vertices::weld_candidates, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_vertices::bulk_weld, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_bulk::add_edges_welded, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_bulk::add_faces_welded, &sub)?)?;
     m.add_submodule(&sub)
 }
