@@ -1664,7 +1664,8 @@ class MetalView(ViewNavigation):
             chrome = getattr(self, "_shared", self)
             renderer = raw_renderer(chrome.renderer) if getattr(chrome, "_ui_attached", False) else None
             owner = model_escape(busy, bool(self.scene.selection),
-                                 source is not None and self.scene.edit_group is not None, renderer)
+                                 source is not None and self.scene.edit_group is not None, renderer,
+                                 self.tools._array_pending())
             self._look_drag = None
             from ingetrazo_render import leave_navigation
             win = self.window() if hasattr(self, "window") else None
@@ -1674,6 +1675,8 @@ class MetalView(ViewNavigation):
             self.tools._apply_tool_cursor()
             if owner == "tool":
                 self.tools.cancel()
+            elif owner == "array":
+                self.tools.tool.close_array_window()
             elif owner == "edit":
                 source.end_one_group_edit()
             elif owner == "selection":
