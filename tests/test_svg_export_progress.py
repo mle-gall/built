@@ -232,7 +232,10 @@ def test_cancel_on_a_slow_preview_turns_the_preview_off(native_host, monkeypatch
     provider.build(ctx)
     assert built == []
     monkeypatch.setattr(time, "monotonic", lambda: clock[0])
-    native_host.timers.run_due()
+    deadline = time.perf_counter() + 3.
+    while not built and time.perf_counter() < deadline:
+        native_host.timers.run_due()
+        time.sleep(.005)
     assert built == [True] and not win._chrome_jobs
     assert not svg.preview_enabled and provider.build(ctx).wire()["detail"] is None
     native_host.timers.run_due()

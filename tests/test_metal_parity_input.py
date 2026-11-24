@@ -113,8 +113,10 @@ def fixed_world(view, point):
 
 
 def test_section_place_move_toggle_undo(view):
+    from core.settings import settings
     from tools.section import SectionPlaneTool
     from tools.move import MoveTool
+    settings().setValue("section/ask_name", "0")
     view.source_viewport.active_tool = SectionPlaneTool()
     fixed_world(view, (0, 0, 0))
     click(view, Qt.LeftButton, Qt.NoModifier, QPoint(400, 300))
