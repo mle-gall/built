@@ -144,3 +144,13 @@ def test_paste_matches_the_recorded_python_tool(name):
 @pytest.mark.parametrize("name", sorted(tp.FLIP_SCENARIOS))
 def test_flip_matches_the_recorded_python_tool(name):
     assert tp.run_flip(tp.FLIP_SCENARIOS[name]) == tp.load("flip")[name]
+
+
+@pytest.mark.parametrize("name", sorted(tp.FREEHAND_SCENARIOS))
+def test_freehand_matches_the_recorded_python_tool(name):
+    assert tp.run_freehand(tp.FREEHAND_SCENARIOS[name]) == tp.load("freehand")[name]
+
+
+@pytest.mark.parametrize("name", sorted(tp.CHANGE_AXES_SCENARIOS))
+def test_change_axes_matches_the_recorded_python_tool(name):
+    assert tp.run_change_axes(tp.CHANGE_AXES_SCENARIOS[name]) == tp.load("change_axes")[name]

@@ -1001,6 +1001,77 @@ def run_rotate(steps):
     return out
 
 
+CHANGE_AXES_SCENARIOS = {
+    "tilted_frame": [("click", 1, 2, 3), ("hover", 2, 2, 4), ("click", 2, 2, 4),
+                     ("hover", 1, 3, 4), ("click", 1, 3, 4), ("undo",)],
+    "degenerate_and_cancel": [("click", 1, 0, 0), ("click", 1, 0, 0), ("click", 3, 0, 0),
+                              ("click", 2, 0, 0), ("value", 4), ("cancel",)],
+}
+
+
+def run_change_axes(steps):
+    from core.group import frame_axes, group_frame
+    from core.scene import Scene
+    from tests.test_parity_tools import _Vp, _ctx
+    from tests.test_group_axes import _slab
+    from tools.change_axes import ChangeAxesTool
+    vp, tool = _Vp(Scene()), ChangeAxesTool()
+    group = _slab()
+    vp.scene.groups.append(group)
+    tool.target = group
+    tool.on_activate(vp)
+    out = []
+    for kind, *args in steps:
+        result = None
+        if kind in ("click", "hover"):
+            getattr(tool, "on_" + kind)(_ctx(vp, *args))
+        elif kind == "undo":
+            vp.history.undo()
+        elif kind == "value":
+            result = tool.on_value(vp, args[0])
+        else:
+            tool.on_cancel(vp)
+        frame = group_frame(group)
+        out.append({"start": _pt(tool.start_point), "red": _pt(tool.red_point), "target": tool.target is group,
+                    "band": [[_pt(a), _pt(b)] for a, b in tool.rubber_band_lines()],
+                    "frame": [_pt(p) for p in frame_axes(frame)] if frame is not None else None,
+                    "undo": len(vp.history.undo_stack), "result": result})
+    return out
+
+
+FREEHAND_SCENARIOS = {
+    "simplified": [("click", 0, 0), ("hover", .01, 0), ("hover", .5, .01),
+                   ("hover", 1, 0), ("hover", 1, 1), ("release",), ("undo",)],
+    "closed": [("click", 1, 1), ("hover", 3, 1), ("hover", 3, 2), ("hover", 1.05, 1),
+               ("release",), ("undo",)],
+    "short_cancel": [("click", 0, 0), ("hover", .05, .05), ("release",),
+                     ("click", 1, 1), ("hover", 2, 1), ("value", 3), ("cancel",), ("release",)],
+}
+
+
+def run_freehand(steps):
+    from core.scene import Scene
+    from tests.test_parity_tools import _Vp, _ctx
+    from tools.freehand import FreehandTool
+    vp, tool = _Vp(Scene()), FreehandTool()
+    tool.on_activate(vp)
+    out = []
+    for kind, *args in steps:
+        result = None
+        if kind in ("click", "hover"):
+            getattr(tool, "on_" + kind)(_ctx(vp, *args))
+        elif kind == "value":
+            result = tool.on_value(vp, args[0])
+        elif kind == "undo":
+            vp.history.undo()
+        else:
+            getattr(tool, "on_" + kind)(vp)
+        snap = _line_snapshot_base(vp, tool)
+        snap.update(curves=len({e.curve for e in vp.scene.mesh.edges}), result=result)
+        out.append(snap)
+    return out
+
+
 FLIP_SCENARIOS = {
     "lock_and_mirror": ["x", "click", "undo", "y", "cancel"],
     "copy": ["control", "x", "click", "undo"],
@@ -1443,6 +1514,12 @@ def record(which=("line", "select", "rectangle", "move", "circle", "rotated_rect
     if "rotated_rectangle" in which:
         rot = {name: run_rot(steps) for name, steps in ROT_SCENARIOS.items()}
         (FIXTURES / "rotated_rectangle.json").write_text(_compact(rot))
+    if "change_axes" in which:
+        cases = {name: run_change_axes(steps) for name, steps in CHANGE_AXES_SCENARIOS.items()}
+        (FIXTURES / "change_axes.json").write_text(_compact(cases))
+    if "freehand" in which:
+        cases = {name: run_freehand(steps) for name, steps in FREEHAND_SCENARIOS.items()}
+        (FIXTURES / "freehand.json").write_text(_compact(cases))
     if "flip" in which:
         cases = {name: run_flip(steps) for name, steps in FLIP_SCENARIOS.items()}
         (FIXTURES / "flip.json").write_text(_compact(cases))
