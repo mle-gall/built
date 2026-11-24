@@ -163,7 +163,15 @@ fn sample_sizes(e: &Obj<'_>, sizes: &mut Vec<f64>) -> PyResult<()> {
     Ok(())
 }
 #[pyfunction]
-fn dxf_suggest_unit_scale(doc: &Obj<'_>) -> PyResult<(Option<f64>, i64)> {
+fn dxf_suggest_unit_scale(py: Python<'_>, doc: Py<PyAny>) -> PyResult<Py<PyAny>> {
+    DocumentOpen::stage(py, None, move |py, _| {
+        Ok(suggest_unit(doc.bind(py))?
+            .into_pyobject(py)?
+            .into_any()
+            .unbind())
+    })
+}
+fn suggest_unit(doc: &Obj<'_>) -> PyResult<(Option<f64>, i64)> {
     let (declared, code) = dxf_read_unit_scale(doc)?;
     let Ok(space) = doc.call_method0("modelspace") else {
         return Ok((declared, code));

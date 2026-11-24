@@ -55,6 +55,7 @@ mod file_precision;
 mod file_textures;
 mod file_save;
 mod file_read;
+mod file_bounds;
 mod file_sheet;
 mod file_groups;
 mod group_geometry;
@@ -153,6 +154,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(file_model::dae_add_fused, m)?)?;
     file_save::register(m)?;
     file_read::register(m)?;
+    file_bounds::register(m)?;
     fuse::register(m)?;
     obj_read::register(m)?;
     obj_write::register(m)?;

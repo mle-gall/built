@@ -95,8 +95,11 @@ fn unit(path: &Path) -> Option<&'static str> {
     })
 }
 #[pyfunction]
-fn obj_suggest_unit(py: Python<'_>, path: PathBuf) -> &'static str {
-    py.detach(|| unit(&path)).unwrap_or("m")
+fn obj_suggest_unit(py: Python<'_>, path: PathBuf) -> PyResult<Py<PyAny>> {
+    DocumentOpen::stage(py, None, move |py, _| {
+        let unit = py.detach(|| unit(&path)).unwrap_or("m");
+        Ok(unit.into_pyobject(py)?.into_any().unbind())
+    })
 }
 fn map_path(
     path: &Path,
