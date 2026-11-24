@@ -495,6 +495,148 @@ fn section_sheet_basis<'py>(py: Python<'py>, normal: &Bound<'py, PyAny>) -> PyRe
     PyTuple::new(py, [vec_arr(py, &u)?, vec_arr(py, &v)?])
 }
 
+// ---- The plane: its letter, its fill, its archive ------------------------------
+
+const FILL_PATTERNS: [&str; 5] = ["solid", "hatch", "cross", "none", "layers"];
+const DEFAULT_HATCH_SPACING: f64 = 0.05;
+
+/// `next_symbol(planes)`: A, B, C… then AA, AB — the first letter no plane
+/// takes (sections are named by letter, «A … A» across the plan).
+#[pyfunction]
+fn section_next_symbol(planes: &Bound<'_, PyAny>) -> PyResult<String> {
+    let mut taken = std::collections::HashSet::new();
+    if planes.is_truthy()? {
+        for p in planes.try_iter()? {
+            let sym = p?.getattr_opt("symbol")?.filter(|s| s.is_truthy().unwrap_or(false));
+            let text = match sym {
+                Some(s) => s.str()?.call_method0("strip")?.call_method0("upper")?.extract::<String>()?,
+                None => String::new(),
+            };
+            taken.insert(text);
+        }
+    }
+    for i in 0.. {
+        let (mut n, mut label) = (i as i64, String::new());
+        loop {
+            label.insert(0, (b'A' + (n % 26) as u8) as char);
+            n = n / 26 - 1;
+            if n < 0 {
+                break;
+            }
+        }
+        if !taken.contains(&label) {
+            return Ok(label);
+        }
+    }
+    unreachable!()
+}
+
+/// `effective_fill(plane, style)`: `(pattern, (r, g, b), spacing)`, the
+/// plane's own settings over the style's; Section Fill off fills nothing.
+#[pyfunction]
+fn section_effective_fill<'py>(py: Python<'py>, plane: &Bound<'py, PyAny>, style: &Bound<'py, PyAny>)
+    -> PyResult<Bound<'py, PyTuple>> {
+    let own = plane.getattr_opt("fill")?.filter(|f| f.is_truthy().unwrap_or(false))
+        .unwrap_or_else(|| pyo3::types::PyDict::new(py).into_any());
+    let on = style.getattr_opt("section_fill")?.map_or(Ok(true), |v| v.is_truthy())?;
+    let pattern = if on { own.call_method1("get", ("pattern", "solid"))? } else { "none".into_pyobject(py)?.into_any() };
+    let color = own.call_method1("get", ("color",))?;
+    let color = if color.is_truthy()? {
+        color
+    } else {
+        match style.getattr_opt("section_fill_color")? {
+            Some(c) => c,
+            None => (0.35, 0.37, 0.41).into_pyobject(py)?.into_any(),
+        }
+    };
+    let color = py.get_type::<PyTuple>().call1((color,))?;
+    let spacing = own.call_method1("get", ("spacing",))?;
+    let spacing = if spacing.is_truthy()? { spacing } else { DEFAULT_HATCH_SPACING.into_pyobject(py)?.into_any() };
+    let spacing = py.get_type::<pyo3::types::PyFloat>().call1((spacing,))?;
+    PyTuple::new(py, [pattern, color.into_any(), spacing.into_any()])
+}
+
+fn xyz_list<'py>(py: Python<'py>, v: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyList>> {
+    PyList::new(py, [v.call_method0("x")?, v.call_method0("y")?, v.call_method0("z")?])
+}
+
+/// `SectionPlane.to_dict`: the .igz entry, defaults left out.
+#[pyfunction]
+fn section_plane_archive<'py>(py: Python<'py>, plane: &Bound<'py, PyAny>) -> PyResult<Bound<'py, pyo3::types::PyDict>> {
+    let out = pyo3::types::PyDict::new(py);
+    out.set_item("point", xyz_list(py, &plane.getattr("point")?)?)?;
+    out.set_item("normal", xyz_list(py, &plane.getattr("normal")?)?)?;
+    out.set_item("uid", plane.getattr("uid")?)?;
+    for key in ["name", "symbol"] {
+        let v = plane.getattr(key)?;
+        if v.is_truthy()? {
+            out.set_item(key, v)?;
+        }
+    }
+    for key in ["active", "hidden"] {
+        if plane.getattr(key)?.is_truthy()? {
+            out.set_item(key, true)?;
+        }
+    }
+    let layer = plane.getattr("layer")?;
+    if layer.is_truthy()? {
+        out.set_item("layer", layer)?;
+    }
+    let fill = plane.getattr("fill")?;
+    if fill.is_truthy()? {
+        let d = pyo3::types::PyDict::new(py);
+        for item in fill.call_method0("items")?.try_iter()? {
+            let (k, v): (Bound<PyAny>, Bound<PyAny>) = item?.extract()?;
+            let v = if k.eq("color")? { py.get_type::<PyList>().call1((v,))? } else { v };
+            d.set_item(k, v)?;
+        }
+        out.set_item("fill", d)?;
+    }
+    Ok(out)
+}
+
+/// `SectionPlane.from_dict(raw)`: a plane from its entry, its fill read
+/// defensively.
+#[pyfunction]
+fn section_plane_load<'py>(py: Python<'py>, cls: &Bound<'py, PyAny>, raw: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    let vec = py.get_type::<crate::math::Vec3>();
+    let get = |k: &str, d: Bound<'py, PyAny>| raw.call_method1("get", (k, d));
+    let kw = pyo3::types::PyDict::new(py);
+    kw.set_item("name", get("name", "".into_pyobject(py)?.into_any())?)?;
+    kw.set_item("symbol", get("symbol", "".into_pyobject(py)?.into_any())?)?;
+    kw.set_item("active", get("active", false.into_pyobject(py)?.to_owned().into_any())?.is_truthy()?)?;
+    kw.set_item("uid", raw.call_method1("get", ("uid",))?)?;
+    kw.set_item("hidden", get("hidden", false.into_pyobject(py)?.to_owned().into_any())?.is_truthy()?)?;
+    let point = vec.call1(PyTuple::new(py, raw.get_item("point")?.try_iter()?.collect::<PyResult<Vec<_>>>()?)?)?;
+    let normal = vec.call1(PyTuple::new(py, raw.get_item("normal")?.try_iter()?.collect::<PyResult<Vec<_>>>()?)?)?;
+    let sp = cls.call((point, normal), Some(&kw))?;
+    let layer = raw.call_method1("get", ("layer",))?;
+    if layer.is_instance_of::<pyo3::types::PyString>() && layer.is_truthy()? {
+        sp.setattr("layer", layer)?;
+    }
+    let fill = raw.call_method1("get", ("fill",))?;
+    if fill.is_instance_of::<pyo3::types::PyDict>() {
+        let clean = pyo3::types::PyDict::new(py);
+        let pattern = fill.call_method1("get", ("pattern",))?;
+        if FILL_PATTERNS.iter().any(|p| pattern.eq(*p).unwrap_or(false)) {
+            clean.set_item("pattern", pattern)?;
+        }
+        let color = fill.call_method1("get", ("color",))?;
+        if (color.is_instance_of::<PyList>() || color.is_instance_of::<PyTuple>()) && color.len()? >= 3 {
+            let float = py.get_type::<pyo3::types::PyFloat>();
+            let rgb = (0..3).map(|i| float.call1((color.get_item(i)?,))).collect::<PyResult<Vec<_>>>()?;
+            clean.set_item("color", PyTuple::new(py, rgb)?)?;
+        }
+        let spacing = fill.call_method1("get", ("spacing",))?;
+        let number = spacing.is_instance_of::<pyo3::types::PyInt>() || spacing.is_instance_of::<pyo3::types::PyFloat>();
+        if number && spacing.gt(0)? {
+            clean.set_item("spacing", py.get_type::<pyo3::types::PyFloat>().call1((spacing,))?)?;
+        }
+        sp.setattr("fill", if clean.len() > 0 { clean.into_any() } else { py.None().into_bound(py) })?;
+    }
+    Ok(sp)
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PlaneReach>()?;
     m.add_function(wrap_pyfunction!(section_cut_chords, m)?)?;
@@ -503,5 +645,9 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(section_fill_triangles, m)?)?;
     m.add_function(wrap_pyfunction!(section_hatch_segments, m)?)?;
     m.add_function(wrap_pyfunction!(section_sheet_basis, m)?)?;
+    m.add_function(wrap_pyfunction!(section_next_symbol, m)?)?;
+    m.add_function(wrap_pyfunction!(section_effective_fill, m)?)?;
+    m.add_function(wrap_pyfunction!(section_plane_archive, m)?)?;
+    m.add_function(wrap_pyfunction!(section_plane_load, m)?)?;
     Ok(())
 }

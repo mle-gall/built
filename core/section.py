@@ -38,19 +38,10 @@ LAYER_HATCH_SCALE = 50.0
 LAYER_HATCH_MOST = 250000
 
 
-def effective_fill(plane, style) -> tuple:
-    """``(pattern, (r, g, b), spacing)`` the cut of ``plane`` is filled
-    with: the plane's own settings over the style's. The style's Section
-    Fill switch is the master — off, nothing is filled."""
-    own = getattr(plane, "fill", None) or {}
-    if not getattr(style, "section_fill", True):
-        pattern = "none"
-    else:
-        pattern = own.get("pattern", "solid")
-    color = tuple(own.get("color") or getattr(
-        style, "section_fill_color", (0.35, 0.37, 0.41)))
-    spacing = float(own.get("spacing") or DEFAULT_HATCH_SPACING)
-    return pattern, color, spacing
+#: ``effective_fill(plane, style)``: ``(pattern, (r, g, b), spacing)`` the cut
+#: of ``plane`` is filled with, the plane's own settings over the style's; the
+#: style's Section Fill switch is the master (off, nothing is filled).
+effective_fill = _NATIVE.section_effective_fill
 
 
 def _take_uid(wanted: int | None) -> int:
@@ -66,27 +57,10 @@ def _take_uid(wanted: int | None) -> int:
     return wanted
 
 
-def next_symbol(planes) -> str:
-    """The letter the next section plane takes: A, B, C… then AA, AB.
-
-    Sections are named by letter and the mark reads «A … A» across the
-    plan — «las secciones se nombran así, no suele ser un 1, sino A-A,
-    B-B» (Rafael, 2026-09-16, 50:45). They used to be numbered, so his
-    sheets said «1 … 1» and he could not find where to change it.
-    """
-    taken = {str(getattr(p, "symbol", "") or "").strip().upper()
-             for p in (planes or [])}
-    i = 0
-    while True:
-        n, label = i, ""
-        while True:
-            label = chr(ord("A") + n % 26) + label
-            n = n // 26 - 1
-            if n < 0:
-                break
-        if label not in taken:
-            return label
-        i += 1
+#: ``next_symbol(planes)``: the letter the next section plane takes, A, B, C…
+#: then AA, AB. Sections are named by letter and the mark reads «A … A» across
+#: the plan (Rafael, 2026-09-16: «no suele ser un 1, sino A-A, B-B»).
+next_symbol = _NATIVE.section_next_symbol
 
 
 @record_fields('point', 'normal', 'name', 'symbol', 'active', 'uid', 'hidden', 'fill', 'layer')
@@ -134,47 +108,14 @@ class SectionPlane(Record):
 
     # ---- Serialisation (.igz) ------------------------------------------------
     def to_dict(self) -> dict:
-        entry = {
-            "point": [self.point.x(), self.point.y(), self.point.z()],
-            "normal": [self.normal.x(), self.normal.y(), self.normal.z()],
-            "uid": self.uid,
-        }
-        if self.name:
-            entry["name"] = self.name
-        if self.symbol:
-            entry["symbol"] = self.symbol
-        if self.active:
-            entry["active"] = True
-        if self.hidden:
-            entry["hidden"] = True          # older readers ignore it
-        if self.layer:
-            entry["layer"] = self.layer   # older readers ignore it
-        if self.fill:
-            entry["fill"] = {k: (list(v) if k == "color" else v)
-                             for k, v in self.fill.items()}
-        return entry
+        """The .igz entry, defaults left out (older readers ignore what they
+        do not know: hidden, layer, fill)."""
+        return _NATIVE.section_plane_archive(self)
 
     @classmethod
     def from_dict(cls, raw: dict) -> "SectionPlane":
-        sp = cls(QVector3D(*raw["point"]), QVector3D(*raw["normal"]),
-                 name=raw.get("name", ""), symbol=raw.get("symbol", ""),
-                 active=bool(raw.get("active", False)),
-                 uid=raw.get("uid"), hidden=bool(raw.get("hidden", False)))
-        if isinstance(raw.get("layer"), str) and raw["layer"]:
-            sp.layer = raw["layer"]
-        fill = raw.get("fill")
-        if isinstance(fill, dict):
-            clean = {}
-            if fill.get("pattern") in FILL_PATTERNS:
-                clean["pattern"] = fill["pattern"]
-            if isinstance(fill.get("color"), (list, tuple)) \
-                    and len(fill["color"]) >= 3:
-                clean["color"] = tuple(float(c) for c in fill["color"][:3])
-            if isinstance(fill.get("spacing"), (int, float)) \
-                    and fill["spacing"] > 0:
-                clean["spacing"] = float(fill["spacing"])
-            sp.fill = clean or None
-        return sp
+        """A plane from its entry, its fill read defensively."""
+        return _NATIVE.section_plane_load(cls, raw)
 
     def __repr__(self) -> str:  # pragma: no cover — debug aid
         state = " ACTIVE" if self.active else ""

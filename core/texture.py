@@ -31,12 +31,29 @@ from ingetrazo_core import Vec3 as QVector3D
 
 
 
+def _data_root() -> Path:
+    """The platform's per-user data folder, as the native shell names it
+    (``platform_paths.rs: local_data_directory``) when it is not loaded
+    (scripts, tests): ``$BUILT_SETTINGS_DIR/data`` for a profile of its own,
+    else ``~/Library/Application Support`` on macOS, ``%LOCALAPPDATA%`` on
+    Windows and ``$XDG_DATA_HOME`` or ``~/.local/share`` elsewhere."""
+    import os
+    import sys
+    profile = os.environ.get("BUILT_SETTINGS_DIR")
+    if profile:
+        return Path(profile) / "data"
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support"
+    if os.name == "nt":
+        return Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
+    xdg = os.environ.get("XDG_DATA_HOME")
+    return Path(xdg) if xdg and os.path.isabs(xdg) else Path.home() / ".local" / "share"
+
+
 def texture_cache_root() -> Path:
     """Root of the app's texture cache: ``<user data>/IngeTrazo/textures``
-    (``~/.local/share/…`` on Linux, ``%LOCALAPPDATA%\\…`` on Windows). Built
-    from ``GenericDataLocation`` rather than ``AppDataLocation`` so the path
-    does not depend on ``QCoreApplication``'s org/app names being set (scripts
-    and tests would otherwise land in a different folder).
+    (``~/Library/Application Support/…`` on macOS, ``~/.local/share/…`` on
+    Linux, ``%LOCALAPPDATA%\\…`` on Windows), the native shell's data folder.
     ``$INGETRAZO_TEXTURE_CACHE`` overrides it (tests, and users who want the
     images somewhere else).
 
@@ -49,15 +66,7 @@ def texture_cache_root() -> Path:
     from app_shell.native import _shell
     if _shell is not None:
         return Path(_shell.local_data_directory(os.environ.get("BUILT_SETTINGS_DIR"))) / "IngeTrazo" / "textures"
-    base = ""
-    try:
-        from PySide6.QtCore import QStandardPaths
-        base = QStandardPaths.writableLocation(
-            QStandardPaths.StandardLocation.GenericDataLocation)
-    except Exception:  # noqa: BLE001 — no Qt paths (headless odd env): use $HOME
-        base = ""
-    root = Path(base) if base else Path.home() / ".local" / "share"
-    return root / "IngeTrazo" / "textures"
+    return _data_root() / "IngeTrazo" / "textures"
 
 
 def texture_cache_stats() -> tuple[int, int]:
@@ -258,24 +267,10 @@ face_uv_axes = _NATIVE.texture_face_uv_axes
 placement_of = _NATIVE.texture_placement_of
 
 
-def flattened_texture(tex: dict, normal=None) -> dict:
-    """``tex`` without its per-face map, keeping the look it had on the
-    plane of ``normal`` as a planar projection: ``sw``/``sh``/``rot`` from
-    :func:`placement_of` when a map was fitted there, else the dict as it
-    is minus ``uvw``."""
-    flat = {k: v for k, v in tex.items() if k != "uvw"}
-    if normal is None or not tex.get("uvw"):
-        return flat
-    placed = placement_of(tex, normal)
-    if placed is None:
-        return flat
-    sw, sh, rot = placed
-    flat["sw"], flat["sh"] = float(sw), float(sh)
-    if abs(rot) > 1e-6:
-        flat["rot"] = float(round(rot, 6))
-    else:
-        flat.pop("rot", None)
-    return flat
+#: ``flattened_texture(tex, normal=None)``: ``tex`` without its per-face map,
+#: keeping the look it had on the plane of ``normal`` as a planar projection
+#: (``sw``/``sh``/``rot`` from :func:`placement_of`).
+flattened_texture = _NATIVE.texture_flattened
 
 
 #: The map ``uv(p) = g·p + c`` carried across a hinge: ``uv(R⁻¹ p)`` for the

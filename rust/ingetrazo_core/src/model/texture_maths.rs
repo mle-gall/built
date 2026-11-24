@@ -450,6 +450,34 @@ fn texture_mean_visible(rgba: &[u8]) -> (f64, f64, f64) {
     (sum[0] / n, sum[1] / n, sum[2] / n)
 }
 
+/// `flattened_texture(tex, normal=None)`: `tex` without its per-face map,
+/// keeping the look it had on the plane of `normal` as a planar projection.
+#[pyfunction]
+#[pyo3(signature = (tex, normal=None))]
+fn texture_flattened<'py>(py: Python<'py>, tex: &Bound<'py, PyAny>, normal: Option<&Bound<'py, PyAny>>)
+    -> PyResult<Bound<'py, pyo3::types::PyDict>> {
+    let flat = pyo3::types::PyDict::new(py);
+    for item in tex.call_method0("items")?.try_iter()? {
+        let (k, v): (Bound<PyAny>, Bound<PyAny>) = item?.extract()?;
+        if !k.eq("uvw")? {
+            flat.set_item(k, v)?;
+        }
+    }
+    let Some(normal) = normal.filter(|n| !n.is_none()) else { return Ok(flat) };
+    if !tex.call_method1("get", ("uvw",))?.is_truthy()? {
+        return Ok(flat);
+    }
+    let Some((sw, sh, rot)) = texture_placement_of(tex, normal)? else { return Ok(flat) };
+    flat.set_item("sw", sw)?;
+    flat.set_item("sh", sh)?;
+    if rot.abs() > 1e-6 {
+        flat.set_item("rot", pyfloat::round(rot, 6))?;
+    } else if flat.contains("rot")? {
+        flat.del_item("rot")?;
+    }
+    Ok(flat)
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(texture_projection_basis, m)?)?;
     m.add_function(wrap_pyfunction!(texture_projection_axes, m)?)?;
@@ -464,5 +492,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(texture_hls_to_rgb, m)?)?;
     m.add_function(wrap_pyfunction!(texture_colorize_pixels, m)?)?;
     m.add_function(wrap_pyfunction!(texture_mean_visible, m)?)?;
+    m.add_function(wrap_pyfunction!(texture_flattened, m)?)?;
     Ok(())
 }
