@@ -18,7 +18,7 @@ type Owned = Py<PyAny>;
 type Obj<'p> = Bound<'p, PyAny>;
 type Job = Pin<Box<dyn Future<Output = PyResult<Owned>> + Send>>;
 #[pyclass]
-struct Steps {
+pub(crate) struct Steps {
     work: std::sync::Mutex<Option<Job>>,
 }
 #[pymethods]
@@ -42,12 +42,12 @@ impl Steps {
         }
     }
 }
-fn steps(job: impl Future<Output = PyResult<Owned>> + Send + 'static) -> Steps {
+pub(crate) fn steps(job: impl Future<Output = PyResult<Owned>> + Send + 'static) -> Steps {
     Steps {
         work: std::sync::Mutex::new(Some(Box::pin(job))),
     }
 }
-async fn pause() {
+pub(crate) async fn pause() {
     let mut first = true;
     poll_fn(|_| {
         if std::mem::take(&mut first) {
@@ -58,10 +58,10 @@ async fn pause() {
     })
     .await
 }
-fn iterator(o: &Obj<'_>) -> PyResult<Py<PyIterator>> {
+pub(crate) fn iterator(o: &Obj<'_>) -> PyResult<Py<PyIterator>> {
     Ok(o.try_iter()?.unbind())
 }
-fn next(it: &Py<PyIterator>) -> PyResult<Option<Owned>> {
+pub(crate) fn next(it: &Py<PyIterator>) -> PyResult<Option<Owned>> {
     Python::attach(|py| {
         it.bind(py)
             .clone()
@@ -99,14 +99,18 @@ impl Geometry {
     }
 }
 #[pyclass(get_all, set_all, module = "ingetrazo_core")]
-struct Survey {
+pub(crate) struct Survey {
     mesh: Owned,
+    thumbnail: Option<Owned>,
 }
 #[pymethods]
 impl Survey {
     #[new]
     fn new(mesh: Owned) -> Self {
-        Self { mesh }
+        Self {
+            mesh,
+            thumbnail: None,
+        }
     }
 }
 
@@ -440,6 +444,23 @@ impl Capture {
         })
     }
 }
+pub(crate) async fn drive(generator: Owned) -> PyResult<Owned> {
+    loop {
+        let result = Python::attach(|py| -> PyResult<_> {
+            match generator.bind(py).call_method0("__next__") {
+                Ok(_) => Ok(None),
+                Err(e) if e.is_instance_of::<PyStopIteration>(py) => {
+                    Ok(Some(e.value(py).getattr("value")?.unbind()))
+                }
+                Err(e) => Err(e),
+            }
+        })?;
+        if let Some(value) = result {
+            return Ok(value);
+        }
+        pause().await
+    }
+}
 #[pyfunction]
 fn snapshot_steps(scene: Owned) -> Steps {
     steps(async move {
@@ -459,21 +480,7 @@ fn snapshot_steps(scene: Owned) -> Steps {
                 .call_method1("prepare_scene_steps", (document, cb))?
                 .unbind())
         })?;
-        loop {
-            let result = Python::attach(|py| -> PyResult<_> {
-                match generator.bind(py).call_method0("__next__") {
-                    Ok(_) => Ok(None),
-                    Err(e) if e.is_instance_of::<PyStopIteration>(py) => {
-                        Ok(Some(e.value(py).getattr("value")?.unbind()))
-                    }
-                    Err(e) => Err(e),
-                }
-            })?;
-            if let Some(value) = result {
-                return copy(value, 0).await;
-            }
-            pause().await
-        }
+        copy(drive(generator).await?, 0).await
     })
 }
 #[pyfunction]
@@ -514,7 +521,7 @@ fn survey_steps(source: Owned) -> Steps {
                 images.set_item(k, raster.call1((v,))?)?
             }
             mesh.bind(py).setattr("images", images)?;
-            Ok(Py::new(py, Survey { mesh })?.into_any())
+            Ok(Py::new(py, Survey::new(mesh))?.into_any())
         })
     })
 }
