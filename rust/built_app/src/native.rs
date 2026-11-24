@@ -153,7 +153,7 @@ fn pump(py: Python<'_>, view: usize, timeout_ms: f64) -> PyResult<Vec<Input>> {
     #[cfg(windows)]
     { let _ = py; Ok(modal_windows::pump(view, timeout_ms)) }
     #[cfg(all(unix, not(target_os = "macos")))]
-    { let _ = view; modal_linux::pump(py, timeout_ms) }
+    { modal_linux::pump(py, view, timeout_ms) }
 }
 
 #[cfg(target_os = "macos")]
@@ -445,6 +445,8 @@ pub fn raw_input_message(msg: *const std::ffi::c_void) -> bool {
 pub fn built_shell(m: &Bound<'_, PyModule>) -> PyResult<()> {
     #[cfg(target_os = "macos")]
     m.add_function(wrap_pyfunction!(crate::menu_commands::menu_commands, m)?)?;
+    #[cfg(any(windows,target_os="linux"))]
+    m.add_function(wrap_pyfunction!(ingetrazo_render::desktop_menu::menu_commands, m)?)?;
     #[cfg(windows)]
     m.add_function(wrap_pyfunction!(set_raw_input_handler,m)?)?;
     m.add_function(wrap_pyfunction!(crate::platform_paths::cache_directory, m)?)?;

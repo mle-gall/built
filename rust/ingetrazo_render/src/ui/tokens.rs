@@ -115,7 +115,8 @@ pub const MARKER_W: f32 = 2.0;
 pub const BAR_H: f32 = 36.0;
 pub const EDGE_GAP: f32 = 12.0;
 // The frame: bars docked to the window's edges, side panes floating 8 in.
-pub const TOP_H: f32 = 40.0;
+pub const MENU_H: f32 = if cfg!(any(target_os = "linux", windows)) { 26.0 } else { 0.0 };
+pub const TOP_H: f32 = 40.0 + MENU_H;
 pub const BOT_H: f32 = 36.0;
 pub const GUT: f32 = 8.0;
 pub const DOCK_W: f32 = 300.0;

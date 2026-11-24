@@ -18,6 +18,8 @@ mod clipboard;
 mod keys;
 mod launcher;
 mod gestures;
+#[cfg(target_os = "linux")]
+mod linux_pointer;
 #[cfg(target_os = "macos")]
 mod menu;
 #[cfg(target_os = "macos")]
@@ -197,6 +199,8 @@ enum AfterOpen {
 /// lives in this one process (app_shell/windows.py): ⇧⌘N and the tab
 /// menu's "Move to new window" make another one here.
 struct Win {
+    #[cfg(target_os = "linux")]
+    pointer_input: Option<linux_pointer::Pointer>,
     window: Window,
     host: python::Host,
     ns_view: usize,
@@ -401,6 +405,16 @@ impl App {
     fn command(&mut self, event_loop: &ActiveEventLoop, cmd: &str) {
         let front = self.front();
         match cmd {
+            #[cfg(any(target_os="linux", windows))]
+            "window:minimize" | "window:maximize" | "window:fullscreen" => {
+                if let Some(w) = front.and_then(|id| self.win(id)) {
+                    match cmd {
+                        "window:minimize" => w.window.set_minimized(true),
+                        "window:maximize" => w.window.set_maximized(!w.window.is_maximized()),
+                        _ => w.window.set_fullscreen(w.window.fullscreen().is_none().then(|| winit::window::Fullscreen::Borderless(None))),
+                    }
+                }
+            }
             // Close Window (⇧⌘W): the window in front, after asking about
             // its unsaved work (app_shell.files: the sheet, answered
             // through the modal pump). The last window closed ends the app.
@@ -775,6 +789,8 @@ impl App {
         }
         let id = window.id();
         self.wins.push((id, Win {
+            #[cfg(target_os = "linux")]
+            pointer_input: linux_pointer::Pointer::attach(window_id, display, platform),
             window, host, ns_view, cursor: (0.0, 0.0), held: 0, last_press: None, last_key_text: None,
             contact: None, second_contact: None, slide_carry: (0., 0.), open_frame: None, after_open: None,
         }));
@@ -956,6 +972,10 @@ impl App {
                 self.recent_sig = Some(recent);
             }
         }
+        #[cfg(any(target_os="linux", windows))]
+        if self.front() == Some(id) {
+            ingetrazo_render::desktop_menu::update(extra.recent, self.win(id)?.host.model_menu_state());
+        }
         if extra.focus {
             self.focus(id);
         }
@@ -1073,6 +1093,24 @@ impl ApplicationHandler<UserEvent> for App {
         // Keep one interpreter turn together. Releasing/reacquiring the
         // GIL for each idle, title, cursor and script query can cost a full
         // worker timeslice at every boundary while packing a large model.
+        #[allow(unused_mut)]
+        let mut kinetic_wake: Option<Instant> = None;
+        #[cfg(target_os = "linux")]
+        for id in self.wins.iter().map(|(id,_)| *id).collect::<Vec<_>>() {
+            let w = self.win(id).unwrap();
+            if let Some(pointer) = &w.pointer_input {
+                for (kind, delta) in pointer.normal() {
+                    w.host.call("gesture", (kind, delta, w.cursor.0, w.cursor.1));
+                    w.window.request_redraw();
+                }
+                let (delta, next) = pointer.momentum(Instant::now());
+                kinetic_wake = kinetic_wake.into_iter().chain(next).min();
+                if let Some(delta) = delta {
+                    self.slide(id, w.cursor, delta, "momentum", false, true);
+                    self.redraw(id);
+                }
+            }
+        }
         let wake = pyo3::Python::attach(|_| {
             if !self.steps.is_empty() || self.resume_at.is_some() {
                 self.run_script(event_loop);
@@ -1083,7 +1121,7 @@ impl ApplicationHandler<UserEvent> for App {
         let scripted = !self.steps.is_empty() && self.resume_at.is_none();
         let flow = if scripted {
             ControlFlow::Poll
-        } else if let Some(at) = wake.into_iter().chain(self.resume_at).min() {
+        } else if let Some(at) = wake.into_iter().chain(self.resume_at).chain(kinetic_wake).min() {
             ControlFlow::WaitUntil(at)
         } else {
             ControlFlow::Wait
@@ -1188,6 +1226,11 @@ fn main() {
         }
     };
     let proxy = event_loop.create_proxy();
+    #[cfg(any(target_os="linux", windows))]
+    {
+        let send = proxy.clone();
+        ingetrazo_render::desktop_menu::install(move |id| { let _ = send.send_event(UserEvent::Menu(id)); });
+    }
     #[cfg(target_os = "macos")]
     {
         let proxy = proxy.clone();
@@ -1406,6 +1449,10 @@ impl App {
                 let (x, y) = self.win(id).map_or((0.0, 0.0), |w| w.cursor);
                 let m = self.mods();
                 let kind = if state == ElementState::Pressed { "press" } else { "release" };
+                #[cfg(target_os = "linux")]
+                if self.win(id).and_then(|w| w.pointer_input.as_ref()).is_some_and(|p| p.consumed(kind,(x,y),bit)) {
+                    return;
+                }
                 self.pointer(id, kind, x, y, bit, m);
             }
             WindowEvent::MouseWheel { delta, phase, .. } => {
@@ -1431,6 +1478,12 @@ impl App {
                                 self.touch(id, u64::MAX, phase, (anchor.0 + dx, anchor.1 + dy));
                             } else if !touch {
                                 let phase = if momentum { "momentum" } else { phase_name(phase) };
+                                #[cfg(target_os = "linux")]
+                                if phase == "start" && (dx != 0. || dy != 0.) {
+                                    self.slide(id, (x,y), (0.,0.), "start", false, natural);
+                                    self.slide(id, (x,y), (dx,dy), "move", false, natural);
+                                } else { self.slide(id, (x,y), (dx,dy), phase, false, natural); }
+                                #[cfg(not(target_os = "linux"))]
                                 self.slide(id, (x, y), (dx, dy), phase, false, natural);
                             }
                         }

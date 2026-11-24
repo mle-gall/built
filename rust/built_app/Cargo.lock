@@ -209,8 +209,11 @@ dependencies = [
  "raw-window-handle",
  "rfd",
  "serde_json",
+ "wayland-client",
+ "wayland-protocols",
  "windows",
  "winit",
+ "x11rb",
 ]
 
 [[package]]

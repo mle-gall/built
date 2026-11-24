@@ -60,6 +60,9 @@ mod panic_log;
 mod overlay;
 mod commands;
 pub mod model_menu;
+pub mod desktop_menu_model;
+#[cfg(any(target_os="linux", windows))]
+pub mod desktop_menu;
 pub mod extension_menu;
 mod extension_setup;
 mod model_views;
