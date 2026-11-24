@@ -21,6 +21,9 @@ from ingetrazo_core import NativeCommand
 # Drawing steps (rust/ingetrazo_core/src/doc/draw_steps.rs).
 from ingetrazo_core import (AddEdgeCommand, AddFaceCommand, DeleteEdgesCommand, DeleteFaceCommand,
                             EraseSelectionCommand)
+# Vertex edits (rust/ingetrazo_core/src/doc/vertex_steps.rs).
+from ingetrazo_core import (FlipVerticesCommand, MoveVerticesCommand, RotateVerticesCommand,
+                            ScaleVerticesCommand)
 # Steps with host state (rust/ingetrazo_core/src/doc/host_steps.rs).
 from ingetrazo_core import AddGeoPointsCommand, SetNorthCommand, StraightenModelCommand
 # Group transform steps (rust/ingetrazo_core/src/doc/transform_steps.rs).
@@ -164,7 +167,8 @@ class MeshCommand(Command):
 for _mesh_step in (MakeGroupCommand, HideCommand, HideEdgesCommand, AssignLayerCommand,
                    MoveGroupCommand, RotateGroupCommand, ScaleGroupCommand, FlipGroupsCommand,
                    ChangeAxesCommand, AddEdgeCommand, AddFaceCommand, DeleteEdgesCommand,
-                   DeleteFaceCommand, EraseSelectionCommand):
+                   DeleteFaceCommand, EraseSelectionCommand, MoveVerticesCommand,
+                   FlipVerticesCommand, RotateVerticesCommand, ScaleVerticesCommand):
     MeshCommand.register(_mesh_step)
 
 
@@ -796,115 +800,6 @@ def _carried_faces(mesh, moving: set) -> list:
     return [faces[i] for i in MeshStore.carried_object_faces(rings, set(moving))]
 
 
-class _VertexEditCommand(MeshCommand):
-    """Replay standalone and object-mesh edits from the shared mesh snapshot."""
-    _before = _after = None
-
-    def undo(self, scene):
-        if self._before is not None:
-            scene.mesh.restore_state(self._before)
-            scene.version += 1
-
-    def do(self, scene):
-        if self._after is None:
-            self._before = self._direct_snapshot(scene.mesh)
-            self._edit(scene)
-            self._after = self._direct_snapshot(scene.mesh)
-        else:
-            scene.mesh.restore_state(self._after)
-            scene.version += 1
-
-    @abstractmethod
-    def _edit(self, scene):
-        """Apply the vertex edit to the active mesh."""
-
-
-class MoveVerticesCommand(_VertexEditCommand):
-    """Move shared vertices, carry whole-face textures and fold warped faces.
-    A snap that introduces a local topology defect rejects the transaction.
-    """
-
-    keeps_rows = True
-
-    def __init__(self, positions: Iterable[QVector3D], delta: QVector3D,
-                 carry_textures: bool = False) -> None:
-        if hasattr(delta, "toTuple"):
-            self.src = [QVector3D(p) for p in positions]
-            self.delta = QVector3D(delta)
-        else:
-            self.src = [tuple(p) for p in positions]
-            self.delta = tuple(delta)
-        #: The Move tool's moves: a textured face moved whole takes its
-        #: image along instead of being re-projected where it lands (#1034).
-        self.carry_textures = carry_textures
-        #: Whether the move joined moved vertices into ones it landed on.
-        self.welded = False
-
-    def _edit(self, scene):
-        keys = {_key(p) for p in self.src}
-        if isinstance(self.delta, tuple):
-            landing = {_key(tuple(x + d for x, d in zip(p, self.delta))) for p in self.src}
-        else:
-            landing = {_key(p + self.delta) for p in self.src}
-        from core.store_mesh import StoreMesh, _hypot, _xyz
-        from core.topology import DEFECT_KINDS, _PLANAR_TOLERANCE
-        mesh = scene.mesh
-        destinations = list(landing)
-        started = None
-        # The facade treats integer cell coordinates as already scaled.
-        if (type(mesh) is StoreMesh and not mesh.__dict__.get("_planned_points")
-                and all(type(x) is float for point in keys | landing for x in point)):
-            started = mesh._store.begin_vertex_move(list(keys), destinations, _xyz(self.delta),
-                                                    self.carry_textures, _hypot())
-        if started is None:
-            vertices = _vertices_at(mesh, keys)
-            moving = {v.key for v in vertices}
-            before = (defects_near(_vertices_at(mesh, keys | landing))
-                      if any(v.key not in moving for v in _vertices_at(mesh, landing)) else None)
-            delta = self.delta if type(mesh) is StoreMesh else QVector3D(*_xyz(self.delta))
-            for v in vertices:
-                mesh.move_vertex(v, delta)
-        else:
-            count, moving, before = started
-            if count:
-                mesh._dirty(count)
-        scene.version += 1
-        if self.carry_textures and moving:
-            carried = _carried_faces(mesh, moving)
-            if carried:
-                from core.group import _remap_uvws
-                from ingetrazo_core import Matrix4
-                transform = Matrix4()
-                transform.translate(self.delta)
-                _remap_uvws(mesh, transform, carried)
-        result = None
-        if started is not None:
-            result = mesh._store.finish_vertex_move(moving, destinations, before, _PLANAR_TOLERANCE, _hypot())
-            if result is None and before is not None:
-                before = dict(zip(DEFECT_KINDS, before))
-        if result is None:
-            self.welded = _weld_landed(mesh, set(moving))
-            fold_nonplanar_faces(mesh, moved=landing)
-            if self.welded and before is not None:
-                worse = new_defects(before, defects_near(_vertices_at(mesh, landing)))
-                if worse:
-                    self._reject(scene, worse[0])
-        else:
-            self.welded, dirty, copies, rejection = result
-            if rejection is not None:
-                self._reject(scene, rejection)
-            mesh._inherit_face_attrs(dirty, copies)
-
-    def _reject(self, scene, reason):
-        from core.i18n import tr
-        if self._before is not None:
-            scene.mesh.restore_state(self._before)
-        scene.version += 1
-        self.welded = False
-        raise CommandRejected(tr("Not joined: it would leave {defect}. The move was undone.",
-                                 defect=defect_names()[reason]))
-
-
 def rotation_matrix(center: QVector3D, axis: QVector3D, degrees: float):
     """Rigid rotation of ``degrees`` around ``axis`` through ``center``."""
     from ingetrazo_core import Matrix4 as QMatrix4x4
@@ -980,58 +875,6 @@ def _edit_local_transform(scene, group, transform):
     return transform
 
 
-class VertexTransformCommand(_VertexEditCommand):
-    """Apply a matrix to loose vertices, then fold the faces they warped."""
-    carry_textures = False
-
-    @abstractmethod
-    def matrix(self):
-        """Transform about the tool's chosen axes and origin."""
-
-    def _edit(self, scene):
-        _map_selected_vertices(scene, {_key(p) for p in self.src}, self.matrix(), self.carry_textures)
-        if faces := getattr(self, "_faces", ()):
-            _reverse_faces(f for f in faces if isinstance(f, Face) or hasattr(f, "loop"))
-        fold_nonplanar_faces(scene.mesh)
-
-
-class FlipVerticesCommand(VertexTransformCommand):
-    """Mirror loose positions about an axis plane and re-reverse the fully
-    selected faces' windings (their normals would flip inward otherwise).
-    Snapshot undo, the exact mirror of RotateVerticesCommand."""
-
-    def __init__(self, positions: Iterable[QVector3D], centre: QVector3D,
-                 axis: QVector3D, faces=()) -> None:
-        self.src = [QVector3D(p) for p in positions]
-        self.centre = QVector3D(centre)
-        self.axis = QVector3D(axis)
-        self._faces = list(faces)
-
-    def matrix(self):
-        return mirror_matrix(self.centre, self.axis)
-
-
-class RotateVerticesCommand(VertexTransformCommand):
-    """Rotate every shared vertex at a set of positions around ``axis``
-    through ``center`` by ``degrees``, then **autofold** (a partial rotation
-    can warp attached faces out of plane, same as Move). Undo/redo restore
-    identity-preserving snapshots — the exact mirror of
-    :class:`MoveVerticesCommand`."""
-
-    def __init__(self, positions: Iterable[QVector3D], center: QVector3D,
-                 axis: QVector3D, degrees: float,
-                 carry_textures: bool = False) -> None:
-        self.src = [QVector3D(p) for p in positions]
-        self.center = QVector3D(center)
-        self.axis = QVector3D(axis)
-        self.degrees = degrees
-        #: As in MoveVerticesCommand: a face turned whole turns its image.
-        self.carry_textures = carry_textures
-
-    def matrix(self):
-        return rotation_matrix(self.center, self.axis, self.degrees)
-
-
 def scale_matrix(center: QVector3D, factor, axes=None):
     """Scale about ``center``: a float scales uniformly, a 3-tuple scales each
     axis by its own factor (the edge/face grips). A negative factor
@@ -1072,23 +915,6 @@ def invert_scale_factor(factor):
     if isinstance(factor, (tuple, list)):
         return tuple(inv(float(f)) for f in factor)
     return inv(float(factor))
-
-
-class ScaleVerticesCommand(VertexTransformCommand):
-    """Uniformly scale every shared vertex at a set of positions about
-    ``center`` by ``factor``, then autofold (scaling a subset of connected
-    geometry can warp attached faces). Snapshot undo/redo — the mirror of
-    Move/RotateVerticesCommand."""
-
-    def __init__(self, positions: Iterable[QVector3D], center: QVector3D,
-                 factor: float, axes=None) -> None:
-        self.src = [QVector3D(p) for p in positions]
-        self.center = QVector3D(center)
-        self.factor = factor
-        self.axes = axes
-
-    def matrix(self):
-        return scale_matrix(self.center, self.factor, self.axes)
 
 
 class PruneOrphanEdgesCommand(MeshCommand):

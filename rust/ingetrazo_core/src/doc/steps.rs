@@ -340,6 +340,10 @@ pub(super) fn rotation<'py>(py: Python<'py>, centre: &Obj<'py>, axis: &Obj<'py>,
 #[pymethods]
 #[allow(non_upper_case_globals)]
 impl RecordStep {
+    /// Whether History journals the step's stores: set per instance by the
+    /// executor, False until then (as on the Python `Command`).
+    #[classattr]
+    const _journal_geometry: bool = false;
     /// Undone and redone by the step's document transaction, unless it
     /// keeps a real inverse for meshes History does not journal.
     #[getter]
