@@ -67,6 +67,14 @@ impl Args {
     fn temporary_profile(&self) -> bool {
         self.check || self.measure || self.gallery || self.script.is_some()
     }
+
+    /// Test and scripted runs never take focus: no activation, no Dock icon,
+    /// windows open behind whatever the user is doing. `BUILT_BACKGROUND=1`
+    /// asks for the same on any launch.
+    fn background(&self) -> bool {
+        self.check || self.measure || self.script.is_some()
+            || std::env::var_os("BUILT_BACKGROUND").is_some_and(|v| v != "0")
+    }
 }
 
 fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
@@ -419,7 +427,7 @@ impl App {
 
     fn focus(&mut self, id: WindowId) {
         if let Some(w) = self.win(id) {
-            w.window.focus_window();
+            if !self.args.background() { w.window.focus_window(); }
         }
         self.focused = Some(id);
     }
@@ -472,7 +480,7 @@ impl App {
         eprintln!("[built] dispatched {} in {ms:.0} ms", path.display());
         if !pending { self.timings.opened.get_or_insert(self.timings.process.elapsed()); }
         if let Some(w) = self.win(id) {
-            w.window.focus_window();
+            if !self.args.background() { w.window.focus_window(); }
         }
         self.redraw(id);
     }
@@ -708,6 +716,9 @@ impl App {
                 .with_fullsize_content_view(true)
                 .with_title_hidden(true);
         }
+        if self.args.background() {
+            attrs = attrs.with_active(false);
+        }
         let window = event_loop.create_window(attrs).map_err(|e| e.to_string())?;
         window.set_ime_allowed(true);
         if self.timings.window.is_none() {
@@ -801,7 +812,7 @@ impl App {
             Ok(id) => {
                 if let Some(w) = self.win(id) {
                     w.host.call("adopt", (token,));
-                    w.window.focus_window();
+                    if !self.args.background() { w.window.focus_window(); }
                 }
                 self.redraw(id);
             }
@@ -1129,6 +1140,12 @@ fn main() {
         std::process::exit(result);
     }
     let mut builder = EventLoop::<UserEvent>::with_user_event();
+    #[cfg(target_os = "macos")]
+    if app_args_background() {
+        use winit::platform::macos::{ActivationPolicy, EventLoopBuilderExtMacOS};
+        builder.with_activation_policy(ActivationPolicy::Accessory);
+        builder.with_activate_ignoring_other_apps(false);
+    }
     #[cfg(windows)]
     winit::platform::windows::EventLoopBuilderExtWindows::with_msg_hook(&mut builder, native::raw_input_message);
     let event_loop = match builder.build() {
@@ -1479,4 +1496,12 @@ impl App {
             _ => {}
         }
     }
+}
+
+/// The background decision before `App` exists: the same rule as
+/// `Args::background`, read from the raw command line.
+fn app_args_background() -> bool {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    args.iter().any(|a| a == "--check" || a == "--measure" || a == "--script")
+        || std::env::var_os("BUILT_BACKGROUND").is_some_and(|v| v != "0")
 }
