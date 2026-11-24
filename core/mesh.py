@@ -681,21 +681,7 @@ class Mesh:
         solid as watertight (defeating the BIM push guard)."""
         self._chunk_dirty = True
         self._mut_serial += 1
-        loop = [self.vertex(p) for p in loop_positions]
-        raw_holes = [list(h) for h in (hole_loops or [])]
-        if len(raw_holes) > 1:
-            from core.topology import _maximal_holes
-
-            raw_holes = _maximal_holes(raw_holes)
-        holes = [[self.vertex(p) for p in h] for h in raw_holes]
-        face = Face(loop, holes, key=next(self._keys))  # Face stores them as hole_loops (vertices)
-        for lp in (loop, *holes):
-            n = len(lp)
-            for i in range(n):
-                edge = self._link_edge(lp[i], lp[(i + 1) % n])
-                edge.faces.append(face)
-        self.faces.append(face)
-        return face
+        return object_replay.add_face(self, loop_positions, hole_loops)
 
     def surface_of(self, face: "Face") -> list:
         """The faces forming the same **curved surface** as ``face`` — the
@@ -703,35 +689,14 @@ class Mesh:
         sweep's hidden seams). Faces joined by softened edges form one
         surface, so clicking/painting one acts on the whole curved
         side. Returns just ``[face]`` for ordinary (hard-edged) geometry."""
-        seen = {face}
-        stack = [face]
-        while stack:
-            f = stack.pop()
-            for lp in (f.loop, *f.hole_loops):
-                n = len(lp)
-                for i in range(n):
-                    e = self.find_edge(lp[i], lp[(i + 1) % n])
-                    if e is None or not e.soft:
-                        continue
-                    for g in e.faces:
-                        if g != f and g not in seen:
-                            seen.add(g)
-                            stack.append(g)
-        return list(seen)
+        return object_replay.surface_of(self, face)
 
     def remove_face(self, face: Face) -> None:
         """Drop a face and detach it from its boundary edges' radial lists. The
         edges themselves stay (they may border other faces or stand alone)."""
         self._chunk_dirty = True
         self._mut_serial += 1
-        for lp in (face.loop, *face.hole_loops):
-            n = len(lp)
-            for i in range(n):
-                edge = self.find_edge(lp[i], lp[(i + 1) % n])
-                if edge is not None and face in edge.faces:
-                    edge.faces.remove(face)
-        if face in self.faces:
-            self.faces.remove(face)
+        object_replay.remove_face(self, face)
 
     # ---- Re-link (undo support) --------------------------------------------
     def relink_edge(self, edge: Edge) -> None:
@@ -749,27 +714,14 @@ class Mesh:
         """Punch a hole into ``face`` (a window/door drawn inside it). Welds the
         loop's vertices, ensures its boundary edges, and registers the face on
         them. Returns the vertex loop so undo can remove exactly this hole."""
-        loop = [self.vertex(p) for p in loop_positions]
-        face.hole_loops.append(loop)
-        n = len(loop)
-        for i in range(n):
-            edge = self._link_edge(loop[i], loop[(i + 1) % n])
-            if face not in edge.faces:
-                edge.faces.append(face)
-        return loop
+        return object_replay.add_hole(self, face, loop_positions)
 
     def relink_hole(self, face: Face, ring: list[Vertex]) -> None:
         """Restore a detached hole and its incidence on existing edges."""
         object_replay.relink_hole(self, face, ring)
 
     def remove_hole(self, face: Face, loop: list[Vertex]) -> None:
-        if loop in face.hole_loops:
-            face.hole_loops.remove(loop)
-        n = len(loop)
-        for i in range(n):
-            edge = self.find_edge(loop[i], loop[(i + 1) % n])
-            if edge is not None and face in edge.faces:
-                edge.faces.remove(face)
+        object_replay.remove_hole(self, face, loop)
 
     # ---- State snapshot (identity-preserving) -------------------------------
     def capture_state(self) -> dict:
