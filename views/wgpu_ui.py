@@ -2021,10 +2021,17 @@ def _inspector(view, win) -> None:
     sel_sig = (len(sel), id(sel[0]) if sel else 0, id(sel[-1]) if sel else 0)
     node_focus = focus[0] if focus and focus[1] == sel_sig else None
     filename = str(getattr(win, "_current_path", "") or "")
+    tool = _active_tool_id(win)
+    brush = None
+    if tool == "paint":
+        from tools.paint import PaintTool
+        tex = PaintTool.current_texture or {}
+        brush = (PaintTool.current_is_default, PaintTool.current_color, tex.get("path"),
+                 tex.get("sw"), tex.get("sh"), tex.get("rot"))
     sig = (id(scene), scene.content_version, sel_sig, node_focus, getattr(view, "_ui_tree_sig", None) is not None,
            view.__dict__.get("_ui_mat_focus"), view.__dict__.get("_ui_mode"), view.__dict__.get("_ui_lens"),
            filename, frozenset(map(id, sel)),
-           _current_material_name(), _active_tool_id(win), scene.show_section_planes, scene.show_section_cuts,
+           _current_material_name(), tool, brush, scene.show_section_planes, scene.show_section_cuts,
            scene.display_style.section_fill, view.__dict__.get("_ui_sheet_revision"))
     if sig == getattr(view, "_ui_insp_sig", None):
         return

@@ -77,13 +77,23 @@ pub fn brush_inspector(brush: &Obj<'_>) -> PyResult<(String, Sections)> {
         format!("\u{1d}{kind}\u{1d}libmat:brush_{id}:{name}\u{1d}{value}")
     };
     let mut rows = vec![("Name".into(), field("edit", "name", &name))];
-    if !brush.getattr("current_texture")?.is_truthy()? {
+    let texture = brush.getattr("current_texture")?;
+    if !texture.is_truthy()? {
         let rgb: [f64; 3] = brush.getattr("current_color")?.extract()?;
         let [r, g, b] = rgb.map(|v| (v * 255.).round() as u8);
         rows.push((
             "Colour".into(),
             field("color", "color", &format!("#{r:02x}{g:02x}{b:02x}")),
         ));
+    } else {
+        for (label, key, fallback) in [
+            ("Tile width (m)", "sw", 1.),
+            ("Tile height (m)", "sh", 1.),
+            ("Rotation (°)", "rot", 0.),
+        ] {
+            let value: f64 = texture.call_method1("get", (key, fallback))?.extract()?;
+            rows.push((label.into(), field("edit", key, &value.to_string())));
+        }
     }
     Ok((
         "Active paint".into(),
@@ -157,6 +167,25 @@ pub fn edit_swatch(
                 &data.get_item("name")?.unwrap().extract::<String>()?,
                 rgb,
             )?
+        }
+        key @ ("sw" | "sh" | "rot") if pending && live.is_none() => {
+            let value: f64 = raw
+                .trim()
+                .replace(',', ".")
+                .parse()
+                .map_err(|_| PyValueError::new_err("Enter a number"))?;
+            if !value.is_finite() || (key != "rot" && value <= 0.) {
+                return Err(PyValueError::new_err(
+                    "Enter a finite angle or a positive tile size",
+                ));
+            }
+            let tex = brush
+                .getattr("current_texture")?
+                .cast_into::<PyDict>()?
+                .copy()?;
+            tex.set_item(key, value)?;
+            data.set_item("texture", tex)?;
+            data.get_item("name")?.unwrap().extract()?
         }
         _ => return Err(PyValueError::new_err("Unknown swatch field")),
     };
