@@ -2178,7 +2178,7 @@ def _inspector(view, win) -> None:
         from ingetrazo_render import inspector_totals
         rows.extend(inspector_totals(scene, sel))
     missing = sum(1 for g in groups if (g.ifc or {}).get("class") and not structure._has_status(g.ifc or {}))
-    if missing and verbs.offers(sel_kind, "status"):
+    if missing and verbs_offered(sel_kind, "status"):
         sections.append(("Status", [("Missing on", f"{missing} items")]))
         sections.append(("Actions", [("status:" + v, "All " + v.lower()) for v in STATUS_CHOICES]))
     if groups:
