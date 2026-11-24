@@ -141,6 +141,7 @@ mod skp;
 mod snap_build;
 mod snap;
 mod snap_engine;
+mod kernel;
 mod tools;
 mod guide_vertices;
 mod pick;
@@ -550,8 +551,6 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<file_json::FileMatrix>()?;
     m.add_class::<group_geometry::GroupGeometry>()?;
     presentation::register(m)?;
-    object_replay::register(m)?;
-    object_drawing::register(m)?;
     m.add_function(wrap_pyfunction!(object_outline::object_hole_mask, m)?)?;
     m.add_function(wrap_pyfunction!(object_outline::flat_faces, m)?)?;
     m.add_class::<object_outline::HoleBounds>()?;
@@ -681,6 +680,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     store::py::register(m)?;
     doc::py::register(m)?;
     m.add_class::<scans::MeshScan>()?;
+    kernel::register_kernel(m)?;
     Ok(())
 }
 

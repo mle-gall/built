@@ -103,25 +103,8 @@ def forget(mesh=None) -> None:
         _CACHE.pop(id(mesh), None)
 
 
-def raw_box(points, pad: float = 0.0):
-    """``(lo, hi)`` of ``QVector3D`` points, grown by ``pad``."""
-    xs = [p.x() for p in points]
-    ys = [p.y() for p in points]
-    zs = [p.z() for p in points]
-    return ((min(xs) - pad, min(ys) - pad, min(zs) - pad),
-            (max(xs) + pad, max(ys) + pad, max(zs) + pad))
-
-
-def box_of(points, pad: float = 0.0):
-    """``(lo, hi)`` of points, grown by ``pad`` plus a relative term for
-    coordinates far from the origin (float32 positions). ``None`` for no
-    points."""
-    pts = list(points)
-    if not pts:
-        return None
-    lo, hi = raw_box(pts)
-    m = pad + 1e-6 * max(abs(c) for c in lo + hi)
-    return ((lo[0] - m, lo[1] - m, lo[2] - m), (hi[0] + m, hi[1] + m, hi[2] + m))
+raw_box = kernel.push_queries.raw_box
+box_of = kernel.push_queries.box_of
 
 
 def _xyz(v: QVector3D):
