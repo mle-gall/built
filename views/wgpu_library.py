@@ -324,9 +324,13 @@ class MaterialsProvider(Provider):
         key, name = item["key"], item["name"]
         kind = key.partition(":")[0]
         if verb == "apply":
-            paint, recipe = self.paint_recipe(ctx, item)
-            if paint or recipe:
-                _pick_paint(ctx.win, name=paint, recipe=recipe)
+            if kind in ("uc", "my"):
+                _, recipe = self.paint_recipe(ctx, item)
+                if recipe:
+                    _pick_paint(ctx.win, recipe=recipe)
+            else:
+                from views.wgpu_ui import _paint_with
+                _paint_with(ctx.win, f"m:{name}" if kind == "lk" else key)
         elif verb == "name":
             self.type_action(ctx, "name")
         elif kind == "uc":
