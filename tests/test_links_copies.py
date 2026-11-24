@@ -230,7 +230,7 @@ def test_rotate_copy_and_a_polar_array(tmp_path):
 def win(native_host, monkeypatch):
     w = native_host.window
     asked = []
-    monkeypatch.setattr("views.chrome_dialogs.ask",
+    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.ask",
                         lambda parent, title, *a, **kw: asked.append(title) or "cancel")
     w._asked = asked
     return w

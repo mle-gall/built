@@ -638,7 +638,7 @@ fn ask_rename(win: &Bound<'_, PyAny>, view: Option<&Bound<'_, PyAny>>, g: &Bound
     let kwargs = PyDict::new(py);
     kwargs.set_item("text", text(g, "name"))?;
     kwargs.set_item("done", done)?;
-    py.import("views.chrome_forms")?.getattr("ask_text")?.call((win, "Rename", "Name:"), Some(&kwargs))?;
+    py.import("ingetrazo_render.chrome_forms")?.getattr("ask_text")?.call((win, "Rename", "Name:"), Some(&kwargs))?;
     Ok(())
 }
 

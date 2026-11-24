@@ -7,7 +7,7 @@ from core.group import Group
 from ingetrazo_core import browser_rename
 from tests.native_tree import action
 from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
-from views import chrome_forms
+from ingetrazo_render import chrome_forms
 
 
 @pytest.fixture

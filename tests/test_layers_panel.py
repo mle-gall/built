@@ -32,7 +32,7 @@ def test_add_opens_the_selected_folder_and_preserves_its_parent(native_host):
 
 def test_purge_asks_for_the_count_and_accepts_only_a_current_confirmation(native_question_host):
     from tests.native_tree import action
-    from views import chrome_dialogs
+    from ingetrazo_render import chrome_dialogs
     host = native_question_host
     scene = host.viewport.scene
     scene.layers.extend([Layer("Vacia 1"), Layer("Vacia 2")])
@@ -109,7 +109,7 @@ def test_the_target_header_ends_the_isolation(native_host):
 
 def test_merge_tag_moves_carriers_in_one_step_and_rejects_a_replaced_target(native_host, monkeypatch):
     from tests.native_tree import action
-    from views import chrome_forms
+    from ingetrazo_render import chrome_forms
     scene = native_host.viewport.scene
     scene.layers.extend([Layer("A"), Layer("B")])
     face = _square(scene.mesh)

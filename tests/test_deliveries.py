@@ -1,6 +1,5 @@
 """Named deliveries through the protocol, dock and one-off export."""
 import json
-import sys
 import time
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -78,10 +77,10 @@ def drain(timers):
 @pytest.fixture
 def next_turn(monkeypatch):
     from core import input_types
-    from ingetrazo_render import WindowTimers
+    from ingetrazo_render import WindowTimers, chrome_dialogs
     timers = WindowTimers()
     monkeypatch.setattr(input_types, "NATIVE", True)
-    monkeypatch.setattr(sys, "builtin_module_names", (*sys.builtin_module_names, "built_shell"))
+    monkeypatch.setattr(chrome_dialogs, "in_shell", lambda: True)
     return SimpleNamespace(timers=timers)
 
 

@@ -991,7 +991,7 @@ fn new_model(py: Python<'_>, win: &Bound<'_, PyAny>, ask_units: bool) -> PyResul
     win.call_method0("_on_new")?;
     hide(win)?;
     if ask_units {
-        py.import("views.units_question")?.call_method1("offer_at_start", (win,))?;
+        py.import("ingetrazo_render.units_question")?.call_method1("offer_at_start", (win,))?;
     }
     Ok(())
 }
@@ -1012,7 +1012,7 @@ fn new_project(win: &Bound<'_, PyAny>) -> PyResult<()> {
     })();
     if let Err(e) = made {
         if e.is_instance_of::<pyo3::exceptions::PyOSError>(py) || e.is_instance_of::<pyo3::exceptions::PyValueError>(py) {
-            py.import("views.chrome_dialogs")?.call_method1("warning", (win, "Project", e.value(py).str()?))?;
+            py.import("ingetrazo_render.chrome_dialogs")?.call_method1("warning", (win, "Project", e.value(py).str()?))?;
             return Ok(());
         }
         return Err(e);

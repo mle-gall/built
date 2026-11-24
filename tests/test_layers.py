@@ -220,7 +220,7 @@ def test_assigning_and_releasing_annotations_in_the_native_document(native_quest
     from core.dimension import Dimension
     from core.textlabel import TextLabel
     from tests.native_tree import action
-    from views import chrome_dialogs
+    from ingetrazo_render import chrome_dialogs
     win = native_question_host.window
     scene = win.viewport.scene
     dim = Dimension(V(0, 0), V(2, 0), V(0, -1))

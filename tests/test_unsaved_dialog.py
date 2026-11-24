@@ -13,7 +13,7 @@ def test_the_unsaved_changes_sheet_offers_discard_cancel_and_save(native_host, m
         seen.append(([key for key, _ in buttons], roles))
         return "discard"
 
-    monkeypatch.setattr("views.chrome_dialogs.ask", answer)
+    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.ask", answer)
     win = native_host.window
     win.viewport.scene.version += 1               # something unsaved
     assert win._confirm_discard("Quit Built?") is True
@@ -28,7 +28,7 @@ def test_the_buttons_speak_the_app_language(native_host, monkeypatch):
         seen.extend(label for key, label in buttons)
         return "cancel"
 
-    monkeypatch.setattr("views.chrome_dialogs.ask", answer)
+    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.ask", answer)
     before = i18n.current_language()
     i18n.set_language("es")
     try:

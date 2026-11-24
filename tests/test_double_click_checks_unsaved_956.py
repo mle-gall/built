@@ -28,7 +28,7 @@ def test_discard_is_asked_only_when_closing_the_original_drawing(native_host, do
     def reply(*args, **kwargs):
         asked.append(win.active_document())
         return answer
-    monkeypatch.setattr("views.chrome_dialogs.ask", reply)
+    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.ask", reply)
     assert native_host.open_path(donor)
     assert not asked and dirty in win.documents()
     assert win.close_document(dirty) is closed
@@ -60,7 +60,7 @@ def test_the_drawing_comes_in_a_tab_and_the_unsaved_one_stays(native_host, donor
     mine.viewport.scene.mesh.add_face([V(9, 9, 9), V(11, 9, 9), V(11, 11, 9), V(9, 11, 9)])
     mine.viewport.scene.version += 1
     assert win._is_dirty()
-    monkeypatch.setattr("views.chrome_dialogs.ask", lambda *a, **k: pytest.fail("unexpected question"))
+    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.ask", lambda *a, **k: pytest.fail("unexpected question"))
     assert native_host.open_path(donor)
     assert len(win.documents()) == 2 and win._current_path == donor
     faces = list(win.viewport.scene.mesh.faces)
@@ -71,7 +71,7 @@ def test_the_drawing_comes_in_a_tab_and_the_unsaved_one_stays(native_host, donor
 
 
 def test_a_clean_window_is_never_asked(native_host, donor, monkeypatch):
-    monkeypatch.setattr("views.chrome_dialogs.ask", lambda *a, **k: pytest.fail("unexpected question"))
+    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.ask", lambda *a, **k: pytest.fail("unexpected question"))
     original = native_host.window.active_document()
     assert native_host.open_path(donor)
     assert native_host.window.documents() == [original]

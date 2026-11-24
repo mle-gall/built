@@ -182,7 +182,7 @@ def _answer(monkeypatch, tick=None, accept=True):
             checklist[0] = (label, tick)
         return default if accept else cancel
 
-    monkeypatch.setattr("views.chrome_dialogs.ask", answer)
+    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.ask", answer)
     return seen
 
 

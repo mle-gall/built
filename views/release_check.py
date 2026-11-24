@@ -12,7 +12,7 @@ from core import desktop_open, update_check
 from core.i18n import tr
 from core.version import __version__
 from ingetrazo_render import chrome_sheet
-from views import chrome_dialogs
+from ingetrazo_render import chrome_dialogs
 
 _RETRY_MS = 5000
 

@@ -22,7 +22,7 @@ def _window(win, monkeypatch, segs):
     monkeypatch.setattr(win.viewport, "flash_status",
                         lambda text, *a, **k: said.append(text))
     warned = []
-    monkeypatch.setattr("views.chrome_dialogs.warning",
+    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.warning",
                         lambda *a, **k: warned.append(a[1:]))
     return win, said, warned
 
