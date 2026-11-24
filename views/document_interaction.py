@@ -430,21 +430,7 @@ def _paint_of(vp, group):
 
 
 def _ghost_edge_points(scene) -> array:
-    """The ends of the edges of the mesh being edited that View ▸ Hidden
-    Geometry draws dotted, on layers that are shown: the hidden ones, and
-    the soft ones a curved surface or a bevel reads smooth with (#1361).
-    The pick already takes soft edges while the view is on; drawn, they
-    are no longer clicked blind.
-
-    Module-level, like :func:`_cache_ver`, so tests reach it without a GL
-    context."""
-    points = array("f")
-    for e in scene.mesh.edges:
-        if ((getattr(e, "hidden", False) or getattr(e, "soft", False))
-                and scene._layer_state(e)[0]):
-            points.extend([e.a.x(), e.a.y(), e.a.z(),
-                           e.b.x(), e.b.y(), e.b.z()])
-    return points
+    return ingetrazo_render.ghost_edge_points(scene)
 
 
 def _cache_ver(vp):
@@ -592,14 +578,7 @@ EDIT_REST_MODES = ("normal", "fade", "hide")
 EDIT_REST_FADE = 0.75
 
 def edit_fade_color(background) -> tuple:
-    """What the rest of the model fades TOWARDS while a group is edited: a
-    grey half way between the background and a neutral mid grey. Fading
-    to the background itself left white faces on a light background
-    looking the same as before — nothing said you were inside a group
-    («quiero que lo demás quede gris», 14-10). Towards this grey the rest
-    reads grey on a light background and dim on a dark one, and what is
-    being edited keeps its colours."""
-    return tuple(0.5 * float(c) + 0.5 * 0.55 for c in list(background)[:3])
+    return ingetrazo_render.edit_fade_color(background)
 
 #: X-ray: how opaque each translucent face layer is. Layers stack, so a face
 #: seen through another reads darker and an opening (no face) stays clear.
@@ -617,33 +596,11 @@ SELECTION_DOT_ALT_COLOR = (0.10, 0.25, 0.85)
 
 
 def selection_dot_color(surface) -> tuple:
-    """The dot colour that reads on a face side painted ``surface`` (an RGB
-    triple, or ``None`` when unknown, e.g. a texture): the selection orange,
-    unless the surface is orange-ish or red-ish itself (hue within ~50° of
-    red, with enough saturation and value to look coloured), where the dots
-    turn blue so a selected face still tells itself apart."""
-    if surface is None:
-        return SELECTION_DOT_COLOR
-    import colorsys
-    h, s, v = colorsys.rgb_to_hsv(*(float(c) for c in surface[:3]))
-    if s >= 0.35 and v >= 0.35 and (h <= 0.14 or h >= 0.96):
-        return SELECTION_DOT_ALT_COLOR
-    return SELECTION_DOT_COLOR
+    return ingetrazo_render.selection_dot_color(surface)
 
 
 def _box_edges(frame, lo, hi) -> bytes:
-    """The twelve segments of a box given in ``frame``'s axes, as an
-    interleaved float32 line buffer — the selection cue for a whole group."""
-    from core.group import oriented_box_corners
-    corners = oriented_box_corners(frame, lo, hi)
-    buf = array("f")
-    for i in range(8):
-        for bit in (1, 2, 4):      # neighbours differ in exactly one axis
-            j = i | bit
-            if j != i:
-                for p in (corners[i], corners[j]):
-                    buf.extend((p.x(), p.y(), p.z()))
-    return buf.tobytes()
+    return ingetrazo_render.box_edges(frame, lo, hi)
 
 
 def _load_edit_rest_mode() -> str:
@@ -708,40 +665,7 @@ _AXIS_DIRS = {"x": (1.0, 0.0, 0.0), "y": (0.0, 1.0, 0.0), "z": (0.0, 0.0, 1.0)}
 
 
 def _axes_vertices(spacing: float, pos_len: float = 1.0e5):
-    """Drawing axes: a long solid line in the positive direction and an
-    **evenly-spaced** dashed line in the negative (constant world ``spacing``, so
-    the dashes converge toward the horizon by perspective — the classic look, not
-    spreading apart). ``spacing`` scales with the camera distance so the on-screen
-    density stays stable across zoom. Returns ``(coords, spans)`` where ``spans``
-    maps ``'x'|'y'|'z'`` → ``(first_vertex, vertex_count)`` for a per-axis draw."""
-    coords = array("f")
-    spans: dict[str, tuple[int, int]] = {}
-    spacing = max(spacing, 1e-4)
-    # Short dots, not half-duty dashes: GL lines are stuck at 1px (Mesa
-    # clamps glLineWidth), so the dash LENGTH is what sets the perceived
-    # weight — the negative axes should read as fine dotted lines.
-    dash = spacing * 0.18
-    n = 520                          # dashes → reach = spacing*n past the model
-    # The DRAWING axes (core.axes): the world's at the top level, the open
-    # group's own — at its origin — inside it (issue #44).
-    from core import axes as _axes
-    o = _axes.ORIGIN
-    ox, oy, oz = o.x(), o.y(), o.z()
-    for name in ("x", "y", "z"):
-        if _axes.is_world():
-            dx, dy, dz = _AXIS_DIRS[name]
-        else:
-            dx, dy, dz = _axes.as_tuple(name)
-        start = len(coords) // 3
-        coords.extend([ox, oy, oz, ox + dx * pos_len, oy + dy * pos_len,
-                       oz + dz * pos_len])
-        for k in range(n):
-            t0 = k * spacing
-            t1 = t0 + dash
-            coords.extend([ox - dx * t0, oy - dy * t0, oz - dz * t0,
-                           ox - dx * t1, oy - dy * t1, oz - dz * t1])
-        spans[name] = (start, len(coords) // 3 - start)
-    return coords, spans
+    return ingetrazo_render.axes_vertices(spacing, pos_len)
 
 
 def _box_edge_vertices(corners):
@@ -752,15 +676,7 @@ def _box_edge_vertices(corners):
 
 
 def shown_guides(scene) -> list:
-    """The guides on screen: the ones whose layer is visible (a guide is
-    scaffolding on a layer like any dimension, so switching the layer off
-    takes its guides off the screen and out of the snap). A function of the
-    scene, so the snap of a stand-in viewport (tests) asks it too."""
-    guides = getattr(scene, "guides", None) or ()
-    visible = getattr(scene, "entity_visible", None)
-    if visible is None:
-        return list(guides)
-    return [g for g in guides if visible(g)]
+    return ingetrazo_render.shown_guides(scene)
 
 
 from ingetrazo_core import point_in_screen_hull as _point_in_screen_hull
@@ -1546,33 +1462,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return ingetrazo_render.pick_locked_group(self, screen_x, screen_y)
 
     def _draw_image_outlines(self, painter: QPainter) -> None:
-        """Border of each reference image: faint normally, selection orange
-        when picked, so an image lying flat on the ground is still findable.
-        A LOCKED image shows it only while selected: it is a backdrop that
-        refuses clicks, and a scan's rectangle runs past the photo over its
-        transparent corners, so the faint dashes cut across the sky (Marco,
-        2026-10-27, the orthomosaic of playa Yanque)."""
-        images = getattr(self.scene, "image_planes", None)
-        if not images:
-            return
-        pen = QPen(QColor(120, 140, 165), 1, Qt.DashLine)
-        sel_pen = QPen(QColor(243, 115, 41), 2)      # selection orange
-        selection = self.scene.selection
-        for im in images:
-            if not self.scene.entity_visible(im):
-                continue
-            picked = im in selection
-            if getattr(im, "locked", False) and not picked:
-                continue
-            painter.setPen(sel_pen if picked else pen)
-            for a, b in im.border_edges():
-                seg = self._clip_segment_front(a, b)
-                if seg is None:
-                    continue
-                pa = self._world_to_pixel(seg[0])
-                pb = self._world_to_pixel(seg[1])
-                if pa is not None and pb is not None:
-                    painter.drawLine(QPointF(*pa), QPointF(*pb))
+        return ingetrazo_render.draw_image_outlines(self, painter)
 
     def finish_image_placement(self) -> None:
         """Called by the Image tool once a picture is placed: drop back to
@@ -1582,28 +1472,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
             win.activate_select_tool()
 
     def _selection_dot_colors(self, face) -> tuple:
-        """``(front_dot, back_dot)``: the selection dot colour for each side
-        of ``face``, each picked against the paint that side shows — its
-        material colour (or the open group's paint), the two-sided back
-        paint, or the style's back-face tint."""
-        from core.materials import effective_attrs
-        attrs = effective_attrs(face.attrs,
-                                _paint_of(self, self.scene.edit_group))
-        tex = attrs.get("texture")
-        if tex is not None and tex.get("path"):
-            front = None                      # a texture: colour unknown
-        else:
-            front = tuple(attrs.get("color") or self.DEFAULT_FACE_COLOR)
-        back_attr = attrs.get("back")
-        if back_attr is True:
-            back = front                      # both sides wear the front
-        elif isinstance(back_attr, dict):
-            col = back_attr.get("color")
-            back = tuple(col) if col is not None else None
-        else:
-            back = effective_back_color(
-                self._view_style(), self.scene)
-        return selection_dot_color(front), selection_dot_color(back)
+        return ingetrazo_render.selection_dot_colors(self, face)
 
 
     def _shade_factor(self, normal) -> float:
@@ -1614,18 +1483,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
     # ---- Line weight for exports --------------------------------------------
     def _line_jitter(self, px: int, w: int, h: int) -> list:
-        """NDC offsets that thicken a 1-px GL line to about ``px`` pixels by
-        redrawing it shifted — a disc of sub-pixel samples (2 px = the four
-        half-pixel corners, 3 px = a cross, …). Only export renders ask for
-        more than one; on screen the list is the single origin."""
-        if px <= 1 or self._export_size is None:
-            return [(0.0, 0.0)]
-        px = min(int(px), 8)
-        r = (px - 1) / 2.0
-        offs = [-r + i for i in range(px)]
-        return [(dx * 2.0 / max(w, 1), dy * 2.0 / max(h, 1))
-                for dx in offs for dy in offs
-                if dx * dx + dy * dy <= r * r + 0.51]
+        return ingetrazo_render.line_jitter(self, px, w, h)
 
     # ---- Base-map tiles (Track G) -------------------------------------------
     def _base_map_showing(self) -> bool:
@@ -1907,50 +1765,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         self.update()
 
     def _rubber_band_style(self):
-        """The active tool's rubber band as GL draws it: ``(segments,
-        rgba, pen width)`` or None. Shared with the Metal view, whose
-        overlay used one cyan pen for every band and so lost the axis and
-        lock colours that tell you which way the line is going."""
-        tool = self.active_tool
-        if tool is None:
-            return None
-        segments = tool.rubber_band_lines()
-        if not segments:
-            return None
-
-        # A tool can force its preview-line colour (Push/Pull uses the normal
-        # edge colour so its forming box reads like real geometry, not a loose
-        # orange rubber band).
-        forced = getattr(tool, "wireframe_color", None)
-        snap = self.last_snap
-        # Axis / reference / extension cues read as "projection lines": draw them
-        # a touch thicker so the alignment is easy to spot while drawing.
-        inference = (
-            forced is None
-            and snap is not None
-            and snap.kind in ("axis", "axis_inference", "reference", "extension",
-                              "through_point", "perp_face")
-        )
-        lock = getattr(snap, "lock_color", None) if snap is not None else None
-        if forced is not None:
-            color = forced
-        elif lock is not None:
-            # A point found ON a lock line keeps the lock's colour (#711).
-            color = (lock[0], lock[1], lock[2], 1.0)
-        elif snap is not None and snap.kind == "axis":
-            r, g, b = snap.color
-            color = (r, g, b, 1.0)
-        elif snap is not None and snap.kind == "axis_inference":
-            r, g, b = snap.color
-            color = (r, g, b, 0.50)
-        elif snap is not None and snap.kind in ("reference", "through_point", "perp_face"):
-            r, g, b = snap.color
-            color = (r, g, b, 1.0)
-        elif snap is not None and snap.kind == "close":
-            color = (0.20, 0.40, 0.78, 0.95)
-        else:
-            color = (0.95, 0.45, 0.16, 0.85)
-        return segments, color, 2.5 if inference else 2.0
+        return ingetrazo_render.rubber_band_style(self)
 
 
     def _snap_context_suffix(self, context) -> str:
@@ -2340,36 +2155,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return ingetrazo_render.face_centers_near(self, px, py)
 
     def _draw_selected_face_centers(self, painter: QPainter) -> None:
-        """A small dot at the centre of each selected face (the ones the
-        view can see), so the point is in sight before the cursor gets
-        there — on a ring it sits in the hole, where hovering finds no face."""
-        pts = self._selected_face_centers()
-        if not pts:
-            return
-        cam = self.camera
-        key = (self.scene.version, tuple((p.x(), p.y(), p.z()) for p in pts), cam.yaw,
-               cam.pitch, cam.distance, cam.perspective, cam.target.x(),
-               cam.target.y(), cam.target.z(), self.width(), self.height())
-        cached = getattr(self, "_sel_face_center_dots", None)
-        if cached is None or cached[0] != key:
-            hidden = self._occluded_many(pts)
-            dots = []
-            for p, h in zip(pts, hidden):
-                pc = None if h else self._world_to_pixel(p)
-                if pc is not None:
-                    dots.append(pc)
-            cached = self._sel_face_center_dots = (key, dots)
-        if not cached[1]:
-            return
-        # As big as a snap marker (14 px, like the endpoint's square), so
-        # the dot reads at a glance; solid and without the cross, so the
-        # one the cursor has snapped to still stands out.
-        from core.snap import COLOR_ON_FACE
-        painter.setPen(QPen(QColor(255, 255, 255, 230), 2.5))
-        painter.setBrush(QColor.fromRgbF(*COLOR_ON_FACE, 0.85))
-        for x, y in cached[1]:
-            painter.drawEllipse(QPointF(x, y), 7.0, 7.0)
-        painter.setBrush(Qt.NoBrush)
+        return ingetrazo_render.draw_selected_face_centers(self, painter)
 
     def _face_context_under(self, px: float, py: float):
         return ingetrazo_render.face_context_under(self, px, py)
@@ -2654,18 +2440,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return visible_draw_spans(self, spans, planes, split, True)
 
     def _tex_run_spans(self, parts, planes, fading: bool):
-        """Frustum-culled draw spans of one texture run, split into
-        ``(context, subject)`` when the edited group's surroundings are
-        fading. Without a fade everything is context and ``subject`` is
-        empty, so callers draw one list either way."""
-        if not fading:
-            return self._visible_spans(
-                [(bb, s, n) for bb, s, n, _ in parts], planes)[0], []
-        ctx = self._visible_spans(
-            [(bb, s, n) for bb, s, n, sub in parts if not sub], planes)[0]
-        subj = self._visible_spans(
-            [(bb, s, n) for bb, s, n, sub in parts if sub], planes)[0]
-        return ctx, subj
+        return ingetrazo_render.tex_run_spans(self, parts, planes, fading)
 
     #: Component placements holding more faces than this, all together,
     #: switch the pick index to LAZY placements (issue #158): below it the

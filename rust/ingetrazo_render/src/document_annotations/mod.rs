@@ -134,10 +134,12 @@ fn tr(py: Python, word: &str) -> PyResult<String> {
 mod geo;
 mod labels;
 mod marks;
+mod selection;
 mod widgets;
 pub fn register(m: &Bound<PyModule>) -> PyResult<()> {
     labels::register(m)?;
     widgets::register(m)?;
     geo::register(m)?;
+    selection::register(m)?;
     marks::register(m)
 }
