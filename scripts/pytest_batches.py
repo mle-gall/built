@@ -4,12 +4,8 @@
 """Run the test suite in batches of files, one process each, and print ONE
 summary line in pytest's own words ("4283 passed, 12 skipped in …").
 
-Why (07-10-2026): the fast suite no longer fits in memory as one process.
-~170 test files build a MainWindow and none destroys it; each keeps
-~18 MB until the process ends, and one run went past 15 GB and into swap.
-Destroying them per test was tried (08-10) and turned up Qt/Python
-lifetime crashes file by file; batches bound the memory without changing
-what the tests do. A batch that crashes counts as a failure, by name.
+Each batch runs in its own process and releases its resources at exit.
+A batch that crashes counts as a failure, by name.
 
     scripts/pytest_batches.py [-m 'not slow'] [--batches 6] [tests]
 """
@@ -20,6 +16,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -50,8 +47,12 @@ def main() -> int:
         # pytest writes UTF-8; text=True alone decodes with the locale's
         # codepage (cp1252 on Windows), which died on the first byte it
         # has no character for and left stdout None (ronda Windows 0.5.9).
-        proc = subprocess.run(cmd + chunk, env=env, capture_output=True,
-                              text=True, encoding="utf-8", errors="replace")
+        with tempfile.TemporaryDirectory() as home, tempfile.TemporaryDirectory() as settings:
+            profile = dict(env, HOME=home, CFFIXED_USER_HOME=home,
+                           BUILT_SETTINGS_DIR=settings, BUILT_BACKGROUND="1",
+                           QT_MAC_DISABLE_FOREGROUND_APPLICATION_TRANSFORM="1")
+            proc = subprocess.run(cmd + chunk, env=profile, capture_output=True,
+                                  text=True, encoding="utf-8", errors="replace")
         lines = [ln for ln in proc.stdout.splitlines() if ln.strip()]
         last = lines[-1] if lines else ""
         for num, kind in _COUNT.findall(last):

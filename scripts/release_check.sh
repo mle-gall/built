@@ -21,15 +21,17 @@ PY="$HERE/venv/bin/python"
 VER="$("$PY" -c 'import sys; sys.path.insert(0, "'"$HERE"'"); from core.version import __version__; print(__version__)')"
 WORK="$(mktemp -d)"
 trap 'git -C "$HERE" worktree remove --force "$WORK/prev" 2>/dev/null || true; rm -rf "$WORK"' EXIT
-git -C "$HERE" worktree add -q "$WORK/prev" "$PREV"
-cp "$HERE/scripts/bench_session.py" "$HERE/scripts/bench_startup.py" "$WORK/"
+# Historic drivers are optional since the Classic cut.
+if [[ -f "$HERE/scripts/bench_session.py" && -f "$HERE/scripts/bench_startup.py" ]]; then
+  git -C "$HERE" worktree add -q "$WORK/prev" "$PREV"
 
-for run in 1 2; do
-  (cd "$WORK/prev" && QT_QPA_PLATFORM=xcb "$PY" "$WORK/bench_session.py" "$DOC" "$PREV" "$WORK/prev-view-$run.json" >/dev/null 2>&1)
-  (cd "$HERE" && QT_QPA_PLATFORM=xcb "$PY" "$WORK/bench_session.py" "$DOC" "$VER" "$WORK/head-view-$run.json" >/dev/null 2>&1)
-done
-(cd "$WORK/prev" && "$PY" "$WORK/bench_startup.py" "$DOC" "$WORK/prev-start.json" >/dev/null 2>&1)
-(cd "$HERE" && "$PY" "$WORK/bench_startup.py" "$DOC" "$WORK/head-start.json" >/dev/null 2>&1)
+  for run in 1 2; do
+    (cd "$WORK/prev" && QT_QPA_PLATFORM=xcb "$PY" "$HERE/scripts/bench_session.py" "$DOC" "$PREV" "$WORK/prev-view-$run.json" >/dev/null 2>&1)
+    (cd "$HERE" && QT_QPA_PLATFORM=xcb "$PY" "$HERE/scripts/bench_session.py" "$DOC" "$VER" "$WORK/head-view-$run.json" >/dev/null 2>&1)
+  done
+  (cd "$WORK/prev" && "$PY" "$HERE/scripts/bench_startup.py" "$DOC" "$WORK/prev-start.json" >/dev/null 2>&1)
+  (cd "$HERE" && "$PY" "$HERE/scripts/bench_startup.py" "$DOC" "$WORK/head-start.json" >/dev/null 2>&1)
+fi
 
 cd "$HERE"
 # In batches, one process each: the fast suite no longer fits in memory as
@@ -46,13 +48,16 @@ work, ver, prev, doc, fast, slow = sys.argv[1:]
 def load(p): return json.load(open(os.path.join(work, p)))
 out = {"version": ver, "compared_with": prev, "date": datetime.date.today().isoformat(),
        "document": os.path.basename(doc),
-       "tests": {"fast": fast, "slow": slow},
-       "viewport": {"head": [load("head-view-1.json"), load("head-view-2.json")],
-                    "prev": [load("prev-view-1.json"), load("prev-view-2.json")]},
-       "startup_memory": {"head": load("head-start.json"), "prev": load("prev-start.json")}}
+       "tests": {"fast": fast, "slow": slow}}
+if os.path.exists(os.path.join(work, "head-start.json")):
+    out["viewport"] = {"head": [load("head-view-1.json"), load("head-view-2.json")],
+                       "prev": [load("prev-view-1.json"), load("prev-view-2.json")]}
+    out["startup_memory"] = {"head": load("head-start.json"), "prev": load("prev-start.json")}
 path = f"benchmarks/results/{ver}.json"
 json.dump(out, open(path, "w"), indent=1)
 print(f"→ {path}\n  tests: {fast} | slow: {slow}")
+if "viewport" not in out:
+    sys.exit(0)
 for sec in ("root", "container"):
     for k, v in out["viewport"]["head"][0].get(sec, {}).items():
         if isinstance(v, dict):

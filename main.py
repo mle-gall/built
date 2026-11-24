@@ -171,7 +171,6 @@ def _install_qt_translator(lang: str) -> None:
         QApplication.installTranslator(translator)
         _qt_translator = translator
 
-from views.main_window import MainWindow
 
 
 def _gpu_available(interactive):
@@ -468,6 +467,7 @@ def _run_cli(argv: list[str]) -> int:
     if not _gpu_available(interactive=False):
         return 1
     _init_language()
+    from views.main_window import MainWindow
     window = MainWindow(defer_extensions=True)
     window.setAttribute(Qt.WA_DontShowOnScreen, True)
     window.show()
@@ -607,6 +607,7 @@ def main() -> int:
     from core import _native
     engine_fell_back = _native.start_guard(sys.argv[1:])
     # The extensions' setup waits until the window is on screen (#440).
+    from views.main_window import MainWindow
     window = MainWindow(defer_extensions=True)
     # Single instance: if IngeTrazo is already running, hand the document to
     # that window and quit — so a second double-click opens the file in the

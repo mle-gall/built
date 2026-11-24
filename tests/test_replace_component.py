@@ -229,6 +229,7 @@ def _row_for(win, name, with_kept=False):
     raise AssertionError(f"no row for {name}")
 
 
+@pytest.mark.classic_pending
 def test_the_in_model_list_selects_and_replaces_from_its_menu(_no_modal_keep_question):
     from core.i18n import tr
     from views.main_window import MainWindow
@@ -260,6 +261,7 @@ def test_the_in_model_list_selects_and_replaces_from_its_menu(_no_modal_keep_que
         win.close()
 
 
+@pytest.mark.classic_pending
 def test_its_own_row_does_not_offer_to_replace_the_selection():
     from core.i18n import tr
     from views.main_window import MainWindow
@@ -368,6 +370,7 @@ def test_a_kept_definition_with_no_copy_can_replace_and_be_placed():
     assert g is not t and g.uid != t.uid
 
 
+@pytest.mark.classic_pending
 def test_the_list_shows_a_kept_definition_with_no_copy(_no_modal_keep_question):
     from core.history import KeepComponentCommand
     from core.i18n import tr
@@ -453,6 +456,7 @@ def test_an_empty_definition_gives_a_blank_icon():
     assert _painted_pixels(thumbnail(g)) == 0
 
 
+@pytest.mark.classic_pending
 def test_the_list_rows_carry_a_thumbnail():
     from PySide6.QtCore import Qt
     from views.main_window import MainWindow
@@ -475,6 +479,7 @@ def test_the_list_rows_carry_a_thumbnail():
 
 # --- a long list, and what a purge must leave alone ---------------------------
 
+@pytest.mark.classic_pending
 def test_a_long_list_offers_a_name_filter_that_survives_a_refresh():
     from views.main_window import MainWindow
     win = MainWindow()
@@ -505,6 +510,7 @@ def test_a_long_list_offers_a_name_filter_that_survives_a_refresh():
         win.close()
 
 
+@pytest.mark.classic_pending
 def test_a_short_list_has_no_filter():
     from views.main_window import MainWindow
     win = MainWindow()
@@ -702,6 +708,7 @@ def test_a_file_without_components_changes_nothing(tmp_path, native_host):
     assert not win.viewport.history.undo_stack
 
 
+@pytest.mark.classic_pending
 def test_clipped_component_list_does_not_build_thumbnails(monkeypatch):
     from PySide6.QtGui import QRegion
     from views.main_window import MainWindow

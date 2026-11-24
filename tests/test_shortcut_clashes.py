@@ -15,7 +15,7 @@ from core.i18n import tr
 from core.settings import settings
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.test_shortcuts_transfer import _keys, ventana  # noqa: F401
-from views import shortcuts as sc
+from core import shortcuts as sc
 
 
 def test_redo_answers_both_keys(ventana):  # noqa: F811
