@@ -8,7 +8,7 @@ import pytest
 from georef.datum import utm_forward, utm_inverse
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.test_settings_sheet import win, act, fields, frame
-from views.settings_sheet import edit_location
+from ingetrazo_render.settings_sheet import edit_location
 
 # Plaza de Yanque, Caylloma — UTM zone 19, southern hemisphere.
 LAT, LON = -15.8402, -70.0219

@@ -205,22 +205,6 @@ def _merge_title_row(win) -> None:
     later(win, 400, fit)
 
 
-def _projects(view, win) -> None:
-    bar = getattr(win, "_project_tabs", None)
-    if bar is None:
-        return
-    current = bar.current()
-    docs = []
-    for i in range(bar.count()):
-        text = bar.tabs.tabText(i)
-        dirty = text.endswith(bar.DIRTY_MARK)
-        name = text[: -len(bar.DIRTY_MARK)] if dirty else text
-        docs.append((name, bar.tabs.tabData(i) is current, dirty))
-    if docs != getattr(view, "_ui_docs", None):
-        view._ui_docs = docs
-        view.renderer.ui_set_projects(LIGHTS_ROOM, docs)
-
-
 def _project_action(win, arg) -> None:
     bar = getattr(win, "_project_tabs", None)
     if bar is None:
@@ -367,9 +351,8 @@ def chrome_frame(view):
         return None
     win = _window(view)
     if win is not None:
-        _projects(view, win)
         from views import wgpu_tabs
-        wgpu_tabs.before_frame(view, win)
+        wgpu_tabs.document_tabs(view).sync(view.renderer, win, LIGHTS_ROOM)
         _sheet_and_jobs(view, win)
         _chrome_form(view, win)
         from views import wgpu_start
@@ -434,10 +417,9 @@ def before_frame(view) -> None:
     from ingetrazo_render import inspector_sync
     inspector_sync(view, win)
     _tabs(view, win)
-    _projects(view, win)
     from views import wgpu_tabs
+    wgpu_tabs.document_tabs(view).sync(view.renderer, win, LIGHTS_ROOM)
     wgpu_tabs.sync_host_context(view, win)
-    wgpu_tabs.before_frame(view, win)
     opts = [(i, label, k, state) for i, label, k, state, _ in _options(view)]
     if opts != getattr(view, "_ui_opts", None):
         view._ui_opts = opts

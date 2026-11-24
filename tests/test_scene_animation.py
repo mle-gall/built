@@ -473,7 +473,7 @@ def test_play_without_scenes_says_why(win):
 
 def test_page_up_and_down_are_no_other_commands_shortcut(win):
     from core.shortcuts import action_keys
-    from views.settings_sheet import SettingsSheet
+    from ingetrazo_render.settings_sheet import SettingsSheet
     sheet = SettingsSheet("keyboard")
     sheet._win = win
     for key, command in (("PgDown", "scene_next"), ("PgUp", "scene_previous")):

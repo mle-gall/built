@@ -2523,7 +2523,7 @@
  "Remove the faces left lying over their own subdivisions after drawing or erasing.": "Премахва повърхнините, останали върху собствените си подразделения след чертане или изтриване.",
  "Resize the selection by dragging the grips of its box; the corners keep its proportions.": "Променя размера на избраните елементи чрез плъзгане на манипулаторите на ограждащата рамка; ъгловите запазват пропорциите.",
  "Save the document under another name or in another folder.": "Запазва документа под друго име или в друга папка.",
- "Save the document — the model and every sheet — to its .igz file.": "Запазва документа — модела и всички чертожни листове — във файл .igz.",
+ "Save the document — the model and every sheet — to its file.": "Запазва документа — модела и всички чертожни листове — във файл.",
  "Save the model as IFC for BIM software, with what the BIM panel tagged.": "Експортира модела във формат IFC за BIM софтуер, включително зададените в панела BIM атрибути.",
  "Save the model as Wavefront OBJ with its materials.": "Експортира модела във формат Wavefront OBJ заедно с материалите.",
  "Save the model as an STL mesh for 3D printing.": "Експортира модела като полигонална мрежа STL за 3D печат.",

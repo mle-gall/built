@@ -794,7 +794,7 @@ class BaseMapPanel(QWidget):
 
     def _open_locator(self) -> None:
         """Open the map locator; on accept, drop the chosen lat/lon and go."""
-        from views.settings_sheet import edit_location
+        from ingetrazo_render.settings_sheet import edit_location
         src = self._current_source() or PRESETS[DEFAULT_SOURCE_ID]
 
         def use_site(lat, lon, width_m, length_m):
@@ -2022,14 +2022,9 @@ class MaterialsPanel(QWidget):
         self._refresh_preview()
 
     def _swatch_menu(self, button, name: str, color=None) -> None:
-        """Right-click on a named material: edit its colour, and choose its
-        finish for Render with Blender (#181) — «Automatic» names the finish
-        it would be guessed as, so the user sees what the name already says."""
+        """Edit a named colour from the remaining Classic swatch grid."""
         from PySide6.QtGui import QCursor
         from PySide6.QtWidgets import QMenu
-        from core import finish as fin
-        scene = self._window.viewport.scene
-        mat = scene.materials.get(name)
         menu = QMenu(button)
         if color is not None:
             # The dialog opens once the menu has closed: a modal opened
@@ -2038,34 +2033,8 @@ class MaterialsPanel(QWidget):
             menu.addAction(tr("Edit colour…"),
                            lambda: QTimer.singleShot(
                                0, lambda: self._edit_named_color(name, color)))
-        if mat is not None:
-            sub = menu.addMenu(tr("Finish for the render"))
-            pic = (mat.texture or {}).get("path")
-            guessed = fin.guess(name, pic and Path(pic).name, mat.opacity)
-            auto = sub.addAction(tr("Automatic: {finish}",
-                                    finish=tr(fin.LABELS[guessed])))
-            auto.setCheckable(True)
-            auto.setChecked(mat.finish not in fin.FINISHES)
-            auto.triggered.connect(lambda: self._set_finish(name, None))
-            sub.addSeparator()
-            for key in fin.FINISHES:
-                act = sub.addAction(tr(fin.LABELS[key]))
-                act.setCheckable(True)
-                act.setChecked(mat.finish == key)
-                act.triggered.connect(
-                    lambda _c=False, k=key: self._set_finish(name, k))
         if not menu.isEmpty():
             menu.exec(QCursor.pos())
-
-    def _set_finish(self, name: str, finish) -> None:
-        from core.finish import LABELS
-        from core.history import SetMaterialFinishCommand
-        self._window.viewport.history.execute(
-            SetMaterialFinishCommand(name, finish))
-        label = tr("Automatic") if finish is None else tr(LABELS[finish])
-        self._window.statusBar().showMessage(
-            tr("Finish of '{name}' for the render: {finish}", name=name,
-               finish=label), 3000)
 
     def _edit_named_color(self, name: str, current_rgb) -> None:
         """Slice (b) of the registry track: edit a named colour material
@@ -3191,7 +3160,7 @@ class ShadowsPanel(QWidget):
         """Add Location, scoped to the sun: pick the site on the
         map and it becomes the model's geographic datum (which is also what
         the Terrain workspace reads — one location, one truth)."""
-        from views.settings_sheet import edit_location
+        from ingetrazo_render.settings_sheet import edit_location
         edit_location(_dialog_parent(self))
 
     def _apply(self, *_a) -> None:
@@ -3338,23 +3307,6 @@ def _restore_scrollbar_later(bar, value: int) -> None:
             b.setValue(v)
 
     QTimer.singleShot(0, restore)
-
-def _wrapping_check(text: str):
-    """A check box whose text wraps: ``(checkbox, row widget)``. A long
-    QCheckBox label is one line and sets the tray's minimum width; here the
-    label is a word-wrapping QLabel beside a text-less box, and clicking the
-    label toggles the box like a check box's own text would."""
-    row = QWidget()
-    box = QHBoxLayout(row)
-    box.setContentsMargins(0, 0, 0, 0)
-    check = QCheckBox()
-    label = QLabel(text)
-    label.setWordWrap(True)
-    label.mousePressEvent = lambda _e: check.isEnabled() and check.toggle()
-    box.addWidget(check, 0, Qt.AlignTop)
-    box.addWidget(label, 1)
-    return check, row
-
 
 #: Combo boxes in a tray ask for this many characters, not their longest
 #: item: «Esri World Imagery (satellite)» would otherwise set the width.

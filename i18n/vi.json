@@ -2383,7 +2383,7 @@
  "Remove the faces left lying over their own subdivisions after drawing or erasing.": "Loại bỏ các bề mặt thừa đè lên các phân vùng hình học sau khi vẽ hoặc xóa.",
  "Resize the selection by dragging the grips of its box; the corners keep its proportions.": "Thay đổi kích thước đối tượng chọn bằng cách kéo các điểm điều khiển (grips) của khung bao; kéo điểm góc để giữ nguyên tỷ lệ.",
  "Save the document under another name or in another folder.": "Lưu tài liệu dưới tên khác hoặc trong thư mục khác.",
- "Save the document — the model and every sheet — to its .igz file.": "Lưu tài liệu — bao gồm mô hình 3D và toàn bộ các trang bản vẽ — vào tệp .igz.",
+ "Save the document — the model and every sheet — to its file.": "Lưu tài liệu — bao gồm mô hình 3D và toàn bộ các trang bản vẽ — vào tệp.",
  "Save the model as IFC for BIM software, with what the BIM panel tagged.": "Lưu mô hình sang định dạng IFC cho các phần mềm BIM, bao gồm các cấu kiện đã phân loại trong bảng BIM.",
  "Save the model as Wavefront OBJ with its materials.": "Lưu mô hình dưới dạng Wavefront OBJ với các vật liệu của nó.",
  "Save the model as an STL mesh for 3D printing.": "Lưu mô hình dưới dạng lưới STL để in 3D.",

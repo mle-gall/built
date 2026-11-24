@@ -2389,7 +2389,7 @@
  "Remove the faces left lying over their own subdivisions after drawing or erasing.": "删除绘制或擦除后残留在自身细分之上的面。",
  "Resize the selection by dragging the grips of its box; the corners keep its proportions.": "拖动所选内容包围盒上的夹点来调整大小；拖角点可保持比例。",
  "Save the document under another name or in another folder.": "以其他名称或在其他文件夹中保存文档。",
- "Save the document — the model and every sheet — to its .igz file.": "将文档 — 模型和每个图纸 — 保存到其 .igz 文件中。",
+ "Save the document — the model and every sheet — to its file.": "将文档 — 模型和每个图纸 — 保存到其文件中。",
  "Save the model as IFC for BIM software, with what the BIM panel tagged.": "将模型另存为 IFC 供 BIM 软件使用，包含在 BIM 面板中标记的内容。",
  "Save the model as Wavefront OBJ with its materials.": "将模型及其材料另存为 Wavefront OBJ。",
  "Save the model as an STL mesh for 3D printing.": "将模型另存为用于 3D 打印的 STL 网格。",

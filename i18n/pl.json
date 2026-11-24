@@ -2393,7 +2393,7 @@
  "Resize the selection by dragging the grips of its box; the corners keep its proportions.": "Zmień rozmiar zaznaczenia, przeciągając uchwyty jego ramki; narożniki zachowują swoje proporcje.",
  "Round the edges of a solid to the radius you set.": "Zaokrąglij krawędzie bryły do ustawionego promienia.",
  "Save the document under another name or in another folder.": "Zapisz dokument pod inną nazwą lub w innym folderze.",
- "Save the document — the model and every sheet — to its .igz file.": "Zapisz dokument — model i każdy arkusz — w pliku .igz.",
+ "Save the document — the model and every sheet — to its file.": "Zapisz dokument — model i każdy arkusz — w pliku.",
  "Save the model as IFC for BIM software, with what the BIM panel tagged.": "Zapisz model jako IFC dla oprogramowania BIM, z tym, co oznaczył panel BIM.",
  "Save the model as Wavefront OBJ with its materials.": "Zapisz model jako Wavefront OBJ z jego materiałami.",
  "Save the model as an STL mesh for 3D printing.": "Zapisz model jako siatkę STL do druku 3D.",

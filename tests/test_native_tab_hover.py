@@ -41,7 +41,7 @@ def setup(app):
         type(win.view).render_pixels = unexpected
         from core.shortcuts import action_keys
         from ingetrazo_render import shortcut_domains
-        from views.settings_sheet import SettingsSheet
+        from ingetrazo_render.settings_sheet import SettingsSheet
         sheet = SettingsSheet("keyboard")
         sheet._win = win
         actions = sheet.actions()

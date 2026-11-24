@@ -11,23 +11,12 @@ imported by package name, which breaks inside a PyInstaller bundle.
 """
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
 import sys
 import textwrap
 from pathlib import Path
 
 import pytest
-from PySide6.QtWidgets import QApplication
-
-_inst = QApplication.instance()
-if _inst is None:
-    _app = QApplication([])
-elif not isinstance(_inst, QApplication):
-    pytest.skip("a non-widget QGuiApplication is already active",
-                allow_module_level=True)
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 import core.extensions as extensions                              # noqa: E402
 from core.extensions import (                                     # noqa: E402
@@ -182,86 +171,62 @@ def test_duplicate_stem_first_dir_wins(tmp_path):
 
 # ---- The Extensions menu itself -------------------------------------------
 
-def _extensions_menu(window):
-    for menu_action in window.menuBar().actions():
-        if menu_action.text().replace("&", "") == "Extensions":
-            return menu_action.menu()
-    raise AssertionError("no Extensions menu in the menubar")
-
-
 @pytest.fixture
-def main_window(tmp_path, monkeypatch):
-    """A MainWindow whose plugin search is confined to tmp_path."""
+def open_window(tmp_path, monkeypatch, request):
+    # Discover the fixture plugins only after the test has written them.
     monkeypatch.setattr(extensions, "plugin_dirs", lambda: [tmp_path])
-    from views.main_window import MainWindow
-
-    def build():
-        win = MainWindow()
-        win.close()
-        return win
-
-    return build
+    return lambda: request.getfixturevalue("native_host").window
 
 
-def test_menu_lists_tools_and_disabled_errors(tmp_path, main_window):
+def test_menu_lists_working_tools_and_reports_load_errors(tmp_path, open_window):
     _write(tmp_path, "hello.py", GOOD)
     _write(tmp_path, "roto.py", "import modulo_que_no_existe\n")
-    win = main_window()
-    entries = {a.text(): a.isEnabled() for a in _extensions_menu(win).actions()}
-    assert entries.get("Hello") is True
-    assert any(t.startswith("⚠ roto") and not on for t, on in entries.items())
-    assert "plugin_hello_HelloTool" in win._tools
+    win = open_window()
+    row, = win._extension_menus.rows()
+    assert row[2] == "Hello" and row[-1]
+    assert "ModuleNotFoundError" in win._extension_load_errors["roto"]["error"]
 
 
-def test_menu_placeholder_when_no_plugins(main_window):
-    win = main_window()
-    actions = _extensions_menu(win).actions()
-    assert actions[0].text() == "(no plugins found)"
-    assert not actions[0].isEnabled()
-    # The plugin-author on-ramp is always at the bottom of the menu.
-    texts = [a.text() for a in actions]
-    assert "Open extensions folder" in texts
-    assert "Develop an extension…" in texts
-    assert "Manage extensions…" in texts
+def test_empty_plugins_leave_management_and_author_commands_available(
+        open_window, tmp_path, monkeypatch):
+    win = open_window()
+    assert win._extension_menus.rows() == []
+    assert {"menu:develop_plugin", "menu:extensions", "menu:plugins_folder"} <= win._registry_actions.keys()
+    opened = []
+    folder = tmp_path / "profile" / "plugins"
+    monkeypatch.setattr(extensions, "user_plugins_dir", lambda: folder)
+    monkeypatch.setattr("core.desktop_open.open_url", opened.append)
+    win._registry_actions["menu:plugins_folder"].trigger()
+    assert folder.is_dir() and opened == [folder]
 
 
-def test_plugin_cannot_steal_a_builtin_shortcut(tmp_path, main_window):
-    """'L' belongs to the Line tool; a plugin asking for it gets its menu
-    entry without the shortcut instead of creating a Qt ambiguity that
-    disables the key for both."""
+def test_plugin_cannot_steal_a_builtin_shortcut(tmp_path, open_window):
     _write(tmp_path, "ladron.py", GOOD.replace(
         'name = "Hello"', 'name = "Ladron"\n        shortcut = "L"'))
-    win = main_window()
-    (action,) = [a for a in _extensions_menu(win).actions()
-                 if a.text() == "Ladron"]
-    assert action.shortcut().isEmpty()
-    assert not win._tool_actions["line"].shortcut().isEmpty()
+    win = open_window()
+    row, = win._extension_menus.rows()
+    assert row[2:4] == ("Ladron", "")
+    assert win._tool_actions["line"].portable_keys() == ["L"]
 
 
-def test_fresh_shortcut_is_honoured(tmp_path, main_window):
+def test_fresh_shortcut_is_honoured(tmp_path, open_window):
     _write(tmp_path, "consola.py", GOOD.replace(
-        'name = "Hello"',
-        'name = "Consola"\n        shortcut = "Ctrl+Shift+P"'))
-    win = main_window()
-    (action,) = [a for a in _extensions_menu(win).actions()
-                 if a.text() == "Consola"]
-    assert action.shortcut().toString() == "Ctrl+Shift+P"
+        'name = "Hello"', 'name = "Consola"\n        shortcut = "Ctrl+Alt+J"'))
+    row, = open_window()._extension_menus.rows()
+    assert row[2:4] == ("Consola", "Ctrl+Alt+J")
 
 
-def test_activating_a_plugin_keeps_the_real_tool_active(tmp_path, main_window):
-    """Plugin entries are one-shot: running one must not lie about the
-    active drawing tool (PR #1 rewrote the status label without actually
-    changing the tool)."""
+def test_activating_a_plugin_keeps_the_real_tool_active(tmp_path, open_window):
     _write(tmp_path, "hello.py", GOOD.replace(
         "def on_activate(self, viewport):\n            pass",
         "def on_activate(self, viewport):\n            viewport._plugin_ran = True"))
-    win = main_window()
-    active_before = win.viewport.active_tool
-    label_before = win._tool_label.text()
-    win._activate_plugin_tool("plugin_hello_HelloTool")
-    assert win.viewport._plugin_ran is True
-    assert win.viewport.active_tool is active_before
-    assert win._tool_label.text() == label_before
+    win = open_window()
+    active = win.viewport.active_tool
+    label = win._tool_label.text()
+    row, = win._extension_menus.rows()
+    win._registry_actions["menu:" + row[0]].trigger()
+    assert win.viewport._plugin_ran and win.viewport.active_tool is active
+    assert win._tool_label.text() == label
 
 
 SETUP_BUILT_TOOL = """

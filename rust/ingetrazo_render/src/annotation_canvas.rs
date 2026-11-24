@@ -471,7 +471,9 @@ impl AnnotationCanvas {
         let tree = text_run(&self.state.font, text, anchor, ink)
             .ok_or_else(|| PyValueError::new_err("invalid annotation text"))?;
         // Placed in device pixels, after the scale: a whole-pixel move then
-        // draws the same pixels.
+        // draws the same pixels. (A cache of the run's pixels at a rounded
+        // sub-pixel offset was tried: tiny-skia's 4x vertical supersampling
+        // then moved horizontal edges by a quarter of their coverage.)
         let scale = self.scale();
         let transform = scale.post_translate(at.0 as f32 * scale.sx, at.1 as f32 * scale.sy);
         let b = tree.root().abs_stroke_bounding_box();
@@ -564,6 +566,22 @@ impl AnnotationCanvas {
             overlay: None,
             drawn: None,
         })
+    }
+    /// Start a new frame on this canvas: what was drawn goes (only its
+    /// region is cleared, the pixels are kept), and so do the pen, brush,
+    /// font and saved states. The live view reuses one canvas.
+    fn clear(&mut self) {
+        if let (Some(r), Some(layer)) = (self.drawn_region(), self.overlay.as_mut()) {
+            let stride = self.size.width() as usize * 4;
+            let data = layer.data_mut();
+            for y in r[1]..r[3] {
+                let at = y as usize * stride;
+                data[at + r[0] as usize * 4..at + r[2] as usize * 4].fill(0);
+            }
+        }
+        self.drawn = None;
+        self.state = Default::default();
+        self.stack.clear();
     }
     #[getter]
     fn logical_size(&self) -> (f64, f64) {
@@ -1026,6 +1044,25 @@ mod tests {
                 assert_eq!(a.pixel(x, y), b.pixel(x + 60, y + 40), "at {x},{y}");
             }
         }
+    }
+
+    #[test]
+    fn a_cleared_canvas_is_blank_and_draws_as_a_new_one() {
+        let draw = |canvas: &mut AnnotationCanvas, at| {
+            canvas.pen(Color([200, 30, 30, 255]), 2., false);
+            canvas.circle(at, 6.).unwrap();
+            canvas.text("Endpoint", at, "start", Color([200, 30, 30, 255])).unwrap();
+        };
+        let mut reused = AnnotationCanvas::new(400, 200, 200.).unwrap();
+        draw(&mut reused, (30., 40.));
+        reused.clear();
+        assert_eq!(reused.drawn_region(), None);
+        assert!(reused.overlay.as_ref().unwrap().data().iter().all(|&v| v == 0));
+        draw(&mut reused, (120.5, 70.25));
+        let mut fresh = AnnotationCanvas::new(400, 200, 200.).unwrap();
+        draw(&mut fresh, (120.5, 70.25));
+        assert_eq!(reused.drawn_region(), fresh.drawn_region());
+        assert_eq!(reused.overlay.unwrap().data(), fresh.overlay.unwrap().data());
     }
 
     #[test]
