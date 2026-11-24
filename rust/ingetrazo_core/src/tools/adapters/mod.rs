@@ -57,6 +57,7 @@ mod move_host_api;
 mod north_tool_api;
 mod offset_host_api;
 mod paint_host_api;
+mod paste_host_api;
 mod planar_machine_api;
 mod position_camera_host_api;
 mod protractor_base_api;
@@ -199,6 +200,7 @@ fn registration(module: &str, name: &str) -> Option<(&'static [Method], &'static
         ("tools.eraser_host", "EraserHost") => {
             (eraser_host_api::METHODS, stringify!(eraser_host_api))
         }
+        ("tools.paste_host", "PasteHost") => (paste_host_api::METHODS, stringify!(paste_host_api)),
         ("tools.pushpull", "PushPullTool") => (pushpull::METHODS, stringify!(pushpull)),
         _ => return None,
     })
