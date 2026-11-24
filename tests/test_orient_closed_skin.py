@@ -72,13 +72,15 @@ def test_a_solid_with_many_features_is_asked_a_handful_of_faces(monkeypatch):
     assert 0 < len(asked) <= orient._SHELL_SAMPLES
 
 
-def test_a_push_on_that_solid_asks_a_handful_too(monkeypatch):
+def test_native_push_leaves_a_coherent_skin(monkeypatch):
     scene, hist = _slab_with_cylinders(4)
     face = _circle(scene, hist, 4)
     asked = _count_questions(monkeypatch)
     _push(scene, face, 0.5)
-    # Two passes per push (before and after), a sample each.
-    assert 0 < len(asked) <= 2 * orient._SHELL_SAMPLES
+    # The store orients the push without calling the object-mesh pass.
+    assert not asked
+    assert orient_outward(scene.mesh) == []
+    assert 0 < len(asked) <= orient._SHELL_SAMPLES
     assert all(not f.interior for f in scene.mesh.faces)
     assert signed_volume(scene.mesh) > 0
 
