@@ -272,7 +272,7 @@ class Host:
             self.request_frame()
         view = self.view
         scene = self.viewport.scene
-        self.viewport._document_watch.observe()
+        self.window._doc.viewport._document_watch.observe()
         # MainWindow._install_wgpu_display's present(): a scene whose
         # version moved since the resident pack is packed again.
         if view.renderer is not None and (scene is not getattr(view, "scene", None)
@@ -353,7 +353,8 @@ class Host:
                 version = scene.version
                 view.set_scene(scene)
                 view._shell_resident_version = version
-            out = view.draw_frame()
+            grid = getattr(self.window._doc, "model_views", None)
+            out = grid.frame() if grid is not None else view.draw_frame()
             if out is not None:
                 self._picture_seen = True
             return out
@@ -421,6 +422,26 @@ class Host:
         from views import chrome_dialogs as cd
         return cd.modal(self.window)
 
+    def _pane_input(self, kind, method, event, held):
+        grid = getattr(self.window._doc, "model_views", None)
+        if grid is None or not grid.visible:
+            return self.view
+        from views.wgpu_view import _ui_claims
+        if not grid.layout.captured and _ui_claims(self.view, method, event):
+            return None
+        pos = event.position()
+        primary = getattr(event, "button", lambda: None)()
+        cursor = grid.layout.divider(kind, pos.x(), pos.y(), getattr(primary, "value", 0) == 1, grid.snap_pixels)
+        if cursor:
+            self.cursor_changed(cursor)
+            return None
+        hit = grid.pointer(kind, pos.x(), pos.y(), held)
+        if hit is None:
+            return None
+        pane, x, y = hit
+        event.set_local_position(x, y)
+        return pane
+
     def pointer(self, kind, x, y, button=0, held=0, modifiers=0, timestamp=0):
         from app_shell.events import ContextMenuEvent, MouseEvent
         self.input_state.pointer(x, y, held, modifiers)
@@ -431,12 +452,16 @@ class Host:
         if kind == "leave":
             return self._guard("leave", view.leaveEvent, None)
         ev = MouseEvent(kind, x, y, button, held, modifiers, timestamp=timestamp)
-        handler = {"press": view.mousePressEvent, "release": view.mouseReleaseEvent,
-                   "move": view.mouseMoveEvent, "double": view.mouseDoubleClickEvent}[kind]
-        self._guard(f"pointer {kind}", handler, ev)
+        method = {"press": "mousePressEvent", "release": "mouseReleaseEvent",
+                  "move": "mouseMoveEvent", "double": "mouseDoubleClickEvent"}[kind]
+        view = self._pane_input(kind, method, ev, held)
+        if view is None:
+            self.request_frame()
+            return
+        self._guard(f"pointer {kind}", getattr(view, method), ev)
         if kind == "press" and button == 2 and not self._modal():
             # Qt on the Mac sends the context menu on the right press.
-            self._guard("context menu", view.contextMenuEvent, ContextMenuEvent(x, y, modifiers))
+            self._guard("context menu", view.contextMenuEvent, ContextMenuEvent(ev.x(), ev.y(), modifiers))
         self.request_frame()
 
     def wheel(self, x, y, pixel_dx, pixel_dy, angle_dx, angle_dy, phase="none",
@@ -447,7 +472,9 @@ class Host:
             return
         self.window.scene_player.stop()
         ev = WheelEvent(x, y, pixel_dx, pixel_dy, angle_dx, angle_dy, phase, modifiers, held, inverted, touch_screen)
-        self._guard("wheel", self.view.wheelEvent, ev)
+        view = self._pane_input("wheel", "wheelEvent", ev, held)
+        if view is not None:
+            self._guard("wheel", view.wheelEvent, ev)
         self.request_frame()
 
     def gesture(self, kind, value, x, y, modifiers=0):
@@ -457,7 +484,9 @@ class Host:
             return
         self.window.scene_player.stop()
         ev = NativeGestureEvent(kind, value, x, y, modifiers=modifiers)
-        self._guard("gesture", self.view.event, ev)
+        view = self._pane_input("gesture", "event", ev, self.input_state.buttons)
+        if view is not None:
+            self._guard("gesture", view.event, ev)
         self.request_frame()
 
     def key(self, pressed, key, modifiers=0, text="", repeat=False):
@@ -493,16 +522,33 @@ class Host:
                     self._guard("job key", cd.job_key, self.window, ev)
             self.request_frame()
             return True
+        grid = getattr(self.window._doc, "model_views", None)
+        if pressed and key == Qt.Key_Escape and grid and grid.layout.cancel_divider():
+            self.request_frame()
+            return True
         if pressed and key == Qt.Key_Escape and self.window.scene_player.is_active():
             self.window.scene_player.stop()
             return True
         if pressed:
             override = ShortcutOverride(key, modifiers, text, repeat)
-            self._guard("shortcut override", view.event, override)
+            if grid and grid.visible:
+                from views import wgpu_ui
+                if wgpu_ui.claims_key(view, override):
+                    override.accept()
+                else:
+                    self._guard("shortcut override", self.viewport.keys_stand_in.event, override)
+            else:
+                self._guard("shortcut override", view.event, override)
             if not override.isAccepted() and not repeat and self._shortcut(key, modifiers):
                 self.request_frame()
                 return True
         ev = KeyEvent(pressed, key, modifiers, text, repeat)
+        if grid is not None and grid.visible:
+            from views.wgpu_view import _ui_claims
+            if _ui_claims(view, "keyPressEvent" if pressed else "keyReleaseEvent", ev):
+                self.request_frame()
+                return True
+            view = self.viewport.keys_stand_in
         self._guard("key", view.keyPressEvent if pressed else view.keyReleaseEvent, ev)
         self.request_frame()
         return True
@@ -595,6 +641,9 @@ class Host:
             self._device.button.disconnect(self.window._on_ndof_button)
             self._device = None
         if not on:
+            grid = getattr(self.window._doc, "model_views", None)
+            if grid is not None:
+                grid.layout.cancel()
             self.input_state.focus_lost()
             self._guard("focus out", self.view.focusOutEvent, None)
 
@@ -623,7 +672,8 @@ class Host:
                 bounds = w._extents_bounds()
                 if bounds:
                     from views.wgpu_ui import free_area
-                    self.viewport.camera.fit_box(*bounds, free=free_area(w))
+                    grid = getattr(w._doc, "model_views", None)
+                    self.viewport.camera.fit_box(*bounds, free=None if grid and grid.visible else free_area(w))
         elif kind == "verb" and arg in _VERBS:
             # The ported prompts (views/chrome_forms.py), by name: the
             # window's own MainWindow methods, borrowed.
@@ -651,6 +701,8 @@ class Host:
         self.window.scene_player.cancel()
         self.timers.cancel_all()
         for doc in list(self.window._documents):
+            if grid := getattr(doc, "model_views", None):
+                grid.suspend()
             self.window._release_document_watch(doc)
             view = doc.stand_in
             if view is not None:
@@ -677,6 +729,11 @@ class Host:
             "groups": len(getattr(scene, "groups", ()) or ()),
             "input": self.view.renderer.ui_input_state() if hasattr(self.view.renderer, "ui_input_state") else {},
             "filter": self.view.__dict__.get("_ui_filter", ""),
+            "qt_modules": sorted(name for name in sys.modules if name.split(".")[0] in ("PySide6", "shiboken6")),
+            "model_layout": win._doc.view_layout,
+            "model_pane": grid.layout.active if (grid := getattr(win._doc, "model_views", None)) else 1,
+            "model_dividers": grid.layout.shares if grid else None,
+            "view_targets": getattr(self.renderer, "target_count", 0),
             "dock_lens": self.view.__dict__.get("_ui_lens", 0),
             "dock_mode": self.view.__dict__.get("_ui_mode", ""),
             "tool_busy": self.viewport._tool_busy_for_delete(tool),

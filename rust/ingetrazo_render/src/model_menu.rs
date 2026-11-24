@@ -72,6 +72,10 @@ fn build_entries() -> Vec<MenuEntry> {
         ("animation_video","Export Video…","",Window("export_video")),
         ("animation_settings","Animation Settings…","",Window("ask_animation")),
     ] { add(id,"Camera ▸ Animation",label,shortcut,handler); }
+    for (id, key, label) in crate::model_views::presets() {
+        add(id, "Window ▸ Model Views", label, "", Argument("set_view_layout", key));
+    }
+    add("maximize_model_view", "Window", "Maximize / Restore View", "Ctrl+Space", Window("_maximize_model_view"));
     add("export:video","File ▸ Export","Scenes as Video…","",Window("export_video"));
     for (id,label,mode) in [("rest_normal","Show normally","normal"),("rest_fade","Fade","fade"),("rest_hide","Hide (fastest)","hide")] {
         add(id,"Camera ▸ Rest of model while editing",label,"",RestMode(mode));

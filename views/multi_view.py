@@ -306,16 +306,10 @@ class _FollowWindow(QObject):
 #: The columns' widths are relative.
 #: In the picker's order: one view always first, then the rest from the
 #: most used to the least.
-LAYOUTS = (
-    ("single", "One view", ((1,),), (1,)),
-    ("four", "Four views", ((0, 2), (1, 3)), (1, 1)),
-    ("two", "Two views", ((0,), (1,)), (1, 1)),
-    ("three", "Three views", ((1,), (0, 2)), (1, 1)),
-    ("two_stacked", "Two views, one above the other", ((1, 3),), (1,)),
-    ("three_mirror", "Three views, the large one on the right",
-     ((0, 2), (1,)), (1, 1)),
-    ("two_wide", "Two views, one wider", ((1,), (0,)), (2, 1)),
-)
+from ingetrazo_render import view_layouts
+
+LAYOUTS = tuple((key, label, tuple(map(tuple, cols)), tuple(weights))
+                for key, label, cols, weights in view_layouts())
 
 #: The view a cell takes in a layout, while the user has not picked one
 #: for it: one above the other, the plan goes under the 3D view.

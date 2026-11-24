@@ -183,7 +183,7 @@ pub fn build() -> muda::Result<Menus> {
     let draw = Submenu::new("Draw", true);
     let mut groups = std::collections::HashMap::from([
         ("File", file.clone()), ("File ▸ Import", import.clone()), ("Edit", edit.clone()), ("Camera", view.clone()),
-        ("Draw", draw.clone()), ("Tools", tools.clone()), ("Help", help.clone()),
+        ("Window", window.clone()), ("Draw", draw.clone()), ("Tools", tools.clone()), ("Help", help.clone()),
     ]);
     for entry in ingetrazo_render::model_menu::entries() {
         if let Some((parent, label)) = entry.path.split_once(" ▸ ") {

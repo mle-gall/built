@@ -191,7 +191,7 @@ class MetalView(ViewNavigation):
         return window_handles(self)
 
     def _wrap_renderer(self):
-        from views.wgpu_peer import TargetRenderer
+        from views.resident_peer import TargetRenderer
         if (self.peers() and self.renderer is not None
                 and hasattr(self.renderer, 'bind_target')
                 and not isinstance(self.renderer, TargetRenderer)):

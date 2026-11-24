@@ -145,8 +145,7 @@ class ShellProjectTabs:
         self.activated = _Relay(lambda doc: win.activate_document(doc))
         self.newRequested = _Relay(lambda: win.run_command("new"))
         self.closeRequested = _Relay(lambda doc: win.run_command("close_tab", doc))
-        self.viewsRequested = _Relay(lambda: win.statusBar().showMessage(
-            "Several views of one model are not in the native app yet", 3000))
+        self.viewsRequested = _Relay(win._pick_view_layout)
 
     def documents(self):
         return list(self._win._documents)
@@ -573,6 +572,8 @@ class ShellWindow(QObject):
         if doc is old:
             return
         self.scene_player.cancel()
+        if grid := getattr(old, "model_views", None):
+            grid.suspend()
         if old is not None and old.viewport is not None:
             from views.inspector_bridge import leave_camera
             leave_camera(old)
@@ -637,6 +638,8 @@ class ShellWindow(QObject):
         from core import autosave
         if doc not in self._documents:
             return
+        if grid := getattr(doc, "model_views", None):
+            grid.suspend()
         self._release_document_watch(doc)
         self._documents.remove(doc)
         from app_shell import project
@@ -701,14 +704,83 @@ class ShellWindow(QObject):
     def setWindowTitle(self, title):
         self._host.set_title(title)
 
+    def _active_view(self):
+        return self.viewport
+
+    def _pick_view_layout(self):
+        from app_shell.model_views import choose
+        choose(self)
+
+    def set_view_layout(self, key):
+        from app_shell.model_views import for_document
+        for_document(self._doc).choose(key)
+
+    def _views_dict(self, doc):
+        grid = getattr(doc, "model_views", None)
+        return grid.layout.archive() if grid else None
+
+    def _fit_model_bounds(self, bounds):
+        from views.wgpu_ui import free_area
+        grid = getattr(self._doc, "model_views", None)
+        if grid and grid.visible:
+            for display in grid.displays.values():
+                display.source_viewport.camera.fit_box(*bounds)
+        else:
+            self.viewport.camera.fit_box(*bounds, free=free_area(self))
+        self._host.request_frame()
+
+    def _on_zoom_extents(self):
+        bounds = self._extents_bounds()
+        if bounds is not None:
+            self._fit_model_bounds(bounds)
+
+    def _on_zoom_selection(self):
+        from core.i18n import tr
+        bounds = self.viewport.scene.selection_bounds()
+        if bounds[0] is None:
+            self.statusBar().showMessage(tr("Nothing selected"), 2500)
+        else:
+            self._fit_model_bounds(bounds)
+
+    def _maximize_model_view(self):
+        grid = getattr(self._doc, "model_views", None)
+        if grid is not None:
+            grid.layout.toggle_maximized()
+            self._host.request_frame()
+
     def active_style(self):
-        return getattr(self.viewport.scene, "display_style", None)
+        return self.viewport._view_style()
+
+    def own_style(self):
+        vp = self.viewport
+        if vp is self._doc.viewport:
+            self.keep_other_views_style()
+            return vp.scene.display_style
+        if vp.view_style is None and vp.scene.display_style is not None:
+            vp.view_style = vp.scene.display_style.copy()
+        return vp.view_style
+
+    def keep_other_views_style(self):
+        if grid := getattr(self._doc, "model_views", None):
+            style = self._doc.viewport.scene.display_style
+            for number, display in grid.displays.items():
+                if number != 1 and display.source_viewport.view_style is None and style is not None:
+                    display.source_viewport.view_style = style.copy()
+
+    def set_active_style(self, style):
+        if self.viewport is self._doc.viewport:
+            self.keep_other_views_style()
+            self.viewport.scene.display_style = style
+        else:
+            self.viewport.view_style = style
+        self._host.request_frame()
 
     def _activate_nav(self, key):
         self.viewport.set_nav_mode(key)
         self._update_status_hint()
-        self.view.tools.sync()
-        self.view.tools._apply_tool_cursor()
+        display = self.viewport.keys_stand_in
+        display.tools.sync()
+        display.tools._apply_tool_cursor()
         self.view.update()
 
     def _activate_tool(self, key: str) -> None:
@@ -718,7 +790,7 @@ class ShellWindow(QObject):
             self._status.showMessage(f"{key} is not in the native app yet — File ▸ Open in Classic App", 4000)
             return
         self.viewport.set_active_tool(tool)
-        display = self._doc.stand_in
+        display = self.viewport.keys_stand_in
         display.tools.pick_up()
         display.set_scene(self.viewport.scene)
         display.update()
@@ -924,8 +996,8 @@ class ShellWindow(QObject):
 #: MainWindow methods that only reach ``self.viewport`` and ``self._doc``:
 #: borrowed eagerly (the rest come on demand, see ``ShellWindow.__getattr__``).
 _FROM_MAIN_WINDOW = ("_CAMERA_FIELDS", "_apply_camera_dict", "_apply_camera_home",
-                     "_on_undo", "_on_redo", "_on_zoom_extents", "_extents_bounds",
-                     "_figure_bounds", "_image_bounds", "_on_zoom_selection",
+                     "_on_undo", "_on_redo", "_extents_bounds",
+                     "_figure_bounds", "_image_bounds",
                      "_saved_version", "_is_dirty", "_doc_is_blank", "_free_untitled_no")
 
 
