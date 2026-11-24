@@ -2932,7 +2932,7 @@ Native denotes routed, not exhaustive parity acceptance.
 | arc3 | ThreePointArcTool | native | Rust state machine, rubber_band_lines |
 | center_arc | CenterArcTool | native | Rust state machine, rubber_band_lines |
 | pie | PieTool | native | Rust state machine, rubber_band_lines |
-| pushpull | PushPullTool | native | Rust state machine, _pixel_to_ray, _world_to_pixel, pick_face_any, rubber_band_lines |
+| pushpull | PushPullTool | native | Rust state machine, pick_face_any, rubber_band_lines |
 | offset | OffsetTool | native | Rust state machine, _world_to_pixel, pick_face |
 | move | MoveTool | native | Rust state machine, _world_to_pixel, rubber_band_lines, set_groups_preview_offset |
 | rotate | RotateTool | native | Rust state machine, rubber_band_lines, set_groups_preview_matrix |
@@ -2956,7 +2956,7 @@ Native denotes routed, not exhaustive parity acceptance.
 | first_person | FirstPersonTool | native | Rust state machine |
 | change_axes | ChangeAxesTool | native | Rust state machine |
 | scale_manager | ScaleManagerTool | native | Rust state machine |
-| paste | PasteTool | native | Rust state machine, set_groups_preview_offset |
+| paste | PasteTool | native | Rust state machine |
 | place_group | PlaceGroupTool | native | Rust state machine |
 | outer_shell | OuterShellTool | native | Rust state machine, pick_group |
 | solid_union | UnionTool | native | Rust state machine, pick_group |
