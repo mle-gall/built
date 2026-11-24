@@ -11,6 +11,7 @@
 //! release/reacquire costs more than the op).
 
 mod command_face;
+mod command_vertices;
 
 use super::build::{Block, Points as BlockPoints};
 use super::edit::Change;
@@ -1785,6 +1786,39 @@ impl PyMeshStore {
     fn transform_vertices(&mut self, source: Vec<[f64; 3]>, matrix: [f64; 16], collect: bool)
         -> (usize, Vec<u128>) {
         self.inner.transform_vertices(&source, matrix, collect)
+    }
+
+    #[staticmethod]
+    #[pyo3(signature = (mesh, positions, delta, carry_textures=false))]
+    fn command_move_vertices(mesh: &Bound<'_, PyAny>, positions: &Bound<'_, PyAny>, delta: [f64;3], carry_textures: bool)
+        -> PyResult<Option<super::command_facade::VertexResult>> {
+        let mut points = Vec::new();
+        for point in positions.try_iter()? {
+            let point = point?;
+            let row = if let Some(coords) = point.getattr_opt("toTuple")? { coords.call0()? } else { point };
+            let coords: Vec<Bound<'_,PyAny>> = row.extract()?;
+            if coords.iter().any(|n| !n.is_exact_instance_of::<pyo3::types::PyFloat>()) {
+                return Ok(None);
+            }
+            points.push(row.extract()?);
+        }
+        Ok(super::command_facade::command_move_vertices(mesh, points, delta, carry_textures)?
+            .map(super::command_facade::MovedVertices::fields))
+    }
+
+    #[staticmethod]
+    #[pyo3(signature = (mesh, positions, matrix, carry_textures=false))]
+    fn command_transform_vertices(mesh: &Bound<'_, PyAny>, positions: Vec<[f64;3]>, matrix: [f64;16], carry_textures: bool)
+        -> PyResult<Option<super::command_facade::VertexResult>> {
+        Ok(super::command_facade::command_transform_vertices(mesh, positions, matrix, carry_textures)?
+            .map(super::command_facade::MovedVertices::fields))
+    }
+
+    #[pyo3(signature = (source, landing, delta, matrix, carry, hypot, owner))]
+    fn _apply_vertex_command(&mut self, py: Python<'_>, source: Vec<[f64;3]>, landing: Vec<[f64;3]>,
+        delta: Option<[f64;3]>, matrix: [f64;16], carry: bool, hypot: &str, owner: &Bound<'_, PyDict>)
+        -> PyResult<Option<super::command_facade::VertexResult>> {
+        self.vertex_command(py, source, landing, delta, matrix, carry, hypot, owner)
     }
 
     /// The two halves of a loose move bracket the editor's update of texture
