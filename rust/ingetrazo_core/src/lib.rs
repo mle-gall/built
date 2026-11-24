@@ -47,6 +47,7 @@ mod text_search;
 mod selection_identity;
 mod sidebar;
 mod hatch_file;
+mod hatch_region;
 mod style_files;
 mod style_edit;
 mod settings;
@@ -280,6 +281,8 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(polygon::polygon_is_convex, m)?)?;
     m.add_function(wrap_pyfunction!(polygon::polygon_earcut, m)?)?;
     m.add_function(wrap_pyfunction!(polygon::polygon_triangles, m)?)?;
+    m.add_function(wrap_pyfunction!(hatch_region::hatch_clip_segments, m)?)?;
+    m.add_function(wrap_pyfunction!(hatch_region::hatch_fill_quads, m)?)?;
     m.add_function(wrap_pyfunction!(earcut_indices, m)?)?;
     m.add_function(wrap_pyfunction!(faces_view, m)?)?;
     m.add_class::<InstanceProto>()?;
