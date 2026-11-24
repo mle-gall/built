@@ -48,6 +48,9 @@ mod first_person_host_api;
 mod move_host_api;
 mod offset_host_api;
 mod position_camera_host_api;
+mod protractor_base_api;
+mod protractor_host_api;
+mod protractor_tool_api;
 mod pushpull;
 mod rotate_host_api;
 mod rotate_tool_api;
@@ -117,6 +120,18 @@ fn registration(module: &str, name: &str) -> Option<(&'static [Method], &'static
         ("tools.offset_host", "OffsetHost") => {
             (offset_host_api::METHODS, stringify!(offset_host_api))
         }
+        ("tools.protractor_host", "ProtractorBase") => (
+            protractor_base_api::METHODS,
+            stringify!(protractor_base_api),
+        ),
+        ("tools.protractor_host", "ProtractorHost") => (
+            protractor_host_api::METHODS,
+            stringify!(protractor_host_api),
+        ),
+        ("tools.rust_tools", "ProtractorTool") => (
+            protractor_tool_api::METHODS,
+            stringify!(protractor_tool_api),
+        ),
         ("tools.pushpull", "PushPullTool") => (pushpull::METHODS, stringify!(pushpull)),
         _ => return None,
     })

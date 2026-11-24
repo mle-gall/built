@@ -1022,6 +1022,7 @@ class PaintTool(PaintHost, RustTool):
 from tools.protractor_host import ProtractorHost, ProtractorBase, DISC_PX, TICK_DEG
 
 
+@register_tool_adapter
 class ProtractorTool(ProtractorHost, RustTool):
     kind = "protractor"
     _READ_DURING = ("start_point", "ref_point", "guides")
@@ -1029,10 +1030,6 @@ class ProtractorTool(ProtractorHost, RustTool):
     def __init__(self):
         RustTool.__init__(self)
         ProtractorBase.__init__(self)
-
-    def _set_arm(self, key, p):
-        if self._during is None:
-            self._machine.set(key, _tuple(p))
 
     start_point = property(lambda self: self._point("start_point"),
                            lambda self, p: self._set_arm("start_point", p))
