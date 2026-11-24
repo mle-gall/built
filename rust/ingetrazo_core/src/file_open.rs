@@ -392,6 +392,7 @@ impl DocumentOpen {
                         let previous = gc.call_method0("get_threshold")?;
                         let budget = (4096, 4, i32::MAX);
                         gc.call_method1("set_threshold", budget)?;
+                        LAST_YIELD.with(|last| last.set(Some(std::time::Instant::now())));
                         let result = job(py, &worker);
                         if gc
                             .call_method0("get_threshold")?

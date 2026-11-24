@@ -29,7 +29,15 @@ impl Output {
         }
     }
     fn __enter__<'p>(&mut self, py: Python<'p>) -> PyResult<Obj<'p>> {
-        let stage = py.detach(|| AtomicDocument::create(self.path.clone()))?;
+        let mut stage = py.detach(|| AtomicDocument::create(self.path.clone()))?;
+        #[cfg(unix)]
+        let target = {
+            use std::os::fd::AsRawFd;
+            let kw = PyDict::new(py);
+            kw.set_item("closefd", false)?;
+            py.import("builtins")?.call_method("open", (stage.output()?.as_raw_fd(), "wb"), Some(&kw))?
+        };
+        #[cfg(not(unix))]
         let target = py
             .import("builtins")?
             .call_method1("open", (stage.pending_path()?, "wb"))?;
@@ -148,6 +156,17 @@ fn igz_write_container<'p>(
         if let Some(writer) = native.getattr_opt("igz_write_zip")? {
             let members = PyList::empty(py);
             for (key, compressed, data) in &entries {
+                if data.is_instance(&fragment)? {
+                    let source = data.getattr("file")?;
+                    // Small Built documents fit entirely in the scratch spool.
+                    // Asking for its descriptor would force an otherwise unused disk file.
+                    if source.getattr_opt("_rolled")?.is_some_and(|v| v.is(&pyo3::types::PyBool::new(py, false))) {
+                        source.call_method1("seek", (data.getattr("offset")?,))?;
+                        let bytes = source.call_method1("read", (data.getattr("size")?,))?;
+                        members.append((key, *compressed, bytes, py.None()))?;
+                        continue;
+                    }
+                }
                 let range = slice(data, &fragment)?;
                 let bytes = if range.is_none() {
                     Some(contents(data)?)
