@@ -43,6 +43,7 @@ fn unpack<'py, const N: usize>(value: &Obj<'py>) -> PyResult<[Obj<'py>; N]> {
         .map_err(|_| pyo3::exceptions::PyValueError::new_err("invalid row"))
 }
 mod fillet_host_api;
+mod move_host_api;
 mod pushpull;
 mod scale;
 mod select_tool_api;
@@ -87,6 +88,7 @@ fn registration(module: &str, name: &str) -> Option<(&'static [Method], &'static
         ("tools.rust_tools", "SelectTool") => {
             (select_tool_api::METHODS, stringify!(select_tool_api))
         }
+        ("tools.move_host", "MoveHost") => (move_host_api::METHODS, stringify!(move_host_api)),
         ("tools.pushpull", "PushPullTool") => (pushpull::METHODS, stringify!(pushpull)),
         _ => return None,
     })
@@ -167,6 +169,7 @@ pub fn register_tool_adapter<'py>(cls: &Obj<'py>) -> Reply<'py> {
     Ok(cls.clone())
 }
 
+mod move_functions;
 mod selection;
 #[pyfunction]
 pub fn register_tool_functions(namespace: &Bound<'_, PyDict>) -> PyResult<()> {
@@ -177,6 +180,7 @@ pub fn register_tool_functions(namespace: &Bound<'_, PyDict>) -> PyResult<()> {
         .extract()?;
     let methods = match module.as_str() {
         "tools.select_host" => selection::METHODS,
+        "tools.move_host" => move_functions::METHODS,
         _ => {
             return Err(pyo3::exceptions::PyValueError::new_err(format!(
                 "Unknown tool module {module}"
