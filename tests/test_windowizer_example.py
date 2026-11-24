@@ -125,21 +125,25 @@ def test_erase_closes_the_wall_again(native_window, monkeypatch):
     assert [len(f.holes) for f in back] == [0]
 
 
-def test_its_menus_come_from_the_extension_api(win):
-    from ingetrazo_render import ExtensionMenus
+def test_its_menus_come_from_the_extension_api(win, monkeypatch):
+    from unittest.mock import Mock
+    from plugins._context_menu import context_menu_action
     rows = win._extension_menus.rows()
     assert any(path == ["Windowizer"] and label == "Windowize selected faces"
                for _, path, label, *_ in rows)
     vp = win.viewport
     vp.scene.select([_wall(vp)])
-    context = ExtensionMenus()
-    for fn in win._ext_context_menus:
-        fn(context.root("context"), list(vp.scene.selection))
-    assert any(path == ["Windowizer"] and label == "Windowize selected faces"
-               for _, path, label, *_ in context.rows())
+    view = win.view
+    monkeypatch.setattr(view, "renderer", Mock())
+    monkeypatch.setattr(chrome_dialogs, "async_host", lambda parent: win)
+    win.show_viewport_context_menu()
+    rendered = view.renderer.ui_set_context_menu.call_args.args[-1]
+    action = next(key for _, verbs in rendered for key, name, *_ in verbs
+                  if name == "Windowizer ▸ Windowize selected faces")
+    assert context_menu_action(win, view, action)
+    assert chrome_forms.forms(win)[-1].field("frame_w") is not None
 
 
-@pytest.mark.classic_pending
 def test_the_project_browser_reads_a_window_as_a_window(win, monkeypatch):
     mod, vp, g = _windowize(win, monkeypatch, rows="2", cols="3")
     from unittest.mock import Mock

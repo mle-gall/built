@@ -709,7 +709,7 @@ class ShellWindow(WindowDocumentCommands, object if NATIVE else QObject):
 
     def show_viewport_context_menu(self, global_pos=None, locked_image=None, locked_group=None):
         """The right-click menu (viewport_menu.rs)."""
-        from ingetrazo_render import context_menu_show
+        from plugins._context_menu import context_menu_show
         return context_menu_show(self, locked_image, locked_group)
 
     # ---- a Built project (app_shell/project.py) ------------------------

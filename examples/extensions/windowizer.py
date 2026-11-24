@@ -1280,15 +1280,15 @@ def _at_top_level(viewport) -> bool:
     return True
 
 
-def _selected_faces(scene):
+def _selected_faces(scene, selection=None):
     from core.mesh import Face
-    return [e for e in scene.selection
+    return [e for e in (scene.selection if selection is None else selection)
             if isinstance(e, Face) and e in scene.mesh.faces]
 
 
-def _selected_windows(scene):
+def _selected_windows(scene, selection=None):
     out = []
-    for e in scene.selection:
+    for e in (scene.selection if selection is None else selection):
         g = getattr(e, "owner", None) or e
         if g in scene.groups and window_data(g) is not None and g not in out:
             out.append(g)
@@ -1512,7 +1512,7 @@ def setup(app) -> None:
 
     def context(menu, selection) -> None:
         scene = app.viewport.scene
-        faces, wins = _selected_faces(scene), _selected_windows(scene)
+        faces, wins = _selected_faces(scene, selection), _selected_windows(scene, selection)
         if not faces and not wins:
             return
         menu.addSeparator()
