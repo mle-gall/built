@@ -73,6 +73,7 @@ mod rotate_host_api;
 mod rotate_tool_api;
 mod rotated_rectangle_tool_api;
 mod scale;
+mod scale_manager_tool_api;
 mod section_plane_tool_api;
 mod select_tool_api;
 mod solid_tool_api;
@@ -216,6 +217,10 @@ fn registration(module: &str, name: &str) -> Option<(&'static [Method], &'static
         ("tools.place_group_host", "PlaceGroupHost") => (
             place_group_host_api::METHODS,
             stringify!(place_group_host_api),
+        ),
+        ("tools.scale_manager_host", "ScaleManagerTool") => (
+            scale_manager_tool_api::METHODS,
+            stringify!(scale_manager_tool_api),
         ),
         ("tools.pushpull", "PushPullTool") => (pushpull::METHODS, stringify!(pushpull)),
         _ => return None,
