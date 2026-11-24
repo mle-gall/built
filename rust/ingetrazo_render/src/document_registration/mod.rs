@@ -4,6 +4,7 @@
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyString, PyTuple};
+mod actions;
 mod defaults;
 mod helpers;
 mod host;
@@ -21,6 +22,31 @@ type Entry = (
     &'static str,
 );
 
+type Adapter = for<'py> fn(&Bound<'py, PyTuple>) -> PyResult<Obj<'py>>;
+type AdapterEntry = (
+    &'static str,
+    Adapter,
+    &'static [&'static str],
+    &'static str,
+    &'static str,
+);
+
+enum Endpoint {
+    Kernel(Py<PyAny>, Py<PyString>),
+    Adapter(Adapter),
+}
+
+impl Endpoint {
+    fn invoke<'py>(&self, args: &Bound<'py, PyTuple>) -> PyResult<Obj<'py>> {
+        match self {
+            Self::Kernel(module, name) => module
+                .bind(args.py())
+                .call_method1(name.bind(args.py()), args),
+            Self::Adapter(callback) => callback(args),
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 enum Mode {
     Method,
@@ -37,8 +63,7 @@ struct Parameter {
 
 #[pyclass(frozen, dict, weakref, module = "ingetrazo_render")]
 struct DocumentBinding {
-    backend: Py<PyAny>,
-    target: Py<PyString>,
+    endpoint: Endpoint,
     method_type: Py<PyAny>,
     name: &'static str,
     params: Vec<Parameter>,
@@ -66,12 +91,11 @@ impl DocumentBinding {
         kwargs: Option<&Bound<'py, PyDict>>,
     ) -> PyResult<Obj<'py>> {
         let py = args.py();
-        let target = self.backend.bind(py).getattr(self.target.bind(py))?;
         let given = args.len();
         let keywords = kwargs.filter(|k| !k.is_empty());
         // Most calls already have exactly the positional arguments of the kernel.
         if given == self.params.len() && given == self.positional && keywords.is_none() {
-            return target.call1(args);
+            return self.endpoint.invoke(args);
         }
         if given > self.positional {
             return Err(PyTypeError::new_err(format!(
@@ -113,7 +137,12 @@ impl DocumentBinding {
                 }
             }
         }
-        target.call1(PyTuple::new(py, values)?)
+        self.endpoint.invoke(&PyTuple::new(py, values)?)
+    }
+
+    // References in plugin state resolve to the same callable when reloaded.
+    fn __reduce__<'py>(slf: &Bound<'py, Self>) -> PyResult<Obj<'py>> {
+        slf.getattr("__qualname__")
     }
 
     #[getter]
@@ -171,76 +200,93 @@ impl<'py> Registrar<'py> {
         mode: Mode,
         entries: &[Entry],
     ) -> PyResult<()> {
-        let py = owner.py();
         for &(name, target, declarations, result, doc) in entries {
-            let mut params = Vec::new();
-            let mut limit = None;
-            let annotations = PyDict::new(py);
-            for &decl in declarations {
-                if decl == "*" {
-                    limit = Some(params.len());
-                    continue;
+            let kernel = Endpoint::Kernel(
+                backend.clone().unbind(),
+                PyString::intern(owner.py(), target).unbind(),
+            );
+            self.define(owner, mode, name, kernel, declarations, result, doc)?;
+        }
+        Ok(())
+    }
+
+    fn define(
+        &self,
+        owner: &Obj<'py>,
+        mode: Mode,
+        name: &'static str,
+        endpoint: Endpoint,
+        declarations: &[&'static str],
+        result: &'static str,
+        doc: &str,
+    ) -> PyResult<()> {
+        let py = owner.py();
+        let mut params = Vec::new();
+        let mut limit = None;
+        let annotations = PyDict::new(py);
+        for &decl in declarations {
+            if decl == "*" {
+                limit = Some(params.len());
+                continue;
+            }
+            let (arg, default) = match decl.split_once('=') {
+                Some((arg, literal)) => {
+                    let value = match self.defaults.get_item(literal)? {
+                        Some(value) => value,
+                        None => {
+                            let value =
+                                py.import("ast")?.call_method1("literal_eval", (literal,))?;
+                            self.defaults.set_item(literal, &value)?;
+                            value
+                        }
+                    };
+                    (arg, Some(value.unbind()))
                 }
-                let (arg, default) = match decl.split_once('=') {
-                    Some((arg, literal)) => {
-                        let value = match self.defaults.get_item(literal)? {
-                            Some(value) => value,
-                            None => {
-                                let value =
-                                    py.import("ast")?.call_method1("literal_eval", (literal,))?;
-                                self.defaults.set_item(literal, &value)?;
-                                value
-                            }
-                        };
-                        (arg, Some(value.unbind()))
-                    }
-                    None => (decl, None),
-                };
-                let (name, annotation) = arg.split_once(':').unwrap_or((arg, ""));
-                if !annotation.is_empty() {
-                    annotations.set_item(name, annotation)?;
-                }
-                params.push(Parameter {
-                    name,
-                    annotation,
-                    default,
-                });
-            }
-            if !result.is_empty() {
-                annotations.set_item("return", result)?;
-            }
-            let binding = Bound::new(
-                py,
-                DocumentBinding {
-                    backend: backend.clone().unbind(),
-                    target: PyString::intern(py, target).unbind(),
-                    method_type: self.method.clone().unbind(),
-                    name,
-                    positional: limit.unwrap_or(params.len()),
-                    params,
-                    result,
-                },
-            )?;
-            binding.setattr("__name__", name)?;
-            let qualname = if matches!(mode, Mode::Function) {
-                name.to_owned()
-            } else {
-                format!("DocumentInteraction.{name}")
+                None => (decl, None),
             };
-            binding.setattr("__qualname__", qualname)?;
-            binding.setattr("__module__", "views.document_interaction")?;
-            binding.setattr("__annotations__", annotations)?;
-            binding.setattr("__doc__", (!doc.is_empty()).then_some(doc))?;
-            let binding = match mode {
-                Mode::Method | Mode::Function => binding.into_any(),
-                Mode::Static => self.builtins.call_method1("staticmethod", (binding,))?,
-                Mode::Class => self.builtins.call_method1("classmethod", (binding,))?,
-            };
-            if matches!(mode, Mode::Function) {
-                owner.cast::<PyDict>()?.set_item(name, binding)?;
-            } else {
-                owner.setattr(name, binding)?;
+            let (name, annotation) = arg.split_once(':').unwrap_or((arg, ""));
+            if !annotation.is_empty() {
+                annotations.set_item(name, annotation)?;
             }
+            params.push(Parameter {
+                name,
+                annotation,
+                default,
+            });
+        }
+        if !result.is_empty() {
+            annotations.set_item("return", result)?;
+        }
+        let binding = Bound::new(
+            py,
+            DocumentBinding {
+                endpoint,
+                method_type: self.method.clone().unbind(),
+                name,
+                positional: limit.unwrap_or(params.len()),
+                params,
+                result,
+            },
+        )?;
+        binding.setattr("__name__", name)?;
+        let qualname = if matches!(mode, Mode::Function) {
+            name.to_owned()
+        } else {
+            format!("DocumentInteraction.{name}")
+        };
+        binding.setattr("__qualname__", qualname)?;
+        binding.setattr("__module__", "views.document_interaction")?;
+        binding.setattr("__annotations__", annotations)?;
+        binding.setattr("__doc__", (!doc.is_empty()).then_some(doc))?;
+        let binding = match mode {
+            Mode::Method | Mode::Function => binding.into_any(),
+            Mode::Static => self.builtins.call_method1("staticmethod", (binding,))?,
+            Mode::Class => self.builtins.call_method1("classmethod", (binding,))?,
+        };
+        if matches!(mode, Mode::Function) {
+            owner.cast::<PyDict>()?.set_item(name, binding)?;
+        } else {
+            owner.setattr(name, binding)?;
         }
         Ok(())
     }
@@ -251,7 +297,19 @@ fn register_document_host(cls: &Obj) -> PyResult<()> {
     let r = Registrar::new(cls.py())?;
     defaults::controller(&r, cls)?;
     host::install(&r, cls)?;
-    plugin::install(&r, cls)
+    plugin::install(&r, cls)?;
+    for &(name, action, params, result, doc) in actions::METHODS {
+        r.define(
+            cls,
+            Mode::Method,
+            name,
+            Endpoint::Adapter(action),
+            params,
+            result,
+            doc,
+        )?;
+    }
+    Ok(())
 }
 
 #[pyfunction]

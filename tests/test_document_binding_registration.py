@@ -91,3 +91,51 @@ def test_host_registers_defaults_and_independent_inference_fields():
     view.inference = SimpleNamespace()
     view.last_snap = object()
     assert view.inference.last_snap is view.last_snap
+
+
+def test_tool_pick_adapters_respect_override_keywords_and_face_context(monkeypatch):
+    sink = []
+
+    def pick(x, y, **opts):
+        return x, y, opts
+
+    view = SimpleNamespace(_pick_edge=pick, linework_hidden=sink.append)
+    assert Controller.pick_edge(view, 2, 3) == (2, 3, {"visible_only": False})
+    assert Controller.pick_linework_edge(view, 2, 3)[2] == {
+        "visible_only": True, "hidden": sink.append, "with_distance": True,
+    }
+    def hit(receiver, x, y, kind):
+        assert receiver is view
+        return x, "owner", kind, "mesh"
+
+    monkeypatch.setattr(Controller, "_face_any", hit)
+    assert Controller.pick_face_any(view, 1, 2) == (1, "owner")
+    assert Controller.pick_face_placement(view, None, 2) == (None, None)
+    assert Controller.pick_face_inference(view, 1, 2) == (1, "infer")
+
+
+def test_plugin_projection_and_edit_adapters_preserve_order():
+    calls = []
+    view = SimpleNamespace(
+        camera=SimpleNamespace(set_projection=calls.append),
+        _sync_projection=lambda: calls.append("sync"),
+        update=lambda: calls.append("update"),
+        scene=SimpleNamespace(bump_view=lambda: calls.append("bump")),
+        notify_scene_changed=lambda: calls.append("notify"),
+        _project_px=lambda data: (data.shape, data.dtype.name),
+    )
+    Controller.set_projection(view, "parallel")
+    Controller.refresh_after_edit(view)
+    assert calls == ["parallel", "sync", "update", "bump", "notify"]
+    assert Controller.world_to_pixels(view, [1, 2, 3]) == ((1, 3), "float64")
+
+
+def test_python_can_pickle_references_to_exported_callables():
+    import copy
+    import pickle
+
+    from views.document_interaction import _bind_bake_store
+
+    for method in (Controller.pick_edge, Controller.pick_text_label, _bind_bake_store):
+        assert pickle.loads(pickle.dumps(method)) is method
+        assert copy.deepcopy(method) is method

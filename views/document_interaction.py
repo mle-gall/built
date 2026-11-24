@@ -92,9 +92,6 @@ class _HoverEvent:
         return self._mods
 
 
-# ---- Geometry helpers ------------------------------------------------------
-
-
 def _entity_owner(entities, i):
     """The owner half of pick-index entity ``i``: a lazy piece of the index
     answers it without building its faces (see views.array_bake)."""
@@ -226,8 +223,6 @@ def _guide_vertices(guides, spacing: float, selection=(), centre=None,
     return data, spans
 
 
-# ---- Viewport --------------------------------------------------------------
-
 def _parse_number(tok: str):
     """``2``, ``2.5``, ``.5``, ``3/4`` (a fraction), ``1-1/2`` (a mixed
     number, the hyphen form) → float, else None — ``core.units`` reads it,
@@ -335,7 +330,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     # face shading. World-fixed so shading is stable while orbiting.
     _LIGHT = QVector3D(0.35, 0.25, 1.0).normalized()
 
-
     _bind_bake_store = _bind_bake_store
 
     def __init__(self, parent=None, **surface) -> None:
@@ -366,111 +360,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         from core import axes as _axes
         _axes.sync(getattr(self.scene, "drawing_frame", None))
 
-
-    # ---- Instanced components (P2) ------------------------------------------
-    # Component instances draw from ONE static proto VBO (local coords) plus
-    # a per-instance matrix buffer (divisor 1): N hedges cost one upload and
-    # one draw per proto run. Instances keep their baked chunks for picks,
-    # silhouettes, selection and the drag preview; only the CONSOLIDATED
-    # draw excludes them. INGETRAZO_NO_INSTANCING=1 reverts to the old path.
-
-    def _proto_base_chunk(self, mesh, paint=None):
-        """The prototype's chunk in LOCAL coordinates (the same wrapper
-        ``_instance_chunk`` derives from). ``paint`` is the container
-        material the variant is baked in (issue #47): a painted instance
-        has its own bake of the prototype, unpainted siblings share the
-        plain one."""
-        return self._group_chunk(_proto_wrapper(self, mesh, paint))
-
-
-    def _placement_bbox(self, g):
-        """World AABB of an instanced placement from its PROTOTYPE's local
-        box and the placement matrix — eight corners, no bake. Reading it
-        off ``_group_chunk(g)`` baked the whole placement to world
-        coordinates only to take its box: on the model of issue #158 that
-        was 21 000 baked copies of geometry the instanced pass never uses."""
-        return self._placement_frame(g)[0]
-
-
-    def pick_image_plane(self, screen_x: float, screen_y: float):
-        """Selection entry point: like :meth:`image_plane_at` but skipping
-        locked images, so a click on an aligned scan falls through to the
-        geometry being drawn on it."""
-        return self.image_plane_at(screen_x, screen_y, selectable_only=True)
-
-    def finish_image_placement(self) -> None:
-        """Called by the Image tool once a picture is placed: drop back to
-        Select, the classic behaviour after a one-shot placement."""
-        win = self.window()
-        if hasattr(win, "activate_select_tool"):
-            win.activate_select_tool()
-
-    # ---- Line weight for exports --------------------------------------------
-    # ---- Base-map tiles (Track G) -------------------------------------------
-
-    def refresh_after_edit(self) -> None:
-        """Refresh an externally executed command without discarding geometry.
-
-        Commands must bump the scene version and use the mesh mutation APIs,
-        just as interactive tools do. The renderer compares mesh, material
-        and placement signatures and rebuilds only changed payloads. Keep
-        reset_document_caches() for New/Open, not individual bridge edits.
-        Call once after a batch, outside an active transform preview.
-        This does not create an undo step or mark a clean document dirty.
-        """
-        self.scene.bump_view()
-        self.notify_scene_changed()
-
-
-    # ---- Photogrammetric survey (Track G, G6) ------------------------------
-
-
-    # ---- Sun shadows (core/sun.py) ------------------------------------------
-
-
-    # ---- Dynamic uploads ----------------------------------------------------
-    def set_groups_preview_offset(self, delta: QVector3D) -> None:
-        self._preview_offset = QVector3D(delta)
-        self._preview_matrix = None
-        self.update()
-
-    def set_groups_preview_matrix(self, m) -> None:
-        """Full-matrix variant (Rotate/Scale previews): the scratch copies
-        draw through ``m`` — same zero-churn frame as the translation."""
-        self._preview_matrix = QMatrix4x4(m)
-        self.update()
-
-
-    def _faceme_dir(self, anchor: QVector3D) -> QVector3D:
-        return ingetrazo_render.faceme_dir(self.camera, anchor)
-
-    # ---- Section planes ------------------------------------------------------
-
-    def section_plane_frame(self, sp) -> list:
-        from ingetrazo_core import section_frame
-        return section_frame(sp.point, plane_axes(sp.normal), self.scene.bounds())
-
-    def _clip_segment_front(
-        self, a: QVector3D, b: QVector3D
-    ) -> Optional[tuple[QVector3D, QVector3D]]:
-        from ingetrazo_core import clip_annotation_front
-        return clip_annotation_front(self.camera.projection_matrix() * self.camera.view_matrix(), a, b)
-
-    def _guide_snap_segment(
-        self, g, margin: float = 1.5
-    ) -> Optional[tuple[QVector3D, QVector3D]]:
-        from core.guide import GUIDE_HALF_LEN
-        from ingetrazo_core import clip_snap_guide
-        return clip_snap_guide(self.camera.projection_matrix() * self.camera.view_matrix(),
-                               g.point, g.direction, GUIDE_HALF_LEN, margin)
-
-    def _clip_pixel_line(
-        self, p0: tuple[float, float], p1: tuple[float, float],
-        margin: float = 64.0,
-    ) -> Optional[tuple[tuple[float, float], tuple[float, float]]]:
-        from ingetrazo_core import clip_annotation_line
-        return clip_annotation_line(p0, p1, self.width(), self.height(), margin)
-
     @staticmethod
     def _format_dim_value(metres: float, style: dict) -> str:
         """Format a length (metres) per the dimension style: unit + precision
@@ -481,46 +370,10 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
                              int(style.get("decimals", 2)),
                              bool(style.get("show_unit", True)))
 
-
-    def _project_samples(self, pts: list[QVector3D]):
-        from ingetrazo_core import annotation_samples
-        return annotation_samples(self, pts, self.camera.projection_matrix() * self.camera.view_matrix())
-
-    # ---- Pixel ↔ world ------------------------------------------------------
-
-
-    def _work_plane_normal(self) -> Optional[QVector3D]:
-        """The normal of the plane the last pixel→world used, or ``None``."""
-        plane = getattr(self, "_last_work_plane", None)
-        return plane[1] if plane is not None else None
-
-
-    def _segment_to_pixels(self, p0: QVector3D, p1: QVector3D):
-        mvp = self.camera.projection_matrix() * self.camera.view_matrix()
-        return ingetrazo_render.segment_to_pixels(mvp, p0, p1, self._clip_w(),
-                                                 self.width(), self.height())
-
-    def world_to_pixel(self, world: QVector3D) -> Optional[tuple[float, float]]:
-        """Public API (extensions): world point (metres) → widget pixel
-        ``(x, y)`` in logical pixels, or ``None`` when the point is behind
-        the camera. The same projection the host's own overlays use."""
-        return self._world_to_pixel(world)
-
-    def world_to_pixels(self, pts):
-        """Public API (extensions): an ``(N, 3)`` float array of world points
-        (metres) → ``(px, py, in_front)`` NumPy arrays, vectorised — for
-        overlays with thousands of points, where a Python loop over
-        :meth:`world_to_pixel` would cost frames. Points with
-        ``in_front == False`` are behind the camera; skip them."""
-        import numpy as np
-        return self._project_px(np.asarray(pts, dtype=float).reshape(-1, 3))
-
-    # ---- On-disk chunk cache (P4: fast cold start) --------------------------
     # Chunk arrays are a pure function of the mesh content; persisting them
     # turns the multi-second cold build of a big group into a disk read.
     # Lives in the app's own cache dir (like extracted textures) and is
     # keyed by a STABLE sha1 content digest — a stale entry can only miss.
-
 
     @staticmethod
     def _chunk_cache_dir():
@@ -529,130 +382,9 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         d.mkdir(parents=True, exist_ok=True)
         return d
 
-
-    def _visible_spans(self, spans, planes, split=None):
-        from ingetrazo_core import visible_draw_spans
-        return visible_draw_spans(self, spans, planes, split,
-                                  len(spans) >= _SPAN_VECTOR_MIN and bool(planes))
-
-    def _visible_spans_np(self, spans, planes, split=None):
-        from ingetrazo_core import visible_draw_spans
-        return visible_draw_spans(self, spans, planes, split, True)
-
-
-    def _ray_near(self, x: float, y: float):
-        """What a ray pick at widget pixel ``(x, y)`` asks the pick index
-        to bake: nothing with the engine, which answers for the lazy
-        placements itself (see _face_hits), the placements the ray meets
-        otherwise."""
-        nat = (self._lazy_native() if hasattr(self, "_lazy_native")
-               else None)
-        return "skip" if nat is not None else ("px", x, y)
-
-    def _hover_hits(self, idx, origin, direction):
-        return ingetrazo_core.cached_face_hits(self, idx, origin, direction, False)
-
-    def _infer_hits(self, idx, origin, direction):
-        return ingetrazo_core.cached_face_hits(self, idx, origin, direction, True)
-
-    def pick_edge(self, screen_x: float, screen_y: float):
-        """Return the edge closest to ``(screen_x, screen_y)`` within threshold."""
-        return self._pick_edge(screen_x, screen_y, visible_only=False)
-
-    def pick_visible_edge(self, screen_x: float, screen_y: float):
-        """The edge a CLICK means: like :meth:`pick_edge`, but an edge the
-        user cannot see never wins — a soft edge (the seams of a smooth
-        surface, which are not drawn) unless hidden geometry is shown, and
-        an edge behind the model. The usual rule, and what made a
-        cylinder's side unclickable (@pacaeiro, issue #71: the invisible
-        seams, front and back, took up to 90 % of the side at normal zoom).
-        Tools that want the tube's seam as a reference keep pick_edge."""
-        return self._pick_edge(screen_x, screen_y, visible_only=True)
-
-    def linework_hidden(self, world: QVector3D) -> bool:
-        """Whether a line through ``world`` is hidden for the Select tool:
-        :meth:`_is_occluded` with a little depth slack, so a line lying ON
-        a face — or a hair above or below it, where the drawn line
-        z-fights the face (shown at one angle, gone at the next) — is
-        still the line the cursor is on. See :func:`linework_slack_point`."""
-        return self._is_occluded(linework_slack_point(self.camera, world))
-
-    def pick_linework_edge(self, screen_x: float, screen_y: float):
-        """``(edge, pixels)``: the loose edge the Select tool takes before a
-        face under the cursor — the nearest one within the pick threshold
-        that :meth:`linework_hidden` does not hide — or ``(None, inf)``."""
-        return self._pick_edge(screen_x, screen_y, visible_only=True,
-                               hidden=self.linework_hidden,
-                               with_distance=True)
-
-    def pick_linework_groups(self, screen_x: float, screen_y: float):
-        return ingetrazo_core.linework_groups(self, screen_x, screen_y, False)
-
-    def linework_groups_around(self, screen_x: float, screen_y: float):
-        return ingetrazo_core.linework_groups(self, screen_x, screen_y, True)
-
-    def _shown_guides(self) -> list:
-        return shown_guides(self.scene)
-
-    def _view_style(self):
-        """The style this view shows outside the composer: its own when it
-        has one (one of several views, restyled there), else the scene's."""
-        return (getattr(self, "view_style", None)
-                or getattr(self.scene, "display_style", None))
-
-    # ---- Screen-depth occlusion for the overlay's annotations ---------------
-
-
-    def pick_face_any(self, screen_x: float, screen_y: float):
-        """Front-most face under the cursor across the loose mesh **and** every
-        group: returns ``(face, group_or_None)``. Same coplanar tiebreak as
-        :meth:`pick_face` (the smallest of the overlapping faces wins). The
-        group half is what lets a tool tell "this face is inside a container"
-        — drawing takes its plane, Push/Pull refuses it until the group is
-        opened. While a group IS open its own faces are the loose part and
-        come back with ``None``; the model around it is in the index for
-        snapping and occlusion only, never as an answer here (the snap
-        engine's own reading is :meth:`pick_face_inference`).
-
-        Memoised per cursor position and view: a hover asks up to three
-        times (work plane, acquisition, on-face flag) for the same answer."""
-        face, owner, _place, _mesh = DocumentInteraction._face_any(
-            self, screen_x, screen_y, "sel")
-        return face, owner
-
-    def pick_face_inference(self, screen_x: float, screen_y: float):
-        """The face the SNAP ENGINE may read under the cursor as
-        ``(face, placement_or_None)``: selectable faces as
-        :meth:`pick_face_placement`, plus the rest of the model drawn
-        around an open group / component — faded, never pickable, but a
-        reference the cursor may infer «On face» from, and the plane a
-        planar tool or a moved part lands on.
-
-        Picking never uses this: a click outside the open context must not
-        select or edit what it cannot touch (see :meth:`pick_face_any`)."""
-        face, _owner, place, _mesh = DocumentInteraction._face_any(
-            self, screen_x, screen_y, "infer")
-        return face, place
-
-    def pick_face_placement(self, screen_x: float, screen_y: float):
-        """Like :meth:`pick_face_any`, but the group half is the PLACEMENT
-        the face was hit through — the proxy whose composed matrix puts it
-        in the world — not the top-level owner a click would select. What
-        every face-PLANE reading needs: the owner of a nested component
-        carries the container's matrix, so a rectangle on the pergola's
-        post got the post's plane in the wrong place (Marco, 2026-09-14)."""
-        face, _owner, place, _mesh = DocumentInteraction._face_any(
-            self, screen_x, screen_y, "sel")
-        if face is None:
-            return None, None
-        return face, place
-
-    # ---- Copy / paste -------------------------------------------------------
-    # ---- Group-edit context (Groups v2) --------------------------------------
     def _offer_link_source(self, group) -> None:
         """«“Site.igz” is linked: open it to edit it?» — and open it in a
         tab of its own (or bring that tab forward) on yes."""
-        from pathlib import Path
         from core import links
         from views import chrome_dialogs
         path = Path(links.link_of(group)["path"])
@@ -678,7 +410,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
             from views.wgpu_tabs import open_link_source
             open_link_source(window, path, group)
 
-    # ---- Rest-of-model context while editing a group -------------------------
     @property
     def edit_rest_mode(self) -> str:
         """``normal`` / ``fade`` / ``hide`` — how the model outside the group
@@ -690,20 +421,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         """0..1 strength of the grey wash applied outside the edit context."""
         return float(getattr(self, "_edit_rest_fade_strength",
                              EDIT_REST_FADE))
-
-    def _rest_is_hidden(self) -> bool:
-        """Whether the model outside the edited group is out of this frame."""
-        return (self.scene.edit_group is not None
-                and self._edit_rest_mode == "hide")
-
-    def _owner_of(self, group):
-        """The object a click on ``group`` must select: a nested placement
-        proxy stands for the top-level group that owns it."""
-        return getattr(group, "owner", None) or group
-
-    # ---- Input --------------------------------------------------------------
-    # ---- Mouse look (a tool with ``on_look``: First Person) -----------------
-
 
     def _dwell_on(self, point: Optional[QVector3D]) -> None:
         self.inference._dwell_on(point)
@@ -724,16 +441,8 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     def _extension_snap(self, snap, px_x: float, px_y: float):
         return self.inference._extension_snap(snap, px_x, px_y)
 
-
     _MODIFIER_KEYS = frozenset({Qt.Key_Control, Qt.Key_Shift, Qt.Key_Alt,
                                 Qt.Key_Meta, Qt.Key_AltGr})
-
-    def ctrl_tapped(self) -> bool:
-        """Whether the Ctrl being released was pressed ALONE — no other key
-        in between, not even one a menu shortcut took (Ctrl+Z reaches us
-        only as a ShortcutOverride). Tools that toggle on a Ctrl tap ask
-        this on the release (#183)."""
-        return getattr(self, "_ctrl_alone", False)
 
     def event(self, ev) -> bool:
         if ingetrazo_render.document_event(self, ev):
@@ -745,7 +454,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
             return
         return super().keyPressEvent(ev)
 
-    # ---- Items an extension lets the user select (issue #205) ---------------
     #: The one extension item selected — ``(entry, item_id, scene version)``
     #: — or None. Kept APART from ``scene.selection``, which only ever holds
     #: the model's own entities, so nothing that walks the selection (Move,
@@ -776,9 +484,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         ingetrazo_render.document_focus_out(self)
         super().focusOutEvent(ev)
 
-
-    # ---- Zoom: the lens typed in the value box ------------------------------
-    # ---- Numeric value buffer (VCB-style) ----------------------------------
     def _handle_value_key(self, ev) -> bool:
         """Route a value-box key to its document tool or the camera lens."""
         return _value_key(self, ev)
@@ -794,24 +499,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         (#152)."""
         from core.units import parse_value_box
         return parse_value_box(buffer, comma_lists)
-
-    def toggle_projection(self) -> None:
-        self.camera.toggle_projection()
-        self._sync_projection()
-        self.update()
-
-    def toggle_two_point(self) -> None:
-        self.camera.toggle_two_point()
-        self._sync_projection()
-        self.update()
-
-    def set_projection(self, mode: str) -> None:
-        """Parallel, perspective or two-point (the View toolbar's buttons)."""
-        self.camera.set_projection(mode)
-        self._sync_projection()
-        self.update()
-
-    # ---- Helpers ------------------------------------------------------------
 
 
 ingetrazo_render.register_document_host(DocumentInteraction)
