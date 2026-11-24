@@ -844,13 +844,32 @@ impl ExtensionsSheet {
 /// `sid` on the window.
 #[pyfunction]
 fn show_report_sheet<'py>(py: Python<'py>, win: &Bound<'py, PyAny>, sid: &str) -> PyResult<Bound<'py, PyAny>> {
+    let chrome = py.import("ingetrazo_render.chrome_sheet")?;
+    if sid == "extensions" {
+        let opened = py.import("ingetrazo_render")?.call_method0("ExtensionsSheet")
+            .and_then(|provider| chrome.call_method1("open", (win, provider)));
+        return match opened {
+            Err(error) if error.is_instance_of::<pyo3::exceptions::PyException>(py) => {
+                crate::extension_setup::log_failure(py, "the extension manager could not open", &error);
+                let tr = tr(py)?;
+                let fields = PyDict::new(py);
+                fields.set_item("error", error.to_string())?;
+                let detail = tr.call(("Could not load extensions: {error}",), Some(&fields))?;
+                let kwargs = PyDict::new(py);
+                kwargs.set_item("tone", "warning")?;
+                let title = tr.call1(("Extension manager",))?;
+                py.import("views.chrome_dialogs")?.call_method("notify", (win, title, detail), Some(&kwargs))?;
+                Ok(py.None().into_bound(py))
+            }
+            result => result,
+        };
+    }
     let provider = match sid {
         "about" => Py::new(py, AboutSheet::new())?.into_any(),
-        "extensions" => py.import("ingetrazo_render")?.getattr("ExtensionsSheet")?.call0()?.unbind(),
         "cutlist" => Py::new(py, CutListSheet::new())?.into_any(),
         _ => return Err(pyo3::exceptions::PyKeyError::new_err(sid.to_owned())),
     };
-    py.import("ingetrazo_render.chrome_sheet")?.call_method1("open", (win, provider))
+    chrome.call_method1("open", (win, provider))
 }
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {

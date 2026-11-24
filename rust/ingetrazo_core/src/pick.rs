@@ -8,7 +8,7 @@
 //! arrays. Projection follows the views' `_project_px`: column-major
 //! `mvp`, `ok` when clip w > 0, y down.
 
-use numpy::{IntoPyArray, PyArray1, PyReadonlyArray1, PyReadonlyArray2, PyUntypedArrayMethods};
+use numpy::{AllowTypeChange, PyArrayLike1, PyArrayLikeDyn, IntoPyArray, PyArray1, PyReadonlyArray1, PyReadonlyArray2, PyUntypedArrayMethods};
 use pyo3::prelude::*;
 
 pub type P = [f64; 3];
@@ -321,22 +321,46 @@ fn mat16(m: Vec<f64>) -> PyResult<[f64; 16]> {
     m.try_into().map_err(|_| pyo3::exceptions::PyValueError::new_err("a 4x4 matrix has 16 values"))
 }
 
-/// `(t, hit)` for the ray against triangles `(v0, e1, e2)`, (N, 3) each:
-/// the NumPy picker's `_moller_trumbore`, in Rust.
-#[pyfunction]
-pub fn ray_triangles<'py>(py: Python<'py>, o: [f64; 3], d: [f64; 3], v0: PyReadonlyArray2<'py, f64>,
-                         e1: PyReadonlyArray2<'py, f64>, e2: PyReadonlyArray2<'py, f64>)
-    -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<bool>>)> {
-    let (v0, e1, e2) = (rows3(&v0)?, rows3(&e1)?, rows3(&e2)?);
-    let mut t = Vec::with_capacity(v0.len());
-    let mut hit = Vec::with_capacity(v0.len());
-    for i in 0..v0.len() {
-        match ray_triangle(o, d, v0[i], e1[i], e2[i]) {
-            Some(x) => { t.push(x); hit.push(true); }
-            None => { t.push(0.0); hit.push(false); }
-        }
+/// Preserve the row-major reshape of an incoming triangle stream. Cached f64
+/// streams are read in place; sliced and Fortran-ordered arrays keep logical order.
+fn triangle_stream<'a>(array: &'a PyArrayLikeDyn<'_, f64, AllowTypeChange>)
+    -> PyResult<std::borrow::Cow<'a, [f64]>>
+{
+    if array.is_c_contiguous() {
+        Ok(std::borrow::Cow::Borrowed(array.as_slice()?))
+    } else {
+        Ok(std::borrow::Cow::Owned(array.as_array().iter().copied().collect()))
     }
-    Ok((t.into_pyarray(py), hit.into_pyarray(py)))
+}
+
+/// Distances and hit flags for a ray and three aligned triangle streams.
+#[pyfunction]
+pub fn ray_triangles<'py>(
+    py: Python<'py>,
+    o: PyArrayLike1<'py, f64, AllowTypeChange>,
+    d: PyArrayLike1<'py, f64, AllowTypeChange>,
+    v0: PyArrayLikeDyn<'py, f64, AllowTypeChange>,
+    e1: PyArrayLikeDyn<'py, f64, AllowTypeChange>,
+    e2: PyArrayLikeDyn<'py, f64, AllowTypeChange>,
+) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<bool>>)> {
+    let (o, d) = (o.as_array(), d.as_array());
+    if o.len() != 3 || d.len() != 3 {
+        return Err(pyo3::exceptions::PyValueError::new_err("expected three ray coordinates"));
+    }
+    let (o, d) = ([o[0], o[1], o[2]], [d[0], d[1], d[2]]);
+    let (v0, e1, e2) = (triangle_stream(&v0)?, triangle_stream(&e1)?, triangle_stream(&e2)?);
+    if v0.len() % 3 != 0 || v0.len() != e1.len() || v0.len() != e2.len() {
+        return Err(pyo3::exceptions::PyValueError::new_err("expected matching XYZ triangle streams"));
+    }
+    let mut times = Vec::with_capacity(v0.len() / 3);
+    let mut hits = Vec::with_capacity(times.capacity());
+    for ((start, a), b) in v0.chunks_exact(3).zip(e1.chunks_exact(3)).zip(e2.chunks_exact(3)) {
+        let hit = ray_triangle(o, d, [start[0], start[1], start[2]],
+                               [a[0], a[1], a[2]], [b[0], b[1], b[2]]);
+        times.push(hit.unwrap_or(0.0));
+        hits.push(hit.is_some());
+    }
+    Ok((times.into_pyarray(py), hits.into_pyarray(py)))
 }
 
 /// `(xs, ys, ok)` of points (N, 3) through `mvp` (column-major) into a

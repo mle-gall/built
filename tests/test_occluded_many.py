@@ -382,7 +382,6 @@ def test_a_narrow_cone_of_rays_hides_what_the_rays_hide(viewport, view,
     plant of #158, ~65 000 corners under the cursor): the spans outside
     their cone are left out of the box test — the answer stays the rays'
     one by one, and some spans were left out."""
-    import numpy as np
     vp = viewport
     vp.camera.set_view(view)
     vp.camera.fit_to(V(-60, -40, -20), V(60, 40, 40))
@@ -400,19 +399,25 @@ def test_a_narrow_cone_of_rays_hides_what_the_rays_hide(viewport, view,
             for _ in range(200)]
     one = [vp._is_occluded(p) for p in pts]
     assert any(one) and not all(one)
-    widths = []
-    real = np.flatnonzero
+    # Count the ray/span pairs that actually reach the triangle kernel. This
+    # includes rejection by the cone, the span boxes and nearer occluders.
+    # Both the few-span and wide-span paths must skip work.
+    import views.document_interaction as controller
+    kernel = controller._occlusion_native()
+    tested = []
 
-    def spy(a):
-        r = real(a)
-        if a.dtype == bool and a.ndim == 1 and len(a) > 64:
-            widths.append((len(r), len(a)))
-        return r
-    monkeypatch.setattr(np, "flatnonzero", spy)
-    got = vp._occluded_many(pts)
-    monkeypatch.setattr(np, "flatnonzero", real)
-    assert got == one
-    assert any(k < n for k, n in widths), widths     # the cone left some out
+    class Measured:
+        def occlusion_span(self, origin, dirs, *args):
+            tested.append(len(dirs))
+            return kernel.occlusion_span(origin, dirs, *args)
+
+    monkeypatch.setattr(vp, "_lazy_native", lambda: None)
+    monkeypatch.setattr(controller, "_occlusion_native", lambda: Measured())
+    idx = vp._pick_index()
+    spans = len(idx.tri_spans) + len(getattr(idx, "own_spans", ()) or ())
+    assert vp._occluded_many(pts) == one
+    assert 0 < sum(tested) < len(pts) * spans
+
 
 
 def test_pick_vertex_asks_a_shared_corner_once(viewport, monkeypatch):

@@ -24,8 +24,8 @@ from core import progress as P                         # noqa: E402
 from core import vista_caras as VC                      # noqa: E402
 from core.vista_caras import FaceFill                   # noqa: E402
 from tests.vista_caras_reference import _scene        # noqa: E402
-import ingetrazo_render as wgpu_deliveries
-from views import chrome_dialogs
+import ingetrazo_render as wgpu_deliveries              # noqa: E402
+from views import chrome_dialogs                        # noqa: E402
 from tests.test_export_view_svg import _export_sheet
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 

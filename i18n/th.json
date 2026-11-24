@@ -2382,7 +2382,7 @@
  "Remove the faces left lying over their own subdivisions after drawing or erasing.": "ลบระนาบหน้าที่ซ้อนทับย่อยของตัวเองออกหลังจากเขียนหรือลบ",
  "Resize the selection by dragging the grips of its box; the corners keep its proportions.": "ปรับขนาดสิ่งที่เลือกโดยดึงจุดจับ (Grips) ของกรอบ จุดมุมจะรักษาอัตราส่วนไว้",
  "Save the document under another name or in another folder.": "บันทึกเอกสารในชื่ออื่นหรือโฟลเดอร์อื่น",
- "Save the document — the model and every sheet — to its .igz file.": "บันทึกเอกสาร — ทั้งโมเดลและแผ่นงานทุกแผ่น — ลงในไฟล์ .igz",
+ "Save the document — the model and every sheet — to its file.": "บันทึกเอกสาร — ทั้งโมเดลและแผ่นงานทุกแผ่น — ลงในไฟล์",
  "Save the model as IFC for BIM software, with what the BIM panel tagged.": "บันทึกโมเดลเป็นไฟล์ IFC สำหรับซอฟต์แวร์ BIM พร้อมแท็กที่กำหนดในแผงควบคุม BIM",
  "Save the model as Wavefront OBJ with its materials.": "บันทึกโมเดลเป็น Wavefront OBJ พร้อมวัสดุ",
  "Save the model as an STL mesh for 3D printing.": "บันทึกโมเดลเป็นเมช STL สำหรับการพิมพ์ 3 มิติ",

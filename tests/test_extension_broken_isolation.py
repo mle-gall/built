@@ -25,9 +25,7 @@ import textwrap
 from pathlib import Path
 
 import pytest
-from PySide6.QtWidgets import QApplication
-
-_app = QApplication.instance() or QApplication([])
+from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
 
 import core.extension_manager as manager                 # noqa: E402
 import core.extensions as extensions                     # noqa: E402
@@ -246,34 +244,25 @@ def test_a_card_that_cannot_be_built_costs_only_itself(plugins, monkeypatch):
 
 # ---- the window -----------------------------------------------------------
 
-def _close(window):
-    window._saved_version = window.viewport.scene.version   # no "save?" modal
-    window.close()
-
-
-@pytest.fixture
-def window():
-    from views.main_window import MainWindow
-    win = MainWindow(defer_extensions=True)
-    yield win
-    _close(win)
-
-
-def test_a_manager_that_fails_to_open_says_so(window, monkeypatch):
+def test_a_manager_that_fails_to_open_says_so(native_question_host, monkeypatch, tmp_path):
     import ingetrazo_render
     from views import chrome_dialogs
 
     def explode():
         raise PermissionError(13, "denied")
 
+    monkeypatch.setattr("core.paths.user_log_dir", lambda: tmp_path)
     monkeypatch.setattr(ingetrazo_render, "ExtensionsSheet", explode)
-    window._on_manage_extensions()
+    window = native_question_host.window
+    native_question_host.menu("extensions")
     notice = chrome_dialogs.history(window)[0]
     assert notice.tone == "warning" and "denied" in notice.detail
+    log = (tmp_path / "ingetrazo-errors.log").read_text()
+    assert "extension manager" in log and "Traceback" in log and "denied" in log
 
 
 def test_sys_exit_in_setup_costs_only_that_extension(
-        window, plugins, monkeypatch):
+        request, plugins, monkeypatch):
     _package(plugins, "aaa_quits", """\
         import sys
         def setup(app):
@@ -284,18 +273,13 @@ def test_sys_exit_in_setup_costs_only_that_extension(
             app.add_menu_action("ZZZ fine", lambda: None)
         """)
     monkeypatch.setattr(extensions, "plugin_dirs", lambda: [plugins])
-    window.load_extensions()
-    texts = []
-    for action in window._ext_menu.actions():
-        texts.append(action.text())
-        if action.menu() is not None:
-            texts += [a.text() for a in action.menu().actions()]
-    assert "ZZZ fine" in texts
+    window = request.getfixturevalue("native_host").window
+    assert [row[2] for row in window._extension_menus.rows()] == ["ZZZ fine"]
     assert "aaa_quits" in window._extension_load_errors
 
 
 def test_a_tool_with_an_unusable_entry_costs_only_itself(
-        window, plugins, monkeypatch):
+        request, plugins, monkeypatch):
     (plugins / "aaa_bad.py").write_text(textwrap.dedent("""\
         from tools.base import Tool
         class Bad(Tool):
@@ -314,7 +298,6 @@ def test_a_tool_with_an_unusable_entry_costs_only_itself(
             def on_deactivate(self, viewport): pass
         """))
     monkeypatch.setattr(extensions, "plugin_dirs", lambda: [plugins])
-    window.load_extensions()
-    assert any(key.endswith("zzz_good_Good") for key in window._tools)
-    assert not any(key.endswith("aaa_bad_Bad") for key in window._tools)
-    assert "Good tool" in [a.text() for a in window._ext_menu.actions()]
+    window = request.getfixturevalue("native_host").window
+    assert [row[2] for row in window._extension_menus.rows()] == ["Good tool"]
+    assert "aaa_bad" in window._extension_load_errors

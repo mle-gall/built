@@ -272,7 +272,12 @@ impl LaunchFiles {
 
     #[cfg(any(target_os = "macos", test))]
     fn is_argv_replay(&mut self, path: &Path) -> bool {
-        if let Some(index) = self.argv.iter().position(|p| same_path(p, path)) {
+        // AppKit hands a bare operand back as given (`1280x800`, relative),
+        // and a path that does not exist cannot be canonicalized: compare
+        // where each would be, with symlinked folders (/var → /private/var)
+        // resolved.
+        let key = launch_key(path);
+        if let Some(index) = self.argv.iter().position(|p| same_path(p, path) || launch_key(p) == key) {
             self.argv.remove(index);
             true
         } else {
@@ -962,6 +967,17 @@ fn ask_close(host: &python::Host) -> bool {
         .unwrap_or(false)
 }
 
+/// Where `p` points, for matching launch operands: absolute, with its
+/// folder canonicalized when it exists (the file itself may not).
+#[cfg(any(target_os = "macos", test))]
+fn launch_key(p: &Path) -> PathBuf {
+    let p = absolute(p);
+    match (p.parent().and_then(|d| d.canonicalize().ok()), p.file_name()) {
+        (Some(dir), Some(name)) => dir.join(name),
+        _ => p,
+    }
+}
+
 fn same_path(a: &Path, b: &Path) -> bool {
     a == b || matches!((a.canonicalize(), b.canonicalize()), (Ok(x), Ok(y)) if x == y)
 }
@@ -1279,6 +1295,21 @@ mod profile_tests {
         assert!(!files.is_argv_replay(Path::new("other.built")));
         assert!(files.is_argv_replay(&path));
         assert!(!files.is_argv_replay(&path));
+    }
+
+    #[test]
+    fn appkit_replays_an_option_value_relative_and_unresolved() {
+        // `--size 1280x800`: AppKit sends "1280x800" back as an open, relative
+        // to the working folder; no such file exists.
+        let mut files = LaunchFiles { argv: vec![absolute(Path::new("1280x800"))], ..Default::default() };
+        assert!(files.is_argv_replay(Path::new("1280x800")));
+        assert!(!files.is_argv_replay(Path::new("1280x800")));
+        // Through a symlinked folder (/tmp → /private/tmp on macOS).
+        let dir = std::env::temp_dir();
+        let linked = dir.join("built-missing-operand.igz");
+        let mut files = LaunchFiles { argv: vec![linked.clone()], ..Default::default() };
+        let real = dir.canonicalize().unwrap().join("built-missing-operand.igz");
+        assert!(files.is_argv_replay(&real));
     }
 
     #[test]

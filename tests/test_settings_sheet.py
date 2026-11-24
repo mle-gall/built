@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Settings as a large sheet (views/settings_sheet.py): its sections and
+"""Settings as a large sheet (ingetrazo_render.settings_sheet): its sections and
 their two groups, the search across every section, changes applied at
 once (native preferences for Built, the document for This model), the 3D mouse and
 keyboard sections, and offscreen command dispatch.
@@ -19,7 +19,7 @@ from core.scene import Scene
 from formats import igz
 from views import chrome_forms
 from ingetrazo_render import chrome_sheet as cs
-from views import settings_sheet as ss
+from ingetrazo_render import settings_sheet as ss
 
 SEP = cs.SEP
 
