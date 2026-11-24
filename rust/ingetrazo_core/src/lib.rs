@@ -296,6 +296,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(store::arrangement::plane_segment_parameter, m)?)?;
     m.add_function(wrap_pyfunction!(store::arrangement::plane_intersections, m)?)?;
     m.add_function(wrap_pyfunction!(store::planar::plane_region_point, m)?)?;
+    store::planar_api::register(m)?;
     m.add_function(wrap_pyfunction!(store::planar::plane_nesting, m)?)?;
     m.add_function(wrap_pyfunction!(store::planar::plane_interior_point, m)?)?;
     m.add_function(wrap_pyfunction!(store::planar::plane_scan_point, m)?)?;

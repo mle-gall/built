@@ -74,6 +74,7 @@ mod solid;
 mod caps;
 mod cap_outline;
 pub(crate) mod planar;
+pub(crate) mod planar_api;
 pub(crate) mod arrangement;
 mod orient_seed;
 mod winding;
