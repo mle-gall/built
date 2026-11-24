@@ -17,6 +17,7 @@ mod document_chunks;
 mod document_records;
 mod document_state;
 mod document_environment;
+mod document_terrain;
 mod document_cache;
 mod document_grid;
 mod document_edits;
@@ -3273,6 +3274,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     document_records::register(m)?;
     document_state::register(m)?;
     document_environment::register(m)?;
+    document_terrain::register(m)?;
     document_cache::register(m)?;
     document_grid::register(m)?;
     document_edits::register(m)?;

@@ -1080,6 +1080,17 @@ fn location<'py>(py: Python<'py>, env: &Bound<'py, PyAny>) -> PyResult<Bound<'py
             ("words", obj(py, "georeference map site")?),
             ("tip", obj(py, tr(py, "Pick the site on the map: the sun and the base map stand there.")?)?)])?,
     ])?;
+    if has && opt(&scene, "tile_layer").is_some_and(|l| !l.is_none()) {
+        rows.append(row(py, "terrain3d", "check", &tr(py, "3D terrain")?, Some(func(py, |py, a| {
+            let vp = a.get_item(0)?.getattr("win")?.getattr("viewport")?;
+            let terrain = vp.getattr("scene")?.getattr("terrain")?;
+            obj(py, crate::document_terrain::enabled(&vp)? && (terrain.is_none() || terrain.getattr("visible")?.is_truthy()?))
+        })?), Some(func(py, |py, a| {
+            let vp = a.get_item(0)?.getattr("win")?.getattr("viewport")?;
+            crate::document_terrain::set_terrain_enabled(&vp, a.get_item(1)?.extract()?)?;
+            Ok(none(py))
+        })?), &[])?)?;
+    }
     PyList::new(py, [PyTuple::new(py, [s(py, "location"), s(py, &tr(py, "Location & north")?), rows.into_any()])?])
 }
 

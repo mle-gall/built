@@ -457,6 +457,10 @@ def _finish_open(win, path, recovered, slot, bar, cb, prepared=None, initial_asp
     view._shell_resident_version = version
     if clean:
         win._saved_version = vp.scene.version
+    if getattr(getattr(vp.scene, "tile_layer", None), "terrain3d", False):
+        from functools import partial
+        from ingetrazo_render import restore_terrain
+        host.after_picture(partial(restore_terrain, vp))
     host.after_picture(win._after_links_loaded)
     for job in list(getattr(view, "after_open", ()) or ()):
         host.after_picture(job)

@@ -382,8 +382,41 @@ fn refresh_surfaces(weak_view: &Bound<'_, PyAny>, weak_datum: &Bound<'_, PyAny>)
             .is(&weak_datum.call0()?)
     {
         rebuild_path_surfaces(&vp)?;
+        crate::document_terrain::rebuild_terrain(&vp)?;
     }
     Ok(())
+}
+
+pub(super) fn surface_sampler<'py>(
+    vp: &Bound<'py, PyAny>,
+    datum: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py = vp.py();
+    let cached = vp.getattr("_surface_sampler").ok();
+    let sampler = if let Some(s) = cached.filter(|s| s.getattr("datum").is_ok_and(|d| d.is(datum)))
+    {
+        s
+    } else {
+        let s = py
+            .import("georef.dem")?
+            .call_method1("DEMSampler", (datum,))?;
+        if s.hasattr("_host")? {
+            s.setattr("_host", vp.getattr("_host")?)?;
+        }
+        let weak = py.import("weakref")?;
+        let done = py.import("functools")?.call_method1(
+            "partial",
+            (
+                wrap_pyfunction!(refresh_surfaces, py)?,
+                weak.call_method1("ref", (vp,))?,
+                weak.call_method1("ref", (datum,))?,
+            ),
+        )?;
+        s.getattr("changed")?.call_method1("connect", (done,))?;
+        vp.setattr("_surface_sampler", &s)?;
+        s
+    };
+    Ok(sampler)
 }
 
 #[pyfunction]
@@ -403,27 +436,7 @@ fn rebuild_path_surfaces(vp: &Bound<'_, PyAny>) -> PyResult<()> {
         }
     }
     if !paths.is_empty() {
-        let cached = vp.getattr("_surface_sampler").ok();
-        let sampler =
-            if let Some(s) = cached.filter(|s| s.getattr("datum").is_ok_and(|d| d.is(&datum))) {
-                s
-            } else {
-                let s = py
-                    .import("georef.dem")?
-                    .call_method1("DEMSampler", (&datum,))?;
-                let weak = py.import("weakref")?;
-                let done = py.import("functools")?.call_method1(
-                    "partial",
-                    (
-                        wrap_pyfunction!(refresh_surfaces, py)?,
-                        weak.call_method1("ref", (vp,))?,
-                        weak.call_method1("ref", (&datum,))?,
-                    ),
-                )?;
-                s.getattr("changed")?.call_method1("connect", (done,))?;
-                vp.setattr("_surface_sampler", &s)?;
-                s
-            };
+        let sampler = surface_sampler(vp, &datum)?;
         let vec = py.import("ingetrazo_core")?.getattr("Vec3")?;
         let build = py.import("georef.surface")?.getattr("build_surface")?;
         for p in paths {

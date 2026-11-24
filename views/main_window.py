@@ -2627,46 +2627,9 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         self.viewport.update()
 
     # ---- Terrain-surface fill (Track G) -------------------------------------
-    def _surface_dem(self, datum):
-        """Shared DEM sampler for surface fills, rebuilt when the datum changes."""
-        if getattr(self, "_surf_sampler", None) is not None \
-                and self._surf_datum is datum:
-            return self._surf_sampler
-        from georef.dem import DEMSampler
-        self._surf_sampler = DEMSampler(datum, parent=self)
-        self._surf_datum = datum
-        self._surf_sampler.changed.connect(self._rebuild_surfaces)
-        self._surf_sampler.changed.connect(self._build_terrain)
-        return self._surf_sampler
-
-    def _rebuild_surfaces(self) -> None:
-        """(Re)compute the 3D triangles of every surfaced path from the DEM."""
-        from georef.surface import build_surface
-        scene = self.viewport.scene
-        datum = getattr(scene, "georef", None)
-        surfaced = [p for p in scene.geo_paths if getattr(p, "surface", None)]
-        if datum is None:
-            for p in surfaced:
-                p._surface_tris = None
-            self.viewport.update()
-            return
-        sampler = self._surface_dem(datum)
-        area = None
-        for p in surfaced:
-            xs = [pt.x() for pt in p.points]
-            ys = [pt.y() for pt in p.points]
-            lo = self._local_to_ll(datum, min(xs), min(ys))
-            hi = self._local_to_ll(datum, max(xs), max(ys))
-            sampler.ensure_area(min(lo[0], hi[0]), min(lo[1], hi[1]),
-                                max(lo[0], hi[0]), max(lo[1], hi[1]))
-            p._surface_tris = build_surface(p, sampler, datum)
-        self.viewport.update()
-
-    @staticmethod
-    def _local_to_ll(datum, x, y):
-        from ingetrazo_core import Vec3 as QVector3D
-        lat, lon, _ = datum.local_to_geodetic(QVector3D(x, y, 0.0))
-        return lat, lon
+    def _rebuild_surfaces(self):
+        from ingetrazo_render import rebuild_path_surfaces
+        rebuild_path_surfaces(self.viewport)
 
     def _on_surfaces_scene_changed(self) -> None:
         """Re-drape surfaced paths when their nodes move (version bump)."""
@@ -2685,91 +2648,17 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
             return bool(getattr(layer, "terrain3d", False))
         return bool(self.__dict__.get("_terrain_wish", False))
 
-    @_terrain_on.setter
-    def _terrain_on(self, on: bool) -> None:
-        self.__dict__["_terrain_wish"] = bool(on)
-        layer = self._terrain_layer()
-        if layer is not None:
-            layer.terrain3d = bool(on)
-
     def _terrain_layer(self):
-        vp = self.__dict__.get("viewport") or getattr(self, "viewport", None)
-        scene = getattr(vp, "scene", None)
-        return getattr(scene, "tile_layer", None)
+        return getattr(self.viewport.scene, "tile_layer", None)
 
-    def set_terrain_enabled(self, on: bool) -> None:
-        self._terrain_on = on
-        if on:
-            terrain = getattr(self.viewport.scene, "terrain", None)
-            if terrain is not None and not getattr(terrain, "visible", True):
-                terrain.visible = True      # hidden by a scene: just show it
-                self.viewport.update()
-                return
-            self._build_terrain()
-        else:
-            self.viewport.scene.terrain = None
-            self.viewport.upload_terrain(None)
-            self.viewport.update()
+    def set_terrain_enabled(self, on):
+        from ingetrazo_render import set_terrain_enabled
+        self._terrain_wish = bool(on)
+        set_terrain_enabled(self.viewport, on)
 
-    @staticmethod
-    def _capture_bbox(layer):
-        """Local-metre bounding box ``(minx, miny, maxx, maxy)`` of the capture
-        patches — the area the 3D terrain should cover."""
-        patches = getattr(layer, "patches", None) or [(0, 0, layer.radius_m,
-                                                        layer.radius_m)]
-        minx = min(cx - hw for cx, cy, hw, hh in patches)
-        maxx = max(cx + hw for cx, cy, hw, hh in patches)
-        miny = min(cy - hh for cx, cy, hw, hh in patches)
-        maxy = max(cy + hh for cx, cy, hw, hh in patches)
-        return minx, miny, maxx, maxy
-
-    def _build_terrain(self) -> None:
-        """(Re)build the 3D terrain from the DEM + base-map tiles (async-ready)."""
-        if not getattr(self, "_terrain_on", False):
-            return
-        from georef.terrain import build_mosaic, build_terrain
-        from georef.surface import ground_reference
-        scene = self.viewport.scene
-        datum = getattr(scene, "georef", None)
-        layer = getattr(scene, "tile_layer", None)
-        if datum is None or layer is None:
-            return
-        sampler = self._surface_dem(datum)
-        zoom = layer.zoom
-        # The terrain covers the captured area (the drawn patches' bounding box),
-        # not a fixed square — so the 3D matches what you captured.
-        bbox = self._capture_bbox(layer)
-        minx, miny, maxx, maxy = bbox
-        lo = self._local_to_ll(datum, minx, miny)
-        hi = self._local_to_ll(datum, maxx, maxy)
-        sampler.ensure_area(min(lo[0], hi[0]), min(lo[1], hi[1]),
-                            max(lo[0], hi[0]), max(lo[1], hi[1]))
-        self.viewport.prefetch_tiles(layer.source, layer.flat_tiles(datum), zoom)
-        # When a survey has already fixed the scene's vertical zero, the DEM
-        # terrain must use the SAME zero or the two grounds render tens of
-        # metres apart. (They still differ by the geoid/ellipsoid separation —
-        # that gap is real, not a bug, and is why elevations are labelled with
-        # where they came from.)
-        ground = float(datum.alt) if datum.alt else ground_reference(sampler, datum)
-        if ground is None:
-            return                         # DEM not ready — retry on changed
-        terrain = build_terrain(datum, sampler, ground, bbox, zoom=zoom)
-        if terrain is None:
-            return                         # DEM grid not fully loaded yet
-        first = scene.terrain is None
-        terrain.texture_image = build_mosaic(terrain, layer.images)
-        # An async rebuild keeps the visibility a scene may have set.
-        terrain.visible = True if first else bool(
-            getattr(scene.terrain, "visible", True))
-        scene.terrain = terrain
-        self.viewport.upload_terrain(terrain)
-        # Frame the terrain only the first time it appears (not on async rebuilds).
-        if first:
-            mn, mx = terrain.bounds()
-            if mn is not None:
-                self.viewport.camera.set_view("iso")
-                self.viewport.camera.fit_to(mn, mx)
-        self.viewport.update()
+    def _build_terrain(self):
+        from ingetrazo_render import restore_terrain
+        restore_terrain(self.viewport)
 
     # ---- Undo / redo --------------------------------------------------------
     # ---- File handling ------------------------------------------------------
@@ -2989,7 +2878,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         vp.sceneVersionChanged.connect(
             live(lambda _v: self._on_surfaces_scene_changed(),
                  after_picture=True))
-        vp.tilesChanged.connect(live(lambda: self._build_terrain()))
         vp.valueBufferChanged.connect(live(self._on_value_buffer))
         vp.measurementChanged.connect(
             live(lambda text: self._queue_status_text("measurement", text)))
