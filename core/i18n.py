@@ -108,8 +108,9 @@ def resolve_language(choice: str | None) -> str:
     from app_shell.native import _shell
     if _shell is not None:
         return language_for_locales(_shell.preferred_languages())
-    from PySide6.QtCore import QLocale
-    return language_for_locales(QLocale.system().uiLanguages())
+    import locale
+    language, _ = locale.getlocale()
+    return language_for_locales([language] if language else [])
 
 
 def set_language(lang: str) -> None:
