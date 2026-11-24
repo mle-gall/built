@@ -590,6 +590,11 @@ class Workspace:
                                   if k in model._record_fields and abs(getattr(model, k) - v) > 1e-9}))
         self._edit(edits)
 
+    def _lock_items(self) -> None:
+        selection = [item for item in self._selected_models() if item is not self.composer.comp]
+        on = not all(item.locked for item in selection)
+        self._edit([(item, {"locked": on}) for item in selection if item.locked != on])
+
     def _delete(self) -> None:
         from core.composition import CompoundCommand, RemoveItemCommand
         comp = self.composer.comp
@@ -968,6 +973,8 @@ class Workspace:
                 self._tool(rest)
         elif verb == "select":
             pass                         # the page keeps its selection; the dock reads it
+        elif verb == "lock_items":
+            self._lock_items()
         elif verb == "delete_items":
             self._delete()
         elif verb == "duplicate_items":
@@ -1311,7 +1318,7 @@ class Workspace:
         return [(seqs(QKeySequence.Undo), self._undo),
                 (seqs(QKeySequence.Redo, "Ctrl+Shift+Z"), lambda: self._undo(redo=True)),
                 (seqs(QKeySequence.Delete, Qt.Key_Backspace, Qt.Key_Delete), self._delete),
-                (seqs("Ctrl+D"), self._duplicate), (seqs("Ctrl+L"), lambda: self.view.renderer.page_command("lock")),
+                (seqs("Ctrl+D"), self._duplicate), (seqs("Ctrl+L"), self._lock_items),
                 (seqs("Ctrl+G"), lambda: self.view.renderer.page_command("group")),
                 (seqs("Ctrl+Shift+G"), lambda: self.view.renderer.page_command("ungroup")),
                 (seqs("Ctrl+Shift+C"), lambda: self.view.renderer.page_command("copy_style")),

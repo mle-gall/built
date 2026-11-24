@@ -290,7 +290,7 @@ pub fn sheet_menu(doc: &crate::sheet_page::Snapshot, keys: &[u64], clip: Option<
         one("page:group", "Group");
     }
     let all_locked = items.iter().all(|i| i.locked);
-    one("page:lock", if all_locked { "Unlock" } else { "Lock" });
+    one("sheets:lock_items", if all_locked { "Unlock" } else { "Lock" });
     if movable { one("sheets:duplicate_items", "Duplicate"); }
     if items.iter().any(|i| !i.locked && i.kind != "titleblock") { one("sheets:delete_items", "Delete"); }
     (title, rows.0)

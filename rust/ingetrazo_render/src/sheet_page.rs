@@ -1104,11 +1104,6 @@ impl Page {
                     if !item.locked && item.kind == "text" { self.edit_text(item.key); }
                 }
             }
-            "lock" if !selected.is_empty() => {
-                let on = !selected.iter().all(|i| i.locked);
-                out.push(Self::set_many(&selected.iter().filter(|i| i.locked != on)
-                    .map(|i| (i.key, serde_json::json!({"locked": on}))).collect::<Vec<_>>()));
-            }
             "group" => {
                 let members: Vec<&Item> = selected.iter().copied().filter(|i| i.kind != "titleblock").collect();
                 if members.len() < 2 {
