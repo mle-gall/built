@@ -422,7 +422,7 @@ def scale_selection(history, anchor, factors, vertices=(), placements=(), images
                               ScaleVerticesCommand)
     from ingetrazo_core import Vec3
     factors = tuple(map(float, factors))
-    if len(factors) != 3 or any(not isfinite(f) or abs(f) < 1e-4 for f in factors):
+    if len(factors) != 3 or any(not isfinite(f) or f == 0.0 for f in factors):
         raise ValueError("three finite, nonzero scale factors required")
     if len(anchor) != 3 or not all(map(isfinite, anchor)):
         raise ValueError("three finite anchor coordinates required")

@@ -264,3 +264,16 @@ def test_a_long_drag_down_and_back_scales_every_vertex():
         want = anchor + (before[v.key] - anchor) * 0.5
         assert (v.position - want).length() < 1e-5
     assert len(scene.mesh.vertices) == len(before)
+
+
+def test_hot_retype_absolute_size_can_imply_a_small_factor():
+    import pytest
+    tool, vp = _tool_with_box(4, 3, 2)
+    grip = next(g for g in tool._grips if g.params == (1., .5, .5))
+    tool._grab(vp, grip, (0., 0.))
+    assert tool.on_value(vp, 2.)
+    assert tool.on_value(vp, ("abs_len", .0002))
+    assert max(v.position.x() for v in vp.scene.mesh.vertices) == pytest.approx(.0002)
+    assert len(vp.history.undo_stack) == 1
+    assert vp.history.undo()
+    assert max(v.position.x() for v in vp.scene.mesh.vertices) == 4.

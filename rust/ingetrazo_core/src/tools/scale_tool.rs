@@ -108,7 +108,7 @@ impl ScaleTool {
                 let Some(f) = spec.typed(&values, absolute) else {
                     return Reply::ignored();
                 };
-                if f.iter().any(|x| !x.is_finite() || x.abs() < MIN_FACTOR) {
+                if f.iter().any(|x| !x.is_finite() || *x == 0.0) {
                     return Reply::ignored();
                 }
                 if !host
