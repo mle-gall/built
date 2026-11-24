@@ -688,81 +688,19 @@ def _selection(view, win, active) -> None:
                                                    for k, label, key, run, enabled, more in _commands(win, sel)])
 
 
-def _edit_actions(win) -> dict:
-    """The Edit menu's actions by label (submenus included), cached."""
-    cached = getattr(win, "_ui_edit_actions", None)
-    if cached is not None:
-        return cached
-    out = {}
-
-    def walk(menu, prefix=""):
-        for a in menu.actions():
-            if a.isSeparator():
-                continue
-            if a.menu():
-                walk(a.menu(), a.text().replace("&", "") + " ")
-            elif a.text():
-                out[prefix + a.text().replace("&", "")] = a
-    for a in win.menuBar().actions():
-        if a.menu() and a.text().replace("&", "") == "Edit":
-            walk(a.menu())
-    win._ui_edit_actions = out
-    return out
-
-
-#: Geometry fixes, under More ▾: real work, not every-selection work.
-MORE = ["Intersect Faces With Model", "Intersect Faces With Selection", "Intersect Faces With Context",
-        "Soften / Smooth Edges…", "Reverse Faces", "Orient Faces", "Heal Overlapping Faces",
-        "Join Segments", "Rebuild Faces (Planar)", "Split into Pieces", "Simplify Mesh…",
-        "Convert Path to Geometry", "Delete Guides"]
-
-
-#: The More ▾ labels' verb ids (views/verbs.py).
-MORE_VERBS = {"Intersect Faces With Model": "intersect", "Intersect Faces With Selection": "intersect",
-              "Intersect Faces With Context": "intersect", "Soften / Smooth Edges…": "soften",
-              "Reverse Faces": "reverse", "Orient Faces": "orient", "Heal Overlapping Faces": "heal",
-              "Join Segments": "join", "Rebuild Faces (Planar)": "rebuild", "Split into Pieces": "split",
-              "Simplify Mesh…": "simplify", "Convert Path to Geometry": "topath", "Delete Guides": "guides"}
-
-
 def _commands(win, sel):
-    """(id, label, shortcut, run, enabled, in More) for the selection bar.
-    Fixed places (council 2026-11-22): File to…, Isolate, Hide, then what
-    the selection can become; geometry fixes under More. Only the verbs
-    that apply to the selection's kind (views/verbs.py, tree C): a linked
-    file's placement or part gets no Explode, Edit or File to; raw
-    geometry no Component."""
-    from core.group import Group
-    from views import verbs
-    groups = [e for e in sel if isinstance(e, Group)]
-    edit = _edit_actions(win)
-    kind = verbs.kind_of(getattr(getattr(win, "viewport", None), "scene", None), sel)
-
-    def act(label, vid, name=None, more=False):
-        a = edit.get(label)
-        if a is None or not verbs.offers(kind, vid):
-            return None
-        return ("e:" + label, name or label.rstrip("…"), a.shortcut().toString(QKeySequence.NativeText),
-                a.trigger, a.isEnabled(), more)
-    out = [
-        ("file", "File to…", "⌘⇧F", (lambda: _file_to(win, len(groups))) if groups else None, bool(groups), False)
-        if verbs.offers(kind, "fileto") else None,
-        ("isolate", "Isolate", "", lambda: _isolate(win, [e for e in sel if getattr(e, "uid", None)]), True, False)
-        if verbs.offers(kind, "isolate") else None,
-        act("Hide", "hide"),
-    ]
-    if len(groups) == 1 and len(sel) == 1:
-        one = groups[0]
-        if verbs.offers(kind, "open"):
-            out.append(("edit", "Edit", "double-click", lambda: win.viewport.begin_group_edit(one), True, False))
-        out.append(act("Explode Group", "explode", "Explode"))
-    else:
-        out.append(act("Make Group", "makegroup", "Group"))
-    out.append(act("Make Component…", "makecomp", "Component"))
-    for label in MORE:
-        name = label.replace("Intersect Faces ", "Intersect Faces ▸ ") if label.startswith("Intersect Faces ") else None
-        out.append(act(label, MORE_VERBS.get(label, ""), name, more=True))
-    return [c for c in out if c is not None]
+    """(id, label, shortcut, run, enabled, in More) for the inspector's
+    verbs: the verb source's (views/verbs.py, verbs.rs), the very entries
+    the right-click menu offers this selection, run the same way."""
+    import json
+    from views import context_menu, verbs
+    view = getattr(getattr(win, "_doc", None), "stand_in", None)
+    facts = verbs.facts(win.viewport.scene, sel, win, view)
+    kind = verbs.verbs_kind(json.dumps(facts))
+    sel = list(sel)
+    return [(vid, label, key, (lambda vid=vid: context_menu.run(win, view, kind, vid, sel, facts=facts)),
+             enabled, more)
+            for vid, label, key, enabled, more in verbs.verbs_inspector(json.dumps(facts))]
 
 
 def _show_all(vp) -> None:
@@ -2325,12 +2263,9 @@ def _linked_inspector(view, win, data, key):
             rows.insert(2, ("Via", " › ".join(stems[:-1])))
         if node.get("merged"):
             rows.append(("Top node", node["merged"]))
-        # The file verbs first (views/verbs.py), then what any row offers.
+        # The file verbs first (the verb source, views/verbs.py), then what any row offers.
         from views import verbs
-        labels = {"linkopen": "Edit source", "linkreload": "Reload" if state != "modified" else "Reload changes",
-                  "linkunlink": "Unlink", "linkfinder": "Show in Finder", "linkrelink": "Locate…"}
-        acts = [("lnk:" + v + ":" + key, labels[v]) for v in verbs.file_verbs(not top)
-                if state != "missing" or v in ("linkunlink", "linkrelink")]
+        acts = [("lnk:" + v + ":" + key, label) for v, label in verbs.file_verb_rows(not top, state)]
         if len(copies) == 1:
             from ingetrazo_core import link_subset_rows
             rows.extend(link_subset_rows(copies[0]))

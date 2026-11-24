@@ -1,34 +1,59 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Bounded, pinnable recent paths retain missing entries for relocation."""
+"""The recent documents and projects, pinnable, missing ones kept for
+relocation: one store, ``home/recent_<kind>`` (JSON rows), which the start
+page, File ▸ Open Recent and the native menu all read. The list rules live
+in ``rust/ingetrazo_core/src/recents.rs``; this module reads and writes the
+settings.
+
+The app used to keep a second, plain path list (``recent_files``). A store
+that has no rich list yet reads it, and the first write drops it, so the
+user's recents survive and a cleared list stays cleared."""
 import json
 from pathlib import Path
 from core.settings import settings as QSettings
 
+from ingetrazo_core import recent_forget, recent_menu, recent_remember, recent_rows
+
 LIMIT = 20
+#: File ▸ Open Recent shows this many.
+MENU = 10
+_LEGACY = 'recent_files'
+
+
+def _key(kind):
+    return 'home/recent_' + kind
+
+
+def _rows_json(kind, st):
+    stored = st.value(_key(kind)) if st.contains(_key(kind)) else None
+    legacy = []
+    if kind == 'files':
+        old = st.value(_LEGACY, []) or []
+        legacy = [str(p) for p in ([old] if isinstance(old, str) else old)]
+    return recent_rows(stored if isinstance(stored, str) else None, legacy)
+
+
+def _store(kind, st, rows_json):
+    st.setValue(_key(kind), rows_json)
+    if kind == 'files':
+        st.remove(_LEGACY)
 
 
 def entries(kind='files', settings=None):
-    st = settings or QSettings()
-    try:
-        rows = json.loads(st.value('home/recent_' + kind, '[]'))
-    except (TypeError, ValueError):
-        rows = []
-    if not rows and kind == 'files':
-        old = st.value('recent_files', []) or []
-        rows = [{'path': p, 'pinned': False} for p in ([old] if isinstance(old, str) else old)]
-    return [r for r in rows if isinstance(r, dict) and isinstance(r.get('path'), str)][:LIMIT]
+    return json.loads(_rows_json(kind, settings or QSettings()))
+
+
+def menu(settings=None, limit=MENU):
+    """File ▸ Open Recent: the recent documents still on disk."""
+    return recent_menu(_rows_json('files', settings or QSettings()), limit)
 
 
 def remember(path, pinned=None, settings=None, replace=None):
     st = settings or QSettings()
     path = str(Path(path).resolve())
     kind = 'projects' if Path(path).suffix.lower() == '.igzproj' else 'files'
-    rows = entries(kind, st)
-    previous = next((r for r in rows if r['path'] in (path, replace)), {})
-    row = {'path': path, 'pinned': previous.get('pinned', False) if pinned is None else bool(pinned)}
-    rows = [row] + [r for r in rows if r['path'] not in (path, replace)]
-    rows.sort(key=lambda r: not r.get('pinned', False))
-    st.setValue('home/recent_' + kind, json.dumps(rows[:LIMIT]))
+    _store(kind, st, recent_remember(_rows_json(kind, st), path, None if pinned is None else bool(pinned),
+                                     None if replace is None else str(replace)))
     if kind == 'files' and pinned is None:
         # Opened or saved, not a pin: the start page's «Continue».
         st.setValue('home/last_file', path)
@@ -44,14 +69,10 @@ def forget(paths, settings=None):
     gone = {str(p) for p in paths}
     gone |= {str(Path(p).resolve()) for p in paths}
     for kind in ('files', 'projects'):
-        rows = entries(kind, st)
-        kept = [r for r in rows if r['path'] not in gone]
-        if len(kept) != len(rows):
-            st.setValue('home/recent_' + kind, json.dumps(kept))
-            if kind == 'files':
-                # The legacy list would bring them back once the new one
-                # is empty (``entries``): keep the two in step.
-                st.setValue('recent_files', [r['path'] for r in kept])
+        rows = _rows_json(kind, st)
+        kept = recent_forget(rows, sorted(gone))
+        if kept != rows:
+            _store(kind, st, kept)
     if st.value('home/last_file', '') in gone:
         st.remove('home/last_file')
     try:
@@ -60,6 +81,14 @@ def forget(paths, settings=None):
         table = {}
     if isinstance(table, dict) and gone & set(table):
         st.setValue('home/meta', json.dumps({k: v for k, v in table.items() if k not in gone}))
+
+
+def clear(settings=None):
+    """File ▸ Open Recent ▸ Clear list: the documents' rows go, the ones
+    pinned on the start page stay."""
+    st = settings or QSettings()
+    forget([r['path'] for r in entries('files', st) if not r.get('pinned')], st)
+    _store('files', st, _rows_json('files', st))
 
 
 def query(settings=None):

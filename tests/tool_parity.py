@@ -417,6 +417,233 @@ def rect_cases():
         yield name, steps, name == "typed_far_from_the_origin"
 
 
+# ---- Circle and Polygon ---------------------------------------------------
+
+def _circle_snapshot(view, tool):
+    snap = _line_snapshot_base(view, tool)
+    label = tool.value_label()
+    snap.update(label=None if label is None else [label[0], _pt(label[1])],
+                plane_lock=tool.plane_lock,
+                work_plane=None if tool.work_plane is None else [_pt(p) for p in tool.work_plane],
+                flashed=list(view.flashed), sides=int(tool.sides),
+                caption=tool.vcb_caption(), unitless=bool(tool.value_is_unitless()),
+                guide=bool(tool._guide_mode),
+                guide_lines=[[_pt(a), _pt(b)] for a, b in tool.guide_preview_lines()],
+                guides=[[_pt(g.center), _pt(g.normal), _r(g.radius)] for g in view.scene.guides])
+    view.flashed.clear()
+    return snap
+
+
+CIRCLE_SCENARIOS = {
+    "centre_and_rim": [("click", (0, 0, 0)), ("hover", (2, 1, 0)), ("click", (2, 1, 0))],
+    "typed_radius_keeps_the_direction": [
+        ("click", (1, 1, 0)), ("hover", (1, 3, 0)), ("value", 0.5)],
+    "sides_before_the_centre": [
+        ("value", 8.0), ("value", 2.0), ("click", (0, 0, 0)), ("hover", (1, 0, 0)), ("click", (1, 0, 0))],
+    "segments_redraw_the_last": [
+        ("click", (0, 0, 0)), ("hover", (1, 0, 0)), ("click", (1, 0, 0)), ("segments", 12),
+        ("segments", 2), ("value", 2.0), ("segments", 5)],
+    "retype_closes_on_undo": [
+        ("click", (0, 0, 0)), ("hover", (1, 0, 0)), ("click", (1, 0, 0)), ("undo",), ("value", 3.0)],
+    "guide_circle_with_ctrl": [
+        ("key", "ctrl"), ("key_release", "ctrl", True), ("click", (0, 0, 0)), ("hover", (0, 2, 0)),
+        ("click", (0, 2, 0)), ("click", (1, 1, 0)), ("hover", (1, 2, 0)), ("value", 0.25)],
+    "ctrl_in_a_chord_takes_itself_back": [
+        ("key", "ctrl"), ("key_release", "ctrl", False), ("click", (0, 0, 0)), ("hover", (1, 1, 0)),
+        ("click", (1, 1, 0))],
+    "a_rim_on_the_centre_draws_nothing": [
+        ("click", (0, 0, 0)), ("hover", (0, 0, 0)), ("click", (0, 0, 0)), ("value", -1.0)],
+    "plane_lock_arrow": [
+        ("key", "right"), ("click", (0, 0, 0)), ("hover", (0, 1, 1)), ("click", (0, 1, 1))],
+    "cancel_mid_circle": [
+        ("click", (0, 0, 0)), ("hover", (1, 1, 0)), ("cancel",), ("click", (3, 3, 0)),
+        ("hover", (4, 3, 0)), ("click", (4, 3, 0)), ("cancel",), ("value", 2.0)],
+    "two_circles_overlap": [
+        ("click", (0, 0, 0)), ("hover", (1, 0, 0)), ("click", (1, 0, 0)),
+        ("click", (1, 0, 0)), ("hover", (2, 0, 0)), ("click", (2, 0, 0))],
+    "tuple_values_are_refused": [("click", (0, 0, 0)), ("hover", (1, 0, 0)), ("value", (1.0, 2.0))],
+    "typed_far_from_the_origin": [
+        ("click", (0.01, 0.02, 0)), ("hover", (0.03, 0.05, 0)), ("value", 0.022345678912)],
+}
+
+
+def run_circle(steps, polygon=False, far=False):
+    from ingetrazo_core import Vec3
+    from PySide6.QtCore import QPointF, Qt
+    from tools.base import ToolContext
+    from tools.circle import CircleTool, PolygonTool
+    view = RectView(far=far)
+    off = view.offset
+    tool = (PolygonTool if polygon else CircleTool)()
+    tool.on_activate(view)
+
+    def at(p):
+        return Vec3(*(float(v) + o for v, o in zip(p, off)))
+
+    out = []
+    for step in steps:
+        kind = step[0]
+        result = None
+        if kind in ("click", "hover"):
+            ctx = ToolContext(view, at(step[1]), QPointF(0, 0), Qt.NoModifier, _Snap("on_face"))
+            (tool.on_click if kind == "click" else tool.on_hover)(ctx)
+        elif kind == "value":
+            v = step[1]
+            result = bool(tool.on_value(view, tuple(map(float, v)) if isinstance(v, (list, tuple)) else float(v)))
+        elif kind == "segments":
+            result = bool(tool.on_segments_value(view, step[1]))
+        elif kind == "key":
+            result = bool(tool.on_key(view, getattr(Qt, _KEYS[step[1]]), Qt.NoModifier))
+        elif kind == "key_release":
+            tapped = step[2]
+            view.ctrl_tapped = lambda: tapped
+            result = bool(tool.on_key_release(view, getattr(Qt, _KEYS[step[1]])))
+        elif kind == "cancel":
+            tool.on_cancel(view)
+        elif kind == "undo":
+            view.history.undo()
+        snap = _circle_snapshot(view, tool)
+        if far:
+            snap = _unshift(snap, off)
+            if snap["label"] is not None:
+                snap["label"][1] = [_r(v - o) for v, o in zip(snap["label"][1], off)]
+            snap["work_plane"] = None if snap["work_plane"] is None else [
+                [_r(v - o) for v, o in zip(snap["work_plane"][0], off)], snap["work_plane"][1]]
+        snap["result"] = result
+        out.append(snap)
+    return out
+
+
+def circle_cases():
+    for name, steps in CIRCLE_SCENARIOS.items():
+        for polygon in (False, True):
+            yield f"{'polygon' if polygon else 'circle'}:{name}", steps, polygon, name == "typed_far_from_the_origin"
+
+
+# ---- Rotated Rectangle ----------------------------------------------------
+
+class RotView(RectView):
+    """A Rect view with an oblique parallel camera (pixels, rays), the
+    axis lock and a wall face the first click may land on."""
+
+    def __init__(self):
+        super().__init__()
+        from core.protocol.commands import run
+        run(self.history, "add_face", outer=[[5, 0, 0], [5, 2, 0], [5, 2, 2], [5, 0, 2]])
+        self.history.undo_stack.clear()
+        self.axis_lock = None
+        self.on_wall = False
+
+    def _world_to_pixel(self, p):
+        return (400.0 + 100.0 * (p.x() + 0.3 * p.z()), 300.0 - 100.0 * (p.y() + 0.2 * p.z()))
+
+    def _pixel_to_ray(self, x, y):
+        from ingetrazo_core import Vec3
+        wx, wy = (x - 400.0) / 100.0, (300.0 - y) / 100.0
+        return Vec3(wx - 3.0, wy - 2.0, 10.0), Vec3(0.3, 0.2, -1.0).normalized()
+
+    def pick_face_any(self, x, y):
+        if not self.on_wall:
+            return None, None
+        return self.scene.mesh.faces[0], None
+
+
+def _rot_snapshot(view, tool):
+    snap = _line_snapshot_base(view, tool)
+    label = tool.value_label()
+    snap.update(label=None if label is None else [label[0], _pt(label[1])],
+                base=_pt(tool.base_point), angle=_r(tool.angle),
+                work_plane=None if tool.work_plane is None else [_pt(p) for p in tool.work_plane],
+                flashed=list(view.flashed), vcb=tool.vcb_label, magnet=bool(tool.magnet_on()),
+                diagonal=bool(tool.diagonal_span), plane_lock=tool.plane_lock)
+    view.flashed.clear()
+    return snap
+
+
+ROT_SCENARIOS = {
+    "three_clicks_flat": [
+        ("click", (0, 0, 0)), ("hover", (2, 0.3, 0)), ("click", (2, 0.3, 0)), ("hover", (2.2, 1.5, 0)),
+        ("click", (2.2, 1.5, 0))],
+    "first_protractor_ticks_near_the_rim": [
+        ("click", (0, 0, 0)), ("hover", (0.5, 0.1, 0)), ("click", (0.5, 0.1, 0)), ("hover", (0.6, 0.8, 0)),
+        ("click", (0.6, 0.8, 0))],
+    "shift_holds_the_edge_direction": [
+        ("click", (0, 0, 0)), ("hover", (3, 1, 0), "shift"), ("hover", (1, 2, 0), "shift"),
+        ("click", (1, 2, 0), "shift"), ("hover", (0, 3, 0)), ("click", (0, 3, 0))],
+    "typed_edge_then_width": [
+        ("click", (0, 0, 0)), ("hover", (1, 1, 0)), ("value", 3.0), ("hover", (1, 3, 0)), ("value", 2.0)],
+    "typed_edge_with_angle_then_standing_width": [
+        ("click", (1, 1, 0)), ("hover", (2, 1, 0)), ("value", (2.0, 30.0)), ("hover", (2, 3, 0)),
+        ("value", (1.5, 90.0))],
+    "negative_and_zero_values": [
+        ("click", (0, 0, 0)), ("hover", (1, 0, 0)), ("value", 0.0), ("value", -2.0), ("hover", (-1, 1, 0)),
+        ("value", 0.0), ("value", (-1.0, 0.0)), ("value", (1.0, 2.0, 3.0)), ("value", -1.0)],
+    "the_width_reads_the_protractor_plane": [
+        ("click", (0, 0, 0)), ("hover", (3, 0, 0)), ("click", (3, 0, 0)), ("hover", (3.4, 1.2, 0)),
+        ("click", (3.4, 1.2, 0))],
+    "a_point_snap_is_taken_as_is": [
+        ("click", (0, 0, 0)), ("hover", (3, 0, 0)), ("click", (3, 0, 0)),
+        ("hover", (3, 1, 1), "endpoint"), ("click", (3, 1, 1), "endpoint")],
+    "axis_lock_sets_the_width": [
+        ("click", (0, 0, 0)), ("hover", (2, 0, 0)), ("click", (2, 0, 0)), ("axis", "z"),
+        ("hover", (2.5, 0.7, 0)), ("click", (2.5, 0.7, 0)), ("axis", None)],
+    "shift_holds_the_width_angle": [
+        ("click", (0, 0, 0)), ("hover", (2, 0, 0)), ("click", (2, 0, 0)), ("hover", (2, 1, 0.2)),
+        ("hover", (2, 1, 0.2), "shift"), ("hover", (2.5, 0.3, 1.5), "shift"), ("click", (2.5, 0.3, 1.5), "shift")],
+    "zero_width_says_why": [
+        ("click", (0, 0, 0)), ("hover", (2, 0, 0)), ("click", (2, 0, 0)), ("hover", (1, 0, 0), "endpoint"),
+        ("click", (1, 0, 0), "endpoint")],
+    "the_wall_under_the_first_click": [
+        ("wall", True), ("click", (5, 0.5, 0.5)), ("wall", False), ("hover", (5, 1.5, 0.5), "endpoint"),
+        ("click", (5, 1.5, 0.5), "endpoint"), ("hover", (5, 1.5, 1.5), "endpoint"),
+        ("click", (5, 1.5, 1.5), "endpoint")],
+    "edge_square_to_the_plane_is_refused": [
+        ("key", "right"), ("click", (0, 0, 0)), ("hover", (1, 0, 0), "endpoint"),
+        ("click", (1, 0, 0), "endpoint"), ("hover", (0, 1, 0)), ("click", (0, 1, 0))],
+    "cancel_and_start_again": [
+        ("click", (0, 0, 0)), ("hover", (1, 0, 0)), ("click", (1, 0, 0)), ("cancel",),
+        ("hover", (2, 2, 0)), ("click", (2, 2, 0)), ("hover", (3, 2, 0)), ("click", (3, 2, 0)),
+        ("hover", (3, 3, 0)), ("click", (3, 3, 0))],
+}
+
+
+def run_rot(steps):
+    from ingetrazo_core import Vec3
+    from PySide6.QtCore import QPointF, Qt
+    from tools.base import ToolContext
+    from tools.rotated_rectangle import RotatedRectangleTool
+    view = RotView()
+    tool = RotatedRectangleTool()
+    tool.on_activate(view)
+    out = []
+    for step in steps:
+        kind = step[0]
+        result = None
+        if kind in ("click", "hover"):
+            w = Vec3(*map(float, step[1]))
+            opt = step[2] if len(step) > 2 else None
+            mods = Qt.ShiftModifier if opt == "shift" else Qt.NoModifier
+            snap = _Snap("endpoint" if opt == "endpoint" else "on_face")
+            x, y = view._world_to_pixel(w)
+            ctx = ToolContext(view, w, QPointF(x, y), mods, snap)
+            (tool.on_click if kind == "click" else tool.on_hover)(ctx)
+        elif kind == "value":
+            v = step[1]
+            result = bool(tool.on_value(view, tuple(map(float, v)) if isinstance(v, (list, tuple)) else float(v)))
+        elif kind == "key":
+            result = bool(tool.on_key(view, getattr(Qt, _KEYS[step[1]]), Qt.NoModifier))
+        elif kind == "axis":
+            view.axis_lock = step[1]
+        elif kind == "wall":
+            view.on_wall = step[1]
+        elif kind == "cancel":
+            tool.on_cancel(view)
+        snap = _rot_snapshot(view, tool)
+        snap["result"] = result
+        out.append(snap)
+    return out
+
+
 # ---- Move -----------------------------------------------------------------
 
 class MoveView(RectView):
@@ -530,7 +757,17 @@ def run_move(steps):
     return out
 
 
-def record(which=("line", "select", "rectangle", "move")):
+def _compact(fixture) -> str:
+    """One scenario step per line: the protractors' segments make an
+    indented file several times larger than the data."""
+    rows = []
+    for name, steps in fixture.items():
+        body = ",\n  ".join(json.dumps(step, separators=(",", ":")) for step in steps)
+        rows.append(f"{json.dumps(name)}: [\n  {body}]")
+    return "{\n" + ",\n".join(rows) + "\n}\n"
+
+
+def record(which=("line", "select", "rectangle", "move", "circle", "rotated_rectangle")):
     FIXTURES.mkdir(parents=True, exist_ok=True)
     if "line" in which:
         line = {name: run_line(steps, far) for name, steps, far in line_cases()}
@@ -544,6 +781,12 @@ def record(which=("line", "select", "rectangle", "move")):
     if "rectangle" in which:
         rect = {name: run_rect(steps, far) for name, steps, far in rect_cases()}
         (FIXTURES / "rectangle.json").write_text(json.dumps(rect, indent=1) + "\n")
+    if "circle" in which:
+        circle = {name: run_circle(steps, polygon, far) for name, steps, polygon, far in circle_cases()}
+        (FIXTURES / "circle.json").write_text(_compact(circle))
+    if "rotated_rectangle" in which:
+        rot = {name: run_rot(steps) for name, steps in ROT_SCENARIOS.items()}
+        (FIXTURES / "rotated_rectangle.json").write_text(_compact(rot))
 
 
 def load(tool):

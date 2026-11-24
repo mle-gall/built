@@ -231,3 +231,46 @@ fn select_cascade_takes_a_label_then_lines_then_groups_then_faces() {
     let mut h = Layers(vec![("face", face)]);
     assert_eq!(select::pick(&mut h, [0.0, 0.0], true).map(|p| p.id), Some(10));
 }
+
+#[test]
+fn circle_retypes_in_place_and_sides_before_the_centre() {
+    let mut t = circle::RadialTool::polygon();
+    let mut h = Fake::default();
+    // A number before the centre is the side count.
+    assert!(t.event(&ToolEvent::Value(Value::Length(8.0)), &mut h).consumed);
+    assert!(!t.event(&ToolEvent::Value(Value::Length(2.0)), &mut h).consumed);
+    assert_eq!(t.state()["sides"], 8);
+    t.event(&ToolEvent::Click(at(0., 0., 0.)), &mut h);
+    t.event(&ToolEvent::Hover(at(1., 0., 0.)), &mut h);
+    t.event(&ToolEvent::Click(at(1., 0., 0.)), &mut h);
+    assert_eq!(h.log.len(), 1);
+    assert!(h.log[0].starts_with("add_face") && h.log[0].contains("\"curve\":true"));
+    // Right after: «5s» and a radius redraw it, an undo before each.
+    assert!(t.event(&ToolEvent::Segments(5), &mut h).consumed);
+    assert!(t.event(&ToolEvent::Value(Value::Length(2.0)), &mut h).committed);
+    let names: Vec<&str> = h.log.iter().map(|l| l.split(' ').next().unwrap()).collect();
+    assert_eq!(names, ["add_face", "undo", "add_face", "undo", "add_face"]);
+    // Anything in between closes the window: a number is a count again.
+    h.token += 1;
+    assert!(t.event(&ToolEvent::Value(Value::Length(4.0)), &mut h).consumed);
+    assert_eq!(t.state()["sides"], 4);
+    assert_eq!(h.log.len(), 5);
+}
+
+#[test]
+fn circle_ctrl_draws_a_guide_and_a_chord_takes_it_back() {
+    let mut t = circle::RadialTool::circle();
+    let mut h = Fake::default();
+    t.event(&ToolEvent::Key { key: "Control".into(), mods: ctrl() }, &mut h);
+    t.event(&ToolEvent::KeyRelease { key: "Control".into(), tapped: false }, &mut h);
+    assert_eq!(t.state()["guide_mode"], false);
+    t.event(&ToolEvent::Key { key: "Control".into(), mods: ctrl() }, &mut h);
+    t.event(&ToolEvent::KeyRelease { key: "Control".into(), tapped: true }, &mut h);
+    t.event(&ToolEvent::Click(at(0., 0., 0.)), &mut h);
+    t.event(&ToolEvent::Hover(at(0., 2., 0.)), &mut h);
+    assert!(t.preview().lines.is_empty(), "the guide is dashed, not a rubber band");
+    assert_eq!(t.state()["guide_ring"].as_array().unwrap().len(), 24);
+    t.event(&ToolEvent::Click(at(0., 2., 0.)), &mut h);
+    assert!(h.log[0].starts_with("add_guide_circle") && h.log[0].contains("\"radius\":2.0"));
+    assert!(!t.busy());
+}

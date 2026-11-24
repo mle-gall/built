@@ -43,15 +43,13 @@ def export_form(win, key=None, one_off=False):
     nodes = Tree(scene, registry).nodes
     fmt = record.get("format", "ifc")
 
+    from ingetrazo_core import delivery_field_visible, delivery_record, delivery_scopes
+
     def scopes(fmt):
-        if fmt == "pdf":
-            return [("sheets", "Sheets")]
-        choices = [("whole", "Whole model"), ("visible", "Visible"), ("selection", "Selection")]
-        if nodes:
-            choices.append(("node", "Project tree node"))
-        if fmt in ("dxf", "svg"):
-            choices.append(("scenes", "Scenes"))
-        return choices
+        return delivery_scopes(fmt, bool(nodes))
+
+    def shows(fid):
+        return lambda f: delivery_field_visible(fid, f.value("format"), f.value("scope"))
 
     from ingetrazo_render import SvgOptions
     view = chrome_dialogs.view_of(win)
@@ -69,21 +67,8 @@ def export_form(win, key=None, one_off=False):
             form.changed()
 
     def unpack(v):
-        opts = {}
-        if v["format"] == "ifc" and v["profile"]:
-            opts["profile"] = v["profile"]
-        if v["format"] == "glb":
-            opts["textures"] = v["textures"]
-        if v["format"] == "svg":
-            opts.update(json.loads(svg.options_json()))
-        if v["format"] == "stl":
-            opts["unit"] = v["unit"]
-        if v["scope"] in ("sheets", "scenes") and v["names"].strip():
-            opts["names"] = v["names"].splitlines()
-        r = {k: v[k] for k in ("name", "format", "scope", "destination")}
-        if r["scope"] == "node":
-            r["node"] = v["node"]
-        return dict(r, options=opts)
+        return json.loads(delivery_record(json.dumps(v, default=str),
+                                          svg.options_json() if v.get("format") == "svg" else "{}"))
 
     def check(form, answer):
         try:
@@ -115,16 +100,16 @@ def export_form(win, key=None, one_off=False):
         Field("format", "choice", "Format", fmt, options=[(k, k.upper()) for k in deliveries.FORMATS]),
         Field("scope", "choice", "Scope", record.get("scope", "whole"), options=scopes(fmt)),
         Field("node", "choice", "Project node", record.get("node", next(iter(nodes), "")),
-              options=[(k, n["name"]) for k, n in nodes.items()], visible=lambda f: f.value("scope") == "node"),
+              options=[(k, n["name"]) for k, n in nodes.items()], visible=shows("node")),
         Field("names", "edit", "Names (one per line, blank for all)", "\n".join(options.get("names", [])),
-              multiline=True, visible=lambda f: f.value("scope") in ("sheets", "scenes")),
+              multiline=True, visible=shows("names")),
         Field("profile", "choice", "IFC profile", options.get("profile", ""),
               options=[("", "Default IFC4")] + [(k, v.get("name", k)) for k, v in registry.get("export_profiles", {}).items()],
-              visible=lambda f: f.value("format") == "ifc"),
+              visible=shows("profile")),
         Field("textures", "check", "Embed textures", options.get("textures", True),
-              visible=lambda f: f.value("format") == "glb"),
+              visible=shows("textures")),
         Field("unit", "choice", "Units", options.get("unit", "mm"), options=["mm", "cm", "m", "in", "ft"],
-              visible=lambda f: f.value("format") == "stl"),
+              visible=shows("unit")),
         Field("destination", "path", "Destination", record.get("destination", ""), pick="save",
               filters=f"{fmt.upper()} (*.{fmt})")]
     buttons = [("cancel", "Cancel")]

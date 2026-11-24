@@ -245,13 +245,15 @@ def _draw_segments(history, segments, single=False, **options):
     return _answer(history, before)
 
 
-def add_face(history, outer=None, holes=(), anchor=None, offsets=None):
+def add_face(history, outer=None, holes=(), anchor=None, offsets=None, curve=False):
     """A face over a ring of points, with its edges: the Rectangle's commit.
     ``outer`` the ring (open mesh coordinates), or ``anchor`` plus
     ``offsets``: the ring is the stored position at ``anchor`` plus each
     offset exactly (typed sizes). ``holes`` are inner rings. The plane it
     lands on is rebuilt, so a ring drawn over a face fills its hole (#538).
-    One step."""
+    ``curve``: the ring is one closed curve (the Circle's and the Polygon's
+    commit), tagged so, its plane's faces rebuilt as
+    ``core.arrangement.curve_extras`` says. One step."""
     from core.coordinate_frame import (ZERO, choose_origin, drawing_point, mesh_frame,
                                        planned_points, point_in_frame)
     from core.edits import build_add_edges
@@ -281,13 +283,39 @@ def add_face(history, outer=None, holes=(), anchor=None, offsets=None):
             else:
                 exact = {p.toTuple(): tuple(v - o for v, o in zip(raw, origin))
                          for p, raw in zip(ring, outer)}
-        cmd = build_add_edges(history.scene, segments, detect_faces=False,
-                              extra=[AddFaceCommand(list(ring), holes=inner or None)],
-                              plane_rebuild=True)
+        if curve:
+            from core.arrangement import curve_extras
+            cmd = build_add_edges(history.scene, segments, detect_faces=False,
+                                  extra=curve_extras(history.scene, ring))
+        else:
+            cmd = build_add_edges(history.scene, segments, detect_faces=False,
+                                  extra=[AddFaceCommand(list(ring), holes=inner or None)],
+                                  plane_rebuild=True)
         with planned_points(mesh, exact):
             history.execute(cmd)
     return _answer(history, before)
 
+
+
+def add_guide_circle(history, center, normal, radius):
+    """An analytic guide circle (the Circle tool with Ctrl): ``center``
+    (open mesh coordinates), the unit ``normal`` of its plane, ``radius``.
+    Nothing when the radius is zero or the circle is not finite. One step."""
+    from ingetrazo_core import Vec3
+    from core.coordinate_frame import point_in_frame
+    from core.guide import GuideCircle
+    from core.history import AddGuideCommand
+    before = history.revision
+    radius = float(radius)
+    if radius < 1e-9:
+        return _answer(history, before)
+    st = store_of(history.scene.mesh)
+    origin = getattr(st, "frame_origin", None) if st is not None else None
+    c = point_in_frame(center, origin) if origin is not None and any(origin) else Vec3(*map(float, center))
+    guide = GuideCircle(c, Vec3(*map(float, normal)), radius)
+    if guide.is_finite():
+        history.execute(AddGuideCommand(guide))
+    return _answer(history, before)
 
 def move_placements(history, placements, delta):
     """Move placements (uids, nested included) by ``delta`` ``[x, y, z]``:
@@ -1115,6 +1143,7 @@ COMMANDS = {"set_location": set_location, "set_model_units": set_model_units, "s
             "create_delivery": create_delivery, "edit_delivery": edit_delivery,
             "delete_delivery": delete_delivery, "run_delivery": run_delivery, "follow_me": follow_me, "intersect_faces": intersect_faces,
             "add_edge": add_edge, "add_edges": add_edges, "add_face": add_face,
+            "add_guide_circle": add_guide_circle,
             "move_placements": move_placements, "copy_placements": copy_placements,
             "move_selection": move_selection,
             "divide_edges": divide_edges, "join_edges": join_edges,

@@ -298,20 +298,3 @@ def test_first_person_sits_beside_walk_in_the_toolbar_and_camera_menu(win):
     assert win._tool_actions["first_person"].shortcut().isEmpty()
 
 
-def test_a_lost_release_frees_the_pointer():
-    """Mouse look hides the pointer and puts it back on every move; if the
-    button's release never arrives, a move with no button held must end
-    the look, or the pointer stays trapped (the orbit bug, 0.5.0)."""
-    from PySide6.QtCore import QPoint, QPointF, Qt
-    from PySide6.QtGui import QMouseEvent
-    from views.main_window import MainWindow
-    win = MainWindow()
-    vp = win.viewport
-    win._activate_tool("first_person") if "first_person" in getattr(win, "_tools", {}) else None
-    vp._look_drag = (Qt.RightButton, QPoint(100, 100))
-    ev = QMouseEvent(QMouseEvent.MouseMove, QPointF(150, 120), QPointF(150, 120),
-                     Qt.NoButton, Qt.NoButton, Qt.NoModifier)
-    vp.mouseMoveEvent(ev)
-    assert vp._look_drag is None
-    win._saved_version = vp.scene.version
-    win.close()

@@ -6,6 +6,8 @@ mod window_timers;
 mod panic_log;
 mod overlay;
 mod commands;
+/// The one verb source: kinds, menu rows, inspector verbs, dispatch.
+mod verbs;
 pub mod ui;
 mod host_context;
 mod inspector;
@@ -2897,6 +2899,8 @@ mod units_start;
 mod preferences;
 mod about;
 mod sheet_host;
+mod start_view;
+mod library_view;
 mod scene_photo;
 mod shortcut_text;
 /// The Sheets workspace's page, native (docs/rust-sheets.md).
@@ -2958,6 +2962,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(commands::command_chrome, m)?)?;
     m.add_function(wrap_pyfunction!(commands::activate_view_command, m)?)?;
     m.add_function(wrap_pyfunction!(commands::rail_layout, m)?)?;
+    verbs::register(m)?;
     m.add_function(wrap_pyfunction!(ui::tokens::chrome_token, m)?)?;
     m.add_function(wrap_pyfunction!(commands::leave_navigation, m)?)?;
     m.add_function(wrap_pyfunction!(commands::view_shortcut, m)?)?;
@@ -2977,7 +2982,8 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(scene_photo::opaque_frame,m)?)?;
     m.add_function(wrap_pyfunction!(scene_photo::scene_thumbnail_icon,m)?)?;
     m.add_function(wrap_pyfunction!(scene_photo::save_thumbnail_mode,m)?)?;
-    m.add_function(wrap_pyfunction!(sheet_host::start_backdrop, m)?)?;
+    start_view::register(m)?;
+    library_view::register(m)?;
     m.add_function(wrap_pyfunction!(sheet_host::show_delivery_form, m)?)?;
     m.add_function(wrap_pyfunction!(sheet_host::show_view_export, m)?)?;
     m.add_class::<units_start::UnitsDraft>()?;

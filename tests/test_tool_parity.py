@@ -54,3 +54,30 @@ def test_move_matches_the_recorded_python_tool(name):
     for i, (g, w) in enumerate(zip(got, want)):
         g = json.loads(json.dumps(g))
         assert g == w, f"step {i}: {tp.MOVE_SCENARIOS[name][i]}"
+
+
+CIRCLE = tp.load("circle")
+
+
+@pytest.mark.parametrize("name,steps,polygon,far", list(tp.circle_cases()),
+                         ids=[c[0] for c in tp.circle_cases()])
+def test_circle_and_polygon_match_the_recorded_python_tools(name, steps, polygon, far):
+    got = tp.run_circle(steps, polygon=polygon, far=far)
+    want = CIRCLE[name]
+    assert len(got) == len(want)
+    for i, (g, w) in enumerate(zip(got, want)):
+        g = json.loads(json.dumps(g))
+        assert g == w, f"step {i}: {steps[i]}"
+
+
+ROT = tp.load("rotated_rectangle")
+
+
+@pytest.mark.parametrize("name", sorted(tp.ROT_SCENARIOS))
+def test_rotated_rectangle_matches_the_recorded_python_tool(name):
+    got = tp.run_rot(tp.ROT_SCENARIOS[name])
+    want = ROT[name]
+    assert len(got) == len(want)
+    for i, (g, w) in enumerate(zip(got, want)):
+        g = json.loads(json.dumps(g))
+        assert g == w, f"step {i}: {tp.ROT_SCENARIOS[name][i]}"

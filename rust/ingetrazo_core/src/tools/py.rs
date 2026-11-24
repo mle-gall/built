@@ -10,7 +10,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyTuple};
 
-use super::{new_tool, Answer, Command, Grow, Mods, Pick, PickKind, Pointer, Reply, SelectMode, Snap, Tool,
+use super::{new_tool, ViewReading, Answer, Command, Grow, Mods, Pick, PickKind, Pointer, Reply, SelectMode, Snap, Tool,
             ToolEvent, ToolHost, Value, P3};
 
 pub fn json_to_py<'py>(py: Python<'py>, v: &serde_json::Value) -> PyResult<Bound<'py, PyAny>> {
@@ -147,6 +147,25 @@ fn event(d: &Bound<'_, PyDict>) -> PyResult<ToolEvent> {
                 names_point: opt(d, "names_point")?.map(|v| v.extract()).transpose()?,
             }
         }
+        "view" => {
+            let pair = |k: &str| -> PyResult<Option<(P3, P3)>> {
+                match opt(d, k)? {
+                    None => Ok(None),
+                    Some(v) => {
+                        let (a, b): (Bound<PyAny>, Bound<PyAny>) = v.extract()?;
+                        Ok(Some((p3(&a)?, p3(&b)?)))
+                    }
+                }
+            };
+            ToolEvent::View(ViewReading {
+                ray: pair("ray")?,
+                axis_lock: opt(d, "axis_lock")?.map(|v| p3(&v)).transpose()?,
+                protractor: opt(d, "protractor")?.map(|v| v.extract::<(Option<f64>, bool)>()).transpose()?,
+                plane_normal: opt(d, "plane_normal")?.map(|v| p3(&v)).transpose()?,
+            })
+        }
+        "segments" => ToolEvent::Segments(
+            d.get_item("count")?.ok_or_else(|| PyValueError::new_err("segments without count"))?.extract()?),
         "value" => ToolEvent::Value(value(&d.get_item("value")?.ok_or_else(|| PyValueError::new_err("value without value"))?)?),
         "work_plane" => ToolEvent::WorkPlane(match opt(d, "plane")? {
             None => None,

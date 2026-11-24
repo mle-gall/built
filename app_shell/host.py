@@ -313,7 +313,7 @@ class Host:
         if self._recent_dirty:
             self._recent_dirty = False
             try:
-                recent = [p for p in self.window._recent_paths() if Path(p).exists()]
+                recent = self.window._recent_paths()
             except Exception:
                 recent = []
         new_window = self.window_requests.pop(0) if self.window_requests else None

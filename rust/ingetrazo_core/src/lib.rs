@@ -14,6 +14,8 @@ use pyo3::types::PyBytes;
 
 mod math;
 mod navigation;
+mod recents;
+mod delivery_form;
 mod command_search;
 mod location;
 mod boxes;
@@ -81,6 +83,7 @@ mod snap_engine;
 mod tools;
 mod pick;
 mod units;
+mod value_field;
 mod inference_state;
 mod snap_curve;
 mod snap_planes;
@@ -153,6 +156,8 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(push_command::push_secondary_faces, m)?)?;
     m.add_function(wrap_pyfunction!(push_command::outline_curve_runs, m)?)?;
     navigation::register(m)?;
+    recents::register(m)?;
+    delivery_form::register(m)?;
     m.add_class::<math::Vec3>()?;
     m.add_class::<math::Vec4>()?;
     m.add_class::<math::Matrix4>()?;
@@ -226,6 +231,10 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(units::py_plain_marks, m)?)?;
     m.add_function(wrap_pyfunction!(units::py_parse, m)?)?;
     m.add_function(wrap_pyfunction!(units::py_parse_value_buffer, m)?)?;
+    m.add_function(wrap_pyfunction!(value_field::value_key, m)?)?;
+    m.add_function(wrap_pyfunction!(value_field::value_enter, m)?)?;
+    m.add_function(wrap_pyfunction!(value_field::py_zoom_enter, m)?)?;
+    m.add_function(wrap_pyfunction!(value_field::value_claims, m)?)?;
     m.add_function(wrap_pyfunction!(pick::project_px, m)?)?;
     m.add_function(wrap_pyfunction!(pick::seg_rect_mask, m)?)?;
     m.add_function(wrap_pyfunction!(pick::box_mesh_arrays, m)?)?;
