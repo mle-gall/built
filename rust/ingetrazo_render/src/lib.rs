@@ -3306,6 +3306,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(commands::command_chrome, m)?)?;
     m.add_function(wrap_pyfunction!(commands::activate_view_command, m)?)?;
     m.add_function(wrap_pyfunction!(commands::rail_layout, m)?)?;
+    m.add_function(wrap_pyfunction!(commands::invalidate_command_rails, m)?)?;
     verbs::register(m)?;
     m.add_function(wrap_pyfunction!(ui::tokens::chrome_token, m)?)?;
     m.add_function(wrap_pyfunction!(commands::leave_navigation, m)?)?;
@@ -3336,6 +3337,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(preview_texture::preview_materials, m)?)?;
     m.add_function(wrap_pyfunction!(tool_feedback::sync_tool_preview, m)?)?;
     m.add_function(wrap_pyfunction!(transform_marks::prepare_face_marks, m)?)?;
+    m.add_function(wrap_pyfunction!(extensions::open_extensions,m)?)?;
     m.add_class::<extensions::ExtensionBrowser>()?;
     m.add_class::<component_catalogue::ComponentCatalogue>()?;
     m.add_function(wrap_pyfunction!(surfaces::surface_spec, m)?)?;

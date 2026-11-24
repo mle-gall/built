@@ -1,96 +1,34 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""No two actions may hold the same key: Qt kills BOTH.
+"""Atajos compartidos por el menú, la paleta y los controles de vista."""
+from collections import defaultdict
+from unittest.mock import Mock, patch
 
-Reported by pacaeiro (PR #11, «Fix protractor shortcut conflict with pan»).
-When two ``QAction`` in one window share a shortcut, Qt does not pick one —
-it flags the shortcut ambiguous, prints ``QAction::event: Ambiguous shortcut
-overload`` and fires NOTHING. Measured on 2026-09-10, three keys were dead:
-
-* ``H``  — Protractor against Pan (the report),
-* ``O``  — Center Arc against Orbit,
-* ``F2`` — Zoom Extents registered twice, once for the toolbar button and
-  once for the Camera menu entry.
-
-The plugin loader already knew this failure mode and refuses a taken key to
-a plugin (``test_plugin_cannot_steal_a_builtin_shortcut``, whose comment
-says it in these words: "instead of creating a Qt ambiguity that disables
-the key for both"). Nobody applied the same rule to the built-ins among
-themselves. This file does.
-
-The camera keys come from the usual reference card: Orbit O, Pan H, Zoom Z, Zoom
-Extents Shift+Z. The Protractor and the Center Arc have NO default shortcut
-there, so they are the ones that yield — and they keep a Shift+key so they
-stay reachable.
-"""
-from __future__ import annotations
-
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-import pytest
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction, QKeySequence
-from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication
-
-_inst = QApplication.instance()
-if _inst is None:
-    _app = QApplication([])
-elif not isinstance(_inst, QApplication):
-    pytest.skip("a non-widget QGuiApplication is already active",
-                allow_module_level=True)
-
-import core.extensions as extensions                              # noqa: E402
+from core.input_types import Qt
+from ingetrazo_render import shortcut_text
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
+from tests.test_shortcuts_transfer import ventana  # noqa: F401
 
 
-@pytest.fixture
-def ventana(tmp_path, monkeypatch):
-    """A visible MainWindow with no user plugins in sight.
-
-    Shown on purpose: a shortcut only dispatches on a window that is up, and
-    this file is about shortcuts actually firing.
-    """
-    monkeypatch.setattr(extensions, "plugin_dirs", lambda: [tmp_path])
-    from views.main_window import MainWindow
-    win = MainWindow()
-    win.show()
-    yield win
-    win._saved_version = win.viewport.scene.version   # no "save?" modal
-    win.close()
-
-
-def _todos_los_atajos(win) -> dict[str, list[str]]:
-    """``{atajo: [nombres de las acciones que lo piden]}``, primary and
-    alternates alike — an alternate collides exactly the same."""
-    por_tecla: dict[str, list[str]] = {}
-    for action in win.findChildren(QAction):
-        for seq in {action.shortcut(), *action.shortcuts()}:
-            texto = seq.toString()
-            if texto:
-                por_tecla.setdefault(texto, []).append(
-                    action.text() or action.toolTip())
+def _todos_los_atajos(win):
+    por_tecla = defaultdict(list)
+    for action in win._registry_actions.values():
+        for tecla in action.portable_keys():
+            por_tecla[tecla].append(action.text())
     return por_tecla
 
 
-def _pulsar(win, tecla, modificador=Qt.NoModifier) -> list[str]:
-    """Names of the actions that fired for one keystroke on the viewport."""
-    disparos: list[str] = []
-    conexiones = []
-    for action in win.findChildren(QAction):
-        conexiones.append(action.triggered.connect(
-            lambda _c=False, n=action.text(): disparos.append(n)))
-    QTest.keyClick(win.viewport.keys_stand_in, tecla, modificador)
-    QApplication.processEvents()
+def _pulsar(win, tecla, modificador=Qt.NoModifier):
+    from app_shell.command_action import ShellAction
+    disparos = []
+    trigger = ShellAction.trigger
+    def observar(action):
+        disparos.append(action.text())
+        trigger(action)
+    with patch.object(ShellAction, "trigger", observar):
+        win._host.key(True, tecla, modificador.value)
+        win._host.key(False, tecla, modificador.value)
     return disparos
-
-
-def _calentar(win) -> None:
-    """The first keystroke a freshly shown offscreen window gets is dropped
-    before the shortcut map sees it; spend it on a key nobody claims."""
-    QTest.keyClick(win.viewport.keys_stand_in, Qt.Key_F1)
-    QApplication.processEvents()
 
 
 def test_ninguna_accion_pisa_el_atajo_de_otra(ventana):
@@ -104,7 +42,6 @@ def test_ninguna_accion_pisa_el_atajo_de_otra(ventana):
 
 def test_las_teclas_de_camara_son_las_habituales(ventana):
     """O / H / Z / Shift+Z, tal cual la tarjeta de referencia habitual."""
-    _calentar(ventana)
     for tecla, modificador, esperado in (
             (Qt.Key_O, Qt.NoModifier, "Orbit"),
             (Qt.Key_H, Qt.NoModifier, "Pan"),
@@ -117,7 +54,6 @@ def test_las_teclas_de_camara_son_las_habituales(ventana):
 
 def test_las_dos_herramientas_que_cedieron_siguen_a_mano(ventana):
     """Ceder la tecla no puede dejarlas sin ninguna."""
-    _calentar(ventana)
     assert _pulsar(ventana, Qt.Key_H, Qt.ShiftModifier) == ["Protractor"]
     assert _pulsar(ventana, Qt.Key_O, Qt.ShiftModifier) == ["Center Arc"]
 
@@ -125,7 +61,6 @@ def test_las_dos_herramientas_que_cedieron_siguen_a_mano(ventana):
 def test_redondear_3d_va_con_mayus_f_y_la_f_sigue_siendo_equidistancia(ventana):
     """Redondear 3D no tenía tecla. La F es de Equidistancia en la tarjeta,
     así que Redondear toma Mayús+F, como las otras que llegaron después."""
-    _calentar(ventana)
     assert _pulsar(ventana, Qt.Key_F, Qt.ShiftModifier) == ["Fillet 3D"]
     assert ventana.viewport.active_tool is ventana._tools["fillet"]
     assert _pulsar(ventana, Qt.Key_F) == ["Offset"]
@@ -172,7 +107,6 @@ def test_la_p_es_empujar_tirar_y_la_u_sigue_valiendo(ventana):
     """La P es Empujar/Tirar (Marco, 2026-09-10). La U no se tira: es el mismo
     comando con dos atajos, que es lo legal — dos ACCIONES con un atajo es
     lo que Qt mata."""
-    _calentar(ventana)
     assert _pulsar(ventana, Qt.Key_P) == ["Push / Pull"]
     assert _pulsar(ventana, Qt.Key_U) == ["Push / Pull"]
     atajos = _todos_los_atajos(ventana)
@@ -180,33 +114,25 @@ def test_la_p_es_empujar_tirar_y_la_u_sigue_valiendo(ventana):
 
 
 def test_la_perspectiva_se_mudo_a_mayus_p(ventana):
-    _calentar(ventana)
     assert _pulsar(ventana, Qt.Key_P, Qt.ShiftModifier) == [
         "Toggle Perspective / Parallel"]
 
 
-def test_la_barra_muestra_el_atajo_configurado_y_no_el_de_fabrica(ventana):
-    """Issue #171 (@pacaeiro): «Menus show the correct new configured
-    shortcut, toolbars show the Default shortcuts.» El tooltip del botón
-    escribía la tecla UNA vez, al arrancar; ahora sigue a la acción."""
-    from PySide6.QtGui import QKeySequence
-    linea = ventana._tool_actions["line"]
-
-    def primera(act):              # la segunda línea dice qué hace
-        return act.toolTip().split("\n")[0]
-
-    assert primera(linea).endswith("(L)")
-    linea.setShortcuts([QKeySequence("Ctrl+Alt+L")])
-    assert QKeySequence("Ctrl+Alt+L").toString(QKeySequence.NativeText) in primera(linea)
-    assert "(L)" not in primera(linea)
-    linea.setShortcuts([])
-    assert "(" not in primera(linea)                 # sin atajo, sin paréntesis
-    linea.setShortcuts([QKeySequence("L")])
-    assert primera(linea).endswith("(L)")
-    ze = ventana._act_zoom_extents
-    ze.setShortcuts([QKeySequence("Ctrl+E")])
-    # el que venía escrito a mano
-    assert QKeySequence("Ctrl+E").toString(QKeySequence.NativeText) in primera(ze)
+def test_la_barra_muestra_el_atajo_configurado_y_no_el_de_fabrica(ventana, monkeypatch):
+    from views import wgpu_ui
+    view = ventana.view
+    monkeypatch.setattr(wgpu_ui, "_icon_rgba", lambda _key: (1, 1, b"\0" * 4))
+    renderer = Mock()
+    monkeypatch.setattr(view, "renderer", renderer)
+    view._ui_tools_sent = False  # initial state after the renderer attaches
+    line = ventana._tool_actions["line"]
+    for keys in (["L"], ["Ctrl+Alt+L"], [], ["L"]):
+        line.setShortcuts(keys)
+        assert not view._ui_tools_sent
+        wgpu_ui._send_tools(view, ventana)
+        groups = renderer.ui_set_tools.call_args.args[0]
+        row = next(row for group in groups for row in group if row[0] == "line")
+        assert row[2] == (shortcut_text(keys[0])[1] if keys else "")
 
 
 #: Vistas estándar por comodidad (Marco, 2026-09-30): Ctrl con el meñique y
@@ -222,7 +148,6 @@ VISTAS = {
 def test_ctrl_numero_pone_la_vista_estandar(ventana, monkeypatch):
     pedidas = []
     monkeypatch.setattr(ventana, "_on_standard_view", pedidas.append)
-    _calentar(ventana)
     for tecla, nombre in VISTAS.items():
         assert _pulsar(ventana, tecla, Qt.ControlModifier) == [nombre]
     assert pedidas == ["top", "front", "right", "iso", "back", "left",
@@ -230,19 +155,21 @@ def test_ctrl_numero_pone_la_vista_estandar(ventana, monkeypatch):
 
 
 def test_menu_y_barra_comparten_la_accion_de_cada_vista(ventana):
-    """Una sola acción por vista: si el menú tuviera la suya, el atajo
-    estaría dos veces y Qt no dispararía ninguna."""
-    barra = ventana.toolbars["views"].actions()
-    for act in ventana._view_actions.values():
-        assert act in barra
-        assert len([a for a in ventana.findChildren(QAction)
-                    if a.text() == act.text()]) == 1
+    from ingetrazo_render import command_registry
+    for i, name in enumerate(("top", "front", "right", "iso", "back", "left", "bottom"), 1):
+        menu_id = f"view:{name}" if i <= 4 else f"view_{name}"
+        menu = [(menu_id, "Camera", name.title(), f"Ctrl+{i}")]
+        rows = command_registry([], menu)
+        assert [row[0] for row in rows if row[5] == menu_id] == [f"view:view_{name}"]
+        assert ventana._view_bindings[f"view_{name}"][0] == shortcut_text(f"Ctrl+{i}")[1]
 
 
 def test_el_boton_de_vista_muestra_su_atajo(ventana):
-    top = ventana._view_actions["top"]
-    assert top.toolTip().split("\n")[0].endswith(
-        "(" + QKeySequence("Ctrl+1").toString(QKeySequence.NativeText) + ")")
+    top = ventana._registry_actions["view:view_top"]
+    top.setShortcuts(["Ctrl+Alt+1"])
+    assert ventana._view_bindings["view_top"] == (shortcut_text("Ctrl+Alt+1")[1], True)
+
+
 def _caja(nombre: str, x0: float):
     """Un grupo cúbico de lado 1 generado en el momento."""
     from ingetrazo_core import Vec3 as QVector3D
@@ -262,7 +189,6 @@ def test_ocultar_es_ctrl_h_y_mostrar_todo_ctrl_mayus_h(ventana):
     atajos = _todos_los_atajos(ventana)
     assert atajos["Ctrl+H"] == ["Hide"]
     assert atajos["Ctrl+Shift+H"] == ["All"]
-    _calentar(ventana)
     assert _pulsar(ventana, Qt.Key_H, Qt.ControlModifier) == ["Hide"]
     assert _pulsar(ventana, Qt.Key_H,
                    Qt.ControlModifier | Qt.ShiftModifier) == ["All"]
@@ -276,16 +202,13 @@ def test_ctrl_h_oculta_la_seleccion_y_ctrl_mayus_h_lo_devuelve_todo(ventana):
     cajas = [_caja(f"caja{i}", 2.0 * i) for i in range(3)]
     vp.scene.groups += cajas
     vp.scene.version += 1
-    _calentar(ventana)
 
     for caja in cajas[:2]:                  # dos ocultaciones separadas
         vp.scene.select([caja])
-        QTest.keyClick(vp.keys_stand_in, Qt.Key_H, Qt.ControlModifier)
-        QApplication.processEvents()
+        _pulsar(ventana, Qt.Key_H, Qt.ControlModifier)
     assert [c.hidden for c in cajas] == [True, True, False]
 
-    QTest.keyClick(vp.keys_stand_in, Qt.Key_H, Qt.ControlModifier | Qt.ShiftModifier)
-    QApplication.processEvents()
+    _pulsar(ventana, Qt.Key_H, Qt.ControlModifier | Qt.ShiftModifier)
     assert not any(c.hidden for c in cajas)
     vp.history.undo()                       # Mostrar todo es un solo paso
     assert [c.hidden for c in cajas] == [True, True, False]

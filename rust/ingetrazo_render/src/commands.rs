@@ -361,6 +361,19 @@ pub fn rail_layout() -> Vec<Vec<(&'static str, &'static str)>> {
     ]
 }
 
+/// Each document sends its rail to its own renderer when it next draws.
+#[pyfunction]
+pub fn invalidate_command_rails(win: &Bound<'_, PyAny>) -> PyResult<()> {
+    for doc in win.call_method0("documents")?.try_iter()? {
+        let view = doc?.getattr("stand_in")?;
+        if !view.is_none() {
+            view.setattr("_ui_tools_sent", false)?;
+        }
+    }
+    win.getattr("_host")?.call_method0("request_frame")?;
+    Ok(())
+}
+
 type RegistryRow = (String, String, String, Vec<String>, String, String);
 
 /// One row per dispatch target. A Cocoa menu entry and egui View command
@@ -418,6 +431,12 @@ pub fn command_registry(
             ("units", "Units…", "Ctrl+U"),
         ] {
             menu.push((id.into(), "Window".into(), label.into(), key.into()));
+        }
+        for (id, label, key) in [
+            ("save", "Save", "Ctrl+S"),
+            ("save_as", "Save As…", "Ctrl+Shift+S"),
+        ] {
+            menu.push((id.into(), "File".into(), label.into(), key.into()));
         }
         for (id, label, key) in [
             ("undo", "Undo", "Ctrl+Z"),
@@ -564,6 +583,7 @@ pub fn command_description(label: &str, key: &str) -> Option<&'static str> {
             "menu:clear_texture_cache" => "Delete the images extracted from imported .skp files.",
             "menu:convert_path" => "Turn the selected paths into edges of the model; a closed path becomes a face, ready to push up.",
             "menu:delete_guides" => "Remove every guide line and guide point from the model.",
+            "menu:plugins_folder" => "Open the folder containing your installed extensions.",
             "menu:develop_plugin" => "Open the developer guide for writing a Built extension.",
             "menu:documentation" => "Open the IngeTrazo documentation in the web browser.",
             "menu:explode_group" => "Break the selected groups apart, back into the geometry around them.",

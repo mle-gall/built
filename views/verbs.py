@@ -48,6 +48,9 @@ def facts(scene, sel, win=None, view=None, *, locked_group=None, locked_image=No
         return f
     vp = win.viewport
     one = sel[0] if len(sel) == 1 else None
+    action = getattr(win, "_registry_actions", {}).get("menu:repeat_last_command")
+    if action is not None:
+        f["repeat_key"] = next(iter(action.portable_keys()), "")
     last = getattr(win, "_last_command", None)
     if last is not None:
         f["repeat"] = last[0]

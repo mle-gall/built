@@ -13,73 +13,44 @@ Shift+R y clic derecho»).
 """
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
 import pytest
-from PySide6.QtCore import QPoint, Qt
-from PySide6.QtGui import QAction, QKeyEvent
-from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication, QMenu
-
-_inst = QApplication.instance()
-if _inst is None:
-    _app = QApplication([])
-elif not isinstance(_inst, QApplication):
-    pytest.skip("a non-widget QGuiApplication is already active",
-                allow_module_level=True)
-
-
-def _V(x, y, z=0.0):
-    return QVector3D(float(x), float(y), float(z))
+from ingetrazo_core import Vec3 as V
+from ingetrazo_render import shortcut_text
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
+from views import context_menu
 
 
 @pytest.fixture
-def win():
-    from views.main_window import MainWindow
-    w = MainWindow()
-    yield w
-    w._saved_version = w.viewport.scene.version
-    w.close()
+def win(native_host):
+    native_host.attach_surface()
+    return native_host.window
+
+
+def repeat_row(win):
+    return win.show_viewport_context_menu().find("repeat")
 
 
 def _face(scene, x0=0.0):
-    return scene.mesh.add_face([_V(x0, 0), _V(x0 + 2, 0),
-                                _V(x0 + 2, 2), _V(x0, 2)])
-
-
-def _enter(vp):
-    vp.keyPressEvent(QKeyEvent(QKeyEvent.KeyPress, Qt.Key_Return,
-                               Qt.NoModifier, "\r"))
-
-
-def _edit_action(win, text):
-    for act in win.menuBar().actions():
-        if act.menu() is not None and act.text() == "Edit":
-            for sub in act.menu().actions():
-                if sub.text() == text:
-                    return sub
-    raise AssertionError(f"no {text!r} in the Edit menu")
+    return scene.mesh.add_face([V(x0, 0, 0), V(x0 + 2, 0, 0),
+                                V(x0 + 2, 2, 0), V(x0, 2, 0)])
 
 
 def test_nothing_to_repeat_on_a_new_document(win):
-    assert not win._repeat_action.isEnabled()
+    assert not repeat_row(win).enabled
     assert win.repeat_last_command() is False
     assert win.viewport.active_tool is win._tools["select"]
 
 
 def test_shift_r_is_the_only_owner_of_its_key(win):
     """An ambiguous shortcut fires NEITHER action (the F2 lesson)."""
-    owners = [a for a in win.findChildren(QAction)
-              if a.shortcut().toString() == "Shift+R"]
-    assert owners == [win._repeat_action]
+    owners = [key for key, act in win._registry_actions.items() if "Shift+R" in act.portable_keys()]
+    assert owners == ["menu:repeat_last_command"]
 
 
 def test_a_tool_comes_back_after_space(win):
     win._activate_tool("line")
     win._activate_tool("select")          # Space
-    assert win._repeat_action.text() == "Repeat Line"
+    assert repeat_row(win).label == "Repeat Line"
     assert win.repeat_last_command()
     assert win.viewport.active_tool is win._tools["line"]
     assert win._tool_actions["line"].isChecked()
@@ -100,40 +71,26 @@ def test_a_command_runs_again_on_the_new_selection(win):
     a, b = _face(scene), _face(scene, 5.0)
     na, nb = a.normal(), b.normal()
     scene.select([a])
-    _edit_action(win, "Reverse Faces").trigger()   # a menu passes `checked`
-    assert QVector3D.dotProduct(a.normal(), na) < -0.99
-    assert win._repeat_action.text() == "Repeat Reverse Faces"
+    win._registry_actions["menu:reverse_faces"].trigger()
+    assert V.dotProduct(a.normal(), na) < -0.99
+    assert repeat_row(win).label == "Repeat Reverse Faces"
     scene.select([b])
     assert win.repeat_last_command()
-    assert QVector3D.dotProduct(b.normal(), nb) < -0.99
-    assert QVector3D.dotProduct(a.normal(), na) < -0.99, "a is left alone"
+    assert V.dotProduct(b.normal(), nb) < -0.99
+    assert V.dotProduct(a.normal(), na) < -0.99, "a is left alone"
 
 
-def test_the_right_click_entry_is_repeatable_after_its_menu_dies(win,
-                                                                  monkeypatch):
-    """The context menu builds its QActions afresh; what is remembered is
-    the command, so the repeat outlives that menu."""
-    import views.main_window as mw
-
-    opened = []
-
-    class _Menu(QMenu):
-        def exec(self, *args, **kwargs):     # noqa: A003 - Qt's name
-            opened.append(self)
-
-    monkeypatch.setattr(mw, "QMenu", _Menu)
+def test_the_right_click_entry_is_repeatable_after_its_menu_dies(win):
     scene = win.viewport.scene
     a, b = _face(scene), _face(scene, 5.0)
     nb = b.normal()
     scene.select([a])
-    win.show_viewport_context_menu(QPoint(0, 0))
-    entry = next(x for x in opened[0].actions() if x.text() == "Reverse Faces")
-    entry.trigger()
-    opened[0].deleteLater()
-    QApplication.processEvents()
+    assert win.show_viewport_context_menu().find("reverse").enabled
+    assert context_menu.action(win, win.view, "reverse")
+    assert win.view._ctx_menu is None
     scene.select([b])
-    win.repeat_last_command()
-    assert QVector3D.dotProduct(b.normal(), nb) < -0.99
+    assert win.repeat_last_command()
+    assert V.dotProduct(b.normal(), nb) < -0.99
 
 
 def test_intersect_repeats_with_the_same_mode(win, monkeypatch):
@@ -154,9 +111,9 @@ def test_the_last_one_wins_tool_or_command(win):
     win._activate_tool("move")
     win._activate_tool("select")
     win._on_reverse_faces()
-    assert win._repeat_action.text() == "Repeat Reverse Faces"
+    assert repeat_row(win).label == "Repeat Reverse Faces"
     win._activate_tool("circle")
-    assert win._repeat_action.text() == "Repeat Circle"
+    assert repeat_row(win).label == "Repeat Circle"
 
 
 def test_enter_on_select_is_not_a_repeat(win):
@@ -168,82 +125,52 @@ def test_enter_on_select_is_not_a_repeat(win):
     win._on_reverse_faces()
     win._activate_tool("line")
     win._activate_tool("select")
-    _enter(win.viewport)
+    from core.input_types import Qt
+    win._host.key(True, Qt.Key_Return, text="\r")
+    win._host.key(False, Qt.Key_Return)
     assert win.viewport.active_tool is win._tools["select"]
-    assert QVector3D.dotProduct(face.normal(), normal) < -0.99,         "the reversed face was not reversed back"
+    assert V.dotProduct(face.normal(), normal) < -0.99,         "the reversed face was not reversed back"
 
 
 # ---- Where you see it: the right-click menu and the status bar ------------
 
-def _context_entries(win, monkeypatch):
-    import views.main_window as mw
-    opened = []
-
-    class _Menu(QMenu):
-        def exec(self, *args, **kwargs):     # noqa: A003 - Qt's name
-            opened.append(self)
-
-    monkeypatch.setattr(mw, "QMenu", _Menu)
-    win.show_viewport_context_menu(QPoint(0, 0))
-    return opened[0].actions()
-
-
-def test_right_click_offers_the_repeat_first(win, monkeypatch):
+def test_right_click_offers_the_repeat_first(win):
     scene = win.viewport.scene
     a, b = _face(scene), _face(scene, 5.0)
     nb = b.normal()
     scene.select([a])
     win._on_reverse_faces()
     scene.select([b])
-    first = _context_entries(win, monkeypatch)[0]
-    assert first.text() == "Repeat Reverse Faces"
-    first.trigger()
-    assert QVector3D.dotProduct(b.normal(), nb) < -0.99
+    first = win.show_viewport_context_menu().verbs()[0]
+    assert first.label == "Repeat Reverse Faces" and first.enabled
+    assert context_menu.action(win, win.view, first.id)
+    assert V.dotProduct(b.normal(), nb) < -0.99
 
 
-def test_right_click_has_no_repeat_before_anything_was_done(win, monkeypatch):
-    texts = [a.text() for a in _context_entries(win, monkeypatch)]
-    assert not any(t.startswith("Repeat") for t in texts)
+def test_right_click_disables_repeat_until_a_command_runs(win):
+    row = repeat_row(win)
+    assert not row.enabled and not context_menu.action(win, win.view, row.id)
 
 
-def test_the_status_bar_says_what_would_repeat_only_in_select(win):
-    lab = win._repeat_label
-    assert lab.isHidden(), "nothing to repeat yet"
+def test_keyboard_settings_identify_repeat_independently_of_its_label(win):
+    from core.shortcuts import action_key
+    action = win._registry_actions["menu:repeat_last_command"]
+    before = action_key(action)
     win._activate_tool("line")
-    assert lab.isHidden(), "inside a tool the corner is the VCB's"
-    win._activate_tool("select")
-    assert not lab.isHidden()
-    from PySide6.QtGui import QKeySequence
-    keys = QKeySequence("Shift+R").toString(QKeySequence.NativeText)
-    assert lab.text() == f"{keys}: repeat Line"
-
-
-def test_the_shortcut_editor_keeps_one_key_for_it_whatever_it_says(win):
-    """The shortcut editor (#138) files an action under its object name or
-    its English text — and this one's text changes with every command."""
-    from views.shortcuts import action_key
-    before = action_key(win._repeat_action)
-    win._activate_tool("line")
-    assert win._repeat_action.text() == "Repeat Line"
-    assert action_key(win._repeat_action) == before == "repeat_last_command"
+    assert repeat_row(win).label == "Repeat Line"
+    assert action_key(action) == before == "menu:repeat_last_command"
 
 
 def test_shift_r_is_not_a_key_the_viewport_reads_itself():
-    from PySide6.QtGui import QKeySequence
-    from views.shortcuts import reserved_reason
-    assert reserved_reason(QKeySequence("Shift+R")) is None
+    assert shortcut_text("Shift+R")[3] is None
 
 
-def test_the_hint_names_the_keys_it_has_now(win):
-    """Remapped in the shortcut editor (#138), the hint follows; with no
-    key at all it still names what would repeat."""
-    from PySide6.QtGui import QKeySequence
+def test_the_repeat_hint_tracks_shortcut_edits_and_removal(win):
     win._activate_tool("line")
     win._activate_tool("select")
-    win._repeat_action.setShortcut(QKeySequence("Ctrl+Shift+Y"))
-    win._refresh_repeat_hint()
-    keys = QKeySequence("Ctrl+Shift+Y").toString(QKeySequence.NativeText)
-    assert win._repeat_label.text() == f"{keys}: repeat Line"
-    win._repeat_action.setShortcut(QKeySequence())
-    win._refresh_repeat_hint()
-    assert win._repeat_label.text() == "Repeat Line"
+    action = win._registry_actions["menu:repeat_last_command"]
+    action.setShortcuts(["Ctrl+Shift+Y"])
+    assert repeat_row(win).key == shortcut_text("Ctrl+Shift+Y")[1]
+    action.setShortcuts([])
+    row = repeat_row(win)
+    assert row.label == "Repeat Line" and row.key == ""

@@ -329,5 +329,8 @@ class Extensions(chrome_sheet.Provider):
 
 
 def show(win, sid):
-    provider = {"about": About, "extensions": Extensions, "cutlist": CutList}[sid]()
+    if sid == "extensions":
+        from ingetrazo_render import open_extensions
+        return open_extensions(win)
+    provider = {"about": About, "cutlist": CutList}[sid]()
     return chrome_sheet.open(win, provider)

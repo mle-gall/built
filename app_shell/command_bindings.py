@@ -3,7 +3,7 @@
 from app_shell.command_action import ShellAction
 
 from core.i18n import tr
-from ingetrazo_render import command_registry, shortcut_text
+from ingetrazo_render import command_registry, invalidate_command_rails, shortcut_text
 from core import shortcuts
 
 
@@ -34,7 +34,7 @@ def refresh(win):
             act.run = lambda k=key: _run(win, k)
             act.setObjectName(key)
             actions[key] = act
-            act.changed = lambda k=key: _reflect(win, k)
+            act.changed = lambda k=key: _changed(win, k)
         act = actions[key]
         old = act.property(shortcuts._DEFAULTS)
         sequences = [parsed[0] for s in defaults if (parsed := shortcut_text(s))]
@@ -82,6 +82,11 @@ def _run(win, key):
         item.trigger()
     elif menu_id:
         win.run_command(menu_id)
+
+
+def _changed(win, key):
+    _reflect(win, key)
+    invalidate_command_rails(win)
 
 
 def _reflect(win, key):
