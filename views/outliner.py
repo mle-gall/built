@@ -961,8 +961,6 @@ class OutlinerPanel(QWidget):
         self._query = ""
         #: The funnel's quick filter and whether it is inverted: seen in
         #: the rows, never written to the document.
-        self.state_filter = "all"
-        self.invert_filter = False
         self._kind_providers: tuple = ()
         self._root = None
         self._sec_root = None               # the «Section planes» folder
@@ -984,13 +982,6 @@ class OutlinerPanel(QWidget):
         self.search.setClearButtonEnabled(True)
         self.search.textChanged.connect(self._on_filter)
         bar.addWidget(self.search, 1)
-        # The funnel: the Layers tab's quick filters, for rows instead of
-        # layers. Same icon and the same filled state when it narrows.
-        self.filter_btn = _tool_button("", tr("Filter rows"),
-                                       self._open_filter_menu)
-        self.filter_btn.setIcon(node_icon("layers_filter"))
-        bar.addWidget(self.filter_btn)
-        self._show_filter_state()
         # Rename: one row in place, several rows at once (Rename selected).
         self._rename_btn = _tool_button("", tr(
             "Rename (F2): several selected rows at once — a name and a "
@@ -1170,7 +1161,6 @@ class OutlinerPanel(QWidget):
         hi.setIcon(COL_ISOLATE, isolate_icon(False))
         self._rename_btn.setIcon(node_icon("layers_rename"))
         self._order_btn.setIcon(node_icon("layers_order"))
-        self._show_filter_state()
         self._update_expand_button()
         root = getattr(self, "_root", None)
         if root is not None:
@@ -1738,126 +1728,13 @@ class OutlinerPanel(QWidget):
         self._shown_selection = chosen
 
     # ---- Filter --------------------------------------------------------------
-    #: The funnel's quick filters, in menu order: (key, label).
-    STATE_FILTERS = (
-        ("all", "All rows"),
-        ("visible", "Visible rows"),
-        ("hidden", "Hidden rows"),
-        ("locked", "Locked rows"),
-        ("selection", "Rows of the selection"),
-        ("components", "Components"),
-        ("images", "Images"),
-        ("sections", "Section planes"),
-    )
-
     def _on_filter(self, text: str) -> None:
         self._query = text.strip().casefold()
         self._apply_filter()
         self._update_summary()
 
     def _filters_active(self) -> bool:
-        """Whether anything narrows the rows: the search, the funnel, or
-        its inversion."""
-        return bool(self._query) or self.state_filter != "all" \
-            or self.invert_filter
-
-    def set_state_filter(self, key: str) -> None:
-        """The funnel's quick filter — ``all``, ``visible``, ``hidden``,
-        ``locked``, ``selection``, ``components``, ``images`` or
-        ``sections`` (the section planes alone) — combined with the search
-        text."""
-        self.state_filter = key if key in dict(self.STATE_FILTERS) else "all"
-        self._show_filter_state()
-        self._apply_filter()
-        self._update_summary()
-
-    def set_invert_filter(self, on: bool) -> None:
-        self.invert_filter = bool(on)
-        self._show_filter_state()
-        self._apply_filter()
-        self._update_summary()
-
-    def _state_label(self, key: str) -> str:
-        return dict(self.STATE_FILTERS).get(key, "All rows")
-
-    def _show_filter_state(self) -> None:
-        """The funnel fills when a filter narrows the list, and its tooltip
-        names it — the Layers tab's own mark."""
-        on = self.state_filter != "all" or self.invert_filter
-        self.filter_btn.setIcon(node_icon(
-            "layers_filter_on" if on else "layers_filter"))
-        tip = tr("Filter: {name}", name=tr(self._state_label(
-            self.state_filter)))
-        if self.invert_filter:
-            tip += " · " + tr("inverted")
-        self.filter_btn.setToolTip(tip)
-
-    def _open_filter_menu(self) -> None:
-        from PySide6.QtGui import QActionGroup
-        from PySide6.QtWidgets import QMenu
-        menu = QMenu(self.filter_btn)
-        group = QActionGroup(menu)
-        group.setExclusive(True)
-        for key, label in self.STATE_FILTERS:
-            act = menu.addAction(tr(label))
-            act.setCheckable(True)
-            act.setChecked(self.state_filter == key)
-            group.addAction(act)
-            act.triggered.connect(lambda _c=False, k=key:
-                                  self.set_state_filter(k))
-        menu.addSeparator()
-        inv = menu.addAction(tr("Invert filter"))
-        inv.setCheckable(True)
-        inv.setChecked(self.invert_filter)
-        inv.setStatusTip(tr("Show the rows the filter leaves out."))
-        inv.toggled.connect(self.set_invert_filter)
-        menu.exec(self.filter_btn.mapToGlobal(
-            self.filter_btn.rect().bottomLeft()))
-
-    def _row_passes_state(self, group) -> bool:
-        """Whether a row passes the funnel's quick filter. Hidden and
-        locked count as the row shows them: its own mark, or the one it
-        inherits from a group around it. A layer's visibility is not the
-        row's eye, so it is not read here."""
-        key = self.state_filter
-        if key == "all":
-            return True
-        state = self._state.get(id(group))
-        if state is None:
-            return False
-        if key == "visible":
-            return not state[4] and not state[11]
-        if key == "hidden":
-            return bool(state[4] or state[11])
-        if key == "locked":
-            return bool(state[6] or state[12])
-        if key == "selection":
-            return group in self._scene().selection
-        if key == "components":
-            return group.is_component()
-        if key == "images":
-            return outliner.kind(group) == "image"
-        if key == "sections":
-            return False                    # the section planes alone
-        return True
-
-    def _plane_passes_state(self, plane) -> bool:
-        """The section planes' side of the funnel: they can be visible or
-        hidden and selected, and «Section planes» shows them alone; they are
-        never locked, components or images."""
-        key = self.state_filter
-        if key in ("all", "sections"):
-            return True
-        scene = self._scene()
-        shown = (not getattr(plane, "hidden", False)
-                 and scene.entity_visible(plane))
-        if key == "visible":
-            return shown
-        if key == "hidden":
-            return not shown
-        if key == "selection":
-            return plane in scene.selection
-        return False
+        return bool(self._query)
 
     def _apply_filter(self) -> None:
         """Hide the rows the search and the funnel leave out — no rebuild:
@@ -1876,8 +1753,7 @@ class OutlinerPanel(QWidget):
         counts = outliner.instance_counts(scene.groups)
         keep, hit = outliner.filter_keep(
             scene.groups, self._query,
-            lambda g: self._type_text(g, counts),
-            self._row_passes_state, self.invert_filter)
+            lambda g: self._type_text(g, counts))
         self._matches = len(hit)
         for key, item in self._items.items():
             item.setHidden(key not in keep)
@@ -2253,9 +2129,7 @@ class OutlinerPanel(QWidget):
             plane = self._plane_of(item)
             show = True
             if plane is not None:
-                show = (outliner.text_matches(plane.name or "", self._query)
-                        and self._plane_passes_state(plane))
-                show = show != self.invert_filter
+                show = outliner.text_matches(plane.name or "", self._query)
             item.setHidden(not show)
             any_shown = any_shown or show
         sec.setHidden(sec.childCount() == 0 or not any_shown)
@@ -2751,8 +2625,7 @@ class OutlinerPanel(QWidget):
             counts = outliner.instance_counts(scene.groups)
             _keep, hit = outliner.filter_keep(
                 scene.groups, self._query,
-                lambda g: self._type_text(g, counts),
-                self._row_passes_state, self.invert_filter)
+                lambda g: self._type_text(g, counts))
         return [g for g, _p, _d in outliner.walk(scene.groups)
                 if id(g) in self._items and (hit is None or id(g) in hit)]
 

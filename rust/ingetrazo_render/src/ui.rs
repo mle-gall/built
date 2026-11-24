@@ -26,6 +26,7 @@ mod context_menu;
 mod lens;
 use lens::Lens;
 mod tree_order;
+mod tree_filter;
 mod tree_keys;
 mod drawing;
 mod drawing_catalog;
@@ -1766,7 +1767,7 @@ impl Ui {
                         .margin(Margin::symmetric(8, 5))
                         .desired_width((W - 20.0 - 16.0 - 4.0).max(40.0))
                         .font(body());
-                    let resp = ui.add(edit);
+                    let resp = ui.add(edit).on_hover_text("Filter by name or wildcard. Use is:hidden, is:visible, is:locked, is:selected, is:component, is:image or is:section. Prefix the query with ! to invert it.");
                     if col.focus_filter {
                         resp.request_focus();
                         col.focus_filter = false;
@@ -2332,6 +2333,9 @@ impl Ui {
                         ui.set_width(220.0);
                         ui.spacing_mut().item_spacing = vec2(0.0, 1.0);
                         if col.mode.is_empty() {
+                            if col.lens == Lens::Filing && tree_filter::controls(ui, &mut col.filter) {
+                                actions.push(format!("filter\u{1f}{}", col.filter));
+                            }
                             let options = tree_order::Sort::OPTIONS;
                             let old = options.iter().position(|(sort, _)| *sort == col.sort).unwrap_or(0);
                             let mut index = old;

@@ -56,6 +56,7 @@ struct Catalogue<'py> {
     bad: HashSet<usize>,
     unfiled: HashSet<usize>,
     filter: String,
+    matching_branches: HashSet<usize>,
 }
 impl<'py> Catalogue<'py> {
     fn cap(&self, key: &str) -> usize {
@@ -76,14 +77,70 @@ impl<'py> Catalogue<'py> {
             },
         )
     }
-    fn hits(&self, g: &Obj<'py>) -> PyResult<bool> {
-        project_item_matches(
-            &self.scene,
-            g,
-            self.kind(g)?,
-            &self.filter,
-            self.bad.contains(&id(g)) || self.unfiled.contains(&id(g)),
-        )
+    /// Include the way to each match. A closed group is still searchable, and
+    /// opening a search result never changes the user's saved disclosure state.
+    fn filter_branches(&self) -> PyResult<HashSet<usize>> {
+        let walk = self
+            .scene
+            .py()
+            .import("core.outliner")?
+            .call_method1("walk", (self.scene.getattr("groups")?,))?;
+        let mut path: Vec<(usize, bool, bool)> = Vec::new();
+        let query = self.filter.to_lowercase();
+        let visibility = query.contains("is:hidden") || query.contains("is:visible");
+        let locks = query.contains("is:locked");
+        let mut rows = Vec::new();
+        let mut hits = HashSet::new();
+        for entry in walk.try_iter()? {
+            let entry = entry?;
+            let group = entry.get_item(0)?;
+            let depth: usize = entry.get_item(2)?.extract()?;
+            path.truncate(depth);
+            let parent = path.last().copied();
+            let hidden = parent.is_some_and(|p| p.1);
+            let locked = parent.is_some_and(|p| p.2);
+            let key = id(&group);
+            if crate::project_tree::item_matches(
+                &self.scene,
+                &group,
+                self.kind(&group)?,
+                &self.filter,
+                self.bad.contains(&key) || self.unfiled.contains(&key),
+                hidden,
+                locked,
+            )? {
+                hits.insert(key);
+            }
+            rows.push((key, parent.map(|p| p.0)));
+            path.push((
+                key,
+                hidden
+                    || (visibility
+                        && !self
+                            .scene
+                            .call_method1("entity_visible", (&group,))?
+                            .is_truthy()?),
+                locked
+                    || (locks
+                        && (self
+                            .scene
+                            .call_method1("entity_locked", (&group,))?
+                            .is_truthy()?
+                            || self
+                                .scene
+                                .call_method1("_layer_state", (&group,))?
+                                .get_item(1)?
+                                .is_truthy()?)),
+            ));
+        }
+        for (key, parent) in rows.into_iter().rev() {
+            if hits.contains(&key) {
+                if let Some(parent) = parent {
+                    hits.insert(parent);
+                }
+            }
+        }
+        Ok(hits)
     }
     fn more(&self, rows: &mut Vec<Row>, key: &str, depth: usize, left: usize) {
         rows.push(row(
@@ -131,7 +188,7 @@ impl<'py> Catalogue<'py> {
         }
         let key = format!("{}:{key}", if nested { "c" } else { "i" });
         let kids = g.getattr("children")?;
-        let open = self.expanded.contains(&key);
+        let open = !self.filter.is_empty() || self.expanded.contains(&key);
         let mut r = row(
             key.clone(),
             name,
@@ -153,11 +210,27 @@ impl<'py> Catalogue<'py> {
         rows.push(r);
         if open {
             let max = self.cap(&key);
-            for child in kids.try_iter()?.take(max) {
-                self.item(rows, &child?, node, d + 1, true)?;
-            }
-            if kids.len()? > max {
-                self.more(rows, &key, d + 1, kids.len()? - max);
+            if self.filter.is_empty() {
+                for child in kids.try_iter()?.take(max) {
+                    self.item(rows, &child?, node, d + 1, true)?;
+                }
+                if kids.len()? > max {
+                    self.more(rows, &key, d + 1, kids.len()? - max);
+                }
+            } else {
+                let mut count = 0;
+                for child in kids.try_iter()? {
+                    let child = child?;
+                    if self.matching_branches.contains(&id(&child)) {
+                        if count < max {
+                            self.item(rows, &child, node, d + 1, true)?;
+                        }
+                        count += 1;
+                    }
+                }
+                if count > max {
+                    self.more(rows, &key, d + 1, count - max);
+                }
             }
         }
         Ok(())
@@ -363,7 +436,7 @@ pub(crate) fn filing_rows<'py>(
         Ok(text(cls)?.trim_start_matches("Ifc").to_string())
     };
     let py = scene.py();
-    let c = Catalogue {
+    let mut c = Catalogue {
         scene,
         tree: tree.clone(),
         nodes: nodes.clone(),
@@ -381,7 +454,8 @@ pub(crate) fn filing_rows<'py>(
             .iter()
             .map(id)
             .collect(),
-        filter,
+        filter: filter.trim().to_owned(),
+        matching_branches: HashSet::new(),
     };
     let mut selected = HashMap::<String, usize>::new();
     for &g in &c.selected {
@@ -422,6 +496,7 @@ pub(crate) fn filing_rows<'py>(
     let mut members = HashMap::new();
     let mut matching_files = HashSet::new();
     if filtering {
+        c.matching_branches = c.filter_branches()?;
         for (key, _) in &order {
             let node = nodes.get_item(key)?;
             let cls = node.get_item("recipe")?.call_method1("get", ("class",))?;
@@ -434,7 +509,7 @@ pub(crate) fn filing_rows<'py>(
             let mut hits = Vec::new();
             for g in direct.get_item(key)?.try_iter()? {
                 let g = g?;
-                if c.hits(&g)? {
+                if c.matching_branches.contains(&id(&g)) {
                     hits.push(g);
                 }
             }
@@ -580,7 +655,7 @@ pub(crate) fn filing_rows<'py>(
     }
     let mut loose = Vec::new();
     for g in unfiled {
-        if !filtering || c.hits(&g)? {
+        if !filtering || c.matching_branches.contains(&id(&g)) {
             loose.push(g);
         }
     }

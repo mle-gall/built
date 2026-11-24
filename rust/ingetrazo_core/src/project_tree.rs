@@ -58,26 +58,42 @@ pub(crate) fn project_item_matches(
     query: &str,
     problem: bool,
 ) -> PyResult<bool> {
+    item_matches(scene, entity, kind, query, problem, false, false)
+}
+
+pub(crate) fn item_matches(
+    scene: &Bound<'_, PyAny>,
+    entity: &Bound<'_, PyAny>,
+    kind: &str,
+    query: &str,
+    problem: bool,
+    parent_hidden: bool,
+    parent_locked: bool,
+) -> PyResult<bool> {
     let name: String = entity
         .getattr("name")?
         .extract::<Option<String>>()?
         .unwrap_or_default();
     let name = name.to_lowercase();
-    for word in query.to_lowercase().split_whitespace() {
+    let query = query.trim().to_lowercase();
+    if query == "!" { return Ok(false); }
+    let (invert, query) = query.strip_prefix("! ").map_or((false, query.as_str()), |q| (true, q));
+    if query.contains(['*', '?']) && !query.contains(':') && !query.split_whitespace().any(|w| w.starts_with('-'))
+        && text_matches(&name, query) {
+        return Ok(!invert);
+    }
+    for word in query.split_whitespace() {
         let (negative, token) = word.strip_prefix('-').map_or((false, word), |s| (true, s));
         let hit = match token {
-            "is:hidden" => !scene
-                .call_method1("entity_visible", (entity,))?
-                .is_truthy()?,
-            "is:locked" => {
-                scene
-                    .call_method1("entity_locked", (entity,))?
-                    .is_truthy()?
-                    || scene
-                        .call_method1("_layer_state", (entity,))?
-                        .get_item(1)?
-                        .is_truthy()?
+            "is:hidden" | "is:visible" => {
+                let hidden = parent_hidden || !scene.call_method1("entity_visible", (entity,))?.is_truthy()?
+                    || (kind == "section" && entity.getattr("hidden")?.is_truthy()?);
+                hidden == (token == "is:hidden")
             }
+            "is:locked" => parent_locked || scene.call_method1("entity_locked", (entity,))?.is_truthy()?
+                || scene.call_method1("_layer_state", (entity,))?.get_item(1)?.is_truthy()?,
+            "is:selected" => scene.getattr("selection")?.contains(entity)?,
+            "is:image" => entity.getattr("billboard").is_ok_and(|v| v.is_truthy().unwrap_or(false)),
             "is:component" => kind == "component",
             "is:section" => kind == "section",
             "is:link" => kind == "link",
@@ -105,10 +121,10 @@ pub(crate) fn project_item_matches(
             }
         };
         if hit == negative {
-            return Ok(false);
+            return Ok(invert);
         }
     }
-    Ok(true)
+    Ok(!invert)
 }
 
 pub(crate) fn row(
