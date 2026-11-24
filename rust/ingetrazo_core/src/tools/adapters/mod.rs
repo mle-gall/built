@@ -50,6 +50,7 @@ mod dimension_tool_api;
 mod eye_host_api;
 mod fillet_host_api;
 mod first_person_host_api;
+mod flip_host_api;
 mod follow_me_host_api;
 mod move_host_api;
 mod offset_host_api;
@@ -191,6 +192,7 @@ fn registration(module: &str, name: &str) -> Option<(&'static [Method], &'static
             tape_measure_tool_api::METHODS,
             stringify!(tape_measure_tool_api),
         ),
+        ("tools.flip_host", "FlipHost") => (flip_host_api::METHODS, stringify!(flip_host_api)),
         ("tools.pushpull", "PushPullTool") => (pushpull::METHODS, stringify!(pushpull)),
         _ => return None,
     })
