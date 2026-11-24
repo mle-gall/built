@@ -55,6 +55,16 @@ Built (`core.protocol.commands.run(history, name, **args)`):
 | `follow_me` | `face` key, `path` of local [x,y,z] points, optional `closed` boolean | Sweep the painted profile, consuming its key and creating outward walls and caps. |
 | `intersect_faces` | `mode` (context, model, selection, placements), optional `faces` keys or `placements` sibling uids | Partition faces in the open mesh or in each selected placement. Omit the keys to use the scene selection. The feed identifies changed meshes. |
 | `move_vertices` | `vertices: [vertex key]`, `delta: [x, y, z]` | `MoveVerticesCommand` (the Move tool's: coincident vertices move along, warped faces fold) |
+| `place_group` | `template` placement uid or occurrence path, `basis` (three axes), `offset`, optional `point` and serialized `attachment` | Stamp a copy of the template. The interactive tool can also stamp a detached import. |
+| `erase_stroke` | Lists of `edges` (decimal keys), `placements` (uids or paths) and record indices in `guides`, `dimensions`, `geo_paths`, `text_labels`. Optional `hide` | Erase one stroke as one step. Hide applies to edges and placements. |
+| `add_geo_path` | `points` (at least two), optional `closed` | Add a geographic path. |
+| `move_geo_path_node` | `path` and `node` (zero-based indices), `point` | Reposition a path node. |
+| `add_dimension` | `a`, `b`, `offset`, optional `axis` (x, y or z) and two serialized `attachments` | Add an aligned or axis-parallel dimension. |
+| `add_text_label` | `anchor`, `offset`, `text`, optional serialized `attachment` | Add a leader and text. |
+| `add_image_plane` | `path`, `origin`, edge vectors `u` and `v`, optional `aspect` and `name` | Add a reference image. |
+| `place_section_plane` | `point`, `normal`, optional `name` and `symbol` | Place a section plane. Omit the symbol to use the next available letter. |
+| `set_group_scale` | `placement` uid or occurrence path, `factors` (three absolute local-axis scales) | Apply Scale Manager values. |
+| `set_north` | `degrees` | Set model north and wrap the angle to one turn. |
 | `solid_operation` | `operation` (outer_shell, union, subtract, trim, intersect, split), `placements` (sibling uids in pick order) | Runs the Solid Tools command. The step names consumed and result placements. |
 | `rebuild_cap` | `face: seed face key` | Rebuild its plane, including debris pruning. Undo and redo restore the original and replacement keys. |
 | `reverse_faces` | `faces: [face key]` | Reverse outer and hole rings in input order. Keys and paint survive. |
