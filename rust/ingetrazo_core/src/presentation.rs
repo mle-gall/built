@@ -8,7 +8,7 @@ type Indexed<'py> = (usize, Obj<'py>);
 /// Restore the occurrence filter and tint saved with a camera, or clear an
 /// active navigator display when recalling an ordinary scene.
 #[pyfunction]
-fn recall_scene_display(vp: &Obj<'_>, view: &Obj<'_>) -> PyResult<()> {
+pub(crate) fn recall_scene_display(vp: &Obj<'_>, view: &Obj<'_>) -> PyResult<()> {
     let py = vp.py();
     let scene = vp.getattr("scene")?;
     let key = view.getattr("navigator_view")?;
@@ -51,7 +51,7 @@ fn recall_scene_display(vp: &Obj<'_>, view: &Obj<'_>) -> PyResult<()> {
 /// Saved views and their folders are persistent edits. They advance the
 /// document version without invalidating every other saved camera's picture.
 #[pyfunction(signature = (scene, changed_view=None))]
-fn bump_scene_catalog(scene: &Obj<'_>, changed_view: Option<&Obj<'_>>) -> PyResult<()> {
+pub(crate) fn bump_scene_catalog(scene: &Obj<'_>, changed_view: Option<&Obj<'_>>) -> PyResult<()> {
     let version: i64 = scene.getattr("version")?.extract()?;
     let catalog: i64 = scene.getattr("_scene_catalog_ticks")?.extract()?;
     scene.setattr("version", version + 1)?;
@@ -63,12 +63,12 @@ fn bump_scene_catalog(scene: &Obj<'_>, changed_view: Option<&Obj<'_>>) -> PyResu
 }
 
 #[pyfunction]
-fn add_item(list: &Obj<'_>, item: &Obj<'_>) -> PyResult<()> {
+pub(crate) fn add_item(list: &Obj<'_>, item: &Obj<'_>) -> PyResult<()> {
     list.call_method1("append", (item,))?;
     Ok(())
 }
 #[pyfunction]
-fn remove_item(list: &Obj<'_>, item: &Obj<'_>) -> PyResult<()> {
+pub(crate) fn remove_item(list: &Obj<'_>, item: &Obj<'_>) -> PyResult<()> {
     if list.contains(item)? {
         list.call_method1("remove", (item,))?;
     }
@@ -76,7 +76,7 @@ fn remove_item(list: &Obj<'_>, item: &Obj<'_>) -> PyResult<()> {
 }
 
 #[pyfunction(signature=(list, items, discard, strict=true))]
-fn delete_items<'py>(
+pub(crate) fn delete_items<'py>(
     list: &Obj<'py>,
     items: Vec<Obj<'py>>,
     discard: Option<&Obj<'py>>,
@@ -109,7 +109,7 @@ fn delete_items<'py>(
     Ok(before)
 }
 #[pyfunction]
-fn restore_items(list: &Obj<'_>, mut before: Vec<Indexed<'_>>) -> PyResult<()> {
+pub(crate) fn restore_items(list: &Obj<'_>, mut before: Vec<Indexed<'_>>) -> PyResult<()> {
     before.sort_by_key(|p| p.0);
     for (i, item) in before {
         list.call_method1("insert", (i, item))?;
@@ -118,7 +118,7 @@ fn restore_items(list: &Obj<'_>, mut before: Vec<Indexed<'_>>) -> PyResult<()> {
 }
 
 #[pyfunction]
-fn translate_items(items: Vec<Obj<'_>>, field: &str, step: &Obj<'_>) -> PyResult<()> {
+pub(crate) fn translate_items(items: Vec<Obj<'_>>, field: &str, step: &Obj<'_>) -> PyResult<()> {
     let step = xyz(step)?;
     for item in items {
         item.setattr(field, Vec3::from(xyz(&item.getattr(field)?)? + step))?;
@@ -127,7 +127,7 @@ fn translate_items(items: Vec<Obj<'_>>, field: &str, step: &Obj<'_>) -> PyResult
 }
 
 #[pyfunction]
-fn shift_guide(guide: &Obj<'_>, step: &Obj<'_>) -> PyResult<()> {
+pub(crate) fn shift_guide(guide: &Obj<'_>, step: &Obj<'_>) -> PyResult<()> {
     let delta = xyz(step)?;
     guide.setattr("point", Vec3::from(xyz(&guide.getattr("point")?)? + delta))?;
     let origin = guide.getattr("origin")?;
@@ -138,7 +138,7 @@ fn shift_guide(guide: &Obj<'_>, step: &Obj<'_>) -> PyResult<()> {
 }
 
 #[pyfunction]
-fn shift_dimension(
+pub(crate) fn shift_dimension(
     dim: &Obj<'_>,
     line: bool,
     step: &Obj<'_>,
@@ -166,7 +166,7 @@ fn shift_dimension(
 
 type GuideState<'py> = (Obj<'py>, Vec3, Option<Vec3>, Option<Vec3>);
 #[pyfunction]
-fn guide_state<'py>(guide: &Obj<'py>) -> PyResult<GuideState<'py>> {
+pub(crate) fn guide_state<'py>(guide: &Obj<'py>) -> PyResult<GuideState<'py>> {
     let vector = |field| -> PyResult<Option<Vec3>> {
         let v = guide.getattr(field)?;
         if v.is_none() {
@@ -183,7 +183,7 @@ fn guide_state<'py>(guide: &Obj<'py>) -> PyResult<GuideState<'py>> {
     ))
 }
 #[pyfunction]
-fn place_guide(state: &Obj<'_>, matrix: Option<&Obj<'_>>) -> PyResult<()> {
+pub(crate) fn place_guide(state: &Obj<'_>, matrix: Option<&Obj<'_>>) -> PyResult<()> {
     let guide = state.get_item(0)?;
     let map = |v: &Obj<'_>| -> PyResult<Vec3> {
         Ok(Vec3::from(if let Some(m) = matrix {
@@ -217,7 +217,7 @@ fn place_guide(state: &Obj<'_>, matrix: Option<&Obj<'_>>) -> PyResult<()> {
 }
 
 #[pyfunction]
-fn rotate_sections(planes: Vec<Obj<'_>>, matrix: &Obj<'_>) -> PyResult<()> {
+pub(crate) fn rotate_sections(planes: Vec<Obj<'_>>, matrix: &Obj<'_>) -> PyResult<()> {
     for p in planes {
         p.setattr("point", matrix.call_method1("map", (p.getattr("point")?,))?)?;
         let n = xyz(&matrix.call_method1("mapVector", (p.getattr("normal")?,))?)?;
@@ -229,7 +229,7 @@ fn rotate_sections(planes: Vec<Obj<'_>>, matrix: &Obj<'_>) -> PyResult<()> {
 }
 
 #[pyfunction]
-fn restore_active(scene: &Obj<'_>, active: &Obj<'_>) -> PyResult<()> {
+pub(crate) fn restore_active(scene: &Obj<'_>, active: &Obj<'_>) -> PyResult<()> {
     let member = scene.getattr("section_planes")?.contains(active)?;
     if member {
         scene.call_method1("set_active_section", (active,))?;
@@ -239,7 +239,7 @@ fn restore_active(scene: &Obj<'_>, active: &Obj<'_>) -> PyResult<()> {
     Ok(())
 }
 #[pyfunction]
-fn activate_section<'py>(scene: &Obj<'py>, plane: &Obj<'py>, place: bool) -> PyResult<Obj<'py>> {
+pub(crate) fn activate_section<'py>(scene: &Obj<'py>, plane: &Obj<'py>, place: bool) -> PyResult<Obj<'py>> {
     let old = scene.call_method0("active_section")?;
     if place {
         add_item(&scene.getattr("section_planes")?, plane)?;
@@ -248,7 +248,7 @@ fn activate_section<'py>(scene: &Obj<'py>, plane: &Obj<'py>, place: bool) -> PyR
     Ok(old)
 }
 #[pyfunction]
-fn section_mode<'py>(
+pub(crate) fn section_mode<'py>(
     scene: &Obj<'py>,
     plane: &Obj<'py>,
     cut: bool,
@@ -267,7 +267,7 @@ fn section_mode<'py>(
     Ok(old)
 }
 #[pyfunction]
-fn set_section_label<'py>(
+pub(crate) fn set_section_label<'py>(
     plane: &Obj<'py>,
     name: &Obj<'py>,
     symbol: &Obj<'py>,
@@ -278,7 +278,7 @@ fn set_section_label<'py>(
     Ok(old)
 }
 #[pyfunction]
-fn set_section_fill<'py>(plane: &Obj<'py>, fill: &Obj<'py>) -> PyResult<Obj<'py>> {
+pub(crate) fn set_section_fill<'py>(plane: &Obj<'py>, fill: &Obj<'py>) -> PyResult<Obj<'py>> {
     let py = plane.py();
     let copied = |v: Obj<'py>| -> PyResult<Obj<'py>> {
         if v.is_truthy()? {
@@ -292,7 +292,7 @@ fn set_section_fill<'py>(plane: &Obj<'py>, fill: &Obj<'py>) -> PyResult<Obj<'py>
     Ok(old)
 }
 #[pyfunction]
-fn make_plan<'py>(
+pub(crate) fn make_plan<'py>(
     scene: &Obj<'py>,
     plane: &Obj<'py>,
     view: &Obj<'py>,
@@ -307,7 +307,7 @@ fn make_plan<'py>(
     Ok(old)
 }
 #[pyfunction]
-fn remove_plan(
+pub(crate) fn remove_plan(
     scene: &Obj<'_>,
     plane: &Obj<'_>,
     view: &Obj<'_>,
@@ -325,7 +325,7 @@ fn remove_plan(
     restore_active(scene, old)
 }
 #[pyfunction]
-fn insert_scene(scene: &Obj<'_>, item: &Obj<'_>, at: &Obj<'_>) -> PyResult<()> {
+pub(crate) fn insert_scene(scene: &Obj<'_>, item: &Obj<'_>, at: &Obj<'_>) -> PyResult<()> {
     let views = scene.getattr("saved_views")?;
     let n = views.len()?;
     let index = if at.is_none() || at.gt(n)? {
@@ -343,7 +343,7 @@ fn insert_scene(scene: &Obj<'_>, item: &Obj<'_>, at: &Obj<'_>) -> PyResult<()> {
     Ok(())
 }
 #[pyfunction]
-fn move_item(
+pub(crate) fn move_item(
     list: &Obj<'_>,
     item: &Obj<'_>,
     index: &Obj<'_>,
@@ -374,7 +374,7 @@ fn move_item(
     Ok(Some(old))
 }
 #[pyfunction]
-fn rename_view<'py>(
+pub(crate) fn rename_view<'py>(
     scene: &Obj<'py>,
     view: &Obj<'py>,
     name: &Obj<'py>,
@@ -408,7 +408,7 @@ fn rename_view<'py>(
     Ok(Some((old, touched)))
 }
 #[pyfunction]
-fn restore_view_name(view: &Obj<'_>, old: &Obj<'_>, frames: Vec<Obj<'_>>) -> PyResult<()> {
+pub(crate) fn restore_view_name(view: &Obj<'_>, old: &Obj<'_>, frames: Vec<Obj<'_>>) -> PyResult<()> {
     view.setattr("name", old)?;
     let key = format!("scene:{}", old.str()?);
     for frame in frames {
@@ -417,7 +417,7 @@ fn restore_view_name(view: &Obj<'_>, old: &Obj<'_>, frames: Vec<Obj<'_>>) -> PyR
     Ok(())
 }
 #[pyfunction]
-fn update_scene<'py>(
+pub(crate) fn update_scene<'py>(
     scene: &Obj<'py>,
     view: &Obj<'py>,
     camera: &Obj<'py>,
@@ -443,7 +443,7 @@ fn update_scene<'py>(
     }
 }
 #[pyfunction]
-fn restore_fields(o: &Obj<'_>, values: &Obj<'_>) -> PyResult<()> {
+pub(crate) fn restore_fields(o: &Obj<'_>, values: &Obj<'_>) -> PyResult<()> {
     for kv in values.call_method0("items")?.try_iter()? {
         let kv = kv?;
         let name: String = kv.get_item(0)?.extract()?;
@@ -452,7 +452,7 @@ fn restore_fields(o: &Obj<'_>, values: &Obj<'_>) -> PyResult<()> {
     Ok(())
 }
 #[pyfunction]
-fn edit_view_tree<'py>(
+pub(crate) fn edit_view_tree<'py>(
     scene: &Obj<'py>,
     change: &Obj<'py>,
     before: &Obj<'py>,
@@ -470,18 +470,18 @@ fn edit_view_tree<'py>(
     Ok(Some((initial, crate::scene_tree::state(scene)?)))
 }
 #[pyfunction]
-fn set_direction<'py>(guide: &Obj<'py>, direction: &Obj<'py>) -> PyResult<Obj<'py>> {
+pub(crate) fn set_direction<'py>(guide: &Obj<'py>, direction: &Obj<'py>) -> PyResult<Obj<'py>> {
     let old = guide.getattr("direction")?;
     guide.setattr("direction", Vec3::from(xyz(direction)?))?;
     Ok(old)
 }
 #[pyfunction]
-fn set_text(o: &Obj<'_>, value: &Obj<'_>) -> PyResult<()> {
+pub(crate) fn set_text(o: &Obj<'_>, value: &Obj<'_>) -> PyResult<()> {
     o.setattr("text", value)
 }
 /// Use the sheet codec's item table for subclasses as well as base items.
 #[pyfunction]
-fn sheet_container<'py>(sheet: &Obj<'py>, item: &Obj<'py>) -> PyResult<Option<Obj<'py>>> {
+pub(crate) fn sheet_container<'py>(sheet: &Obj<'py>, item: &Obj<'py>) -> PyResult<Option<Obj<'py>>> {
     let classes = sheet.py().import("core.composition")?;
     for &(field, kind) in crate::file_sheet::ITEMS {
         if item.is_instance(&classes.getattr(kind)?)? {
@@ -492,7 +492,7 @@ fn sheet_container<'py>(sheet: &Obj<'py>, item: &Obj<'py>) -> PyResult<Option<Ob
 }
 
 #[pyfunction]
-fn append_sheet_item<'py>(
+pub(crate) fn append_sheet_item<'py>(
     sheet: &Obj<'py>,
     item: &Obj<'py>,
     container: &Obj<'py>,
@@ -507,7 +507,7 @@ fn append_sheet_item<'py>(
     }
 }
 #[pyfunction]
-fn remove_sheet_item(
+pub(crate) fn remove_sheet_item(
     sheet: &Obj<'_>,
     item: &Obj<'_>,
     container: &Obj<'_>,
@@ -521,7 +521,7 @@ fn remove_sheet_item(
     Ok(())
 }
 #[pyfunction]
-fn capture_sheet_fields<'py>(
+pub(crate) fn capture_sheet_fields<'py>(
     item: &Obj<'py>,
     changes: &Obj<'py>,
     before: &Obj<'py>,

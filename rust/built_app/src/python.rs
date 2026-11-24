@@ -116,13 +116,22 @@ impl Host {
     where
         A: for<'py> pyo3::call::PyCallArgs<'py>,
     {
-        Python::attach(|py| match self.obj.bind(py).call_method1(name, args) {
+        let t0 = std::time::Instant::now();
+        let out = Python::attach(|py| match self.obj.bind(py).call_method1(name, args) {
             Ok(v) => Some(v.unbind()),
             Err(e) => {
                 report(py, e, name);
                 None
             }
-        })
+        });
+        // BUILT_PERF: each wheel (slide, notch) and gesture (pinch, rotate)
+        // event's handler time, beside the pointer moves.
+        match name {
+            "wheel" => crate::perf::note("wheel_ms", t0),
+            "gesture" => crate::perf::note("gesture_ms", t0),
+            _ => {}
+        }
+        out
     }
 
     pub fn call0(&self, name: &str) -> Option<Py<PyAny>> {
