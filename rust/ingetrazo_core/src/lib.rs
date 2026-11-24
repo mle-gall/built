@@ -188,8 +188,6 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(object_weld::revert_object_split, m)?)?;
     m.add_function(wrap_pyfunction!(push_guard::guarded_push, m)?)?;
     m.add_function(wrap_pyfunction!(push_guard::translate_prism_cap, m)?)?;
-    m.add_function(wrap_pyfunction!(push_guard::push_region, m)?)?;
-    m.add_function(wrap_pyfunction!(push_guard::push_through_face, m)?)?;
     m.add_function(wrap_pyfunction!(push_command::push_top_out, m)?)?;
     m.add_function(wrap_pyfunction!(push_command::push_secondary_faces, m)?)?;
     m.add_function(wrap_pyfunction!(push_command::outline_curve_runs, m)?)?;

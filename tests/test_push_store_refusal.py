@@ -31,19 +31,7 @@ def logs(monkeypatch, tmp_path):
     return tmp_path
 
 
-def _refuse(name):
-    """A store method body that refuses as the store does (StoreFallback,
-    then the facade's refusal hook)."""
-    def refusing(self, *args, **kwargs):
-        try:
-            raise S._fallback()(f"test: {name} refused")
-        except S._fallback():
-            S._note_refusal(name)
-        return False
-    return refusing
-
-
-@pytest.mark.parametrize("where", ["translate", "stitch", "fixpoint"])
+@pytest.mark.parametrize("where", ["translate", "extrude"])
 def test_a_store_refusal_leaves_the_model_and_writes_a_repro(monkeypatch, logs, where):
     scene, hist = _boxed(0, 0, 0, 2, 2, 2)
     mesh = scene.mesh
@@ -51,28 +39,13 @@ def test_a_store_refusal_leaves_the_model_and_writes_a_repro(monkeypatch, logs, 
     top = _face(mesh, (1, 1, 2), (0, 0, 1))
     before = _state(mesh)
     calls = []
-    if where == "translate":
-        from ingetrazo_core import MeshStore
+    from ingetrazo_core import MeshStore
 
-        def refused_translate(self, *args):
-            calls.append(1)
-            raise S._fallback()("test: translation refused")
+    def refused(self, *args):
+        calls.append(1)
+        raise S._fallback()(f"test: {where} refused")
 
-        monkeypatch.setattr(MeshStore, "push_translate", refused_translate)
-    elif where == "stitch":
-        refusing = _refuse("stitch_connect")
-
-        def counted(self, *a, **k):
-            calls.append(1)
-            return refusing(self, *a, **k)
-        monkeypatch.setattr(S.StoreMesh, "stitch_connect", counted)
-    else:
-        import core.cap_rebuild as C
-
-        def refusing(mesh, *a, **k):
-            calls.append(1)
-            return _refuse("rebuild_push_planes")(None)
-        monkeypatch.setattr(C, "rebuild_push_planes_native", refusing)
+    monkeypatch.setattr(MeshStore, "push_" + where, refused)
     flashes = []
     from core.protocol import commands
     monkeypatch.setattr(commands._Headless, "flash_status",

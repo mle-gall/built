@@ -660,7 +660,7 @@ def _frozen(x):
     return x
 
 
-def paint_classes(mesh):
+def paint_classes(mesh, *, push=False):
     """``(own, rows, reps)`` for the native rebuild: the paint class of each
     face's own attrs dict and of each attribute-table row (equal dicts, one
     class; 0 for none) and a dict per class."""
@@ -690,6 +690,21 @@ def paint_classes(mesh):
 
     rows = [cls(r) for r in owner["_attr_table"]]
     own = {k: cls(d) for k, d in owner["_attr_own"].items()}
+    if push:
+        from core.mesh import PAINT_KEYS, _exchange_paint
+        # Entry orientation and free-sheet winding can each exchange the sides.
+        # The store also needs the paint-only class inherited by a divided cap.
+        swaps = []
+        for _ in range(2):
+            for d in reps[len(swaps):]:
+                copy = dict(d)
+                if isinstance(copy.get("back"), dict):
+                    _exchange_paint(copy)
+                swaps.append(cls(copy))
+        surface = [cls({k: d[k] for k in PAINT_KEYS if k in d}) for d in list(reps)]
+        swaps.extend(range(len(swaps), len(reps)))
+        surface.extend(range(len(surface), len(reps)))
+        return own, rows, reps, swaps, surface
     return own, rows, reps
 
 

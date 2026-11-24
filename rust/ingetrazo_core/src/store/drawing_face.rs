@@ -668,17 +668,18 @@ pub(super) enum Division {
 }
 
 impl Outline {
-    fn remainder(&self, ring: &[P]) -> Option<Vec<Ring>> {
+    pub(super) fn subtract_chain(&self, ring: &[P]) -> Option<Ring> {
         use super::commands::cell;
         use std::collections::HashSet;
         let cells = |r: &[P]| r.iter().copied().map(cell).collect::<HashSet<_>>();
-        if let Some(pieces) = self.chain(ring).and_then(|c| self.pieces(&c, false)) {
-            let target = cells(ring);
-            if let Some(i) = pieces.iter().position(|r| cells(r) == target) {
-                return Some(vec![pieces[1 - i].clone()]);
-            }
-        }
-        self.carve(ring)
+        let mut pieces = self.pieces(&self.chain(ring)?, false)?;
+        let target = cells(ring);
+        let i = pieces.iter().position(|r| cells(r) == target)?;
+        Some(pieces.swap_remove(1-i))
+    }
+
+    fn remainder(&self, ring: &[P]) -> Option<Vec<Ring>> {
+        self.subtract_chain(ring).map(|r| vec![r]).or_else(|| self.carve(ring))
     }
 
     fn redistribute_holes(&self, pieces: Vec<Ring>) -> Option<Vec<Vec<Ring>>> {

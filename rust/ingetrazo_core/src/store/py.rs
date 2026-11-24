@@ -1124,6 +1124,32 @@ impl PyMeshStore {
             .map(|f| self.inner.key(Kind::Face, f))
             .collect()
     }
+    #[pyo3(signature = (face, distance, normal, keep, oriented, preview, own, rows, swapped, surface, hypot, compensated))]
+    fn push_extrude(&mut self, face: u128, distance: f64, normal: Option<[f64;3]>, keep: bool, oriented: bool, preview: bool,
+                    own: std::collections::HashMap<u128,u32>, rows: Vec<u32>, swapped: Vec<u32>, surface: Vec<u32>, hypot: &str, compensated: bool)
+        -> PyResult<(usize,usize,Vec<(u128,u32)>,Vec<u128>,Vec<u128>,Vec<u128>)> {
+        let f=live_of(&self.inner,Kind::Face,face)?;
+        let h=crate::hypot_of(hypot)?;
+        if own.values().chain(&rows).chain(&swapped).any(|&c|(c as usize)>=swapped.len() || (c as usize)>=surface.len()) || swapped.is_empty() {
+            return Err(PyValueError::new_err("missing push paint class"));
+        }
+        let mut paint=super::Paint::new(own,rows);
+        let (r,_)=self.op_all(|s,ch|s.push_extrude(f,distance,normal,keep,oriented,preview,&mut paint,&swapped,&surface,h,compensated,ch))?;
+        Ok((r.bumps,r.steps,r.painted,r.flipped,r.faces,r.edges))
+    }
+
+    #[pyo3(signature = (face, base, top, delta, attached, far, hypot))]
+    fn push_shell(&mut self, face: u128, base: Vec<Vec<[f64; 3]>>, top: Vec<Vec<[f64; 3]>>,
+                  delta: [f64; 3], attached: bool, far: Option<(u128, Vec<[f64; 3]>, Option<Vec<[f64; 3]>>)>, hypot: &str)
+        -> PyResult<(usize, usize, u128, Vec<u128>, Vec<u128>, Option<u128>, Vec<u128>)> {
+        let face = live_of(&self.inner, Kind::Face, face)?;
+        let far = far.map(|(key,back,rest)| Ok::<_,PyErr>((live_of(&self.inner, Kind::Face,key)?,back,rest))).transpose()?;
+        let mut work = self.inner.clone();
+        let result = work.push_shell(face,base,top,delta,attached,far,crate::hypot_of(hypot)?).map_err(op_err)?;
+        self.inner = work;
+        Ok((result.dirty,result.steps,result.cap,result.removed_faces,result.removed_edges,result.source,result.remainders))
+    }
+
     fn faces_are_flat(&self, tolerance: f64, hypot: &str) -> PyResult<Option<bool>> {
         Ok(self.inner.faces_are_flat(tolerance, crate::hypot_of(hypot)?))
     }

@@ -213,12 +213,11 @@ def test_pushed_prism_cap_rebuild_matches_committed_face(perm, normal):
     kinds = [classify_push_edge(face, base[i], base[(i + 1) % count], sc.faces)
              for i in range(count)]
     attached = all(k != "free" for k, _ in kinds)
-    t = PushPullTool()
-    t.base_face = face
-    t.extrusion = d
-    t._normal = fn
-    for c in t._extrude_commands(face, base, top, [], [], count, attached):
-        c.do(sc)
+    from core.store_mesh import _hypot
+    dirty, *_ = m._store.push_shell(face.key, [[p.toTuple() for p in base]],
+                                    [[p.toTuple() for p in top]], (fn * d).toTuple(),
+                                    attached, None, _hypot())
+    m._dirty(dirty)
 
     o = V(0, 0, 3) if normal.z() > 0 else V(0, 0, 0)
     faces = rebuild_plane(m, o, normal)

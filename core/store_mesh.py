@@ -1618,6 +1618,30 @@ class StoreMesh(Mesh):
             before, face, shift, facet_cos, _mesh._CURVE_COUNTER, painted, _hypot())
         return [FaceView(self, key) for key in faces]
 
+    def push_extrude(self, scene, face, distance, normal, keep, oriented, preview):
+        """Publish one store extrusion's paint, selection and editor counters."""
+        import sys
+        from core.cap_rebuild import paint_classes
+        from core.mesh import swap_orientation_paint
+        own, rows, reps, swapped, surface = paint_classes(self, push=True)
+        try:
+            dirty, steps, painted, flips, faces, edges = self._store.push_extrude(
+                face.key, distance, normal, keep, oriented, preview, own, rows,
+                swapped, surface, _hypot(), sys.version_info >= (3, 12))
+        except _fallback():
+            _note_refusal("push_extrude")
+            raise
+        self._dirty(dirty)
+        for key, cls in painted:
+            FaceView(self, key).attrs = _copy_attrs(reps[cls])
+        for key in flips:
+            swap_orientation_paint(FaceView(self, key))
+        for key in faces:
+            scene.selection.discard(FaceView(self, key))
+        for key in edges:
+            scene.selection.discard(EdgeView(self, key))
+        scene.version += steps
+
     def push_translate(self, cap, delta, removing, preview):
         """Run the prism translation and publish the store's paint transfers."""
         import sys

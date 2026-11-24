@@ -47,13 +47,18 @@ fn cap_neighbourhood(source: &HashSet<Cell>) -> HashSet<[i64; 3]> {
 }
 
 impl Store {
-    fn touched_face(&self, face: u32, seeds: &HashSet<Cell>) -> bool {
+    pub(super) fn touched_face(&self, face: u32, seeds: &HashSet<Cell>) -> bool {
         self.outer_ring(face)
             .into_iter()
             .any(|v| seeds.contains(&cell(*self.state.vpos.get(v as usize))))
     }
 
-    fn orient_push(&mut self, seeds: &HashSet<Cell>, h: Hypot, compensated: bool) -> Vec<u128> {
+    pub(super) fn orient_push(
+        &mut self,
+        seeds: &HashSet<Cell>,
+        h: Hypot,
+        compensated: bool,
+    ) -> Vec<u128> {
         let faces = self.live_slots(Kind::Face);
         let touched: Vec<_> = faces
             .iter()
@@ -61,6 +66,16 @@ impl Store {
             .filter_map(|(i, &f)| self.touched_face(f, seeds).then_some(i as u32))
             .collect();
         let scope = (!touched.is_empty()).then_some(touched.as_slice());
+        self.orient_push_faces(&faces, scope, h, compensated)
+    }
+
+    pub(super) fn orient_push_faces(
+        &mut self,
+        faces: &[u32],
+        scope: Option<&[u32]>,
+        h: Hypot,
+        compensated: bool,
+    ) -> Vec<u128> {
         let scan = MeshScan::from_state(self.state.clone(), RINGS | EFACES | FFLAGS);
         let geom = Geom::of(&scan, h, compensated);
         let params = Params {

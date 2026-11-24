@@ -10,28 +10,15 @@ from ingetrazo_core import Vec3 as QVector3D
 
 from core.geometry import Face
 from core.i18n import tr
-from core.mesh import _STITCH_TOL, PAINT_KEYS, turn_face_over
-from core.history import (
-    AddFaceCommand,
-    DeleteFaceCommand,
-    PruneOrphanEdgesCommand,
-    SnapshotMutation,
-    run_stitch,
-    subtract_loop_from_face,
-)
+from core.mesh import _STITCH_TOL, PAINT_KEYS
+from core.history import SnapshotMutation
 from core.arrangement import _interior_point, _point_in_polygon, plane_basis
 from core.orient import is_closed, orient_outward
 from core.cap_rebuild import _canon_loop
-from core.topology import (
-    _key,
-    _mesh_is_flat,
-    classify_push_edge,
-    loop_inside_face,
-    refine_loop_with_points,
-)
+from core.topology import _mesh_is_flat
 from core.units import fmt_len
 from core import push_scans
-from ingetrazo_core import guarded_push, push_region, push_through_face, translate_prism_cap
+from ingetrazo_core import guarded_push, translate_prism_cap
 
 
 class _Abandoned(Exception):
@@ -99,12 +86,6 @@ def _write_conversion_failure(reason: str) -> None:
         pass
 
 
-def _face_keys(mesh) -> list:
-    """The store mesh's live face keys, in list order."""
-    keys = push_scans.live_keys(mesh, "face")
-    return mesh._store.keys("face") if keys is None else keys
-
-
 def _project_loop_2d(loop, normal):
     u, v = plane_basis(normal)
     return [(QVector3D.dotProduct(p, u), QVector3D.dotProduct(p, v)) for p in loop]
@@ -122,22 +103,6 @@ def _loops_overlap_2d(a_xy, b_xy) -> bool:
         return True
     return any(_point_in_polygon(p, b_xy) for p in a_xy) or \
         any(_point_in_polygon(p, a_xy) for p in b_xy)
-
-
-class _PushBand:
-    """The connecting edges and faces of one pushed ring, inside the push transaction."""
-
-    def __init__(self, base, top, *, rim=False, rails=False, walls=False, cap=False):
-        self.base, self.top = base, top
-        self.parts = rim, rails, walls, cap
-
-    def do(self, scene):
-        mesh = scene.mesh
-        dirty, steps = mesh._store.push_band([mesh._input_point(p) for p in self.base],
-                                             [mesh._input_point(p) for p in self.top], *self.parts)
-        if dirty:
-            mesh._dirty(dirty)
-        scene.version += steps
 
 
 class _GroupScene:
@@ -171,42 +136,6 @@ class _GroupScene:
         self._scene.version = value
 
 
-def _classify_edge(face, a, b, mesh, faces, memo):
-    """``classify_push_edge`` of ``a``–``b``: over the native candidates
-    near the segment when the scans are on (``push_scans.faces_on_segment``), or
-    over ``faces`` with ``memo`` — the coplanar split remembered across
-    the edges of one face, valid only while the list asked about is the
-    same one each time."""
-    got = push_scans.faces_on_segment(mesh, a, b)
-    if got is None:
-        return classify_push_edge(face, a, b, faces, memo)
-    return classify_push_edge(face, a, b, got)
-
-
-def _refine_candidates(mesh, loops) -> list:
-    """The positions ``refine_loop_with_points(loop, points)`` can insert
-    into ``loops``' edges: every vertex inside the box it tests around an
-    edge (``2·tol + 1e-6·|coords|``, grown a hair), in list order — or every
-    vertex with the scans off. The same points per edge, in the same order,
-    so the same refined loops."""
-    from core.topology import _SPLIT_TOLERANCE as tol
-    boxes = []
-    for loop in loops:
-        n = len(loop)
-        for i in range(n):
-            a, b = loop[i], loop[(i + 1) % n]
-            big = max(abs(a.x()), abs(a.y()), abs(a.z()),
-                      abs(b.x()), abs(b.y()), abs(b.z()))
-            g = 2.0 * tol + 1e-6 * big + 1e-9 * (1.0 + big)
-            boxes.append((min(a.x(), b.x()) - g, min(a.y(), b.y()) - g,
-                          min(a.z(), b.z()) - g, max(a.x(), b.x()) + g,
-                          max(a.y(), b.y()) + g, max(a.z(), b.z()) + g))
-    got = push_scans.vertices_in_boxes(mesh, boxes) if boxes else []
-    if got is None:
-        return [v.position for v in mesh.vertices]
-    return [v.position for v in got]
-
-
 def _made_since(mesh, snap, kind: str):
     """The elements of ``kind`` a store-backed ``mesh`` holds and its
     snapshot ``snap`` (``capture_state()``) does not, in list order — what
@@ -216,30 +145,6 @@ def _made_since(mesh, snap, kind: str):
     if not isinstance(snap, StoreState):
         return None
     return push_scans.made_since(mesh, snap.snap, kind)
-
-
-def _component_is_closed(mesh, face) -> bool:
-    """Whether ``face``'s edge-connected component is watertight — every edge
-    reachable from it borders at least two faces. An open sheet (a flat
-    drawing) reaches a boundary edge and reads ``False`` even when a closed
-    solid exists elsewhere in the same mesh."""
-    seen = {face}
-    stack = [face]
-    while stack:
-        f = stack.pop()
-        for lp in (f.loop, *f.hole_loops):
-            n = len(lp)
-            for i in range(n):
-                e = mesh.find_edge(lp[i], lp[(i + 1) % n])
-                if e is None:
-                    continue
-                if len(e.faces) < 2:
-                    return False
-                for g in e.faces:
-                    if g not in seen:
-                        seen.add(g)
-                        stack.append(g)
-    return True
 
 
 # The smallest extrusion that still moves geometry: anything below the mesh's
@@ -1002,163 +907,8 @@ class PushPullOperation:
             scene.version += 1
             return
 
-        # Establish the outward invariant *up front* instead of trusting history:
-        # hand-built or loaded meshes can arrive with mixed winding, and every
-        # downstream decision (the wall quads' deterministic winding, the
-        # per-plane rebuild's material-side classification) reads face normals.
-        # If the base face flips, the drag distance flips with it so the push
-        # still goes where the user dragged.
-        #
-        # PERF: on an OPEN mesh orient never flips a face — it only marks
-        # interior partitions for the volumetric rebuild's parity queries — so
-        # for open meshes the (expensive) pass is deferred until we know the
-        # push takes the solid path at all; a pure sheet push skips it. The
-        # per-drag flag skips repeating it every preview frame (the preview
-        # snapshot preserves the oriented state). Re-orienting the eye model
-        # each frame made the drag lag at ~4 fps.
-        entry_closed = is_closed(scene.mesh)
-        # ``d`` is signed along the normal the DRAG used, which is the base's
-        # surface normal (see _surface_normal) — not necessarily the winding
-        # the face carries. Reconcile the two, the same way this already
-        # reconciles a face orient_outward flips underneath it: on an open
-        # shell the two disagree, and taking the face's word for it swept the
-        # push the wrong way, so a door previewed going IN and came out going
-        # OUT at the commit (Marco, 2026-08-27).
-        pre_normal = (self._normal if self._normal is not None
-                      else face.normal())
-        if entry_closed and not self._drag_pre_oriented:
-            orient_outward(scene.mesh, only=(face,))
-        normal = face.normal()
-        if QVector3D.dotProduct(normal, pre_normal) < 0:
-            d = -d
-        # Only a vertex inside a base edge's box can split it (the boxes
-        # refine_loop_with_points itself tests, grown): those, in list order.
-        allverts = _refine_candidates(scene.mesh, [face.vertices, *face.holes])
-        # Split the base loop at any existing vertex sitting on one of its edges
-        # (a T-junction where the host wall ends and an earlier overhang's floor
-        # begins) so each sub-edge is carried by one face and classifies right.
-        base = refine_loop_with_points(face.vertices, allverts, mesh=scene.mesh)
-        top = [v + normal * d for v in base]
-        # A face with holes (an offset ring — the wall footprint) extrudes its
-        # holes too: the inner walls rise and the cap keeps the opening, so a
-        # ring lifts as walls-with-thickness, not the whole footprint.
-        base_holes = [refine_loop_with_points(h, allverts, mesh=scene.mesh) for h in face.holes]
-        top_holes = [[v + normal * d for v in h] for h in base_holes]
-        count = len(base)
-        faces = scene.faces
-        memo: dict = {}
-        attached_any, attached, sheet_fast, was_solid, through = push_region(
-            base, base_holes, self._keep_base, entry_closed,
-            lambda a, b: _classify_edge(face, a, b, scene.mesh, faces, memo)[0],
-            lambda: self._find_through_face(face, d, faces, mesh=scene.mesh),
-            lambda: _component_is_closed(scene.mesh, face), lambda: _mesh_is_flat(scene.mesh))
-        if was_solid and not entry_closed and not self._drag_pre_oriented:
-            # Open mixed mesh taking the solid path: mark interior partitions
-            # for the rebuild's parity (orient never flips faces here).
-            orient_outward(scene.mesh, only=(face,))
-
-        # The faces there before, by key on a store-backed mesh (see
-        # push_scans.set_minus: the same set, iteration order included).
-        before_fkeys = _face_keys(scene.mesh)
-        self._cap_cmd = None
-        base_attrs = dict(face.attrs)
-        if through is None and not attached_any and self._sweeps_a_free_sheet(
-                face, base, base_holes, faces, mesh=scene.mesh):
-            # A sheet swept free has no outside to orient against until it is
-            # a block, and when it shares an edge with another sheet the block
-            # is part of an open piece the orientation pass leaves alone: the
-            # base stayed facing into the new block (#550). Wound outward by
-            # construction instead — the base faces away from the sweep, the
-            # cap and the sides along it.
-            if d > 0:
-                turn_face_over(face)
-            else:
-                base.reverse()
-                top.reverse()
-                for lp in (*base_holes, *top_holes):
-                    lp.reverse()
-        if through is not None:
-            commands = self._through_commands(face, base, through,
-                                              base_holes, faces)
-        else:
-            commands = self._extrude_commands(
-                face, base, top, base_holes, top_holes, count, attached
-            )
-        from core.coordinate_frame import planned_points
-        exact = {}
-        if through is None:
-            delta = tuple(n * d for n in normal.toTuple())
-            for ring, raised in zip([base, *base_holes], [top, *top_holes]):
-                for point, cap in zip(ring, raised):
-                    vertex = scene.mesh.vertex_at(point)
-                    if vertex is not None:
-                        source = vertex.position_tuple()
-                        exact[point.toTuple()] = source
-                        exact[cap.toTuple()] = tuple(v + t for v, t in zip(source, delta))
-        with planned_points(scene.mesh, exact):
-            for cmd in commands:
-                cmd.do(scene)
-        if (base_attrs and self._cap_cmd is not None
-                and self._cap_cmd.face in scene.mesh.faces):
-            # The moved cap continues the (consumed) base: same attrs.
-            self._cap_cmd.face.attrs = dict(base_attrs)
-        far = getattr(self, "_far_cmd", None)
-        self._far_cmd = None
-        if far is not None and far[1] and far[0].face in scene.mesh.faces:
-            far[0].face.attrs = dict(far[1])
-        now = _face_keys(scene.mesh)
-        new_faces = push_scans.set_minus(scene.mesh, "face", now, set(before_fkeys))
-        if new_faces is None:
-            new_faces = (set(push_scans.views(scene.mesh, "face", now))
-                         - set(push_scans.views(scene.mesh, "face", before_fkeys)))
-        if self._keep_base and attached_any and d < 0:
-            # The Ctrl-stack grows *into* the solid: its cap is a deliberate
-            # interior division (the inward counterpart of the kept base), not
-            # a boundary declaration — mark it so the rebuild preserves it.
-            for f in new_faces:
-                fn = f.normal().normalized()
-                if (abs(QVector3D.dotProduct(fn, normal)) > 0.999
-                        and abs(QVector3D.dotProduct(
-                            f.centroid() - top[0], normal)) < 1e-4):
-                    f.interior = True
-        seed = list(base) + list(top)
-        for hb, ht in zip(base_holes, top_holes):
-            seed += list(hb) + list(ht)
-        seedkeys = {_key(p) for p in seed}
-        # On a solid, the naive extrude's seams and overlaps are dissolved by the
-        # deterministic per-plane rebuild below, so the winding-tolerant coplanar
-        # merge (phase 3) stays off. On raw/open geometry (a flat sheet) there is
-        # no "outside" to classify against, so the merge still applies there.
-        solid = attached_any and was_solid
-        # On solids the identical-cycle dedupe waits for the rebuild: a flush
-        # collapse's sweep quad lands identical to the face it annihilates
-        # with, and only the volumetric classification can tell "keep one"
-        # (shared wall) from "drop both" (emptied region).
-        run_stitch(scene.mesh, seedkeys, new_faces,
-                   coplanar_merge=not solid and not self._keep_base,
-                   dedupe=not solid)
-        if solid:
-            self._rebuild_planes_fixpoint(scene.mesh, (None, now, before_fkeys), seedkeys,
-                                          keep_mode=self._keep_base,
-                                          removing=d < 0)
-        # Give any closed solid a consistent outward orientation — every face's
-        # normal pointing out. The extrude can otherwise commit a closed solid
-        # wound inconsistently (a flipped cap, or the base of a first flat→solid
-        # extrude), invisible until you push that face and it extrudes *inward*.
-        # PERF: deferred during drag PREVIEW frames — the state is discarded
-        # next frame and the face shading is winding-proof (abs), so paying a
-        # parity pass per mouse move only made the drag lag; the commit runs
-        # it for real. A sheet-path push whose result is still open has
-        # nothing to orient either way (open meshes never flip; interior
-        # marking is recomputed by the next solid op). What counts is the
-        # pushed solid, not the whole mesh: an open piece elsewhere left a
-        # new box with its base reversed (#230).
-        if not preview:
-            touched = self._touched_faces(scene.mesh, seedkeys)
-            if (not sheet_fast or is_closed(scene.mesh)
-                    or (touched and _component_is_closed(scene.mesh,
-                                                         touched[0]))):
-                orient_outward(scene.mesh, only=touched)
+        scene.mesh.push_extrude(scene, face, d, self._normal.toTuple() if self._normal is not None else None,
+                                self._keep_base, self._drag_pre_oriented, preview)
 
     def _cap_passes_a_wall_vertex(self, scene, face, d: float) -> bool:
         """Whether shrinking the prism cap by ``d`` carries it past a vertex
@@ -1170,157 +920,6 @@ class PushPullOperation:
             return False
         normal = self._normal if self._normal is not None else face.normal()
         return push_scans.cap_passes_wall(scene.mesh, face, self._cap_positions, normal, d)
-
-    @staticmethod
-    def _sweeps_a_free_sheet(face, base, base_holes, faces, mesh=None) -> bool:
-        """Whether ``face`` is a sheet whose whole rim — outline and holes —
-        borders only other sheets on its plane or nothing at all: no face off
-        its plane (a room's wall beside it) stands on any rim edge
-        (``pushscan::scan_sweeps_free_sheet``)."""
-        return push_scans.sweeps_free_sheet(mesh if mesh is not None else face._m, face,
-                                            [base, *base_holes])
-
-    @staticmethod
-    def _touched_faces(mesh, seedkeys: set):
-        """The faces carrying one of the operation's seed positions — the
-        entry point into the solid(s) it edited, for scoping the orientation
-        pass to those components. ``None`` (meaning "the whole mesh") when the
-        op left none, so a collapse can never silently skip orientation."""
-        from core.topology import KeyMemo
-        key = KeyMemo()
-        # Only a face with a corner near the seeds can hold one's key.
-        near = push_scans.faces_near_points(mesh, seedkeys)
-        hit = [f for f in (mesh.faces if near is None else near)
-               if any(key(v) in seedkeys for v in f.vertices)]
-        return hit or None
-
-    @staticmethod
-    def _rebuild_planes_fixpoint(mesh, fresh, seedkeys: set,
-                                 keep_mode: bool = False,
-                                 removing: bool = True) -> None:
-        """Deterministic root-fix (path C): recompute each touched plane's
-        faces from its edges — the planar arrangement finds every region,
-        winding-classification keeps the ones inside the solid and drops
-        phantoms outside, and the union dissolves coplanar seams. Seam planes
-        (a fresh face coplanar-adjacent to another) cover the strip stacked on
-        a wall and the quad overlapping a wall to be notched; crack planes
-        cover anything a nested push left unfaced. Shared by the extrude path
-        and the prism-translate path (whose flush landings need the same
-        volumetric resolution). Rebuilt to a **fixpoint**, planes in sorted
-        key order; then one connectivity stitch.
-
-        One store call (``Store::rebuild_push_planes``,
-        ``store/push_rebuild.rs``). ``fresh`` says how the push's own faces
-        are found: ``(listed, None, None)``, their keys in list order, or
-        ``(None, now, before)``, the faces of ``now`` not in ``before``
-        (:func:`core.cap_rebuild.rebuild_push_planes_native`). A refusal
-        refuses the push (the store is strict there)."""
-        from core.cap_rebuild import rebuild_push_planes_native
-        from core.store_mesh import StoreRefusal
-        if not rebuild_push_planes_native(mesh, fresh, seedkeys, keep_mode, removing):
-            raise StoreRefusal("rebuild_push_planes: not a store mesh")
-
-    def _extrude_commands(self, face, base, top, base_holes, top_holes, count, attached):
-        """Build the cap between the outer rim edges and the inner and outer walls."""
-        commands = [DeleteFaceCommand(face)] if attached else []
-        commands.append(_PushBand(base, top, rim=True, rails=True))
-        self._cap_cmd = AddFaceCommand(top, auto=not attached, holes=top_holes)
-        commands.append(self._cap_cmd)
-        for lower, upper in zip(base_holes, top_holes):
-            commands.append(_PushBand(lower, upper, rim=True, rails=True, walls=True))
-        commands.append(_PushBand(base, top, walls=True))
-        if attached:
-            commands.append(PruneOrphanEdgesCommand(base))
-        return commands
-
-    # ---- Through-hole -------------------------------------------------------
-    @staticmethod
-    def _find_through_face(face, d, faces, mesh=None):
-        return push_through_face(face, d, faces, mesh, push_scans.faces_meeting,
-                                 loop_inside_face, subtract_loop_from_face)
-
-    def _through_commands(self, face, base, through, base_holes=(), faces=()):
-        """Punch the far face, connect the tunnel walls and close any swept islands."""
-        far_face, back, remainder = through
-        holes = list(far_face.holes)
-        islands = []
-        if remainder is None:
-            holes.append(back)
-            if base_holes:
-                islands = self._through_islands(face, base_holes, far_face, back, faces)
-        far = AddFaceCommand(far_face.vertices if remainder is None else remainder, auto=False, holes=holes)
-        self._far_cmd = far, dict(far_face.attrs)
-        commands = [DeleteFaceCommand(face), DeleteFaceCommand(far_face), far,
-                    _PushBand(base, back, rim=remainder is None, rails=True, walls=True)]
-        for lower, upper in islands:
-            commands.append(_PushBand(lower, upper, rim=True, rails=True, walls=True, cap=True))
-        commands.append(PruneOrphanEdgesCommand(list(base) + list(back)))
-        return commands
-
-    @staticmethod
-    def _through_islands(face, base_holes, far_face, back_loop, faces):
-        """``[(hole, back_hole)]`` for a ring pushed through: each hole of
-        ``face`` with its copy on the far face's plane — or ``[]`` (no
-        island geometry, the old behaviour) unless EVERY hole is filled by
-        a single hole-free face on the same plane (the island), so an
-        opening that already goes through (a window the ring frames) is
-        never capped."""
-        if not base_holes or len(back_loop) < 3:
-            return []
-        gn = far_face.normal().normalized()
-        gc = far_face.centroid()
-        # The push direction, from the opening's own sweep.
-        lead = back_loop[0] - face.vertices[0]
-        if lead.length() < 1e-9:
-            return []
-        push = lead.normalized()
-        den = QVector3D.dotProduct(push, gn)
-        if den < 1e-6:
-            # Only through the face the push LEAVES the material by (it
-            # faces along the push). An outward push that meets a face
-            # looking back at it -- the eye model's iris raised past the
-            # outer ring -- is not a ring carved through a slab.
-            return []
-        # The opening must land strictly INSIDE the far face, clear of its
-        # rim and of its holes: an iris raised to an outer ring's cap meets
-        # it along the cap's own hole, which is no slab to carve through.
-        def _clear(p) -> bool:
-            for lp in (far_face.vertices, *far_face.holes):
-                k = len(lp)
-                for i in range(k):
-                    a, b = lp[i], lp[(i + 1) % k]
-                    ab = b - a
-                    L2 = ab.lengthSquared()
-                    t = 0.0 if L2 < 1e-18 else max(0.0, min(
-                        1.0, QVector3D.dotProduct(p - a, ab) / L2))
-                    if (a + ab * t - p).length() < 1e-4:
-                        return False
-            return True
-        if not all(_clear(p) for p in back_loop):
-            return []
-        out = []
-        for hole in base_holes:
-            m = len(hole)
-            if m < 3:
-                return []
-            filled = None
-            for i in range(m):
-                kind, g = classify_push_edge(face, hole[i], hole[(i + 1) % m],
-                                             faces)
-                if kind != "coplanar" or g is None or g.holes \
-                        or (filled is not None and g != filled):
-                    return []
-                filled = g
-            if filled is None or len(filled.vertices) != m:
-                return []
-            back = []
-            for p in hole:
-                t = QVector3D.dotProduct(gc - p, gn) / den
-                back.append(p + push * t)
-            if not loop_inside_face(far_face, back):
-                return []
-            out.append((list(hole), back))
-        return out
 
     def _reset(self) -> None:
         self.hovered_face = None

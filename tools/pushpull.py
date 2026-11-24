@@ -64,15 +64,11 @@ from core.push_pull import (  # noqa: E402,F401  (moved; tests and extensions im
     _DRAG_PX,
     _GroupScene,
     _MIN_EXTRUDE,
-    _PushBand,
-    _classify_edge,
-    _component_is_closed,
     _face_shape,
     _loops_overlap_2d,
     _made_since,
     _paint_of,
     _project_loop_2d,
-    _refine_candidates,
 )
 
 
