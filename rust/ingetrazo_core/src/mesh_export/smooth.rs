@@ -15,6 +15,47 @@ fn loops<'p>(face: &Obj<'p>) -> PyResult<Vec<Obj<'p>>> {
     }
     Ok(all)
 }
+/// A store can answer the flat-shading case without creating Python views
+/// for each incident vertex and edge. A soft shared edge still needs the
+/// angle-weighted fan, including any scripted changes to vertex positions.
+fn all_corners_flat(face: &Obj<'_>) -> PyResult<bool> {
+    use crate::store::{keys::Kind, py::PyMeshStore, FLAT, SOFT};
+    use pyo3::sync::PyOnceLock;
+    type Types = (Py<PyAny>, Py<PyAny>);
+    static TYPES: PyOnceLock<Types> = PyOnceLock::new();
+    let py = face.py();
+    let (face_type, mesh_type) = TYPES.get_or_try_init(py, || -> PyResult<Types> {
+        let module = py.import("core.store_mesh")?;
+        Ok((
+            module.getattr("FaceView")?.unbind(),
+            module.getattr("StoreMesh")?.unbind(),
+        ))
+    })?;
+    if !face.get_type().is(face_type.bind(py)) {
+        return Ok(false);
+    }
+    let mesh = face.getattr("_m")?;
+    if !mesh.get_type().is(mesh_type.bind(py)) {
+        return Ok(false);
+    }
+    let native = mesh.getattr("_store")?.cast_into::<PyMeshStore>()?;
+    let store = native.try_borrow()?;
+    let st = &store.inner;
+    let Some(slot) = st.slot(Kind::Face, face.getattr("key")?.extract()?) else {
+        return Ok(false);
+    };
+    for ring in st.face_rings(slot) {
+        for vertex in ring {
+            if st.edges_at(vertex).any(|e| {
+                *st.state.eflags.get(e as usize) & (SOFT | FLAT) == SOFT
+                    && st.edge_faces(e).len() >= 2
+            }) {
+                return Ok(false);
+            }
+        }
+    }
+    Ok(true)
+}
 #[pyclass(module = "ingetrazo_core")]
 pub struct SmoothNormals {
     flat: Py<PyDict>,
@@ -44,6 +85,9 @@ impl SmoothNormals {
     }
     pub fn corners<'p>(&self, face: &Obj<'p>) -> PyResult<Bound<'p, PyDict>> {
         let out = PyDict::new(face.py());
+        if all_corners_flat(face)? {
+            return Ok(out);
+        }
         for ring in loops(face)? {
             for vertex in ring.try_iter()? {
                 let vertex = vertex?;
