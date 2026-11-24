@@ -115,7 +115,7 @@ def after_open(win, path, callback, failed=None):
     pending = win.__dict__.get("_pending_open")
     if pending and ((path == pending.path and getattr(pending, "target", None) is None)
                     or path in pending.queue):
-        win._open_callbacks.setdefault(path, []).append(callback)
+        win.__dict__.setdefault("_open_callbacks", {}).setdefault(path, []).append(callback)
         if failed is not None:
             win.__dict__.setdefault("_open_failures", {}).setdefault(path, []).append(failed)
     else:

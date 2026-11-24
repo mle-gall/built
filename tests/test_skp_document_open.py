@@ -64,3 +64,17 @@ def test_cancel_skp_does_not_deliver_a_partial_result():
     assert worker.take() is None
     with pytest.raises(InterruptedError):
         worker.wait()
+
+
+def test_first_insertion_keeps_callbacks_for_a_queued_document():
+    from types import SimpleNamespace
+    from views.document_open import after_open
+
+    path = DATA / "skp_arcs_2017.skp"
+    active = SimpleNamespace(path=PANEL, target=object(), queue=[path])
+    window = SimpleNamespace(_pending_open=active)
+    results = []
+    after_open(window, path, results.append)
+    assert not results
+    window._open_callbacks[path][0]("queued drawing")
+    assert results == ["queued drawing"]

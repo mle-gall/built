@@ -496,24 +496,19 @@ def _soft_edge_segments(defn, xform, out) -> None:
         out.append(((a[0], a[1], a[2]), (b[0], b[1], b[2])))
 
 
-#: The tags the file being adapted hides, by name AND by id (an edge's
-#: ``layer`` is the tag's id in a 2021+ file): see _loose_edge_segments.
-_hidden_tags: frozenset = frozenset()
-
-
 def _loose_edge_segments(defn, xform, out) -> None:
     """Append the transformed endpoint pairs of ``defn``'s LOOSE edges —
     lines that bound no face — to ``out``. Only face rings were read, so a
     group holding nothing but lines arrived empty and was dropped. Hidden
     edges stay out (the file does not draw them), and so do the lines on a
-    tag the file hides (``_hidden_tags``, set by :func:`_adapt`): the
+    tag the file hides (by name or id in this adapter's cache): the
     contour lines of a survey drawing kept on a hidden tag would otherwise
     cover the plaza, and a line inside a group does not hide with its tag
     here. Cached on the definition like the soft edges."""
     import numpy as np
     arr = getattr(defn, "_loose_arr", None)
     if arr is None:
-        hidden_tags = _hidden_tags
+        hidden_tags = getattr(_geometry_cache.get(), "hidden_tags", ())
         used = set()
         for face in getattr(defn, "faces", {}).values():
             for loop in getattr(face, "loops", None) or ():
@@ -918,9 +913,8 @@ def _adapt_inner(model, name: str, skp_path=None, *, consume=False):
 
     defs = getattr(model, "definitions", {}) or {}
     attr_map, materials = _material_attrs(model, skp_path or name)
-    global _hidden_tags
     from formats import openskp_compat
-    _hidden_tags = openskp_compat.hidden_tags(
+    _geometry_cache.get().hidden_tags = openskp_compat.hidden_tags(
         r["name"] for r in file_layer_records(model) if not r["visible"])
     # openskp ≥ 0.4 exposes the implicit root as its own field; older
     # releases keep it inside ``definitions`` under the name ROOT_MODEL.

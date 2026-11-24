@@ -2,12 +2,12 @@
 //! Transfer staged occurrences into an existing drawing as one transaction.
 //! A staged root releases ownership before publication. Its handles retain
 //! the definition stores, including those shared by several occurrences.
-use super::apply::{material_names, skp_apply_metadata};
+use super::apply::{material_names, remap_paint, skp_apply_metadata};
 use pyo3::{
     prelude::*,
     types::{PyDict, PyList},
 };
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 #[pyclass(dict, module = "ingetrazo_core")]
 pub struct SkpInsertion {
@@ -77,18 +77,6 @@ impl SkpInsertion {
     }
 }
 
-fn remap_row(row: &Bound<'_, PyAny>, names: &HashMap<String, String>) -> PyResult<()> {
-    if let Some(old) = row
-        .call_method1("get", ("mat",))?
-        .extract::<Option<String>>()?
-    {
-        if let Some(new) = names.get(&old) {
-            row.set_item("mat", new)?;
-        }
-    }
-    Ok(())
-}
-
 #[pymethods]
 impl SkpInsertion {
     #[classattr]
@@ -111,22 +99,23 @@ impl SkpInsertion {
         let py = scene.py();
         let remap = material_names(py, scene, self.materials.bind(py))?;
         if !remap.is_empty() {
+            let mut seen = HashSet::new();
             for mesh in &self.meshes {
                 let mesh = mesh.bind(py);
                 if let Some(table) = mesh.getattr_opt("_attr_table")? {
                     for row in table.try_iter()? {
-                        remap_row(&row?, &remap)?;
+                        remap_paint(&row?, &remap, &mut seen)?;
                     }
                     for row in mesh
                         .getattr("_attr_own")?
                         .call_method0("values")?
                         .try_iter()?
                     {
-                        remap_row(&row?, &remap)?;
+                        remap_paint(&row?, &remap, &mut seen)?;
                     }
                 } else {
                     for face in mesh.getattr("faces")?.try_iter()? {
-                        remap_row(&face?.getattr("attrs")?, &remap)?;
+                        remap_paint(&face?.getattr("attrs")?, &remap, &mut seen)?;
                     }
                 }
             }

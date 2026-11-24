@@ -56,6 +56,26 @@ pub(super) fn material_names(
     Ok(remap)
 }
 
+/// A back side is either a distinct paint dictionary or a flag saying it
+/// shares the front paint. Attribute tables may share either dictionary.
+pub(super) fn remap_paint(
+    attrs: &Bound<'_, PyAny>,
+    names: &HashMap<String, String>,
+    seen: &mut HashSet<*mut pyo3::ffi::PyObject>,
+) -> PyResult<()> {
+    let back = opt(attrs, "back")?;
+    for side in std::iter::once(attrs).chain(back.cast::<PyDict>().ok().map(|v| v.as_any())) {
+        if seen.insert(side.as_ptr()) {
+            if let Some(name) = opt(side, "mat")?.extract::<Option<String>>()? {
+                if let Some(actual) = names.get(&name) {
+                    side.set_item("mat", actual)?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 fn register_materials(
     py: Python<'_>,
     scene: &Bound<'_, PyAny>,
@@ -70,12 +90,8 @@ fn register_materials(
         for part in rows(payload, kind)?.try_iter()? {
             for face in rows(&part?, "faces")?.try_iter()? {
                 let attr = face?.get_item(2)?;
-                if attr.is_truthy()? && seen.insert(attr.as_ptr()) {
-                    if let Some(name) = opt(&attr, "mat")?.extract::<Option<String>>()? {
-                        if let Some(actual) = remap.get(&name) {
-                            attr.set_item("mat", actual)?;
-                        }
-                    }
+                if attr.is_truthy()? {
+                    remap_paint(&attr, &remap, &mut seen)?;
                 }
             }
         }
