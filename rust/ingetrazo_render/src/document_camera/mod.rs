@@ -2,6 +2,7 @@
 //! Camera queries and navigation shared by the document presentation hosts.
 use crate::document_host::{call_opt, none, opt, vec3, xyz, Obj};
 use pyo3::prelude::*;
+mod depth;
 mod navigation;
 mod planes;
 
@@ -22,5 +23,6 @@ fn size(v: &Obj) -> PyResult<(f64, f64)> {
 }
 pub(crate) fn register(m: &Bound<PyModule>) -> PyResult<()> {
     planes::register(m)?;
+    depth::register(m)?;
     navigation::register(m)
 }

@@ -873,72 +873,10 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
             self.projectionChanged.emit(mode)
 
     def _sync_depth_reach(self) -> None:
-        """Tell the camera what the view holds, for the depth range of a
-        parallel view (``OrbitCamera.parallel_depth``, issue #874): the
-        model's box, the reference images and figures, and the drawing
-        axes' origin. ``None`` — the old ±far range — while a base map or
-        a survey shows, whose extent the model's box does not know."""
-        cam = self.camera
-        if cam.perspective:
-            return                       # perspective does not read it
-        sc = self.scene
-        layer = getattr(sc, "tile_layer", None)
-        survey = getattr(sc, "photo_mesh", None)
-        if (layer is not None and getattr(layer, "visible", False)) \
-                or (survey is not None and getattr(survey, "visible", False)):
-            cam.depth_reach = None
-            return
-        from core import axes as _axes
-        lo, hi = sc.bounds()
-        pts = [_axes.ORIGIN]
-        if lo is not None:
-            pts += [lo, hi]
-        for im in getattr(sc, "image_planes", None) or ():
-            if sc.entity_visible(im):
-                pts.extend(im.corners())
-        for g in sc.groups:
-            if getattr(g, "billboard", False) and sc.entity_visible(g):
-                xf = g.xform
-                pts.append(QVector3D(xf.column(3).x(), xf.column(3).y(),
-                                     xf.column(3).z())
-                           if xf is not None else QVector3D())
-                pts.append(pts[-1] + QVector3D(0.0, 0.0, 3.0))
-        xs = [p.x() for p in pts]
-        ys = [p.y() for p in pts]
-        zs = [p.z() for p in pts]
-        a = QVector3D(min(xs), min(ys), min(zs))
-        b = QVector3D(max(xs), max(ys), max(zs))
-        cam.depth_reach = ((a + b) * 0.5, (b - a).length() * 0.5)
+        return ingetrazo_render.sync_reach(self)
 
     def _navigation_detail(self, mvp, mode):
-        """Defer edge linework during camera movement in dense assemblies.
-
-        Keep faces/materials intact and repaint at rest even if no mouse event
-        follows. Exports, line styles and editing contexts retain full detail.
-        """
-        if self._export_size is not None:
-            return False
-        cam = tuple(mvp.data())
-        previous = getattr(self, "_nav_detail_camera", None)
-        self._nav_detail_camera = cam
-        pool = getattr(self, "_inst_pool", None)
-        eligible = (pool is not None and len(pool[1]) >= 2000
-                    and mode in ("shaded", "textures", "monochrome")
-                    and self.scene.edit_group is None
-                    and not self.scene.selection)
-        if not eligible:
-            self._nav_detail_until = 0.0
-            return False
-        now = _time_mod.monotonic()
-        if previous is not None and previous != cam:
-            self._nav_detail_until = now + 0.35
-            timer = getattr(self, "_nav_detail_timer", None)
-            if timer is None:
-                timer = self._nav_detail_timer = window_timer(self, self.update)
-            timer.start(370)
-        if now < getattr(self, "_nav_detail_until", 0.0):
-            return True
-        return False
+        return ingetrazo_render.navigation_detail(self, mvp, mode)
 
 
     #: This picture's background is alpha 0 (``render_image``'s ``transparent``).
@@ -955,91 +893,13 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     painting = 0
 
     def _depth_fit_refused(self) -> bool:
-        """Whether this frame keeps the automatic near/far: something
-        drawn may lie outside the model's boxes, or the boxes are not
-        known (shared by the Metal view, whose camera this is)."""
-        sc = self.scene
-        if (not self.camera.perspective or sc.edit_group is not None
-                or getattr(self, "_preview_groups", None)
-                or getattr(self, "_frozen_cache_version", None) is not None
-                or self._base_map_showing() or self._terrain_showing()
-                or self._photo_showing()
-                or getattr(sc, "guides", None)
-                or getattr(getattr(sc, "shadows", None), "enabled", False)
-                or getattr(sc, "show_hidden_objects", False)
-                or getattr(sc, "show_hidden_geometry", False)):
-            return True
-        # A tool's live preview (Push/Pull's box, a pasted copy, Follow
-        # Me) can reach toward the eye past the model's nearest box.
-        tool = getattr(self, "active_tool", None)
-        provider = getattr(tool, "preview_faces", None) if tool else None
-        try:
-            if callable(provider) and provider():
-                return True
-        except Exception:
-            return True
-        return bool(getattr(tool, "wireframe_depth_tested", False))
+        return ingetrazo_render.refuse_depth(self)
 
     def _fit_scene_depth(self):
-        """Fit the perspective near/far to the visible placements' boxes
-        (``OrbitCamera.fit_depth_range``) for this frame. The boxes are
-        walked once per content and placement epoch; a refusal (a box not
-        known) is cached too, so the walk is not repeated per frame."""
-        import numpy as np
-        self.camera._depth_range = None
-        if self._depth_fit_refused():
-            return
-        key = (self._placements_epoch(), _content_ver(self), id(self.scene.mesh))
-        memo = getattr(self, "_depth_boxes", None)
-        if memo is None or memo[0] != key:
-            memo = self._depth_boxes = (key, *self._depth_fit_boxes())
-        if memo[1] is not None:
-            self.camera.fit_depth_range(memo[1], memo[2])
+        return ingetrazo_render.fit_scene(self)
 
     def _depth_fit_boxes(self):
-        """``(lo, hi)`` arrays of world boxes covering everything drawn,
-        or ``(None, None)`` when one placement's box is not known."""
-        import numpy as np
-        from core.lazy_mesh import entity_count
-        boxes = []
-        for g in self._placements():
-            if not self.scene.entity_visible(g):
-                continue
-            if getattr(g, "billboard", False):
-                verts = self._billboard_mesh(g).vertices
-                if verts:
-                    a = np.asarray([v.position.toTuple() for v in verts])
-                    lo, hi = a.min(axis=0), a.max(axis=0)
-                    # Face-me figures turn about their vertical axis.
-                    ctr = (lo + hi) * .5
-                    radius = np.linalg.norm(hi[:2] - lo[:2]) * .5
-                    boxes.append(((ctr[0] - radius, ctr[1] - radius, lo[2]),
-                                  (ctr[0] + radius, ctr[1] + radius, hi[2])))
-                continue
-            box = (self._placement_bbox(g) if g.xform is not None
-                   else self._group_chunk(g).get("bbox"))
-            if box is None:
-                if entity_count(g.mesh) == 0:
-                    continue            # an empty container draws nothing
-                return None, None
-            boxes.append(box)
-        # Loose geometry has no placement box. A still-deferred mesh is
-        # read from its plan, not built.
-        from core.lazy_mesh import plan_of
-        planned = plan_of(self.scene.mesh)
-        a = (planned.pos if planned is not None else
-             np.asarray([v.position.toTuple() for v in self.scene.mesh.vertices]))
-        if len(a):
-            a = np.asarray(a, float).reshape(-1, 3)
-            boxes.append((a.min(axis=0), a.max(axis=0)))
-        for im in getattr(self.scene, "image_planes", ()) or ():
-            if self.scene.entity_visible(im):
-                a = np.asarray([p.toTuple() for p in im.corners()])
-                boxes.append((a.min(axis=0), a.max(axis=0)))
-        if not boxes:
-            return None, None
-        a = np.asarray(boxes, dtype=float).reshape(-1, 2, 3)
-        return a[:, 0], a[:, 1]
+        return ingetrazo_render.depth_boxes(self)
 
 
 
