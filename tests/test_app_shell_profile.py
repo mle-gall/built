@@ -47,27 +47,7 @@ def test_isolated_profiles(tmp_path, mode):
                    env=env, home=tmp_path, settings=tmp_path / "env", check=True, timeout=45)
 
 
-def test_qt_launcher_respects_isolated_profile(tmp_path):
-    profile = tmp_path / "settings"
-    env = dict(os.environ, HOME=str(tmp_path), CFFIXED_USER_HOME=str(tmp_path),
-               BUILT_SETTINGS_DIR=str(profile))
-    script = """
-        import sys
-        from pathlib import Path
-        from PySide6.QtCore import QSettings
-        import main
-        def check():
-            assert QSettings.defaultFormat() == QSettings.IniFormat
-            assert Path(QSettings().fileName()).is_relative_to(sys.argv[2])
-            return 0
-        main._self_check = check
-        sys.exit(main.main())
-    """
-    isolated_launch.run([sys.executable, "-c", textwrap.dedent(script), "--check", str(profile)],
-                   env=env, home=tmp_path, settings=profile, check=True, timeout=45)
-
-
-def test_launchers_share_an_isolated_profile(tmp_path):
+def test_native_launches_share_an_isolated_profile(tmp_path):
     profile = tmp_path / "shared"
     script = """
         import sys
@@ -87,26 +67,15 @@ def test_launchers_share_an_isolated_profile(tmp_path):
             user.setValue("recent_files", [sys.argv[3]])
             user.sync()
             assert st.status() == QSettings.NoError
-        if sys.argv[1] == "native":
-            from app_shell.host import Host
-            host = Host(0, 1280, 800, 2)
-            assert Path(host.settings_dir) == Path(sys.argv[4])
-            exchange()
-            host.close()
-        else:
-            import main
-            set_org = main._App.setOrganizationName
-            def ready(self, name):
-                set_org(name)
-                exchange()
-                raise SystemExit(0)
-            main._App.setOrganizationName = ready
-            main.main()
-            raise AssertionError("Qt startup did not initialize its profile")
+        from app_shell.host import Host
+        host = Host(0, 1280, 800, 2)
+        assert Path(host.settings_dir) == Path(sys.argv[4])
+        exchange()
+        host.close()
     """
     env = dict(os.environ, QT_QPA_PLATFORM="offscreen")
-    for mode, old, new in (("native", "", "native.built"), ("qt", "native.built", "qt.built"),
-                           ("native", "qt.built", "last.built")):
+    for mode, old, new in (("native", "", "native.built"), ("native", "native.built", "second.built"),
+                           ("native", "second.built", "last.built")):
         isolated_launch.run([sys.executable, "-c", textwrap.dedent(script), mode, old, new,
                              str(profile)], env=env, home=tmp_path, settings=profile,
                             check=True, timeout=45)

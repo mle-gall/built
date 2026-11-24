@@ -40,17 +40,10 @@ def test_arabic_is_offered_and_complete():
     ("de", Qt.LeftToRight)])
 def test_startup_direction_follows_the_language(lang, direction, tmp_path,
                                                 monkeypatch):
-    import main
-    path = tmp_path / "start.ini"
-    st = QSettings(str(path), QSettings.IniFormat)
-    st.setValue("language", lang)
-    st.sync()
-    monkeypatch.setattr(main, "QSettings",
-                        lambda: QSettings(str(path), QSettings.IniFormat))
-    monkeypatch.setattr(main, "_install_qt_translator", lambda _l: None)
+    from plugins._widget_language import apply_widget_language
     before = i18n.current_language()
     try:
-        main._init_language()
+        apply_widget_language(_app, lang)
         assert _app.layoutDirection() == direction
         # Left to right nothing is installed: the app is as it always was.
         assert (getattr(_app, "_rtl_numbers", None) is not None) == (

@@ -22,11 +22,10 @@ def test_it_does_nothing_elsewhere(monkeypatch):
     assert malloc_arenas.limit() is False
 
 
-def test_main_calls_it_before_the_crash_log_and_qt():
-    src = (Path(__file__).resolve().parents[1] / "main.py").read_text("utf-8")
-    call = src.index("malloc_arenas.limit()")
-    assert call < src.index("open_crash_log()")
-    assert call < src.index("from PySide6")
+def test_native_launcher_caps_glibc_arenas_before_dispatch():
+    root = Path(__file__).resolve().parents[1]
+    src = (root / "rust/built_app/src/launcher.rs").read_text()
+    assert src.index("mallopt(M_ARENA_MAX, 2)") < src.index("let args: Vec<_>")
 
 
 @pytest.mark.skipif(not sys.platform.startswith("linux"), reason="glibc only")

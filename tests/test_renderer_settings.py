@@ -71,8 +71,14 @@ def test_subprocess_boundary_and_cache(monkeypatch, outcome):
         rs.capability.cache_clear()
 
 
-def test_unavailable_gpu_stops_startup(monkeypatch, capsys):
-    import main
-    monkeypatch.setattr(rs, 'capability', lambda: rs.Capability(False, 'no adapter'))
-    assert not main._gpu_available(interactive=False)
-    assert 'no adapter' in capsys.readouterr().err
+def test_native_gpu_probe_opens_a_surface():
+    import json
+    from tests.launcher_binary import run
+    result = run("--probe-gpu")
+    assert result.returncode == 0, result.stderr
+    assert isinstance(json.loads(result.stdout.splitlines()[-1])["available"], bool)
+
+
+def test_unavailable_gpu_explains_why(monkeypatch):
+    monkeypatch.setattr(rs, "capability", lambda: rs.Capability(False, "no adapter"))
+    assert "no adapter" in rs.status_text()

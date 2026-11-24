@@ -7,69 +7,102 @@
 #   scripts/release_check.sh <previous tag> <real .igz>
 #   e.g. scripts/release_check.sh v0.5.2 ~/Descargas/plaza.igz
 #
-# Runs, for HEAD and for the previous tag on the SAME document: the viewport
-# benchmark (scripts/bench_session.py) twice, and startup / opening / memory
-# with the leak check (scripts/bench_startup.py); then the fast and the slow
-# test suites. Everything lands in benchmarks/results/<version>.json, next to
-# the earlier releases' files — the history to compare against.
-# Opens real GL windows (xcb) for a few seconds each.
+# Measure the release binary and replay input against the same document twice.
 set -euo pipefail
-PREV="${1:?previous tag, e.g. v0.5.2}"
-DOC="${2:?a real .igz, e.g. ~/Descargas/plaza.igz}"
+PREV="${1:?previous tag}"
+DOC="${2:?document path}"
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
-PY="$HERE/venv/bin/python"
-VER="$("$PY" -c 'import sys; sys.path.insert(0, "'"$HERE"'"); from core.version import __version__; print(__version__)')"
+DOC="$(cd "$(dirname "$DOC")" && pwd)/$(basename "$DOC")"
+test -f "$DOC"
+PY="${PYO3_PYTHON:-$HERE/.venv/bin/python}"
+[[ -x "$PY" ]] || PY="$HERE/venv/bin/python"
+export PYO3_PYTHON="$PY" RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}" CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}"
+cd "$HERE"
+VER="$("$PY" -c 'from core.version import __version__; print(__version__)')"
 WORK="$(mktemp -d)"
 trap 'git -C "$HERE" worktree remove --force "$WORK/prev" 2>/dev/null || true; rm -rf "$WORK"' EXIT
-# Historic drivers are optional since the Classic cut.
-if [[ -f "$HERE/scripts/bench_session.py" && -f "$HERE/scripts/bench_startup.py" ]]; then
-  git -C "$HERE" worktree add -q "$WORK/prev" "$PREV"
-
+git worktree add --detach -q "$WORK/prev" "$PREV"
+export HOME="$WORK/home" CFFIXED_USER_HOME="$WORK/home" BUILT_BACKGROUND=1 BUILT_SETTINGS_DIR="$WORK/settings"
+mkdir -p "$HOME" "$BUILT_SETTINGS_DIR"
+cat > "$WORK/session" <<'SCRIPT'
+wait-open
+wait 120
+move 400 300
+drag 400 300 600 300 middle 20
+wheel 500 300 -40
+pinch 500 300 0.1
+state
+quit
+SCRIPT
+for revision in prev head; do
+  root="$HERE"
+  [[ "$revision" == head ]] || root="$WORK/prev"
+  if [[ ! -f "$root/rust/built_app/Cargo.toml" && "$revision" == prev ]]; then
+    echo "Previous release predates the native shell. Recording a baseline."
+    continue
+  fi
+  target="$WORK/target-$revision"
+  cargo build --locked --release --target-dir "$target" --manifest-path "$root/rust/built_app/Cargo.toml"
+  # The embedded renderer comes from this binary. Use the same revision
+  # of the separately loaded document engine when timing its open.
+  wheels="$WORK/wheels-$revision"
+  "$PY" -m maturin build --release --locked -m "$root/rust/ingetrazo_core/Cargo.toml" -o "$wheels"
+  "$PY" -m pip install --no-index --no-deps --target "$WORK/engine-$revision" "$wheels"/ingetrazo_core-*.whl
   for run in 1 2; do
-    (cd "$WORK/prev" && QT_QPA_PLATFORM=xcb "$PY" "$HERE/scripts/bench_session.py" "$DOC" "$PREV" "$WORK/prev-view-$run.json" >/dev/null 2>&1)
-    (cd "$HERE" && QT_QPA_PLATFORM=xcb "$PY" "$HERE/scripts/bench_session.py" "$DOC" "$VER" "$WORK/head-view-$run.json" >/dev/null 2>&1)
+    for mode in measure script; do
+      args=(--measure)
+      [[ "$mode" == measure ]] || args=(--script "$WORK/session")
+      PYTHONPATH="$WORK/engine-$revision${PYTHONPATH:+:$PYTHONPATH}" BUILT_PERF=1 "$PY" scripts/isolated_launch.py "$target/release/built" --root "$root" \
+        --venv "$(dirname "$(dirname "$PY")")" "${args[@]}" "$DOC" > "$WORK/$revision-$mode-$run.log"
+    done
   done
-  (cd "$WORK/prev" && "$PY" "$HERE/scripts/bench_startup.py" "$DOC" "$WORK/prev-start.json" >/dev/null 2>&1)
-  (cd "$HERE" && "$PY" "$HERE/scripts/bench_startup.py" "$DOC" "$WORK/head-start.json" >/dev/null 2>&1)
-fi
-
+done
 cd "$HERE"
 # In batches, one process each: the fast suite no longer fits in memory as
 # a single run (07-10, >15 GB) — see scripts/pytest_batches.py.
 # A failing test is recorded in the report (and named below), not a reason
 # to throw the measurements away: the run used to stop here with nothing.
-FAST="$(QT_QPA_PLATFORM=offscreen "$PY" scripts/pytest_batches.py -m 'not slow' tests 2>"$WORK/fast.err" | tail -1 || true)"
-SLOW="$(QT_QPA_PLATFORM=offscreen "$PY" scripts/pytest_batches.py -m slow tests 2>"$WORK/slow.err" | tail -1 || true)"
+tests_status=0
+FAST="$(QT_QPA_PLATFORM=offscreen "$PY" scripts/pytest_batches.py -m 'not slow' tests 2>"$WORK/fast.err" | tail -1)" || tests_status=1
+SLOW="$(QT_QPA_PLATFORM=offscreen "$PY" scripts/pytest_batches.py -m slow tests 2>"$WORK/slow.err" | tail -1)" || tests_status=1
 grep -hE "^(FAILED|ERROR)|CRASHED" "$WORK/fast.err" "$WORK/slow.err" || true
 
-"$PY" - "$WORK" "$VER" "$PREV" "$DOC" "$FAST" "$SLOW" <<'PYEOF'
+"$PY" - "$WORK" "$VER" "$PREV" "$DOC" "$FAST" "$SLOW" "$tests_status" <<'PYEOF'
 import json, sys, datetime, os
-work, ver, prev, doc, fast, slow = sys.argv[1:]
-def load(p): return json.load(open(os.path.join(work, p)))
+work, ver, prev, doc, fast, slow, tests_status = sys.argv[1:]
+from pathlib import Path
+
+def records(revision, mode, label):
+    values = []
+    for log in sorted(Path(work).glob(f"{revision}-{mode}-*.log")):
+        lines = [line for line in log.read_text().splitlines() if line.startswith(label)]
+        if not lines:
+            raise RuntimeError(f"{log} missing {label}")
+        values.append(json.loads(lines[-1][len(label):]))
+    return values
+
 out = {"version": ver, "compared_with": prev, "date": datetime.date.today().isoformat(),
-       "document": os.path.basename(doc),
-       "tests": {"fast": fast, "slow": slow}}
-if os.path.exists(os.path.join(work, "head-start.json")):
-    out["viewport"] = {"head": [load("head-view-1.json"), load("head-view-2.json")],
-                       "prev": [load("prev-view-1.json"), load("prev-view-2.json")]}
-    out["startup_memory"] = {"head": load("head-start.json"), "prev": load("prev-start.json")}
-path = f"benchmarks/results/{ver}.json"
-json.dump(out, open(path, "w"), indent=1)
-print(f"→ {path}\n  tests: {fast} | slow: {slow}")
-if "viewport" not in out:
-    sys.exit(0)
-for sec in ("root", "container"):
-    for k, v in out["viewport"]["head"][0].get(sec, {}).items():
-        if isinstance(v, dict):
-            a = min(r[sec][k]["median_ms"] for r in out["viewport"]["prev"])
-            b = min(r[sec][k]["median_ms"] for r in out["viewport"]["head"])
-            flag = "  ⚠" if b > a * 1.25 else ""
-            print(f"  {sec:9s} {k:24s} {prev}={a:9.2f} ms  {ver}={b:9.2f} ms  {100*(b-a)/a:+6.1f}%{flag}")
-h, p = out["startup_memory"]["head"], out["startup_memory"]["prev"]
-print(f"  startup  {p['startup_s']} s → {h['startup_s']} s | open {min(p['open_s'])} s → {min(h['open_s'])} s")
-print(f"  memory   {max(p['rss_after_open_mb'])} MB → {max(h['rss_after_open_mb'])} MB"
-      f" (growth over the last reopenings {p.get('rss_growth_last3_mb')} → {h['rss_growth_last3_mb']} MB each)")
-print(f"  leaked objects over {len(h['live_after_open'])} reopenings: "
-      f"{p.get('leaked_objects', 'n/a')} → {h['leaked_objects'] or 'none'}"
-      + ("  ⚠ LEAK" if h["leaked_objects"] else ""))
+       "document": os.path.basename(doc), "tests": {"fast": fast, "slow": slow}}
+for revision in ("head", "prev"):
+    out[revision] = {"startup": records(revision, "measure", "[built] measure "),
+                     "session": records(revision, "script", "[built] perf ")}
+path = Path("benchmarks/results") / f"{ver}.json"
+path.parent.mkdir(parents=True, exist_ok=True)
+path.write_text(json.dumps(out, indent=2) + "\n")
+print(path)
+failed = bool(int(tests_status))
+for revision in ("head", "prev"):
+    for sample in out[revision]["startup"]:
+        if (sample["first_frame_ms"] < 0 or sample["state"].get("errors")
+                or Path(sample["state"].get("path") or "") != Path(doc)):
+            failed = True
+for key in ("frame_ms", "move_ms"):
+    def best(revision):
+        return min(sample[key]["median"] for sample in out[revision]["session"])
+    head = best("head")
+    if out["prev"]["session"]:
+        previous = best("prev")
+        print(f"{key}: {previous:.3f} -> {head:.3f} ms")
+        failed |= head > previous * 1.25
+sys.exit(int(failed))
 PYEOF
