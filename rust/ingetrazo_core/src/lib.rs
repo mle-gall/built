@@ -138,6 +138,7 @@ mod selection;
 mod camera_live;
 mod section_cut;
 mod group_frame;
+mod tag_folders;
 mod value_field;
 mod inference_state;
 mod snap_curve;
@@ -492,6 +493,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     camera_live::register(m)?;
     section_cut::register(m)?;
     group_frame::register(m)?;
+    tag_folders::register(m)?;
     m.add_function(wrap_pyfunction!(value_field::value_key, m)?)?;
     m.add_function(wrap_pyfunction!(value_field::value_enter, m)?)?;
     m.add_function(wrap_pyfunction!(value_field::py_zoom_enter, m)?)?;

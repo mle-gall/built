@@ -983,17 +983,7 @@ def unique_name(taken, base: str) -> str:
 
 def _parent_in(parents: dict, known: set, name: str) -> str | None:
     """:func:`folder_parent` against an already-read folder set."""
-    parent = parents.get(name)
-    if not parent or parent not in known:
-        return None
-    seen = {name}
-    up = parent
-    while up is not None:
-        if up in seen:
-            return None
-        seen.add(up)
-        up = parents.get(up) if parents.get(up) in known else None
-    return parent
+    return _rs.tag_folder_parent(parents or {}, list(known), name)
 
 
 def folder_parent(scene, name: str, *, known=None) -> str | None:
@@ -1004,24 +994,13 @@ def folder_parent(scene, name: str, *, known=None) -> str | None:
 
 
 def subfolders(scene, name: str, deep: bool = False) -> list[str]:
-    """The folders directly in ``name`` — or, ``deep``, at any depth.
-
-    The folder list is read once: reading it again for every folder and
-    every level made opening the ride (hundreds of linked tag folders,
-    placed one by one by core.links) take 15 s more."""
-    folders = folders_of(scene)
-    parents = getattr(scene, "folder_parents", None) or {}
-    known = set(folders)
-    below: dict = {}
-    for f in folders:
-        below.setdefault(_parent_in(parents, known, f), []).append(f)
-    def walk(folder) -> list[str]:
-        out = list(below.get(folder, ()))
-        if deep:
-            for f in list(out):
-                out += walk(f)
-        return out
-    return walk(name)
+    """The folders directly in ``name`` — or, ``deep``, at any depth
+    (``rust/ingetrazo_core/src/tag_folders.rs``). The folder list is read
+    once: reading it for every folder and level made opening the ride
+    (hundreds of linked tag folders) take 15 s more."""
+    return _rs.tag_subfolders(folders_of(scene),
+                              getattr(scene, "folder_parents", None) or {},
+                              name, bool(deep))
 
 
 def layers_in_folder(scene, name: str) -> list[str]:
@@ -1035,35 +1014,16 @@ def ordered_names(scene) -> list[str]:
     order created», folders unfolded: the default layer first, then each
     folder and every layer out of one as they were made — folders before
     layers, as the tab ranks them — with what a folder holds inside it, its
-    subfolders first.
+    subfolders first (``rust/ingetrazo_core/src/tag_folders.rs``).
 
     Ordering the Browser by layer follows this list, so the rows on the
     layers of a folder stay together, in the folder's place. The model is
     not touched: this is how the tab reads it."""
     layers = list(getattr(scene, "layers", None) or ())
-    folders = folders_of(scene)
-    place = {ly.key: i for i, ly in enumerate(layers)}
-    folder_place = {f: i for i, f in enumerate(folders)}
-
-    def made(names, places) -> list[str]:
-        return sorted(names, key=places.__getitem__)
-
-    held: dict = {}
-    for ly in layers:
-        if ly.key != DEFAULT_LAYER:
-            held.setdefault(ly.folder, []).append(ly.key)
-    below: dict = {}
-    for f in folders:
-        below.setdefault(folder_parent(scene, f), []).append(f)
-
-    def block(folder, out) -> None:
-        for f in made(below.get(folder, ()), folder_place):
-            block(f, out)          # what a subfolder holds comes before it
-        out.extend(made(held.get(folder, ()), place))
-
-    out = [DEFAULT_LAYER] if DEFAULT_LAYER in place else []
-    block(None, out)
-    return out
+    return _rs.tag_ordered_keys([(ly.key, ly.folder) for ly in layers],
+                                folders_of(scene),
+                                getattr(scene, "folder_parents", None) or {},
+                                DEFAULT_LAYER)
 
 
 def add_folder(scene, base: str, parent: str | None = None) -> str:
