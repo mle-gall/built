@@ -59,6 +59,10 @@ pub fn billboard_stances(
     ranges: Vec<(usize, usize)>,
     worlds: PyReadonlyArray3<'_, f32>,
 ) -> PyResult<Vec<Option<(V3, [f64; 2])>>> {
+    // No figures: an empty scene's arrays are never viewed.
+    if ranges.is_empty() {
+        return Ok(Vec::new());
+    }
     let pos = positions.as_array();
     let worlds = worlds.as_array();
     if pos.ncols() != 3 || worlds.shape()[1..] != [4, 4] || worlds.shape()[0] != ranges.len() {
@@ -97,6 +101,9 @@ pub fn billboard_worlds<'py>(
     target: V3,
     perspective: bool,
 ) -> PyResult<Bound<'py, PyArray3<f32>>> {
+    if stances.is_empty() {
+        return Ok(PyArray3::zeros(py, [0, 4, 4], false));
+    }
     let base = base.as_array();
     if base.shape()[1..] != [4, 4] || base.shape()[0] != stances.len() || mesh.len() != stances.len() {
         return Err(PyValueError::new_err("expected one 4 x 4 base matrix and mesh flag per stance"));
@@ -136,6 +143,9 @@ pub fn billboard_worlds<'py>(
 /// `u = p · (ux, uy, uz) + u0`; None for a flat or empty outline.
 #[pyfunction]
 pub fn sprite_mapping(positions: PyReadonlyArray2<'_, f64>, corners: Vec<usize>, first_ring: usize) -> PyResult<Option<[f64; 8]>> {
+    if corners.is_empty() {
+        return Ok(None);
+    }
     let pos = positions.as_array();
     if pos.ncols() != 3 || corners.iter().any(|&c| c >= pos.nrows()) {
         return Err(PyValueError::new_err("expected (N, 3) positions and corners inside them"));
