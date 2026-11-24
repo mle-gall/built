@@ -44,7 +44,6 @@ from typing import Callable, Optional
 import ingetrazo_core as kernel
 from ingetrazo_core import Vec3 as QVector3D
 
-from core import _native
 from .geometry import Edge
 
 # Colors used by the rubber band and the 2D snap indicator. RGB floats [0, 1].
@@ -218,21 +217,6 @@ def _detect_axis_on_screen(
     return "xyz"[axis] if axis is not None else None
 
 
-def _still_along_axis(
-    axis: str, start: QVector3D, candidate: QVector3D, angle_deg: float
-) -> bool:
-    """Whether start→candidate is still within ``angle_deg`` of ``axis``.
-
-    The STICKY release test: looser than the engage cone, so a hand drifting
-    in perspective keeps the line on the axis it already took."""
-    d = candidate - start
-    if d.length() < 1e-6:
-        return True                       # too close to tell: keep holding
-    a = _AXIS_VECTORS[axis]
-    return abs(QVector3D.dotProduct(d.normalized(), a)) >= math.cos(
-        math.radians(angle_deg))
-
-
 #: How far (degrees) a draw may drift from an engaged axis before the STICKY
 #: axis lets go. Generous on purpose: once a line is being drawn along an
 #: axis, a hand drifting in perspective must not drop it (issue #1095) — but
@@ -245,83 +229,6 @@ _STICKY_AXIS_RELEASE_DEG = 20.0
 #: (``PlaneLock.OFF_PLANE_TOL``), so everything agrees on what "on the plane"
 #: means.
 _IN_PLANE_TOL = 1e-3
-
-
-def _axis_in_plane(name: Optional[str], normal: Optional[QVector3D]
-                   ) -> Optional[str]:
-    """``name`` when that axis lies IN the plane with this normal, else
-    ``None``. A missing or degenerate normal filters nothing."""
-    if name is None or normal is None:
-        return name
-    n = QVector3D(normal)
-    if n.length() < 1e-9:
-        return name
-    n = n.normalized()
-    if abs(QVector3D.dotProduct(_AXIS_VECTORS[name], n)) > _IN_PLANE_TOL:
-        return None
-    return name
-
-
-def _engaged_axis(
-    start_point: QVector3D,
-    candidate_world: QVector3D,
-    candidate_pixel: tuple[float, float],
-    world_to_pixel,
-    project_onto_line,
-    magnetic_axis_deg: Optional[float],
-    screen_axis_px: Optional[float],
-    work_plane_normal: Optional[QVector3D] = None,
-    axis_in_plane: bool = False,
-) -> Optional[str]:
-    """Which axis the drag has taken command of, or ``None``.
-
-    A tool asks for one or both detectors: ``magnetic_axis_deg`` for the work
-    plane's own two axes (world space), ``screen_axis_px`` for the axes the
-    plane CANNOT offer (issue #31/#42). The **screen answer wins where it
-    exists**, because it is the gesture the hand is actually making - and
-    ``_detect_axis_on_screen``'s whole reason to exist is that a camera-facing
-    plane leaves X and Y unreachable in the world: the Move tool dragged
-    exactly along X produced ``axis:z`` for all thirty steps of the iso test
-    (measured 2026-09-18) because the world detector can only see the plane's
-    normal. Preferring the screen cannot change an answer the world detector
-    already gave on the Line tool's grid study (zero cells of 57k where the two
-    disagreed), and where they DO disagree it says what the cursor points at.
-
-    The world detector keeps its turn when the screen is blind: an axis
-    pointing at the camera projects to a dot and is skipped there. A screen
-    runaway - an edge-on axis is one pixel of mouse per metre of line, so a
-    stray pixel is a point 16 km out (Marco, first live test) - is NOT an
-    engagement: the point may not run further from the start than
-    ``_MAX_AXIS_REACH`` times where the cursor actually is, and past that the
-    call is handed to the world detector exactly as before.
-
-    Point snaps are deliberately NOT consulted here. They sit above the axis
-    in :func:`compute_snap` and still win - going to fetch a vertex with the
-    mouse is the one thing the caller must not switch off.
-    """
-    if start_point is None or project_onto_line is None:
-        return None
-    if screen_axis_px is not None:
-        axis = _detect_axis_on_screen(
-            start_point, candidate_world, candidate_pixel,
-            world_to_pixel, screen_axis_px,
-        )
-        if axis is not None and axis_in_plane:
-            # A planar shape may not follow an axis its plane cannot hold:
-            # keep the screen detector's generous pixel capture for the
-            # plane's own two axes and let the world detector answer for
-            # the rest (#962).
-            axis = _axis_in_plane(axis, work_plane_normal)
-        if axis is not None:
-            reach = (candidate_world - start_point).length()
-            locked = project_onto_line(start_point, _AXIS_VECTORS[axis])
-            if (locked - start_point).length() <= _MAX_AXIS_REACH * reach:
-                return axis
-    if magnetic_axis_deg is not None:
-        return _detect_axis_alignment(
-            start_point, candidate_world, magnetic_axis_deg
-        )
-    return None
 
 
 def _direction_from_edge(edge, mode: str,
@@ -399,38 +306,6 @@ def _on_edge_point(edge, t: float,
             tt = QVector3D.dotProduct(proj - edge.a, ab) / QVector3D.dotProduct(ab, ab)
             return edge.a + ab * max(0.0, min(1.0, tt))
     return edge.a + ab * t
-
-
-def _edge_cursor_point(edge, cursor, world_to_pixel, threshold_px,
-                       project_onto_line=None):
-    """Screen distance, segment parameter and world point under the cursor.
-
-    If one endpoint is behind the camera, recover the visible point through
-    the cursor ray. Keep the original endpoints and midpoint: a clipping
-    boundary is neither an endpoint target nor the middle of the model edge.
-    """
-    pa, pb = world_to_pixel(edge.a), world_to_pixel(edge.b)
-    if pa is not None and pb is not None:
-        distance, t = _closest_on_segment_2d(cursor, pa, pb)
-        if distance > threshold_px:
-            return None
-        return distance, t, _on_edge_point(edge, t, project_onto_line)
-    if project_onto_line is None or (pa is None and pb is None):
-        return None
-    ab = edge.b - edge.a
-    length_sq = ab.lengthSquared()
-    if length_sq < 1e-18:
-        return None
-    projected = project_onto_line(edge.a, ab)
-    if projected is None:
-        return None
-    t = max(0.0, min(1.0, QVector3D.dotProduct(projected - edge.a, ab) / length_sq))
-    point = edge.a + ab * t
-    pixel = world_to_pixel(point)
-    if pixel is None:
-        return None
-    distance = math.hypot(pixel[0] - cursor[0], pixel[1] - cursor[1])
-    return (distance, t, point) if distance <= threshold_px else None
 
 
 def _line_segment_intersection(
@@ -704,37 +579,6 @@ def _first_point_from_point(
     return SnapResult(foot, "from_point", COLOR_ENDPOINT,
                       guide=(QVector3D(ref), foot),
                       guide_color=AXIS_COLORS[axis], axis=axis)
-
-
-def _edge_from_point_crossing(
-    edge, ref, cx, cy, world_to_pixel, threshold_px, is_occluded=None,
-) -> Optional[SnapResult]:
-    """Where an axis line through ``ref`` (the acquired point) crosses
-    ``edge``, when that crossing is within the snap radius of the cursor —
-    a green 'from point' on the edge with the axis-coloured guide back to
-    ``ref``. ``None`` when no axis line meets the edge near the cursor."""
-    best = None
-    for axis, a in _AXIS_VECTORS.items():
-        hit = _line_segment_intersection(ref, a, edge.a, edge.b)
-        if hit is None or (hit - ref).length() < 1e-4:
-            continue
-        hp = world_to_pixel(hit)
-        if hp is None:
-            continue
-        d = math.hypot(hp[0] - cx, hp[1] - cy)
-        if d > threshold_px:
-            continue
-        if is_occluded is not None and is_occluded(hit):
-            continue
-        if best is None or d < best[0]:
-            best = (d, hit, axis)
-    if best is None:
-        return None
-    _, hit, axis = best
-    return SnapResult(hit, "from_point", COLOR_ENDPOINT,
-                      guide=(QVector3D(ref), hit),
-                      guide_color=AXIS_COLORS[axis],
-                      context=getattr(edge, "context", None))
 
 
 def _in_plane_with_point_snap(
@@ -1114,50 +958,6 @@ def _from_point_result(foot, ref, kind, color):
         guide_color = AXIS_COLORS[gaxis] if along > 0.999 else COLOR_EXTENSION
     return SnapResult(foot, kind, color, guide=(ref, foot),
                       guide_color=guide_color)
-
-
-def _through_point_snap(
-    start_point, through_point, draw_dir, project_onto_line, inference_deg,
-) -> Optional[SnapResult]:
-    """'Through point' inference ("A través del punto"): when the draw heads
-    along the line from the start *through* an encouraged point, lock onto that
-    line so the segment passes exactly through it. A magenta directional lock,
-    like parallel/perpendicular but toward an arbitrary point."""
-    if (
-        start_point is None or through_point is None
-        or project_onto_line is None or draw_dir.length() < 1e-6
-    ):
-        return None
-    dirv = through_point - start_point
-    if dirv.length() < 1e-6:
-        return None
-    dir_u = dirv.normalized()
-    if abs(QVector3D.dotProduct(draw_dir.normalized(), dir_u)) < \
-            math.cos(math.radians(inference_deg)):
-        return None
-    locked = project_onto_line(start_point, dir_u)
-    return SnapResult(locked, "through_point", COLOR_REFERENCE,
-                      guide=(through_point, locked))
-
-
-def _perpendicular_face_snap(
-    start_point, face_normal, draw_dir, project_onto_line, inference_deg,
-) -> Optional[SnapResult]:
-    """'Perpendicular to face' inference ("Perpendicular a la cara"): when the
-    draw runs along an encouraged face's normal, lock to it so the line leaves
-    the face square-on. Magenta directional lock."""
-    if (
-        start_point is None or face_normal is None
-        or project_onto_line is None or draw_dir.length() < 1e-6
-        or face_normal.length() < 1e-6
-    ):
-        return None
-    n_u = face_normal.normalized()
-    if abs(QVector3D.dotProduct(draw_dir.normalized(), n_u)) < \
-            math.cos(math.radians(inference_deg)):
-        return None
-    locked = project_onto_line(start_point, n_u)
-    return SnapResult(locked, "perp_face", COLOR_REFERENCE)
 
 
 def _pairs_that_may_meet(edges):
@@ -1863,13 +1663,5 @@ def compute_snap(
     options = locals()
     from core.snap_query import make_query
     query = make_query(scene.edges, world_to_pixel, candidate_pixel)
-    if query is not None:
-        from core.snap_frame import SnapFrame
-        frame = SnapFrame(options, query)
-        return _native.native.resolve_snap(query, frame)
-    return _compute_snap_python(**options)
-
-
-def _compute_snap_python(**options):
-    from core._snap_python import compute_snap
-    return compute_snap(**options)
+    from core.snap_frame import SnapFrame
+    return kernel.resolve_snap(query, SnapFrame(options, query))
