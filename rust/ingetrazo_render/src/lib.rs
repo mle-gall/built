@@ -67,6 +67,7 @@ mod sun;
 mod shadow_fit;
 mod textures;
 pub mod tool_cursors;
+pub mod icon_art;
 mod annotation_canvas;
 mod tool_overlay;
 mod image_assets;
@@ -3255,6 +3256,10 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     scene_navigation::register(m)?;
     window_services::register(m)?;
     m.add_function(wrap_pyfunction!(tool_cursors::rail_icon,m)?)?;
+    m.add_function(wrap_pyfunction!(icon_art::icon_art, m)?)?;
+    m.add_function(wrap_pyfunction!(icon_art::icon_keys, m)?)?;
+    m.add_function(wrap_pyfunction!(icon_art::letter_art, m)?)?;
+    m.add_function(wrap_pyfunction!(icon_art::row_icon_art, m)?)?;
     m.add_function(wrap_pyfunction!(tool_cursors::tool_cursor_name, m)?)?;
     m.add_function(wrap_pyfunction!(tool_cursors::tool_cursor_art, m)?)?;
     m.add_function(wrap_pyfunction!(image_assets::texture_has_alpha,m)?)?;
