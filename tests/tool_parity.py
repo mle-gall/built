@@ -790,12 +790,13 @@ class MoveView(RectView):
 
     def __init__(self):
         super().__init__()
-        from ingetrazo_core import Matrix4
+        from ingetrazo_core import Matrix4, Vec3
         from core.group import Group
         from core.mesh import Mesh
-        self.scene.mesh.add_face([(0., 0., 0.), (1., 0., 0.), (1., 1., 0.), (0., 1., 0.)])
+        square = [Vec3(0, 0, 0), Vec3(1, 0, 0), Vec3(1, 1, 0), Vec3(0, 1, 0)]
+        self.scene.mesh.add_face(square)
         box = Mesh()
-        box.add_face([(0., 0., 0.), (1., 0., 0.), (1., 1., 0.), (0., 1., 0.)])
+        box.add_face(square)
         self.group = Group(box)
         self.group.uid = "box"
         self.group.xform = Matrix4()
@@ -918,8 +919,8 @@ def run_scale(steps):
 
     view = LineView()
     view._world_to_pixel = lambda p: (100 * p.x(), 100 * p.y())
-    face = view.scene.mesh.add_face([(0., 0., 0.), (4., 0., 0.),
-                                     (4., 3., 0.), (0., 3., 0.)])
+    face = view.scene.mesh.add_face([Vec3(0, 0, 0), Vec3(4, 0, 0),
+                                     Vec3(4, 3, 0), Vec3(0, 3, 0)])
     view.scene.select([face])
     tool = ScaleTool()
     tool.on_activate(view)
