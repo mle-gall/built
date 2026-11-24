@@ -384,9 +384,6 @@ def read_rgba(info: GeoTiffInfo, max_px: int = 8192,
     factor = 1
     while max(info.width, info.height) / factor > max_px:
         factor *= 2
-    if info.tiled and factor > 1:
-        while info.tile_w % factor or info.tile_h % factor:
-            factor *= 2               # a tile reduces cleanly or not at all
     out_w = -(-info.width // factor)
     out_h = -(-info.height // factor)
     out = np.zeros((out_h, out_w, 4), dtype=np.uint8)

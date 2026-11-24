@@ -98,6 +98,11 @@ def test_big_mosaics_reduce_while_streaming(tmp_path):
     write_geotiff(p2, rgba, compression=1)   # 16-row strips, factor 4
     out2, _ = read_rgba(read_info(p2), max_px=40)
     assert np.array_equal(out2, out)
+    # At a small display size one output pixel spans several 32-pixel tiles.
+    coarse, factor = read_rgba(info, max_px=2)
+    from_strips, strips_factor = read_rgba(read_info(p2), max_px=2)
+    assert factor == strips_factor == 64
+    assert np.array_equal(coarse, from_strips)
 
 
 def test_cancel_and_unsupported_are_reported(tmp_path):
