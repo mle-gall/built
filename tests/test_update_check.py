@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 import time
-from tests.shell_isolation import native_question_host
+from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
 
 from core import update_check as uc
 from ingetrazo_render import chrome_sheet

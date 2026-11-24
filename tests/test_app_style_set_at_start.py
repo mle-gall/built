@@ -3,6 +3,7 @@
 """The native renderer installs the bundled chrome on its first attachment."""
 from unittest.mock import Mock
 
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from views import wgpu_ui
 
 

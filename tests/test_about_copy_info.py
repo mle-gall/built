@@ -5,6 +5,7 @@ import platform
 
 import pytest
 
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.test_report_sheets import pasteboard  # noqa: F401
 
 from core.i18n import current_language, set_language
