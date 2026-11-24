@@ -134,6 +134,7 @@ def test_document_keeps_the_choice_and_old_documents_show_the_unit(tmp_path):
     assert again.dimension_style["show_unit"] is True
 
 
+@pytest.mark.classic_pending
 def test_dimension_style_panel_switches_it():
     from core.scene import Scene
     from views.tray import DimensionStylePanel
@@ -147,5 +148,3 @@ def test_dimension_style_panel_switches_it():
     assert scene.version > v0                       # the viewport redraws
     panel._show_unit.setChecked(True)
     assert scene.dimension_style["show_unit"] is True
-
-

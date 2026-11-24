@@ -20,7 +20,6 @@ elif not isinstance(_inst, QApplication):
                 allow_module_level=True)
 
 from core.scene import Scene  # noqa: E402
-from views.tray import BaseMapPanel  # noqa: E402
 
 URL = "https://tiles.example.com/drone/{z}/{x}/{y}.png"
 
@@ -43,7 +42,9 @@ def _isolated_settings():
     QCoreApplication.setApplicationName(prev_app)
 
 
+@pytest.mark.classic_pending
 def test_named_source_appears_forever_in_the_menu():
+    from views.tray import BaseMapPanel
     panel = BaseMapPanel(_Win())
     assert panel.add_custom_source("Dron Yanque", URL)
     # selected right away, with its own cache-safe id
@@ -57,7 +58,9 @@ def test_named_source_appears_forever_in_the_menu():
     assert fresh._current_source().url_template == URL
 
 
+@pytest.mark.classic_pending
 def test_several_sources_coexist_and_upsert_by_name():
+    from views.tray import BaseMapPanel
     panel = BaseMapPanel(_Win())
     assert panel.add_custom_source("Dron Yanque", URL)
     assert panel.add_custom_source("IGN Perú", "https://ign.example/{z}/{x}/{y}")
@@ -71,13 +74,17 @@ def test_several_sources_coexist_and_upsert_by_name():
     assert len(fresh._custom_entries) == 2               # no duplicates
 
 
+@pytest.mark.classic_pending
 def test_url_without_placeholders_is_rejected():
+    from views.tray import BaseMapPanel
     panel = BaseMapPanel(_Win())
     assert not panel.add_custom_source("Mala", "https://example.com/tile.png")
     assert panel._custom_entries == {}
 
 
+@pytest.mark.classic_pending
 def test_remove_forgets_the_source():
+    from views.tray import BaseMapPanel
     panel = BaseMapPanel(_Win())
     panel.add_custom_source("Dron Yanque", URL)
     panel._remove_current_custom()
@@ -86,8 +93,10 @@ def test_remove_forgets_the_source():
     assert fresh._source.findText("Dron Yanque") < 0     # gone for good
 
 
+@pytest.mark.classic_pending
 def test_legacy_single_url_pref_migrates_to_a_named_source():
     QSettings().setValue("basemap/custom_url", URL)      # pre-rename pref
+    from views.tray import BaseMapPanel
     panel = BaseMapPanel(_Win())
     assert panel._source.findText("XYZ personalizado") >= 0
     sid = panel._source.itemData(panel._source.findText("XYZ personalizado"))

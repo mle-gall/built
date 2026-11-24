@@ -15,15 +15,16 @@ def registry(root):
 
 
 def table(root=None):
+    from ingetrazo_core import tool_module_classes, tool_preview_hooks
     from views.wgpu_tools import TOOL_DISPATCH
     root = Path(root) if root else Path(__file__).resolve().parents[1]
-    classes = {}
+    classes = {name: (module, [base], "") for module, name, base in tool_module_classes()}
     for file in (root / 'tools').glob('*.py'):
         source = file.read_text()
         lines = source.splitlines()
         for node in ast.parse(source).body:
             if isinstance(node, ast.ClassDef):
-                classes[node.name] = ([ast.unparse(base) for base in node.bases],
+                classes[node.name] = (f"tools.{file.stem}", [ast.unparse(base) for base in node.bases],
                                       "\n".join(lines[node.lineno - 1:node.end_lineno]))
     rows = ['| Registry key | Class | Metal status | GL hooks / preview dependencies |',
             '| --- | --- | --- | --- |']
@@ -44,7 +45,8 @@ def table(root=None):
                 continue
             if name == "Tool":
                 continue
-            bases, source = classes[name]
+            module, bases, source = classes[name]
+            hooks.update(tool_preview_hooks(root, module, name))
             pending.extend(bases)
             hooks.update(re.findall(r'(?:viewport|vp)\.((?:pick_\w+|\w*preview\w*|_world_to_pixel|_pixel_to_ray))', source))
             if 'rubber_band_lines' in source:

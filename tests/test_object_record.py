@@ -123,6 +123,7 @@ def test_csv_atomic():
         bim_registry.import_codes_csv(reg, 'uniclass2015', 'code,title\nX,A\nX,B\n')
 
 
+@pytest.mark.classic_pending
 def test_panel_tag_untag_multiselect():
     from views.tray import BimPanel
     app = QApplication.instance() or QApplication([])

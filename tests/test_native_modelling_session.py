@@ -21,15 +21,16 @@ def test_modelling_session_uses_native_handlers(tmp_path):
     plugins = profile / "data/ingetrazo/plugins"
     plugins.mkdir(parents=True)
     probe = plugins / "session_probe.py"
-    probe.write_text("""import json, sys
+    probe.write_text("""import importlib.util, json, sys
 from pathlib import Path
 def setup(app):
     def snapshot():
+        retired = ("views.main_window", "views.scene_tabs", "views.side_tree",
+                   "views.tray", "views.layers_panel", "views.outliner",
+                   "views.color_dialog", "views.panel_refresh", "views.tree_icons")
         Path(__file__).with_suffix(".json").write_text(json.dumps({
-            "classic": sorted(set(sys.modules) & {
-                "views.main_window", "views.scene_tabs", "views.side_tree",
-                "views.tray", "views.layers_panel", "views.outliner",
-            }),
+            "classic": [name for name in retired if name in sys.modules or
+                        importlib.util.find_spec(name) is not None],
             "skp_exporter": "formats.skp_out" in sys.modules,
             "qt_pasteboard": "formats.clip" in sys.modules,
             "scenes": [v.name for v in app.scene.saved_views],
