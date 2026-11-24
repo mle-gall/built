@@ -6,13 +6,18 @@ use pyo3::{exceptions::PyValueError, prelude::*};
 use crate::math::{xyz, Vec3};
 use crate::tools::plane::{plane_axes, Axes};
 
-fn newell(points: &[DVec3]) -> DVec3 {
+fn raw_newell(points: &[DVec3]) -> DVec3 {
     let mut normal = DVec3::ZERO;
     for (a, b) in points.iter().zip(points.iter().cycle().skip(1)) {
         normal.x += (a.y - b.y) * (a.z + b.z);
         normal.y += (a.z - b.z) * (a.x + b.x);
         normal.z += (a.x - b.x) * (a.y + b.y);
     }
+    normal
+}
+
+fn newell(points: &[DVec3]) -> DVec3 {
+    let normal = raw_newell(points);
     if normal.length() < 1e-9 {
         DVec3::Z
     } else {
@@ -123,4 +128,40 @@ pub fn polygon_is_planar(vertices: Vec<Corner<'_>>, tolerance: f64) -> PyResult<
         &pts.into_iter().map(|p| p.to_array()).collect::<Vec<_>>(),
         tolerance,
     ))
+}
+
+fn positions(vertices: &[Corner<'_>]) -> PyResult<Vec<DVec3>> {
+    vertices.iter().map(xyz).collect()
+}
+
+#[pyfunction]
+pub fn polygon_newell(vertices: Vec<Corner<'_>>) -> PyResult<Vec3> {
+    Ok(raw_newell(&positions(&vertices)?).into())
+}
+
+#[pyfunction]
+pub fn polygon_centroid(py: Python<'_>, vertices: Vec<Corner<'_>>) -> PyResult<Vec3> {
+    let points = positions(&vertices)?;
+    if points.is_empty() {
+        return Ok(DVec3::ZERO.into());
+    }
+    let compensated = py.version_info().minor >= 12;
+    let mean = |i: usize| {
+        crate::facegeom::py_sum(points.iter().map(|p| p[i]), compensated) / points.len() as f64
+    };
+    Ok(DVec3::new(mean(0), mean(1), mean(2)).into())
+}
+
+#[pyfunction]
+pub fn polygon_net_area(outer: Vec<Corner<'_>>, holes: Vec<Vec<Corner<'_>>>) -> PyResult<f64> {
+    if outer.len() < 3 {
+        return Ok(0.);
+    }
+    let area =
+        |ring: &[Corner<'_>]| -> PyResult<f64> { Ok(0.5 * raw_newell(&positions(ring)?).length()) };
+    let mut net = area(&outer)?;
+    for hole in holes.iter().filter(|h| h.len() >= 3) {
+        net -= area(hole)?;
+    }
+    Ok(if net < 0. { 0. } else { net })
 }
