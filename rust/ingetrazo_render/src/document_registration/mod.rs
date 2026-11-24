@@ -4,6 +4,8 @@
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyString, PyTuple};
+mod defaults;
+mod helpers;
 mod host;
 
 type Obj<'py> = Bound<'py, PyAny>;
@@ -233,7 +235,11 @@ impl<'py> Registrar<'py> {
                 Mode::Static => self.builtins.call_method1("staticmethod", (binding,))?,
                 Mode::Class => self.builtins.call_method1("classmethod", (binding,))?,
             };
-            owner.setattr(name, binding)?;
+            if matches!(mode, Mode::Function) {
+                owner.cast::<PyDict>()?.set_item(name, binding)?;
+            } else {
+                owner.setattr(name, binding)?;
+            }
         }
         Ok(())
     }
@@ -241,10 +247,20 @@ impl<'py> Registrar<'py> {
 
 #[pyfunction]
 fn register_document_host(cls: &Obj) -> PyResult<()> {
-    host::install(&Registrar::new(cls.py())?, cls)
+    let r = Registrar::new(cls.py())?;
+    defaults::controller(&r, cls)?;
+    host::install(&r, cls)
+}
+
+#[pyfunction]
+fn register_document_module(ns: &Bound<PyDict>) -> PyResult<()> {
+    let r = Registrar::new(ns.py())?;
+    defaults::module(&r, ns)?;
+    helpers::install(&r, ns)
 }
 
 pub(super) fn register(m: &Bound<PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(register_document_module, m)?)?;
     m.add_function(wrap_pyfunction!(register_document_host, m)?)?;
     Ok(())
 }

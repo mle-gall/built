@@ -74,3 +74,20 @@ def test_plugin_clipboard_option_stays_keyword_only(monkeypatch):
     assert Controller.copy_selection(view, publish=False) == (view, False)
     with pytest.raises(TypeError):
         Controller.copy_selection(view, False)
+
+
+def test_host_registers_defaults_and_independent_inference_fields():
+    from views import document_interaction as module
+
+    assert type(Controller.CENTER_HINT_PX) is float
+    assert Controller._SHADOW_MAP_SIZE == Controller._shadow_size == 2048
+    assert Controller._SNAP_LABELS["intersection_edge"] == "Intersect with Edge"
+    assert isinstance(Controller._ENCOURAGING_KINDS, frozenset)
+    assert module._SHARED_BAKES[0] == "_group_chunks"
+    assert module._SnapEdge is ingetrazo_render.SnapEdge
+    assert vars(Controller)["_bind_bake_store"] is module._bind_bake_store
+    assert module._AXIS_DIRS["z"] == (0., 0., 1.)
+    view = object.__new__(Controller)
+    view.inference = SimpleNamespace()
+    view.last_snap = object()
+    assert view.inference.last_snap is view.last_snap

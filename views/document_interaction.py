@@ -20,31 +20,6 @@ from typing import Optional
 from core.units import fmt_len as _fmt_len
 from core.units import typed_value_text as _typed_value_text
 
-# Perf telemetry (INGETRAZO_PERF=1): every operation slower than 50 ms and a
-# once-per-second frame summary land in ~/ingetrazo-perf.log — the tool for
-# "it feels slow" reports from real sessions, where synthetic benchmarks lie.
-_PERF = bool(os.environ.get("INGETRAZO_PERF"))
-# Kill-switch for the instanced component pass (P2): set to 1 to draw
-# every instance through the consolidated VBOs like before.
-_NO_INSTANCING = os.environ.get("INGETRAZO_NO_INSTANCING", "") == "1"
-# Kill-switch for the default-back tint pass (faces have sides, 2026-09-11):
-# set to 1 to draw every paint on both sides like before — a diagnostic,
-# and the escape hatch should a driver misbehave with front culling.
-_NO_BACK_TINT = os.environ.get("INGETRAZO_NO_BACK_TINT", "") == "1"
-# Kill-switch for the snap engine's shortcuts (edge grid, occlusion in
-# batches, centre lookup through the registry): set to 1 to run every hover
-# the way it ran before — one pass over all group edges, one ray per
-# candidate, the rounded-position table. A diagnostic, and the escape hatch
-# should a snap ever land somewhere it did not before.
-_NO_SNAP_FAST = os.environ.get("INGETRAZO_NO_SNAP_FAST", "") == "1"
-# Kill-switch for the pick index's span grid: set to 1 to keep one span per
-# chunk however big, as before (a ray that meets the box of a 107 k-triangle
-# group then tests all of its triangles).
-_NO_SPAN_GRID = os.environ.get("INGETRAZO_NO_SPAN_GRID", "") == "1"
-#: A chunk with more triangles than this is split into grid cells for the
-#: ray prefilter (_split_chunk_spans); ~4 096 triangles a cell.
-_SPAN_GRID_MIN = 8192
-_SPAN_CELL_TRIS = 4096
 _perf_file = None
 
 
@@ -97,6 +72,8 @@ from core.triangulate import plane_axes
 from tools.base import Tool, ToolContext
 from core.inference import InferenceEngine
 
+ingetrazo_render.register_document_module(globals())
+
 
 class _HoverEvent:
     """Minimal stand-in for a QMouseEvent inside the coalesced hover path —
@@ -115,57 +92,7 @@ class _HoverEvent:
         return self._mods
 
 
-_active_cut = ingetrazo_core.active_cut
-
-
-_SnapEdge = ingetrazo_render.SnapEdge
-
-
-_copy_snap_edge = ingetrazo_render.copy_snap_edge
-
-
-def _snap_context_of(vp, place):
-    return ingetrazo_core.snap_context_of(vp, place)
-
-
-_group_pseudo_edge = ingetrazo_core.group_pseudo_edge
-
-
-#: The depth slack of a line the Select tool may take: a fraction of the
-#: eye's distance to it, and never less than a millimetre. A line drawn on
-#: a face, or a few millimetres under or over it, z-fights that face: the
-#: renderers draw it at one angle and lose it at the next (Metal, 2 mm
-#: under a face 9 m away: drawn from 45°, gone from above), and the strict
-#: occlusion test made it unclickable — the object behind took the click.
-LINEWORK_SLACK = 5e-4
-LINEWORK_SLACK_MIN = 1e-3
-
-
-def linework_slack_point(camera, world):
-    return ingetrazo_render.linework_slack_point(camera, world)
-
-
-def _boxes_around(keys, x0, y0, x1, y1, px, py, owner_of, scene):
-    return ingetrazo_core.boxes_around(keys, x0, y0, x1, y1, px, py, owner_of, scene)
-
-
-
-
 # ---- Geometry helpers ------------------------------------------------------
-
-#: Beyond this many loose edges the snap engine gets a near-cursor subset
-#: instead of the whole mesh: compute_snap walks its edge list in Python
-#: ~a dozen times per hover, and an exploded medium import (9k faces =
-#: ~20k edges) froze every mouse move (user report, piscina.igz).
-_LOOSE_SNAP_CAP = 3000
-
-
-def _inst_proto_of(mod, base):
-    return ingetrazo_render.inst_proto_of(mod, base)
-
-
-_PickWarm = ingetrazo_render.PickWarm
-_pick_warm_take = ingetrazo_render.pick_warm_take
 
 
 def _entity_owner(entities, i):
@@ -173,10 +100,6 @@ def _entity_owner(entities, i):
     answers it without building its faces (see views.array_bake)."""
     at = getattr(entities, "owner_at", None)
     return at(i) if at is not None else entities[i][1]
-
-
-def _split_chunk_spans(chunk, depth=0, force=False):
-    return ingetrazo_render.split_chunk_spans(chunk, depth, force)
 
 
 #: Every chunk entry built (or loaded from disk) takes the next number.
@@ -237,36 +160,6 @@ class _LazyChunk(dict):
         return dict(self.items())
 
 
-#: The snap engine's occlusion rays go through core._native's kernel when
-#: the experimental engine is on (tests compare both).
-_OCCL_NATIVE = True
-
-
-_occlusion_native = ingetrazo_render.occlusion_native
-
-
-#: Lazy placements are filtered by core._native's spatial index before
-#: being baked for a pick (the experimental engine; tests compare both).
-_INSTANCE_FILTER = True
-#: The engine answers the corner and occlusion queries for the lazy
-#: placements without baking them (tests compare both ways).
-_LAZY_NATIVE = True
-#: A big document's pick index starts behind it as soon as it opens (see
-#: DocumentInteraction.start_pick_warmup; the switch is for measuring and for tests).
-_PICK_WARM = os.environ.get("INGETRAZO_NO_PICK_WARM", "") != "1"
-#: A pointer move over a still view reuses the model as the last frame
-#: drew it (Viewport._frame_cache_key); INGETRAZO_FRAME_CACHE=0 turns it
-#: off, and every frame draws everything as before.
-_FRAME_CACHE = os.environ.get("INGETRAZO_FRAME_CACHE", "1") != "0"
-#: Occlusion answers kept a view (DocumentInteraction._occluded_many);
-#: INGETRAZO_OCCLUSION_MEMO=0 asks every point again.
-_OCCLUSION_MEMO = os.environ.get("INGETRAZO_OCCLUSION_MEMO",
-                                 "1") != "0"
-#: The first corner in sight asked of the native engine in one call
-#: (DocumentInteraction._first_clear); INGETRAZO_FIRST_CLEAR=0 asks in batches.
-_FIRST_CLEAR = os.environ.get("INGETRAZO_FIRST_CLEAR", "1") != "0"
-#: Span lists this long are culled with NumPy (_visible_spans_np).
-_SPAN_VECTOR_MIN = 64
 #: The CPU side of a document's bakes — the render/pick chunks of its
 #: groups, the instances' derived chunks, the fingerprints and the
 #: prototypes' stand-ins — one store per Scene, shared by every viewport
@@ -279,27 +172,11 @@ import weakref
 #: reference tells a dead scene's id from a new scene born at the same
 #: address, and a finalizer drops the store when the scene goes.
 _BAKE_STORES: dict = {}
-_SHARED_BAKES = ("_group_chunks", "_inst_chunks", "_fp_memo",
-                 "_proto_wrappers")
-
-
-_bake_store_of = ingetrazo_render.bake_store_of
-
-
-def _drop_bake_store(key, ref) -> None:
-    return ingetrazo_render.drop_bake_store(key, ref)
-
-
-def _bind_bake_store(vp) -> None:
-    return ingetrazo_render.bind_bake_store(vp)
 
 
 #: Every viewport made, weakly: the decoded textures are kept only while
 #: more than one of them is on screen (:func:`_several_views_shown`).
 _LIVE_VIEWS: "weakref.WeakSet" = weakref.WeakSet()
-
-
-_several_views_shown = ingetrazo_render.several_views_shown
 
 
 #: Texture images decoded once per file, for every GL context that
@@ -308,10 +185,6 @@ _several_views_shown = ingetrazo_render.several_views_shown
 #: plaza's decoded its textures again each (1.6 s of the 3.8 s); the GL
 #: texture itself belongs to each context and is made from this.
 _DECODED_TEXTURES: dict = {}
-_DECODED_BUDGET = 256 * 1024 * 1024
-
-
-_decoded_texture = ingetrazo_render.decoded_texture
 
 
 def _array_bake():
@@ -321,189 +194,13 @@ def _array_bake():
         "views.array_bake")
 
 
-def _proto_wrapper(vp, mesh, paint=None):
-    return ingetrazo_render.proto_wrapper(vp, mesh, paint)
-
-
-_fp_winding = ingetrazo_render.fp_winding
-
-
-_flags_read = ingetrazo_render.flags_read
-
-
-#: flat look.
-_BY_LAYER_MODES = ("textures", "shaded", "xray")
-
-
-def _layer_look_sig(scene, style=None) -> tuple:
-    return ingetrazo_render.layer_look_sig(scene, style)
-
-
-#: The face modes that draw the per-vertex colour, where the style's Front
-#: color reaches the default faces through their bake. Hidden line and
-#: Monochrome paint every face flat in it with a uniform instead.
-_VCOLOR_MODES = ("textures", "shaded", "xray")
-
-
-_front_tint = ingetrazo_render.front_tint
-
-
-def _with_front_tint(paint, style):
-    return ingetrazo_render.with_front_tint(paint, style)
-
-
-def _paint_of(vp, group):
-    return ingetrazo_render.paint_of(vp, group)
-
-
-_ghost_edge_points = ingetrazo_render.ghost_edge_points
-
-
-def _cache_ver(vp):
-    return ingetrazo_render.cache_ver(vp)
-
-
-def _content_ver(vp):
-    return ingetrazo_render.content_ver(vp)
-
-
-_plan_curved_edges = ingetrazo_core.plan_curved_edges
-
-
-def _lazy_edge_may_be_curve(mesh, a, b, tol=1e-3) -> bool:
-    return ingetrazo_core.lazy_edge_may_be_curve(mesh, a, b, tol)
-
-
-def _snap_dropped_loose(vp):
-    return ingetrazo_core.snap_dropped_loose(vp)
-
-
-def _px_near(x, y, ok, px, py, thr, pts=None, seen=None):
-    return ingetrazo_core.px_near(x, y, ok, px, py, thr, pts, seen)
-
-
-_nearest_within = ingetrazo_core.document_nearest_within
-
-
-#: The cursor's edge and the snap's read off one search in an event
-#: (INGETRAZO_EDGES_SHARED=0: two searches, as before).
-_EDGES_SHARED = os.environ.get("INGETRAZO_EDGES_SHARED", "1") != "0"
-
-
-#: The front face at a pixel without gathering every face the ray meets
-#: (INGETRAZO_FRONT_LEAN=0: through _face_hits, as before).
-_FRONT_LEAN = os.environ.get("INGETRAZO_FRONT_LEAN", "1") != "0"
-
-
-#: The nearest group edges picked in the native engine
-#: (INGETRAZO_NEAREST=0: in NumPy, as before).
-_NEAREST_NATIVE = os.environ.get("INGETRAZO_NEAREST", "1") != "0"
-
-
-#: The depth test of the corners near the cursor in the native engine
-#: (INGETRAZO_NEAR_SEEN=0: in NumPy, as before).
-_NEAR_SEEN_NATIVE = os.environ.get("INGETRAZO_NEAR_SEEN", "1") != "0"
-
-
 # Existing native callers still accept the legacy rounding-mode argument.
 from core._native import qt_hypot
 _QV_HYPOT3 = qt_hypot()
 
 
-def _hypot3_f32(a, kind="libstdc++"):
-    return ingetrazo_core.hypot3_f32(a, kind)
-
-
 def _qv_hypot3():
     return _QV_HYPOT3
-
-
-_unit_rays = ingetrazo_core.document_unit_rays
-
-
-# Barycentric roundoff on a shared triangle edge can reject both faces.
-_BARY_EPS = 1e-14
-
-
-_occlusion_block = ingetrazo_core.occlusion_block
-
-
-_placed_maps = ingetrazo_render.placed_maps
-
-
-def _batch_instances(base, xfs, tri_parts, hard_parts, soft_parts,
-                     n_parts) -> None:
-    return ingetrazo_render.batch_hlr_instances(base, xfs, tri_parts, hard_parts, soft_parts, n_parts)
-
-
-_cat_kept = ingetrazo_render.cat_kept
-
-
-_offset_kept = ingetrazo_render.offset_kept
-
-
-_moller_trumbore = ingetrazo_core.ray_triangles
-
-
-#: How the rest of the model reads while a group is open for editing.
-#: ``normal`` draws it as always, ``fade`` washes it out behind the group
-#: being edited (the default), ``hide`` leaves it out of the frame.
-EDIT_REST_MODES = ("normal", "fade", "hide")
-#: Default for how far the context is mixed TOWARD grey (0 = untouched, 1 =
-#: fully washed). It is a wash, not transparency: the context keeps writing
-#: depth, so it still occludes itself and never turns the model into glass.
-#: The user-adjustable value lives on :class:`Viewport`; this constant remains
-#: the default and the fallback for the small viewport stubs used by tools and
-#: tests.
-EDIT_REST_FADE = 0.75
-
-edit_fade_color = ingetrazo_render.edit_fade_color
-
-#: X-ray: how opaque each translucent face layer is. Layers stack, so a face
-#: seen through another reads darker and an opening (no face) stays clear.
-XRAY_FACE_OPACITY = 0.6
-#: X-ray: edges hidden behind a face are washed this far toward the
-#: background (0 = like a visible edge, 1 = gone), so the form still reads
-#: and you can tell which edges have a face in front of them.
-XRAY_HIDDEN_EDGE_FADE = 0.6
-
-#: Dot colour of a SELECTED face (the usual selection orange) and the one it
-#: switches to on a surface that is itself orange/red, where orange dots
-#: would vanish into the paint.
-SELECTION_DOT_COLOR = (0.95, 0.45, 0.16)
-SELECTION_DOT_ALT_COLOR = (0.10, 0.25, 0.85)
-
-
-selection_dot_color = ingetrazo_render.selection_dot_color
-
-
-_box_edges = ingetrazo_render.box_edges
-
-
-_load_edit_rest_mode = ingetrazo_render.load_edit_rest_mode
-
-
-_load_edit_rest_fade = ingetrazo_render.load_edit_rest_fade
-
-
-_load_hide_similar = ingetrazo_render.load_hide_similar
-
-
-#: Soft sun shadows (#1281), Preferences ▸ General: off (0) or a level, and
-#: how fast the penumbra widens with the distance from what casts it, in
-#: world width per world distance. The real sun is about 0.009; the levels
-#: are broader, as a picture of soft daylight asks.
-SOFT_SHADOW_SPREAD = {1: 0.012, 2: 0.03, 3: 0.06}
-
-
-_load_soft_shadows = ingetrazo_render.load_soft_shadows
-
-
-_AXIS_DIRS = {"x": (1.0, 0.0, 0.0), "y": (0.0, 1.0, 0.0), "z": (0.0, 0.0, 1.0)}
-
-
-def _axes_vertices(spacing: float, pos_len: float = 1.0e5):
-    return ingetrazo_render.axes_vertices(spacing, pos_len)
 
 
 def _box_edge_vertices(corners):
@@ -511,10 +208,6 @@ def _box_edge_vertices(corners):
     coords = array("f")
     coords.frombytes(memoryview(box_edge_vertices(corners)).cast("B"))
     return coords
-
-
-def shown_guides(scene) -> list:
-    return ingetrazo_render.shown_guides(scene)
 
 
 from ingetrazo_core import point_in_screen_hull as _point_in_screen_hull
@@ -531,20 +224,6 @@ def _guide_vertices(guides, spacing: float, selection=(), centre=None,
     data = array("f")
     data.frombytes(memoryview(coords).cast("B"))
     return data, spans
-
-
-def _ray_triangle(
-    origin: QVector3D,
-    direction: QVector3D,
-    v0: QVector3D,
-    v1: QVector3D,
-    v2: QVector3D,
-) -> Optional[float]:
-    return ingetrazo_render.scalar_ray_triangle(origin, direction, v0, v1, v2)
-
-
-def _point_to_segment_distance_2d(p, a, b) -> float:
-    return ingetrazo_render.point_segment_distance(p, a, b)
 
 
 # ---- Viewport --------------------------------------------------------------
@@ -622,19 +301,6 @@ class _AltWatch(object if NATIVE else QObject):
         return ingetrazo_render.alt_filter(self, ev)
 
 
-def _face_geometry(f, memo, triangulate):
-    return ingetrazo_render.face_geometry(f, memo, triangulate)
-
-
-_finite_point = ingetrazo_render.finite_point
-
-
-_curved_faces = ingetrazo_render.curved_faces
-
-
-_smooth_vcol = ingetrazo_render.smooth_vcol
-
-
 from views.document_tools import DocumentTools
 from views.view_navigation import ViewNavigation
 
@@ -669,53 +335,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     # face shading. World-fixed so shading is stable while orbiting.
     _LIGHT = QVector3D(0.35, 0.25, 1.0).normalized()
 
-    # Tooltip text shown next to the snap marker. English source
-    # strings; translated at draw time via ``tr`` (see i18n/es.json).
-    #: How close (px) the cursor must come to an acquired circle centre
-    #: for its green dot to show — beyond that the reference stays silent.
-    #: The real radius is a share of the circle's size on screen, capped
-    #: here (see ``_center_hint_px``).
-    CENTER_HINT_PX = 40.0
-    #: A circle smaller than this on screen offers no centre at all.
-    CENTER_MIN_RADIUS_PX = 12.0
-
-    #: How long the cursor must rest on a point to encourage it (ms).
-    ENCOURAGE_MS = 250
-    #: Snap kinds whose point can be encouraged (a definite point, not a
-    #: place along an edge or on a face).
-    _ENCOURAGING_KINDS = frozenset((
-        "endpoint", "midpoint", "arc_midpoint", "center", "component_origin",
-        "origin", "intersection", "intersection_edge", "intersection_face",
-        "close", "face_center"))
-
-    _SNAP_LABELS = {
-        "endpoint": "Endpoint",
-        "midpoint": "Midpoint",
-        "arc_midpoint": "Arc midpoint",
-        "quadrant": "Quadrant",
-        "component_origin": "Component origin",
-        "on_line": "On line",
-        "on_circle": "On circle",
-        "on_axis": "On axis",
-        "tangent": "Tangent",
-        "on_edge": "On edge",
-        "on_face": "On face",
-        "face_center": "Face center",
-        "origin": "Origin",
-        "extension": "Extension",
-        "intersection": "Intersection",
-        "intersection_edge": "Intersect with Edge",
-        "intersection_face": "Intersect with Face",
-        "from_point": "From point",
-        # The axis PLANE through an encouraged point cut by the face under
-        # the cursor (rule 8e): "Level with point" when it is the horizontal
-        # one, see ``_draw_snap_indicator``.
-        "aligned": "In line with point",
-        "through_point": "Through point",
-        "perp_face": "Perpendicular to face",
-        "center": "Center",
-        "guide_point": "Guide point",
-    }
 
     _bind_bake_store = _bind_bake_store
 
@@ -747,18 +366,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         from core import axes as _axes
         _axes.sync(getattr(self.scene, "drawing_frame", None))
 
-    #: This picture's background is alpha 0 (``render_image``'s ``transparent``).
-    _export_transparent = False
-
-    #: Off in a view of several (ingetrazo_render.DocumentViews) other than the one being
-    #: worked in: the model shows there, without the tool in hand's preview.
-    tool_preview = True
-
-    #: How many viewports are inside ``paintGL`` right now (a view of
-    #: several paints the others from its own). What a paint announces must
-    #: not show or hide a widget beside the view: that resizes it in the
-    #: middle of its frame, and macOS crashed on the flush after (#1316).
-    painting = 0
 
     # ---- Instanced components (P2) ------------------------------------------
     # Component instances draw from ONE static proto VBO (local coords) plus
@@ -775,8 +382,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         plain one."""
         return self._group_chunk(_proto_wrapper(self, mesh, paint))
 
-    #: How many past epochs keep their parts for ``_epoch_only_matrices``.
-    _EPOCH_HISTORY = 4
 
     def prepare_drawing(self, progress=None) -> None:
         return ingetrazo_render.prepare_drawing(self, progress)
@@ -789,16 +394,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         was 21 000 baked copies of geometry the instanced pass never uses."""
         return self._placement_frame(g)[0]
 
-    #: How far past the view the instanced batches reach, as a fraction of
-    #: its width and height, so an orbit keeps drawing the same ones
-    #: (_gather_instanced).
-    _INST_VIEW_MARGIN = 0.10
-    #: ... and while they hold at most this many times what is in view.
-    _INST_SUPERSET_MAX = 2
-
-    #: An instance whose bounding sphere spans less than this many
-    #: framebuffer pixels is not drawn (the camera's frame only).
-    _INST_MIN_PX = 1.0
 
     def image_plane_at(self, screen_x: float, screen_y: float,
                        selectable_only: bool = False):
@@ -828,21 +423,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
     # ---- Line weight for exports --------------------------------------------
     # ---- Base-map tiles (Track G) -------------------------------------------
-    #: Per-document caches keyed by ``id()`` of the document's groups,
-    #: meshes and placements — the render/pick chunks and what hangs off
-    #: them. Nothing but the document boundary makes them all stale at once.
-    _DOCUMENT_CACHES = ("_group_chunks", "_inst_chunks", "_fp_memo",
-                        "_proto_wrappers", "_proto_draw", "_hidden_edge_draws", "_faceme_cache",
-                        "_proto_pts_store", "_container_obb", "_placement_frames",
-                        "_pick_live", "_pick_foot_keep",
-                        # Also keyed by id(): a face-me's placed sprite, the
-                        # nested-placement proxies and the arc midpoints per
-                        # mesh. A group of the next document born at a dead
-                        # one's address met its entry — the scale figure
-                        # «transported» into an opened file (issue #75).
-                        "_billboard_world", "_placement_proxies",
-                        "_placement_tops", "_arc_mid_by_mesh",
-                        "_billboard_extents", "_figure_tokens")
 
     def refresh_after_edit(self) -> None:
         """Refresh an externally executed command without discarding geometry.
@@ -862,60 +442,19 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return ingetrazo_render.reset_document_caches(self, keep_bakes)
 
 
-
-
-
-
     def reset_tiles(self) -> None:
         return ingetrazo_render.reset_tiles(self)
-
-    # Max NEW GL textures created per frame. Uploading hundreds at once (a big
-    # capture) overwhelms Mesa and reads back as garbage (black/green tears at
-    # the far edge); creating a few per frame spreads it — the map fills in over
-    # a second and repaints itself until done.
-    # P4: 6 uploads (each with mipmap generation, ~5-15 ms on the iGPU)
-    # stacked into one frame was the ~100 ms hitch while zooming over the
-    # base map. 2 per frame keeps every frame under the 33 ms gate; the
-    # deferred-repaint loop below spreads the rest across frames.
-    _TEX_PER_FRAME = 2
 
 
     def prefetch_tiles(self, source, tile_list, zoom) -> None:
         return ingetrazo_render.prefetch_tiles(self, source, tile_list, zoom)
 
 
-
     # ---- Photogrammetric survey (Track G, G6) ------------------------------
 
 
-
-
-
-
-
-
-    # Sky (top) and ground (bottom) backdrop colours — subtle two-tone.
-    _SKY_RGB = (0.925, 0.935, 0.945)
-    _GROUND_RGB = (0.815, 0.820, 0.815)
-
-    #: NDC span over which each half of the backdrop completes its ramp.
-    _SKY_GRAD_SPAN = 1.4
-    _GROUND_GRAD_SPAN = 0.9
-
     # ---- Sun shadows (core/sun.py) ------------------------------------------
-    _SHADOW_MAP_SIZE = 2048
-    #: The map an exported picture draws with (``render_image``'s
-    #: ``sharp_shadows``): drawn once per picture, so its cost does not
-    #: matter the way the view's does. Capped by the driver's texture size.
-    _SHADOW_EXPORT_SIZE = 8192
-    _shadow_size = _SHADOW_MAP_SIZE
 
-    #: The .skp translucency rule: materials under 70 % opacity cast no
-    #: shadow — the sun passes through glass.
-    _SHADOW_OPACITY_MIN = 0.7
-
-    #: How long the view must stay put before the fitted map is drawn (#958).
-    SHADOW_SETTLE_MS = 200
 
     # ---- Dynamic uploads ----------------------------------------------------
     def prune_stale_selection(self):
@@ -941,9 +480,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         self._preview_matrix = QMatrix4x4(m)
         self.update()
 
-    #: A face this big (corners, holes included) is worth handing to the
-    #: native earcut ahead of ``_tris_of``.
-    NATIVE_TRIS_MIN_CORNERS = 64
 
     def _faceme_dir(self, anchor: QVector3D) -> QVector3D:
         return ingetrazo_render.faceme_dir(self.camera, anchor)
@@ -976,9 +512,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     def pick_section_plane(self, screen_x: float, screen_y: float):
         return ingetrazo_render.pick_section_plane(self, screen_x, screen_y)
 
-    #: The sheet's cut pen (mm) a layer's own cut weight is measured
-    #: against in the model: a layer at 0.50 draws the usual ~2.5 px line.
-    CUT_PEN_MM = 0.5
 
     def _clip_segment_front(
         self, a: QVector3D, b: QVector3D
@@ -1026,14 +559,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
                              int(style.get("decimals", 2)),
                              bool(style.get("show_unit", True)))
 
-    #: Screen pixels between the occlusion samples of a long annotation
-    #: line (``_draw_occluded_segment``), and the most samples it takes.
-    _OCCLUSION_STEP_PX = 12.0
-    _OCCLUSION_MAX_SAMPLES = 128
-    #: Where a line goes behind something, its sample step is cut in this
-    #: many parts this many times: 1/64 of a step, under a pixel.
-    _OCCLUSION_SPLIT = 8
-    _OCCLUSION_ROUNDS = 2
 
     def _project_samples(self, pts: list[QVector3D]):
         from ingetrazo_core import annotation_samples
@@ -1041,41 +566,12 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
     # ---- Pixel ↔ world ------------------------------------------------------
 
-    #: A ray meeting the work plane below this angle gives a point nobody
-    #: asked for. Measured: at 25 deg of camera pitch — an ordinary
-    #: architectural view — nothing on screen comes anywhere near it, so this
-    #: only fires where the plane really is unreadable.
-    GRAZING_PLANE_DEG = 6.0
 
     def _work_plane_normal(self) -> Optional[QVector3D]:
         """The normal of the plane the last pixel→world used, or ``None``."""
         plane = getattr(self, "_last_work_plane", None)
         return plane[1] if plane is not None else None
 
-    #: XY stays the ground in shallow views and where its cursor-ray hit is
-    #: reasonably close compared with the two vertical global planes.
-    GROUND_PREFERENCE_ANGLE_DEG = 5.0
-    GROUND_DEPTH_PREFERENCE_RATIO = 1.25
-    PERSPECTIVE_GROUND_DEPTH_PREFERENCE_RATIO = 10.0
-    PLANE_ALIGNMENT_TIE_MARGIN = 0.05
-
-    # When the camera is at least this tilted off the horizon, the work plane
-    # stays horizontal (XY) — that covers top, iso, and most architectural
-    # angles. Only at near-horizon views does it switch to a vertical plane,
-    # which is the only orientation where cursor-to-ground is ambiguous.
-    HORIZON_PITCH_THRESHOLD_DEG = 15.0
-
-    #: How far from the cursor (px) a face crossing snaps, and how far
-    #: either side of the crossing the search checks that each face shows.
-    _CROSSING_RING_PX = 8.0
-    _CROSSING_SIDE_PX = 3.0
-
-    #: More selected faces than this and their centres are neither drawn
-    #: nor offered: a «select all» would bury the model in dots.
-    FACE_CENTER_SELECTION_MAX = 500
-
-    #: Eye depth (m) a segment is cut at when it runs behind the camera.
-    _CLIP_W = 1e-3
 
     def _segment_to_pixels(self, p0: QVector3D, p1: QVector3D):
         mvp = self.camera.projection_matrix() * self.camera.view_matrix()
@@ -1106,8 +602,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     # Lives in the app's own cache dir (like extracted textures) and is
     # keyed by a STABLE sha1 content digest — a stale entry can only miss.
 
-    _CHUNK_CACHE_MIN_FACES = 5000       # small groups rebuild faster than IO
-    _CHUNK_CACHE_KEEP = 120             # files kept; oldest pruned at save
 
     @staticmethod
     def _chunk_cache_dir():
@@ -1116,12 +610,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         d.mkdir(parents=True, exist_ok=True)
         return d
 
-    _CHUNK_CACHE_FIELDS = (
-        "edges", "vcol", "smooth_vcol", "by_texture", "tcol", "ttex", "back_vcol",
-        "back_tex", "back_tcol", "back_ttex", "fvcol", "dback", "areas",
-        "v0", "e1", "e2", "tri_ent", "soft_pts", "soft_n0", "soft_c0",
-        "soft_n1", "soft_c1", "soft_single", "edge_layer", "soft_layer",
-        "bbox", "coordsum", "nv", "ne", "nf", "samples")
 
     def _visible_spans(self, spans, planes, split=None):
         from ingetrazo_core import visible_draw_spans
@@ -1132,20 +620,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         from ingetrazo_core import visible_draw_spans
         return visible_draw_spans(self, spans, planes, split, True)
 
-    #: Component placements holding more faces than this, all together,
-    #: switch the pick index to LAZY placements (issue #158): below it the
-    #: index is exactly what it always was.
-    _PICK_LAZY_MIN_FACES = 1_000_000
-    #: How many faces of lazy placements the index keeps baked at once.
-    _PICK_LIVE_MAX_FACES = 600_000
-    #: Lazy placements baked by one query at most (the nearest first) —
-    #: by all the footprint queries of one input event together.
-    _PICK_NEW_PER_QUERY = 300
-    #: A snap's footprint skips placements under this many framebuffer
-    #: pixels across — the ones the frame does not draw.
-    _PICK_MIN_PX = 1.0
-    #: Screen margin, in pixels, around the cursor for «near the cursor».
-    _PICK_NEAR_PX = 32.0
 
     def start_pick_warmup(self) -> None:
         return ingetrazo_core.start_pick_warmup(self)
@@ -1218,29 +692,10 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     def pick_geopath(self, screen_x: float, screen_y: float):
         return ingetrazo_render.pick_geopath(self, screen_x, screen_y)
 
-    #: The group-edge distances' contract with their two readers (the
-    #: hovered-edge pick, within ``pick_threshold_px``; the snap prefilter,
-    #: the ``GEDGE_ENOUGH`` nearest within 48 px): exact within
-    #: ``GEDGE_NEAR_PX``, and within ``GEDGE_REACH_PX`` too unless at least
-    #: ``GEDGE_ENOUGH`` edges already lie inside the near radius — then the
-    #: nearest ones are all there. Past that a big model says ``inf``.
-    GEDGE_NEAR_PX = 8.0
-    GEDGE_REACH_PX = 64.0
-    GEDGE_ENOUGH = 48
-    #: The radius of the snap's own search of group edges near the cursor
-    #: (``_nearby_group_edges``'s default), which narrower ones in the
-    #: same event are read off (see _nearby_edges_unbaked).
-    GEDGE_SHARED_PX = 48.0
-    #: From this many group edges up, the distances come through a screen
-    #: grid (core.edge_grid) instead of one pass over all of them.
-    GEDGE_GRID_MIN = 20000
 
     def pick_edge_any(self, screen_x: float, screen_y: float):
         return ingetrazo_core.pick_edge_any(self, screen_x, screen_y)
 
-    #: How close (px) the cursor must come to a component's origin or an
-    #: arc's midpoint for it to enter the snap scene at all.
-    POINT_INFERENCE_PX = 40.0
 
     def pick_axis(self, screen_x: float, screen_y: float):
         return ingetrazo_render.pick_axis(self, screen_x, screen_y)
@@ -1268,11 +723,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
     # ---- Screen-depth occlusion for the overlay's annotations ---------------
 
-
-
-    #: Cap on rays × triangles in one NumPy block of ``_occluded_many``
-    #: (×3 float64 per array: ~50 MB at most).
-    _OCCL_BLOCK = 2_000_000
 
     def pick_face(self, screen_x: float, screen_y: float):
         return ingetrazo_render.pick_face(self, screen_x, screen_y)
@@ -1400,30 +850,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     # ---- Mouse look (a tool with ``on_look``: First Person) -----------------
 
 
-    # -- Snapping inference, delegated to self.inference -----------------
-    # The reference state (the hover / acquired edges and points, the centre
-    # reference, the axis and reference locks, the last snap) lives in
-    # core.inference.InferenceEngine, and so do the rules that used to be the
-    # two post-processors of the search (the axis-source cue, the extension
-    # hooks). These properties and thin wrappers keep the surface the tools,
-    # the extensions, the probe and the tests read and write, so the
-    # extraction stays behaviour-neutral.
-    _acquired_point = ingetrazo_render.InferenceField("_acquired_point")
-    _encouraged = ingetrazo_render.InferenceField("_encouraged")
-    _dwell_point = ingetrazo_render.InferenceField("_dwell_point")
-    _dwell_timer = ingetrazo_render.InferenceField("_dwell_timer")
-    axis_lock = ingetrazo_render.InferenceField("axis_lock")
-    last_snap = ingetrazo_render.InferenceField("last_snap")
-    reference_edge = ingetrazo_render.InferenceField("reference_edge")
-    reference_mode = ingetrazo_render.InferenceField("reference_mode")
-    _shift_lock = ingetrazo_render.InferenceField("_shift_lock")
-    _shift_lock_ref = ingetrazo_render.InferenceField("_shift_lock_ref")
-    _hover_edge = ingetrazo_render.InferenceField("_hover_edge")
-    _hover_center = ingetrazo_render.InferenceField("_hover_center")
-    _center_ref = ingetrazo_render.InferenceField("_center_ref")
-    _acquired_edge = ingetrazo_render.InferenceField("_acquired_edge")
-    _acquired_face_normal = ingetrazo_render.InferenceField("_acquired_face_normal")
-
     def _dwell_on(self, point: Optional[QVector3D]) -> None:
         self.inference._dwell_on(point)
 
@@ -1443,8 +869,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     def _extension_snap(self, snap, px_x: float, px_y: float):
         return self.inference._extension_snap(snap, px_x, px_y)
 
-    # Below this many pixels of drag, a left press/release is a click, not a box.
-    BOX_DRAG_THRESHOLD_PX = 4.0
 
     def wheelEvent(self, ev) -> None:
         # While a 3D mouse moves the view, wheel notches are its driver's
@@ -1452,12 +876,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         # does not know): zooming on them too made the view jump a step
         # about eight times a second over the smooth move.
         return ingetrazo_render.document_wheel(self, ev)
-
-
-    #: The least a notch of the wheel backs out, from a close-up, once the
-    #: camera stands 2 cm or more from what it looks at — and always in an
-    #: empty scene, which has no size to go by.
-    _ZOOM_OUT_STEP = 0.05
 
 
     _MODIFIER_KEYS = frozenset({Qt.Key_Control, Qt.Key_Shift, Qt.Key_Alt,
@@ -1532,11 +950,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         ingetrazo_render.document_focus_out(self)
         super().focusOutEvent(ev)
 
-    # Inferences whose direction can be captured by a Shift lock.
-    _SHIFT_LOCKABLE = frozenset({
-        "axis", "axis_inference", "reference", "through_point", "perp_face",
-        "extension", "from_point",
-    })
 
     # ---- Zoom: the lens typed in the value box ------------------------------
     def apply_zoom_value(self, typed: str) -> bool:
