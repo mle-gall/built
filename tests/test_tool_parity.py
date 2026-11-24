@@ -119,3 +119,8 @@ def test_offset_matches_the_recorded_python_tool(name):
 @pytest.mark.parametrize("name", sorted(tp.PAINT_SCENARIOS))
 def test_paint_matches_the_recorded_python_tool(name):
     assert tp.run_paint(tp.PAINT_SCENARIOS[name]) == tp.load("paint")[name]
+
+
+@pytest.mark.parametrize("name", sorted(tp.PROTRACTOR_SCENARIOS))
+def test_protractor_matches_the_recorded_python_tool(name):
+    assert tp.run_protractor(tp.PROTRACTOR_SCENARIOS[name]) == tp.load("protractor")[name]

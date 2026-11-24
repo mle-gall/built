@@ -1001,6 +1001,50 @@ def run_rotate(steps):
     return out
 
 
+PROTRACTOR_SCENARIOS = {
+    "click_and_reaim": [("click", 2, 1, 0), ("click", 5, 1, 0), ("hover", 2, 4, 0),
+                        ("click", 2, 4, 0), ("value", 30), ("value", -60), ("undo",)],
+    "typed_clockwise": [("click", 0, 0, 0), ("click", 2, 0, 0), ("hover", 1, -1, 0),
+                        ("value", 45), ("value", 20), ("undo",), ("undo",), ("value", 10)],
+    "measure_only": [("control",), ("click", 0, 0, 0), ("click", 1, 0, 0),
+                     ("hover", .4, .3, 0), ("click", .4, .3, 0), ("value", 20)],
+    "tilt_plane_and_cancel": [("click", 0, 0, 0), ("hover", 2, 2, 1), ("release",),
+                              ("click", 2, 0, 0), ("hover", 0, 1, 1), ("cancel",)],
+}
+
+
+def run_protractor(steps):
+    from PySide6.QtCore import Qt
+    from core.scene import Scene
+    from tests.test_protractor import _VpScreen, _ctx
+    from tools.protractor import ProtractorTool
+    view, tool = _VpScreen(Scene()), ProtractorTool()
+    tool.on_activate(view)
+    out = []
+    for kind, *args in steps:
+        result = None
+        if kind in ("hover", "click"):
+            (tool.on_hover if kind == "hover" else tool.on_click)(_ctx(view, *args))
+        elif kind == "control":
+            result = tool.on_key(view, Qt.Key_Control, Qt.NoModifier)
+        elif kind == "release":
+            tool.on_release(view)
+        elif kind == "value":
+            result = tool.on_value(view, args[0])
+        elif kind == "undo":
+            view.history.undo()
+        elif kind == "cancel":
+            tool.on_cancel(view)
+        label = tool.value_label()
+        out.append({"centre": _pt(tool.start_point), "arm": _pt(tool.ref_point),
+                    "axis": _pt(tool._axis()), "plus": tool.cursor_plus,
+                    "label": label[0] if label else None,
+                    "guide_preview": [[_pt(a), _pt(b)] for a, b in tool.guide_preview_lines()],
+                    "guides": [[_pt(g.point), _pt(g.direction)] for g in view.scene.guides],
+                    "undo": len(view.history.undo_stack), "result": result})
+    return out
+
+
 PAINT_SCENARIOS = {
     "front_selection_and_undo": ["front", "select", "blue", "front", "undo", "undo"],
     "back_sample_and_repaint": ["back", "blue", "sample_back", "other", "default", "back", "undo"],
@@ -1204,6 +1248,9 @@ def record(which=("line", "select", "rectangle", "move", "circle", "rotated_rect
     if "rotated_rectangle" in which:
         rot = {name: run_rot(steps) for name, steps in ROT_SCENARIOS.items()}
         (FIXTURES / "rotated_rectangle.json").write_text(_compact(rot))
+    if "protractor" in which:
+        cases = {name: run_protractor(steps) for name, steps in PROTRACTOR_SCENARIOS.items()}
+        (FIXTURES / "protractor.json").write_text(_compact(cases))
     if "paint" in which:
         cases = {name: run_paint(steps) for name, steps in PAINT_SCENARIOS.items()}
         (FIXTURES / "paint.json").write_text(_compact(cases))
