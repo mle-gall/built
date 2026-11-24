@@ -130,12 +130,12 @@ class TapeMeasureTool(Tool):
     def start_from_hover(self, viewport, pixel=None) -> bool:
         """Picking T over a line starts its guide without a first click."""
         from PySide6.QtCore import QPointF
-        from PySide6.QtGui import QCursor
+        from views import input_state
         from views.document_interaction import _HoverEvent
         if self.start_point is not None or self._mode != "line":
             return False
         if pixel is None:
-            pixel = viewport.mapFromGlobal(QCursor.pos())
+            pixel = viewport.mapFromGlobal(input_state.cursor_position(viewport))
         if not viewport.rect().contains(pixel):
             return False                 # toolbar/menu pickup outside the canvas
         ev = _HoverEvent(QPointF(pixel), Qt.NoModifier)

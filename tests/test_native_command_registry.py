@@ -1,5 +1,6 @@
 """The native Keyboard table edits the same bindings the window dispatches."""
-from PySide6.QtCore import QSettings, Qt
+from PySide6.QtCore import Qt
+from core.settings import settings
 from PySide6.QtGui import QKeySequence
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
@@ -46,7 +47,7 @@ def test_tools_views_and_menus_reassign_and_reset_across_windows(tmp_path, monke
         assert seen == ["cutlist"]
         sheet.state.kb_focus = "sc:menu:cutlist"
         sheet._kb_verb("kb_default")
-        assert not QSettings().contains("shortcuts/menu:cutlist")
+        assert not settings().contains("shortcuts/menu:cutlist")
         assert not fresh._shortcut(Qt.Key_F9, 0)
         sheet.state.kb_focus = "sc:view:orbit"
         sheet._kb_verb("kb_default")

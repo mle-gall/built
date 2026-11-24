@@ -207,25 +207,21 @@ impl Host {
         });
     }
 
-    /// The frame as RGBA bytes: request a capture, draw, take it.
-    pub fn capture(&self) -> Option<Vec<u8>> {
-        Python::attach(|py| -> PyResult<Option<Vec<u8>>> {
+    /// Save the renderer's current target at its actual physical dimensions.
+    pub fn capture(&self, path: &std::path::Path) -> bool {
+        Python::attach(|py| -> PyResult<bool> {
             let host = self.obj.bind(py);
             let renderer = host.getattr("renderer")?;
             if renderer.is_none() {
-                return Ok(None);
+                return Ok(false);
             }
             renderer.call_method0("request_capture")?;
             host.call_method0("frame")?;
-            let data = renderer.call_method0("take_capture")?;
-            if data.is_none() {
-                return Ok(None);
-            }
-            Ok(Some(data.extract::<Vec<u8>>()?))
+            renderer.call_method1("save_capture", (path,))?.extract()
         })
         .unwrap_or_else(|e| {
             Python::attach(|py| report(py, e, "capture"));
-            None
+            false
         })
     }
 
@@ -321,7 +317,7 @@ mod tests {
 
 pub fn touch_select() -> bool {
     Python::attach(|py| -> PyResult<bool> {
-        let store = py.import("PySide6.QtCore")?.getattr("QSettings")?.call0()?;
+        let store = py.import("core.settings")?.getattr("settings")?.call0()?;
         Ok(store
             .call_method1("value", ("nav/touch_slide", "orbit"))?
             .extract::<String>()?

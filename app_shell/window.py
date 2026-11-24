@@ -33,56 +33,8 @@ import types
 from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtGui import QKeySequence
 
+from app_shell.command_action import ShellAction
 from views.view_host import MISSING
-
-
-class ShellAction:
-    """The QAction surface the chrome reads."""
-
-    def __init__(self, text, shortcut="", run=None, checkable=True):
-        self._text = text
-        self._shortcut = QKeySequence(shortcut) if shortcut else QKeySequence()
-        self._run = run
-        self._checked = False
-        self._checkable = checkable
-        self._enabled = True
-
-    def text(self):
-        return self._text
-
-    def shortcut(self):
-        return self._shortcut
-
-    def isChecked(self):
-        return self._checked
-
-    def setChecked(self, on):
-        self._checked = bool(on)
-
-    def isCheckable(self):
-        return self._checkable
-
-    def isEnabled(self):
-        return self._enabled
-
-    def setEnabled(self, on):
-        self._enabled = bool(on)
-
-    def isVisible(self):
-        return True
-
-    def trigger(self):
-        if self._run is not None:
-            self._run()
-
-    def toolTip(self):
-        return self._text
-
-    def statusTip(self):
-        return ""
-
-    def menu(self):
-        return None
 
 
 class _Label:
@@ -442,7 +394,6 @@ def _doc_attr(name):
 
 
 class ShellWindow(QObject):
-    documentChanged = Signal()
 
     def __init__(self, host):
         super().__init__()
@@ -457,16 +408,16 @@ class ShellWindow(QObject):
         install(self, plugins)
         self._running_extensions = {p.stem for p in plugins}
         self._extension_load_errors = {e.stem: {"error": e.error, "path": str(e.path)} for e in errors}
-        from PySide6.QtGui import QAction
+        from ingetrazo_core import WindowCommands
+        self._command_store = WindowCommands()
+        self._command_actions = {}
         from views.main_window import build_tools
         self._tools = build_tools()
-        self._act_eyedropper = QAction("Sample material", self)
-        self._act_eyedropper.setCheckable(True)
-        self._act_eyedropper.toggled.connect(self._on_toggle_eyedropper)
-        self._act_bridge = ShellAction("Bridge", run=self._on_bridge, checkable=False)
-        self._act_make_faces = ShellAction("Make Faces", run=self._on_make_faces, checkable=False)
-        self._act_3dtext = QAction("3D Text", self)
-        self._act_3dtext.triggered.connect(self._on_insert_3d_text)
+        self._act_eyedropper = ShellAction(self, "Sample material", checkable=True,
+                                           toggled=self._on_toggle_eyedropper)
+        self._act_bridge = ShellAction(self, "Bridge", run=self._on_bridge, listed=False)
+        self._act_make_faces = ShellAction(self, "Make Faces", run=self._on_make_faces, listed=False)
+        self._act_3dtext = ShellAction(self, "3D Text", run=self._on_insert_3d_text)
 
         self._tool_actions = {}
         self._style_before_xray = (None, None)
@@ -500,12 +451,11 @@ class ShellWindow(QObject):
             shortcut = getattr(tool, "shortcut", "") or ""
             if key == "select":
                 shortcut = "Space"          # bound by MainWindow, not the tool
-            action = QAction(tr(getattr(tool, "name", key)), self)
-            action.setCheckable(True)
+            action = ShellAction(self, tr(getattr(tool, "name", key)), checkable=True)
             alternate = getattr(tool, "shortcut_alt", None)
             action.setShortcuts([QKeySequence(s) for s in (shortcut, alternate) if s])
             self._tool_actions[key] = action
-        self._tool_defaults = [(k, a.text(), [s.toString(QKeySequence.PortableText) for s in a.shortcuts()])
+        self._tool_defaults = [(k, a.text(), a.state.portable_keys())
                               for k, a in self._tool_actions.items()]
         self._registry_actions = {}
         self.refresh_commands()
@@ -577,10 +527,7 @@ class ShellWindow(QObject):
         doc.stand_in = view
         doc._renderer_wgpu = True
         doc.saved_content = vp.scene.content_version
-        try:
-            vp.sceneVersionChanged.connect(lambda *_: self._update_title())
-        except Exception:  # noqa: BLE001
-            pass
+        self._watch_document(doc)
         at = self._documents.index(self._doc) + 1 if self._doc in self._documents else len(self._documents)
         self._documents.insert(at, doc)
         vp.set_active_tool(None)
@@ -631,16 +578,43 @@ class ShellWindow(QObject):
         _axes.sync(getattr(doc.viewport.scene, "drawing_frame", None))
         self._scene_tabs.mark_view(None)
         self._activate_tool("select")
-        doc.viewport.notify_scene_changed()
-        self.documentChanged.emit()
-        self._update_title()
+        doc.viewport.prune_stale_selection()
+        doc.viewport.update()
+        doc.viewport._document_watch.observe(force=True)
+        self._host.request_frame()
+
+    def _watch_document(self, doc):
+        from ingetrazo_core import DocumentWatch
+        vp = doc.viewport
+        vp._document_watch = DocumentWatch(doc)
+        vp._unsubscribe_changes = vp.history.feed.subscribe(vp._document_watch)
+
+    def _release_document_watch(self, doc):
+        vp = doc.viewport
+        unsubscribe = vp.__dict__.pop("_unsubscribe_changes", None)
+        if unsubscribe is not None:
+            unsubscribe()
+        vp.__dict__.pop("_document_watch", None)
+
+    def _document_changed(self, doc, version):
+        if doc is self._doc:
+            self._update_title()
+            for fn in tuple(self.__dict__.get("_doc_change_hooks", ())):
+                self._host._guard("extension document changed", fn)
+        else:
+            self._update_tab(doc)
+        if doc.composer is not None:
+            doc.composer._on_model_version(version)
         self._host.request_frame()
 
     def _retire_document(self, doc) -> None:
         from core import autosave
         if doc not in self._documents:
             return
+        self._release_document_watch(doc)
         self._documents.remove(doc)
+        for fn in tuple(self.__dict__.get("_doc_close_hooks", ())):
+            self._host._guard("extension document closed", fn, doc.viewport.scene)
         try:
             autosave.clear(doc.path, untitled=doc.untitled_no)
         except Exception:  # noqa: BLE001
@@ -663,10 +637,7 @@ class ShellWindow(QObject):
         doc.stand_in = view
         doc._renderer_wgpu = True
         doc.saved_content = viewport.scene.content_version
-        try:
-            viewport.sceneVersionChanged.connect(lambda *_: self._update_title())
-        except Exception:  # noqa: BLE001
-            pass
+        self._watch_document(doc)
         self._documents = [doc]
         self._doc = doc
 

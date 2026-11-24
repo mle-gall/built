@@ -88,6 +88,8 @@ class Host:
         from app_shell.view import ShellView
         from app_shell.window import ShellWindow
         from app_shell import files, modal
+        from ingetrazo_core import WindowInput
+        self.input_state = WindowInput()
         self.window = ShellWindow(self)
         viewport = DocumentController(self)
         try:
@@ -263,6 +265,7 @@ class Host:
             self.request_frame()
         view = self.view
         scene = self.viewport.scene
+        self.viewport._document_watch.observe()
         # MainWindow._install_wgpu_display's present(): a scene whose
         # version moved since the resident pack is packed again.
         if view.renderer is not None and (scene is not getattr(view, "scene", None)
@@ -413,7 +416,7 @@ class Host:
 
     def pointer(self, kind, x, y, button=0, held=0, modifiers=0, timestamp=0):
         from app_shell.events import ContextMenuEvent, MouseEvent
-        qt_host.INPUT.update(modifiers=int(modifiers), buttons=int(held), pos=(x, y))
+        self.input_state.pointer(x, y, held, modifiers)
         if kind == "press":
             self._front()
         view = self.view
@@ -431,7 +434,7 @@ class Host:
     def wheel(self, x, y, pixel_dx, pixel_dy, angle_dx, angle_dy, phase="none",
               modifiers=0, held=0, inverted=True, touch_screen=False):
         from app_shell.events import WheelEvent
-        qt_host.INPUT["modifiers"] = int(modifiers)
+        self.input_state.pointer(x, y, held, modifiers)
         if self._modal():
             return
         ev = WheelEvent(x, y, pixel_dx, pixel_dy, angle_dx, angle_dy, phase, modifiers, held, inverted, touch_screen)
@@ -440,6 +443,7 @@ class Host:
 
     def gesture(self, kind, value, x, y, modifiers=0):
         from app_shell.events import NativeGestureEvent
+        self.input_state.pointer(x, y, self.input_state.buttons, modifiers)
         if self._modal():
             return
         ev = NativeGestureEvent(kind, value, x, y, modifiers=modifiers)
@@ -454,7 +458,7 @@ class Host:
         from PySide6.QtCore import Qt
         from app_shell.events import KeyEvent, ShortcutOverride
         from views import chrome_dialogs as cd
-        qt_host.INPUT["modifiers"] = int(modifiers)
+        self.input_state.modifiers = modifiers
         view = self.view
         if pressed:
             self._front()
@@ -494,17 +498,14 @@ class Host:
         self.window.refresh_commands()
 
     def _shortcut(self, key, modifiers):
-        from PySide6.QtGui import QKeySequence
-        try:
-            combo = QKeySequence(int(modifiers) | int(key))
-        except Exception:
-            return False
-        from PySide6.QtGui import QAction
-        for action in self.window.findChildren(QAction):
-            if action.isEnabled() and any(seq.matches(combo) == QKeySequence.ExactMatch for seq in action.shortcuts()):
-                action.trigger()
-                return True
-        return False
+        win = self.window
+        slot = win._command_store.resolve(int(key), int(modifiers))
+        if slot is not None:
+            win._command_actions[slot].trigger()
+            return True
+        # Third-party plugins can still attach a raw Qt action to the host.
+        from views.shortcuts import trigger_plugin_shortcut
+        return trigger_plugin_shortcut(win, key, modifiers)
 
     def text(self, text):
         """Committed IME text: the chrome's focused field, else the tools
@@ -576,6 +577,7 @@ class Host:
             self._device.button.disconnect(self.window._on_ndof_button)
             self._device = None
         if not on:
+            self.input_state.focus_lost()
             self._guard("focus out", self.view.focusOutEvent, None)
 
     # ---- menus ---------------------------------------------------------
@@ -627,6 +629,7 @@ class Host:
         windows.unregister(self)
         self.timers.cancel_all()
         for doc in list(self.window._documents):
+            self.window._release_document_watch(doc)
             view = doc.stand_in
             if view is not None:
                 self._guard("close", view.closeEvent, None)

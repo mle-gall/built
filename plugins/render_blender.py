@@ -22,9 +22,10 @@ import math
 import time
 from pathlib import Path
 
+from core.settings import settings as QSettings
 from PySide6.QtCore import (QObject, QPointF, QProcess, QProcessEnvironment,
                             QTimer, Signal,
-                            QSettings, Qt)
+                            Qt)
 from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import (
@@ -190,7 +191,8 @@ class SyncSession(QObject):
             self._seen_key = cam_key
             self._still_since = now
             return
-        if QApplication.mouseButtons() != Qt.NoButton:
+        from views import input_state
+        if input_state.mouse_buttons(self.panel.app.viewport) != Qt.NoButton:
             self._still_since = now          # still dragging, only paused
             return
         if (now - self._still_since) * 1000 < rb.SYNC_REST_MS:

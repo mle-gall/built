@@ -31,8 +31,9 @@ of the views (a line also to its other half), and Esc leaves them as they were.
 """
 from __future__ import annotations
 
+from core.settings import settings as QSettings
 from PySide6.QtCore import (QEvent, QLine, QObject, QPoint, QPointF, QRectF,
-                            QSettings, QSize, Qt, Signal)
+                            QSize, Qt, Signal)
 from PySide6.QtGui import QColor, QCursor, QKeySequence, QPainter, QPen
 from PySide6.QtWidgets import (QApplication, QFrame, QHBoxLayout, QMenu,
                                QSizePolicy, QSplitter, QSplitterHandle,

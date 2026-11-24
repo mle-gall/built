@@ -142,16 +142,12 @@ def dispatch(h, ev) -> None:
     if kind in ("press", "release", "move"):
         if view is None or not getattr(view, "_ui_attached", False):
             return
-        held = qt_host.INPUT.get("buttons", 0)
-        if kind == "press":
-            held |= button
-        elif kind == "release":
-            held &= ~button
-        qt_host.INPUT.update(modifiers=int(mods), buttons=int(held), pos=(x, y))
+        held = h.input_state.modal_pointer(kind, x, y, button, mods)
         h._guard("modal pointer", wgpu_ui.pointer, view, kind,
                  MouseEvent(kind, x, y, button, held, mods))
         h.request_frame()
     elif kind == "key":
+        h.input_state.modifiers = mods
         event = KeyEvent(True, key, mods, text)
         if chrome_dialogs.current_sheet(win) is not None:
             h._guard("sheet key", chrome_dialogs.sheet_key, win, event)
@@ -219,18 +215,12 @@ def _answer_when_drawn(loop, answer):
 def capture(h, path) -> bool:
     """The frame as a PNG (the shell's own capture: the renderer's surface,
     never the screen)."""
-    from pathlib import Path
-    from PySide6.QtGui import QImage
     renderer = h.view.renderer
     if renderer is None:
         return False
     renderer.request_capture()
     h.frame()
-    data = renderer.take_capture()
-    if not data:
+    try:
+        return renderer.save_capture(path)
+    except OSError:
         return False
-    w = int(round(h.width * h.scale))
-    hh = len(data) // 4 // max(1, w)
-    img = QImage(bytes(data), w, hh, w * 4, QImage.Format_RGBA8888)
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    return img.copy().save(str(path))

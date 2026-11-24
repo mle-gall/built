@@ -3,7 +3,8 @@
 """Shared host action metadata for search, tooltips and Keyboard settings."""
 import re
 
-from PySide6.QtCore import QSettings, Qt
+from core.settings import settings as QSettings
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import QMainWindow, QMenu, QMenuBar, QToolBar
 

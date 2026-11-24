@@ -304,12 +304,12 @@ NEW_DOCUMENT_KEY = "units/new_document"
 
 
 def ask_at_start() -> bool:
-    from PySide6.QtCore import QSettings
+    from core.settings import settings as QSettings
     return str(QSettings().value("units/ask_at_start", "1")) != "0"
 
 
 def set_ask_at_start(ask: bool) -> None:
-    from PySide6.QtCore import QSettings
+    from core.settings import settings as QSettings
     st = QSettings()
     st.setValue("units/ask_at_start", "1" if ask else "0")
     st.sync()
@@ -322,7 +322,7 @@ def new_document_units() -> dict:
     in metres, as it was drawn)."""
     import json
 
-    from PySide6.QtCore import QSettings
+    from core.settings import settings as QSettings
     try:
         raw = QSettings().value(NEW_DOCUMENT_KEY)
         return model_units_of({"units": json.loads(raw)} if raw else {})
@@ -333,7 +333,7 @@ def new_document_units() -> dict:
 def remember_new_document_units(units: dict) -> None:
     import json
 
-    from PySide6.QtCore import QSettings
+    from core.settings import settings as QSettings
     st = QSettings()
     st.setValue(NEW_DOCUMENT_KEY, json.dumps(model_units_of({"units": units})))
     st.sync()

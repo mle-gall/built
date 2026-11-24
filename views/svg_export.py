@@ -414,7 +414,8 @@ def open_view_export(win, frame_builder=None):
     """Open the one-off Export sheet. Sheets can supply a frame's SvgBuilder."""
     import json
     from pathlib import Path
-    from PySide6.QtCore import QIODevice, QSaveFile, QSettings
+    from core.settings import settings as QSettings
+    from PySide6.QtCore import QIODevice, QSaveFile
     from core.i18n import tr
     from core.saved_views import SavedView
     from core.sun import scene_sun_direction

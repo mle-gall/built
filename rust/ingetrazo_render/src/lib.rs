@@ -1,5 +1,7 @@
 //! A resident Metal scene: compute compaction precedes native indirect draws.
 mod timing;
+mod captured_frame;
+use captured_frame::CapturedFrame;
 mod window_timers;
 mod panic_log;
 mod overlay;
@@ -17,6 +19,7 @@ mod references;
 mod sun;
 mod shadow_fit;
 mod textures;
+mod material_textures;
 // R-look: isolated style and background passes.
 mod style;
 mod background;
@@ -115,7 +118,7 @@ struct Target {
     stable_frames: u32,
     pick_pending: bool,
     capture_next: bool,
-    captured: Option<Vec<u8>>,
+    captured: Option<CapturedFrame>,
     /// ``scene_epoch`` when it was last live: a later scene change leaves
     /// its pick IDs stale.
     seen_epoch: u64,
@@ -146,7 +149,7 @@ struct Renderer {
     background: background::Background,
     look_groups: Vec<wgpu::BindGroup>,
     capture_next: bool,
-    captured: Option<Vec<u8>>,
+    captured: Option<CapturedFrame>,
     overlay: overlay::Overlay,
     axes: axes::Axes,
     sections: sections::Sections,
@@ -380,7 +383,7 @@ impl Renderer {
             }
             self.capture_next = true;
             self.render(false)?;
-            let mut pixels = self.captured.take().unwrap_or_default();
+            let mut pixels = self.take_capture().unwrap_or_default();
             if self.look.data[3][3] < 0. {
                 // PNG and QImage RGBA8888 expect unassociated color.
                 for pixel in pixels.chunks_exact_mut(4) {
@@ -1492,7 +1495,7 @@ impl Renderer {
     fn read_pixels(&mut self) -> PyResult<Vec<u8>> {
         self.capture_next = true;
         self.render(true)?;
-        Ok(self.captured.take().unwrap_or_default())
+        Ok(self.take_capture().unwrap_or_default())
     }
     /// Render with resident geometry and textures into isolated sheet targets.
     /// Surface configuration and interactive attachments are never replaced.
@@ -2025,7 +2028,7 @@ impl Renderer {
             }
             drop(mapped);
             read.unmap();
-            self.captured = Some(rgba);
+            self.captured = Some(CapturedFrame { width: self.config.width, height: self.config.height, rgba });
             self.capture_next = false;
         }
         let before_present = Instant::now();
@@ -2063,7 +2066,12 @@ impl Renderer {
         self.capture_next = true;
     }
     fn take_capture(&mut self) -> Option<Vec<u8>> {
-        self.captured.take()
+        self.captured.take().map(|frame| frame.rgba)
+    }
+    fn save_capture(&mut self, py: Python<'_>, path: std::path::PathBuf) -> PyResult<bool> {
+        let Some(frame) = self.captured.take() else { return Ok(false) };
+        py.detach(|| frame.write_png(&path))?;
+        Ok(true)
     }
     #[pyo3(signature = (center, radius, cursor, scale))]
     fn set_center_cue(&mut self, center: Option<[f32; 3]>, radius: f32, cursor: [f32; 2], scale: f32) {
@@ -2240,7 +2248,7 @@ impl Renderer {
             }
             drop(mapped);
             read.unmap();
-            self.captured = Some(rgba);
+            self.captured = Some(CapturedFrame { width: self.config.width, height: self.config.height, rgba });
             self.capture_next = false;
         }
         let before_present = Instant::now();
@@ -2925,6 +2933,7 @@ fn context_targets(hit: bool, selection: &Bound<'_, PyAny>) -> PyResult<Vec<Py<P
 
 #[pymodule]
 pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(material_textures::material_texture_array, m)?)?;
     navigation::register(m)?;
     m.add_function(wrap_pyfunction!(preferences::msaa_levels,m)?)?;
     m.add_function(wrap_pyfunction!(preferences::apply_msaa,m)?)?;

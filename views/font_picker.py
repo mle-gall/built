@@ -1,7 +1,7 @@
 """Host binding for the renderer's font picker and retained text geometry."""
 import json
 
-from PySide6.QtCore import QSettings
+from core.settings import settings as QSettings
 from views import chrome_dialogs
 
 

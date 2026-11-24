@@ -480,3 +480,76 @@ def test_with_the_chrome_the_menu_goes_to_it(host, kinds, monkeypatch):
     finally:
         view.renderer = None
         view._ui_attached = False
+
+
+def test_feed_changes_follow_the_document_across_windows(host, second):
+    from app_shell import windows
+    from core.history import SetPluginDataCommand
+    from views.extension_api import ExtensionApp
+
+    src = host.window
+    doc = src.new_document()
+    dst = second()
+    left, right = [], []
+    ExtensionApp(src, "probe").on_document_changed(lambda: left.append(src._doc))
+    ExtensionApp(dst.window, "probe").on_document_changed(lambda: right.append(dst.window._doc))
+    history = doc.viewport.history
+    history.execute(SetPluginDataCommand("probe", 1))
+    assert left == [doc] and not right
+    assert windows.transfer(src, doc, dst)
+    left.clear()
+    right.clear()
+    history.undo()
+    history.redo()
+    doc.viewport.notify_scene_changed()  # the same revision also reached the view
+    assert not left and right == [doc, doc]
+    dst.close()
+    history.undo()
+    assert right == [doc, doc]
+
+
+def test_replacing_the_viewport_history_detaches_the_old_feed(host):
+    from core.history import History, SetPluginDataCommand
+    from core.scene import Scene
+    from views.extension_api import ExtensionApp
+
+    vp = host.viewport
+    original = vp.history
+    scene = Scene()
+    replacement = History(scene)
+    notices = []
+    ExtensionApp(host.window, "probe").on_document_changed(lambda: notices.append(vp.scene))
+    vp.set_document(scene, replacement)
+    assert notices == [scene]
+    original.execute(SetPluginDataCommand("old", 1))
+    assert notices == [scene]
+    replacement.execute(SetPluginDataCommand("new", 2))
+    assert notices == [scene, scene]
+    # Bypass history as a legacy plugin may do. An idle turn notices it once.
+    scene.version += 1
+    host.idle()
+    host.idle()
+    assert notices == [scene, scene, scene]
+
+
+def test_input_and_modal_buttons_stay_in_the_owning_window(host, second):
+    from app_shell import modal
+    from views import input_state
+    from PySide6.QtCore import Qt, QPoint
+
+    other = second()
+    host.pointer("move", 17, 23, held=1, modifiers=Qt.ShiftModifier.value)
+    other.pointer("move", 5, 3, modifiers=Qt.ControlModifier.value)
+    assert input_state.mouse_buttons(host.window) == Qt.LeftButton
+    assert input_state.cursor_position(host.view) == QPoint(17, 23)
+    assert input_state.modifiers(host.viewport) == Qt.ShiftModifier
+    assert input_state.mouse_buttons(other.viewport) == Qt.NoButton
+    assert input_state.modifiers(other.viewport) == Qt.ControlModifier
+    other.view._ui_attached = True
+    modal.dispatch(other, ("press", 1, 2, 2, 0, 0, ""))
+    assert input_state.mouse_buttons(other.window) == Qt.RightButton
+    modal.dispatch(other, ("release", 1, 2, 2, 0, 0, ""))
+    assert input_state.mouse_buttons(other.window) == Qt.NoButton
+    host.focus(False)
+    assert input_state.mouse_buttons(host.window) == Qt.NoButton
+    assert input_state.modifiers(host.viewport) == Qt.NoModifier

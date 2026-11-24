@@ -15,7 +15,8 @@ import os
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import (Qt, QSettings, QEvent, QCoreApplication, QPoint,
+from core.settings import settings as QSettings
+from PySide6.QtCore import (Qt, QEvent, QCoreApplication, QPoint,
                             QRect, QSize, QTimer, Signal)
 from PySide6.QtGui import QAction, QActionGroup, QIcon, QKeySequence
 from ingetrazo_core import Vec3 as QVector3D

@@ -2,7 +2,7 @@
 """Bounded, pinnable recent paths retain missing entries for relocation."""
 import json
 from pathlib import Path
-from PySide6.QtCore import QSettings
+from core.settings import settings as QSettings
 
 LIMIT = 20
 

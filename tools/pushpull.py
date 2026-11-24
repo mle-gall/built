@@ -45,7 +45,7 @@ import time
 
 from PySide6.QtCore import Qt
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
+from views import input_state
 
 from core.geometry import Face
 from core.i18n import tr
@@ -398,7 +398,7 @@ class PushPullTool(PushPullOperation, Tool):
         # not whatever the press carried. The release is a commit, so it
         # latches like the commit click does — and a tapped keep mode
         # (#322) still holds when no key is down.
-        self._sync_keep_base(QApplication.queryKeyboardModifiers(),
+        self._sync_keep_base(input_state.modifiers(viewport, query=True),
                              latch_ctrl=True)
         if abs(self.extrusion) < _MIN_EXTRUDE:
             if not self._tiny_hint_shown:

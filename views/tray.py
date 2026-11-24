@@ -23,7 +23,8 @@ import math
 import os
 from pathlib import Path
 
-from PySide6.QtCore import QEvent, QObject, QPoint, QRect, QSettings, QSize, Qt, QTimer
+from core.settings import settings as QSettings
+from PySide6.QtCore import QEvent, QObject, QPoint, QRect, QSize, Qt, QTimer
 from PySide6.QtGui import QColor, QIcon, QImage, QPixmap
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -136,7 +137,7 @@ class _Section(QWidget):
         # eu deixei»). Keyed by the panel's class, not its title: the title
         # changes with the language.
         self._key = f"tray/collapsed/{type(content).__name__}"
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         if str(QSettings().value(self._key, "0")) == "1":
             self._btn.setChecked(False)
 
@@ -145,7 +146,7 @@ class _Section(QWidget):
         set_arrow(self._btn, Qt.DownArrow if on else Qt.RightArrow)
         key = getattr(self, "_key", None)
         if key is not None:
-            from PySide6.QtCore import QSettings
+            from core.settings import settings as QSettings
             QSettings().setValue(key, "0" if on else "1")
 
 
@@ -620,7 +621,7 @@ class BaseMapPanel(QWidget):
         """``[{"name", "url"}]`` from QSettings. Migrates the short-lived
         single-URL preference (``basemap/custom_url``) into a named entry."""
         import json
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         settings = QSettings()
         raw = settings.value("basemap/custom_sources", "", type=str)
         entries: list[dict] = []
@@ -642,7 +643,7 @@ class BaseMapPanel(QWidget):
     @staticmethod
     def _store_custom_sources(entries: list[dict]) -> None:
         import json
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         settings = QSettings()
         settings.setValue("basemap/custom_sources", json.dumps(entries))
         # Flush NOW: a hand-added source must survive even a crash right
@@ -731,7 +732,8 @@ class BaseMapPanel(QWidget):
 
     def _restore_saved_source(self) -> None:
         """Select the source used in the last session (QSettings)."""
-        from PySide6.QtCore import QSettings, QSignalBlocker
+        from core.settings import settings as QSettings
+        from PySide6.QtCore import QSignalBlocker
         sid = QSettings().value("basemap/source", "", type=str)
         if sid and sid != self._ADD:
             idx = self._source.findData(sid)
@@ -746,7 +748,7 @@ class BaseMapPanel(QWidget):
             self._attribution.setText(src.attribution)
 
     def _save_source_pref(self) -> None:
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         sid = self._source.currentData()
         if sid and sid != self._ADD:
             settings = QSettings()
@@ -4293,14 +4295,14 @@ class ScenesPanel(QWidget):
     # ---- The list or the thumbnails -----------------------------------------
     @staticmethod
     def _saved_thumbnails() -> bool:
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         raw = QSettings().value("scenes/thumbnails", True)
         return raw not in (False, "false", "0", 0)
 
     def set_thumbnails(self, on: bool) -> None:
         """Show each scene with its picture (``True``) or as a plain list,
         and remember the choice."""
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         self.thumbnails = bool(on)
         QSettings().setValue("scenes/thumbnails", self.thumbnails)
         self._show_view_mode()

@@ -19,7 +19,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from PySide6.QtCore import QSettings, QStandardPaths
+from core.settings import settings as QSettings
+from PySide6.QtCore import QStandardPaths
 from PySide6.QtWidgets import QFileDialog
 
 _KEY = "files/last_dir"

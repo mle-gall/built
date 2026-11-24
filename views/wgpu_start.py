@@ -37,7 +37,8 @@ import threading
 import time
 from pathlib import Path
 
-from PySide6.QtCore import QSettings, Qt, QTimer
+from core.settings import settings as QSettings
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QGuiApplication, QImage
 
 from core import recent

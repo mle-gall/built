@@ -1383,14 +1383,14 @@ def _box_edges(frame, lo, hi) -> bytes:
 
 
 def _load_edit_rest_mode() -> str:
-    from PySide6.QtCore import QSettings
+    from core.settings import settings as QSettings
     mode = str(QSettings().value("display/edit_rest_mode", "fade"))
     return mode if mode in EDIT_REST_MODES else "fade"
 
 
 def _load_edit_rest_fade() -> float:
     """Saved strength of the grey edit context, safely clamped to 0..1."""
-    from PySide6.QtCore import QSettings
+    from core.settings import settings as QSettings
     try:
         value = float(QSettings().value("display/edit_rest_fade",
                                         EDIT_REST_FADE))
@@ -1400,13 +1400,13 @@ def _load_edit_rest_fade() -> float:
 
 
 def _load_hide_similar() -> bool:
-    from PySide6.QtCore import QSettings
+    from core.settings import settings as QSettings
     return str(QSettings().value("display/hide_similar_components",
                                  "0")) == "1"
 
 
 def _load_invert_wheel() -> bool:
-    from PySide6.QtCore import QSettings
+    from core.settings import settings as QSettings
     return str(QSettings().value("nav/invert_wheel", "0")) != "0"
 
 
@@ -1418,7 +1418,7 @@ def _load_invert_orbit_y() -> bool:
     including the ones that learned it from IngeTrazo before 0.3.16, when
     the vertical axis was inverted by mistake.
     """
-    from PySide6.QtCore import QSettings
+    from core.settings import settings as QSettings
     return str(QSettings().value("nav/invert_orbit_y", "0")) != "0"
 
 
@@ -1432,7 +1432,7 @@ SOFT_SHADOW_SPREAD = {1: 0.012, 2: 0.03, 3: 0.06}
 def _load_soft_shadows() -> int:
     """The soft shadows level (Preferences ▸ General): 0 = off, the
     default, since it costs the graphics card more while the sun is on."""
-    from PySide6.QtCore import QSettings
+    from core.settings import settings as QSettings
     try:
         n = int(QSettings().value("display/soft_shadows", 0))
     except (TypeError, ValueError):
@@ -2001,6 +2001,14 @@ def _smooth_vcol(face, base, flat_rgb, smoother, tris, light) -> list:
 
 from views.document_tools import DocumentTools
 from views.view_navigation import ViewNavigation
+
+
+def _publish_scene_version(viewport, version):
+    watch = viewport.__dict__.get("_document_watch")
+    if watch is None:
+        viewport.sceneVersionChanged.emit(version)
+    else:
+        watch.observe()
 
 
 class DocumentInteraction(DocumentTools, ViewNavigation):
@@ -3852,7 +3860,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         without waiting for the next paint.
         """
         self.prune_stale_selection()
-        self.sceneVersionChanged.emit(self.scene.version)
+        _publish_scene_version(self, self.scene.version)
         self.update()
 
     def begin_groups_preview(self, groups=(), external: bool = False) -> None:
@@ -4138,7 +4146,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
     def _announce_queued_version(self) -> None:
         self._announce_queued = False
-        self.sceneVersionChanged.emit(self._version_to_announce)
+        _publish_scene_version(self, self._version_to_announce)
 
     def _sync_content_key(self) -> tuple:
         """What the edge and face buffers of ``_sync_edges`` depend on:
@@ -13048,7 +13056,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         if mode not in EDIT_REST_MODES or mode == self._edit_rest_mode:
             return
         self._edit_rest_mode = mode
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         QSettings().setValue("display/edit_rest_mode", mode)
         # "hide" keeps the rest out of the VBOs entirely, so switching to or
         # from it changes what is uploaded, not just how it is drawn.
@@ -13067,7 +13075,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         if math.isclose(strength, self.edit_rest_fade, abs_tol=1e-9):
             return
         self._edit_rest_fade_strength = strength
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         QSettings().setValue("display/edit_rest_fade", strength)
         self.update()
 
@@ -13076,7 +13084,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         component being edited leave the frame. Persisted like the rest
         mode; the version bump re-keys the pick index."""
         on = bool(on)
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         QSettings().setValue("display/hide_similar_components",
                              "1" if on else "0")
         if bool(getattr(self.scene, "hide_similar_components", False)) == on:
@@ -14374,9 +14382,9 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
             or not self.active_tool.uses_snap
         ):
             return
-        from PySide6.QtGui import QGuiApplication
+        from views import input_state
 
-        modifiers = QGuiApplication.keyboardModifiers()
+        modifiers = input_state.modifiers(self)
         p = self._last_mouse_pos.toPoint()
         snap = self._snap_at(p.x(), p.y(), modifiers)
         if snap is None:

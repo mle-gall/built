@@ -4,7 +4,8 @@ from concurrent.futures import Future
 import threading
 import sys
 
-from PySide6.QtCore import QSettings, QTimer
+from core.settings import settings as QSettings
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
 
 from core import desktop_open, update_check

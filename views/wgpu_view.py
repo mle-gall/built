@@ -932,8 +932,29 @@ class MetalView(ViewNavigation):
         ``camera(origin)`` and ``rows()`` (resident rows with the frame's
         visibility), and ``page_key``, the page texture the picture goes to:
         then nothing is read back and None is returned."""
-        from copy import copy
+        frame = self._render_resident(width_px, height_px, sharp_shadows, transparent,
+                                      page_key, scene, style, camera, rows, edge_px, profile_px)
+        if frame is None:
+            return None
+        width_px, height_px, pixels, frame_camera = frame
         from PySide6.QtGui import QImage
+        image = QImage(pixels, width_px, height_px, width_px * 4, QImage.Format_RGBA8888).copy()
+        if overlays:
+            from views.wgpu_annotations import composite_annotations
+            image = composite_annotations(image, self.source_viewport.scene, frame_camera,
+                logical_size=(self.width(), self.height()), overlays=True,
+                annotations_only=annotations_only)
+        return image
+
+    def render_pixels(self, width_px, height_px=None):
+        """The shaded viewport at this size, as tightly packed RGBA for egui."""
+        width, height, pixels, _ = self._render_resident(width_px, height_px)
+        return width, height, pixels
+
+    def _render_resident(self, width_px, height_px, sharp_shadows=False, transparent=False,
+                         page_key=None, scene=None, style=None, camera=None, rows=None,
+                         edge_px=None, profile_px=None):
+        from copy import copy
         from views.wgpu_style import style_payload
 
         source = self.source_viewport
@@ -1019,15 +1040,7 @@ class MetalView(ViewNavigation):
                 self.renderer.set_instance_world(billboard_ids, resident_world.reshape(-1))
             self.renderer.set_axes(*old_axes)
             self.renderer.set_section_geometry(previous)
-        image = QImage(pixels, width_px, height_px, width_px * 4,
-                       QImage.Format_RGBA8888).copy()
-        if overlays:
-            from views.wgpu_annotations import composite_annotations
-            image = composite_annotations(image, source.scene, camera,
-                logical_size=(self.width(), self.height()), overlays=True,
-                annotations_only=annotations_only)
-        return image
-        # End R3c-2a offscreen entry point.
+        return width_px, height_px, pixels, camera
 
     def paintEvent(self, event):
         # During a splitter/window drag keep the last Metal frame: the
@@ -1690,8 +1703,9 @@ class MetalView(ViewNavigation):
         source._cycle_reference_mode(edge)
         if pos is not None:
             # The lock shows at once, the hand still (GL's _refresh_snap).
-            from PySide6.QtGui import QGuiApplication, QMouseEvent
-            held = QGuiApplication.keyboardModifiers()
+            from PySide6.QtGui import QMouseEvent
+            from views import input_state
+            held = input_state.modifiers(self)
             self.hover(pos.x(), pos.y(), held)
             self.tools.hover(QMouseEvent(QEvent.MouseMove, pos, pos,
                                          Qt.NoButton, Qt.NoButton, held))

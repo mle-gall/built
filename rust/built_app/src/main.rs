@@ -432,24 +432,12 @@ impl App {
     fn capture(&mut self, name: &str) {
         let Some(id) = self.front() else { return };
         let Some(win) = self.win(id) else { return };
-        let Some(rgba) = win.host.capture() else {
-            eprintln!("[built] capture {name}: no frame");
-            return;
-        };
-        let size = win.window.inner_size();
-        let (mut w, mut hgt) = (size.width, size.height);
-        if (w as usize) * (hgt as usize) * 4 != rgba.len() && hgt > 0 {
-            w = (rgba.len() / 4 / hgt as usize) as u32;
-        }
-        if w == 0 || hgt == 0 {
-            hgt = 0;
-        }
         let dir = self.args.shots.clone().unwrap_or_else(|| PathBuf::from("build/shell-shots"));
-        let _ = std::fs::create_dir_all(&dir);
         let path = dir.join(format!("{name}.png"));
-        match write_png(&path, w, hgt, &rgba) {
-            Ok(()) => println!("[built] capture {}", path.display()),
-            Err(e) => eprintln!("[built] capture {name}: {e}"),
+        if win.host.capture(&path) {
+            println!("[built] capture {}", path.display());
+        } else {
+            eprintln!("[built] capture {name}: no frame written");
         }
     }
 
@@ -505,8 +493,19 @@ impl App {
             }
             Step::Move(x, y) => self.pointer(id, "move", x, y, 0, 0),
             Step::ClickCommand(command) => {
-                if let Some(center) = self.host(id).and_then(|h| h.command_center(&command)) {
-                    self.steps.push_front(Step::Click(center.0, center.1, 1, 0));
+                // A rendered command can move after the preceding tool or
+                // document change. Hit-test and click the same frame, then
+                // present its input before another scripted gesture begins.
+                if let Some(h) = self.host(id) {
+                    h.frame();
+                }
+                if let Some((x, y)) = self.host(id).and_then(|h| h.command_center(&command)) {
+                    self.pointer(id, "move", x, y, 0, 0);
+                    if let Some(h) = self.host(id) { h.frame(); }
+                    self.pointer(id, "press", x, y, 1, 0);
+                    if let Some(h) = self.host(id) { h.frame(); }
+                    self.pointer(id, "release", x, y, 1, 0);
+                    if let Some(h) = self.host(id) { h.frame(); }
                 } else {
                     eprintln!("[built] no visible top-bar command {command}");
                     self.exit_code = 1;
@@ -867,18 +866,6 @@ fn ask_close(host: &python::Host) -> bool {
 
 fn same_path(a: &Path, b: &Path) -> bool {
     a == b || matches!((a.canonicalize(), b.canonicalize()), (Ok(x), Ok(y)) if x == y)
-}
-
-fn write_png(path: &Path, w: u32, h: u32, rgba: &[u8]) -> Result<(), String> {
-    if w == 0 || h == 0 {
-        return Err("empty frame".into());
-    }
-    let file = std::fs::File::create(path).map_err(|e| e.to_string())?;
-    let mut enc = png::Encoder::new(std::io::BufWriter::new(file), w, h);
-    enc.set_color(png::ColorType::Rgba);
-    enc.set_depth(png::BitDepth::Eight);
-    let mut writer = enc.write_header().map_err(|e| e.to_string())?;
-    writer.write_image_data(&rgba[..(w * h * 4) as usize]).map_err(|e| e.to_string())
 }
 
 fn cursor_icon(name: &str) -> CursorIcon {

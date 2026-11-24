@@ -7,7 +7,7 @@ Default pytest runs Qt offscreen and skips the raster check; run this file
 with QT_QPA_PLATFORM=cocoa on macOS to execute it (no widget is shown).
 """
 import importlib.util
-import inspect
+from types import SimpleNamespace
 import os
 import sys
 
@@ -57,12 +57,41 @@ def test_off_or_nonsense_is_the_crisp_map():
     assert sun_payload(scene, soft_shadows=3)["shadow_soft"] == 0.0
 
 
-def test_the_metal_view_reads_the_level_off_its_viewport():
-    """Both the presented frame and the offscreen export pass the source
-    viewport's ``_soft_shadows`` (GL softens exports too)."""
+def test_the_metal_view_reads_the_level_off_its_viewport(monkeypatch):
+    from core.camera import OrbitCamera
+    from views import wgpu_style
     from views.wgpu_view import WgpuView
-    for fn in (WgpuView._present_frame, WgpuView.render_image):
-        assert "soft_shadows=getattr(" in inspect.getsource(fn), fn.__name__
+
+    class PayloadReceived(Exception):
+        pass
+
+    received = []
+    def record(scene, style, **options):
+        received.append(options["soft_shadows"])
+        raise PayloadReceived
+
+    monkeypatch.setattr(wgpu_style, "style_payload", record)
+    view = WgpuView()
+    source = SimpleNamespace(scene=_wall_scene(), camera=OrbitCamera(), _effective_style=lambda: None)
+    view.source_viewport = source
+    view.packed = SimpleNamespace(model_translations=None)
+    view.renderer = object()
+    view._scene_dirty = False
+    monkeypatch.setattr(view.tools, "sync", lambda: None)
+    monkeypatch.setattr(view, "_mirror_cursor", lambda: None)
+    monkeypatch.setattr(view, "_fit_depth", lambda: None)
+    monkeypatch.setattr(view, "_horizon", lambda *_: 0.0)
+    try:
+        source._soft_shadows = 2
+        with pytest.raises(PayloadReceived):
+            view._present_frame()
+        source._soft_shadows = 3
+        with pytest.raises(PayloadReceived):
+            view.render_image(16, 12)
+        assert received == [2, 3]
+    finally:
+        view.renderer = None
+        view.close()
 
 
 class _VP:

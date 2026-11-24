@@ -2,7 +2,7 @@
 """Bind the Rust first-run units draft to document settings and the chrome."""
 import json
 
-from PySide6.QtCore import QSettings
+from core.settings import settings as QSettings
 
 from core import units
 from core.i18n import tr

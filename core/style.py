@@ -239,7 +239,7 @@ def builtin_names() -> set[str]:
 def _settings():
     """One place to get the QSettings handle, so tests can point it at a
     temp file."""
-    from PySide6.QtCore import QSettings
+    from core.settings import settings as QSettings
     return QSettings()
 
 

@@ -27,7 +27,8 @@ import html
 import threading
 import uuid
 
-from PySide6.QtCore import (QBuffer, QEvent, QIODevice, QSettings, Qt,
+from core.settings import settings as QSettings
+from PySide6.QtCore import (QBuffer, QEvent, QIODevice, Qt,
                             QUrl, Signal)
 from PySide6.QtGui import (QImage, QImageReader, QPalette, QPixmap,
                            QTextDocument)
@@ -536,7 +537,7 @@ class AsistentePanel(QWidget):
         dlg.exec()
 
     # ---- Settings -----------------------------------------------------------
-    def _settings(self) -> QSettings:
+    def _settings(self):
         return QSettings()
 
     def _load_settings(self) -> None:
@@ -570,7 +571,7 @@ class AsistentePanel(QWidget):
         st.setValue("ia/proveedor", self._provider.currentData())
         self._stash_credentials(st, self._provider.currentData())
 
-    def _stash_credentials(self, st: QSettings, slot) -> None:
+    def _stash_credentials(self, st, slot) -> None:
         """Remember the current key/model under the provider they belong
         to (detected by prefix when the combo is on Auto). Empty fields
         never clobber a stored value."""

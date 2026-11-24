@@ -159,7 +159,7 @@ def leave_camera(doc):
 def open_camera(win, target=None):
     from ingetrazo_render import CameraInspector
     view = getattr(win._doc, "stand_in", None) or win.viewport
-    from PySide6.QtCore import QSettings
+    from core.settings import settings as QSettings
     leave_camera(win._doc)
     inspector = CameraInspector()
     inspector.advanced = QSettings().value("camera_settings/advanced", False, type=bool)
@@ -196,7 +196,7 @@ def _camera(win, view, key, v):
             FOV_RANGE[1], max(FOV_RANGE[0], cam.fov_for_focal(v) if key == "focal" else v)
         )
     elif key == "advanced":
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         inspector.advanced = v
         QSettings().setValue("camera_settings/advanced", v)
     elif key == "sensor":

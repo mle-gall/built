@@ -6,7 +6,8 @@ with the tray instead of forcing it wider (#181: a horizontal scroll bar
 and cut-off buttons with room to spare). Shared by the Render and AI tabs."""
 from __future__ import annotations
 
-from PySide6.QtCore import QSettings, Qt
+from core.settings import settings as QSettings
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QComboBox, QFormLayout, QFrame, QLabel,
                                QSizePolicy, QToolButton, QVBoxLayout, QWidget)
 

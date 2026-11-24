@@ -9,6 +9,7 @@ import pytest
 _ENV = ("QT_QPA_PLATFORM", "XDG_DATA_HOME", "BUILT_ANSWERS", "BUILT_SETTINGS_DIR")
 
 _PATCHED = {
+    "core.settings": ("_store",),
     "views.chrome_dialogs": ("live", "QEventLoop", "_shell_installed"),
     "views.filedialogs": ("QFileDialog",),
     "core.renderer_settings": ("capability", "status_text", "_shell_installed"),
@@ -22,12 +23,8 @@ def restore_shell_patches(tmp_path_factory):
     env = {k: os.environ.get(k) for k in _ENV}
     os.environ["BUILT_SETTINGS_DIR"] = str(tmp_path_factory.mktemp("shell-settings"))
     from PySide6.QtCore import QCoreApplication, QSettings, QStandardPaths, QTimer
-    from PySide6.QtGui import QCursor, QGuiApplication
-    qt = [(QGuiApplication, a, QGuiApplication.__dict__.get(a, _MISSING))
-          for a in ("keyboardModifiers", "queryKeyboardModifiers", "mouseButtons")]
-    qt += [(QCursor, "pos", QCursor.__dict__.get("pos", _MISSING))]
-    qt += [(QTimer, a, QTimer.__dict__.get(a, _MISSING))
-           for a in ("start", "singleShot", "_shell_tracked")]
+    qt = [(QTimer, a, QTimer.__dict__.get(a, _MISSING))
+          for a in ("start", "singleShot", "_shell_tracked")]
     names = (QCoreApplication.organizationName(), QCoreApplication.applicationName())
     test_mode = QStandardPaths.isTestModeEnabled()
     fmt = QSettings.defaultFormat()

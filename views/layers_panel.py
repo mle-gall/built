@@ -1022,7 +1022,7 @@ class HatchGrid(QWidget):
     @classmethod
     def favourites(cls) -> list:
         """The pinned patterns, in the order they were pinned."""
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         raw = QSettings().value(cls.FAVOURITES_KEY, []) or []
         if isinstance(raw, str):
             raw = [raw]
@@ -1031,7 +1031,7 @@ class HatchGrid(QWidget):
     def set_favourite(self, key, on: bool) -> None:
         """Pin ``key`` among the favourites, or unpin it — the grid shows
         it at once, first of all, and keeps it for next time."""
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         if not key:
             return
         keys = [k for k in self.favourites() if k != key]
@@ -1078,7 +1078,7 @@ class HatchGrid(QWidget):
     @classmethod
     def recent(cls) -> list:
         """The patterns used last, newest first."""
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         raw = QSettings().value(cls.RECENT_KEY, []) or []
         if isinstance(raw, str):
             raw = [raw]
@@ -1089,7 +1089,7 @@ class HatchGrid(QWidget):
         """Put ``key`` first among the recently used."""
         if not key:
             return
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         keys = [key] + [k for k in cls.recent() if k != key]
         QSettings().setValue(cls.RECENT_KEY, keys[:cls.RECENT_MAX])
 
@@ -1100,7 +1100,7 @@ class HatchGrid(QWidget):
         """«More settings ▸»: the seldom used settings of a section folded
         under a small switch — the section shows what is set nearly always,
         the rest one click away, remembered for next time."""
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         from PySide6.QtWidgets import QVBoxLayout
         holder = QWidget(self)
         col = QVBoxLayout(holder)
@@ -1400,7 +1400,7 @@ class HatchGrid(QWidget):
     def own_pieces(cls) -> dict:
         """``{kind: [size, …]}`` the user saved (core.hatches.clean_brick
         sizes)."""
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         from core.hatches import clean_brick
         try:
             raw = json.loads(str(QSettings().value(cls.OWN_PIECES_KEY, "{}")))
@@ -1417,7 +1417,7 @@ class HatchGrid(QWidget):
 
     @classmethod
     def _save_own_pieces(cls, pieces: dict) -> None:
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         QSettings().setValue(cls.OWN_PIECES_KEY, json.dumps(
             {k: [list(v) for v in sizes] for k, sizes in pieces.items()
              if sizes}))
@@ -3792,7 +3792,7 @@ class LayersPanel(QWidget):
                 if v.strip().isdigit()}
 
     def hidden_columns(self) -> set[int]:
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         settings = QSettings()
         if not settings.contains(self.HIDDEN_COLUMNS_KEY):
             return set(self.DEFAULT_HIDDEN)
@@ -3805,7 +3805,7 @@ class LayersPanel(QWidget):
         return hidden | ((optional - known) & set(self.DEFAULT_HIDDEN))
 
     def set_column_shown(self, col: int, on: bool) -> None:
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         hidden = self.hidden_columns()
         if on:
             hidden.discard(col)
@@ -3829,7 +3829,7 @@ class LayersPanel(QWidget):
 
     @property
     def sort_by(self) -> str:
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         v = str(QSettings().value(self.SORT_KEY, "name") or "name")
         return v if v in SORT_MODES else "name"
 
@@ -3839,7 +3839,7 @@ class LayersPanel(QWidget):
         (by name inside each group) — Layer 0 first and folders before
         layers either way; remembered. A row whose eye or padlock is
         clicked moves to its group at once."""
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         QSettings().setValue(self.SORT_KEY,
                              how if how in SORT_MODES else "name")
         self._sort = (COL_NAME, Qt.AscendingOrder)
@@ -4070,13 +4070,13 @@ class LayersPanel(QWidget):
 
     @classmethod
     def new_layers_hidden_in_scenes(cls) -> bool:
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         return str(QSettings().value(cls.NEW_HIDDEN_KEY, "false")).lower() \
             in ("true", "1")
 
     @classmethod
     def set_new_layers_hidden_in_scenes(cls, on: bool) -> None:
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         QSettings().setValue(cls.NEW_HIDDEN_KEY, bool(on))
 
     def _selected_folder(self) -> str | None:

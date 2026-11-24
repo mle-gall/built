@@ -51,7 +51,7 @@ _NO_WALK_REACH = os.environ.get("INGETRAZO_NO_WALK_REACH", "") == "1"
 def eye_height() -> float:
     """The eye height the three tools share, remembered across sessions."""
     try:
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         v = float(QSettings().value(_SETTINGS_KEY, DEFAULT_EYE_HEIGHT))
         return v if 0.05 <= v <= 100.0 else DEFAULT_EYE_HEIGHT
     except Exception:  # noqa: BLE001 — no settings store (tests, scripts)
@@ -60,7 +60,7 @@ def eye_height() -> float:
 
 def set_eye_height(value: float) -> None:
     try:
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         QSettings().setValue(_SETTINGS_KEY, float(value))
     except Exception:  # noqa: BLE001
         pass
@@ -75,7 +75,7 @@ _LOOK_KEY = "walk/look_sensitivity"
 def look_sensitivity() -> int:
     """The mouse-look sensitivity, 1..100, remembered across sessions."""
     try:
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         v = int(float(QSettings().value(_LOOK_KEY, DEFAULT_LOOK_SENSITIVITY)))
         return v if 1 <= v <= 100 else DEFAULT_LOOK_SENSITIVITY
     except Exception:  # noqa: BLE001 — no settings store (tests, scripts)
@@ -412,8 +412,8 @@ class WalkTool(_EyeTool):
         vp = self._viewport
         if vp is None or self._anchor_px is None or self._cursor_px is None:
             return
-        from PySide6.QtWidgets import QApplication
-        mods = QApplication.keyboardModifiers() | self._modifiers
+        from views import input_state
+        mods = input_state.modifiers(vp) | self._modifiers
         dx = self._cursor_px.x() - self._anchor_px.x()
         dy = self._anchor_px.y() - self._cursor_px.y()      # up = forward
         self.step(vp, dx, dy, self.TICK_MS / 1000.0, mods)
@@ -585,9 +585,9 @@ class FirstPersonTool(_EyeTool):
         vp = self._viewport
         if vp is None or not self.held:
             return
-        from PySide6.QtWidgets import QApplication
+        from views import input_state
         self.step(vp, set(self.held), self.TICK_MS / 1000.0,
-                  QApplication.keyboardModifiers())
+                  input_state.modifiers(vp))
         emit = getattr(vp, "measurementChanged", None)
         if emit is not None and hasattr(vp, "_measurement_text"):
             emit.emit(vp._measurement_text())

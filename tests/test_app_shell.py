@@ -97,16 +97,14 @@ def test_events_answer_the_qt_calls_the_handlers_make():
     assert g.gestureType() == Qt.ZoomNativeGesture and g.value() == pytest.approx(0.1)
 
 
-def test_qt_input_queries_answer_from_the_shell(host):
-    """Push/Pull asks QApplication.queryKeyboardModifiers() for its keep-base
-    Ctrl; offscreen Qt sees no keyboard, so the shell answers it."""
-    from PySide6.QtWidgets import QApplication
-    from PySide6.QtGui import QCursor
+def test_window_input_answers_from_winit(host):
+    from views import input_state
+    from PySide6.QtCore import QPoint
     host.pointer("move", 30, 40, 0, 0, Qt.ControlModifier.value)
-    assert QApplication.queryKeyboardModifiers() & Qt.ControlModifier
-    assert (QCursor.pos().x(), QCursor.pos().y()) == (30, 40)
+    assert input_state.modifiers(host.viewport, query=True) & Qt.ControlModifier
+    assert input_state.cursor_position(host.viewport) == QPoint(30, 40)
     host.key(True, Qt.Key_Shift.value, Qt.ShiftModifier.value)
-    assert QApplication.keyboardModifiers() == Qt.ShiftModifier
+    assert input_state.modifiers(host.viewport) == Qt.ShiftModifier
 
 
 def test_rail_matches_classic_groups_and_dispatches(host):
@@ -201,3 +199,26 @@ def test_annotation_font_options(host, tool):
     finally:
         view._ui_attached = False
         view.renderer = None
+
+
+def test_registered_shortcuts_use_rust_and_plugin_actions_still_trigger(host):
+    from PySide6.QtGui import QAction, QKeySequence
+    from app_shell.command_action import ShellAction
+
+    win = host.window
+    assert all(isinstance(a, ShellAction) for a in win._registry_actions.values())
+    assert not win.findChildren(QAction)
+    line = win._registry_actions["tool:line"]
+    line.setShortcuts([QKeySequence("F12"), QKeySequence("Ctrl+X, Ctrl+C")])
+    seen = []
+    line.run = lambda: seen.append("registered")
+    assert host._shortcut(Qt.Key_F12, 0)
+    assert not host._shortcut(Qt.Key_X, Qt.ControlModifier.value)
+    line.setEnabled(False)
+    plugin = QAction("Plugin fixture", win)
+    plugin.setShortcut(QKeySequence("F12"))
+    plugin.triggered.connect(lambda: seen.append("plugin"))
+    assert host._shortcut(Qt.Key_F12, 0)
+    plugin.setEnabled(False)
+    assert not host._shortcut(Qt.Key_F12, 0)
+    assert seen == ["registered", "plugin"]

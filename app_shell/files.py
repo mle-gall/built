@@ -235,7 +235,7 @@ def open_dialog(win) -> bool:
 
 def open_recent_index(win, arg) -> bool:
     if arg == "clear":
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         QSettings().setValue("recent_files", [])
         win._host.recent_changed()
         return True
@@ -603,7 +603,7 @@ def dxf_options(win, path, header_scale=None):
     """MainWindow._dxf_options on the sheet: the unit, preselected from the
     header or the last answer; faces as last chosen (the classic app's
     dialog has the checkbox)."""
-    from PySide6.QtCore import QSettings
+    from core.settings import settings as QSettings
     from views import chrome_dialogs as cd
     keys = ["mm", "cm", "m", "in", "ft"]
     factors = {"mm": 0.001, "cm": 0.01, "m": 1.0, "in": 0.0254, "ft": 0.3048}
