@@ -5,31 +5,31 @@ import platform
 
 import pytest
 
-from PySide6.QtWidgets import QApplication
+from tests.test_report_sheets import pasteboard  # noqa: F401
 
 from core.i18n import current_language, set_language
 from ingetrazo_render import AboutSheet as About, about_review
 from types import SimpleNamespace
 
-_app = QApplication.instance() or QApplication([])
+_WINDOW = SimpleNamespace(width=900, height=600, scale=1.)
 
 _GL = "NVIDIA Corporation · RTX 9999/PCIe · OpenGL 4.6.0"
 
 
 def system_info(version, gl_line=""):
-    return about_review(version, gl_line).info
+    return about_review(version, gl_line, _WINDOW).info
 
 
-def test_the_info_names_program_system_python_qt_and_gl():
+def test_the_info_names_program_system_python_renderer_and_gl():
     text = system_info("9.8.7", _GL)
     assert text.splitlines()[0].startswith("Built 9.8.7")
     os_line = next(line for line in text.splitlines() if line.startswith("OS: "))
     assert platform.machine() in os_line
     assert ("macOS" if platform.system() == "Darwin" else platform.system()) in os_line
     assert f"Python: {platform.python_version()}" in text
-    assert "Qt: " in text and "PySide6: " in text
+    assert "Renderer: wgpu" in text
     assert f"OpenGL: {_GL}" in text
-    assert "Screen: " in text
+    assert "Window: " in text
     assert f"Language: {current_language()}" in text
 
 
@@ -45,22 +45,21 @@ def test_the_info_stays_in_english_whatever_the_interface_language():
     finally:
         set_language(before)
     assert "Language: es" in text
-    assert "OS: " in text and "Screen: " in text
+    assert "OS: " in text and "Window: " in text
 
 
-def test_the_button_copies_the_info_to_the_clipboard():
-    QApplication.clipboard().setText("something else")
-    ctx = SimpleNamespace(win=SimpleNamespace())
+def test_the_button_copies_the_info_to_the_clipboard(native_host, pasteboard):
+    ctx = SimpleNamespace(win=native_host.window)
     sheet = About()
-    sheet.review = about_review("9.8.7", _GL)
+    sheet.review = about_review("9.8.7", _GL, _WINDOW)
     sheet.build(ctx)
     sheet.act(ctx, "verb", ["copy"])
-    assert QApplication.clipboard().text() == system_info("9.8.7", _GL)
+    assert pasteboard["public.utf8-plain-text"].decode() == system_info("9.8.7", _GL)
 
 
-def test_the_button_says_it_copied():
+def test_the_button_says_it_copied(native_host, pasteboard):
     from core.i18n import tr
-    ctx = SimpleNamespace(win=SimpleNamespace())
+    ctx = SimpleNamespace(win=native_host.window)
     sheet = About()
     def label():
         buttons = [v for b in sheet.build(ctx).wire()["content"]["blocks"] for v in b.get("buttons", [])]
