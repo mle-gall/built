@@ -2595,6 +2595,12 @@ impl Renderer {
         if let Some(ui)=self.ui.as_mut(){ui.hatch_preference(py,verb,value)?;}
         Ok(())
     }
+    fn ui_tick_tag_counts(&mut self, history: &Bound<'_, PyAny>) -> PyResult<bool> {
+        match self.ui.as_mut() {
+            Some(ui) => ui.tick_tag_counts(history),
+            None => Ok(false),
+        }
+    }
     fn ui_drawing_applied(&mut self, verb:&str, key:&str) { if let Some(ui)=self.ui.as_mut(){ui.drawing_edit_applied(verb,key);} }
     #[pyo3(signature=(name, origin, scene=None, mount=None))]
     fn ui_set_host_context(&mut self, name: String, origin: [f64; 3], scene: Option<&Bound<'_, PyAny>>, mount: Option<&Bound<'_, PyAny>>) -> PyResult<()> {
@@ -3173,6 +3179,7 @@ mod registry_editor;
 mod render_result;
 mod font_lengths;
 mod svg_options;
+mod tag_counts;
 /// Sheet items' display lists on the page.
 pub mod sheet_display;
 /// An image item's picture as the sheet shows it, shared with the writers.
@@ -3335,6 +3342,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<render_result::RenderResult>()?;
     m.add_function(wrap_pyfunction!(font_lengths::font_length, m)?)?;
     m.add_class::<svg_options::SvgOptions>()?;
+    m.add_class::<tag_counts::TagCounts>()?;
     m.add_function(wrap_pyfunction!(commands::command_registry, m)?)?;
     m.add_function(wrap_pyfunction!(commands::command_description, m)?)?;
     m.add_function(wrap_pyfunction!(commands::shortcut_conflicts, m)?)?;

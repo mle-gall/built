@@ -5,9 +5,7 @@ beside the Browser.
 
 One row per layer, filed under folders when it has one: the pencil marks
 the ACTIVE layer (new objects go there, core.layers.tag_new_objects), the
-eye and the padlock show and lock, the swatch is the layer's colour (what
-«Colour by layer» paints the model with), and the last column counts what
-carries the layer. Clicking the eye or the padlock of one of several
+eye and the padlock show and lock, and the swatch is the layer's colour. Clicking the eye or the padlock of one of several
 selected rows acts on all of them; clicking a column header sorts, with the
 default layer always first. Visibility, lock, colour and folders are
 display state and stay off the undo stack, like before; deleting a layer
@@ -2294,10 +2292,7 @@ class _LineDelegate(QStyledItemDelegate):
 
 
 class _LayerTree(SideTree):
-    """The layer tree, taking drops of its own rows: what is dragged goes
-    into the folder dropped on — the folder of the layer dropped on, or out
-    of any folder on the empty space. Qt never moves a row by itself here:
-    the document changes and the tree is rebuilt from it."""
+    """Classic layer list with row-wide selection and cell actions."""
 
     #: The cells a press acts on directly, as in the Browser: the row's
     #: selection is left as it is, so a click on the eye of one of several
@@ -2309,58 +2304,6 @@ class _LayerTree(SideTree):
     #: Delete belongs to the list while it has the focus, not to a window
     #: shortcut.
     DELETE_KEY = True
-
-    def target_folder(self, pos) -> str | None:
-        """The folder a drop at `pos` (viewport coordinates) files into."""
-        item = self.itemAt(pos)
-        if item is None:
-            return None
-        kind, name = self._panel._key(item)
-        if kind == KIND_FOLDER:
-            return name
-        parent = item.parent()
-        return self._panel._key(parent)[1] if parent is not None else None
-
-    # ---- Where a drop lands ----------------------------------------------
-    def drop_target(self, pos):
-        return self.target_folder(pos)
-
-    def folder_item(self, name: str):
-        """The row of folder `name`, or None."""
-        it = QTreeWidgetItemIterator(self)
-        while it.value() is not None:
-            item = it.value()
-            if self._panel._key(item) == (KIND_FOLDER, name):
-                return item
-            it += 1
-        return None
-
-    def drop_items(self, folder):
-        """The folder's row and every row shown inside it; none for the
-        empty space (the whole list, out of any folder)."""
-        item = self.folder_item(folder)
-        if item is None:
-            return []
-        items = [item]
-        stack = [item]
-        while stack:
-            node = stack.pop()
-            if not node.isExpanded():
-                continue
-            for i in range(node.childCount()):
-                child = node.child(i)
-                if child.isHidden():
-                    continue
-                items.append(child)
-                stack.append(child)
-        return items
-
-    def drop_text(self, folder) -> str:
-        return (tr("Into «{folder}»", folder=folder) if folder is not None
-                else tr("Out of any folder"))
-
-    def apply_drop(self, folder, rows) -> None:
-        self._panel.drop_rows([self._panel._key(it) for it in rows], folder)
 
 
 class LayersPanel(QWidget):
@@ -2377,8 +2320,6 @@ class LayersPanel(QWidget):
         self._updating = False
         self._told_outline = None
         self._collapsed: set[str] = set()
-        self._counts: dict[str, int] = {}
-        self._counted_version = None
         lay = QVBoxLayout(self)
         lay.setContentsMargins(6, 6, 6, 6)
         lay.setSpacing(4)
@@ -2440,6 +2381,7 @@ class LayersPanel(QWidget):
         lay.addLayout(bar)
 
         self.tree = _LayerTree(self)
+        self.tree.setDragDropMode(QAbstractItemView.NoDragDrop)
         self.tree.setColumnCount(11)
         self.tree.setHeaderLabels([tr("Name"), "", "", "", "", "#", "",
                                    tr("Line"), "mm", "%", "", tr("Cut pen"),
@@ -2545,9 +2487,6 @@ class LayersPanel(QWidget):
         # is the Delete key and the right-click menu, assigning is the
         # Layers toolbar's drop-down and the right-click menu.
 
-        self._count_timer = QTimer(self)
-        self._count_timer.setSingleShot(True)
-        self._count_timer.timeout.connect(self._count_slice)
         # Back in the drawing, the rows picked here let go: a highlighted
         # row left behind reads as a layer still being worked on.
         QApplication.instance().focusChanged.connect(self._on_focus_changed)
@@ -2628,9 +2567,7 @@ class LayersPanel(QWidget):
         return item.data(COL_NAME, Qt.UserRole) or (KIND_LAYER, "")
 
     def refresh(self) -> None:
-        """Rebuild the tree from the document, keeping the selection, the
-        folded folders and the filter; the counts follow a moment later
-        (one walk of the model, not one per edit)."""
+        """Rebuild the rows, keeping the selection, folded folders and filter."""
         # This rebuild covers whatever the deferred one was waiting for.
         timer = getattr(self, "_refresh_timer", None)
         if timer is not None and timer.isActive():
@@ -2694,7 +2631,6 @@ class LayersPanel(QWidget):
         self._drawn_structure = self._structure()
         self.tree.horizontalScrollBar().setValue(scroll[0])
         self.tree.verticalScrollBar().setValue(scroll[1])
-        self._count_timer.start(300)
         self._tell_order()
 
     def display_outline(self) -> list:
@@ -3042,8 +2978,6 @@ class LayersPanel(QWidget):
             look.append(L.folder_label(self._scene(), ly.folder))
         item.setToolTip(COL_NAME, "\n".join([ly.name, " · ".join(look)])
                         if look else ly.name)
-        if ly.key in self._counts:
-            self._set_count(item, self._counts[ly.key])
 
     def _paint_folder_row(self, item, layers=None) -> None:
         scene = self._scene()
@@ -3069,51 +3003,6 @@ class LayersPanel(QWidget):
         item.setToolTip(COL_ISOLATE, tr(
             "Shown alone — click to show back what Isolate hid")
             if alone else tr("Isolate: show only the layers in this folder"))
-
-    @staticmethod
-    def _set_count(item, n: int) -> None:
-        item.setText(COL_COUNT, str(n))
-        item.setData(COL_COUNT, Qt.UserRole + 1, n)
-        item.setTextAlignment(COL_COUNT, Qt.AlignRight | Qt.AlignVCenter)
-
-    def update_counts(self) -> None:
-        """How many entities carry each layer — faces, edges, objects and
-        annotations, inside groups too."""
-        from core.purge import layer_counts
-        scene = self._scene()
-        self._counted_version = scene.content_version
-        counts = layer_counts(scene)
-        self._count_job = None
-        self._show_counts(counts)
-
-    def _count_slice(self):
-        from time import monotonic
-        from core.purge import layer_count_steps
-        scene = self._scene()
-        key = (id(scene), scene.content_version)
-        job = getattr(self, "_count_job", None)
-        if job is None or job[0] != key:
-            job = self._count_job = (key, layer_count_steps(
-                scene, history=self._window.viewport.history))
-        deadline = monotonic() + 0.030
-        for counts in job[1]:
-            if counts is not None:
-                self._count_job = None
-                self._counted_version = scene.content_version
-                self._show_counts(counts)
-                return
-            if monotonic() >= deadline:
-                self._count_timer.start(10)
-                return
-
-    def _show_counts(self, counts):
-        self._counts = counts
-        self._updating = True
-        for it in self._all_items():
-            kind, name = self._key(it)
-            if kind == KIND_LAYER:
-                self._set_count(it, counts.get(name, 0))
-        self._updating = False
 
     def _all_items(self):
         """Every row, folders inside folders included, depth first."""
@@ -4025,36 +3914,6 @@ class LayersPanel(QWidget):
         L.move_to_folder(self._scene(), names, folder)
         self._touch()
 
-    def drop_rows(self, rows, folder: str | None) -> None:
-        """File the dragged rows — ``(kind, name)`` pairs — into ``folder``
-        (``None``: out of any folder). A layer inside a dragged folder
-        travels with its folder; the default layer never goes in one; a
-        folder will not go into itself or into a folder inside it."""
-        scene = self._scene()
-        folders = [n for k, n in rows if k == KIND_FOLDER]
-        inside = set(folders)
-        for f in folders:
-            inside.update(L.subfolders(scene, f, deep=True))
-        layers = [n for k, n in rows if k == KIND_LAYER
-                  and n != L.DEFAULT_LAYER
-                  and scene.layer(n) is not None
-                  and scene.layer(n).folder not in inside]
-        moved = 0
-        for f in folders:
-            if f != folder and L.move_folder(scene, f, folder):
-                moved += 1
-        if layers:
-            L.move_to_folder(scene, layers, folder)
-            moved += len(layers)
-        if folder:
-            self._collapsed.discard(folder)          # show where they went
-        self._touch()
-        if moved:
-            self._window.statusBar().showMessage(
-                tr("{n} moved to '{folder}'", n=moved, folder=folder)
-                if folder else tr("{n} moved out of any folder", n=moved),
-                2500)
-
     def move_folder(self, name: str, parent: str | None) -> None:
         L.move_folder(self._scene(), name, parent)
         self._touch()
@@ -4868,17 +4727,12 @@ class LayersPanel(QWidget):
         timer.start(0)
 
     def _refresh_after_change(self) -> None:
-        """What the next turn does: only the selection's mark and, after a
-        change of the model, the counts — the filter too: «Selection» shows
-        the layers of what is picked — when the rows are what they were;
-        otherwise the tree is rebuilt."""
+        """Update selection and filtering in place when the rows are unchanged."""
         signature = self._signature()
         previous = getattr(self, "_drawn_signature", None)
         if signature == previous and self.tree.topLevelItemCount():
             self._mark_selection()
             self._apply_filter()
-            if self._scene().content_version != self._counted_version:
-                self._count_timer.start(300)
             return
         if previous is not None and self._append_root_layers(previous, signature):
             return
@@ -4911,7 +4765,6 @@ class LayersPanel(QWidget):
         self._apply_filter()
         self._drawn_signature = signature
         self._drawn_structure = self._structure()
-        self._count_timer.start(300)
         self._tell_order()
         return True
 

@@ -198,3 +198,45 @@ def test_unprinted_tags_can_be_found_and_bulk_print_preserves_visibility():
     for flag in (True, False):
         drawing_edit(project, "drawingpatch", [names, {"print": str(int(flag))}])
         assert all(tag.printable == flag for tag in project.scene.layers)
+
+
+def test_drawing_drops_and_entity_counts_follow_the_document():
+    import json
+    from ingetrazo_core import Vec3
+    from ingetrazo_render import TagCounts
+
+    p = Project(Layer("A"), Layer("B"), Layer("C", folder="Plans"))
+    scene = p.scene
+    outside = layers.add_folder(scene, "Outside")
+    p.action("lens", "1")
+
+    def drop(verb, **payload):
+        p.action("tagfolder", verb + wgpu_ui.SEP + json.dumps(payload))
+
+    history = p.win.viewport.history
+    before = history.revision
+    drop("file", tags=["A", "B"], parent="Plans")
+    assert (scene.layer("A").folder, scene.layer("B").folder) == ("Plans", "Plans")
+    assert history.revision == before + 1
+    drop("move", folder="Plans", parent=outside)
+    assert layers.folder_parent(scene, "Plans") == outside and scene.layer("C").folder == "Plans"
+    before = history.revision
+    drop("move", folder=outside, parent="Plans")
+    assert history.revision == before
+    assert history.undo() and history.undo()
+    assert scene.layer("A").folder is None and scene.layer("B").folder is None
+
+    p.action("eye", "preview-folder:Plans")
+    assert not layers.effective_visible(scene, scene.layer("C"))
+    p.action("eye", "preview-folder:Plans")
+    assert layers.effective_visible(scene, scene.layer("C"))
+    counts = TagCounts()
+    edge = scene.mesh.add_edge(Vec3(0, 0, 0), Vec3(1, 0, 0))
+    edge.layer = "C"
+    scene.version += 1
+    while counts.tick(history):
+        pass
+    assert counts.count("C") == 1 and counts.count("A") == 0
+    drawing_edit(p, "drawingpatch", [["C"], {"color": "#ff0000"}])
+    p.action("toggle", "preview-folder:Plans")
+    assert scene.layer("C").color == (1., 0., 0.)

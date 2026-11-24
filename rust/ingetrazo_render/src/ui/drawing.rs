@@ -2,6 +2,59 @@
 //! Drawing controls for the focused Project node.
 use super::{kit, parse_hex, Node, SWATCH_FALLBACK};
 
+/// Imported tags and their folders are filed by stable key, independently of
+/// the sort applied to the visible rows. A drop onto a tag uses its folder.
+pub(super) struct DrawingDrag {
+    owner: usize,
+    verb: &'static str,
+    tags: Vec<String>,
+    folder: String,
+}
+
+impl DrawingDrag {
+    pub fn begin(styles: &StyleEditor, row: &Node) -> Option<Self> {
+        let (verb, tags, folder) = if let Some(tag) = row.key.strip_prefix("preview-tag:") {
+            if tag == "Layer 0" { return None; }
+            let tags = if styles.selected(row) {
+                styles.selected.keys().filter(|k| *k != "Layer 0").cloned().collect()
+            } else { vec![tag.to_owned()] };
+            ("file", tags, String::new())
+        } else {
+            ("move", Vec::new(), row.key.strip_prefix("preview-folder:")?.to_owned())
+        };
+        Some(Self { owner: styles.owner, verb, tags, folder })
+    }
+
+    fn action(&self, folder: &str) -> String {
+        let data = serde_json::json!({"parent": folder, "folder": self.folder, "tags": self.tags});
+        format!("tagfolder\u{1f}{}\u{1f}{data}", self.verb)
+    }
+}
+
+pub(super) fn drawing_drop(ui: &egui::Ui, response: &egui::Response, nodes: &[Node],
+                           index: Option<usize>, owner: usize, actions: &mut Vec<String>) {
+    let Some(payload) = response.dnd_hover_payload::<DrawingDrag>() else { return };
+    if payload.owner != owner { return; }
+    let mut target = "";
+    if let Some(index) = index {
+        let row = &nodes[index];
+        if let Some(folder) = row.key.strip_prefix("preview-folder:") {
+            target = folder;
+        } else if row.key.starts_with("preview-tag:") {
+            if row.depth > 0 {
+                if let Some(parent) = nodes[..index].iter().rev().find(|n| n.depth < row.depth) {
+                    target = parent.key.strip_prefix("preview-folder:").unwrap_or("");
+                }
+            }
+        } else { return; }
+    }
+    if payload.verb == "move" && payload.folder == target { return; }
+    kit::paint_focus(ui, response.rect, super::R_ROW);
+    if response.dnd_release_payload::<DrawingDrag>().is_some() {
+        actions.push(payload.action(target));
+    }
+}
+
 pub(super) enum DraggedRow {
     Node(String),
     Placement { key: String, selected: bool },
@@ -86,6 +139,7 @@ use std::collections::BTreeMap;
 #[derive(Default)]
 pub(super) struct StyleEditor {
     pub owner: usize,
+    counts: crate::tag_counts::TagCounts,
     pub catalog: super::drawing_catalog::Catalog,
     folder_focus: bool,
     pub hatches: super::drawing_hatches::Hatches,
@@ -164,6 +218,7 @@ impl StyleEditor {
     }
     pub fn clear_focus(&mut self) {
         self.selected.clear();
+        self.counts.cancel_pending();
         self.patch.clear();
         self.folder_focus = false;
         self.catalog.close_line();
@@ -171,9 +226,18 @@ impl StyleEditor {
     pub fn pick_folder(&mut self, key: &str) {
         self.catalog.close_line();
         self.selected.clear();
+        self.counts.cancel_pending();
         self.patch.clear();
         self.folder_focus = true;
         self.catalog.select_folder(key);
+    }
+
+    pub fn tick_counts(&mut self, history: &pyo3::Bound<'_, pyo3::PyAny>) -> pyo3::PyResult<bool> {
+        if self.selected.is_empty() {
+            self.counts.cancel_pending();
+            return Ok(false);
+        }
+        self.counts.tick(history)
     }
 
     pub fn active(&self) -> bool {
@@ -182,6 +246,11 @@ impl StyleEditor {
 
     pub fn draw(&mut self, ui: &mut egui::Ui, actions: &mut Vec<String>) -> bool {
         let tags: Vec<_> = self.selected.keys().cloned().collect();
+        if !tags.is_empty() {
+            let count: Option<u64> = tags.iter().map(|tag| self.counts.count(tag)).sum();
+            let value = count.map_or_else(|| "Counting…".to_string(), |n| n.to_string());
+            kit::property_control(ui, "Entities", |ui| { ui.label(value); });
+        }
         let fields_height =
             (ui.available_height() - super::BUTTON_H - super::SPACE_S).max(super::CONTROL_H);
         egui::ScrollArea::vertical()

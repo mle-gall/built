@@ -429,6 +429,8 @@ def before_frame(view) -> None:
     from views import wgpu_deliveries
     wgpu_deliveries.bind(win)
     _tree(view, win)
+    if view.__dict__.get("_ui_lens") == 1 and view.renderer.ui_tick_tag_counts(win.viewport.history):
+        view.update()
     from views import wgpu_library
     wgpu_library.before_frame(view, win)
     _inspector(view, win)
