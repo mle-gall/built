@@ -114,7 +114,18 @@ fn event(d: &Bound<'_, PyDict>) -> PyResult<ToolEvent> {
     let mods = || -> PyResult<Mods> {
         Ok(Mods::from_qt(opt(d, "mods")?.map(|v| v.extract()).transpose()?.unwrap_or(0)))
     };
+    use super::walkthrough::Navigation;
+    let field = |key: &str| d.get_item(key)?.ok_or_else(|| PyValueError::new_err(format!("missing {key}")));
     Ok(match kind.as_str() {
+        "paste_at" => ToolEvent::PasteAt(p3(&field("offset")?)?),
+        "flip_along" => ToolEvent::FlipAlong { axis: field("axis")?.extract()?, copy: field("copy")?.extract()? },
+        "profile" => ToolEvent::Profile(field("value")?.extract()?),
+        "protractor_frame" => ToolEvent::ProtractorFrame { basis: field("basis")?.extract()?, near: field("near")?.extract()?, exact: field("exact")?.extract()? },
+        "place_camera" => ToolEvent::Navigate(Navigation::Place { base: p3(&field("base")?)?, look: opt(d,"look")?.map(|v| p3(&v)).transpose()? }),
+        "look_delta" => ToolEvent::Navigate(Navigation::Look(field("delta")?.extract()?)),
+        "camera_tick" => ToolEvent::Navigate(Navigation::Tick { dt: field("dt")?.extract()?, mods: mods()? }),
+        "walk_step" => ToolEvent::Navigate(Navigation::Walk { delta: field("delta")?.extract()?, dt: field("dt")?.extract()?, mods: mods()? }),
+        "first_person_step" => ToolEvent::Navigate(Navigation::Keys { keys: field("keys")?.extract()?, dt: field("dt")?.extract()?, mods: mods()? }),
         "activate" => ToolEvent::Activate,
         "deactivate" => ToolEvent::Deactivate,
         "cancel" => ToolEvent::Cancel,
@@ -407,6 +418,41 @@ impl ToolMachine {
         new_tool(kind)
             .map(|tool| ToolMachine { tool, serial: 0 })
             .ok_or_else(|| PyValueError::new_err(format!("no Rust tool {kind:?}")))
+    }
+
+    #[staticmethod]
+    fn group_axes_basis(origin: P3, red: P3, green: P3) -> Option<[P3; 3]> {
+        super::change_axes::axes(origin, red, green)
+    }
+
+    #[staticmethod]
+    fn flip_quad(axis: &str, center: P3, half: P3, margin: f64) -> [P3; 4] {
+        super::flip::quad(axis, center, half, margin)
+    }
+
+    #[staticmethod]
+    fn protractor_angle(basis: [P3; 2], arm: P3, other: P3) -> Option<f64> {
+        super::protractor::angle(basis, arm, other)
+    }
+    #[staticmethod]
+    fn protractor_display(degrees: f64, near: bool) -> f64 {
+        super::protractor::display(degrees, near)
+    }
+    #[staticmethod]
+    fn protractor_direction(basis: [P3; 2], arm: P3, degrees: f64) -> P3 {
+        super::protractor::direction(basis, arm, degrees)
+    }
+
+    #[staticmethod]
+    fn offset_loop(points: Vec<P3>, normal: P3, distance: f64) -> Option<Vec<P3>> {
+        super::offset_tool::closed_offset(&points, normal, distance)
+    }
+
+    #[staticmethod]
+    fn walk_blocked(host: &Bound<'_, PyAny>, eye: P3, delta: P3, height: f64, clearance: f64, knee: f64) -> PyResult<bool> {
+        let mut bridge = PyHost { obj: host, err: None };
+        let blocked = super::walkthrough::blocked(&mut bridge, eye, delta, height, clearance, knee);
+        bridge.err.map_or(Ok(blocked), Err)
     }
 
     /// The tool's class attributes, as the inference and the host read them.

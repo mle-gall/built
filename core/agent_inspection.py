@@ -17,6 +17,54 @@ def bounds(pair):
     return None if lo is None else {"min": vector(lo), "max": vector(hi)}
 
 
+def set_camera(camera, *, preset=None, eye=None, target=None, up=None, ortho=None,
+               direction=None, turn=None, translation=None):
+    """Apply a view-only set_camera command. Relative moves preserve orbit distance."""
+    def numbers(value, size):
+        if (not isinstance(value, (list, tuple)) or len(value) != size
+                or not all(isinstance(x, (int, float)) and math.isfinite(x) for x in value)):
+            raise ValueError(f"camera vectors must contain {size} finite numbers")
+        return value
+
+    def point(value):
+        return QVector3D(*numbers(value, 3))
+
+    if turn is not None or translation is not None:
+        if ((turn is not None and translation is not None)
+                or any(v is not None for v in (eye, target, up, direction, ortho, preset))):
+            raise ValueError("a relative camera move takes one turn or translation")
+        if turn is not None:
+            camera.turn(*numbers(turn, 2))
+        else:
+            camera.move_eye(point(translation))
+        return
+    if preset is not None and preset not in camera._STANDARD_VIEWS:
+        raise ValueError(f"unknown camera preset {preset!r}")
+    if ortho is not None and type(ortho) is not bool:
+        raise ValueError("ortho must be a boolean")
+    e = point(eye) if eye is not None else camera.eye()
+    u = point(up) if up is not None else camera.up
+    if direction is not None and target is not None:
+        raise ValueError("specify one camera direction or target")
+    t = point(target) if target is not None else camera.target
+    d = point(direction) if direction is not None else t - e
+    if d.lengthSquared() < 1e-18 or u.lengthSquared() < 1e-18:
+        raise ValueError("camera eye/target and up must define a direction")
+    if direction is not None:
+        camera.look_from(e, d)
+    elif eye is not None or target is not None:
+        camera.distance = d.length()
+        camera.look_from(e, d)
+    camera.up = u
+    if preset:
+        camera.set_view(preset)
+    if ortho is not None:
+        if direction is not None and not ortho:
+            camera.perspective = True
+        else:
+            camera.set_projection("parallel" if ortho else "perspective")
+
+
 class InspectionTools:
     def _groups(self):
         # Every tool starts from this walk; a sweep of one query_entity per
@@ -200,29 +248,10 @@ class InspectionTools:
         return dict(eye=vector(c.eye()), target=vector(c.target), up=vector(c.up_vector()),
                     fov=c.fov_deg, ortho=not c.perspective, preset=preset)
 
-    def _tool_set_camera(self, preset=None, eye=None, target=None, up=None, ortho=None):
-        c = self._viewport.camera
-        def point(value):
-            if not isinstance(value, (list, tuple)) or len(value) != 3 or not all(isinstance(x, (int, float)) and math.isfinite(x) for x in value):
-                raise ValueError("camera vectors must contain three finite numbers")
-            return QVector3D(*value)
-        e = point(eye) if eye is not None else c.eye()
-        t = point(target) if target is not None else c.target
-        u = point(up) if up is not None else c.up
-        if (t-e).lengthSquared() < 1e-18 or u.lengthSquared() < 1e-18:
-            raise ValueError("camera eye/target and up must define a direction")
-        if preset is not None and preset not in c._STANDARD_VIEWS:
-            raise ValueError(f"unknown camera preset {preset!r}")
-        if ortho is not None and type(ortho) is not bool:
-            raise ValueError("ortho must be a boolean")
-        if eye is not None or target is not None:
-            c.distance = (t-e).length()
-            c.look_from(e, t-e)
-        c.up = u
-        if preset:
-            c.set_view(preset)
-        if ortho is not None:
-            c.set_projection("parallel" if ortho else "perspective")
+    def _tool_set_camera(self, preset=None, eye=None, target=None, up=None, ortho=None,
+                         direction=None, turn=None, translation=None):
+        set_camera(self._viewport.camera, preset=preset, eye=eye, target=target, up=up,
+                   ortho=ortho, direction=direction, turn=turn, translation=translation)
         self._viewport.update()
         return self._tool_query_camera()
 

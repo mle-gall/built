@@ -2923,7 +2923,7 @@ Native denotes routed, not exhaustive parity acceptance.
 | --- | --- | --- | --- |
 | select | SelectTool | native | Rust state machine, rubber_band_lines |
 | line | LineTool | native | Rust state machine, rubber_band_lines |
-| freehand | FreehandTool | native | rubber_band_lines |
+| freehand | FreehandTool | native | Rust state machine, rubber_band_lines |
 | rectangle | RectangleTool | native | rubber_band_lines |
 | rotated_rect | RotatedRectangleTool | native | rubber_band_lines |
 | circle | CircleTool | native | rubber_band_lines |
@@ -2933,30 +2933,30 @@ Native denotes routed, not exhaustive parity acceptance.
 | center_arc | CenterArcTool | native | rubber_band_lines |
 | pie | PieTool | native | rubber_band_lines |
 | pushpull | PushPullTool | native | _pixel_to_ray, _world_to_pixel, pick_face_any, rubber_band_lines |
-| offset | OffsetTool | native | _pixel_to_ray, _world_to_pixel, pick_face, rubber_band_lines |
+| offset | OffsetTool | native | Rust state machine, _pixel_to_ray, _world_to_pixel, pick_face |
 | move | MoveTool | native | Rust state machine, _world_to_pixel, pick_edge, pick_face, pick_group, rubber_band_lines, set_groups_preview_offset |
 | rotate | RotateTool | native | Rust state machine, pick_edge, pick_face, rubber_band_lines, set_groups_preview_matrix |
 | scale | ScaleTool | native | Rust state machine, _pixel_to_ray, _world_to_pixel, pick_edge, pick_face, scale_box_state (screen handles) |
-| flip | FlipTool | native | _world_to_pixel |
+| flip | FlipTool | native | Rust state machine, _world_to_pixel |
 | followme | FollowMeTool | native | pick_edge, pick_face, rubber_band_lines |
-| fillet | FilletTool | native | rubber_band_lines |
+| fillet | FilletTool | native | Rust state machine, rubber_band_lines |
 | texture_position | TexturePositionTool | native | shared viewport / tool base |
-| paint | PaintTool | native | pick_face_any |
+| paint | PaintTool | native | Rust state machine, pick_face_any |
 | dimension | DimensionTool | native | rubber_band_lines |
 | eraser | EraserTool | native | pick_dimension, pick_edge, pick_geopath, pick_guide, rubber_band_lines |
-| tape | TapeMeasureTool | native | _world_to_pixel, pick_axis, pick_edge, pick_edge_any, pick_guide, rubber_band_lines |
-| protractor | ProtractorTool | native | rubber_band_lines |
+| tape | TapeMeasureTool | native | Rust state machine, _world_to_pixel, pick_axis, pick_edge_any, pick_guide |
+| protractor | ProtractorTool | native | Rust state machine, rubber_band_lines |
 | north | NorthTool | native | rubber_band_lines |
 | text | TextTool | native | pick_edge, pick_face_any, rubber_band_lines |
 | geopath | GeoPathTool | native | _world_to_pixel, rubber_band_lines |
 | section | SectionPlaneTool | native — after the crate work | rubber_band_lines |
-| position_camera | PositionCameraTool | native | rubber_band_lines |
-| walk | WalkTool | native | rubber_band_lines |
-| look_around | LookAroundTool | native | rubber_band_lines |
-| first_person | FirstPersonTool | native | rubber_band_lines |
-| change_axes | ChangeAxesTool | native | rubber_band_lines |
+| position_camera | PositionCameraTool | native | Rust state machine |
+| walk | WalkTool | native | Rust state machine |
+| look_around | LookAroundTool | native | Rust state machine |
+| first_person | FirstPersonTool | native | Rust state machine |
+| change_axes | ChangeAxesTool | native | Rust state machine, rubber_band_lines |
 | scale_manager | ScaleManagerTool | native | shared viewport / tool base |
-| paste | PasteTool | native | rubber_band_lines, set_groups_preview_offset |
+| paste | PasteTool | native | Rust state machine, set_groups_preview_offset |
 | place_group | PlaceGroupTool | native | pick_face_any, rubber_band_lines |
 | outer_shell | OuterShellTool | native | pick_group |
 | solid_union | UnionTool | native | pick_group |

@@ -17,7 +17,7 @@ from core.axes import plane_axes  # drawing axes (#44)
 from core.guide import is_guide
 from tools.base import ToolContext
 
-from tools.protractor import ProtractorBase
+from tools.protractor_host import ProtractorBase
 
 
 class RotateHost(ProtractorBase):

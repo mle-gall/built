@@ -1,0 +1,16 @@
+{
+"tilted_frame": [
+  {"start":[1.0,2.0,3.0],"red":null,"target":true,"band":[],"frame":null,"undo":0,"result":null},
+  {"start":[1.0,2.0,3.0],"red":null,"target":true,"band":[[[1.0,2.0,3.0],[2.0,2.0,4.0]]],"frame":null,"undo":0,"result":null},
+  {"start":[1.0,2.0,3.0],"red":[2.0,2.0,4.0],"target":true,"band":[[[1.0,2.0,3.0],[2.0,2.0,4.0]]],"frame":null,"undo":0,"result":null},
+  {"start":[1.0,2.0,3.0],"red":[2.0,2.0,4.0],"target":true,"band":[[[1.0,2.0,3.0],[2.0,2.0,4.0]],[[1.0,2.0,3.0],[0.422649731,3.154700538,3.577350269]],[[1.0,2.0,3.0],[0.183503419,1.183503419,3.816496581]]],"frame":null,"undo":0,"result":null},
+  {"start":null,"red":null,"target":false,"band":[],"frame":[[1.0,2.0,3.0],[0.707106781,0.0,0.707106781],[-0.40824829,0.816496581,0.40824829],[-0.577350269,-0.577350269,0.577350269]],"undo":1,"result":null},
+  {"start":null,"red":null,"target":false,"band":[],"frame":null,"undo":0,"result":null}],
+"degenerate_and_cancel": [
+  {"start":[1.0,0.0,0.0],"red":null,"target":true,"band":[],"frame":null,"undo":0,"result":null},
+  {"start":[1.0,0.0,0.0],"red":null,"target":true,"band":[],"frame":null,"undo":0,"result":null},
+  {"start":[1.0,0.0,0.0],"red":[3.0,0.0,0.0],"target":true,"band":[],"frame":null,"undo":0,"result":null},
+  {"start":[1.0,0.0,0.0],"red":[3.0,0.0,0.0],"target":true,"band":[],"frame":null,"undo":0,"result":null},
+  {"start":[1.0,0.0,0.0],"red":[3.0,0.0,0.0],"target":true,"band":[],"frame":null,"undo":0,"result":false},
+  {"start":null,"red":null,"target":true,"band":[],"frame":null,"undo":0,"result":null}]
+}

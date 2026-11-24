@@ -1,0 +1,26 @@
+{
+"simplified": [
+  {"edges":[],"faces":0,"undo":0,"start":[0.0,0.0,0.0],"lines":[],"curves":0,"result":null},
+  {"edges":[],"faces":0,"undo":0,"start":[0.0,0.0,0.0],"lines":[],"curves":0,"result":null},
+  {"edges":[],"faces":0,"undo":0,"start":[0.0,0.0,0.0],"lines":[[[0.0,0.0,0.0],[0.5,0.01,0.0]]],"curves":0,"result":null},
+  {"edges":[],"faces":0,"undo":0,"start":[0.0,0.0,0.0],"lines":[[[0.0,0.0,0.0],[0.5,0.01,0.0]],[[0.5,0.01,0.0],[1.0,0.0,0.0]]],"curves":0,"result":null},
+  {"edges":[],"faces":0,"undo":0,"start":[0.0,0.0,0.0],"lines":[[[0.0,0.0,0.0],[0.5,0.01,0.0]],[[0.5,0.01,0.0],[1.0,0.0,0.0]],[[1.0,0.0,0.0],[1.0,1.0,0.0]]],"curves":0,"result":null},
+  {"edges":[[[0.0,0.0,0.0],[1.0,0.0,0.0]],[[1.0,0.0,0.0],[1.0,1.0,0.0]]],"faces":0,"undo":1,"start":null,"lines":[],"curves":1,"result":null},
+  {"edges":[],"faces":0,"undo":0,"start":null,"lines":[],"curves":0,"result":null}],
+"closed": [
+  {"edges":[],"faces":0,"undo":0,"start":[1.0,1.0,0.0],"lines":[],"curves":0,"result":null},
+  {"edges":[],"faces":0,"undo":0,"start":[1.0,1.0,0.0],"lines":[[[1.0,1.0,0.0],[3.0,1.0,0.0]]],"curves":0,"result":null},
+  {"edges":[],"faces":0,"undo":0,"start":[1.0,1.0,0.0],"lines":[[[1.0,1.0,0.0],[3.0,1.0,0.0]],[[3.0,1.0,0.0],[3.0,2.0,0.0]]],"curves":0,"result":null},
+  {"edges":[],"faces":0,"undo":0,"start":[1.0,1.0,0.0],"lines":[[[1.0,1.0,0.0],[3.0,1.0,0.0]],[[3.0,1.0,0.0],[3.0,2.0,0.0]],[[3.0,2.0,0.0],[1.05,1.0,0.0]]],"curves":0,"result":null},
+  {"edges":[[[1.0,1.0,0.0],[3.0,1.0,0.0]],[[1.0,1.0,0.0],[3.0,2.0,0.0]],[[3.0,1.0,0.0],[3.0,2.0,0.0]]],"faces":1,"undo":1,"start":null,"lines":[],"curves":1,"result":null},
+  {"edges":[],"faces":0,"undo":0,"start":null,"lines":[],"curves":0,"result":null}],
+"short_cancel": [
+  {"edges":[],"faces":0,"undo":0,"start":[0.0,0.0,0.0],"lines":[],"curves":0,"result":null},
+  {"edges":[],"faces":0,"undo":0,"start":[0.0,0.0,0.0],"lines":[[[0.0,0.0,0.0],[0.05,0.05,0.0]]],"curves":0,"result":null},
+  {"edges":[],"faces":0,"undo":0,"start":null,"lines":[],"curves":0,"result":null},
+  {"edges":[],"faces":0,"undo":0,"start":[1.0,1.0,0.0],"lines":[],"curves":0,"result":null},
+  {"edges":[],"faces":0,"undo":0,"start":[1.0,1.0,0.0],"lines":[[[1.0,1.0,0.0],[2.0,1.0,0.0]]],"curves":0,"result":null},
+  {"edges":[],"faces":0,"undo":0,"start":[1.0,1.0,0.0],"lines":[[[1.0,1.0,0.0],[2.0,1.0,0.0]]],"curves":0,"result":false},
+  {"edges":[],"faces":0,"undo":0,"start":null,"lines":[],"curves":0,"result":null},
+  {"edges":[],"faces":0,"undo":0,"start":null,"lines":[],"curves":0,"result":null}]
+}

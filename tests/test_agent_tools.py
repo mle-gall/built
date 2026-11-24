@@ -161,6 +161,20 @@ def test_camera_zoom_and_screenshot(model, monkeypatch):
     assert len(win.viewport.history.undo_stack) == before
 
 
+def test_walkthrough_camera_verbs_keep_orbit_distance_and_document_history(model):
+    win, bridge, *_ = model
+    depth = len(win.viewport.history.undo_stack)
+    before = call(bridge, "set_camera", eye=[0, 0, 2], target=[0, 4, 2])
+    posed = call(bridge, "set_camera", eye=[1, 2, 3], direction=[0, 1, 0])
+    assert posed["target"] == pytest.approx([1, 6, 3])
+    turned = call(bridge, "set_camera", turn=[90, 0])
+    assert turned["eye"] == pytest.approx(posed["eye"])
+    moved = call(bridge, "set_camera", translation=[3, 2, 1])
+    assert moved["target"] == pytest.approx([8, 4, 4])
+    assert len(win.viewport.history.undo_stack) == depth
+    assert before["eye"] == pytest.approx([0, 0, 2])
+
+
 def test_screenshot_frames_shared_camera_and_captures_metal(model, monkeypatch, tmp_path):
     from PySide6.QtGui import QImage
     win, bridge, _, child, _ = model

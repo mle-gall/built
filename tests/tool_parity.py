@@ -1001,6 +1001,425 @@ def run_rotate(steps):
     return out
 
 
+CHANGE_AXES_SCENARIOS = {
+    "tilted_frame": [("click", 1, 2, 3), ("hover", 2, 2, 4), ("click", 2, 2, 4),
+                     ("hover", 1, 3, 4), ("click", 1, 3, 4), ("undo",)],
+    "degenerate_and_cancel": [("click", 1, 0, 0), ("click", 1, 0, 0), ("click", 3, 0, 0),
+                              ("click", 2, 0, 0), ("value", 4), ("cancel",)],
+}
+
+
+def run_change_axes(steps):
+    from core.group import frame_axes, group_frame
+    from core.scene import Scene
+    from tests.test_parity_tools import _Vp, _ctx
+    from tests.test_group_axes import _slab
+    from tools.change_axes import ChangeAxesTool
+    vp, tool = _Vp(Scene()), ChangeAxesTool()
+    group = _slab()
+    vp.scene.groups.append(group)
+    tool.target = group
+    tool.on_activate(vp)
+    out = []
+    for kind, *args in steps:
+        result = None
+        if kind in ("click", "hover"):
+            getattr(tool, "on_" + kind)(_ctx(vp, *args))
+        elif kind == "undo":
+            vp.history.undo()
+        elif kind == "value":
+            result = tool.on_value(vp, args[0])
+        else:
+            tool.on_cancel(vp)
+        frame = group_frame(group)
+        out.append({"start": _pt(tool.start_point), "red": _pt(tool.red_point), "target": tool.target is group,
+                    "band": [[_pt(a), _pt(b)] for a, b in tool.rubber_band_lines()],
+                    "frame": [_pt(p) for p in frame_axes(frame)] if frame is not None else None,
+                    "undo": len(vp.history.undo_stack), "result": result})
+    return out
+
+
+FREEHAND_SCENARIOS = {
+    "simplified": [("click", 0, 0), ("hover", .01, 0), ("hover", .5, .01),
+                   ("hover", 1, 0), ("hover", 1, 1), ("release",), ("undo",)],
+    "closed": [("click", 1, 1), ("hover", 3, 1), ("hover", 3, 2), ("hover", 1.05, 1),
+               ("release",), ("undo",)],
+    "short_cancel": [("click", 0, 0), ("hover", .05, .05), ("release",),
+                     ("click", 1, 1), ("hover", 2, 1), ("value", 3), ("cancel",), ("release",)],
+}
+
+
+def run_freehand(steps):
+    from core.scene import Scene
+    from tests.test_parity_tools import _Vp, _ctx
+    from tools.freehand import FreehandTool
+    vp, tool = _Vp(Scene()), FreehandTool()
+    tool.on_activate(vp)
+    out = []
+    for kind, *args in steps:
+        result = None
+        if kind in ("click", "hover"):
+            getattr(tool, "on_" + kind)(_ctx(vp, *args))
+        elif kind == "value":
+            result = tool.on_value(vp, args[0])
+        elif kind == "undo":
+            vp.history.undo()
+        else:
+            getattr(tool, "on_" + kind)(vp)
+        snap = _line_snapshot_base(vp, tool)
+        snap.update(curves=len({e.curve for e in vp.scene.mesh.edges}), result=result)
+        out.append(snap)
+    return out
+
+
+FLIP_SCENARIOS = {
+    "lock_and_mirror": ["x", "click", "undo", "y", "cancel"],
+    "copy": ["control", "x", "click", "undo"],
+    "copy_chord": ["control", "chord", "y", "click", "undo"],
+    "direct_nested": ["group", "direct", "undo", "clear", "direct"],
+}
+
+
+def run_flip(steps):
+    from types import SimpleNamespace
+    from PySide6.QtCore import Qt
+    from core.scene import Scene
+    from core.group import placement_points
+    from tests.test_flip_nested_groups import _vp, _cabinet, V
+    from tools.flip import FlipTool
+    scene = Scene()
+    face = scene.mesh.add_face([V(1, 0, 0), V(3, 0, 0), V(1, 2, 0)])
+    scene.select([face])
+    vp, tool = _vp(scene), FlipTool()
+    tool.on_activate(vp)
+    out = []
+    for kind in steps:
+        result = None
+        if kind in ("x", "y", "control"):
+            key = {"x": Qt.Key_Right, "y": Qt.Key_Left, "control": Qt.Key_Control}[kind]
+            result = tool.on_key(vp, key, Qt.NoModifier)
+        elif kind == "chord":
+            vp.ctrl_tapped = lambda: False
+            result = tool.on_key_release(vp, Qt.Key_Control)
+        elif kind == "click":
+            tool.on_click(SimpleNamespace(viewport=vp))
+        elif kind == "cancel":
+            tool.on_cancel(vp)
+        elif kind == "undo":
+            vp.history.undo()
+        elif kind == "group":
+            _cabinet(scene)
+        elif kind == "clear":
+            scene.clear_selection()
+        elif kind == "direct":
+            result = tool.flip(vp, "x")
+        out.append({"axis": tool._lock_axis, "copy": tool.cursor_plus, "result": result,
+                    "faces": len(scene.mesh.faces), "undo": len(vp.history.undo_stack),
+                    "vertices": sorted(_pt(v.position) for v in scene.mesh.vertices),
+                    "groups": [sorted(placement_points(g).round(6).tolist()) for g in scene.groups]})
+    return out
+
+
+PASTE_SCENARIOS = {
+    "face_and_edge": [("hover", 3, 4), ("click", 3, 4), ("undo",), ("redo",)],
+    "in_place": [("in_place",), ("undo",)],
+    "group": [("group",), ("hover", 2, 1), ("click", 2, 1), ("undo",)],
+    "cancel": [("hover", -3, 0), ("value", 2), ("cancel",), ("click", 1, 1)],
+}
+
+
+def run_paste(steps):
+    from PySide6.QtCore import QPointF, Qt
+    from core.history import History
+    from core.scene import Scene
+    from tests.test_paste import _PreviewVP, _make_group, V
+    from tools.base import ToolContext
+    from tools.paste import PasteTool
+    scene = Scene()
+    clip = {"ref": V(1, 2), "edges": [(V(1, 2), V(1, 3), False, None)],
+            "faces": [([V(1, 2), V(2, 2), V(2, 3)], [], {"layer": "Layer0"})]}
+    vp, tool = _PreviewVP(scene, History(scene), clip), PasteTool()
+    tool.on_activate(vp)
+    out = []
+    for kind, *args in steps:
+        result = None
+        if kind in ("hover", "click"):
+            getattr(tool, "on_" + kind)(ToolContext(vp, V(*args), QPointF(), Qt.NoModifier, None))
+        elif kind == "group":
+            clip["groups"] = [_make_group(scene)]
+            tool.on_activate(vp)
+        elif kind == "in_place":
+            result = tool.in_place(vp)
+        elif kind == "value":
+            result = tool.on_value(vp, args[0])
+        elif kind == "cancel":
+            tool.on_cancel(vp)
+        elif kind in ("undo", "redo"):
+            getattr(vp.history, kind)()
+        out.append({"ref": _pt(tool.start_point), "offset": _pt(tool._offset), "ended": vp.ended,
+                    "preview": [[_pt(a), _pt(b)] for a, b in tool.rubber_band_lines()],
+                    "vertices": sorted(_pt(v.position) for v in scene.mesh.vertices),
+                    "faces": len(scene.mesh.faces), "groups": len(scene.groups),
+                    "selected": len(scene.selection), "undo": len(vp.history.undo_stack), "result": result})
+    return out
+
+
+TAPE_SCENARIOS = {
+    "axis_offset": [("axis", "x"), ("click", 2, .02, None), ("hover", 3, 1, None),
+                    ("value", -.75), ("undo",)],
+    "source_point": [("click", 2, 1, "endpoint"), ("hover", 2, 4, None), ("value", 2.5),
+                     ("click", 0, 0, "origin"), ("click", 3, 4, "endpoint")],
+    "mode_cycle": [("control",), ("click", 1, 2, None), ("click", 1, 2, None), ("control",),
+                   ("click", 0, 0, None), ("hover", 3, 4, None), ("value", 4),
+                   ("click", 3, 4, None), ("undo",)],
+    "guide_source": [("guide",), ("click", 2, 1, "on_edge"), ("hover", 3, 2, None),
+                     ("click", 3, 2, None), ("click", 2, 1, "on_edge"), ("cancel",), ("undo",)],
+}
+
+
+def run_tape(steps):
+    from PySide6.QtCore import Qt
+    from core.guide import Guide
+    from core.scene import Scene
+    from tests.test_tape_axis_source_and_guide_segment import _Vp, _ctx, V
+    from tools.tape import TapeMeasureTool
+    view, tool = _Vp(Scene()), TapeMeasureTool()
+    tool.on_activate(view)
+    out = []
+    for kind, *args in steps:
+        result = None
+        if kind == "axis":
+            view._axis = args[0]
+        elif kind == "guide":
+            source = Guide(V(0, 1), V(1, 0))
+            view.scene.guides.append(source)
+            view.pick_guide = lambda *_: source
+        elif kind in ("hover", "click"):
+            ctx = _ctx(view, *args[:2], kind=args[2])
+            getattr(tool, "on_" + kind)(ctx)
+        elif kind == "control":
+            result = tool.on_key_release(view, Qt.Key_Control)
+        elif kind == "value":
+            result = tool.on_value(view, args[0])
+        elif kind == "cancel":
+            tool.on_cancel(view)
+        elif kind == "undo":
+            view.history.undo()
+        label = tool.value_label()
+        out.append({"mode": tool._mode, "start": _pt(tool.start_point), "measured": tool._measured,
+                    "label": [label[0], _pt(label[1])] if label else None,
+                    "band": [[_pt(a), _pt(b)] for a, b in tool.rubber_band_lines()],
+                    "preview": [[_pt(a), _pt(b)] for a, b in tool.guide_preview_lines()],
+                    "guides": [[_pt(g.point), _pt(g.direction), _pt(g.origin)] for g in view.scene.guides],
+                    "undo": len(view.history.undo_stack), "result": result})
+    return out
+
+
+FILLET_SCENARIOS = {
+    "cursor_round": [("hover", 1, 0, 1), ("click", 1, 0, 1), ("hover", 1, .2, 1),
+                     ("click", 1, .2, 1), ("undo",)],
+    "selected_edge": [("select",), ("segments", 4), ("profile", .4), ("value", .15), ("undo",)],
+    "corner": [("affect", "vertices"), ("hover", .1, 0, 1), ("click", .1, 0, 1),
+               ("hover", .2, .1, 1), ("value", .15), ("undo",)],
+    "refused_size": [("hover", 1, 0, 1), ("click", 1, 0, 1), ("value", -1),
+                     ("value", 5), ("cancel",)],
+}
+
+
+def run_fillet(steps):
+    from contextlib import ExitStack
+    from unittest.mock import patch
+    from tests.test_fillet_tool import _box_scene, _ctx, edge_at
+    from tools.fillet import FilletTool
+    view = RectView()
+    mesh = _box_scene(view)
+    edge = edge_at(mesh, (0, 0, 1), (2, 0, 1))
+    out = []
+    with ExitStack() as changes:
+        for key, val in dict(radius=.1, segments=8, profile=.5, measure="radius",
+                             corners="round", shape=None, affect="edges").items():
+            changes.enter_context(patch.object(FilletTool, key, val))
+        tool = FilletTool()
+        tool.on_activate(view)
+        view._hover_edge = edge
+        for kind, *args in steps:
+            result = None
+            if kind in ("hover", "click"):
+                getattr(tool, "on_" + kind)(_ctx(view, args))
+            elif kind == "select":
+                view.scene.select([edge])
+                tool.on_activate(view)
+            elif kind == "affect":
+                tool.set_affect(view, args[0])
+            elif kind in ("value", "profile", "segments"):
+                method = "on_value" if kind == "value" else f"on_{kind}_value"
+                result = getattr(tool, method)(view, args[0])
+            elif kind == "cancel":
+                tool.on_cancel(view)
+            elif kind == "undo":
+                view.history.undo()
+            label = tool.value_label()
+            out.append({"sizing": tool.sizing, "targets": len(tool.edges),
+                        "radius": round(FilletTool.radius, 6), "label": label[0] if label else None,
+                        "preview": len(tool.preview_faces()), "lines": len(tool.rubber_band_lines()),
+                        "faces": len(mesh.faces), "vertices": sorted(_pt(v.position) for v in mesh.vertices),
+                        "undo": len(view.history.undo_stack), "result": result})
+    return out
+
+
+PROTRACTOR_SCENARIOS = {
+    "click_and_reaim": [("click", 2, 1, 0), ("click", 5, 1, 0), ("hover", 2, 4, 0),
+                        ("click", 2, 4, 0), ("value", 30), ("value", -60), ("undo",)],
+    "typed_clockwise": [("click", 0, 0, 0), ("click", 2, 0, 0), ("hover", 1, -1, 0),
+                        ("value", 45), ("value", 20), ("undo",), ("undo",), ("value", 10)],
+    "measure_only": [("control",), ("click", 0, 0, 0), ("click", 1, 0, 0),
+                     ("hover", .4, .3, 0), ("click", .4, .3, 0), ("value", 20)],
+    "tilt_plane_and_cancel": [("click", 0, 0, 0), ("hover", 2, 2, 1), ("release",),
+                              ("click", 2, 0, 0), ("hover", 0, 1, 1), ("cancel",)],
+}
+
+
+def run_protractor(steps):
+    from PySide6.QtCore import Qt
+    from core.scene import Scene
+    from tests.test_protractor import _VpScreen, _ctx
+    from tools.protractor import ProtractorTool
+    view, tool = _VpScreen(Scene()), ProtractorTool()
+    tool.on_activate(view)
+    out = []
+    for kind, *args in steps:
+        result = None
+        if kind in ("hover", "click"):
+            (tool.on_hover if kind == "hover" else tool.on_click)(_ctx(view, *args))
+        elif kind == "control":
+            result = tool.on_key(view, Qt.Key_Control, Qt.NoModifier)
+        elif kind == "release":
+            tool.on_release(view)
+        elif kind == "value":
+            result = tool.on_value(view, args[0])
+        elif kind == "undo":
+            view.history.undo()
+        elif kind == "cancel":
+            tool.on_cancel(view)
+        label = tool.value_label()
+        out.append({"centre": _pt(tool.start_point), "arm": _pt(tool.ref_point),
+                    "axis": _pt(tool._axis()), "plus": tool.cursor_plus,
+                    "label": label[0] if label else None,
+                    "guide_preview": [[_pt(a), _pt(b)] for a, b in tool.guide_preview_lines()],
+                    "guides": [[_pt(g.point), _pt(g.direction)] for g in view.scene.guides],
+                    "undo": len(view.history.undo_stack), "result": result})
+    return out
+
+
+PAINT_SCENARIOS = {
+    "front_selection_and_undo": ["front", "select", "blue", "front", "undo", "undo"],
+    "back_sample_and_repaint": ["back", "blue", "sample_back", "other", "default", "back", "undo"],
+    "sample_default_and_miss": ["front", "sample_empty", "front", "miss", "undo"],
+    "closed_container": ["container", "front", "blue", "sample_group", "undo"],
+}
+
+
+def run_paint(steps):
+    from contextlib import ExitStack
+    from unittest.mock import patch
+    from PySide6.QtCore import Qt, QPointF
+    from ingetrazo_core import Vec3
+    from core.group import Group
+    from core.mesh import Mesh
+    from tests.test_paint_recent import _FakeViewport, _quad, _use
+    from tools.base import ToolContext
+    from tools.paint import PaintTool
+    view = _FakeViewport()
+    a, b = _quad(view.scene.mesh), _quad(view.scene.mesh, 1.)
+    group = Group(Mesh(), name="Room")
+    painted = _quad(group.mesh)
+    view.scene.groups.append(group)
+    container = False
+    hit = (a, None)
+    side = -1.
+    view.pick_face_any = lambda x, y: hit
+    view.pick_group = lambda x, y: group if container else None
+    view._pixel_to_ray = lambda x, y: (Vec3(0, 0, 5), Vec3(0, 0, side))
+    with ExitStack() as saved:
+        for key in ("recent", "sample_armed", "current_texture_plane", "current_color",
+                    "current_texture", "current_opacity", "current_is_default", "current_material"):
+            saved.enter_context(patch.object(PaintTool, key, getattr(PaintTool, key)))
+        PaintTool.recent, PaintTool.sample_armed, PaintTool.current_texture_plane = [], False, None
+        _use(color=(.8, .3, .2), name="Brick", opacity=.65)
+        tool, rows = PaintTool(), []
+        for step in steps:
+            if step == "container":
+                container = True
+            elif step == "select":
+                view.scene.selection = {a, b}
+            elif step == "undo":
+                view.history.undo()
+            elif step == "default":
+                PaintTool.current_is_default = True
+            elif step == "blue":
+                _use(color=(.1, .3, .8), name="Blue")
+            else:
+                sample = step.startswith("sample")
+                PaintTool.sample_armed = sample
+                side = 1. if step in ("back", "sample_back") else -1.
+                hit = ((None, None) if step == "miss" else (painted, group) if container
+                       else (b if step in ("other", "sample_empty") else a, None))
+                ctx = ToolContext(view, Vec3(), QPointF(), Qt.NoModifier, None)
+                tool.on_hover(ctx)
+                tool.on_click(ctx)
+            rows.append(json.loads(json.dumps({
+                "faces": [dict(f.attrs) for f in (a, b, painted)], "group": group.material,
+                "materials": sorted(view.scene.materials), "armed": PaintTool.sample_armed,
+                "default": PaintTool.current_is_default, "active": PaintTool._current_as_material(),
+                "recent": PaintTool.recent, "undo": len(view.history.undo_stack)})))
+    return rows
+
+
+OFFSET_SCENARIOS = {
+    "inward_retype_refuse_and_undo": [("hover", 2, .1), ("click", 2, .1), ("hover", 3, .5),
+                                      ("value", 1.), ("value", 3.), ("value", .25), ("undo",)],
+    "outward_click": [("hover", .1, 2), ("click", .1, 2), ("hover", -.5, 2), ("click", -.5, 2)],
+    "zero_and_cancel": [("hover", 2, .1), ("click", 2, .1), ("click", 2, 0), ("value", 0.),
+                        ("hover", 3, .25), ("cancel",), ("value", .5)],
+    "armed_edge_chain": [("arm",), ("hover", 2, .1), ("click", 2, .1), ("hover", 2, .5),
+                         ("value", .25), ("value", .5), ("undo",)],
+}
+
+
+def run_offset(steps):
+    from tests.test_offset_reference import Viewport, context
+    from tools.offset import OffsetTool
+    view, tool = Viewport(), OffsetTool()
+    tool.on_activate(view)
+    out = []
+    for kind, *args in steps:
+        result = None
+        if kind in ("hover", "click"):
+            ctx = context(view, *args)
+            (tool.on_hover if kind == "hover" else tool.on_click)(ctx)
+        elif kind == "arm":
+            view.scene.selection = set(view.scene.mesh.edges[:2])
+            tool.on_activate(view)
+        elif kind == "value":
+            result = tool.on_value(view, *args)
+        elif kind == "cancel":
+            tool.on_cancel(view)
+        elif kind == "undo":
+            view.history.undo()
+        label = tool.value_label()
+        ref = [_pt(p) for p in tool._offset_reference or ()]
+        # An edge selected in the opposite order draws the same segment.
+        reference = [*sorted(ref[:2]), ref[2]] if ref else []
+        out.append({"distance": round(tool.distance, 9), "drag": tool.dragging,
+                    "lines": sorted(sorted([_pt(a), _pt(b)]) for a, b in tool.rubber_band_lines()),
+                    "reference": reference,
+                    "label": None if label is None else [label[0], _pt(label[1])],
+                    "areas": sorted(round(f.area(), 8) for f in view.scene.mesh.faces),
+                    "vertices": sorted(_pt(v.position) for v in view.scene.mesh.vertices),
+                    "undo": len(view.history.undo_stack), "result": result})
+    return out
+
+
 WALKTHROUGH_SCENARIOS = {
     "place_drag_offset": ("PositionCameraTool", [("click", (3, 2, 0), (100, 100)),
         ("hover", (4, 6, 0), (106, 100)), ("hover", (4, 6, 0), (107, 100)),
@@ -1095,6 +1514,33 @@ def record(which=("line", "select", "rectangle", "move", "circle", "rotated_rect
     if "rotated_rectangle" in which:
         rot = {name: run_rot(steps) for name, steps in ROT_SCENARIOS.items()}
         (FIXTURES / "rotated_rectangle.json").write_text(_compact(rot))
+    if "change_axes" in which:
+        cases = {name: run_change_axes(steps) for name, steps in CHANGE_AXES_SCENARIOS.items()}
+        (FIXTURES / "change_axes.json").write_text(_compact(cases))
+    if "freehand" in which:
+        cases = {name: run_freehand(steps) for name, steps in FREEHAND_SCENARIOS.items()}
+        (FIXTURES / "freehand.json").write_text(_compact(cases))
+    if "flip" in which:
+        cases = {name: run_flip(steps) for name, steps in FLIP_SCENARIOS.items()}
+        (FIXTURES / "flip.json").write_text(_compact(cases))
+    if "paste" in which:
+        cases = {name: run_paste(steps) for name, steps in PASTE_SCENARIOS.items()}
+        (FIXTURES / "paste.json").write_text(_compact(cases))
+    if "tape" in which:
+        cases = {name: run_tape(steps) for name, steps in TAPE_SCENARIOS.items()}
+        (FIXTURES / "tape.json").write_text(_compact(cases))
+    if "fillet" in which:
+        cases = {name: run_fillet(steps) for name, steps in FILLET_SCENARIOS.items()}
+        (FIXTURES / "fillet.json").write_text(_compact(cases))
+    if "protractor" in which:
+        cases = {name: run_protractor(steps) for name, steps in PROTRACTOR_SCENARIOS.items()}
+        (FIXTURES / "protractor.json").write_text(_compact(cases))
+    if "paint" in which:
+        cases = {name: run_paint(steps) for name, steps in PAINT_SCENARIOS.items()}
+        (FIXTURES / "paint.json").write_text(_compact(cases))
+    if "offset" in which:
+        cases = {name: run_offset(steps) for name, steps in OFFSET_SCENARIOS.items()}
+        (FIXTURES / "offset.json").write_text(_compact(cases))
     if "walkthrough" in which:
         cases = {name: run_walkthrough(*case) for name, case in WALKTHROUGH_SCENARIOS.items()}
         (FIXTURES / "walkthrough.json").write_text(_compact(cases))

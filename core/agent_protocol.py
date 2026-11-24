@@ -44,3 +44,46 @@ class ProtocolTools:
                   angles=angles, **targets)
         self._viewport.update()
         return {**out, "step": out["step"].to_json() if out["step"] else None}
+
+    def _tool_offset_outline(self, distance, **source):
+        from core.protocol.commands import run
+        out = run(self._viewport.history, "offset_outline", distance=distance, **source)
+        self._viewport.update()
+        return {**out, "step": out["step"].to_json() if out["step"] else None}
+
+    def _tool_paint_material(self, placement=None, mesh=None, faces=(), seed=None, material=None,
+                             color=None, texture=None, opacity=None, default=False, back=False, plane=None):
+        from core.protocol.commands import run
+        out = run(self._viewport.history, "paint_material", placement=placement, mesh=mesh, faces=faces,
+                  seed=seed, material=material, color=color, texture=texture, opacity=opacity,
+                  default=default, back=back, plane=plane)
+        self._viewport.update()
+        return {**out, "step": out["step"].to_json() if out["step"] else None}
+
+    def _tool_set_group_axes(self, placement, origin, red, green):
+        return self._edit_command("set_group_axes", placement=placement, origin=origin, red=red, green=green)
+
+    def _tool_flip_selection(self, center, axis, copy=False, placements=(), faces=(), edges=()):
+        return self._edit_command("flip_selection", center=center, axis=axis, copy=copy,
+                                  placements=placements, faces=faces, edges=edges)
+
+    def _tool_paste_clipboard(self, offset):
+        return self._edit_command("paste_clipboard", offset=offset,
+                                  clipboard=getattr(self._viewport, "clipboard", None))
+
+    def _tool_bevel_selection(self, radius, segments=8, profile=.5, measure="radius", corners="round",
+                              shape=None, edges=(), vertices=()):
+        return self._edit_command("bevel_selection", radius=radius, segments=segments, profile=profile,
+                                  measure=measure, corners=corners, shape=shape, edges=edges, vertices=vertices)
+
+    def _edit_command(self, name, **args):
+        from core.protocol.commands import run
+        out = run(self._viewport.history, name, **args)
+        self._viewport.update()
+        return {**out, "step": out["step"].to_json() if out["step"] else None}
+
+    def _tool_add_guide(self, point, direction=None, origin=None):
+        return self._edit_command("add_guide", point=point, direction=direction, origin=origin)
+
+    def _tool_change_guide(self, index, direction):
+        return self._edit_command("change_guide", index=index, direction=direction)
