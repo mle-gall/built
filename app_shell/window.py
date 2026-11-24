@@ -30,6 +30,8 @@ from __future__ import annotations
 
 import types
 
+import ingetrazo_render as native
+
 from PySide6.QtCore import QEvent, QObject, Qt, Signal
 
 from app_shell.command_action import ShellAction
@@ -957,6 +959,54 @@ class ShellWindow(WindowDocumentCommands, QObject):
     def _on_import_survey_points(self):
         from views.survey_import import import_points
         import_points(self)
+
+
+    def _on_standard_view(self, key):
+        native.standard_view(self._active_view(), key)
+
+    def _set_projection(self, mode):
+        self._active_view().set_projection(mode)
+
+    def _apply_display_style(self, preset):
+        native.display_style(self, preset)
+
+    def _toggle_xray(self):
+        native.toggle_xray(self)
+
+    def _set_style_field(self, name, value):
+        native.style_field(self, name, value)
+
+    def repaint_styled(self):
+        self._host.request_frame()
+
+    def _set_section_visibility(self, attr, on):
+        setattr(self.viewport.scene, attr, bool(on))
+        self.viewport.update()
+
+    def _set_hidden_view(self, attr, on):
+        native.hidden_view(self.viewport, attr, on)
+
+    def _on_toggle_shadows(self, on):
+        native.set_shadows(self.viewport, on)
+
+    def _on_smart_zoom(self):
+        native.smart_zoom(self)
+
+    def _update_status_hint(self):
+        native.tool_hint(self)
+
+    def _rebuild_surfaces(self):
+        from ingetrazo_render import rebuild_path_surfaces
+        rebuild_path_surfaces(self.viewport)
+
+    def _on_preferences(self):
+        return self.run_command("prefs")
+
+    def _on_manage_extensions(self):
+        return self.run_command("extensions")
+
+    def release_eyedropper(self):
+        self._on_toggle_eyedropper(False)
 
     def _set_survey_capture(self, datum, lo, hi):
         from georef.tiles import DEFAULT_SOURCE_ID, PRESETS, TileLayer
