@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """Viewport picks, cursor and overlays for the Rust measuring tape."""
-from PySide6.QtCore import QRectF, Qt
-from PySide6.QtGui import QColor, QPen
+from tools.overlay_painter import draw_overlay
+from PySide6.QtCore import Qt
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.guide import Guide
@@ -124,20 +124,5 @@ class TapeHost(Tool):
         reading = self._machine.query("label", None)
         return (fmt_len(reading[0]), QVector3D(*reading[1])) if reading else None
 
-    def draw_overlay(self, viewport, painter):
-        """Keep the first measurement point visible while pulling a guide."""
-        if self.start_point is None:
-            return
-        pixel = viewport._world_to_pixel(self.start_point)
-        if pixel is None:
-            return
-        hidden = getattr(viewport, "_occluded_on_screen", lambda _p: False)
-        if hidden(self.start_point):
-            return
-        painter.save()
-        try:
-            painter.setPen(QPen(QColor(255, 255, 255), 1.5))
-            painter.setBrush(QColor(195, 28, 44))
-            painter.drawRect(QRectF(pixel[0] - 3.5, pixel[1] - 3.5, 7, 7))
-        finally:
-            painter.restore()
+    overlay_kind = "tape"
+    draw_overlay = draw_overlay

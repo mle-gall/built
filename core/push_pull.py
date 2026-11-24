@@ -18,7 +18,7 @@ from ingetrazo_core import plane_cycle as _canon_loop
 from core.topology import _mesh_is_flat
 from core.units import fmt_len
 from core import push_scans
-from ingetrazo_core import guarded_push, translate_prism_cap
+from ingetrazo_core import guarded_push, translate_prism_cap, PushStages
 
 
 class _Abandoned(Exception):
@@ -254,59 +254,13 @@ class PushPullOperation:
         self._normal: QVector3D | None = None
         self._cap_positions: list[QVector3D] = []  # original cap vertices
         self._infer_cache = None
-        # The clean model under a STAGED preview (see _show_staged_preview):
-        # captured before the drag's first stage and kept until the drag ends
-        # — restored whenever a staged model goes back to clean (a restage,
-        # the overlay, Esc, a tool switch, a pipeline commit), and the undo
-        # state of a commit that keeps the stage. The selection rides along:
-        # the stage deletes the base face, which drops it from the selection.
-        self._preview_snapshot: dict | None = None
-        self._preview_selection: set = set()
+        self._stages = PushStages()
         # How much of ``extrusion`` the prism preview has already applied to
         # the model, so a frame moves only the delta and the revert knows the
         # total to undo, and the very Vertex OBJECTS it moves.
         self._prism_applied: float = 0.0
         self._prism_verts: list = []
-        # ---- Staged preview -------------------------------------------------
-        # The distance the staged result was built at (None = the model is
-        # NOT staged: the one indicator _revert_preview restores on), where
-        # its cap currently sits, the new cap-plane Vertex OBJECTS a frame
-        # slides (with their staged positions and slide rates — see
-        # _slide_rate), and the open interval of
-        # distances the slide stays exact in. Kept apart from the prism fields:
-        # the per-frame _revert_prism_preview would otherwise undo them.
-        self._stage_d: float | None = None
-        self._stage_applied: float = 0.0
-        self._stage_verts: list = []
-        self._stage_slide = None
-        self._stage_lo: float = 0.0
-        self._stage_hi: float = 0.0
-        # The faces/edges the stage created: the distance inference skips
-        # them, or the drag would lock onto its own moving cap.
-        self._stage_new: set = set()
-        # Stages left behind when the cursor leaves their interval, at most
-        # one per side of the base plane ({sign: record}, see _park_stage), so
-        # dragging back and forth restores one instead of re-running the
-        # pipeline; and the record the current stage came from (None = not
-        # parked yet).
-        self._stage_cache: dict = {}
-        self._stage_rec: dict | None = None
-        # ``(sign, abs(d))`` of the last refused or failed stage: that
-        # direction shows the overlay and retries only once the distance has
-        # doubled, so a refusal never re-runs the pipeline per frame, and a
-        # tiny first frame refused by float noise does not cost the whole
-        # direction its live result.
-        self._stage_refusal: tuple | None = None
-        # A stage slower than _SLOW_STAGE_S: no more stages this drag.
-        self._stage_slow: bool = False
-        # Levels (along the normal) of the parallel faces over/under the base,
-        # collected at drag start: crossing one changes the topology.
         self._plane_levels: list = []
-        # ``(id(mesh), mesh._mut_serial)`` after the tool's own last edit while
-        # a snapshot is held: anything else touching the mesh mid-drag (File >
-        # New, a redo that bypassed on_redo) makes the snapshots stale, and
-        # restoring one would resurrect the model it replaced.
-        self._stage_serial: tuple | None = None
         # The model point the distance inference is currently locked onto (a
         # corner or a face hit), drawn as a green marker by the viewport overlay.
         self._inference_point: QVector3D | None = None
@@ -417,54 +371,14 @@ class PushPullOperation:
         if self._prism_applied:
             self._move_cap(viewport, -self._prism_applied, 0.0)
 
-    def _slide_stage(self, viewport, d: float) -> None:
-        """Slide the stage's moving vertices to distance ``d``. Placed at
-        staged position + rate × offset, not moved by deltas: float32 deltas
-        drift frame by frame (place_vertex, issue #163)."""
-        if not self._stage_verts or abs(d - self._stage_applied) <= 1e-12:
-            return
-        mesh = self._target_mesh(viewport.scene)
-        self._stage_slide.apply(mesh, d - self._stage_d)
-        self._stage_applied = d
-        self._stage_serial = (id(mesh), mesh._mut_serial)
-        viewport.scene.version += 1
+    _stage_d = property(lambda self: self._stages.distance)
+    _stage_cache = property(lambda self: self._stages.cached_sides)
+    _stage_new = property(lambda self: self._stages.made)
+    _stage_slow = property(lambda self: self._stages.slow)
+    _stage_refusal = property(lambda self: self._stages.refusal)
+    _preview_snapshot = property(lambda self: self._stages.snapshot)
 
-    @staticmethod
-    def _interval_holds(d: float, stage_d, lo: float, hi: float) -> bool:
-        """Whether a stage built at ``stage_d`` with interval ``(lo, hi)``
-        shows the commit at distance ``d``: its own distance, or strictly
-        inside — kept a weld tolerance clear of the levels, where the commit
-        welds the cap onto them."""
-        if stage_d is None:
-            return False
-        if abs(d - stage_d) <= 1e-9:
-            return True
-        return lo + _STITCH_TOL < d < hi - _STITCH_TOL
-
-    def _stage_holds(self, d: float) -> bool:
-        return self._interval_holds(d, self._stage_d, self._stage_lo,
-                                    self._stage_hi)
-
-    def _restore_clean(self, viewport) -> None:
-        """Back to the clean model the stages are built on, and its
-        selection. The current stage is dropped; a parked copy survives."""
-        scene = viewport.scene
-        mesh = self._target_mesh(scene)
-        mesh.restore_state(self._preview_snapshot)
-        scene.selection.clear()
-        scene.selection.update(self._preview_selection)
-        self._clear_stage()
-        self._stage_serial = (id(mesh), mesh._mut_serial)
-        scene.version += 1
-
-    def _clear_stage(self) -> None:
-        """Forget the current stage (the model's state is the caller's)."""
-        self._stage_d = None
-        self._stage_applied = 0.0
-        self._stage_verts = []
-        self._stage_slide = None
-        self._stage_new = set()
-        self._stage_rec = None
+    _stage_verts = property(lambda self: self._stages.vertices)
 
     def _staged_command(self, viewport):
         """The commit of a held stage that already IS the result at
@@ -476,18 +390,15 @@ class PushPullOperation:
         if (self._stage_d is None or self._keep_base
                 or self._drop_stale_stage(viewport)
                 or abs(self.extrusion) < _MIN_EXTRUDE
-                or not self._stage_holds(self.extrusion)):
+                or not self._stages.holds(self.extrusion, _STITCH_TOL)):
             return None
-        self._slide_stage(viewport, self.extrusion)
         mesh = self._target_mesh(viewport.scene)
+        self._stages.slide(mesh, viewport.scene, self.extrusion)
         cmd = SnapshotMutation.from_states(
             self._preview_snapshot, mesh.capture_state(),
             mesh=self._group.mesh if self._group is not None else None)
         # The command owns the snapshots now: nothing is restored.
-        self._preview_snapshot = None
-        self._preview_selection = set()
-        self._stage_cache = {}
-        self._clear_stage()
+        self._stages = PushStages()
         self._refused = False
         return cmd
 
@@ -499,7 +410,7 @@ class PushPullOperation:
         if self._preview_snapshot is None:
             return False
         mesh = self._target_mesh(viewport.scene)
-        if self._stage_serial == (id(mesh), mesh._mut_serial):
+        if not self._stages.stale(mesh):
             return False
         viewport.set_suppressed_faces(set())
         self._reset()
@@ -515,7 +426,7 @@ class PushPullOperation:
         if self._drop_stale_stage(viewport):
             return
         if self._stage_d is not None:
-            self._restore_clean(viewport)
+            self._stages.restore(self._target_mesh(viewport.scene), viewport.scene)
 
     # ---- Internals ----------------------------------------------------------
     def _compute_inward_limit(self, scene) -> None:
@@ -918,14 +829,8 @@ class PushPullOperation:
         self._grab = None
         self._normal = None
         self._cap_positions = []
-        self._preview_snapshot = None
-        self._preview_selection = set()
-        self._clear_stage()
-        self._stage_cache = {}
-        self._stage_refusal = None
-        self._stage_slow = False
+        self._stages = PushStages()
         self._plane_levels = []
-        self._stage_serial = None
         self._drag_pre_oriented = False
         self._inference_point = None
         self._inference_kind = None

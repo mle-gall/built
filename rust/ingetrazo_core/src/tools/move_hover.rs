@@ -187,3 +187,122 @@ pub fn snap_exclusions(
         .collect::<PyResult<HashSet<_>>>()?;
     Ok((include_empty || !edges.is_empty() || !groups.is_empty()).then_some((edges, groups)))
 }
+
+/// Move borrows Rotate for one box grip and its immediately following angle
+/// retype. Both tools keep their normal history and modifier handling.
+#[derive(Default)]
+enum Turn {
+    #[default]
+    Idle,
+    Active(Py<PyAny>),
+    Retype(Py<PyAny>),
+}
+#[pyclass(module = "ingetrazo_core")]
+#[derive(Default)]
+pub struct GripTurn {
+    phase: Turn,
+}
+impl GripTurn {
+    fn end_if_committed(
+        slf: &Bound<'_, Self>,
+        tool: &Bound<'_, PyAny>,
+        rotate: &Bound<'_, PyAny>,
+    ) -> PyResult<()> {
+        if rotate.getattr("start_point")?.is_none() {
+            slf.borrow_mut().phase = Turn::Retype(rotate.clone().unbind());
+            tool.call_method0("_clear_grips")?;
+        }
+        Ok(())
+    }
+}
+#[pymethods]
+impl GripTurn {
+    #[new]
+    fn new() -> Self {
+        Self::default()
+    }
+    #[getter]
+    fn active(&self, py: Python<'_>) -> Option<Py<PyAny>> {
+        if let Turn::Active(r) = &self.phase {
+            Some(r.clone_ref(py))
+        } else {
+            None
+        }
+    }
+    #[getter]
+    fn takes_angle(&self) -> bool {
+        !matches!(self.phase, Turn::Idle)
+    }
+    fn clear(&mut self) {
+        self.phase = Turn::Idle;
+    }
+    fn cancel(slf: &Bound<'_, Self>, view: &Bound<'_, PyAny>) -> PyResult<bool> {
+        let phase = std::mem::take(&mut slf.borrow_mut().phase);
+        if let Turn::Active(r) = phase {
+            r.call_method1(view.py(), "on_cancel", (view,))?;
+            return Ok(true);
+        }
+        Ok(false)
+    }
+    fn click(
+        slf: &Bound<'_, Self>,
+        tool: &Bound<'_, PyAny>,
+        ctx: &Bound<'_, PyAny>,
+    ) -> PyResult<bool> {
+        let py = ctx.py();
+        let active = slf.borrow().active(py);
+        if let Some(r) = active {
+            r.call_method1(py, "on_click", (ctx,))?;
+            Self::end_if_committed(slf, tool, r.bind(py))?;
+            return Ok(true);
+        }
+        slf.borrow_mut().clear();
+        let grip = tool.getattr("_hot_grip")?;
+        if grip.is_none() || !tool.getattr("start_point")?.is_none() {
+            return Ok(false);
+        }
+        let (pos, center, n): (Bound<'_, PyAny>, Bound<'_, PyAny>, Bound<'_, PyAny>) =
+            tool.getattr("_grips")?.get_item(grip)?.extract()?;
+        let view = ctx.getattr("viewport")?;
+        let rot = py.import("tools.rotate")?.call_method0("RotateTool")?;
+        rot.call_method1("on_activate", (&view,))?;
+        rot.setattr("_groups", vec![tool.getattr("_grip_group")?])?;
+        rot.getattr("_gesture")?
+            .call_method1("begin", (&rot, &view, false))?;
+        super::transform_queries::CopyWire::capture(&rot, ctx)?;
+        rot.setattr("_custom_axis", Vec3::from(xyz(&n)?.normalize_or_zero()))?;
+        rot.setattr("start_point", center)?;
+        rot.setattr("ref_point", &pos)?;
+        rot.setattr("hover_point", pos)?;
+        slf.borrow_mut().phase = Turn::Active(rot.unbind());
+        let message = py.import("core.i18n")?.call_method1(
+            "tr",
+            ("Rotate: move to turn, click or type the angle. Ctrl = copy",),
+        )?;
+        view.call_method1("flash_status", (message,))?;
+        view.call_method0("update")?;
+        Ok(true)
+    }
+    fn value(
+        slf: &Bound<'_, Self>,
+        tool: &Bound<'_, PyAny>,
+        view: &Bound<'_, PyAny>,
+        value: &Bound<'_, PyAny>,
+    ) -> PyResult<Option<bool>> {
+        let py = view.py();
+        let r = match &slf.borrow().phase {
+            Turn::Idle => return Ok(None),
+            Turn::Active(r) | Turn::Retype(r) => r.clone_ref(py),
+        };
+        if !tool.getattr("start_point")?.is_none() {
+            return Ok(None);
+        }
+        let done = r
+            .call_method1(py, "on_value", (view, value))?
+            .is_truthy(py)?;
+        if slf.borrow().active(py).is_some() {
+            Self::end_if_committed(slf, tool, r.bind(py))?;
+        }
+        Ok(Some(done))
+    }
+}

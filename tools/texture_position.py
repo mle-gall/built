@@ -42,6 +42,7 @@ here is what any .skp reader shows for the same file.
 """
 from __future__ import annotations
 
+from tools.overlay_painter import draw_overlay
 from PySide6.QtCore import Qt
 from ingetrazo_core import TextureMap, TexturePlacement, Vec3 as QVector3D
 
@@ -404,88 +405,5 @@ class TexturePositionTool(Tool):
     def grid_lines(self) -> list[tuple[QVector3D, QVector3D]]:
         return self._placement.grid_lines(self.face.vertices) if self.active else []
 
-    def draw_overlay(self, viewport, painter) -> None:
-        if not self.active:
-            return
-        from PySide6.QtCore import QPointF
-        from PySide6.QtGui import QColor, QPen
-        to_px = getattr(viewport, "_world_to_pixel", None)
-        if to_px is None:
-            return
-        pen = QPen(QColor(255, 255, 255, 170), 1.0, Qt.DotLine)
-        painter.setPen(pen)
-        for a, b in self.grid_lines():
-            pa, pb = to_px(a), to_px(b)
-            if pa is None or pb is None:
-                continue
-            painter.drawLine(QPointF(*pa), QPointF(*pb))
-        if self._placement.draw_protractor:
-            disc = self._protractor_segments(viewport)
-            if disc is not None:
-                # The instrument, in its UI blue whatever the face.
-                from PySide6.QtGui import QPolygonF
-                blue = QColor(60, 60, 225, 235)
-                R, u, v, r = disc["frame"]
-
-                def line(a, b, pen):
-                    pa, pb = to_px(a), to_px(b)
-                    if pa is not None and pb is not None:
-                        painter.setPen(pen)
-                        painter.drawLine(QPointF(*pa), QPointF(*pb))
-
-                dashed = QPen(blue, 1.3, Qt.DashLine)
-                line(*disc["current_arm"], dashed)
-                line(*disc["base_stub"], dashed)
-                poly = [to_px(w) for w in disc["wedge"]]
-                if all(q is not None for q in poly):
-                    painter.setPen(QPen(blue, 1.0))
-                    painter.setBrush(QColor(60, 60, 225, 70))
-                    painter.drawPolygon(QPolygonF([QPointF(*q) for q in poly]))
-                    painter.setBrush(Qt.NoBrush)
-                solid = QPen(blue, 1.3)
-                for a, b in disc["ring"]:
-                    line(a, b, solid)
-                line(*disc["diameter"], solid)
-                # The two squares, joined (the chord between the arms).
-                line(*disc["squares"], QPen(blue, 1.0))
-                painter.setBrush(blue)
-                painter.setPen(QPen(blue, 1.0))
-                for q in disc["squares"]:
-                    pq = to_px(q)
-                    if pq is not None:
-                        painter.drawRect(pq[0] - 2.5, pq[1] - 2.5, 5.0, 5.0)
-                painter.setBrush(Qt.NoBrush)
-        if self._held is not None:
-            q = to_px(self._held[0])
-            if q is not None:
-                # The drawing tools' marks: green corner, cyan middle.
-                colour = (QColor(40, 200, 220) if self._held[1] == "middle"
-                          else QColor(40, 200, 60))
-                painter.setPen(QPen(colour, 2.0))
-                painter.setBrush(Qt.NoBrush)
-                if self._held[1] == "middle":
-                    from PySide6.QtGui import QPolygonF
-                    r = 7.0
-                    painter.drawPolygon(QPolygonF([
-                        QPointF(q[0], q[1] - r), QPointF(q[0] + r, q[1] + r * 0.8),
-                        QPointF(q[0] - r, q[1] + r * 0.8)]))
-                else:
-                    painter.drawRect(q[0] - 6.0, q[1] - 6.0, 12.0, 12.0)
-        half = self.PIN_PX
-        for i, p in enumerate(self.pins()):
-            q = to_px(p)
-            if q is None:
-                continue
-            r, g, b = PIN_COLORS[i]
-            alpha = 120 if i == PIN_DISTORT else 255
-            fill = QColor.fromRgbF(r, g, b, alpha / 255.0)
-            outline = QColor(255, 255, 255, 240)
-            if i == self._placement.hover_pin or i == self._lifted:
-                outline = QColor(30, 30, 30, 255)
-            painter.setPen(QPen(outline, 2.0))
-            painter.setBrush(fill)
-            painter.drawRect(q[0] - half, q[1] - half, 2 * half, 2 * half)
-            if i == self._lifted:
-                painter.setBrush(Qt.NoBrush)
-                painter.setPen(QPen(fill, 1.5))
-                painter.drawEllipse(QPointF(*q), half * 2.0, half * 2.0)
+    overlay_kind = "texture_position"
+    draw_overlay = draw_overlay

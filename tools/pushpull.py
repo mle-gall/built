@@ -38,21 +38,15 @@ reaches it); pushing out grows the solid. A free-standing face keeps its base
 as the cap of the new box.
 """
 from __future__ import annotations
-from core.element_set import ElementSet
 
 import math
-import time
 
 from PySide6.QtCore import Qt
-from ingetrazo_core import Vec3 as QVector3D, push_sweep_preview, push_reference_target
+from ingetrazo_core import Vec3 as QVector3D, push_reference_target
 from views import input_state
 
-from core.geometry import Face
 from core.i18n import tr
 from core.mesh import _STITCH_TOL
-# MeshFace is core.mesh's Face — the class scene meshes are built from. The
-# geometry.Face imported above is a DIFFERENT legacy class; an isinstance
-# against IT is always False, so the preselection arm checks MeshFace.
 from core.mesh import Face as MeshFace
 from core.orient import orient_outward
 from core.topology import _key
@@ -166,9 +160,6 @@ class PushPullTool(PushPullOperation, RustTool):
         if len(sel) != 1:
             return
         item = next(iter(sel))
-        # MeshFace, not the geometry.Face imported at top: the mesh's Face
-        # and the legacy one are different classes, and the loose mesh only
-        # ever holds the former.
         if not isinstance(item, MeshFace) or item not in viewport.scene.mesh.faces:
             return
         self.hovered_face = item
@@ -262,23 +253,7 @@ class PushPullTool(PushPullOperation, RustTool):
             self.extrusion = QVector3D.dotProduct(
                 projected - grab, self._normal)
         self._clamp_extrusion(viewport)
-        # A clean prism extend/shrink is previewed by MOVING the cap, so the
-        # model itself shows the result and nothing of the old shape is left
-        # standing. Any other attached face is STAGED: the real commit applied
-        # once, then stretched — walls merging and old edges going live, as
-        # the commit will leave them. A free face (nothing to merge with) and
-        # a Ctrl-copy show the sweep as an overlay — see _build_light_faces.
-        # Several faces at once always show the overlay: a prism or staged
-        # preview edits the model under the OTHER faces' feet. A view that
-        # draws the mesh as an outline (the native one) shows it too.
-        if self._extra_faces or getattr(viewport, 'mesh_outline_preview', False):
-            self._show_light_preview(viewport)
-        elif self._prism_cap and not self._keep_base:
-            self._show_prism_preview(viewport)
-        elif self._attached and not self._keep_base:
-            self._show_staged_preview(viewport)
-        else:
-            self._show_light_preview(viewport)
+        self._present(viewport, "auto")
 
     def host_begin(self, viewport, pick):
         ctx = self._ctx
@@ -310,7 +285,6 @@ class PushPullTool(PushPullOperation, RustTool):
         self._prism_verts = self._cap_vertices(target)
         self._compute_inward_limit(target)
         self._compute_plane_levels(target)
-        self._preview_snapshot = None
         if not pick:
             viewport.set_hover(None)
             viewport.update()
@@ -376,7 +350,6 @@ class PushPullTool(PushPullOperation, RustTool):
         self._extra_normals = last["extra_normals"]
         self.dragging = True
         self.extrusion = 0.0
-        self._preview_snapshot = None
         self._prism_applied = 0.0
         self._prism_verts = []
         self._light_faces = []
@@ -416,63 +389,15 @@ class PushPullTool(PushPullOperation, RustTool):
         return self._light_faces
 
     def _build_light_faces(self):
-        self._light_wires = []
-        if self.base_face is None or self._normal is None or abs(self.extrusion) < _MIN_EXTRUDE:
-            return []
-        faces = []
-        for face, normal in zip((self.base_face, *self._extra_faces),
-                                (self._normal, *self._extra_normals)):
-            cap, walls, wires = push_sweep_preview(face, normal * self.extrusion,
-                                                  self._CURVE_FACET_COS)
-            faces.append(Face(cap[0], cap[1:], dict(face.attrs) if face.attrs else None))
-            paint = _paint_of(face) or None
-            faces.extend(Face(wall, attrs=paint) for wall in walls)
-            self._light_wires.extend(wires)
-        return faces
+        from ingetrazo_core import push_light_faces
+        return push_light_faces(self, _MIN_EXTRUDE)
 
-    def _show_light_preview(self, viewport) -> None:
-        """Drop any applied preview and show the sweep as an overlay instead.
-        The mesh is left untouched, so the scene version does not move and the
-        consolidated buffers are not touched either — the frame costs one small
-        preview upload. A held stage is parked first (a no-op once parked):
-        a Ctrl tap mid-drag must find it again, not pay for a new one."""
-        self._park_stage(viewport)
-        self._revert_preview(viewport)
-        self._light_faces = self._build_light_faces()
-        # Hiding the base face is what lets a drag AWAY FROM THE EYE read as
-        # a recess opening instead of a cap buried behind the base. Toward
-        # the eye, the sweep covers the base anyway and the frame is
-        # identical either way — worth distinguishing, because suppression
-        # is the one expensive thing left in a drag frame: a group with a
-        # hidden face cannot use its cached chunk, so all of its faces are
-        # bucketed in Python (measured at 317 ms cold on the 3054-face
-        # barbecue, 13 ms once the triangulation memo is warm). A Ctrl-stack
-        # keeps its base, so it never hides it.
-        #
-        # "Away from the eye" is the CAMERA's question, not the normal's.
-        # It used to be ``extrusion < 0`` — into the material along the
-        # outward normal — which is the same thing only while the normal
-        # points at the viewer. Looking at a face's BACK (an inverted face,
-        # or a wall seen from inside the room), a push away from the eye is
-        # positive, the base stayed, and the pocket formed invisibly behind
-        # it while the commit worked («no se ve cuando hago push para
-        # adentro cuando tengo la cara invertida», Marco, 2026-09-18).
-        recessing = (self._light_faces and self.base_face is not None
-                     and self._attached and not self._keep_base
-                     and self._sweeps_away_from_eye(viewport))
-        viewport.set_suppressed_faces({self.base_face} if recessing else set())
-        viewport.update()
+    def _present(self, viewport, mode):
+        from ingetrazo_core import present_push_preview
+        present_push_preview(self, viewport, mode, _MIN_EXTRUDE, _STITCH_TOL)
 
-    def _sweeps_away_from_eye(self, viewport) -> bool:
-        """Does the sweep move the cap away from the camera — behind the
-        base face, where the base would hide it? Without a camera to ask
-        (tests, the bridge) the normal's sign answers as it always did."""
-        cam = getattr(viewport, "camera", None)
-        eye_fn = getattr(cam, "eye", None)
-        if eye_fn is None or self._anchor is None or self._normal is None:
-            return self.extrusion < 0.0
-        off = self._normal * self.extrusion
-        return QVector3D.dotProduct(off, self._anchor - eye_fn()) > 0.0
+    def _show_light_preview(self, viewport):
+        self._present(viewport, "overlay")
 
     def _refuse_closed_group(self, viewport) -> None:
         """A face inside a group that has not been opened is not pushable.
@@ -492,31 +417,7 @@ class PushPullTool(PushPullOperation, RustTool):
             "then push inside"), 4000)
 
     def _show_prism_preview(self, viewport) -> None:
-        """Preview a prism extend/shrink by translating the cap in the MODEL,
-        the classic way — the walls follow it and the old shape simply
-        is not there any more.
-
-        The overlay cannot do that. It can only ADD faces on top, so pushing
-        the end of a block left the original cap's edges cutting across the
-        block being formed, and pushing in left the whole original block
-        standing around the pocket (Marco, 2026-08-27, with a reference
-        modeller beside it for comparison).
-
-        Reversible by ARITHMETIC, not by a snapshot: the frame moves the cap
-        by the delta since the last one, and the revert moves it back by the
-        total. Snapshots are what made the mesh-mutating preview too slow to
-        keep — measured on this machine, capture+restore is 11 ms a frame at
-        3k faces and 151 ms at 40k, where translating a cap is a handful of
-        points. ``_prism_cap`` is exactly the case where a translation IS the
-        operation, so the two always agree.
-        """
-        self._light_faces = []
-        self._light_wires = []
-        viewport.set_suppressed_faces(set())
-        delta = self.extrusion - self._prism_applied
-        if abs(delta) > 1e-12:
-            self._move_cap(viewport, delta, self.extrusion)
-        viewport.update()
+        self._present(viewport, "prism")
 
     def _cap_vertices(self, scene) -> list:
         """The Vertex OBJECTS the cap loop stands on, resolved once."""
@@ -533,152 +434,7 @@ class PushPullTool(PushPullOperation, RustTool):
     _SLOW_STAGE_S = 0.25
 
     def _show_staged_preview(self, viewport) -> None:
-        """Preview an attached push by showing the REAL result: the commit's
-        own ``_mutate`` applied to the model once ("stage"), then only its new
-        cap vertices slid along the normal per frame ("stretch").
-
-        The overlay cannot shorten a wall, merge it with a coplanar riser or
-        take an old edge away, so pushing half of a split top previewed a box
-        standing on the old shape, and the shape changed on release (#434).
-        Running the pipeline every frame did show it, at ~0.3 s a frame.
-
-        The slide is exact while the cap crosses no "event level" (_stage
-        works them out): every face holding a moving vertex is the cap or a
-        wall containing the push direction, which stays planar as its
-        vertices slide — the _swept_by_push argument. Leaving that interval
-        parks the stage and restores the one parked on the cursor's side, or
-        stages anew (_enter_stage). A refused or failed stage, or any new one
-        once staging proved slow, shows the overlay instead."""
-        self._light_faces = []
-        self._light_wires = []
-        d = self.extrusion
-        if abs(d) < _MIN_EXTRUDE:
-            # Nothing to show, as the overlay. Parked, not dropped: the
-            # cursor is on its way to the other side and may come back.
-            self._park_stage(viewport)
-            self._revert_preview(viewport)
-            viewport.set_suppressed_faces(set())
-            viewport.update()
-            return
-        sign = 1.0 if d > 0.0 else -1.0
-        if self._stage_refusal is not None and self._stage_refusal[0] != sign:
-            self._stage_refusal = None
-        if not self._stage_holds(d) and not self._enter_stage(viewport, sign):
-            self._show_light_preview(viewport)
-            return
-        self._slide_stage(viewport, d)
-        # The base face is genuinely gone from the staged model.
-        viewport.set_suppressed_faces(set())
-        viewport.update()
-
-    def _enter_stage(self, viewport, sign: float) -> bool:
-        """The cursor is outside the current stage's interval (or nothing is
-        staged): park the current stage, then restore the one parked on this
-        side if it holds the distance, else stage anew — unless staging
-        proved slow, or this direction was refused at a distance not yet
-        doubled. False = show the overlay (the model is left as it was; the
-        overlay's revert cleans it)."""
-        d = self.extrusion
-        self._park_stage(viewport)
-        rec = self._stage_cache.get(sign)
-        if rec is not None and self._interval_holds(d, rec["d"], rec["lo"],
-                                                    rec["hi"]):
-            self._unpark_stage(viewport, rec)
-            return True
-        refusal = self._stage_refusal
-        if self._stage_slow or (refusal is not None
-                                and abs(d) < 2.0 * refusal[1]):
-            return False
-        if self._stage(viewport):
-            return True
-        self._stage_refusal = (sign, abs(d))
-        return False
-
-    def _stage(self, viewport) -> bool:
-        """Apply the commit's mutation at ``extrusion`` to the clean model
-        (capturing it on the drag's first stage, restoring it when the model
-        is staged) and resolve what a frame may slide. False — with the clean
-        model back — when the push is refused, raises, or would not stretch
-        cleanly. A stage slower than _SLOW_STAGE_S makes the drag slow."""
-        scene = viewport.scene
-        mesh = self._target_mesh(scene)
-        t0 = time.perf_counter()
-        try:
-            if self._preview_snapshot is None:
-                self._preview_snapshot = mesh.capture_state()
-                self._preview_selection = ElementSet(scene.selection)
-            elif self._stage_d is not None:
-                self._restore_clean(viewport)
-            self._mutate(scene)
-            ok = not self._refused and self._resolve_stage(mesh)
-        except Exception:
-            # The commit is guarded by History.execute's rollback; the stage
-            # is not, and a pipeline error must not escape a mouse move.
-            ok = False
-        # The whole pause the user sat through, snapshot work included.
-        if time.perf_counter() - t0 > self._SLOW_STAGE_S:
-            self._stage_slow = True
-        self._refused = False          # the commit decides that for itself
-        if not ok:
-            if self._preview_snapshot is not None:
-                self._restore_clean(viewport)
-            return False
-        self._stage_d = self._stage_applied = self.extrusion
-        self._stage_serial = (id(mesh), mesh._mut_serial)
-        scene.version += 1
-        return True
-
-    def _resolve_stage(self, mesh) -> bool:
-        from ingetrazo_core import PushSlide
-        levels = [0., *self._plane_levels]
-        if self._limit_in is not None:
-            levels.append(-self._limit_in)
-        slide = PushSlide.resolve(mesh._store, self._preview_snapshot.snap, self._anchor,
-                                  self._normal, self.extrusion, levels, self._cap_positions,
-                                  _STITCH_TOL)
-        if slide is None:
-            return False
-        self._stage_slide = slide
-        self._stage_lo, self._stage_hi = slide.interval
-        self._stage_verts = push_scans.views(mesh, "vertex", slide.vertices)
-        self._stage_new = ElementSet(push_scans.views(mesh, "face", slide.faces))
-        self._stage_new.update(push_scans.views(mesh, "edge", slide.edges))
-        return True
-
-    def _park_stage(self, viewport) -> None:
-        """Keep the current stage for a return trip: its fields plus a
-        snapshot of the staged model, captured the first time it is parked —
-        its topology never changes, and re-entry re-places the movers
-        absolutely. One per side of the base plane (no interval contains 0,
-        a level); a newer stage replaces the older one."""
-        if self._stage_d is None or self._stage_rec is not None:
-            return
-        self._stage_rec = {
-            "d": self._stage_d, "lo": self._stage_lo, "hi": self._stage_hi,
-            "verts": self._stage_verts, "slide": self._stage_slide,
-            "new": self._stage_new, "applied": self._stage_applied,
-            "state": self._target_mesh(viewport.scene).capture_state(),
-            "sel": set(viewport.scene.selection),
-        }
-        self._stage_cache[1.0 if self._stage_d > 0.0 else -1.0] = self._stage_rec
-
-    def _unpark_stage(self, viewport, rec: dict) -> None:
-        """Show a parked stage again: one restore. restore_state resets every
-        captured object and the lists, so whatever the model holds now —
-        clean, or the other side's stage — needs no clean restore first."""
-        scene = viewport.scene
-        mesh = self._target_mesh(scene)
-        mesh.restore_state(rec["state"])
-        scene.selection.clear()
-        scene.selection.update(rec["sel"])
-        self._stage_d, self._stage_lo, self._stage_hi = (
-            rec["d"], rec["lo"], rec["hi"])
-        self._stage_verts, self._stage_slide, self._stage_new = (
-            rec["verts"], rec["slide"], rec["new"])
-        self._stage_applied = rec["applied"]
-        self._stage_rec = rec
-        self._stage_serial = (id(mesh), mesh._mut_serial)
-        scene.version += 1
+        self._present(viewport, "stage")
 
     def inference_marker(self):
         """Return ``(world_point, kind)`` for the marker the viewport draws

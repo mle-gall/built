@@ -60,6 +60,7 @@ mod shadow_fit;
 mod textures;
 pub mod tool_cursors;
 mod annotation_canvas;
+mod tool_overlay;
 mod image_assets;
 mod survey_raster;
 mod survey_import;
@@ -3206,6 +3207,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(extension_setup::setup_extension_menus,m)?)?;
     m.add_function(wrap_pyfunction!(model_views::view_layouts, m)?)?;
     m.add_class::<annotation_canvas::AnnotationCanvas>()?;
+    m.add_function(wrap_pyfunction!(tool_overlay::tool_overlay_tile,m)?)?;
     m.add_function(wrap_pyfunction!(image_assets::reference_texture, m)?)?;
     m.add_function(wrap_pyfunction!(image_assets::fit_reference_rgba, m)?)?;
     m.add_function(wrap_pyfunction!(image_assets::swatch_pixels, m)?)?;

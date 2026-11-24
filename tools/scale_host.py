@@ -4,9 +4,8 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from ingetrazo_core import TransformPose, ScaleGripSpec, scale_grab, Vec3 as QVector3D
+from ingetrazo_core import MatrixGesture, ScaleGripSpec, scale_grab, Vec3 as QVector3D
 
-from core.history import scale_matrix
 from core.i18n import tr
 
 
@@ -52,8 +51,7 @@ class ScaleHost:
         self._lo: QVector3D | None = None
         self._hi: QVector3D | None = None
         self._axes = None                  # (red, green, blue) or None = world
-        self._resident_preview = False
-        self._pose = None
+        self._gesture = MatrixGesture()
         self._orig = None
         self._grips: list[_Grip] = []
         self._box_version = -1
@@ -66,7 +64,6 @@ class ScaleHost:
         self._grip: _Grip | None = None
         self._hover_grip: _Grip | None = None
         self._anchor: QVector3D | None = None
-        self._factors = (1.0, 1.0, 1.0)    # live preview factors
         # A tap toggles.
         self.about_center = False
         self.uniform = False
@@ -285,7 +282,6 @@ class ScaleHost:
         scale_grab(viewport.scene, self)
         self._grip = grip
         self._anchor = self._anchor_for(grip)
-        self._factors = (1.0, 1.0, 1.0)
         self._capture_originals(viewport)
         viewport.update()
 
@@ -372,34 +368,16 @@ class ScaleHost:
         viewport.update()
 
     # ---- Live preview -------------------------------------------------------
-    def _capture_originals(self, viewport) -> None:
-        self._resident_preview = not self._images and TransformPose.begin(viewport, self)
-        if self._resident_preview:
-            return
-        self._pose = TransformPose(self, viewport.scene, "scale", False)
+    _factors = property(lambda self: self._gesture.factors)
 
-    def _set_preview(self, viewport, factors):
-        identity = all(abs(f - 1.0) < 1e-12 for f in factors)
-        matrix = scale_matrix(self._anchor, factors, self._axes)
-        if self._resident_preview:
-            viewport.set_groups_preview_matrix(matrix)
-        elif self._pose is not None:
-            self._pose.apply(viewport.scene, None if identity else matrix)
+    def _capture_originals(self, viewport):
+        self._gesture.begin(self, viewport, True)
 
-    def _apply_preview(self, viewport, target: tuple) -> None:
-        if all(abs(t - f) < 1e-12 for t, f in zip(target, self._factors)):
-            return
-        self._set_preview(viewport, target)
-        self._factors = target
+    def _apply_preview(self, viewport, target):
+        self._gesture.scale(self, viewport, target)
 
-    def _revert_preview(self, viewport) -> None:
-        if self._resident_preview:
-            viewport.end_groups_preview()
-            self._resident_preview = False
-            self._factors = (1.0, 1.0, 1.0)
-        elif any(abs(f - 1.0) > 1e-12 for f in self._factors):
-            self._set_preview(viewport, (1.0, 1.0, 1.0))
-            self._factors = (1.0, 1.0, 1.0)
+    def _revert_preview(self, viewport):
+        self._gesture.revert(viewport, False)
 
     # ---- Commit -------------------------------------------------------------
     def _commit(self, viewport, factors: tuple) -> None:
@@ -424,8 +402,6 @@ class ScaleHost:
     def host_end_grip(self, viewport, _):
         self._grip = None
         self._anchor = None
-        self._factors = (1.0, 1.0, 1.0)
-        self._pose = None                 # the operation is over
         self._box_version = -1              # geometry moved: rebuild the box
         self._refresh_box(viewport)
         viewport.update()
@@ -436,12 +412,10 @@ class ScaleHost:
         self._grip = None
         self._hover_grip = None
         self._anchor = None
-        self._factors = (1.0, 1.0, 1.0)
         self._groups = []
         self._positions = []
         self._verts = []
         self._images = []
-        self._pose = None
         self._box_version = -1
 
     # ---- Feedback -----------------------------------------------------------

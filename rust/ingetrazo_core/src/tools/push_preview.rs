@@ -122,3 +122,64 @@ pub fn push_guide_reference(
     }
     Ok(best.map(|(_, p, d)| (p.into(), d)))
 }
+
+/// The renderer accepts ordinary face records from both tools and extensions.
+/// Build the complete surface and wire payload together, including extra caps.
+#[pyfunction]
+pub fn push_light_faces<'py>(
+    tool: &Bound<'py, PyAny>,
+    minimum: f64,
+) -> PyResult<Bound<'py, pyo3::types::PyList>> {
+    use pyo3::types::{PyDict, PyList};
+    let py = tool.py();
+    let faces = PyList::empty(py);
+    let wires = PyList::empty(py);
+    tool.setattr("_light_wires", &wires)?;
+    let d = tool.getattr("extrusion")?.extract::<f64>()?;
+    let base = tool.getattr("base_face")?;
+    let normal = tool.getattr("_normal")?;
+    if base.is_none() || normal.is_none() || d.abs() < minimum {
+        return Ok(faces);
+    }
+    let facet_cos = tool.getattr("_CURVE_FACET_COS")?.extract()?;
+    let face_record = py.import("core.geometry")?.getattr("Face")?;
+    let wall_paint = py.import("core.push_pull")?.getattr("_paint_of")?;
+    let caps = std::iter::once(Ok(base)).chain(tool.getattr("_extra_faces")?.try_iter()?);
+    let normals = std::iter::once(Ok(normal)).chain(tool.getattr("_extra_normals")?.try_iter()?);
+    for (face, n) in caps.zip(normals) {
+        let face = face?;
+        let offset = Py::new(py, Vec3::from(xyz(&n?)? * d))?;
+        let (cap, walls, edges) = push_sweep_preview(&face, offset.bind(py), facet_cos)?;
+        let mut rings = cap.into_iter();
+        let outer = rings.next().unwrap_or_default();
+        let attrs = face.getattr("attrs")?;
+        let material = if attrs.is_truthy()? {
+            Some(py.get_type::<PyDict>().call1((attrs,))?)
+        } else {
+            None
+        };
+        faces.append(face_record.call1((outer, rings.collect::<Vec<_>>(), material))?)?;
+        let paint = wall_paint.call1((&face,))?;
+        let paint = paint.is_truthy()?.then_some(paint);
+        for wall in walls {
+            faces.append(face_record.call1((wall, PyList::empty(py), &paint))?)?;
+        }
+        wires.call_method1("extend", (edges,))?;
+    }
+    Ok(faces)
+}
+
+pub(super) fn recessed(tool: &Bound<'_, PyAny>, view: &Bound<'_, PyAny>, d: f64) -> PyResult<bool> {
+    let cam = view.getattr_opt("camera")?;
+    let eye = cam
+        .as_ref()
+        .map(|c| c.getattr_opt("eye"))
+        .transpose()?
+        .flatten();
+    let anchor = tool.getattr("_anchor")?;
+    let normal = tool.getattr("_normal")?;
+    if let Some(eye) = eye.filter(|_| !anchor.is_none() && !normal.is_none()) {
+        return Ok((xyz(&normal)? * d).dot(xyz(&anchor)? - xyz(&eye.call0()?)?) > 0.);
+    }
+    Ok(d < 0.)
+}

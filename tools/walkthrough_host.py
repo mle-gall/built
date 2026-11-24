@@ -2,6 +2,7 @@
 """Walkthrough bindings for the viewport camera, preferences, timers and painter."""
 import os
 
+from tools.overlay_painter import draw_overlay
 from PySide6.QtCore import QPointF, Qt, QTimer
 from ingetrazo_core import Vec3, ToolMachine
 
@@ -201,17 +202,8 @@ class WalkHost(EyeHost):
     def _anchor_px(self, p):
         self._machine.set("anchor", None if p is None else (p.x(), p.y()))
 
-    def draw_overlay(self, viewport, painter):
-        anchor = self._anchor_px
-        if anchor is None:
-            return
-        from PySide6.QtGui import QColor, QPen
-        x, y = anchor.x(), anchor.y()
-        painter.setPen(QPen(QColor(30, 30, 30, 230), 1.5))
-        painter.drawLine(QPointF(x - 10, y), QPointF(x + 10, y))
-        painter.drawLine(QPointF(x, y - 10), QPointF(x, y + 10))
-        painter.setPen(QPen(QColor(255, 255, 255, 200), 1.0))
-        painter.drawEllipse(QPointF(x, y), 4.0, 4.0)
+    overlay_kind = "walk"
+    draw_overlay = draw_overlay
 
 
 class FirstPersonHost(EyeHost):

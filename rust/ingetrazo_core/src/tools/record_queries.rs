@@ -78,6 +78,11 @@ impl ViewportToolHost {
         arg: &Value,
     ) -> PyResult<Option<Value>> {
         let view = self.vp.bind(py);
+        if matches!(verb, "grab" | "preview" | "park" | "revert" | "move" | "copy") {
+            if let Some(result) = self.move_service(py, verb, arg)? {
+                return Ok(Some(result));
+            }
+        }
         Ok(Some(match verb {
             "begin_paste_preview" | "pose_paste_preview" | "end_paste_preview" | "can_stamp" =>
                 self.paste_service(py, verb, arg)?,

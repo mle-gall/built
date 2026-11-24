@@ -77,7 +77,7 @@ impl TransformPose {
     /// Select a resident row preview when the grabbed topology covers the
     /// whole loose row. Scripted hosts may only provide the group API.
     #[staticmethod]
-    fn begin(view: &Bound<'_, PyAny>, tool: &Bound<'_, PyAny>) -> PyResult<bool> {
+    pub(super) fn begin(view: &Bound<'_, PyAny>, tool: &Bound<'_, PyAny>) -> PyResult<bool> {
         let groups = tool.getattr("_groups")?;
         let vertices = tool.getattr("_verts")?;
         if vertices.is_truthy()? {
@@ -93,7 +93,7 @@ impl TransformPose {
         Ok(false)
     }
     #[new]
-    fn new(
+    pub(super) fn new(
         tool: &Bound<'_, PyAny>,
         scene: &Bound<'_, PyAny>,
         mode: &str,
@@ -191,7 +191,7 @@ impl TransformPose {
     }
 }
 impl TransformPose {
-    fn pose(&self, scene: &Bound<'_, PyAny>, matrix: Option<DMat4>) -> PyResult<()> {
+    pub(super) fn pose(&self, scene: &Bound<'_, PyAny>, matrix: Option<DMat4>) -> PyResult<()> {
         let py = scene.py();
         let point = |p: DVec3| matrix.map_or(p, |m| m.transform_point3(p));
         for (g, x) in &self.groups {
@@ -257,6 +257,129 @@ impl TransformPose {
                 scene.setattr("version", version + 1)?;
             }
         }
+        Ok(())
+    }
+}
+
+/// Absolute matrix previews for Scale and Rotate. Scale captures the original
+/// on grab. Rotate defers it until the reference arm is set, including when
+/// Move hands its box grip to Rotate. Copy parks the row without releasing it.
+#[pyclass(module = "ingetrazo_core")]
+pub struct MatrixGesture {
+    original: Option<TransformPose>,
+    resident: bool,
+    factors: [f64; 3],
+    #[pyo3(get)]
+    angle: f64,
+}
+#[pymethods]
+impl MatrixGesture {
+    #[new]
+    fn new() -> Self {
+        Self {
+            original: None,
+            resident: false,
+            factors: [1.; 3],
+            angle: 0.,
+        }
+    }
+    #[getter]
+    fn factors(&self) -> (f64, f64, f64) {
+        self.factors.into()
+    }
+
+    fn begin(
+        &mut self,
+        tool: &Bound<'_, PyAny>,
+        view: &Bound<'_, PyAny>,
+        scale: bool,
+    ) -> PyResult<()> {
+        *self = Self::new();
+        self.resident =
+            (!scale || !tool.getattr("_images")?.is_truthy()?) && TransformPose::begin(view, tool)?;
+        if scale && !self.resident {
+            self.original = Some(TransformPose::new(
+                tool,
+                &view.getattr("scene")?,
+                "scale",
+                false,
+            )?);
+        }
+        Ok(())
+    }
+    fn scale(
+        &mut self,
+        tool: &Bound<'_, PyAny>,
+        view: &Bound<'_, PyAny>,
+        factors: [f64; 3],
+    ) -> PyResult<()> {
+        if factors
+            .iter()
+            .zip(self.factors)
+            .all(|(a, b)| (a - b).abs() < 1e-12)
+        {
+            return Ok(());
+        }
+        let matrix = view.py().import("core.history")?.call_method1(
+            "scale_matrix",
+            (tool.getattr("_anchor")?, factors, tool.getattr("_axes")?),
+        )?;
+        if self.resident {
+            view.call_method1("set_groups_preview_matrix", (matrix,))?;
+        } else if let Some(original) = &self.original {
+            let identity = factors.iter().all(|f| (f - 1.).abs() < 1e-12);
+            original.apply(&view.getattr("scene")?, (!identity).then_some(&matrix))?;
+        }
+        self.factors = factors;
+        Ok(())
+    }
+    fn rotate(
+        &mut self,
+        tool: &Bound<'_, PyAny>,
+        view: &Bound<'_, PyAny>,
+        angle: f64,
+    ) -> PyResult<()> {
+        let scene = view.getattr("scene")?;
+        let matrix = view.py().import("core.history")?.call_method1(
+            "rotation_matrix",
+            (
+                tool.getattr("start_point")?,
+                tool.call_method0("_axis")?,
+                angle,
+            ),
+        )?;
+        if self.original.is_none() {
+            self.original = Some(TransformPose::new(tool, &scene, "rotate", self.resident)?);
+        }
+        self.original
+            .as_ref()
+            .unwrap()
+            .apply(&scene, Some(&matrix))?;
+        if self.resident {
+            view.call_method1("set_groups_preview_matrix", (matrix,))?;
+        }
+        self.angle = angle;
+        Ok(())
+    }
+    fn revert(&mut self, view: &Bound<'_, PyAny>, park: bool) -> PyResult<()> {
+        if let Some(original) = self.original.take() {
+            if original.mode != "scale" || self.factors.iter().any(|f| (f - 1.).abs() > 1e-12) {
+                original.pose(&view.getattr("scene")?, None)?;
+            }
+        }
+        if self.resident {
+            if park {
+                view.call_method1(
+                    "set_groups_preview_matrix",
+                    (Matrix4::from(DMat4::IDENTITY),),
+                )?;
+            } else {
+                view.call_method0("end_groups_preview")?;
+                self.resident = false;
+            }
+        }
+        self.angle = 0.;
+        self.factors = [1.; 3];
         Ok(())
     }
 }

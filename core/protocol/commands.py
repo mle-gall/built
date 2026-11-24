@@ -907,7 +907,7 @@ def scale_selection(history, anchor, factors, vertices=(), placements=(), images
 
 
 def move_selection(history, delta, placements=None, vertices=None, edges=None,
-                   faces=None, copy=False, count=1, mode="x"):
+                   faces=None, copy=False, count=1, mode="x", _plan=None):
     """Move (or copy) what is named — placements by uid, loose vertices,
     edges and faces by key — or, with none named, the scene's selection
     (placements, loose geometry, guides, labels, dimensions, section
@@ -915,6 +915,18 @@ def move_selection(history, delta, placements=None, vertices=None, edges=None,
     along): the Move tool's commit (``core.move_ops``). A copy
     lays ``count`` copies at multiples of ``delta`` (``mode`` ``"x"``) or
     dividing it (``"/"``) and selects them. One step."""
+    from core.history import Command
+    if _plan is not None and not isinstance(_plan, Command):
+        raise TypeError("a prepared move must be a history command")
+    before = history.revision
+    command = _plan if _plan is not None else _move_selection_command(
+        history, delta, placements, vertices, edges, faces, copy, count, mode)
+    if command is not None:
+        history.execute(command)
+    return _answer(history, before)
+
+
+def _move_selection_command(history, delta, placements, vertices, edges, faces, copy, count, mode):
     from ingetrazo_core import Vec3
     from core.dimension import Dimension
     from core.group import Group
@@ -944,17 +956,13 @@ def move_selection(history, delta, placements=None, vertices=None, edges=None,
     splanes = [e for e in rest if isinstance(e, SectionPlane)]
     images = [e for e in rest if type(e).__name__ == "ImagePlane"]
     d = Vec3(*map(float, delta))
-    before = history.revision
     if copy:
         count = int(count)
         if count < 1 or mode not in ("x", "/"):
             raise ValueError("count is at least 1 and mode is 'x' or '/'")
         steps = ([d * (k / float(count)) for k in range(1, count + 1)] if mode == "/"
                  else [d * float(k) for k in range(1, count + 1)])
-        cmd = copy_builder(history.scene, groups, fs, es, guides)(steps)
-        if cmd is not None:
-            history.execute(cmd)
-        return _answer(history, before)
+        return copy_builder(history.scene, groups, fs, es, guides)(steps)
     from core.topology import _key
     seen, positions = set(), []
     for p in [v.position for v in vs] + [p for e in es for p in (e.a, e.b)] + \
@@ -971,8 +979,7 @@ def move_selection(history, delta, placements=None, vertices=None, edges=None,
     cmds = move_commands(d, groups=groups, positions=positions, labels=labels,
                          guides=guides, dims=dims, splanes=splanes, images=images)
     if cmds:
-        history.execute(cmds[0] if len(cmds) == 1 else CompoundCommand(cmds))
-    return _answer(history, before)
+        return cmds[0] if len(cmds) == 1 else CompoundCommand(cmds)
 
 
 def _edge_edit(history, edges, edit, *args):

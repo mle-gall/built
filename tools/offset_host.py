@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Offset viewport bindings. The machine owns the source geometry and gesture."""
-from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QColor, QPainter, QPen
+from tools.overlay_painter import draw_overlay
 from ingetrazo_core import Vec3 as QVector3D, ordered_edge_path as _run_from_edges, outline_normal as _newell
 
 from core.i18n import tr
@@ -187,51 +186,9 @@ class OffsetHost:
         if message:
             viewport.flash_status(message, 5000)
 
-    def draw_overlay(self, viewport, painter: QPainter) -> None:
-        """Show the boundary and the clicked start of the offset distance."""
-        if self._offset_reference is None:
-            return
-        a, b, start = self._offset_reference
-        hidden = getattr(viewport, "_occluded_on_screen", lambda _point: False)
-        if hidden(start):
-            return
-        pixel = viewport._world_to_pixel(start)
-        if pixel is None:
-            return
-        red = QColor(195, 28, 44)
-        painter.save()
-        try:
-            # A white under-stroke separates the reference from both the
-            # model outline and a stippled face highlight.
-            if not hidden((a + b) * 0.5):
-                segment = viewport._segment_to_pixels(a, b)
-                if segment is not None:
-                    p0, p1 = (QPointF(*xy) for xy in segment)
-                    painter.setPen(QPen(QColor(255, 255, 255, 235), 4.0))
-                    painter.drawLine(p0, p1)
-                    painter.setPen(QPen(QColor(0, 1, 255), 2.0))
-                    painter.drawLine(p0, p1)
-            if self.dragging and self._ref_inward is not None:
-                end = start + self._ref_inward * self.distance
-                segment = viewport._segment_to_pixels(start, end)
-                if segment is not None:
-                    pen = QPen(red, 1.25, Qt.DashLine)
-                    pen.setDashPattern([4.0, 3.0])
-                    painter.setPen(pen)
-                    painter.drawLine(*(QPointF(*xy) for xy in segment))
-                    target = viewport._world_to_pixel(end)
-                    if target is not None:
-                        painter.setBrush(QColor(255, 255, 255))
-                        painter.drawEllipse(QPointF(*target), 2.5, 2.5)
-            px, py = pixel
-            square = QRectF(px - 4.0, py - 4.0, 8.0, 8.0)
-            painter.setPen(QPen(QColor(255, 255, 255), 3.5))
-            painter.setBrush(red)
-            painter.drawRect(square)
-            painter.setPen(QPen(red, 1.2))
-            painter.drawRect(square)
-        finally:
-            painter.restore()
+    overlay_kind = "offset"
+    draw_overlay = draw_overlay
+
 
 def _run_from_edge(edge: Edge):
     """The run ``edge`` belongs to, walked both ways through vertices
