@@ -261,15 +261,13 @@ fn rfa_apply<'p>(py: Python<'p>, scene: &Obj<'p>, payload: &Obj<'p>) -> PyResult
     // and refuse a conflicting material recipe before publishing any geometry.
     let new_materials = PyDict::new(py);
     for (k, v) in mats.cast::<PyDict>()?.iter() {
-        if !baseline.contains(&k)? {
+        let current = registered.call_method1("get", (&k,))?;
+        if current.is_none() && !baseline.contains(&k)? {
             new_materials.set_item(&k, &v)?;
-        }
-        if let Some(current) = registered.cast::<PyDict>()?.get_item(&k)? {
-            if !current.is(&v) && !current.eq(&v)? {
-                return Err(PyRuntimeError::new_err(
-                    "A family material changed during import",
-                ));
-            }
+        } else if !current.is(&v) && !current.eq(&v)? {
+            return Err(PyRuntimeError::new_err(
+                "A family material changed during import",
+            ));
         }
     }
     registered.call_method1("update", (new_materials,))?;
