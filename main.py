@@ -698,10 +698,6 @@ def main() -> int:
     from views import mac_glass
     mac_glass.install_menus(app)
     _init_language()
-    # Long hints wrap into a box instead of a strip across the window.
-    from views.tooltips import WrappingToolTips
-    tooltips = WrappingToolTips(app)
-    app.installEventFilter(tooltips)
     # The Rust engine: if the last start with it on never
     # drew its first frame, this one goes back to the normal engine (and
     # says so below); --python-engine does it for one run.

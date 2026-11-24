@@ -107,7 +107,7 @@ def can_return(win) -> bool:
 
 def _docs_sig(win):
     return tuple((id(d), str(getattr(d, "path", None)), getattr(d, "import_name", None))
-                 for d in getattr(win, "_documents", []) or []) + (id(getattr(win, "_doc", None)),)
+                 for d in getattr(win, "_documents", []) or []) + (id(getattr(win, "_doc", None)), can_return(win))
 
 
 class Page:

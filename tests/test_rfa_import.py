@@ -2,16 +2,14 @@
 import base64
 from copy import deepcopy
 import json
-import os
 import sys
 from types import SimpleNamespace
 
-os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 import pytest
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 from PySide6.QtCore import QByteArray, QBuffer, QIODevice
 from PySide6.QtGui import QImage
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
 
 from core.scene import Scene
 from core.layers import Layer
@@ -19,8 +17,6 @@ from core.materials import Material
 from core.kept_components import definitions_of
 from core.bim_registry import get
 from formats.rfa import apply_payload, read_rfa, RfaImport, ZONE_TAG_KEY
-
-_app = QApplication.instance() or QApplication([])
 
 
 def payload():
@@ -155,26 +151,23 @@ def test_persistence(tmp_path):
     assert restored.layer(restored.groups[0].children[1].layer).name == 'Clearance zones'
 
 
-def test_menu_dispatch_and_report(monkeypatch, tmp_path):
-    from views.main_window import MainWindow
+def test_menu_dispatch_and_report(native_window, monkeypatch, tmp_path):
+    from app_shell.files import IMPORTS
     from views.filedialogs import file_dialogs
     from formats import rfa
-    win = MainWindow()
+
+    win = native_window
     reports = []
-    path = tmp_path / 'test.rfa'
-    monkeypatch.setattr(rfa, 'read_rfa', lambda path: payload())
+    path = tmp_path / "test.rfa"
+    path.touch()
+    monkeypatch.setattr(rfa, "read_rfa", lambda path: payload())
     monkeypatch.setattr("views.chrome_dialogs.information", lambda parent, title, text: reports.append(text))
-    monkeypatch.setattr(file_dialogs, 'getOpenFileName', lambda *a, **k: (str(path), ''))
-    try:
-        assert '.rfa' in win._openable_suffixes()
-        win._on_import_rfa()
-        assert len(win.viewport.scene.kept_components) == 2
-        assert reports and 'Decoder warning' in reports[0] and 'placeholder' in reports[0]
-        win.viewport.history.undo()
-        assert not win.viewport.scene.kept_components
-        assert win._open_path_here(path, '.rfa')
-        assert len(win.viewport.scene.kept_components) == 2
-    finally:
-        for doc in win.documents():
-            doc.saved_content = doc.viewport.scene.content_version
-        win.close()
+    monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *args, **kwargs: (str(path), ""))
+    assert ".rfa" in IMPORTS
+    win._host.menu("import:rfa")
+    assert len(win.viewport.scene.kept_components) == 2
+    assert reports and "Decoder warning" in reports[0] and "placeholder" in reports[0]
+    win.viewport.history.undo()
+    assert not win.viewport.scene.kept_components
+    assert win._host.open_path(path)
+    assert len(win.viewport.scene.kept_components) == 2

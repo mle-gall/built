@@ -14,19 +14,14 @@ Rotate ignored it and Select All skipped it. Now:
 """
 from __future__ import annotations
 
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 import math
-import os
-import sys
 from types import SimpleNamespace
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QPointF, Qt
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
 
-if QApplication.instance() is None:
-    QApplication(sys.argv[:1])
 
 from core.group import Group
 from core.guide import Guide, GuideCircle
@@ -438,26 +433,21 @@ def test_invert_selection_inside_a_group_leaves_guides_out():
     scene.end_group_edit()
 
 
-def test_select_all_takes_the_guides_in_the_model_only():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        scene = win.viewport.scene
-        _square(scene.mesh)
-        line = Guide(V(0, 3), V(1, 0))
-        pt = Guide(V(4, 4))
-        scene.guides.extend([line, pt])
+def test_select_all_takes_the_guides_in_the_model_only(native_window):
+    win = native_window
+    scene = win.viewport.scene
+    _square(scene.mesh)
+    line = Guide(V(0, 3), V(1, 0))
+    pt = Guide(V(4, 4))
+    scene.guides.extend([line, pt])
 
-        win._on_select_all()
-        assert line in scene.selection and pt in scene.selection
+    win._on_select_all()
+    assert line in scene.selection and pt in scene.selection
 
-        outer = Group(Mesh(), name="caja")
-        _square(outer.mesh, 5)
-        scene.groups.append(outer)
-        scene.begin_group_edit(outer)
-        win._on_select_all()
-        assert line not in scene.selection and pt not in scene.selection
-        scene.end_group_edit()
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    outer = Group(Mesh(), name="caja")
+    _square(outer.mesh, 5)
+    scene.groups.append(outer)
+    scene.begin_group_edit(outer)
+    win._on_select_all()
+    assert line not in scene.selection and pt not in scene.selection
+    scene.end_group_edit()

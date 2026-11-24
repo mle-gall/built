@@ -6,10 +6,9 @@ gigabytes on a large model. What they answer is what the built faces give, and
 an edit still gets the real mesh. Skipped without the engine."""
 from __future__ import annotations
 
-import os
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 from types import SimpleNamespace
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
 from PySide6.QtCore import QEvent, QPointF, Qt  # noqa: E402
@@ -27,7 +26,6 @@ pytestmark = pytest.mark.skipif(
     reason="engine off or not built")
 
 __all__ = ["big_enough", "binary"]
-
 
 
 def _built(mesh) -> bool:
@@ -199,7 +197,7 @@ def test_grabbing_a_group_builds_nothing_until_a_copy_is_asked(floor, tool):
     t.on_cancel(vp)
 
 
-def test_a_centre_on_a_lazy_group_follows_it_unbuilt(big_enough, tmp_path):
+def test_a_centre_on_a_lazy_group_follows_it_unbuilt(native_window, big_enough, tmp_path):
     """An edit elsewhere re-checks the acquired centre: the frame after it
     built the group under the centre, whatever the size."""
     import math
@@ -207,7 +205,6 @@ def test_a_centre_on_a_lazy_group_follows_it_unbuilt(big_enough, tmp_path):
     from core.scene import Scene
     from formats import igz
     from views import array_bake
-    from views.main_window import MainWindow
     from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
     scene = Scene()
     m = M.Mesh()
@@ -218,34 +215,30 @@ def test_a_centre_on_a_lazy_group_follows_it_unbuilt(big_enough, tmp_path):
     scene.groups.append(Group(m, name="discs"))
     path = tmp_path / "discs.igz"
     igz.save_scene(scene, path)
-    win = MainWindow()
-    try:
-        assert win.open_path(path) is not False
-        vp = win.viewport
-        group = vp.scene.groups[0]
-        mesh = group.mesh
-        assert type(mesh) is M.DeferredMesh
-        found = vp._center_of_face(array_bake.light_face(mesh, 0), group, mesh,
-                                   0.0, 0.0)
-        vp._center_ref = found
-        vp.scene.version += 1
-        fresh = vp._valid_center_ref()
-        assert type(mesh) is M.DeferredMesh, "the check built the group"
-        assert _xyz(fresh[0]) == _xyz(found[0])
-        group.xform = QMatrix4x4()
-        group.xform.translate(1, 2, 3)
-        vp.scene.version += 1
-        moved = vp._valid_center_ref()
-        assert type(mesh) is M.DeferredMesh
-        assert _xyz(moved[0]) == _xyz(group.xform.map(found[0]))
-        mesh.faces                       # built meanwhile: the real face now
-        vp.scene.version += 1
-        again = vp._valid_center_ref()
-        assert _real(again[4])
-        assert _xyz(again[0]) == _xyz(moved[0])
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    win = native_window
+    assert win.open_path(path) is not False
+    vp = win.viewport
+    group = vp.scene.groups[0]
+    mesh = group.mesh
+    assert type(mesh) is M.DeferredMesh
+    found = vp._center_of_face(array_bake.light_face(mesh, 0), group, mesh,
+                               0.0, 0.0)
+    vp._center_ref = found
+    vp.scene.version += 1
+    fresh = vp._valid_center_ref()
+    assert type(mesh) is M.DeferredMesh, "the check built the group"
+    assert _xyz(fresh[0]) == _xyz(found[0])
+    group.xform = QMatrix4x4()
+    group.xform.translate(1, 2, 3)
+    vp.scene.version += 1
+    moved = vp._valid_center_ref()
+    assert type(mesh) is M.DeferredMesh
+    assert _xyz(moved[0]) == _xyz(group.xform.map(found[0]))
+    mesh.faces                       # built meanwhile: the real face now
+    vp.scene.version += 1
+    again = vp._valid_center_ref()
+    assert _real(again[4])
+    assert _xyz(again[0]) == _xyz(moved[0])
 
 
 def test_a_view_moving_into_the_grid_keeps_its_bakes(floor):

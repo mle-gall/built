@@ -7,6 +7,7 @@ culled count — boxes straddling a plane, empty spans, spans without a
 box, gaps between spans."""
 from __future__ import annotations
 
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 import random
 
 import views.document_interaction as vpm
@@ -38,23 +39,18 @@ def _planes(rng):
     return pl
 
 
-def test_vector_culling_is_the_walk(monkeypatch):
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        rng = random.Random(4)
-        for _ in range(60):
-            spans = _spans(rng, rng.randrange(64, 600))
-            planes = _planes(rng)
-            split = rng.choice([None, spans[len(spans) // 2][1],
-                                spans[len(spans) // 3][1] + 1])
-            monkeypatch.setattr(vpm, "_SPAN_VECTOR_MIN", 10 ** 9)
-            want = vp._visible_spans(spans, planes, split)
-            monkeypatch.setattr(vpm, "_SPAN_VECTOR_MIN", 1)
-            got = vp._visible_spans(spans, planes, split)
-            again = vp._visible_spans(spans, planes, split)  # cached arrays
-            assert got == want and again == want
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_vector_culling_is_the_walk(native_window, monkeypatch):
+    win = native_window
+    vp = win.viewport
+    rng = random.Random(4)
+    for _ in range(60):
+        spans = _spans(rng, rng.randrange(64, 600))
+        planes = _planes(rng)
+        split = rng.choice([None, spans[len(spans) // 2][1],
+                            spans[len(spans) // 3][1] + 1])
+        monkeypatch.setattr(vpm, "_SPAN_VECTOR_MIN", 10 ** 9)
+        want = vp._visible_spans(spans, planes, split)
+        monkeypatch.setattr(vpm, "_SPAN_VECTOR_MIN", 1)
+        got = vp._visible_spans(spans, planes, split)
+        again = vp._visible_spans(spans, planes, split)  # cached arrays
+        assert got == want and again == want

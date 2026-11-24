@@ -10,16 +10,13 @@ plane never comes closer than at the old floor (the depth buffer is no
 coarser), and away from a close-up the wheel backs out as before."""
 from __future__ import annotations
 
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 import math
-import sys
 from types import SimpleNamespace
 
 import pytest
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication
 
-if QApplication.instance() is None:
-    QApplication(sys.argv[:1])
 
 from core.camera import (MIN_DISTANCE, MIN_DISTANCE_FAR, NEAR_FLOOR,  # noqa: E402
                          OrbitCamera)
@@ -129,23 +126,18 @@ def test_preview_cut_follows_the_near_plane_only_up_close():
     assert clip(_stub(MIN_DISTANCE, 1.0, perspective=False)) == 1e-3
 
 
-def test_a_preview_just_in_front_of_the_eye_is_drawn():
+def test_a_preview_just_in_front_of_the_eye_is_drawn(native_window):
     """At the 5 mm close-up, a segment 0.5–0.9 mm in front of the eye was
     cut whole by the fixed 1 mm; now it shows."""
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        vp.resize(1000, 700)
-        cam = vp.camera
-        cam.set_aspect(1000, 700)
-        cam.target = V(0, 0, 0)
-        cam.distance = MIN_DISTANCE
-        eye, f = cam.eye(), cam.forward()
-        side = V.crossProduct(f, cam.up_vector()).normalized() * 0.0001
-        p0 = eye + f * 0.0005 + side
-        p1 = eye + f * 0.0009 - side
-        assert vp._segment_to_pixels(p0, p1) is not None
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    win = native_window
+    vp = win.viewport
+    win._host.resize(1000, 700, 1.0)
+    cam = vp.camera
+    cam.set_aspect(1000, 700)
+    cam.target = V(0, 0, 0)
+    cam.distance = MIN_DISTANCE
+    eye, f = cam.eye(), cam.forward()
+    side = V.crossProduct(f, cam.up_vector()).normalized() * 0.0001
+    p0 = eye + f * 0.0005 + side
+    p1 = eye + f * 0.0009 - side
+    assert vp._segment_to_pixels(p0, p1) is not None

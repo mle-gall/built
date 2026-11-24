@@ -11,6 +11,7 @@ group. Each case: do → next command → undo ×2 → redo ×2 must end where t
 first pass did, with nothing left to redo."""
 from __future__ import annotations
 
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 from ingetrazo_core import Vec3 as V
 
 from core.group import Group
@@ -169,50 +170,45 @@ def _snapshot(scene):
                    for g in scene.groups))
 
 
-def test_window_loose_geometry_and_one_group_then_explode_redoes_both():
+def test_window_loose_geometry_and_one_group_then_explode_redoes_both(native_window):
     """The menu's way: a loose box and ONE group selected, Make Group,
     Explode, then Edit ▸ Undo twice and Edit ▸ Redo twice."""
     import sys
     from PySide6.QtWidgets import QApplication
     if QApplication.instance() is None:
         QApplication(sys.argv[:1])
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        scene, hist = vp.scene, vp.history
-        scene.groups[:] = []                       # no scale figure
-        _loose_box(scene, x=6.0)
-        scene.groups.append(_box_group(0, "A"))
-        scene.selection.clear()
-        scene.selection.update(scene.mesh.faces)
-        scene.selection.update(scene.mesh.edges)
-        scene.selection.add(scene.groups[0])
-        start = _snapshot(scene)
+    win = native_window
+    vp = win.viewport
+    scene, hist = vp.scene, vp.history
+    scene.groups[:] = []                       # no scale figure
+    _loose_box(scene, x=6.0)
+    scene.groups.append(_box_group(0, "A"))
+    scene.selection.clear()
+    scene.selection.update(scene.mesh.faces)
+    scene.selection.update(scene.mesh.edges)
+    scene.selection.add(scene.groups[0])
+    start = _snapshot(scene)
 
-        win._on_make_group()
-        grouped = _snapshot(scene)
-        assert len(scene.groups) == 1 and not scene.mesh.faces
-        container = scene.groups[0]
-        scene.selection.clear()
-        scene.selection.add(container)
-        win._on_explode_group()
-        exploded = _snapshot(scene)
-        assert exploded == start                   # loose box and A again
+    win._on_make_group()
+    grouped = _snapshot(scene)
+    assert len(scene.groups) == 1 and not scene.mesh.faces
+    container = scene.groups[0]
+    scene.selection.clear()
+    scene.selection.add(container)
+    win._on_explode_group()
+    exploded = _snapshot(scene)
+    assert exploded == start                   # loose box and A again
 
-        win._on_undo()
-        assert _snapshot(scene) == grouped
-        win._on_undo()
-        assert _snapshot(scene) == start
-        win._on_redo()
-        assert _snapshot(scene) == grouped
-        assert scene.groups[0] is container
-        win._on_redo()
-        assert _snapshot(scene) == exploded, "the second redo was lost"
-        assert not hist.redo_stack
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    win._on_undo()
+    assert _snapshot(scene) == grouped
+    win._on_undo()
+    assert _snapshot(scene) == start
+    win._on_redo()
+    assert _snapshot(scene) == grouped
+    assert scene.groups[0] is container
+    win._on_redo()
+    assert _snapshot(scene) == exploded, "the second redo was lost"
+    assert not hist.redo_stack
 
 
 def test_split_into_pieces_then_explode_redoes_both():

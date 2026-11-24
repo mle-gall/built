@@ -1,4 +1,5 @@
 """Exercise the registered callables with the same JSON boundary as the bridge."""
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 from types import SimpleNamespace
 import pytest
 
@@ -62,29 +63,24 @@ def test_catalog_round_trip():
     assert call('query_structure') == q
 
 
-def test_bridge_and_mcp_share_catalog(monkeypatch):
+def test_bridge_and_mcp_share_catalog(native_window, monkeypatch):
     from tests.test_agent_tools import call
     from tests.test_mcp_client_host import _client
     from plugins.ai_bridge import _Bridge
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        bridge = _Bridge(win.viewport)
-        client = _client(monkeypatch)
-        monkeypatch.setattr(client, '_bridge', lambda tool, args: dict(ok=True, result=call(bridge, tool, **args)))
-        tools = client.handle(dict(id=1, method='tools/list'))['result']['tools']
-        specs = {s['name']: s for s in tools}
-        assert specs['query_structure']['annotations']['readOnlyHint']
-        assert not specs['bootstrap_structure']['annotations']['readOnlyHint']
-        g = Group(name='Sample')
-        win.viewport.scene.groups = [g]
-        call(bridge, 'set_structure', value={'nodes': {'sample': dict(name='Sample', parent=None, order=0)}})
-        assert call(bridge, 'file', uids=[g.uid], node='sample')['applied']
-        assert call(bridge, 'query_structure')['nodes']['sample']['members'] == 1
-        assert call(bridge, 'undo')['ok']
-        assert call(bridge, 'query_unsorted')['rows'][0]['uid'] == g.uid
-        win.viewport.scene.worksession_read_only = True
-        assert not call(bridge, 'bootstrap_structure')['applied']
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    win = native_window
+    bridge = _Bridge(win.viewport)
+    client = _client(monkeypatch)
+    monkeypatch.setattr(client, '_bridge', lambda tool, args: dict(ok=True, result=call(bridge, tool, **args)))
+    tools = client.handle(dict(id=1, method='tools/list'))['result']['tools']
+    specs = {s['name']: s for s in tools}
+    assert specs['query_structure']['annotations']['readOnlyHint']
+    assert not specs['bootstrap_structure']['annotations']['readOnlyHint']
+    g = Group(name='Sample')
+    win.viewport.scene.groups = [g]
+    call(bridge, 'set_structure', value={'nodes': {'sample': dict(name='Sample', parent=None, order=0)}})
+    assert call(bridge, 'file', uids=[g.uid], node='sample')['applied']
+    assert call(bridge, 'query_structure')['nodes']['sample']['members'] == 1
+    assert call(bridge, 'undo')['ok']
+    assert call(bridge, 'query_unsorted')['rows'][0]['uid'] == g.uid
+    win.viewport.scene.worksession_read_only = True
+    assert not call(bridge, 'bootstrap_structure')['applied']

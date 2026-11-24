@@ -3,6 +3,7 @@
 """Locking a group protects edits without removing its inference points (#1210)."""
 from __future__ import annotations
 
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 import pytest
 from PySide6.QtCore import Qt
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
@@ -143,22 +144,18 @@ def test_native_candidates_keep_locked_references_out_of_editable_picks(monkeypa
     assert Viewport._lazy_sel_rows(stub, native).tolist() == [0]
 
 
-def test_locked_billboard_keeps_its_feet_reference():
-    from views.main_window import MainWindow
-    win = MainWindow()
+def test_locked_billboard_keeps_its_feet_reference(native_window):
+    win = native_window
+    win._start_blank_document()
     vp = win.viewport
-    try:
-        figure = next(g for g in vp.scene.groups if g.billboard)
-        before = vp._billboard_snap_edges()
-        assert len(before) == 1
-        figure.locked = True
-        vp.scene.version += 1
-        after = vp._billboard_snap_edges()
-        assert len(after) == 1
-        assert after[0].a == before[0].a
-        figure.hidden = True
-        vp.scene.version += 1
-        assert vp._billboard_snap_edges() == []
-    finally:
-        win._saved_version = vp.scene.version
-        win.close()
+    figure = next(g for g in vp.scene.groups if g.billboard)
+    before = vp._billboard_snap_edges()
+    assert len(before) == 1
+    figure.locked = True
+    vp.scene.version += 1
+    after = vp._billboard_snap_edges()
+    assert len(after) == 1
+    assert after[0].a == before[0].a
+    figure.hidden = True
+    vp.scene.version += 1
+    assert vp._billboard_snap_edges() == []

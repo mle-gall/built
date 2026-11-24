@@ -29,11 +29,13 @@ not a baseline. ``--selftest`` checks exactly that.
 from __future__ import annotations
 
 import argparse
+from contextlib import closing
 import json
 import math
 import os
 import pathlib
 import sys
+from tempfile import TemporaryDirectory
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -41,7 +43,6 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 from PySide6.QtCore import QPointF                         # noqa: E402
 from ingetrazo_core import Vec3 as QVector3D                        # noqa: E402
-from PySide6.QtWidgets import QApplication                 # noqa: E402
 
 #: Every standard view plus four obliques. The obliques matter: pacaeiro's
 #: report is about "certain viewport positions", and a bug that only shows
@@ -241,90 +242,85 @@ def run(out_path: str, radii=RADII_PX, directions: int = 16,
         cameras=CAMERAS, tools=TOOLS, scenes=SCENES,
         alt_modes=ALT_MODES, acquired=ACQUIRED, started=STARTED,
         locks=LOCKS) -> int:
-    app = QApplication.instance() or QApplication([])
-    from views.main_window import MainWindow
+    from app_shell.host import Host
 
-    win = MainWindow()
-    win.show()
-    win.resize(1200, 800)
-    app.processEvents()
-    vp = win.viewport
-    start_world = QVector3D(0.0, 0.0, 0.0)
-    rows = 0
-    with open(out_path, "w", encoding="utf-8") as fh:
-        for scene_kind in scenes:
-            _build_scene(vp, scene_kind)
-            for cam_name, oblique in cameras:
-                if oblique is None:
-                    vp.camera.set_view(cam_name)
-                else:
-                    vp.camera.yaw = math.radians(oblique[0])
-                    vp.camera.pitch = math.radians(oblique[1])
-                vp.camera.distance = 20.0
-                vp.camera.target = QVector3D(0.0, 0.0, 0.0)
-                app.processEvents()
-                sx, sy = vp._world_to_pixel(start_world)
-                for tool_key in tools:
-                    try:
-                        win._activate_tool(tool_key)
-                    except Exception:           # noqa: BLE001
-                        continue
-                    if vp.active_tool is None:
-                        continue
-                    for empezado in started:
-                      for lock in (locks if empezado else (None,)):
-                        for acq in acquired:
-                          for mode in alt_modes:
-                              for radius in radii:
-                                  for i in range(directions):
-                                      ang = 2.0 * math.pi * i / directions
-                                      px = sx + radius * math.cos(ang)
-                                      py = sy + radius * math.sin(ang)
-                                      _reset_tool(vp, start_world if empezado else None)
-                                      # After the reset, never before: the reset
-                                      # is what clears it.
-                                      if acq is not None:
-                                          vp._acquired_point = QVector3D(*acq)
-                                          vp._encouraged = [QVector3D(*acq)]
-                                      if lock == "shift-x":
-                                          from core.snap import COLOR_AXIS_X
-                                          vp._shift_lock = (QVector3D(1.0, 0.0, 0.0),
-                                                            COLOR_AXIS_X)
-                                      elif lock is not None:
-                                          vp.axis_lock = lock
-                                      vp.linear_inference_mode = mode
-                                      vp._last_mouse_pos = QPointF(px, py)
-                                      try:
-                                          vp._refresh_snap()
-                                      except Exception as exc:    # noqa: BLE001
-                                          answer = {"kind": "ERROR",
-                                                    "err": type(exc).__name__}
-                                      else:
-                                          s = vp.last_snap
-                                          answer = ({"kind": "none-returned"}
-                                                    if s is None else
-                                                    {"kind": s.kind,
-                                                     "axis": s.axis,
-                                                     "x": _round(s.point.x()),
-                                                     "y": _round(s.point.y()),
-                                                     "z": _round(s.point.z())})
-                                      fh.write(json.dumps({
-                                          "scene": scene_kind, "cam": cam_name,
-                                          "tool": tool_key, "alt": mode,
-                                          "r": radius, "dir": i,
-                                          # Which one, not just whether: two
-                                          # points both spelt "on" collided
-                                          # in a keyed diff (2026-09-19).
-                                          "acq": ("off" if acq is None
-                                                  else "%g,%g,%g" % acq),
-                                          "lock": lock or "none",
-                                      "fase": "curso" if empezado else "1er-clic",
-                                          **answer,
-                                      }, sort_keys=True, ensure_ascii=False) + "\n")
-                                      rows += 1
-    win._saved_version = vp.scene.version
-    win.close()
-    return rows
+    with TemporaryDirectory() as profile, closing(Host(0, 1200, 800, 1.0, settings=profile)) as host:
+        win = host.window
+        win.new_document()
+        vp = win.viewport
+        start_world = QVector3D(0.0, 0.0, 0.0)
+        rows = 0
+        with open(out_path, "w", encoding="utf-8") as fh:
+            for scene_kind in scenes:
+                _build_scene(vp, scene_kind)
+                for cam_name, oblique in cameras:
+                    if oblique is None:
+                        vp.camera.set_view(cam_name)
+                    else:
+                        vp.camera.yaw = math.radians(oblique[0])
+                        vp.camera.pitch = math.radians(oblique[1])
+                    vp.camera.distance = 20.0
+                    vp.camera.target = QVector3D(0.0, 0.0, 0.0)
+                    sx, sy = vp._world_to_pixel(start_world)
+                    for tool_key in tools:
+                        try:
+                            win._activate_tool(tool_key)
+                        except Exception:           # noqa: BLE001
+                            continue
+                        if vp.active_tool is None:
+                            continue
+                        for empezado in started:
+                          for lock in (locks if empezado else (None,)):
+                            for acq in acquired:
+                              for mode in alt_modes:
+                                  for radius in radii:
+                                      for i in range(directions):
+                                          ang = 2.0 * math.pi * i / directions
+                                          px = sx + radius * math.cos(ang)
+                                          py = sy + radius * math.sin(ang)
+                                          _reset_tool(vp, start_world if empezado else None)
+                                          # After the reset, never before: the reset
+                                          # is what clears it.
+                                          if acq is not None:
+                                              vp._acquired_point = QVector3D(*acq)
+                                              vp._encouraged = [QVector3D(*acq)]
+                                          if lock == "shift-x":
+                                              from core.snap import COLOR_AXIS_X
+                                              vp._shift_lock = (QVector3D(1.0, 0.0, 0.0),
+                                                                COLOR_AXIS_X)
+                                          elif lock is not None:
+                                              vp.axis_lock = lock
+                                          vp.linear_inference_mode = mode
+                                          vp._last_mouse_pos = QPointF(px, py)
+                                          try:
+                                              vp._refresh_snap()
+                                          except Exception as exc:    # noqa: BLE001
+                                              answer = {"kind": "ERROR",
+                                                        "err": type(exc).__name__}
+                                          else:
+                                              s = vp.last_snap
+                                              answer = ({"kind": "none-returned"}
+                                                        if s is None else
+                                                        {"kind": s.kind,
+                                                         "axis": s.axis,
+                                                         "x": _round(s.point.x()),
+                                                         "y": _round(s.point.y()),
+                                                         "z": _round(s.point.z())})
+                                          fh.write(json.dumps({
+                                              "scene": scene_kind, "cam": cam_name,
+                                              "tool": tool_key, "alt": mode,
+                                              "r": radius, "dir": i,
+                                              # Which one, not just whether: two
+                                              # points both spelt "on" collided
+                                              # in a keyed diff (2026-09-19).
+                                              "acq": ("off" if acq is None
+                                                      else "%g,%g,%g" % acq),
+                                              "lock": lock or "none",
+                                          "fase": "curso" if empezado else "1er-clic",
+                                              **answer,
+                                          }, sort_keys=True, ensure_ascii=False) + "\n")
+                                          rows += 1
+        return rows
 
 
 def main() -> int:
@@ -353,4 +349,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    from scripts.isolated_launch import isolate_script
+    isolate_script()
     raise SystemExit(main())

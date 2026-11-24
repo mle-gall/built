@@ -12,6 +12,7 @@ import random
 from types import SimpleNamespace
 
 import numpy as np
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 import pytest
 from PySide6.QtGui import QImage
 from ingetrazo_core import Vec3 as V
@@ -49,13 +50,9 @@ def lazy(request, monkeypatch):
     monkeypatch.setattr(_native, "native", _native.available())
 
 
-@pytest.fixture(scope="module")
-def vp():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    yield win.viewport
-    win._saved_version = win.viewport.scene.version
-    win.close()
+@pytest.fixture
+def vp(native_window):
+    return native_window.viewport
 
 
 def _paint_up(scene, rng, png):
