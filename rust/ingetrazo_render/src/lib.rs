@@ -2238,11 +2238,8 @@ impl Renderer {
         if (w, h) != (self.config.width, self.config.height) {
             return Err(PyValueError::new_err("overlay must match physical surface dimensions"));
         }
-        if let Some(rgba) = layer.take_rgba() {
-            self.overlay.upload(&self.device, &self.queue, w, h, &rgba);
-        } else {
-            self.overlay.clear_layer(&self.device, w, h);
-        }
+        let region = layer.drawn_region();
+        self.overlay.upload_changed(&self.device, &self.queue, w, h, region, |r| layer.region_rgba(r));
         Ok(())
     }
     fn set_overlay(

@@ -368,6 +368,17 @@ impl Default for Style {
     }
 }
 
+fn demultiply(rgba: &mut [u8]) {
+    for pixel in rgba.chunks_exact_mut(4) {
+        let a = u32::from(pixel[3]);
+        if a != 0 && a != 255 {
+            for channel in &mut pixel[..3] {
+                *channel = ((u32::from(*channel) * 255 + a / 2) / a).min(255) as u8;
+            }
+        }
+    }
+}
+
 #[pyclass]
 pub struct AnnotationCanvas {
     size: IntSize,
@@ -376,6 +387,9 @@ pub struct AnnotationCanvas {
     state: Style,
     stack: Vec<Style>,
     overlay: Option<Pixmap>,
+    /// Physical bounds of everything drawn, `[x0, y0, x1, y1]`, padded for
+    /// anti-aliasing: the part of the layer the renderer uploads.
+    drawn: Option<[f32; 4]>,
 }
 
 impl AnnotationCanvas {
@@ -383,18 +397,44 @@ impl AnnotationCanvas {
         (self.size.width(), self.size.height())
     }
 
-    /// The GPU layer samples straight-alpha sRGB. Demultiply only inked pixels.
-    pub(crate) fn take_rgba(&mut self) -> Option<Vec<u8>> {
-        let mut rgba = self.overlay.take()?.take();
-        for pixel in rgba.chunks_exact_mut(4) {
-            let a = u32::from(pixel[3]);
-            if a != 0 && a != 255 {
-                for channel in &mut pixel[..3] {
-                    *channel = ((u32::from(*channel) * 255 + a / 2) / a).min(255) as u8;
-                }
-            }
+    fn mark(&mut self, x0: f32, y0: f32, x1: f32, y1: f32) {
+        if !(x0 <= x1 && y0 <= y1) {
+            return;
         }
-        Some(rgba)
+        let r = [x0.floor() - 1., y0.floor() - 1., x1.ceil() + 1., y1.ceil() + 1.];
+        self.drawn = Some(match self.drawn {
+            Some(d) => [d[0].min(r[0]), d[1].min(r[1]), d[2].max(r[2]), d[3].max(r[3])],
+            None => r,
+        });
+    }
+
+    fn mark_logical(&mut self, rect: Rect, pad: f32) {
+        let k = self.size.width() as f32 / self.width as f32;
+        self.mark(rect.left() * k - pad, rect.top() * k - pad, rect.right() * k + pad, rect.bottom() * k + pad);
+    }
+
+    /// The drawn part of the layer in whole physical pixels, `[x0, y0, x1, y1)`.
+    pub(crate) fn drawn_region(&self) -> Option<[u32; 4]> {
+        self.overlay.as_ref()?;
+        let (w, h) = (self.size.width() as f32, self.size.height() as f32);
+        let d = self.drawn?;
+        let r = [d[0].clamp(0., w) as u32, d[1].clamp(0., h) as u32, d[2].clamp(0., w) as u32, d[3].clamp(0., h) as u32];
+        (r[0] < r[2] && r[1] < r[3]).then_some(r)
+    }
+
+    /// Straight-alpha RGBA of `[x0, y0, x1, y1)`, zero where nothing was drawn.
+    pub(crate) fn region_rgba(&self, r: [u32; 4]) -> Vec<u8> {
+        let (w, h) = (r[2] - r[0], r[3] - r[1]);
+        let mut out = vec![0u8; (w * h * 4) as usize];
+        let Some(layer) = &self.overlay else { return out };
+        let stride = self.size.width() as usize * 4;
+        for (row, y) in (r[1]..r[3]).enumerate() {
+            let at = y as usize * stride + r[0] as usize * 4;
+            let dst = &mut out[row * w as usize * 4..(row + 1) * w as usize * 4];
+            dst.copy_from_slice(&layer.data()[at..at + w as usize * 4]);
+            demultiply(dst);
+        }
+        out
     }
 
     fn scale(&self) -> Transform {
@@ -419,6 +459,11 @@ impl AnnotationCanvas {
         let pen = self.state.pen;
         let brush = self.state.brush;
         let stroke = self.state.stroke.clone();
+        if pen.is_some() || (fill && brush.is_some()) {
+            // A stroke reaches half its width out, a miter join up to twice it.
+            let pad = if pen.is_some() { 2. * stroke.width.max(1.) * transform.sx } else { 0. };
+            self.mark_logical(path.bounds(), pad);
+        }
         let target = self.target()?;
         if let Some(color) = brush.filter(|_| fill) {
             target.fill_path(&path, &color.paint(), FillRule::EvenOdd, transform, None);
@@ -447,6 +492,7 @@ impl AnnotationCanvas {
             state: Default::default(),
             stack: vec![],
             overlay: None,
+            drawn: None,
         })
     }
     #[getter]
@@ -570,6 +616,7 @@ impl AnnotationCanvas {
         let (w, h) = self.size();
         let image = resvg::tiny_skia::PixmapRef::from_bytes(data.as_bytes(), w, h)
             .ok_or_else(|| PyValueError::new_err("invalid plugin overlay pixels"))?;
+        self.mark(0., 0., w as f32, h as f32);
         self.target()?.draw_pixmap(
             0,
             0,
@@ -593,6 +640,7 @@ impl AnnotationCanvas {
             h,
             self.devicePixelRatioF() as f32,
         )? {
+            self.mark(x as f32, y as f32, x as f32 + tile.width() as f32, y as f32 + tile.height() as f32);
             self.target()?.draw_pixmap(
                 x as i32,
                 y as i32,
@@ -631,6 +679,7 @@ impl AnnotationCanvas {
         };
         if let Some(rect) = rect {
             let transform = self.scale();
+            self.mark_logical(rect, 0.);
             self.target()?
                 .fill_rect(rect, &Color::read(&color)?.paint(), transform, None);
         }
@@ -660,6 +709,8 @@ impl AnnotationCanvas {
             .text_tree(text, (x, y), (self.width, self.height), anchor, ink)
             .ok_or_else(|| PyValueError::new_err("invalid annotation text"))?;
         let transform = self.scale();
+        let ink = tree.root().abs_stroke_bounding_box();
+        self.mark_logical(ink, 2.);
         resvg::render(&tree, transform, &mut self.target()?.as_mut());
         Ok(())
     }
