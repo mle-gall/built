@@ -9,6 +9,10 @@ import os
 import sys
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+# Test windows never take the user's focus (macOS): the native shell runs as a
+# background app, and a Qt test app that does show windows stays out of front.
+os.environ.setdefault("BUILT_BACKGROUND", "1")
+os.environ.setdefault("QT_MAC_DISABLE_FOREGROUND_APPLICATION_TRANSFORM", "1")
 
 # As main.py does: a collection a worker thread starts frees nothing, so
 # no Qt object a test let go of is destroyed off the main thread.

@@ -37,6 +37,13 @@ mod file_archive;
 mod file_json;
 mod file_open;
 mod file_geometry;
+mod file_mesh;
+mod file_scene;
+mod gltf_read;
+mod gltf_maps;
+mod gltf_mesh;
+mod gltf_write;
+mod file_precision;
 mod file_textures;
 mod file_sheet;
 mod file_groups;
@@ -123,6 +130,16 @@ mod alignment;
 
 #[pymodule]
 fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(file_scene::igz_archive_scene_fields, m)?)?;
+    m.add_function(wrap_pyfunction!(file_scene::igz_reset_scene, m)?)?;
+    m.add_function(wrap_pyfunction!(file_scene::igz_restore_views, m)?)?;
+    m.add_function(wrap_pyfunction!(file_scene::igz_finish_scene, m)?)?;
+    file_mesh::register(m)?;
+    file_precision::register(m)?;
+    gltf_read::register(m)?;
+    gltf_maps::register(m)?;
+    gltf_mesh::register(m)?;
+    gltf_write::register(m)?;
     stl::register(m)?;
     alignment::register(m)?;
     m.add("TAG_PALETTE", pyo3::types::PyTuple::new(m.py(), doc::drawing::PALETTE)?)?;
