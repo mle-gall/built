@@ -460,16 +460,7 @@ def _offset_kept(vp, te, offset):
     return ingetrazo_render.offset_kept(vp, te, offset)
 
 
-def _moller_trumbore(o, d, v0, e1, e2):
-    """Möller–Trumbore of the ray ``o`` + t·``d`` against triangles (v0, e1,
-    e2) (N, 3): ``(t, hit)``, with the thresholds of :func:`_ray_triangle`
-    (``ingetrazo_core.ray_triangles``, rust/ingetrazo_core/src/pick.rs)."""
-    import numpy as np
-    from ingetrazo_core import ray_triangles
-    as_rows = lambda a: np.ascontiguousarray(a, dtype=np.float64).reshape(-1, 3)
-    o, d = np.asarray(o, dtype=np.float64), np.asarray(d, dtype=np.float64)
-    return ray_triangles(tuple(map(float, o)), tuple(map(float, d)),
-                         as_rows(v0), as_rows(e1), as_rows(e2))
+_moller_trumbore = ingetrazo_core.ray_triangles
 
 
 #: How the rest of the model reads while a group is open for editing.
