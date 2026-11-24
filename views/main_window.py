@@ -901,48 +901,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
             timer.timeout.connect(self._on_autosave_tick)
         self._configure_recovery(timer)
 
-    def _offer_untitled_recovery(self) -> None:
-        """Offer back every untitled drawing the last session left in its
-        auto-save slot — one per project tab it had — each into a tab."""
-        from core import autosave
-        for n, slot in autosave.pending_untitled():
-            if any(d.untitled_no == n and not self._doc_is_blank(d)
-                   for d in self._documents):
-                continue                # this session already writes it
-            self._recover_untitled(n, slot)
-
-    def _recover_untitled(self, n: int, slot) -> None:
-        from core import autosave
-        answer = _dialogs.question(
-            self, tr("Recover the auto-saved drawing?"),
-            tr("The last session ended without saving an untitled drawing "
-               "(auto-saved copy found). Recover it?"),
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
-        if answer != QMessageBox.Yes:
-            autosave.clear(None, untitled=n)
-            return
-        if not self._doc_is_blank():
-            self._new_document()
-        # The slot stays this project's until a clean save names it.
-        for d in self._documents:
-            if d is not self._doc and d.untitled_no == n:
-                d.untitled_no = self._free_untitled_no()
-        self._doc.untitled_no = n
-        try:
-            igz_format.load_into(self.viewport.scene, slot)
-        except Exception as exc:  # noqa: BLE001
-            _dialogs.critical(self, tr("Open failed"), str(exc))
-            return
-        self.viewport.history.clear()
-        self.viewport.reset_texture_cache()
-        self._current_path = None
-        self._import_name = None
-        self._saved_version = -1        # recovered ≠ saved: title shows *
-        self.viewport.notify_scene_changed()
-        self._sync_style_menu()
-        self._sync_section_menu()
-        self._update_title()
-
     def _build_tray(self) -> None:
         # Two role-based right-side docks (tabbed): Properties (what you're
         # working with) and Georef (the location workspace).
@@ -7364,34 +7322,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
             _dialogs.warning(self, tr("New Window"),
                                 tr("Could not start another Built window."))
 
-    def _on_recover_discarded(self) -> None:
-        """Open one of the retired auto-save copies as a NEW, unsaved
-        document: Save then asks where to put it, never over the file the
-        copy came from."""
-        from core import autosave
-        folder = autosave.discarded_dir()
-        if not any(p.suffix in built.DOCUMENT_SUFFIXES for p in folder.iterdir()):
-            _dialogs.information(
-                self, tr("Recover a discarded auto-save…"),
-                tr("No discarded auto-saved copies yet."))
-            return
-        chosen, _ = file_dialogs.getOpenFileName(
-            self, tr("Recover a discarded auto-save…"), str(folder),
-            built.DOCUMENT_FILTER)
-        if not chosen:
-            return
-        if not self.open_path(Path(chosen)):
-            return
-        from views.document_open import after_open
-
-        def recovered(doc):
-            doc.path = None
-            doc.saved_content = -1
-            self._update_title()
-            self.statusBar().showMessage(tr(
-                "Recovered copy loaded — use Save As to keep it."), 6000)
-        after_open(self, Path(chosen), recovered)
-
     # ---- Recent files -------------------------------------------------------
 
     def _fill_recent_menu(self) -> None:
@@ -7531,15 +7461,10 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         slot = autosave.pending(path)
         defer_recovery = slot is not None and (prepared is not None or _dialogs.live(self) is not None)
         if slot is not None and not defer_recovery:
-            answer = _dialogs.question(
-                self, tr("Recover the auto-saved drawing?"),
-                tr("A session with '{name}' ended without saving (auto-saved "
-                   "copy found). Recover it instead of the file on disk?",
-                   name=path.name),
-                QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
-            recovered = answer == QMessageBox.Yes
-            if not recovered:
-                autosave.clear(path)
+            from ingetrazo_render import named_recovery
+            recovered = named_recovery(self, path)
+            if recovered is None:
+                return False
         if prepared is None:
             dlg, cb = self._import_progress(tr("Opening {name}…", name=path.name), monotonic=True)
         else:
@@ -7707,26 +7632,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
             self.viewport.update()
             dlg.close()
 
-    def _on_open_cancelled(self) -> None:
-        """Cancel in the top bar while an .igz is coming in: the load
-        unwinds at its next milestone and the window stays."""
-        if getattr(self, "_open_in_progress", False):
-            self._open_cancelled = True
-
-    def _finish_cancelled_open(self) -> None:
-        """The load unwound after Cancel: what came in so far goes, so the
-        project is the empty one it was (open_path then retires the tab
-        it made for this file)."""
-        self._open_cancelled = False
-        scene = self.viewport.scene
-        scene.clear()
-        scene.version += 1
-        self.viewport.history.clear()
-        self.viewport.reset_texture_cache()
-        self._saved_version = scene.version
-        self.viewport.notify_scene_changed()
-        self.statusBar().showMessage(tr("Opening cancelled."), 4000)
-
     def _finish_aborted_open(self) -> None:
         """The user closed the window while a file was loading (#1269)
         and the load has now unwound. What is on screen is the loader's
@@ -7798,11 +7703,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
                                     tr("Some texture images could not be packed."))
         except Exception as exc:
             _dialogs.save_failed(self, exc, self._on_export_igz)
-
-    def _end_group_edits(self) -> None:
-        """The view in front and the project's own, when they differ."""
-        self.viewport.end_group_edit()
-        self._doc.viewport.end_group_edit()
 
     def _do_save(self, path: Path) -> None:
         """Write the active project to ``path``: its OWN scene and camera,
@@ -9618,22 +9518,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         self.statusBar().showMessage(
             tr("Exported {label} → {name}", label=label, name=path.name), 3000)
 
-    def _confirm_discard(self, prompt: str) -> bool:
-        """Return True if it's safe to discard the current drawing."""
-        if not self._is_dirty():
-            return True
-        # The Built UI asks on its own sheet (Enter saves, Esc stays, ⌘D
-        # lets the changes go).
-        answer = _dialogs.ask(
-            self, prompt, tr("Unsaved changes will be lost."),
-            [("discard", tr("Don't Save")), ("cancel", tr("Cancel")),
-             ("save", tr("Save"))],
-            default="save", cancel="cancel", discard="discard")
-        if answer == "save":
-            self._on_save()
-            return not self._is_dirty()
-        return answer == "discard"
-
     def _on_scene_version_changed(self, _version: int) -> None:
         # Something came into the blank project behind the empty area (an
         # import, a paste, an extension, the AI bridge): it is on show.
@@ -9726,36 +9610,3 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         # into it afterwards (#1269).
         self._closed = True
         super().closeEvent(event)
-
-    def _confirm_quit(self) -> bool:
-        """Quitting: one project with unsaved changes gets the usual
-        question; several get ONE question that names them all — save
-        them all, lose them all, or stay."""
-        dirty = [d for d in self.documents() if self._doc_is_dirty(d)]
-        if not dirty:
-            return True
-        if len(dirty) == 1:
-            if dirty[0] is not self._doc:
-                self.activate_document(dirty[0])
-            return self._confirm_discard(tr("Quit Built?"))
-        checklist = [(d.display_name(), True) for d in dirty]
-        answer = _dialogs.ask(
-            self, tr("Which projects should be saved?"),
-            tr("{n} projects have unsaved changes. Unchecked changes will be discarded.", n=len(dirty)),
-            [("discard", tr("Don't Save")), ("cancel", tr("Cancel")),
-             ("save", tr("Save Selected"))],
-            default="save", cancel="cancel", discard="discard", checklist=checklist)
-        selected = [d for d, (_, checked) in zip(dirty, checklist) if checked]
-        return self._save_all_or_stay(selected, answer)
-
-    def _save_all_or_stay(self, dirty, answer: str) -> bool:
-        if answer == "discard":
-            return True
-        if answer != "save":
-            return False
-        for doc in dirty:
-            self.activate_document(doc)
-            self._on_save()             # Save As for an untitled one
-            if self._is_dirty():
-                return False            # its dialog was cancelled: stay
-        return True

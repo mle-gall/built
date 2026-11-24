@@ -281,18 +281,10 @@ def offer_recovery(win, path, slot):
     except OSError:
         archived = slot
 
-    def mark_recovered(doc):
-        win._current_path = None
-        win._saved_version = -1
-        win._update_title()
-
-    def recover():
-        if win.open_path(archived):
-            from views.document_open import after_open
-            after_open(win, archived, mark_recovered)
-
+    from functools import partial
+    from ingetrazo_render import open_recovery_copy
     _record(win, tr("Auto-saved copy available"), path.name, "info",
-            tr("Open copy"), recover)
+            tr("Open copy"), partial(open_recovery_copy, win, archived))
 
 
 def save_failed(win, exc, retry):

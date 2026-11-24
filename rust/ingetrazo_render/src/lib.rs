@@ -4,6 +4,8 @@ mod captured_frame;
 use captured_frame::CapturedFrame;
 mod window_timers;
 mod window_document;
+mod close_documents;
+mod recovery_commands;
 mod component_replacement;
 mod edge_commands;
 mod face_commands;
@@ -3013,6 +3015,8 @@ fn context_targets(hit: bool, selection: &Bound<'_, PyAny>) -> PyResult<Vec<Py<P
 #[pymodule]
 pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     window_document::register(m)?;
+    close_documents::register(m)?;
+    recovery_commands::register(m)?;
     component_replacement::register(m)?;
     edge_commands::register(m)?;
     face_commands::register(m)?;

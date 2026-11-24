@@ -556,7 +556,7 @@ class ShellWindow(WindowDocumentCommands, QObject):
         from app_shell.view import ShellView
         host = self._host
         doc = ShellDocument()
-        doc.untitled_no = self._free_untitled_no() if self._documents else 1
+        doc.untitled_no = self._free_untitled_no()
         vp = DocumentController(host)
         try:
             from core import general_settings

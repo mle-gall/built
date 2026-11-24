@@ -295,3 +295,32 @@ class WindowDocumentCommands:
 
     def _ask_keep_orphans(self, orphans):
         return native.ask_keep_orphans(self, orphans)
+
+    def _offer_untitled_recovery(self):
+        native.offer_untitled_recovery(self)
+
+    def _recover_untitled(self, n, slot):
+        native.recover_untitled(self, n, slot)
+
+    def _on_recover_discarded(self):
+        native.recover_discarded(self)
+
+    def _on_open_cancelled(self):
+        if self._open_in_progress:
+            self._open_cancelled = True
+
+    def _finish_cancelled_open(self):
+        native.reset_cancelled_open(self)
+
+    def _end_group_edits(self):
+        self.viewport.end_group_edit()
+        self._doc.viewport.end_group_edit()
+
+    def _confirm_discard(self, prompt):
+        return native.confirm_discard(self, prompt)
+
+    def _confirm_quit(self):
+        return native.confirm_quit(self)
+
+    def _save_all_or_stay(self, dirty, answer):
+        return native.save_selected(self, dirty, answer)

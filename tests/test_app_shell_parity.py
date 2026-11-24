@@ -415,3 +415,35 @@ def test_native_view_timers_release_callbacks_on_close(host):
     assert ref() is None
     host.timers.run_due()
     assert not timer.isActive()
+
+
+def test_cancelling_named_recovery_keeps_the_slot_and_active_tab(host, tmp_path, answers):
+    from core import autosave
+    from formats import igz
+    from core.scene import Scene
+    source = _copy(tmp_path)
+    scene = Scene()
+    igz.load_into(scene, source)
+    slot = autosave.write(scene, source)
+    before = host.window.active_document()
+    answers.append("later")
+    assert not host.open_path(source)
+    assert host.window.active_document() is before
+    assert slot.is_file() and before.path is None
+
+
+def test_a_bad_untitled_slot_preserves_the_open_drawing(host, tmp_path, answers, monkeypatch):
+    from views import chrome_dialogs
+    win = host.window
+    _draw(host)
+    original = win.active_document()
+    revision = win.viewport.history.revision
+    bad = tmp_path / "untitled-3.built"
+    bad.write_bytes(b"broken archive")
+    errors = []
+    monkeypatch.setattr(chrome_dialogs, "critical", lambda win, title, msg: errors.append(msg))
+    answers.append("yes")
+    win._recover_untitled(3, bad)
+    assert errors and bad.is_file()
+    assert win.documents() == [original] and win.active_document() is original
+    assert win.viewport.history.revision == revision

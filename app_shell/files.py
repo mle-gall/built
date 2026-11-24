@@ -317,7 +317,6 @@ def open_document(win, path: Path) -> bool:
     progress capsule with Cancel, camera and views home, the resident pack
     under the same capsule, links and the heap after the first picture
     (MainWindow._open_path_here's steps that are not about Qt panels)."""
-    from PySide6.QtWidgets import QMessageBox
     from core import autosave
     from formats import igz as igz_format
     from views import chrome_dialogs as cd
@@ -329,14 +328,10 @@ def open_document(win, path: Path) -> bool:
     slot = autosave.pending(path)
     defer_recovery = slot is not None and cd.live(win) is not None
     if slot is not None and not defer_recovery:
-        answer = cd.question(
-            win, tr("Recover the auto-saved drawing?"),
-            tr("A session with '{name}' ended without saving (auto-saved "
-               "copy found). Recover it instead of the file on disk?", name=path.name),
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
-        recovered = answer == QMessageBox.Yes
-        if not recovered:
-            autosave.clear(path)
+        from ingetrazo_render import named_recovery
+        recovered = named_recovery(win, path)
+        if recovered is None:
+            return False
     bar, cb = win._import_progress(tr("Opening {name}…", name=path.name), monotonic=True)
     chrome = isinstance(bar, cd.ChromeBar)
     win._open_cancelled = False
