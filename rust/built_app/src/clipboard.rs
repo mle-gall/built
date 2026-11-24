@@ -233,6 +233,9 @@ mod platform {
             .ok()?;
         recv.recv().ok()
     }
+    pub fn on_gtk_thread<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -> Option<T> {
+        request(move |_, _| work())
+    }
     pub fn write(items: Items) -> bool {
         request(move |board, _| {
             let mut targets = Vec::new();
@@ -298,3 +301,6 @@ mod platform {
         .unwrap_or_default()
     }
 }
+
+#[cfg(not(windows))]
+pub use platform::on_gtk_thread;

@@ -3,13 +3,13 @@
 # module below lets pip download wheels. The shape follows IngeCAD's proven
 # manifest (packaging/flatpak/ in that repo), krb5 lesson included.
 app-id: com.ingetrazo.IngeTrazo
-runtime: org.freedesktop.Platform
-runtime-version: '25.08'
-sdk: org.freedesktop.Sdk
+runtime: org.gnome.Platform
+runtime-version: '49'
+sdk: org.gnome.Sdk
 # The Rust engine (rust/ingetrazo_core, #767) is compiled at build time;
 # only the SDK carries cargo, the finished module needs nothing at run time.
 sdk-extensions:
-  - org.freedesktop.Sdk.Extension.rust-stable
+  - org.freedesktop.Sdk.Extension.rust-stable//25.08
 command: ingetrazo
 
 finish-args:
@@ -83,7 +83,9 @@ modules:
       #    the bundled reference extensions (core/extensions.py discovers
       #    them under app_root(), which resolves to /app/ingetrazo here).
       - mkdir -p ${FLATPAK_DEST}/ingetrazo
-      - cp -a main.py core views tools formats georef materials styles plugins resources i18n scripts LICENSE ${FLATPAK_DEST}/ingetrazo/
+      - PYO3_PYTHON=$(command -v python3) cargo build --locked --release --manifest-path rust/built_app/Cargo.toml
+      - install -Dm755 rust/built_app/target/release/built ${FLATPAK_DEST}/bin/built
+      - cp -a app_shell core views tools formats georef materials styles plugins resources i18n scripts LICENSE ${FLATPAK_DEST}/ingetrazo/
       # The example extensions (Extensions ▸ Example extensions installs one
       # into the user's plugins folder): shipped, never loaded by default.
       # DWG import (#101): LibreDWG's dwg2dxf, the same binary the AppImage
@@ -159,6 +161,9 @@ modules:
         path: ../../
         skip:
           - venv
+          - .venv
+          - rust/built_app/target
+          - rust/ingetrazo_render/target
           - build
           - dist
           - .git

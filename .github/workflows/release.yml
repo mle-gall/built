@@ -17,6 +17,7 @@ permissions:
 
 # The bundle's --check fails if the Rust engine is missing (core._native).
 env:
+  BUILT_BACKGROUND: "1"
   INGETRAZO_REQUIRE_RUST: "1"
 
 jobs:
@@ -35,9 +36,9 @@ jobs:
           sudo apt-get update -qq
           # libegl/libgl for Qt, fuse for appimagetool, xvfb for the smoke test
           sudo apt-get install -y --no-install-recommends \
-            curl file libegl1 libgl1 libxkbcommon-x11-0 \
+            curl file libgtk-3-dev libegl1 libgl1 libxkbcommon-x11-0 \
             libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-shape0 \
-            libfuse2 xvfb
+            libfuse2 xvfb mesa-vulkan-drivers
 
       - name: Python dependencies
         run: |
@@ -78,25 +79,22 @@ jobs:
       - name: Smoke test with a display
         run: |
           APP=$(ls dist/IngeTrazo-*-x86_64.AppImage)
-          # No --exit-after flag, so give it a few seconds and require that it
-          # was still alive: a crash on startup exits well before the timeout.
-          set +e
-          python3 scripts/isolated_launch.py xvfb-run -a timeout 25 "$APP" > smoke.log 2>&1
-          rc=$?
-          set -e
-          cat smoke.log
-          if [ "$rc" != "124" ]; then
-            echo "!! the AppImage exited with $rc instead of surviving to the timeout"
-            exit 1
-          fi
-          echo "OK — started and stayed up"
+          python3 scripts/isolated_launch.py xvfb-run -a timeout 60 "$APP" --measure \
+            "$PWD/tests/fixtures/shell/slab-and-cube.igz" | tee smoke.log
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          log = Path("smoke.log").read_text().splitlines()
+          frame = json.loads(next(line.removeprefix("[built] measure ") for line in log if line.startswith("[built] measure ")))
+          assert frame["first_frame_ms"] >= 0 and frame["state"]["instances"] > 0
+          PY
 
       # The tarball is the same bundle without the AppImage wrapper. Prove it
       # runs after extraction, not just that it was packed.
       - name: Smoke test the tarball
         run: |
           mkdir -p tarcheck && tar -C tarcheck -xzf dist/IngeTrazo-*-linux-x86_64.tar.gz
-          python3 scripts/isolated_launch.py tarcheck/IngeTrazo-*/ingetrazo --check
+          python3 scripts/isolated_launch.py tarcheck/IngeTrazo-*/built --check
 
       - uses: actions/upload-artifact@v4
         with:
@@ -145,7 +143,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
-            file libegl1 libgl1 libxkbcommon-x11-0 \
+            file libgtk-3-dev libegl1 libgl1 libxkbcommon-x11-0 \
             libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-shape0 \
             libxcb-render-util0
 
@@ -171,7 +169,8 @@ jobs:
       - name: Build the PyInstaller bundle
         run: |
           ./venv/bin/python -m PyInstaller --noconfirm ingetrazo.spec
-          python3 scripts/isolated_launch.py dist/ingetrazo/ingetrazo --check
+          PYO3_PYTHON="$PWD/venv/bin/python" packaging/install-native-launcher.sh dist/ingetrazo
+          python3 scripts/isolated_launch.py dist/ingetrazo/built --check
 
       - name: Stage the snap tree
         run: |
@@ -182,7 +181,7 @@ jobs:
           cp -a dist/ingetrazo/. build/snap-stage/payload/
           cp resources/icons/ingetrazo_256.png build/snap-stage/snap/gui/ingetrazo.png
           # Desktop entry: same as the tarball's, with the snap's icon path.
-          sed -e 's|^Icon=.*|Icon=${SNAP}/meta/gui/ingetrazo.png|' \
+          sed -e 's|^Exec=.*|Exec=ingetrazo %f|' -e 's|^Icon=.*|Icon=${SNAP}/meta/gui/ingetrazo.png|' \
               packaging/ingetrazo.desktop > build/snap-stage/snap/gui/ingetrazo.desktop
 
       - name: Build the snap

@@ -48,11 +48,11 @@ def start(settings: str | None = None, *, temporary: bool = False) -> str | None
         data = os.path.join(profile, "data")
         os.makedirs(data, exist_ok=True)
         os.environ["XDG_DATA_HOME"] = data
-    if "built_shell" not in sys.builtin_module_names:
-        enable_plugin_widgets()
     from core import i18n, settings
     settings.use_native(profile)
     i18n.set_language(i18n.resolve_language(settings.settings().value("language")))
+    if "built_shell" not in sys.builtin_module_names:
+        enable_plugin_widgets()
     return profile
 
 
@@ -67,6 +67,9 @@ def enable_plugin_widgets():
     QCoreApplication.setOrganizationName("IngeTrazo")
     QCoreApplication.setApplicationName("IngeTrazo")
     _APP = QApplication.instance() or QApplication([sys.argv[0] if sys.argv else "built"])
+    from core.i18n import current_language
+    from plugins._widget_language import apply_widget_language
+    apply_widget_language(_APP, current_language())
     _track_timers()
     install_widget_guard()
 

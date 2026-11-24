@@ -14,7 +14,7 @@
 #define MyAppName "Built"
 #define MyAppPublisher "Ing. Marco Sumari Tellez"
 #define MyAppURL "https://github.com/mle-gall/ingetrazo"
-#define MyAppExeName "ingetrazo.exe"
+#define MyAppExeName "built.exe"
 
 ; MyAppVersion is injected from the build command with /DMyAppVersion=X.Y.Z
 #ifndef MyAppVersion

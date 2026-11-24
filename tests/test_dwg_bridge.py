@@ -171,10 +171,9 @@ def test_the_spec_bundles_it_on_all_three_platforms():
     assert "programs/dwg2dxf" in mac and "shasum -a 256 -c" in mac
 
 
-def test_check_reports_the_converter(capsys):
-    import main
-    main._self_check()
-    assert "DWG converter" in capsys.readouterr().out
+def test_check_reports_the_converter():
+    from tests.launcher_binary import run
+    assert "DWG converter" in run("--check").stdout
 
 
 # ---- Cancellable converter (#401) -------------------------------------------
