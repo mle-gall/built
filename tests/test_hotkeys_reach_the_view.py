@@ -25,7 +25,7 @@ import pytest
 from PySide6.QtCore import QPointF, Qt, QTimer
 from ingetrazo_core import Vec3 as V
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import (QAbstractItemView, QApplication, QLineEdit,
+from PySide6.QtWidgets import (QAbstractItemView, QApplication,
                                QMenu, QProgressDialog, QPushButton)
 
 from tools.base import ToolContext
@@ -167,17 +167,6 @@ def test_a_click_in_the_view_takes_the_keyboard(win):
     QTest.mousePress(display, Qt.LeftButton, Qt.NoModifier, display.rect().center())
     QTest.mouseRelease(display, Qt.LeftButton, Qt.NoModifier, display.rect().center())
     assert focus() is display
-
-
-def test_a_text_field_keeps_its_letters(win):
-    field = next(f for f in win.layers_dock.findChildren(QLineEdit) if f.isVisible())
-    field.setFocus()
-    settle()
-    before = tool_name(win)
-    QTest.keyClick(field, Qt.Key_L)
-    settle()
-    assert field.text() == "l" and tool_name(win) == before
-    assert focus() is field
 
 
 def test_a_clicked_button_still_clicks(win):

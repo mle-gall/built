@@ -3377,10 +3377,15 @@ fn new_drawing_tag_keeps_its_editor_through_refresh_and_commits_only_its_own_nam
         ui.drawing_edit_applied("newtag", "Layer 1");
         tree_frame(&mut ui, vec![]);
         ui.set_tree(vec![row()], 0);
-        tree_frame(&mut ui, vec![egui::Event::Text("A".into())]);
+        let tool = ui.active.clone();
+        assert!(ui.claims_key("L", 0));
+        assert!(ui.key("L", true, 0) && ui.text("l".into()) && ui.key("L", false, 0));
+        let events = std::mem::take(&mut ui.events);
+        tree_frame(&mut ui, events);
         let col = ui.column.as_ref().unwrap();
+        assert!(ui.ctx.wants_keyboard_input() && ui.active == tool);
         assert!(!col.styles.selected(&col.nodes[0]));
-        assert!(col.renaming.as_ref().unwrap().1.contains('A'));
+        assert!(col.renaming.as_ref().unwrap().1.ends_with('l'));
         if enter {
             tree_frame(&mut ui, vec![egui::Event::Key {
                 key: egui::Key::Enter, physical_key: None, pressed: true, repeat: false,
