@@ -55,19 +55,24 @@ def known_linetype(key) -> bool:
                                 and len(key) > len(CUSTOM_LINETYPE))
 
 
-def linetype_pattern(key, scene=None) -> tuple:
-    """The dash pattern of line type ``key`` as it is drawn: paper mm,
-    dash, gap, dash, gap… in turn (as :data:`LINETYPES` holds them; a dot
-    is a dash of 0; empty: continuous) — a built-in one, or the document's
-    own, whose stored pieces (dash > 0, gap < 0, dot 0) are turned so."""
-    if key in LINETYPES:
-        return tuple(LINETYPES[key])
-    if isinstance(key, str) and key.startswith(CUSTOM_LINETYPE):
-        entry = (getattr(scene, "line_types", None) or {}).get(
-            key[len(CUSTOM_LINETYPE):])
-        if isinstance(entry, dict):
-            return drawn_dashes(entry.get("pattern") or ())
-    return ()
+# ---- Styles: Rust ------------------------------------------------------------
+# ``rust/ingetrazo_core/src/model/tag_styles.rs``. Line types by document:
+# ``linetype_pattern`` (the dashes as drawn, paper mm), ``linetype_text``,
+# ``clean_line_colour``, ``linetype_color`` (a gas line yellow whatever its
+# tag), ``set_linetype_color``, ``load_linetype_colors``, ``model_line_styles``.
+# Colours and looks: ``layer_color`` (picked, the default tag's white, or the
+# automatic one by key), ``light_layer_color``, ``hatch_ground_rgb``,
+# ``hatch_ink_rgb``, ``is_link_untagged``, ``object_layer`` (a linked file's
+# «Untagged» counts as none), ``layer_paint``, ``layer_fx``, ``layer_look``.
+# Sheets: ``layer_lines_wanted``, ``line_styles``, ``legend_rows``,
+# ``cut_hatches``, ``cut_hatch_grounds``, ``cut_hatch_inks``,
+# ``cut_fill_colours``, ``cut_hatch_forms`` (turned, sized with the drawing or
+# on paper, the families and brick), ``hatch_families``, ``layer_brick``,
+# ``load_bricks``, ``layer_hatch_families``, ``hatch_label``, ``hatch_grows``,
+# ``clean_offset``, ``unprinted``, ``hide_unprinted``.
+for _name in ("linetype_pattern", "linetype_text", "clean_line_colour", "linetype_color", "set_linetype_color", "load_linetype_colors", "model_line_styles", "hatch_ground_rgb", "hatch_ink_rgb", "light_layer_color", "layer_color", "is_link_untagged", "object_layer", "layer_paint", "layer_fx", "layer_look", "layer_lines_wanted", "line_styles", "legend_rows", "cut_hatches", "cut_hatch_grounds", "hatch_families", "layer_brick", "load_bricks", "layer_hatch_families", "hatch_label", "hatch_grows", "cut_hatch_forms", "clean_offset", "cut_hatch_inks", "cut_fill_colours", "unprinted", "hide_unprinted"):
+    globals()[_name] = getattr(_rs.tag_styles, _name)
+del _name
 
 
 def text_width(text: str, size: float) -> float:
@@ -98,110 +103,6 @@ def text_offset(pattern, at: int) -> float:
     which moves a leading gap to the end) the middle of piece ``at`` of
     ``pattern`` falls, in mm."""
     return _rs.linetype_text_offset(pattern, int(at))
-
-
-def linetype_text(key, scene=None):
-    """The text of line type ``key`` as it is drawn: ``(text, height mm,
-    where its middle falls along a period, the period)`` in paper mm;
-    ``None`` for a line type without one (every built-in one)."""
-    if not (isinstance(key, str) and key.startswith(CUSTOM_LINETYPE)):
-        return None
-    entry = (getattr(scene, "line_types", None) or {}).get(
-        key[len(CUSTOM_LINETYPE):])
-    pattern = entry.get("pattern") if isinstance(entry, dict) else None
-    spec = clean_line_text(entry, pattern)
-    if spec is None:
-        return None
-    period = sum(drawn_dashes(pattern))
-    return (spec["text"], spec["text_size"],
-            text_offset(pattern, spec["text_at"]), period)
-
-
-def clean_line_colour(raw) -> tuple | None:
-    """A line type's own colour as it is kept: ``(r, g, b)`` 0–1, or
-    ``None`` (by layer) for none or anything else."""
-    if not isinstance(raw, (list, tuple)) or len(raw) != 3:
-        return None
-    try:
-        rgb = tuple(min(1.0, max(0.0, float(c))) for c in raw)
-    except (TypeError, ValueError):
-        return None
-    return rgb if all(c == c for c in rgb) else None
-
-
-def linetype_color(key, scene=None) -> tuple | None:
-    """The colour line type ``key`` inks its lines with whatever their
-    layer — a gas line yellow, a water main blue — or ``None``: the
-    layer's. A built-in one takes the colour the document gave it."""
-    if key in LINETYPES:
-        return clean_line_colour(
-            (getattr(scene, "linetype_colors", None) or {}).get(key))
-    if not (isinstance(key, str) and key.startswith(CUSTOM_LINETYPE)):
-        return None
-    entry = (getattr(scene, "line_types", None) or {}).get(
-        key[len(CUSTOM_LINETYPE):])
-    return clean_line_colour(entry.get("color")) \
-        if isinstance(entry, dict) else None
-
-
-def set_linetype_color(scene, key, rgb) -> bool:
-    """Give line type ``key`` the colour ``rgb`` — ``None``: by layer again
-    — a built-in one in the document's list, an own one in its entry.
-    Returns whether anything changed."""
-    rgb = clean_line_colour(rgb)
-    if linetype_color(key, scene) == rgb:
-        return False
-    if key in LINETYPES:
-        colours = dict(getattr(scene, "linetype_colors", None) or {})
-        if rgb is None:
-            colours.pop(key, None)
-        else:
-            colours[key] = rgb
-        scene.linetype_colors = colours
-        return True
-    if not (isinstance(key, str) and key.startswith(CUSTOM_LINETYPE)):
-        return False
-    own = dict(getattr(scene, "line_types", None) or {})
-    entry = own.get(key[len(CUSTOM_LINETYPE):])
-    if not isinstance(entry, dict):
-        return False
-    entry = dict(entry)
-    if rgb is None:
-        entry.pop("color", None)
-    else:
-        entry["color"] = rgb
-    own[key[len(CUSTOM_LINETYPE):]] = entry
-    scene.line_types = own
-    return True
-
-
-def load_linetype_colors(scene, raw) -> None:
-    """The built-in line types' colours as a file keeps them, read
-    defensively: known keys and real colours only."""
-    if not isinstance(raw, dict):
-        return
-    colours = dict(getattr(scene, "linetype_colors", None) or {})
-    for key, value in raw.items():
-        rgb = clean_line_colour(value)
-        if key in LINETYPES and rgb is not None:
-            colours[key] = rgb
-    scene.linetype_colors = colours
-
-
-def model_line_styles(scene) -> dict:
-    """``{layer key: (rgb or None, dash pattern)}`` of the layers whose
-    edges the model draws with their line type (the style's «Line types in
-    the model»): dashed (the pattern in paper mm, as
-    :func:`linetype_pattern` gives it), in a colour of its own, or both.
-    A continuous line type by layer is not here: the model draws it as
-    ever."""
-    out = {}
-    for ly in getattr(scene, "layers", ()):
-        rgb = linetype_color(ly.linetype, scene)
-        pattern = tuple(linetype_pattern(ly.linetype, scene))
-        if rgb is not None or pattern:
-            out[ly.key] = (rgb, pattern)
-    return out
 
 
 #: The model draws a line type's dashes as a sheet at 1:50 does — metres
@@ -393,7 +294,6 @@ class _LayerMethods:
         return _rs.igz_load_layer(raw, cls)
 
 
-
 from core import doc_model as _dm
 
 #: A tag's fields that live in the document (core/doc_model.py) when it
@@ -465,334 +365,11 @@ def _ground(raw):
     return None
 
 
-def hatch_ground_rgb(ly) -> tuple | None:
-    """The colour under a layer's hatch: its own pick, the layer's colour
-    made light for :data:`GROUND_LAYER`, ``None`` for the paper."""
-    ground = getattr(ly, "hatch_ground", None)
-    if ground == GROUND_LAYER:
-        return light_layer_color(ly)
-    return tuple(ground) if ground is not None else None
-
-
-def hatch_ink_rgb(ly) -> tuple | None:
-    """The ink of a layer's hatch lines when the layer sets one: its colour
-    by layer (a shade darker, so mid tones read on paper) or the fixed one;
-    ``None`` — as the frame says."""
-    ink = getattr(ly, "hatch_color", None)
-    if ink == GROUND_LAYER:
-        return tuple(c * 0.7 for c in layer_color(ly))
-    return tuple(ink) if ink is not None else None
-
-
-def light_layer_color(ly) -> tuple:
-    """The layer's colour three quarters of the way to white — a ground a
-    hatch still reads on."""
-    return tuple(c + (1.0 - c) * 0.75 for c in layer_color(ly))
-
-
-def layer_color(layer) -> tuple:
-    """The colour a layer shows: the picked one, else the default layer's
-    white for the default layer, else one from :data:`PALETTE` chosen by the
-    name — stable across sessions and machines, and unchanged when other
-    layers are added, deleted or sorted."""
-    if layer is None:
-        return DEFAULT_LAYER_COLOR
-    if layer.color is not None:
-        return tuple(layer.color[:3])
-    if layer.key == DEFAULT_LAYER:
-        return DEFAULT_LAYER_COLOR
-    return automatic_tag_color(layer.key)
-
-
 #: The tag a linked file's untagged content wears in the host
 #: (``core.links.tag_name``): «<file> / Untagged». It stands for the
 #: source's default tag, so for colour it reads as none — the piece takes
 #: its owner's tag, as it did in its own file.
 LINK_UNTAGGED_SUFFIX = " / Untagged"
-
-
-def is_link_untagged(name) -> bool:
-    """Whether ``name`` is a linked file's stand-in for the default tag."""
-    return bool(name) and name.endswith(LINK_UNTAGGED_SUFFIX)
-
-
-def object_layer(group) -> str:
-    """The layer an object's insides take their colour from: its own, else
-    the top-level object's it belongs to (a nested piece of a component on
-    a layer), else the default layer. ``None`` is the loose model. A linked
-    file's «Untagged» counts as none here: with the source's default tag
-    renamed on linking, every untagged piece of the facilities model took
-    that one tag's colour instead of its owner's (Maxence, 2026-11-09)."""
-    for g in (group, getattr(group, "owner", None)):
-        name = getattr(g, "layer", None) if g is not None else None
-        if name and not is_link_untagged(name):
-            return name
-    return DEFAULT_LAYER
-
-
-def layer_paint(scene, group=None) -> dict:
-    """The container paint Colour by layer bakes ``group`` with (see
-    ``core.materials.effective_attrs``): every layer's colour by name, and
-    the object's own layer colour for the faces that carry none."""
-    table = {ly.key: layer_color(ly) for ly in getattr(scene, "layers", ())}
-    color = table.get(object_layer(group), DEFAULT_LAYER_COLOR)
-    return {"by_layer": table, "color": color}
-
-
-def layer_fx(scene) -> dict:
-    """``{name: (opacity, fade)}`` of the layers that change how their faces
-    look — see-through ones and locked ones (washed out, so it shows they
-    are not in play). Empty when none does: the common case costs nothing."""
-    return {ly.key: (ly.opacity, LOCKED_FADE if ly.locked else 0.0)
-            for ly in getattr(scene, "layers", ())
-            if ly.opacity < 1.0 or ly.locked}
-
-
-def layer_look(scene, group, base, fx=None):
-    """``base`` (the container paint: its own, or :func:`layer_paint`) with
-    the layers' look on top, or ``base`` itself when no layer has one."""
-    fx = layer_fx(scene) if fx is None else fx
-    if not fx:
-        return base
-    return {"layer_fx": fx, "fx_self": fx.get(object_layer(group)),
-            "base": base}
-
-
-def layer_lines_wanted(scene, style=None) -> bool:
-    """Whether a sheet has to ink lines layer by layer: some layer has a
-    line type, weight or cut weight of its own, or the style colours by
-    layer."""
-    style = style if style is not None else getattr(scene, "display_style",
-                                                    None)
-    if getattr(style, "color_by_layer", False):
-        return True
-    return any(ly.linetype != "continuous" or ly.lineweight is not None
-               or getattr(ly, "cut_weight", None) is not None
-               for ly in getattr(scene, "layers", ()))
-
-
-def line_styles(scene, colored: bool) -> dict:
-    """``{name: (rgb or None, linetype, lineweight or None, cut weight or
-    None, dash pattern, text)}`` — how each layer's lines are inked on a sheet
-    and written to a DXF (the pattern in paper mm, the document's own line
-    types resolved). The colour
-    only with Colour by layer on (a plan prints black otherwise), and never
-    for the default layer, whose white would vanish on paper."""
-    out = {}
-    for ly in getattr(scene, "layers", ()):
-        # A line type with a colour of its own inks with it, on any sheet.
-        rgb = linetype_color(ly.linetype, scene) or (
-            layer_color(ly) if colored and ly.key != DEFAULT_LAYER
-            else None)
-        out[ly.key] = (rgb, ly.linetype, ly.lineweight,
-                       getattr(ly, "cut_weight", None),
-                       linetype_pattern(ly.linetype, scene),
-                       linetype_text(ly.linetype, scene))
-    return out
-
-
-def legend_rows(scene) -> tuple[list, dict]:
-    """What a sheet's layer legend shows: the visible, printed layers'
-    labels — their folder path, so two «Beams» read apart — and, for each,
-    its swatch — colour and line type."""
-    rows, swatches = [], {}
-    hatch_forms = cut_hatch_forms(scene)
-    for ly in getattr(scene, "layers", ()):
-        if not effective_visible(scene, ly) or not getattr(ly, "printable", True):
-            continue
-        label = path_label(scene, ly.key)
-        rows.append(label)
-        swatch = {"color": [round(c, 4) for c in layer_color(ly)],
-                  "linetype": ly.linetype}
-        swatches[label] = swatch
-        if ly.linetype.startswith(CUSTOM_LINETYPE):
-            swatch["pattern"] = list(linetype_pattern(ly.linetype, scene))
-        if getattr(ly, "hatch", None):
-            swatch["hatch_form"] = hatch_forms[ly.key]
-            swatch["hatch"] = ly.hatch
-            if getattr(ly, "hatch_angle", 0.0):
-                swatch["hatch_angle"] = ly.hatch_angle
-            families = hatch_forms[ly.key]["families"]
-            if families:
-                swatch["hatch_families"] = families
-            for key, rgb in (("hatch_ground", hatch_ground_rgb(ly)),
-                             ("hatch_color", hatch_ink_rgb(ly))):
-                if rgb is not None:
-                    swatch[key] = [round(c, 4) for c in rgb]
-    return rows, swatches
-
-
-def cut_hatches(scene) -> dict:
-    """``{layer key: pattern}`` of the layers whose section cut has a hatch of
-    its own (see ``core.hatches``) — empty when none has."""
-    return {ly.key: ly.hatch for ly in getattr(scene, "layers", ())
-            if getattr(ly, "hatch", None)}
-
-
-def cut_hatch_grounds(scene) -> dict:
-    """``{layer key: rgb}`` — the solid colour under each hatched layer's
-    pattern, for the layers that have one."""
-    out = {}
-    for ly in getattr(scene, "layers", ()):
-        rgb = hatch_ground_rgb(ly) if getattr(ly, "hatch", None) else None
-        if rgb is not None:
-            out[ly.key] = rgb
-    return out
-
-
-def hatch_families(scene, key):
-    """The families of an imported pattern (``pat:<name>``) kept in the
-    document, ``None`` for a built-in one (or one the document lost)."""
-    from core.hatches import IMPORTED
-    if not (isinstance(key, str) and key.startswith(IMPORTED)):
-        return None
-    entry = (getattr(scene, "hatch_patterns", None) or {}).get(
-        key[len(IMPORTED):])
-    return entry.get("families") if isinstance(entry, dict) else None
-
-
-def layer_brick(scene, ly):
-    """The piece a layer's masonry hatch is drawn with: its own
-    (``Layer.brick``), else the document's of that kind (``Scene.bricks``:
-    brick, ticholo, block), else ``None`` — the usual one of its kind."""
-    own = getattr(ly, "brick", None)
-    if own is not None:
-        return own
-    from core.hatches import piece_kind
-    kind = piece_kind(getattr(ly, "hatch", None))
-    return (getattr(scene, "bricks", None) or {}).get(kind) if kind else None
-
-
-def load_bricks(scene, raw) -> None:
-    """The document's pieces as a file or a template stores them,
-    ``{kind: size}``, read defensively into ``Scene.bricks``."""
-    from core.hatches import PIECE_SIZES, clean_brick
-    if not isinstance(raw, dict):
-        return
-    for kind, size in raw.items():
-        size = clean_brick(size) if kind in PIECE_SIZES else None
-        if size is not None:
-            scene.bricks = dict(getattr(scene, "bricks", None) or {},
-                                **{kind: size})
-
-
-def layer_hatch_families(scene, ly):
-    """The families a layer's hatch is drawn with when they are not the
-    built-in pattern's own: an imported pattern's, or a brick pattern's
-    drawn with the layer's brick (its own or the document's). ``None``
-    otherwise."""
-    key = getattr(ly, "hatch", None)
-    families = hatch_families(scene, key)
-    brick = layer_brick(scene, ly)
-    if families is None and brick is not None:
-        from core.hatches import BRICKS, brick_families
-        if key in BRICKS:
-            return [list(f[:5]) + [list(f[5])]
-                    for f in brick_families(key, brick)]
-    return families
-
-
-def hatch_label(scene, key) -> str:
-    """A pattern's name as the user knows it (untranslated): the built-in
-    label, or an imported pattern's own name."""
-    from core.hatches import HATCH_LABELS, IMPORTED
-    if key in HATCH_LABELS:
-        return HATCH_LABELS[key]
-    if isinstance(key, str) and key.startswith(IMPORTED):
-        return key[len(IMPORTED):]
-    return ""
-
-
-def hatch_grows(ly) -> bool:
-    """Whether a layer's hatch grows with the drawing's scale: as the layer
-    says, else as its pattern goes — a material with a real size (brick,
-    tiles, boards…) does, a stipple or a generic hatch keeps its size on
-    paper."""
-    own = getattr(ly, "hatch_on_paper", None)
-    if own is not None:
-        return not own
-    from core.hatches import REAL_SIZE
-    return getattr(ly, "hatch", None) in REAL_SIZE
-
-
-def cut_hatch_forms(scene, scale_n: float = 100.0) -> dict:
-    """``{layer key: {"angle", "scale", "families", "brick", "scale_n"}}`` — how
-    each hatched layer's pattern is laid on a sheet drawn at 1:``scale_n``:
-    turned, sized (on paper; or with the drawing — a material at its real
-    size, any other pattern from its size at 1:100), the families of an
-    imported pattern or of the layer's own brick, and that brick."""
-    out = {}
-    for ly in getattr(scene, "layers", ()):
-        key = getattr(ly, "hatch", None)
-        if not key:
-            continue
-        size = float(getattr(ly, "hatch_scale", 1.0) or 1.0)
-        if hatch_grows(ly):
-            from core.hatches import real_scale
-            real = real_scale(key, scale_n, layer_brick(scene, ly))
-            size *= (real if real is not None
-                     else 100.0 / max(1e-6, float(scale_n or 100.0)))
-        out[ly.key] = {"angle": float(getattr(ly, "hatch_angle", 0.0) or 0.0),
-                        "scale": size,
-                        "families": layer_hatch_families(scene, ly),
-                        "brick": layer_brick(scene, ly),
-                        "cross": bool(getattr(ly, "hatch_cross", False)),
-                        "joints": getattr(ly, "joints", None),
-                        "mortar": bool(getattr(ly, "mortar", False)),
-                        "hatch_scale": float(getattr(ly, "hatch_scale", 1.0)
-                                             or 1.0),
-                        "offset": getattr(ly, "hatch_offset", None),
-                        "scale_n": float(scale_n or 100.0)}
-    return out
-
-
-def clean_offset(raw) -> tuple | None:
-    """A pattern's shift as a layer keeps it: ``(x, y)`` real mm, each
-    within ±10 m — ``None`` for none or for anything else."""
-    import math
-    if not isinstance(raw, (list, tuple)) or len(raw) != 2:
-        return None
-    try:
-        x, y = (float(v) for v in raw)
-    except (TypeError, ValueError):
-        return None
-    if not (math.isfinite(x) and math.isfinite(y)) or (not x and not y):
-        return None
-    return (min(10000.0, max(-10000.0, x)),
-            min(10000.0, max(-10000.0, y)))
-
-
-def cut_hatch_inks(scene) -> dict:
-    """``{layer key: rgb}`` — the ink of each hatched layer's pattern, for the
-    layers that set one (by layer or fixed)."""
-    out = {}
-    for ly in getattr(scene, "layers", ()):
-        rgb = hatch_ink_rgb(ly) if getattr(ly, "hatch", None) else None
-        if rgb is not None:
-            out[ly.key] = rgb
-    return out
-
-
-def cut_fill_colours(scene) -> dict:
-    """``{layer key: rgb}`` a sheet fills each layer's section cut with when the
-    frame asks for the layers' colours: every layer's own colour (picked or
-    automatic), except the default layer, which keeps the frame's fill — its
-    white would vanish on paper."""
-    return {ly.key: layer_color(ly) for ly in getattr(scene, "layers", ())
-            if ly.key != DEFAULT_LAYER}
-
-
-def unprinted(scene) -> list:
-    """The layers left out of the sheets."""
-    return [ly for ly in getattr(scene, "layers", ())
-            if not getattr(ly, "printable", True)]
-
-
-def hide_unprinted(scene) -> None:
-    """Switch off the layers that do not print — for a sheet's render, whose
-    caller puts the visibility back."""
-    for ly in unprinted(scene):
-        ly.visible = False
 
 
 def ordered_names(scene) -> list[str]:
