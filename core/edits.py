@@ -23,7 +23,7 @@ from core.mesh import element_identity
 
 from typing import Iterable, Optional, Sequence
 
-from ingetrazo_core import Vec3 as QVector3D, object_drawing
+from ingetrazo_core import Vec3 as QVector3D, object_drawing, polygon_newell as _newell
 
 _order_chain = object_drawing.order_chain
 
