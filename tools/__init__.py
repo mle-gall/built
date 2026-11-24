@@ -1,3 +1,18 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """IngeTrazo built-in tools (line, rectangle, push/pull, select, ...)."""
+
+from functools import wraps as _wraps
+
+
+def _plugin_method(native):
+    """Expose a Python function to signal libraries that inspect bound slot code."""
+    @_wraps(native)
+    def method(*args, **kwargs):
+        return native(*args, **kwargs)
+    return method
+
+
+from ingetrazo_core import install_tool_modules as _install_tool_modules
+
+_install_tool_modules(__path__)

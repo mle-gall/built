@@ -21,6 +21,22 @@ def install(win, plugins):
     win._panel_factories = {p.stem: p.panel for p in plugins if p.panel}
 
 
+def on_document_close(app, close):
+    """Release document resources when its tab or owning window closes."""
+    scene = app.scene
+    window = app.window
+
+    def finished(closed_scene=None):
+        if closed_scene is not None and closed_scene is not scene:
+            return
+        window._doc_close_hooks.remove(finished)
+        window._extension_closed.disconnect(finished)
+        close()
+
+    app.on_document_closed(finished)
+    window._extension_closed.connect(finished)
+
+
 def open_panel(win, key):
     from views.chrome_dialogs import view_of
     view = view_of(win)
@@ -29,6 +45,11 @@ def open_panel(win, key):
     sync(view, win)
     for binding in getattr(view, "_plugin_bindings", {}).values():
         if binding.key == key:
+            opened = getattr(binding.model, "on_open", None)
+            if opened is not None:
+                opened()
+                binding.invalidate()
+                binding.push()
             view.renderer.ui_plugin_open(binding.instance)
             view.update()
             return True
@@ -175,3 +196,33 @@ def dispatch(win, raw):
     except (Exception, SystemExit) as exc:
         binding.error = str(exc)
     binding.invalidate()
+
+
+def overlay_primitives(view, viewport):
+    """Collect document panel overlays for this viewport in logical pixels."""
+    result = []
+    for binding in getattr(view, "_plugin_bindings", {}).values():
+        overlay = getattr(binding.model, "overlay", None)
+        if overlay is None:
+            continue
+        try:
+            result.extend(list(overlay(viewport)))
+        except (Exception, SystemExit) as exc:
+            if binding.error != str(exc):
+                binding.error = str(exc)
+                binding.invalidate()
+    return result
+
+
+def draw_tool_feedback(painter, tools, layout):
+    from views.wgpu_annotations import draw_tool_feedback as draw_builtin_feedback
+    from views.wgpu_overlay import paint_layer
+    draw_builtin_feedback(painter, tools, layout)
+    if hasattr(painter, "draw_primitives"):
+        primitives = overlay_primitives(tools.view, tools)
+        if primitives:
+            painter.save()
+            try:
+                paint_layer(painter, primitives)
+            finally:
+                painter.restore()

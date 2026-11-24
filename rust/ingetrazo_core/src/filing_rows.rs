@@ -133,6 +133,7 @@ struct Catalogue<'py> {
     unfiled: HashSet<usize>,
     filter: String,
     matching_branches: HashSet<usize>,
+    providers: Option<Obj<'py>>,
 }
 impl<'py> Catalogue<'py> {
     fn cap(&self, key: &str) -> usize {
@@ -153,6 +154,22 @@ impl<'py> Catalogue<'py> {
             },
         )
     }
+    fn extension_kind(&self, group: &Obj<'py>) -> PyResult<(String, String)> {
+        let Some(providers) = &self.providers else { return Ok(Default::default()) };
+        let description = group.py().import("core.outliner")?.call_method1("custom_kind", (group, providers))?;
+        if description.is_none() { return Ok(Default::default()); }
+        let kind = description.get_item("type")?.extract()?;
+        let properties: Vec<(String, String)> = description.get_item("props")?.extract()?;
+        Ok((kind, properties.into_iter().map(|(k,v)| format!("{k}: {v}")).collect::<Vec<_>>().join("\n")))
+    }
+
+    fn label_kind(&self, group: &Obj<'py>, kind: &str) -> PyResult<String> {
+        let (label, tip) = self.extension_kind(group)?;
+        Ok(if label.is_empty() {
+            match kind { "component" => "Component", "link" => "Reference", _ => "Group" }.into()
+        } else if tip.is_empty() { label } else { format!("{label}\u{1e}{tip}") })
+    }
+
     /// Include the way to each match. A closed group is still searchable, and
     /// opening a search result never changes the user's saved disclosure state.
     fn filter_branches(&self) -> PyResult<HashSet<usize>> {
@@ -180,6 +197,7 @@ impl<'py> Catalogue<'py> {
                 &self.scene,
                 &group,
                 self.kind(&group)?,
+                &self.extension_kind(&group)?.0.to_lowercase(),
                 &self.filter,
                 self.bad.contains(&key) || self.unfiled.contains(&key),
                 hidden,
@@ -275,6 +293,7 @@ impl<'py> Catalogue<'py> {
             0,
             selected,
         );
+        r.0[2] = self.label_kind(g, kind)?;
         if kind == "link" {
             r.0[3] = "⛓".into();
         } else if kind == "component" {
@@ -380,6 +399,7 @@ impl<'py> Catalogue<'py> {
                 selected,
             );
             r.1[5] = i64::from(!gs[0].getattr("hidden")?.is_truthy()?);
+            r.0[2] = self.label_kind(&gs[0], "component")?;
             r.0[3] = format!("×{}", gs.len());
             r.1[2] = gs.iter().filter(|g| self.bad.contains(&id(g))).count() as i64;
             let open = self.expanded.contains(&key);
@@ -498,6 +518,7 @@ fn controls<'py>(
 }
 
 #[pyfunction]
+#[pyo3(signature = (scene, model, expanded, pages, filter, discover, cap, lens, selected, active, kinds, tips, states, providers=None))]
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn filing_rows<'py>(
     scene: Obj<'py>,
@@ -513,6 +534,7 @@ pub(crate) fn filing_rows<'py>(
     kinds: Obj<'py>,
     tips: HashMap<String, String>,
     states: HashMap<String, String>,
+    providers: Option<Obj<'py>>,
 ) -> PyResult<Vec<Row>> {
     let tree = model.get_item("tree")?;
     let nodes = tree.getattr("nodes")?;
@@ -549,6 +571,7 @@ pub(crate) fn filing_rows<'py>(
             .collect(),
         filter: filter.trim().to_owned(),
         matching_branches: HashSet::new(),
+        providers: providers.filter(|p| p.is_truthy().unwrap_or(false)),
     };
     let mut selected = HashMap::<String, usize>::new();
     for &g in &c.selected {

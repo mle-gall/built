@@ -22,6 +22,8 @@
     <comment>IngeTrazo document</comment>
     <comment xml:lang="es">Documento de IngeTrazo</comment>
     <icon name="application-x-ingetrazo"/>
+    <glob pattern="*.built"/>
+    <glob pattern="*.builtproject"/>
     <glob pattern="*.igz"/>
   </mime-type>
 

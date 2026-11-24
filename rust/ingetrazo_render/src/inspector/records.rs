@@ -4,12 +4,14 @@ use std::collections::BTreeMap;
 
 #[derive(Default)]
 pub(super) struct Records {
+    pub(super) editor: super::record_editor::Editor,
     pub rows: BTreeMap<Vec<String>, Row>,
     total: usize,
     writable: Vec<String>,
     set_name: String,
     property_name: String,
     property_value: String,
+    property_kind: String,
     pending: Option<Value>,
     error: String,
 }
@@ -71,6 +73,7 @@ impl Records {
     }
 
     pub fn draw(&mut self, ui: &mut egui::Ui, out: &mut Vec<String>) {
+        self.editor.draw(ui,out);
         ui.weak("Edit a value and press Enter");
         let mut ordered: Vec<_> = self.rows.iter_mut().collect();
         ordered.sort_by_key(|(path, _)| match path[0].as_str() {
@@ -148,6 +151,11 @@ impl Records {
                 ui.add(
                     egui::TextEdit::singleline(&mut self.property_name).hint_text("Property name"),
                 );
+                egui::ComboBox::from_label("Property kind").selected_text(if self.property_kind.is_empty() { "Automatic" } else { &self.property_kind }).show_ui(ui, |ui| {
+                    for kind in ["", "text", "label", "enum", "boolean", "integer", "real", "length", "area", "volume"] {
+                        ui.selectable_value(&mut self.property_kind, kind.into(), if kind.is_empty() { "Automatic" } else { kind });
+                    }
+                });
                 ui.add(
                     egui::TextEdit::singleline(&mut self.property_value)
                         .hint_text("Text, number, or true / false"),
@@ -175,6 +183,13 @@ impl Records {
                             _ => ("text", json!(raw)),
                         };
                         self.error.clear();
+                        let (kind,value) = match self.property_kind.as_str() {
+                            "" => (kind,value),
+                            k @ ("text"|"label"|"enum") => (k,json!(raw)),
+                            k @ ("real"|"length"|"area"|"volume") if value.is_number() => (k,value),
+                            k if k==kind => (k,value),
+                            k => {self.error=format!("Enter a {k} value");return;}
+                        };
                         self.pending = Some(json!([self.writable, path, value, kind]));
                     }
                 }

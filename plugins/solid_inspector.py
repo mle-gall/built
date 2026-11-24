@@ -45,25 +45,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QColor
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import (
-    QFrame,
-    QHBoxLayout,
-    QHeaderView,
-    QLabel,
-    QPushButton,
-    QSizePolicy,
-    QTableWidget,
-    QTableWidgetItem,
-    QToolButton,
-    QVBoxLayout,
-    QWidget,
-)
-
-from core import bim
-from core.history import Command
 from core.i18n import tr
 from tools.base import Tool
 
@@ -81,7 +63,7 @@ from core.solid_analysis import (
     repair_mesh, RepairSolidsCommand, KINDS as _KIND_STYLES,
 )
 
-KINDS = {kind: (label, QColor(*rgb)) for kind, (label, rgb) in _KIND_STYLES.items()}
+KINDS = _KIND_STYLES
 
 # ---------------------------------------------------------------------------
 # Dialog
@@ -148,129 +130,33 @@ def _frame(vp, pts) -> None:
                       hi + QVector3D(pad, pad, pad))
 
 
-_OK = QColor(76, 160, 92)          # a closed, sound solid
-_BAD = QColor(214, 84, 56)         # an object with problems
+class SolidInspectorPanel:
+    id, title, slot = "solids", tr("Solid Inspector"), "utility"
+    notify_close = True
 
+    def __init__(self, viewport):
+        self._viewport = viewport
+        self.visible = False
+        self._last_key = None
+        self._rows = []
+        self.selected = 0
+        self._current = None
+        self._painted = []
+        self.note = ""
 
-def _chip(color: QColor) -> QLabel:
-    """A rounded count tinted in ``color`` — the verdict at a glance."""
-    chip = QLabel()
-    r, g, b = color.red(), color.green(), color.blue()
-    chip.setStyleSheet(
-        f"QLabel {{ background: rgba({r}, {g}, {b}, 46);"
-        f" color: rgb({r}, {g}, {b}); border: 1px solid rgba({r}, {g}, {b}, 120);"
-        " border-radius: 11px; padding: 3px 11px; font-weight: bold; }")
-    chip.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
-    return chip
-
-
-def _section(title: str) -> QLabel:
-    """A section title as the side tray draws them: bold, a thin rule
-    under it, no bar."""
-    label = QLabel(title)
-    label.setStyleSheet("QLabel { font-weight: bold; padding: 2px 0 4px 0;"
-                        " border-bottom: 1px solid palette(mid); }")
-    return label
-
-
-def _nav_button(arrow, tip: str) -> QToolButton:
-    btn = QToolButton()
-    from views.rtl import set_arrow
-    set_arrow(btn, arrow)
-    btn.setToolTip(tip)
-    btn.setAutoRaise(True)
-    btn.setFixedSize(30, 28)
-    btn.setStyleSheet(
-        "QToolButton { border: 1px solid palette(mid); border-radius: 4px; }"
-        "QToolButton:hover { background: palette(midlight); }")
-    return btn
-
-
-def _icon_button(key: str, text: str) -> QPushButton:
-    """A button with one of IngeTrazo's own icons, repainted when the
-    theme changes (the ``icon_key`` property)."""
-    from views.icons import tool_icon
-    btn = QPushButton(tool_icon(key), text)
-    btn.setProperty("icon_key", key)
-    return btn
-
-
-class SolidInspectorPanel(QWidget):
-    """The inspector, a tab of the side tray: click an object to fly to
-    it, walk its problems one by one — each framed and painted in its own
-    colour — and repair them one at a time, or everything at once. The
-    model stays in view beside it.
-
-    Laid out for the narrow tray: the list keeps the object and its
-    verdict, and what is wrong with the chosen one reads under it; with
-    room to spare (a floating tab) the other columns come back."""
-
-    #: Below this width the list shows only Object and Status.
-    WIDE = 560
-
-    @property
-    def _viewport(self):
-        """The viewport of the project in front (projects in tabs, #1066):
-        the one handed in at setup may be a tab in the back, or closed."""
-        return self._live_viewport()
-
-    def __init__(self, viewport, parent=None) -> None:
-        super().__init__(parent)
-        from views.documents import live_viewport
-        self._live_viewport = live_viewport(viewport)
-        self._rows: list = []          # payload per table row
-        #: The problem on screen: {"name", "index", "count", "item",
-        #: "mesh", "matrix"} — or None.
-        self._current: Optional[dict] = None
-        #: Highlight problems: every problem of one object, painted at once
-        #: (each in its kind's colour), and the matrix placing them.
-        self._painted: list = []
-        self._painted_matrix = None
-        self._filling = False          # refresh() is rebuilding the table
-        self.setWindowTitle(tr("Solid Inspector"))
-        self._refresh_pending = True
-        self._dock_visible = None
-        self._resize_timer = QTimer(self)
-        self._resize_timer.setSingleShot(True)
-        self._resize_timer.setInterval(120)
-        self._resize_timer.timeout.connect(self._settled)
-        self._build_ui()
-        overlays = getattr(viewport, "_ext_overlays", None)
-        if overlays is not None:
-            overlays.append(self._paint)
-
-    def _let_go(self) -> None:
-        """Nothing painted any more (the tab hidden, the window closed)."""
-        if self._current is not None or self._painted:
-            self._current = None
-            self._painted = []
-            self._show_label()
-            self._viewport.update()
-
-    def showEvent(self, event) -> None:  # noqa: N802 — Qt override
-        # The tab brought forward: the model may have changed meanwhile.
-        super().showEvent(event)
-        self._fit_columns()
-        self._refresh_if_needed()
-
-    def _visible(self):
-        # Tabified docks can keep their child visible while another tab
-        # covers it. QDockWidget.visibilityChanged reports that distinction.
-        return self.isVisible() and self._dock_visible is not False
-
-    def _dock_visibility_changed(self, visible):
-        self._dock_visible = visible
-        if visible:
-            self._refresh_if_needed()
-        else:
-            self._resize_timer.stop()
-            self._let_go()
-
-    def _refresh_if_needed(self):
-        if (self._visible() and not self._resize_timer.isActive()
-                and (self._refresh_pending
-                     or self._inspected_key() != getattr(self, "_last_key", None))):
+    def show(self):
+        self.visible = True
+        if self._inspected_key() != self._last_key:
             self.refresh()
+
+    on_open = show
+
+    def close(self):
+        self.visible = False
+        self._current = None
+        self._painted = []
+        self.note = ""
+        self._viewport.update()
 
     def _inspected_key(self):
         """Geometry/context plus every inspected mesh's mutation token.
@@ -296,206 +182,15 @@ class SolidInspectorPanel(QWidget):
         return (id(scene), scene.geometry_version, id(scene.edit_group),
                 len(scene.groups), tuple(rows))
 
-    def hideEvent(self, event) -> None:  # noqa: N802 — Qt override
-        # Another tab in front: the colours of a panel nobody sees would
-        # only puzzle.
-        self._resize_timer.stop()
-        self._let_go()
-        super().hideEvent(event)
-
-    def closeEvent(self, event) -> None:  # noqa: N802 — Qt override
-        overlays = getattr(self._viewport, "_ext_overlays", None)
-        if overlays is not None and self._paint in overlays:
-            overlays.remove(self._paint)
-        self._let_go()
-        super().closeEvent(event)
-
-    def resizeEvent(self, event) -> None:  # noqa: N802 — Qt override
-        super().resizeEvent(event)
-        if self._visible():
-            self._resize_timer.start()
-
-    def _settled(self):
-        if self._visible():
-            self._fit_columns()
-            self._refresh_if_needed()
-
-    def _fit_columns(self) -> None:
-        wide = self.width() >= self.WIDE
-        for col in (1, 3, 4):
-            self._table.setColumnHidden(col, not wide)
-        self._detail.setVisible(not wide)
-
-    def _build_ui(self) -> None:
-        from views.theme import style as theme_style
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(8)
-
-        subtitle = QLabel(tr(
-            "Finds why an object is not a closed solid, and repairs it."))
-        subtitle.setWordWrap(True)
-        theme_style(subtitle, "color:{muted}; font-size:11px;")
-        layout.addWidget(subtitle)
-        # The verdict at a glance, in two counts.
-        chips = QHBoxLayout()
-        chips.setSpacing(6)
-        self._ok_chip = _chip(_OK)
-        self._bad_chip = _chip(_BAD)
-        chips.addWidget(self._ok_chip)
-        chips.addWidget(self._bad_chip)
-        chips.addStretch(1)
-        layout.addLayout(chips)
-        # The verdict in words, for whoever reads it aloud or in a test.
-        self._summary = QLabel()
-        self._summary.setVisible(False)
-        layout.addWidget(self._summary)
-
-        layout.addWidget(_section(tr("Objects")))
-        self._table = QTableWidget()
-        self._table.setColumnCount(5)
-        self._table.setHorizontalHeaderLabels(
-            [tr("Object"), tr("Faces"), tr("Status"), tr("Problems"),
-             tr("Volume")])
-        header = self._table.horizontalHeader()
-        header.setStretchLastSection(False)
-        header.setSectionResizeMode(0, QHeaderView.Stretch)
-        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(3, QHeaderView.Stretch)
-        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)
-        header.setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        header.setHighlightSections(False)
-        header.setMinimumSectionSize(40)
-        self._table.verticalHeader().setVisible(False)
-        self._table.verticalHeader().setDefaultSectionSize(24)
-        self._table.setShowGrid(False)
-        self._table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self._table.setWordWrap(False)
-        self._table.setTextElideMode(Qt.ElideRight)
-        self._table.setFrameShape(QFrame.NoFrame)
-        self._table.setMinimumHeight(120)
-        self._table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self._table.setSelectionBehavior(QTableWidget.SelectRows)
-        self._table.setSelectionMode(QTableWidget.SingleSelection)
-        self._table.setAlternatingRowColors(True)
-        self._table.setStyleSheet(
-            "QTableWidget { border: 1px solid palette(mid);"
-            " border-radius: 4px; }"
-            "QTableWidget::item { padding: 0 4px; }"
-            "QHeaderView::section { font-weight: bold; padding: 4px;"
-            " border: none; border-bottom: 1px solid palette(mid);"
-            " background: palette(window); }")
-        # One click on a row: its first problem on screen, ready to repair
-        # (a double click was a gesture nobody finds); a sound object is
-        # simply flown to.
-        self._table.cellClicked.connect(lambda _r, _c: self.focus_object())
-        self._table.currentCellChanged.connect(
-            lambda *_a: self._show_detail())
-        layout.addWidget(self._table, stretch=1)
-        # What is wrong with the chosen object, when the list is too narrow
-        # for its own Problems and Volume columns.
-        self._detail = QLabel()
-        self._detail.setWordWrap(True)
-        theme_style(self._detail, "color:{muted}; font-size:11px;")
-        layout.addWidget(self._detail)
-
-        # The problem on screen, as a card edged in its kind's colour:
-        # which one, why it cannot be repaired here when it cannot, and
-        # the buttons that walk and repair them one at a time.
-        layout.addWidget(_section(tr("Problem by problem")))
-        self._card = QFrame()
-        self._card.setObjectName("problemCard")
-        card = QVBoxLayout(self._card)
-        card.setContentsMargins(10, 6, 6, 6)
-        card.setSpacing(6)
-        self._problem_label = QLabel()
-        self._problem_label.setTextFormat(Qt.RichText)
-        self._problem_label.setWordWrap(True)
-        card.addWidget(self._problem_label)
-        step = QHBoxLayout()
-        step.setSpacing(4)
-        self._prev_btn = _nav_button(Qt.LeftArrow, tr("Previous problem"))
-        self._prev_btn.clicked.connect(self.previous_problem)
-        step.addWidget(self._prev_btn)
-        self._next_btn = _nav_button(Qt.RightArrow, tr("Next problem"))
-        self._next_btn.setToolTip(
-            tr("Next problem") + "\n"
-            + tr("Select the next problem and zoom to it"))
-        self._next_btn.clicked.connect(self.next_problem)
-        step.addWidget(self._next_btn)
-        self._fix_btn = QPushButton(tr("Repair this problem"))
-        self._fix_btn.setObjectName("primary")
-        self._fix_btn.setToolTip(tr(
-            "Repair only the problem on screen and go on to the next one"))
-        self._fix_btn.clicked.connect(self.repair_current)
-        step.addWidget(self._fix_btn, 1)
-        card.addLayout(step)
-        layout.addWidget(self._card)
-
-        # Foot: looking on top, repairing under it.
-        look = QHBoxLayout()
-        look.setSpacing(6)
-        refresh_btn = _icon_button("refresh", tr("Refresh"))
-        refresh_btn.clicked.connect(self.refresh)
-        look.addWidget(refresh_btn, 1)
-        self._hl_btn = _icon_button("zoom_selection", tr("Highlight problems"))
-        self._hl_btn.setToolTip(tr(
-            "Paint every problem of the chosen object, each in its colour"))
-        self._hl_btn.clicked.connect(self.highlight)
-        look.addWidget(self._hl_btn, 1)
-        layout.addLayout(look)
-        fix = QHBoxLayout()
-        fix.setSpacing(6)
-        self._repair_btn = QPushButton(tr("Repair"))
-        self._repair_btn.setToolTip(tr(
-            "Erase stray edges and duplicated faces, close flat holes, "
-            "turn reversed faces outward"))
-        self._repair_btn.clicked.connect(self.repair)
-        fix.addWidget(self._repair_btn, 1)
-        self._repair_all_btn = QPushButton(tr("Repair all"))
-        self._repair_all_btn.setObjectName("primary")
-        self._repair_all_btn.clicked.connect(self.repair_all)
-        fix.addWidget(self._repair_all_btn, 1)
-        layout.addLayout(fix)
-
-        # IngeTrazo's blue marks the buttons that change the model.
-        # (A template: theme_style fills {muted} again on every theme change.)
-        theme_style(self,
-            "QPushButton {{ padding: 5px 10px; }}"
-            "QPushButton#primary {{ background: rgb(42, 93, 143);"
-            " color: white; border: 1px solid rgb(42, 93, 143);"
-            " border-radius: 4px; padding: 5px 10px; font-weight: bold; }}"
-            "QPushButton#primary:hover {{ background: rgb(55, 112, 168); }}"
-            "QPushButton#primary:pressed {{ background: rgb(33, 74, 114); }}"
-            "QPushButton#primary:disabled {{ background: palette(midlight);"
-            " border: 1px solid palette(mid); color: {muted}; }}")
-        self._show_label()
-        self._fit_columns()
-
-    def _show_detail(self) -> None:
-        row = self._selected_row()
-        if row is None:
-            self._detail.setText("")
-            return
-        rep = row["report"]
-        from core.units import fmt_volume
-        parts = [row["name"] + ":", _problem_text(rep) or tr("watertight")]
-        if rep["volume"] is not None:
-            parts.append("· " + fmt_volume(rep["volume"]))
-        self._detail.setText(" ".join(parts))
-
-    # ---- Data --------------------------------------------------------------
     def refresh(self) -> None:
         """Inspect everything again. The problem on screen is let go: what
         it pointed at may have changed."""
-        self._refresh_pending = True
-        if not self._visible() or self._resize_timer.isActive():
+        if not self.visible:
+            self._last_key = None
             return
         scene = self._viewport.scene
         current = self._selected_row()
-        current_name = current["name"] if current else None
+        current_mesh = current["mesh"] if current else None
         self._rows = []
 
         # The mesh you are editing right now: the open group's, or the
@@ -516,74 +211,61 @@ class SolidInspectorPanel(QWidget):
             row["report"] = inspect_mesh(row["mesh"])
             self._rows.append(row)
 
-        table = self._table
-        self._filling = True
-        # A column sized to its contents re-measures every row on each
-        # setItem: thousands of rows took ~30 s. Fixed while filling, then
-        # one measuring pass at the end.
-        header = table.horizontalHeader()
-        fitted = [c for c in range(table.columnCount())
-                  if header.sectionResizeMode(c) == QHeaderView.ResizeToContents]
-        for c in fitted:
-            header.setSectionResizeMode(c, QHeaderView.Interactive)
-        table.setUpdatesEnabled(False)
-        try:
-            table.setRowCount(len(self._rows))
-            ok, bad = _OK, _BAD
-            solids = problems = 0
-            from core.units import fmt_volume
-            for i, row in enumerate(self._rows):
-                rep = row["report"]
-                table.setItem(i, 0, QTableWidgetItem(row["name"]))
-                table.setItem(i, 1, QTableWidgetItem(f"{rep['faces']:,}"))
-                if not rep["faces"] and not rep["edges"]:
-                    status = QTableWidgetItem(tr("(empty)"))
-                elif is_sound(rep):
-                    status = QTableWidgetItem("✔ " + tr("watertight"))
-                    status.setForeground(ok)
-                    solids += 1
-                else:
-                    status = QTableWidgetItem(
-                        "✘ " + (tr("faces reversed") if rep["watertight"]
-                                else tr("not watertight")))
-                    status.setForeground(bad)
-                    problems += 1
-                table.setItem(i, 2, status)
-                table.setItem(i, 3, QTableWidgetItem(_problem_text(rep)))
-                vol = (fmt_volume(rep['volume'])
-                       if rep["volume"] is not None else "—")
-                table.setItem(i, 4, QTableWidgetItem(vol))
-            names = [r["name"] for r in self._rows]
-            if current_name in names:
-                table.setCurrentCell(names.index(current_name), 0)
-        finally:
-            for c in fitted:
-                header.setSectionResizeMode(c, QHeaderView.ResizeToContents)
-            table.setUpdatesEnabled(True)
-            self._filling = False
-
-        self._summary.setText(
-            tr("{ok} watertight solids, {bad} with problems",
-               ok=solids, bad=problems))
-        self._ok_chip.setText("✔ " + tr("{n} solids", n=solids))
-        self._bad_chip.setText("✘ " + tr("{n} with problems", n=problems))
-        self._bad_chip.setVisible(problems > 0)
-        self._ok_chip.setToolTip(self._summary.text())
-        self._bad_chip.setToolTip(self._summary.text())
+        self.selected = next((i for i, row in enumerate(self._rows)
+                              if row["mesh"] is current_mesh), 0)
         self._current = None
         self._painted = []
-        self._show_label()
-        self._show_detail()
+        self.note = ""
         self._last_key = self._inspected_key()
-        self._refresh_pending = False
-        self._viewport.update()
 
-    # ---- Highlight ---------------------------------------------------------
-    def _selected_row(self) -> dict | None:
-        i = self._table.currentRow()
-        if 0 <= i < len(self._rows):
-            return self._rows[i]
-        return None
+    def _selected_row(self):
+        if 0 <= self.selected < len(self._rows):
+            return self._rows[self.selected]
+
+    def sections(self):
+        from core.plugin_panels import section, item
+        from core.units import fmt_volume
+        if not self.visible:
+            return [section("inspector", self.title, item("button", "inspect", tr("Inspect")))]
+        self.show()
+        rows = []
+        for i, row in enumerate(self._rows):
+            rep = row["report"]
+            if not rep["faces"] and not rep["edges"]:
+                status = tr("(empty)")
+            elif is_sound(rep):
+                status = "✔ " + tr("watertight")
+            else:
+                status = "✘ " + tr("faces reversed" if rep["watertight"] else "not watertight")
+            volume = fmt_volume(rep["volume"]) if rep["volume"] is not None else "—"
+            rows.append(dict(key=str(i), cells=[row["name"], str(rep["faces"]), status,
+                                                _problem_text(rep), volume]))
+        controls = [item("table", "objects", columns=list(map(tr, ("Object", "Faces", "Status", "Problems", "Volume"))),
+                         rows=rows, selection=str(self.selected)),
+                    item("log", "details", lines=[self.note])]
+        for key, label in (("previous", "Previous problem"), ("next", "Next problem"),
+                           ("highlight", "Highlight problems"), ("repair_current", "Repair this problem"),
+                           ("repair", "Repair object"), ("repair_all", "Repair all")):
+            controls.append(item("button", key, tr(label), enabled=key != "repair_current" or self.can_fix))
+        return [section("inspector", self.title, *controls)]
+
+    @property
+    def can_fix(self):
+        cur = self._current
+        return cur is not None and not why_not_repairable(cur["mesh"], cur["item"])
+
+    def event(self, control, event, value):
+        if control == "objects" and event == "selection":
+            self.selected = int(value)
+            self.focus_object()
+        elif control == "_panel" and event == "closed":
+            self.close()
+        elif event == "invoke":
+            actions = dict(inspect=self.show, previous=self.previous_problem, next=self.next_problem,
+                           highlight=self.highlight, repair_current=self.repair_current,
+                           repair=self.repair, repair_all=self.repair_all)
+            if control in actions:
+                actions[control]()
 
     def focus_object(self) -> bool:
         """What a click on the list does: an object with problems shows its
@@ -592,7 +274,7 @@ class SolidInspectorPanel(QWidget):
         show (an empty row, or the table being rebuilt)."""
         row = self._selected_row()
         vp = self._viewport
-        if row is None or self._filling:
+        if row is None:
             return False
         if problem_items(row["report"]):
             return self.show_problem(0) is not None
@@ -720,97 +402,39 @@ class SolidInspectorPanel(QWidget):
         vp.update()
         return item
 
-    def _edge(self, color: Optional[QColor]) -> None:
-        """Edge the problem card in ``color`` (a neutral rule when None)."""
-        edge = color.name() if color is not None else "palette(mid)"
-        self._card.setStyleSheet(
-            "QFrame#problemCard { background: palette(base);"
-            " border: 1px solid palette(mid); border-radius: 4px;"
-            f" border-left: 4px solid {edge}; }}")
+    def _show_label(self, note=""):
+        self.note = note
+        if self._current:
+            cur = self._current
+            name = KINDS[cur["item"]["kind"]][0]
+            self.note = tr("Problem {i} of {n}: {kind}", i=cur["index"] + 1,
+                           n=cur["count"], kind=tr(name))
+            reason = why_not_repairable(cur["mesh"], cur["item"])
+            if reason:
+                self.note += " · " + reason
+        elif self._painted:
+            from collections import Counter
+            counts = Counter(item["kind"] for item in self._painted)
+            self.note = "   ".join(f"{tr(KINDS[k][0])} ({n})" for k, n in counts.items())
 
-    def _show_label(self, note: str = "") -> None:
-        cur = self._current
-        if cur is None and self._painted and not note:
-            counts: dict = {}
-            for item in self._painted:
-                counts[item["kind"]] = counts.get(item["kind"], 0) + 1
-            parts = []
-            for kind, (name, color) in KINDS.items():
-                if kind in counts:
-                    parts.append(
-                        f'<span style="color:{color.name()}; '
-                        f'font-size:16px">■</span> {tr(name)} '
-                        f'({counts[kind]})')
-            self._problem_label.setText("&nbsp;&nbsp; ".join(parts))
-            self._fix_btn.setEnabled(False)
-            self._edge(QColor(243, 115, 41))      # IngeTrazo orange
-            return
-        if cur is None:
-            text = note or tr(
-                "Click an object to see its first problem; the arrows "
-                "walk the others.")
-            self._problem_label.setText(text)
-            self._fix_btn.setEnabled(False)
-            self._edge(None)
-            return
-        name, color = KINDS[cur["item"]["kind"]]
-        text = (f'<span style="color:{color.name()}; font-size:16px">■</span> '
-                + tr("Problem {i} of {n}: {kind}", i=cur["index"] + 1,
-                     n=cur["count"], kind=tr(name)))
-        reason = why_not_repairable(cur["mesh"], cur["item"])
-        if reason:
-            text += f'<br><span style="color:#c85a3c">{reason}</span>'
-        self._problem_label.setText(text)
-        self._fix_btn.setEnabled(reason is None)
-        self._edge(color)
-
-    def _paint(self, vp, painter) -> None:
-        """Viewport overlay: the problem on screen (or, after Highlight
-        problems, all of them) in its kind's colour —
-        thick lines on edges, a see-through fill on faces — drawn over the
-        model, so it shows inside a group and behind other geometry."""
-        cur = self._current
-        if self._painted:
-            items, m = self._painted, self._painted_matrix
-        elif cur is not None:
-            items, m = [cur["item"]], cur["matrix"]
+    def overlay(self, vp):
+        from views.wgpu_overlay import Primitive
+        if self._current:
+            items, matrix = [self._current["item"]], self._current["matrix"]
+        elif self._painted:
+            items, matrix = self._painted, self._painted_matrix
         else:
             return
-        from PySide6.QtGui import QPainter
-        painter.setRenderHint(QPainter.Antialiasing)
-        for item in items:
-            self._paint_item(vp, painter, item, m)
-
-    @staticmethod
-    def _paint_item(vp, painter, item, m) -> None:
-        from PySide6.QtCore import QPointF
-        from PySide6.QtGui import QPen, QPolygonF
-        _name, color = KINDS[item["kind"]]
-
-        def px(p):
-            q = vp.world_to_pixel(m.map(p) if m is not None else p)
-            return None if q is None else QPointF(*q)
-
-        fill = QColor(color)
-        fill.setAlpha(110)
-        for ent in item["ents"]:
-            if hasattr(ent, "loop"):
-                pts = [px(v.position) for v in ent.loop]
-                if any(q is None for q in pts):
-                    continue
-                painter.setPen(QPen(color, 3))
-                painter.setBrush(fill)
-                painter.drawPolygon(QPolygonF(pts))
-            else:
-                a, b = px(ent.v0.position), px(ent.v1.position)
-                if a is None or b is None:
-                    continue
-                painter.setPen(QPen(color, 5, Qt.SolidLine, Qt.RoundCap))
-                painter.drawLine(a, b)
-                painter.setBrush(color)
-                painter.setPen(Qt.NoPen)
-                for q in (a, b):
-                    painter.drawEllipse(q, 4.0, 4.0)
+        for problem in items:
+            color = "#%02x%02x%02x" % tuple(KINDS[problem["kind"]][1])
+            for entity in problem["ents"]:
+                face = hasattr(entity, "loop")
+                vertices = entity.loop if face else (entity.v0, entity.v1)
+                points = [vp._world_to_pixel(matrix.map(v.position) if matrix is not None else v.position)
+                          for v in vertices]
+                if None not in points:
+                    yield Primitive("polygon" if face else "polyline", points, color,
+                                    3 if face else 5, fill="#6e" + color[1:] if face else None)
 
     def repair_current(self) -> Optional[dict]:
         """Repair the problem on screen (one undo step) and show the next
@@ -901,64 +525,13 @@ class SolidInspectorTool(Tool):
         "repair what has one right answer.")
     uses_snap = False
 
-    def on_activate(self, viewport) -> None:
-        window = viewport.window()
-        panel = getattr(window, "_solid_inspector", None)
-        dock = getattr(window, "_solid_inspector_dock", None)
-        if panel is not None and dock is not None:
-            show = getattr(window, "set_tray_shown", None)
-            if show is not None:
-                show(dock, True)
-            dock.raise_()
-            panel._refresh_if_needed()
-            return
-        if panel is None or not panel.isVisible():
-            panel = SolidInspectorPanel(viewport, parent=window)
-            panel.setWindowFlags(Qt.Tool)
-            panel.resize(380, 560)
-            window._solid_inspector = panel
-            panel.show()
-        else:
-            panel.refresh()
-            panel.raise_()
-            panel.activateWindow()
+    def on_activate(self, viewport):
+        from core.plugin_panels import open_panel
+        open_panel(viewport.window(), "solid_inspector")
 
-    def on_deactivate(self, viewport) -> None:
+    def on_deactivate(self, viewport):
         pass
 
 
-def _join_tray(window, dock) -> bool:
-    """Tab ``dock`` with the side tray when it stands alone on the tray's
-    side. Returns whether it did.
-
-    ``setup`` runs before the window restores the user's saved layout, and
-    that restore puts back the panels IT knows — leaving the inspector,
-    when it was not among them (or was saved apart that way), alone on a
-    strip of its own above the tabs; the layout saved next keeps it there.
-    Alone on the tray's side is never a place the tray's tabs let anyone
-    choose, so it always rejoins them; moved to the other side, it stays
-    there."""
-    tray = getattr(window, "tray", None)
-    if (tray is None or dock.isFloating() or dock.isHidden()
-            or window.tabifiedDockWidgets(dock)
-            or window.dockWidgetArea(dock) != window.dockWidgetArea(tray)):
-        return False
-    window.tabifyDockWidget(tray, dock)
-    getattr(tray, "raise_", lambda: None)()   # Properties stays in front
-    return True
-
-
-def setup(app) -> None:
-    """The inspector lives in the side tray, beside Properties and BIM,
-    so the model it points at stays in view; Extensions ▸ Solid Inspector
-    brings the tab forward."""
-    from PySide6.QtCore import QTimer
-    panel = SolidInspectorPanel(app.viewport)
-    dock = app.add_panel(tr("Solid Inspector"), panel,
-                         icon="panel_solid_inspector")
-    panel._dock_visible = dock.isVisible()
-    dock.visibilityChanged.connect(panel._dock_visibility_changed)
-    app.window._solid_inspector = panel
-    app.window._solid_inspector_dock = dock
-    # Once the window has restored the saved layout (after every setup).
-    QTimer.singleShot(0, lambda: _join_tray(app.window, dock))
+def create_panel(app, invalidate):
+    return SolidInspectorPanel(app.viewport)

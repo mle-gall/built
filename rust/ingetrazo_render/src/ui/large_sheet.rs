@@ -712,6 +712,7 @@ impl Draw<'_> {
         let side = picture_size.x;
         let cell = vec2(side, picture_size.y + 36.0);
         let mut visible = Vec::new();
+        let mut components = vec![];
         let rows = b.items.len().div_ceil(cols);
         let h = rows as f32 * (cell.y + gap) - if rows > 0 { gap } else { 0.0 };
         let (block, _) = ui.allocate_exact_size(vec2(w, h.max(0.0)), Sense::hover());
@@ -730,6 +731,7 @@ impl Draw<'_> {
             }
             if !clip.intersects(r) { continue; }
             let resp = ui.interact(r, ui.id().with(("lstile", &it.id, i)), Sense::click());
+            if it.icon.starts_with("component:") && !self.icons.contains_key(&it.icon) { components.push(it.icon.as_str()); }
             if report_visible && !it.icon.is_empty() { visible.push(it.icon.clone()); }
             let pic = Rect::from_min_size(r.min, picture_size);
             picture(ui, pic, self.icons.get(&it.icon), &it.hex, 8);
@@ -760,6 +762,9 @@ impl Draw<'_> {
             }
             let resp = if it.tip.is_empty() { resp } else { resp.on_hover_text(&it.tip) };
             self.item_input(&resp, it);
+        }
+        if !components.is_empty() {
+            self.out.push(std::iter::once("component-previews").chain(components).collect::<Vec<_>>().join(&SEP.to_string()));
         }
         if report_visible && self.st.visible_previews != visible {
             self.out.push(std::iter::once("visible").chain(visible.iter().map(String::as_str)).collect::<Vec<_>>().join(&SEP.to_string()));
@@ -1488,6 +1493,38 @@ mod tests {
             fonts.families.insert(egui::FontFamily::Name(name.into()), base.clone());
         }
         ctx.set_fonts(fonts);
+    }
+
+    #[test]
+    fn component_pictures_are_requested_only_inside_the_clip() {
+        let ctx = egui::Context::default();
+        fonts(&ctx);
+        let items: Vec<_> = (0..120).map(|i| serde_json::json!({
+            "id":format!("cm:{i}"), "icon":format!("component:1:0:{i}"), "label":format!("Part {i}")
+        })).collect();
+        let block: Block = serde_json::from_value(serde_json::json!({"kind":"tiles","items":items})).unwrap();
+        let screen = Rect::from_min_size(Pos2::ZERO, vec2(400., 250.));
+        let mut state = LargeSheet::default();
+        let icons = HashMap::new();
+        let requests = |offset:f32, state:&mut LargeSheet| {
+            let mut out=Vec::new();
+            let _ = ctx.run(egui::RawInput { screen_rect: Some(screen), ..Default::default() }, |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    let area = Rect::from_min_size(pos2(0.,offset),vec2(400.,8000.));
+                    ui.allocate_new_ui(egui::UiBuilder::new().max_rect(area), |ui| {
+                        ui.set_clip_rect(screen);
+                        Draw { st: state, icons: &icons, out:&mut out, focusable:true, pane:"c", rects:vec![] }.tiles(ui,&block);
+                    });
+                });
+            });
+            out
+        };
+        assert!(requests(400., &mut state).is_empty());
+        let first=requests(0., &mut state);
+        assert!(first[0].contains("component:1:0:0") && !first[0].contains("component:1:0:119"));
+        let later=requests(-1200., &mut state);
+        assert_ne!(later,first);
+        assert!(!later.is_empty() && !later[0].contains("component:1:0:0"));
     }
 
     #[test]

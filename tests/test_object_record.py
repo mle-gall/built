@@ -1,9 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 from copy import deepcopy
-from types import SimpleNamespace
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
-from PySide6.QtWidgets import QApplication
 from core import record, bim_registry
 from core.group import Group, copy_group
 from core.mesh import Mesh
@@ -123,33 +121,43 @@ def test_csv_atomic():
         bim_registry.import_codes_csv(reg, 'uniclass2015', 'code,title\nX,A\nX,B\n')
 
 
-def test_panel_tag_untag_multiselect():
-    from views.tray import BimPanel
-    app = QApplication.instance() or QApplication([])
-    scene = Scene(); groups = [Group(Mesh(), name) for name in ('A', 'B')]
-    scene.groups.extend(groups); scene.selection.update(groups)
-    history = History(scene)
-    vp = SimpleNamespace(scene=scene, history=history, update=lambda: None)
-    panel = BimPanel(SimpleNamespace(viewport=vp))
-    panel.name_edit.setText('Both'); panel._on_tag()
-    assert all(g.ifc['name'] == 'Both' for g in groups)
-    ids = [g.ifc['guid'] for g in groups]; assert ids[0] != ids[1]
-    history.undo(); assert all(g.ifc is None for g in groups)
-    history.redo(); assert [g.ifc['guid'] for g in groups] == ids
-    panel._on_untag(); assert all(g.ifc is None for g in groups)
-    history.undo(); assert [g.ifc['guid'] for g in groups] == ids
-    panel.close()
+def _selection(host, *names):
+    scene = host.viewport.scene
+    groups = [Group(Mesh(), name) for name in names]
+    scene.plugin_data["bim_registry"] = registry()
+    scene.groups.extend(groups)
+    scene.select(groups)
+    return groups
 
 
-def test_dialog_surfaces_userdefined():
-    from views.object_record import RecordDialog
-    app = QApplication.instance() or QApplication([])
-    dialog = RecordDialog(None, {'class': 'IfcWall'}, registry())
-    dialog.predefined.setCurrentText('USERDEFINED'); dialog.submit()
-    assert 'object_type' in dialog.error.text()
-    assert dialog.patch is None
-    dialog.fields['object_type'].setText('Ride'); dialog.submit()
-    assert dialog.patch['object_type'] == 'Ride'
+def _edit(host, verb, groups, values, schema="IFC4"):
+    from tests.test_native_inspector_panels import run
+    run(host, "record." + verb, [[g.uid for g in groups], values, schema])
+
+
+def test_panel_tag_untag_multiselect(native_host):
+    gs = _selection(native_host, "A", "B")
+    history = native_host.viewport.history
+    _edit(native_host, "fields", gs, {"class": "IfcWall", "name": "Both"})
+    assert all(g.ifc["name"] == "Both" for g in gs)
+    ids = [g.ifc["guid"] for g in gs]
+    assert ids[0] != ids[1]
+    assert history.undo() and all(g.ifc is None for g in gs)
+    assert history.redo() and [g.ifc["guid"] for g in gs] == ids
+    _edit(native_host, "untag", gs, None)
+    assert all(g.ifc is None for g in gs)
+    assert history.undo() and [g.ifc["guid"] for g in gs] == ids
+
+
+def test_dialog_surfaces_userdefined(native_host, monkeypatch):
+    groups = _selection(native_host, "Wall")
+    errors = []
+    monkeypatch.setattr(native_host.viewport, "flash_status", lambda msg, *_: errors.append(msg))
+    patch = {"class": "IfcWall", "predefined_type": "USERDEFINED"}
+    _edit(native_host, "fields", groups, patch)
+    assert "object_type" in errors[-1] and groups[0].ifc is None
+    _edit(native_host, "fields", groups, {**patch, "object_type": "Ride"})
+    assert groups[0].ifc["object_type"] == "Ride"
 
 
 def test_paste_with_layers_preserves_record():
@@ -196,27 +204,35 @@ def test_legacy_record_round_trip(tmp_path):
     assert not record.validate(loaded.groups[0].ifc, registry())
 
 
-def test_dialog_patch_carries_only_what_changed():
-    """One dialog over a multi-selection: the first object's name must not
-    land on the others, only the edited fields travel."""
-    from views.object_record import RecordDialog
-    app = QApplication.instance() or QApplication([])
-    scene = Scene(); groups = [Group(Mesh(), name) for name in ('Pier 1', 'Pier 2')]
-    scene.groups.extend(groups)
-    history = History(scene)
-    history.execute(TagGroupsCommand(groups, 'IfcColumn', ''))
-    history.execute(SetRecordCommand([groups[0]], {'name': 'Pier 1', 'tag': 'P1'}))
-    history.execute(SetRecordCommand([groups[1]], {'name': 'Pier 2', 'tag': 'P2'}))
-    dialog = RecordDialog(None, groups[0].ifc, registry())
-    dialog.predefined.setCurrentText('PILASTER'); dialog.submit()
-    assert dialog.patch == {'predefined_type': 'PILASTER'}
-    history.execute(SetRecordCommand(groups, dialog.patch))
-    assert [g.ifc['name'] for g in groups] == ['Pier 1', 'Pier 2']
-    assert [g.ifc['tag'] for g in groups] == ['P1', 'P2']
-    assert all(g.ifc['predefined_type'] == 'PILASTER' for g in groups)
-    # A fresh record keeps its class even when the default was not touched.
-    fresh = RecordDialog(None, None, registry()); fresh.submit()
-    assert fresh.patch == {'class': 'IfcWall'}
+def test_dialog_patch_carries_only_what_changed(native_host):
+    groups = _selection(native_host, "Pier 1", "Pier 2")
+    for i, group in enumerate(groups, 1):
+        _edit(native_host, "fields", [group], {"class": "IfcColumn", "name": group.name, "tag": f"P{i}"})
+    _edit(native_host, "fields", groups, {"predefined_type": "PILASTER"})
+    assert [g.ifc["name"] for g in groups] == ["Pier 1", "Pier 2"]
+    assert [g.ifc["tag"] for g in groups] == ["P1", "P2"]
+    assert all(g.ifc["predefined_type"] == "PILASTER" for g in groups)
+    fresh = _selection(native_host, "Wall")
+    _edit(native_host, "fields", fresh, {})
+    assert fresh[0].ifc["class"] == "IfcWall"
+
+
+def test_membership_changes_preserve_other_objects_codes_and_undo_once(native_host):
+    a, b = groups = _selection(native_host, "A", "B")
+    history = native_host.viewport.history
+    _edit(native_host, "classification", [a], ["discipline", "A", "Architectural", True])
+    _edit(native_host, "classification", groups, ["discipline", "S", "Structure", True])
+    assert [c["code"] for c in a.ifc["classifications"]] == ["A", "S"]
+    assert [c["code"] for c in b.ifc["classifications"]] == ["S"]
+    _edit(native_host, "system", groups, ["ride", True])
+    assert all(g.ifc["systems"] == ["ride"] for g in groups)
+    _edit(native_host, "system", [b], ["ride", False])
+    assert not b.ifc["systems"] and a.ifc["systems"] == ["ride"]
+    _edit(native_host, "classification", groups, ["discipline", "S", "", False])
+    assert [c["code"] for c in a.ifc["classifications"]] == ["A"]
+    assert not b.ifc["classifications"]
+    assert history.undo()
+    assert all(g.ifc["classifications"][-1]["code"] == "S" for g in groups)
 
 
 def test_first_inspection_is_lazy_and_measuring_catches_up(native_host, monkeypatch):

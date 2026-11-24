@@ -23,22 +23,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QColor
-from PySide6.QtWidgets import (
-    QApplication,
-    QDialog,
-    QHBoxLayout,
-    QHeaderView,
-    QLabel,
-    QPushButton,
-    QTabWidget,
-    QTableWidget,
-    QTableWidgetItem,
-    QVBoxLayout,
-    QWidget,
-)
-
 from core import bim
 from core.i18n import tr
 from tools.base import Tool
@@ -221,108 +205,26 @@ def _stats_to_text(stats: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Dialog
+# Native statistics panel
 # ---------------------------------------------------------------------------
 
-def _make_table(headers: list[str]) -> QTableWidget:
-    """The dialog's uniform read-only table (no edit, no selection)."""
-    t = QTableWidget()
-    t.setColumnCount(len(headers))
-    t.setHorizontalHeaderLabels(headers)
-    t.horizontalHeader().setStretchLastSection(True)
-    t.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
-    t.verticalHeader().setVisible(False)
-    t.setEditTriggers(QTableWidget.NoEditTriggers)
-    t.setAlternatingRowColors(True)
-    t.setSelectionMode(QTableWidget.NoSelection)
-    return t
+class ModelInfoPanel:
+    id, title, slot = "statistics", tr("Model Info"), "utility"
 
+    def __init__(self, app, invalidate):
+        self.app = app
+        self.invalidate = invalidate
 
-class ModelInfoDialog(QDialog):
-    """Tabbed, read-only model statistics."""
+    def sections(self):
+        from core.plugin_panels import field, item, section
 
-    @property
-    def _viewport(self):
-        """The viewport of the project in front (projects in tabs, #1066):
-        the one handed in at setup may be a tab in the back, or closed."""
-        return self._live_viewport()
+        s = _collect_stats(self.app.scene)
+        style = s["style"]
 
-    def __init__(self, viewport, parent=None) -> None:
-        super().__init__(parent or viewport.window())
-        from views.documents import live_viewport
-        self._live_viewport = live_viewport(viewport)
-        self.setWindowTitle(tr("Model Info"))
-        self.setMinimumSize(480, 520)
-        self.resize(520, 600)
-        self._build_ui()
-        self._refresh()
+        def table(key, columns, data):
+            return item("table", key, columns=list(map(tr, columns)),
+                        rows=[dict(key=str(i), cells=list(row)) for i, row in enumerate(data)])
 
-    # ---- Layout ------------------------------------------------------------
-    def _build_ui(self) -> None:
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(8)
-
-        self._tabs = QTabWidget()
-        layout.addWidget(self._tabs, stretch=1)
-
-        # Geometry tab
-        geom_tab = QWidget()
-        gl = QVBoxLayout(geom_tab)
-        self._geom_table = _make_table([tr("Property"), tr("Value")])
-        gl.addWidget(self._geom_table)
-        self._tabs.addTab(geom_tab, tr("Geometry"))
-
-        # Materials & layers tab
-        mat_tab = QWidget()
-        ml = QVBoxLayout(mat_tab)
-        ml.addWidget(QLabel(tr("Materials in use")))
-        self._mat_table = _make_table(
-            [tr("Material"), tr("Faces"), tr("Area")])
-        ml.addWidget(self._mat_table, stretch=1)
-        ml.addWidget(QLabel(tr("Layers")))
-        self._layer_table = _make_table(
-            [tr("Layer"), tr("Visible"), tr("Locked")])
-        ml.addWidget(self._layer_table, stretch=1)
-        self._tabs.addTab(mat_tab, tr("Materials & Layers"))
-
-        # BIM tab
-        bim_tab = QWidget()
-        bl = QVBoxLayout(bim_tab)
-        self._bim_label = QLabel()
-        bl.addWidget(self._bim_label)
-        self._bim_table = _make_table(
-            [tr("IFC Class"), tr("Name"), tr("Area"), tr("Volume")])
-        bl.addWidget(self._bim_table, stretch=1)
-        self._no_bim_label = QLabel(tr(
-            "No BIM tags yet.\nSelect faces or a group and use the BIM "
-            "panel to assign an IFC class\n(IfcWall, IfcSlab, ...); tagged "
-            "objects export to .ifc with their quantities."))
-        self._no_bim_label.setAlignment(Qt.AlignCenter)
-        bl.addWidget(self._no_bim_label)
-        self._tabs.addTab(bim_tab, tr("BIM"))
-
-        btn_row = QHBoxLayout()
-        refresh_btn = QPushButton(tr("Refresh"))
-        refresh_btn.clicked.connect(self._refresh)
-        btn_row.addWidget(refresh_btn)
-        copy_btn = QPushButton(tr("Copy to clipboard"))
-        copy_btn.clicked.connect(self._copy_to_clipboard)
-        btn_row.addWidget(copy_btn)
-        close_btn = QPushButton(tr("Close"))
-        close_btn.clicked.connect(self.close)
-        btn_row.addWidget(close_btn)
-        layout.addLayout(btn_row)
-
-    # ---- Data refresh ------------------------------------------------------
-    def _refresh(self) -> None:
-        self._stats = _collect_stats(self._viewport.scene)
-        self._populate_geom()
-        self._populate_materials()
-        self._populate_bim()
-
-    def _populate_geom(self) -> None:
-        s, style = self._stats, self._stats["style"]
         rows = [
             (tr("TOTALS"), ""),
             (tr("Vertices"), f"{s['total_verts']:,}"),
@@ -349,95 +251,39 @@ class ModelInfoDialog(QDialog):
             (tr("Saved views"), str(s["saved_views_count"])),
             (tr("Geo paths"), str(s["geo_paths_count"])),
         ]
-        table = self._geom_table
-        table.setRowCount(len(rows))
-        for i, (prop, val) in enumerate(rows):
-            p_item = QTableWidgetItem(prop)
-            if not val:                      # section header row
-                font = p_item.font()
-                font.setBold(True)
-                p_item.setFont(font)
-            table.setItem(i, 0, p_item)
-            table.setItem(i, 1, QTableWidgetItem(val))
-        table.resizeRowsToContents()
+        materials = []
+        swatches = []
+        for m in s["textures"]:
+            materials.append((m.get("mat") or m["name"], str(m["faces"]), fmt_area(m["area"])))
+        for i, m in enumerate(s["colors"]):
+            rgb = [round(c * 255) for c in m["rgb"][:3]]
+            label = m.get("mat") or "rgb(%d,%d,%d)" % tuple(rgb)
+            materials.append((label, str(m["faces"]), fmt_area(m["area"])))
+            swatches.append(field(f"swatch{i}", label, "colour", rgb, enabled=False))
+        layers = [(ly["name"], "✓" if ly["visible"] else "✗", "✓" if ly["locked"] else "—")
+                  for ly in s["layers"]]
+        objects = [(o["class"], o["name"], fmt_area(o["area"]),
+                    fmt_volume(o["volume"]) if o["volume"] is not None else tr("(not watertight)"))
+                   for o in s["bim_objects"]]
+        return [
+            section("geometry", tr("Geometry"), table("counts", ["Property", "Value"], rows),
+                    item("button", "copy", tr("Copy to Clipboard"))),
+            section("materials", tr("Materials in use"),
+                    table("takeoff", ["Material", "Faces", "Area"], materials), *swatches),
+            section("layers", tr("Layers"), table("layer_list", ["Name", "Visible", "Locked"], layers)),
+            section("bim", tr("BIM objects"), table("objects", ["Class", "Name", "Area", "Volume"], objects)),
+        ]
 
-    def _populate_materials(self) -> None:
-        s = self._stats
-        mats = ([{"label": m.get("mat") or m["name"], "swatch": None, **m}
-                 for m in s["textures"]]
-                + [{"label": m.get("mat") or "", "swatch": m["rgb"], **m}
-                   for m in s["colors"]])
-        # Named materials first, biggest painted area first — the order a
-        # finishes takeoff reads in.
-        mats.sort(key=lambda m: (0 if m.get("mat") else 1, -m["area"]))
-        self._mat_table.setRowCount(max(len(mats), 1))
-        if not mats:
-            self._mat_table.setItem(
-                0, 0, QTableWidgetItem(tr("(none)")))
-            self._mat_table.setItem(0, 1, QTableWidgetItem(""))
-            self._mat_table.setItem(0, 2, QTableWidgetItem(""))
-        for i, m in enumerate(mats):
-            name_item = QTableWidgetItem(m["label"])
-            if m["swatch"] is not None:
-                rgb = m["swatch"][:3]
-                name_item.setBackground(QColor.fromRgbF(*rgb))
-                if not m["label"]:
-                    r, g, b = (int(round(c * 255)) for c in rgb)
-                    name_item.setText(f"rgb({r},{g},{b})")
-                # Legible over any swatch colour.
-                lum = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
-                name_item.setForeground(
-                    QColor("black") if lum > 0.5 else QColor("white"))
-            self._mat_table.setItem(i, 0, name_item)
-            self._mat_table.setItem(
-                i, 1, QTableWidgetItem(f"{m['faces']:,}"))
-            self._mat_table.setItem(
-                i, 2, QTableWidgetItem(f"{fmt_area(m['area'])}"))
-        self._mat_table.resizeRowsToContents()
-
-        layers = s["layers"]
-        self._layer_table.setRowCount(len(layers))
-        for i, ly in enumerate(layers):
-            self._layer_table.setItem(i, 0, QTableWidgetItem(ly["name"]))
-            vis = QTableWidgetItem("✓" if ly["visible"] else "✗")
-            vis.setTextAlignment(Qt.AlignCenter)
-            self._layer_table.setItem(i, 1, vis)
-            lock = QTableWidgetItem("🔒" if ly["locked"] else "—")
-            lock.setTextAlignment(Qt.AlignCenter)
-            self._layer_table.setItem(i, 2, lock)
-        self._layer_table.resizeRowsToContents()
-
-    def _populate_bim(self) -> None:
-        objects = self._stats["bim_objects"]
-        by_class = self._stats["bim_by_class"]
-        summary = "   ".join(f"{c}: {n}" for c, n in sorted(by_class.items()))
-        self._bim_label.setText(
-            tr("BIM objects: {n}", n=len(objects))
-            + (f"   ({summary})" if summary else ""))
-        self._bim_table.setVisible(bool(objects))
-        self._no_bim_label.setVisible(not objects)
-        self._bim_table.setRowCount(len(objects))
-        for i, o in enumerate(objects):
-            self._bim_table.setItem(i, 0, QTableWidgetItem(o["class"]))
-            self._bim_table.setItem(i, 1, QTableWidgetItem(o["name"]))
-            self._bim_table.setItem(
-                i, 2, QTableWidgetItem(f"{fmt_area(o['area'])}"))
-            vol = (fmt_volume(o['volume']) if o["volume"] is not None
-                   else tr("(not watertight)"))
-            self._bim_table.setItem(i, 3, QTableWidgetItem(vol))
-        self._bim_table.resizeRowsToContents()
-
-    # ---- Clipboard ---------------------------------------------------------
-    def _copy_to_clipboard(self) -> None:
-        QApplication.clipboard().setText(_stats_to_text(self._stats))
-        self.setWindowTitle(tr("Model Info") + " — " + tr("copied!"))
-        QTimer.singleShot(
-            1500, lambda: self.setWindowTitle(tr("Model Info")))
+    def event(self, control, event, value):
+        if (control, event) == ("copy", "invoke"):
+            from app_shell.native import pasteboard_write
+            text = _stats_to_text(_collect_stats(self.app.scene))
+            if not pasteboard_write([("public.utf8-plain-text", text.encode())]):
+                raise RuntimeError(tr("Could not copy to clipboard"))
 
 
-# ---------------------------------------------------------------------------
-# Tool registration (the plugin entry point)
-# ---------------------------------------------------------------------------
+create_panel = ModelInfoPanel
+
 
 class ModelInfoTool(Tool):
     """Extensions-menu tool that opens the Model Info dialog."""
@@ -449,7 +295,8 @@ class ModelInfoTool(Tool):
     uses_snap = False
 
     def on_activate(self, viewport) -> None:
-        ModelInfoDialog(viewport, parent=viewport.window()).exec()
+        from core.plugin_panels import open_panel
+        open_panel(viewport.window(), "model_info")
 
     def on_deactivate(self, viewport) -> None:
         pass

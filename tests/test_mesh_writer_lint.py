@@ -33,7 +33,7 @@ def writes_topology(node):
 
 def test_no_direct_topology_writes_outside_kernel():
     violations = []
-    paths = [ROOT / "main.py"]
+    paths = list(ROOT.glob("*.py"))
     for folder in ("analysis", "core", "formats", "georef", "materials",
                    "plugins", "resources", "styles", "tools", "views"):
         paths.extend((ROOT / folder).rglob("*.py"))

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_render import chrome_sheet
-from views.shortcuts import action_keys, collect_actions
+from core.shortcuts import action_keys, collect_actions
 
 
 def test_preferences_has_ctrl_comma(native_host):

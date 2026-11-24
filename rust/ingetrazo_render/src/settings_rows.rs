@@ -1105,8 +1105,17 @@ pub fn section_groups<'py>(py: Python<'py>, env: &Bound<'py, PyAny>, section: &s
         "import" => import(py, env),
         "units" => _units(env),
         "dimensions" => dimensions(py, env),
-        "appearance" => appearance::groups(py, env),
-        "location" => location(py, env),
+        "appearance" => {
+            let groups = appearance::groups(py, env)?;
+            crate::model_panels::model_appearance::append(py, env, &groups)?;
+            crate::model_panels::shadows::append(py, env, &groups)?;
+            Ok(groups)
+        },
+        "location" => {
+            let groups = location(py, env)?;
+            crate::model_panels::basemap::append(py, env, &groups)?;
+            Ok(groups)
+        },
         other => Err(pyo3::exceptions::PyKeyError::new_err(other.to_owned())),
     }
 }

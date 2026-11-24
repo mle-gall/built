@@ -7,17 +7,7 @@
 #
 #     packaging/build-macos-app.sh [outdir]
 #
-# Needs: the project venv with the runtime deps (PyInstaller is installed
-# on first run if missing). No Xcode project — PyInstaller freezes main.py
-# straight from ingetrazo.spec, whose BUNDLE() step (macOS-only, see the
-# bottom of the spec) produces the .app; `hdiutil`/`iconutil`, part of every
-# macOS install, make the icon and the .dmg. (Sibling of
-# packaging/build-appimage.sh; same shape, different OS.)
-#
-# Ad-hoc signed only (no Developer ID / notarization here): Gatekeeper will
-# still show the "unidentified developer" prompt on a machine that isn't
-# this one — right-click > Open the first time, same as the README already
-# tells a source-build user.
+# Uses the same native bundle builder as the installed macOS app.
 set -euo pipefail
 
 ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
@@ -28,35 +18,12 @@ ARCH=$(uname -m)   # arm64 or x86_64 — whichever Mac builds it
 
 cd "$ROOT"
 VERSION=$("$PYTHON" -c 'from core.version import __version__; print(__version__)')
-BUILD_APP="$WORK/pyi/Built.app"
 APP="$OUT/Built.app"
 DMG="$OUT/Built-$VERSION-macos-$ARCH.dmg"
 
 echo "==> Built $VERSION -> $DMG"
 
-echo "==> icon (.icns from the committed PNGs, via iconutil)"
-# The Windows .ico is built by scripts/gen_app_icon.py + ImageMagick/Inkscape;
-# .icns only needs macOS's own iconutil, so it is generated here rather than
-# committed — one less binary in git, and every Mac already has the tool.
-bash packaging/macos-icon.sh "$ROOT" "$WORK"
-
-echo "==> PyInstaller"
-"$PYTHON" -m PyInstaller --version >/dev/null 2>&1 \
-    || "$PYTHON" -m pip install --quiet pyinstaller
-rm -rf "$BUILD_APP" "$WORK/pyi"
-"$PYTHON" -m PyInstaller --noconfirm \
-    --distpath "$WORK/pyi" --workpath "$WORK/pyi-work" \
-    ingetrazo.spec
-
-echo "==> the bundle finds its own data"
-# Before wrapping it in a .dmg, ask the bundle itself. A missing shader or
-# texture starts fine and only fails when the user needs it.
-"$PYTHON" scripts/isolated_launch.py "$BUILD_APP/Contents/MacOS/ingetrazo" --check
-
-echo "==> .app"
-mkdir -p "$OUT"
-rm -rf "$APP"
-cp -R "$BUILD_APP" "$APP"
+PYO3_PYTHON="$(command -v "$PYTHON")" packaging/build-macos-native.sh "$OUT"
 
 echo "==> .dmg"
 # A staging folder with the .app plus a symlink to /Applications is what

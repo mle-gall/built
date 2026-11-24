@@ -7,7 +7,7 @@ from __future__ import annotations
 import pytest
 from core.settings import settings
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from views import shortcuts as sc
+from core import shortcuts as sc
 
 
 @pytest.fixture
@@ -32,7 +32,7 @@ def test_export_then_import_brings_the_keys_back(ventana):
     assert data["format"] == sc.EXPORT_FORMAT
     assert data["shortcuts"][key] == "Ctrl+Alt+L"
     # Another machine: factory keys.
-    line.setShortcuts(sc.default_shortcuts(line))
+    line.setShortcuts(sc.default_keys(line))
     settings().remove("shortcuts")
     applied, skipped, _clashes = sc.import_shortcuts(ventana, data)
     assert applied > 0 and skipped == 0

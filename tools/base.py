@@ -14,6 +14,8 @@ position, keyboard modifiers and the snap metadata.
 """
 from __future__ import annotations
 
+from ingetrazo_core import register_tool_adapter, register_tool_functions
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
@@ -33,6 +35,7 @@ from core.axes import AXES as PLANE_LOCK_AXES  # noqa: E402
 PLANE_LOCK_NAMES = {"x": "YZ", "y": "XZ", "z": "XY"}
 
 
+@register_tool_adapter
 class AxisMagnet:
     """The Line tool's axis magnet, for the other drawing tools.
 
@@ -63,39 +66,8 @@ class AxisMagnet:
     _MAGNET_DEG = 3.0
     _MAGNET_PX = 9.0
 
-    def magnet_on(self) -> bool:
-        return True
 
-    def magnet_off_plane(self) -> bool:
-        """Whether an inference may take the point OFF the plane the tool
-        is drawing on.
-
-        A shape that LIVES in one plane (``PlaneLock``: circle, polygon,
-        the arcs, the rotated rectangle) says no: the snap engine then
-        keeps the magnet — world and screen detectors alike — on the axes
-        the plane HOLDS (``axis_in_plane``). Over a face, following the one
-        axis the plane cannot hold (its own normal) left the rim off the
-        face while the radius was measured in it, and the circle came out
-        «a metade ou menos ainda» (Marco, #545). A Line, a Text and a
-        Dimension are free placements and may leave the plane.
-        """
-        return not isinstance(self, PlaneLock)
-
-    @property
-    def magnetic_axis_deg(self):
-        return self._MAGNET_DEG if self.magnet_on() else None
-
-    @property
-    def screen_axis_px(self):
-        """The pixel-space detector's threshold (9 px), for every magnetised
-        tool. A planar shape's answer stays confined to its plane by the
-        snap engine's ``axis_in_plane``, so here it only widens the capture
-        from the 3° world cone to the screen's 9 px (#962)."""
-        if not self.magnet_on():
-            return None
-        return self._MAGNET_PX
-
-
+@register_tool_adapter
 class PlaneLock:
     """Arrow keys BEFORE the first click lock a planar tool (circle,
     polygon, rectangle, the arcs) to a drawing plane: Right = the plane
@@ -151,214 +123,20 @@ class PlaneLock:
     #: reads (``RotatedRectangleTool._width_dir``).
     plane_lock_after_the_first_point: bool = True
 
-    @property
-    def _plane_state(self):
-        state = self.__dict__.get("_plane_state_rs")
-        if state is None:
-            from ingetrazo_core import PlaneLock as _State
-            state = self.__dict__["_plane_state_rs"] = _State()
-        return state
-
-    @property
-    def plane_lock(self):
-        return self._plane_state.plane_lock
-
-    @plane_lock.setter
-    def plane_lock(self, axis):
-        self._plane_state.plane_lock = axis
-
-    @property
-    def plane_ref(self):
-        return self._plane_state.plane_ref
-
-    @plane_ref.setter
-    def plane_ref(self, ref):
-        self._plane_state.plane_ref = ref
-
-    @property
-    def hover_plane(self):
-        return self._plane_state.hover_plane
-
-    @hover_plane.setter
-    def hover_plane(self, plane):
-        self._plane_state.hover_plane = plane
-
-    def note_plane(self, viewport) -> None:
-        """Remember the plane the viewport just hit — call on every hover
-        and click before using the point."""
-        plane = getattr(viewport, "_last_work_plane", None)
-        if plane is not None:
-            self.hover_plane = plane
-
-    def drawing_plane(self):
-        """``(point, normal)`` the shape is laid out on: the captured or
-        locked plane — unless a snapped point says otherwise (see
-        ``snapped_plane``) — else the plane of the last hit, else the
-        ground."""
-        plane = self._own_plane()
-        snapped = self.snapped_plane(plane)
-        return snapped if snapped is not None else plane
-
-    def _own_plane(self):
-        """The captured plane, else the last hit's, else the context's ground."""
-        from core import axes
-        return self._plane_state.own_plane(self.work_plane, axes.frame())
-
     #: How far off the drawing plane a point must be to count as pointing
     #: ELSEWHERE. The free cursor lies on the plane by construction, so
     #: only a snap (endpoint, midpoint…) gets this far.
     OFF_PLANE_TOL = 1e-3
 
-    def plane_points(self) -> list:
-        """The points the shape must pass through, first click first — the
-        clicked ones and the one under the cursor. A tool opts in to
-        ``snapped_plane`` by listing them; the default opts out."""
-        return []
-
-    def snapped_plane(self, plane):
-        """The plane the shape's points ask for when a SNAPPED one lies off
-        ``plane``, or ``None`` to keep ``plane``.
-
-        Filling a window opening (2026-09-29): first point on the midpoint
-        of one jamb's depth edge, the next on the midpoint of the other.
-        The first click captured the jamb face, where those two points
-        share a vertical line: a rectangle «0.00 × 2.41 m», a circle whose
-        rim missed the point, arcs that ended on the wrong jamb. Both lie on
-        the wall's middle plane, and that is the plane they get:
-
-        - two points: the axis plane that holds both, when exactly one
-          does (the span has no component along its normal);
-        - three points not in a line: the plane through them.
-
-        An arrow-key lock was asked for explicitly and never yields. A
-        cursor whose snap kind positively names a face (not a point of the
-        model, ``core.snap.POINT_SNAP_KINDS``) keeps that face's plane
-        (#545); no kind known keeps the older rule: the points decide.
-        The rule is Rust's (``PlaneLock.snapped``)."""
-        from core import axes
-        names_point = None if self.snap_kind is None else self.snap_kind in POINT_SNAP_KINDS
-        return self._plane_state.snapped(plane, self.plane_points(), names_point, axes.frame())
-
-    def adopt_snapped_plane(self) -> None:
-        """Make the snapped plane the captured one — call when a point that
-        is NOT the last is clicked, so the cursor rays for the next point
-        land on the new plane instead of the old one."""
-        snapped = self.snapped_plane(self._own_plane())
-        if snapped is not None:
-            self.work_plane = snapped
-
     #: Radius (circle) / half-side (rectangle) of the cursor preview, px.
     PREVIEW_PX = 22
 
-    def preview_plane(self, viewport, point: QVector3D):
-        """The plane the shape WOULD take at ``point`` before the first
-        click: the arrow-key lock, else the face under the cursor, else
-        the view's — vertical facing the camera near the horizon, flat
-        otherwise. The classic tool shows this plane on the cursor (a coloured
-        square / ring) so a lock is visible before you commit to it."""
-        locked = self.locked_work_plane(point)
-        if locked is not None:
-            return locked
-        plane = getattr(viewport, "_last_work_plane", None)
-        from core import axes
-        if plane is not None:
-            return QVector3D(point), plane[1]
-        return QVector3D(point), axes.axis("z")
-
     plane_color = staticmethod(cursor_plane_color)
-
-    def lock_color(self):
-        """The rubber band colour for a locked or camera-selected plane."""
-        if self.plane_ref is not None:
-            from core.snap import COLOR_REFERENCE
-            return (*COLOR_REFERENCE, 1.0)
-        if self.plane_lock is not None:
-            from tools.base import PLANE_LOCK_AXES
-            return self.plane_color(PLANE_LOCK_AXES[self.plane_lock])
-        if self.hover_plane is not None:
-            return self.plane_color(self.hover_plane[1])
-        return None
 
     world_per_pixel = staticmethod(cursor_pixel_scale)
     plane_preview_scale = staticmethod(cursor_pixel_scale)
 
-    def plane_lock_key(self, viewport, key: int) -> bool:
-        if (getattr(self, "start_point", None) is not None
-                and not self.plane_lock_after_the_first_point):
-            return False
-        if int(key) == int(Qt.Key_Down):
-            return self.reference_lock_key(viewport)
-        axis = PLANE_LOCK_KEYS.get(int(key))
-        if axis is None:
-            return False
-        return plane_input(self, viewport, axis)
-
-    def reference_lock_key(self, viewport) -> bool:
-        return plane_input(self, viewport, "reference")
-
-    def mark_plane(self, viewport) -> bool:
-        return plane_input(self, viewport, "mark")
-
     hovered_reference = staticmethod(cursor_plane_reference)
-
-    def clear_plane_lock(self) -> None:
-        """Both locks off — the shape spent them, or Esc / deactivation. A
-        held Shift's mark (``plane_ref``) goes with them; its own release
-        then has nothing left to do."""
-        self._plane_state.clear()
-
-    def locked_work_plane(self, point: QVector3D):
-        """``(point, normal)`` of the locked plane through *point* — the
-        arrow-key axis plane or the Down-arrow reference — or ``None``
-        without a lock."""
-        from core import axes
-        return self._plane_state.locked(point, axes.frame())
-
-
-def loop_normal(corners) -> QVector3D:
-    """Newell normal of a closed loop of points (``ingetrazo_core``)."""
-    from ingetrazo_core import loop_normal as native
-    return native(list(corners))
-
-
-def ctrl_clause(active: bool, on: str, off: str) -> str:
-    """The classic two-state modifier clause: «Ctrl = [copy] / original».
-
-    The state in force is the bracketed one, exactly the way the Tape and
-    the Protractor spell out their cycles, so the status bar says which way
-    the modifier is set RIGHT NOW and not just what it can do (Marco,
-    2026-09-17). ``on``/``off`` are source strings handed to ``tr``."""
-    from core.i18n import tr
-    on, off = tr(on), tr(off)
-    return "Ctrl = " + (f"[{on}] / {off}" if active else f"{on} / [{off}]")
-
-
-def face_the_plane(corners, plane_normal):
-    """Wind ``corners`` so the face looks the way its plane does.
-
-    A shape built by walking «along u, then along v» inherits the SIGN of
-    that walk: drag the other diagonal and the face came out backwards
-    (Marco, 2026-09-18), and the back side travels into the .skp and the
-    BIM tagging. A loop lying square to the plane is left as it came
-    (``ingetrazo_core.face_the_plane``)."""
-    from ingetrazo_core import face_the_plane as native
-    return native(list(corners), plane_normal)
-
-
-def retype_open(viewport, cmd) -> bool:
-    """Whether a hot retype may still redo ``cmd``: the command a tool
-    just committed is still the top of the undo stack.
-
-    The retype (type a new measurement right after finishing, #414) undoes
-    that command and commits it again with the new value, so the model
-    keeps ONE undo step however many times the number is retyped. Anything
-    done in between — an undo, another operation — closes the window,
-    because undoing then would take away the wrong thing."""
-    if cmd is None:
-        return False
-    stack = getattr(getattr(viewport, "history", None), "undo_stack", None)
-    return bool(stack) and stack[-1] is cmd
-
 
 @dataclass
 class ToolContext:
@@ -437,7 +215,6 @@ class Tool(ABC):
     def on_deactivate(self, viewport) -> None:
         """Called when the user switches to another tool."""
 
-    # ---- High-level spatial input (overridden by drawing tools) -------------
     def on_click(self, ctx: ToolContext) -> None:
         """Left click at ``ctx.world`` (already snapped)."""
 
@@ -492,7 +269,6 @@ class Tool(ABC):
         (the Eraser) override this; the default is a no-op, so click-driven
         tools are unaffected."""
 
-    # ---- Key dispatch -------------------------------------------------------
     def on_key(self, viewport, key: int, modifiers: Qt.KeyboardModifiers) -> bool:
         """Tool gets first shot at the key. Return True to consume it."""
         return False
@@ -538,7 +314,6 @@ class Tool(ABC):
         if callable(hint):
             hint()
 
-    # ---- Visual feedback hooks ---------------------------------------------
     def rubber_band_lines(self):
         """Return ``[(a, b), ...]`` line segments to draw as the live preview.
 
@@ -571,3 +346,5 @@ class Tool(ABC):
         that have no solid preview default to an empty list.
         """
         return []
+
+register_tool_functions(globals())

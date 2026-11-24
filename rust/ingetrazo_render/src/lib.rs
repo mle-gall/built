@@ -53,6 +53,7 @@ mod model_visibility;
 mod model_clipboard;
 mod group_edit;
 mod tree_grouping;
+mod model_panels;
 mod document_starter;
 mod scene_navigation;
 mod window_services;
@@ -3271,23 +3272,8 @@ fn context_targets(hit: bool, selection: &Bound<'_, PyAny>) -> PyResult<Vec<Py<P
 
 #[pymodule]
 pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    document_bindings::register(m)?;
-    document_registration::register(m)?;
-    document_camera::register(m)?;
-    document_input::register(m)?;
-    document_chunks::register(m)?;
-    document_records::register(m)?;
-    document_state::register(m)?;
-    document_environment::register(m)?;
+    document_registration::register_interaction(m)?;
     document_terrain::register(m)?;
-    document_cache::register(m)?;
-    document_grid::register(m)?;
-    document_edits::register(m)?;
-    document_targets::register(m)?;
-    document_hlr::register(m)?;
-    document_placements::register(m)?;
-    document_annotations::register(m)?;
-    document_planes::register(m)?;
     m.add_class::<tool_instances::InstancePreview>()?;
     window_document::register(m)?;
     close_documents::register(m)?;
@@ -3313,6 +3299,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     context_tools::register(m)?;
     image_edits::register(m)?;
     component_files::register(m)?;
+    model_panels::register_qt_host(m)?;
     m.add_class::<dwg_process::DwgConverter>()?;
     edge_commands::register(m)?;
     face_commands::register(m)?;

@@ -39,3 +39,15 @@ def test_coordinate_and_measurement_texts_are_coalesced(native_host, monkeypatch
     vp._emit_coordinate(SimpleNamespace())
     sync_status_readout(view, "Line", "")
     assert renderer.ui_set_status.call_args.args == ("Line", "", "", "")
+
+
+def test_a_temporary_message_gives_the_tool_hint_back(native_host):
+    win = native_host.window
+    win._activate_tool("line")
+    bar = win.statusBar()
+    standing = bar.currentMessage()
+    assert standing.startswith("Line")
+    win.viewport.flash_status("Temporary message")
+    assert bar.currentMessage() == "Temporary message"
+    bar.clearMessage()
+    assert bar.currentMessage() == standing

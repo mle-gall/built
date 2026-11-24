@@ -13,4 +13,5 @@ export PYTHONPATH="/app/lib/python${PYVER}/site-packages:${PYTHONPATH}"
 # outside the sandbox and answers "/app/ingetrazo not found". Python puts the
 # script's own directory on sys.path, so the imports do not need the cd.
 cd "${HOME:-/}" 2>/dev/null || cd /
-exec python3 /app/ingetrazo/main.py "$@"
+export BUILT_ROOT=/app/ingetrazo
+exec /app/bin/built "$@"

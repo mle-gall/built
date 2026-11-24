@@ -13,8 +13,8 @@ import pytest
 from PySide6.QtGui import QFontDatabase
 from PySide6.QtWidgets import QApplication
 
-from views import script_fonts
-from views.script_fonts import apply_script_font, script_font_for
+from plugins import _widget_language as script_fonts
+from plugins._widget_language import apply_script_font, script_font_for
 
 _app = QApplication.instance() or QApplication([])
 
@@ -83,16 +83,9 @@ def test_apply_leaves_the_font_as_it_was(app_font, lang, platform):
 
 
 def test_startup_hook_runs_with_the_language(app_font, monkeypatch, tmp_path):
-    """main's language loader calls the hook with the chosen language."""
-    import main
+    from plugins._widget_language import apply_widget_language
     seen = []
     monkeypatch.setattr(script_fonts, "apply_script_font",
                         lambda app, lang: seen.append(lang) or False)
-    monkeypatch.setattr(main.i18n, "resolve_language", lambda _c: "lo")
-    monkeypatch.setattr(main, "_install_qt_translator", lambda _l: None)
-    try:
-        main._init_language()
-    finally:
-        main.i18n.set_language("en")
+    apply_widget_language(_app, "lo")
     assert seen == ["lo"]
-    

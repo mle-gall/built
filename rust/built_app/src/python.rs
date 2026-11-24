@@ -32,6 +32,10 @@ impl Layout {
     /// `--root`, else `BUILT_ROOT`, else the checkout this binary was built
     /// from; the venv is `--venv`, `VIRTUAL_ENV`, or `<root>/.venv`.
     pub fn find(root: Option<PathBuf>, venv: Option<PathBuf>) -> Layout {
+        #[cfg(not(target_os = "macos"))]
+        if let Some(bundle) = portable_root() {
+            return Layout { root: bundle, venv: None };
+        }
         let root = root
             .or_else(|| std::env::var_os("BUILT_ROOT").map(PathBuf::from))
             .unwrap_or_else(|| std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."));
@@ -41,6 +45,13 @@ impl Layout {
             .or_else(|| Some(root.join(".venv")).filter(|p| p.is_dir()));
         Layout { root, venv }
     }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn portable_root() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let root = exe.parent()?.join("_internal");
+    root.join("base_library.zip").is_file().then_some(root)
 }
 
 /// Register the renderer module and start the interpreter (once).
@@ -59,12 +70,32 @@ pub fn start(layout: &Layout) -> PyResult<()> {
         // Called once on the main thread before PyO3 attaches.
         unsafe { built_initialize(root.as_ptr(), exe.as_ptr()) };
     }
+    #[cfg(not(target_os = "macos"))]
+    if let Some(root) = portable_root() {
+        let mut paths = vec![root.clone(), root.join("base_library.zip")];
+        for entry in root.read_dir()?.flatten() {
+            let dynload = entry.path().join("lib-dynload");
+            if dynload.is_dir() { paths.push(dynload); }
+        }
+        std::env::set_var("PYTHONPATH", std::env::join_paths(paths)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?);
+        std::env::set_var("PYTHONHOME", root);
+        std::env::set_var("PYTHONNOUSERSITE", "1");
+    }
     #[cfg(not(built_bundle))]
     Python::initialize();
     Python::attach(|py| {
         let sys = py.import("sys")?;
         #[cfg(built_bundle)]
         sys.setattr("_MEIPASS", &layout.root)?;
+        #[cfg(not(target_os = "macos"))]
+        if let Some(root) = portable_root() {
+            sys.setattr("_MEIPASS", &root)?;
+            sys.setattr("frozen", true)?;
+            sys.setattr("executable", std::env::current_exe()?)?;
+            #[cfg(windows)]
+            sys.setattr("_built_dll_directory", py.import("os")?.call_method1("add_dll_directory", (&root,))?)?;
+        }
         let path = sys.getattr("path")?;
         path.call_method1("insert", (0, layout.root.to_string_lossy().to_string()))?;
         sys.setattr("argv", vec!["built".to_string()])?;
@@ -76,7 +107,7 @@ pub fn start(layout: &Layout) -> PyResult<()> {
                 layout.venv.as_ref().map(|v| v.to_string_lossy().to_string()),
             ),
         )?;
-        Ok(())
+        crate::launcher::initialize(py)
     })
 }
 
