@@ -213,6 +213,8 @@ def test_isolate_and_show_all_are_one_undo_step_each():
     assert not wall.hidden and not level1.hidden and not building.hidden
     win.viewport.history.undo()
     assert not (slab.hidden or level2.hidden or tree.hidden)
+    panel.refresh()
+    assert not panel._isolated_now()
     panel.isolate()
     panel.show_all()
     assert not any(g.hidden for g, _p, _d in outliner.walk(scene.groups))
