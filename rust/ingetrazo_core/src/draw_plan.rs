@@ -19,7 +19,7 @@ type Point = [f64; 2];
 fn vertices(it: &Obj<'_>) -> PyResult<Vec<DVec3>> {
     it.try_iter()?.map(|p| xyz(&p?)).collect()
 }
-struct Region {
+pub(crate) struct Region {
     origin: DVec3,
     normal: DVec3,
     axes: [DVec3; 2],
@@ -27,7 +27,7 @@ struct Region {
     holes: Vec<(Vec<DVec3>, Vec<Point>)>,
 }
 impl Region {
-    fn new(f: &Obj<'_>) -> PyResult<Self> {
+    pub(crate) fn new(f: &Obj<'_>) -> PyResult<Self> {
         let outer = vertices(&f.getattr("vertices")?)?;
         let normal = xyz(&f.call_method0("normal")?)?;
         let [x, y, z] = normal.to_array();
@@ -53,6 +53,12 @@ impl Region {
     fn solid(&self, p: DVec3) -> bool {
         let p = self.project(p);
         inside(p, &self.outer, false) && !self.holes.iter().any(|(_, hole)| inside(p, hole, false))
+    }
+    pub(crate) fn contacts(&self, a: DVec3, b: DVec3) -> bool {
+        self.normal.length_squared() > 0.5
+            && (a - self.origin).dot(self.normal).abs() < 1e-4
+            && (b - self.origin).dot(self.normal).abs() < 1e-4
+            && [a, b, (a + b) * 0.5].iter().any(|&p| self.solid(p))
     }
     fn holds(&self, ring: &[Point], cycle: &[DVec3]) -> bool {
         cycle.iter().all(|&p| {

@@ -62,29 +62,7 @@ def same_position(p: QVector3D, q: QVector3D) -> bool:
     return _key(p) == _key(q)
 
 
-def find_duplicate_edge(
-    edges: Iterable[Edge], a: QVector3D, b: QVector3D
-) -> Optional[Edge]:
-    """Return an existing edge whose endpoints coincide with segment ``a``–``b``.
-
-    Orientation-independent: an edge stored as ``b``–``a`` still matches.
-    Coincidence uses the same tolerant position key as the cycle finder, so
-    two endpoints within ≈ 0.1 mm weld to the same node. A degenerate
-    (zero-length) query never matches. Returns ``None`` if no duplicate
-    exists. This is the primitive behind the classic auto-merge: drawing
-    an edge that already exists reuses it instead of stacking a duplicate.
-    """
-    ka, kb = _key(a), _key(b)
-    if ka == kb:
-        return None
-    target = frozenset((ka, kb))
-    for edge in edges:
-        ea, eb = _key(edge.a), _key(edge.b)
-        if ea == eb:
-            continue
-        if frozenset((ea, eb)) == target:
-            return edge
-    return None
+find_duplicate_edge = kernel.object_drawing.find_duplicate_edge
 
 
 def find_smallest_cycle_through(
@@ -171,10 +149,7 @@ class CycleGraph:
         if self._scan is not None:
             sc = self._scan
             self._scan = None
-            n = sc._sc.native.counts()[1]
-            for edge in sc._sc.edges(i for i in range(n) if i not in sc._dead):
-                self.add(edge)
-            for edge in sc._extra:
+            for edge in sc.all_elements():
                 self.add(edge)
         return self._adj
 
