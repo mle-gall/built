@@ -116,22 +116,6 @@ def natural_key(text: str) -> tuple:
                  if part)
 
 
-def walk_by_name(groups) -> list:
-    """``(group, parent, depth)`` as :func:`walk`, each container's children
-    by name with the numbers read as numbers («Oct 26» before «Oct 28»,
-    «Muro 2» before «Muro 10»); equal names as the document holds them.
-    Siblings only: a group stays inside its parent. The model is not
-    touched — this is a way of reading it."""
-    def container(items, parent, depth):
-        out = []
-        for g in sorted(items, key=lambda g: natural_key(g.name or "")):
-            out.append((g, parent, depth))
-            out.extend(container(getattr(g, "children", None) or (),
-                                 g, depth + 1))
-        return out
-    return container(list(groups), None, 0)
-
-
 def layer_outline(scene) -> list:
     """``(kind, name, depth)`` of the Layers tab's rows — ``kind``
     ``"folder"`` or ``"layer"`` — as it lists them with «Sort by order

@@ -893,6 +893,7 @@ def test_scene_menu_reads_saved_frame_pixels_without_touching_live_lens(host, mo
     assert render_scene_photo(host.window, json.dumps([*valid[:2], "gone"])) is None
     assert not called
     w, h, rgba = render_scene_photo(host.window, json.dumps(valid))
+    assert getattr(host.window, "_composer", None) is None
     assert len(called) == 1 and (w, h) == (96, 64)
     assert list(rgba[:4]) == [200, 2, 3, 255] and list(rgba[-4:]) == [3, 4, 205, 255]
     assert host.viewport.camera.lens_dict() == lens

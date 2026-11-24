@@ -143,6 +143,18 @@ mod tests {
     }
 
     #[test]
+    fn equal_names_keep_their_document_order_within_each_parent() {
+        let rows = [
+            node("i:b", "Pieza", 0, 1, 0),
+            node("i:c", "Casa", 0, 1, 0),
+            node("c:d", "Hijo 10", 1, 1, 0),
+            node("c:e", "Hijo 2", 1, 1, 0),
+            node("i:a", "Pieza", 0, 1, 0),
+        ];
+        assert_eq!(Sort::Name.order(&rows), [1, 3, 2, 0, 4]);
+    }
+
+    #[test]
     fn sorting_keeps_the_default_geometry_first() {
         let rows = [
             node("preview-tag:Z", "zeta", 0, 1, 0),

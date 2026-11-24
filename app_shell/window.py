@@ -156,8 +156,7 @@ class ShellProjectTabs:
 
 
 class ShellScenes:
-    """The Scenes panel's verbs the bottom bar's scene chips call
-    (views/tray.py ScenesPanel), over core's own scene commands."""
+    """Bind the scene chooser to the current camera and document commands."""
 
     def __init__(self, win):
         self._win = win
@@ -167,7 +166,6 @@ class ShellScenes:
 
     def _touch(self):
         vp = self._vp()
-        vp.scene.version += 1
         vp.notify_scene_changed()
         vp.update()
         view = self._win._doc.stand_in
@@ -190,6 +188,7 @@ class ShellScenes:
     def finish_view(self, view, camera=True):
         if view is None:
             return
+        from ingetrazo_core import presentation
         from core.saved_views import shown_state
         vp = self._vp()
         scene = vp.scene
@@ -198,8 +197,10 @@ class ShellScenes:
             view.apply(scene, vp.camera, self._win.set_active_style)
         else:
             view.apply_state(scene, self._win.set_active_style)
+        presentation.recall_scene_display(vp, view)
         self._win._scene_tabs.mark_view(view)
         if shown_state(scene) != before:
+            scene.version += 1
             self._touch()
         else:
             vp.update()
@@ -211,12 +212,15 @@ class ShellScenes:
     activate_view = finish_view
 
     def add_scene(self):
+        marked = self._win._scene_tabs.marked_view()
+        return self.add_scene_in_folder(getattr(marked, "folder", None))
+
+    def add_scene_in_folder(self, folder):
         from core.i18n import tr
         from core.protocol.commands import edit_saved_scene
         vp = self._vp()
-        marked = self._win._scene_tabs.marked_view()
         result = edit_saved_scene(vp.history, "add", name=tr("Scene"), camera=vp.camera,
-                                  style=self._win.active_style(), folder=getattr(marked, "folder", None))
+                                  style=self._win.active_style(), folder=folder or None)
         if not result["ok"]:
             return None
         view = vp.scene.saved_views[result["index"]]

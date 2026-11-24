@@ -16,6 +16,7 @@ from PySide6.QtWidgets import QApplication
 from core import outliner
 from core.group import Group, copy_group
 from core.mesh import Mesh
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.test_project_occurrences import _box, _building, _group, _random_tree, _two_planes
 from views.outliner import COL_EYE, COL_LAYER, COL_TYPE
 
@@ -234,8 +235,9 @@ def test_the_footer_counts_and_follows_the_filter():
 
 # ---- Rename, links, live refresh (2D) ----------------------------------------
 
-def test_renaming_a_scene_carries_its_sheet_views_along():
-    win, scene, panel = _window_with()
+def test_renaming_a_scene_carries_its_sheet_views_along(native_host):
+    win = native_host.window
+    scene = win.viewport.scene
     a101, a102 = _sheets_model(win)
     view = scene.saved_views[0]
     assert outliner.rename_scene(scene, view, "Ground floor")
@@ -245,17 +247,17 @@ def test_renaming_a_scene_carries_its_sheet_views_along():
     # A name another scene has is refused, and nothing moves.
     assert not outliner.rename_scene(scene, view, "North elevation")
     assert view.name == "Ground floor"
-    _close(win)
 
 
-def test_the_scenes_panel_rename_no_longer_orphans_sheet_views():
-    win, scene, panel = _window_with()
-    a101, _a102 = _sheets_model(win)
-    scenes = win.tray.scenes
-    scenes.refresh()
-    scenes.scene_rows()[0].setText(0, "Ground floor")
-    assert a101.frames[0].view_key == "scene:Ground floor"
-    _close(win)
+def test_the_scenes_panel_rename_no_longer_orphans_sheet_views(native_host):
+    from tests.scene_controls import choose, prompt
+    win = native_host.window
+    first, second = _sheets_model(win)
+    choose(win, 0)
+    prompt(win, "scene_rename", "yes", "Ground floor")
+    for page in (first, second):
+        assert page.frames[0].view_key == "scene:Ground floor"
+        assert not outliner.is_orphan(win.viewport.scene, page.frames[0])
 
 
 # ---- Re-nesting (drag and drop, Tab / Shift+Tab) ----------------------------
@@ -280,20 +282,6 @@ def test_the_fill_colour_comes_from_the_styles_panel_picker():
 
 
 # ---- A cut's own fill, renaming planes, column widths -----------------------
-
-def test_the_name_column_width_is_the_users_and_is_remembered():
-    from PySide6.QtWidgets import QHeaderView
-    win, scene, panel = _window_with()
-    head = panel.tree.header()
-    assert head.sectionResizeMode(0) == QHeaderView.Interactive
-    panel._header_pressed = True        # a drag on the header, mouse down
-    head.resizeSection(0, 321)
-    panel._header_pressed = False
-    _close(win)
-    win2, scene2, panel2 = _window_with()
-    assert panel2.tree.header().sectionSize(0) == 321
-    _close(win2)
-
 
 # ---- 8 · What an extension says a group is ------------------------------------
 

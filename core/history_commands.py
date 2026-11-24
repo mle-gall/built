@@ -2024,7 +2024,12 @@ class ExplodeCurvesCommand(MeshCommand):
         scene.version += 1
 
 
-class AddSceneCommand(Command):
+class SavedSceneCommand(Command):
+    def doc_after(self, scene, phase):
+        _presentation.bump_scene_catalog(scene)
+
+
+class AddSceneCommand(SavedSceneCommand):
     """A saved scene into the list — a new one, or a copy (Duplicate) —
     at ``index`` (``None``: at the end), with the rest of its folder;
     undo takes it away again. Renamed in
@@ -2038,14 +2043,14 @@ class AddSceneCommand(Command):
 
     def do(self, scene) -> None:
         _presentation.insert_scene(scene, self.view, self.index)
-        scene.version += 1
+        self.doc_after(scene, None)
 
     def undo(self, scene) -> None:
         _presentation.remove_item(scene.saved_views, self.view)
-        scene.version += 1
+        self.doc_after(scene, None)
 
 
-class DeleteScenesCommand(Command):
+class DeleteScenesCommand(SavedSceneCommand):
     """Delete saved scenes, several at once (#280); undo puts each back in
     its place in the list."""
 
@@ -2057,14 +2062,14 @@ class DeleteScenesCommand(Command):
 
     def do(self, scene) -> None:
         self._at = _presentation.delete_items(scene.saved_views, self.views, None)
-        scene.version += 1
+        self.doc_after(scene, None)
 
     def undo(self, scene) -> None:
         _presentation.restore_items(scene.saved_views, self._at)
-        scene.version += 1
+        self.doc_after(scene, None)
 
 
-class UpdateSceneCommand(Command):
+class UpdateSceneCommand(SavedSceneCommand):
     """Update a scene from the live view, keeping its name; undo gives it
     back what it remembered before (#1158)."""
 
@@ -2079,17 +2084,20 @@ class UpdateSceneCommand(Command):
         self._before: dict = {}
         self._after: Optional[dict] = None
 
+    def doc_after(self, scene, phase):
+        _presentation.bump_scene_catalog(scene, self.view)
+
     def do(self, scene) -> None:
         self._before, self._after = _presentation.update_scene(
             scene, self.view, self.camera, self.style, self._after)
-        scene.version += 1
+        self.doc_after(scene, None)
 
     def undo(self, scene) -> None:
         _presentation.restore_fields(self.view, self._before)
-        scene.version += 1
+        self.doc_after(scene, None)
 
 
-class SceneTreeCommand(Command):
+class SceneTreeCommand(SavedSceneCommand):
     """A change to the Scenes tab's tree — a folder made, renamed or taken
     away, rows dragged into a folder or to another place (#1158). ``change``
     does it with the helpers of :mod:`core.scene_folders` and returns
@@ -2109,12 +2117,12 @@ class SceneTreeCommand(Command):
         if state is None:
             raise CommandRejected("Nothing to change")
         self._before, self._after = state
-        scene.version += 1
+        self.doc_after(scene, None)
 
     def undo(self, scene) -> None:
         from core import scene_folders as SF
         SF.restore(scene, self._before)
-        scene.version += 1
+        self.doc_after(scene, None)
 
 
 class MoveSectionPlanesCommand(Command):

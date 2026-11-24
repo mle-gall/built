@@ -675,9 +675,9 @@ def _own_dock(win, title, name):
 
 
 def test_a_tab_stands_for_its_own_panel_not_for_one_of_the_same_name(win):
-    """An extension's «Scenes» beside the window's own: found by title,
+    """An extension dock with the same title as a built-in dock: found by title,
     the tab of one answered for the other — its menu, its icon."""
-    mine = win.scenes_dock
+    mine = win.layers_dock
     other = _own_dock(win, mine.windowTitle(), "own_scenes")
     docks = [mine, other]
     seen = []

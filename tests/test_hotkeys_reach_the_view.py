@@ -101,14 +101,14 @@ def test_tab_stays_with_the_tool(win):
 
 def test_viewport_set_focus_reaches_the_metal_view(win):
     display = win._doc.stand_in
-    scenes = tree(win.scenes_dock)
-    scenes.setFocus()
+    layers = tree(win.layers_dock)
+    layers.setFocus()
     settle()
-    assert focus() is scenes
-    win.viewport.setFocus()             # what a scene picked in its list does
+    assert focus() is layers
+    win.viewport.setFocus()             # what an action returning focus does
     assert focus() is display
-    scenes.setFocus()
-    QTest.keyClick(scenes, Qt.Key_O)    # Orbit, from its key
+    layers.setFocus()
+    QTest.keyClick(layers, Qt.Key_O)    # Orbit, from its key
     assert win.viewport.nav_mode == "orbit"
     assert focus() is display, focus()
 

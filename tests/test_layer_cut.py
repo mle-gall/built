@@ -213,58 +213,6 @@ def win():
     QSettings().remove("ui/window_geometry")
 
 
-def test_the_cut_column_starts_off_and_a_click_sets_every_selected_row(
-        win, monkeypatch):
-    from PySide6.QtCore import QSettings
-    from views.layers_panel import COL_CUT, LayersPanel
-    panel = win.layers_dock.panel
-    QSettings().remove(LayersPanel.HIDDEN_COLUMNS_KEY)
-    QSettings().remove(LayersPanel.KNOWN_COLUMNS_KEY)
-    panel._apply_column_choice()
-    assert panel.tree.isColumnHidden(COL_CUT)
-    scene = win.viewport.scene
-    scene.layers += [Layer("A"), Layer("B"), Layer("C")]
-    panel.refresh()
-    for n in ("A", "B"):
-        panel.item_for(n).setSelected(True)
-    seen = {}
-
-    def fake_popup(menu, _at):
-        seen["texts"] = [a.text() for a in menu.actions()]
-        next(a for a in menu.actions() if a.text() == seen["pick"]).trigger()
-
-    monkeypatch.setattr(panel, "_popup", fake_popup)
-    seen["pick"] = "0.70 mm"
-    panel.click_cell(("layer", "A"), COL_CUT)
-    assert seen["texts"][0] == "The sheet's cut pen"
-    assert scene.layer("A").cut_weight == scene.layer("B").cut_weight == 0.7
-    assert scene.layer("C").cut_weight is None
-    assert scene.layer("A").lineweight is None        # not the line weight
-    assert panel.item_for("A").text(COL_CUT) == "0.70"
-    seen["pick"] = "The sheet's cut pen"
-    panel.click_cell(("layer", "A"), COL_CUT)
-    assert panel.item_for("A").text(COL_CUT) == "—"
-
-
-def test_a_saved_column_choice_from_before_keeps_the_new_column_off(win):
-    """Someone who chose their columns before the cut column existed: the
-    saved list never named it, and it still starts off; once they choose
-    again, their choice is kept."""
-    from PySide6.QtCore import QSettings
-    from views.layers_panel import COL_COUNT, COL_CUT, COL_WEIGHT, LayersPanel
-    panel = win.layers_dock.panel
-    QSettings().setValue(LayersPanel.HIDDEN_COLUMNS_KEY, str(COL_COUNT))
-    QSettings().remove(LayersPanel.KNOWN_COLUMNS_KEY)
-    assert panel.hidden_columns() == {COL_COUNT, COL_CUT}
-    assert COL_WEIGHT not in panel.hidden_columns()   # their choice stands
-    panel.set_column_shown(COL_CUT, True)
-    assert COL_CUT not in panel.hidden_columns()
-    panel.set_column_shown(COL_COUNT, True)
-    assert panel.hidden_columns() == set()
-    QSettings().remove(LayersPanel.HIDDEN_COLUMNS_KEY)
-    QSettings().remove(LayersPanel.KNOWN_COLUMNS_KEY)
-
-
 def test_the_right_click_offers_the_cut_weight(win):
     panel = win.layers_dock.panel
     scene = win.viewport.scene

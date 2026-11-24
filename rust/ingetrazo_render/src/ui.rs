@@ -26,6 +26,7 @@ mod context_menu;
 mod lens;
 use lens::Lens;
 mod tree_order;
+mod tree_filter;
 mod tree_keys;
 mod drawing;
 mod drawing_catalog;
@@ -555,7 +556,8 @@ impl Ui {
         if let Some(col) = self.column.as_mut() { col.proposal_available = available; }
     }
     pub fn set_tree_sort(&mut self, index: usize) {
-        if let (Some(col), Some(&(sort, _))) = (self.column.as_mut(), tree_order::Sort::OPTIONS.get(index)) {
+        if let Some(col) = self.column.as_mut() {
+            let sort = tree_order::Sort::OPTIONS.get(index).map(|&(sort, _)| sort).unwrap_or_default();
             if col.sort != sort {
                 col.sort = sort;
                 col.ordered = sort.order(&col.nodes);
@@ -1442,7 +1444,9 @@ impl Ui {
                                         _ => ("", true),
                                     };
                                     if menu_row(ui, &(id.to_owned(), label, hint.into(), "check".into(), -1, enabled)) {
-                                        clicked = Some(format!("tab:{id}"));
+                                        clicked = Some(if id == "scene:add" {
+                                            self.scene_browser.add_scene_action()
+                                        } else { format!("tab:{id}") });
                                     }
                                 }
                                 ui.add_space(SPACE_XS);
@@ -1765,7 +1769,7 @@ impl Ui {
                         .margin(Margin::symmetric(8, 5))
                         .desired_width((W - 20.0 - 16.0 - 4.0).max(40.0))
                         .font(body());
-                    let resp = ui.add(edit);
+                    let resp = ui.add(edit).on_hover_text("Filter by name or wildcard. Use is:hidden, is:visible, is:locked, is:selected, is:component, is:image or is:section. Prefix the query with ! to invert it.");
                     if col.focus_filter {
                         resp.request_focus();
                         col.focus_filter = false;
@@ -2331,6 +2335,9 @@ impl Ui {
                         ui.set_width(220.0);
                         ui.spacing_mut().item_spacing = vec2(0.0, 1.0);
                         if col.mode.is_empty() {
+                            if col.lens == Lens::Filing && tree_filter::controls(ui, &mut col.filter) {
+                                actions.push(format!("filter\u{1f}{}", col.filter));
+                            }
                             let options = tree_order::Sort::OPTIONS;
                             let old = options.iter().position(|(sort, _)| *sort == col.sort).unwrap_or(0);
                             let mut index = old;
@@ -3166,6 +3173,47 @@ fn occurrence_menu_runs_the_document_action_and_closes() {
         .take_actions()
         .contains(&format!("tree:explode\u{1f}{key}")));
     assert!(ui.column.unwrap().row_menu.is_none());
+}
+
+#[test]
+fn a_tree_refresh_keeps_the_selected_row_at_its_scroll_position() {
+    let Some(mut ui) = test_chrome() else { return };
+    ui.ctx = test_context();
+    let rows = |count: usize| (0..count).map(|i| {
+        let mut text = vec![String::new(); 12];
+        text[0] = format!("preview-tag:{i}");
+        text[1] = format!("Tag {i}");
+        text[10] = i.to_string();
+        (text, vec![0, 0, 0, 0, 6, 1, 0])
+    }).collect();
+    ui.set_tree(rows(100), 0);
+    ui.column.as_mut().unwrap().lens = Lens::Drawing;
+    for _ in 0..3 { tree_frame(&mut ui, vec![]); }
+    ui.reveal_row("preview-tag:50".into());
+    let at = tree_frame(&mut ui, vec![])["Tag 50"];
+    tree_click(&mut ui, at, egui::PointerButton::Primary);
+    let before = tree_frame(&mut ui, vec![])["Tag 50"];
+    ui.set_tree(rows(101), 0);
+    let after = tree_frame(&mut ui, vec![])["Tag 50"];
+    let col = ui.column.as_ref().unwrap();
+    assert!(col.styles.selected(&col.nodes[50]));
+    assert!((before.y - after.y).abs() < 1., "{before:?} -> {after:?}");
+}
+
+#[test]
+fn name_sort_uses_the_new_label_and_unknown_preferences_restore_project_order() {
+    let Some(mut ui) = test_chrome() else { return };
+    let groups = |a: &str| vec![
+        (vec!["i:a".into(), a.into()], vec![0, 0, 0, 0, 1]),
+        (vec!["i:b".into(), "Muro 2".into()], vec![0, 0, 0, 0, 1]),
+    ];
+    ui.set_tree(groups("Muro 1"), 0);
+    ui.set_tree_sort(1);
+    assert_eq!(ui.column.as_ref().unwrap().ordered, [0, 1]);
+    ui.set_tree(groups("Muro 10"), 0);
+    assert_eq!(ui.column.as_ref().unwrap().ordered, [1, 0]);
+    ui.set_tree_sort(usize::MAX);
+    assert_eq!(ui.column.as_ref().unwrap().ordered, [0, 1]);
 }
 
 #[test]

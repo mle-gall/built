@@ -813,7 +813,7 @@ def _tree(view, win, *, discover=False):
             exp.add(f"n:{k}")
     rows = filing_rows(scene, model, exp, pages, flt, discover, ROW_CAP, lens, sel_ids,
                        active, KINDS, TIPS, FILE_STATES)
-    rows, path_bar = project_sidebar(scene, tree, rows, flt, exp, str(getattr(win, "_current_path", "") or ""))
+    rows, path_bar = project_sidebar(scene, tree, rows, flt, exp, str(getattr(win, "_current_path", "") or ""), lens == 1)
     rows.extend(catalog.rows(flt, exp))
     if "_project" in getattr(win, "__dict__", {}):
         from app_shell import project as built_project
@@ -1864,13 +1864,13 @@ def _tree_action(win, view, action) -> None:
                             vp.notify_scene_changed()
                             view.update()
                 elif what == "scene_rename" and extra.strip():
-                    panel = getattr(getattr(win, "scenes_dock", None), "panel", None) or getattr(win.tray, "scenes", None)
+                    panel = getattr(win.tray, "scenes", None)
                     if panel is not None:
                         panel.rename_view(arg, extra.strip())
                 elif what == "scene_delete":
-                    panel = getattr(getattr(win, "scenes_dock", None), "panel", None) or getattr(win.tray, "scenes", None)
+                    panel = getattr(win.tray, "scenes", None)
                     if panel is not None:
-                        panel.delete_views([arg])
+                        panel.delete_views(arg)
         elif verb == "edit":
             what, _, arg = rk.partition(":")
             if what == "section":
@@ -2594,18 +2594,29 @@ def _run(win, actions, source_view=None) -> None:
                 elif _core(vp, "edit_visibility_set", verb=operation, key=key)["ok"]:
                     vp.notify_scene_changed()
                     view.update()
+            elif arg.startswith("scenedelete:"):
+                from ingetrazo_core import scene_tree
+                try:
+                    targets = scene_tree.menu_selection(win.viewport.scene, arg.partition(":")[2])
+                except ValueError as exc:
+                    win.viewport.flash_status(str(exc))
+                    continue
+                view._ui_pending = ("scene_delete", targets)
+                view.renderer.ui_set_prompt(f"Delete {len(targets)} scenes?", "",
+                                            [("yes", "Delete"), ("no", "Cancel")])
             elif arg.startswith("scenefolders:"):
                 from ingetrazo_core import scene_tree
                 vp = win.viewport
                 try:
-                    scene_tree.edit_menu_folder(vp.history, arg.partition(":")[2])
+                    scene_tree.edit_menu_folder(vp.history, arg.partition(":")[2],
+                                                getattr(win.tray.scenes, "add_scene_in_folder", None))
                     vp.notify_scene_changed()
                     view._ui_tabs = None
                     view.update()
                 except ValueError as exc:
                     vp.flash_status(str(exc))
             elif arg in ("scene:add", "scene:update", "scene:up", "scene:down", "scene:delete", "scene:rename", "scene:duplicate"):
-                panel = getattr(getattr(win, "scenes_dock", None), "panel", None) or getattr(win.tray, "scenes", None)
+                panel = getattr(win.tray, "scenes", None)
                 row = getattr(getattr(win, "_scene_tabs", None), "tabs", None)
                 marked = row.marked_view() if row is not None else None
                 if panel is not None:
@@ -2626,7 +2637,7 @@ def _run(win, actions, source_view=None) -> None:
                         view.renderer.ui_set_prompt("Rename scene", f"{ED}edit{ED}scene{ED}{marked.name}",
                                                     [("yes", "Rename"), ("no", "Cancel")])
                     elif marked is not None and arg == "scene:delete":
-                        view._ui_pending = ("scene_delete", marked)
+                        view._ui_pending = ("scene_delete", [marked])
                         view.renderer.ui_set_prompt(f"Delete “{marked.name}”?", "The scene goes; the model does not change.",
                                                     [("yes", "Delete"), ("no", "Cancel")])
                     view._ui_tabs = None

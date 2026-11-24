@@ -2,6 +2,57 @@
 //! Browse saved views in their document folders without changing scene order.
 use super::{kit, tokens::*, Item};
 
+use crate::text_search::text_matches;
+use std::collections::{HashMap, HashSet};
+
+/// A folder match includes its descendants; a scene match includes its path.
+struct Matches<'a> {
+    folders: HashSet<&'a str>,
+    scenes: HashSet<&'a str>,
+}
+
+fn matches<'a>(folders: &'a [Item], scenes: &'a [Item], query: &str) -> Matches<'a> {
+    let mut result = Matches {
+        folders: HashSet::new(),
+        scenes: HashSet::new(),
+    };
+    let mut children: HashMap<&str, Vec<&str>> = HashMap::new();
+    let mut parents = HashMap::new();
+    let mut pending = Vec::new();
+    for (id, label, parent, ..) in folders.iter().skip(1) {
+        children.entry(parent).or_default().push(id);
+        parents.insert(id.as_str(), parent.as_str());
+        if text_matches(&label.to_lowercase(), query) {
+            pending.push(id.as_str());
+        }
+    }
+    while let Some(id) = pending.pop() {
+        if result.folders.insert(id) {
+            pending.extend(children.get(id).into_iter().flatten().copied());
+        }
+    }
+    let mut paths = Vec::new();
+    for (id, label, _, folder, ..) in scenes {
+        if result.folders.contains(folder.as_str()) || text_matches(&label.to_lowercase(), query) {
+            result.scenes.insert(id);
+            paths.push(folder.as_str());
+        }
+    }
+    paths.extend(
+        result
+            .folders
+            .iter()
+            .filter_map(|id| parents.get(id))
+            .copied(),
+    );
+    while let Some(id) = paths.pop() {
+        if !id.is_empty() && result.folders.insert(id) {
+            paths.extend(parents.get(id).copied());
+        }
+    }
+    result
+}
+
 const PHOTO_ATTEMPTS: usize = 4;
 
 #[derive(Default)]
@@ -12,12 +63,19 @@ struct Photo {
     next: f64,
 }
 
+// The camera record key precedes the thumbnail revision in a scene row.
+fn record_key(row: &Item) -> Option<u64> {
+    row.2.split_once(':')?.0.parse().ok()
+}
+
 #[derive(Default)]
 pub(super) struct Browser {
     owner: String,
     pub thumbnails: Option<bool>,
     photos: std::collections::BTreeMap<String, Photo>,
     pending: Option<String>,
+    selecting: bool,
+    selected: std::collections::BTreeSet<u64>,
     folder: String,
     destination: String,
     name: String,
@@ -28,6 +86,10 @@ impl Browser {
     pub fn retain(&mut self, scenes: &[Item]) {
         let names: std::collections::HashSet<_> = scenes.iter().map(|s| s.1.as_str()).collect();
         self.photos.retain(|name, _| names.contains(name.as_str()));
+        if !self.selected.is_empty() {
+            let live: HashSet<_> = scenes.iter().filter_map(record_key).collect();
+            self.selected.retain(|key| live.contains(key));
+        }
     }
 
     pub fn finish(
@@ -40,7 +102,7 @@ impl Browser {
             return;
         }
         self.pending = None;
-        if let (Ok((owner, revision, name)), Some((w, h, pixels))) = (
+        if let (Ok((owner, _revision, name)), Some((w, h, pixels))) = (
             serde_json::from_str::<(String, String, String)>(request),
             pixels,
         ) {
@@ -49,11 +111,7 @@ impl Browser {
                 && (1..=128).contains(&h)
                 && pixels.len() == w * h * 4
             {
-                if let Some(photo) = self
-                    .photos
-                    .get_mut(&name)
-                    .filter(|p| p.revision == revision)
-                {
+                if let Some(photo) = self.photos.get_mut(&name) {
                     let image = egui::ColorImage::from_rgba_unmultiplied([w, h], &pixels);
                     photo.texture =
                         Some(ctx.load_texture(name, image, egui::TextureOptions::LINEAR));
@@ -62,6 +120,16 @@ impl Browser {
             }
         }
         ctx.request_repaint();
+    }
+
+    pub fn add_scene_action(&self) -> String {
+        if self.folder.is_empty() {
+            return "tab:scene:add".into();
+        }
+        format!(
+            "tab:scenefolders:{}",
+            serde_json::json!(["capture", self.owner, self.folder, "", ""])
+        )
     }
 
     fn open(&mut self, key: &str) {
@@ -116,20 +184,20 @@ impl Browser {
             }
             ui.strong(&self.folder);
         }
-        if scenes.len() + folders.len() > 4 || !self.query.is_empty() {
+        if !scenes.is_empty() || folders.len() > 1 || !self.query.is_empty() {
             ui.add(kit::search(&mut self.query, "Find scene or folder"));
         }
         let query = self.query.trim().to_lowercase();
+        let hits = (!query.is_empty()).then(|| matches(folders, scenes, &query));
         egui::ScrollArea::vertical()
             .id_salt("saved views")
             .max_height(ui.ctx().screen_rect().height() * 0.31)
             .show(ui, |ui| {
                 for row in folders.iter().skip(1) {
-                    if if query.is_empty() {
-                        row.2 != self.folder
-                    } else {
-                        !row.1.to_lowercase().contains(&query)
-                    } {
+                    if !hits.as_ref().map_or_else(
+                        || row.2 == self.folder,
+                        |h| h.folders.contains(row.0.as_str()),
+                    ) {
                         continue;
                     }
                     if kit::quiet(ui, &format!("{}  ›", row.1)).clicked() {
@@ -137,11 +205,23 @@ impl Browser {
                     }
                 }
                 for row in scenes {
-                    if if query.is_empty() {
-                        row.3 != self.folder
-                    } else {
-                        !row.1.to_lowercase().contains(&query)
-                    } {
+                    if !hits.as_ref().map_or_else(
+                        || row.3 == self.folder,
+                        |h| h.scenes.contains(row.0.as_str()),
+                    ) {
+                        continue;
+                    }
+                    if self.selecting {
+                        if let Some(key) = record_key(row) {
+                            let mut checked = self.selected.contains(&key);
+                            if kit::toggle(ui, &mut checked, &row.1).changed() {
+                                if checked {
+                                    self.selected.insert(key);
+                                } else {
+                                    self.selected.remove(&key);
+                                }
+                            }
+                        }
                         continue;
                     }
                     let activated = if thumbnails {
@@ -149,10 +229,10 @@ impl Browser {
                         let response = kit::scene_preview_row(ui, &row.1, row.4 == 1, cached);
                         if ui.is_rect_visible(response.rect) && self.pending.is_none() {
                             let p = self.photos.entry(row.1.clone()).or_default();
-                            if p.revision != root.2 {
-                                p.revision = root.2.clone();
+                            if p.revision != row.2 {
+                                p.revision.clone_from(&row.2);
                                 p.attempts = 0;
-                                p.next = 0.;
+                                p.next = if p.texture.is_some() { now + 0.4 } else { now };
                             }
                             if p.attempts < PHOTO_ATTEMPTS {
                                 if now >= p.next {
@@ -205,6 +285,12 @@ impl Browser {
                         }
                     });
             });
+            if scenes.len() > 1 || self.selecting {
+                kit::toggle(ui, &mut self.selecting, "Select multiple scenes");
+                if !self.selecting {
+                    self.selected.clear();
+                }
+            }
             let request = |verb: &str, label: &str| {
                 format!(
                     "tab:scenefolders:{}",
@@ -233,7 +319,21 @@ impl Browser {
                         *clicked = Some(request("remove", ""));
                     }
                 }
-                if let Some(scene) = current {
+                if self.selecting && !self.selected.is_empty() {
+                    let n = self.selected.len();
+                    if kit::quiet(ui, &format!("Move {n} here")).clicked() {
+                        *clicked = Some(request(
+                            "file_selected",
+                            &serde_json::json!(self.selected).to_string(),
+                        ));
+                    }
+                    if kit::quiet(ui, &format!("Delete {n}…")).clicked() {
+                        *clicked = Some(format!(
+                            "tab:scenedelete:{}",
+                            serde_json::json!([self.owner, self.selected])
+                        ));
+                    }
+                } else if let Some(scene) = current {
                     if scene.3 != self.destination
                         && kit::quiet(ui, &format!("Move “{}” here", scene.1)).clicked()
                     {
@@ -250,6 +350,56 @@ mod tests {
     use super::*;
     fn row(key: &str, name: &str, rev: &str, parent: &str) -> Item {
         (key.into(), name.into(), rev.into(), parent.into(), 0, true)
+    }
+
+    #[test]
+    fn scene_search_shows_matching_paths_and_contents_and_accepts_wildcards() {
+        let folders = [
+            row("", "All scenes", "", "doc"),
+            row("Plans", "Plans", "", "doc"),
+            row("Upper", "Upper", "Plans", "doc"),
+            row("Cuts", "Cuts", "", "doc"),
+        ];
+        let scenes = [
+            row("a", "First", "", "Upper"),
+            row("b", "Second", "", "Plans"),
+            row("c", "Elevation North", "", "Cuts"),
+        ];
+        let first = matches(&folders, &scenes, "f?rst");
+        assert_eq!(first.folders, HashSet::from(["Plans", "Upper"]));
+        assert_eq!(first.scenes, HashSet::from(["a"]));
+        let plans = matches(&folders, &scenes, "lan");
+        assert_eq!(plans.folders, first.folders);
+        assert_eq!(plans.scenes, HashSet::from(["a", "b"]));
+        let north = matches(&folders, &scenes, "*north");
+        assert_eq!(north.folders, HashSet::from(["Cuts"]));
+        assert_eq!(north.scenes, HashSet::from(["c"]));
+        let mut browser = Browser::default();
+        browser.owner = "doc".into();
+        assert_eq!(browser.add_scene_action(), "tab:scene:add");
+        browser.open("Upper");
+        assert_eq!(
+            browser.add_scene_action(),
+            r#"tab:scenefolders:["capture","doc","Upper","",""]"#
+        );
+    }
+
+    #[test]
+    fn selection_survives_refresh_rename_and_reorder_by_document_key() {
+        let mut browser = Browser::default();
+        browser.selected.extend([11, 13]);
+        let mut rows = [
+            row("scene:0", "C", "13:4:2", ""),
+            row("scene:1", "Renamed", "11:4:0", ""),
+        ];
+        browser.retain(&rows);
+        assert_eq!(
+            browser.selected.iter().copied().collect::<Vec<_>>(),
+            [11, 13]
+        );
+        rows[0].2 = "14:4:2".into();
+        browser.retain(&rows);
+        assert_eq!(browser.selected.iter().copied().collect::<Vec<_>>(), [11]);
     }
 
     fn frame(
@@ -278,8 +428,8 @@ mod tests {
     fn photos_use_visible_rows_and_retry_a_miss_without_discarding_a_previous_image() {
         let ctx = crate::ui::test_context();
         let mut browser = Browser::default();
-        let scenes = [
-            row("scene:0", "A", "", ""),
+        let mut scenes = [
+            row("scene:0", "A", "geometry 1", ""),
             row("scene:1", "B", "", "hidden"),
         ];
         let mut folders = [
@@ -294,6 +444,13 @@ mod tests {
         browser.finish(&ctx, req, Some((2, 2, vec![255; 16])));
         assert!(frame(&ctx, &mut browser, &scenes, &folders, 2.).is_empty());
         folders[0].2 = "2".into();
+        // Filing changes the request guard but keeps the existing picture.
+        assert!(frame(&ctx, &mut browser, &scenes, &folders, 2.1).is_empty());
+        scenes[0].2 = "geometry 2".into();
+        assert!(frame(&ctx, &mut browser, &scenes, &folders, 2.2).is_empty());
+        scenes[0].2 = "geometry 3".into();
+        assert!(frame(&ctx, &mut browser, &scenes, &folders, 2.4).is_empty());
+        assert!(frame(&ctx, &mut browser, &scenes, &folders, 2.7).is_empty());
         for i in 0..PHOTO_ATTEMPTS {
             let next = frame(&ctx, &mut browser, &scenes, &folders, 3. + i as f64);
             assert_eq!(next.len(), 1);

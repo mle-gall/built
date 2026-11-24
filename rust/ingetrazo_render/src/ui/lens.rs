@@ -67,7 +67,7 @@ impl RowLayout {
                     (&mut c.weight, 32.0),
                     (&mut c.print, 28.0),
                 ] {
-                    if room(end - width - 8.0) >= MIN_NAME {
+                    if room(end - width - 6.0 - 4.0) >= MIN_NAME {
                         *cell = Some((end - width, end));
                         end -= width + 6.0;
                     }
@@ -186,6 +186,23 @@ mod tests {
                 c.name_right - (LEAD + PLAN_DEPTH * INDENT) >= MIN_NAME - 30.0,
                 "{c:?}"
             );
+        }
+    }
+
+    #[test]
+    fn drawing_cells_fit_inside_the_dock_as_it_widens_and_narrows() {
+        for width in (280..=800).chain((280..800).rev()) {
+            let left = 37.;
+            let right = left + width as f32;
+            let row = RowLayout::plan(Lens::Drawing, left, right);
+            assert!(row.name_right - left - LEAD - PLAN_DEPTH * INDENT >= MIN_NAME);
+            let mut previous = row.name_right;
+            for (start, end) in [row.print, row.weight, row.hatch, row.line, row.swatch, row.flags]
+                .into_iter().flatten()
+            {
+                assert!(previous <= start && start < end && end <= right);
+                previous = end;
+            }
         }
     }
 

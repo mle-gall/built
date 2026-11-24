@@ -74,6 +74,7 @@ class Scene:
     #: and need every bump; "unsaved changes" must not: a click on empty
     #: space after Ctrl+S asked to save again (issue #159).
     view_version: int = 0
+    _scene_catalog_ticks: int = field(default=0, init=False, repr=False)
     # Context changes which preserve resident placement geometry.
     _placement_context_bumps: int = field(default=0, init=False, repr=False)
     #: How many of ``version``'s bumps moved only the section planes —

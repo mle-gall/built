@@ -263,26 +263,24 @@ def test_expand_all_and_collapse_all_reach_the_headings():
 
 
 def test_the_filter_leaves_no_empty_heading():
-    house, shed = _group("House", "Walls"), _group("Shed", "Walls")
-    site = _group("Site")
-    win, scene, panel = _window(["Walls"], house, shed, site)
-    try:
-        panel.set_order_by("layer")
-        panel.search.setText("site")
-        assert panel._heads[("layer", "Walls")].isHidden()
-        assert not panel._heads[("layer", DEFAULT_LAYER)].isHidden()
-        panel.search.setText("")
-        assert not panel._heads[("layer", "Walls")].isHidden()
-
-        house.hidden = True
-        panel.refresh()
-        panel.set_state_filter("hidden")
-        assert not panel._heads[("layer", "Walls")].isHidden()
-        assert panel._heads[("layer", DEFAULT_LAYER)].isHidden()
-        panel.set_state_filter("all")
-        assert not panel._heads[("layer", DEFAULT_LAYER)].isHidden()
-    finally:
-        _close(win)
+    from core import structure
+    from tests.test_project_drawing_filters import Project
+    from tests.test_structure import model
+    scene, registry, house, shed = model()
+    project = Project(scene=scene)
+    history = project.win.viewport.history
+    for group, node in [(house, "sections"), (shed, "ref")]:
+        history.execute(structure.file(scene, [group.uid], node))
+    # Only the matching placement's filing branch and its ancestors remain.
+    assert "n:ref" in project.action("filter", "Survey point")
+    assert "n:sections" not in project.rows()
+    house.hidden = True
+    scene.version += 1
+    rows = project.action("filter", "is:hidden")
+    assert "n:sections" in rows and "n:ref" not in rows
+    project.action("filter", "")
+    project.action("expandall", "")
+    assert {"n:sections", "n:ref"} <= project.rows().keys()
 
 
 def test_a_folder_heading_hides_with_its_last_shown_layer():

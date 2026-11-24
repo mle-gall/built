@@ -1,14 +1,13 @@
 """Selecting thousands of groups syncs the Outliner in one selection, not one per row (2026-11-10)."""
 import time
 
-from PySide6.QtWidgets import QApplication
+from tests.test_project_drawing_filters import Project
 
 from core.group import Group
 from core.mesh import Mesh
 from core.scene import Scene
 from ingetrazo_core import Vec3 as QVector3D
 
-_app = QApplication.instance() or QApplication([])
 
 
 def _scene(n):
@@ -22,33 +21,14 @@ def _scene(n):
 
 
 def test_a_selection_of_thousands_syncs_in_one_go():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        scene = win.viewport.scene
-        for g in _scene(3000).groups:
-            scene.groups.append(g)
-        panel = win.project_browser.widget() if hasattr(win.project_browser, "widget") else win.project_browser
-        panel = getattr(win, "project_browser")
-        outl = getattr(panel, "_panel", None) or getattr(panel, "panel", None) or panel
-        # reach the Outliner panel object that owns _sync_selection
-        target = None
-        for obj in (outl, getattr(outl, "widget", lambda: None)(), *outl.findChildren(object)):
-            if hasattr(obj, "_sync_selection") and hasattr(obj, "_items"):
-                target = obj
-                break
-        assert target is not None
-        target.refresh() if hasattr(target, "refresh") else None
-        _app.processEvents()
-        scene.select(list(scene.groups))
-        t = time.perf_counter()
-        target._sync_selection(scene)
-        took = time.perf_counter() - t
-        selected = sum(1 for it in target._items.values() if it.isSelected())
-        assert selected >= 2900, selected
-        assert took < 3.0, took
-        scene.select([])
-        target._sync_selection(scene)
-        assert not any(it.isSelected() for it in target._items.values())
-    finally:
-        win.close()
+    scene = _scene(3000)
+    project = Project(scene=scene)
+    project.view._ui_pages = {"": 3000}
+    project.action("toggle", "n:")
+    scene.select(scene.groups)
+    start = time.perf_counter()
+    marked = {key for key, (_, flags) in project.rows().items() if flags[10] == 1}
+    assert time.perf_counter() - start < 3.0
+    assert marked == {"i:" + group.uid for group in scene.groups}
+    scene.clear_selection()
+    assert not any(flags[10] for _, flags in project.rows().values())
