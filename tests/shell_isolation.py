@@ -75,10 +75,16 @@ def restore_shell_patches(tmp_path_factory):
 
 
 @pytest.fixture
-def native_host(tmp_path, restore_shell_patches):
+def native_host(tmp_path, restore_shell_patches, monkeypatch):
     """One native host, including its initial document and private profile."""
     from app_shell.host import Host
-    host = Host(0, 900, 600, 1., settings=str(tmp_path / "profile"))
+    from core import settings
+    profile = str(tmp_path / "profile")
+    # The offscreen QApplication lives for the module. Choose this document's
+    # test store even when Qt has already been initialized by an earlier test.
+    from ingetrazo_core import NativeSettings
+    monkeypatch.setattr(settings, "_store", NativeSettings(profile))
+    host = Host(0, 900, 600, 1., settings=profile)
     try:
         yield host
     finally:

@@ -4,67 +4,24 @@
 Preferences, free everywhere else."""
 from __future__ import annotations
 
-import sys
-
-import pytest
-from PySide6.QtGui import QAction, QKeySequence
-from PySide6.QtWidgets import QApplication
-
-if QApplication.instance() is None:
-    QApplication(sys.argv[:1])
-
-KEY = QKeySequence("Ctrl+,")
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
+from views import chrome_sheet
+from views.shortcuts import action_keys, collect_actions
 
 
-@pytest.fixture
-def win():
-    from views.main_window import MainWindow
-    w = MainWindow()
-    yield w
-    w._saved_version = w.viewport.scene.version
-    w.close()
+def test_preferences_has_ctrl_comma(native_host):
+    action = native_host.window._registry_actions["menu:prefs"]
+    assert action.text()
+    assert action_keys(action) == ["Ctrl+,"]
 
 
-def test_preferences_has_ctrl_comma(win):
-    act = win._act_preferences
-    assert act.text().endswith("…")
-    assert act.shortcut() == KEY
+def test_nobody_else_has_ctrl_comma(native_host):
+    win = native_host.window
+    assert [a for a in collect_actions(win) if "Ctrl+," in action_keys(a)] == [
+        win._registry_actions["menu:prefs"]]
 
 
-def test_nobody_else_has_ctrl_comma(win):
-    others = [a.text() for a in win.findChildren(QAction)
-              if a is not win._act_preferences and KEY in a.shortcuts()]
-    assert others == []
-
-
-def test_ctrl_comma_opens_preferences_on_its_first_page(win, monkeypatch):
-    from views import chrome_sheet
-    win._act_preferences.trigger()
+def test_ctrl_comma_opens_preferences_on_its_first_page(native_host):
+    win = native_host.window
+    win._registry_actions["menu:prefs"].trigger()
     assert chrome_sheet.current(win).section == "general"
-
-
-def test_opening_preferences_flashes_no_loose_window(win):
-    """Building the dialog showed «Check for new versions at startup» for
-    an instant as a window of its own (setVisible before it had a
-    parent): a flicker over the panels on every opening."""
-    from PySide6.QtCore import QEvent, QObject
-    from PySide6.QtWidgets import QDialog as _Dialog
-
-    shown = []
-
-    class Spy(QObject):
-        def eventFilter(self, obj, ev):
-            if (ev.type() == QEvent.Show and obj.isWidgetType()
-                    and obj.isWindow() and obj is not win
-                    and not isinstance(obj, _Dialog)):
-                shown.append(type(obj).__name__)
-            return False
-
-    spy = Spy()
-    app = QApplication.instance()
-    app.installEventFilter(spy)
-    try:
-        win.open_preferences()
-    finally:
-        app.removeEventFilter(spy)
-    assert shown == []

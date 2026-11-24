@@ -6,18 +6,12 @@ camera it was saved with; New goes back to the default view."""
 from __future__ import annotations
 
 import math
-import os
 
 import pytest
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication  # noqa: E402
-
-if QApplication.instance() is None:
-    QApplication([])
-
 from core.scene import Scene  # noqa: E402
 from formats import igz  # noqa: E402
 
@@ -36,46 +30,39 @@ def test_the_camera_travels_in_the_igz(tmp_path):
     assert scene.camera_home is None
 
 
-def test_open_restores_the_authors_view_and_new_resets_it(tmp_path):
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        cam = win.viewport.camera
-        win._saved_version = win.viewport.scene.version
-        cam.target = QVector3D(12.0, -4.0, 1.5)
-        cam.distance = 33.0
-        cam.yaw = 1.1
-        cam.pitch = 0.2
-        cam.perspective = False
-        path = tmp_path / "doc.igz"
-        win._do_save(path)
-        assert win.viewport.scene.camera_home["distance"] == 33.0
-        # Move the camera away, then reopen: back where the author left it.
-        cam.target = QVector3D(0, 0, 0)
-        cam.distance = 5.0
-        cam.yaw = -0.7
-        cam.perspective = True
-        win._saved_version = win.viewport.scene.version
-        # The same file would only bring its tab to the front (#1066): open
-        # a copy, which comes in a tab of its own with its author's view.
-        import shutil
-        copy = tmp_path / "copy.igz"
-        shutil.copy(path, copy)
-        assert win.open_path(copy)
-        cam = win.viewport.camera
-        assert (cam.target - QVector3D(12.0, -4.0, 1.5)).length() < 1e-6
-        assert cam.distance == 33.0 and abs(cam.yaw - 1.1) < 1e-9
-        assert cam.perspective is False
-        # New: the default view, whatever the last document did.
-        win._saved_version = win.viewport.scene.version
-        win._on_new()
-        cam = win.viewport.camera
-        assert cam.distance == 20.0 and cam.perspective is True
-        assert abs(cam.yaw - math.radians(-45.0)) < 1e-9
-        assert (cam.target - QVector3D(0, 0, 0)).length() < 1e-9
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_open_restores_the_authors_view_and_new_resets_it(native_host, tmp_path):
+    from app_shell.files import do_save
+    win = native_host.window
+    cam = win.viewport.camera
+    cam.target = QVector3D(12.0, -4.0, 1.5)
+    cam.distance = 33.0
+    cam.yaw = 1.1
+    cam.pitch = 0.2
+    cam.perspective = False
+    path = tmp_path / "doc.igz"
+    assert do_save(win, path)
+    assert win.viewport.scene.camera_home["distance"] == 33.0
+    # Move the camera away, then reopen: back where the author left it.
+    cam.target = QVector3D(0, 0, 0)
+    cam.distance = 5.0
+    cam.yaw = -0.7
+    cam.perspective = True
+    # The same file would only bring its tab to the front (#1066): open
+    # a copy, which comes in a tab of its own with its author's view.
+    import shutil
+    copy = tmp_path / "copy.igz"
+    shutil.copy(path, copy)
+    assert win.open_path(copy)
+    cam = win.viewport.camera
+    assert (cam.target - QVector3D(12.0, -4.0, 1.5)).length() < 1e-6
+    assert cam.distance == 33.0 and abs(cam.yaw - 1.1) < 1e-9
+    assert cam.perspective is False
+    # New: the default view, whatever the last document did.
+    win._on_new()
+    cam = win.viewport.camera
+    assert cam.distance == 20.0 and cam.perspective is True
+    assert abs(cam.yaw - math.radians(-45.0)) < 1e-9
+    assert (cam.target - QVector3D(0, 0, 0)).length() < 1e-9
 
 
 def test_the_loader_reports_progress(tmp_path):
@@ -103,27 +90,22 @@ def test_the_loader_reports_progress(tmp_path):
     igz.load_into(Scene(), path)                      # no callback: as before
 
 
-def test_a_broken_camera_never_blocks_the_save(tmp_path):
+def test_a_broken_camera_never_blocks_the_save(native_host, tmp_path):
     # #383: a NaN in the live camera made the save refuse the whole
     # document («invalid coordinates»), so the user's work could not be
     # saved. The geometry is what matters; the file keeps its last view.
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        cam = win.viewport.camera
-        win._saved_version = win.viewport.scene.version
-        path = tmp_path / "doc.igz"
-        win._do_save(path)
-        good = dict(win.viewport.scene.camera_home)
-        cam.target = QVector3D(float("nan"), 0.0, 0.0)
-        win._do_save(path)
-        assert win.viewport.scene.camera_home == good
-        back = Scene()
-        igz.load_into(back, path)
-        assert back.camera_home == good
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    from app_shell.files import do_save
+    win = native_host.window
+    cam = win.viewport.camera
+    path = tmp_path / "doc.igz"
+    assert do_save(win, path)
+    good = dict(win.viewport.scene.camera_home)
+    cam.target = QVector3D(float("nan"), 0.0, 0.0)
+    assert do_save(win, path)
+    assert win.viewport.scene.camera_home == good
+    back = Scene()
+    igz.load_into(back, path)
+    assert back.camera_home == good
 
 
 @pytest.mark.parametrize("extension", [".built", ".igz"])
@@ -131,25 +113,24 @@ def test_document_camera_precision(tmp_path, extension):
     from types import SimpleNamespace
     import numpy as np
     from core.camera import OrbitCamera
-    from views.main_window import MainWindow
+    from ingetrazo_render import camera_record, apply_camera_record
     cam = OrbitCamera()
     cam.target = (650000.012345678, 6860000.023456789, .01)
     cam.up = (.00123456789, .00234567891, .999999)
     cam.distance = .07
     scene = Scene()
-    win = SimpleNamespace(viewport=SimpleNamespace(camera=cam, scene=scene, update=lambda: None),
-                          _CAMERA_FIELDS=MainWindow._CAMERA_FIELDS)
-    scene.camera_home = MainWindow._camera_dict(win)
+    vp = SimpleNamespace(camera=cam, scene=scene, update=lambda: None)
+    scene.camera_home = camera_record(vp)
     path = tmp_path / ("eye" + extension)
     igz.save_scene(scene, path)
     restored = Scene()
     igz.load_into(restored, path)
-    win.viewport.camera = OrbitCamera()
-    MainWindow._apply_camera_dict(win, restored.camera_home)
+    vp.camera = OrbitCamera()
+    apply_camera_record(vp, restored.camera_home)
     for attr in ("target", "up"):
         expected = np.array(getattr(cam, attr).toTuple())
         if extension == ".igz":
             expected = expected.astype(np.float32)
-        np.testing.assert_array_equal(getattr(win.viewport.camera, attr).toTuple(), expected)
+        np.testing.assert_array_equal(getattr(vp.camera, attr).toTuple(), expected)
     if extension == ".built":
-        np.testing.assert_array_equal(win.viewport.camera.eye().toTuple(), cam.eye().toTuple())
+        np.testing.assert_array_equal(vp.camera.eye().toTuple(), cam.eye().toTuple())

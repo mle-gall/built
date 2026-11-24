@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Settings as a large sheet (views/settings_sheet.py): its sections and
 their two groups, the search across every section, changes applied at
-once (QSettings for Built, the document for This model), the 3D mouse and
+once (native preferences for Built, the document for This model), the 3D mouse and
 keyboard sections, and offscreen command dispatch.
 
 A stand-in renderer records the sheet sent by the offscreen host."""
@@ -10,9 +10,9 @@ from __future__ import annotations
 import json
 
 import pytest
-from PySide6.QtCore import QSettings
-from PySide6.QtGui import QKeySequence
-from PySide6.QtWidgets import QApplication
+from app_shell.files import do_save
+from core.settings import settings as preferences
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 from core import units
 from core.scene import Scene
@@ -21,13 +21,11 @@ from views import chrome_forms
 from views import chrome_sheet as cs
 from views import settings_sheet as ss
 
-_app = QApplication.instance() or QApplication([])
 SEP = cs.SEP
 
 
 @pytest.fixture(autouse=True)
-def _throwaway_settings(private_settings, monkeypatch):
-    QSettings().clear()
+def _throwaway_settings(monkeypatch):
     monkeypatch.setenv("INGETRAZO_STORE", "0")
     ss._PENDING.clear()
     yield
@@ -59,18 +57,12 @@ class FakeView:
 
 
 @pytest.fixture
-def win(monkeypatch):
-    from views.main_window import MainWindow
-    w = MainWindow(defer_extensions=True)
+def win(monkeypatch, native_host):
+    w = native_host.window
     view = FakeView()
     monkeypatch.setattr(cs, "_view", lambda _w: view)
     w._fake_view = view
-    yield w
-    w.__dict__.pop("_chrome_sheet", None)
-    for d in w.documents():
-        d.saved_content = d.viewport.scene.content_version
-    w._saved_version = w.viewport.scene.version
-    w.close()
+    return w
 
 
 def frame(win) -> dict:
@@ -162,7 +154,7 @@ def test_search_lists_hits_from_every_section_with_their_names(win):
     assert not any(r.get("on") for r in sheet["side"])
     # A hit applies at once, like in its section.
     act(win, "v", "invert_wheel", "1")
-    assert QSettings().value("nav/invert_wheel") == "1"
+    assert preferences().value("nav/invert_wheel") == "1"
     # Picking a section empties the search.
     sheet = act(win, "side", "display")
     assert sheet["content"]["title"] == "Display"
@@ -186,7 +178,7 @@ def test_a_built_setting_applies_at_once(win):
     sheet = frame(win)
     assert fields(sheet)["invert_wheel"][4] == 0.0
     sheet = act(win, "v", "invert_wheel", "1")
-    assert QSettings().value("nav/invert_wheel") == "1"
+    assert preferences().value("nav/invert_wheel") == "1"
     assert all(v._invert_wheel for v in win.all_viewports())
     assert fields(sheet)["invert_wheel"][4] == 1.0
     # A choice comes as the index of its option.
@@ -213,7 +205,7 @@ def test_a_change_for_the_next_start_says_so(win):
     row = fields(sheet)["language"]
     from core.i18n import LANGUAGE_NAMES
     sheet = act(win, "v", "language", row[7].index(LANGUAGE_NAMES.get(others[0], others[0])))
-    assert QSettings().value("language") == others[0]
+    assert preferences().value("language") == others[0]
     notes = [b["text"] for b in sheet["content"]["blocks"] if b["kind"] == "text" and b.get("tone") == "warn"]
     assert notes and "Restart Built" in notes[0] and "Language" in notes[0]
     # Back to the running language: nothing waits for a restart any more.
@@ -227,11 +219,11 @@ def test_restore_defaults_asks_then_restores(win, monkeypatch):
     win.open_preferences(page="navigation")
     frame(win)
     act(win, "v", "invert_orbit", "1")
-    assert QSettings().value("nav/invert_orbit_y") == "1"
+    assert preferences().value("nav/invert_orbit_y") == "1"
     act(win, "verb", "restore")
     assert len(shown) == 1 and shown[0].buttons[-1][0] == "ok"
     shown[0].press("ok")
-    assert QSettings().value("nav/invert_orbit_y") == "0"
+    assert preferences().value("nav/invert_orbit_y") == "0"
     assert not any(v._invert_orbit_y for v in win.all_viewports())
 
 
@@ -253,7 +245,7 @@ def test_units_go_in_the_document_and_are_saved_with_it(win, tmp_path):
     assert units.model_units_of(scene)["precision"] == 3
     # Saved with the document, read back from it.
     path = tmp_path / "units.igz"
-    win._do_save(path)
+    assert do_save(win, path)
     fresh = Scene()
     igz.load_into(fresh, path)
     assert units.model_units_of(fresh) == {"length": "mm", "precision": 3}
@@ -279,7 +271,7 @@ def test_dimension_style_and_north_are_the_documents(win, tmp_path):
     assert scene_north_deg(scene) == pytest.approx(30.0)
     assert len(win.viewport.history.undo_stack) == steps + 1
     path = tmp_path / "north.igz"
-    win._do_save(path)
+    assert do_save(win, path)
     fresh = Scene()
     igz.load_into(fresh, path)
     assert scene_north_deg(fresh) == pytest.approx(30.0)
@@ -335,8 +327,8 @@ def test_keyboard_lists_commands_and_changes_their_keys(win, monkeypatch):
     form.receive("keys", "Ctrl+Alt+Shift+F11")
     form.press("ok")
     assert form.closed
-    assert target.shortcut() == QKeySequence("Ctrl+Alt+Shift+F11")
-    st = QSettings()
+    assert target.portable_keys() == ["Ctrl+Alt+Shift+F11"]
+    st = preferences()
     st.beginGroup("shortcuts")
     assert any("F11" in str(st.value(k)) for k in st.allKeys())
     st.endGroup()
@@ -350,7 +342,7 @@ def test_keyboard_lists_commands_and_changes_their_keys(win, monkeypatch):
     ask = shown[-1]
     assert ask is not form and "already used by" in ask.fields[0].value
     ask.press("ok")
-    assert other.shortcut() == QKeySequence("Ctrl+Alt+Shift+F11")
+    assert other.portable_keys() == ["Ctrl+Alt+Shift+F11"]
     assert target.shortcuts() == []
 
 
@@ -405,7 +397,7 @@ def test_add_location_opens_coordinates_first_applies_to_the_document_and_undoes
     act(win, "verb", "site_apply")
     assert (scene.georef.lat, scene.georef.lon, scene_north_deg(scene)) == (48.86, 2.36, 37)
     path = tmp_path / "located.igz"
-    win._do_save(path)
+    assert do_save(win, path)
     other = Scene()
     igz.load_into(other, path)
     assert (other.georef.lat, other.georef.lon, other.georef.north) == (48.86, 2.36, 37)
@@ -464,7 +456,7 @@ def test_move_origin_confirmation_and_undo_restore_survey_datum(win, monkeypatch
     assert win.viewport.history.undo() and scene.georef is old
 
 def test_ai_connection_reads_and_writes_the_plugins_provider_slots(win):
-    settings = QSettings()
+    settings = preferences()
     settings.setValue("ia/proveedor", "groq")
     settings.setValue("ia/api_key", "fixture-groq")
     settings.setValue("ia/modelo", "first")

@@ -37,6 +37,14 @@ fn status(
 
 #[pyfunction]
 pub fn unique_components(win: &Bound<'_, PyAny>) -> PyResult<()> {
+    unique_rows(win, &selected(win, "core.group", "Group")?, false)
+}
+
+pub(super) fn unique_rows(
+    win: &Bound<'_, PyAny>,
+    groups: &Bound<'_, PyList>,
+    batch: bool,
+) -> PyResult<()> {
     let py = win.py();
     let vp = win.getattr("viewport")?;
     let links = py.import("core.links")?;
@@ -44,53 +52,66 @@ pub fn unique_components(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let linked = PyList::empty(py);
     let kw = PyDict::new(py);
     kw.set_item("rename", true)?;
-    for group in selected(win, "core.group", "Group")?.iter() {
+    let steps = PyList::empty(py);
+    for group in groups.iter() {
         if !group.call_method0("is_component")?.is_truthy()? {
             continue;
         }
         if links.call_method1("is_linked", (&group,))?.is_truthy()? {
             linked.append(group)?;
         } else {
-            execute(
-                &vp,
-                &hist
-                    .getattr("MakeUniqueCommand")?
+            steps.append(
+                hist.getattr("MakeUniqueCommand")?
                     .call((group,), Some(&kw))?,
             )?;
         }
     }
-    if !linked.is_empty() {
-        let cmd = hist.call_method1("UnlinkCommand", (linked,))?;
-        if cmd.getattr("groups")?.is_truthy()? {
-            execute(&vp, &cmd)?;
-            let stack = vp.getattr("history")?.getattr("undo_stack")?;
-            if stack.is_truthy()? && stack.get_item(-1)?.is(&cmd) {
-                win.call_method1("_unlinked", (&cmd,))?;
-                let mut names = Vec::new();
-                for path in cmd.getattr("paths")?.try_iter()? {
-                    let path = path?.str()?.to_string();
-                    names.push(
-                        Path::new(&path)
-                            .file_name()
-                            .unwrap_or_default()
-                            .to_string_lossy()
-                            .into_owned(),
-                    );
-                }
-                let kw = PyDict::new(py);
-                kw.set_item("name", names.join(", "))?;
-                vp.call_method1(
-                    "flash_status",
-                    (
-                        translated(
-                            py,
-                            "“{name}” is no longer linked: its geometry is now part of this model",
-                            Some(&kw),
-                        )?,
-                        5000,
-                    ),
-                )?;
+    let cmd = hist.call_method1("UnlinkCommand", (linked,))?;
+    let unlink = cmd.getattr("groups")?.is_truthy()?;
+    if unlink {
+        steps.append(&cmd)?;
+    }
+    if steps.is_empty() {
+        return Ok(());
+    }
+    let last = if batch && steps.len() > 1 {
+        let all = hist.call_method1("CompoundCommand", (&steps,))?;
+        execute(&vp, &all)?;
+        all
+    } else {
+        for step in steps.iter() {
+            execute(&vp, &step)?;
+        }
+        steps.get_item(steps.len() - 1)?
+    };
+    if unlink {
+        let stack = vp.getattr("history")?.getattr("undo_stack")?;
+        if stack.is_truthy()? && stack.get_item(-1)?.is(&last) {
+            win.call_method1("_unlinked", (&cmd,))?;
+            let mut names = Vec::new();
+            for path in cmd.getattr("paths")?.try_iter()? {
+                let path = path?.str()?.to_string();
+                names.push(
+                    Path::new(&path)
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .into_owned(),
+                );
             }
+            let kw = PyDict::new(py);
+            kw.set_item("name", names.join(", "))?;
+            vp.call_method1(
+                "flash_status",
+                (
+                    translated(
+                        py,
+                        "“{name}” is no longer linked: its geometry is now part of this model",
+                        Some(&kw),
+                    )?,
+                    5000,
+                ),
+            )?;
         }
     }
     vp.call_method0("update")?;
