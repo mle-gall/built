@@ -245,3 +245,48 @@ def test_the_tool_preview_helpers_stay_on_the_classes():
     state = RotateGuidesCommand.state(guide)
     RotateGuidesCommand.place(state, None)
     assert guide.point.x() == 1
+
+
+# ---- group and component steps
+
+def test_insert_and_delete_publish_where_the_placement_went():
+    from core.history import DeleteGroupCommand, InsertGroupCommand
+    import ingetrazo_core
+    scene = Scene()
+    h = History(scene)
+    g = Group(Mesh(), name="part", uid="p")
+    step = InsertGroupCommand(g)
+    assert isinstance(step, ingetrazo_core.RecordStep) and step.keeps_groups
+    assert step._owner is None and step.group is g
+    h.execute(step)
+    assert step._owner is scene.groups and g in scene.selection
+    gone = DeleteGroupCommand(g)
+    h.execute(gone)
+    assert g not in scene.groups and gone.index == 0
+    h.undo()
+    assert list(scene.groups) == [g]
+    h.undo()
+    assert list(scene.groups) == [] and g not in scene.selection
+    h.redo()
+    h.redo()
+    assert list(scene.groups) == []
+
+
+def test_merge_puts_back_the_same_merged_group_on_redo():
+    from core.history import MergeGroupsCommand
+    from ingetrazo_core import Vec3
+    scene = Scene()
+    h = History(scene)
+    parts = []
+    for x in (0, 2):
+        m = Mesh()
+        m.add_face([Vec3(x, 0, 0), Vec3(x + 1, 0, 0), Vec3(x + 1, 1, 0)])
+        parts.append(Group(m, name=f"g{x}"))
+    scene.groups.extend(parts)
+    h.execute(MergeGroupsCommand(parts))
+    merged = scene.groups[0]
+    assert len(scene.groups) == 1 and merged not in parts
+    h.undo()
+    assert list(scene.groups) == parts
+    h.redo()
+    assert list(scene.groups) == [merged]

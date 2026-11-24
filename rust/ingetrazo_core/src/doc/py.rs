@@ -3051,6 +3051,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<super::history::DocumentHistory>()?;
     super::commands::register(m)?;
     super::steps::register(m)?;
+    super::group_steps::register(m)?;
     m.add_class::<super::feed::FeedReaders>()?;
     m.add_class::<DocRecord>()?;
     m.add_class::<DocAttr>()?;

@@ -9,7 +9,7 @@ use pyo3::{
 type Obj<'py> = Bound<'py, PyAny>;
 
 #[pyfunction]
-fn replacement_targets<'py>(groups: &Obj<'py>, source: &Obj<'py>) -> PyResult<Vec<Obj<'py>>> {
+pub(crate) fn replacement_targets<'py>(groups: &Obj<'py>, source: &Obj<'py>) -> PyResult<Vec<Obj<'py>>> {
     let mesh = source.getattr("mesh")?;
     let mut out = Vec::new();
     for g in groups.try_iter()? {
@@ -24,7 +24,7 @@ fn replacement_targets<'py>(groups: &Obj<'py>, source: &Obj<'py>) -> PyResult<Ve
     Ok(out)
 }
 #[pyfunction]
-fn replace_definitions<'py>(
+pub(crate) fn replace_definitions<'py>(
     targets: Vec<Obj<'py>>,
     source: &Obj<'py>,
     fields: Vec<String>,
@@ -109,7 +109,7 @@ fn replace_definitions<'py>(
     Ok(before)
 }
 #[pyfunction]
-fn restore_definitions(groups: Vec<Obj<'_>>, before: Vec<Bound<'_, PyDict>>) -> PyResult<()> {
+pub(crate) fn restore_definitions(groups: Vec<Obj<'_>>, before: Vec<Bound<'_, PyDict>>) -> PyResult<()> {
     for (g, values) in groups.into_iter().zip(before) {
         for (k, v) in values {
             g.setattr(k.extract::<String>()?.as_str(), v)?;
@@ -118,7 +118,7 @@ fn restore_definitions(groups: Vec<Obj<'_>>, before: Vec<Bound<'_, PyDict>>) -> 
     Ok(())
 }
 #[pyfunction]
-fn keep_template<'py>(
+pub(crate) fn keep_template<'py>(
     scene: &Obj<'py>,
     instance: &Obj<'py>,
     keep: bool,
@@ -145,7 +145,7 @@ fn keep_template<'py>(
     }
 }
 #[pyfunction]
-fn restore_template(
+pub(crate) fn restore_template(
     kept: &Obj<'_>,
     template: &Obj<'_>,
     keep: bool,
@@ -162,7 +162,7 @@ fn restore_template(
 }
 
 #[pyfunction]
-fn merge_group_geometry<'py>(groups: &Obj<'py>) -> PyResult<Obj<'py>> {
+pub(crate) fn merge_group_geometry<'py>(groups: &Obj<'py>) -> PyResult<Obj<'py>> {
     let py = groups.py();
     let api = py.import("core.group")?;
     let mut edge_coords = Vec::new();
@@ -248,7 +248,7 @@ fn merge_group_geometry<'py>(groups: &Obj<'py>) -> PyResult<Obj<'py>> {
 }
 
 #[pyfunction]
-fn replace_roots<'py>(
+pub(crate) fn replace_roots<'py>(
     roots: &Obj<'py>,
     groups: Vec<Obj<'py>>,
     merged: &Obj<'py>,
@@ -266,7 +266,7 @@ fn replace_roots<'py>(
     Ok(indices)
 }
 #[pyfunction]
-fn group_owner<'py>(scene: &Obj<'py>, g: &Obj<'py>) -> PyResult<Option<Obj<'py>>> {
+pub(crate) fn group_owner<'py>(scene: &Obj<'py>, g: &Obj<'py>) -> PyResult<Option<Obj<'py>>> {
     let roots = scene.getattr("groups")?;
     if roots.contains(g)? {
         return Ok(Some(roots));
@@ -287,7 +287,7 @@ fn group_owner<'py>(scene: &Obj<'py>, g: &Obj<'py>) -> PyResult<Option<Obj<'py>>
     Ok(None)
 }
 #[pyfunction]
-fn delete_placement<'py>(scene: &Obj<'py>, g: &Obj<'py>) -> PyResult<(Obj<'py>, usize)> {
+pub(crate) fn delete_placement<'py>(scene: &Obj<'py>, g: &Obj<'py>) -> PyResult<(Obj<'py>, usize)> {
     let Some(owner) = group_owner(scene, g)? else {
         return Err(pyo3::exceptions::PyValueError::new_err(
             "group is not in the scene",
@@ -298,7 +298,7 @@ fn delete_placement<'py>(scene: &Obj<'py>, g: &Obj<'py>) -> PyResult<(Obj<'py>, 
     Ok((owner, index))
 }
 #[pyfunction]
-fn restore_placement(
+pub(crate) fn restore_placement(
     roots: &Obj<'_>,
     owner: &Obj<'_>,
     index: Option<usize>,
@@ -309,7 +309,7 @@ fn restore_placement(
     Ok(())
 }
 #[pyfunction]
-fn set_placement_field<'py>(g: &Obj<'py>, field: &str, value: &Obj<'py>) -> PyResult<Obj<'py>> {
+pub(crate) fn set_placement_field<'py>(g: &Obj<'py>, field: &str, value: &Obj<'py>) -> PyResult<Obj<'py>> {
     let old = if field == "material" && !g.hasattr(field)? {
         g.py().None().into_bound(g.py())
     } else {
@@ -319,12 +319,12 @@ fn set_placement_field<'py>(g: &Obj<'py>, field: &str, value: &Obj<'py>) -> PyRe
     Ok(old)
 }
 #[pyfunction]
-fn append_members(list: &Obj<'_>, items: &Obj<'_>) -> PyResult<()> {
+pub(crate) fn append_members(list: &Obj<'_>, items: &Obj<'_>) -> PyResult<()> {
     list.call_method1("extend", (items,))?;
     Ok(())
 }
 #[pyfunction]
-fn remove_members(list: &Obj<'_>, items: &Obj<'_>) -> PyResult<()> {
+pub(crate) fn remove_members(list: &Obj<'_>, items: &Obj<'_>) -> PyResult<()> {
     for item in items.try_iter()? {
         let item = item?;
         if list.contains(&item)? {
@@ -334,7 +334,7 @@ fn remove_members(list: &Obj<'_>, items: &Obj<'_>) -> PyResult<()> {
     Ok(())
 }
 #[pyfunction]
-fn rebuild_letter_placement<'py>(
+pub(crate) fn rebuild_letter_placement<'py>(
     g: &Obj<'py>,
     params: &Obj<'py>,
     before: &Obj<'py>,
@@ -370,7 +370,7 @@ fn rebuild_letter_placement<'py>(
     Ok(before)
 }
 #[pyfunction]
-fn restore_letter_placement(g: &Obj<'_>, before: (Obj<'_>, Obj<'_>, Obj<'_>)) -> PyResult<()> {
+pub(crate) fn restore_letter_placement(g: &Obj<'_>, before: (Obj<'_>, Obj<'_>, Obj<'_>)) -> PyResult<()> {
     g.setattr("children", before.0)?;
     g.setattr("text3d", before.1)?;
     g.setattr("name", before.2)
@@ -381,7 +381,7 @@ type UnlinkPlan<'py> = (
     Vec<(Obj<'py>, Bound<'py, PyList>)>,
 );
 #[pyfunction]
-fn unlink_placements<'py>(
+pub(crate) fn unlink_placements<'py>(
     scene: &Obj<'py>,
     groups: Vec<Obj<'py>>,
     fields: Vec<String>,

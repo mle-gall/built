@@ -18,6 +18,8 @@ from ingetrazo_core import Vec3 as QVector3D
 # Typed native steps (docs/commands-port.md): placement renames, locks and
 # whole-placement paint are Rust deltas, created through the protocol verbs.
 from ingetrazo_core import NativeCommand
+# Group and component steps (rust/ingetrazo_core/src/doc/group_steps.rs).
+from ingetrazo_core import (ReplaceComponentCommand, KeepComponentCommand, AddKeptComponentsCommand, GroupToComponentCommand, EditText3DCommand, ReparentGroupsCommand, MergeGroupsCommand, MakeUniqueCommand, InsertGroupCommand, DeleteGroupCommand, SetStructureNodeCommand, SplitIntoPiecesCommand)
 # Annotation, section, guide, image, survey, saved-scene and sheet steps
 # (rust/ingetrazo_core/src/doc/steps.rs): the retired classes' names.
 from ingetrazo_core import (RecordStep, AddDimensionCommand, DeleteDimensionsCommand, AddTextLabelCommand, MoveTextLabelsCommand, MoveGuidesCommand, RotateGuidesCommand, MoveDimensionsCommand, EditTextLabelCommand, EditDimensionTextCommand, DeleteTextLabelsCommand, AddGuideCommand, PlaceSectionPlaneCommand, DeleteSectionPlanesCommand, ReverseSectionPlaneCommand, SetActiveSectionCommand, SetSectionModeCommand, SetSectionFillCommand, RenameSectionPlaneCommand, AddSheetCommand, PlaceViewCommand, SheetCommand, InsertSheetCommand, RemoveSheetCommand, MoveSheetCommand, CreatePlanCommand, AddSceneCommand, DeleteScenesCommand, UpdateSceneCommand, SceneTreeCommand, MoveSectionPlanesCommand, RotateSectionPlanesCommand, ChangeGuideCommand, DeleteGuidesCommand, AddImagePlaneCommand, DeleteImagePlanesCommand, TransformImagePlaneCommand, SetImagePlaneOpacityCommand, MoveImagePlanesCommand, RotateImagePlanesCommand, ScaleImagePlanesCommand, AddGeoPathCommand, DeleteGeoPointsCommand, DeleteGeoPathsCommand, ToggleGeoPathClosedCommand, SetGeoPathSurfaceCommand, MoveGeoPathNodeCommand)
@@ -2536,39 +2538,6 @@ class MakeGroupCommand(MeshCommand):
         scene.version += 1
 
 
-class MakeUniqueCommand(Command):
-    """Make Unique: bake a component instance into its OWN mesh
-    so edits stop touching the siblings' shared definition.
-
-    ``rename``: the command Make Unique also gives it a name of its own
-    when another object in the model wears the same one — «Silla» becomes
-    «Silla #2» (#620). Opening a copied group, which makes it unique on the
-    way in, leaves the name alone."""
-
-    doc_undo = True
-
-    def __init__(self, group, rename: bool = False) -> None:
-        self.group = group
-        self._rename = rename
-        self._prior = None
-
-    def do(self, scene) -> None:
-        from ingetrazo_core import make_placement_unique
-        self._prior = make_placement_unique(scene, self.group, self._rename, True)
-        if self._prior is not None:
-            scene.version += 1
-
-    def bind_transaction(self, txn):
-        super().bind_transaction(txn)
-        self._prior = None
-
-    def undo(self, scene) -> None:
-        from ingetrazo_core import restore_unique_placement
-        if self._prior is not None:
-            restore_unique_placement(self.group, self._prior)
-            scene.version += 1
-
-
 def _move_holds(scene, placements, moved) -> None:
     """The dimensions held on a vertex inside ``placements`` hold the
     same vertex in its copy now: ``moved`` maps ``id`` of each part and
@@ -2866,196 +2835,6 @@ def _nested_pairs(old, new) -> list:
     return out
 
 
-class ReplaceComponentCommand(Command):
-    """Replace Component: each target instance takes ``source``'s
-    definition and keeps its own placement.
-
-    What a copy shares — the prototype mesh, the subgroups inside it, the
-    name and what was generated or tagged with it (3D text, BIM tag,
-    extensions' data, face-me) — comes from ``source``; what belongs to
-    this one copy stays: its matrix, layer, paint, visibility and uid, so a
-    scene that hides it still finds it. The source's origin lands where the
-    target's sat, turned and scaled the way the target was.
-
-    Targets that already share ``source``'s definition, and anything that is
-    not a component instance, are left alone."""
-
-    _SHARED = ("mesh", "children", "name", "axes", "component", "text3d",
-               "ifc", "ext", "billboard", "exploded")
-
-    doc_undo = True
-
-    def __init__(self, targets, source) -> None:
-        self.source = source
-        self.targets = _definitions.replacement_targets(targets, source)
-        self._before: list = []
-
-    def do(self, scene) -> None:
-        self._before = _definitions.replace_definitions(self.targets, self.source, self._SHARED)
-        scene.version += 1
-
-    def undo(self, scene) -> None:
-        _definitions.restore_definitions(self.targets, self._before)
-        scene.version += 1
-
-
-class KeepComponentCommand(Command):
-    """Keep in File, on or off, for the definition ``instance`` uses
-    (``instance`` may be a kept template itself). On: a placement-free
-    template joins ``scene.kept_components``, so the definition stays in
-    the document with no copy placed. Off: it leaves, and a definition with
-    no copy left is gone when the file is saved."""
-
-    doc_undo = True     # ``scene.kept_components`` is a document list
-
-    def __init__(self, instance, keep: bool = True) -> None:
-        self.instance = instance
-        self.keep = bool(keep)
-        self._template = None
-        self._index = None
-
-    def do(self, scene) -> None:
-        self._template, self._index = _definitions.keep_template(scene, self.instance, self.keep, self._template)
-        scene.version += 1
-
-    def undo(self, scene) -> None:
-        _definitions.restore_template(scene.kept_components, self._template, self.keep, self._index)
-        scene.version += 1
-
-
-class AddKeptComponentsCommand(Command):
-    """Bring ready-made definitions into the document as kept components
-    (no copy placed) — «Components from File…». Undo takes them out."""
-
-    doc_undo = True     # ``scene.kept_components`` is a document list
-
-    def __init__(self, templates) -> None:
-        self.templates = list(templates)
-
-    def do(self, scene) -> None:
-        _definitions.append_members(scene.kept_components, self.templates)
-        scene.version += 1
-
-    def undo(self, scene) -> None:
-        _definitions.remove_members(scene.kept_components, self.templates)
-        scene.version += 1
-
-
-class GroupToComponentCommand(Command):
-    """Convert a CLASSIC group into a component instance in place: its mesh
-    becomes the shared definition (world frame == local frame) under an
-    identity transform. Free — no geometry is copied — and from then on
-    Move/Rotate compose the matrix (O(1)) and copies share the definition.
-    The reverse road exists too (Make Unique). Exploding a 230k-face group
-    to feed Make Component ground the loose-mesh machinery for minutes
-    (piscina report); this is the door that was missing."""
-
-    doc_undo = True
-
-    def __init__(self, group, name=None) -> None:
-        self.group = group
-        self._name = name
-
-    def do(self, scene) -> None:
-        self._previous = _placements.convert_component(self.group, self._name)
-        scene.version += 1
-
-    def undo(self, scene) -> None:
-        _placements.restore_component(self.group, self._previous)
-        scene.version += 1
-
-
-class InsertGroupCommand(Command):
-    """Insert a ready-made Group (a bundled component, a paste, a future
-    collection item) into the scene, selected so the user can Move it into
-    place.
-
-    INSIDE an open container it goes into the container — the usual rule
-    that whatever you create while editing a group belongs to it. A roof
-    pasted while editing the pergola used to land at the top level, beside
-    the plaza («se supone que todo lo que edite debería estar dentro del
-    grupo», Marco, 2026-09-14). The group arrives in WORLD coordinates and
-    is expressed in the container's own space when that one carries a
-    matrix (entering usually pushes it down into the children already)."""
-
-    keeps_groups = True
-
-    def __init__(self, group, attachment=None) -> None:
-        self.attachment = attachment
-        self._sign_anchor = None
-        self.group = group
-        self._owner: Optional[list] = None
-        self._baked = False
-
-    doc_undo = True  # A baked mesh replaces the journalled definition handle.
-
-    def doc_after(self, scene, phase) -> None:
-        if phase == "undo":
-            scene.selection.discard(self.group)
-        else:
-            scene.selection.clear()
-            scene.selection.add(self.group)
-        scene.version += 1
-
-    @staticmethod
-    def _target(scene):
-        ctx = getattr(scene, "edit_group", None)
-        if ctx is not None and getattr(ctx, "children", None) is not None:
-            return ctx
-        return None
-
-    def do(self, scene) -> None:
-        ctx = self._target(scene)
-        self._owner, baked = _placements.insert_placement(scene.groups, ctx, scene.mesh, self.group)
-        self._baked |= baked
-        from ingetrazo_core import file_created_placement
-        self._filing = file_created_placement(scene, self.group)
-        if self.attachment is not None:
-            from core.annotation_anchor import TextPlacementAnchor
-            self._sign_anchor = TextPlacementAnchor.create(
-                scene, scene.occurrence_path(self.group), self.attachment)
-            if self._sign_anchor is not None:
-                scene.text_placement_anchors.append(self._sign_anchor)
-        scene.selection.clear()
-        scene.selection.add(self.group)
-        scene.version += 1
-
-    def undo(self, scene) -> None:
-        if getattr(self, "_filing", None) is not None:
-            self._filing.undo(scene)
-        owner = self._owner if self._owner is not None else scene.groups
-        if self._sign_anchor is not None and self._sign_anchor in scene.text_placement_anchors:
-            scene.text_placement_anchors.remove(self._sign_anchor)
-        if self.group in owner:
-            owner.remove(self.group)
-        scene.selection.discard(self.group)
-        scene.version += 1
-
-
-class EditText3DCommand(Command):
-    """Re-edit a 3D text (core/text3d.py): the container keeps its identity,
-    pose and own mesh; its letter children are laid out again from the new
-    parameters where the old ones stood, and the name follows the text.
-    Undo puts the old letters and parameters back."""
-
-    #: Its letters (children), ``text3d`` and name are document state;
-    #: redo puts back the very letters the first run laid out.
-    doc_undo = True
-
-    def __init__(self, group, params: dict) -> None:
-        self.group = group
-        self.params = dict(params)
-        self._old: Optional[tuple] = None
-
-    def do(self, scene) -> None:
-        self._old = _definitions.rebuild_letter_placement(self.group, self.params, self._old)
-        scene.version += 1
-
-    def undo(self, scene) -> None:
-        _definitions.restore_letter_placement(self.group, self._old)
-        scene.version += 1
-
-
 class MakeNestedGroupCommand(Command):
     """Make Group when the selection already holds groups.
 
@@ -3189,53 +2968,6 @@ class GroupInContextCommand(Command):
         scene.version += 1
 
 
-class ReparentGroupsCommand(Command):
-    """Move groups into another group — or out to the model with
-    ``target=None`` — without moving them in the world: the Browser's
-    drag and drop (#219).
-
-    A group's placement is relative to its parent, so changing parent
-    changes the frame it is read in. The old parent's frame and the new
-    one are both known, and the difference goes into the group: composed
-    into its matrix when it has one, baked into its mesh when it is a
-    classic group (and only when the two frames differ at all). Its own
-    children ride along untouched, being relative to it.
-
-    The target gets a matrix if it had none — a group that holds groups is
-    always an instance (``Group.adopt``) — and stays a GROUP, not a
-    component. Callers check :func:`core.outliner.reparent_problem` first:
-    components keep their definition, so nothing goes in or out of one.
-    """
-
-    def __init__(self, groups, target=None) -> None:
-        self.groups = list(groups)
-        self.target = target
-        self._moves: list = []
-        self._target_state = None
-
-    doc_undo = True  # A baked mesh replaces the journalled definition handle.
-
-    def doc_after(self, scene, phase) -> None:
-        if phase == "undo":
-            scene.selection.clear()
-        else:
-            _unselect(scene, [m[0] for m in self._moves])
-        _dirty_placements([m[0] for m in self._moves])
-        scene.version += 1
-
-    def do(self, scene) -> None:
-        self._target_state, self._moves = _placements.reparent(
-            scene.groups, self.groups, self.target, scene.selection.discard)
-        _dirty_placements([m[0] for m in self._moves])
-        scene.version += 1
-
-    def undo(self, scene) -> None:
-        _placements.restore_parent(scene.groups, self.target, self._target_state, self._moves)
-        scene.selection.clear()
-        _dirty_group_chunks(scene)
-        scene.version += 1
-
-
 class MakeComponentOfCommand(Command):
     """Make Component over a selection that holds groups (or groups and
     loose geometry): ONE component containing them, each still a group
@@ -3261,47 +2993,6 @@ class MakeComponentOfCommand(Command):
 
     def undo(self, scene) -> None:
         self._nest.undo(scene)
-
-
-class MergeGroupsCommand(Command):
-    """Fuse several groups (component instances included) into ONE new
-    group holding their combined world-space geometry — the fix-my-
-    grouping path. Explode + regroup routes everything through the loose
-    mesh, whose per-face machinery froze on a 100k-leaf import (piscina
-    report); this merge goes group-to-group through the bulk-weld API and
-    the loose mesh never hears about it. Undo restores the original
-    groups at their positions."""
-
-    doc_undo = True
-
-    def doc_after(self, scene, phase):
-        if phase == "undo":
-            scene.selection.discard(self._merged)
-        else:
-            scene.selection.clear()
-            scene.selection.add(self._merged)
-        scene.version += 1
-
-    def __init__(self, groups) -> None:
-        self._groups = list(groups)
-        self._indices: Optional[list] = None
-        self._merged = None
-
-    def do(self, scene) -> None:
-        if self._merged is None:
-            self._merged = _definitions.merge_group_geometry(self._groups)
-        self._indices = _definitions.replace_roots(scene.groups, self._groups, self._merged, scene.selection.discard)
-        scene.selection.clear()
-        scene.selection.add(self._merged)
-        scene.version += 1
-
-    def undo(self, scene) -> None:
-        if self._merged in scene.groups:
-            scene.groups.remove(self._merged)
-        scene.selection.discard(self._merged)
-        for idx, g in sorted(zip(self._indices or [], self._groups)):
-            scene.groups.insert(min(idx, len(scene.groups)), g)
-        scene.version += 1
 
 
 class ExplodeGroupCommand(MeshCommand):
@@ -3616,37 +3307,6 @@ class ExplodeViewCommand(Command):
         scene.version += 1
 
 
-class SplitIntoPiecesCommand(Command):
-    """Replace what ``group`` holds with ``pieces`` (from
-    :func:`core.pieces.split_into_pieces`): the same geometry, now one child
-    group per physical piece. The group stays the object the user placed —
-    same matrix, name, layer and paint — so it moves, copies and exports as
-    before, and Explode sets the pieces free. Undo puts the old contents
-    back untouched (the split only ever built new meshes)."""
-
-    doc_undo = True
-
-    def __init__(self, group: Group, pieces: list) -> None:
-        self.group = group
-        self.pieces = list(pieces)
-        self.before: Optional[tuple] = None
-        self._emptied = None
-        #: Where the group's faces went, for the change feed: ``[(source
-        #: mesh, piece mesh, {"face": [(key, key)]})]`` for the pieces the
-        #: store cut (``core.store_parts.copy_part``).
-        from core.store_parts import origin_of
-        self.copies = [(src, p.mesh, keys) for p in self.pieces
-                       for src, keys in [origin_of(p.mesh)] if src is not None]
-
-    def do(self, scene) -> None:
-        self.before, self._emptied = _placements.split_placement(self.group, self.pieces, self._emptied)
-        scene.version += 1
-
-    def undo(self, scene) -> None:
-        _placements.restore_split(self.group, self.before)
-        scene.version += 1
-
-
 class MoveGroupCommand(GroupTransformCommand):
     """Translate a whole group by ``delta`` (every vertex of its mesh). Because
     the group is isolated, this never drags the rest of the model."""
@@ -3779,41 +3439,6 @@ def group_owner_list(scene, group):
     ``children`` of the container that owns it, however deep. ``None`` when
     the group is not in the scene at all."""
     return _definitions.group_owner(scene, group)
-
-
-class DeleteGroupCommand(Command):
-    """Remove a whole group (and its geometry) from the scene; undo restores it
-    at its original position in the list.
-
-    The list may be a container's ``children``: inside a component, Delete
-    on one of its parts used to look for it in ``scene.groups`` and fail —
-    rolled back, nothing on screen, «quiero eliminar, tampoco puedo»
-    (Marco, 2026-09-11, a fountain inside an imported component)."""
-
-    keeps_groups = True
-
-    doc_undo = True
-
-    def __init__(self, group: Group) -> None:
-        self.group = group
-        self.index: Optional[int] = None
-        self._owner: Optional[list] = None
-
-    def doc_after(self, scene, phase) -> None:
-        if phase == "redo":
-            scene.selection.discard(self.group)
-            scene.mesh.purge_debris()
-        scene.version += 1
-
-    def do(self, scene) -> None:
-        self._owner, self.index = _definitions.delete_placement(scene, self.group)
-        scene.selection.discard(self.group)
-        scene.mesh.purge_debris()
-        scene.version += 1
-
-    def undo(self, scene) -> None:
-        _definitions.restore_placement(scene.groups, self._owner, self.index, self.group)
-        scene.version += 1
 
 
 class HealOverlapsCommand(MeshCommand):
@@ -4141,29 +3766,6 @@ class ChangeAxesCommand(MeshCommand):
     def undo(self, scene) -> None:
         if self._axes_edit.undo(self.group):
             scene.version += 1
-
-class SetStructureNodeCommand(Command):
-    """Membership belongs to a placement, including ones without an IFC record."""
-    doc_undo = True     # ``Group.ext`` is a document value (slice 2)
-
-    def __init__(self, targets, key):
-        self.targets = list(targets)
-        self.key = key
-
-    def do(self, scene):
-        from ingetrazo_core import set_structure_nodes
-        self.before = set_structure_nodes(self.targets, self.key)
-        scene.version += 1
-
-    def bind_transaction(self, txn):
-        super().bind_transaction(txn)
-        self.before = None
-
-    def undo(self, scene):
-        from ingetrazo_core import restore_structure_nodes
-        restore_structure_nodes(self.targets, self.before)
-        scene.version += 1
-
 
 class SetRecordCommand(Command):
     """Top-level patch of group records; None patch removes the record.

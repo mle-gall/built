@@ -23,8 +23,11 @@ use pyo3::types::{PyDict, PyList, PyTuple};
 use pyo3::PyTraverseError;
 use std::sync::Mutex;
 
-type Obj<'py> = Bound<'py, PyAny>;
-type Run = for<'py> fn(&RecordStep, Python<'py>, &Obj<'py>) -> PyResult<()>;
+pub(super) type Obj<'py> = Bound<'py, PyAny>;
+pub(super) type Run = for<'py> fn(&RecordStep, Python<'py>, &Obj<'py>) -> PyResult<()>;
+/// A step's own after-effect, in place of the shared pick and bump.
+#[derive(Clone, Copy)]
+pub(super) struct After(pub for<'py> fn(&RecordStep, Python<'py>, &Obj<'py>, Option<&str>) -> PyResult<()>);
 
 /// The counter a step bumps after it runs, and after a replay.
 #[derive(Clone, Copy)]
@@ -61,26 +64,35 @@ pub struct RecordStep {
     keeps_paint: bool,
     #[pyo3(get)]
     keeps_rows: bool,
+    #[pyo3(get)]
+    keeps_groups: bool,
+    hook: Option<After>,
     bump: Bump,
     pick: Pick,
     /// What a repeated execute reuses (a scene update's captured state).
     memory: Mutex<Vec<Py<PyAny>>>,
     /// The transaction a direct execute (outside History) opened.
     own: Mutex<Option<Py<PyAny>>>,
+    /// Results an execute publishes under the retired class's attribute
+    /// names (`_owner`, `index`): None until it runs.
+    named: Mutex<Vec<(&'static str, Option<Py<PyAny>>)>>,
 }
 
 impl RecordStep {
-    fn new(name: &'static str, run: Run, args: Vec<(&'static str, Obj<'_>)>) -> Self {
+    pub(super) fn new(name: &'static str, run: Run, args: Vec<(&'static str, Obj<'_>)>) -> Self {
         Self {
             name,
             run,
             args: args.into_iter().map(|(k, v)| (k, v.unbind())).collect(),
             keeps_paint: false,
             keeps_rows: false,
+            keeps_groups: false,
+            hook: None,
             bump: Bump::Version,
             pick: Pick::Nothing,
             memory: Mutex::new(Vec::new()),
             own: Mutex::new(None),
+            named: Mutex::new(Vec::new()),
         }
     }
     fn paint(mut self) -> Self {
@@ -91,6 +103,31 @@ impl RecordStep {
         self.keeps_rows = true;
         self
     }
+    pub(super) fn groups(mut self) -> Self {
+        self.keeps_groups = true;
+        self
+    }
+    pub(super) fn hook(mut self, after: After) -> Self {
+        self.hook = Some(after);
+        self
+    }
+    /// What an earlier execute of this step kept for a repeated one.
+    pub(super) fn remembered<'py>(&self, py: Python<'py>, i: usize) -> Option<Obj<'py>> {
+        self.memory.lock().unwrap().get(i).map(|v| v.clone_ref(py).into_bound(py))
+    }
+    /// Attribute names an execute publishes results under.
+    pub(super) fn publishes(self, names: &[&'static str]) -> Self {
+        *self.named.lock().unwrap() = names.iter().map(|n| (*n, None)).collect();
+        self
+    }
+    pub(super) fn publish(&self, name: &'static str, value: Obj<'_>) {
+        if let Some(slot) = self.named.lock().unwrap().iter_mut().find(|(n, _)| *n == name) {
+            slot.1 = Some(value.unbind());
+        }
+    }
+    pub(super) fn remember(&self, values: Vec<Obj<'_>>) {
+        *self.memory.lock().unwrap() = values.into_iter().map(|v| v.unbind()).collect();
+    }
     fn bumps(mut self, bump: Bump) -> Self {
         self.bump = bump;
         self
@@ -99,13 +136,16 @@ impl RecordStep {
         self.pick = pick;
         self
     }
-    fn arg<'py>(&self, py: Python<'py>, i: usize) -> Obj<'py> {
+    pub(super) fn arg<'py>(&self, py: Python<'py>, i: usize) -> Obj<'py> {
         self.args[i].1.bind(py).clone()
     }
-    fn items<'py>(&self, py: Python<'py>, i: usize) -> PyResult<Vec<Obj<'py>>> {
+    pub(super) fn items<'py>(&self, py: Python<'py>, i: usize) -> PyResult<Vec<Obj<'py>>> {
         self.arg(py, i).try_iter()?.collect()
     }
     fn after(&self, py: Python<'_>, scene: &Obj<'_>, phase: Option<&str>) -> PyResult<()> {
+        if let Some(After(hook)) = self.hook {
+            return hook(self, py, scene, phase);
+        }
         let target = self.arg(py, 0);
         let selection = || scene.getattr("selection");
         match (self.pick, phase) {
@@ -148,7 +188,7 @@ fn bump(scene: &Obj<'_>, kind: Bump, target: &Obj<'_>) -> PyResult<()> {
     }
 }
 
-fn version(scene: &Obj<'_>) -> PyResult<()> {
+pub(super) fn version(scene: &Obj<'_>) -> PyResult<()> {
     let v: i64 = scene.getattr("version")?.extract()?;
     scene.setattr("version", v + 1)
 }
@@ -207,9 +247,6 @@ impl RecordStep {
     /// Undone and redone by the step's document transaction.
     #[classattr]
     const doc_undo: bool = true;
-    #[classattr]
-    const keeps_groups: bool = false;
-
     #[getter]
     fn history_name(&self) -> &'static str {
         self.name
@@ -217,11 +254,13 @@ impl RecordStep {
 
     /// The constructor's arguments, under the retired class's names.
     fn __getattr__(&self, py: Python<'_>, name: &str) -> PyResult<Py<PyAny>> {
-        self.args
-            .iter()
-            .find(|(k, _)| *k == name)
-            .map(|(_, v)| v.clone_ref(py))
-            .ok_or_else(|| PyAttributeError::new_err(name.to_owned()))
+        if let Some((_, v)) = self.args.iter().find(|(k, _)| *k == name) {
+            return Ok(v.clone_ref(py));
+        }
+        match self.named.lock().unwrap().iter().find(|(k, _)| *k == name) {
+            Some((_, v)) => Ok(v.as_ref().map_or_else(|| py.None(), |v| v.clone_ref(py))),
+            None => Err(PyAttributeError::new_err(name.to_owned())),
+        }
     }
 
     #[pyo3(name = "do")]
@@ -314,6 +353,11 @@ impl RecordStep {
         }
         if let Ok(memory) = self.memory.try_lock() {
             for v in memory.iter() {
+                visit.call(v)?;
+            }
+        }
+        if let Ok(named) = self.named.try_lock() {
+            for v in named.iter().filter_map(|(_, v)| v.as_ref()) {
                 visit.call(v)?;
             }
         }

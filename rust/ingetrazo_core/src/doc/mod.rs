@@ -34,6 +34,7 @@ mod feed;
 mod execute;
 pub mod commands;
 mod steps;
+mod group_steps;
 mod file_view;
 pub(crate) mod drawing;
 pub mod occurrences;
