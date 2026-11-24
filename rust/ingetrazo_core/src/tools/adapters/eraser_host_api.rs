@@ -4,7 +4,7 @@ use super::*;
 
 fn mark<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.eraser_host")?;
+    let module = imported(py, "tools.eraser_host")?;
     let tool = a.get_item(0)?;
     let vp = a.get_item(1)?;
     let x = a.get_item(2)?;
@@ -23,13 +23,12 @@ fn on_release<'py>(a: &Args<'py>) -> Reply<'py> {
 
 fn send<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.eraser_host")?;
+    let module = imported(py, "tools.eraser_host")?;
     let event = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let vp = a.get_item(1)?;
     tool.setattr("_viewport", &vp)?;
-    let reply = py
-        .import("builtins")?
+    let reply = imported(py, "builtins")?
         .getattr("super")?
         .call1((module.getattr("EraserHost")?, &tool))?
         .call_method1("_send", (&vp, &event))?;
@@ -44,7 +43,7 @@ fn send<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn rubber_band_lines<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.eraser_host")?;
+    let module = imported(py, "tools.eraser_host")?;
     let mut i: Obj<'py>;
     let mut m: Obj<'py>;
     let mut pts: Obj<'py>;
@@ -76,8 +75,7 @@ fn rubber_band_lines<'py>(a: &Args<'py>) -> Reply<'py> {
                             "extend",
                             ({
                                 let collected = PyList::empty(py);
-                                for item in py
-                                    .import("builtins")?
+                                for item in imported(py, "builtins")?
                                     .getattr("range")?
                                     .call1((pts.len()?.into_bound_py_any(py)?,))?
                                     .try_iter()?
@@ -124,7 +122,7 @@ fn group_box_segments<'py>(a: &Args<'py>) -> Reply<'py> {
     let viewport = optional(&tool, "_viewport")?;
     let output = PyList::empty(py);
     if let Some(obb) = viewport.getattr_opt("_group_obb")?.filter(|v| !v.is_none()) {
-        let corners = py.import("core.group")?.getattr("oriented_box_corners")?;
+        let corners = imported(py, "core.group")?.getattr("oriented_box_corners")?;
         if let Ok(c) = obb
             .call1((group,))
             .and_then(|b| corners.call1(positional(&b)?))

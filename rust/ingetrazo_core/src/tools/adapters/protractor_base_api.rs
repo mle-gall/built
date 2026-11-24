@@ -8,7 +8,7 @@ fn value_is_unitless<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn on_key<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.protractor_host")?;
+    let module = imported(py, "tools.protractor_host")?;
     let key = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
@@ -21,7 +21,7 @@ fn on_key<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn wireframe_color<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.protractor_host")?;
+    let module = imported(py, "tools.protractor_host")?;
     let mut axis: Obj<'py>;
     let tool = a.get_item(0)?;
     let mut v: Obj<'py>;
@@ -41,7 +41,7 @@ fn wireframe_color<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn disc_lines<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.protractor_host")?;
+    let module = imported(py, "tools.protractor_host")?;
     let tool = a.get_item(0)?;
     let sweep = a.get_item(1)?;
     let centre = if !tool.getattr("start_point")?.is_none() {

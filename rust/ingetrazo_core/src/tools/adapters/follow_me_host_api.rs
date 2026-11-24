@@ -24,7 +24,7 @@ fn hovered_face<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn path<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.followme_host")?;
+    let module = imported(py, "tools.followme_host")?;
     let tool = a.get_item(0)?;
     let path = tool.call_method1("_state", ("path",))?;
     return Ok(if !path.is_none() {
@@ -65,7 +65,7 @@ fn chain<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn path_points<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.followme_host")?;
+    let module = imported(py, "tools.followme_host")?;
     let tool = a.get_item(0)?;
     return Ok((
         ({
@@ -105,7 +105,7 @@ fn host_sweep_highlight<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn host_sweep_selection<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.followme_host")?;
+    let module = imported(py, "tools.followme_host")?;
     let ordered: Obj<'py>;
     let mut p: Obj<'py>;
     let tool = a.get_item(0)?;
@@ -201,7 +201,7 @@ fn host_sweep_ring<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn host_sweep_message<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.followme_host")?;
+    let module = imported(py, "tools.followme_host")?;
     let code = a.get_item(2)?;
     let vp = a.get_item(1)?;
     vp.call_method1(
@@ -219,7 +219,7 @@ fn host_sweep_message<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn host_sweep_done<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.followme_host")?;
+    let module = imported(py, "tools.followme_host")?;
     let ok = a.get_item(2)?;
     let vp = a.get_item(1)?;
     vp.call_method1("set_hover", (py.None(),))?;
@@ -249,7 +249,7 @@ fn commit<'py>(a: &Args<'py>) -> Reply<'py> {
     let path = a.get_item(3)?;
     let tool = a.get_item(0)?;
     let vp = a.get_item(1)?;
-    let run = py.import("core.protocol.commands")?.getattr("run")?;
+    let run = imported(py, "core.protocol.commands")?.getattr("run")?;
     let answer = run.call((vp.getattr("history")?, "follow_me",), Some(&fields!(py; "face" => py.get_type::<pyo3::types::PyString>().call1((face.getattr("key")?,))?, "path" => {let items=PyList::empty(py); for item in path.try_iter()? { let p = item?;
 items.append(p.call_method0("toTuple")?)?;
 } items.into_any()}, "closed" => &closed)))?;
@@ -273,12 +273,11 @@ fn on_release<'py>(a: &Args<'py>) -> Reply<'py> {
 
 fn preview_faces<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.followme_host")?;
+    let module = imported(py, "tools.followme_host")?;
     let attrs: Obj<'py>;
     let mut face: Obj<'py>;
     let tool = a.get_item(0)?;
-    let faces = py
-        .import("builtins")?
+    let faces = imported(py, "builtins")?
         .getattr("super")?
         .call1((module.getattr("FollowMeHost")?, &tool))?
         .call_method0("preview_faces")?;
@@ -307,10 +306,10 @@ fn host_sweep_profile<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn on_deactivate<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.followme_host")?;
+    let module = imported(py, "tools.followme_host")?;
     let tool = a.get_item(0)?;
     let vp = a.get_item(1)?;
-    py.import("builtins")?
+    imported(py, "builtins")?
         .getattr("super")?
         .call1((module.getattr("FollowMeHost")?, &tool))?
         .call_method1("on_deactivate", (&vp,))?;
@@ -353,7 +352,7 @@ fn host_sweep_chain<'py>(a: &Args<'py>) -> Reply<'py> {
     for key in keys.try_iter()? {
         chain.append(entities.get_item(key?)?)?;
     }
-    let module = py.import("tools.followme_host")?;
+    let module = imported(py, "tools.followme_host")?;
     let (crossing, chain) = if chain.is_empty() {
         if plane.__call__(&edge)? {
             return Ok(none(py));

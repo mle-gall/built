@@ -81,3 +81,16 @@ def test_native_tool_signatures_keep_evaluated_and_postponed_annotations():
     assert inspect.signature(recent_key).return_annotation is tuple
     assert inspect.signature(look_deg_per_px).parameters["sensitivity"].annotation == int | None
     assert inspect.signature(_Grip.kind).return_annotation == "str"
+
+
+def test_registered_callback_sees_the_current_host_module(monkeypatch):
+    import sys
+    from types import ModuleType, SimpleNamespace
+    from tools.rust_tool_base import RustTool
+
+    bridge = ModuleType("tools.rust_tool_base")
+    bridge._mods = lambda value: 17
+    bridge._tuple = lambda value: (3, 2, 1)
+    monkeypatch.setitem(sys.modules, bridge.__name__, bridge)
+    event = RustTool._pointer("hover", SimpleNamespace())
+    assert (event["mods"], event["world"]) == (17, (3, 2, 1))

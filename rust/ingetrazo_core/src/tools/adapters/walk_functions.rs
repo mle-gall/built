@@ -4,7 +4,7 @@ use super::*;
 
 fn blocked<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.walkthrough_host")?;
+    let module = imported(py, "tools.walkthrough_host")?;
     let clearance = a.get_item(4)?;
     let delta = a.get_item(2)?;
     let eye = a.get_item(1)?;
@@ -31,7 +31,7 @@ fn blocked<'py>(a: &Args<'py>) -> Reply<'py> {
 fn look_deg_per_px<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let sensitivity = a.get_item(0)?;
-    let walkthrough = py.import("tools.walkthrough")?.into_any();
+    let walkthrough = imported(py, "tools.walkthrough")?.into_any();
     let s = if sensitivity.is_none() {
         walkthrough.call_method0("look_sensitivity")?
     } else {

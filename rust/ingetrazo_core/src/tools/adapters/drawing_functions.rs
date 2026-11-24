@@ -24,7 +24,7 @@ fn face_the_plane<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let corners = a.get_item(0)?;
     let plane_normal = a.get_item(1)?;
-    let native = py.import("ingetrazo_core")?.getattr("face_the_plane")?;
+    let native = imported(py, "ingetrazo_core")?.getattr("face_the_plane")?;
     native.call1((
         py.get_type::<pyo3::types::PyList>().call1((&corners,))?,
         &plane_normal,
@@ -36,7 +36,7 @@ fn ctrl_clause<'py>(a: &Args<'py>) -> Reply<'py> {
     let active = a.get_item(0)?;
     let mut off = a.get_item(2)?;
     let mut on = a.get_item(1)?;
-    let tr = py.import("core.i18n")?.getattr("tr")?;
+    let tr = imported(py, "core.i18n")?.getattr("tr")?;
     {
         let [part0, part1] =
             unpack::<2>(&(tr.call1((&on,))?, tr.call1((&off,))?).into_bound_py_any(py)?)?;
@@ -69,7 +69,7 @@ fn ctrl_clause<'py>(a: &Args<'py>) -> Reply<'py> {
 fn loop_normal<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let corners = a.get_item(0)?;
-    let native = py.import("ingetrazo_core")?.getattr("loop_normal")?;
+    let native = imported(py, "ingetrazo_core")?.getattr("loop_normal")?;
     native.call1((py.get_type::<pyo3::types::PyList>().call1((&corners,))?,))
 }
 

@@ -21,7 +21,7 @@ fn moving<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn claims_key<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.walkthrough_host")?;
+    let module = imported(py, "tools.walkthrough_host")?;
     let key = a.get_item(1)?;
     let modifiers = a.get_item(2)?;
     let tool = a.get_item(0)?;
@@ -45,7 +45,7 @@ fn claims_key<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn on_key<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.walkthrough_host")?;
+    let module = imported(py, "tools.walkthrough_host")?;
     let key = a.get_item(2)?;
     let modifiers = a.get_item(3)?;
     let tool = a.get_item(0)?;
@@ -68,13 +68,13 @@ fn on_focus_out<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn step<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.walkthrough_host")?;
+    let module = imported(py, "tools.walkthrough_host")?;
     let dt = a.get_item(3)?;
     let keys = a.get_item(2)?;
     let modifiers = a.get_item(4)?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
-    tool.call_method1("_send", (&viewport, fields!(py; "type" => "first_person_step", "keys" => py.get_type::<pyo3::types::PyList>().call1((py.import("builtins")?.getattr("map")?.call1((py.get_type::<pyo3::types::PyInt>().into_any(), &keys,))?,))?, "dt" => &dt, "mods" => module.call_method1("_mods", (&modifiers,))?).into_any(),))?;
+    tool.call_method1("_send", (&viewport, fields!(py; "type" => "first_person_step", "keys" => py.get_type::<pyo3::types::PyList>().call1((imported(py, "builtins")?.getattr("map")?.call1((py.get_type::<pyo3::types::PyInt>().into_any(), &keys,))?,))?, "dt" => &dt, "mods" => module.call_method1("_mods", (&modifiers,))?).into_any(),))?;
     Ok(none(py))
 }
 fn on_look<'py>(a: &Args<'py>) -> Reply<'py> {
@@ -96,7 +96,7 @@ fn on_look<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn host_look_rate<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let walkthrough = py.import("tools.walkthrough")?.into_any();
+    let walkthrough = imported(py, "tools.walkthrough")?.into_any();
     walkthrough.call_method0("look_deg_per_px")
 }
 fn context_menu<'py>(a: &Args<'py>) -> Reply<'py> {

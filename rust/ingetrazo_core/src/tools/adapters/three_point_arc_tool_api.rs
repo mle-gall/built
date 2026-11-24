@@ -4,7 +4,7 @@ use super::*;
 
 fn on_value<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let tool = a.get_item(0)?;
     let value = a.get_item(2)?;
     let viewport = a.get_item(1)?;
@@ -42,7 +42,7 @@ fn plane_points<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn points<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let end = a.get_item(1)?;
     let tool = a.get_item(0)?;
     return Ok({

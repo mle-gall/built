@@ -4,7 +4,7 @@ use super::*;
 
 fn pointer<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tool_base")?;
+    let module = imported(py, "tools.rust_tool_base")?;
     let ctx = a.get_item(1)?;
     let kind = a.get_item(0)?;
     let t = a.get_item(2)?;
@@ -107,7 +107,7 @@ fn busy<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn point<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tool_base")?;
+    let module = imported(py, "tools.rust_tool_base")?;
     let key = a.get_item(1)?;
     let tool = a.get_item(0)?;
     let value = tool.call_method1("_state", (&key,))?;
@@ -171,8 +171,7 @@ fn send<'py>(a: &Args<'py>) -> Reply<'py> {
     tool.setattr("_during", during)?;
     // Host callbacks may read a point while the machine is mutably borrowed.
     let dispatch = (|| {
-        let host = py
-            .import("tools.rust_tool_base")?
+        let host = imported(py, "tools.rust_tool_base")?
             .call_method1("_Host", (viewport, tool.getattr("_handles")?, &tool))?;
         tool.getattr("_machine")?
             .call_method1("event", (event, host))
@@ -183,7 +182,7 @@ fn send<'py>(a: &Args<'py>) -> Reply<'py> {
 fn preview_faces<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let faces = PyList::empty(py);
-    let ctor = py.import("core.geometry")?.getattr("Face")?;
+    let ctor = imported(py, "core.geometry")?.getattr("Face")?;
     for surface in a
         .get_item(0)?
         .getattr("_machine")?

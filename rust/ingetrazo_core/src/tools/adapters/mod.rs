@@ -17,6 +17,19 @@ macro_rules! fields {
     }};
 }
 
+/// Tool callbacks look up their live globals on every dispatch so plugins may
+/// replace helpers. Already loaded modules need no Python import-hook call.
+fn imported<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyModule>> {
+    // SAFETY: Python owns sys.modules and the interpreter is attached here.
+    let modules = unsafe { Bound::from_borrowed_ptr(py, pyo3::ffi::PyImport_GetModuleDict()) };
+    if let Some(module) = modules.cast::<PyDict>()?.get_item(name)? {
+        if let Ok(module) = module.cast_into::<PyModule>() {
+            return Ok(module);
+        }
+    }
+    py.import(name)
+}
+
 fn positional<'py>(value: &Obj<'py>) -> PyResult<Args<'py>> {
     if let Ok(tuple) = value.cast::<PyTuple>() {
         return Ok(tuple.clone());

@@ -23,9 +23,9 @@ fn every_face_painted<'py>(a: &Args<'py>) -> Reply<'py> {
     let mut _m: Obj<'py>;
     let mut g: Obj<'py>;
     let obj = a.get_item(0)?;
-    let iter_placements = py.import("core.group")?.getattr("iter_placements")?;
-    let has_own_material = py.import("core.materials")?.getattr("has_own_material")?;
-    let face_attrs = py.import("core.mesh")?.getattr("face_attrs")?;
+    let iter_placements = imported(py, "core.group")?.getattr("iter_placements")?;
+    let has_own_material = imported(py, "core.materials")?.getattr("has_own_material")?;
+    let face_attrs = imported(py, "core.mesh")?.getattr("face_attrs")?;
     let mut seen = false.into_bound_py_any(py)?;
     for item in iter_placements.call1((&obj,))?.try_iter()? {
         [g, _m] = unpack::<2>(&item?)?;
@@ -41,7 +41,7 @@ fn every_face_painted<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn remember_current<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.paint_host")?;
+    let module = imported(py, "tools.paint_host")?;
     let cls = a.get_item(0)?;
     let vp = a.get_item(1)?;
     if cls.getattr("current_is_default")?.is_truthy()? {
@@ -74,7 +74,7 @@ fn remember_current<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn current_as_material<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.paint_host")?;
+    let module = imported(py, "tools.paint_host")?;
     let cls = a.get_item(0)?;
     module.call_method1(
         "paint_stamp",
@@ -88,7 +88,7 @@ fn current_as_material<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn back_material_for<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.paint_host")?;
+    let module = imported(py, "tools.paint_host")?;
     let cls = a.get_item(0)?;
     let face = a.get_item(1)?;
     module.call_method1(
@@ -127,12 +127,9 @@ fn host_brush<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let tool = a.get_item(0)?;
     let vp = a.get_item(1)?;
-    let refresh_library_paint = py
-        .import("ingetrazo_core")?
-        .getattr("refresh_library_paint")?;
-    let material_for_paint = py
-        .import("core.material_commands")?
-        .getattr("material_for_paint")?;
+    let refresh_library_paint = imported(py, "ingetrazo_core")?.getattr("refresh_library_paint")?;
+    let material_for_paint =
+        imported(py, "core.material_commands")?.getattr("material_for_paint")?;
     let brush = tool.get_type().into_any();
     refresh_library_paint.call1((vp.getattr("scene")?, &brush))?;
     if !(brush.getattr("current_is_default")?.is_truthy()?)
@@ -144,7 +141,7 @@ fn host_brush<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn host_container_painted<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.paint_host")?;
+    let module = imported(py, "tools.paint_host")?;
     let name: Obj<'py>;
     let tool = a.get_item(0)?;
     let vp = a.get_item(1)?;
@@ -211,7 +208,7 @@ fn host_adopt_sample<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let [tool, vp, sample] = unpack::<3>(a.as_any())?;
     let cls = tool.get_type();
-    let module = py.import("tools.paint_host")?;
+    let module = imported(py, "tools.paint_host")?;
     let attrs = sample.get_item("attrs")?;
     let attrs = attrs
         .cast::<PyDict>()
@@ -223,7 +220,7 @@ fn host_adopt_sample<'py>(a: &Args<'py>) -> Reply<'py> {
     let texture = field("texture")?;
     cls.setattr(
         "current_is_default",
-        !py.import("core.materials")?
+        !imported(py, "core.materials")?
             .call_method1("has_own_material", (&attrs,))?
             .is_truthy()?,
     )?;

@@ -13,14 +13,14 @@ fn siblings<'py>(a: &Args<'py>) -> Reply<'py> {
 fn qt_cursor<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let tool = a.get_item(0)?;
-    let solid_cursor = py.import("views.icons")?.getattr("solid_cursor")?;
+    let solid_cursor = imported(py, "views.icons")?.getattr("solid_cursor")?;
     solid_cursor.call1((tool.getattr("_badge")?,))
 }
 fn host_solid_selection<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let tool = a.get_item(0)?;
     let vp = a.get_item(1)?;
-    let group = py.import("core.group")?.getattr("Group")?;
+    let group = imported(py, "core.group")?.getattr("Group")?;
     tool.setattr("_viewport", &vp)?;
     return Ok({
         let items = PyList::empty(py);
@@ -50,7 +50,7 @@ fn is_solid<'py>(a: &Args<'py>) -> Reply<'py> {
     let group = a.get_item(2)?;
     let scene = a.get_item(1)?;
     let tool = a.get_item(0)?;
-    let is_solid = py.import("core.solids")?.getattr("is_solid")?;
+    let is_solid = imported(py, "core.solids")?.getattr("is_solid")?;
     if tool
         .getattr("_cache_version")?
         .ne(scene.getattr("version")?)?
@@ -83,10 +83,10 @@ fn host_solid_pick<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn host_solid_error<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.solid_host")?;
+    let module = imported(py, "tools.solid_host")?;
     let message = a.get_item(2)?;
     let vp = a.get_item(1)?;
-    let tr = py.import("core.i18n")?.getattr("tr")?;
+    let tr = imported(py, "core.i18n")?.getattr("tr")?;
     vp.call_method1(
         "flash_status",
         (
@@ -112,7 +112,7 @@ fn host_solid_error<'py>(a: &Args<'py>) -> Reply<'py> {
 fn host_solid_cutter_hint<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let vp = a.get_item(1)?;
-    let tr = py.import("core.i18n")?.getattr("tr")?;
+    let tr = imported(py, "core.i18n")?.getattr("tr")?;
     vp.call_method1(
         "flash_status",
         (

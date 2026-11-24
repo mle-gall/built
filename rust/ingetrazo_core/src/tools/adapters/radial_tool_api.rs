@@ -49,7 +49,7 @@ fn vcb_caption<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn radius_retype_open<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let tool = a.get_item(0)?;
     let token = tool.getattr("_last")?;
     Ok({
@@ -213,12 +213,12 @@ fn refresh<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn on_key<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let key = a.get_item(2)?;
     let modifiers = a.get_item(3)?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
-    let qt = py.import("core.input_types")?.getattr("Qt")?;
+    let qt = imported(py, "core.input_types")?.getattr("Qt")?;
     if key.eq(qt.getattr("Key_Control")?)? && tool.getattr("_guide_capable")?.is_truthy()? {
         tool.call_method1("_send_framed", (&viewport, fields!(py; "type" => "key", "key" => "Control", "mods" => module.call_method1("_mods", (&modifiers,))?).into_any(),))?;
         tool.call_method1("_refresh", (&viewport,))?;
@@ -231,7 +231,7 @@ fn on_key_release<'py>(a: &Args<'py>) -> Reply<'py> {
     let key = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
-    let qt = py.import("core.input_types")?.getattr("Qt")?;
+    let qt = imported(py, "core.input_types")?.getattr("Qt")?;
     if key.ne(qt.getattr("Key_Control")?)? {
         return false.into_bound_py_any(py);
     }
@@ -248,12 +248,12 @@ fn status_clause<'py>(a: &Args<'py>) -> Reply<'py> {
     if !tool.getattr("_guide_capable")?.is_truthy()? {
         return ("").into_bound_py_any(py);
     }
-    let tr = py.import("core.i18n")?.getattr("tr")?;
+    let tr = imported(py, "core.i18n")?.getattr("tr")?;
     tr.call1(("Ctrl = guide",))
 }
 fn guide_preview_lines<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let mut first: Obj<'py>;
     let mut b: Obj<'py>;
     let tool = a.get_item(0)?;
@@ -288,8 +288,8 @@ fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
     if r.is_none() {
         return Ok(none(py));
     }
-    let tr = py.import("core.i18n")?.getattr("tr")?;
-    let fmt_len = py.import("core.units")?.getattr("fmt_len")?;
+    let tr = imported(py, "core.i18n")?.getattr("tr")?;
+    let fmt_len = imported(py, "core.units")?.getattr("fmt_len")?;
     Ok((
         ("R ")
             .into_bound_py_any(py)?
@@ -328,7 +328,7 @@ fn query<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn axes<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let tool = a.get_item(0)?;
     let u: Obj<'py>;
     let v: Obj<'py>;
@@ -341,7 +341,7 @@ fn axes<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn points<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let center = a.get_item(1)?;
     let rim = a.get_item(2)?;
     let tool = a.get_item(0)?;
@@ -369,7 +369,7 @@ fn points<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn commit<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let pts = a.get_item(2)?;
     let viewport = a.get_item(1)?;
     module.call_method1("_Host", (&viewport,))?.call_method1("run", ("add_face", module.getattr("json")?.call_method1("dumps", (fields!(py; "outer" => {let items=PyList::empty(py); for item in pts.try_iter()? { let p = item?;

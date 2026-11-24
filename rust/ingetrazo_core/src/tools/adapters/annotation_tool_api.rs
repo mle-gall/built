@@ -4,13 +4,11 @@ use super::*;
 
 fn host_annotation_pick<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.annotation_host")?;
+    let module = imported(py, "tools.annotation_host")?;
     let binding: Obj<'py>;
     let point = a.get_item(2)?;
     let tool = a.get_item(0)?;
-    let picked_attachment = py
-        .import("core.annotation_anchor")?
-        .getattr("picked_attachment")?;
+    let picked_attachment = imported(py, "core.annotation_anchor")?.getattr("picked_attachment")?;
     if tool
         .getattr("_ctx")?
         .getattr("world")?
@@ -28,7 +26,7 @@ fn host_annotation_pick<'py>(a: &Args<'py>) -> Reply<'py> {
 
 fn pointer<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.annotation_host")?;
+    let module = imported(py, "tools.annotation_host")?;
     let ctx = a.get_item(2)?;
     let kind = a.get_item(1)?;
     let tool = a.get_item(0)?;
@@ -38,19 +36,18 @@ fn pointer<'py>(a: &Args<'py>) -> Reply<'py> {
         tool.setattr("_ctx", part0)?;
         tool.setattr("_vp", part1)?;
     }
-    py.import("builtins")?
+    imported(py, "builtins")?
         .getattr("super")?
         .call1((module.getattr("_AnnotationTool")?, &tool))?
         .call_method1("_pointer", (&kind, &ctx, &t))
 }
 fn send<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.annotation_host")?;
+    let module = imported(py, "tools.annotation_host")?;
     let event = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let vp = a.get_item(1)?;
-    let result = py
-        .import("builtins")?
+    let result = imported(py, "builtins")?
         .getattr("super")?
         .call1((module.getattr("_AnnotationTool")?, &tool))?
         .call_method1("_send", (&vp, &event))?;

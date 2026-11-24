@@ -162,13 +162,13 @@ fn on_value<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn on_key<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let key = a.get_item(2)?;
     let modifiers = a.get_item(3)?;
     let tool = a.get_item(0)?;
     let update: Obj<'py>;
     let viewport = a.get_item(1)?;
-    let qt = py.import("core.input_types")?.getattr("Qt")?;
+    let qt = imported(py, "core.input_types")?.getattr("Qt")?;
     let name = fields!(py; qt.getattr("Key_Control")? => "Control", qt.getattr("Key_Down")? => "ArrowDown", qt.getattr("Key_Right")? => "ArrowRight", qt.getattr("Key_Left")? => "ArrowLeft", qt.getattr("Key_Up")? => "ArrowUp").into_any().call_method1("get", (&key,))?;
     if !name.is_none() && tool.call_method1("_send_framed", (&viewport, fields!(py; "type" => "key", "key" => &name, "mods" => module.call_method1("_mods", (&modifiers,))?).into_any(),))?.get_item("consumed")?.is_truthy()? {
 if name.eq("Control")? {
@@ -188,7 +188,7 @@ fn on_key_release<'py>(a: &Args<'py>) -> Reply<'py> {
     let key = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
-    let qt = py.import("core.input_types")?.getattr("Qt")?;
+    let qt = imported(py, "core.input_types")?.getattr("Qt")?;
     if key.ne(qt.getattr("Key_Control")?)? {
         return false.into_bound_py_any(py);
     }
@@ -204,7 +204,7 @@ fn on_key_release<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let du: Obj<'py>;
     let dv: Obj<'py>;
     let mid: Obj<'py>;
@@ -214,7 +214,7 @@ fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
     if label.is_none() {
         return Ok(none(py));
     }
-    let fmt_pair = py.import("core.units")?.getattr("fmt_pair")?;
+    let fmt_pair = imported(py, "core.units")?.getattr("fmt_pair")?;
     [du, dv, square, mid] = unpack::<4>(&label)?;
     let text = fmt_pair.call1((&du, &dv))?.add(if square.is_truthy()? {
         ("  (Cuadrado)").into_bound_py_any(py)?
@@ -241,7 +241,7 @@ fn query<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn span<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let first: Obj<'py>;
     let b: Obj<'py>;
     let cursor = a.get_item(1)?;
@@ -258,7 +258,7 @@ fn span<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn dimensions<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let first = a.get_item(1)?;
     let b = a.get_item(2)?;
     let tool = a.get_item(0)?;
@@ -282,7 +282,7 @@ fn square_locked<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn square_corner<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let first = a.get_item(1)?;
     let b = a.get_item(2)?;
     let far: Obj<'py>;
@@ -309,7 +309,7 @@ fn square_corner<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn corners<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let first = a.get_item(1)?;
     let b = a.get_item(2)?;
     let tool = a.get_item(0)?;
@@ -338,12 +338,12 @@ fn corners<'py>(a: &Args<'py>) -> Reply<'py> {
 
 fn degenerate_reason<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let arguments: Obj<'py>;
     let tool = a.get_item(0)?;
     let template: Obj<'py>;
     let world = a.get_item(1)?;
-    let tr = py.import("core.i18n")?.getattr("tr")?;
+    let tr = imported(py, "core.i18n")?.getattr("tr")?;
     {
         let [part0, part1] = unpack::<2>(&tool.call_method1(
             "_query",

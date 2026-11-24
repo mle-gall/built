@@ -9,7 +9,7 @@ fn plane_state<'py>(a: &Args<'py>) -> Reply<'py> {
         .getattr("__dict__")?
         .call_method1("get", ("_plane_state_rs",))?;
     if state.is_none() {
-        let _state = py.import("ingetrazo_core")?.getattr("PlaneLock")?;
+        let _state = imported(py, "ingetrazo_core")?.getattr("PlaneLock")?;
         {
             let value = _state.call0()?;
             state = value.clone();
@@ -77,7 +77,7 @@ fn drawing_plane<'py>(a: &Args<'py>) -> Reply<'py> {
 fn own_plane<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let tool = a.get_item(0)?;
-    let axes = py.import("core.axes")?.into_any();
+    let axes = imported(py, "core.axes")?.into_any();
     tool.getattr("_plane_state")?.call_method1(
         "own_plane",
         (tool.getattr("work_plane")?, axes.call_method0("frame")?),
@@ -89,10 +89,10 @@ fn plane_points<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn snapped_plane<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.base")?;
+    let module = imported(py, "tools.base")?;
     let plane = a.get_item(1)?;
     let tool = a.get_item(0)?;
-    let axes = py.import("core.axes")?.into_any();
+    let axes = imported(py, "core.axes")?.into_any();
     let names_point = if tool.getattr("snap_kind")?.is_none() {
         none(py)
     } else {
@@ -122,7 +122,7 @@ fn adopt_snapped_plane<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn preview_plane<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.base")?;
+    let module = imported(py, "tools.base")?;
     let point = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
@@ -131,7 +131,7 @@ fn preview_plane<'py>(a: &Args<'py>) -> Reply<'py> {
         return Ok(locked.clone());
     }
     let plane = optional(&viewport, "_last_work_plane")?;
-    let axes = py.import("core.axes")?.into_any();
+    let axes = imported(py, "core.axes")?.into_any();
     if !plane.is_none() {
         return (
             module.call_method1("QVector3D", (&point,))?,
@@ -147,7 +147,7 @@ fn preview_plane<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn plane_lock_key<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.base")?;
+    let module = imported(py, "tools.base")?;
     let key = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
@@ -175,14 +175,14 @@ fn plane_lock_key<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn reference_lock_key<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.base")?;
+    let module = imported(py, "tools.base")?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
     module.call_method1("plane_input", (&tool, &viewport, "reference"))
 }
 fn mark_plane<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.base")?;
+    let module = imported(py, "tools.base")?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
     module.call_method1("plane_input", (&tool, &viewport, "mark"))
@@ -197,7 +197,7 @@ fn locked_work_plane<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let point = a.get_item(1)?;
     let tool = a.get_item(0)?;
-    let axes = py.import("core.axes")?.into_any();
+    let axes = imported(py, "core.axes")?.into_any();
     tool.getattr("_plane_state")?
         .call_method1("locked", (&point, axes.call_method0("frame")?))
 }
@@ -206,7 +206,7 @@ fn lock_color<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let tool = a.get_item(0)?;
     if !tool.getattr("plane_ref")?.is_none() {
-        let color_reference = py.import("core.snap")?.getattr("COLOR_REFERENCE")?;
+        let color_reference = imported(py, "core.snap")?.getattr("COLOR_REFERENCE")?;
         return Ok({
             let values = PyList::empty(py);
             values.call_method1("extend", (&color_reference,))?;
@@ -215,7 +215,7 @@ fn lock_color<'py>(a: &Args<'py>) -> Reply<'py> {
         });
     }
     if !tool.getattr("plane_lock")?.is_none() {
-        let plane_lock_axes = py.import("tools.base")?.getattr("PLANE_LOCK_AXES")?;
+        let plane_lock_axes = imported(py, "tools.base")?.getattr("PLANE_LOCK_AXES")?;
         return Ok(tool.call_method1(
             "plane_color",
             (plane_lock_axes.get_item(tool.getattr("plane_lock")?)?,),

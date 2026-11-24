@@ -22,7 +22,7 @@ fn chain_first_point<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn set_chain_first_point<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let tool = a.get_item(0)?;
     let value = a.get_item(1)?;
     tool.getattr("_machine")?.call_method1(
@@ -36,7 +36,7 @@ fn set_chain_first_point<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn chain_vertices<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let tool = a.get_item(0)?;
     return Ok({
         let items = PyList::empty(py);
@@ -52,7 +52,7 @@ fn chain_vertices<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn set_chain_vertices<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let points = a.get_item(1)?;
     let tool = a.get_item(0)?;
     tool.getattr("_machine")?.call_method1(
@@ -73,7 +73,7 @@ fn set_chain_vertices<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn work_plane<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let tool = a.get_item(0)?;
     let plane = tool.call_method1("_state", ("work_plane",))?;
     Ok(if plane.is_none() {
@@ -88,7 +88,7 @@ fn work_plane<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn set_work_plane<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let plane = a.get_item(1)?;
     let tool = a.get_item(0)?;
     tool.getattr("_machine")?.call_method1(

@@ -9,7 +9,7 @@ fn magnet_on<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn equidistant<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let tool = a.get_item(0)?;
     let e = tool.call_method1("_state", ("equidistant",))?;
     Ok(if e.is_none() {
@@ -26,7 +26,7 @@ fn equidistant<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn start_edge<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let tool = a.get_item(0)?;
     let e = tool.call_method1("_state", ("start_edge",))?;
     Ok(if e.is_none() {
@@ -42,7 +42,7 @@ fn start_edge<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn tangent_at_start<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
     if tool.getattr("start_point")?.is_none() {
@@ -112,7 +112,7 @@ fn on_radius_value<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn rubber_band_lines<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let tool = a.get_item(0)?;
     module
         .getattr("RustTool")?
@@ -139,7 +139,7 @@ fn plane_points<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn points<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let bulge = a.get_item(2)?;
     let cursor = a.get_item(1)?;
     let tool = a.get_item(0)?;
@@ -163,7 +163,7 @@ fn points<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn bulge_for<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let cursor = a.get_item(1)?;
     let tool = a.get_item(0)?;
     tool.call_method1(
@@ -181,7 +181,7 @@ fn tangent_bulge<'py>(a: &Args<'py>) -> Reply<'py> {
 
 fn fillet<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let mut p: Obj<'py>;
     let tool = a.get_item(0)?;
     let f = tool.call_method1("_state", ("fillet",))?;
@@ -200,10 +200,10 @@ fn fillet<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn cue_colour<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let tool = a.get_item(0)?;
-    let color_midpoint = py.import("core.snap")?.getattr("COLOR_MIDPOINT")?;
-    let color_tangent = py.import("core.snap")?.getattr("COLOR_TANGENT")?;
+    let color_midpoint = imported(py, "core.snap")?.getattr("COLOR_MIDPOINT")?;
+    let color_tangent = imported(py, "core.snap")?.getattr("COLOR_TANGENT")?;
     let cue = tool.call_method1("_state", ("cue",))?;
     let colour = fields!(py; "tangent" => &color_tangent, "fillet" => module.getattr("COLOR_FILLET")?, "half" => &color_midpoint).into_any().call_method1("get", (&cue,))?;
     Ok(if !colour.is_none() {
@@ -225,8 +225,8 @@ fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
         return Ok(none(py));
     }
     let [kind, value, point] = unpack::<3>(&label)?;
-    let tr = py.import("core.i18n")?.getattr("tr")?;
-    let length = || py.import("core.units")?.call_method1("fmt_len", (&value,));
+    let tr = imported(py, "core.i18n")?.getattr("tr")?;
+    let length = || imported(py, "core.units")?.call_method1("fmt_len", (&value,));
     let key: String = kind.extract()?;
     let text = match key.as_str() {
         "tangent_edge" => tr.call1(("Tangent to edge",))?,
@@ -247,8 +247,7 @@ fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
     };
     (
         text,
-        py.import("tools.rust_tools")?
-            .call_method1("Vec3", positional(&point)?)?,
+        imported(py, "tools.rust_tools")?.call_method1("Vec3", positional(&point)?)?,
     )
         .into_bound_py_any(py)
 }

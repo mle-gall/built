@@ -106,7 +106,7 @@ fn on_release<'py>(a: &Args<'py>) -> Reply<'py> {
         .call_method1("_release_axis_drag", (&viewport,))?
         .is_truthy()?
     {
-        let tr = py.import("core.i18n")?.getattr("tr")?;
+        let tr = imported(py, "core.i18n")?.getattr("tr")?;
         viewport.call_method1(
             "flash_status",
             (tr.call1(("Protractor axis set along the drag",))?,),
@@ -119,8 +119,7 @@ fn on_value<'py>(a: &Args<'py>) -> Reply<'py> {
     let tool = a.get_item(0)?;
     let value = a.get_item(2)?;
     let viewport = a.get_item(1)?;
-    if !(py
-        .import("builtins")?
+    if !(imported(py, "builtins")?
         .getattr("isinstance")?
         .call1((
             &value,
@@ -171,7 +170,7 @@ fn host_guide_toggle<'py>(a: &Args<'py>) -> Reply<'py> {
     let say: Obj<'py>;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
-    let tr = py.import("core.i18n")?.getattr("tr")?;
+    let tr = imported(py, "core.i18n")?.getattr("tr")?;
     [guides, say] = unpack::<2>(&arguments)?;
     tool.getattr("_during")?
         .set_item("guides", guides.clone())?;
@@ -191,7 +190,7 @@ fn host_guide_toggle<'py>(a: &Args<'py>) -> Reply<'py> {
     {
         let name = item?;
         callback =
-            py.import("builtins")?
+            imported(py, "builtins")?
                 .getattr("getattr")?
                 .call1((&viewport, &name, py.None()))?;
         if callback.is_truthy()? {
@@ -203,7 +202,7 @@ fn host_guide_toggle<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn host_disc_centre<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.protractor_host")?;
+    let module = imported(py, "tools.protractor_host")?;
     let point = a.get_item(2)?;
     let tool = a.get_item(0)?;
     tool.setattr(
@@ -234,8 +233,8 @@ fn host_measured_angle<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let degrees = a.get_item(2)?;
     let viewport = a.get_item(1)?;
-    let tr = py.import("core.i18n")?.getattr("tr")?;
-    let fmt_angle_deg = py.import("core.units")?.getattr("fmt_angle_deg")?;
+    let tr = imported(py, "core.i18n")?.getattr("tr")?;
+    let fmt_angle_deg = imported(py, "core.units")?.getattr("fmt_angle_deg")?;
     viewport.call_method1("flash_status", (tr.call1(("Angle: {a}",))?.call_method("format", (), Some(&fields!(py; "a" => fmt_angle_deg.call((&degrees,), Some(&fields!(py; "signed" => true)))?)))?, 4000,))?;
     Ok(none(py))
 }
@@ -245,7 +244,7 @@ fn rubber_band_lines<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn guide_preview_lines<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.protractor_host")?;
+    let module = imported(py, "tools.protractor_host")?;
     let tool = a.get_item(0)?;
     if !(tool.getattr("_guides")?.is_truthy()?)
         || tool.getattr("start_point")?.is_none()
@@ -282,7 +281,7 @@ fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
     if deg.is_none() {
         return Ok(none(py));
     }
-    let fmt_angle_deg = py.import("core.units")?.getattr("fmt_angle_deg")?;
+    let fmt_angle_deg = imported(py, "core.units")?.getattr("fmt_angle_deg")?;
     Ok((
         fmt_angle_deg.call((&deg,), Some(&fields!(py; "signed" => true)))?,
         tool.getattr("hover_point")?,
@@ -299,7 +298,7 @@ fn status_clause<'py>(a: &Args<'py>) -> Reply<'py> {
     let guia: Obj<'py>;
     let medir: Obj<'py>;
     let tool = a.get_item(0)?;
-    let _tr = py.import("core.i18n")?.getattr("tr")?;
+    let _tr = imported(py, "core.i18n")?.getattr("tr")?;
     {
         let [part0, part1] = unpack::<2>(
             &(_tr.call1(("guide",))?, _tr.call1(("measure",))?).into_bound_py_any(py)?,
@@ -337,7 +336,7 @@ fn status_clause<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn on_key<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.protractor_host")?;
+    let module = imported(py, "tools.protractor_host")?;
     let key = a.get_item(2)?;
     let modifiers = a.get_item(3)?;
     let tool = a.get_item(0)?;
@@ -353,14 +352,14 @@ fn on_key<'py>(a: &Args<'py>) -> Reply<'py> {
             )?
             .get_item("consumed")?);
     }
-    py.import("builtins")?
+    imported(py, "builtins")?
         .getattr("super")?
         .call1((module.getattr("ProtractorHost")?, &tool))?
         .call_method1("on_key", (&viewport, &key, &modifiers))
 }
 fn on_key_release<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.protractor_host")?;
+    let module = imported(py, "tools.protractor_host")?;
     let key = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;

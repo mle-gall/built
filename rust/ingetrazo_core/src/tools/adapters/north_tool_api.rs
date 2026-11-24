@@ -12,7 +12,7 @@ fn vcb_caption<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn work_plane<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.north_host")?;
+    let module = imported(py, "tools.north_host")?;
     let tool = a.get_item(0)?;
     Ok(if !tool.getattr("centre")?.is_none() {
         (
@@ -35,18 +35,18 @@ fn pending_deg<'py>(a: &Args<'py>) -> Reply<'py> {
 fn host_north_angle<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let vp = a.get_item(1)?;
-    let scene_north_deg = py.import("core.sun")?.getattr("scene_north_deg")?;
+    let scene_north_deg = imported(py, "core.sun")?.getattr("scene_north_deg")?;
     scene_north_deg.call1((optional(&vp, "scene")?,))
 }
 fn host_north_done<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.north_host")?;
+    let module = imported(py, "tools.north_host")?;
     let changed: Obj<'py>;
     let deg: Obj<'py>;
     let result = a.get_item(2)?;
     let vp = a.get_item(1)?;
-    let tr = py.import("core.i18n")?.getattr("tr")?;
-    let fmt_angle_deg = py.import("core.units")?.getattr("fmt_angle_deg")?;
+    let tr = imported(py, "core.i18n")?.getattr("tr")?;
+    let fmt_angle_deg = imported(py, "core.units")?.getattr("fmt_angle_deg")?;
     [deg, changed] = unpack::<2>(&result)?;
     if changed.is_truthy()? {
         module.call_method1("refresh_north_display", (&vp,))?;
@@ -78,7 +78,7 @@ fn commit<'py>(a: &Args<'py>) -> Reply<'py> {
 fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let tool = a.get_item(0)?;
-    let fmt_angle_deg = py.import("core.units")?.getattr("fmt_angle_deg")?;
+    let fmt_angle_deg = imported(py, "core.units")?.getattr("fmt_angle_deg")?;
     let deg = tool.call_method0("pending_deg")?;
     if !deg.is_none() && !tool.getattr("hover_point")?.is_none() {
         return (fmt_angle_deg.call1((&deg,))?, tool.getattr("hover_point")?).into_bound_py_any(py);
@@ -88,21 +88,21 @@ fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
 
 fn send<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.north_host")?;
+    let module = imported(py, "tools.north_host")?;
     let event = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let vp = a.get_item(1)?;
     tool.setattr("_scene", optional(&vp, "scene")?)?;
-    py.import("builtins")?
+    imported(py, "builtins")?
         .getattr("super")?
         .call1((module.getattr("NorthTool")?, &tool))?
         .call_method1("_send", (&vp, &event))
 }
 fn rubber_band_lines<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.north_host")?;
+    let module = imported(py, "tools.north_host")?;
     let tool = a.get_item(0)?;
-    let scene_north_deg = py.import("core.sun")?.getattr("scene_north_deg")?;
+    let scene_north_deg = imported(py, "core.sun")?.getattr("scene_north_deg")?;
     if tool.getattr("_during")?.is_none() {
         tool.getattr("_machine")?.call_method1(
             "set",
@@ -112,7 +112,7 @@ fn rubber_band_lines<'py>(a: &Args<'py>) -> Reply<'py> {
             ),
         )?;
     }
-    py.import("builtins")?
+    imported(py, "builtins")?
         .getattr("super")?
         .call1((module.getattr("NorthTool")?, &tool))?
         .call_method0("rubber_band_lines")

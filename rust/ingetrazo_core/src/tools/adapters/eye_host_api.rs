@@ -4,7 +4,7 @@ use super::*;
 
 fn drag_plane<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.walkthrough_host")?;
+    let module = imported(py, "tools.walkthrough_host")?;
     let viewport = a.get_item(1)?;
     (
         module.call_method1("Vec3", (viewport.getattr("camera")?.getattr("target")?,))?,
@@ -14,7 +14,7 @@ fn drag_plane<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.walkthrough_host")?;
+    let module = imported(py, "tools.walkthrough_host")?;
     let tool = a.get_item(0)?;
     if !tool.getattr("_viewport")?.is_none() {
         return (
@@ -34,12 +34,12 @@ fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn host_eye_height<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let walkthrough = py.import("tools.walkthrough")?.into_any();
+    let walkthrough = imported(py, "tools.walkthrough")?.into_any();
     walkthrough.call_method0("eye_height")
 }
 fn host_ray_distance<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.walkthrough_host")?;
+    let module = imported(py, "tools.walkthrough_host")?;
     let arguments = a.get_item(2)?;
     let at: Obj<'py>;
     let direction: Obj<'py>;
@@ -64,9 +64,9 @@ fn host_ray_distance<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn tick<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.walkthrough_host")?;
+    let module = imported(py, "tools.walkthrough_host")?;
     let tool = a.get_item(0)?;
-    let input_state = py.import("views.input_state")?.into_any();
+    let input_state = imported(py, "views.input_state")?.into_any();
     let vp = tool.getattr("_viewport")?;
     if vp.is_none() {
         return Ok(none(py));
@@ -84,11 +84,11 @@ fn tick<'py>(a: &Args<'py>) -> Reply<'py> {
 
 fn on_activate<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.walkthrough_host")?;
+    let module = imported(py, "tools.walkthrough_host")?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
     tool.setattr("_viewport", &viewport)?;
-    py.import("builtins")?
+    imported(py, "builtins")?
         .getattr("super")?
         .call1((module.getattr("EyeHost")?, &tool))?
         .call_method1("on_activate", (&viewport,))?;
@@ -96,10 +96,10 @@ fn on_activate<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn on_deactivate<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.walkthrough_host")?;
+    let module = imported(py, "tools.walkthrough_host")?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
-    py.import("builtins")?
+    imported(py, "builtins")?
         .getattr("super")?
         .call1((module.getattr("EyeHost")?, &tool))?
         .call_method1("on_deactivate", (&viewport,))?;
@@ -108,12 +108,11 @@ fn on_deactivate<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn on_value<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.walkthrough_host")?;
+    let module = imported(py, "tools.walkthrough_host")?;
     let tool = a.get_item(0)?;
     let value = a.get_item(2)?;
     let viewport = a.get_item(1)?;
-    if !(py
-        .import("builtins")?
+    if !(imported(py, "builtins")?
         .getattr("isinstance")?
         .call1((
             &value,
@@ -127,8 +126,7 @@ fn on_value<'py>(a: &Args<'py>) -> Reply<'py> {
     {
         return false.into_bound_py_any(py);
     }
-    let accepted = py
-        .import("builtins")?
+    let accepted = imported(py, "builtins")?
         .getattr("super")?
         .call1((module.getattr("EyeHost")?, &tool))?
         .call_method1("on_value", (&viewport, &value))?;
@@ -166,7 +164,7 @@ fn host_set_camera<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let arguments = a.get_item(2)?;
     let viewport = a.get_item(1)?;
-    let set_camera = py.import("core.agent_inspection")?.getattr("set_camera")?;
+    let set_camera = imported(py, "core.agent_inspection")?.getattr("set_camera")?;
     set_camera.call(
         (viewport.getattr("camera")?,),
         Some(arguments.cast::<PyDict>()?),
@@ -185,7 +183,7 @@ fn host_timer<'py>(a: &Args<'py>) -> Reply<'py> {
         return Ok(none(py));
     }
     if tool.getattr("_timer")?.is_none() {
-        let timer = py.import("core.timers")?.getattr("timer")?;
+        let timer = imported(py, "core.timers")?.getattr("timer")?;
         tool.setattr(
             "_timer",
             timer.call(

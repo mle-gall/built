@@ -31,7 +31,7 @@ fn box_loose_arrays<'py>(a: &Args<'py>) -> Reply<'py> {
     if camera.is_none()
         || !mesh
             .get_type()
-            .is(&py.import("core.store_mesh")?.getattr("StoreMesh")?)
+            .is(&imported(py, "core.store_mesh")?.getattr("StoreMesh")?)
     {
         return Ok(none(py));
     }
@@ -79,11 +79,9 @@ fn box_loose_fast<'py>(a: &Args<'py>) -> Reply<'py> {
     }
     let scene = vp.getattr("scene")?;
     let selectable = scene.getattr("entity_selectable")?;
-    let mask = py
-        .import("tools.select_host")?
+    let mask = imported(py, "tools.select_host")?
         .call_method1("_seg_rect_mask", (ax, ay, bx, by, valid, rect, &crossing))?;
-    let mut hits = py
-        .import("numpy")?
+    let mut hits = imported(py, "numpy")?
         .call_method1("where", (mask,))?
         .get_item(0)?;
     if let Some(allowed) = index.getattr_opt("edge_sel")?.filter(|v| !v.is_none()) {
@@ -143,8 +141,7 @@ fn box_loose_fast<'py>(a: &Args<'py>) -> Reply<'py> {
 
 fn box_group_fast<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    match py
-        .import("tools.select_host")?
+    match imported(py, "tools.select_host")?
         .getattr("box_chunk_group")?
         .call1(a)
     {
@@ -163,7 +160,7 @@ fn box_group_fast<'py>(a: &Args<'py>) -> Reply<'py> {
 
 fn box_select<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.select_host")?;
+    let module = imported(py, "tools.select_host")?;
     let [vp, rect, crossing, mode] = unpack::<4>(a.as_any())?;
     let scene = vp.getattr("scene")?;
     let picked = PyList::empty(py);
@@ -212,9 +209,8 @@ fn box_select<'py>(a: &Args<'py>) -> Reply<'py> {
                 let verdict =
                     module.call_method1("_box_group_fast", (&vp, &group, &rect, &crossing))?;
                 if verdict.is_none() {
-                    let placements = py
-                        .import("core.group")?
-                        .call_method1("iter_placements", (&group,))?;
+                    let placements =
+                        imported(py, "core.group")?.call_method1("iter_placements", (&group,))?;
                     module
                         .call_method1("box_placements", (&vp, &rect, &crossing, placements))?
                         .is_truthy()?
@@ -240,7 +236,7 @@ fn bounded<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let vp = a.get_item(0)?;
     let entity = a.get_item(1)?;
-    let module = py.import("tools.select_host")?;
+    let module = imported(py, "tools.select_host")?;
     let mesh = vp.getattr("scene")?.getattr("mesh")?;
     let face = module.getattr("Face")?;
     let edge = module.getattr("Edge")?;
@@ -281,7 +277,7 @@ fn erase_entities<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let vp = a.get_item(0)?;
     let entities = a.get_item(1)?;
-    let module = py.import("tools.select_host")?;
+    let module = imported(py, "tools.select_host")?;
     let bucket = |name: &str| -> PyResult<Bound<'py, PyList>> {
         let cls = module.getattr(name)?;
         let group = PyList::empty(py);
@@ -340,7 +336,7 @@ fn erase_entities<'py>(a: &Args<'py>) -> Reply<'py> {
 
 fn delete_selection_or_hover<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.select_host")?;
+    let module = imported(py, "tools.select_host")?;
     let viewport = a.get_item(0)?;
     if !optional(&viewport, "extension_pick")?.is_none() {
         return viewport.call_method0("delete_extension_pick");
@@ -367,7 +363,7 @@ fn delete_selection_or_hover<'py>(a: &Args<'py>) -> Reply<'py> {
 
 fn expand_pick<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.select_host")?;
+    let module = imported(py, "tools.select_host")?;
     let entity = a.get_item(1)?;
     let viewport = a.get_item(0)?;
     if entity.is_instance(&module.getattr("Face")?)? {
@@ -387,7 +383,7 @@ fn expand_pick<'py>(a: &Args<'py>) -> Reply<'py> {
 
 fn toggle_section<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.select_host")?;
+    let module = imported(py, "tools.select_host")?;
     let entity = a.get_item(1)?;
     let viewport = a.get_item(0)?;
     viewport.getattr("history")?.call_method1(
@@ -409,7 +405,7 @@ fn toggle_section<'py>(a: &Args<'py>) -> Reply<'py> {
 
 fn apply<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.select_host")?;
+    let module = imported(py, "tools.select_host")?;
     let entities = a.get_item(1)?;
     let grow = a.get_item(3)?;
     let mode = a.get_item(2)?;
@@ -420,8 +416,7 @@ fn apply<'py>(a: &Args<'py>) -> Reply<'py> {
     for item in entities.try_iter()? {
         let entity = item?;
         if grow.ne("natural")?
-            && py
-                .import("builtins")?
+            && imported(py, "builtins")?
                 .getattr("isinstance")?
                 .call1((
                     &entity,
@@ -441,7 +436,7 @@ fn apply<'py>(a: &Args<'py>) -> Reply<'py> {
             }
         }
         if grow.eq("connected")? {
-            let all_connected = py.import("core.select_ops")?.getattr("all_connected")?;
+            let all_connected = imported(py, "core.select_ops")?.getattr("all_connected")?;
             picked.call_method1(
                 "extend",
                 (all_connected.call1((PyList::new(py, [entity.clone()])?.into_any(),))?,),
@@ -470,14 +465,14 @@ fn apply<'py>(a: &Args<'py>) -> Reply<'py> {
 
 fn cycle_status<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.select_host")?;
+    let module = imported(py, "tools.select_host")?;
     let count = a.get_item(2)?;
     let entity = a.get_item(3)?;
     let index = a.get_item(1)?;
     let viewport = a.get_item(0)?;
     let flash = optional(&viewport, "flash_status")?;
     if flash.is_callable() {
-        let tr = py.import("core.i18n")?.getattr("tr")?;
+        let tr = imported(py, "core.i18n")?.getattr("tr")?;
         flash.call1((tr.call1(("{index} of {count}: {what} — click again for the next",))?.call_method("format", (), Some(&fields!(py; "index" => index.add(1)?, "count" => &count, "what" => module.call_method1("describe_pick", (&entity,))?)))?,))?;
     }
     Ok(none(py))
@@ -486,7 +481,7 @@ fn cycle_status<'py>(a: &Args<'py>) -> Reply<'py> {
 fn seg_rect_mask<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let [ax, ay, bx, by, valid, rect, crossing] = unpack::<7>(a.as_any())?;
-    let np = py.import("numpy")?;
+    let np = imported(py, "numpy")?;
     let dtype = np.getattr("float64")?;
     let array = |v| {
         np.call_method(
@@ -508,7 +503,7 @@ fn seg_rect_mask<'py>(a: &Args<'py>) -> Reply<'py> {
         .try_iter()?
         .map(|v| floats.call1((v?,)))
         .collect::<PyResult<Vec<_>>>()?;
-    py.import("ingetrazo_core")?.call_method1(
+    imported(py, "ingetrazo_core")?.call_method1(
         "seg_rect_mask",
         (
             ax,
@@ -524,8 +519,8 @@ fn seg_rect_mask<'py>(a: &Args<'py>) -> Reply<'py> {
 fn describe_pick<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let entity = a.get_item(0)?;
-    let module = py.import("tools.select_host")?;
-    let tr = py.import("core.i18n")?.getattr("tr")?;
+    let module = imported(py, "tools.select_host")?;
+    let tr = imported(py, "core.i18n")?.getattr("tr")?;
     if entity.is_instance(&module.getattr("Group")?)? {
         let group = tr.call1((if entity.call_method0("is_instance")?.is_truthy()? {
             "Component"

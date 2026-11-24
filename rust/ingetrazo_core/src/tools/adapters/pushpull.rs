@@ -5,7 +5,7 @@ use super::*;
 use crate::math::{xyz, Vec3};
 
 fn module(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("tools.pushpull")
+    imported(py, "tools.pushpull")
 }
 fn busy<'py>(a: &Args<'py>) -> Reply<'py> {
     a.get_item(0)?.getattr("dragging")
@@ -393,7 +393,7 @@ fn take_extras<'py>(a: &Args<'py>) -> Reply<'py> {
         return Ok(none(py));
     }
     let mesh = scene.getattr("mesh")?;
-    let id = py.import("core.mesh")?.getattr("element_identity")?;
+    let id = imported(py, "core.mesh")?.getattr("element_identity")?;
     let order = PyDict::new(py);
     for (i, f) in mesh.getattr("faces")?.try_iter()?.enumerate() {
         order.set_item(id.call1((f?,))?, i)?;
@@ -442,7 +442,7 @@ fn host_hover_face<'py>(a: &Args<'py>) -> Reply<'py> {
         }
         t.setattr("_selected_arm", false)?;
     }
-    let bake = py.import("views.array_bake")?;
+    let bake = imported(py, "views.array_bake")?;
     let (face, group): (Obj, Obj) = read_faces(&bake, || {
         vp.call_method1("pick_face_any", screen(&t.getattr("_ctx")?)?)
     })?
@@ -485,7 +485,7 @@ fn reference_face<'py>(a: &Args<'py>) -> Reply<'py> {
     } else {
         vp.getattr("pick_face_any")?
     };
-    read_faces(&a.py().import("views.array_bake")?, || {
+    read_faces(&imported(a.py(), "views.array_bake")?, || {
         pick.call1((a.get_item(1)?, a.get_item(2)?))
     })
 }
@@ -493,8 +493,7 @@ fn reference_hidden<'py>(a: &Args<'py>) -> Reply<'py> {
     let vp = a.get_item(1)?;
     let p = a.get_item(2)?;
     let py = a.py();
-    let cut = py
-        .import("views.document_interaction")?
+    let cut = imported(py, "views.document_interaction")?
         .call_method1("_active_cut", (vp.getattr("scene")?,))?;
     if !cut.is_none() && cut.call_method1("side", (&p,))?.gt(1e-6)? {
         return true.into_bound_py_any(py);
@@ -612,7 +611,7 @@ fn on_double_click<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn on_release<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.pushpull")?;
+    let module = imported(py, "tools.pushpull")?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
     let mods = if tool.getattr("dragging")?.is_truthy()? {
@@ -650,7 +649,7 @@ fn host_close_retype<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn host_tiny_push<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.pushpull")?;
+    let module = imported(py, "tools.pushpull")?;
     let viewport = a.get_item(1)?;
     viewport.call_method1(
         "flash_status",
@@ -666,7 +665,7 @@ fn host_tiny_push<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn refuse_python_mesh<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.pushpull")?;
+    let module = imported(py, "tools.pushpull")?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
     tool.setattr("base_face", none(py))?;
@@ -685,20 +684,18 @@ fn preview_faces<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn build_light_faces<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.pushpull")?;
+    let module = imported(py, "tools.pushpull")?;
     let tool = a.get_item(0)?;
-    let push_light_faces = py.import("ingetrazo_core")?.getattr("push_light_faces")?;
+    let push_light_faces = imported(py, "ingetrazo_core")?.getattr("push_light_faces")?;
     push_light_faces.call1((&tool, module.getattr("_MIN_EXTRUDE")?))
 }
 fn present<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.pushpull")?;
+    let module = imported(py, "tools.pushpull")?;
     let mode = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
-    let present_push_preview = py
-        .import("ingetrazo_core")?
-        .getattr("present_push_preview")?;
+    let present_push_preview = imported(py, "ingetrazo_core")?.getattr("present_push_preview")?;
     present_push_preview.call1((
         &tool,
         &viewport,
@@ -717,7 +714,7 @@ fn show_light_preview<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn refuse_closed_group<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.pushpull")?;
+    let module = imported(py, "tools.pushpull")?;
     let viewport = a.get_item(1)?;
     viewport.call_method1("flash_status", (module.call_method1("tr", ("That face belongs to a group — double-click to open it first, then push inside",))?, 4000,))?;
     Ok(none(py))
@@ -738,7 +735,7 @@ fn show_staged_preview<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn on_key<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.pushpull")?;
+    let module = imported(py, "tools.pushpull")?;
     let key = a.get_item(2)?;
     let modifiers = a.get_item(3)?;
     let tool = a.get_item(0)?;
@@ -746,14 +743,14 @@ fn on_key<'py>(a: &Args<'py>) -> Reply<'py> {
     if key.eq(module.getattr("Qt")?.getattr("Key_Control")?)? {
         return Ok(tool.call_method1("_send", (&viewport, fields!(py; "type" => "key", "key" => "Control", "mods" => module.call_method1("_mods", (&modifiers,))?).into_any(),))?.get_item("consumed")?);
     }
-    py.import("builtins")?
+    imported(py, "builtins")?
         .getattr("super")?
         .call1((module.getattr("PushPullTool")?, &tool))?
         .call_method1("on_key", (&viewport, &key, &modifiers))
 }
 fn on_key_release<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.pushpull")?;
+    let module = imported(py, "tools.pushpull")?;
     let key = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
@@ -775,7 +772,7 @@ fn host_modifier<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn host_show_mode<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.pushpull")?;
+    let module = imported(py, "tools.pushpull")?;
     let enabled = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
@@ -793,7 +790,7 @@ fn host_show_mode<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn status_clause<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.pushpull")?;
+    let module = imported(py, "tools.pushpull")?;
     let tool = a.get_item(0)?;
     module.call_method1(
         "ctrl_clause",

@@ -96,7 +96,7 @@ fn on_deactivate<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn in_place<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.paste_host")?;
+    let module = imported(py, "tools.paste_host")?;
     let cls = a.get_item(0)?;
     let vp = a.get_item(1)?;
     let tool = cls.call0()?;

@@ -13,7 +13,7 @@ fn edge<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn set_edge<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let edge = a.get_item(1)?;
     let tool = a.get_item(0)?;
     tool.setattr("_source", &edge)?;

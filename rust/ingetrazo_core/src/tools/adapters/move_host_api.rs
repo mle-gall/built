@@ -74,7 +74,7 @@ fn on_deactivate<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn on_key<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.move_host")?;
+    let module = imported(py, "tools.move_host")?;
     let key = a.get_item(2)?;
     let modifiers = a.get_item(3)?;
     let tool = a.get_item(0)?;
@@ -112,7 +112,7 @@ fn toggle_copy<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn on_key_release<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.move_host")?;
+    let module = imported(py, "tools.move_host")?;
     let key = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
@@ -196,7 +196,7 @@ fn array_pending<'py>(a: &Args<'py>) -> Reply<'py> {
     if window.is_none() || !tool.getattr("start_point")?.is_none() {
         return false.into_bound_py_any(py);
     }
-    let _host = py.import("tools.rust_tool_base")?.getattr("_Host")?;
+    let _host = imported(py, "tools.rust_tool_base")?.getattr("_Host")?;
     (window
         .get_item("token")?
         .eq(_host.call1((&viewport,))?.call_method0("revision")?)?)
@@ -266,7 +266,7 @@ fn rubber_band_lines<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.move_host")?;
+    let module = imported(py, "tools.move_host")?;
     let grab: Obj<'py>;
     let hover: Obj<'py>;
     let tool = a.get_item(0)?;
@@ -288,7 +288,7 @@ fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn snap_excluded<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.move_host")?;
+    let module = imported(py, "tools.move_host")?;
     let tool = a.get_item(0)?;
     if !tool.getattr("_grip_rot")?.is_none() {
         return tool.getattr("_grip_rot")?.call_method0("snap_excluded");
@@ -300,7 +300,7 @@ fn snap_excluded<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn moving_face_ids<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.move_host")?;
+    let module = imported(py, "tools.move_host")?;
     let tool = a.get_item(0)?;
     if tool.getattr("grab")?.is_none() || tool.getattr("_copy")?.is_truthy()? {
         return py.get_type::<pyo3::types::PySet>().call0();
@@ -322,7 +322,7 @@ fn wireframe_color<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn drag_plane<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.move_host")?;
+    let module = imported(py, "tools.move_host")?;
     let tool = a.get_item(0)?;
     if !tool.getattr("_grip_rot")?.is_none() {
         return (
@@ -349,7 +349,7 @@ fn clear_grips<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn track_grips<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.move_host")?;
+    let module = imported(py, "tools.move_host")?;
     let ctx = a.get_item(1)?;
     let tool = a.get_item(0)?;
     module.call_method1(
@@ -360,12 +360,12 @@ fn track_grips<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn grip_under<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.move_host")?;
+    let module = imported(py, "tools.move_host")?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
     let x = a.get_item(2)?;
     let y = a.get_item(3)?;
-    let move_grip_hit = py.import("ingetrazo_core")?.getattr("move_grip_hit")?;
+    let move_grip_hit = imported(py, "ingetrazo_core")?.getattr("move_grip_hit")?;
     Ok(if tool.getattr("_grips")?.is_truthy()? {
         move_grip_hit.call1((
             &viewport,
@@ -380,14 +380,14 @@ fn grip_under<'py>(a: &Args<'py>) -> Reply<'py> {
 fn hovered_vertex<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let ctx = a.get_item(0)?;
-    let move_endpoint = py.import("ingetrazo_core")?.getattr("move_endpoint")?;
+    let move_endpoint = imported(py, "ingetrazo_core")?.getattr("move_endpoint")?;
     move_endpoint.call1((&ctx,))
 }
 fn make_copy_builder<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let scene = a.get_item(1)?;
     let tool = a.get_item(0)?;
-    let copy_builder = py.import("core.move_ops")?.getattr("copy_builder")?;
+    let copy_builder = imported(py, "core.move_ops")?.getattr("copy_builder")?;
     copy_builder.call1((
         &scene,
         tool.getattr("_groups")?,
@@ -398,7 +398,7 @@ fn make_copy_builder<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn shift<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.move_host")?;
+    let module = imported(py, "tools.move_host")?;
     let tool = a.get_item(0)?;
     let step = a.get_item(2)?;
     let viewport = a.get_item(1)?;
@@ -424,7 +424,7 @@ fn commit<'py>(a: &Args<'py>) -> Reply<'py> {
     } else {
         positional(&delta)?.into_any()
     };
-    tool.call_method1("_send", (&viewport, fields!(py; "type" => "value", "value" => py.get_type::<pyo3::types::PyTuple>().call1((py.import("builtins")?.getattr("map")?.call1((py.get_type::<pyo3::types::PyFloat>().into_any(), &d,))?,))?).into_any(),))?;
+    tool.call_method1("_send", (&viewport, fields!(py; "type" => "value", "value" => py.get_type::<pyo3::types::PyTuple>().call1((imported(py, "builtins")?.getattr("map")?.call1((py.get_type::<pyo3::types::PyFloat>().into_any(), &d,))?,))?).into_any(),))?;
     tool.call_method1("_after", (&viewport,))?;
     Ok(none(py))
 }
@@ -473,14 +473,14 @@ fn moving_guide_ids<'py>(a: &Args<'py>) -> Reply<'py> {
         let collected = PySet::empty(py)?;
         for item in tool.getattr("_moved_guides")?.try_iter()? {
             g = item?;
-            collected.add(py.import("builtins")?.getattr("id")?.call1((&g,))?)?;
+            collected.add(imported(py, "builtins")?.getattr("id")?.call1((&g,))?)?;
         }
         collected.into_any()
     });
 }
 fn tell_join<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.move_host")?;
+    let module = imported(py, "tools.move_host")?;
     let mut c: Obj<'py>;
     let commands = a.get_item(1)?;
     let viewport = a.get_item(0)?;

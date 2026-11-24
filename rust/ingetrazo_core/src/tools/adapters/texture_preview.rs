@@ -14,7 +14,7 @@ fn update<'py>(a: &Args<'py>) -> Reply<'py> {
     if renderer.is_none() || optional(&view, "_instance_updates")?.is_none() {
         return Ok(none(py));
     }
-    let module = py.import("tools.texture_position_metal")?;
+    let module = imported(py, "tools.texture_position_metal")?;
     let face = tool.getattr("face")?;
     let side = tool.getattr("side")?;
     let target = (face.getattr("key")?, &side).into_bound_py_any(py)?;

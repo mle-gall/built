@@ -8,7 +8,7 @@ fn magnet_on<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn magnet_off_plane<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.base")?;
+    let module = imported(py, "tools.base")?;
     let tool = a.get_item(0)?;
     (!(tool.is_instance(&module.getattr("PlaneLock")?)?)).into_bound_py_any(py)
 }

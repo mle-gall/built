@@ -42,7 +42,7 @@ fn diagonal_span<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn view<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let mut _v: Obj<'py>;
     let centre: Obj<'py>;
     let ctx = a.get_item(2)?;
@@ -61,9 +61,9 @@ fn view<'py>(a: &Args<'py>) -> Reply<'py> {
     let u: Obj<'py>;
     let viewport = a.get_item(1)?;
     let w2p: Obj<'py>;
-    let math = py.import("math")?.into_any();
-    let a_x_e_s = py.import("core.axes")?.getattr("AXES")?;
-    let plane_axes = py.import("core.axes")?.getattr("plane_axes")?;
+    let math = imported(py, "math")?.into_any();
+    let a_x_e_s = imported(py, "core.axes")?.getattr("AXES")?;
+    let plane_axes = imported(py, "core.axes")?.getattr("plane_axes")?;
     let lock = optional(&viewport, "axis_lock")?;
     let reading = fields!(py; "type" => "view", "axis_lock" => if lock.is_truthy()? && a_x_e_s.contains(&lock)? { module.call_method1("_tuple", (a_x_e_s.get_item(&lock)?,))? } else { none(py) }).into_any();
     let normal = optional(&viewport, "_work_plane_normal")?;
@@ -118,7 +118,7 @@ fn view<'py>(a: &Args<'py>) -> Reply<'py> {
                 )?;
             }
             if !p0.is_none() && !p1.is_none() {
-                let disc_px = py.import("tools.protractor")?.getattr("DISC_PX")?;
+                let disc_px = imported(py, "tools.protractor")?.getattr("DISC_PX")?;
                 px = math.call_method1(
                     "hypot",
                     (
@@ -148,7 +148,7 @@ fn view<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn face_plane<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let mut _point: Obj<'py>;
     let ctx = a.get_item(1)?;
     let face: Obj<'py>;
@@ -172,7 +172,7 @@ fn face_plane<'py>(a: &Args<'py>) -> Reply<'py> {
     if face.is_none() {
         return Ok(none(py));
     }
-    let face_plane_world = py.import("core.snap")?.getattr("face_plane_world")?;
+    let face_plane_world = imported(py, "core.snap")?.getattr("face_plane_world")?;
     [_point, normal] = unpack::<2>(&face_plane_world.call1((&face, optional(&group, "xform")?))?)?;
     if normal.is_none() || normal.call_method0("lengthSquared")?.lt(0.5)? {
         return Ok(none(py));
@@ -189,7 +189,7 @@ fn framed<'py>(a: &Args<'py>) -> Reply<'py> {
     let event = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
-    let axes = py.import("core.axes")?.into_any();
+    let axes = imported(py, "core.axes")?.into_any();
     tool.call_method1(
         "_send",
         (
@@ -268,7 +268,7 @@ fn on_hover<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn on_value<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let tool = a.get_item(0)?;
     let mut value = a.get_item(2)?;
     let viewport = a.get_item(1)?;
@@ -300,7 +300,7 @@ fn on_key<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn locked<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let tool = a.get_item(0)?;
     let d = tool.call_method1("_state", ("locked",))?;
     Ok(if d.is_none() {
@@ -311,7 +311,7 @@ fn locked<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn locked_dir<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
     tool.call_method1("_view", (&viewport,))?;
@@ -326,7 +326,7 @@ fn locked_dir<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn corners<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let angle = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let width = a.get_item(1)?;
@@ -355,7 +355,7 @@ fn corners<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn width_and_angle<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let first: Obj<'py>;
     let cursor = a.get_item(1)?;
     let forced = a.get_item(2)?;
@@ -378,7 +378,7 @@ fn width_and_angle<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn perp<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let tool = a.get_item(0)?;
     module.call_method1(
         "Vec3",
@@ -391,7 +391,7 @@ fn perp<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn normal<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let tool = a.get_item(0)?;
     module.call_method1(
         "Vec3",
@@ -412,7 +412,7 @@ fn reset<'py>(a: &Args<'py>) -> Reply<'py> {
 
 fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let mut _unused: Obj<'py>;
     let angle: Obj<'py>;
     let length: Obj<'py>;
@@ -424,8 +424,8 @@ fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
     if label.is_none() {
         return Ok(none(py));
     }
-    let fmt_len = py.import("core.units")?.getattr("fmt_len")?;
-    let fmt_pair = py.import("core.units")?.getattr("fmt_pair")?;
+    let fmt_len = imported(py, "core.units")?.getattr("fmt_len")?;
+    let fmt_pair = imported(py, "core.units")?.getattr("fmt_pair")?;
     if label.get_item(0)?.eq("edge")? {
         {
             let [part0, part1, part2, part3] = unpack::<4>(&label)?;

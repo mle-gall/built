@@ -10,7 +10,7 @@ fn run_from_edge<'py>(a: &Args<'py>) -> Reply<'py> {
             return store.call_method1("edge_run", (edge.getattr("key")?,));
         }
     }
-    let vec = py.import("tools.offset_host")?.getattr("QVector3D")?;
+    let vec = imported(py, "tools.offset_host")?.getattr("QVector3D")?;
     let walk = |mut vertex: Obj<'py>| -> PyResult<(Vec<Obj<'py>>, bool)> {
         let mut previous = edge.clone();
         let mut points = Vec::new();

@@ -27,11 +27,11 @@ fn set_target<'py>(a: &Args<'py>) -> Reply<'py> {
 
 fn on_deactivate<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.scale_manager_host")?;
+    let module = imported(py, "tools.scale_manager_host")?;
     let tool = a.get_item(0)?;
     let vp = a.get_item(1)?;
     tool.setattr("_target_group", none(py))?;
-    py.import("builtins")?
+    imported(py, "builtins")?
         .getattr("super")?
         .call1((module.getattr("ScaleManagerTool")?, &tool))?
         .call_method1("on_deactivate", (&vp,))?;

@@ -8,7 +8,7 @@ fn cycle_status<'py>(a: &Args<'py>) -> Reply<'py> {
     let ident = a.get_item(3)?;
     let index = a.get_item(1)?;
     let tool = a.get_item(0)?;
-    let select = py.import("tools.select_host")?.into_any();
+    let select = imported(py, "tools.select_host")?.into_any();
     select.call_method1(
         "cycle_status",
         (
@@ -26,7 +26,7 @@ fn select<'py>(a: &Args<'py>) -> Reply<'py> {
     let ids = a.get_item(1)?;
     let mode = a.get_item(2)?;
     let tool = a.get_item(0)?;
-    let select = py.import("tools.select_host")?.into_any();
+    let select = imported(py, "tools.select_host")?.into_any();
     select.call_method1(
         "apply",
         (
@@ -51,7 +51,7 @@ fn box_select<'py>(a: &Args<'py>) -> Reply<'py> {
     let mode = a.get_item(3)?;
     let rect = a.get_item(1)?;
     let tool = a.get_item(0)?;
-    let select = py.import("tools.select_host")?.into_any();
+    let select = imported(py, "tools.select_host")?.into_any();
     select.call_method1("box_select", (tool.getattr("vp")?, &rect, &crossing, &mode))?;
     Ok(none(py))
 }
@@ -59,7 +59,7 @@ fn erase<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let selection_only = a.get_item(1)?;
     let tool = a.get_item(0)?;
-    let select = py.import("tools.select_host")?.into_any();
+    let select = imported(py, "tools.select_host")?.into_any();
     if selection_only.is_truthy()? {
         return select.call_method1(
             "erase_entities",
@@ -77,7 +77,7 @@ fn host_verb<'py>(a: &Args<'py>) -> Reply<'py> {
     let ident = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let verb = a.get_item(1)?;
-    let select = py.import("tools.select_host")?.into_any();
+    let select = imported(py, "tools.select_host")?.into_any();
     select.getattr("HOST_VERBS")?.get_item(&verb)?.call1((
         tool.getattr("vp")?,
         tool.getattr("handles")?.call_method1("get", (&ident,))?,

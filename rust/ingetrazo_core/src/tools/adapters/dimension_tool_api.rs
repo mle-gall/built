@@ -15,8 +15,8 @@ fn owns_shift_lock<'py>(a: &Args<'py>) -> Reply<'py> {
 fn shift_held<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let tool = a.get_item(0)?;
-    let qt = py.import("core.input_types")?.getattr("Qt")?;
-    let input_state = py.import("views.input_state")?.into_any();
+    let qt = imported(py, "core.input_types")?.getattr("Qt")?;
+    let input_state = imported(py, "views.input_state")?.into_any();
     (input_state
         .call_method1("modifiers", (tool.getattr("_vp")?,))?
         .bitand(qt.getattr("ShiftModifier")?)?
@@ -25,16 +25,14 @@ fn shift_held<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn host_dimension_edge<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.annotation_host")?;
+    let module = imported(py, "tools.annotation_host")?;
     let ends: Obj<'py>;
     let hit: Obj<'py>;
     let owner: Obj<'py>;
     let tool = a.get_item(0)?;
     let vp = a.get_item(1)?;
-    let picked_edge = py
-        .import("core.annotation_anchor")?
-        .getattr("picked_edge")?;
-    let attachment = py.import("core.annotation_anchor")?.getattr("Attachment")?;
+    let picked_edge = imported(py, "core.annotation_anchor")?.getattr("picked_edge")?;
+    let attachment = imported(py, "core.annotation_anchor")?.getattr("Attachment")?;
     let snap = optional(&tool.getattr("_ctx")?, "snap")?;
     let edge = optional(&snap, "edge")?;
     if optional(&snap, "kind")?.eq("on_edge")?
@@ -80,12 +78,12 @@ fn host_dimension_edge<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn proposed<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.annotation_host")?;
+    let module = imported(py, "tools.annotation_host")?;
     let axis: Obj<'py>;
     let cursor = a.get_item(1)?;
     let offset: Obj<'py>;
     let tool = a.get_item(0)?;
-    let dimension = py.import("core.dimension")?.getattr("Dimension")?;
+    let dimension = imported(py, "core.dimension")?.getattr("Dimension")?;
     tool.getattr("_machine")?.call_method1(
         "set",
         (
@@ -141,7 +139,7 @@ fn rubber_band_lines<'py>(a: &Args<'py>) -> Reply<'py> {
 fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let tool = a.get_item(0)?;
-    let fmt_len = py.import("core.units")?.getattr("fmt_len")?;
+    let fmt_len = imported(py, "core.units")?.getattr("fmt_len")?;
     if tool.getattr("a")?.is_none() || tool.getattr("hover_point")?.is_none() {
         return Ok(none(py));
     }
@@ -168,10 +166,8 @@ fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
 fn pointer<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let [tool, kind, ctx, t] = unpack::<4>(a.as_any())?;
-    let cls = py
-        .import("tools.annotation_host")?
-        .getattr("DimensionTool")?;
-    let parent = py.import("builtins")?.call_method1("super", (cls, &tool))?;
+    let cls = imported(py, "tools.annotation_host")?.getattr("DimensionTool")?;
+    let parent = imported(py, "builtins")?.call_method1("super", (cls, &tool))?;
     let event = parent.call_method1("_pointer", (&kind, &ctx, t))?;
     let camera = optional(&ctx.getattr("viewport")?, "camera")?;
     let origin = tool.getattr("a")?;
@@ -180,15 +176,14 @@ fn pointer<'py>(a: &Args<'py>) -> Reply<'py> {
         && (kind.eq("hover")? || tool.getattr("b")?.is_none())
     {
         let normal = camera.getattr("target")?.sub(camera.call_method0("eye")?)?;
-        let world = py.import("core.snap")?.call_method1(
+        let world = imported(py, "core.snap")?.call_method1(
             "project_to_view_plane",
             (ctx.getattr("world")?, origin, normal),
         )?;
         event.set_item("world", world.call_method0("toTuple")?)?;
     }
     if tool.call_method0("_shift_held")?.is_truthy()? {
-        let shift = py
-            .import("core.input_types")?
+        let shift = imported(py, "core.input_types")?
             .getattr("Qt")?
             .getattr("ShiftModifier")?
             .getattr("value")?;

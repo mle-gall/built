@@ -118,7 +118,7 @@ fn side_texture<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn begin<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.texture_position")?;
+    let module = imported(py, "tools.texture_position")?;
     let at = a.get_item(3)?;
     let face = a.get_item(2)?;
     let tool = a.get_item(0)?;
@@ -279,7 +279,7 @@ fn on_face<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn on_click<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.texture_position")?;
+    let module = imported(py, "tools.texture_position")?;
     let ctx = a.get_item(1)?;
     let tool = a.get_item(0)?;
     if !tool.getattr("active")?.is_truthy()? {
@@ -327,7 +327,7 @@ fn on_click<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn on_hover<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.texture_position")?;
+    let module = imported(py, "tools.texture_position")?;
     let ctx = a.get_item(1)?;
     let tool = a.get_item(0)?;
     let vp: Obj<'py>;
@@ -364,7 +364,7 @@ fn on_hover<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn on_release<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.texture_position")?;
+    let module = imported(py, "tools.texture_position")?;
     let action: Obj<'py>;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
@@ -386,12 +386,12 @@ fn on_release<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.texture_position")?;
+    let module = imported(py, "tools.texture_position")?;
     let tool = a.get_item(0)?;
     if tool.getattr("_sweep_deg")?.is_none() || !(tool.getattr("active")?.is_truthy()?) {
         return Ok(none(py));
     }
-    let fmt_angle_deg = py.import("core.units")?.getattr("fmt_angle_deg")?;
+    let fmt_angle_deg = imported(py, "core.units")?.getattr("fmt_angle_deg")?;
     Ok((
         fmt_angle_deg.call(
             (tool.getattr("_sweep_deg")?,),
@@ -507,7 +507,7 @@ fn side_command<'py>(a: &Args<'py>) -> Reply<'py> {
     let side = a.get_item(1)?;
     let tex = a.get_item(2)?;
     if side.eq("back")? {
-        let set_face_back_command = py.import("core.history")?.getattr("SetFaceBackCommand")?;
+        let set_face_back_command = imported(py, "core.history")?.getattr("SetFaceBackCommand")?;
         back = py.get_type::<pyo3::types::PyDict>().call1((({
             let value = face.getattr("attrs")?.call_method1("get", ("back",))?;
             if value.is_truthy()? {
@@ -529,9 +529,8 @@ fn side_command<'py>(a: &Args<'py>) -> Reply<'py> {
             PyList::new(py, [back.clone()])?.into_any(),
         ));
     }
-    let set_face_texture_command = py
-        .import("core.history")?
-        .getattr("SetFaceTextureCommand")?;
+    let set_face_texture_command =
+        imported(py, "core.history")?.getattr("SetFaceTextureCommand")?;
     set_face_texture_command.call1((PyList::new(py, [face.clone()])?.into_any(), &tex))
 }
 fn cancel<'py>(a: &Args<'py>) -> Reply<'py> {
@@ -543,7 +542,7 @@ fn cancel<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn on_cancel<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.texture_position")?;
+    let module = imported(py, "tools.texture_position")?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
     if !tool.getattr("active")?.is_truthy()? {
@@ -568,7 +567,7 @@ fn on_cancel<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn on_key<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.texture_position")?;
+    let module = imported(py, "tools.texture_position")?;
     let key = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
@@ -617,7 +616,7 @@ fn preview_faces<'py>(a: &Args<'py>) -> Reply<'py> {
     if tex.is_none() {
         return Ok(PyList::empty(py).into_any());
     }
-    let preview_face = py.import("core.geometry")?.getattr("Face")?;
+    let preview_face = imported(py, "core.geometry")?.getattr("Face")?;
     return Ok(PyList::new(
         py,
         [preview_face.call1((

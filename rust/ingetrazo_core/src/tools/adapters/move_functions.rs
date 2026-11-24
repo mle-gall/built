@@ -4,11 +4,11 @@ use super::*;
 
 fn gather_dimensions<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.move_host")?;
+    let module = imported(py, "tools.move_host")?;
     let ctx = a.get_item(0)?;
     let groups = a.get_item(1)?;
     let vertices = a.get_item(2)?;
-    let dimension_modes = py.import("core.move_ops")?.getattr("dimension_modes")?;
+    let dimension_modes = imported(py, "core.move_ops")?.getattr("dimension_modes")?;
     dimension_modes.call1((
         module.call_method1("transform_records", (&ctx, "dimension"))?,
         &groups,
@@ -18,7 +18,7 @@ fn gather_dimensions<'py>(a: &Args<'py>) -> Reply<'py> {
 
 fn gather_images<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.move_host")?;
+    let module = imported(py, "tools.move_host")?;
     let ctx = a.get_item(0)?;
     module.call_method1("transform_records", (&ctx, "image_plane"))
 }

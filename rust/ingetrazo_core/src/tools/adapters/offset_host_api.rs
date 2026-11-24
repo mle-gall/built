@@ -44,7 +44,7 @@ fn set_base_face<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn loop_points<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.offset_host")?;
+    let module = imported(py, "tools.offset_host")?;
     let tool = a.get_item(0)?;
     return Ok({
         let items = PyList::empty(py);
@@ -81,7 +81,7 @@ fn set_loop<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn normal<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.offset_host")?;
+    let module = imported(py, "tools.offset_host")?;
     let tool = a.get_item(0)?;
     module.call_method1(
         "QVector3D",
@@ -105,8 +105,7 @@ fn on_value<'py>(a: &Args<'py>) -> Reply<'py> {
     let tool = a.get_item(0)?;
     let value = a.get_item(2)?;
     let viewport = a.get_item(1)?;
-    if !(py
-        .import("builtins")?
+    if !(imported(py, "builtins")?
         .getattr("isinstance")?
         .call1((
             &value,
@@ -148,7 +147,7 @@ fn commit<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.offset_host")?;
+    let module = imported(py, "tools.offset_host")?;
     let tool = a.get_item(0)?;
     let label = if tool.getattr("_during")?.is_none() {
         tool.getattr("_machine")?
@@ -225,7 +224,7 @@ fn host_picked_outline<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn picked<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.offset_host")?;
+    let module = imported(py, "tools.offset_host")?;
     let report = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
@@ -248,7 +247,7 @@ fn picked<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn run_payload<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.offset_host")?;
+    let module = imported(py, "tools.offset_host")?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
     let run = a.get_item(2)?;
@@ -288,7 +287,7 @@ fn run_payload<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn host_offset_refusal<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.offset_host")?;
+    let module = imported(py, "tools.offset_host")?;
     let arguments = a.get_item(2)?;
     let distance: Obj<'py>;
     let error: Obj<'py>;
@@ -299,7 +298,7 @@ fn host_offset_refusal<'py>(a: &Args<'py>) -> Reply<'py> {
     let side: Obj<'py>;
     let sign: Obj<'py>;
     let viewport = a.get_item(1)?;
-    let max_offset_distance = py.import("core.topology")?.getattr("max_offset_distance")?;
+    let max_offset_distance = imported(py, "core.topology")?.getattr("max_offset_distance")?;
     [error, distance, points, normal] = unpack::<4>(&arguments)?;
     let d = module.call_method1("fmt_len", (distance.abs()?,))?;
     if error.eq("hole")? {
@@ -361,7 +360,7 @@ fn host_offset_refusal<'py>(a: &Args<'py>) -> Reply<'py> {
 
 fn offset_reference<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.offset_host")?;
+    let module = imported(py, "tools.offset_host")?;
     let mut p: Obj<'py>;
     let tool = a.get_item(0)?;
     let points = tool.call_method1("_state", ("reference",))?;
@@ -380,13 +379,12 @@ fn offset_reference<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn pointer<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.offset_host")?;
+    let module = imported(py, "tools.offset_host")?;
     let ctx = a.get_item(2)?;
     let kind = a.get_item(1)?;
     let tool = a.get_item(0)?;
     let t = a.get_item(3)?;
-    let event = py
-        .import("builtins")?
+    let event = imported(py, "builtins")?
         .getattr("super")?
         .call1((module.getattr("OffsetHost")?, &tool))?
         .call_method1("_pointer", (&kind, &ctx, &t))?;
@@ -407,7 +405,7 @@ fn pointer<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn host_selected_outline<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.offset_host")?;
+    let module = imported(py, "tools.offset_host")?;
     let mut e: Obj<'py>;
     let tool = a.get_item(0)?;
     let source: Obj<'py>;

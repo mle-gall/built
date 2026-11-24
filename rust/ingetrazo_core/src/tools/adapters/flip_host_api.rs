@@ -4,7 +4,7 @@ use super::*;
 
 fn status_clause<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.flip_host")?;
+    let module = imported(py, "tools.flip_host")?;
     let tool = a.get_item(0)?;
     module.call_method1(
         "ctrl_clause",
@@ -13,7 +13,7 @@ fn status_clause<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn host_empty_flip<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.flip_host")?;
+    let module = imported(py, "tools.flip_host")?;
     let vp = a.get_item(1)?;
     vp.call_method1(
         "flash_status",
@@ -23,7 +23,7 @@ fn host_empty_flip<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn host_flip_targets<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.flip_host")?;
+    let module = imported(py, "tools.flip_host")?;
     let axis = a.get_item(2)?;
     let hi: Obj<'py>;
     let lo: Obj<'py>;
@@ -55,7 +55,7 @@ items.append(py.get_type::<pyo3::types::PyString>().call1((e.getattr("key")?,))?
 }
 fn host_flip_copy<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.flip_host")?;
+    let module = imported(py, "tools.flip_host")?;
     let active: Obj<'py>;
     let arguments = a.get_item(2)?;
     let say: Obj<'py>;
@@ -94,7 +94,7 @@ fn host_flip_cursor<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn on_key<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.flip_host")?;
+    let module = imported(py, "tools.flip_host")?;
     let key = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let vp = a.get_item(1)?;
@@ -130,16 +130,14 @@ fn flip<'py>(a: &Args<'py>) -> Reply<'py> {
 fn bounds<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let viewport = a.get_item(1)?;
-    let selection_bounds = py
-        .import("tools.rust_tool_base")?
-        .getattr("selection_bounds")?;
+    let selection_bounds = imported(py, "tools.rust_tool_base")?.getattr("selection_bounds")?;
     selection_bounds
         .call1((viewport.getattr("scene")?,))?
         .call_method0("limits")
 }
 fn plane_quad<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.flip_host")?;
+    let module = imported(py, "tools.flip_host")?;
     let axis = a.get_item(1)?;
     let centre = a.get_item(2)?;
     let half = a.get_item(3)?;
@@ -170,9 +168,7 @@ fn plane_under_cursor<'py>(a: &Args<'py>) -> Reply<'py> {
     let sx = a.get_item(2)?;
     let sy = a.get_item(3)?;
     let viewport = a.get_item(1)?;
-    let selection_bounds = py
-        .import("tools.rust_tool_base")?
-        .getattr("selection_bounds")?;
+    let selection_bounds = imported(py, "tools.rust_tool_base")?.getattr("selection_bounds")?;
     let bounds = selection_bounds.call1((viewport.getattr("scene")?,))?;
     if !bounds.call_method0("limits")?.get_item(0)?.is_none()
         && viewport.hasattr("_world_to_pixel")?
@@ -184,15 +180,14 @@ fn plane_under_cursor<'py>(a: &Args<'py>) -> Reply<'py> {
 
 fn host_flip_selected<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.flip_host")?;
+    let module = imported(py, "tools.flip_host")?;
     let mut e: Obj<'py>;
     let vp = a.get_item(1)?;
     return Ok({
         let mut found = false;
         for item in vp.getattr("scene")?.getattr("selection")?.try_iter()? {
             e = item?;
-            if py
-                .import("builtins")?
+            if imported(py, "builtins")?
                 .getattr("isinstance")?
                 .call1((
                     &e,
@@ -226,7 +221,7 @@ fn host_flip_plane_at<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn on_key_release<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.flip_host")?;
+    let module = imported(py, "tools.flip_host")?;
     let key = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let vp = a.get_item(1)?;

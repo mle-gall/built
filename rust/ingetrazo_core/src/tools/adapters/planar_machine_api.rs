@@ -10,8 +10,8 @@ fn frame<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
-    let axes = py.import("core.axes")?.into_any();
-    let point_snap_kinds = py.import("core.snap")?.getattr("POINT_SNAP_KINDS")?;
+    let axes = imported(py, "core.axes")?.into_any();
+    let point_snap_kinds = imported(py, "core.snap")?.getattr("POINT_SNAP_KINDS")?;
     let kind = optional(&tool, "snap_kind")?;
     tool.call_method1("_send", (&viewport, fields!(py; "type" => "frame", "axes" => axes.call_method0("frame")?, "names_point" => if kind.is_none() { none(py) } else { (point_snap_kinds.contains(&kind)?).into_bound_py_any(py)? }).into_any(),))?;
     Ok(none(py))
@@ -38,7 +38,7 @@ fn cursor_preview<'py>(a: &Args<'py>) -> Reply<'py> {
     if vp.is_none() || point.is_none() {
         return Ok(PyList::empty(py).into_any());
     }
-    let plane_axes = py.import("core.axes")?.getattr("plane_axes")?;
+    let plane_axes = imported(py, "core.axes")?.getattr("plane_axes")?;
     [_unused, normal] = unpack::<2>(&tool.call_method1("preview_plane", (&vp, &point))?)?;
     [u, v] = unpack::<2>(&plane_axes.call1((&normal,))?)?;
     let scale = tool.call_method1("plane_preview_scale", (&vp, &point, &u, &v))?;
@@ -57,12 +57,12 @@ fn cursor_preview<'py>(a: &Args<'py>) -> Reply<'py> {
 
 fn rubber_band_lines<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let tool = a.get_item(0)?;
     Ok(if tool.getattr("start_point")?.is_none() {
         tool.call_method0("_cursor_preview")?
     } else {
-        py.import("builtins")?
+        imported(py, "builtins")?
             .getattr("super")?
             .call1((module.getattr("_PlanarMachine")?, &tool))?
             .call_method0("rubber_band_lines")?

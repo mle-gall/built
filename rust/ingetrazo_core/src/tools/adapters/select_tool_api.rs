@@ -4,7 +4,7 @@ use super::*;
 
 fn px<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let kind = a.get_item(2)?;
     let modifiers = a.get_item(5)?;
     let tool = a.get_item(0)?;
@@ -42,13 +42,13 @@ fn pressed<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn pick_at<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let lines = a.get_item(4)?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
     let x = a.get_item(2)?;
     let y = a.get_item(3)?;
-    let select_pick = py.import("ingetrazo_core")?.getattr("select_pick")?;
+    let select_pick = imported(py, "ingetrazo_core")?.getattr("select_pick")?;
     let hit = select_pick.call1((
         module.call_method1("_Host", (&viewport, tool.getattr("_handles")?))?,
         py.get_type::<pyo3::types::PyFloat>().call1((&x,))?,
@@ -152,12 +152,12 @@ fn on_box_select<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn on_key<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let key = a.get_item(2)?;
     let modifiers = a.get_item(3)?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
-    let qt = py.import("core.input_types")?.getattr("Qt")?;
+    let qt = imported(py, "core.input_types")?.getattr("Qt")?;
     let name = fields!(py; qt.getattr("Key_Delete")? => "Delete", qt.getattr("Key_Backspace")? => "Backspace").into_any().call_method1("get", (&key,))?;
     if name.is_none() {
         return false.into_bound_py_any(py);

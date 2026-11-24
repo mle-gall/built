@@ -4,7 +4,7 @@ use super::*;
 
 fn compass_segments<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.north_host")?;
+    let module = imported(py, "tools.north_host")?;
     let mut first: Obj<'py>;
     let mut b: Obj<'py>;
     let centre = a.get_item(0)?;
@@ -50,7 +50,7 @@ fn compass_segments<'py>(a: &Args<'py>) -> Reply<'py> {
 
 fn north_deg_towards<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.north_host")?;
+    let module = imported(py, "tools.north_host")?;
     let centre = a.get_item(0)?;
     let point = a.get_item(1)?;
     module

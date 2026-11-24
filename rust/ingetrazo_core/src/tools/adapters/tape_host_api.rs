@@ -13,15 +13,13 @@ fn cursor_plus<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn start_from_hover<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.tape_host")?;
+    let module = imported(py, "tools.tape_host")?;
     let mut pixel = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
-    let q_point_f = py.import("core.input_types")?.getattr("QPointF")?;
-    let input_state = py.import("views.input_state")?.into_any();
-    let _hover_event = py
-        .import("views.document_interaction")?
-        .getattr("_HoverEvent")?;
+    let q_point_f = imported(py, "core.input_types")?.getattr("QPointF")?;
+    let input_state = imported(py, "views.input_state")?.into_any();
+    let _hover_event = imported(py, "views.document_interaction")?.getattr("_HoverEvent")?;
     if !tool.getattr("start_point")?.is_none() || tool.getattr("_mode")?.ne("line")? {
         return false.into_bound_py_any(py);
     }
@@ -149,7 +147,7 @@ fn toggle_mode<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn host_tape_mode<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.tape_host")?;
+    let module = imported(py, "tools.tape_host")?;
     let mut callback: Obj<'py>;
     let mode = a.get_item(2)?;
     let tool = a.get_item(0)?;
@@ -169,8 +167,7 @@ fn host_tape_mode<'py>(a: &Args<'py>) -> Reply<'py> {
         .try_iter()?
     {
         let name = item?;
-        callback = py
-            .import("builtins")?
+        callback = imported(py, "builtins")?
             .getattr("getattr")?
             .call1((&vp, &name, py.None()))?;
         if callback.is_truthy()? {
@@ -182,7 +179,7 @@ fn host_tape_mode<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn on_key<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.tape_host")?;
+    let module = imported(py, "tools.tape_host")?;
     let key = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let vp = a.get_item(1)?;
@@ -205,7 +202,7 @@ fn on_key<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn host_tape_message<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.tape_host")?;
+    let module = imported(py, "tools.tape_host")?;
     let arguments = a.get_item(2)?;
     let distance: Obj<'py>;
     let label: Obj<'py>;
@@ -233,7 +230,7 @@ fn host_tape_message<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.tape_host")?;
+    let module = imported(py, "tools.tape_host")?;
     let tool = a.get_item(0)?;
     let reading = tool
         .getattr("_machine")?
@@ -251,7 +248,7 @@ fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
 
 fn status_clause<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.tape_host")?;
+    let module = imported(py, "tools.tape_host")?;
     let mut k: Obj<'py>;
     let tool = a.get_item(0)?;
     let mut v: Obj<'py>;
@@ -286,7 +283,7 @@ fn status_clause<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn on_click<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.tape_host")?;
+    let module = imported(py, "tools.tape_host")?;
     let ctx = a.get_item(1)?;
     let tool = a.get_item(0)?;
     {
@@ -296,7 +293,7 @@ fn on_click<'py>(a: &Args<'py>) -> Reply<'py> {
         tool.setattr("_click_point", part1)?;
     }
     let action = (|| -> Reply<'py> {
-        py.import("builtins")?
+        imported(py, "builtins")?
             .getattr("super")?
             .call1((module.getattr("TapeHost")?, &tool))?
             .call_method1("on_click", (&ctx,))?;
@@ -312,7 +309,7 @@ fn on_click<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn on_key_release<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.tape_host")?;
+    let module = imported(py, "tools.tape_host")?;
     let key = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let vp = a.get_item(1)?;
@@ -335,7 +332,7 @@ fn guide_preview_lines<'py>(a: &Args<'py>) -> Reply<'py> {
         .call_method1("query", ("guide", py.None()))?;
     let result = PyList::empty(py);
     if reading.is_truthy()? {
-        let module = py.import("tools.tape_host")?;
+        let module = imported(py, "tools.tape_host")?;
         let vec = module.getattr("QVector3D")?;
         let points = reading
             .try_iter()?

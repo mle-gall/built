@@ -8,12 +8,12 @@ fn current_normal<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn on_key<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.section_host")?;
+    let module = imported(py, "tools.section_host")?;
     let key = a.get_item(2)?;
     let modifiers = a.get_item(3)?;
     let tool = a.get_item(0)?;
     let vp = a.get_item(1)?;
-    let qt = py.import("core.input_types")?.getattr("Qt")?;
+    let qt = imported(py, "core.input_types")?.getattr("Qt")?;
     let arrow = fields!(py; qt.getattr("Key_Right")? => "ArrowRight", qt.getattr("Key_Left")? => "ArrowLeft", qt.getattr("Key_Up")? => "ArrowUp", qt.getattr("Key_Down")? => "ArrowDown").into_any().call_method1("get", (&key,))?;
     if !arrow.is_truthy()? {
         return false.into_bound_py_any(py);
@@ -26,7 +26,7 @@ fn on_click<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let ctx = a.get_item(1)?;
     let tool = a.get_item(0)?;
-    let tr = py.import("core.i18n")?.getattr("tr")?;
+    let tr = imported(py, "core.i18n")?.getattr("tr")?;
     let vp = ctx.getattr("viewport")?;
     if !(tool
         .call_method1(
@@ -88,12 +88,12 @@ fn on_click<'py>(a: &Args<'py>) -> Reply<'py> {
 fn wireframe_color<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let tool = a.get_item(0)?;
-    let plane_lock = py.import("tools.base")?.getattr("PlaneLock")?;
+    let plane_lock = imported(py, "tools.base")?.getattr("PlaneLock")?;
     let axis = plane_lock.call_method1("plane_color", (tool.call_method0("_current_normal")?,))?;
     if !axis.is_none() {
         return Ok(axis.clone());
     }
-    let color_reference = py.import("core.snap")?.getattr("COLOR_REFERENCE")?;
+    let color_reference = imported(py, "core.snap")?.getattr("COLOR_REFERENCE")?;
     Ok({
         let values = PyList::empty(py);
         values.call_method1("extend", (&color_reference,))?;
@@ -103,16 +103,16 @@ fn wireframe_color<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn send<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.section_host")?;
+    let module = imported(py, "tools.section_host")?;
     let event = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let vp = a.get_item(1)?;
-    let axes = py.import("core.axes")?.into_any();
+    let axes = imported(py, "core.axes")?.into_any();
     if ("hover", "click", "key")
         .into_bound_py_any(py)?
         .contains(event.get_item("type")?)?
     {
-        py.import("builtins")?
+        imported(py, "builtins")?
             .getattr("super")?
             .call1((module.getattr("SectionPlaneTool")?, &tool))?
             .call_method1(
@@ -124,7 +124,7 @@ fn send<'py>(a: &Args<'py>) -> Reply<'py> {
                 ),
             )?;
     }
-    py.import("builtins")?
+    imported(py, "builtins")?
         .getattr("super")?
         .call1((module.getattr("SectionPlaneTool")?, &tool))?
         .call_method1("_send", (&vp, &event))

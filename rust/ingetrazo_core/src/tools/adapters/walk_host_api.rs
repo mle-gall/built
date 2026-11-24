@@ -4,7 +4,7 @@ use super::*;
 
 fn step<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.walkthrough_host")?;
+    let module = imported(py, "tools.walkthrough_host")?;
     let dt = a.get_item(4)?;
     let dx = a.get_item(2)?;
     let dy = a.get_item(3)?;
@@ -21,7 +21,7 @@ fn walking<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn anchor_px<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.walkthrough_host")?;
+    let module = imported(py, "tools.walkthrough_host")?;
     let tool = a.get_item(0)?;
     let p = tool.call_method1("_state", ("anchor",))?;
     Ok(if p.is_none() {

@@ -28,7 +28,7 @@ fn vcb_caption<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let at: Obj<'py>;
     let kind: Obj<'py>;
     let tool = a.get_item(0)?;
@@ -39,7 +39,7 @@ fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
     }
     [kind, value, at] = unpack::<3>(&label)?;
     if kind.eq("radius")? {
-        let fmt_len = py.import("core.units")?.getattr("fmt_len")?;
+        let fmt_len = imported(py, "core.units")?.getattr("fmt_len")?;
         return (
             ("R ")
                 .into_bound_py_any(py)?
@@ -48,7 +48,7 @@ fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
         )
             .into_bound_py_any(py);
     }
-    let fmt_angle_deg = py.import("core.units")?.getattr("fmt_angle_deg")?;
+    let fmt_angle_deg = imported(py, "core.units")?.getattr("fmt_angle_deg")?;
     Ok((
         fmt_angle_deg.call((&value,), Some(&fields!(py; "signed" => true)))?,
         module.call_method1("Vec3", positional(&at)?)?,
@@ -76,7 +76,7 @@ fn plane_points<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn sweep_to<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let cursor = a.get_item(1)?;
     let tool = a.get_item(0)?;
     tool.call_method1(
@@ -89,7 +89,7 @@ fn sweep_to<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn points<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let tool = a.get_item(0)?;
     let sweep_deg = a.get_item(1)?;
     return Ok({

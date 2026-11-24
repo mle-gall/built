@@ -9,7 +9,7 @@ fn corners_mode<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn host_reset_bevel<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.fillet_host")?;
+    let module = imported(py, "tools.fillet_host")?;
     let activate = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
@@ -72,7 +72,7 @@ fn reset<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn start_point<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.fillet_host")?;
+    let module = imported(py, "tools.fillet_host")?;
     let tool = a.get_item(0)?;
     if !tool.getattr("edges")?.is_truthy()? {
         return Ok(none(py));
@@ -86,7 +86,7 @@ fn start_point<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn host_pick_bevel<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.fillet_host")?;
+    let module = imported(py, "tools.fillet_host")?;
     let tool = a.get_item(0)?;
     let vp = a.get_item(1)?;
     let world = a.get_item(2)?;
@@ -112,7 +112,7 @@ fn host_pick_bevel<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn host_hover_bevel<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.fillet_host")?;
+    let module = imported(py, "tools.fillet_host")?;
     let tool = a.get_item(0)?;
     let vp = a.get_item(1)?;
     if tool.getattr("edges")?.is_truthy()? {
@@ -162,7 +162,7 @@ fn on_hover<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn host_bevel_geometry<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.fillet_host")?;
+    let module = imported(py, "tools.fillet_host")?;
     let tool = a.get_item(0)?;
     return Ok({
         let items = PyList::empty(py);
@@ -197,7 +197,7 @@ fn host_bevel_picked<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn on_key<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.fillet_host")?;
+    let module = imported(py, "tools.fillet_host")?;
     let key = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
@@ -220,7 +220,7 @@ fn on_key<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn set_affect<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.fillet_host")?;
+    let module = imported(py, "tools.fillet_host")?;
     let affect = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
@@ -295,7 +295,7 @@ fn host_measure<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn set_measure<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.fillet_host")?;
+    let module = imported(py, "tools.fillet_host")?;
     let measure = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
@@ -328,7 +328,7 @@ fn set_size<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn set_corners<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.fillet_host")?;
+    let module = imported(py, "tools.fillet_host")?;
     let corners = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
@@ -343,7 +343,7 @@ fn set_corners<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn apply_from_panel<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.fillet_host")?;
+    let module = imported(py, "tools.fillet_host")?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
     if !tool.call_method0("_current_edges")?.is_truthy()? {
@@ -386,7 +386,7 @@ fn vcb_caption<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn status_clause<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.fillet_host")?;
+    let module = imported(py, "tools.fillet_host")?;
     let tool = a.get_item(0)?;
     if tool.call_method0("_corners_mode")?.is_truthy()? {
         return module.call_method1("tr", ("Vertices: size along the edges",));
@@ -440,7 +440,7 @@ fn on_profile_value<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn host_bad_profile<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.fillet_host")?;
+    let module = imported(py, "tools.fillet_host")?;
     let viewport = a.get_item(1)?;
     viewport.call_method1(
         "flash_status",
@@ -450,7 +450,7 @@ fn host_bad_profile<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn host_announce_size<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.fillet_host")?;
+    let module = imported(py, "tools.fillet_host")?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
     viewport.call_method1("flash_status", (module.call_method("tr", ("{m} {r} — click an edge.",), Some(&fields!(py; "m" => module.call_method1("tr", (tool.call_method0("_measure_label")?,))?, "r" => module.call_method1("fmt_len_fine", (tool.getattr("radius")?,))?)))?, 3000,))?;
@@ -477,7 +477,7 @@ fn current_edges<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn host_fillet_plan<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.fillet_host")?;
+    let module = imported(py, "tools.fillet_host")?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
     tool.call_method0("_replan")?;
@@ -498,7 +498,7 @@ fn host_fillet_plan<'py>(a: &Args<'py>) -> Reply<'py> {
         )?;
         return Ok(none(py));
     }
-    let to_json_key = py.import("core.protocol.keys")?.getattr("to_json_key")?;
+    let to_json_key = imported(py, "core.protocol.keys")?.getattr("to_json_key")?;
     let kind = if tool.call_method0("_corners_mode")?.is_truthy()? {
         ("vertices").into_bound_py_any(py)?
     } else {
@@ -510,7 +510,7 @@ items.append(to_json_key.call1((e.getattr("key")?,))?)?;
 }
 fn host_finish_bevel<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.fillet_host")?;
+    let module = imported(py, "tools.fillet_host")?;
     let n: Obj<'py>;
     let r: Obj<'py>;
     let said: Obj<'py>;
@@ -558,7 +558,7 @@ fn preview_faces<'py>(a: &Args<'py>) -> Reply<'py> {
     if tool.getattr("_plan")?.is_none() {
         return Ok(PyList::empty(py).into_any());
     }
-    let preview_face = py.import("core.geometry")?.getattr("Face")?;
+    let preview_face = imported(py, "core.geometry")?.getattr("Face")?;
     return Ok({
         let items = PyList::empty(py);
         for item in tool.getattr("_plan")?.getattr("new_faces")?.try_iter()? {
@@ -585,7 +585,7 @@ fn shape_label<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn is_plain_fillet<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.fillet_host")?;
+    let module = imported(py, "tools.fillet_host")?;
     let tool = a.get_item(0)?;
     Ok({
         let value = (tool.getattr("measure")?.eq("radius")?).into_bound_py_any(py)?;
@@ -611,7 +611,7 @@ fn is_plain_fillet<'py>(a: &Args<'py>) -> Reply<'py> {
 
 fn on_key_release<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.fillet_host")?;
+    let module = imported(py, "tools.fillet_host")?;
     let key = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
@@ -627,16 +627,15 @@ fn on_key_release<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn set_shape<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.fillet_host")?;
+    let module = imported(py, "tools.fillet_host")?;
     let tool = a.get_item(0)?;
     let mut shape = a.get_item(2)?;
     let mut sm: Obj<'py>;
     let viewport = a.get_item(1)?;
     let mut x: Obj<'py>;
     let mut y: Obj<'py>;
-    let bevel_profiles = py.import("core.bevel_profiles")?.into_any();
-    if py
-        .import("builtins")?
+    let bevel_profiles = imported(py, "core.bevel_profiles")?.into_any();
+    if imported(py, "builtins")?
         .getattr("isinstance")?
         .call1((
             &shape,
@@ -699,7 +698,7 @@ fn set_shape<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn host_panel_value<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.fillet_host")?;
+    let module = imported(py, "tools.fillet_host")?;
     let arguments = a.get_item(2)?;
     let field: Obj<'py>;
     let tool = a.get_item(0)?;
@@ -710,7 +709,7 @@ fn host_panel_value<'py>(a: &Args<'py>) -> Reply<'py> {
         field = part0;
         value = part1;
     }
-    py.import("builtins")?.getattr("setattr")?.call1((
+    imported(py, "builtins")?.getattr("setattr")?.call1((
         tool.get_type().into_any(),
         &field,
         &value,
@@ -730,7 +729,7 @@ fn host_panel_value<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn replan<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.fillet_host")?;
+    let module = imported(py, "tools.fillet_host")?;
     let mut e: Obj<'py>;
     let plan: Obj<'py>;
     let tool = a.get_item(0)?;
@@ -751,7 +750,7 @@ fn replan<'py>(a: &Args<'py>) -> Reply<'py> {
             }
             collected.into_any()
         },))?,
-        py.import("builtins")?
+        imported(py, "builtins")?
             .getattr("round")?
             .call1((tool.getattr("radius")?, 6))?,
         tool.getattr("segments")?,
@@ -819,8 +818,7 @@ fn rubber_band_lines<'py>(a: &Args<'py>) -> Reply<'py> {
             "extend",
             ({
                 let collected = PyList::empty(py);
-                for item in py
-                    .import("builtins")?
+                for item in imported(py, "builtins")?
                     .getattr("range")?
                     .call1((pts.len()?.into_bound_py_any(py)?.sub(1)?,))?
                     .try_iter()?
@@ -838,7 +836,7 @@ fn rubber_band_lines<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.fillet_host")?;
+    let module = imported(py, "tools.fillet_host")?;
     let head: Obj<'py>;
     let tool = a.get_item(0)?;
     let edges = tool.call_method0("_current_edges")?;

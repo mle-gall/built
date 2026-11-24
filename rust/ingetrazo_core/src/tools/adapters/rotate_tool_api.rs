@@ -4,7 +4,7 @@ use super::*;
 
 fn set_arm<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let key = a.get_item(1)?;
     let point = a.get_item(2)?;
     let tool = a.get_item(0)?;

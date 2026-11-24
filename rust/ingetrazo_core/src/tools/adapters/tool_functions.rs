@@ -18,9 +18,9 @@ fn tuple<'py>(a: &Args<'py>) -> Reply<'py> {
 
 fn selection_mode<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tool_base")?;
+    let module = imported(py, "tools.rust_tool_base")?;
     let modifiers = a.get_item(0)?;
-    let select_mode = py.import("ingetrazo_core")?.getattr("select_mode")?;
+    let select_mode = imported(py, "ingetrazo_core")?.getattr("select_mode")?;
     select_mode.call1((module.call_method1("_mods", (&modifiers,))?,))
 }
 

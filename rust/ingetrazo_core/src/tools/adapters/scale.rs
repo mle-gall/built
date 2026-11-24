@@ -27,7 +27,7 @@ fn host_deactivate_box<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn refresh_box<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.scale_host")?;
+    let module = imported(py, "tools.scale_host")?;
     let mut mask: Obj<'py>;
     let mut p: Obj<'py>;
     let tool = a.get_item(0)?;
@@ -98,7 +98,7 @@ fn grip_pos<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn grip_under<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.scale_host")?;
+    let module = imported(py, "tools.scale_host")?;
     let tool = a.get_item(0)?;
     let sx = a.get_item(2)?;
     let sy = a.get_item(3)?;
@@ -145,12 +145,12 @@ fn snap_excluded<'py>(a: &Args<'py>) -> Reply<'py> {
     if tool.getattr("_grip")?.is_none() {
         return Ok(none(py));
     }
-    let snap_exclusions = py.import("ingetrazo_core")?.getattr("snap_exclusions")?;
+    let snap_exclusions = imported(py, "ingetrazo_core")?.getattr("snap_exclusions")?;
     snap_exclusions.call1((&tool, true))
 }
 fn snapped_point<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.scale_host")?;
+    let module = imported(py, "tools.scale_host")?;
     let ctx = a.get_item(1)?;
     let tool = a.get_item(0)?;
     let snap = if !ctx.is_none() {
@@ -169,7 +169,7 @@ fn snapped_point<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn grip_spec<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.scale_host")?;
+    let module = imported(py, "tools.scale_host")?;
     let tool = a.get_item(0)?;
     let grip = tool.getattr("_grip")?;
     Ok(module.call_method1(
@@ -274,7 +274,7 @@ fn on_hover<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn host_pick_grip<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.scale_host")?;
+    let module = imported(py, "tools.scale_host")?;
     let edge: Obj<'py>;
     let face: Obj<'py>;
     let grip: Obj<'py>;
@@ -287,8 +287,8 @@ fn host_pick_grip<'py>(a: &Args<'py>) -> Reply<'py> {
     let sy: Obj<'py>;
     let viewport = a.get_item(1)?;
     let xy = a.get_item(2)?;
-    let gather_images = py.import("tools.move_host")?.getattr("gather_images")?;
-    let gather_targets = py.import("tools.move_host")?.getattr("gather_targets")?;
+    let gather_images = imported(py, "tools.move_host")?.getattr("gather_images")?;
+    let gather_targets = imported(py, "tools.move_host")?.getattr("gather_targets")?;
     let ctx = tool.getattr("_ctx")?;
     tool.call_method1("_refresh_box", (&viewport,))?;
     [sx, sy] = unpack::<2>(&xy)?;
@@ -360,7 +360,7 @@ fn grab<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn capture_grip<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.scale_host")?;
+    let module = imported(py, "tools.scale_host")?;
     let grip = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
@@ -396,7 +396,7 @@ fn on_release<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn host_toggle_center<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.scale_host")?;
+    let module = imported(py, "tools.scale_host")?;
     let say = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
@@ -420,7 +420,7 @@ fn host_toggle_center<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn host_toggle_uniform<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.scale_host")?;
+    let module = imported(py, "tools.scale_host")?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
     tool.setattr(
@@ -440,7 +440,7 @@ fn host_toggle_uniform<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn on_key<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.scale_host")?;
+    let module = imported(py, "tools.scale_host")?;
     let key = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
@@ -542,7 +542,7 @@ fn host_grip_spec<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let tool = a.get_item(0)?;
     let grip = tool.getattr("_grip")?;
-    return Ok(fields!(py; "extents" => tool.call_method0("_extents")?, "mask" => {let items=PyList::empty(py); for item in py.import("builtins")?.getattr("range")?.call1((3,))?.try_iter()? { let i = item?;
+    return Ok(fields!(py; "extents" => tool.call_method0("_extents")?, "mask" => {let items=PyList::empty(py); for item in imported(py, "builtins")?.getattr("range")?.call1((3,))?.try_iter()? { let i = item?;
 items.append((grip.getattr("mask")?.contains(&i)?).into_bound_py_any(py)?)?;
 } items.into_any()}, "uniform" => { let value = tool.getattr("uniform")?; if value.is_truthy()? {value} else {(grip.call_method1("kind", (tool.call_method0("_active_axes")?,))?.eq("corner")?).into_bound_py_any(py)?} }).into_any());
 }
@@ -633,8 +633,7 @@ fn selection_bounds<'py>(a: &Args<'py>) -> Reply<'py> {
     } else {
         none(py)
     };
-    let bounds = py
-        .import("tools.rust_tool_base")?
+    let bounds = imported(py, "tools.rust_tool_base")?
         .getattr("selection_bounds")?
         .call(
             (viewport.getattr("scene")?, frame),
@@ -660,8 +659,8 @@ fn active_axes<'py>(a: &Args<'py>) -> Reply<'py> {
 fn pick_frame<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let [tool, viewport] = unpack::<2>(a.as_any())?;
-    let group = py.import("core.group")?;
-    let axes = py.import("core.axes")?;
+    let group = imported(py, "core.group")?;
+    let axes = imported(py, "core.axes")?;
     let selection = viewport
         .getattr("scene")?
         .getattr("selection")?
@@ -715,8 +714,7 @@ fn anchor_for<'py>(a: &Args<'py>) -> Reply<'py> {
     for (i, value) in params.iter_mut().enumerate() {
         *value = if mask.contains(i)? { 1.0 - *value } else { 0.5 };
     }
-    let anchor = py
-        .import("tools.scale_host")?
+    let anchor = imported(py, "tools.scale_host")?
         .call_method1("_Grip", (PyTuple::new(py, params)?, mask))?;
     tool.call_method1("_grip_pos", (anchor,))
 }
@@ -849,7 +847,7 @@ fn vcb_caption<'py>(a: &Args<'py>) -> Reply<'py> {
     {
         return "Scale".into_bound_py_any(py);
     }
-    let names = py.import("tools.scale_host")?.getattr("_AXIS_NAMES")?;
+    let names = imported(py, "tools.scale_host")?.getattr("_AXIS_NAMES")?;
     let labels = grip
         .getattr("mask")?
         .try_iter()?
@@ -917,8 +915,7 @@ pub(super) const GRIP_METHODS: &[Method] = &[(
 fn on_key_release<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let [tool, viewport, key] = unpack::<3>(a.as_any())?;
-    if key.ne(py
-        .import("tools.scale_host")?
+    if key.ne(imported(py, "tools.scale_host")?
         .getattr("Qt")?
         .getattr("Key_Control")?)?
     {

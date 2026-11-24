@@ -8,7 +8,7 @@ fn host_geo_plan<'py>(a: &Args<'py>) -> Reply<'py> {
     let enter = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let vp = a.get_item(1)?;
-    let tr = py.import("core.i18n")?.getattr("tr")?;
+    let tr = imported(py, "core.i18n")?.getattr("tr")?;
     if enter.is_truthy()? && vp.call_method0("has_ground_surface")?.is_truthy()? {
         cam = vp.getattr("camera")?;
         tool.setattr(
@@ -43,7 +43,7 @@ fn on_key<'py>(a: &Args<'py>) -> Reply<'py> {
     let key = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let vp = a.get_item(1)?;
-    let qt = py.import("core.input_types")?.getattr("Qt")?;
+    let qt = imported(py, "core.input_types")?.getattr("Qt")?;
     if !(qt.getattr("Key_Enter")?, qt.getattr("Key_Return")?)
         .into_bound_py_any(py)?
         .contains(&key)?
@@ -77,7 +77,7 @@ fn on_double_click<'py>(a: &Args<'py>) -> Reply<'py> {
 
 fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.geopath_host")?;
+    let module = imported(py, "tools.geopath_host")?;
     let at: Obj<'py>;
     let elevation: Obj<'py>;
     let grade: Obj<'py>;
@@ -85,7 +85,7 @@ fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
     let run: Obj<'py>;
     let tool = a.get_item(0)?;
     let mut v: Obj<'py>;
-    let fmt_len = py.import("core.units")?.getattr("fmt_len")?;
+    let fmt_len = imported(py, "core.units")?.getattr("fmt_len")?;
     let label = tool.call_method1("_state", ("label",))?;
     if label.is_none() {
         return Ok(none(py));
@@ -158,7 +158,7 @@ fn host_geo_preview<'py>(a: &Args<'py>) -> Reply<'py> {
         if index.lt(points.len()?)? {
             points.set_item(
                 &index,
-                py.import("tools.geopath_host")?
+                imported(py, "tools.geopath_host")?
                     .getattr("Vec3")?
                     .call1(positional(&point)?)?,
             )?;

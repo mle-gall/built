@@ -151,7 +151,7 @@ fn query<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn axes<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rust_tools")?;
+    let module = imported(py, "tools.rust_tools")?;
     let tool = a.get_item(0)?;
     let u: Obj<'py>;
     let v: Obj<'py>;

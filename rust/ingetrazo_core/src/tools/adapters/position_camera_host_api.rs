@@ -8,7 +8,7 @@ fn drag_plane<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.walkthrough_host")?;
+    let module = imported(py, "tools.walkthrough_host")?;
     let tool = a.get_item(0)?;
     (
         module.call_method1(
@@ -21,7 +21,7 @@ fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn place<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.walkthrough_host")?;
+    let module = imported(py, "tools.walkthrough_host")?;
     let base = a.get_item(2)?;
     let look_at = a.get_item(3)?;
     let tool = a.get_item(0)?;
@@ -33,13 +33,13 @@ fn place<'py>(a: &Args<'py>) -> Reply<'py> {
 fn host_set_eye_height<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let value = a.get_item(2)?;
-    let walkthrough = py.import("tools.walkthrough")?.into_any();
+    let walkthrough = imported(py, "tools.walkthrough")?.into_any();
     walkthrough.call_method1("set_eye_height", (&value,))?;
     Ok(none(py))
 }
 fn host_eye_placed<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.walkthrough_host")?;
+    let module = imported(py, "tools.walkthrough_host")?;
     let height = a.get_item(2)?;
     let viewport = a.get_item(1)?;
     let flash = optional(&viewport, "flash_status")?;

@@ -10,9 +10,8 @@ fn on_click<'py>(a: &Args<'py>) -> Reply<'py> {
         && tool.getattr("_align")?.is_truthy()?
         && tool.getattr("_group")?.getattr("text3d")?.is_truthy()?
     {
-        let picked_attachment = py
-            .import("core.annotation_anchor")?
-            .getattr("picked_attachment")?;
+        let picked_attachment =
+            imported(py, "core.annotation_anchor")?.getattr("picked_attachment")?;
         tool.setattr("_attachment", picked_attachment.call1((&ctx,))?)?;
     }
     tool.call_method1(
@@ -44,7 +43,7 @@ fn place_at<'py>(a: &Args<'py>) -> Reply<'py> {
 
 fn face_frame<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.place_group_host")?;
+    let module = imported(py, "tools.place_group_host")?;
     let normal = a.get_item(0)?;
     let mut p: Obj<'py>;
     return Ok(py.get_type::<pyo3::types::PyTuple>().call1(({
@@ -66,7 +65,7 @@ fn drop<'py>(a: &Args<'py>) -> Reply<'py> {
     let tool = a.get_item(0)?;
     let vp = a.get_item(1)?;
     let window: Obj<'py>;
-    let tr = py.import("core.i18n")?.getattr("tr")?;
+    let tr = imported(py, "core.i18n")?.getattr("tr")?;
     if tool
         .call_method1("_send", (&vp, &event))?
         .get_item("committed")?
@@ -87,11 +86,11 @@ fn drop<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn on_cancel<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.place_group_host")?;
+    let module = imported(py, "tools.place_group_host")?;
     let tool = a.get_item(0)?;
     let vp = a.get_item(1)?;
     tool.setattr("_group", none(py))?;
-    py.import("builtins")?
+    imported(py, "builtins")?
         .getattr("super")?
         .call1((module.getattr("PlaceGroupHost")?, &tool))?
         .call_method1("on_cancel", (&vp,))?;
@@ -99,11 +98,11 @@ fn on_cancel<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn on_deactivate<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.place_group_host")?;
+    let module = imported(py, "tools.place_group_host")?;
     let tool = a.get_item(0)?;
     let vp = a.get_item(1)?;
     tool.setattr("_group", none(py))?;
-    py.import("builtins")?
+    imported(py, "builtins")?
         .getattr("super")?
         .call1((module.getattr("PlaceGroupHost")?, &tool))?
         .call_method1("on_deactivate", (&vp,))?;

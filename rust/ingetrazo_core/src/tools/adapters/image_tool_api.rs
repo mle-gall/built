@@ -10,7 +10,7 @@ fn set_work_plane<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let tool = a.get_item(0)?;
     let value = a.get_item(1)?;
-    let plane_axes = py.import("core.axes")?.getattr("plane_axes")?;
+    let plane_axes = imported(py, "core.axes")?.getattr("plane_axes")?;
     tool.setattr("_plane", &value)?;
     tool.getattr("_machine")?.call_method1(
         "set",
@@ -75,7 +75,7 @@ fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
     let tool = a.get_item(0)?;
     let u: Obj<'py>;
     let v: Obj<'py>;
-    let fmt_pair = py.import("core.units")?.getattr("fmt_pair")?;
+    let fmt_pair = imported(py, "core.units")?.getattr("fmt_pair")?;
     if tool.getattr("armed")?.is_truthy()?
         && !tool.getattr("start_point")?.is_none()
         && !tool.getattr("hover_point")?.is_none()
@@ -101,12 +101,11 @@ fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
 
 fn send<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.image_host")?;
+    let module = imported(py, "tools.image_host")?;
     let event = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let vp = a.get_item(1)?;
-    let reply = py
-        .import("builtins")?
+    let reply = imported(py, "builtins")?
         .getattr("super")?
         .call1((module.getattr("ImageTool")?, &tool))?
         .call_method1("_send", (&vp, &event))?;
@@ -124,7 +123,7 @@ fn send<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn frame<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.image_host")?;
+    let module = imported(py, "tools.image_host")?;
     let first = a.get_item(1)?;
     let b = a.get_item(2)?;
     let mut p: Obj<'py>;

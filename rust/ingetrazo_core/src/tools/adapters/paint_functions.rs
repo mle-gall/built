@@ -3,7 +3,7 @@
 use super::*;
 fn push_recent<'py>(a: &Args<'py>) -> Reply<'py> {
     let [entries, entry, cap] = unpack::<3>(a.as_any())?;
-    let key = a.py().import("tools.paint_host")?.getattr("recent_key")?;
+    let key = imported(a.py(), "tools.paint_host")?.getattr("recent_key")?;
     let ident = key.call1((&entry,))?;
     let others = PyList::empty(a.py());
     for existing in entries.try_iter()? {
@@ -92,7 +92,7 @@ fn recent_key<'py>(a: &Args<'py>) -> Reply<'py> {
             for item in col.try_iter()? {
                 c = item?;
                 collected.append(
-                    py.import("builtins")?
+                    imported(py, "builtins")?
                         .getattr("round")?
                         .call1((py.get_type::<pyo3::types::PyFloat>().call1((&c,))?, 4))?,
                 )?;

@@ -38,7 +38,7 @@ fn toggle_copy<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn host_copy_changed<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rotate_host")?;
+    let module = imported(py, "tools.rotate_host")?;
     let arguments = a.get_item(2)?;
     let copy: Obj<'py>;
     let say: Obj<'py>;
@@ -76,10 +76,10 @@ fn on_click<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn host_pick_rotation<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rotate_host")?;
+    let module = imported(py, "tools.rotate_host")?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
-    let transform_grab = py.import("ingetrazo_core")?.getattr("transform_grab")?;
+    let transform_grab = imported(py, "ingetrazo_core")?.getattr("transform_grab")?;
     let ctx = tool.getattr("_ctx")?;
     if !(transform_grab.call1((&tool, &ctx, "rotate"))?.is_truthy()?) {
         viewport.call_method1(
@@ -104,7 +104,7 @@ fn host_pick_rotation<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn host_rotation_angle<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rotate_host")?;
+    let module = imported(py, "tools.rotate_host")?;
     let point = a.get_item(2)?;
     let tool = a.get_item(0)?;
     tool.call_method1("_note_snap", (tool.getattr("_ctx")?,))?;
@@ -150,7 +150,7 @@ fn host_swing_angle<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn on_release<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rotate_host")?;
+    let module = imported(py, "tools.rotate_host")?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
     if tool
@@ -206,7 +206,7 @@ fn array_pending<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
-    let _host = py.import("tools.rust_tool_base")?.getattr("_Host")?;
+    let _host = imported(py, "tools.rust_tool_base")?.getattr("_Host")?;
     let token = tool.call_method1("_state", ("array_token",))?;
     Ok({
         let value = (!token.is_none()).into_bound_py_any(py)?;
@@ -252,12 +252,12 @@ fn snap_excluded<'py>(a: &Args<'py>) -> Reply<'py> {
     if tool.getattr("ref_point")?.is_none() || tool.getattr("_copy")?.is_truthy()? {
         return Ok(none(py));
     }
-    let snap_exclusions = py.import("ingetrazo_core")?.getattr("snap_exclusions")?;
+    let snap_exclusions = imported(py, "ingetrazo_core")?.getattr("snap_exclusions")?;
     snap_exclusions.call1((&tool, false))
 }
 fn rubber_band_lines<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rotate_host")?;
+    let module = imported(py, "tools.rotate_host")?;
     let matrix: Obj<'py>;
     let tool = a.get_item(0)?;
     let angle = if !tool.getattr("start_point")?.is_none()
@@ -300,7 +300,7 @@ fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
     if deg.is_none() {
         return Ok(none(py));
     }
-    let fmt_angle_deg = py.import("core.units")?.getattr("fmt_angle_deg")?;
+    let fmt_angle_deg = imported(py, "core.units")?.getattr("fmt_angle_deg")?;
     Ok((
         fmt_angle_deg.call((&deg,), Some(&fields!(py; "signed" => true)))?,
         tool.getattr("hover_point")?,
@@ -330,10 +330,10 @@ fn revert_preview<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn make_builder<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rotate_host")?;
+    let module = imported(py, "tools.rotate_host")?;
     let tool = a.get_item(0)?;
-    let partial = py.import("functools")?.getattr("partial")?;
-    let rotation_command = py.import("core.rotate_ops")?.getattr("rotation_command")?;
+    let partial = imported(py, "functools")?.getattr("partial")?;
+    let rotation_command = imported(py, "core.rotate_ops")?.getattr("rotation_command")?;
     partial.call1((
         &rotation_command,
         module.call_method1("QVector3D", (tool.getattr("start_point")?,))?,
@@ -379,7 +379,7 @@ items.append(scene.getattr("section_planes")?.call_method1("index", (&sp,))?)?;
 }
 fn reset<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rotate_host")?;
+    let module = imported(py, "tools.rotate_host")?;
     let tool = a.get_item(0)?;
     tool.call_method0("_reset_protractor")?;
     tool.setattr("_groups", PyList::empty(py).into_any())?;
@@ -396,7 +396,7 @@ fn reset<'py>(a: &Args<'py>) -> Reply<'py> {
 
 fn on_key<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rotate_host")?;
+    let module = imported(py, "tools.rotate_host")?;
     let key = a.get_item(2)?;
     let modifiers = a.get_item(3)?;
     let tool = a.get_item(0)?;
@@ -412,14 +412,14 @@ fn on_key<'py>(a: &Args<'py>) -> Reply<'py> {
             )?
             .get_item("consumed")?);
     }
-    py.import("builtins")?
+    imported(py, "builtins")?
         .getattr("super")?
         .call1((module.getattr("RotateHost")?, &tool))?
         .call_method1("on_key", (&viewport, &key, &modifiers))
 }
 fn on_key_release<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = py.import("tools.rotate_host")?;
+    let module = imported(py, "tools.rotate_host")?;
     let key = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
@@ -459,7 +459,7 @@ fn moving_guide_ids<'py>(a: &Args<'py>) -> Reply<'py> {
         let collected = PySet::empty(py)?;
         for item in tool.getattr("_moved_guides")?.try_iter()? {
             g = item?;
-            collected.add(py.import("builtins")?.getattr("id")?.call1((&g,))?)?;
+            collected.add(imported(py, "builtins")?.getattr("id")?.call1((&g,))?)?;
         }
         collected.into_any()
     });

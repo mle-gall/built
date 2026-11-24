@@ -16,7 +16,7 @@ fn host_axes_message<'py>(a: &Args<'py>) -> Reply<'py> {
     let key = a.get_item(2)?;
     let labels: Obj<'py>;
     let vp = a.get_item(1)?;
-    let tr = py.import("core.i18n")?.getattr("tr")?;
+    let tr = imported(py, "core.i18n")?.getattr("tr")?;
     if key.eq("collinear")? {
         vp.call_method1(
             "flash_status",
@@ -65,7 +65,7 @@ fn on_click<'py>(a: &Args<'py>) -> Reply<'py> {
 fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let tool = a.get_item(0)?;
-    let tr = py.import("core.i18n")?.getattr("tr")?;
+    let tr = imported(py, "core.i18n")?.getattr("tr")?;
     if !tool.getattr("start_point")?.is_none() && !tool.getattr("hover_point")?.is_none() {
         return (
             (if tool.getattr("red_point")?.is_none() {
