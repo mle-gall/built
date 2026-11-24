@@ -115,6 +115,8 @@ def command(win, name, *args):
         "reload_links": lambda: win._reload_all_links(),
         "prefs": lambda: open_settings(win),
         "library": lambda: open_library(win),
+        "undo": lambda: win._on_undo(),
+        "redo": lambda: win._on_redo(),
         "select_all": lambda: win._on_select_all(),
         "select_none": lambda: win._on_select_none(),
         "next_doc": lambda: step_document(win, 1),
