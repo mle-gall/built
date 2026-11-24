@@ -258,7 +258,7 @@ def test_native_location_coordinates_map_apply_and_cancel(tmp_path):
         "from georef.tile_fetcher import TileFetcher\nfrom pathlib import Path\n"
         f"TileFetcher.request = lambda self, src, x, y, z: Path({str(requested)!r}).touch()\n")
     steps = tmp_path / "commands"
-    steps.write_text("wait 600\nkey escape\nmenu prefs\nwait 350\nclick 116 460\nwait 150\n"
+    steps.write_text("wait 600\nkey escape\nmenu prefs\nwait 350\nclick 116 485\nwait 150\n"
                      "click 552 328\nwait 200\nclick 550 282\nkey a cmd\ntype 48.85\n"
                      "click 550 311\nkey a cmd\ntype 2.35\nclick 340 351\nwait 450\n"
                      "drag 590 585 625 585 left 7\nwait 250\nstate\nclick 492 747\nwait 250\n"
@@ -756,3 +756,34 @@ quit
     assert edited["photo"] and edited["restored"] and edited["swatch"], log
     assert output.is_file() and "*" in output.read_text(), log
     assert all(not s["errors"] and not s["blocked_widgets"] for s in states), log
+
+
+@pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
+                    reason="requires the native window")
+@pytest.mark.parametrize("suffix", ["obj", "stl"])
+def test_native_mesh_units_and_model_menu(tmp_path, suffix):
+    from tests.test_import_failure_reported import _CUBE_OBJ, _GOOD_STL
+
+    path = tmp_path / ("triangle." + suffix)
+    path.write_bytes(_CUBE_OBJ if suffix == "obj" else _GOOD_STL)
+    steps = tmp_path / "steps"
+    steps.write_text(
+        f"wait 600\nmenu open_path:{path}\nwait 300\nstate\nkey escape\nwait 200\nstate\n"
+        f"menu open_path:{path}\nwait 250\nkey enter\nwait 700\nstate\n"
+        "menu scene_add\nmenu scene_duplicate\nmenu export:obj\nwait 250\nstate\n"
+        "key escape\nwait 120\nkey escape\nwait 120\nkey escape\nwait 300\nstate\nquit\n")
+    result = run([str(BIN), "--root", str(ROOT), "--venv", str(ROOT / ".venv"), "--new-instance",
+                  "--size", "960x700", "--script", str(steps),
+                  str(ROOT / "tests/fixtures/shell/slab-and-cube.igz")],
+                 env=dict(os.environ, BUILT_ANSWERS="discard"), capture_output=True,
+                 text=True, timeout=60)
+    states = [json.loads(line.removeprefix("[built] state ")) for line in result.stdout.splitlines()
+              if line.startswith("[built] state ")]
+    assert result.returncode == 0 and len(states) >= 5, result.stderr
+    opened, cancelled, accepted, exporting, closed = states[:5]
+    assert opened["form_open"] and not cancelled["form_open"]
+    assert opened["documents"] == cancelled["documents"] == ["slab-and-cube.igz"]
+    assert not accepted["form_open"] and len(accepted["documents"]) == 2
+    assert accepted["groups"] or accepted["faces"]
+    assert exporting["large_sheet"] == "export" and not closed["large_sheet"]
+    assert all(not s["errors"] and not s["blocked_widgets"] for s in states), result.stderr

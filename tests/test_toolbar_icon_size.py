@@ -87,7 +87,6 @@ def test_simplify_mesh_is_only_in_the_edit_menu(settings_file):
 
 def test_stl_simplification_defaults_to_principal_planes(
         settings_file, monkeypatch, tmp_path):
-    from PySide6.QtWidgets import QDialog, QComboBox
     from views.main_window import MainWindow
     import views.main_window as mw
 
@@ -99,12 +98,11 @@ def test_stl_simplification_defaults_to_principal_planes(
         lambda *args: (str(tmp_path / "sample.stl"), ""))
     selected = {}
 
-    def reject_dialog(dialog):
-        combo = dialog.findChildren(QComboBox)[1]
-        selected["mode"] = combo.currentData()
-        return QDialog.Rejected
+    def reject_form(_, form):
+        selected["mode"] = form.values()["simplify"]
+        form.press("cancel")
 
-    monkeypatch.setattr(QDialog, "exec", reject_dialog)
+    monkeypatch.setattr("views.chrome_forms.show", reject_form)
     win = MainWindow()
     try:
         win._on_import_stl()

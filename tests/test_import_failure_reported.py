@@ -18,7 +18,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import pytest  # noqa: E402
 from PySide6.QtCore import QEventLoop, QTimer  # noqa: E402
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication, QDialog  # noqa: E402
+from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from core.history import AddEdgeCommand  # noqa: E402
 from formats import dae, glb, obj, skp, stl  # noqa: E402
@@ -93,8 +93,7 @@ def _menu_import(win, path, monkeypatch):
     answered."""
     monkeypatch.setattr(file_dialogs, "getOpenFileName",
                         lambda *_a, **_k: (str(path), ""))
-    monkeypatch.setattr(win, "_obj_unit", lambda _p: 1.0, raising=True)
-    monkeypatch.setattr(QDialog, "exec", lambda _self: QDialog.Accepted)
+    monkeypatch.setattr("views.chrome_forms.show", lambda _, form: form.press("ok"))
     {".dae": win._on_import_dae, ".glb": win._on_import_glb,
      ".gltf": win._on_import_glb, ".obj": win._on_import_obj,
      ".stl": win._on_import_stl}[path.suffix]()
