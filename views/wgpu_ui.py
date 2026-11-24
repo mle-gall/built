@@ -791,7 +791,8 @@ def _tree(view, win, *, discover=False):
     mode = "" if discover else view.__dict__.get("_ui_mode", "")
     from core import structure
     from core import layers as L
-    from ingetrazo_core import filing_rows, mark_filing_selection, project_sidebar
+    from ingetrazo_core import filing_rows, mark_filing_selection
+    from plugins._browser import project_sidebar
     hist = getattr(win.viewport, "history", None)
     readers = getattr(getattr(hist, "feed", None), "readers", None)
     model = _tree_model(view, scene, cv, None if getattr(win, "_outliner_kinds", ()) else readers)
@@ -2593,7 +2594,7 @@ def _run(win, actions, source_view=None) -> None:
             from views import wgpu_tabs
             wgpu_tabs.action(win, getattr(getattr(win, "_doc", None), "stand_in", None), arg)
         elif kind == "ctx":
-            from ingetrazo_render import context_menu_action
+            from plugins._context_menu import context_menu_action
             context_menu_action(win, getattr(getattr(win, "_doc", None), "stand_in", None), arg)
         elif kind == "tab":
             view = getattr(getattr(win, "_doc", None), "stand_in", None)

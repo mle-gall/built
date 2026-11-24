@@ -1,6 +1,6 @@
 # Plugin panels
 
-The native Built shell and the Qt app with the Metal chrome draw the same egui panels. Select **Plugins** in the right dock, then select a panel. A dock panel replaces the project tree. A utility panel opens above the bottom bar and has its own resize handle and Close button. The native Plugins menu opens the bundled panels directly. The Console and Blender render preview use these utilities wherever the native chrome is attached. The classic Blender settings dock still supplies its own light controls.
+Built draws plugin panels with egui. Select **Plugins** in the right dock to open a panel. A dock panel replaces the project tree. A utility panel opens above the bottom bar and has a resize handle and Close button. The Console and Blender render preview use utility panels. Blender lights, the AI assistant and the Levels extension use dock panels.
 
 ## Register a panel
 
@@ -61,3 +61,7 @@ The bridge adds `api`, `plugin` (the extension filename stem), `panel`, `instanc
 Built refreshes a descriptor after an event or a scene revision change. Call `invalidate()` on the application thread when asynchronous progress or results change. Use `views.chrome_dialogs.Job(app.window, label, on_cancel=...)` for long-running work. Snapshot the active scene and camera before starting a worker. Update and end the job on the application thread. Closing the panel leaves the job in the activity capsule.
 
 For a snapped point, call `app.pick_point(prompt, done)`. The host routes the next viewport click to `done(point, on_face)` for the original scene revision. Escape cancels and restores the Select tool.
+
+A model may implement `on_open()` to prepare its content when a command opens it. For document overlays, implement `overlay(viewport)` and yield `views.wgpu_overlay.Primitive` values. Coordinates are logical pixels in the supplied viewport. Project world points with `viewport._world_to_pixel(point)` and skip points outside the projection. The native annotation canvas draws these primitives above the model. Supported shapes include `polyline`, `polygon`, `point` and `text`. Set `color` and optional `fill` to hex colours, and `width` to the stroke width. An empty sequence clears the overlay.
+
+Extensions can use `app.add_context_menu(callback)` alongside a panel. The callback receives a native menu builder and the selection under the pointer. Add a submenu with `addMenu(title)` and a command with `addAction(label, callback)`. The viewport menu displays the submenu path beside each command. `app.add_outliner_kind(provider)` supplies the type and property tooltip for an extension's groups in the Project browser.
