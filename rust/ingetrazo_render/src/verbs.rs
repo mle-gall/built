@@ -46,6 +46,7 @@ pub struct Facts {
     // What applies.
     pub repeat: Option<String>,
     pub repeat_value: String,
+    pub repeat_key: Option<String>,
     pub locked_group: Option<String>,
     pub locked_image: Option<String>,
     pub text3d: bool,
@@ -303,12 +304,14 @@ pub fn menu_rows(f: &Facts, kind: &str) -> Vec<Row> {
     let read_only = READ_ONLY.contains(&kind);
     let mut r = Rows(Vec::new());
     // Repeat, with the value the last command runs with.
+    let key = crate::shortcut_text::shortcut_text(f.repeat_key.as_deref().unwrap_or("Shift+R"))
+        .map(|sequence| sequence.1).unwrap_or_default();
     let repeat = match &f.repeat {
         Some(label) => {
             let text = if f.repeat_value.is_empty() { format!("Repeat {label}") } else { format!("Repeat {label}  {}", f.repeat_value) };
-            (String::from("repeat"), text, String::from("⇧R"), !read_only, -1)
+            (String::from("repeat"), text, key, !read_only, -1)
         }
-        None => ("repeat".into(), "Repeat".into(), "⇧R".into(), false, -1),
+        None => ("repeat".into(), "Repeat".into(), key, false, -1),
     };
     r.one(vec![repeat]);
     // A locked thing under the pointer the click could not select: its

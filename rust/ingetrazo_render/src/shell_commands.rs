@@ -199,7 +199,9 @@ struct RegistryReflect {
 #[pymethods]
 impl RegistryReflect {
     fn __call__(&self, py: Python<'_>) -> PyResult<()> {
-        reflect(self.win.bind(py), &self.key)
+        let win = self.win.bind(py);
+        reflect(win, &self.key)?;
+        crate::commands::invalidate_command_rails(win)
     }
 }
 

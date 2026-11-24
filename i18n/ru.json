@@ -2389,7 +2389,7 @@
  "Remove the faces left lying over their own subdivisions after drawing or erasing.": "Удалить грани, оставшиеся поверх собственных подразделений после рисования или стирания.",
  "Resize the selection by dragging the grips of its box; the corners keep its proportions.": "Изменить размер выделения, перетаскивая маркеры его габаритной рамки; углы сохраняют пропорции.",
  "Save the document under another name or in another folder.": "Сохранить документ под другим именем или в другой папке.",
- "Save the document — the model and every sheet — to its .igz file.": "Сохранить документ — модель и все листы — в его файл .igz.",
+ "Save the document — the model and every sheet — to its file.": "Сохранить документ — модель и все листы — в его файл.",
  "Save the model as IFC for BIM software, with what the BIM panel tagged.": "Сохранить модель в IFC для BIM-программ с тегами, заданными на панели BIM.",
  "Save the model as Wavefront OBJ with its materials.": "Сохранить модель в Wavefront OBJ с ее материалами.",
  "Save the model as an STL mesh for 3D printing.": "Сохранить модель как STL сетку для 3D-печати.",
