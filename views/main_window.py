@@ -4462,7 +4462,7 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
     # ---- File handling ------------------------------------------------------
     # ---- The document's camera (issue #60) ---------------------------------
     def _show_camera_settings(self):
-        from views.inspector_bridge import open_camera
+        from ingetrazo_render import open_camera
         return open_camera(self)
 
     # ---- Documents: one project per tab (#1066, views/documents.py) ---------
@@ -4747,7 +4747,7 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         self._enter_document(doc)
 
     def _leave_document(self, doc) -> None:
-        from views.inspector_bridge import leave_camera
+        from ingetrazo_render import leave_camera
         leave_camera(doc)
         vp = doc.viewport
         if vp is None:

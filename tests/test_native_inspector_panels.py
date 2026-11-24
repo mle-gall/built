@@ -5,7 +5,7 @@ import pytest
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from core.group import Group
-from views.inspector_bridge import action
+from ingetrazo_render import inspector_action as action
 
 
 @pytest.fixture

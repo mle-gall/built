@@ -432,8 +432,8 @@ def before_frame(view) -> None:
     from views import wgpu_library
     wgpu_library.before_frame(view, win)
     _inspector(view, win)
-    from views import inspector_bridge
-    inspector_bridge.sync(view, win)
+    from ingetrazo_render import inspector_sync
+    inspector_sync(view, win)
     _tabs(view, win)
     _projects(view, win)
     from views import wgpu_tabs
@@ -2600,12 +2600,12 @@ def _run(win, actions, source_view=None) -> None:
             wgpu_sheets.action(win, arg)
             continue
         if (kind, arg) == ("tab", "scene:editcamera"):
-            from views.inspector_bridge import _marked
-            win.edit_scene_camera(_marked(win))
+            from ingetrazo_render import marked_view
+            win.edit_scene_camera(marked_view(win))
             continue
         if kind == "panel" or (kind, arg) in (("act", "camera"), ("tab", "scene:camera")):
-            from views import inspector_bridge
-            inspector_bridge.action(win, win._doc.stand_in, arg if kind == "panel" else '["camera.open",null]')
+            from ingetrazo_render import inspector_action
+            inspector_action(win, win._doc.stand_in, arg if kind == "panel" else '["camera.open",null]')
             continue
         if kind == "tool":
             view = getattr(getattr(win, "_doc", None), "stand_in", None)

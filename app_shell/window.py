@@ -489,7 +489,7 @@ class ShellWindow(WindowDocumentCommands, object if NATIVE else QObject):
         if old is not None:
             old.model_views.suspend(old)
         if old is not None and old.viewport is not None:
-            from views.inspector_bridge import leave_camera
+            from ingetrazo_render import leave_camera
             leave_camera(old)
             try:
                 old.viewport.set_active_tool(None)
