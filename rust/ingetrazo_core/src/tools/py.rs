@@ -118,6 +118,7 @@ fn event(d: &Bound<'_, PyDict>) -> PyResult<ToolEvent> {
     let field = |key: &str| d.get_item(key)?.ok_or_else(|| PyValueError::new_err(format!("missing {key}")));
     Ok(match kind.as_str() {
         "paste_at" => ToolEvent::PasteAt(p3(&field("offset")?)?),
+        "flip_along" => ToolEvent::FlipAlong { axis: field("axis")?.extract()?, copy: field("copy")?.extract()? },
         "profile" => ToolEvent::Profile(field("value")?.extract()?),
         "protractor_frame" => ToolEvent::ProtractorFrame { basis: field("basis")?.extract()?, near: field("near")?.extract()?, exact: field("exact")?.extract()? },
         "place_camera" => ToolEvent::Navigate(Navigation::Place { base: p3(&field("base")?)?, look: opt(d,"look")?.map(|v| p3(&v)).transpose()? }),
@@ -417,6 +418,11 @@ impl ToolMachine {
         new_tool(kind)
             .map(|tool| ToolMachine { tool, serial: 0 })
             .ok_or_else(|| PyValueError::new_err(format!("no Rust tool {kind:?}")))
+    }
+
+    #[staticmethod]
+    fn flip_quad(axis: &str, center: P3, half: P3, margin: f64) -> [P3; 4] {
+        super::flip::quad(axis, center, half, margin)
     }
 
     #[staticmethod]

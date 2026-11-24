@@ -579,3 +579,20 @@ def test_bridge_bevels_keyed_edges_and_undoes(bridge):
     assert result["ok"] and result["step"]
     assert len(mesh.faces) == 10
     assert vp.history.undo() and len(mesh.faces) == 6
+
+
+def test_bridge_mirrors_and_stamps_the_model_clipboard(bridge):
+    from ingetrazo_core import Vec3
+    win, b = bridge
+    vp = win.viewport
+    face = vp.scene.mesh.faces[-1]
+    original = sorted(v.position.toTuple() for v in face.loop)
+    count = len(vp.scene.mesh.faces)
+    result = _call(b, "flip_selection", center=[0, 0, 0], axis=[1, 0, 0], faces=[str(face.key)])
+    assert result["ok"] and result["step"]
+    assert sorted(v.position.toTuple() for v in face.loop) == sorted((-x, y, z) for x, y, z in original)
+    assert vp.history.undo()
+    vp.clipboard = {"ref": Vec3(), "faces": [([Vec3(), Vec3(1, 0, 0), Vec3(0, 1, 0)], [])], "edges": []}
+    result = _call(b, "paste_clipboard", offset=[8, 2, 1])
+    assert result["ok"] and result["step"] and len(vp.scene.mesh.faces) == count + 1
+    assert vp.history.undo() and len(vp.scene.mesh.faces) == count

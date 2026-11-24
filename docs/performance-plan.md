@@ -2937,7 +2937,7 @@ Native denotes routed, not exhaustive parity acceptance.
 | move | MoveTool | native | Rust state machine, _world_to_pixel, pick_edge, pick_face, pick_group, rubber_band_lines, set_groups_preview_offset |
 | rotate | RotateTool | native | Rust state machine, pick_edge, pick_face, rubber_band_lines, set_groups_preview_matrix |
 | scale | ScaleTool | native | Rust state machine, _pixel_to_ray, _world_to_pixel, pick_edge, pick_face, scale_box_state (screen handles) |
-| flip | FlipTool | native | _world_to_pixel |
+| flip | FlipTool | native | Rust state machine, _world_to_pixel |
 | followme | FollowMeTool | native | pick_edge, pick_face, rubber_band_lines |
 | fillet | FilletTool | native | Rust state machine, rubber_band_lines |
 | texture_position | TexturePositionTool | native | shared viewport / tool base |
@@ -2956,7 +2956,7 @@ Native denotes routed, not exhaustive parity acceptance.
 | first_person | FirstPersonTool | native | Rust state machine |
 | change_axes | ChangeAxesTool | native | rubber_band_lines |
 | scale_manager | ScaleManagerTool | native | shared viewport / tool base |
-| paste | PasteTool | native | rubber_band_lines, set_groups_preview_offset |
+| paste | PasteTool | native | Rust state machine, set_groups_preview_offset |
 | place_group | PlaceGroupTool | native | pick_face_any, rubber_band_lines |
 | outer_shell | OuterShellTool | native | pick_group |
 | solid_union | UnionTool | native | pick_group |

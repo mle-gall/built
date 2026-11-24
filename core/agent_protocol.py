@@ -60,6 +60,10 @@ class ProtocolTools:
         self._viewport.update()
         return {**out, "step": out["step"].to_json() if out["step"] else None}
 
+    def _tool_flip_selection(self, center, axis, copy=False, placements=(), faces=(), edges=()):
+        return self._edit_command("flip_selection", center=center, axis=axis, copy=copy,
+                                  placements=placements, faces=faces, edges=edges)
+
     def _tool_paste_clipboard(self, offset):
         return self._edit_command("paste_clipboard", offset=offset,
                                   clipboard=getattr(self._viewport, "clipboard", None))

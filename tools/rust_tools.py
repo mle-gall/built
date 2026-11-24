@@ -1848,3 +1848,17 @@ class PasteTool(PasteHost, RustTool):
     description = None
     start_point = _point_property("start_point")
     _offset = _point_property("offset")
+
+
+from tools.flip_host import FlipHost
+
+
+class FlipTool(FlipHost, RustTool):
+    kind = "flip"
+    shortcut = None
+    _READ_DURING = ("hover_point", "hover_axis", "lock_axis", "copy")
+    hover_point = _point_property("hover_point")
+    _lock_axis = property(lambda self: self._state("lock_axis"))
+    _hover_axis = property(lambda self: self._state("hover_axis"))
+    _copy = property(lambda self: self._state("copy"))
+    cursor_plus = _copy

@@ -301,6 +301,13 @@ BUILTIN_TOOLS.append(dict(
     }, required=["distance"], oneOf=[{"required": ["face"]}, {"required": ["points", "normal"]}])))
 
 BUILTIN_TOOLS.append(dict(
+    name="flip_selection", mutates=True,
+    description="Mirror named faces, edges and placements across a plane, optionally making a copy.",
+    inputSchema=dict(type="object", properties={"center": _SCALE_TRIPLE, "axis": _SCALE_TRIPLE,
+        "placements": {"type": "array", "items": _OCCURRENCE}, "faces": _KEYS, "edges": _KEYS,
+        "copy": {"type": "boolean"}}, required=["center", "axis"])))
+
+BUILTIN_TOOLS.append(dict(
     name="paste_clipboard", mutates=True,
     description="Stamp the document's model clipboard at its original position plus an offset in metres.",
     inputSchema=dict(type="object", properties={"offset": _SCALE_TRIPLE}, required=["offset"])))

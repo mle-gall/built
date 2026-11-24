@@ -114,6 +114,65 @@ def _push_face(history, f, distance, keep_base, tool):
     return _answer(history, before)
 
 
+def flip_selection(history, center, axis, copy=False, placements=(), faces=(), edges=()):
+    """Mirror keyed selection across a plane through center with normal axis."""
+    from math import isfinite
+    from core.coordinate_frame import point_in_frame, ZERO
+    from ingetrazo_core import Vec3
+    from core.group import copy_group, transformed_attrs
+    from core.mesh import Mesh
+    from core.history import (AddEdgeCommand, AddFaceCommand, CompoundCommand, FlipGroupsCommand,
+                              FlipVerticesCommand, InsertGroupCommand, mirror_matrix)
+    if len(center) != 3 or len(axis) != 3 or not all(map(isfinite, (*center, *axis))):
+        raise ValueError("flip needs a finite centre and plane normal")
+    if Vec3(*axis).length() < 1e-12:
+        raise ValueError("flip needs a nonzero plane normal")
+    scene = history.scene
+    mesh = scene.mesh
+    centre = point_in_frame(center, getattr(store_of(mesh), "frame_origin", ZERO))
+    n = Vec3(*axis).normalized()
+    groups = _placements(history, placements)
+    faces, edges = _need(mesh, "face", faces), _need(mesh, "edge", edges)
+    positions = {v.key: v.position for f in faces for v in f.loop}
+    positions.update((v.key, v.position) for e in edges for v in (e.v0, e.v1))
+    before = history.revision
+    cmds: list = []
+    if copy:
+        from core.ifc_identity import copied_face_attrs
+        copy_attrs = copied_face_attrs(scene)
+        m = mirror_matrix(centre, n)
+        for g in groups:
+            clone = copy_group(g)
+            cmds.append(InsertGroupCommand(clone))
+            cmds.append(FlipGroupsCommand([clone], centre, n))
+        id_map: dict[int, int] = {}
+        for f in faces:
+            # Mirrored loops are re-reversed so the copy faces OUT.
+            loop = [m.map(Vec3(v)) for v in f.vertices][::-1]
+            holes = [[m.map(Vec3(v)) for v in h][::-1]
+                     for h in f.holes] or None
+            cmds.append(AddFaceCommand(
+                loop, holes=holes, auto=False,
+                attrs=copy_attrs(transformed_attrs(f.attrs, m))))
+        for e in edges:
+            curve = getattr(e, "curve", None)
+            if curve is not None and curve not in id_map:
+                id_map[curve] = Mesh.next_curve_id()
+            cmds.append(AddEdgeCommand(
+                m.map(Vec3(e.a)), m.map(Vec3(e.b)),
+                soft=getattr(e, "soft", False) or None,
+                curve=id_map.get(curve)))
+    else:
+        if groups:
+            cmds.append(FlipGroupsCommand(groups, centre, n))
+        if positions:
+            cmds.append(FlipVerticesCommand(
+                list(positions.values()), centre, n, faces=faces))
+    if cmds:
+        history.execute(cmds[0] if len(cmds) == 1 else CompoundCommand(cmds))
+    return _answer(history, before)
+
+
 def paste_clipboard(history, offset, *, clipboard):
     """Stamp the bound document clipboard with a model-space displacement."""
     import math
@@ -1422,7 +1481,7 @@ COMMANDS = {"set_location": set_location, "set_model_units": set_model_units, "s
             "add_guide": add_guide, "change_guide": change_guide, "add_guide_circle": add_guide_circle, "add_arc": add_arc,
             "move_placements": move_placements, "copy_placements": copy_placements,
             "move_selection": move_selection, "scale_selection": scale_selection,
-            "paste_clipboard": paste_clipboard, "bevel_selection": bevel_selection, "rotate_selection": rotate_selection, "offset_outline": offset_outline, "paint_material": paint_material,
+            "flip_selection": flip_selection, "paste_clipboard": paste_clipboard, "bevel_selection": bevel_selection, "rotate_selection": rotate_selection, "offset_outline": offset_outline, "paint_material": paint_material,
             "divide_edges": divide_edges, "join_edges": join_edges,
             "move_vertices": move_vertices, "erase": erase,
             "reverse_faces": reverse_faces, "push_pull": push_pull, "orient_faces": orient_faces,

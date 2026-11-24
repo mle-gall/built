@@ -7,6 +7,7 @@
 //! against a fake host.
 
 mod paste;
+mod flip;
 mod tape;
 mod fillet_tool;
 mod protractor;
@@ -131,6 +132,7 @@ pub enum ToolEvent {
     Radius(f64),
     Profile(f64),
     PasteAt(P3),
+    FlipAlong { axis: String, copy: bool },
     /// What only the view knows, before a pointer or value event.
     View(ViewReading),
     /// The plane the operation keeps to (a face clicked first, a plane lock).
@@ -346,6 +348,7 @@ pub(crate) fn json_p3(v: &serde_json::Value) -> Option<P3> {
 pub fn new_tool(kind: &str) -> Option<Box<dyn Tool>> {
     match kind {
         "paste" => Some(Box::new(paste::Paste::default())),
+        "flip" => Some(Box::new(flip::Flip::default())),
         "tape" => Some(Box::new(tape::Tape::default())),
         "fillet" => Some(Box::new(fillet_tool::Fillet::default())),
         "protractor" => Some(Box::new(protractor::Protractor::default())),
