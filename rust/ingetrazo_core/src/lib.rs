@@ -42,6 +42,7 @@ mod file_groups;
 mod group_geometry;
 mod structure;
 mod project_tree;
+mod text_search;
 mod selection_identity;
 mod sidebar;
 mod hatch_file;

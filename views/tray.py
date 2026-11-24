@@ -49,7 +49,6 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QSlider,
     QSpinBox,
-    QStyledItemDelegate,
     QStyle,
     QToolButton,
     QVBoxLayout,
@@ -3768,19 +3767,6 @@ def _scrolled(sections) -> QScrollArea:
 _SCENE_THUMB = QSize(96, 64)
 
 
-class _SceneNameDelegate(QStyledItemDelegate):
-    """The name being typed in a box one line high, centred beside the
-    picture, as in Layers' rows — not a box as tall as a thumbnail."""
-
-    def updateEditorGeometry(self, editor, option, index) -> None:  # noqa: N802
-        super().updateEditorGeometry(editor, option, index)
-        rect = editor.geometry()
-        h = min(rect.height(), editor.sizeHint().height())
-        rect.setTop(option.rect.center().y() - h // 2)
-        rect.setHeight(h)
-        editor.setGeometry(rect)
-
-
 class _SceneTree(SideTree):
     """The Scenes tab's tree, taking drops of its own rows: dropped on a
     folder they go into it; dropped on a scene they go right before it, in
@@ -3902,11 +3888,7 @@ class ScenesPanel(QWidget):
         bar.addWidget(self.add_btn)
         bar.addWidget(self.add_folder_btn)
         bar.addWidget(self.update_btn)
-        self.search = QLineEdit()
-        self.search.setPlaceholderText(tr("Filter scenes… (* and ? work)"))
-        self.search.setClearButtonEnabled(True)
-        self.search.textChanged.connect(lambda _t: self._apply_filter())
-        bar.addWidget(self.search, 1)
+        bar.addStretch(1)
         # The list or the thumbnails: a picture of each scene, as the
         # sheets' list draws them — the thumbnails unless chosen otherwise.
         self.view_btn = QToolButton()
@@ -3932,7 +3914,7 @@ class ScenesPanel(QWidget):
         bar.addWidget(self.view_btn)
         lay.addLayout(bar)
         self.tree = _SceneTree(self)
-        self.tree.setItemDelegate(_SceneNameDelegate(self.tree))
+        self.tree.setDragDropMode(QAbstractItemView.InternalMove)
         self.tree.setHeaderHidden(True)
         self.tree.setColumnCount(1)
         self.tree.setToolTip(tr("Double-click a scene to show it"))
@@ -4216,7 +4198,6 @@ class ScenesPanel(QWidget):
                 item.setSelected(key in keep)
         finally:
             self._updating = False
-        self._apply_filter()
         self._queue_thumbnails()
         self._follow(views)
 
@@ -4294,42 +4275,6 @@ class ScenesPanel(QWidget):
             return obj
         from core.scene_folders import folder_of
         return folder_of(self._scene(), obj)
-
-    def _apply_filter(self) -> None:
-        """Rows whose name passes the filter stay (``*`` and ``?`` as in
-        Layers), with the folders on the way to them; a folder whose name
-        passes shows all it holds. Filtered, the rows do not drag: a row
-        dropped among hidden ones would land in a place nobody sees."""
-        from PySide6.QtWidgets import QAbstractItemView
-        from core.outliner import text_matches
-        text = self.search.text().strip().casefold()
-
-        def show(item, inherited: bool) -> bool:
-            here = inherited or text_matches(item.text(0), text)
-            kind = item.data(0, Qt.UserRole)[0]
-            below = False
-            for i in range(item.childCount()):
-                below = show(item.child(i), here and kind == "folder") \
-                    or below
-            visible = here or below
-            item.setHidden(not visible)
-            if text and below and kind == "folder":
-                item.setExpanded(True)
-            return visible
-
-        self._updating = True
-        try:
-            for i in range(self.tree.topLevelItemCount()):
-                show(self.tree.topLevelItem(i), False)
-            if not text:
-                for item in self._rows():
-                    kind, obj = item.data(0, Qt.UserRole)
-                    if kind == "folder":
-                        item.setExpanded(obj not in self._collapsed)
-        finally:
-            self._updating = False
-        self.tree.setDragDropMode(QAbstractItemView.NoDragDrop if text
-                                  else QAbstractItemView.InternalMove)
 
     def select_view(self, view) -> None:
         """Make ``view``'s row the current one (and the only one picked),
@@ -4545,20 +4490,8 @@ class ScenesPanel(QWidget):
             return False
         return self.rename(view, name)
 
-    def ask_rename(self, view, in_row: bool = False) -> None:
-        """Ask for a new name of ``view`` in the program's name prompt (a
-        scene tab: the name is asked where the user is). ``in_row`` (the
-        panel's menu, Camera ▸ Scenes): in its row when the Scenes tab is
-        in sight, as Layers and the Browser rename."""
+    def ask_rename(self, view) -> None:
         if view is None:
-            return
-        self.select_view(view)
-        row = self.row_for(view)
-        if (in_row and row is not None and self.tree.isVisible()
-                and not row.isHidden()):
-            self.tree.scrollToItem(row)
-            self.tree.setCurrentItem(row)
-            self.tree.editItem(row, 0)      # _on_item_changed renames
             return
         from views import prompts as _prompts
         name, ok = _prompts.get_text(

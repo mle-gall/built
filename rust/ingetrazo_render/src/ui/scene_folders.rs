@@ -2,6 +2,57 @@
 //! Browse saved views in their document folders without changing scene order.
 use super::{kit, tokens::*, Item};
 
+use crate::text_search::text_matches;
+use std::collections::{HashMap, HashSet};
+
+/// A folder match includes its descendants; a scene match includes its path.
+struct Matches<'a> {
+    folders: HashSet<&'a str>,
+    scenes: HashSet<&'a str>,
+}
+
+fn matches<'a>(folders: &'a [Item], scenes: &'a [Item], query: &str) -> Matches<'a> {
+    let mut result = Matches {
+        folders: HashSet::new(),
+        scenes: HashSet::new(),
+    };
+    let mut children: HashMap<&str, Vec<&str>> = HashMap::new();
+    let mut parents = HashMap::new();
+    let mut pending = Vec::new();
+    for (id, label, parent, ..) in folders.iter().skip(1) {
+        children.entry(parent).or_default().push(id);
+        parents.insert(id.as_str(), parent.as_str());
+        if text_matches(&label.to_lowercase(), query) {
+            pending.push(id.as_str());
+        }
+    }
+    while let Some(id) = pending.pop() {
+        if result.folders.insert(id) {
+            pending.extend(children.get(id).into_iter().flatten().copied());
+        }
+    }
+    let mut paths = Vec::new();
+    for (id, label, _, folder, ..) in scenes {
+        if result.folders.contains(folder.as_str()) || text_matches(&label.to_lowercase(), query) {
+            result.scenes.insert(id);
+            paths.push(folder.as_str());
+        }
+    }
+    paths.extend(
+        result
+            .folders
+            .iter()
+            .filter_map(|id| parents.get(id))
+            .copied(),
+    );
+    while let Some(id) = paths.pop() {
+        if !id.is_empty() && result.folders.insert(id) {
+            paths.extend(parents.get(id).copied());
+        }
+    }
+    result
+}
+
 const PHOTO_ATTEMPTS: usize = 4;
 
 #[derive(Default)]
@@ -64,6 +115,16 @@ impl Browser {
         ctx.request_repaint();
     }
 
+    pub fn add_scene_action(&self) -> String {
+        if self.folder.is_empty() {
+            return "tab:scene:add".into();
+        }
+        format!(
+            "tab:scenefolders:{}",
+            serde_json::json!(["capture", self.owner, self.folder, "", ""])
+        )
+    }
+
     fn open(&mut self, key: &str) {
         self.folder = key.into();
         self.destination = key.into();
@@ -116,20 +177,20 @@ impl Browser {
             }
             ui.strong(&self.folder);
         }
-        if scenes.len() + folders.len() > 4 || !self.query.is_empty() {
+        if !scenes.is_empty() || folders.len() > 1 || !self.query.is_empty() {
             ui.add(kit::search(&mut self.query, "Find scene or folder"));
         }
         let query = self.query.trim().to_lowercase();
+        let hits = (!query.is_empty()).then(|| matches(folders, scenes, &query));
         egui::ScrollArea::vertical()
             .id_salt("saved views")
             .max_height(ui.ctx().screen_rect().height() * 0.31)
             .show(ui, |ui| {
                 for row in folders.iter().skip(1) {
-                    if if query.is_empty() {
-                        row.2 != self.folder
-                    } else {
-                        !row.1.to_lowercase().contains(&query)
-                    } {
+                    if !hits.as_ref().map_or_else(
+                        || row.2 == self.folder,
+                        |h| h.folders.contains(row.0.as_str()),
+                    ) {
                         continue;
                     }
                     if kit::quiet(ui, &format!("{}  ›", row.1)).clicked() {
@@ -137,11 +198,10 @@ impl Browser {
                     }
                 }
                 for row in scenes {
-                    if if query.is_empty() {
-                        row.3 != self.folder
-                    } else {
-                        !row.1.to_lowercase().contains(&query)
-                    } {
+                    if !hits.as_ref().map_or_else(
+                        || row.3 == self.folder,
+                        |h| h.scenes.contains(row.0.as_str()),
+                    ) {
                         continue;
                     }
                     let activated = if thumbnails {
@@ -250,6 +310,38 @@ mod tests {
     use super::*;
     fn row(key: &str, name: &str, rev: &str, parent: &str) -> Item {
         (key.into(), name.into(), rev.into(), parent.into(), 0, true)
+    }
+
+    #[test]
+    fn scene_search_shows_matching_paths_and_contents_and_accepts_wildcards() {
+        let folders = [
+            row("", "All scenes", "", "doc"),
+            row("Plans", "Plans", "", "doc"),
+            row("Upper", "Upper", "Plans", "doc"),
+            row("Cuts", "Cuts", "", "doc"),
+        ];
+        let scenes = [
+            row("a", "First", "", "Upper"),
+            row("b", "Second", "", "Plans"),
+            row("c", "Elevation North", "", "Cuts"),
+        ];
+        let first = matches(&folders, &scenes, "f?rst");
+        assert_eq!(first.folders, HashSet::from(["Plans", "Upper"]));
+        assert_eq!(first.scenes, HashSet::from(["a"]));
+        let plans = matches(&folders, &scenes, "lan");
+        assert_eq!(plans.folders, first.folders);
+        assert_eq!(plans.scenes, HashSet::from(["a", "b"]));
+        let north = matches(&folders, &scenes, "*north");
+        assert_eq!(north.folders, HashSet::from(["Cuts"]));
+        assert_eq!(north.scenes, HashSet::from(["c"]));
+        let mut browser = Browser::default();
+        browser.owner = "doc".into();
+        assert_eq!(browser.add_scene_action(), "tab:scene:add");
+        browser.open("Upper");
+        assert_eq!(
+            browser.add_scene_action(),
+            r#"tab:scenefolders:["capture","doc","Upper","",""]"#
+        );
     }
 
     fn frame(

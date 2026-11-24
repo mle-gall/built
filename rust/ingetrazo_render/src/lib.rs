@@ -3176,6 +3176,9 @@ mod svg_options;
 /// Sheet items' display lists on the page.
 pub mod sheet_display;
 /// An image item's picture as the sheet shows it, shared with the writers.
+#[path = "../../ingetrazo_core/src/text_search.rs"]
+mod text_search;
+
 #[path = "../../ingetrazo_core/src/sheets/picture.rs"]
 #[allow(dead_code)]
 pub mod sheet_picture;

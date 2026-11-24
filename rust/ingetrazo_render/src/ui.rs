@@ -1444,7 +1444,9 @@ impl Ui {
                                         _ => ("", true),
                                     };
                                     if menu_row(ui, &(id.to_owned(), label, hint.into(), "check".into(), -1, enabled)) {
-                                        clicked = Some(format!("tab:{id}"));
+                                        clicked = Some(if id == "scene:add" {
+                                            self.scene_browser.add_scene_action()
+                                        } else { format!("tab:{id}") });
                                     }
                                 }
                                 ui.add_space(SPACE_XS);

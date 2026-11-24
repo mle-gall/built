@@ -211,12 +211,15 @@ class ShellScenes:
     activate_view = finish_view
 
     def add_scene(self):
+        marked = self._win._scene_tabs.marked_view()
+        return self.add_scene_in_folder(getattr(marked, "folder", None))
+
+    def add_scene_in_folder(self, folder):
         from core.i18n import tr
         from core.protocol.commands import edit_saved_scene
         vp = self._vp()
-        marked = self._win._scene_tabs.marked_view()
         result = edit_saved_scene(vp.history, "add", name=tr("Scene"), camera=vp.camera,
-                                  style=self._win.active_style(), folder=getattr(marked, "folder", None))
+                                  style=self._win.active_style(), folder=folder or None)
         if not result["ok"]:
             return None
         view = vp.scene.saved_views[result["index"]]

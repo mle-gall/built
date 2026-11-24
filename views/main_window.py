@@ -4398,7 +4398,7 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         name, and a name another scene has is refused."""
         view = self._selected_scene()
         if view is not None:
-            self.tray.scenes.ask_rename(view, in_row=True)
+            self.tray.scenes.ask_rename(view)
 
     def _on_scene_duplicate(self) -> None:
         """A copy right after the scene, made current, so Update or Rename

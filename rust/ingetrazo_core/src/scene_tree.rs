@@ -569,7 +569,12 @@ fn move_among_siblings(history: &Obj<'_>, view: &Obj<'_>, earlier: bool) -> PyRe
 }
 
 #[pyfunction]
-fn edit_menu_folder(history: &Obj<'_>, request: &str) -> PyResult<String> {
+#[pyo3(signature = (history, request, add_scene=None))]
+fn edit_menu_folder(
+    history: &Obj<'_>,
+    request: &str,
+    add_scene: Option<&Obj<'_>>,
+) -> PyResult<String> {
     use pyo3::exceptions::PyValueError;
     let (verb, owner, folder, target, label): (String, String, String, String, String) =
         serde_json::from_str(request).map_err(|e| PyValueError::new_err(e.to_string()))?;
@@ -585,6 +590,17 @@ fn edit_menu_folder(history: &Obj<'_>, request: &str) -> PyResult<String> {
         .any(|f| !f.is_empty() && !tree.known.contains(*f))
     {
         return Err(PyValueError::new_err("This folder no longer exists"));
+    }
+    if verb == "capture" {
+        let add = add_scene.ok_or_else(|| PyValueError::new_err("A live view is required"))?;
+        add.call1((&folder,))?;
+        return Ok(folder);
+    }
+    if verb == "rename" && label.trim() != folder && tree.known.contains(label.trim()) {
+        return Err(PyValueError::new_err(format!(
+            "Another folder is already called «{}»",
+            label.trim()
+        )));
     }
     let parent = (!target.is_empty()).then_some(target.clone());
     let name = label.trim();

@@ -2598,7 +2598,8 @@ def _run(win, actions, source_view=None) -> None:
                 from ingetrazo_core import scene_tree
                 vp = win.viewport
                 try:
-                    scene_tree.edit_menu_folder(vp.history, arg.partition(":")[2])
+                    scene_tree.edit_menu_folder(vp.history, arg.partition(":")[2],
+                                                getattr(win.tray.scenes, "add_scene_in_folder", None))
                     vp.notify_scene_changed()
                     view._ui_tabs = None
                     view.update()
