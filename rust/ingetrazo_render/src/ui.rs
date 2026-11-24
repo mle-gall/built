@@ -2380,68 +2380,85 @@ impl Ui {
                 .show(ctx, |ui| {
                     glass(Surface::Raised).inner_margin(Margin::same(6)).show(ui, |ui| {
                         ui.set_width(220.0);
-                        ui.spacing_mut().item_spacing = vec2(0.0, 1.0);
-                        if col.mode.is_empty() {
-                            if (col.lens == Lens::Filing || col.lens == Lens::Drawing && col.proposal_available) &&
-                                tree_filter::controls(ui, &mut col.filter, col.lens == Lens::Drawing) {
-                                actions.push(format!("filter\u{1f}{}", col.filter));
-                            }
-                            if col.lens == Lens::Drawing && col.proposal_available {
-                                if menu_row(ui, &("newtag".into(), "New tag".into(), String::new(), String::new(), -1, true)) {
-                                    actions.push(format!("newtag\u{1f}{}", col.styles.creation_row()));
+                        egui::ScrollArea::vertical().id_salt("project_header_actions")
+                            .max_height((screen.max.y - at.y - GUT * 2.).max(80.0)).show(ui, |ui| {
+                            ui.spacing_mut().item_spacing = vec2(0.0, 1.0);
+                            if col.mode.is_empty() {
+                                if (col.lens == Lens::Filing || col.lens == Lens::Drawing && col.proposal_available) &&
+                                    tree_filter::controls(ui, &mut col.filter, col.lens == Lens::Drawing) {
+                                    actions.push(format!("filter\u{1f}{}", col.filter));
+                                }
+                                if col.lens == Lens::Drawing && col.proposal_available {
+                                    if menu_row(ui, &("newtag".into(), "New tag".into(), String::new(), String::new(), -1, true)) {
+                                        actions.push(format!("newtag\u{1f}{}", col.styles.creation_row()));
+                                        close = true;
+                                    }
+                                    let hidden = col.styles.catalog.new_hidden;
+                                    if menu_row(ui, &("newtaghidden".into(), "New tags hidden in saved scenes".into(), String::new(), String::new(), i8::from(hidden), true)) {
+                                        col.styles.catalog.new_hidden = !hidden;
+                                        actions.push(format!("newtaghidden\u{1f}{}", u8::from(!hidden)));
+                                        close = true;
+                                    }
+                                }
+                                if col.lens == Lens::Drawing {
+                                    for (id, label, check) in [
+                                        ("tagcolours", "Colour by tag", Some(col.styles.catalog.color_by_layer)),
+                                        ("modellines", "Line types in the model", Some(col.styles.catalog.model_linetypes)),
+                                        ("exporttags", "Export layer template…", None),
+                                        ("importtags", "Import layer template…", None),
+                                    ] {
+                                        if menu_row(ui, &(id.into(), label.into(), String::new(), String::new(), check.map_or(-1, i8::from), true)) {
+                                            let value = check.map_or("", |on| if on { "0" } else { "1" });
+                                            actions.push(format!("{id}\u{1f}{value}"));
+                                            close = true;
+                                        }
+                                    }
+                                }
+                                if col.lens == Lens::Drawing && menu_row(ui, &("purgetags".into(), "Purge unused tags…".into(), String::new(), String::new(), -1, true)) {
+                                    actions.push("purgetags\u{1f}".into());
                                     close = true;
                                 }
-                                let hidden = col.styles.catalog.new_hidden;
-                                if menu_row(ui, &("newtaghidden".into(), "New tags hidden in saved scenes".into(), String::new(), String::new(), i8::from(hidden), true)) {
-                                    col.styles.catalog.new_hidden = !hidden;
-                                    actions.push(format!("newtaghidden\u{1f}{}", u8::from(!hidden)));
+                                let options = tree_order::Sort::OPTIONS;
+                                let old = options.iter().position(|(sort, _)| *sort == col.sort).unwrap_or(0);
+                                let mut index = old;
+                                ui.horizontal(|ui| {
+                                    kit::caption_plain(ui, "Sort by");
+                                    kit::choice(ui, "project_sort", &mut index, &options.map(|(_, label)| label));
+                                });
+                                if index != old {
+                                    col.sort = options[index].0;
+                                    col.ordered = col.sort.order(&col.nodes);
+                                    actions.push(format!("sort\u{1f}{index}"));
                                     close = true;
                                 }
                             }
-                            if col.lens == Lens::Drawing && menu_row(ui, &("purgetags".into(), "Purge unused tags…".into(), String::new(), String::new(), -1, true)) {
-                                actions.push("purgetags\u{1f}".into());
-                                close = true;
-                            }
-                            let options = tree_order::Sort::OPTIONS;
-                            let old = options.iter().position(|(sort, _)| *sort == col.sort).unwrap_or(0);
-                            let mut index = old;
-                            ui.horizontal(|ui| {
-                                kit::caption_plain(ui, "Sort by");
-                                kit::choice(ui, "project_sort", &mut index, &options.map(|(_, label)| label));
-                            });
-                            if index != old {
-                                col.sort = options[index].0;
-                                col.ordered = col.sort.order(&col.nodes);
-                                actions.push(format!("sort\u{1f}{index}"));
-                                close = true;
-                            }
-                        }
-                        if col.mode.is_empty() {
-                            for (id, label) in [("linkselection", "Link selection from open file…"), ("linkregistry", "Move registry to project…")] {
-                                let item = (id.to_owned(), label.to_owned(), String::new(), String::new(), -1, true);
+                            if col.mode.is_empty() {
+                                for (id, label) in [("linkselection", "Link selection from open file…"), ("linkregistry", "Move registry to project…")] {
+                                    let item = (id.to_owned(), label.to_owned(), String::new(), String::new(), -1, true);
+                                    if menu_row(ui, &item) {
+                                        actions.push(format!("{id}\u{1f}"));
+                                        close = true;
+                                    }
+                                }
+                                let shortcut = if cfg!(target_os = "macos") { "⇧⌘J" } else { "Ctrl+Shift+J" };
+                                let item = ("revealselection".into(), "Reveal selection".into(), shortcut.into(), String::new(), -1, selection.is_some());
                                 if menu_row(ui, &item) {
+                                    actions.push("revealselection\u{1f}".into());
+                                    close = true;
+                                }
+                            }
+                            if self.plugins.available() && menu_row(ui,&("plugins".into(),"Plugins".into(),String::new(),String::new(),-1,true)) {
+                                self.plugins.showing = !self.plugins.showing; close = true;
+                            }
+                            for (id, label) in [("new", "New node"), ("propose", "Propose structure from tags…"),
+                                                ("expandall", "Expand all"), ("collapseall", "Collapse all"), ("showall", "Show all"),
+                                                ("measure", "Measure quantities"), ("exportcsv", "Export quantities CSV…")] {
+                                if menu_row(ui, &(id.to_owned(), label.to_owned(), String::new(), String::new(), -1i8, true)) {
                                     actions.push(format!("{id}\u{1f}"));
                                     close = true;
                                 }
                             }
-                            let shortcut = if cfg!(target_os = "macos") { "⇧⌘J" } else { "Ctrl+Shift+J" };
-                            let item = ("revealselection".into(), "Reveal selection".into(), shortcut.into(), String::new(), -1, selection.is_some());
-                            if menu_row(ui, &item) {
-                                actions.push("revealselection\u{1f}".into());
-                                close = true;
-                            }
-                        }
-                        if self.plugins.available() && menu_row(ui,&("plugins".into(),"Plugins".into(),String::new(),String::new(),-1,true)) {
-                            self.plugins.showing = !self.plugins.showing; close = true;
-                        }
-                        for (id, label) in [("new", "New node"), ("propose", "Propose structure from tags…"),
-                                            ("expandall", "Expand all"), ("collapseall", "Collapse all"), ("showall", "Show all"),
-                                            ("measure", "Measure quantities"), ("exportcsv", "Export quantities CSV…")] {
-                            if menu_row(ui, &(id.to_owned(), label.to_owned(), String::new(), String::new(), -1i8, true)) {
-                                actions.push(format!("{id}\u{1f}"));
-                                close = true;
-                            }
-                        }
+                        });
                     });
                 });
             if close { col.head_menu = None; }

@@ -1433,7 +1433,7 @@ def _tree_action(win, view, action) -> None:
         elif verb == "newtaghidden":
             from ingetrazo_render import set_new_tags_hidden
             set_new_tags_hidden(rk == "1")
-        elif verb in ("newtag", "tagassign", "tagactive", "tagpick") or (verb == "rename" and kind == "preview-tag"):
+        elif verb in ("newtag", "tagassign", "tagactive", "tagpick", "tagcolours", "modellines") or (verb == "rename" and kind == "preview-tag"):
             from ingetrazo_render import tree_edit_tag
             if verb == "tagpick":
                 import json
@@ -1593,6 +1593,21 @@ def _tree_action(win, view, action) -> None:
             _core(vp, "patch_record_field", **json.loads(rk))
             vp.notify_scene_changed()
             rebuild()
+        elif verb in ("importtags", "exporttags"):
+            from ingetrazo_core import tag_template_file
+            from views.filedialogs import file_dialogs
+            save = verb == "exporttags"
+            chooser = file_dialogs.getSaveFileName if save else file_dialogs.getOpenFileName
+            path, _ = chooser(win, "Export layer template" if save else "Import layer template",
+                              "layers.json" if save else "", "Layer template (*.json)")
+            if path and win.viewport.scene is scene:
+                try:
+                    vp.flash_status(tag_template_file(scene, path, save))
+                    if not save:
+                        vp.notify_scene_changed()
+                        rebuild()
+                except (OSError, ValueError) as exc:
+                    vp.flash_status(str(exc))
         elif verb in ("exportpat", "exportlin"):
             from ingetrazo_core import export_style_file
             from views.filedialogs import file_dialogs

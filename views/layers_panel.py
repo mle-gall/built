@@ -130,18 +130,16 @@ def printer_icon(on: bool) -> QIcon:
 
 def layers_signature(scene) -> tuple:
     """Everything the Layers rows are drawn from — each layer's own state,
-    the folders, the active layer and «colour by layer». The same value
+    the folders and the active layer. The same value
     twice means the rows would come out the same: an edit of the model
     (a push, a move) leaves it as it was and does not rebuild the list."""
-    style = getattr(scene, "display_style", None)
     folders = tuple(L.folders_of(scene))
     known = set(folders)
     return (tuple(repr(sorted(L.layer_values(ly).items())) for ly in scene.layers),
             folders, tuple(L.folder_parent(scene, f, known=known) for f in folders),
             tuple(L.folder_label(scene, f) for f in folders),
             tuple(sorted(scene.folder_visibility.items())),
-            L.active_layer(scene),
-            bool(getattr(style, "color_by_layer", False)))
+            L.active_layer(scene))
 
 
 #: The orders of the panel's rows: by name, as they were made, the visible
@@ -735,24 +733,11 @@ class LayersPanel(QWidget):
         self.expand_btn = self._tool_button(
             QIcon(), tr("Expand all"), self._expand_or_collapse)
         bar.addWidget(self.expand_btn)
-        # Colour by layer, at the top right: the model painted in its
-        # layers' colours, on and off in one click.
         from views.icons import tool_icon
-        self.color_by_layer = QToolButton()
-        self.color_by_layer.setAutoRaise(True)
-        self.color_by_layer.setCheckable(True)
-        self.color_by_layer.setIcon(tool_icon("layers_colour"))
-        self.color_by_layer.setToolTip(tr(
-            "Colour by layer: paint the model in its layers' colours "
-            "(shaded, textured and X-ray styles). Scenes remember it with "
-            "the style."))
-        self.color_by_layer.toggled.connect(self.set_color_by_layer)
-        bar.addWidget(self.color_by_layer)
-        # Templates and options, last: used now and then.
         self.more_btn = QToolButton()
         self.more_btn.setAutoRaise(True)
         self.more_btn.setIcon(tool_icon("layers_templates"))
-        self.more_btn.setToolTip(tr("Layer templates and options"))
+        self.more_btn.setToolTip(tr("Sort by"))
         self.more_menu = QMenu(self.more_btn)
         self.more_btn.clicked.connect(self._open_more_menu)
         bar.addWidget(self.more_btn)
@@ -915,7 +900,6 @@ class LayersPanel(QWidget):
     def retheme(self) -> None:
         from views.icons import tool_icon
         self._header_icons()
-        self.color_by_layer.setIcon(tool_icon("layers_colour"))
         self.more_btn.setIcon(tool_icon("layers_templates"))
         self._update_expand_button()
         self.refresh()
@@ -991,11 +975,6 @@ class LayersPanel(QWidget):
         col, order = getattr(self, "_sort", (COL_NAME, Qt.AscendingOrder))
         self.tree.sortItems(col, order)
         self._update_expand_button()
-        style = getattr(scene, "display_style", None)
-        self.color_by_layer.blockSignals(True)
-        self.color_by_layer.setChecked(bool(getattr(style, "color_by_layer",
-                                                    False)))
-        self.color_by_layer.blockSignals(False)
         self._updating = False
         self._drawn_signature = self._signature()
         self._drawn_structure = self._structure()
@@ -1223,9 +1202,6 @@ class LayersPanel(QWidget):
         self._drawn_signature = self._signature()
         col, order = self._sort
         self.tree.sortItems(col, order)
-        self.color_by_layer.blockSignals(True)
-        self.color_by_layer.setChecked(bool(getattr(scene.display_style, "color_by_layer", False)))
-        self.color_by_layer.blockSignals(False)
         self._mark_selection()
 
     def _new_layer_row(self, ly, order, active):
@@ -1885,32 +1861,6 @@ class LayersPanel(QWidget):
         self._dirty_paint()
         self._touch()
 
-    def set_color_by_layer(self, on: bool) -> None:
-        """Paint the model by layer, or by material again. A setting of the
-        STYLE, so the scenes saved with it remember it."""
-        style = getattr(self._scene(), "display_style", None)
-        if style is None or bool(style.color_by_layer) == bool(on):
-            return
-        style.color_by_layer = bool(on)
-        self._dirty_paint()
-        self._touch(rebuild=False)
-        if on and style.face_mode not in ("textures", "shaded", "xray"):
-            self._window.statusBar().showMessage(tr(
-                "Colour by layer shows in the shaded, textured and X-ray "
-                "styles."), 4000)
-
-    def set_model_linetypes(self, on: bool) -> None:
-        """Draw the layers' line types — dashes and colours — on the model's
-        edges, or not — a setting of the STYLE, like «Colour by layer»."""
-        style = getattr(self._scene(), "display_style", None)
-        if style is None or bool(style.model_linetypes) == bool(on):
-            return
-        style.model_linetypes = bool(on)
-        self._touch(rebuild=False)
-        vp = getattr(self._window, "viewport", None)
-        if vp is not None:
-            vp.update()
-
     def _dirty_paint(self) -> None:
         from core.history import _dirty_group_chunks
         _dirty_group_chunks(self._scene())
@@ -1958,10 +1908,7 @@ class LayersPanel(QWidget):
         if ok and name.strip():
             self.move_to_folder(names, name.strip())
 
-    # ---- Templates and options -------------------------------------------------
     def _fill_more_menu(self) -> None:
-        """The panel's options: how the rows are ordered, new layers in the
-        scenes, and the layer templates."""
         from PySide6.QtGui import QActionGroup
         menu = self.more_menu
         menu.clear()
@@ -1975,67 +1922,6 @@ class LayersPanel(QWidget):
             act.setChecked(self.sort_by == key)
             group.addAction(act)
             act.triggered.connect(lambda _c=False, k=key: self.set_sort_by(k))
-        menu.addSeparator()
-        style = getattr(self._scene(), "display_style", None)
-        act = menu.addAction(tr("Line types in the model"))
-        act.setCheckable(True)
-        act.setChecked(bool(getattr(style, "model_linetypes", True)))
-        act.setStatusTip(tr(
-            "The layers' line types on their edges in the 3D view too: "
-            "dashed as a sheet at 1:50 draws them, in the line type's own "
-            "colour (a gas line yellow); scenes remember it with the style."))
-        act.toggled.connect(self.set_model_linetypes)
-        menu.addSeparator()
-        menu.addAction(tr("Export layer template…"), self.export_template)
-        menu.addAction(tr("Import layer template…"), self.import_template)
-
-    def export_template(self, path: str | None = None) -> bool:
-        """Save the layer list (names, colours, lines, folders) as a JSON
-        template to load into other documents."""
-        import json
-        if path is None:
-            from views.filedialogs import file_dialogs
-            path, _ = file_dialogs.getSaveFileName(
-                self, tr("Export layer template"), "layers.json",
-                tr("Layer template (*.json)"))
-            if not path:
-                return False
-        try:
-            with open(path, "w", encoding="utf-8") as fh:
-                json.dump(L.template_of(self._scene()), fh,
-                          ensure_ascii=False, indent=2)
-        except OSError as exc:
-            QMessageBox.warning(self, tr("Layers"), str(exc))
-            return False
-        self._window.statusBar().showMessage(
-            tr("Layer template saved"), 2500)
-        return True
-
-    def import_template(self, path: str | None = None) -> bool:
-        """Bring a template's layers in: new ones added, the ones already
-        here take the template's look; nothing is removed."""
-        import json
-        if path is None:
-            from views.filedialogs import file_dialogs
-            path, _ = file_dialogs.getOpenFileName(
-                self, tr("Import layer template"), "",
-                tr("Layer template (*.json)"))
-            if not path:
-                return False
-        try:
-            with open(path, encoding="utf-8") as fh:
-                data = json.load(fh)
-            added, updated = L.apply_template(self._scene(), data)
-        except (OSError, ValueError) as exc:
-            QMessageBox.warning(self, tr("Layers"), tr(
-                "This file is not a layer template.") + f"\n\n{exc}")
-            return False
-        self._dirty_paint()
-        self._touch()
-        self._window.statusBar().showMessage(tr(
-            "{added} layers added, {updated} updated", added=added,
-            updated=updated), 3000)
-        return True
 
     def set_style(self, names, **look) -> None:
         """Line type, line weight, cut weight, cut hatch or opacity of the

@@ -127,6 +127,37 @@ pub fn tree_edit_tag(
     }
     let mut created = None;
     match verb {
+        "tagcolours" | "modellines" => {
+            let style = scene.getattr("display_style")?;
+            let field = if verb == "tagcolours" {
+                "color_by_layer"
+            } else {
+                "model_linetypes"
+            };
+            let on = row == "1";
+            if style.getattr(field)?.is_truthy()? == on {
+                return Ok(None);
+            }
+            style.setattr(field, on)?;
+            if verb == "tagcolours" {
+                py.import("core.history")?
+                    .call_method1("_dirty_group_chunks", (&scene,))?;
+                let mode: String = style.getattr("face_mode")?.extract()?;
+                if on && !matches!(mode.as_str(), "textures" | "shaded" | "xray") {
+                    vp.call_method1(
+                        "flash_status",
+                        (
+                            translated(
+                                py,
+                                "Colour by layer shows in the shaded, textured and X-ray styles.",
+                                None,
+                            )?,
+                            4000,
+                        ),
+                    )?;
+                }
+            }
+        }
         "newtag" => {
             let folder = if let Some(key) = row.strip_prefix("preview-folder:") {
                 if !layers

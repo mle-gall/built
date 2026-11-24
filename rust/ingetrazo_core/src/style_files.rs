@@ -75,3 +75,46 @@ pub fn export_style_file(scene: &Bound<'_, PyAny>, path: PathBuf, format: &str) 
     py.detach(|| publish(&path, &text))?;
     Ok(rows.len())
 }
+
+/// Round-trip the office tag catalogue using the same stable identities as copy/paste.
+#[pyfunction]
+pub fn tag_template_file(scene: &Bound<'_, PyAny>, path: PathBuf, save: bool) -> PyResult<String> {
+    let py = scene.py();
+    let backend = py.import("core.layers")?;
+    let json = py.import("json")?;
+    if save {
+        let data = backend.call_method1("template_of", (scene,))?;
+        let options = pyo3::types::PyDict::new(py);
+        options.set_item("ensure_ascii", false)?;
+        options.set_item("indent", 2)?;
+        let text: String = json
+            .call_method("dumps", (data,), Some(&options))?
+            .extract()?;
+        py.detach(|| publish(&path, &text))?;
+        return Ok("Layer template saved".into());
+    }
+    if scene.hasattr("worksession_read_only")?
+        && scene.getattr("worksession_read_only")?.is_truthy()?
+    {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "This document is read-only",
+        ));
+    }
+    let text = py.detach(|| std::fs::read_to_string(path))?;
+    let data = json.call_method1("loads", (text,))?;
+    // The existing importer applies folders and tables before it reaches individual tags.
+    // Validate the entire input on an empty document before updating the open one.
+    let scratch = py.import("core.scene")?.call_method0("Scene")?;
+    backend
+        .call_method1("apply_template", (&scratch, &data))
+        .map_err(|e| {
+            pyo3::exceptions::PyValueError::new_err(format!("Invalid layer template: {e}"))
+        })?;
+    let (added, updated): (usize, usize) = backend
+        .call_method1("apply_template", (scene, data))?
+        .extract()?;
+    py.import("core.history")?
+        .call_method1("_dirty_group_chunks", (scene,))?;
+    scene.setattr("version", scene.getattr("version")?.extract::<u64>()? + 1)?;
+    Ok(format!("{added} layers added, {updated} updated"))
+}

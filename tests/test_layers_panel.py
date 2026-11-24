@@ -92,28 +92,6 @@ def test_columns_and_indent_follow_the_browser(win):
     assert panel.tree.indentation() == 12
 
 
-def test_the_top_bar_ends_with_expand_colour_by_layer_and_more(win):
-    from PySide6.QtWidgets import QPushButton, QToolButton
-    panel = win.layers_dock.panel
-    bar = panel.layout().itemAt(0).layout()
-    widgets = [bar.itemAt(i).widget() for i in range(bar.count())]
-    assert widgets[-3:] == [panel.expand_btn, panel.color_by_layer,
-                            panel.more_btn]
-    assert not hasattr(panel, "isolate_btn")       # isolating is per row
-    # No row of buttons under the list any more: the tree is the last.
-    assert panel.layout().itemAt(panel.layout().count() - 1).widget()         is panel.tree
-    assert not panel.findChildren(QPushButton)
-    panel._fill_more_menu()
-    assert any("template" in a.text() for a in panel.more_menu.actions())
-    btn = panel.color_by_layer
-    assert isinstance(btn, QToolButton) and btn.isCheckable()
-    assert btn.autoRaise() and not btn.icon().isNull()
-    btn.click()
-    assert win.viewport.scene.display_style.color_by_layer
-    btn.click()
-    assert not win.viewport.scene.display_style.color_by_layer
-
-
 def test_the_eye_and_padlock_headers_act_on_every_layer(native_host):
     from tests.native_tree import action
     scene = native_host.viewport.scene
@@ -338,12 +316,15 @@ def test_saved_scene_preference_and_make_active(native_host):
     assert list(scene.saved_views[0].hidden_layers) == [key]
 
 
-def test_colour_by_layer_button_sets_the_style(win):
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    panel.color_by_layer.setChecked(True)
-    assert scene.display_style.color_by_layer
-    panel.color_by_layer.setChecked(False)
+def test_drawing_model_colours_belong_to_the_style(native_host):
+    from core.style import Style
+    from tests.native_tree import action
+    scene = native_host.viewport.scene
+    for on in (True, False):
+        action(native_host, "tagcolours", str(int(on)))
+        assert Style.from_dict(scene.display_style.to_dict()).color_by_layer == on
+    scene.worksession_read_only = True
+    action(native_host, "tagcolours", "1")
     assert not scene.display_style.color_by_layer
 
 
@@ -366,15 +347,33 @@ def test_context_menu_offers_the_layer_actions(win):
     assert scene.layer("A") is None
 
 
-def test_template_export_and_import_through_the_panel(win, tmp_path):
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers.append(Layer("Ejes", linetype="dashdot"))
-    path = str(tmp_path / "plantilla.json")
-    assert panel.export_template(path)
+def test_template_export_and_import_in_drawing(native_host, tmp_path, monkeypatch):
+    from tests.native_tree import action
+    from views.filedialogs import file_dialogs
+    scene = native_host.viewport.scene
+    folder = L.add_folder(scene, "Oficina")
+    tag = Layer("Ejes", folder=folder, linetype="dashdot")
+    scene.layers.append(tag)
+    path = tmp_path / "plantilla.json"
+    for picker in ("getSaveFileName", "getOpenFileName"):
+        monkeypatch.setattr(file_dialogs, picker, lambda *a: (str(path), ""))
+    action(native_host, "exporttags", "")
     scene.layers[:] = [Layer(DEFAULT_LAYER)]
-    assert panel.import_template(path)
-    assert scene.layer("Ejes").linetype == "dashdot"
+    action(native_host, "importtags", "")
+    restored = scene.layer("Ejes")
+    assert (restored.uid, restored.folder, restored.linetype) == (tag.uid, folder, "dashdot")
+    restored.visible = False
+    action(native_host, "importtags", "")
+    assert not restored.visible and scene.layer("Ejes") is restored
+
+    # Bad input cannot leave a newly imported folder behind.
+    path.write_text('{"ingetrazo_layers":1,"folders":["Partial"],"layers":[],"folder_uids":[1]}')
+    action(native_host, "importtags", "")
+    assert "Partial" not in L.folders_of(scene)
+    scene.worksession_read_only = True
+    path.write_text('{"ingetrazo_layers":1,"layers":[{"name":"Forbidden"}]}')
+    action(native_host, "importtags", "")
+    assert scene.layer("Forbidden") is None
 
 
 def test_right_click_hides_and_isolates_the_clicked_layer(win):

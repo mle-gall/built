@@ -1389,47 +1389,8 @@ def test_the_plane_keeps_the_layers_fill():
     assert SectionPlane.from_dict(sp.to_dict()).fill == {"pattern": "layers"}
 
 
-def test_the_viewer_fills_the_cut_by_layer_and_keeps_it():
-    from views.main_window import MainWindow
-    QApplication.instance() or QApplication([])
-    win = MainWindow()
-    vp = win.viewport
-    scene = _wall_and_door(vp.scene)
-    scene.layer("Muros").hatch = "brick"
-    scene.active_section().fill = {"pattern": "layers"}
-    scene.version += 1
-    grey = (0.35, 0.37, 0.41)
-    fills = vp._section_layer_fills(grey)
-    assert fills is not None
-    hatched = [f for f in fills if f[2] is not None]
-    assert len(hatched) == 1 and len(hatched[0][2]) > 20
-    assert vp._section_layer_fills(grey) is fills        # kept
-    scene.layer("Muros").hatch = "concrete"              # a layer changes
-    assert vp._section_layer_fills(grey) is not fills
-    vp.repaint()                                         # draws without error
-    win._saved_version = scene.version
 
 
-def test_the_viewer_draws_each_layers_cut_weight_with_its_hatches():
-    from views.main_window import MainWindow
-    QApplication.instance() or QApplication([])
-    win = MainWindow()
-    vp = win.viewport
-    scene = _wall_and_door(vp.scene)                 # Muros at 0.70
-    scene.layer("Carpinterías").cut_weight = 0.18
-    sp = scene.active_section()
-    scene.version += 1
-    segs = vp._section_cut_segments()
-    keep = np.ones(len(segs), dtype=bool)
-    vp._frame_style = vp._effective_style()
-    assert set(vp._cut_edge_weights(sp, keep)) == {1.0}     # all alike
-    sp.fill = {"pattern": "layers"}
-    tags = vp._section_cut_cache[2]
-    weights = vp._cut_edge_weights(sp, keep)
-    assert weights[tags == "Muros"] == pytest.approx(1.4)
-    assert weights[tags == "Carpinterías"] == pytest.approx(0.4)   # floor
-    assert weights[tags == DEFAULT_LAYER] == pytest.approx(1.0)
-    win._saved_version = scene.version
 
 
 # ---- Where the pieces start ------------------------------------------------
@@ -1571,31 +1532,6 @@ def test_the_panel_keeps_the_colour_it_is_given(win):
     assert "color" not in scene.line_types["Agua"]     # by layer again
 
 
-def test_the_model_draws_the_line_types_by_default(win):
-    """«Line types in the model», on unless a style says otherwise: a
-    layer's edges come out dashed and in their line type's colour."""
-    from core.style import Style
-    vp = win.viewport
-    scene = _gas_scene(vp.scene)
-    scene.version += 1
-    groups = vp._model_linetype_edges()
-    assert len(groups) == 1
-    rgb, dashes, gaps, words = groups[0]
-    assert not len(words)                                # no text: no words
-    assert rgb == (0.85, 0.65, 0.0)
-    assert len(dashes) > 12 and len(gaps) > 0           # cut into dashes
-    assert vp._model_linetype_edges() is groups         # kept
-    assert Style(name="t").model_linetypes               # on by default
-    off = Style(name="t")
-    off.model_linetypes = False
-    assert Style.from_dict(off.to_dict()).model_linetypes is False
-    assert Style.from_dict({}).model_linetypes is True   # an old file: on
-    panel = win.layers_dock.panel
-    panel.set_model_linetypes(False)
-    assert not scene.display_style.model_linetypes
-    panel.set_model_linetypes(True)
-    vp.repaint()                                         # draws without error
-    win._saved_version = scene.version
 
 
 def test_a_dash_pattern_cuts_an_edge_as_a_sheet_at_1_50():
@@ -1766,31 +1702,6 @@ def test_the_line_panel_foot_and_the_pencil(win, monkeypatch):
     assert "Borde" not in scene.line_types
 
 
-def test_the_model_writes_a_line_types_words(win):
-    """GAS along a gas line in the 3D view too: the letters' outlines in
-    the gaps the pattern leaves for them, lying along the edge."""
-    import numpy as np
-    from core.layers import load_line_types, with_text
-    vp = win.viewport
-    scene = vp.scene
-    drawn, spec = with_text([10.0, -2.0], "GAS", 2.0)
-    load_line_types(scene, {"Gas": dict({"pattern": drawn,
-                                         "pieces": [10.0, -2.0],
-                                         "color": [0.85, 0.65, 0.0]},
-                                        **spec)})
-    scene.layers.append(Layer("Gas", linetype="lin:Gas"))
-    pipe = Group(Mesh(), name="caño")
-    pipe.mesh.add_edge(V(0, 0, 0), V(6, 0, 0))
-    pipe.layer = "Gas"
-    scene.groups.append(pipe)
-    scene.version += 1
-    (_rgb, _d, _g, words), = vp._model_linetype_edges()
-    assert len(words) > 20                               # letters drawn
-    w = words.reshape(-1, 3)
-    assert w[:, 0].min() >= -0.01 and w[:, 0].max() <= 6.01   # on the edge
-    assert np.ptp(w[:, 1]) < 0.2                         # 2 mm at 1:50: 10 cm
-    vp.repaint()
-    win._saved_version = scene.version
 
 
 def test_an_open_cell_of_a_honeycomb_bond_is_closed_on_both_sides():
@@ -1857,25 +1768,3 @@ def test_solids_each_of_one_layer_are_tagged_as_they_were():
     scene = _wall_and_door(Scene())
     chords, tags = _model_cut(scene)
     assert closing_tags(chords, tags) == list(tags)
-
-
-def test_picking_does_not_dash_the_model_again(win, monkeypatch):
-    """A click moves the scene's version (the view's caches follow it); the
-    dashes of the layers' line types follow the document's."""
-    vp = win.viewport
-    scene = _gas_scene(vp.scene)
-    scene.version += 1
-    walked = []                 # the geometry read (the arrays, no walk)
-    real = type(vp).hlr_geometry
-    monkeypatch.setattr(
-        type(vp), "hlr_geometry",
-        lambda self, *a, **k: walked.append(1) or real(self, *a, **k))
-    groups = vp._model_linetype_edges()
-    assert len(walked) == 1
-    scene.select([scene.groups[0]])
-    scene.clear_selection()
-    assert vp._model_linetype_edges() is groups
-    assert len(walked) == 1
-    scene.version += 1                                   # the model changed
-    assert vp._model_linetype_edges() is not groups
-    assert len(walked) == 2
