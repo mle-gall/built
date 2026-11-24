@@ -220,7 +220,7 @@ def test_panels_forget_what_they_drew_for_the_other_project(win):
 def test_materials_let_go_of_the_meshes_of_the_project_left(win):
     from core.group import Group
     from core.mesh import Mesh
-    from views.wgpu_library import material_uses
+    from ingetrazo_render.wgpu_library import material_uses
     mesh = Mesh()
     face = mesh.add_face([V(0, 0, 0), V(1, 0, 0), V(0, 1, 0)])
     face.attrs = {"mat": "Brick"}
@@ -238,7 +238,7 @@ def test_materials_let_go_of_the_meshes_of_the_project_left(win):
 
 
 def test_view_preferences_reach_the_tabs_behind(win, tmp_path):
-    from views.settings_sheet import Env, SettingsSheet
+    from ingetrazo_render.settings_sheet import Env, SettingsSheet
 
     _edit(win)
     a = win.active_document()

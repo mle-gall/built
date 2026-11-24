@@ -431,7 +431,7 @@ class Mesh:
     def vertex(self, position: QVector3D) -> Vertex:
         """Get-or-create the shared vertex at ``position`` (welds coincident
         points to one object)."""
-        return object_replay.vertex(self, position, _key(position), _WELD_TOL2, True)
+        return object_replay.vertex(self, position, _key(position), _WELD_TOL2, True, Vertex)
 
     def vertex_at(self, position: QVector3D) -> Optional[Vertex]:
         """The existing vertex at ``position``, or ``None``."""
@@ -450,12 +450,7 @@ class Mesh:
     def find_edge(self, v0: Vertex, v1: Vertex) -> Optional[Edge]:
         """The edge between two vertices (either orientation), or ``None``.
         O(degree) via the smaller vertex's incidence — no list scan."""
-        small = v0 if len(v0.edges) <= len(v1.edges) else v1
-        target = v1 if small is v0 else v0
-        for e in small.edges:
-            if e.other(small) is target:
-                return e
-        return None
+        return object_replay.find_edge(v0, v1)
 
     @staticmethod
     def next_curve_id() -> int:
@@ -474,27 +469,10 @@ class Mesh:
         all its pieces tagged. Returns the id, or ``None`` if nothing matched."""
         self._chunk_dirty = True
         self._mut_serial += 1
-        from core.topology import _point_on_seg_incl
-        global _CURVE_COUNTER
-        pts = list(loop_points)
-        if len(pts) < 2:
-            return None
+        points = list(loop_points)
         cid = _CURVE_COUNTER
-        pairs = list(zip(pts, pts[1:]))
-        if closed:
-            pairs.append((pts[-1], pts[0]))
-        tagged = False
-        for e in self.edges:
-            if e.curve is not None:
-                continue
-            a, b = e.a, e.b
-            for pa, pb in pairs:
-                if _point_on_seg_incl(a, pa, pb) and _point_on_seg_incl(b, pa, pb):
-                    e.curve = cid
-                    tagged = True
-                    break
-        if tagged:
-            _CURVE_COUNTER += 1
+        if object_drawing.tag_curve(self.edges, points, closed, cid):
+            self.next_curve_id()
             return cid
         return None
 
@@ -518,105 +496,21 @@ class Mesh:
         curve per segment on every copy, explode or solid operation."""
         self._chunk_dirty = True
         self._mut_serial += 1
-        by_id: dict[int, list[Edge]] = {}
-        for e in self.edges:
-            if e.curve is not None:
-                by_id.setdefault(e.curve, []).append(e)
-        self._resplit_curve_groups(by_id)
-
-    @staticmethod
-    def _resplit_curve_groups(by_id) -> None:
-        """:meth:`resplit_curves` past its scan: ``by_id`` maps each curve
-        id to its edges in mesh order."""
         global _CURVE_COUNTER
-        for cid, edges in by_id.items():
-            eset = set(edges)
-
-            def is_break(v) -> bool:
-                mine = [e for e in v.edges if e in eset]
-                if len(mine) != 2:
-                    return True
-                if len(v.edges) == 2:
-                    return False
-                p = v.position
-                a = mine[0].other(v).position - p
-                b = mine[1].other(v).position - p
-                n = QVector3D.crossProduct(a, b)
-                if n.length() <= 1e-6 * a.length() * b.length():
-                    return True              # straight through: no plane
-                n.normalize()
-                for e in v.edges:
-                    if e in eset:
-                        continue
-                    u = e.other(v).position - p
-                    length = u.length()
-                    if (length <= 1e-12
-                            or abs(QVector3D.dotProduct(u, n)) < 0.05 * length):
-                        return True
-                return False
-
-            # Walk chains between break vertices; a break-free component is a
-            # closed loop (one chain).
-            unvisited = set(edges)
-            chains: list[list[Edge]] = []
-            # Seed from break vertices first so open chains are walked end-to-end.
-            seeds = [e for e in edges if is_break(e.v0) or is_break(e.v1)]
-            for seed in seeds + edges:
-                if seed not in unvisited:
-                    continue
-                start_v = seed.v0 if is_break(seed.v0) else (
-                    seed.v1 if is_break(seed.v1) else seed.v0)
-                chain, v, e = [], start_v, seed
-                while e in unvisited:
-                    unvisited.discard(e)
-                    chain.append(e)
-                    v = e.other(v)
-                    if is_break(v):
-                        break
-                    nxt = next((n for n in v.edges if n in unvisited), None)
-                    if nxt is None:
-                        break
-                    e = nxt
-                chains.append(chain)
-            if len(chains) <= 1:
-                continue  # still one contour — keep the id stable
-            for i, chain in enumerate(chains):
-                new_id = cid if i == 0 else _CURVE_COUNTER
-                if i > 0:
-                    _CURVE_COUNTER += 1
-                for e in chain:
-                    e.curve = new_id
+        _CURVE_COUNTER = object_drawing.resplit_curves(self.edges, _CURVE_COUNTER)
 
     def _link_edge(self, v0: Vertex, v1: Vertex) -> Edge:
-        self._chunk_dirty = True
-        self._mut_serial += 1
-        e = self.find_edge(v0, v1)
-        if e is not None:
-            return e
-        e = Edge(v0, v1, key=next(self._keys))
-        v0.edges.add(e)
-        v1.edges.add(e)
-        self.edges.append(e)
-        return e
+        return object_replay.link_edge(self, v0, v1, Edge)
 
     def add_edge(self, a: QVector3D, b: QVector3D) -> Edge:
         """Add a free edge between two positions (welding endpoints, deduping
         the edge). Returns the existing edge if it is already there."""
-        v0 = self.vertex(a)
-        v1 = self.vertex(b)
-        if v0 is v1:
-            raise ValueError("degenerate edge: endpoints weld to one vertex")
-        return self._link_edge(v0, v1)
+        return object_replay.add_edge(self, a, b)
 
     def remove_edge(self, e: Edge) -> None:
         """Detach and drop an edge. Callers remove any incident faces first when
         needed; this does not cascade."""
-        self._chunk_dirty = True
-        self._mut_serial += 1
-        e.v0.edges.discard(e)
-        e.v1.edges.discard(e)
-        if e in self.edges:
-            self.edges.remove(e)
+        object_replay.remove_edge(self, e)
 
     def prune_orphan_vertices(self) -> int:
         """Drop vertices nothing references any more. Returns how many went.
@@ -767,21 +661,7 @@ class Mesh:
         solid as watertight (defeating the BIM push guard)."""
         self._chunk_dirty = True
         self._mut_serial += 1
-        loop = [self.vertex(p) for p in loop_positions]
-        raw_holes = [list(h) for h in (hole_loops or [])]
-        if len(raw_holes) > 1:
-            from core.topology import _maximal_holes
-
-            raw_holes = _maximal_holes(raw_holes)
-        holes = [[self.vertex(p) for p in h] for h in raw_holes]
-        face = Face(loop, holes, key=next(self._keys))  # Face stores them as hole_loops (vertices)
-        for lp in (loop, *holes):
-            n = len(lp)
-            for i in range(n):
-                edge = self._link_edge(lp[i], lp[(i + 1) % n])
-                edge.faces.append(face)
-        self.faces.append(face)
-        return face
+        return object_replay.add_face(self, loop_positions, hole_loops)
 
     def surface_of(self, face: "Face") -> list:
         """The faces forming the same **curved surface** as ``face`` — the
@@ -789,35 +669,14 @@ class Mesh:
         sweep's hidden seams). Faces joined by softened edges form one
         surface, so clicking/painting one acts on the whole curved
         side. Returns just ``[face]`` for ordinary (hard-edged) geometry."""
-        seen = {face}
-        stack = [face]
-        while stack:
-            f = stack.pop()
-            for lp in (f.loop, *f.hole_loops):
-                n = len(lp)
-                for i in range(n):
-                    e = self.find_edge(lp[i], lp[(i + 1) % n])
-                    if e is None or not e.soft:
-                        continue
-                    for g in e.faces:
-                        if g != f and g not in seen:
-                            seen.add(g)
-                            stack.append(g)
-        return list(seen)
+        return object_replay.surface_of(self, face)
 
     def remove_face(self, face: Face) -> None:
         """Drop a face and detach it from its boundary edges' radial lists. The
         edges themselves stay (they may border other faces or stand alone)."""
         self._chunk_dirty = True
         self._mut_serial += 1
-        for lp in (face.loop, *face.hole_loops):
-            n = len(lp)
-            for i in range(n):
-                edge = self.find_edge(lp[i], lp[(i + 1) % n])
-                if edge is not None and face in edge.faces:
-                    edge.faces.remove(face)
-        if face in self.faces:
-            self.faces.remove(face)
+        object_replay.remove_face(self, face)
 
     # ---- Re-link (undo support) --------------------------------------------
     def relink_edge(self, edge: Edge) -> None:
@@ -835,27 +694,14 @@ class Mesh:
         """Punch a hole into ``face`` (a window/door drawn inside it). Welds the
         loop's vertices, ensures its boundary edges, and registers the face on
         them. Returns the vertex loop so undo can remove exactly this hole."""
-        loop = [self.vertex(p) for p in loop_positions]
-        face.hole_loops.append(loop)
-        n = len(loop)
-        for i in range(n):
-            edge = self._link_edge(loop[i], loop[(i + 1) % n])
-            if face not in edge.faces:
-                edge.faces.append(face)
-        return loop
+        return object_replay.add_hole(self, face, loop_positions)
 
     def relink_hole(self, face: Face, ring: list[Vertex]) -> None:
         """Restore a detached hole and its incidence on existing edges."""
         object_replay.relink_hole(self, face, ring)
 
     def remove_hole(self, face: Face, loop: list[Vertex]) -> None:
-        if loop in face.hole_loops:
-            face.hole_loops.remove(loop)
-        n = len(loop)
-        for i in range(n):
-            edge = self.find_edge(loop[i], loop[(i + 1) % n])
-            if edge is not None and face in edge.faces:
-                edge.faces.remove(face)
+        object_replay.remove_hole(self, face, loop)
 
     # ---- State snapshot (identity-preserving) -------------------------------
     def capture_state(self) -> dict:

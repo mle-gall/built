@@ -11,6 +11,17 @@ ROOT = Path(__file__).resolve().parents[1]
 BIN = ROOT / "rust/built_app/target/release/built"
 
 
+def english(profile):
+    """The scripted runs below type and click on English text and layout;
+    a profile without a language follows the system's."""
+    from ingetrazo_core import NativeSettings
+    profile.mkdir(parents=True, exist_ok=True)
+    st = NativeSettings(str(profile)).fresh()
+    st.setValue("language", "en")
+    st.sync()
+    return profile
+
+
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
                     reason="requires a built window and BUILT_WINDOW_TESTS=1")
 def test_native_soften_and_export(tmp_path):
@@ -48,7 +59,7 @@ quit
     result = run([str(BIN), "--root", str(ROOT), "--new-instance", "--size", "1280x800",
                   "--script", str(steps), str(model)],
                  env=dict(os.environ, BUILT_ANSWERS="escape"),
-                 home=tmp_path / "home", settings=tmp_path / "profile",
+                 home=tmp_path / "home", settings=english(tmp_path / "profile"),
                  capture_output=True, text=True, timeout=90)
     log = result.stdout + result.stderr
     assert result.returncode == 0, log
@@ -266,7 +277,7 @@ def test_native_location_coordinates_map_apply_and_cancel(tmp_path):
                      f"click 431 351\nwait 200\nkey escape\nwait 200\nmenu save_to:{saved}\nwait 500\nstate\nquit\n")
     result = run([str(BIN), "--root", str(ROOT), "--venv", str(venv), "--new-instance",
                   "--size", "1000x920", "--script", str(steps), str(model)],
-                 env=dict(os.environ, BUILT_ANSWERS="escape,cmd-d,cmd-d"), home=home, settings=tmp_path / "profile",
+                 env=dict(os.environ, BUILT_ANSWERS="escape,cmd-d,cmd-d"), home=home, settings=english(tmp_path / "profile"),
                  capture_output=True, text=True, timeout=90)
     log = result.stdout + result.stderr
     states = [json.loads(line.removeprefix("[built] state ")) for line in log.splitlines()
@@ -779,7 +790,7 @@ def dispatch(self, command):
         self.fixture_photo=bool(pic and len(pic[2])==pic[0]*pic[1]*4 and max(pic[2])>min(pic[2]))
         self.fixture_restored=(cam.shift_y==0.18)
         wgpu_ui._paint_with(self.window,"ral:RAL 1000")
-        from views import wgpu_library
+        from ingetrazo_render import wgpu_library
         from tools.paint import PaintTool
         wgpu_library.edit_field(self.window,self.view,"brush_name:"+PaintTool.current_material.name,"Site paint")
         self.fixture_swatch=(PaintTool.current_material.name=="Site paint" and "Site paint" not in scene.materials)

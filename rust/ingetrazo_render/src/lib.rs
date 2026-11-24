@@ -26,6 +26,9 @@ mod document_placements;
 mod document_annotations;
 mod document_planes;
 mod document_host;
+mod document_bindings;
+mod document_registration;
+mod document_camera;
 mod section_display;
 mod inspection_edits;
 mod context_edits;
@@ -69,6 +72,10 @@ mod inspector_host;
 mod shell_events;
 mod deliveries_host;
 mod sheet_runtime;
+mod settings_rows;
+mod settings_host;
+mod library_host;
+mod start_host;
 pub mod ui;
 mod host_context;
 mod inspector;
@@ -91,6 +98,7 @@ mod textures;
 pub mod tool_cursors;
 pub mod icon_art;
 mod billboards;
+mod document_tabs;
 mod annotation_canvas;
 mod tool_overlay;
 mod image_assets;
@@ -222,6 +230,8 @@ static NEXT_RENDERER_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::Atomi
 #[pyclass(unsendable)]
 struct Renderer {
     id: u64,
+    /// What the document ▾ and the project tabs were last sent (document_tabs.rs).
+    document_tabs: Option<Py<document_tabs::DocumentTabs>>,
     instance: wgpu::Instance,
     /// Inactive views of the same scene, addressed by a never-recycled id.
     targets: std::collections::HashMap<usize, Target>,
@@ -771,6 +781,7 @@ impl Renderer {
         transparency.bind_textures(&device, &textures);
         Ok(Self {
             id: NEXT_RENDERER_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+            document_tabs: None,
             instance, targets: Default::default(), active: 0, next_target: 1, scene_epoch: 0,
             textures, texture_groups, textures_enabled: true, material_transparency: true,
             ao: ao::AmbientOcclusion::new(samples.clone(), &device, format),
@@ -2665,6 +2676,15 @@ impl Renderer {
     fn ui_finish_scene_photo(&mut self,key:&str,pixels:Option<scene_photo::Pixels>){
         if let Some(ui)=self.ui.as_mut(){ui.finish_scene_photo(key,pixels);}
     }
+    /// The window's documents as this renderer's chrome was last sent them
+    /// (``DocumentTabs.sync``, document_tabs.rs): one per renderer, so the
+    /// comparison is always with what it shows.
+    fn document_tabs(&mut self, py: Python<'_>) -> PyResult<Py<document_tabs::DocumentTabs>> {
+        if self.document_tabs.is_none() {
+            self.document_tabs = Some(Py::new(py, document_tabs::DocumentTabs::default())?);
+        }
+        Ok(self.document_tabs.as_ref().unwrap().clone_ref(py))
+    }
     fn ui_set_projects(&mut self, left: f32, docs: Vec<(String, bool, bool)>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_projects(left, docs); }
     }
@@ -3249,6 +3269,9 @@ fn context_targets(hit: bool, selection: &Bound<'_, PyAny>) -> PyResult<Vec<Py<P
 
 #[pymodule]
 pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    document_bindings::register(m)?;
+    document_registration::register(m)?;
+    document_camera::register(m)?;
     document_input::register(m)?;
     document_chunks::register(m)?;
     document_records::register(m)?;
@@ -3308,6 +3331,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(icon_art::icon_keys, m)?)?;
     m.add_function(wrap_pyfunction!(icon_art::letter_art, m)?)?;
     m.add_function(wrap_pyfunction!(icon_art::row_icon_art, m)?)?;
+    m.add_class::<document_tabs::DocumentTabs>()?;
     m.add_function(wrap_pyfunction!(billboards::billboard_stances, m)?)?;
     m.add_function(wrap_pyfunction!(billboards::billboard_worlds, m)?)?;
     m.add_function(wrap_pyfunction!(billboards::sprite_mapping, m)?)?;
@@ -3397,6 +3421,8 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<units_start::UnitsDraft>()?;
     m.add_class::<preferences::PreferencesView>()?;
     m.add_class::<preferences::RestartPreferences>()?;
+    // Settings needs the preference classes above.
+    settings_host::register(m)?;
     m.add_class::<preferences::PreferencePage>()?;
     m.add_function(wrap_pyfunction!(preferences::edit_ai_connection, m)?)?;
     m.add_class::<preferences::DevicePreferences>()?;
@@ -3429,7 +3455,10 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(shortcut_text::shortcut_text, m)?)?;
     m.add_function(wrap_pyfunction!(shortcut_text::shortcut_alternatives, m)?)?;
     m.add_class::<SceneUpload>()?;
-    m.add_class::<Renderer>()
+    m.add_class::<Renderer>()?;
+    // The Library needs library_view's functions and the sheet host above.
+    library_host::register(m)?;
+    start_host::register(m)
 }
 #[cfg(test)]
 mod tests {

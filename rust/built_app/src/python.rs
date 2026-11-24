@@ -208,7 +208,7 @@ impl Host {
         Python::attach(|py| {
             let result = (|| -> PyResult<()> {
                 let win = self.obj.bind(py).getattr("window")?;
-                let env = py.import("views.settings_sheet")?.getattr("Env")?.call1((win,))?;
+                let env = py.import("ingetrazo_render.settings_sheet")?.getattr("Env")?.call1((win,))?;
                 let render = py.import("ingetrazo_render")?;
                 let levels: Vec<u32> = render.call_method1("msaa_levels", (&env,))?.extract()?;
                 if levels.contains(&count) {

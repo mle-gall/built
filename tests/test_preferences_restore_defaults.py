@@ -127,7 +127,7 @@ def test_cancel_after_restore_touches_nothing(native_host):
 
 def test_restore_does_not_copy_the_document_units_to_new_documents(native_host):
     from core import units
-    from views.settings_sheet import SettingsSheet
+    from ingetrazo_render.settings_sheet import SettingsSheet
 
     win = native_host.window
     units.apply_units(win.viewport.scene, {"length": "ft", "precision": 2})

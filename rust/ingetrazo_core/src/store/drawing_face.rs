@@ -10,6 +10,33 @@ type Ring = Vec<P>;
 fn side(a: XY, b: XY, p: XY) -> f64 {
     (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0])
 }
+#[pyo3::pyfunction]
+pub(crate) fn loops_cross(a: Vec<XY>, b: Vec<XY>) -> bool {
+    for axis in 0..2 {
+        let span = |r: &[XY]| {
+            r.iter()
+                .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), p| {
+                    (lo.min(p[axis]), hi.max(p[axis]))
+                })
+        };
+        let (al, ah) = span(&a);
+        let (bl, bh) = span(&b);
+        if al > bh + 1e-9 || bl > ah + 1e-9 {
+            return false;
+        }
+    }
+    proper_cross(&a, &b)
+}
+
+fn proper_cross(a: &[XY], b: &[XY]) -> bool {
+    let opposite = |x: f64, y: f64| (x > 1e-12 && y < -1e-12) || (x < -1e-12 && y > 1e-12);
+    segments(a).any(|(&p, &q)| {
+        segments(b).any(|(&u, &v)| {
+            opposite(side(p, q, u), side(p, q, v)) && opposite(side(u, v, p), side(u, v, q))
+        })
+    })
+}
+
 fn segments<T>(ring: &[T]) -> impl Iterator<Item = (&T, &T)> {
     ring.iter().zip(ring.iter().cycle().skip(1))
 }
@@ -87,6 +114,8 @@ pub struct Outline {
     axes: (V3, V3),
     h: Hypot,
 }
+fn xy_bits(xy: XY) -> [u64;2] { xy.map(|x| if x == 0. { 0 } else { x.to_bits() }) }
+
 impl Store {
     pub fn outline(&self, f: u32, h: Hypot) -> Outline {
         let normal = self.face_normal(f, h);
@@ -140,14 +169,7 @@ impl Outline {
                 {
                     return false;
                 }
-                let opposite =
-                    |x: f64, y: f64| (x > 1e-12 && y < -1e-12) || (x < -1e-12 && y > 1e-12);
-                if segments(&h).any(|(&a, &b)| {
-                    segments(&poly).any(|(&c, &d)| {
-                        opposite(side(a, b, c), side(a, b, d))
-                            && opposite(side(c, d, a), side(c, d, b))
-                    })
-                }) {
+                if proper_cross(&h, &poly) {
                     return false;
                 }
             }
@@ -709,21 +731,79 @@ impl Outline {
 
     /// A normal shared-rim union has one positive loop. The reference tracer
     /// resolves ambiguous angular ties and classifies multi-loop arrangements.
-    fn joined_hole(&self, hole: Ring, drawn: Ring) -> Option<Ring> {
+    fn project_join(
+        &self,
+        hole: Ring,
+        drawn: Ring,
+    ) -> (
+        Vec<super::cap_outline::Region>,
+        std::collections::HashMap<[u64; 2], P>,
+    ) {
         use std::collections::HashMap;
         let mut back = HashMap::new();
-        let bits = |xy: XY| xy.map(|x| if x == 0. { 0 } else { x.to_bits() });
-        let area = |r: &[XY]| segments(r).map(|(a,b)| a[0]*b[1] - b[0]*a[1]).sum::<f64>() * 0.5;
-        let regions = [hole, drawn].into_iter().map(|r| {
-            let mut xy = self.polygon(&r);
-            back.extend(xy.iter().zip(r).map(|(&q,p)| (bits(q),p)));
-            if area(&xy) < 0. { xy.reverse(); }
-            (xy, vec![])
-        }).collect();
-        let loops = super::cap_outline::trace(regions, &[], 1e-4)?;
-        if loops.len() != 1 || area(&loops[0]) <= 1e-4 { return None; }
-        loops[0].iter().map(|&q| back.get(&bits(q)).copied()).collect()
+
+        let area = |r: &[XY]| {
+            segments(r)
+                .map(|(a, b)| a[0] * b[1] - b[0] * a[1])
+                .sum::<f64>()
+                * 0.5
+        };
+        let regions = [hole, drawn]
+            .into_iter()
+            .map(|r| {
+                let mut xy = self.polygon(&r);
+                back.extend(xy.iter().zip(r).map(|(&q, p)| (xy_bits(q), p)));
+                if area(&xy) < 0. {
+                    xy.reverse();
+                }
+                (xy, vec![])
+            })
+            .collect();
+        (regions, back)
     }
+
+    fn joined_hole(&self, hole: Ring, drawn: Ring) -> Option<Ring> {
+        let (regions, back) = self.project_join(hole, drawn);
+        let loops = super::cap_outline::trace(regions, &[], 1e-4)?;
+        if loops.len() != 1 || super::planar::area(&loops[0]) <= 1e-4 {
+            return None;
+        }
+        loops[0]
+            .iter()
+            .map(|&q| back.get(&xy_bits(q)).copied())
+            .collect()
+    }
+
+    pub(crate) fn merged_hole(
+        &self,
+        py: pyo3::Python<'_>,
+        ring: &[P],
+    ) -> pyo3::PyResult<Option<(usize, Ring)>> {
+        use super::{
+            cap_outline::{trace_ordered, Ties},
+            planar::{nesting, Metrics, TOL},
+        };
+        let Some((i, h, r)) = self.shared_hole(ring) else {
+            return Ok(None);
+        };
+        let (regions, back) = self.project_join(h, r);
+        let loops = trace_ordered(regions, &[], TOL, Ties::Python(py))?
+            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("non-finite plane outline"))?;
+        let faces = nesting(&Metrics::new(py)?, &loops, false)?;
+        let [(outer, holes)] = faces.as_slice() else {
+            return Ok(None);
+        };
+        if !holes.is_empty() {
+            return Ok(None);
+        }
+        Ok(loops[*outer]
+            .iter()
+            .map(|&q| back.get(&xy_bits(q)).copied())
+            .collect::<Option<Vec<_>>>()
+            .map(|ring| (i, ring)))
+    }
+
+
 }
 
 impl Store {

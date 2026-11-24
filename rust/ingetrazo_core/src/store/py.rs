@@ -522,6 +522,14 @@ fn rows3<'py, T: numpy::Element + Copy>(py: Python<'py>, rows: &[[T; 3]]) -> Bou
 
 #[pymethods]
 impl PyMeshStore {
+    #[staticmethod]
+    #[pyo3(signature = (mesh, namespace, scale=10_000.0, tol2=1e-8, fused=false))]
+    fn _from_objects<'py>(mesh: &Bound<'py, PyAny>, namespace: u64, scale: f64, tol2: f64, fused: bool)
+        -> PyResult<(Self, Bound<'py, PyDict>, Bound<'py, PyDict>)> {
+        let (store, own, views) = super::from_objects::read(mesh, namespace, Weld { scale, tol2, fused })?;
+        Ok((Self::wrap(store), own, views))
+    }
+
     /// An empty store in key namespace `namespace` (`next(_KEY_NAMESPACES)`).
     #[new]
     #[pyo3(signature = (namespace, scale = 10_000.0, tol2 = 1e-8, fused = false))]
@@ -847,6 +855,13 @@ impl PyMeshStore {
         let store = &self.inner;
         let face = slot_of(store, Kind::Face, key)?;
         Ok(store.face_triangles(face, normal, crate::hypot_of(hypot)?))
+    }
+
+    #[pyo3(signature=(key, xform=None))]
+    fn curve_centers(&self, py: Python<'_>, key: u128, xform: Option<&Bound<'_, PyAny>>)
+        -> PyResult<crate::snap_boundary::Centers> {
+        let f = live_of(&self.inner, Kind::Face, key)?;
+        crate::snap_boundary::store_centers(py, &self.inner, f, xform)
     }
 
     fn face_positions(&self, key: u128) -> PyResult<Vec<Vec<(f64, f64, f64)>>> {
@@ -1332,6 +1347,11 @@ impl PyMeshStore {
             .collect()
     }
 
+    fn resplit_curves(&mut self, mut next_id: i64) -> i64 {
+        self.inner.resplit_curves(&mut next_id, super::geometry::Hypot::LibStdCxx);
+        next_id
+    }
+
     fn refine_ring(
         &self,
         ring: Vec<[f64; 3]>,
@@ -1350,6 +1370,28 @@ impl PyMeshStore {
     fn carve_face(&self, face: u128, ring: Vec<[f64; 3]>, hypot: &str) -> PyResult<Option<Vec<Vec<[f64; 3]>>>> {
         let f = live_of(&self.inner, Kind::Face, face)?;
         Ok(self.inner.outline(f, crate::hypot_of(hypot)?).carve(&ring))
+    }
+
+    fn merged_hole(
+        &self,
+        py: Python<'_>,
+        key: u128,
+        ring: Vec<[f64; 3]>,
+        hypot: &str,
+    ) -> PyResult<Option<(usize, Vec<crate::math::Vec3>)>> {
+        let f = live_of(&self.inner, Kind::Face, key)?;
+        Ok(self
+            .inner
+            .outline(f, crate::hypot_of(hypot)?)
+            .merged_hole(py, &ring)?
+            .map(|(i, ring)| {
+                (
+                    i,
+                    ring.into_iter()
+                        .map(|p| glam::DVec3::from_array(p).into())
+                        .collect(),
+                )
+            }))
     }
 
     fn shared_hole(
@@ -2747,6 +2789,161 @@ impl PyMeshStore {
             Ok(f)
         })?;
         Ok((self.inner.key(Kind::Face, face), change))
+    }
+
+    #[staticmethod]
+    #[pyo3(signature=(namespace, pos, scale=10_000., tol2=1e-8, fused=false))]
+    fn _bulk_points<'py>(
+        py: Python<'py>,
+        namespace: u64,
+        pos: PointArray<'py>,
+        scale: f64,
+        tol2: f64,
+        fused: bool,
+    ) -> PyResult<(Self, Bound<'py, PyArray1<i64>>)> {
+        let pos = match &pos {
+            PointArray::Single(p) => BlockPoints::Single(triples(p)?),
+            PointArray::Double(p) => BlockPoints::Double(triples(p)?),
+        };
+        let block = Block {
+            pos,
+            ..Block::default()
+        };
+        let (store, indices) = py
+            .detach(|| Store::from_block_indices(namespace, &block, Weld { scale, tol2, fused }))
+            .map_err(PyValueError::new_err)?;
+        Ok((Self::wrap(store), indices.into_pyarray(py)))
+    }
+
+    /// Validate every input before installing the next prefix of keys.
+    #[pyo3(signature=(ia,ib,flags=None))]
+    fn _bulk_edges(
+        &mut self,
+        py: Python<'_>,
+        ia: PyReadonlyArray1<'_, i64>,
+        ib: PyReadonlyArray1<'_, i64>,
+        flags: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<bool> {
+        let ia = slice(&ia, "ia")?;
+        let ib = slice(&ib, "ib")?;
+        if ia.len() != ib.len() {
+            return Err(PyValueError::new_err(
+                "edge endpoint columns differ in length",
+            ));
+        }
+        let n = ia.len();
+        let nv = self.inner.state.vpos.len() as i64;
+        let index = |i: i64| if i < 0 { i + nv } else { i };
+        let edges: Vec<_> = ia
+            .iter()
+            .zip(ib)
+            .map(|(&a, &b)| [index(a), index(b)])
+            .collect();
+        let mut bits = vec![0; n];
+        let mut curves = vec![-1; n];
+        let mut layers = vec![-1; n];
+        let mut names = Vec::new();
+        let mut by_name = std::collections::HashMap::new();
+        if let Some(rows) = flags {
+            for (i, row) in rows.try_iter()?.enumerate() {
+                if i >= n {
+                    return Err(pyo3::exceptions::PyIndexError::new_err(i));
+                }
+                let row = row?;
+                let len = row.len()?;
+                let soft = row.get_item(0)?.is_truthy()?;
+                let curve = row.get_item(1)?;
+                let layer = row.get_item(2)?;
+                bits[i] = u8::from(soft);
+                if len > 3 && row.get_item(3)?.is_truthy()? {
+                    bits[i] |= super::HIDDEN;
+                }
+                if len > 4 && row.get_item(4)?.is_truthy()? {
+                    bits[i] |= super::FLAT;
+                }
+                if !curve.is_none() {
+                    curves[i] = py
+                        .get_type::<pyo3::types::PyInt>()
+                        .call1((curve,))?
+                        .extract()?;
+                }
+                if !layer.is_none() {
+                    let Ok(name) = layer.extract::<String>() else {
+                        return Ok(false);
+                    };
+                    let id = *by_name.entry(name.clone()).or_insert_with(|| {
+                        let id = names.len() as i64;
+                        names.push(name);
+                        id
+                    });
+                    layers[i] = id;
+                }
+            }
+        }
+        let block = Block {
+            edges: &edges,
+            flags: Some(&bits),
+            curves: Some(&curves),
+            layers: Some(&layers),
+            layer_names: names,
+            ..Block::default()
+        };
+        let store = py
+            .detach(|| self.inner.staged_block(&block))
+            .map_err(PyValueError::new_err)?;
+        self._extend_bulk(&Self::wrap(store))?;
+        Ok(true)
+    }
+
+    #[pyo3(signature=(rings,sizes,counts,attrs=None))]
+    fn _bulk_faces(
+        &mut self,
+        py: Python<'_>,
+        rings: PyReadonlyArray1<'_, i64>,
+        sizes: PyReadonlyArray1<'_, i64>,
+        counts: PyReadonlyArray1<'_, i64>,
+        attrs: Option<Vec<i64>>,
+    ) -> PyResult<()> {
+        let rings = slice(&rings, "rings")?;
+        let sizes = slice(&sizes, "sizes")?;
+        let counts = slice(&counts, "counts")?;
+        let state = &self.inner.state;
+        let store = py
+            .detach(|| {
+                let nv = state.vpos.len() as i64;
+                let rings: Vec<_> = rings
+                    .iter()
+                    .map(|&i| if i < 0 { i + nv } else { i })
+                    .collect();
+                let edges: Vec<_> = state.ends.iter().map(|ends| ends.map(i64::from)).collect();
+                let flags = state.eflags.to_vec();
+                let curves = state.ecurve.to_vec();
+                let layers: Vec<_> = state
+                    .elayer
+                    .iter()
+                    .map(|&i| {
+                        if i == super::keys::NONE {
+                            -1
+                        } else {
+                            i64::from(i)
+                        }
+                    })
+                    .collect();
+                self.inner.staged_block(&Block {
+                    edges: &edges,
+                    flags: Some(&flags),
+                    curves: Some(&curves),
+                    layers: Some(&layers),
+                    layer_names: state.layers.as_ref().clone(),
+                    rings: &rings,
+                    sizes,
+                    counts,
+                    face_attr: attrs.as_deref(),
+                    ..Block::default()
+                })
+            })
+            .map_err(PyValueError::new_err)?;
+        self._extend_bulk(&Self::wrap(store))
     }
 
     /// Internal to the staged block builder. Columns for the next stage

@@ -290,3 +290,43 @@ def test_merge_puts_back_the_same_merged_group_on_redo():
     assert list(scene.groups) == parts
     h.redo()
     assert list(scene.groups) == [merged]
+
+
+# ---- mesh steps
+
+def _square(mesh, x=0.0):
+    from ingetrazo_core import Vec3
+    return mesh.add_face([Vec3(x, 0, 0), Vec3(x + 1, 0, 0), Vec3(x + 1, 1, 0), Vec3(x, 1, 0)])
+
+
+def test_make_group_is_a_native_mesh_step_with_one_group_across_redo():
+    from core.history import MakeGroupCommand, MeshCommand
+    scene = Scene()
+    h = History(scene)
+    face = _square(scene.mesh)
+    step = MakeGroupCommand([face], list(scene.mesh.edges))
+    assert isinstance(step, MeshCommand) and step.group is None
+    assert step.geometry_meshes(scene) == (scene.mesh,)
+    h.execute(step)
+    group = step.group
+    assert list(scene.groups) == [group] and not scene.mesh.faces
+    h.undo()
+    assert list(scene.groups) == [] and len(scene.mesh.faces) == 1
+    h.redo()
+    assert list(scene.groups) == [group] and not scene.mesh.faces
+
+
+def test_nested_group_and_component_of_hold_the_groups():
+    from core.history import MakeComponentOfCommand, MakeNestedGroupCommand
+    scene = Scene()
+    h = History(scene)
+    a, b = Group(Mesh(), name="a"), Group(Mesh(), name="b")
+    scene.groups.extend([a, b])
+    h.execute(MakeNestedGroupCommand([], [], [a, b], name="both"))
+    box = h.undo_stack[-1].container
+    assert list(scene.groups) == [box] and list(box.children) == [a, b]
+    h.undo()
+    assert list(scene.groups) == [a, b]
+    h.execute(MakeComponentOfCommand([], [], [a, b]))
+    comp = h.undo_stack[-1].container
+    assert comp.component and list(scene.groups) == [comp]

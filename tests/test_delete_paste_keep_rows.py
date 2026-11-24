@@ -12,15 +12,8 @@ answer here is compared with one made afresh."""
 from __future__ import annotations
 
 import math
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
-from PySide6.QtWidgets import QApplication  # noqa: E402
-
-_app = QApplication.instance() or QApplication([])
 
 
 def _prisma(n=12, r=1.0, h=2.0):
@@ -85,11 +78,6 @@ def _scene(win):
     sc.groups += gs[:4] + [plain[0], box, plain[1], glass] + gs[4:] + plain[2:]
     sc.version += 1
     return vp, gs, box, plain, glass
-
-
-def _close(win):
-    win._saved_version = win.viewport.scene.version
-    win.close()
 
 
 def _fresh(vp, fn, *names):
@@ -211,115 +199,67 @@ def test_a_rename_between_two_deletes_makes_the_rows_read_again(native_host):
     assert all("i:" + g.uid not in names for g in groups[2:4])
 
 
-def test_the_materials_panel_reads_only_the_meshes_that_came():
+def test_the_library_reads_only_new_or_repainted_meshes(native_host, monkeypatch):
+    from core import geometry_arrays
     from core.group import copy_group
-    from core.history import (DeleteGroupCommand, InsertGroupCommand,
-                              SetFaceColorCommand)
-    from views.main_window import MainWindow
-    import core.mesh as cm
-    win = MainWindow()
-    try:
-        vp, gs, box, plain, glass = _scene(win)
-        panel = win.tray.materials
+    from core.history import DeleteGroupCommand, InsertGroupCommand, SetFaceColorCommand
+    from ingetrazo_render import wgpu_library as lib
 
-        def colours():
-            panel.refresh_in_model()
-            return sorted(tuple(round(c, 3) for c in color)
-                          for _key, color, _name in panel._swatch_sig[0])
+    win = native_host.window
+    vp, _, _, plain, _ = _scene(win)
+    ctx = lib.Ctx(win, win.view)
+    provider = lib.MaterialsProvider()
+    read = []
+    scan = geometry_arrays.face_attributes
 
-        read = []
-        real = cm.face_attrs
+    def spy(mesh):
+        read.append(id(mesh))
+        return scan(mesh)
 
-        def spy(mesh):
-            read.append(id(mesh))
-            return real(mesh)
-        import views.tray as tray_mod  # noqa: F401
-        cm.face_attrs = spy
-        try:
-            start = colours()
-            assert (0.2, 0.4, 0.8) in start
-            read.clear()
-            vp.history.execute(DeleteGroupCommand(plain[1]))
-            got = colours()
-            assert (0.2, 0.4, 0.8) not in got           # nothing wears it
-            assert not read                             # no mesh read again
-            vp.history.undo()
-            assert colours() == start
-            assert read == [id(plain[1].mesh)]          # back: read again
-            read.clear()
-            pasted = copy_group(plain[2], V(0.0, 30.0, 0.0))
-            vp.history.execute(InsertGroupCommand(pasted))
-            assert colours() == start
-            assert read == [id(pasted.mesh)]            # the new one only
-            # A keyed paint invalidates only the mesh that owns the faces.
-            read.clear()
-            vp.history.execute(SetFaceColorCommand(
-                list(plain[0].mesh.faces), (0.9, 0.1, 0.1)))
-            assert (0.9, 0.1, 0.1) in colours()
-            if getattr(plain[0].mesh, "_store", None) is not None:
-                assert read == [id(plain[0].mesh)]
-            else:
-                assert len(read) > 1
-        finally:
-            cm.face_attrs = real
-    finally:
-        _close(win)
+    monkeypatch.setattr(geometry_arrays, "face_attributes", spy)
+    def colours():
+        return {row["name"] for row in provider._model_items(ctx)}
+
+    start = colours()
+    assert "#3366CC" in start
+    read.clear()
+    vp.history.execute(DeleteGroupCommand(plain[1]))
+    assert "#3366CC" not in colours() and not read
+    vp.history.undo()
+    assert colours() == start and read == [id(plain[1].mesh)]
+    read.clear()
+    pasted = copy_group(plain[2], V(0, 30, 0))
+    vp.history.execute(InsertGroupCommand(pasted))
+    assert colours() == start and read == [id(pasted.mesh)]
+    read.clear()
+    vp.history.execute(SetFaceColorCommand(list(plain[0].mesh.faces), (0.9, 0.1, 0.1)))
+    assert "#E61A1A" in colours()
+    if getattr(plain[0].mesh, "_store", None) is not None:
+        assert read == [id(plain[0].mesh)]
+    else:
+        assert len(read) > 1
 
 
-def test_unchanged_swatches_are_kept_and_the_components_list_too():
+def test_unchanged_swatches_and_component_rows_keep_their_keys(native_host):
     from core.history import DeleteGroupCommand
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp, gs, box, plain, glass = _scene(win)
-        mats = win.tray.materials
-        mats.refresh_in_model()
-        buttons = [mats._in_model_grid.itemAt(i).widget()
-                   for i in range(mats._in_model_grid.count())]
-        comps = win.tray.components
-        comps.refresh_in_model()
-        lst = comps._in_model
-        items = [lst.item(i) for i in range(lst.count())]
-        # A copy of the 7-sided prism: the list keeps its order (the
-        # rows go by copies, then by name).
-        vp.history.execute(DeleteGroupCommand(gs[5]))
-        mats.refresh_in_model()
-        assert [mats._in_model_grid.itemAt(i).widget()
-                for i in range(mats._in_model_grid.count())] == buttons
-        comps.refresh_in_model()
-        assert [lst.item(i) for i in range(lst.count())] == items
-        n = sum(1 for g in vp.scene.groups if g.mesh is gs[1].mesh) + 1
-        row = next(it for it in items
-                   if (it.data(0x0100) or [None])[0] is not None
-                   and it.data(0x0100)[0].mesh is gs[1].mesh)
-        assert f"({n}×" in row.text()                  # the box counts too
-    finally:
-        _close(win)
+    from ingetrazo_render import wgpu_library as lib
 
-
-def test_the_flow_layout_answers_a_new_width_and_a_new_item():
-    from PySide6.QtWidgets import QPushButton, QWidget
-    from views.tray import FlowLayout
-    host = QWidget()
-    lay = FlowLayout(host)
-    for _ in range(6):
-        b = QPushButton("x")
-        b.setFixedSize(40, 30)
-        lay.addWidget(b)
-    h1 = lay.heightForWidth(100)
-    assert lay.heightForWidth(100) == h1
-    assert lay.heightForWidth(400) < h1
-    b = QPushButton("y")
-    b.setFixedSize(40, 30)
-    lay.addWidget(b)
-    assert lay.heightForWidth(400) == lay._do_layout(
-        type(lay.geometry())(0, 0, 400, 0), test_only=True)
-    h2 = lay.heightForWidth(100)
-    # A button that grows tells its layout so (Qt invalidates it): the
-    # height asked next is the new one.
-    for i in range(7):
-        lay.itemAt(i).widget().setFixedSize(40, 90)
-    assert lay.heightForWidth(100) > h2
+    win = native_host.window
+    vp, gs, _, _, _ = _scene(win)
+    ctx = lib.Ctx(win, win.view)
+    def rows():
+        materials = [row["key"] for row in lib.MaterialsProvider()._model_items(ctx)]
+        components = {row["key"]: row["uses"] for row in lib.ComponentsProvider().items(ctx)
+                      if row["source"] == "model"}
+        return materials, components
+    mats, initial = rows()
+    vp.history.execute(DeleteGroupCommand(gs[5]))
+    after_mats, after = rows()
+    assert after_mats == mats
+    assert list(after) == list(initial)
+    assert sum(initial.values()) == sum(after.values()) + 1
+    family = next(row for row in lib.ComponentsProvider()._model(ctx) if row[2] and row[2][0].mesh is gs[1].mesh)
+    assert len(family[2]) == 1 + sum(g.mesh is gs[1].mesh for g in vp.scene.groups)
 
 
 def test_only_groups_only_commands_carry_the_groups_mark_forward(native_host):

@@ -4,6 +4,44 @@ use pyo3::{prelude::*, types::PyDict};
 use serde_json::{json, Value};
 use std::path::Path;
 
+/// Older files may store a named paint only on a container. Browsing it
+/// must not add a registry entry or an undo step.
+pub(crate) fn container_swatch<'py>(
+    attrs: &Bound<'py, PyDict>,
+    name: &str,
+    uses: usize,
+) -> PyResult<Bound<'py, PyDict>> {
+    let py = attrs.py();
+    let recipe = attrs.copy()?;
+    recipe.set_item("name", name)?;
+    let color = recipe
+        .get_item("color")?
+        .and_then(|v| v.extract::<[f64; 3]>().ok());
+    let hex = color
+        .map(|rgb| {
+            let [r, g, b] = rgb.map(|v| (v.clamp(0., 1.) * 255.) as u8);
+            format!("#{r:02x}{g:02x}{b:02x}")
+        })
+        .unwrap_or_default();
+    let path = recipe
+        .get_item("texture")?
+        .and_then(|tex| tex.get_item("path").ok())
+        .and_then(|v| v.extract::<String>().ok())
+        .filter(|s| !s.is_empty());
+    let row = PyDict::new(py);
+    row.set_item("key", format!("worn:{name}"))?;
+    row.set_item("source", "model")?;
+    row.set_item("category", "")?;
+    row.set_item("base", if path.is_some() { "image" } else { "colour" })?;
+    row.set_item("thumb", path)?;
+    row.set_item("hex", hex)?;
+    row.set_item("uses", uses)?;
+    row.set_item("name", name)?;
+    row.set_item("verbs", ["apply", "select"])?;
+    row.set_item("recipe", recipe)?;
+    Ok(row)
+}
+
 fn category(id: &str) -> &str {
     match id {
         "roof" => "Roofing",

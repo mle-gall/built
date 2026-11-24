@@ -163,6 +163,7 @@ pub fn read_facts(
         groups: groups.len(),
         faces: faces.len(),
         edges: edges.len(),
+        painted_group: groups.iter().any(|g| flag(g, "material")),
         components: groups.iter().filter(|g| is_component(g)).count(),
         linked_part,
         all_links: !groups.is_empty() && groups.iter().all(linked),
@@ -230,13 +231,22 @@ pub fn read_facts(
                 instances += usize::from(o?.getattr("mesh")?.is(&mesh));
             }
             f.instances = instances;
-            f.replaceable = win.call_method1("_replacement_choices", (&selection,))?.is_truthy()?;
-            f.kept = !py.import("core.kept_components")?.call_method1("kept_template", (scene, &mesh))?.is_none();
         }
         let rec = links.call_method1("link_of", (one,))?;
         if rec.is_truthy()? {
             f.file = record_file(&rec);
             f.include_nested = Some(rec.call_method1("get", ("include_nested", true))?.is_truthy()?);
+        }
+    }
+    if f.components > 0 && groups.len() == sel.len() && !f.linked_part && !f.all_links {
+        f.replaceable = win.call_method1("_replacement_choices", (&selection,))?.is_truthy()?;
+        let kept = py.import("core.kept_components")?;
+        f.kept = true;
+        for group in groups.iter().filter(|g| is_component(g)) {
+            if kept.call_method1("kept_template", (scene, group.getattr("mesh")?))?.is_none() {
+                f.kept = false;
+                break;
+            }
         }
     }
     if linked_part {
@@ -661,6 +671,22 @@ fn glue(
     let ui = || py.import("views.wgpu_ui");
     let first = || sel.first().ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("nothing selected"));
     match name {
+        "grow" => {
+            let scene = vp.getattr("scene")?;
+            let current = scene.getattr("selection")?;
+            let ops = py.import("core.select_ops")?;
+            let found = match arg {
+                "all_connected" | "bounding_edges" => ops.call_method1(arg, (current,))?,
+                "same_material" | "same_layer" | "same_definition" =>
+                    ops.call_method1(arg, (&scene, current))?,
+                _ => return Err(PyKeyError::new_err(arg.to_owned())),
+            };
+            ui()?.call_method1("_select", (win, found))?;
+            let vars = PyDict::new(py);
+            vars.set_item("n", scene.getattr("selection")?.len()?)?;
+            let msg = crate::model_edit::translated(py, "{n} entities selected", Some(&vars))?;
+            vp.call_method1("flash_status", (msg,))?;
+        }
         "selectiontag" => crate::tree_grouping::tag_visibility::viewport_tag_menu(win, PyList::new(py, sel)?.as_any())?,
         "intersect" => {
             let intersect = py.import("core.intersect")?;

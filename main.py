@@ -681,7 +681,7 @@ def main() -> int:
         app.aboutToQuit.connect(lambda: QLocalServer.removeServer(_SOCKET))
 
     # Publish the Start sheet before the first frame.
-    from views import wgpu_start
+    from ingetrazo_render import wgpu_start
     if wgpu_start.wants_at_start(bool(arg)):
         wgpu_start.show(window)
     window.show()

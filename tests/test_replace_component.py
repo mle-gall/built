@@ -210,75 +210,6 @@ def test_replacement_survives_the_igz(tmp_path):
 
 # --- the window --------------------------------------------------------------
 
-def _menu_texts(win, monkeypatch):
-    """The right-click menu's entries, submenus included, without opening
-    it (a real ``exec`` would wait for a mouse that is not there)."""
-    import views.main_window as mw
-    from PySide6.QtCore import QPoint
-    from PySide6.QtWidgets import QMenu
-    opened = []
-
-    class _NoModal(QMenu):
-        def exec(self, *_a, **_k):          # noqa: A003 - Qt's name
-            opened.append(self)
-
-    monkeypatch.setattr(mw, "QMenu", _NoModal)
-    win.show_viewport_context_menu(QPoint(0, 0))
-    menu = opened[-1]
-    # Submenus are parented to the menu (QAction.menu() is unreliable
-    # under PySide 6.11).
-    return [act.text() for m in [menu, *menu.findChildren(QMenu)]
-            for act in m.actions()]
-
-
-def test_the_menu_offers_both_and_replace_swaps_the_selection(monkeypatch):
-    from views import chrome_forms
-    from core.i18n import tr
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        scene = win.viewport.scene
-        _s, _h, sillas, mesas, classic, holder = _model(moved=True)
-        scene.groups.extend(sillas + mesas + [classic, holder])
-        scene.selection.clear()
-        scene.selection.update(sillas)
-        texts = _menu_texts(win, monkeypatch)
-        assert tr("All Instances") in texts
-        assert tr("Replace Component…") in texts
-
-        choices = win._replacement_choices(list(scene.selection))
-        assert [g.name for _lb, g in choices] == ["Mesa"]   # not its own
-        win._on_replace_component()
-        form = chrome_forms.current(win)
-        assert "3" in form.field("item").label
-        form.press("ok")
-        assert all(g.mesh is mesas[0].mesh for g in sillas)
-        win.viewport.history.undo()
-        assert all(g.name == "Silla" for g in sillas)
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
-
-
-def test_no_replace_entry_without_another_definition(monkeypatch):
-    from core.i18n import tr
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        scene = win.viewport.scene
-        silla = _component(_quad(1.0), "Silla")
-        scene.groups.extend([silla, copy_group(silla, V(4, 0, 0)),
-                             Group(_quad(2.0), name="Muro")])
-        scene.selection.clear()
-        scene.selection.add(silla)
-        texts = _menu_texts(win, monkeypatch)
-        assert tr("All Instances") in texts
-        assert tr("Replace Component…") not in texts
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
-
-
 # --- the tray's «In model» list ----------------------------------------------
 
 def _row_for(win, name, with_kept=False):
@@ -687,24 +618,6 @@ def test_no_question_while_a_copy_remains(monkeypatch):
         scene.selection.clear()
         scene.selection.update(sillas[:2])
         assert win.replace_selection_with(mesas[0]) == 2
-    finally:
-        _close(win)
-
-
-def test_keep_in_file_from_the_viewport_menu(monkeypatch):
-    from core.i18n import tr
-    win, scene, sillas, mesas = _window_with_model()
-    try:
-        scene.selection.clear()
-        scene.selection.update([sillas[0], mesas[1]])
-        assert tr("Keep in File") in _menu_texts(win, monkeypatch)
-        win.keep_selected_components(True)
-        assert sorted(t.name for t in scene.kept_components) == [
-            "Mesa", "Silla"]
-        win.keep_selected_components(False)
-        assert scene.kept_components == []
-        win.viewport.history.undo()
-        assert len(scene.kept_components) == 2
     finally:
         _close(win)
 

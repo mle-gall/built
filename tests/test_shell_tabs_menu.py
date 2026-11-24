@@ -111,12 +111,57 @@ def test_tab_strip_lists_the_projects_with_front_and_unsaved(host, tmp_path):
     view = host.view
     view.renderer = StubRenderer()
     try:
-        wgpu_tabs.before_frame(view, win)
+        wgpu_tabs.document_tabs(view).sync(view.renderer, win, 86.0)
         sent, elsewhere, can_move, pictures = view.renderer.tabs
         assert [t[1] for t in sent] == [p.name for p in paths]
         assert elsewhere == [] and can_move and pictures
     finally:
         view.renderer = None
+
+
+class OwningRenderer(StubRenderer):
+    """A stand-in that keeps its own DocumentTabs, as the renderer does."""
+
+    def __init__(self):
+        super().__init__()
+        from ingetrazo_render import DocumentTabs
+        self._document_tabs = DocumentTabs()
+        self.sent = []
+        self.projects = []
+
+    def document_tabs(self):
+        return self._document_tabs
+
+    def ui_set_project_tabs(self, tabs, elsewhere=(), can_move=False, pictures=True):
+        super().ui_set_project_tabs(tabs, elsewhere, can_move, pictures)
+        self.sent.append([t[2] for t in tabs])
+
+    def ui_set_projects(self, left, docs):
+        self.projects.append([d[1] for d in docs])
+
+
+def test_a_view_handed_the_renderer_back_resends_what_it_shows(host, tmp_path):
+    """Review finding 5: A, then B, then A again with one renderer. The
+    record of what was sent is the renderer's, so A's tabs go out again
+    although A's view sent the same ones before."""
+    from types import SimpleNamespace
+    from views import wgpu_tabs
+    paths = _copies(tmp_path, 2)
+    for p in paths:
+        assert host.open_path(p)
+    win = host.window
+    renderer = OwningRenderer()
+    assert len(win._documents) == 2
+    views = [SimpleNamespace(renderer=renderer) for _ in win._documents]
+    a, b = win._documents
+    for doc, view in ((a, views[0]), (b, views[1]), (a, views[0])):
+        win.activate_document(doc)
+        wgpu_tabs.document_tabs(view).sync(view.renderer, win, 86.0)
+    assert renderer.sent == [[True, False], [False, True], [True, False]]
+    assert renderer.projects == [[True, False], [False, True], [True, False]]
+    # Unchanged, nothing more is sent until the tips' next refresh.
+    wgpu_tabs.document_tabs(views[0]).sync(renderer, win, 86.0)
+    assert len(renderer.sent) == 3 and len(renderer.projects) == 3
 
 
 def test_tab_clicks_activate_close_and_the_tab_menu(host, tmp_path):
@@ -352,7 +397,7 @@ def test_the_menus_carry_the_expected_verbs(host, kinds):
                                  "Reverse faces | Orient faces", "Intersect: Model | Selection | Context",
                                  "Soften / Smooth edges…"]
     assert "Divide…" in rows("edges") and "Reverse faces | Orient faces" not in rows("edges")
-    assert rows("group")[:7] == ["Open for editing", "Rename…", "Hide", "Isolate", "Lock", "Zoom to | Reveal selection | Tag…", "File to…"]
+    assert rows("group")[:6] == ["Open for editing", "Rename…", "Hide | Isolate", "Lock", "Zoom to | Reveal selection | Tag…", "File to…"]
     assert "Explode | Make component…" in rows("group") and "Split into pieces" in rows("group")
     assert "Select instances | Make unique" in rows("component")
     assert "Merge groups | Explode" in rows("groups")

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""The Library on the large sheet (views/wgpu_library.py, option B with C's
+"""The Library on the large sheet (ingetrazo_render.wgpu_library, option B with C's
 palette): types as tabs, scopes and categories on the side with the linked
 files' materials read-only, 96-pt tiles, the details pane and its editor;
 the Paint strip's fast path and Browse all…; the dock's inspector editing
@@ -15,7 +15,7 @@ from ingetrazo_core import Vec3 as V
 
 from core.materials import Material
 from ingetrazo_render import chrome_sheet as cs
-from views import wgpu_library as L
+from ingetrazo_render import wgpu_library as L
 
 
 class Renderer:

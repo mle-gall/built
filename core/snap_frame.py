@@ -1,7 +1,7 @@
 """Viewport services used by the Rust inference rule engine for one mouse event."""
 import math
 
-from ingetrazo_core import Vec3 as V
+from ingetrazo_core import Vec3 as V, hidden_batch
 
 from core import snap as S
 from core.snap_query import point_result
@@ -186,10 +186,7 @@ class SnapFrame:
             return S.SnapResult(win[1], win[2], win[3])
 
     def hidden_batch(self, points):
-        vectors = [V(*p) for p in points]
-        if len(vectors) > 1 and self.are_occluded is not None:
-            return self.are_occluded(vectors)
-        return [self.is_occluded(v) for v in vectors]
+        return hidden_batch(points, self.is_occluded, self.are_occluded)
 
     def target(self, include_ends=False, skip_clipped=False, exclude=None):
         rims = [] if include_ends else [hit for _, hit, _ in self.rims]

@@ -95,10 +95,11 @@ def pictures_on() -> bool:
     return str(QSettings().value("tabs/hover_picture", "1")) != "0"
 
 
-def tabs(win) -> list:
+def tabs(win, docs=None) -> list:
     """The strip's tabs: (id, name, front, unsaved, link source, tip,
-    optional external picture key), in the window's order."""
-    docs = _docs(win)
+    optional external picture key), in the window's order. ``docs``: the
+    window's documents, when the caller already read them."""
+    docs = _docs(win) if docs is None else list(docs)
     front = getattr(win, "_doc", None)
     out = []
     for doc in docs:
@@ -125,27 +126,19 @@ def _can_move(win) -> bool:
     return windows.can_move(win)
 
 
-def before_frame(view, win) -> None:
-    """Send the tabs when they changed (cheap: names, flags, a stat per
-    saved file once a second at most)."""
-    renderer = getattr(view, "renderer", None)
-    if renderer is None or not hasattr(renderer, "ui_set_project_tabs"):
-        return
-    now = time.monotonic()
-    docs = _docs(win)
-    sig = (tuple(id(d) for d in docs), id(getattr(win, "_doc", None)),
-           tuple(_dirty(win, d) for d in docs), tuple(d.display_name() for d in docs),
-           pictures_on(),
-           tuple(_elsewhere(win)))
-    last = view.__dict__.get("_ui_ptabs_sig")
-    if last is not None and last[0] == sig and now - last[1] < 1.0:
-        return
-    data = tabs(win)
-    payload = (data, _elsewhere(win), _can_move(win), pictures_on())
-    if payload != view.__dict__.get("_ui_ptabs"):
-        renderer.ui_set_project_tabs(*payload)
-        view._ui_ptabs = payload
-    view._ui_ptabs_sig = (sig, now)
+def document_tabs(view):
+    """The renderer's record of what its document ▾ and tab strip show
+    (``ingetrazo_render.DocumentTabs``): ``.sync(renderer, win, left)``
+    sends what changed, once a frame. A stand-in renderer without one
+    (tests) leaves the record on the view."""
+    from ingetrazo_render import DocumentTabs
+    own = getattr(getattr(view, "renderer", None), "document_tabs", None)
+    state = own() if callable(own) else None
+    if not isinstance(state, DocumentTabs):
+        state = view.__dict__.get("_ui_document_tabs")
+        if state is None:
+            state = view._ui_document_tabs = DocumentTabs()
+    return state
 
 
 # ---- actions ------------------------------------------------------------------------
@@ -202,7 +195,7 @@ def action(win, view, arg) -> None:
             from ingetrazo_render import project_tab_menu
             project_tab_menu(win, what, int(index))
     if view is not None:
-        view._ui_ptabs_sig = None
+        document_tabs(view).stale()
         view.update()
 
 

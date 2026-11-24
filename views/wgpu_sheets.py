@@ -1380,7 +1380,8 @@ def frame(view):
     snapshot and frame contents, then the page and the chrome."""
     import time
     from ingetrazo_render import chrome_sheet
-    from views import wgpu_start, wgpu_ui
+    from ingetrazo_render import wgpu_start
+    from views import wgpu_ui
     ws = workspace_of(view)
     renderer = view.renderer
     start = time.perf_counter()
@@ -1391,7 +1392,8 @@ def frame(view):
         chrome_sheet.before_frame(view, win)
         if not view._ui_tools_sent and win._tool_actions:
             wgpu_ui._send_tools(view, win)
-        wgpu_ui._projects(view, win)
+        from views import wgpu_tabs
+        wgpu_tabs.document_tabs(view).sync_projects(view.renderer, win, wgpu_ui.LIGHTS_ROOM)
         wgpu_ui._tabs(view, win)
     try:
         ws.before_frame(view)

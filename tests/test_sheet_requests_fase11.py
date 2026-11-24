@@ -8,11 +8,8 @@ a deleted one's render because the caches are keyed on ``id(frame)``.
 """
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
 import pytest
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.composition import (Composicion, MarcoVista, format_scale,
@@ -98,17 +95,28 @@ def test_the_section_tool_letters_the_plane_it_places():
     assert [p.symbol for p in vp.scene.section_planes] == ["A", "B"]
 
 
-def test_the_plane_can_be_renamed_after_it_is_placed():
-    """He could not find where: the prompt only ever appeared the moment a
-    plane was placed. It is on the plane's own right-click menu now, right
-    under Reverse / Active Cut / Align View."""
-    from pathlib import Path
-    text = (Path(__file__).resolve().parents[1]
-            / "views/main_window.py").read_text(encoding="utf-8")
-    i = text.index('menu.addAction(tr("Align View")')
-    near = text[i:i + 500]
-    assert "Name and symbol" in near
-    assert "prompt_section_name" in near
+def test_the_plane_can_be_renamed_after_it_is_placed(native_host):
+    from core.history import PlaceSectionPlaneCommand
+    from core.section import SectionPlane
+    from ingetrazo_render import context_menu_build, context_menu_run
+    from views import chrome_forms
+
+    win = native_host.window
+    vp = native_host.viewport
+    plane = SectionPlane(QVector3D(0, 0, 0), QVector3D(0, 0, 1),
+                         name="Original", symbol="A")
+    vp.history.execute(PlaceSectionPlaneCommand(plane))
+    vp.scene.select([plane])
+    menu = context_menu_build(win, native_host.view)
+    assert "secname" in menu.ids()
+    assert context_menu_run(win, native_host.view, menu.kind, "secname", menu.sel, facts=menu.facts)
+    form = chrome_forms.current(win)
+    form.receive("name", "South elevation")
+    form.receive("symbol", "S")
+    form.press("ok")
+    assert (plane.name, plane.symbol) == ("South elevation", "S")
+    vp.history.undo()
+    assert (plane.name, plane.symbol) == ("Original", "A")
 
 
 # ---- 3. the N of the north arrow ----------------------------------------

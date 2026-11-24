@@ -7,7 +7,7 @@ Browser does, since the view selects inside one open group at a time."""
 from __future__ import annotations
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from views.wgpu_library import ComponentsProvider, Ctx
+from ingetrazo_render.wgpu_library import ComponentsProvider, Ctx
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core.group import Group, copy_group
