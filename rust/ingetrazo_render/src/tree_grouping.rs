@@ -1,5 +1,6 @@
 //! Document facts and commands for an occurrence's context menu.
 pub mod paint;
+pub mod row_actions;
 use super::model_edit::translated;
 use pyo3::{
     prelude::*,
@@ -268,6 +269,8 @@ pub fn tree_group_rows(
         push("component", "Make Component", None, why)?;
         push("explode", "Explode Group", None, why)?;
     }
+    push("isolaterows", "Isolate", None, "")?;
+    push("deleterows", "Delete", None, "")?;
     let comps = tree.components()?;
     if !comps.is_empty() {
         push(
@@ -289,6 +292,13 @@ pub fn tree_group_action(
     clicked: &Bound<'_, PyAny>,
     verb: &str,
 ) -> PyResult<()> {
+    if verb == "isolaterows" {
+        let scene = win.getattr("viewport")?.getattr("scene")?;
+        let tree = Occurrences::read(&scene, clicked)?;
+        let groups = PyList::new(win.py(), tree.targets.iter().map(|&i| &tree.rows[i].group))?;
+        win.py().import("views.wgpu_ui")?.call_method1("_isolate", (win, groups))?;
+        return Ok(());
+    }
     if verb == "pickrow" || verb == "roweye" {
         let vp = win.getattr("viewport")?;
         let scene = vp.getattr("scene")?;

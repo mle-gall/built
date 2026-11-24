@@ -185,7 +185,12 @@ impl Catalog {
         self.line.is_some()
     }
 
-    pub fn sync(&mut self, scene: &Bound<'_, PyAny>) -> PyResult<()> {
+    pub fn sync(
+        &mut self,
+        scene: &Bound<'_, PyAny>,
+        selected: &mut BTreeMap<String, (String, Vec<String>)>,
+        selected_folders: &mut BTreeSet<String>,
+    ) -> PyResult<()> {
         let version = scene.getattr("version")?.extract()?;
         if self.revision == Some(version) {
             return Ok(());
@@ -206,11 +211,18 @@ impl Catalog {
             .extract::<Vec<_>>()?
             .into_iter()
             .collect();
+        let mut tags = BTreeSet::new();
         for layer in scene.getattr("layers")?.try_iter()? {
-            if let Some(key) = layer?.getattr("folder")?.extract::<Option<String>>()? {
+            let layer = layer?;
+            if !selected.is_empty() {
+                tags.insert(layer.getattr("key")?.extract::<String>()?);
+            }
+            if let Some(key) = layer.getattr("folder")?.extract::<Option<String>>()? {
                 keys.insert(key);
             }
         }
+        selected.retain(|key, _| tags.contains(key));
+        selected_folders.retain(|key| keys.contains(key));
         self.folders = keys
             .iter()
             .map(|key| {

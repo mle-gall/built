@@ -21,6 +21,7 @@ from core.group import Group
 from core.layers import DEFAULT_LAYER, Layer, assign_layer
 from core.mesh import Mesh
 from core.saved_views import SavedView
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.test_drawing_records import _square
 from core.scene import Scene
 
@@ -464,7 +465,7 @@ def test_context_menu_offers_the_layer_actions(win):
     assert {"Make active", "Move the selection here", "Show all layers",
             "Select content", "Colour…", "Line type", "Line weight",
             "Transparency", "Hide in every scene", "Merge into",
-            "Move to folder", "Rename", "Delete"} <= texts
+            "Move to folder", "Rename"} <= texts
     assert "Isolate" not in texts                    # the row's target is
     merge = next(a.menu() for a in menu.actions() if a.text() == "Merge into")
     next(a for a in merge.actions() if a.text() == "B").trigger()
@@ -613,25 +614,15 @@ def test_a_new_row_opens_its_name_without_a_half_lit_highlight(win):
     assert win.viewport.scene.layer(inner).folder == made
 
 
-def test_the_delete_key_deletes_the_current_row(win, monkeypatch):
-    from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QMessageBox
-    monkeypatch.setattr(QMessageBox, "question",
-                        lambda *a, **k: QMessageBox.Yes)
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
+def test_the_delete_key_deletes_the_current_row(native_host):
+    from tests.native_tree import action
+    scene = native_host.viewport.scene
     scene.layers += [Layer("A"), Layer("B")]
-    panel.refresh()
-    panel.tree.setCurrentItem(panel.item_for("A"))
-    QTest.keyClick(panel.tree, Qt.Key_Delete)
-    _app.processEvents()
+    action(native_host, "deletetag", "preview-tag:A")
     assert scene.layer("A") is None and scene.layer("B") is not None
-    win.viewport.history.undo()                      # one undo step
-    assert scene.layer("A") is not None
-    panel.refresh()
-    panel.tree.setCurrentItem(panel.item_for(DEFAULT_LAYER))
-    QTest.keyClick(panel.tree, Qt.Key_Delete)        # the default stays
-    assert scene.layer(DEFAULT_LAYER) is not None
+    assert native_host.viewport.history.undo() and scene.layer("A") is not None
+    action(native_host, "deletetag", "preview-tag:" + DEFAULT_LAYER)
+    assert scene.layer(DEFAULT_LAYER) is not None and not native_host.viewport.history.undo_stack
 
 
 def test_leaving_a_new_name_for_the_model_leaves_nothing_selected(win):

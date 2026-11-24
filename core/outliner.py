@@ -97,16 +97,6 @@ def layer_name(group) -> str:
     return layer_of(group)
 
 
-def layer_rank(scene) -> dict:
-    """``{layer name: place}`` in the order the Layers tab lists them: the
-    default layer first, then each folder's layers together, in the order
-    the folders and the layers were made. A name no layer answers to (a
-    label left on an object after its layer went) sorts after every one of
-    them."""
-    from core.layers import ordered_names
-    return {name: i for i, name in enumerate(ordered_names(scene))}
-
-
 def natural_key(text: str) -> tuple:
     """Sort key that reads the numbers in a name as numbers: «Capa 2»
     before «Capa 10», «Planta 9» before «Planta 12»."""
@@ -114,94 +104,6 @@ def natural_key(text: str) -> tuple:
     return tuple((0, int(part), "") if part.isdigit() else (1, 0, part)
                  for part in re.split(r"(\d+)", (text or "").casefold())
                  if part)
-
-
-def layer_outline(scene) -> list:
-    """``(kind, name, depth)`` of the Layers tab's rows — ``kind``
-    ``"folder"`` or ``"layer"`` — as it lists them with «Sort by order
-    created», every folder unfolded: the default layer first, then the
-    folders and the layers out of one, each folder followed by what it
-    holds (its subfolders first). What the Browser's layer headings
-    follow when no Layers tab tells it its own order."""
-    from core import layers as L
-    layers = list(getattr(scene, "layers", None) or ())
-    folders = L.folders_of(scene)
-    held: dict = {}
-    for ly in layers:
-        if ly.key != L.DEFAULT_LAYER:
-            held.setdefault(ly.folder, []).append(ly.key)
-    below: dict = {}
-    for f in folders:
-        below.setdefault(L.folder_parent(scene, f), []).append(f)
-
-    out = []
-
-    def block(folder, depth) -> None:
-        for f in below.get(folder, ()):
-            out.append(("folder", f, depth))
-            block(f, depth + 1)
-        out.extend(("layer", n, depth) for n in held.get(folder, ()))
-
-    if any(ly.key == L.DEFAULT_LAYER for ly in layers):
-        out.append(("layer", L.DEFAULT_LAYER, 0))
-    block(None, 0)
-    return out
-
-
-def outline_rank(outline) -> dict:
-    """``{layer name: place}`` from a :func:`layer_outline`-like list."""
-    rank: dict = {}
-    for kind, name, _depth in outline:
-        if kind == "layer" and name not in rank:
-            rank[name] = len(rank)
-    return rank
-
-
-def layer_headings(outline, used) -> list:
-    """The headings the Browser shows ordering by layer: ``(kind, name,
-    parent)`` in ``outline``'s order — every layer in ``used`` and the
-    folders on the way to one, ``parent`` the heading's folder (``None`` at
-    the top). A layer in ``used`` the outline does not list (a label left
-    on an object after its layer went) comes last, at the top."""
-    used = set(used)
-    chain: list = []                 # the folders around the current row
-    rows = []
-    for kind, name, depth in outline:
-        del chain[depth:]
-        if kind == "folder":
-            rows.append(("folder", name, chain[-1] if chain else None,
-                         tuple(chain)))
-            chain.append(name)
-        else:
-            rows.append(("layer", name, chain[-1] if chain else None,
-                         tuple(chain)))
-    needed = set()
-    listed = set()
-    for kind, name, _parent, around in rows:
-        if kind == "layer" and name in used:
-            listed.add(name)
-            needed.add(("layer", name))
-            needed.update(("folder", f) for f in around)
-    out = [(kind, name, parent) for kind, name, parent, _a in rows
-           if (kind, name) in needed]
-    out.extend(("layer", n, None) for n in sorted(used - listed))
-    return out
-
-
-def walk_by_layer(groups, rank) -> list:
-    """``(group, parent, depth)`` as :func:`walk`, each container's children
-    in ``rank``'s order (``{layer name: place}``), and the rest as the
-    document holds them. Siblings only: a group stays inside its parent.
-    The model is not touched — this is a way of reading it."""
-    def container(items, parent, depth):
-        out = []
-        for g in sorted(items,
-                        key=lambda g: rank.get(layer_name(g), len(rank))):
-            out.append((g, parent, depth))
-            out.extend(container(getattr(g, "children", None) or (),
-                                 g, depth + 1))
-        return out
-    return container(list(groups), None, 0)
 
 
 def text_matches(text, query: str) -> bool:

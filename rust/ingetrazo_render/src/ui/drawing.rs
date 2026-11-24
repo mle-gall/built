@@ -6,46 +6,44 @@ use super::{kit, parse_hex, Node, SWATCH_FALLBACK};
 /// the sort applied to the visible rows. A drop onto a tag uses its folder.
 pub(super) struct DrawingDrag {
     owner: usize,
-    verb: &'static str,
     tags: Vec<String>,
-    folder: String,
+    folders: Vec<String>,
 }
 
 impl DrawingDrag {
     pub fn begin(styles: &StyleEditor, row: &Node) -> Option<Self> {
-        let (verb, tags, folder) = if let Some(tag) = row.key.strip_prefix("preview-tag:") {
-            if tag == "Layer 0" {
-                return None;
-            }
-            let tags = if styles.selected(row) {
+        if row.key == "preview-tag:Layer 0" {
+            return None;
+        }
+        let (tags, folders) = if styles.selected(row) {
+            (
                 styles
                     .selected
                     .keys()
                     .filter(|k| *k != "Layer 0")
                     .cloned()
-                    .collect()
-            } else {
-                vec![tag.to_owned()]
-            };
-            ("file", tags, String::new())
-        } else {
-            (
-                "move",
-                Vec::new(),
-                row.key.strip_prefix("preview-folder:")?.to_owned(),
+                    .collect(),
+                styles.selected_folders.iter().cloned().collect(),
             )
+        } else if let Some(key) = row.key.strip_prefix("preview-folder:") {
+            (vec![], vec![key.to_owned()])
+        } else {
+            let tag = row.key.strip_prefix("preview-tag:")?;
+            (vec![tag.to_owned()], vec![])
         };
+        if tags.is_empty() && folders.is_empty() {
+            return None;
+        }
         Some(Self {
             owner: styles.owner,
-            verb,
             tags,
-            folder,
+            folders,
         })
     }
 
-    fn action(&self, folder: &str) -> String {
-        let data = serde_json::json!({"parent": folder, "folder": self.folder, "tags": self.tags});
-        format!("tagfolder\u{1f}{}\u{1f}{data}", self.verb)
+    fn action(&self, parent: &str) -> String {
+        let data = serde_json::json!({"owner":self.owner,"parent":parent,"folders":self.folders,"tags":self.tags});
+        format!("tagfolder\u{1f}batch\u{1f}{data}")
     }
 }
 
@@ -78,7 +76,7 @@ pub(super) fn drawing_drop(
             return;
         }
     }
-    if payload.verb == "move" && payload.folder == target {
+    if payload.folders.iter().any(|f| f == target) {
         return;
     }
     kit::paint_focus(ui, response.rect, super::R_ROW);
@@ -174,6 +172,7 @@ pub(super) struct StyleEditor {
     counts: crate::tag_counts::TagCounts,
     pub catalog: super::drawing_catalog::Catalog,
     folder_focus: bool,
+    selected_folders: std::collections::BTreeSet<String>,
     pub hatches: super::drawing_hatches::Hatches,
     cuts: Option<(
         super::drawing_cuts::CutSpec,
@@ -194,6 +193,10 @@ pub(super) struct StyleEditor {
 }
 
 impl StyleEditor {
+    pub fn sync_catalog(&mut self, scene: &pyo3::Bound<'_, pyo3::PyAny>) -> pyo3::PyResult<()> {
+        self.catalog.sync(scene, &mut self.selected, &mut self.selected_folders)
+    }
+
     pub fn set_patterns(&mut self, source: String) {
         if self.pattern_source != source {
             self.patterns = serde_json::from_str(&source).unwrap_or_default();
@@ -203,13 +206,16 @@ impl StyleEditor {
     }
 
     pub fn selected(&self, n: &Node) -> bool {
+        if let Some(key) = n.key.strip_prefix("preview-folder:") {
+            return self.selected_folders.contains(key);
+        }
         n.cells
             .get(5)
             .is_some_and(|key| self.selected.contains_key(key))
     }
 
     pub fn state_action(&self, n: &Node, lock: bool) -> Option<String> {
-        if !self.selected(n) {
+        if n.cells.get(5).is_none() || !self.selected(n) {
             return None;
         }
         let tags: Vec<_> = self.selected.keys().collect();
@@ -227,9 +233,11 @@ impl StyleEditor {
         self.catalog.close_line();
         self.folder_focus = false;
         if !extend {
+            self.selected_folders.clear();
             self.selected.clear();
         }
         if extend && self.selected.remove(key).is_some() {
+            self.folder_focus = self.selected.is_empty() && !self.selected_folders.is_empty();
             return;
         }
         self.selected
@@ -254,19 +262,34 @@ impl StyleEditor {
         self.catalog.applied(verb, key);
     }
     pub fn clear_focus(&mut self) {
+        self.selected_folders.clear();
         self.selected.clear();
         self.counts.cancel_pending();
         self.patch.clear();
         self.folder_focus = false;
         self.catalog.close_line();
     }
-    pub fn pick_folder(&mut self, key: &str) {
-        self.catalog.close_line();
-        self.selected.clear();
-        self.counts.cancel_pending();
+    pub fn pick_folder(&mut self, key: &str, extend: bool) {
+        if !extend {
+            self.clear_focus();
+        }
         self.patch.clear();
-        self.folder_focus = true;
-        self.catalog.select_folder(key);
+        self.catalog.close_line();
+        if extend && self.selected_folders.remove(key) {
+            self.folder_focus = !self.selected_folders.is_empty();
+            self.catalog.select_folder(
+                self.selected_folders
+                    .last()
+                    .map(String::as_str)
+                    .unwrap_or(""),
+            );
+        } else {
+            if !key.is_empty() {
+                self.selected_folders.insert(key.to_owned());
+            }
+            self.folder_focus = true;
+            self.catalog.select_folder(key);
+        }
     }
 
     pub fn tick_counts(&mut self, history: &pyo3::Bound<'_, pyo3::PyAny>) -> pyo3::PyResult<bool> {

@@ -562,9 +562,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         self.project_browser = ProjectBrowser(self)
         from views.layers_panel import LayersDock
         self.layers_dock = LayersDock(self)
-        # The Browser ordering by layer lists them as the Layers tab does.
-        self.layers_dock.panel.orderChanged.connect(
-            self.project_browser.outliner.on_layer_order_changed)
         self._lay_out_trays()
         # The tabs show only an icon each (the name is their tooltip): the
         # name heads the panel instead, in place of the dock's own title

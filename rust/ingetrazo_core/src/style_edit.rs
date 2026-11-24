@@ -5,7 +5,10 @@ use pyo3::{
     types::{PyDict, PyList},
 };
 use serde::Deserialize;
-use std::{collections::HashSet, path::PathBuf};
+use std::{
+    collections::{HashMap, HashSet},
+    path::PathBuf,
+};
 
 type Change = (Py<PyAny>, &'static str, Py<PyAny>, Py<PyAny>);
 
@@ -231,6 +234,8 @@ struct FolderDraft {
     folder: String,
     name: String,
     parent: String,
+    folders: Vec<String>,
+    owner: Option<usize>,
     tags: Vec<String>,
 }
 
@@ -240,6 +245,13 @@ pub fn edit_tag_folder(history: &Bound<'_, PyAny>, verb: &str, draft: &str) -> P
         serde_json::from_str(draft).map_err(|e| PyValueError::new_err(e.to_string()))?;
     let py = history.py();
     let scene = history.getattr("scene")?;
+    if d.owner
+        .is_some_and(|owner| owner != scene.as_ptr() as usize)
+    {
+        return Err(PyValueError::new_err(
+            "The active document changed during the drag",
+        ));
+    }
     let backend = py.import("core.layers")?;
     let namespace = py.import("types")?.getattr("SimpleNamespace")?;
     let work = namespace.call0()?;
@@ -305,14 +317,63 @@ pub fn edit_tag_folder(history: &Bound<'_, PyAny>, verb: &str, draft: &str) -> P
         "delete" => {
             backend.call_method1("remove_folder", (&work, &key))?;
         }
-        "file" => {
+        "file" | "batch" => {
+            let folders: HashSet<_> = d.folders.into_iter().collect();
+            let known: HashSet<_> = known.iter().collect();
+            if folders.iter().any(|key| !known.contains(key)) {
+                return Err(PyValueError::new_err("A selected folder no longer exists"));
+            }
+            // Work on the detached snapshot. Descendants of any selected
+            // folder travel inside it, including separately selected tags.
+            let parents = work.getattr("folder_parents")?.cast_into::<PyDict>()?;
+            let mut children: HashMap<String, Vec<String>> = HashMap::new();
+            for (child, up) in parents.iter() {
+                let child: String = child.extract()?;
+                if let Ok(up) = up.extract::<String>() {
+                    if known.contains(&child) && known.contains(&up) {
+                        children.entry(up).or_default().push(child);
+                    }
+                }
+            }
+            let mut covered = HashSet::new();
+            let mut pending: Vec<_> = folders.iter().cloned().collect();
+            while let Some(key) = pending.pop() {
+                if covered.insert(key.clone()) {
+                    if let Some(below) = children.get(&key) {
+                        pending.extend(below.iter().cloned());
+                    }
+                }
+            }
+            if parent.is_some_and(|up| covered.contains(up)) {
+                return Err(PyValueError::new_err(
+                    "A folder cannot move inside itself or its descendants",
+                ));
+            }
+            for folder in &folders {
+                let old: Option<String> = parents
+                    .get_item(folder)?
+                    .map(|v| v.extract())
+                    .transpose()?
+                    .flatten();
+                if old.as_ref().is_some_and(|up| covered.contains(up)) {
+                    continue;
+                }
+                if let Some(up) = parent {
+                    parents.set_item(folder, up)?;
+                } else if old.is_some() {
+                    parents.del_item(folder)?;
+                }
+            }
             let mut needed: HashSet<_> = d.tags.into_iter().collect();
             if needed.contains("Layer 0") {
                 return Err(PyValueError::new_err("Untagged stays at the root"));
             }
             for (_, tag) in &originals {
                 if needed.remove(&tag.getattr("key")?.extract::<String>()?) {
-                    tag.setattr("folder", parent)?;
+                    let old = tag.getattr("folder")?.extract::<Option<String>>()?;
+                    if !old.is_some_and(|folder| covered.contains(&folder)) {
+                        tag.setattr("folder", parent)?;
+                    }
                 }
             }
             if !needed.is_empty() {

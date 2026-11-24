@@ -10,12 +10,9 @@ Every model here is generated, as in tests/test_outliner.py.
 """
 from __future__ import annotations
 
-import time
-
 from ingetrazo_core import Vec3 as QVector3D
 
 from core import layers as L
-from core import outliner
 from core.group import Group
 from core.layers import DEFAULT_LAYER, Layer
 from core.mesh import Mesh
@@ -60,46 +57,29 @@ def test_siblings_are_ordered_by_layer_and_stay_inside_their_parent():
     kid = _group("Kid", "Roof")
     host = _container("Host", [kid])
     groups = [walls, host, plain, roof]          # the document's own order
-    rank = {DEFAULT_LAYER: 0, "Walls": 1, "Roof": 2}
-
-    rows = outliner.walk_by_layer(groups, rank)
-    assert [g.name for g, _p, _d in rows] == [
-        "Host", "Kid", "Plain", "Walls", "Roof"]
-    by_name = {g.name: (g, p, d) for g, p, d in rows}
-    assert by_name["Kid"][1] is host              # inside its parent still
-    assert by_name["Kid"][2] == 1
+    project = Project(Layer("Walls"), Layer("Roof"))
+    project.scene.groups = groups
+    project.action("toggle", "n:")
+    rows = project.action("toggle", "i:" + host.uid)
+    assert rows["c:" + kid.uid][1][0] == rows["i:" + host.uid][1][0] + 1
+    keys = list(rows)
+    assert keys.index("c:" + kid.uid) == keys.index("i:" + host.uid) + 1
     # The model itself is left alone: this is a way of reading it.
     assert [g.name for g in groups] == ["Walls", "Host", "Plain", "Roof"]
     assert host.children == [kid]
 
 
 def test_the_default_layer_comes_first_and_the_rest_as_the_tab_lists_them():
-    scene = type("Scene", (), {
-        "layers": [Layer(DEFAULT_LAYER), Layer("Roof"), Layer("Walls")]})()
-    rank = outliner.layer_rank(scene)
-    assert rank == {DEFAULT_LAYER: 0, "Roof": 1, "Walls": 2}
-    assert rank[DEFAULT_LAYER] < rank["Roof"] < rank["Walls"]
+    project = Project(Layer("Roof"), Layer("Walls"))
+    assert list(project.rows()) == ["preview-tag:Layer 0", "preview-tag:Roof", "preview-tag:Walls"]
 
 
-def test_a_layer_that_no_longer_exists_sorts_after_every_one_of_them():
-    scene = type("Scene", (), {"layers": [Layer(DEFAULT_LAYER)]})()
-    gone = _group("Gone", "Deleted layer")
-    plain = _group("Plain")
-    rows = outliner.walk_by_layer([gone, plain], outliner.layer_rank(scene))
-    assert [g.name for g, _p, _d in rows] == ["Plain", "Gone"]
-
-
-def test_ten_thousand_rows_order_quickly():
-    groups = [_group(f"G{i}", ("Walls", "Roof", None)[i % 3])
-              for i in range(10_000)]
-    scene = type("Scene", (), {
-        "layers": [Layer(DEFAULT_LAYER), Layer("Walls"), Layer("Roof")]})()
-    t0 = time.perf_counter()
-    rows = outliner.walk_by_layer(groups, outliner.layer_rank(scene))
-    elapsed = time.perf_counter() - t0
-    assert len(rows) == 10_000
-    assert rows[0][0].layer is None               # the default layer first
-    assert elapsed < 1.0
+def test_a_missing_tag_keeps_its_occurrence_accessible_by_name():
+    project = Project()
+    lost = _group("Lost", "Deleted tag")
+    project.scene.groups = [lost, _group("Other")]
+    rows = project.action("filter", "Lost")
+    assert rows["i:" + lost.uid][0] == "Lost" and "preview-tag:Deleted tag" not in rows
 
 
 # ---- Folder folders: the layers of a folder stay together --------------------
@@ -122,8 +102,6 @@ def test_the_layers_of_a_folder_are_ordered_together():
     scene.layers[4].folder = "Obra gris"         # Tabique, made last
     assert L.ordered_names(scene) == [
         DEFAULT_LAYER, "Acero", "Vidrio", "Tabique", "Muros"]
-    rank = outliner.layer_rank(scene)
-    assert rank["Acero"] < rank["Vidrio"] < rank["Tabique"] < rank["Muros"]
 
 
 def test_a_folder_inside_a_folder_holds_its_layers_first():

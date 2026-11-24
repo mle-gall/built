@@ -7,6 +7,7 @@ from ingetrazo_core import Vec3 as QVector3D
 
 from core.layers import DEFAULT_LAYER, Layer, assign_layer, layer_of
 from core.scene import Scene
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from formats import igz
 
 
@@ -215,40 +216,22 @@ def test_hidden_layer_hides_annotations_from_picks():
     assert pick_dim(100, 150) is None
 
 
-def test_layers_tray_assigns_and_releases_annotations(monkeypatch):
-    """Capas ▸ assign moves selected cotas/texts to the current layer, and
-    deleting that layer sends them back to the default one."""
-    import os
-    from PySide6.QtCore import Qt
-    from ingetrazo_core import Vec3 as QVector3D
-    from PySide6.QtWidgets import QApplication, QMessageBox
-    monkeypatch.setattr(QMessageBox, "question",
-                        staticmethod(lambda *a, **k: QMessageBox.Yes))
+def test_assigning_and_releasing_annotations_in_the_native_document(native_host):
     from core.dimension import Dimension
     from core.textlabel import TextLabel
-    from views.main_window import MainWindow
-
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    if QApplication.instance() is None:
-        QApplication([])
-    win = MainWindow()
-    try:
-        scene = win.viewport.scene
-        panel = win.layers_dock.panel
-        dim = Dimension(QVector3D(0, 0, 0), QVector3D(2, 0, 0),
-                        QVector3D(0, -1, 0))
-        lab = TextLabel(QVector3D(1, 0, 0), QVector3D(0.5, 0.5, 1), "Pileta")
-        scene.dimensions.append(dim)
-        scene.text_labels.append(lab)
-        scene.layers.append(Layer("Anotaciones"))
-        panel.refresh()
-        panel.tree.setCurrentItem(panel.item_for("Anotaciones"))
-        scene.select([dim, lab])
-        panel._on_assign()
-        assert layer_of(dim) == "Anotaciones" and layer_of(lab) == "Anotaciones"
-        panel._on_delete()
-        assert scene.layer("Anotaciones") is None
-        assert layer_of(dim) == DEFAULT_LAYER and layer_of(lab) == DEFAULT_LAYER
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    from tests.native_tree import action
+    from views import chrome_dialogs
+    win = native_host.window
+    scene = win.viewport.scene
+    dim = Dimension(V(0, 0), V(2, 0), V(0, -1))
+    label = TextLabel(V(1, 0), V(.5, .5, 1), "Pileta")
+    scene.dimensions.append(dim)
+    scene.text_labels.append(label)
+    scene.layers.append(Layer("Anotaciones"))
+    scene.select([dim, label])
+    win._assign_layer("Anotaciones")
+    assert layer_of(dim) == layer_of(label) == "Anotaciones"
+    action(native_host, "deletetag", "preview-tag:Anotaciones")
+    assert chrome_dialogs.answer(win, "delete")
+    assert scene.layer("Anotaciones") is None
+    assert layer_of(dim) == layer_of(label) == DEFAULT_LAYER

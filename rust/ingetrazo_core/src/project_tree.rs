@@ -441,6 +441,26 @@ pub(crate) fn source_placement_rows(
     Ok(rows)
 }
 
+#[pyfunction]
+pub(crate) fn expand_project_folders(
+    scene: &Bound<'_, PyAny>,
+    nodes: &Bound<'_, pyo3::types::PyDict>,
+) -> PyResult<Vec<String>> {
+    let mut keys = Vec::new();
+    for node in nodes.keys() {
+        keys.push(format!("n:{}", node.extract::<String>()?));
+    }
+    for folder in scene
+        .py()
+        .import("core.layers")?
+        .call_method1("folders_of", (scene,))?
+        .try_iter()?
+    {
+        keys.push(format!("preview-folder:{}", folder?.extract::<String>()?));
+    }
+    Ok(keys)
+}
+
 /// Candidate branches for one explicit reveal. This read follows the selected
 /// occurrence paths without expanding every linked file to search for a row.
 #[pyfunction]

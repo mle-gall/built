@@ -707,7 +707,10 @@ def dispatch(self, command):
     elif command=="fixture-folder":
         act("tagfolder","new",dict(name="Survey",parent="Site"))
         folder=next(key for key in scene.layer_folders if scene.layer_folder_names.get(key,key)=="Survey")
-        act("tagfolder","file",dict(parent=folder,tags=["Paths"]))
+        act("tagfolder","new",dict(name="Details",parent="Site"))
+        detail=next(key for key in scene.layer_folders if scene.layer_folder_names.get(key,key)=="Details")
+        act("tagfolder","batch",dict(owner=id(scene),parent=folder,folders=[detail],tags=["Paths"]))
+        self.fixture_mixed_folder=scene.folder_parents.get(detail)==folder
     elif command=="fixture-scenes":
         wgpu_ui._run(self.window,["tab:scene:add","tab:scenefolders:"+json.dumps(["add",str(id(scene)),"","","Field views"])])
         saved=self.window._scene_tabs.marked_view()
@@ -745,7 +748,7 @@ def facts(self):
         paint_sheet=getattr(self,"fixture_paint_sheet",None), row_paint=getattr(self,"fixture_row_paint",None),
         swatch=getattr(self,"fixture_swatch",False), editor=self.renderer.ui_input_state()["drawing_line"],
         line=paths.linetype, hatch=paths.hatch, mortar=paths.mortar, size=scene.bricks.get("brick"),
-        folder=scene.layer_folder_names.get(paths.folder,paths.folder),scene_folder=getattr(row,"folder",None))
+        mixed_folder=getattr(self,"fixture_mixed_folder",False),folder=scene.layer_folder_names.get(paths.folder,paths.folder),scene_folder=getattr(row,"folder",None))
 Host.menu,Host.state=dispatch,facts
 """)
     steps = tmp_path / "commands.txt"
@@ -784,6 +787,7 @@ quit
                                      "saved": {"brick": [[300, 150, 80, 12, 8]]}, "removed": {}}
     assert opened["editor"] and not saved["editor"] and saved["line"] == "lin:Boundary", log
     assert edited["hatch"] == "brick" and edited["mortar"] and edited["size"] == [250, 115, 60, 8], log
+    assert edited["mixed_folder"], log
     assert edited["folder"] == "Survey" and edited["scene_folder"] == "Field views", log
     assert edited["photo"] and edited["restored"] and edited["swatch"], log
     assert output.is_file() and "*" in output.read_text(), log

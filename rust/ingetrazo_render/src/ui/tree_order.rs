@@ -143,6 +143,17 @@ mod tests {
     }
 
     #[test]
+    fn ten_thousand_rows_sort_naturally_without_reordering_the_model() {
+        let rows: Vec<_> = (0..10_000).rev().map(|i|
+            node(&format!("i:{i}"), &format!("Item {i}"), 0, 1, 0)).collect();
+        let started = std::time::Instant::now();
+        let order = Sort::Name.order(&rows);
+        assert!(started.elapsed() < std::time::Duration::from_secs(1));
+        assert!(order.into_iter().eq((0..10_000).rev()));
+        assert_eq!(rows[0].key, "i:9999");
+    }
+
+    #[test]
     fn equal_names_keep_their_document_order_within_each_parent() {
         let rows = [
             node("i:b", "Pieza", 0, 1, 0),

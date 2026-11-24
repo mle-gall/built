@@ -1,29 +1,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""What every tree of the side tray has in common.
-
-The Browser (Model 3D) and the Layers tab are the same kind of list, and
-some of their manners are nobody's in particular: the strip the columns
-button stands in, the alternate tone of the rows, a press on a cell that
-acts at once and leaves the selection as it was, dragging rows with a
-picture of them and the place they land on outlined, and the menu of
-columns that stays open while its switches are flipped.
-
-A new tree of the tray inherits from :class:`SideTree` and says only what
-a drop lands on and what it does — :meth:`drop_target`,
-:meth:`drop_items`, :meth:`drop_text` and :meth:`apply_drop` — instead of
-writing the drag, the cells and the strip again.
-"""
+"""Shared cell, column and resize handling for the remaining Classic trees."""
 from __future__ import annotations
 
-from PySide6.QtCore import (QEvent, QPoint, QRect, QRectF, Qt, QTimer)
-from PySide6.QtGui import (QColor, QCursor, QDrag, QPainter, QPalette, QPen,
-                           QPixmap)
+from PySide6.QtCore import QEvent, QPoint, Qt, QTimer
+from PySide6.QtGui import QPainter, QPalette
 from PySide6.QtWidgets import (QAbstractItemView, QApplication, QMenu, QStyle,
                                QStyleOptionHeader, QToolButton, QTreeWidget,
                                QWidget)
-
-from core.i18n import tr
 
 
 class _HeaderButton(QToolButton):
@@ -141,32 +125,10 @@ class _StripFiller(QWidget):
 
 
 class SideTree(QTreeWidget):
-    """A tree of the side tray: the columns button's strip, the alternate
-    tone of the rows, cells that act without touching the selection, and
-    rows dragged with their picture and their landing place marked.
-
-    Subclasses fill in what a drop lands on (``drop_target``), the rows the
-    outline covers (``drop_items``), the words that say it (``drop_text``)
-    and what the drop does (``apply_drop``). A press on one of ``CELLS`` is
-    answered by the panel's ``cell_clicked(item, column)``; the selection
-    is left as it was, so a click on the eye of one of several selected
-    rows acts on all of them."""
-
-    #: How see-through the dragged rows are, and how many are drawn before
-    #: the rest is only counted.
-    DRAG_OPACITY = 0.55
-    DRAG_ROWS = 6
-
-    #: Hovering a folded row this long unfolds it while dragging.
-    AUTO_EXPAND_MS = 600
+    """A cell control acts without replacing the row selection."""
 
     #: The cells a press acts on directly, without selecting their row.
     CELLS: tuple = ()
-
-    #: Whether Delete (and Backspace) removes the current row here. The
-    #: Browser leaves Delete to the view's own command: in the Layers tab it
-    #: is the layer list's.
-    DELETE_KEY = False
 
     def __init__(self, panel) -> None:
         super().__init__()
@@ -177,18 +139,6 @@ class SideTree(QTreeWidget):
         self._filler.hide()
         # It repaints with the rows: scrolled, expanded, selected.
         self.viewport().installEventFilter(self)
-        self.setDragEnabled(True)
-        self.setAcceptDrops(True)
-        self.viewport().setAcceptDrops(True)
-        # Qt's line between rows says «between these two», which a drop here
-        # never means: the row or the folder it files into is outlined
-        # instead, and the words at the foot of the list say where.
-        self.setDropIndicatorShown(False)
-        self.setDragDropMode(QAbstractItemView.InternalMove)
-        self.setAutoExpandDelay(self.AUTO_EXPAND_MS)
-        #: While a drag is over the tree: ``(target,)`` — whatever the drop
-        #: would land on; else ``None``.
-        self.drop_hint: tuple | None = None
         #: A press on one of :attr:`CELLS` is the panel's until the button
         #: is let go: Qt never saw it, so a move with the button held would
         #: draw a selection box from wherever Qt's last press was — a few
@@ -313,184 +263,3 @@ class SideTree(QTreeWidget):
         super().mouseReleaseEvent(event)
 
     # ---- Delete ----------------------------------------------------------
-    def _is_delete(self, event) -> bool:
-        return (self.DELETE_KEY
-                and event.key() in (Qt.Key_Delete, Qt.Key_Backspace)
-                and self.state() != QAbstractItemView.EditingState)
-
-    def event(self, event) -> bool:
-        # Delete belongs to the list while it has the focus, not to a
-        # window shortcut.
-        if event.type() == QEvent.ShortcutOverride and self._is_delete(event):
-            event.accept()
-            return True
-        return super().event(event)
-
-    def keyPressEvent(self, event) -> None:
-        if self._is_delete(event):
-            event.accept()
-            self._panel.delete_row()
-            return
-        super().keyPressEvent(event)
-
-    # ---- Dragging --------------------------------------------------------
-    def drag_rows(self):
-        """The rows the drag carries, in the order they are shown."""
-        rows = [it for it in self.selectedItems()
-                if self.visualItemRect(it).isValid()]
-        rows.sort(key=lambda it: self.visualItemRect(it).top())
-        return rows
-
-    def drag_pixmap(self):
-        """The rows being dragged, as they look in the list, stacked with
-        no gaps between them (however far apart they sit) and see-through,
-        so the rows under the pointer still show. ``(pixmap, rows)``."""
-        vp = self.viewport()
-        rows = self.drag_rows()
-        shown = rows[:self.DRAG_ROWS]
-        if not shown:
-            return QPixmap(), []
-        width = vp.width()
-        heights = [self.visualItemRect(it).height() for it in shown]
-        extra = len(rows) - len(shown)
-        foot = heights[0] if extra else 0
-        dpr = vp.devicePixelRatioF()
-        pm = QPixmap(round(width * dpr), round((sum(heights) + foot) * dpr))
-        pm.setDevicePixelRatio(dpr)
-        pm.fill(Qt.transparent)
-        p = QPainter(pm)
-        p.setOpacity(self.DRAG_OPACITY)
-        y = 0
-        for it, h in zip(shown, heights):
-            r = self.visualItemRect(it)
-            p.drawPixmap(0, y, vp.grab(QRect(0, r.top(), width, h)))
-            y += h
-        p.setOpacity(1.0)
-        accent = QColor(QApplication.palette().highlight().color())
-        if extra:
-            p.setPen(QApplication.palette().text().color())
-            p.drawText(QRectF(0, y, width, foot), Qt.AlignCenter,
-                       tr("+{n} more", n=extra))
-        p.setPen(QPen(accent, 1.5))
-        p.setBrush(Qt.NoBrush)
-        p.drawRoundedRect(QRectF(0.75, 0.75, width - 1.5, y + foot - 1.5),
-                          3, 3)
-        p.end()
-        return pm, rows
-
-    def startDrag(self, actions) -> None:
-        pm, rows = self.drag_pixmap()
-        if not rows:
-            return
-        drag = QDrag(self)
-        drag.setMimeData(self.mimeData(rows))
-        drag.setPixmap(pm)
-        # Held where it was picked up: the pointer stays on the row it
-        # pressed, within the first row's height.
-        at = self.viewport().mapFromGlobal(QCursor.pos())
-        first = self.visualItemRect(rows[0])
-        drag.setHotSpot(QPoint(max(0, min(at.x(), first.width() - 1)),
-                               max(0, min(at.y() - first.top(),
-                                          first.height() - 1))))
-        drag.exec(Qt.MoveAction)
-        self._clear_hint()
-
-    def dragMoveEvent(self, event) -> None:
-        if event.source() is self:
-            super().dragMoveEvent(event)             # auto-scroll, unfold
-            event.setDropAction(Qt.MoveAction)
-            event.accept()
-            hint = (self.drop_target(event.position().toPoint()),)
-            if hint != self.drop_hint:
-                self.drop_hint = hint
-                self.viewport().update()
-        else:
-            event.ignore()
-
-    def dragLeaveEvent(self, event) -> None:
-        super().dragLeaveEvent(event)
-        self._clear_hint()
-
-    def _clear_hint(self) -> None:
-        if self.drop_hint is not None:
-            self.drop_hint = None
-            self.viewport().update()
-
-    # ---- Where a drop lands ----------------------------------------------
-    def drop_target(self, pos):
-        """What a drop at ``pos`` (viewport coordinates) lands on."""
-        return None
-
-    def drop_items(self, token):
-        """The rows the outline covers for ``token``."""
-        return []
-
-    def drop_text(self, token) -> str:
-        """What the pill at the foot of the list says for ``token``."""
-        return ""
-
-    def apply_drop(self, token, rows) -> None:
-        """Do the drop: move the rows in the document, then rebuild."""
-
-    def drop_rect(self, token):
-        """Where the drop lands, in viewport coordinates: the rows of
-        ``token``, full width; the whole list for nothing (out of every
-        folder, at the top level)."""
-        if token is None:
-            return self.viewport().rect()
-        rect = QRect()
-        for item in self.drop_items(token):
-            if item is None or item.isHidden():
-                continue
-            r = self.visualItemRect(item)
-            if r.isValid():
-                rect = rect.united(r)
-        if rect.isNull():
-            return QRect()
-        vp = self.viewport().rect()
-        return QRect(vp.left(), rect.top(), vp.width(), rect.height())
-
-    def paintEvent(self, event) -> None:
-        super().paintEvent(event)
-        if self.drop_hint is None:
-            return
-        token = self.drop_hint[0]
-        accent = QColor(QApplication.palette().highlight().color())
-        p = QPainter(self.viewport())
-        p.setRenderHint(QPainter.Antialiasing)
-        rect = self.drop_rect(token)
-        if rect.isValid():
-            tint = QColor(accent)
-            tint.setAlpha(45)
-            p.setBrush(tint)
-            p.setPen(QPen(accent, 2.0))
-            p.drawRoundedRect(QRectF(rect).adjusted(1.5, 1.5, -1.5, -1.5),
-                              4, 4)
-        # Said in words too, at the foot of the list: with rows inside rows
-        # the outline alone can leave a doubt.
-        text = self.drop_text(token)
-        if text:
-            fm = p.fontMetrics()
-            vp = self.viewport().rect()
-            w = fm.horizontalAdvance(text) + 16
-            h = fm.height() + 6
-            pill = QRectF(vp.right() - w - 6, vp.bottom() - h - 6, w, h)
-            p.setPen(Qt.NoPen)
-            p.setBrush(accent)
-            p.drawRoundedRect(pill, h / 2, h / 2)
-            p.setPen(QApplication.palette().highlightedText().color())
-            p.drawText(pill, Qt.AlignCenter, text)
-        p.end()
-
-    def dropEvent(self, event) -> None:
-        self._clear_hint()
-        if event.source() is not self:
-            event.ignore()
-            return
-        token = self.drop_target(event.position().toPoint())
-        rows = self.drag_rows()
-        # Accepted, but as nothing for Qt to do: the panel moves the rows in
-        # the document and rebuilds the tree from it.
-        event.setDropAction(Qt.IgnoreAction)
-        event.accept()
-        QTimer.singleShot(0, lambda: self.apply_drop(token, rows))
