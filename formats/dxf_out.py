@@ -16,6 +16,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import ingetrazo_core as _NATIVE
+
+#: The line types every file can declare (their table is Rust's).
+_LTYPES = tuple(_NATIVE.sheet_dxf_ltypes())
+
 
 def save_dxf_lines(path: str | Path, segments, layer: str = "VISTA") -> int:
     """Write ``segments`` — an iterable of (x0, y0, x1, y1) in metres —
@@ -46,5 +51,4 @@ def save_dxf_layers(path: str | Path, groups, solids=(), texts=()) -> int:
     filled cuts and the grounds under the hatches. ``texts`` — ``(layer, x,
     y, height, degrees, text)`` — go out as TEXT entities centred on their
     point: the words a line type writes along its lines."""
-    import ingetrazo_core as NATIVE
-    return NATIVE.sheet_dxf(str(path), list(groups), list(solids), list(texts))
+    return _NATIVE.sheet_dxf(str(path), list(groups), list(solids), list(texts))

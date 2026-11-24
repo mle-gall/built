@@ -232,7 +232,8 @@ def _write_pdf(win, path, sheets) -> list:
         return composer_for(win).export_all_pdf(path, sheets)
     from views import wgpu_sheet_frames
     scene = win.viewport.history.scene
-    comps = [c for c in scene.compositions if sheets is None or any(c is s for s in sheets)]
+    wanted = None if sheets is None else {s._doc_key for s in sheets}
+    comps = [c for c in scene.compositions if wanted is None or c._doc_key in wanted]
     return wgpu_sheet_frames.export_pdf(view, comps, path, wgpu_sheet_frames.Ground(lambda: None),
                                         getattr(win, "_current_path", None))
 

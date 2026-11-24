@@ -214,6 +214,12 @@ fn rows4(v: &Bound<'_, PyAny>) -> PyResult<Vec<[f64; 4]>> {
     Ok(rows.into_iter().map(|r| [r[0], r[1], r[2], r[3]]).collect())
 }
 
+/// The line types every file can declare, by name.
+#[pyfunction]
+pub fn sheet_dxf_ltypes() -> Vec<&'static str> {
+    LTYPES.iter().map(|t| t.0).collect()
+}
+
 /// ``formats.dxf_out.save_dxf_layers``: ``groups`` ``(layer, segments[,
 /// ltype[, rgb[, pattern]]])``, ``solids`` ``(layer, quads, rgb)``,
 /// ``texts`` ``(layer, x, y, height, degrees, text)``. Returns the lines.
