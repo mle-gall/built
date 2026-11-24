@@ -23,6 +23,7 @@ def start(win, path, install):
     win._open_aborted = False
 
     announced = False
+    outcome = [None]       # why it did not come in, for the failure callbacks
 
     def poll():
         nonlocal announced
@@ -46,9 +47,11 @@ def start(win, path, install):
                 win._opening_document = True
                 if install(win, path, bar, staged):
                     win._dismiss_home()
+                    outcome[0] = False
                     for callback in callbacks:
                         callback(win._doc)
         except Exception as exc:
+            outcome[0] = str(exc) or type(exc).__name__
             cd.close_failed(bar, exc)
             cd.notify(win, tr("Open failed"), str(exc), tone="error")
             import logging
@@ -56,6 +59,12 @@ def start(win, path, install):
         if timer is not None:
             timer.stop()
         win._open_callbacks.pop(path, None)
+        failures = win.__dict__.setdefault("_open_failures", {}).pop(path, [])
+        if outcome[0] is not False:
+            why = outcome[0] or (tr("cancelled") if bar.wasCanceled() or win._open_aborted
+                                 else tr("could not be opened"))
+            for callback in failures:
+                callback(why)
         bar.close()
         bar.poll = None
         bar.deleteLater()
@@ -63,6 +72,7 @@ def start(win, path, install):
         win._open_in_progress = win._opening_document = False
         if win._open_aborted:
             win._open_callbacks.clear()
+            win._open_failures.clear()
             if hasattr(type(win), "closeEvent"):
                 QTimer.singleShot(0, win, win.close)
         else:
@@ -82,10 +92,19 @@ def start(win, path, install):
     return True
 
 
-def after_open(win, path, callback):
-    """Apply tab metadata once the matching request actually succeeds."""
+def after_open(win, path, callback, failed=None):
+    """Apply tab metadata once the matching request actually succeeds;
+    ``failed(reason)`` runs instead when it does not (an error, Cancel)."""
     pending = win.__dict__.get("_pending_open")
     if pending and (path == pending.path or path in pending.queue):
         win._open_callbacks.setdefault(path, []).append(callback)
+        if failed is not None:
+            win.__dict__.setdefault("_open_failures", {}).setdefault(path, []).append(failed)
     else:
         callback(win._doc)
+
+
+def pending(win, path) -> bool:
+    """Whether ``path`` is opening or queued to open in ``win``."""
+    bar = win.__dict__.get("_pending_open")
+    return bool(bar) and (path == bar.path or path in bar.queue)

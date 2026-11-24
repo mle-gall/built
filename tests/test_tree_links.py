@@ -257,7 +257,7 @@ def _visible(scene, g):
     while getattr(root, "owner", None) is not None:
         root = root.owner
     root = next((r for r in scene.groups if r is root or any(p is g for p, _m in iter_placements(r))), root)
-    for p, _m, _x, f in wgpu_scene._placement_records(scene, [root], SimpleNamespace(scene=scene),
+    for p, _m, _x, f, _c in wgpu_scene._placement_records(scene, [root], SimpleNamespace(scene=scene),
                                                       wgpu_scene._placement_state(scene)):
         if p is g:
             return not f & (wgpu_scene.VISIBILITY_FILTERED | 1)
@@ -347,7 +347,7 @@ def test_packer_draws_isolated_parts_through_their_link(ui):
     tie = tree.direct[_key(view, "Ties")][0]
     act("isolate", "n:" + _key(view, "Rails"))
     from types import SimpleNamespace
-    flags = {id(g): f for g, _m, _p, f in wgpu_scene._placement_records(
+    flags = {id(g): f for g, _m, _p, f, _c in wgpu_scene._placement_records(
         scene, [a], SimpleNamespace(scene=scene), wgpu_scene._placement_state(scene))}
     filt = wgpu_scene.VISIBILITY_FILTERED
     assert flags[id(a)] & filt and not flags[id(rail)] & filt and flags[id(tie)] & filt
