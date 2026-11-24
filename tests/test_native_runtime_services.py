@@ -47,6 +47,11 @@ def setup(app):
         manager.request([])
         manager.cancel()
         assert len(build_text_letters("AV")) == 2
+        app.viewport.camera.frame_aspect = 1.5
+        image = app.viewport.render_raster(300, crop_to_frame=True)
+        assert (image.width, image.height) == (300, 200)
+        app.window._save_export_image(app.viewport, folder / "export.png", 300, False)
+        assert SurveyRaster.open(folder / "export.png").height == 200
 
         tile = SurveyRaster(2, 1, bytes([200, 50, 10, 255, 0, 0, 0, 0])).png()
         sample = folder / "figure.png"
@@ -69,10 +74,10 @@ def setup(app):
     capture = tmp_path / "model.png"
     script = tmp_path / "services.script"
     script.write_text(f"wait 350\nstate\nmenu extension:service_probe:0\nwait 800\n"
-                      f"capture {capture}\nstate\nquit\n")
+                      "capture model\nstate\nquit\n")
     binary = os.environ.get("BUILT_BINARY", ROOT / "rust/built_app/target/release/built")
     result = run([binary, "--new-instance", "--root", ROOT, "--venv", ROOT / ".venv",
-                  "--script", script, ROOT / "tests/fixtures/shell/slab-and-cube.igz"],
+                  "--shots", tmp_path, "--script", script, ROOT / "tests/fixtures/shell/slab-and-cube.igz"],
                  settings=tmp_path / "profile", capture_output=True, text=True, timeout=90)
     states = [json.loads(line[14:]) for line in result.stdout.splitlines()
               if line.startswith("[built] state ")]

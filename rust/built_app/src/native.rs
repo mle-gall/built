@@ -292,8 +292,7 @@ fn pasteboard_write(items: Vec<(String, Vec<u8>)>) -> bool {
     }
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = items;
-        false
+        crate::clipboard::write(items)
     }
 }
 
@@ -312,8 +311,7 @@ fn pasteboard_read(kind: &str) -> Option<Vec<u8>> {
     }
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = kind;
-        None
+        crate::clipboard::read(kind)
     }
 }
 
@@ -328,7 +326,7 @@ fn pasteboard_types() -> (Vec<String>, isize) {
     }
     #[cfg(not(target_os = "macos"))]
     {
-        (Vec::new(), 0)
+        crate::clipboard::types()
     }
 }
 

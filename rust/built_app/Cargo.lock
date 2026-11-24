@@ -198,6 +198,7 @@ name = "built_app"
 version = "0.1.0"
 dependencies = [
  "cc",
+ "gtk",
  "ingetrazo_render",
  "muda",
  "objc2 0.6.5",

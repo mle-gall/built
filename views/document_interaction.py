@@ -2154,7 +2154,8 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     """Editing and input shared by the document presentation hosts."""
 
     def _render_framed_image(self, width_px, overlays, annotations_only,
-                             sharp_shadows, transparent):
+                             sharp_shadows, transparent, *, raster=False):
+        render = self.render_raster if raster else self.render_image
         lw, lh = max(self.width(), 1), max(self.height(), 1)
         from core.camera import frame_rect
         rect = frame_rect(lw, lh, getattr(self.camera, "frame_aspect",
@@ -2165,11 +2166,13 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
             aspect = self.camera.frame_aspect
             out_w = max(int(width_px), 64)
             out_h = max(int(round(out_w / aspect)), 1)
-            full = self.render_image(
+            full = render(
                 max(int(round(out_w * lw / fw)), 64), None, overlays,
                 annotations_only, sharp_shadows, transparent, False)
             if full is None:
                 return None
+            if raster:
+                return full.frame_region((fx / lw, fy / lh, fw / lw, fh / lh), out_w, out_h)
             sx = full.width() / lw
             sy = full.height() / lh
             x = int(round(fx * sx))
@@ -2181,7 +2184,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
                 image = image.scaled(out_w, out_h, Qt.IgnoreAspectRatio,
                                      Qt.SmoothTransformation)
             return image
-        return self.render_image(width_px, None, overlays, annotations_only,
+        return render(width_px, None, overlays, annotations_only,
                                  sharp_shadows, transparent, False)
 
     def _configure_surface(self):

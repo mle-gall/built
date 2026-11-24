@@ -397,11 +397,11 @@ fn save_export_image(
     kw.set_item("sharp_shadows", true)?;
     kw.set_item("transparent", transparent)?;
     kw.set_item("crop_to_frame", true)?;
-    let image = view.call_method("render_image", (width,), Some(&kw))?;
-    if image.is_none()
-        || image.call_method0("isNull")?.is_truthy()?
-        || !image.call_method1("save", (path.str()?,))?.is_truthy()?
-    {
+    let native = py.import("app_shell.native")?.call_method0("available")?.is_truthy()?;
+    let method = if native { "render_raster" } else { "render_image" };
+    let image = view.call_method(method, (width,), Some(&kw))?;
+    let ready = !image.is_none() && (native || !image.call_method0("isNull")?.is_truthy()?);
+    if !ready || !image.call_method1("save", (path.str()?,))?.is_truthy()? {
         py.import("views.chrome_dialogs")?.call_method1(
             "critical",
             (
@@ -412,8 +412,9 @@ fn save_export_image(
         )?;
     } else {
         let vars = PyDict::new(py);
-        vars.set_item("w", image.call_method0("width")?)?;
-        vars.set_item("h", image.call_method0("height")?)?;
+        for (key, name) in [("w", "width"), ("h", "height")] {
+            vars.set_item(key, if native { image.getattr(name)? } else { image.call_method0(name)? })?;
+        }
         vars.set_item("name", path.getattr("name")?)?;
         win.call_method0("statusBar")?.call_method1(
             "showMessage",

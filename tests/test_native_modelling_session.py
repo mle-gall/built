@@ -139,6 +139,5 @@ quit
     snapshot = json.loads(probe.with_suffix(".json").read_text())
     assert not snapshot["classic"]
     assert not snapshot["skp_exporter"]
-    if sys.platform == "darwin":
-        assert not snapshot["qt_pasteboard"]
+    assert not snapshot["qt_pasteboard"]
     assert len(set(snapshot["scenes"])) >= 2

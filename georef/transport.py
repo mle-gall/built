@@ -22,10 +22,7 @@ if NATIVE:
             raise ValueError("Survey URL must use HTTP or HTTPS")
         opener = build_opener(HTTPSHandler(context=https_context()), _Redirect())
         with opener.open(Request(url, headers={"User-Agent": agent.decode()}), timeout=15) as reply:
-            data = reply.read(32 * 1024 * 1024 + 1)
-            if len(data) > 32 * 1024 * 1024:
-                raise ValueError("Survey response exceeds 32 MiB")
-            return data
+            return reply.read()
 
     def request(owner, url, agent, ready, error):
         return WindowJob.submit(owner, _workers.submit(_download, url, agent), ready, error)

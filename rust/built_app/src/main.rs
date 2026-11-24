@@ -11,6 +11,8 @@
 //!       [--new-instance] [--measure] [--check]
 //! ```
 
+#[cfg(not(target_os = "macos"))]
+mod clipboard;
 mod keys;
 mod gestures;
 #[cfg(target_os = "macos")]

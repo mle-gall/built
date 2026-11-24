@@ -87,7 +87,57 @@ impl SurveyRaster {
     }
 
     fn material_png<'py>(&self, py: Python<'py>, source: &[u8]) -> PyResult<Bound<'py, PyBytes>> {
-        crate::material_png::encode(py, self.width(), self.height(), self.pixels.as_raw(), source)
+        crate::material_png::encode(
+            py,
+            self.width(),
+            self.height(),
+            self.pixels.as_raw(),
+            source,
+        )
+    }
+
+    fn frame_region(
+        &self,
+        py: Python<'_>,
+        region: (f64, f64, f64, f64),
+        width: u32,
+        height: u32,
+    ) -> PyResult<Self> {
+        if !fits(width, height) {
+            return Err(PyValueError::new_err("invalid frame dimensions"));
+        }
+        let (x, y, w, h) = region;
+        let crop = |origin: f64, extent: f64, pixels: u32| {
+            let start = (origin * f64::from(pixels))
+                .round()
+                .clamp(0., f64::from(pixels - 1)) as u32;
+            let length = (extent * f64::from(pixels))
+                .round()
+                .clamp(1., f64::from(pixels - start)) as u32;
+            (start, length)
+        };
+        let (x, w) = crop(x, w, self.width());
+        let (y, h) = crop(y, h, self.height());
+        let pixels = py.detach(|| {
+            let part = imageops::crop_imm(&self.pixels, x, y, w, h).to_image();
+            if (width, height) == (w, h) {
+                part
+            } else {
+                crate::image_assets::resize(part, width, height)
+            }
+        });
+        Ok(Self { pixels })
+    }
+
+    fn save(&self, py: Python<'_>, path: std::path::PathBuf) -> bool {
+        py.detach(|| {
+            if image::ImageFormat::from_path(&path).ok() == Some(image::ImageFormat::Jpeg) {
+                let rgb: image::RgbImage = image::buffer::ConvertBuffer::convert(&self.pixels);
+                rgb.save(path).is_ok()
+            } else {
+                self.pixels.save(path).is_ok()
+            }
+        })
     }
 
     fn png<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {

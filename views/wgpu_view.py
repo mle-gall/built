@@ -1724,12 +1724,12 @@ class MetalView(ViewNavigation):
         source._cycle_reference_mode(edge)
         if pos is not None:
             # The lock shows at once, the hand still (GL's _refresh_snap).
-            from PySide6.QtGui import QMouseEvent
+            from app_shell.events import MouseEvent
             from views import input_state
             held = input_state.modifiers(self)
             self.hover(pos.x(), pos.y(), held)
-            self.tools.hover(QMouseEvent(QEvent.MouseMove, pos, pos,
-                                         Qt.NoButton, Qt.NoButton, held))
+            self.tools.hover(MouseEvent("move", pos.x(), pos.y(),
+                                       modifiers=int(getattr(held, "value", held))))
 
     @_tool_frame
     def keyReleaseEvent(self, event):

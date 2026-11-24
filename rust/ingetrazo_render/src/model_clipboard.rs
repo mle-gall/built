@@ -30,7 +30,7 @@ fn install(
     Ok(())
 }
 
-// The non-AppKit shell still uses the platform offer supplied by Qt. Reuse
+// The widget host uses the platform offer supplied by its Qt application. Reuse
 // its identity for repeated pastes, but decode new offers into the receiving
 // document's own groups, materials and meshes.
 fn adopt_platform_offer(vp: &Bound<'_, PyAny>) -> PyResult<()> {
@@ -68,7 +68,7 @@ impl ModelClipboard {
     #[staticmethod]
     fn available(py: Python<'_>) -> PyResult<bool> {
         let native = py.import("app_shell.native")?;
-        if cfg!(target_os = "macos") && native.call_method0("available")?.is_truthy()? {
+        if native.call_method0("available")?.is_truthy()? {
             let (types, _): (Vec<String>, i64) =
                 native.call_method0("pasteboard_types")?.extract()?;
             return Ok(types.iter().any(|t| t == MIME));
@@ -84,7 +84,7 @@ impl ModelClipboard {
         let py = win.py();
         let native = py.import("app_shell.native")?;
         let vp = win.getattr("viewport")?;
-        if !cfg!(target_os = "macos") || !native.call_method0("available")?.is_truthy()? {
+        if !native.call_method0("available")?.is_truthy()? {
             return adopt_platform_offer(&vp);
         }
         let (types, count): (Vec<String>, i64) =
@@ -159,7 +159,7 @@ impl ModelClipboard {
                     "cut_selection"
                 };
                 let native_board =
-                    cfg!(target_os = "macos") && native.call_method0("available")?.is_truthy()?;
+                    native.call_method0("available")?.is_truthy()?;
                 let copied = if native_board {
                     let options = PyDict::new(py);
                     options.set_item("publish", false)?;
