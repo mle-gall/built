@@ -94,3 +94,22 @@ def test_registered_callback_sees_the_current_host_module(monkeypatch):
     monkeypatch.setitem(sys.modules, bridge.__name__, bridge)
     event = RustTool._pointer("hover", SimpleNamespace())
     assert (event["mods"], event["world"]) == (17, (3, 2, 1))
+
+
+@pytest.mark.parametrize(("module_name", "class_name"), [
+    ("eraser_host", "EraserHost"), ("fillet_host", "FilletHost"),
+    ("followme_host", "FollowMeHost"), ("geopath_host", "GeoPathTool"),
+    ("image_host", "ImageTool"), ("move_host", "MoveHost"),
+    ("north_host", "NorthTool"), ("paint_host", "PaintHost"),
+    ("place_group_host", "PlaceGroupHost"), ("pushpull", "PushPullTool"),
+    ("rotate_host", "RotateHost"), ("rust_tools", "SelectTool"),
+    ("scale_host", "ScaleHost"), ("section_host", "SectionPlaneTool"),
+    ("solid_host", "OuterShellTool"), ("tape_host", "TapeHost"),
+])
+def test_host_class_keeps_its_plugin_import_path(module_name, class_name):
+    path = f"tools.{module_name}"
+    discovered = {entry.name for entry in pkgutil.iter_modules(tools.__path__, "tools.")}
+    assert path in discovered
+    cls = getattr(importlib.import_module(path), class_name)
+    assert (cls.__module__, cls.__name__) == (path, class_name)
+    assert pickle.loads(pickle.dumps(cls)) is cls
