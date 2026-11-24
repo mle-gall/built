@@ -18,6 +18,7 @@ fn path_obj<'p>(py: Python<'p>, p: &std::path::Path) -> PyResult<Obj<'p>> {
     py.import("pathlib")?.call_method1("Path", (p,))
 }
 mod datum;
+mod delivery;
 mod geotiff;
 mod ground;
 mod paths;
@@ -155,5 +156,6 @@ pub(super) fn register_formats(m: &Bound<'_, PyModule>) -> PyResult<()> {
     paths::register(m)?;
     ground::register(m)?;
     services::register(m)?;
+    delivery::register(m)?;
     Ok(())
 }
