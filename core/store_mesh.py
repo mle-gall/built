@@ -1320,6 +1320,8 @@ class StoreMesh(Mesh):
         return sources
 
     def _py(self, name, *args):
+        if self.__class__ is StoreMesh:
+            _note_refusal(name)
         self._materialise()
         return getattr(self, name)(*args)
 
@@ -1877,6 +1879,10 @@ class StoreMesh(Mesh):
         if self.__dict__.get("_resident_edit"):
             raise _fallback()("face edit requires unsupported mesh topology")
         _log_object_fallback("materialise")
+        import sys
+        caller = sys._getframe(1).f_code.co_name
+        if caller != "_py":
+            _note_refusal(caller)
         _materialise(self)
 
 
@@ -2009,6 +2015,33 @@ del _name
 
 
 # ---- Building, materialising, restoring -------------------------------------
+
+def _note_refusal(step) -> None:
+    """With ``INGETRAZO_REFUSALS`` naming a file: one JSON line per store
+    step that refused and handed the mesh to Python objects: the step, the
+    refusal's message, and the operation on the stack (a push, a cap
+    rebuild, a stitch). Measurement for the native push (docs/rust-tools.md
+    §22)."""
+    import os
+    path = os.environ.get("INGETRAZO_REFUSALS")
+    if not path:
+        return
+    import json
+    import sys
+    err = sys.exc_info()[1]
+    ops = []
+    f = sys._getframe(1)
+    while f is not None:
+        name = os.path.basename(f.f_code.co_filename)
+        if name in ("push_pull.py", "pushpull.py", "cap_rebuild.py", "history_commands.py",
+                    "topology.py", "commands.py") and f.f_code.co_name not in ops:
+            ops.append(f"{name[:-3]}.{f.f_code.co_name}")
+        f = f.f_back
+    test = os.environ.get("PYTEST_CURRENT_TEST", "").split(" ")[0]
+    with open(path, "a") as out:
+        out.write(json.dumps({"step": step, "reason": "" if err is None else str(err)[:200],
+                              "ops": ops[:6], "test": test}) + "\n")
+
 
 def _log_object_fallback(reason):
     import os
