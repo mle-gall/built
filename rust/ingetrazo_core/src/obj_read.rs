@@ -552,3 +552,19 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(obj_suggest_unit, m)?)?;
     m.add_function(wrap_pyfunction!(read_obj_text, m)?)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn original_obj_and_sidecar_retain_colors_and_face_count() {
+        let path =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/obj/structured.obj");
+        let model = parse(&path, 1., None).unwrap();
+        assert_eq!(model.pieces.len(), 1);
+        let faces = &model.pieces[0].faces;
+        assert_eq!(faces.len(), 72);
+        assert_eq!(faces[0].mat.as_ref().unwrap().color, Some([0.6; 3]));
+        assert!(faces.iter().all(|f| f.points.len() == 3 && area(f)));
+    }
+}

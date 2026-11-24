@@ -386,3 +386,67 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(svg_uv_to_page, m)?)?;
     m.add_function(wrap_pyfunction!(svg_image_uri, m)?)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn painted_view_matches_original_svg() {
+        Python::initialize();
+        Python::attach(|py| {
+            let mut faces = vec![];
+            let ring = vec![[0., 0.], [1., 0.], [1., 2.], [0., 2.]];
+            for (color, opacity, ground) in [
+                (None, 0.5, true),
+                (Some([1., 0., 0.5]), 1., false),
+                (Some([0.1, 0.9, 1.]), 0.85, false),
+            ] {
+                let f = py
+                    .import("types")
+                    .unwrap()
+                    .call_method0("SimpleNamespace")
+                    .unwrap();
+                f.setattr("layer", "level").unwrap();
+                f.setattr("rgb", color).unwrap();
+                f.setattr("opacity", opacity).unwrap();
+                let extra = PyDict::new(py);
+                extra.set_item("ground_shadow", ground).unwrap();
+                f.setattr("extra", extra).unwrap();
+                f.setattr("texture", py.None()).unwrap();
+                f.setattr("shadow", vec![vec![[0., 0.], [1., 1.], [0., 1.]]])
+                    .unwrap();
+                f.setattr("shadow_alpha", 0.35).unwrap();
+                faces.push(Surface {
+                    f,
+                    rings: vec![ring.clone()],
+                });
+            }
+            let paint = Canvas {
+                faces,
+                picture: None,
+                bake: 8.,
+                seam: 0.15,
+                clip: "",
+            };
+            let lines = svg::Group {
+                name: "level-CARAS".into(),
+                segs: vec![[0., 0., 1., 2.]],
+                ..Default::default()
+            };
+            let options = Options {
+                extra: Some([0., 0., 1., 2.]),
+                ..Default::default()
+            };
+            let (svg, n) = svg::svg_text(
+                &[lines],
+                &options,
+                Some(&mut |page, ids| paint.render(page, ids).unwrap()),
+            );
+            assert_eq!(n, 1);
+            assert_eq!(
+                svg,
+                include_str!("../../../tests/fixtures/svg_parity/filled-view.svg")
+            );
+        });
+    }
+}
