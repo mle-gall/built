@@ -207,7 +207,7 @@ fn igz_load_mesh_small(mesh: &Obj<'_>, payload: &Dict<'_>) -> PyResult<()> {
     Ok(())
 }
 
-fn rings<'py>(row: &Dict<'py>) -> PyResult<Vec<Obj<'py>>> {
+pub(crate) fn rings<'py>(row: &Dict<'py>) -> PyResult<Vec<Obj<'py>>> {
     let mut out = vec![field(row, "vertices")?];
     let holes = records(row, "holes")?;
     if holes.len()? <= 1 {

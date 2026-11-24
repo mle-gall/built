@@ -37,6 +37,8 @@ mod file_archive;
 mod file_json;
 mod file_open;
 mod file_geometry;
+mod file_deferred;
+mod file_pack;
 mod file_mesh;
 mod file_scene;
 mod gltf_read;
@@ -166,6 +168,8 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(file_model::dae_add_fused, m)?)?;
     file_save::register(m)?;
     file_snapshot::register(m)?;
+    file_deferred::register(m)?;
+    file_pack::register(m)?;
     file_read::register(m)?;
     file_bounds::register(m)?;
     fuse::register(m)?;
