@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! History command entry points. The caller enlists the facade in the document
 //! transaction. Going through its store also publishes edits to an open definition.
+mod erase;
+pub(crate) use erase::{command_erase_cleanup, command_erase_selection, ErasedCleanup, ErasedSelection};
 use crate::math::Vec3;
 use pyo3::{prelude::*, types::PyDict};
 

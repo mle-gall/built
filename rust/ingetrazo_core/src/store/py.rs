@@ -1926,6 +1926,21 @@ impl PyMeshStore {
         self.add_face_in_frame(py, rings, attrs, interior, divide, scan, hypot, owner)
     }
 
+    #[staticmethod]
+    fn command_erase_selection(
+        mesh: &Bound<'_, PyAny>, loops: Vec<Vec<[f64;3]>>, segments: Vec<[[f64;3];2]>,
+    ) -> PyResult<Option<(Vec<u128>, Vec<u128>, Vec<([f64;3],[f64;3])>, Vec<u128>, u32, Py<PyAny>)>> {
+        Ok(super::command_facade::command_erase_selection(mesh, loops, segments)?
+            .map(|r| (r.edges, r.faces, r.slit_planes, r.across, r.dirty, r.footprint)))
+    }
+
+    #[staticmethod]
+    fn command_erase_cleanup(mesh: &Bound<'_, PyAny>, footprint: &Bound<'_, PyAny>)
+        -> PyResult<Option<(u32, Vec<u128>, u32, u32)>> {
+        Ok(super::command_facade::command_erase_cleanup(mesh, footprint)?
+            .map(|r| (r.seams, r.healed_faces, r.orphan_vertices, r.dirty)))
+    }
+
     fn erase_selection(&mut self, loops: Vec<Vec<[f64;3]>>, ends: Vec<[[f64;3];2]>, hypot: &str)
         -> PyResult<Option<(usize, Vec<u128>, Vec<u128>, Vec<(u128,Vec<u128>,bool)>, Vec<super::erase::Plane>, Vec<u128>)>> {
         let h = crate::hypot_of(hypot)?;
