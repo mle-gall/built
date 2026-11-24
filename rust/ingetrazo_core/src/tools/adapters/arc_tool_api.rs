@@ -230,7 +230,10 @@ fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
     let key: String = kind.extract()?;
     let text = match key.as_str() {
         "tangent_edge" => tr.call1(("Tangent to edge",))?,
-        "tangent" => tr.call1(("Tangent at vertex",))?,
+        "tangent" => tr
+            .call1(("Tangent at vertex",))?
+            .add("  ")?
+            .add(length()?)?,
         "fillet" | "half" => {
             let text = if key == "half" {
                 "Half circle"
