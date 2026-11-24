@@ -115,23 +115,20 @@ class _HoverEvent:
         return self._mods
 
 
-def _active_cut(scene):
-    return ingetrazo_core.active_cut(scene)
+_active_cut = ingetrazo_core.active_cut
 
 
 _SnapEdge = ingetrazo_render.SnapEdge
 
 
-def _copy_snap_edge(e: _SnapEdge) -> _SnapEdge:
-    return ingetrazo_render.copy_snap_edge(e)
+_copy_snap_edge = ingetrazo_render.copy_snap_edge
 
 
 def _snap_context_of(vp, place):
     return ingetrazo_core.snap_context_of(vp, place)
 
 
-def _group_pseudo_edge(idx, i: int) -> _SnapEdge:
-    return ingetrazo_core.group_pseudo_edge(idx, i)
+_group_pseudo_edge = ingetrazo_core.group_pseudo_edge
 
 
 #: The depth slack of a line the Select tool may take: a fraction of the
@@ -245,8 +242,7 @@ class _LazyChunk(dict):
 _OCCL_NATIVE = True
 
 
-def _occlusion_native():
-    return ingetrazo_render.occlusion_native()
+_occlusion_native = ingetrazo_render.occlusion_native
 
 
 #: Lazy placements are filtered by core._native's spatial index before
@@ -287,8 +283,7 @@ _SHARED_BAKES = ("_group_chunks", "_inst_chunks", "_fp_memo",
                  "_proto_wrappers")
 
 
-def _bake_store_of(scene) -> dict:
-    return ingetrazo_render.bake_store_of(scene)
+_bake_store_of = ingetrazo_render.bake_store_of
 
 
 def _drop_bake_store(key, ref) -> None:
@@ -304,8 +299,7 @@ def _bind_bake_store(vp) -> None:
 _LIVE_VIEWS: "weakref.WeakSet" = weakref.WeakSet()
 
 
-def _several_views_shown() -> bool:
-    return ingetrazo_render.several_views_shown()
+_several_views_shown = ingetrazo_render.several_views_shown
 
 
 #: Texture images decoded once per file, for every GL context that
@@ -317,8 +311,7 @@ _DECODED_TEXTURES: dict = {}
 _DECODED_BUDGET = 256 * 1024 * 1024
 
 
-def _decoded_texture(path: str):
-    return ingetrazo_render.decoded_texture(path)
+_decoded_texture = ingetrazo_render.decoded_texture
 
 
 def _array_bake():
@@ -332,12 +325,10 @@ def _proto_wrapper(vp, mesh, paint=None):
     return ingetrazo_render.proto_wrapper(vp, mesh, paint)
 
 
-def _fp_winding(fp) -> int:
-    return ingetrazo_render.fp_winding(fp)
+_fp_winding = ingetrazo_render.fp_winding
 
 
-def _flags_read(mesh, entry: dict) -> None:
-    return ingetrazo_render.flags_read(mesh, entry)
+_flags_read = ingetrazo_render.flags_read
 
 
 #: flat look.
@@ -354,8 +345,7 @@ def _layer_look_sig(scene, style=None) -> tuple:
 _VCOLOR_MODES = ("textures", "shaded", "xray")
 
 
-def _front_tint(style):
-    return ingetrazo_render.front_tint(style)
+_front_tint = ingetrazo_render.front_tint
 
 
 def _with_front_tint(paint, style):
@@ -366,8 +356,7 @@ def _paint_of(vp, group):
     return ingetrazo_render.paint_of(vp, group)
 
 
-def _ghost_edge_points(scene) -> array:
-    return ingetrazo_render.ghost_edge_points(scene)
+_ghost_edge_points = ingetrazo_render.ghost_edge_points
 
 
 def _cache_ver(vp):
@@ -378,8 +367,7 @@ def _content_ver(vp):
     return ingetrazo_render.content_ver(vp)
 
 
-def _plan_curved_edges(plan):
-    return ingetrazo_core.plan_curved_edges(plan)
+_plan_curved_edges = ingetrazo_core.plan_curved_edges
 
 
 def _lazy_edge_may_be_curve(mesh, a, b, tol=1e-3) -> bool:
@@ -394,8 +382,7 @@ def _px_near(x, y, ok, px, py, thr, pts=None, seen=None):
     return ingetrazo_core.px_near(x, y, ok, px, py, thr, pts, seen)
 
 
-def _nearest_within(d, radius, cap):
-    return ingetrazo_core.document_nearest_within(d, radius, cap)
+_nearest_within = ingetrazo_core.document_nearest_within
 
 
 #: The cursor's edge and the snap's read off one search in an event
@@ -431,20 +418,17 @@ def _qv_hypot3():
     return _QV_HYPOT3
 
 
-def _unit_rays(eye, pts):
-    return ingetrazo_core.document_unit_rays(eye, pts)
+_unit_rays = ingetrazo_core.document_unit_rays
 
 
 # Barycentric roundoff on a shared triangle edge can reject both faces.
 _BARY_EPS = 1e-14
 
 
-def _occlusion_block(o, d, v0, e1, e2):
-    return ingetrazo_core.occlusion_block(o, d, v0, e1, e2)
+_occlusion_block = ingetrazo_core.occlusion_block
 
 
-def _placed_maps(xf):
-    return ingetrazo_render.placed_maps(xf)
+_placed_maps = ingetrazo_render.placed_maps
 
 
 def _batch_instances(base, xfs, tri_parts, hard_parts, soft_parts,
@@ -452,12 +436,10 @@ def _batch_instances(base, xfs, tri_parts, hard_parts, soft_parts,
     return ingetrazo_render.batch_hlr_instances(base, xfs, tri_parts, hard_parts, soft_parts, n_parts)
 
 
-def _cat_kept(vp, slot, parts):
-    return ingetrazo_render.cat_kept(vp, slot, parts)
+_cat_kept = ingetrazo_render.cat_kept
 
 
-def _offset_kept(vp, te, offset):
-    return ingetrazo_render.offset_kept(vp, te, offset)
+_offset_kept = ingetrazo_render.offset_kept
 
 
 _moller_trumbore = ingetrazo_core.ray_triangles
@@ -475,8 +457,7 @@ EDIT_REST_MODES = ("normal", "fade", "hide")
 #: tests.
 EDIT_REST_FADE = 0.75
 
-def edit_fade_color(background) -> tuple:
-    return ingetrazo_render.edit_fade_color(background)
+edit_fade_color = ingetrazo_render.edit_fade_color
 
 #: X-ray: how opaque each translucent face layer is. Layers stack, so a face
 #: seen through another reads darker and an opening (no face) stays clear.
@@ -493,24 +474,19 @@ SELECTION_DOT_COLOR = (0.95, 0.45, 0.16)
 SELECTION_DOT_ALT_COLOR = (0.10, 0.25, 0.85)
 
 
-def selection_dot_color(surface) -> tuple:
-    return ingetrazo_render.selection_dot_color(surface)
+selection_dot_color = ingetrazo_render.selection_dot_color
 
 
-def _box_edges(frame, lo, hi) -> bytes:
-    return ingetrazo_render.box_edges(frame, lo, hi)
+_box_edges = ingetrazo_render.box_edges
 
 
-def _load_edit_rest_mode() -> str:
-    return ingetrazo_render.load_edit_rest_mode()
+_load_edit_rest_mode = ingetrazo_render.load_edit_rest_mode
 
 
-def _load_edit_rest_fade() -> float:
-    return ingetrazo_render.load_edit_rest_fade()
+_load_edit_rest_fade = ingetrazo_render.load_edit_rest_fade
 
 
-def _load_hide_similar() -> bool:
-    return ingetrazo_render.load_hide_similar()
+_load_hide_similar = ingetrazo_render.load_hide_similar
 
 
 def _load_invert_wheel() -> bool:
@@ -537,8 +513,7 @@ def _load_invert_orbit_y() -> bool:
 SOFT_SHADOW_SPREAD = {1: 0.012, 2: 0.03, 3: 0.06}
 
 
-def _load_soft_shadows() -> int:
-    return ingetrazo_render.load_soft_shadows()
+_load_soft_shadows = ingetrazo_render.load_soft_shadows
 
 
 _AXIS_DIRS = {"x": (1.0, 0.0, 0.0), "y": (0.0, 1.0, 0.0), "z": (0.0, 0.0, 1.0)}
@@ -668,28 +643,17 @@ def _face_geometry(f, memo, triangulate):
     return ingetrazo_render.face_geometry(f, memo, triangulate)
 
 
-def _finite_point(p) -> bool:
-    return ingetrazo_render.finite_point(p)
+_finite_point = ingetrazo_render.finite_point
 
 
-def _curved_faces(mesh) -> set:
-    return ingetrazo_render.curved_faces(mesh)
+_curved_faces = ingetrazo_render.curved_faces
 
 
-def _smooth_vcol(face, base, flat_rgb, smoother, tris, light) -> list:
-    return ingetrazo_render.smooth_vcol(face, base, flat_rgb, smoother, tris, light)
+_smooth_vcol = ingetrazo_render.smooth_vcol
 
 
 from views.document_tools import DocumentTools
 from views.view_navigation import ViewNavigation
-
-
-def _publish_scene_version(viewport, version):
-    watch = viewport.__dict__.get("_document_watch")
-    if watch is None:
-        viewport.sceneVersionChanged.emit(version)
-    else:
-        watch.observe()
 
 
 class DocumentInteraction(DocumentTools, ViewNavigation):
@@ -1125,15 +1089,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return ingetrazo_render.prune_stale_selection(self)
 
     def notify_scene_changed(self) -> None:
-        """Force a redraw and emit the version-changed signal.
-
-        Use this when an outside system (load, undo, redo) has mutated the
-        scene and wants subscribers (title-bar dirty flag, etc.) to react
-        without waiting for the next paint.
-        """
-        self.prune_stale_selection()
-        _publish_scene_version(self, self.scene.version)
-        self.update()
+        return ingetrazo_render.document_scene_changed(self)
 
     def begin_groups_preview(self, groups=(), external: bool = False) -> None:
         return ingetrazo_render.begin_groups_preview(self, groups, external)
@@ -1209,13 +1165,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return ingetrazo_render.set_hover(self, entity, placement)
 
     def flash_status(self, text: str, msec: int = 2500) -> None:
-        """Briefly show ``text`` in the main window's status bar (e.g. Push/Pull
-        saying how far the solid lets it go). No-op if there is no status bar
-        yet."""
-        window = self.window()
-        bar = window.statusBar() if window is not None else None
-        if bar is not None:
-            bar.showMessage(text, msec)
+        return ingetrazo_render.document_status(self, text, msec)
 
     def set_suppressed_faces(self, faces) -> None:
         return ingetrazo_render.set_suppressed_faces(self, faces)
@@ -1559,25 +1509,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
                                                  self.width(), self.height())
 
     def _draw_extension_overlays(self, painter: QPainter) -> None:
-        """Extensions' overlays (``ExtensionApp.add_overlay``): whatever the
-        active tool, and never able to break the frame. Each call is fenced
-        by save/restore, and one that raises is logged ONCE and dropped: a
-        paint handler failing on every frame would flood the log and leave
-        the view half drawn for good."""
-        for fn in list(getattr(self, "_ext_overlays", ())):
-            painter.save()
-            try:
-                fn(self, painter)
-            except Exception:  # noqa: BLE001 — a plugin never breaks paint
-                import logging
-                logging.getLogger("ingetrazo.plugins").exception(
-                    "extension overlay %r failed; removed", fn)
-                try:
-                    self._ext_overlays.remove(fn)
-                except ValueError:
-                    pass
-            finally:
-                painter.restore()
+        return ingetrazo_render.document_paint_extensions(self, painter)
 
     def world_to_pixel(self, world: QVector3D) -> Optional[tuple[float, float]]:
         """Public API (extensions): world point (metres) → widget pixel
@@ -1846,17 +1778,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     def _pick_edge(self, screen_x: float, screen_y: float,
                    visible_only: bool, which: str = "sel", hidden=None,
                    with_distance: bool = False):
-        """``which``: "sel" for the edges a click means, "snap" for the ones a
-        reference may hold — the rest of the model's loose edges, drawn
-        around an open group / component, are snappable and not selectable.
-        ``hidden``: the visibility test of ``visible_only`` (default
-        :meth:`_is_occluded`). ``with_distance``: ``(edge, pixels)``,
-        ``(None, inf)`` for no edge."""
-        found = self._pick_edge_d(screen_x, screen_y, visible_only, which,
-                                  hidden)
-        if with_distance:
-            return found if found is not None else (None, float("inf"))
-        return found[0] if found is not None else None
+        return ingetrazo_render.document_edge_result(self, screen_x, screen_y, visible_only, which, hidden, with_distance)
 
     def _pick_edge_d(self, screen_x, screen_y, visible_only, which, hidden):
         return ingetrazo_core.pick_edge_distance(self, screen_x, screen_y, visible_only, which, hidden)
@@ -2106,10 +2028,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return ingetrazo_render.pick_group(self, screen_x, screen_y)
 
     def _pointer_for_tool(self, key, plus=False):
-        factory = getattr(getattr(self, "_host", None), "tool_cursor", None)
-        if factory is None:
-            from views.icons import tool_cursor as factory
-        return factory(key, plus)
+        return ingetrazo_render.document_tool_pointer(self, key, plus)
 
     def _apply_tool_cursor(self) -> None:
         return ingetrazo_render.apply_tool_cursor(self)
