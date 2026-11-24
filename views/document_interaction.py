@@ -642,10 +642,6 @@ from views.view_navigation import ViewNavigation
 class DocumentInteraction(DocumentTools, ViewNavigation):
     """Editing and input shared by the document presentation hosts."""
 
-    def _render_framed_image(self, width_px, overlays, annotations_only,
-                             sharp_shadows, transparent, *, raster=False):
-        return ingetrazo_render.framed_image(self, width_px, overlays, annotations_only, sharp_shadows, transparent, raster)
-
     def _configure_surface(self):
         pass
 
@@ -745,24 +741,11 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
             _AltWatch.watch(self)
         ingetrazo_render.init_navigation(self)
 
-    def _fb_size(self) -> tuple[int, int]:
-        return ingetrazo_render.framebuffer_size(self)
-
     def _sync_axes(self) -> None:
         """Make the drawing axes the current context's (issue #44) — the
         world's at the top level, the open group's own inside it."""
         from core import axes as _axes
         _axes.sync(getattr(self.scene, "drawing_frame", None))
-
-    def _sync_projection(self) -> None:
-        return ingetrazo_render.synced_projection(self)
-
-    def _sync_depth_reach(self) -> None:
-        return ingetrazo_render.sync_reach(self)
-
-    def _navigation_detail(self, mvp, mode):
-        return ingetrazo_render.navigation_detail(self, mvp, mode)
-
 
     #: This picture's background is alpha 0 (``render_image``'s ``transparent``).
     _export_transparent = False
@@ -777,28 +760,12 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     #: middle of its frame, and macOS crashed on the flush after (#1316).
     painting = 0
 
-    def _depth_fit_refused(self) -> bool:
-        return ingetrazo_render.refuse_depth(self)
-
-    def _fit_scene_depth(self):
-        return ingetrazo_render.fit_scene(self)
-
-    def _depth_fit_boxes(self):
-        return ingetrazo_render.depth_boxes(self)
-
-
-
-
-
     # ---- Instanced components (P2) ------------------------------------------
     # Component instances draw from ONE static proto VBO (local coords) plus
     # a per-instance matrix buffer (divisor 1): N hedges cost one upload and
     # one draw per proto run. Instances keep their baked chunks for picks,
     # silhouettes, selection and the drag preview; only the CONSOLIDATED
     # draw excludes them. INGETRAZO_NO_INSTANCING=1 reverts to the old path.
-
-    def _instanced_eligible(self, g) -> bool:
-        return ingetrazo_render.instanced_eligible(self, g)
 
     def _proto_base_chunk(self, mesh, paint=None):
         """The prototype's chunk in LOCAL coordinates (the same wrapper
@@ -808,36 +775,8 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         plain one."""
         return self._group_chunk(_proto_wrapper(self, mesh, paint))
 
-    def _placements_epoch(self):
-        return ingetrazo_render.placements_epoch(self)
-
     #: How many past epochs keep their parts for ``_epoch_only_matrices``.
     _EPOCH_HISTORY = 4
-
-    def _epoch_remember(self, epoch, head, parts, tops=()) -> None:
-        return ingetrazo_render.epoch_remember(self, epoch, head, parts, tops)
-
-    def _epoch_only_matrices(self, old, new=None) -> bool:
-        return ingetrazo_render.epoch_only_matrices(self, old, new)
-
-    def _epoch_kept_tops(self, old, new=None, ctx=False):
-        return ingetrazo_render.epoch_kept_tops(self, old, new, ctx)
-
-    def _refilter(self, old_epoch, old_out, source, test, old_source=None,
-                  ctx=False):
-        return ingetrazo_render.refilter(self, old_epoch, old_out, source, test, old_source, ctx)
-
-    def _placement_top(self, g):
-        return ingetrazo_render.placement_top(self, g)
-
-    def _placements(self):
-        return ingetrazo_render.placements(self)
-
-    def _expand_placements(self, group, out=None, seen=None, above=None):
-        return ingetrazo_render.expand_placements(self, group, out, seen, above)
-
-    def _bind_placement_rows(self, handles, parents, out, seen=None, above=None):
-        return ingetrazo_render.bind_placement_rows(self, handles, parents, out, seen, above)
 
     def prepare_drawing(self, progress=None) -> None:
         return ingetrazo_render.prepare_drawing(self, progress)
@@ -850,9 +789,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         was 21 000 baked copies of geometry the instanced pass never uses."""
         return self._placement_frame(g)[0]
 
-    def _placement_frame(self, g):
-        return ingetrazo_render.placement_frame(self, g)
-
     #: How far past the view the instanced batches reach, as a fraction of
     #: its width and height, so an orbit keeps drawing the same ones
     #: (_gather_instanced).
@@ -860,33 +796,9 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     #: ... and while they hold at most this many times what is in view.
     _INST_SUPERSET_MAX = 2
 
-    @staticmethod
-    def _widened_planes(planes, frac):
-        from ingetrazo_core import widened_planes
-        return widened_planes(planes, frac)
-
-    @staticmethod
-    def _instances_in_frustum(lo, hi, planes, margin=0.0):
-        from ingetrazo_core import instances_in_frustum
-        return instances_in_frustum(lo, hi, planes, margin)
-
     #: An instance whose bounding sphere spans less than this many
     #: framebuffer pixels is not drawn (the camera's frame only).
     _INST_MIN_PX = 1.0
-
-    def _instances_below_a_pixel(self, pool, scale=1.0):
-        return ingetrazo_render.instance_pixel_mask(self, pool, scale)
-
-    @staticmethod
-    def _bounding_spheres(lo, hi):
-        from ingetrazo_core import bounding_spheres
-        return bounding_spheres(lo, hi)
-
-    def _spheres_below_a_pixel(self, ctr, rad, floor=None):
-        return ingetrazo_render.small_pixel_spheres(self, ctr, rad, floor)
-
-    def _edit_rest_fade(self, group):
-        return ingetrazo_render.edit_rest_fade(self, group)
 
     def image_plane_at(self, screen_x: float, screen_y: float,
                        selectable_only: bool = False):
@@ -907,9 +819,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     def pick_locked_group(self, screen_x: float, screen_y: float):
         return ingetrazo_render.pick_locked_group(self, screen_x, screen_y)
 
-    def _draw_image_outlines(self, painter: QPainter) -> None:
-        return ingetrazo_render.draw_image_outlines(self, painter)
-
     def finish_image_placement(self) -> None:
         """Called by the Image tool once a picture is placed: drop back to
         Select, the classic behaviour after a one-shot placement."""
@@ -917,39 +826,8 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         if hasattr(win, "activate_select_tool"):
             win.activate_select_tool()
 
-    def _selection_dot_colors(self, face) -> tuple:
-        return ingetrazo_render.selection_dot_colors(self, face)
-
-
-    def _shade_factor(self, normal) -> float:
-        return ingetrazo_render.shade_factor(self, normal)
-
-    def _shaded_color(self, base, normal):
-        return ingetrazo_render.shaded_color(self, base, normal)
-
     # ---- Line weight for exports --------------------------------------------
-    def _line_jitter(self, px: int, w: int, h: int) -> list:
-        return ingetrazo_render.line_jitter(self, px, w, h)
-
     # ---- Base-map tiles (Track G) -------------------------------------------
-    def _base_map_showing(self) -> bool:
-        return ingetrazo_render.base_map_showing(self)
-
-    def _ensure_tile_fetcher(self):
-        return ingetrazo_render.ensure_tile_fetcher(self)
-
-    def _on_tile_ready(self, source_id, x, y, z, image) -> None:
-        return ingetrazo_render.on_tile_ready(self, source_id, x, y, z, image)
-
-    def _disk_cached_tile(self, source, x, y, z):
-        return ingetrazo_render.disk_cached_tile(self, source, x, y, z)
-
-    def _schedule_tile_requests(self) -> None:
-        return ingetrazo_render.schedule_tile_requests(self)
-
-    def _request_missing_tiles(self) -> None:
-        return ingetrazo_render.request_missing_tiles(self)
-
     #: Per-document caches keyed by ``id()`` of the document's groups,
     #: meshes and placements — the render/pick chunks and what hangs off
     #: them. Nothing but the document boundary makes them all stale at once.
@@ -1002,9 +880,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     _TEX_PER_FRAME = 2
 
 
-    def _terrain_showing(self) -> bool:
-        return ingetrazo_render.terrain_showing(self)
-
     def prefetch_tiles(self, source, tile_list, zoom) -> None:
         return ingetrazo_render.prefetch_tiles(self, source, tile_list, zoom)
 
@@ -1023,16 +898,9 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     _SKY_RGB = (0.925, 0.935, 0.945)
     _GROUND_RGB = (0.815, 0.820, 0.815)
 
-    def _horizon_ndc_y(self, mvp, camera=None) -> float:
-        return ingetrazo_render.horizon_y(self, mvp, camera)
-
     #: NDC span over which each half of the backdrop completes its ramp.
     _SKY_GRAD_SPAN = 1.4
     _GROUND_GRAD_SPAN = 0.9
-
-    @staticmethod
-    def _sky_gradient(sky_rgb, ground_rgb, hy):
-        return ingetrazo_render.sky_gradient(sky_rgb, ground_rgb, hy)
 
     # ---- Sun shadows (core/sun.py) ------------------------------------------
     _SHADOW_MAP_SIZE = 2048
@@ -1046,22 +914,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     #: shadow — the sun passes through glass.
     _SHADOW_OPACITY_MIN = 0.7
 
-    def _sun_dir_now(self):
-        return ingetrazo_render.sun_dir_now(self)
-
-
-    @staticmethod
-    def _shadow_footprint(light_vp) -> tuple[float, float]:
-        return ingetrazo_render.shadow_footprint(light_vp)
-
-    @staticmethod
-    def _light_vp(d, lo, hi, fit=None):
-        return ingetrazo_render.light_vp(d, lo, hi, fit)
-
-    @staticmethod
-    def _light_view(d, lo, hi):
-        return ingetrazo_render.light_view(d, lo, hi)
-
     #: How long the view must stay put before the fitted map is drawn (#958).
     SHADOW_SETTLE_MS = 200
 
@@ -1074,9 +926,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
     def begin_groups_preview(self, groups=(), external: bool = False) -> None:
         return ingetrazo_render.begin_groups_preview(self, groups, external)
-
-    def _preview_chunk(self, g):
-        return ingetrazo_render.preview_chunk(self, g)
 
     def end_groups_preview(self) -> None:
         return ingetrazo_render.end_groups_preview(self)
@@ -1092,55 +941,12 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         self._preview_matrix = QMatrix4x4(m)
         self.update()
 
-    def _groups_preview_transform(self) -> QMatrix4x4:
-        return ingetrazo_render.groups_preview_transform(self)
-
-
-    def _newell_of(self, face):
-        return ingetrazo_render.newell_of(self, face)
-
-    def _area_of(self, face) -> float:
-        return ingetrazo_render.area_of(self, face)
-
-    def _tris_of(self, face):
-        return ingetrazo_render.tris_of(self, face)
-
     #: A face this big (corners, holes included) is worth handing to the
     #: native earcut ahead of ``_tris_of``.
     NATIVE_TRIS_MIN_CORNERS = 64
 
-    def _seed_tris_native(self, faces) -> None:
-        return ingetrazo_render.seed_tris_native(self, faces)
-
-    def _normal_of(self, face):
-        return ingetrazo_render.normal_of(self, face)
-
-    def _static_draw_groups(self, groups):
-        return ingetrazo_render.static_draw_groups(self, groups)
-
-    def _bucket_back_face(self, face, back):
-        return ingetrazo_render.bucket_back_face(self, face, back)
-
-    def _append_textured_face(self, by_texture: dict, face, tex: dict) -> None:
-        return ingetrazo_render.append_textured_face(self, by_texture, face, tex)
-
     def _faceme_dir(self, anchor: QVector3D) -> QVector3D:
         return ingetrazo_render.faceme_dir(self.camera, anchor)
-
-    def _figure_token(self, group):
-        return ingetrazo_render.figure_token(self, group)
-
-    def _billboard_mesh(self, group):
-        return ingetrazo_render.billboard_mesh(self, group)
-
-    def _billboard_extent(self, group):
-        return ingetrazo_render.billboard_extent(self, group)
-
-    def _billboard_quad(self, group, face_dir=None):
-        return ingetrazo_render.billboard_quad(self, group, face_dir)
-
-    def _faceme_base(self, g):
-        return ingetrazo_render.faceme_base(self, g)
 
     def set_hover(self, entity, placement=None) -> None:
         return ingetrazo_render.set_hover(self, entity, placement)
@@ -1151,22 +957,11 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     def set_suppressed_faces(self, faces) -> None:
         return ingetrazo_render.set_suppressed_faces(self, faces)
 
-    def _rubber_band_style(self):
-        return ingetrazo_render.rubber_band_style(self)
-
-
-    def _snap_context_suffix(self, context) -> str:
-        return ingetrazo_render.snap_context_suffix(self, context)
-
     def _draw_snap_indicator(self, painter: QPainter, snap: SnapResult) -> None:
         # Axis-lock and inference state is conveyed by the coloured rubber
         # band; no badge follows the cursor along the lock line. Only the
         # discrete point snaps get a marker.
         return ingetrazo_render.draw_snap_indicator(self, painter, snap)
-
-    def _edit_group_box_corners(self):
-        from ingetrazo_core import edit_group_box
-        return edit_group_box(self)
 
     def edit_group_box_contains_pixel(self, x: float, y: float) -> bool:
         from ingetrazo_core import edit_box_contains_pixel
@@ -1178,53 +973,12 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         from ingetrazo_core import section_frame
         return section_frame(sp.point, plane_axes(sp.normal), self.scene.bounds())
 
-    def _draw_section_planes(self, painter: QPainter) -> None:
-        return ingetrazo_render.draw_section_planes(self, painter)
-
     def pick_section_plane(self, screen_x: float, screen_y: float):
         return ingetrazo_render.pick_section_plane(self, screen_x, screen_y)
-
-    def _section_cut_segments(self):
-        from ingetrazo_render import section_cut
-        return section_cut(self)
-
-    @staticmethod
-    def _cut_layer_tags(idx, ents):
-        from ingetrazo_render import cut_layer_tags
-        return cut_layer_tags(idx, ents)
-
-    def _section_fill_tris(self):
-        from ingetrazo_render import section_fill
-        return section_fill(self)
-
-    def _model_linetype_edges(self) -> list:
-        from ingetrazo_render import model_layer_lines
-        return model_layer_lines(self)
-
-    @staticmethod
-    def _model_line_words(segs, spec):
-        from ingetrazo_render import model_line_words
-        return model_line_words(segs, spec)
-
-
-
-    def _section_layer_fills(self, color):
-        from ingetrazo_render import section_layer_fills
-        return section_layer_fills(self, color)
-
-
-
-    def _section_hatch(self, spacing: float, cross: bool):
-        from ingetrazo_render import section_hatch
-        return section_hatch(self, spacing, cross)
 
     #: The sheet's cut pen (mm) a layer's own cut weight is measured
     #: against in the model: a layer at 0.50 draws the usual ~2.5 px line.
     CUT_PEN_MM = 0.5
-
-    def _cut_edge_weights(self, plane, keep):
-        from ingetrazo_render import cut_weights
-        return cut_weights(self, plane, keep)
 
     def _clip_segment_front(
         self, a: QVector3D, b: QVector3D
@@ -1240,9 +994,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return clip_snap_guide(self.camera.projection_matrix() * self.camera.view_matrix(),
                                g.point, g.direction, GUIDE_HALF_LEN, margin)
 
-    def _draw_scale_box(self, painter: QPainter) -> None:
-        return ingetrazo_render.draw_scale_box(self, painter)
-
     def _clip_pixel_line(
         self, p0: tuple[float, float], p1: tuple[float, float],
         margin: float = 64.0,
@@ -1250,17 +1001,8 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         from ingetrazo_core import clip_annotation_line
         return clip_annotation_line(p0, p1, self.width(), self.height(), margin)
 
-    def _draw_guides(self, painter: QPainter) -> None:
-        return ingetrazo_render.draw_guides(self, painter)
-
-    def _draw_geo_surfaces(self, painter: QPainter) -> None:
-        return ingetrazo_render.draw_geo_surfaces(self, painter)
-
     def ground_height(self, x: float, y: float) -> float | None:
         return ingetrazo_render.ground_height(self, x, y)
-
-    def _emit_coordinate(self, ev) -> None:
-        return ingetrazo_render.emit_coordinate(self, ev)
 
     def ground_elevation(self, x: float, y: float) -> float | None:
         return ingetrazo_render.ground_elevation(self, x, y)
@@ -1273,37 +1015,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
     def drape(self, v: QVector3D) -> QVector3D:
         return ingetrazo_render.drape(self, v)
-
-    def _draw_geo_points(self, painter: QPainter) -> None:
-        return ingetrazo_render.draw_geo_points(self, painter)
-
-    def _draw_rubber_band_overlay(self, painter: QPainter) -> None:
-        return ingetrazo_render.draw_rubber_band_overlay(self, painter)
-
-    def _draw_guide_preview(self, painter: QPainter) -> None:
-        return ingetrazo_render.draw_guide_preview(self, painter)
-
-    def _draw_route_marker(self, painter: QPainter) -> None:
-        return ingetrazo_render.draw_route_marker(self, painter)
-
-    def _draw_linear_mode_label(self, painter: QPainter) -> None:
-        return ingetrazo_render.draw_linear_mode_label(self, painter)
-
-    def _draw_geo_paths(self, painter: QPainter) -> None:
-        return ingetrazo_render.draw_geo_paths(self, painter)
-
-    def _draw_geo_path_label(self, painter: QPainter, path) -> None:
-        return ingetrazo_render.draw_geo_path_label(self, painter, path)
-
-    @staticmethod
-    def _text_block_x(p_pos, p_anchor, block_w: float) -> float:
-        return ingetrazo_render.text_block_x(p_pos, p_anchor, block_w)
-
-    def _draw_text_labels(self, painter: QPainter) -> None:
-        return ingetrazo_render.draw_text_labels(self, painter)
-
-    def _draw_dimensions(self, painter: QPainter) -> None:
-        return ingetrazo_render.draw_dimensions(self, painter)
 
     @staticmethod
     def _format_dim_value(metres: float, style: dict) -> str:
@@ -1324,46 +1035,11 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     _OCCLUSION_SPLIT = 8
     _OCCLUSION_ROUNDS = 2
 
-    def _draw_occluded_segment(self, painter: QPainter, p3a: QVector3D,
-                               p3b: QVector3D, samples: int = 16) -> None:
-        return ingetrazo_render.document_draw_strokes(self, painter, p3a, p3b, samples)
-
     def _project_samples(self, pts: list[QVector3D]):
         from ingetrazo_core import annotation_samples
         return annotation_samples(self, pts, self.camera.projection_matrix() * self.camera.view_matrix())
 
-    def _draw_inference_marker(self, painter: QPainter) -> None:
-        return ingetrazo_render.draw_inference_marker(self, painter)
-
-    def _length_label_at(self):
-        return ingetrazo_render.length_label_at(self)
-
-    def _draw_length_label(self, painter: QPainter) -> None:
-        return ingetrazo_render.draw_length_label(self, painter)
-
-    def _measurement_text(self) -> str:
-        return ingetrazo_render.measurement_text(self)
-
-    def _draw_axis_lock_label(self, painter: QPainter) -> None:
-        return ingetrazo_render.draw_axis_lock_label(self, painter)
-
-    def _draw_plane_lock_label(self, painter: QPainter) -> None:
-        return ingetrazo_render.draw_plane_lock_label(self, painter)
-
-    def _draw_inference_label(self, painter: QPainter) -> None:
-        return ingetrazo_render.draw_inference_label(self, painter)
-
-    def _draw_reference_label(self, painter: QPainter) -> None:
-        return ingetrazo_render.draw_reference_label(self, painter)
-
     # ---- Pixel ↔ world ------------------------------------------------------
-
-    def _coplanar_eps(self, origin: QVector3D, direction: QVector3D,
-                      best_t: float) -> float:
-        return ingetrazo_render.coplanar_eps(self, origin, direction, best_t)
-
-    def _world_from_pixel(self, x: int, y: int) -> Optional[QVector3D]:
-        return ingetrazo_render.world_from_pixel(self, x, y)
 
     #: A ray meeting the work plane below this angle gives a point nobody
     #: asked for. Measured: at 25 deg of camera pitch — an ordinary
@@ -1376,19 +1052,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         plane = getattr(self, "_last_work_plane", None)
         return plane[1] if plane is not None else None
 
-    @staticmethod
-    def _same_plane(a, b, tol: float = 1e-6) -> bool:
-        return ingetrazo_render.same_plane(a, b, tol)
-
-    def _planar_face_plane(self, tool, cursor, captured=None, face_plane=None):
-        return ingetrazo_render.planar_face_plane(self, tool, cursor, captured, face_plane)
-
-    def _ray_plane(self, origin: QVector3D, direction: QVector3D,
-                   plane_point: QVector3D, plane_normal: QVector3D,
-                   *, allow_grazing: bool = False,
-                   ) -> Optional[QVector3D]:
-        return ingetrazo_render.ray_plane(self, origin, direction, plane_point, plane_normal, allow_grazing)
-
     #: XY stays the ground in shallow views and where its cursor-ray hit is
     #: reasonably close compared with the two vertical global planes.
     GROUND_PREFERENCE_ANGLE_DEG = 5.0
@@ -1396,90 +1059,23 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     PERSPECTIVE_GROUND_DEPTH_PREFERENCE_RATIO = 10.0
     PLANE_ALIGNMENT_TIE_MARGIN = 0.05
 
-    def _camera_planar_work_plane(
-        self, cursor: Optional[tuple[float, float]] = None,
-    ) -> Optional[tuple[QVector3D, QVector3D]]:
-        return ingetrazo_render.planar_camera(self, cursor)
-
     # When the camera is at least this tilted off the horizon, the work plane
     # stays horizontal (XY) — that covers top, iso, and most architectural
     # angles. Only at near-horizon views does it switch to a vertical plane,
     # which is the only orientation where cursor-to-ground is ambiguous.
     HORIZON_PITCH_THRESHOLD_DEG = 15.0
 
-    def _current_work_plane(
-        self, cursor: Optional[tuple[float, float]] = None
-    ) -> tuple[QVector3D, QVector3D]:
-        return ingetrazo_render.current_work_plane(self, cursor)
-
-    def _front_face_at(self, x: float, y: float, which: str = "sel"):
-        return ingetrazo_render.front_face_at(self, x, y, which)
-
-    def _front_face_lean(self, idx, nat, o, d, which: str = "sel"):
-        return ingetrazo_render.front_face_lean(self, idx, nat, o, d, which)
-
     #: How far from the cursor (px) a face crossing snaps, and how far
     #: either side of the crossing the search checks that each face shows.
     _CROSSING_RING_PX = 8.0
     _CROSSING_SIDE_PX = 3.0
 
-    def _face_crossing_point(self, px: float, py: float):
-        return ingetrazo_render.face_crossing_point(self, px, py)
-
-    def _crossing_sides(self, px, py, o, d, f, g):
-        return ingetrazo_render.crossing_sides(self, px, py, o, d, f, g)
-
-    def _crossing_on_screen(self, f, g, found):
-        return ingetrazo_render.crossing_on_screen(self, f, g, found)
-
-    def _face_outline_world(self, px: float, py: float):
-        return ingetrazo_render.face_outline_world(self, px, py)
-
-    def _still_face_under(self, px: float, py: float) -> bool:
-        return ingetrazo_render.still_face_under(self, px, py)
-
-    def _face_center_under(self, px: float, py: float):
-        return ingetrazo_render.face_center_under(self, px, py)
-
     #: More selected faces than this and their centres are neither drawn
     #: nor offered: a «select all» would bury the model in dots.
     FACE_CENTER_SELECTION_MAX = 500
 
-    def _selected_face_centers(self) -> list:
-        return ingetrazo_render.selected_face_centers(self)
-
-    def _face_centers_near(self, px: float, py: float) -> list:
-        return ingetrazo_render.face_centers_near(self, px, py)
-
-    def _draw_selected_face_centers(self, painter: QPainter) -> None:
-        return ingetrazo_render.draw_selected_face_centers(self, painter)
-
-    def _face_context_under(self, px: float, py: float):
-        return ingetrazo_render.face_context_under(self, px, py)
-
-    def _hover_face_plane(self, cursor):
-        return ingetrazo_render.hover_face_plane(self, cursor)
-
-    def _locked_plane_through_reference(self, tool, cursor):
-        return ingetrazo_render.locked_plane_through_reference(self, tool, cursor)
-
-    def _ray_hit_plane(self, cursor, plane):
-        return ingetrazo_render.ray_hit_plane(self, cursor, plane)
-
-    def _start_point_plane(self, tool, start):
-        return ingetrazo_render.start_plane(self, tool, start)
-
-    def _near_horizon_vertical(
-        self, start: QVector3D
-    ) -> Optional[tuple[QVector3D, QVector3D]]:
-        return ingetrazo_render.horizon_vertical(self, start)
-
-
     #: Eye depth (m) a segment is cut at when it runs behind the camera.
     _CLIP_W = 1e-3
-
-    def _clip_w(self) -> float:
-        return ingetrazo_render.clip_distance(self)
 
     def _segment_to_pixels(self, p0: QVector3D, p1: QVector3D):
         mvp = self.camera.projection_matrix() * self.camera.view_matrix()
@@ -1504,46 +1100,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         import numpy as np
         return self._project_px(np.asarray(pts, dtype=float).reshape(-1, 3))
 
-    def _pixel_projector(self):
-        return ingetrazo_render.pixel_projector(self)
-
-
-    @staticmethod
-    def _mesh_fingerprint(mesh):
-        return ingetrazo_render.mesh_fingerprint(mesh)
-
-    @staticmethod
-    def _faces_paint_fp(mesh) -> int:
-        return ingetrazo_render.faces_paint_fp(mesh)
-
-    def _group_fp(self, group):
-        return ingetrazo_render.group_fp(self, group)
-
-    @staticmethod
-    def _translation_probe(entry, mesh):
-        return ingetrazo_render.translation_probe(entry, mesh)
-
-    @staticmethod
-    def _samples_match(entry, mesh) -> bool:
-        return ingetrazo_render.samples_match(entry, mesh)
-
-    @staticmethod
-    def _shift_obb(entry, d) -> None:
-        return ingetrazo_render.shift_obb(entry, d)
-
-    def _shift_chunk(self, entry, d, mesh) -> None:
-        return ingetrazo_render.shift_chunk(self, entry, d, mesh)
-
-
-    def _instance_chunk(self, group):
-        return ingetrazo_render.instance_chunk(self, group)
-
-    def _shift_instance_entry(self, entry, d: QVector3D) -> None:
-        return ingetrazo_render.shift_instance_entry(self, entry, d)
-
-    def _group_chunk(self, group):
-        return ingetrazo_render.group_chunk(self, group)
-
     # ---- On-disk chunk cache (P4: fast cold start) --------------------------
     # Chunk arrays are a pure function of the mesh content; persisting them
     # turns the multi-second cold build of a big group into a disk read.
@@ -1560,41 +1116,12 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         d.mkdir(parents=True, exist_ok=True)
         return d
 
-    @staticmethod
-    def _chunk_cache_key(mesh, fp) -> str:
-        return ingetrazo_render.chunk_cache_key(mesh, fp)
-
     _CHUNK_CACHE_FIELDS = (
         "edges", "vcol", "smooth_vcol", "by_texture", "tcol", "ttex", "back_vcol",
         "back_tex", "back_tcol", "back_ttex", "fvcol", "dback", "areas",
         "v0", "e1", "e2", "tri_ent", "soft_pts", "soft_n0", "soft_c0",
         "soft_n1", "soft_c1", "soft_single", "edge_layer", "soft_layer",
         "bbox", "coordsum", "nv", "ne", "nf", "samples")
-
-    def _chunk_cache_load(self, group, fp, vkey):
-        return ingetrazo_render.chunk_cache_load(self, group, fp, vkey)
-
-    def _chunk_cache_store(self, mesh, entry) -> None:
-        return ingetrazo_render.chunk_cache_store(self, mesh, entry)
-
-    def _np_mvp(self):
-        return ingetrazo_render.camera_matrix_array(self)
-
-    def _camera_px(self):
-        return ingetrazo_render.camera_transform(self)
-
-    def _project_px(self, pts):
-        return ingetrazo_render.document_project_batch(self, pts)
-
-    @staticmethod
-    def _frustum_planes(mvp):
-        from ingetrazo_core import frustum_planes
-        return frustum_planes(mvp)
-
-    @staticmethod
-    def _aabb_visible(planes, lo, hi) -> bool:
-        from ingetrazo_core import aabb_visible
-        return aabb_visible(planes, lo, hi)
 
     def _visible_spans(self, spans, planes, split=None):
         from ingetrazo_core import visible_draw_spans
@@ -1604,9 +1131,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     def _visible_spans_np(self, spans, planes, split=None):
         from ingetrazo_core import visible_draw_spans
         return visible_draw_spans(self, spans, planes, split, True)
-
-    def _tex_run_spans(self, parts, planes, fading: bool):
-        return ingetrazo_render.tex_run_spans(self, parts, planes, fading)
 
     #: Component placements holding more faces than this, all together,
     #: switch the pick index to LAZY placements (issue #158): below it the
@@ -1623,68 +1147,12 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     #: Screen margin, in pixels, around the cursor for «near the cursor».
     _PICK_NEAR_PX = 32.0
 
-    def _pick_lazy_table(self):
-        return ingetrazo_core.pick_lazy_table(self)
-
-    def _pick_instance_set(self, table):
-        return ingetrazo_core.pick_instance_set(self, table)
-
     def start_pick_warmup(self) -> None:
         return ingetrazo_core.start_pick_warmup(self)
-
-    def _static_occluders(self, idx):
-        return ingetrazo_core.static_occluders(self, idx)
-
-    def _static_ray_rows(self, idx, ent_mask, o3, d3):
-        return ingetrazo_core.static_ray_rows(self, idx, ent_mask, o3, d3)
-
-    def _lazy_native(self):
-        return ingetrazo_core.pick_lazy_native(self)
-
-    def _pick_materialize(self, near):
-        return ingetrazo_core.pick_materialize(self, near)
-
-    def _depth_limits(self, x: float, y: float, r: float):
-        return ingetrazo_core.pick_depth_limits(self, x, y, r)
-
-    @staticmethod
-    def _depth_hidden(seen, pts, sx, sy):
-        return ingetrazo_core.depth_hidden(seen, pts, sx, sy)
-
-    def _footprint_need(self, table, x: float, y: float, reach=None):
-        return ingetrazo_core.footprint_need(self, table, x, y, reach)
-
-    def _footprint_rows(self, table):
-        return ingetrazo_core.footprint_rows(self, table)
-
-    def _visible_depth_limit(self, x: float, y: float):
-        return ingetrazo_core.visible_depth_limit(self, x, y)
-
-    def _placements_under_px(self, lo, hi, x, y, r=None):
-        return ingetrazo_core.placements_under_px(self, lo, hi, x, y, r)
-
-    def _outer_loose_meshes(self):
-        return ingetrazo_core.outer_loose_meshes(self)
-
-    def _loose_mesh_wrapper(self, mesh):
-        return ingetrazo_core.loose_mesh_wrapper(self, mesh)
-
-    def _pick_index(self, near=None):
-        return ingetrazo_core.document_pick_index(self, near)
-
-    @staticmethod
-    def _pick_flat(idx):
-        return ingetrazo_core.flat_pick_index(idx)
 
     def ray_distance(self, origin: QVector3D, direction: QVector3D,
                      reach: float | None = None):
         return ingetrazo_core.index_ray_distance(self, origin, direction, reach)
-
-    def _ray_hits(self, idx, origin, direction, ent_mask,
-                  reduce_global: bool = False, reach: float | None = None,
-                  own: bool = True):
-        return ingetrazo_core.index_ray_hits(self, idx, origin, direction, ent_mask,
-                              reduce_global, reach, own)
 
     def _ray_near(self, x: float, y: float):
         """What a ray pick at widget pixel ``(x, y)`` asks the pick index
@@ -1694,12 +1162,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         nat = (self._lazy_native() if hasattr(self, "_lazy_native")
                else None)
         return "skip" if nat is not None else ("px", x, y)
-
-    def _face_hits(self, idx, origin, direction, which: str = "sel"):
-        return ingetrazo_core.face_hits(self, idx, origin, direction, which)
-
-    def _lazy_sel_rows(self, nat):
-        return ingetrazo_core.pick_lazy_selectable(self, nat)
 
     def _hover_hits(self, idx, origin, direction):
         return ingetrazo_core.cached_face_hits(self, idx, origin, direction, False)
@@ -1740,22 +1202,11 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
                                hidden=self.linework_hidden,
                                with_distance=True)
 
-    def _linework_edge_rows(self, screen_x: float, screen_y: float):
-        return ingetrazo_core.linework_edge_rows(self, screen_x, screen_y)
-
     def pick_linework_groups(self, screen_x: float, screen_y: float):
         return ingetrazo_core.linework_groups(self, screen_x, screen_y, False)
 
     def linework_groups_around(self, screen_x: float, screen_y: float):
         return ingetrazo_core.linework_groups(self, screen_x, screen_y, True)
-
-    def _pick_edge(self, screen_x: float, screen_y: float,
-                   visible_only: bool, which: str = "sel", hidden=None,
-                   with_distance: bool = False):
-        return ingetrazo_render.document_edge_result(self, screen_x, screen_y, visible_only, which, hidden, with_distance)
-
-    def _pick_edge_d(self, screen_x, screen_y, visible_only, which, hidden):
-        return ingetrazo_core.pick_edge_distance(self, screen_x, screen_y, visible_only, which, hidden)
 
     def pick_dimension(self, screen_x: float, screen_y: float):
         return ingetrazo_render.pick_dimension(self, screen_x, screen_y)
@@ -1766,17 +1217,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
     def pick_geopath(self, screen_x: float, screen_y: float):
         return ingetrazo_render.pick_geopath(self, screen_x, screen_y)
-
-    @classmethod
-    def _tool_busy_for_delete(cls, tool) -> bool:
-        return ingetrazo_render.tool_busy_for_delete(cls, tool)
-
-    @staticmethod
-    def _tool_busy(tool) -> bool:
-        return ingetrazo_render.tool_busy(tool)
-
-    def _gedge_screen(self):
-        return ingetrazo_core.gedge_screen(self)
 
     #: The group-edge distances' contract with their two readers (the
     #: hovered-edge pick, within ``pick_threshold_px``; the snap prefilter,
@@ -1795,30 +1235,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     #: grid (core.edge_grid) instead of one pass over all of them.
     GEDGE_GRID_MIN = 20000
 
-    def _gedge_dist(self, px: float, py: float):
-        return ingetrazo_core.gedge_dist(self, px, py)
-
-    def _ledge_screen(self):
-        return ingetrazo_core.ledge_screen(self)
-
-    def _nearby_loose_edges(self, px: float, py: float,
-                            radius_px: float = 64.0, cap: int = 400) -> list:
-        return ingetrazo_core.nearby_loose_edges(self, px, py, radius_px, cap)
-
-    def _nearby_group_edges(self, px: float, py: float,
-                            radius_px: float = 48.0, cap: int = 48) -> list:
-        return ingetrazo_core.nearby_group_edges(self, px, py, radius_px, cap)
-
-    def _nearby_edges_unbaked(self, px, py, radius, cap, nat,
-                              with_d=False) -> list:
-        return ingetrazo_core.nearby_edges_unbaked(self, px, py, radius, cap, nat, with_d)
-
-    def _nearby_edges_found(self, px, py, radius, cap, nat) -> list:
-        return ingetrazo_core.nearby_edges_found(self, px, py, radius, cap, nat)
-
-    def _pick_group_edge_unbaked(self, px, py, nat):
-        return ingetrazo_core.pick_group_edge_unbaked(self, px, py, nat)
-
     def pick_edge_any(self, screen_x: float, screen_y: float):
         return ingetrazo_core.pick_edge_any(self, screen_x, screen_y)
 
@@ -1826,74 +1242,11 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     #: arc's midpoint for it to enter the snap scene at all.
     POINT_INFERENCE_PX = 40.0
 
-    def _component_origin_points(self, px: float, py: float) -> list:
-        return ingetrazo_core.component_origin_points(self, px, py)
-
-    def _arc_midpoints(self, px: float, py: float) -> list:
-        return ingetrazo_core.arc_midpoints(self, px, py)
-
-    @staticmethod
-    def _mesh_arc_midpoints(mesh) -> list:
-        return ingetrazo_core.mesh_arc_midpoints(mesh)
-
-    def _billboard_placements(self) -> list:
-        return ingetrazo_core.billboard_placements(self)
-
-    def _billboard_snap_edges(self) -> list:
-        return ingetrazo_core.billboard_snap_edges(self)
-
-    def _snap_scene(self, px: Optional[float] = None,
-                    py: Optional[float] = None):
-        return ingetrazo_core.document_snap_scene(self, px, py)
-
-    def _group_obb(self, group):
-        return ingetrazo_core.group_obb(self, group)
-
-    def _proto_points_cache(self, group) -> dict:
-        return ingetrazo_core.proto_points_cache(self, group)
-
-    def _editing_meshes(self) -> set:
-        return ingetrazo_core.editing_meshes(self)
-
-    def _proto_points_store(self, group, protos: dict) -> None:
-        return ingetrazo_core.proto_points_store(self, group, protos)
-
-    @staticmethod
-    def _compute_obb(group, protos=None):
-        return ingetrazo_core.compute_obb(group, protos)
-
-    def _update_center_ref(self, x: float, y: float) -> None:
-        return ingetrazo_core.update_center_ref(self, x, y)
-
-    def _center_of_group_edge(self, pseudo):
-        return ingetrazo_core.center_of_group_edge(self, pseudo)
-
-    def _center_of_edge(self, edge, mesh):
-        return ingetrazo_core.center_of_edge(self, edge, mesh)
-
-    def _center_of_face(self, face, group, mesh, x, y):
-        return ingetrazo_core.center_of_face(self, face, group, mesh, x, y)
-
-    def _center_hint_px(self, ref, pc) -> float:
-        return ingetrazo_core.center_hint_px(self, ref, pc)
-
-    def _valid_center_ref(self):
-        return ingetrazo_core.valid_center_ref(self)
-
-    def _selection_box_points(self, skip=()) -> list:
-        return ingetrazo_core.selection_box_points(self, skip)
-
     def pick_axis(self, screen_x: float, screen_y: float):
         return ingetrazo_render.pick_axis(self, screen_x, screen_y)
 
-    def _axis_source_visible(self, name: str, point: QVector3D) -> bool:
-        return ingetrazo_render.axis_source_visible(self, name, point)
-
     def _shown_guides(self) -> list:
         return shown_guides(self.scene)
-
-    def _circle_pick_distance(self, g, screen_x: float, screen_y: float):
-        return ingetrazo_render.circle_pick_distance(self, g, screen_x, screen_y)
 
     def pick_guide(self, screen_x: float, screen_y: float):
         return ingetrazo_render.pick_guide(self, screen_x, screen_y)
@@ -1901,17 +1254,11 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     def pick_vertex(self, screen_x: float, screen_y: float):
         return ingetrazo_render.pick_vertex(self, screen_x, screen_y)
 
-    def _pick_vertex_unbaked(self, screen_x, screen_y, nat):
-        return ingetrazo_render.pick_vertex_unbaked(self, screen_x, screen_y, nat)
-
     def hlr_geometry(self, tags: bool = False):
         return ingetrazo_render.hlr_geometry(self, tags)
 
     def hlr_geometry_now(self):
         return ingetrazo_render.hlr_geometry_now(self)
-
-    def _effective_style(self):
-        return ingetrazo_render.effective_style(self)
 
     def _view_style(self):
         """The style this view shows outside the composer: its own when it
@@ -1923,27 +1270,9 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
 
 
-    def _occluded_on_screen(self, world: QVector3D) -> bool:
-        return ingetrazo_core.occluded_on_screen(self, world)
-
-    def _is_occluded(self, world: QVector3D) -> bool:
-        return ingetrazo_core.is_occluded(self, world)
-
     #: Cap on rays × triangles in one NumPy block of ``_occluded_many``
     #: (×3 float64 per array: ~50 MB at most).
     _OCCL_BLOCK = 2_000_000
-
-    def _occluded_many(self, worlds) -> list:
-        return ingetrazo_core.occluded_many(self, worlds)
-
-    def _first_clear(self, pts):
-        return ingetrazo_core.first_clear(self, pts)
-
-    def _occluded_memo_key(self):
-        return ingetrazo_core.occluded_memo_key(self)
-
-    def _occluded_many_now(self, worlds) -> list:
-        return ingetrazo_core.occluded_many_now(self, worlds)
 
     def pick_face(self, screen_x: float, screen_y: float):
         return ingetrazo_render.pick_face(self, screen_x, screen_y)
@@ -1964,9 +1293,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         face, owner, _place, _mesh = DocumentInteraction._face_any(
             self, screen_x, screen_y, "sel")
         return face, owner
-
-    def _face_any(self, screen_x: float, screen_y: float, which: str):
-        return ingetrazo_render.face_any(self, screen_x, screen_y, which)
 
     def pick_face_inference(self, screen_x: float, screen_y: float):
         """The face the SNAP ENGINE may read under the cursor as
@@ -1995,30 +1321,12 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
             return None, None
         return face, place
 
-    def _smallest_at_front(self, hits, origin, direction):
-        return ingetrazo_render.smallest_at_front(self, hits, origin, direction)
-
     def pick_group(self, screen_x: float, screen_y: float):
         return ingetrazo_render.pick_group(self, screen_x, screen_y)
-
-    def _pointer_for_tool(self, key, plus=False):
-        return ingetrazo_render.document_tool_pointer(self, key, plus)
-
-    def _apply_tool_cursor(self) -> None:
-        return ingetrazo_render.apply_tool_cursor(self)
-
-    def _apply_nav_cursor(self) -> None:
-        return ingetrazo_render.nav_cursor(self)
 
     # ---- Copy / paste -------------------------------------------------------
     def copy_selection(self, *, publish=True) -> bool:
         return ingetrazo_render.copy_selection(self, publish)
-
-    def _seed_proto_chunk(self, mesh, src_group) -> None:
-        return ingetrazo_render.seed_proto_chunk(self, mesh, src_group)
-
-    def _drop_clip_protos(self, clip) -> None:
-        return ingetrazo_render.drop_clip_protos(self, clip)
 
     def cut_selection(self, *, publish=True) -> bool:
         return ingetrazo_render.cut_selection(self, publish)
@@ -2080,50 +1388,15 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return (self.scene.edit_group is not None
                 and self._edit_rest_mode == "hide")
 
-    def _pick_candidates(self, oculto, lazy):
-        from ingetrazo_render import pick_candidates
-        return pick_candidates(self, oculto, lazy)
-
-    def _context_placements(self):
-        from ingetrazo_render import context_placements
-        return context_placements(self)
-
     def _owner_of(self, group):
         """The object a click on ``group`` must select: a nested placement
         proxy stands for the top-level group that owns it."""
         return getattr(group, "owner", None) or group
 
-    def _draws_in_edit_context(self, group) -> bool:
-        return ingetrazo_render.draws_in_edit_context(self, group)
-
-
-    def _model_point_at(self, x: float, y: float):
-        return ingetrazo_render.model_point_at(self, x, y)
-
-
-    def _orbit_pivot_at(self, x: float, y: float):
-        return ingetrazo_render.orbit_pivot_at(self, x, y)
-
-    def _set_middle_drag_pan_mode(self, pan: bool) -> None:
-        return ingetrazo_render.set_middle_drag_pan_mode(self, pan)
-
     def set_nav_mode(self, mode: Optional[str]) -> None:
         return ingetrazo_render.set_nav_mode(self, mode)
 
     # ---- Input --------------------------------------------------------------
-    def _context_pick(self, x: float, y: float):
-        from ingetrazo_render import context_pick
-        return context_pick(self, x, y)
-
-    def _face_or_image_in_front(self, x: float, y: float):
-        return ingetrazo_render.face_or_image_in_front(self, x, y)
-
-    def _dispatch_tool_click(self, ev, double: bool = False) -> None:
-        return ingetrazo_render.dispatch_tool_click(self, ev, double)
-
-    def _reassert_tool_cursor(self) -> None:
-        return ingetrazo_render.reassert_tool_cursor(self)
-
     # ---- Mouse look (a tool with ``on_look``: First Person) -----------------
 
 
@@ -2170,9 +1443,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     def _extension_snap(self, snap, px_x: float, px_y: float):
         return self.inference._extension_snap(snap, px_x, px_y)
 
-    def _process_hover(self, pos, modifiers) -> None:
-        return ingetrazo_render.process_hover(self, pos, modifiers)
-
     # Below this many pixels of drag, a left press/release is a click, not a box.
     BOX_DRAG_THRESHOLD_PX = 4.0
 
@@ -2190,9 +1460,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     _ZOOM_OUT_STEP = 0.05
 
 
-    def _model_diag(self) -> float:
-        return ingetrazo_render.model_diag(self)
-
     _MODIFIER_KEYS = frozenset({Qt.Key_Control, Qt.Key_Shift, Qt.Key_Alt,
                                 Qt.Key_Meta, Qt.Key_AltGr})
 
@@ -2208,25 +1475,10 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
             return True
         return super().event(ev)
 
-    def _measurement_claims_key(self, ev, buffer) -> bool:
-        return ingetrazo_render.measurement_claims_key(self, ev, buffer)
-
-    def _tool_claims_key(self, ev) -> bool:
-        return ingetrazo_render.tool_claims_key(self, ev)
-
     def keyPressEvent(self, ev) -> None:
         if ingetrazo_render.document_key_press(self, ev):
             return
         return super().keyPressEvent(ev)
-
-    def _release_linear_mode(self) -> None:
-        return ingetrazo_render.release_linear_mode(self)
-
-    def _release_axis_lock_after_operation(self, committed: bool = False) -> None:
-        return ingetrazo_render.release_axis_lock_after_operation(self, committed)
-
-    def _cycle_linear_inference_mode(self) -> None:
-        return ingetrazo_render.cycle_linear_inference_mode(self)
 
     def escape(self) -> None:
         return ingetrazo_render.document_escape(self)
@@ -2253,20 +1505,8 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     def release_constraints(self) -> bool:
         return ingetrazo_render.release_constraints(self)
 
-    def _cycle_reference_mode(self, edge=None) -> None:
-        return ingetrazo_render.cycle_reference_mode(self, edge)
-
-    def _refresh_snap(self) -> None:
-        return ingetrazo_render.refresh_snap(self)
-
     def refresh_status_hint(self) -> None:
         return ingetrazo_render.refresh_status_hint(self)
-
-    def _alt_tapped(self) -> bool:
-        return ingetrazo_render.alt_tapped(self)
-
-    def _apply_alt_cursor(self, down: bool) -> None:
-        return ingetrazo_render.apply_alt_cursor(self, down)
 
     def keyReleaseEvent(self, ev) -> None:
         if ingetrazo_render.document_key_release(self, ev):
@@ -2298,15 +1538,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         "extension", "from_point",
     })
 
-    def _capture_shift_lock(self) -> None:
-        return ingetrazo_render.capture_shift_lock(self)
-
-    def _mark_plane_for_shift(self) -> None:
-        return ingetrazo_render.mark_plane_for_shift(self)
-
-    def _release_shift_plane_mark(self) -> None:
-        return ingetrazo_render.release_shift_plane_mark(self)
-
     # ---- Zoom: the lens typed in the value box ------------------------------
     def apply_zoom_value(self, typed: str) -> bool:
         return ingetrazo_render.apply_zoom_value(self, typed)
@@ -2328,12 +1559,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         from core.units import parse_value_box
         return parse_value_box(buffer, comma_lists)
 
-    def _array_pending(self) -> bool:
-        return ingetrazo_render.array_pending(self)
-
-    def _set_value_buffer(self, text: str) -> None:
-        return ingetrazo_render.set_value_buffer(self, text)
-
     def toggle_projection(self) -> None:
         self.camera.toggle_projection()
         self._sync_projection()
@@ -2351,13 +1576,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         self.update()
 
     # ---- Helpers ------------------------------------------------------------
-    def _snap_at(
-        self, px_x: float, px_y: float, modifiers
-    ) -> Optional[SnapResult]:
-        return ingetrazo_render.document_snap_at(self, px_x, px_y, modifiers)
 
-    def _build_ctx(self, ev) -> Optional[ToolContext]:
-        return ingetrazo_render.build_ctx(self, ev)
 
-    def _note_snap(self, snap: SnapResult) -> None:
-        return ingetrazo_render.note_snap(self, snap)
+ingetrazo_render.register_document_host(DocumentInteraction)
