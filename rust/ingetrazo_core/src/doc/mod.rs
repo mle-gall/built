@@ -33,6 +33,7 @@ mod settings;
 mod feed;
 mod execute;
 pub mod commands;
+mod steps;
 mod file_view;
 mod drawing;
 pub mod occurrences;

@@ -5,7 +5,7 @@ use crate::math::{xyz, Vec3};
 use pyo3::prelude::*;
 type Obj<'py> = Bound<'py, PyAny>;
 #[pyfunction]
-fn add_image(scene: &Obj<'_>, image: &Obj<'_>) -> PyResult<bool> {
+pub(crate) fn add_image(scene: &Obj<'_>, image: &Obj<'_>) -> PyResult<bool> {
     let name = image.getattr("layer")?;
     let make = name.is_truthy()? && scene.call_method1("layer", (&name,))?.is_none();
     if make {
@@ -22,7 +22,7 @@ fn add_image(scene: &Obj<'_>, image: &Obj<'_>) -> PyResult<bool> {
     Ok(make)
 }
 #[pyfunction]
-fn remove_image_layer(scene: &Obj<'_>, image: &Obj<'_>) -> PyResult<()> {
+pub(crate) fn remove_image_layer(scene: &Obj<'_>, image: &Obj<'_>) -> PyResult<()> {
     let name = image.getattr("layer")?;
     if name.is_truthy()? {
         let layer = scene.call_method1("layer", (name,))?;
@@ -33,7 +33,7 @@ fn remove_image_layer(scene: &Obj<'_>, image: &Obj<'_>) -> PyResult<()> {
     Ok(())
 }
 #[pyfunction]
-fn set_image_frame(image: &Obj<'_>, vectors: &Obj<'_>) -> PyResult<(Vec3, Vec3, Vec3)> {
+pub(crate) fn set_image_frame(image: &Obj<'_>, vectors: &Obj<'_>) -> PyResult<(Vec3, Vec3, Vec3)> {
     let previous = (
         Vec3::from(xyz(&image.getattr("origin")?)?),
         Vec3::from(xyz(&image.getattr("u")?)?),
@@ -48,7 +48,7 @@ fn set_image_frame(image: &Obj<'_>, vectors: &Obj<'_>) -> PyResult<(Vec3, Vec3, 
     Ok(previous)
 }
 #[pyfunction]
-fn transform_images(images: Vec<Obj<'_>>, m: &Obj<'_>) -> PyResult<()> {
+pub(crate) fn transform_images(images: Vec<Obj<'_>>, m: &Obj<'_>) -> PyResult<()> {
     for image in images {
         image.setattr(
             "origin",
@@ -64,7 +64,7 @@ fn transform_images(images: Vec<Obj<'_>>, m: &Obj<'_>) -> PyResult<()> {
     Ok(())
 }
 #[pyfunction]
-fn toggle_paths(paths: Vec<Obj<'_>>) -> PyResult<()> {
+pub(crate) fn toggle_paths(paths: Vec<Obj<'_>>) -> PyResult<()> {
     for path in paths {
         path.setattr("closed", !path.getattr("closed")?.is_truthy()?)?;
     }
@@ -72,7 +72,7 @@ fn toggle_paths(paths: Vec<Obj<'_>>) -> PyResult<()> {
 }
 type Surface<'py> = (Obj<'py>, Obj<'py>, Obj<'py>);
 #[pyfunction]
-fn path_surfaces<'py>(paths: Vec<Obj<'py>>, mode: &Obj<'py>) -> PyResult<Vec<Surface<'py>>> {
+pub(crate) fn path_surfaces<'py>(paths: Vec<Obj<'py>>, mode: &Obj<'py>) -> PyResult<Vec<Surface<'py>>> {
     let mut before = Vec::new();
     for p in &paths {
         before.push((p.clone(), p.getattr("surface")?, p.getattr("closed")?));
@@ -87,7 +87,7 @@ fn path_surfaces<'py>(paths: Vec<Obj<'py>>, mode: &Obj<'py>) -> PyResult<Vec<Sur
     Ok(before)
 }
 #[pyfunction]
-fn restore_surfaces(prior: Vec<Surface<'_>>) -> PyResult<()> {
+pub(crate) fn restore_surfaces(prior: Vec<Surface<'_>>) -> PyResult<()> {
     for (p, surface, closed) in prior {
         p.setattr("surface", surface)?;
         p.setattr("closed", closed)?;
@@ -96,7 +96,7 @@ fn restore_surfaces(prior: Vec<Surface<'_>>) -> PyResult<()> {
     Ok(())
 }
 #[pyfunction]
-fn move_node(path: &Obj<'_>, index: &Obj<'_>, value: &Obj<'_>) -> PyResult<Vec3> {
+pub(crate) fn move_node(path: &Obj<'_>, index: &Obj<'_>, value: &Obj<'_>) -> PyResult<Vec3> {
     let points = path.getattr("points")?;
     let old = Vec3::from(xyz(&points.get_item(index)?)?);
     points.set_item(index, Vec3::from(xyz(value)?))?;
