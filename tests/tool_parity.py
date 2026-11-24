@@ -1097,9 +1097,12 @@ def run_offset(steps):
         elif kind == "undo":
             view.history.undo()
         label = tool.value_label()
+        ref = [_pt(p) for p in tool._offset_reference or ()]
+        # An edge selected in the opposite order draws the same segment.
+        reference = [*sorted(ref[:2]), ref[2]] if ref else []
         out.append({"distance": round(tool.distance, 9), "drag": tool.dragging,
                     "lines": sorted(sorted([_pt(a), _pt(b)]) for a, b in tool.rubber_band_lines()),
-                    "reference": [_pt(p) for p in tool._offset_reference or ()],
+                    "reference": reference,
                     "label": None if label is None else [label[0], _pt(label[1])],
                     "areas": sorted(round(f.area(), 8) for f in view.scene.mesh.faces),
                     "vertices": sorted(_pt(v.position) for v in view.scene.mesh.vertices),

@@ -6,6 +6,7 @@
 //! `py.rs` is the only PyO3 face, and `tests.rs` drives the machines
 //! against a fake host.
 
+mod offset_tool;
 mod walkthrough;
 mod scale_grip;
 mod scale_tool;
@@ -336,6 +337,7 @@ pub(crate) fn json_p3(v: &serde_json::Value) -> Option<P3> {
 
 pub fn new_tool(kind: &str) -> Option<Box<dyn Tool>> {
     match kind {
+        "offset" => Some(Box::new(offset_tool::Offset::default())),
         "position_camera" | "look_around" | "walk" | "first_person" => Some(Box::new(walkthrough::Walkthrough::new(kind))),
         "select" => Some(Box::new(select::SelectTool::default())),
         "line" => Some(Box::new(line::LineTool::default())),

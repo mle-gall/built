@@ -44,3 +44,9 @@ class ProtocolTools:
                   angles=angles, **targets)
         self._viewport.update()
         return {**out, "step": out["step"].to_json() if out["step"] else None}
+
+    def _tool_offset_outline(self, distance, **source):
+        from core.protocol.commands import run
+        out = run(self._viewport.history, "offset_outline", distance=distance, **source)
+        self._viewport.update()
+        return {**out, "step": out["step"].to_json() if out["step"] else None}

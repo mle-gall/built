@@ -529,3 +529,24 @@ def test_bridge_rotates_named_vertices_in_one_undo_step(bridge):
     assert actual == sorted((-y, x, z) for x, y, z in before)
     assert vp.history.undo()
     assert sorted(v.position.toTuple() for v in vp.scene.mesh.faces[-1].loop) == before
+
+
+def test_offset_uses_the_face_key_and_model_frame_for_a_distant_path():
+    from core.protocol.commands import run
+    from core.scene import Scene
+    from core.history import History
+    from ingetrazo_core import Vec3
+    scene = Scene()
+    history = History(scene)
+    face = scene.mesh.add_face([Vec3(0, 0, 0), Vec3(4, 0, 0), Vec3(4, 4, 0), Vec3(0, 4, 0)])
+    assert run(history, "offset_outline", face=str(face.key), distance=.5)["ok"]
+    assert [f.area() for f in scene.mesh.faces if not f.holes] == pytest.approx([9])
+    assert sum(bool(f.holes) for f in scene.mesh.faces) == 1
+    assert history.undo()
+    start = 1_000_000.
+    assert run(history, "offset_outline", points=[[start, 0, 0], [start + 2, 0, 0],
+                                                  [start + 2, 1, 0]],
+               normal=[0, 0, 1], distance=.25)["ok"]
+    coordinates = {v.position.toTuple() for v in scene.mesh.vertices}
+    assert (start, .25, 0) in coordinates and (start + 1.75, 1, 0) in coordinates
+    assert history.undo() and len(scene.mesh.vertices) == 4

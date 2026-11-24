@@ -417,6 +417,11 @@ impl ToolMachine {
     }
 
     #[staticmethod]
+    fn offset_loop(points: Vec<P3>, normal: P3, distance: f64) -> Option<Vec<P3>> {
+        super::offset_tool::closed_offset(&points, normal, distance)
+    }
+
+    #[staticmethod]
     fn walk_blocked(host: &Bound<'_, PyAny>, eye: P3, delta: P3, height: f64, clearance: f64, knee: f64) -> PyResult<bool> {
         let mut bridge = PyHost { obj: host, err: None };
         let blocked = super::walkthrough::blocked(&mut bridge, eye, delta, height, clearance, knee);

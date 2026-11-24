@@ -114,6 +114,52 @@ def _push_face(history, f, distance, keep_base, tool):
     return _answer(history, before)
 
 
+def offset_outline(history, distance, face=None, points=None, normal=None, closed=False, eye=None):
+    """Offset one keyed face or a coplanar edge path, in model coordinates."""
+    import math
+    from core.coordinate_frame import ZERO, choose_origin, mesh_frame, point_in_frame
+    from core.edits import build_add_edges
+    from core.offset import build_offset_face, OffsetHoleCollision, offset_chain
+    from core.topology import offset_loop
+    from ingetrazo_core import Vec3
+
+    if (face is None) == (points is None):
+        raise ValueError("offset_outline needs one face or point path")
+    if not math.isfinite(distance) or distance == 0:
+        raise ValueError("offset distance must be finite and nonzero")
+    mesh = history.scene.mesh
+    store = store_of(mesh)
+    before = history.revision
+    if face is not None:
+        (target,) = _need(mesh, "face", [face])
+        origin = choose_origin(store.face_positions(target.key)[0][0]) if store is not None else ZERO
+        with mesh_frame(mesh, origin):
+            try:
+                cmd = build_offset_face(mesh, target, distance)
+            except OffsetHoleCollision:
+                return {**_answer(history, before, False), "error": "hole"}
+            if cmd is None:
+                return {**_answer(history, before, False), "error": "collapsed_face"}
+            history.execute(cmd)
+    else:
+        if len(points) < (3 if closed else 2) or normal is None:
+            raise ValueError("an offset path needs points and a plane normal")
+        if not all(len(p) == 3 and all(math.isfinite(v) for v in p) for p in [normal, *points]):
+            raise ValueError("offset path vectors must contain three finite coordinates")
+        if Vec3(*normal).lengthSquared() < 1e-18:
+            raise ValueError("offset path normal must be nonzero")
+        origin = choose_origin(points[0]) if store is not None else ZERO
+        with mesh_frame(mesh, origin):
+            path = [point_in_frame(p, origin) for p in points]
+            shifted = (offset_loop if closed else offset_chain)(path, Vec3(*normal), distance)
+            if shifted is None:
+                return {**_answer(history, before, False), "error": "collapsed_chain"}
+            segments = list(zip(shifted, shifted[1:] + (shifted[:1] if closed else [])))
+            history.execute(build_add_edges(history.scene, segments,
+                            eye=point_in_frame(eye, origin) if eye is not None else None))
+    return _answer(history, before)
+
+
 def follow_me(history, face, path, closed=False):
     from ingetrazo_core import Vec3 as QVector3D
     from core.sweep import build_sweep_face
@@ -1241,7 +1287,7 @@ COMMANDS = {"set_location": set_location, "set_model_units": set_model_units, "s
             "add_guide_circle": add_guide_circle, "add_arc": add_arc,
             "move_placements": move_placements, "copy_placements": copy_placements,
             "move_selection": move_selection, "scale_selection": scale_selection,
-            "rotate_selection": rotate_selection,
+            "rotate_selection": rotate_selection, "offset_outline": offset_outline,
             "divide_edges": divide_edges, "join_edges": join_edges,
             "move_vertices": move_vertices, "erase": erase,
             "reverse_faces": reverse_faces, "push_pull": push_pull, "orient_faces": orient_faces,

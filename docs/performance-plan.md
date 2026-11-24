@@ -2933,7 +2933,7 @@ Native denotes routed, not exhaustive parity acceptance.
 | center_arc | CenterArcTool | native | rubber_band_lines |
 | pie | PieTool | native | rubber_band_lines |
 | pushpull | PushPullTool | native | _pixel_to_ray, _world_to_pixel, pick_face_any, rubber_band_lines |
-| offset | OffsetTool | native | _pixel_to_ray, _world_to_pixel, pick_face, rubber_band_lines |
+| offset | OffsetTool | native | Rust state machine, _pixel_to_ray, _world_to_pixel, pick_face |
 | move | MoveTool | native | Rust state machine, _world_to_pixel, pick_edge, pick_face, pick_group, rubber_band_lines, set_groups_preview_offset |
 | rotate | RotateTool | native | Rust state machine, pick_edge, pick_face, rubber_band_lines, set_groups_preview_matrix |
 | scale | ScaleTool | native | Rust state machine, _pixel_to_ray, _world_to_pixel, pick_edge, pick_face, scale_box_state (screen handles) |

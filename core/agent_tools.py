@@ -290,3 +290,12 @@ BUILTIN_TOOLS.append(dict(
         "placements": {"type": "array", "items": {"oneOf": [{"type": "string"}, _KEYS]}},
         "images": _RECORD_INDICES, "guides": _RECORD_INDICES, "sections": _RECORD_INDICES,
     }, required=["center", "axis", "angles"])))
+
+BUILTIN_TOOLS.append(dict(
+    name="offset_outline", mutates=True,
+    description="Offset a keyed face or a coplanar edge path by a signed distance in metres.",
+    inputSchema=dict(type="object", properties={
+        "distance": {"type": "number"}, "face": _KEYS["items"],
+        "points": {"type": "array", "items": _VECTOR}, "normal": _VECTOR,
+        "closed": {"type": "boolean"}, "eye": _VECTOR,
+    }, required=["distance"], oneOf=[{"required": ["face"]}, {"required": ["points", "normal"]}])))

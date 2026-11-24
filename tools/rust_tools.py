@@ -67,7 +67,7 @@ class _Host:
         from core.protocol.commands import run
         args = json.loads(args)
         for key in ("a", "b", "eye", "anchor", "center"):
-            if key in args:
+            if args.get(key) is not None:
                 args[key] = self._model(args[key])
         for key in ("outer", "points"):
             if key in args:
@@ -80,7 +80,7 @@ class _Host:
         try:
             answer = run(history, name, **args)
         except (KeyError, ValueError) as error:
-            if name not in ("scale_selection", "rotate_selection"):
+            if name not in ("scale_selection", "rotate_selection", "offset_outline"):
                 raise
             # A stale target during hot retype must leave the machine
             # free to redo the original command.
@@ -1747,3 +1747,10 @@ class WalkTool(WalkHost, RustTool):
 
 class FirstPersonTool(FirstPersonHost, RustTool):
     kind = "first_person"
+
+from tools.offset_host import OffsetHost, _run_from_edge, _run_from_edges
+
+
+class OffsetTool(OffsetHost, RustTool):
+    kind = "offset"
+    uses_snap = OffsetHost.uses_snap

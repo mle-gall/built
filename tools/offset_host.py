@@ -1,0 +1,309 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""Offset viewport bindings. The machine owns the source geometry and gesture."""
+from PySide6.QtCore import QPointF, QRectF, Qt
+from PySide6.QtGui import QColor, QPainter, QPen
+from ingetrazo_core import Vec3 as QVector3D
+
+from core.i18n import tr
+from core.mesh import Edge
+from core.units import fmt_len
+from tools.rust_tools import _point_property
+
+
+def _field(key):
+    return property(lambda self: self._state(key), lambda self, v: self._machine.set(key, v))
+
+
+class OffsetHost:
+    _READ_DURING = ("dragging", "distance", "ref_point", "ref_inward", "reference")
+    hovered_face = hovered_edge = None
+    _base_face = None
+    dragging = _field("dragging")
+    distance = _field("distance")
+    _armed = _field("armed")
+    _closed = _field("closed")
+    _ref_point = _point_property("ref_point")
+    _ref_inward = _point_property("ref_inward")
+    allow_inferences = False
+    wireframe_color = (0.13, 0.17, 0.23, 1.0)
+    wireframe_depth_tested = True
+    allowed_snap_kinds = frozenset((
+        "endpoint", "midpoint", "arc_midpoint", "center", "origin",
+        "component_origin", "intersection", "intersection_edge",
+        "intersection_face",
+    ))
+
+    @property
+    def uses_snap(self) -> bool:
+        """Only during the drag, whose distance snaps to named model points.
+        Before it the click picks a face or a run of edges, not a point."""
+        return self.dragging
+
+
+    @property
+    def _chain(self):
+        return self._state("chain")
+
+    @_chain.setter
+    def _chain(self, chain):
+        if chain:
+            self.base_face = None
+
+    @property
+    def base_face(self):
+        return self._base_face
+
+    @base_face.setter
+    def base_face(self, face):
+        self._base_face = face
+        self._machine.set("face", str(face.key) if face is not None else None)
+
+    @property
+    def _loop(self):
+        return [QVector3D(*p) for p in self._machine.query("points", None)]
+
+    @_loop.setter
+    def _loop(self, points):
+        self._machine.set("points", [p.toTuple() for p in points])
+
+    @property
+    def _normal(self):
+        return QVector3D(*self._machine.query("normal", None))
+
+    @_normal.setter
+    def _normal(self, n):
+        self._machine.set("normal", n.toTuple())
+
+    @property
+    def _offset_reference(self):
+        points = self._state("reference")
+        return None if points is None else tuple(QVector3D(*p) for p in points)
+
+    def _pointer(self, kind, ctx, t=0.0):
+        event = super()._pointer(kind, ctx, t)
+        if event["snap_kind"] in self.allowed_snap_kinds:
+            event["world"] = ctx.snap.point.toTuple()
+        else:
+            event["snap_kind"] = None
+        return event
+
+    def on_value(self, viewport, value):
+        if not isinstance(value, (int, float)):
+            return False
+        answer = self._send(viewport, {"type": "value", "value": value})
+        if answer["redraw"]:
+            viewport.update()
+        return answer["consumed"]
+
+    def _commit(self, viewport):
+        self._send(viewport, {"type": "key", "key": "CommitOffset"})
+        viewport.update()
+
+    def value_label(self):
+        label = self._machine.query("label", None) if self._during is None else None
+        if label is not None:
+            return fmt_len(label[0]), QVector3D(*label[1])
+
+    def host_offset_ray(self, viewport, px):
+        return viewport._pixel_to_ray(*px)
+
+    def host_clear_offset_picks(self, viewport, _):
+        self.hovered_face = self.hovered_edge = self._base_face = None
+
+    def host_clear_offset_hover(self, viewport, _):
+        viewport.set_hover(None)
+
+    def host_hover_outline(self, viewport, px):
+        self.hovered_face = viewport.pick_face(*px)
+        self.hovered_edge = None
+        if self.hovered_face is None:
+            pick = getattr(viewport, "pick_edge", None)
+            self.hovered_edge = pick(*px) if pick else None
+        viewport.set_hover(self.hovered_face or self.hovered_edge)
+        return self._picked(viewport, False)
+
+    def host_picked_outline(self, viewport, _):
+        self._base_face = self.hovered_face
+        return self._picked(viewport, True)
+
+    def _picked(self, viewport, report):
+        f = self.hovered_face
+        if f is not None:
+            if len(f.vertices) >= 3:
+                return dict(points=f.vertices, normal=f.normal(), origin=f.centroid(),
+                            face=str(f.key), closed=True)
+        elif self.hovered_edge is not None:
+            return self._run_payload(viewport, _run_from_edge(self.hovered_edge), report)
+
+    def host_selected_outline(self, viewport, _):
+        selection = list(getattr(getattr(viewport, "scene", None), "selection", ()))
+        if len(selection) < 2 or not all(isinstance(e, Edge) for e in selection):
+            return None
+        run = _run_from_edges(selection)
+        if run is not None:
+            source = self._run_payload(viewport, run, True)
+            if source:
+                viewport.flash_status(tr("{n} edges selected — click to start the offset",
+                                         n=len(selection)), 4000)
+            return source
+
+    def _run_payload(self, viewport, run, report):
+        if run is not None:
+            points, closed = run
+            normal = _newell(points)
+            if normal is not None:
+                return dict(points=points, closed=closed, normal=normal)
+        if report:
+            if run is None:
+                message = "Offset needs one connected run of edges — a polyline, or a closed loop."
+            elif len(points) == 2 and not closed:
+                message = ("This line is on its own — nothing is joined to its ends, so there is no "
+                           "chain to offset. Draw the missing line, or select the edges to offset.")
+                if self.hovered_edge is not None:
+                    viewport.scene.select([self.hovered_edge])
+                viewport.flash_status(tr(message), 6000)
+                return None
+            else:
+                message = ("Offset needs at least two edges that are not in line — a straight "
+                           "run has no plane to offset in.")
+            viewport.flash_status(tr(message), 5000)
+
+    def host_offset_refusal(self, viewport, args):
+        from core.topology import max_offset_distance
+        error, distance, points, normal = args
+        d = fmt_len(abs(distance))
+        if error == "hole":
+            message = tr("{d} runs into a hole of this face — try a smaller offset", d=d)
+        elif error == "collapsed_chain":
+            message = tr("{d} collapses this run — try a smaller offset", d=d)
+        elif error == "collapsed_face":
+            sign = -1 if distance < 0 else 1
+            room = max_offset_distance([QVector3D(*p) for p in points], QVector3D(*normal), sign)
+            side = tr("inward") if sign > 0 else tr("outward")
+            if room <= 1e-4:
+                message = tr("{d} closes this face — it takes no offset {side}", d=d, side=side)
+            else:
+                message = tr("{d} closes this face — {side} it takes at most {max}",
+                             d=d, side=side, max=fmt_len(room))
+        else:
+            message = error
+        if message:
+            viewport.flash_status(message, 5000)
+
+    def draw_overlay(self, viewport, painter: QPainter) -> None:
+        """Show the boundary and the clicked start of the offset distance."""
+        if self._offset_reference is None:
+            return
+        a, b, start = self._offset_reference
+        hidden = getattr(viewport, "_occluded_on_screen", lambda _point: False)
+        if hidden(start):
+            return
+        pixel = viewport._world_to_pixel(start)
+        if pixel is None:
+            return
+        red = QColor(195, 28, 44)
+        painter.save()
+        try:
+            # A white under-stroke separates the reference from both the
+            # model outline and a stippled face highlight.
+            if not hidden((a + b) * 0.5):
+                segment = viewport._segment_to_pixels(a, b)
+                if segment is not None:
+                    p0, p1 = (QPointF(*xy) for xy in segment)
+                    painter.setPen(QPen(QColor(255, 255, 255, 235), 4.0))
+                    painter.drawLine(p0, p1)
+                    painter.setPen(QPen(QColor(0, 1, 255), 2.0))
+                    painter.drawLine(p0, p1)
+            if self.dragging and self._ref_inward is not None:
+                end = start + self._ref_inward * self.distance
+                segment = viewport._segment_to_pixels(start, end)
+                if segment is not None:
+                    pen = QPen(red, 1.25, Qt.DashLine)
+                    pen.setDashPattern([4.0, 3.0])
+                    painter.setPen(pen)
+                    painter.drawLine(*(QPointF(*xy) for xy in segment))
+                    target = viewport._world_to_pixel(end)
+                    if target is not None:
+                        painter.setBrush(QColor(255, 255, 255))
+                        painter.drawEllipse(QPointF(*target), 2.5, 2.5)
+            px, py = pixel
+            square = QRectF(px - 4.0, py - 4.0, 8.0, 8.0)
+            painter.setPen(QPen(QColor(255, 255, 255), 3.5))
+            painter.setBrush(red)
+            painter.drawRect(square)
+            painter.setPen(QPen(red, 1.2))
+            painter.drawRect(square)
+        finally:
+            painter.restore()
+
+def _newell(points: list):
+    """The plane normal of a polyline by Newell's method (open runs
+    included: the closing edge only adds a term), or ``None`` when the
+    points are in line."""
+    n = len(points)
+    if n < 3:
+        return None
+    nx = ny = nz = 0.0
+    for i in range(n):
+        p, q = points[i], points[(i + 1) % n]
+        nx += (p.y() - q.y()) * (p.z() + q.z())
+        ny += (p.z() - q.z()) * (p.x() + q.x())
+        nz += (p.x() - q.x()) * (p.y() + q.y())
+    normal = QVector3D(nx, ny, nz)
+    span = max((p - points[0]).length() for p in points) or 1.0
+    if normal.length() < 1e-6 * span * span:
+        return None
+    return normal.normalized()
+
+
+def _run_from_edges(edges: list):
+    """Order a set of edges into one run: ``(points, closed)``. ``None``
+    unless every vertex joins at most two of them and they form a single
+    path or cycle."""
+    nbrs: dict = {}
+    for e in edges:
+        for v in (e.v0, e.v1):
+            nbrs.setdefault(v.key, (v, []))[1].append(e)
+    if any(len(es) > 2 for _v, es in nbrs.values()):
+        return None
+    ends = [v for v, es in nbrs.values() if len(es) == 1]
+    if len(ends) not in (0, 2):
+        return None
+    closed = not ends
+    start = ends[0] if ends else edges[0].v0
+    points = [QVector3D(start.position)]
+    seen: set = set()
+    v = start
+    while True:
+        nxt = next((e for e in nbrs[v.key][1] if e.key not in seen), None)
+        if nxt is None:
+            break
+        seen.add(nxt.key)
+        v = nxt.other(v)
+        if closed and v == start:
+            break
+        points.append(QVector3D(v.position))
+    if len(seen) != len(edges):
+        return None                           # two separate runs
+    return points, closed
+
+
+def _run_from_edge(edge: Edge):
+    """The run ``edge`` belongs to, walked both ways through vertices
+    where exactly two edges meet (a corner of a polyline); a junction or a
+    free end stops the walk. ``(points, closed)``."""
+    def walk(v, e):
+        out = []
+        while len(v.edges) == 2:
+            e = next(x for x in v.edges if x != e)
+            if e == edge:
+                return out, True              # came round: a closed loop
+            v = e.other(v)
+            out.append(QVector3D(v.position))
+        return out, False
+    fwd, closed = walk(edge.v1, edge)
+    if closed:
+        return [QVector3D(edge.v0.position), QVector3D(edge.v1.position)] + fwd[:-1], True
+    back, _ = walk(edge.v0, edge)
+    return list(reversed(back)) + [QVector3D(edge.v0.position),
+                                   QVector3D(edge.v1.position)] + fwd, False
