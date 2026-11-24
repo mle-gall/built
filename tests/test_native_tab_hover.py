@@ -39,7 +39,8 @@ def setup(app):
             Path(__file__).with_suffix(".redrew").touch()
             raise AssertionError("rendered the model again for a tab preview")
         type(win.view).render_pixels = unexpected
-        from views.shortcuts import action_keys
+        from core.shortcuts import action_keys
+        from ingetrazo_render import shortcut_domains
         from views.settings_sheet import SettingsSheet
         sheet = SettingsSheet("keyboard")
         sheet._win = win
@@ -48,7 +49,8 @@ def setup(app):
             owned = sheet._action("sc:menu:" + command)
             assert owned and owned.portable_keys(), command
             for key in owned.portable_keys():
-                assert [a for a in actions if key in action_keys(a)] == [owned], key
+                active = [a for a in actions if shortcut_domains(a.objectName()) & 1]
+                assert [a for a in active if key in action_keys(a)] == [owned], key
         Path(__file__).with_suffix(".armed").touch()
     for label, fn in [("Arm", arm), ("First", lambda: hover(0)), ("Second", lambda: hover(1)),
                       ("Record", record),

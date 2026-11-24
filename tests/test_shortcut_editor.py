@@ -84,9 +84,13 @@ def test_a_clash_takes_the_keys_from_the_other_action(sheet, monkeypatch):
     taken, = group.portable_keys()
     sheet._assign(explode, [taken])
     forms.pop().press("ok")
-    assert [act for act in sheet.actions() if taken in act.portable_keys()] == [explode]
-    keys = [key for a in sheet.actions() for key in a.portable_keys()]
-    assert len(keys) == len(set(keys))
+    assert not group.portable_keys() and taken in explode.portable_keys()
+    assert sheet._action("sc:sheet:group").portable_keys() == [taken]
+    from ingetrazo_render import shortcut_domains
+    for domain in (1, 2):
+        keys = [key for action in sheet.actions() if shortcut_domains(action.objectName()) & domain
+                for key in action.portable_keys()]
+        assert len(keys) == len(set(keys))
 
 
 def test_default_puts_the_factory_keys_back(sheet):

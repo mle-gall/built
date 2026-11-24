@@ -122,6 +122,23 @@ def test_model_search_lists_menu_commands_and_tools_and_prioritizes_recent_actio
     assert query(win, "frobnic")[0] == []
 
 
+def test_a_plugin_can_hide_its_action_after_the_native_search_opens(win):
+    from PySide6.QtGui import QAction
+    action = QAction("Frobnicate the active sheet", win)
+    ran = Mock()
+    action.triggered.connect(ran)
+    try:
+        assert query(win, "frobnic")[0][0][0] == action.text()
+        action.setVisible(False)
+        wgpu_ui.command_action(win.view, win, "cmdrun", "0")
+        ran.assert_not_called()
+        assert not query(win, "frobnic")[0]
+        action.setVisible(True)
+        assert query(win, "frobnic")[0]
+    finally:
+        action.setParent(None)
+
+
 def test_search_finds_translated_names_and_paths_by_either_language(tmp_path):
     from app_shell.host import Host
     from core import i18n
