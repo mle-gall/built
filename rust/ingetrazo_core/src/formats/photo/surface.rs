@@ -2,7 +2,7 @@
 use super::Obj;
 use crate::math::Vec3;
 use glam::DVec3;
-use numpy::{PyArrayMethods, PyReadonlyArray2};
+use numpy::PyReadonlyArray2;
 use pyo3::{exceptions::PyValueError, prelude::*, types::PyList};
 
 #[pyclass]

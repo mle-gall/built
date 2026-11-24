@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """XYZ map source definitions and native tile capture and caching."""
 from dataclasses import dataclass, field
 from functools import partialmethod
