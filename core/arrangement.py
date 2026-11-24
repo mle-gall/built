@@ -158,6 +158,54 @@ def coplanar_plane(points, tol: float = 1e-4):
     return (o, n)
 
 
+
+def flat_drawing(scene, new_points) -> bool:
+    """Whether the whole drawing (existing mesh + the new loop) shares one
+    plane — the gate for the classic planar arrangement, which forms
+    every intersection face deterministically. 3D models keep the naive path."""
+    verts = [v.position for v in scene.mesh.vertices] + list(new_points)
+    return coplanar_plane(verts) is not None
+
+
+def busy_plane(scene, new_points):
+    """``(origin, normal)`` of the plane the new loop lies on, when that plane
+    already carries mesh content (edges or faces) — the gate for the scoped
+    per-plane arrangement in 3D scenes. As soon as ANY solid exists, the
+    whole-mesh flat gate goes dark; without this, a circle drawn over another
+    circle on the ground stacks two full discs instead of splitting into three
+    areas. ``None`` when the plane is virgin (naive path is enough)."""
+    plane = coplanar_plane(list(new_points))
+    if plane is None:
+        return None
+    origin, normal = plane
+    tol = 1e-4
+    for e in scene.mesh.edges:
+        if (abs(QVector3D.dotProduct(e.a - origin, normal)) < tol
+                and abs(QVector3D.dotProduct(e.b - origin, normal)) < tol):
+            return origin, normal
+    return None
+
+
+def curve_extras(scene, pts):
+    """The commands after a closed curve's edges (a circle, a polygon, a
+    pie): tagged as one curve, with the faces of its plane rebuilt.
+
+    A flat drawing rebuilds the plane's faces from the edge graph (the
+    deterministic planar arrangement: a circle crossing a square splits
+    both); a 3D scene whose plane already carries content runs the SCOPED
+    arrangement on that plane, the disc going in first so the new regions
+    count as covered; a virgin plane takes the disc as is. The outline is
+    drawn either way: only a swept curve's facets hide (Push/Pull)."""
+    from core.history import (AddFaceCommand, RebuildPlaneFacesCommand,
+                              RebuildPlanarFacesCommand, TagCurveCommand)
+    if flat_drawing(scene, pts):
+        return [TagCurveCommand(list(pts), closed=True), RebuildPlanarFacesCommand()]
+    plane = busy_plane(scene, pts)
+    if plane is not None:
+        return [AddFaceCommand(list(pts)), TagCurveCommand(list(pts), closed=True),
+                RebuildPlaneFacesCommand(*plane)]
+    return [AddFaceCommand(list(pts)), TagCurveCommand(list(pts), closed=True)]
+
 def _interior_point(loop: list):
     """A point safely inside the polygon ``loop`` (average of a triangle fan
     vertex that tests inside), good enough for containment nesting."""

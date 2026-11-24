@@ -156,7 +156,7 @@ def commit_arc(viewport, pts: list[QVector3D], close_to=None, trim=None):
     if trim:
         after.append(DeleteEdgesCommand([_Seg(QVector3D(a), QVector3D(b))
                                          for a, b in trim]))
-    from tools.circle import busy_plane, flat_drawing
+    from core.arrangement import busy_plane, flat_drawing
     if flat_drawing(viewport.scene, pts):
         cmd = build_add_edges(
             viewport.scene, segments, detect_faces=False,
