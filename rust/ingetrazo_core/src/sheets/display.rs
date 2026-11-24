@@ -47,6 +47,35 @@ fn swatch_pattern(py: Python<'_>, f: &Fields, name: &str) -> PyResult<Vec<f64>> 
     }
 }
 
+/// Record the chip with the same layer-look painter as a cut ring in a frame.
+fn swatch_ops(py: Python<'_>, f: &Fields, row: usize, name: &str) -> PyResult<Vec<Op>> {
+    let Some(Value::Dict(swatches)) = f.0.get("swatches") else { return Ok(Vec::new()) };
+    let Some((_, Value::Dict(swatch))) = swatches.iter().find(|(k, _)| matches!(k, Value::Str(s) if s == name)) else {
+        return Ok(Vec::new());
+    };
+    let get = |k: &str| swatch.iter().find(|(key, _)| matches!(key, Value::Str(s) if s == k)).map(|(_, v)| v);
+    let Some(Value::Str(hatch)) = get("hatch") else { return Ok(Vec::new()) };
+    if hatch.is_empty() { return Ok(Vec::new()); }
+    let rgb = |k| get(k).and_then(|v| v.to_py(py).ok()?.extract::<[f64; 3]>().ok());
+    let form = match get("hatch_form") {
+        Some(Value::Dict(v)) => Value::Dict(v.clone()).to_py(py)?.cast_into::<PyDict>()?,
+        _ => {
+            let form = PyDict::new(py);
+            for (key, field) in [("angle", "hatch_angle"), ("families", "hatch_families"), ("scale", "hatch_scale")] {
+                if let Some(v) = get(field) { form.set_item(key, v.to_py(py)?)?; }
+            }
+            form
+        }
+    };
+    let look = super::hatching::Look { colour: rgb("color"), ground: rgb("hatch_ground"), ink: rgb("hatch_color"),
+                                       hatch: Some(hatch.clone()), form: Some(form.unbind()) };
+    let [x, y, w, h] = items::legend_chip(row);
+    let ring = vec![[x, y], [x+w, y], [x+w, y+h], [x, y+h]];
+    let mut painter = Painter::default();
+    super::hatching::paint_fills(py, &mut painter, f, &[ring], &[look])?;
+    Ok(painter.ops)
+}
+
 /// A terrain profile's samples, as ``ComposerWindow.profile_for`` gives
 /// them: ``(profile, path_name, message)``.
 fn profile_extra(py: Python<'_>, f: &Fields, given: Option<&Bound<'_, PyAny>>, x: &mut Extra) -> PyResult<()> {
@@ -64,20 +93,20 @@ fn profile_extra(py: Python<'_>, f: &Fields, given: Option<&Bound<'_, PyAny>>, x
             tr(py, "Longitudinal profile — {name}", &[("name", n)])?
         }
     };
-    x.0.insert("title".into(), Value::Str(title));
+    x.values.insert("title".into(), Value::Str(title));
     let waiting = if message.is_empty() { tr(py, "Loading terrain…", &[])? } else { message.clone() };
-    x.0.insert("waiting".into(), Value::Str(waiting));
-    x.0.insert("message".into(), Value::Str(message));
-    x.0.insert("caption".into(), Value::Str(tr(py, "Scale H 1:{h} · V 1:{v} · vert. exag. ×{k}", &[])?));
-    x.0.insert("fitted".into(), Value::Str(tr(py, "(fitted to the width)", &[])?));
+    x.values.insert("waiting".into(), Value::Str(waiting));
+    x.values.insert("message".into(), Value::Str(message));
+    x.values.insert("caption".into(), Value::Str(tr(py, "Scale H 1:{h} · V 1:{v} · vert. exag. ×{k}", &[])?));
+    x.values.insert("fitted".into(), Value::Str(tr(py, "(fitted to the width)", &[])?));
     if let Some(pr) = profile {
         // sheets::profile's sampling: {"samples": [(station, x, y, elevation)], "length"}.
         let rows: Vec<(f64, f64, f64, Option<f64>)> = pr.get_item("samples")?.extract()?;
         let samples = rows.into_iter()
             .map(|(st, _, _, el)| Value::Tuple(vec![Value::Float(st), el.map_or(Value::None, Value::Float)]))
             .collect();
-        x.0.insert("samples".into(), Value::List(samples));
-        x.0.insert("length".into(), Value::Float(pr.get_item("length")?.extract()?));
+        x.values.insert("samples".into(), Value::List(samples));
+        x.values.insert("length".into(), Value::Float(pr.get_item("length")?.extract()?));
     }
     Ok(())
 }
@@ -87,7 +116,7 @@ pub fn extra(py: Python<'_>, handle: &Bound<'_, PyAny>, kind: ItemKind, f: &Fiel
              profile: Option<&Bound<'_, PyAny>>) -> PyResult<Extra> {
     let mut x = Extra::default();
     let mut put = |k: String, v: Value| {
-        x.0.insert(k, v);
+        x.values.insert(k, v);
     };
     match kind {
         ItemKind::ScaleBar => {
@@ -101,6 +130,8 @@ pub fn extra(py: Python<'_>, handle: &Bound<'_, PyAny>, kind: ItemKind, f: &Fiel
                 _ => None,
             }).collect();
             for (i, name) in rows.iter().enumerate() {
+                let ops = swatch_ops(py, f, i, name)?;
+                if !ops.is_empty() { x.swatch_ops.insert(i, ops); }
                 let p = swatch_pattern(py, f, name)?;
                 put(format!("pattern.{i}"), Value::List(p.into_iter().map(Value::Float).collect()));
             }

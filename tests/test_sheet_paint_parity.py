@@ -108,3 +108,32 @@ def test_the_box_is_the_record_s(group, name, make):
         return                                       # a level mark has no box
     w, h = NATIVE.sheet_item_size(item)
     assert (w, h) == pytest.approx((float(item.w_mm), float(item.h_mm)), abs=1e-9)
+
+
+@pytest.mark.parametrize("older_record", [True, False])
+def test_legend_hatch_uses_the_same_clipped_marks_as_a_frame(older_record):
+    import numpy as np
+    from core.composition import Leyenda, MarcoVista
+
+    color, ink, ground = [.3, .6, .8], [.2, .1, .3], [1., .9, .8]
+    form = {"angle": 33., "scale": .65}
+    swatch = dict(color=color, hatch="crosshatch", hatch_color=ink, hatch_ground=ground)
+    if older_record:
+        swatch.update(hatch_angle=33., hatch_scale=.65)
+    else:
+        swatch["hatch_form"] = form
+    legend = Leyenda(rows=["Sample"], swatches={"Sample": swatch})
+    chip = np.array([[2.2, 8.3], [6.2, 8.3], [6.2, 11.5], [2.2, 11.5]])
+    frame = MarcoVista(style="vectorial", cut_fill="solid", pen_edge_mm=.18)
+    content = dict(segs=np.array([[0., 0., 1., 1.]]), kinds=np.array([0]), fills=[chip],
+                   fill_looks=[(color, "crosshatch", ground, ink, form)])
+
+    def hatch_ops(ops):
+        start = next(i for i, op in enumerate(ops) if op["op"] == "path" and op["rings"] == [chip.tolist()])
+        end = next(i for i in range(start, len(ops)) if ops[i]["op"] == "unclip")
+        return ops[start:end]
+
+    actual = hatch_ops(json.loads(NATIVE.sheet_item_display(legend)))
+    expected = hatch_ops(json.loads(NATIVE.sheet_frame_display(frame, content)))
+    assert any(op["op"] == "line" for op in actual)
+    assert actual == expected

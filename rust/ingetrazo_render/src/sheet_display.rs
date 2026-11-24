@@ -174,6 +174,7 @@ pub fn paint(painter: &egui::Painter, ctx: &egui::Context, pictures: &mut Pictur
     let Some(ops) = ops.as_array() else { return };
     let z = place.zoom;
     let mut clip: Option<Vec<Pos2>> = None;
+    let mut clip_rect = painter.clip_rect();
     let mut shapes: Vec<Shape> = Vec::new();
     for op in ops {
         let stroke = stroke_of(op, z);
@@ -234,22 +235,23 @@ pub fn paint(painter: &egui::Painter, ctx: &egui::Context, pictures: &mut Pictur
                     }
                 }
             }
-            "clip" => {
-                if let Some(ring) = op["rings"].as_array().and_then(|r| r.first()) {
-                    clip = Some(place.pts(ring));
-                } else if op["rect"].is_array() {
-                    clip = Some(place.pts(&op["rect"]));
-                }
-            }
-            "unclip" => {
-                // The end of a clip's scope: the outer one again, or none.
-                clip = if let Some(ring) = op["rings"].as_array().and_then(|r| r.first()) {
+            "clip" | "unclip" => {
+                // Flush ink under its current scissor before changing it. A hatch can
+                // contain dots, polygons or pictures as well as straight lines.
+                painter.with_clip_rect(clip_rect).extend(shapes.drain(..));
+                let rings = op["rings"].as_array();
+                clip = if let Some(ring) = rings.and_then(|rs| rs.first()) {
                     Some(place.pts(ring))
                 } else if op["rect"].is_array() {
                     Some(place.pts(&op["rect"]))
-                } else {
-                    None
-                };
+                } else { None };
+                clip_rect = clip.as_ref().map_or(painter.clip_rect(), |ring| {
+                    let mut bounds = Rect::from_points(ring);
+                    if let Some(rs) = rings {
+                        for r in rs.iter().skip(1) { bounds = bounds.union(Rect::from_points(&place.pts(r))); }
+                    }
+                    bounds.intersect(painter.clip_rect())
+                });
             }
             "text" => {
                 let r = place.pts(&op["rect"]);
@@ -272,7 +274,7 @@ pub fn paint(painter: &egui::Painter, ctx: &egui::Context, pictures: &mut Pictur
             _ => {}
         }
     }
-    painter.extend(shapes);
+    painter.with_clip_rect(clip_rect).extend(shapes);
 }
 
 /// Qt's text box: the words laid out in the box's frame (which may turn),
@@ -319,4 +321,27 @@ fn text(shapes: &mut Vec<Shape>, ctx: &egui::Context, op: &J, r: &[Pos2], z: f32
 pub fn screen_bounds(bounds: [f64; 4], place: Place) -> Rect {
     Rect::from_min_size(pos2(place.origin.x + bounds[0] as f32 * place.zoom, place.origin.y + bounds[1] as f32 * place.zoom),
                         vec2(bounds[2] as f32 * place.zoom, bounds[3] as f32 * place.zoom))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hatch_dots_use_the_chip_clip_and_the_next_item_uses_the_page() {
+        let ctx = egui::Context::default();
+        let ops = serde_json::json!([
+            {"op":"clip", "rings":[[[10,20],[18,20],[18,25],[10,25]]]},
+            {"op":"ellipse", "center":[9,20], "ax":[2,0], "ay":[0,2], "brush":"#101010ff"},
+            {"op":"unclip"},
+            {"op":"ellipse", "center":[40,20], "ax":[2,0], "ay":[0,2], "brush":"#101010ff"}
+        ]);
+        let out = ctx.run(egui::RawInput::default(), |ctx| {
+            paint(&ctx.layer_painter(egui::LayerId::background()), ctx, &mut Pictures::default(),
+                  &ops, Place { origin: Pos2::ZERO, zoom: 1.0 });
+        });
+        let chip = Rect::from_min_max(pos2(10.,20.), pos2(18.,25.));
+        assert!(out.shapes.iter().any(|s| s.clip_rect == chip));
+        assert!(out.shapes.last().unwrap().clip_rect.contains(pos2(40.,20.)));
+    }
 }

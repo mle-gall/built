@@ -942,6 +942,7 @@ def legend_rows(scene) -> tuple[list, dict]:
     labels — their folder path, so two «Beams» read apart — and, for each,
     its swatch — colour and line type."""
     rows, swatches = [], {}
+    hatch_forms = cut_hatch_forms(scene)
     for ly in getattr(scene, "layers", ()):
         if not effective_visible(scene, ly) or not getattr(ly, "printable", True):
             continue
@@ -953,10 +954,11 @@ def legend_rows(scene) -> tuple[list, dict]:
         if ly.linetype.startswith(CUSTOM_LINETYPE):
             swatch["pattern"] = list(linetype_pattern(ly.linetype, scene))
         if getattr(ly, "hatch", None):
+            swatch["hatch_form"] = hatch_forms[ly.key]
             swatch["hatch"] = ly.hatch
             if getattr(ly, "hatch_angle", 0.0):
                 swatch["hatch_angle"] = ly.hatch_angle
-            families = layer_hatch_families(scene, ly)
+            families = hatch_forms[ly.key]["families"]
             if families:
                 swatch["hatch_families"] = families
             for key, rgb in (("hatch_ground", hatch_ground_rgb(ly)),

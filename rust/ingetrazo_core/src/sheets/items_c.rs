@@ -77,7 +77,7 @@ pub fn rounded_ring(r: [f64; 4], rx: f64, ry: f64) -> Vec<[f64; 2]> {
 }
 
 fn rows_of(x: &Extra) -> Vec<(String, String)> {
-    match x.0.get("rows") {
+    match x.values.get("rows") {
         Some(Value::List(rows)) => rows.iter().filter_map(|r| match r {
             Value::List(c) | Value::Tuple(c) if c.len() >= 2 => {
                 let s = |v: &Value| match v {
