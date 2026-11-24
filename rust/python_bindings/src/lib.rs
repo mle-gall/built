@@ -171,6 +171,7 @@ impl NativeBinding {
 
 pub struct Registrar<'py> {
     method: Obj<'py>,
+    plugin_method: Option<Obj<'py>>,
     builtins: Bound<'py, PyModule>,
     defaults: Bound<'py, PyDict>,
 }
@@ -178,10 +179,22 @@ pub struct Registrar<'py> {
 impl<'py> Registrar<'py> {
     pub fn new(py: Python<'py>) -> PyResult<Self> {
         Ok(Self {
+            plugin_method: None,
             method: py.import("types")?.getattr("MethodType")?,
             builtins: py.import("builtins")?,
             defaults: PyDict::new(py),
         })
+    }
+
+    /// Some plugin hosts inspect a bound slot with CPython's PyFunction API.
+    /// Give them a real Python function while dispatching the body natively.
+    pub fn with_plugin_method(mut self, wrap: Obj<'py>) -> Self {
+        self.plugin_method = Some(wrap);
+        self
+    }
+
+    pub fn bind_default(&self, name: &str, value: &Obj<'py>) -> PyResult<()> {
+        self.defaults.set_item(name, value)
     }
 
     pub fn install(
@@ -277,8 +290,12 @@ impl<'py> Registrar<'py> {
         binding.setattr("__module__", module)?;
         binding.setattr("__annotations__", annotations)?;
         binding.setattr("__doc__", (!doc.is_empty()).then_some(doc))?;
+        let binding = match (&self.plugin_method, mode) {
+            (Some(wrap), Mode::Method | Mode::Class) => wrap.call1((binding,))?,
+            _ => binding.into_any(),
+        };
         let binding = match mode {
-            Mode::Method | Mode::Function => binding.into_any(),
+            Mode::Method | Mode::Function => binding,
             Mode::Static => self.builtins.call_method1("staticmethod", (binding,))?,
             Mode::Class => self.builtins.call_method1("classmethod", (binding,))?,
             Mode::Property => self.builtins.call_method1("property", (binding,))?,
