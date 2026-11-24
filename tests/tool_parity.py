@@ -1001,6 +1001,57 @@ def run_rotate(steps):
     return out
 
 
+TAPE_SCENARIOS = {
+    "axis_offset": [("axis", "x"), ("click", 2, .02, None), ("hover", 3, 1, None),
+                    ("value", -.75), ("undo",)],
+    "source_point": [("click", 2, 1, "endpoint"), ("hover", 2, 4, None), ("value", 2.5),
+                     ("click", 0, 0, "origin"), ("click", 3, 4, "endpoint")],
+    "mode_cycle": [("control",), ("click", 1, 2, None), ("click", 1, 2, None), ("control",),
+                   ("click", 0, 0, None), ("hover", 3, 4, None), ("value", 4),
+                   ("click", 3, 4, None), ("undo",)],
+    "guide_source": [("guide",), ("click", 2, 1, "on_edge"), ("hover", 3, 2, None),
+                     ("click", 3, 2, None), ("click", 2, 1, "on_edge"), ("cancel",), ("undo",)],
+}
+
+
+def run_tape(steps):
+    from PySide6.QtCore import Qt
+    from core.guide import Guide
+    from core.scene import Scene
+    from tests.test_tape_axis_source_and_guide_segment import _Vp, _ctx, V
+    from tools.tape import TapeMeasureTool
+    view, tool = _Vp(Scene()), TapeMeasureTool()
+    tool.on_activate(view)
+    out = []
+    for kind, *args in steps:
+        result = None
+        if kind == "axis":
+            view._axis = args[0]
+        elif kind == "guide":
+            source = Guide(V(0, 1), V(1, 0))
+            view.scene.guides.append(source)
+            view.pick_guide = lambda *_: source
+        elif kind in ("hover", "click"):
+            ctx = _ctx(view, *args[:2], kind=args[2])
+            getattr(tool, "on_" + kind)(ctx)
+        elif kind == "control":
+            result = tool.on_key_release(view, Qt.Key_Control)
+        elif kind == "value":
+            result = tool.on_value(view, args[0])
+        elif kind == "cancel":
+            tool.on_cancel(view)
+        elif kind == "undo":
+            view.history.undo()
+        label = tool.value_label()
+        out.append({"mode": tool._mode, "start": _pt(tool.start_point), "measured": tool._measured,
+                    "label": [label[0], _pt(label[1])] if label else None,
+                    "band": [[_pt(a), _pt(b)] for a, b in tool.rubber_band_lines()],
+                    "preview": [[_pt(a), _pt(b)] for a, b in tool.guide_preview_lines()],
+                    "guides": [[_pt(g.point), _pt(g.direction), _pt(g.origin)] for g in view.scene.guides],
+                    "undo": len(view.history.undo_stack), "result": result})
+    return out
+
+
 FILLET_SCENARIOS = {
     "cursor_round": [("hover", 1, 0, 1), ("click", 1, 0, 1), ("hover", 1, .2, 1),
                      ("click", 1, .2, 1), ("undo",)],
@@ -1300,6 +1351,9 @@ def record(which=("line", "select", "rectangle", "move", "circle", "rotated_rect
     if "rotated_rectangle" in which:
         rot = {name: run_rot(steps) for name, steps in ROT_SCENARIOS.items()}
         (FIXTURES / "rotated_rectangle.json").write_text(_compact(rot))
+    if "tape" in which:
+        cases = {name: run_tape(steps) for name, steps in TAPE_SCENARIOS.items()}
+        (FIXTURES / "tape.json").write_text(_compact(cases))
     if "fillet" in which:
         cases = {name: run_fillet(steps) for name, steps in FILLET_SCENARIOS.items()}
         (FIXTURES / "fillet.json").write_text(_compact(cases))
