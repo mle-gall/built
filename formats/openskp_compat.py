@@ -116,6 +116,14 @@ def apply() -> bool:
         from openskp import legacy as L
     except Exception:  # noqa: BLE001 — no openskp: nothing to fix
         return False
+    from openskp import _core
+    from functools import partial
+    from ingetrazo_core import skp_geometry_nodes
+    if hasattr(_core, "_GeometryRecordNode"):
+        _core._parse_tlv_geometry = partial(
+            skp_geometry_nodes, _core._TlvNode, _core._GeometryRecordNode,
+            _core._tag_strings())
+    _core._parse_pages = _parse_pages
     _applied = True
     _keep_legacy_pids(L)
     layers = _keep_layer_table()
@@ -313,84 +321,12 @@ def _keep_layer_table() -> bool:
 # A tag's own record (8C3C) does not name its folder (its 903C reads 0
 # throughout): membership is the folder's list.
 
-#: Folder records' children, by tag.
-_F_FOLDER, _F_NAME, _F_SUBS, _F_TAGS, _F_HIDDEN = (
-    "803E", "813E", "833E", "843E", "823E")
+from ingetrazo_core import skp_tag_folders as parse_tag_folders
 
 
-def _records(data: bytes, start: int = 0, end: int | None = None):
-    """``(tag, payload)`` for each TLV record in ``data[start:end]``: a
-    two-byte tag (written as openskp spells it, e.g. ``'803E'``) and a
-    little-endian u32 length."""
-    end = len(data) if end is None else end
-    i = start
-    while i + 6 <= end:
-        tag = data[i:i + 2].hex().upper()
-        n = struct.unpack_from("<I", data, i + 2)[0]
-        if i + 6 + n > end:
-            return
-        yield tag, data[i + 6:i + 6 + n]
-        i += 6 + n
-
-
-def _id_list(payload: bytes) -> list:
-    """843E: tag ids, each a length byte then a var-int."""
-    from openskp._core import parse_var_int
-    out, i = [], 0
-    while i < len(payload):
-        n = payload[i]
-        if n == 0 or i + 1 + n > len(payload):
-            break
-        out.append(parse_var_int(payload, i + 1, n))
-        i += 1 + n
-    return out
-
-
-def _entity_key(payload: bytes):
-    from openskp._core import parse_var_int, read_u32
-    if payload.startswith(bytes([0xDE, 0x05])):
-        return parse_var_int(payload, 6, read_u32(payload, 2))
-    return parse_var_int(payload, 0, len(payload))
-
-
-def parse_tag_folders(payload: bytes) -> list:
-    """The folders a 9B3A payload holds, depth first, as dicts
-    ``{"key", "name", "parent", "hidden", "tags"}`` — ``parent`` the key of
-    the enclosing folder (None at the top), ``tags`` the tag ids filed
-    directly in it. The unnamed root is not one of them."""
-    out: list = []
-
-    def folder(body: bytes, parent, is_root: bool) -> None:
-        rec = {"key": None, "name": "", "parent": parent, "hidden": False,
-               "tags": []}
-        subs = []
-        for tag, pay in _records(body):
-            if tag == "DC05":
-                try:
-                    rec["key"] = _entity_key(pay)
-                except Exception:  # noqa: BLE001
-                    pass
-            elif tag == _F_NAME:
-                rec["name"] = pay.decode("utf-8", errors="replace")
-            elif tag == _F_SUBS:
-                subs = [p for t, p in _records(pay) if t == _F_FOLDER]
-            elif tag == _F_TAGS:
-                rec["tags"] = _id_list(pay)
-            elif tag == _F_HIDDEN:
-                rec["hidden"] = bool(pay[:1] == b"\x01")
-        me = None
-        if not is_root:
-            if rec["key"] is None:
-                rec["key"] = ("anon", len(out))
-            out.append(rec)
-            me = rec["key"]
-        for sub in subs:
-            folder(sub, me, False)
-
-    for tag, pay in _records(payload):
-        if tag == _F_FOLDER:
-            folder(pay, None, True)
-    return out
+def _parse_pages(node):
+    from ingetrazo_core import skp_pages
+    return skp_pages(node["payload"]) if node is not None else []
 
 
 def _find_node(node, tag):

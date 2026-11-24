@@ -77,6 +77,7 @@ mod occlusion;
 mod parity;
 mod visible;
 mod weld;
+mod skp;
 mod snap_build;
 mod snap;
 mod snap_engine;
@@ -108,6 +109,9 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<window_commands::WindowCommands>()?;
     m.add_class::<window_commands::WindowCommand>()?;
     m.add_class::<file_open::DocumentOpen>()?;
+    m.add_function(wrap_pyfunction!(skp::skp_tag_folders, m)?)?;
+    m.add_function(wrap_pyfunction!(skp::skp_pages, m)?)?;
+    m.add_function(wrap_pyfunction!(skp::skp_geometry_nodes, m)?)?;
     m.add_class::<command_search::SearchItem>()?;
     m.add_function(wrap_pyfunction!(command_search::damerau_levenshtein, m)?)?;
     m.add_function(wrap_pyfunction!(command_search::rank_commands, m)?)?;
