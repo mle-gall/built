@@ -961,6 +961,7 @@ class ScaleTool(ScaleHost, RustTool):
 from tools.rotate_host import RotateHost
 
 
+@register_tool_adapter
 class RotateTool(RotateHost, RustTool):
     kind = "rotate"
     _READ_DURING = ("start_point", "ref_point", "copy", "array_token")
@@ -972,10 +973,6 @@ class RotateTool(RotateHost, RustTool):
     # The shared protractor clears its arms at reset. Inside a machine
     # callback the machine already did that; direct setters let Move
     # start a rotation from a selected group's grip.
-    def _set_arm(self, key, point):
-        if self._during is None:
-            self._machine.set(key, _tuple(point))
-
     start_point = property(lambda self: self._point("start_point"),
                            lambda self, p: self._set_arm("start_point", p))
     ref_point = property(lambda self: self._point("ref_point"),

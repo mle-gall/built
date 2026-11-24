@@ -45,6 +45,8 @@ fn unpack<'py, const N: usize>(value: &Obj<'py>) -> PyResult<[Obj<'py>; N]> {
 mod fillet_host_api;
 mod move_host_api;
 mod pushpull;
+mod rotate_host_api;
+mod rotate_tool_api;
 mod scale;
 mod select_tool_api;
 mod texture;
@@ -89,6 +91,12 @@ fn registration(module: &str, name: &str) -> Option<(&'static [Method], &'static
             (select_tool_api::METHODS, stringify!(select_tool_api))
         }
         ("tools.move_host", "MoveHost") => (move_host_api::METHODS, stringify!(move_host_api)),
+        ("tools.rotate_host", "RotateHost") => {
+            (rotate_host_api::METHODS, stringify!(rotate_host_api))
+        }
+        ("tools.rust_tools", "RotateTool") => {
+            (rotate_tool_api::METHODS, stringify!(rotate_tool_api))
+        }
         ("tools.pushpull", "PushPullTool") => (pushpull::METHODS, stringify!(pushpull)),
         _ => return None,
     })
