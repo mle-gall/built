@@ -77,6 +77,7 @@ mod link_subset;
 mod presentation;
 mod object_replay;
 mod object_relink;
+mod object_registry;
 mod object_vertices;
 mod object_bulk;
 mod object_fold;

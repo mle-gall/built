@@ -444,16 +444,7 @@ class Mesh:
         ``_displaced`` while the other keeps the key: it is still this
         mesh's vertex, and a dimension holding it must not let go (#563).
         A vertex welded away or erased is filed nowhere."""
-        k = _key(v.position)
-        holder = self._registry.get(k)
-        if holder is v:
-            return True
-        waiting = self._displaced.get(k)
-        if waiting and any(w is v for w in waiting):
-            return True
-        if holder is None:
-            return self._probe_neighbours(k, v.position) is v
-        return False
+        return object_replay.registers(self, v, _key(v.position), _WELD_TOL2)
 
     # ---- Edges --------------------------------------------------------------
     def find_edge(self, v0: Vertex, v1: Vertex) -> Optional[Edge]:
@@ -670,33 +661,7 @@ class Mesh:
         is not enough on its own: the corners of a face with no free edges
         would go with it. Both are checked.
         """
-        used = set()
-        for f in self.faces:
-            for v in f.loop:
-                used.add(v.key)
-            for hole in f.hole_loops:
-                for v in hole:
-                    used.add(v.key)
-        doomed = {v.key for v in self.vertices
-                  if not v.edges and v.key not in used}
-        live = {v.key for v in self.vertices if v.key not in doomed}
-        ghosts = [k for k, v in self._registry.items() if v.key not in live]
-        for k in list(self._displaced):
-            waiting = [v for v in self._displaced[k] if v.key in live]
-            if waiting:
-                self._displaced[k] = waiting
-            else:
-                del self._displaced[k]
-        if not doomed and not ghosts:
-            return 0, 0
-        if doomed:
-            self.vertices[:] = [v for v in self.vertices
-                                if v.key not in doomed]
-        for k in ghosts:
-            del self._registry[k]
-        self._chunk_dirty = True
-        self._mut_serial += 1
-        return len(doomed), len(ghosts)
+        return object_replay.purge_debris(self)
 
     def relink_vertices(self, vertices) -> None:
         """Re-attach vertices a previous :meth:`drop_orphan_vertices` took
@@ -710,19 +675,7 @@ class Mesh:
         knows exactly which vertices it created (no pass over the model).
         A face's corners always carry its boundary edges, so a vertex with
         no edges is in no face. The registry is cleaned by identity."""
-        doomed = {v.key for v in vertices if not v.edges}
-        doomed &= {v.key for v in self.vertices}
-        if not doomed:
-            return 0
-        self.vertices[:] = [v for v in self.vertices if v.key not in doomed]
-        for v in vertices:
-            if v.key in doomed:
-                k = _key(v.position)
-                if self._registry.get(k) is v:
-                    del self._registry[k]
-        self._chunk_dirty = True
-        self._mut_serial += 1
-        return len(doomed)
+        return object_replay.drop_orphans(self, vertices, _key)
 
     # ---- Bulk construction (imports / .igz load) ----------------------------
     def bulk_weld(self, pos):
@@ -968,15 +921,7 @@ class Mesh:
         self._mut_serial += 1
         old = _key(v.position)
         v.position = v.position + delta
-        new = _key(v.position)
-        if old == new:
-            return
-        reg = self._registry
-        if not self._displaced and reg.get(old) is v and new not in reg:
-            del reg[old]               # the common case, kept inline
-            reg[new] = v
-            return
-        self._rekey(v, old, new)
+        self._rekey(v, old, _key(v.position))
 
     def place_vertex(self, v: Vertex, position: QVector3D) -> None:
         """Put a vertex AT ``position`` -- :meth:`move_vertex` with an
@@ -987,43 +932,11 @@ class Mesh:
         self._mut_serial += 1
         old = _key(v.position)
         v.position = QVector3D(position)
-        new = _key(v.position)
-        if old == new:
-            return
-        reg = self._registry
-        if not self._displaced and reg.get(old) is v and new not in reg:
-            del reg[old]               # the common case, kept inline
-            reg[new] = v
-            return
-        self._rekey(v, old, new)
+        self._rekey(v, old, _key(v.position))
 
     def _rekey(self, v: Vertex, old: tuple, new: tuple) -> None:
-        """File a moved vertex under its new key.
-
-        A selection moved along itself -- two chained lines shifted one
-        length down their own axis -- moves each vertex onto the spot the
-        next one still holds. The newcomer cannot take that key yet, so it
-        waits in ``_displaced``; when the holder moves on, the first waiter
-        still standing there takes the key. Without the queue the moved
-        vertex was never filed again: Delete missed its edges and a new line
-        to it welded a duplicate."""
-        if self._registry.get(old) is v:
-            del self._registry[old]
-            for w in self._displaced.pop(old, ()):
-                if w is not v and w.edges and _key(w.position) == old:
-                    self._registry[old] = w
-                    break
-        else:
-            waiting = self._displaced.get(old)
-            if waiting is not None:
-                waiting[:] = [w for w in waiting if w is not v]
-                if not waiting:
-                    del self._displaced[old]
-        holder = self._registry.get(new)
-        if holder is None:
-            self._registry[new] = v
-        elif holder is not v:
-            self._displaced.setdefault(new, []).append(v)
+        """Refill a vacated cell and queue a vertex landing on an occupied one."""
+        object_replay.rekey(self, v, old, new, _key)
 
     def split_edge(self, edge: Edge, position: QVector3D) -> tuple[Edge, Edge]:
         """Split ``edge`` at ``position``, inserting a shared vertex, and return

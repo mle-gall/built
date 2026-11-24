@@ -251,5 +251,9 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     sub.add_function(wrap_pyfunction!(crate::object_bulk::add_edges_welded, &sub)?)?;
     sub.add_function(wrap_pyfunction!(crate::object_bulk::add_faces_welded, &sub)?)?;
     sub.add_function(wrap_pyfunction!(crate::object_fold::fold_objects, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_registry::rekey, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_registry::drop_orphans, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_registry::registers, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_registry::purge_debris, &sub)?)?;
     m.add_submodule(&sub)
 }
