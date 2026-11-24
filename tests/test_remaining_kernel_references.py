@@ -164,3 +164,12 @@ def view_rows():
 def test_store_view_reference(monkeypatch):
     monkeypatch.setenv('INGETRAZO_STORE','1')
     assert digest(view_rows()) == '3973b52522c033a2e0e24b52f615b24e37ec4c6e863f79f666bae1fdc5ab6bec'
+
+
+def test_public_kernel_module_paths_round_trip():
+    import importlib
+    import pickle
+    for name, fn in (('topology', top._key), ('snap_query', sq.make_query),
+                     ('push_scans', scans.faces_on_segment), ('arrangement', ar.arc_command)):
+        assert importlib.import_module('core.' + name).__name__ == 'core.' + name
+        assert pickle.loads(pickle.dumps(fn)) is fn
