@@ -251,16 +251,7 @@ impl Color {
             return Ok(Self([r.extract()?, g, b, a]));
         }
         if let Ok(s) = r.extract::<String>() {
-            if let Some(hex) = s.strip_prefix('#').filter(|v| v.len() == 8) {
-                if let Ok(argb) = u32::from_str_radix(hex, 16) {
-                    let [a, r, g, b] = argb.to_be_bytes();
-                    return Ok(Self([r, g, b, a]));
-                }
-            }
-            let c = s
-                .parse::<svgtypes::Color>()
-                .map_err(|_| PyValueError::new_err("invalid paint color"))?;
-            return Ok(Self([c.red, c.green, c.blue, c.alpha]));
+            return parse_color(&s);
         }
         Self::read(r)
     }
@@ -328,6 +319,18 @@ impl NativePen {
         };
     }
 }
+/// A colour as Qt names one: `#rrggbb`, `#aarrggbb` or a CSS name.
+fn parse_color(s: &str) -> PyResult<Color> {
+    if let Some(hex) = s.strip_prefix('#').filter(|v| v.len() == 8) {
+        if let Ok(argb) = u32::from_str_radix(hex, 16) {
+            let [a, r, g, b] = argb.to_be_bytes();
+            return Ok(Color([r, g, b, a]));
+        }
+    }
+    let c = s.parse::<svgtypes::Color>().map_err(|_| PyValueError::new_err("invalid paint color"))?;
+    Ok(Color([c.red, c.green, c.blue, c.alpha]))
+}
+
 impl Color {
     fn read(obj: &Obj<'_>) -> PyResult<Self> {
         if let Ok(color) = obj.cast::<Self>() {
@@ -743,6 +746,77 @@ impl AnnotationCanvas {
             (value.cast::<pyo3::types::PyString>()?.to_str()?, "start")
         };
         self.text(text, (x, y), anchor, ink)
+    }
+    /// The tool overlay's logical-pixel primitives (formerly the loop in
+    /// views/wgpu_overlay.paint_layer), in order. Each is ``(kind, points,
+    /// color, width, text, fill, dash, pen_style, snap_kind)``: kind is
+    /// polyline, polygon, rectangle (two corners), point (a disc of radius
+    /// ``width``), text or snap (a marker without its label); ``dash`` is
+    /// a custom pattern in pen widths, drawn with flat caps; ``pen_style``
+    /// the Qt pen style code.
+    #[allow(clippy::type_complexity)]
+    fn draw_primitives(
+        &mut self,
+        items: Vec<(String, Vec<(f64, f64)>, String, f64, String, Option<String>, Vec<f32>, u32, String)>,
+    ) -> PyResult<()> {
+        for (kind, points, color, width, text, fill, dash, style, snap_kind) in items {
+            let ink = parse_color(&color)?;
+            if kind == "snap" {
+                let [r, g, b, _] = ink.0.map(|v| f64::from(v) / 255.);
+                let at = *points.first().ok_or_else(|| PyValueError::new_err("a snap needs a point"))?;
+                self.draw_snap(&snap_kind, at, (r, g, b), Vec::new(), None)?;
+                continue;
+            }
+            let pattern: Vec<f32> = if dash.is_empty() {
+                match style {
+                    2 => vec![4., 2.],
+                    3 => vec![1., 2.],
+                    4 => vec![4., 2., 1., 2.],
+                    5 => vec![4., 2., 1., 2., 1., 2.],
+                    _ => Vec::new(),
+                }
+            } else {
+                dash.clone()
+            };
+            self.state.pen = Some(ink);
+            let pen_width = width as f32;
+            self.state.stroke = Stroke {
+                width: pen_width,
+                line_cap: if dash.is_empty() { LineCap::Square } else { LineCap::Butt },
+                line_join: LineJoin::Bevel,
+                dash: StrokeDash::new(pattern.iter().map(|n| n * pen_width).collect(), 0.),
+                ..Default::default()
+            };
+            self.state.brush = fill.as_deref().map(parse_color).transpose()?;
+            let line = |closed: bool| {
+                let mut path = PathBuilder::new();
+                for (i, &(x, y)) in points.iter().enumerate() {
+                    if i == 0 {
+                        path.move_to(x as f32, y as f32);
+                    } else {
+                        path.line_to(x as f32, y as f32);
+                    }
+                }
+                if closed {
+                    path.close();
+                }
+                path.finish()
+            };
+            match kind.as_str() {
+                "polyline" => self.path(line(false), false)?,
+                "polygon" => self.path(line(true), true)?,
+                "rectangle" => {
+                    let (&(x0, y0), &(x1, y1)) = (points.first().unwrap_or(&(0., 0.)), points.get(1).unwrap_or(&(0., 0.)));
+                    // As QRectF(a, b).normalized(): the corner, then the extent.
+                    let rect = Rect::from_xywh(x0.min(x1) as f32, y0.min(y1) as f32, (x1 - x0).abs() as f32, (y1 - y0).abs() as f32);
+                    self.path(rect.map(PathBuilder::from_rect), true)?
+                }
+                "point" => self.circle(*points.first().unwrap_or(&(0., 0.)), width)?,
+                "text" => self.text(&text, *points.first().unwrap_or(&(0., 0.)), "start", ink)?,
+                other => return Err(PyValueError::new_err(format!("Unknown overlay primitive: {other}"))),
+            }
+        }
+        Ok(())
     }
     /// A snap's marker (formerly views/wgpu_overlay.draw_snap_indicator):
     /// the dashed guides (projected and clipped, logical pixels, with their
