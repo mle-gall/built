@@ -22,6 +22,27 @@ fn plane_basis(normal: &Obj<'_>) -> PyResult<(Vec3, Vec3)> {
     ))
 }
 #[pyfunction]
+fn project_loop(ring: &Obj<'_>, normal: &Obj<'_>) -> PyResult<Vec<(f64, f64)>> {
+    let (u, v) = plane_basis(normal)?;
+    let (u, v) = (DVec3::from_array(u.coords()), DVec3::from_array(v.coords()));
+    ring.try_iter()?
+        .map(|p| {
+            let p = xyz(&p?)?;
+            Ok((p.dot(u), p.dot(v)))
+        })
+        .collect()
+}
+
+#[pyfunction]
+fn loops_overlap(py: Python<'_>, a: Ring, b: Ring) -> PyResult<bool> {
+    let metrics = Metrics::new(py)?;
+    Ok(planar::inside(&b, metrics.interior(&a)?)
+        || planar::inside(&a, metrics.interior(&b)?)
+        || a.iter().any(|p| planar::inside(&b, *p))
+        || b.iter().any(|p| planar::inside(&a, *p)))
+}
+
+#[pyfunction]
 fn grid_key(py: Python<'_>, x: f64, y: f64) -> PyResult<Bound<'_, PyTuple>> {
     match Cell::at([x, y], TOL) {
         Some(c) => c.tuple(py),
@@ -192,6 +213,8 @@ fn arc_command<'py>(
 
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let sub = PyModule::new(m.py(), "arrangement")?;
+    sub.add_function(wrap_pyfunction!(project_loop, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(loops_overlap, &sub)?)?;
     sub.add_function(wrap_pyfunction!(grid_key, &sub)?)?;
     sub.add_function(wrap_pyfunction!(plane_basis, &sub)?)?;
     sub.add_function(wrap_pyfunction!(area_floor, &sub)?)?;

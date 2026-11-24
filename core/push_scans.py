@@ -161,7 +161,7 @@ def vertices_in_boxes(mesh, boxes):
     s = _scan(mesh) if fn is not None else None
     if s is None:
         return None
-    return s.vertices(fn(s.native, list(boxes)))
+    return s.vertices(fn(s.native, [tuple(b) for b in boxes]))
 
 
 def vertices_at_keys(mesh, points):

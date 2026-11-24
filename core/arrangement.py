@@ -27,17 +27,15 @@ from collections import namedtuple
 
 from ingetrazo_core import (
     arrangement as _kernel, arrange_plane, object_drawing,
-    plane_interior_point as _interior_point, plane_intersections as _intersections,
-    plane_scan_point as scan_interior_point, plane_segment_parameter as _on_seg,
-    plane_split_graph as _build_graph,
+    plane_interior_point, plane_intersections as _intersections,
+    plane_scan_point, plane_segment_parameter as _on_seg,
+    plane_split_graph,
 )
 
 _TOL = 1e-4
 _Seg = namedtuple("_Seg", "a b")
 _key = _kernel.grid_key
-_area_floor = _kernel.area_floor
 plane_basis = _kernel.plane_basis
-_signed_area = _kernel.signed_area
 _point_in_polygon = _kernel.point_in_polygon
 _classify = _kernel.classify
 coplanar_plane = object_drawing.coplanar_plane
@@ -45,6 +43,26 @@ flat_drawing = _kernel.flat_drawing
 busy_plane = _kernel.busy_plane
 curve_extras = _kernel.curve_extras
 arc_command = _kernel.arc_command
+
+
+def _area_floor(xy):
+    return _kernel.area_floor(xy)
+
+
+def _signed_area(loop):
+    return _kernel.signed_area(loop)
+
+
+def _interior_point(loop):
+    return plane_interior_point(loop)
+
+
+def scan_interior_point(outer, holes=()):
+    return plane_scan_point(outer, holes)
+
+
+def _build_graph(segments_2d):
+    return plane_split_graph(segments_2d)
 
 
 def planar_arrangement(segments_3d, origin, normal):
