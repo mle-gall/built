@@ -37,11 +37,10 @@ import pathlib
 import sys
 from tempfile import TemporaryDirectory
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
-from PySide6.QtCore import QPointF                         # noqa: E402
+from core.input_types import ScreenPoint                         # noqa: E402
 from ingetrazo_core import Vec3 as QVector3D                        # noqa: E402
 
 #: Every standard view plus four obliques. The obliques matter: pacaeiro's
@@ -291,7 +290,7 @@ def run(out_path: str, radii=RADII_PX, directions: int = 16,
                                           elif lock is not None:
                                               vp.axis_lock = lock
                                           vp.linear_inference_mode = mode
-                                          vp._last_mouse_pos = QPointF(px, py)
+                                          vp._last_mouse_pos = ScreenPoint(px, py)
                                           try:
                                               vp._refresh_snap()
                                           except Exception as exc:    # noqa: BLE001

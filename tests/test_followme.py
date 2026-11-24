@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import math
 
-from PySide6.QtCore import QPointF, Qt
+from core.input_types import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import History
@@ -179,10 +179,10 @@ def test_tool_flow_path_then_profile():
     t.on_activate(vp)
     assert t._path is not None
     vp._pick = profile
-    t.on_hover(ToolContext(viewport=vp, world=V(0, 0), screen=QPointF(0, 0),
-                           modifiers=Qt.NoModifier, snap=None))
-    t.on_click(ToolContext(viewport=vp, world=V(0, 0), screen=QPointF(0, 0),
-                           modifiers=Qt.NoModifier, snap=None))
+    t.on_hover(ToolContext(viewport=vp, world=V(0, 0), screen=ScreenPoint(0, 0),
+                           modifiers=Input.NoModifier, snap=None))
+    t.on_click(ToolContext(viewport=vp, world=V(0, 0), screen=ScreenPoint(0, 0),
+                           modifiers=Input.NoModifier, snap=None))
     assert is_closed(m)
     assert signed_volume(m) > 0
     assert vp.history.undo()                        # single undoable step
@@ -204,8 +204,8 @@ class _Vp2(_Vp):
         self.hover.append(entity)
 
 
-def _ctx(vp, x=0.0, y=0.0, world=None, mods=Qt.NoModifier):
-    return ToolContext(viewport=vp, world=world or V(0, 0), screen=QPointF(x, y),
+def _ctx(vp, x=0.0, y=0.0, world=None, mods=Input.NoModifier):
+    return ToolContext(viewport=vp, world=world or V(0, 0), screen=ScreenPoint(x, y),
                        modifiers=mods, snap=None)
 
 
@@ -311,11 +311,11 @@ def test_alt_over_a_face_follows_its_perimeter():
     t.on_hover(_ctx(vp))
     t.on_click(_ctx(vp))
     vp._pick = path_face
-    t.on_hover(_ctx(vp, 40, 40, mods=Qt.AltModifier))
+    t.on_hover(_ctx(vp, 40, 40, mods=Input.AltModifier))
     pts, closed = t.path_points()
     assert closed and len(pts) == 4 and len(t.preview_faces()) == 16
     assert len(t.rubber_band_lines()) == 4
-    t.on_click(_ctx(vp, 40, 40, mods=Qt.AltModifier))
+    t.on_click(_ctx(vp, 40, 40, mods=Input.AltModifier))
     assert len(m.faces) == 1 + 16                    # the ground face + frame
     # the frame is watertight: every edge of the moulding has two faces
     assert all(len(e.faces) == 2 for e in m.edges

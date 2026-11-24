@@ -17,15 +17,9 @@ A visible edge behaves exactly as before.
 """
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
-if QApplication.instance() is None:
-    QApplication([])
 
 from core.snap import compute_snap  # noqa: E402
 from views import document_interaction as viewport_mod  # noqa: E402

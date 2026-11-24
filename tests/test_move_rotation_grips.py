@@ -13,7 +13,7 @@ from __future__ import annotations
 import math
 
 import pytest
-from PySide6.QtCore import QPointF, Qt
+from core.input_types import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.group import Group, oriented_bounds
@@ -113,9 +113,9 @@ class _Vp:
         return None
 
 
-def _ctx(vp, wx, wy, wz=1.0, mods=Qt.NoModifier):
+def _ctx(vp, wx, wy, wz=1.0, mods=Input.NoModifier):
     return ToolContext(viewport=vp, world=V(wx, wy, wz),
-                       screen=QPointF(wx * 100.0, -wy * 100.0),
+                       screen=ScreenPoint(wx * 100.0, -wy * 100.0),
                        modifiers=mods, snap=None)
 
 

@@ -18,15 +18,10 @@ the sweep moves away from the eye, whichever way the face is wound.
 """
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QGuiApplication
+from core.input_types import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
 
-_app = QGuiApplication.instance() or QGuiApplication([])
 
 from core.scene import Scene
 from core.history import History
@@ -82,8 +77,8 @@ def _start_drag(vp, face):
     pp.hovered_face = face
     pp._hover_group = None
     pp.on_click(ToolContext(viewport=vp, world=QVector3D(0, 0, 0),
-                            screen=QPointF(400, 300),
-                            modifiers=Qt.NoModifier, snap=None))
+                            screen=ScreenPoint(400, 300),
+                            modifiers=Input.NoModifier, snap=None))
     assert pp._attached
     return pp
 

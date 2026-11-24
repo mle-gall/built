@@ -6,9 +6,8 @@ are rounded together; refusals only speak."""
 from __future__ import annotations
 
 import pytest
-from PySide6.QtCore import QPointF, Qt
+from core.input_types import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
 
 from core.orient import is_closed
 from tools.base import ToolContext
@@ -18,11 +17,6 @@ from tests.test_fillet import box, edge_at
 
 @pytest.fixture(scope="module")
 def viewport():
-    app = QApplication.instance()
-    if app is None:
-        app = QApplication([])
-    elif not isinstance(app, QApplication):
-        pytest.skip("another Qt application flavour is already running")
     from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
     vp.resize(1000, 700)
@@ -43,8 +37,8 @@ def _box_scene(vp):
 
 
 def _ctx(vp, world):
-    return ToolContext(viewport=vp, world=QVector3D(*world), screen=QPointF(0, 0),
-                       modifiers=Qt.NoModifier, snap=None)
+    return ToolContext(viewport=vp, world=QVector3D(*world), screen=ScreenPoint(0, 0),
+                       modifiers=Input.NoModifier, snap=None)
 
 
 def test_click_edge_size_with_the_cursor_click_to_round(viewport):

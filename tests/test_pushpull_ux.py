@@ -8,7 +8,7 @@ Headless: stub viewport + direct tool calls.
 """
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, QPointF
+from core.input_types import Input, ScreenPoint
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.edits import build_add_edges
@@ -55,8 +55,8 @@ class _StubViewport:
         return self._pick, None
 
 
-def _ctx(vp, modifiers=Qt.NoModifier):
-    return ToolContext(viewport=vp, world=QVector3D(), screen=QPointF(0, 0),
+def _ctx(vp, modifiers=Input.NoModifier):
+    return ToolContext(viewport=vp, world=QVector3D(), screen=ScreenPoint(0, 0),
                        modifiers=modifiers, snap=None)
 
 
@@ -365,7 +365,7 @@ class _InferViewport(_StubViewport):
 
 
 def test_hovering_vertex_infers_distance():
-    from PySide6.QtCore import QPointF
+    from core.input_types import ScreenPoint
     from tools.base import ToolContext
 
     scene = Scene()
@@ -392,20 +392,20 @@ def test_hovering_vertex_infers_distance():
     tool._cap_positions = tool._cap_loop_positions(top)
 
     # Cursor over the reference block's top corner (6, 0, 5) → pixel (60, -50).
-    ctx = ToolContext(viewport=vp, world=QVector3D(), screen=QPointF(60.0, -50.0),
-                      modifiers=Qt.NoModifier, snap=None)
+    ctx = ToolContext(viewport=vp, world=QVector3D(), screen=ScreenPoint(60.0, -50.0),
+                      modifiers=Input.NoModifier, snap=None)
     d = tool._infer_reference_distance(ctx)
     # Anchor is the cube top (z=3); the hovered corner is at z=5 → push +2.
     assert d is not None and abs(d - 2.0) < 1e-6
 
     # Cursor over empty space → no inference.
-    ctx2 = ToolContext(viewport=vp, world=QVector3D(), screen=QPointF(500.0, 500.0),
-                       modifiers=Qt.NoModifier, snap=None)
+    ctx2 = ToolContext(viewport=vp, world=QVector3D(), screen=ScreenPoint(500.0, 500.0),
+                       modifiers=Input.NoModifier, snap=None)
     assert tool._infer_reference_distance(ctx2) is None
 
     # The base face's own corners never pin the drag.
-    ctx3 = ToolContext(viewport=vp, world=QVector3D(), screen=QPointF(0.0, -30.0),
-                       modifiers=Qt.NoModifier, snap=None)
+    ctx3 = ToolContext(viewport=vp, world=QVector3D(), screen=ScreenPoint(0.0, -30.0),
+                       modifiers=Input.NoModifier, snap=None)
     assert tool._infer_reference_distance(ctx3) is None
 
 
@@ -431,7 +431,7 @@ class _FaceInferViewport(_StubViewport):
 
 
 def test_hovering_face_infers_distance_and_marks_it():
-    from PySide6.QtCore import QPointF
+    from core.input_types import ScreenPoint
     from tools.base import ToolContext
 
     scene = Scene()
@@ -457,8 +457,8 @@ def test_hovering_face_infers_distance_and_marks_it():
     vp = _FaceInferViewport(scene, ref)
     # No vertex near the cursor → falls back to the face plane (z=7). Anchor at
     # z=3 → distance +4, and the engaged hit point is recorded for the marker.
-    ctx = ToolContext(viewport=vp, world=QVector3D(), screen=QPointF(220.0, -70.0),
-                      modifiers=Qt.NoModifier, snap=None)
+    ctx = ToolContext(viewport=vp, world=QVector3D(), screen=ScreenPoint(220.0, -70.0),
+                      modifiers=Input.NoModifier, snap=None)
     d = tool._infer_reference_distance(ctx)
     assert d is not None and abs(d - 4.0) < 1e-6
     marker = tool.inference_marker()
@@ -1212,7 +1212,7 @@ def test_hovering_an_edge_infers_distance_and_says_on_edge():
     """The usual "On edge" while pushing (Marco's capture, 2026-09-14):
     the cursor on another block's top edge — away from its corners — sets
     the push level with that edge, red marker and «On edge» label."""
-    from PySide6.QtCore import QPointF
+    from core.input_types import ScreenPoint
     from tools.base import ToolContext
 
     scene = Scene()
@@ -1242,8 +1242,8 @@ def test_hovering_an_edge_infers_distance_and_says_on_edge():
     vp = _EdgeInferViewport(scene, top_edge, scale=20.0)
     # Cursor at (6.5, ·, 5): a quarter of the edge, 10 px from its corner
     # and from its midpoint (which has its own cue, #863).
-    ctx = ToolContext(viewport=vp, world=QVector3D(), screen=QPointF(130.0, -100.0),
-                      modifiers=Qt.NoModifier, snap=None)
+    ctx = ToolContext(viewport=vp, world=QVector3D(), screen=ScreenPoint(130.0, -100.0),
+                      modifiers=Input.NoModifier, snap=None)
     d = tool._infer_reference_distance(ctx)
     assert d is not None and abs(d - 2.0) < 1e-6
     pt, kind = tool.inference_marker()
@@ -1549,10 +1549,10 @@ def test_retype_window_takes_no_tuple_and_no_zero():
 _DRAG_MOTION_PX = 6.0
 
 
-def _px(vp, x, y, modifiers=Qt.NoModifier):
+def _px(vp, x, y, modifiers=Input.NoModifier):
     """A context whose screen point is the REAL pixel — a press or a hover
     frame at (x, y)."""
-    return ToolContext(viewport=vp, world=QVector3D(), screen=QPointF(x, y),
+    return ToolContext(viewport=vp, world=QVector3D(), screen=ScreenPoint(x, y),
                        modifiers=modifiers, snap=None)
 
 
@@ -1624,13 +1624,10 @@ def test_release_after_real_drag_commits():
     assert len(vp.history.undo_stack) == depth + 1
 
 
-def test_release_honours_a_tapped_keep_mode(monkeypatch):
+def test_release_honours_a_tapped_keep_mode():
     # The Ctrl TAP arms "keep the base" with no key held (#322). A release
     # commit must read Ctrl the way the commit click does — held OR tapped —
     # or the tapped mode is silently dropped and the base moves after all.
-    from PySide6.QtWidgets import QApplication
-    monkeypatch.setattr(QApplication, "queryKeyboardModifiers",
-                        staticmethod(lambda: Qt.NoModifier))
     scene = Scene()
     hist = History(scene)
     _cube(scene, hist, height=3.0)
@@ -2109,7 +2106,7 @@ def test_activate_with_no_selection_unchanged():
 def test_hovering_the_origin_pushes_level_with_it():  # #407
     """A box standing away from the origin, its top pushed down: hovering
     the origin (nothing drawn there) brings the top level with z = 0."""
-    from PySide6.QtCore import QPointF
+    from core.input_types import ScreenPoint
     from tools.base import ToolContext
 
     scene = Scene()
@@ -2129,8 +2126,8 @@ def test_hovering_the_origin_pushes_level_with_it():  # #407
     tool._normal = top.normal()
     tool._attached, tool._prism_cap = tool._classify_base(scene)
     tool._cap_positions = tool._cap_loop_positions(top)
-    ctx = ToolContext(viewport=vp, world=QVector3D(), screen=QPointF(0.0, 0.0),
-                      modifiers=Qt.NoModifier, snap=None)
+    ctx = ToolContext(viewport=vp, world=QVector3D(), screen=ScreenPoint(0.0, 0.0),
+                      modifiers=Input.NoModifier, snap=None)
     d = tool._infer_reference_distance(ctx)
     assert d is not None and abs(d + 2.0) < 1e-6
     assert tool._inference_kind == "origin"
