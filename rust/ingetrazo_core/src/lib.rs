@@ -15,6 +15,7 @@ use pyo3::types::PyBytes;
 mod math;
 mod navigation;
 mod recents;
+mod builtproject;
 mod delivery_form;
 mod command_search;
 mod location;
@@ -103,6 +104,7 @@ mod sheets;
 
 #[pymodule]
 fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    builtproject::register(m)?;
     m.add_class::<settings::NativeSettings>()?;
     m.add_class::<document_watch::DocumentWatch>()?;
     m.add_class::<window_input::WindowInput>()?;

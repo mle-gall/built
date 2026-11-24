@@ -904,6 +904,9 @@ def _tree(view, win, *, discover=False):
                        active, KINDS, TIPS, FILE_STATES)
     rows, path_bar = project_sidebar(scene, tree, rows, flt, exp, str(getattr(win, "_current_path", "") or ""))
     rows.extend(catalog.rows(flt, exp))
+    if "_project" in getattr(win, "__dict__", {}):
+        from app_shell import project as built_project
+        rows.extend(built_project.tree_rows(win, flt, exp))
     if discover:
         from ingetrazo_core import reveal_selection
         return reveal_selection(rows)
@@ -917,6 +920,9 @@ def _tree(view, win, *, discover=False):
         cache = getattr(view, "_ui_rules_cache", None)
         if not cache or cache[0] != cache_key:
             cache = cache_key, _problem_rules(scene, registry, structure._nodes(registry), recipes, unfiled, profile)
+            if "_project" in win.__dict__:
+                from app_shell import project as built_project
+                cache[1].extend(built_project.problems(win))
             view._ui_rules_cache = cache
         rows, readiness = export_readiness(scene, tree, records, getattr(view, "_delivery_key", "") or "",
                                            cache[1], exp, rows)
@@ -1503,6 +1509,13 @@ def _tree_action(win, view, action) -> None:
         elif verb == "item" and kind in ("sheet-page", "sheet-frame", "saved-scene", "sheet-pages", "saved-scenes"):
             _select(win, [])
             view._ui_insp_node = (rk, (0, 0, 0))
+        elif kind == "project-file" and verb in ("item", "open", "edit", "linkrelink"):
+            # A project file row: one click shows its tab (opening it);
+            # Locate… on a missing one finds where it went.
+            from app_shell import project as built_project
+            built_project.tree_action(win, {"edit": "edit", "linkrelink": "locate"}.get(verb, "open"), ident)
+        elif kind == "project-files" and verb in ("item", "open"):
+            pass
         elif verb == "open" and kind in ("sheet-page", "sheet-frame", "saved-scene"):
             target = view._ui_sheet_catalog.target(scene, rk)
             if target is not None:
@@ -1525,7 +1538,7 @@ def _tree_action(win, view, action) -> None:
         elif verb == "linkregistry":
             from core import project
             from views.filedialogs import file_dialogs
-            path, _ = file_dialogs.getSaveFileName(win, "Move registry to project", "", "Project (*.igzproj)")
+            path, _ = file_dialogs.getSaveFileName(win, "Move registry to project", "", "Built project (*.builtproject)")
             if path:
                 project.create(scene, path, win._current_path)
                 win._relink_done("Project registry updated")

@@ -1,5 +1,10 @@
 # Shared projects and linked placements (version 1)
 
+*Superseded for projects by [builtproject-format.md](builtproject-format.md)
+(2026-11-24): Built opens an `.igzproj` by converting it in place to a
+`.builtproject` manifest, and the worksession moved to a per-user session
+file. The link selection and identity rules below still apply.*
+
 An .igzproj is UTF-8 plain JSON, with no executable or Python-specific data.
 Unknown fields are preserved. All measurements remain in metres.
 

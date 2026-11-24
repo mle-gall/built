@@ -136,7 +136,7 @@ class History:
 
     def _run(self, cmd, phase, operation):
         if getattr(self.scene, 'worksession_read_only', False):
-            self.last_rejected = 'Choose this file in Worksession before editing it.'
+            self.last_rejected = 'This project file is read-only here: make it the file you edit first.'
             return False
         target = getattr(cmd, "_history_mesh", None) or self.scene.mesh
         st = target.__dict__.get("_store")
