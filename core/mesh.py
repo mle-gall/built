@@ -250,8 +250,13 @@ class Face:
         object_replay.reverse_rings(self)
 
     # ---- Legacy-compatible read interface (positions) -----------------------
-    vertices = property(object_replay.face_vertices, doc="Outer ring of shared positions.")
-    holes = property(object_replay.face_holes, doc="Hole rings of shared positions.")
+    @property
+    def vertices(self) -> list[QVector3D]:
+        return [v.position for v in self.loop]
+
+    @property
+    def holes(self) -> list[list[QVector3D]]:
+        return [[v.position for v in h] for h in self.hole_loops]
 
     # ---- Geometry (ported from legacy Face, over shared positions) ----------
     def _newell(self) -> QVector3D:

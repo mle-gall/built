@@ -33,7 +33,7 @@ from collections.abc import Mapping
 from itertools import count
 
 import numpy as np
-from ingetrazo_core import Vec3 as QVector3D, polygon_centroid, polygon_net_area, polygon_newell as _newell, store_views
+from ingetrazo_core import Vec3 as QVector3D, polygon_centroid, polygon_net_area, polygon_newell as _newell, store_views, object_replay
 
 from core import mesh as _mesh
 from core.mesh import Edge, Face, Mesh, Vertex
@@ -570,14 +570,14 @@ class FaceView(_ViewMixin, Face):
     def vertices(self):
         rings = self._vectors()
         if rings is None:
-            return [v.position for v in self.loop]
+            return object_replay.face_vertices(self)
         return list(rings[0])
 
     @property
     def holes(self):
         rings = self._vectors()
         if rings is None:
-            return [[v.position for v in h] for h in self.hole_loops]
+            return object_replay.face_holes(self)
         return [list(r) for r in rings[1:]]
 
     @property
