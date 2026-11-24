@@ -429,7 +429,7 @@ class Host:
             return None
 
     def _modal(self):
-        from views import chrome_dialogs as cd
+        from ingetrazo_render import chrome_dialogs as cd
         return cd.modal(self.window)
 
     def _pane_input(self, kind, method, event, held):
@@ -490,7 +490,7 @@ class Host:
         or an exclusive job holds the window, only they hear keys."""
         from core.input_types import Qt
         from ingetrazo_render import KeyEvent, ShortcutOverride
-        from views import chrome_dialogs as cd
+        from ingetrazo_render import chrome_dialogs as cd
         self.input_state.modifiers = modifiers
         view = self.view
         if pressed:

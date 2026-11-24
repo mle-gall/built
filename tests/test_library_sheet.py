@@ -167,7 +167,7 @@ def test_paint_with_it_closes_the_sheet_and_remembers_it(win, monkeypatch):
 
 def test_delete_asks_first_over_the_sheet(win, monkeypatch):
     asked = []
-    monkeypatch.setattr("views.chrome_dialogs.ask_later",
+    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.ask_later",
                         lambda parent, title, body, buttons, done, **kw: (asked.append(title), done("yes")))
     L.open_library(win)
     frame(win)

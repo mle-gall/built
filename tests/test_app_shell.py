@@ -340,7 +340,7 @@ def test_open_unitless_mesh_preserves_original_tab_on_cancel_or_failure(host, tm
     path.write_bytes(b"invalid STL fixture")
     forms, failures = [], []
     monkeypatch.setattr("ingetrazo_render.chrome_forms.show", lambda _, f: forms.append(f) or "chrome")
-    monkeypatch.setattr("views.chrome_dialogs.critical", lambda _, title, text: failures.append(title))
+    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.critical", lambda _, title, text: failures.append(title))
     assert host.open(path)
     assert win.documents() == [original]
     forms.pop().press(choice)

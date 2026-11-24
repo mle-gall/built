@@ -3,7 +3,7 @@ from core.input_types import NATIVE
 from core.timers import later
 
 from core.i18n import tr
-from views import chrome_dialogs as cd
+from ingetrazo_render import chrome_dialogs as cd
 
 
 def start(win, path, install, *, target=None):

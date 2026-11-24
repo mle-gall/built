@@ -90,7 +90,7 @@ def test_odm_uses_survey_altitude_and_keeps_a_missing_atlas(host, tmp_path, monk
 @pytest.mark.parametrize("outcome", ["error", "cancel"])
 def test_odm_failure_or_cancel_preserves_unlocated_model(host, tmp_path, monkeypatch, outcome):
     from tests.test_photomesh import _write_odm_tree
-    from views import chrome_dialogs
+    from ingetrazo_render import chrome_dialogs
     from app_shell.files import NullBar
     pick(monkeypatch, _write_odm_tree(tmp_path))
     warnings = []

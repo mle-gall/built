@@ -85,7 +85,7 @@ def move_to_new_window(win, doc) -> str | None:
     host = host_of(win)
     if not can_move(win) or doc not in win._documents:
         return None
-    from views import chrome_dialogs as cd
+    from ingetrazo_render import chrome_dialogs as cd
     if cd.modal(win):
         return None
     return request(host, "move", (win, doc))

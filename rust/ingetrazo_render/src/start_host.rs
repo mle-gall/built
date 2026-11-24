@@ -1012,7 +1012,7 @@ fn new_project(win: &Bound<'_, PyAny>) -> PyResult<()> {
     })();
     if let Err(e) = made {
         if e.is_instance_of::<pyo3::exceptions::PyOSError>(py) || e.is_instance_of::<pyo3::exceptions::PyValueError>(py) {
-            py.import("views.chrome_dialogs")?.call_method1("warning", (win, "Project", e.value(py).str()?))?;
+            py.import("ingetrazo_render.chrome_dialogs")?.call_method1("warning", (win, "Project", e.value(py).str()?))?;
             return Ok(());
         }
         return Err(e);

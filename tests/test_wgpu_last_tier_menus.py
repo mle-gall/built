@@ -47,7 +47,7 @@ def test_shared_menus_and_dock_selection(native_question_host, monkeypatch):
     action(host, "pickrow", key)
     assert group in scene.selection
 
-    from views import chrome_dialogs
+    from ingetrazo_render import chrome_dialogs
     monkeypatch.setattr(chrome_dialogs, "in_shell", lambda: True)
     scale_editor.ask_scale(win, group)
     form = chrome_forms.current(win)

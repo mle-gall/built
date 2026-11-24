@@ -18,7 +18,7 @@ def _set_scale(viewport, group, factors):
 
 
 def ask_scale(window, group, done=None) -> None:
-    from views.chrome_dialogs import in_shell
+    from ingetrazo_render.chrome_dialogs import in_shell
     if not in_shell():
         from views.scale_dialog import ScaleDialog
         ScaleDialog(window, group).exec()

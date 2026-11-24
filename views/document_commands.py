@@ -271,7 +271,7 @@ class WindowDocumentCommands:
         open_url("https://ingetrazo-docs.pages.dev/")
 
     def _on_get_models(self) -> None:
-        from views.chrome_dialogs import information
+        from ingetrazo_render.chrome_dialogs import information
         information(
             self, tr("Get more models and textures"),
             tr("Free sources that open directly in Built:") + "<br><br>"

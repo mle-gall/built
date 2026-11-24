@@ -12,7 +12,7 @@ pub(super) fn busy<T>(
 ) -> PyResult<T> {
     let py = win.py();
     let chip = py
-        .import("views.chrome_dialogs")?
+        .import("ingetrazo_render.chrome_dialogs")?
         .call_method1("busy", (win, label))?;
     chip.call_method0("__enter__")?;
     let result = op();

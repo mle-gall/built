@@ -662,7 +662,7 @@ impl SettingsSheet {
         if !datum.is_none() {
             let message = tr(py, "This project already has a location. Moving it makes the new point the model's origin (0,0): everything drawn keeps its local coordinates and shows up at the new spot on the map.\n\nMove the origin?")?;
             let kw = [("default", "cancel"), ("cancel", "cancel")].into_py_dict(py)?;
-            let answer = py.import("views.chrome_dialogs")?.getattr("ask")?.call(
+            let answer = py.import("ingetrazo_render.chrome_dialogs")?.getattr("ask")?.call(
                 (ctx.getattr("win")?, tr(py, "Move the project origin?")?, message, vec![("cancel", tr(py, "Cancel")?), ("move", tr(py, "Move")?)]),
                 Some(&kw),
             )?;

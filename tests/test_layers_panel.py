@@ -32,7 +32,7 @@ def test_add_opens_the_selected_folder_and_preserves_its_parent(native_host):
 
 def test_purge_asks_for_the_count_and_accepts_only_a_current_confirmation(native_question_host):
     from tests.native_tree import action
-    from views import chrome_dialogs
+    from ingetrazo_render import chrome_dialogs
     host = native_question_host
     scene = host.viewport.scene
     scene.layers.extend([Layer("Vacia 1"), Layer("Vacia 2")])

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""The Built chrome's sheet and jobs (views/chrome_dialogs.py) stand in for
+"""The Built chrome's sheet and jobs (rust/ingetrazo_render/src/dialogs_host.rs) stand in for
 Qt's message boxes and progress dialogs. Blocking questions cancel on a
 missing frame. Notices and progress can be read from the offscreen model.
 
@@ -13,8 +13,8 @@ import pytest
 from core.input_types import Qt
 from ingetrazo_core import Vec3 as QVector3D
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from views import chrome_dialogs as cd
-from views.chrome_dialogs import QMessageBox
+from ingetrazo_render import chrome_dialogs as cd
+from ingetrazo_render.chrome_dialogs import QMessageBox
 
 
 @pytest.fixture
@@ -431,3 +431,37 @@ def test_failed_job_and_export_folder_are_retained(win, tmp_path, monkeypatch):
     assert row.action_label == "Open folder"
     row.action()
     assert opened == [tmp_path.resolve()]
+
+
+def test_the_guard_holds_a_qt_window_while_a_sheet_is_up():
+    """In the Qt app the guard filters the application's events: a key is
+    the sheet's (Esc answers it), clicks reach only the Metal view, the
+    menu bar greys out; released, all of it comes back."""
+    from PySide6.QtCore import QEvent, QPointF
+    from PySide6.QtGui import QKeyEvent, QMouseEvent
+    from PySide6.QtWidgets import QApplication, QLineEdit, QMainWindow, QWidget
+
+    class Window(QMainWindow):
+        _tool_actions = {}
+        _documents = []
+
+    w = Window()
+    field = QLineEdit(w)
+    view = QWidget(w)
+    w._doc = SimpleNamespace(stand_in=view)
+    menu = w.menuBar().addMenu("File")
+    answers = []
+    cd.ask_later(w, "Q", "Which?", [("cancel", "Cancel"), ("ok", "OK")], answers.append,
+                 default="ok", cancel="cancel")
+    assert cd.modal(w) and not menu.menuAction().isEnabled()
+    QApplication.sendEvent(field, QKeyEvent(QEvent.KeyPress, Qt.Key_A.value, Qt.NoModifier, "a"))
+    assert field.text() == ""
+    click = QMouseEvent(QEvent.MouseButtonPress, QPointF(2, 2), QPointF(2, 2), Qt.LeftButton,
+                        Qt.LeftButton, Qt.NoModifier)
+    guard = w._chrome_guard.filter
+    assert guard.eventFilter(field, click) is True
+    assert guard.eventFilter(view, click) is False
+    QApplication.sendEvent(field, QKeyEvent(QEvent.KeyPress, Qt.Key_Escape.value, Qt.NoModifier))
+    assert answers == ["cancel"] and not cd.modal(w) and menu.menuAction().isEnabled()
+    QApplication.sendEvent(field, QKeyEvent(QEvent.KeyPress, Qt.Key_A.value, Qt.NoModifier, "a"))
+    assert field.text() == "a"

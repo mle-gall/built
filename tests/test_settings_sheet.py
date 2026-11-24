@@ -444,7 +444,7 @@ def test_place_search_approximate_location_and_capture_use_the_open_draft(win, m
 
 def test_move_origin_confirmation_and_undo_restore_survey_datum(win, monkeypatch):
     from georef.datum import SceneDatum
-    from views import chrome_dialogs
+    from ingetrazo_render import chrome_dialogs
     scene = win.viewport.scene
     old = SceneDatum(45, 7, alt=1250, north=30)
     scene.georef = old

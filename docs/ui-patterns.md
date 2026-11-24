@@ -24,7 +24,7 @@ Manager**, **About** and report sheets also use this component.
   time. (What does — painting, filing, editing a material while looking at
   it — stays in the dock, the strip or the inspector; the sheet links to it.)
 - It is **not a question**. A question that changes data is the small
-  sheet hung from the top bar (`set_sheet`, `views/chrome_dialogs.py`); a
+  sheet hung from the top bar (`set_sheet`, `ingetrazo_render.chrome_dialogs`, `dialogs_host.rs`); a
   form with OK/Cancel is a chrome form (`ingetrazo_render.chrome_forms`, `forms_host.rs`). Passing
   information is a toast or the activity capsule.
 

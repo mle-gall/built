@@ -34,7 +34,7 @@ impl PreviewTask {
             Ok(image) => {
                 if svg.borrow_mut().finish_preview(self.ticket, String::new()) {
                     let view = py
-                        .import("views.chrome_dialogs")?
+                        .import("ingetrazo_render.chrome_dialogs")?
                         .call_method1("view_of", (win,))?;
                     if !view.is_none() {
                         let (w, h, rgba): (usize, usize, Bound<'_, pyo3::types::PyBytes>) =

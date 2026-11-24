@@ -73,7 +73,7 @@ def test_going_into_a_linked_copy_offers_its_file(win, tmp_path, monkeypatch):
     def answer(parent, title, text, buttons, **kw):
         asked["text"] = title
         return "open"
-    monkeypatch.setattr("views.chrome_dialogs.ask", answer)
+    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.ask", answer)
     win.viewport.begin_group_edit(g)
     assert "Site.igz" in asked["text"]
     assert win.viewport.scene.edit_group is None        # never entered

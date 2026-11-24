@@ -807,7 +807,7 @@ def test_video_picker_and_sheet_agree_on_encoder_format(win, monkeypatch, tmp_pa
 
 def test_normalizing_the_movie_suffix_preserves_an_unconfirmed_file(win, monkeypatch, tmp_path):
     import views.video_export as ve
-    from views import chrome_dialogs
+    from ingetrazo_render import chrome_dialogs
     from ingetrazo_render import chrome_forms
     from views.filedialogs import file_dialogs
     _scenes(win, ("A", "iso", set()))

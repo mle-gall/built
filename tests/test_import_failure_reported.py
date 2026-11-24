@@ -94,7 +94,7 @@ def win(native_host):
 @pytest.fixture
 def errors(monkeypatch):
     shown = []
-    monkeypatch.setattr("views.chrome_dialogs.critical",
+    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.critical",
                         lambda _parent, title, text: shown.append((title, text)))
     return shown
 

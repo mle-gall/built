@@ -807,7 +807,7 @@ def dispatch(self, command):
     self.request_frame()
 def facts(self):
     scene=self.viewport.scene
-    from views.chrome_dialogs import current_sheet
+    from ingetrazo_render.chrome_dialogs import current_sheet
     from ingetrazo_render import chrome_forms
     choice=chrome_forms.current(self.window)
     question=current_sheet(self.window)

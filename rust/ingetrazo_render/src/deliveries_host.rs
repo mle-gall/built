@@ -30,7 +30,7 @@ fn json_loads<'py>(py: Python<'py>, s: &str) -> PyResult<Bound<'py, PyAny>> {
 }
 
 fn dialogs(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("views.chrome_dialogs")
+    py.import("ingetrazo_render.chrome_dialogs")
 }
 
 fn deliveries(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {

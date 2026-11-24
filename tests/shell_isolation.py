@@ -10,7 +10,7 @@ _ENV = ("QT_QPA_PLATFORM", "XDG_DATA_HOME", "BUILT_ANSWERS", "BUILT_SETTINGS_DIR
 
 _PATCHED = {
     "core.settings": ("_store",),
-    "views.chrome_dialogs": ("live", "QEventLoop", "_shell_installed"),
+    "ingetrazo_render.chrome_dialogs": ("live", "QEventLoop", "_shell_installed"),
     "views.filedialogs": ("QFileDialog",),
     "core.renderer_settings": ("capability", "status_text", "_shell_installed"),
     "app_shell.modal": ("_HOST",),
@@ -94,7 +94,7 @@ def native_host(tmp_path, restore_shell_patches, monkeypatch):
 @pytest.fixture
 def native_question_host(native_host, monkeypatch):
     """Use the real sheet stack while driving a native document without a renderer."""
-    from views import chrome_dialogs
+    from ingetrazo_render import chrome_dialogs
     monkeypatch.setattr(chrome_dialogs, "async_host",
                         lambda parent: native_host.window if parent is native_host.window else None)
     return native_host

@@ -13,6 +13,7 @@
 //! Python fills a form and never subclasses it.
 //!
 //! Multi-step questions read top to bottom with `flow` and `request`.
+use crate::dialogs_host::stderr;
 use crate::settings_rows::{func, none, obj, opt, s, tr, trf};
 use pyo3::{
     prelude::*,
@@ -36,7 +37,7 @@ fn forms_mod(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
 }
 
 fn dialogs(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("views.chrome_dialogs")
+    py.import("ingetrazo_render.chrome_dialogs")
 }
 
 fn truth(v: &Bound<'_, PyAny>, form: &Bound<'_, PyAny>) -> PyResult<bool> {
@@ -761,7 +762,7 @@ fn show<'py>(py: Python<'py>, parent: &Bound<'py, PyAny>, form: &Bound<'py, PyAn
     let d = dialogs(py)?;
     let win = d.call_method1("async_host", (parent,))?;
     if win.is_none() {
-        eprintln!("Built could not show the form: {}", form.getattr("title")?.str()?);
+        stderr(py, &format!("Built could not show the form: {}", form.getattr("title")?.str()?))?;
         form.call_method1("finish", (form.getattr("cancel")?,))?;
         return Ok("none");
     }

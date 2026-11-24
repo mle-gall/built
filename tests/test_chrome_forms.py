@@ -15,7 +15,7 @@ import pytest
 from core.input_types import Qt
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
-from views import chrome_dialogs as cd
+from ingetrazo_render import chrome_dialogs as cd
 from ingetrazo_render import chrome_forms as cf
 
 class FakeRenderer:

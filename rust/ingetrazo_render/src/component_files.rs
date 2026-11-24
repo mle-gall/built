@@ -13,7 +13,7 @@ fn notice(
     let py = win.py();
     let vars = PyDict::new(py);
     vars.set_item(field, value)?;
-    py.import("views.chrome_dialogs")?.call_method1(
+    py.import("ingetrazo_render.chrome_dialogs")?.call_method1(
         "warning",
         (
             win,
@@ -182,7 +182,7 @@ fn catalogue_component<'py>(
         Ok(())
     };
     if let Err(err) = read() {
-        py.import("views.chrome_dialogs")?.call_method1(
+        py.import("ingetrazo_render.chrome_dialogs")?.call_method1(
             "critical",
             (
                 win,

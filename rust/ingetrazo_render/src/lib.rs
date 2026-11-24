@@ -76,6 +76,7 @@ mod settings_host;
 mod library_host;
 mod start_host;
 mod forms_host;
+mod dialogs_host;
 pub mod ui;
 mod host_context;
 mod inspector;
@@ -3303,6 +3304,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     shell_events::register(m)?;
     deliveries_host::register(m)?;
     sheet_runtime::register(m)?;
+    dialogs_host::register(m)?;
     forms_host::register(m)?;
     native_view_actions::register(m)?;
     plugin_workspace::register(m)?;

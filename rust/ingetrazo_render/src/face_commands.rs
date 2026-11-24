@@ -124,7 +124,7 @@ fn intersect_faces(win: &Bound<'_, PyAny>, mode: &str) -> PyResult<()> {
     history.call_method1("execute", (command,))?;
     let error = history.getattr("last_error")?;
     if error.is_truthy()? {
-        py.import("views.chrome_dialogs")?.call_method1(
+        py.import("ingetrazo_render.chrome_dialogs")?.call_method1(
             "warning",
             (win, translated(py, "Intersect Faces failed", None)?, error),
         )?;
@@ -312,7 +312,7 @@ fn simplify_mesh(
     history.call_method1("execute", (&cmd,))?;
     let error = history.getattr("last_error")?;
     if error.is_truthy()? {
-        py.import("views.chrome_dialogs")?.call_method1(
+        py.import("ingetrazo_render.chrome_dialogs")?.call_method1(
             "warning",
             (win, translated(py, "Simplify Mesh failed", None)?, error),
         )?;

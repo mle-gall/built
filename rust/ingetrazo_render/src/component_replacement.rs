@@ -189,7 +189,7 @@ fn ask_keep_orphans(win: &Bound<'_, PyAny>, orphans: &Bound<'_, PyAny>) -> PyRes
     let kw = PyDict::new(py);
     kw.set_item("default", "keep")?;
     kw.set_item("cancel", "cancel")?;
-    let answer = py.import("views.chrome_dialogs")?.getattr("ask")?.call(
+    let answer = py.import("ingetrazo_render.chrome_dialogs")?.getattr("ask")?.call(
         (
             win,
             translated(py, "Keep {names} in the file?", Some(&vars))?,

@@ -712,7 +712,7 @@ impl ExtensionsSheet {
         let t = tr(py)?;
         let kwargs = [("cancel", "cancel"), ("default", "cancel")].into_py_dict(py)?;
         let buttons = vec![("cancel".into_pyobject(py)?.into_any(), t.call1(("Cancel",))?), ("ok".into_pyobject(py)?.into_any(), title.into_pyobject(py)?.into_any())];
-        let answer = py.import("views.chrome_dialogs")?.getattr("ask")?.call((win, title, text, buttons), Some(&kwargs))?;
+        let answer = py.import("ingetrazo_render.chrome_dialogs")?.getattr("ask")?.call((win, title, text, buttons), Some(&kwargs))?;
         Ok(answer.extract::<Option<String>>()?.as_deref() == Some("ok"))
     }
 
@@ -858,7 +858,7 @@ fn show_report_sheet<'py>(py: Python<'py>, win: &Bound<'py, PyAny>, sid: &str) -
                 let kwargs = PyDict::new(py);
                 kwargs.set_item("tone", "warning")?;
                 let title = tr.call1(("Extension manager",))?;
-                py.import("views.chrome_dialogs")?.call_method("notify", (win, title, detail), Some(&kwargs))?;
+                py.import("ingetrazo_render.chrome_dialogs")?.call_method("notify", (win, title, detail), Some(&kwargs))?;
                 Ok(py.None().into_bound(py))
             }
             result => result,

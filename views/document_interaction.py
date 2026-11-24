@@ -2029,7 +2029,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         tab of its own (or bring that tab forward) on yes."""
         from pathlib import Path
         from core import links
-        from views import chrome_dialogs
+        from ingetrazo_render import chrome_dialogs
         path = Path(links.link_of(group)["path"])
         if not path.is_file():
             chrome_dialogs.warning(

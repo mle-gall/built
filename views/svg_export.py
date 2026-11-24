@@ -494,7 +494,7 @@ def open_view_export(win, frame_builder=None):
     from core.saved_views import SavedView
     from core.sun import scene_sun_direction
     from ingetrazo_render import SvgOptions, show_view_export
-    from views import chrome_dialogs
+    from ingetrazo_render import chrome_dialogs
     from ingetrazo_render import svg_progress
 
     viewport = win._active_view()
