@@ -104,3 +104,25 @@ def test_quitting_leaves_the_copy_as_plain_data(app):
     md = QApplication.clipboard().mimeData()
     assert not isinstance(md, clip.ClipMime)
     assert clip.decode(md.data(clip.MIME).data()) is not None
+
+
+def test_native_window_adopts_a_platform_offer_once(app, monkeypatch):
+    from types import SimpleNamespace
+    from ingetrazo_render import ModelClipboard
+    from app_shell import native
+
+    original = _clip()
+    offer = clip.ClipMime(original)
+    monkeypatch.setattr(native, "available", lambda: False)
+    monkeypatch.setattr(clip, "current_offer", lambda: offer)
+    released = []
+    previous = _clip()
+    vp = SimpleNamespace(clipboard=previous, _drop_clip_protos=released.append)
+    win = SimpleNamespace(viewport=vp)
+    board = ModelClipboard()
+    board.adopt(win)
+    adopted = vp.clipboard
+    assert adopted is not original and adopted["groups"][0].mesh is not original["groups"][0].mesh
+    assert vp._clip_adopted_from is original and released == [previous]
+    board.adopt(win)
+    assert vp.clipboard is adopted and len(released) == 1

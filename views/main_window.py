@@ -49,10 +49,6 @@ from views.filedialogs import file_dialogs
 from core.version import __version__
 from core.group import Group
 from core.history import (
-    ExplodeGroupCommand,
-    HealOverlapsCommand,
-    MakeGroupCommand,
-    RebuildPlanarFacesCommand,
     SnapshotImport,
     SnapshotMutation,
 )
@@ -65,10 +61,9 @@ from formats import ifc as ifc_format
 from formats import stl as stl_format
 from formats import gltf as gltf_format
 from tools.texture_position import TexturePositionTool
-from views.document_commands import WindowDocumentCommands
-from ingetrazo_render import build_tools
+from views.document_commands import WindowDocumentCommands, _repeatable
+from ingetrazo_render import build_tools, transient_tool_class
 from tools.paint import PaintTool
-from tools.paste import PasteTool
 from tools.flip import FlipTool
 from views.tray import BimTray, GeorefTray, Tray, style_slider
 from views.icons import tool_icon
@@ -108,30 +103,6 @@ _RESET_TOOLBARS_TIP = ("Every toolbar back in its factory place and order, "
                        "they are.")
 _TEXT3D_TIP = ("Build a text as an extruded solid, in the font and height "
                "you choose.")
-
-def _repeatable(label: str):
-    """Mark a one-shot command as the one Repeat (Shift+R) replays.
-
-    Blender's Shift+R: after Reverse Faces on one face, select the next and
-    repeat. Recorded on the SLOT, not on a
-    QAction, because the right-click menu builds its actions afresh each
-    time — a remembered context-menu QAction would be a dead object by the
-    next repeat. Arguments the command takes (Intersect's mode) are kept;
-    the ``checked`` flag Qt may append to a menu's ``triggered`` is not."""
-    import functools
-    import inspect
-
-    def deco(fn):
-        takes = len(inspect.signature(fn).parameters) - 1    # minus self
-
-        @functools.wraps(fn)
-        def wrapper(self, *args):
-            args = args[:takes]
-            self._remember_command(label, lambda: fn(self, *args))
-            return fn(self, *args)
-        return wrapper
-    return deco
-
 
 def _obj_parts(temp):
     """The container a multi-part OBJ imported as, its pieces' facet seams
@@ -4370,22 +4341,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
                 lab.setText(text)
         lab.setVisible(show)
 
-    def repeat_last_command(self) -> bool:
-        """Run again the last tool picked or one-shot command applied.
-
-        A tool comes back as if its key were pressed; a command runs on the
-        CURRENT selection — the point of it: reverse this face, select the
-        next, repeat."""
-        last = getattr(self, "_last_command", None)
-        if last is None:
-            self.viewport.flash_status(tr("Nothing to repeat yet"), 3000)
-            return False
-        label, run = last
-        run()
-        self.viewport.flash_status(tr("Repeat: {name}", name=tr(label)), 2000)
-        self.viewport.update()
-        return True
-
     def _activate_nav(self, key: str) -> None:
         self.viewport.set_nav_mode(key)
         # The keys typed next are the view's (Zoom takes «35mm»), wherever
@@ -4398,151 +4353,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
             tr("Nav: {name}", name=tr(key.capitalize())))
         self._refresh_vcb()
         self._update_status_hint()
-
-    def _can_make_here(self) -> bool:
-        """Make Group, Make Component and Explode work inside an open
-        group — what they make goes into it (#490, #561) — but not inside
-        a component, whose parts are its shared definition."""
-        from core.outliner import editing_inside_component
-        if editing_inside_component(self.viewport.scene):
-            self.viewport.flash_status(tr(
-                "Components keep their parts: Make Unique first to "
-                "change what is inside one"), 4000)
-            return False
-        return True
-
-    def _execute_make(self, cmd) -> None:
-        """Run a Make Group / Make Component / Explode command where the
-        user is: at the model, or into the open group."""
-        ctx = self.viewport.scene.edit_group
-        if ctx is not None:
-            from core.history import GroupInContextCommand
-            cmd = GroupInContextCommand(cmd, ctx)
-        self.viewport.history.execute(cmd)
-
-    @_repeatable("Make Group")
-    def _on_make_group(self) -> None:
-        """Make Group (G) over the selection.
-
-        Every path here ANSWERS. A refusal whispered into the status bar for
-        five seconds, or an empty selection that returns in silence, reads to
-        the user as "I pressed Create group and it does not create" — which
-        is exactly how this was reported."""
-        if not self._can_make_here():
-            return
-        sel = self.viewport.scene.selection
-        faces = [f for f in sel if isinstance(f, Face)]
-        edges = [e for e in sel if isinstance(e, Edge)]
-        groups = [g for g in sel if isinstance(g, Group)]
-        if len(groups) == 1 and not (faces or edges):
-            # One group (or component) alone: wrapping it in a container of
-            # itself is a Russian doll with nothing inside (@pacaeiro,
-            # issue #35: «a group inside of a group that is equal to
-            # itself… shouldn't be possible»). Grouping needs a second
-            # thing — another group, or loose geometry.
-            self.viewport.flash_status(tr(
-                "That is already a group — select something else with it "
-                "to group them together"), 4000)
-            return
-        if groups:
-            # A group can hold groups now (2026-09-11): the container adopts
-            # them and the loose part of the selection becomes its own mesh,
-            # the classic behaviour. What used to happen here was a dialog offering
-            # to merge or explode, because opening a container baked it.
-            from core.history import MakeNestedGroupCommand
-            self._execute_make(
-                MakeNestedGroupCommand(faces, edges, groups))
-            self.viewport.flash_status(tr(
-                "Grouped {n} group(s){extra} — double-click to go inside",
-                n=len(groups),
-                extra=(tr(" and the loose geometry") if (faces or edges)
-                       else "")), 4000)
-            self.viewport.update()
-            return
-        if not (faces or edges):
-            self.viewport.flash_status(tr(
-                "Select the geometry to group first"), 4000)
-            return
-        self._execute_make(MakeGroupCommand(faces, edges))
-        self.viewport.update()
-
-    @_repeatable("Make Component")
-    def _on_make_component(self) -> None:
-        """Make Component (G): the selection becomes a shared
-        DEFINITION placed as an instance — every copy shares it."""
-        if not self._can_make_here():
-            return
-        sel = self.viewport.scene.selection
-        faces = [f for f in sel if isinstance(f, Face)]
-        edges = [e for e in sel if isinstance(e, Edge)]
-        groups = [g for g in sel if isinstance(g, Group)
-                  and not getattr(g, "billboard", False)]
-        # The first «Component #n» no object wears yet: counting the copies
-        # at the top skipped numbers and could hand out a name in use
-        # (#620, @ibsgroupdubai-netizen).
-        from core.kept_components import names_in_use
-        taken = names_in_use(self.viewport.scene)
-        count = 1
-        while tr("Component #{n}", n=count) in taken:
-            count += 1
-        if len(groups) > 1 or (groups and (faces or edges)):
-            # Several groups, or groups and loose geometry: ONE component
-            # holding them, each still a group inside (Marco, 24-09, with
-            # issue #90) — it used to make one component per group, or
-            # refuse outright when loose geometry came along.
-            from core.history import MakeComponentOfCommand
-
-            def make_of(name):
-                if name is None:
-                    return
-                self._execute_make(MakeComponentOfCommand(
-                    faces, edges, groups,
-                    name=name.strip() or tr("Component #{n}", n=count)))
-                self.viewport.update()
-                self.statusBar().showMessage(tr(
-                    "Component created — copies will share its definition"), 4000)
-            _forms.ask_text(self, tr("Make Component"), tr("Component name:"),
-                            text=tr("Component #{n}", n=count), done=make_of)
-            return
-        if groups:
-            # One group converts in place — its mesh becomes the shared
-            # definition, free (no geometry copied); a group of groups just
-            # becomes what it holds a matrix for. The old answer was
-            # "explode it first", which fed 230k faces through the loose
-            # mesh for minutes (piscina report).
-            g = groups[0]
-            if g.is_component():
-                self.viewport.flash_status(tr("It is a component already"))
-                return
-            from core.history import GroupToComponentCommand
-
-            def convert(name):
-                if name is None:
-                    return
-                self._execute_make(
-                    GroupToComponentCommand(g, name.strip() or None))
-                self.viewport.update()
-                self.statusBar().showMessage(tr(
-                    "Component created — copies will share its definition"), 4000)
-            _forms.ask_text(self, tr("Make Component"), tr("Component name:"),
-                            text=g.name or tr("Component"), done=convert)
-            return
-        if not faces and not edges:
-            self.viewport.flash_status(
-                tr("Select the geometry for the component first"))
-            return
-
-        def make(name):
-            if name is None:
-                return
-            self._execute_make(MakeGroupCommand(
-                faces, edges, component=True,
-                name=name.strip() or tr("Component #{n}", n=count)))
-            self.viewport.update()
-            self.statusBar().showMessage(tr(
-                "Component created — copies will share its definition"), 4000)
-        _forms.ask_text(self, tr("Make Component"), tr("Component name:"),
-                        text=tr("Component #{n}", n=count), done=make)
 
     @_repeatable("Make Unique")
     def _on_make_unique(self) -> None:
@@ -4832,29 +4642,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
                 label, lambda m=mode: self._on_intersect_faces(m))
             act.setStatusTip(tip)
 
-    @_repeatable("Intersect Faces")
-    def _on_intersect_faces(self, mode: str) -> None:
-        """Intersect Faces: edges wherever the selection's faces
-        cross the others (core/intersect.py), added to the context being
-        edited — they split its faces there — in one undo step."""
-        from core.intersect import build_intersect_faces
-        scene = self.viewport.scene
-        if not scene.selection:
-            self.viewport.flash_status(tr("Select faces or groups first"))
-            return
-        count, command = build_intersect_faces(scene, mode)
-        if command is None:
-            self.viewport.flash_status(tr("No faces cross the selection"))
-            return
-        history = self.viewport.history
-        history.execute(command)
-        if history.last_error:
-            _dialogs.warning(self, tr("Intersect Faces failed"),
-                                history.last_error)
-            return
-        self.viewport.flash_status(
-            tr("{n} intersection edges added", n=count), 3000)
-
     @_repeatable("Split into Pieces")
     def _on_split_into_pieces(self) -> None:
         """Regroup the selected group's contents by physical piece — the
@@ -4888,89 +4675,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         self.viewport.flash_status(tr(
             "Split into {n} pieces — Explode Group sets them free",
             n=len(pieces)), 5000)
-        self.viewport.update()
-
-    @_repeatable("Explode Group")
-    def _on_explode_group(self) -> None:
-        # Inside an open group what comes out stays in it, one level up
-        # from where it was — not out at the model (as Make Group).
-        if not self._can_make_here():
-            return
-        groups = [g for g in self.viewport.scene.selection if isinstance(g, Group)]
-        for g in groups:
-            self._execute_make(ExplodeGroupCommand(g))
-        if groups:
-            self.viewport.update()
-        elif any(type(e).__name__ == "ImagePlane"
-                 for e in self.viewport.scene.selection):
-            # The same command on a selected image explodes the image (#687).
-            self._on_explode_image()
-
-    def _on_simplify_mesh(self) -> None:
-        from PySide6.QtWidgets import QInputDialog
-        from core.history import SimplifyMeshCommand
-
-        scene = self.viewport.scene
-        if not scene.mesh.faces:
-            if scene.groups:
-                self.viewport.flash_status(tr(
-                    "Explode the imported group first, then simplify the mesh"))
-            else:
-                self.viewport.flash_status(tr("There is no mesh to simplify"))
-            return
-
-        _forms.ask_number(
-            self, tr("Simplify Mesh"),
-            tr("Maximum facet angle in degrees "
-               "(0 = coplanar only; higher values may change rounded geometry):"),
-            1.0, 0.0, 5.0, 2, done=self._simplify_mesh_by, suffix="°")
-
-    def _simplify_mesh_by(self, angle) -> None:
-        if angle is None:
-            return
-        from core.history import SimplifyMeshCommand
-        self.viewport.history.execute(SimplifyMeshCommand(angle))
-        error = self.viewport.history.last_error
-        if error:
-            _dialogs.warning(self, tr("Simplify Mesh failed"), error)
-            return
-        command = self.viewport.history.undo_stack[-1]
-        removed = getattr(command, "faces_removed", 0)
-        if removed:
-            self.viewport.flash_status(
-                tr("Simplified mesh: removed {count} faces", count=removed),
-                5000)
-        else:
-            self.viewport.flash_status(tr("No faces could be simplified"))
-        self.viewport.update()
-
-    @_repeatable("Convert Path to Geometry")
-    def _on_convert_geopath(self) -> None:
-        """Bake selected georef paths into real mesh geometry (Track G bridge).
-
-        The trace crosses from the georef subsystem into the modelling engine
-        *on demand*: each segment becomes a welded edge (a closed path auto-faces,
-        so a traced footprint is ready to push/pull into a building), and the
-        GeoPath is consumed. One undoable step.
-        """
-        from georef.geopath import GeoPath
-        from core.edits import build_add_edges
-        from core.history import CompoundCommand, DeleteGeoPathsCommand
-
-        scene = self.viewport.scene
-        paths = [p for p in scene.selection if isinstance(p, GeoPath)]
-        if not paths:
-            self.statusBar().showMessage(
-                tr("Select a path to convert to geometry."), 3000)
-            return
-        cmds = []
-        for path in paths:
-            segs = [(a, b) for a, b in path.segments()]
-            if segs:
-                cmds.append(build_add_edges(scene, segs, detect_faces=True))
-        cmds.append(DeleteGeoPathsCommand(paths))
-        cmd = cmds[0] if len(cmds) == 1 else CompoundCommand(cmds)
-        self.viewport.history.execute(cmd)
         self.viewport.update()
 
     # ---- Sections (section planes) -----------------------------------------
@@ -5023,24 +4727,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         """Apply the Camera-menu fade slider immediately and persist it."""
         self._rest_fade_value.setText(f"{value} %")
         self.viewport.set_edit_rest_fade(value / 100.0)
-
-    def _on_toggle_hide_rest(self, _checked: bool = False) -> None:
-        """Hide Rest of Model (Alt+Q). Reads the viewport, not
-        the checkmark, which Preferences may have left stale."""
-        mode = self.viewport.edit_rest_mode
-        if mode == "hide":
-            self.viewport.set_edit_rest_mode(self._rest_shown_mode)
-        else:
-            self._rest_shown_mode = mode
-            self.viewport.set_edit_rest_mode("hide")
-        self._sync_component_edit_menu()
-
-    def _on_toggle_hide_similar(self, _checked: bool = False) -> None:
-        """Hide Similar Components (Alt+W)."""
-        on = not bool(getattr(self.viewport.scene,
-                              "hide_similar_components", False))
-        self.viewport.set_hide_similar_components(on)
-        self._sync_component_edit_menu()
 
     def _set_hidden_view(self, attr: str, on: bool) -> None:
         """View ▸ Hidden Objects / Geometry: a scene flag (it travels in the
@@ -5277,72 +4963,12 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         if panel is not None:
             panel.refresh()
 
-    @_repeatable("Delete Guides")
-    def _on_delete_guides(self) -> None:
-        """Remove every construction guide (Edit ▸ Delete Guides)."""
-        from core.history import DeleteGuidesCommand
-        guides = list(self.viewport.scene.guides)
-        if guides:
-            self.viewport.history.execute(DeleteGuidesCommand(guides))
-            self.viewport.update()
-
     def _on_toggle_path_closed(self) -> None:
         from georef.geopath import GeoPath
         from core.history import ToggleGeoPathClosedCommand
         paths = [p for p in self.viewport.scene.selection if isinstance(p, GeoPath)]
         if paths:
             self.viewport.history.execute(ToggleGeoPathClosedCommand(paths))
-            self.viewport.update()
-
-    def _on_delete_selection(self) -> None:
-        """Delete the current selection (any entity type), as one undoable step —
-        the same logic the Select tool's Delete key runs, reachable from the
-        context menu regardless of the active tool."""
-        from core.mesh import Edge, Face
-        from core.dimension import Dimension
-        from core.guide import is_guide
-        from core.textlabel import TextLabel
-        from georef.geopath import GeoPath
-        from core.history import (
-            CompoundCommand, DeleteDimensionsCommand, DeleteGeoPathsCommand,
-            DeleteGroupCommand, DeleteGuidesCommand,
-            DeleteImagePlanesCommand, DeleteTextLabelsCommand,
-            EraseSelectionCommand,
-        )
-        from core.image_plane import ImagePlane
-        sel = self.viewport.scene.selection
-        if not sel:
-            return
-        edges = [e for e in sel if isinstance(e, Edge)]
-        faces = [f for f in sel if isinstance(f, Face)]
-        groups = [g for g in sel if isinstance(g, Group)]
-        dims = [d for d in sel if isinstance(d, Dimension)]
-        labels = [t for t in sel if isinstance(t, TextLabel)]
-        paths = [p for p in sel if isinstance(p, GeoPath)]
-        guides = [g for g in sel if is_guide(g)]
-        from core.section import SectionPlane
-        splanes = [p for p in sel if isinstance(p, SectionPlane)]
-        cmds = []
-        if edges or faces:
-            cmds.append(EraseSelectionCommand(edges, faces))
-        cmds.extend(DeleteGroupCommand(g) for g in groups)
-        if guides:
-            cmds.append(DeleteGuidesCommand(guides))
-        images = [im for im in sel if isinstance(im, ImagePlane)]
-        if images:
-            cmds.append(DeleteImagePlanesCommand(images))
-        if splanes:
-            from core.history import DeleteSectionPlanesCommand
-            cmds.append(DeleteSectionPlanesCommand(splanes))
-        if dims:
-            cmds.append(DeleteDimensionsCommand(dims))
-        if labels:
-            cmds.append(DeleteTextLabelsCommand(labels))
-        if paths:
-            cmds.append(DeleteGeoPathsCommand(paths))
-        if cmds:
-            self.viewport.history.execute(
-                cmds[0] if len(cmds) == 1 else CompoundCommand(cmds))
             self.viewport.update()
 
     def release_eyedropper(self) -> None:
@@ -5981,99 +5607,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         _forms.ask_text(self, tr("New layer"), tr("Layer name:"),
                         text=f"{base} {n}", done=assign)
 
-    def _hideable(self, entities) -> list:
-        """The objects, faces and edges in ``entities`` that Hide acts on
-        (the ones not hidden already): a group picked inside an open
-        container is the child itself; one picked at the top level is the
-        top-level object."""
-        from core.history import _is_hidden
-        return [e for e in entities
-                if isinstance(e, (Edge, Face, Group)) and not _is_hidden(e)]
-
-    @_repeatable("Hide")
-    def _on_hide(self) -> None:
-        """Edit ▸ Hide: the selected objects (groups,
-        components), faces and edges stop drawing, picking and exporting —
-        they are still in the document and come back with Unhide, with
-        View ▸ Hidden Objects / Geometry, or with a scene that remembers
-        them visible."""
-        from core.history import HideCommand
-        targets = self._hideable(self.viewport.scene.selection)
-        if not targets:
-            self.statusBar().showMessage(
-                tr("Select an object, faces or edges first."), 3000)
-            return
-        self.viewport.history.execute(HideCommand(targets, hidden=True))
-        self.viewport.update()
-        n_obj = sum(1 for e in targets if isinstance(e, Group))
-        n_face = sum(1 for e in targets if isinstance(e, Face))
-        n_edge = len(targets) - n_obj - n_face
-        self.statusBar().showMessage(
-            tr("Hid {objects} object(s), {faces} face(s) and {edges} "
-               "edge(s) — Edit ▸ Unhide brings them back",
-               objects=n_obj, faces=n_face, edges=n_edge), 4000)
-
-    def _on_unhide_selected(self) -> None:
-        """Edit ▸ Unhide ▸ Selected — reachable once View ▸
-        Hidden Objects / Geometry lets hidden things be selected."""
-        from core.history import HideCommand, _is_hidden
-        targets = [e for e in self.viewport.scene.selection
-                   if isinstance(e, (Edge, Face, Group)) and _is_hidden(e)]
-        if not targets:
-            self.statusBar().showMessage(
-                tr("Nothing hidden in the selection — turn on Camera ▸ "
-                   "Hidden Objects / Geometry to select hidden things."), 4000)
-            return
-        self.viewport.history.execute(HideCommand(targets, hidden=False))
-        self.viewport.update()
-        self.statusBar().showMessage(
-            tr("Unhid {n} entities.", n=len(targets)), 3000)
-
-    def _on_unhide_last(self) -> None:
-        """Edit ▸ Unhide ▸ Last: the most recent Hide whose
-        entities are still hidden comes back, as its own undoable step."""
-        from core.history import HideCommand
-        for cmd in reversed(self.viewport.history.undo_stack):
-            if isinstance(cmd, HideCommand) and cmd.hides:
-                still = [e for e in cmd.entities if getattr(e, "hidden", False)]
-                if still:
-                    self.viewport.history.execute(HideCommand(still, hidden=False))
-                    self.viewport.update()
-                    self.statusBar().showMessage(
-                        tr("Unhid {n} entities.", n=len(still)), 3000)
-                    return
-        self.statusBar().showMessage(tr("Nothing to unhide."), 3000)
-
-    def _hidden_everywhere(self) -> list:
-        """Every hidden object in the document (nested ones too) plus the
-        hidden faces and edges of the mesh being edited — what Unhide ▸ All
-        restores.
-        Objects everywhere, because a hidden child inside a closed container
-        can only be reached by opening it, and the point of Unhide All is
-        not to have to hunt."""
-        from core.purge import iter_groups
-        scene = self.viewport.scene
-        out = [g for g in iter_groups(scene.groups) if g.hidden]
-        out += [f for f in scene.mesh.faces if f.attrs.get("hidden")]
-        out += [e for e in scene.mesh.edges if getattr(e, "hidden", False)]
-        return out
-
-    def _on_unhide_all(self) -> None:
-        """Edit ▸ Unhide ▸ All."""
-        from core.history import HideCommand
-        targets = self._hidden_everywhere()
-        if not targets:
-            self.statusBar().showMessage(tr("Nothing is hidden."), 3000)
-            return
-        self.viewport.history.execute(HideCommand(targets, hidden=False))
-        self.viewport.update()
-        self.statusBar().showMessage(
-            tr("Unhid {n} entities.", n=len(targets)), 3000)
-
-    # Older spellings, kept for callers that grew up with them.
-    _on_hide_edges = _on_hide
-    _on_unhide_all_edges = _on_unhide_all
-
     def _on_toggle_shadows(self, on: bool) -> None:
         """Camera ▸ Shadows: flip the scene's sun on/off (the tray panel
         holds the date/time/darkness detail)."""
@@ -6193,96 +5726,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
             tr("Removed {n} intermediate points", n=joined) if joined
             else tr("No collinear segments to join."), 3000)
 
-    def _bridgeable(self, sel) -> bool:
-        """Whether the selection holds the two profiles Bridge needs (the
-        right-click menu offers it only then)."""
-        from core.bridge import BridgeError, profiles_from_selection
-        # Every right-click asks, so a big selection (Ctrl+A) must not be
-        # walked: a third face already rules Bridge out.
-        faces = 0
-        for e in sel:
-            if isinstance(e, Face):
-                faces += 1
-                if faces > 2:
-                    return False
-        try:
-            profiles_from_selection(self.viewport.scene.mesh, sel)
-        except BridgeError:
-            return False
-        return True
-
-    @_repeatable("Bridge")
-    def _on_bridge(self) -> None:
-        """Bridge (issue #614): side faces between two selected faces, a
-        face and a line, or two lines (core/bridge.py), in one undo step.
-        The faces bridged stay, as caps; the new ones end up selected."""
-        from core.bridge import (BridgeError, bridge, plan,
-                                 profiles_from_selection)
-        from core.history import SnapshotMutation
-        scene = self.viewport.scene
-        try:
-            profiles = profiles_from_selection(scene.mesh, scene.selection)
-            plan(profiles)
-        except BridgeError as err:
-            self.viewport.flash_status(tr(str(err)), 4000)
-            return
-        result: list = []
-        self.viewport.history.execute(SnapshotMutation(
-            lambda sc: result.extend(bridge(sc.mesh, profiles))))
-        scene.selection.clear()
-        scene.selection.update(f for f in result if f in scene.mesh.faces)
-        scene.version += 1
-        self.viewport.update()
-        self.viewport.flash_status(
-            tr("Bridge: {n} faces added", n=len(result)), 3000)
-
-    @staticmethod
-    def _makes_faces(sel) -> bool:
-        """Whether the right-click menu offers Make Faces: three selected
-        edges at least, the fewest that close a loop. Counted, not
-        walked: every right-click asks, and Ctrl+A may hold the model."""
-        edges = 0
-        for e in sel:
-            if isinstance(e, Edge):
-                edges += 1
-                if edges >= 3:
-                    return True
-        return False
-
-    @_repeatable("Make Faces")
-    def _on_make_faces(self) -> None:
-        """Make Faces (core/make_faces.py): the faces the selected edges
-        close, on those edges, in one undo step. The faces end up
-        selected, ready for Push/Pull."""
-        from core.history import SnapshotMutation
-        from core.make_faces import (MakeFacesError, make_faces, plan,
-                                     selected_edges)
-        scene = self.viewport.scene
-        edges = selected_edges(scene.mesh, scene.selection)
-        try:
-            plan(edges)
-        except MakeFacesError as err:
-            self.viewport.flash_status(tr(str(err)), 4000)
-            return
-        cam = getattr(self.viewport, "camera", None)
-        eye = cam.eye() if cam is not None and hasattr(cam, "eye") else None
-        result: dict = {}
-        self.viewport.history.execute(SnapshotMutation(
-            lambda sc: result.update(make_faces(sc.mesh, edges, eye))))
-        faces = [f for f in result.get("faces", ()) if f in scene.mesh.faces]
-        scene.selection.clear()
-        scene.selection.update(faces)
-        scene.version += 1
-        self.viewport.update()
-        if result.get("new"):
-            msg = tr("Make Faces: {n} faces made", n=result["new"])
-        elif faces:
-            msg = tr("Make Faces: those loops already had their faces")
-        else:
-            msg = tr("Make Faces: an existing face already covers those "
-                     "loops")
-        self.viewport.flash_status(msg, 3000)
-
     def _on_flip_along(self, axis: str) -> None:
         """Right-click ▸ Flip Along ▸ Red / Green / Blue (issue #178)."""
         from tools.flip import FlipTool
@@ -6327,104 +5770,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         view.update()
         view.notify_scene_changed()
 
-    @_repeatable("Reverse Faces")
-    def _on_reverse_faces(self) -> None:
-        """Reverse Faces: flip the winding (and thus the front/back
-        sides) of the selected faces."""
-        from core.history import FlipFacesCommand
-        from core.mesh import Face as MeshFace
-        faces = [e for e in self.viewport.scene.selection
-                 if isinstance(e, MeshFace)]
-        if not faces:
-            self.statusBar().showMessage(
-                tr("Select one or more faces first."), 3000)
-            return
-        self.viewport.history.execute(FlipFacesCommand(faces))
-        self.viewport.update()
-        self.statusBar().showMessage(
-            tr("Reversed {n} face(s).", n=len(faces)), 3000)
-
-    @_repeatable("Orient Faces")
-    def _on_orient_faces(self) -> None:
-        """Orient Faces (issue #77): every face connected to the
-        chosen one turns to wind like it — its front side is the one the
-        rest take."""
-        from core.history import FlipFacesCommand
-        from core.mesh import Face as MeshFace
-        from core.orient_faces import faces_to_flip
-        faces = [e for e in self.viewport.scene.selection
-                 if isinstance(e, MeshFace)]
-        if len(faces) != 1:
-            self.statusBar().showMessage(
-                tr("Select the one face the others should match."), 3000)
-            return
-        flip = faces_to_flip(faces[0])
-        if flip:
-            self.viewport.history.execute(FlipFacesCommand(flip))
-            self.viewport.update()
-        self.statusBar().showMessage(
-            tr("Oriented {n} face(s) like the selected one.", n=len(flip))
-            if flip else tr("The connected faces already match."), 3000)
-
-    @_repeatable("Heal Overlapping Faces")
-    def _on_heal_overlaps(self) -> None:
-        cmd = HealOverlapsCommand()
-        self.viewport.history.execute(cmd)
-        self.viewport.update()
-        self.statusBar().showMessage(
-            tr("Healed {n} overlapping face(s).", n=cmd.healed) if cmd.healed
-            else tr("No overlapping faces found."), 3000)
-
-    @_repeatable("Rebuild Faces (Planar)")
-    def _on_rebuild_planar(self) -> None:
-        # With faces selected, rebuild just THEIR plane — the per-plane
-        # rebuild every stroke already runs — so a 3D model keeps the tool
-        # (issue #73, @pacaeiro). Nothing selected: the whole flat drawing,
-        # as before.
-        from core.mesh import Face as MeshFace
-        picked = [e for e in self.viewport.scene.selection
-                  if isinstance(e, MeshFace)]
-        if picked:
-            plane = self._common_plane(picked)
-            if plane is None:
-                self.statusBar().showMessage(tr(
-                    "The selected faces must lie on one plane."), 3000)
-                return
-            from core.history import RebuildPlaneFacesCommand
-            cmd = RebuildPlaneFacesCommand(*plane)
-            self.viewport.history.execute(cmd)
-            self.viewport.update()
-            self.statusBar().showMessage(tr(
-                "Rebuilt {n} face(s) on the selected plane.", n=cmd.rebuilt),
-                3000)
-            return
-        cmd = RebuildPlanarFacesCommand()
-        self.viewport.history.execute(cmd)
-        self.viewport.update()
-        if not cmd.flat:
-            msg = tr("Rebuild Faces only works on a flat (single-plane) drawing.")
-        else:
-            msg = tr("Rebuilt {n} face(s) from the edge graph.", n=cmd.rebuilt)
-        self.statusBar().showMessage(msg, 3000)
-
-    @staticmethod
-    def _common_plane(faces):
-        """(origin, unit normal) of the plane every face lies on, or None."""
-        from ingetrazo_core import Vec3 as QVector3D
-        n = faces[0].normal()
-        length = n.length()
-        if length < 1e-9:
-            return None
-        n = n / length
-        o = QVector3D(faces[0].loop[0].position)
-        tol = 1e-4                  # RebuildPlaneFacesCommand's own
-        for f in faces:
-            for loop in [f.loop, *f.hole_loops]:
-                for v in loop:
-                    if abs(QVector3D.dotProduct(v.position - o, n)) > tol:
-                        return None
-        return o, n
-
     def _sync_foreign_clipboard(self) -> None:
         # A copy made in ANOTHER IngeTrazo window wins over this window's
         # older one, as a system clipboard does (issue #76).
@@ -6459,24 +5804,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
                 drop(old)
             self.viewport.clipboard = other
             self.viewport._clip_adopted_from = source
-
-    def _on_paste_in_place(self) -> None:
-        """Edit ▸ Paste in Place: the copy lands where the
-        original was, in whatever context is open — the way to move things
-        into and out of groups without shifting them."""
-        self._sync_foreign_clipboard()
-        if PasteTool.in_place(self.viewport):
-            self.statusBar().showMessage(tr("Pasted in place."), 3000)
-
-    def _on_paste(self) -> None:
-        self._sync_foreign_clipboard()
-        if self.viewport.clipboard is None:
-            return
-        self.viewport.set_active_tool(PasteTool())
-        for action in self._tool_actions.values():
-            action.setChecked(False)
-        self._tool_label.setText(tr("Tool: {name}", name=tr("Paste")))
-        self._refresh_vcb()
 
     def _cancel_tool(self) -> None:
         """Esc, escalating like the viewport: release a sticky constraint
@@ -6620,11 +5947,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
             self._no_scene_selected()
             return
         panel._on_delete()
-
-    def _no_scene_selected(self) -> None:
-        # From a key the panel may be closed: say why nothing happened.
-        self.statusBar().showMessage(
-            tr("Select a scene in the Scenes panel first"), 3000)
 
     def _on_open_composer(self) -> None:
         """Open (or raise) the sheet composer — see docs/composer-plan.md.
@@ -6887,56 +6209,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
                 self.viewport.camera.fit_to(mn, mx)
         self.viewport.update()
 
-    def _on_select_all(self) -> None:
-        """Select every entity (Ctrl+A) — edges (soft included), faces, groups,
-        dimensions and, in the model, the construction guides. The safe way to rotate/move/scale a WHOLE model: a
-        window box-select that misses one protruding piece leaves it behind
-        and the transform warps the boundary (the sigue.igz report)."""
-        sel = self.viewport.scene.selection
-        sel.clear()
-        sel.update(self.viewport.scene.edges)
-        sel.update(self.viewport.scene.faces)
-        ctx = self.viewport.scene.edit_group
-        # Inside a group, "everything" is what the group holds: its loose
-        # geometry (above) and its children — never the model around it.
-        sel.update(self.viewport.scene.groups if ctx is None
-                   else (getattr(ctx, "children", None) or []))
-        sel.update(getattr(self.viewport.scene, "dimensions", []))
-        if ctx is None:
-            # Guides belong to the model, not to a group (#627); the ones a
-            # click could not pick stay out.
-            scene = self.viewport.scene
-            sel.update(g for g in getattr(scene, "guides", [])
-                       if scene.entity_selectable(g))
-        # Bump the version and say so: the GL colour caches are keyed on it
-        # and Entity Info listens for it, so a selection made behind
-        # Scene.select()'s back left the status bar counting entities the
-        # viewport drew unselected and the tray called "nothing selected"
-        # (issue #38). Everything else goes through Scene.select(); this
-        # one builds the set by hand because "all" is four sources.
-        self.viewport.scene.version += 1
-        self.viewport.notify_scene_changed()
-        self.statusBar().showMessage(
-            tr("Selected everything ({n} entities)", n=len(sel)), 2500)
-
-    def _on_invert_selection(self) -> None:
-        """Select what is not selected, drop what is (Ctrl+Shift+I) — see
-        ``Scene.invert_selection`` for what counts."""
-        n = self.viewport.scene.invert_selection()
-        self.viewport.notify_scene_changed()
-        self.statusBar().showMessage(
-            tr("Selection inverted ({n} entities)", n=n), 2500)
-
-    def _on_select_none(self) -> None:
-        """Deselect everything (Ctrl+T), the counterpart of Select All
-        (Ctrl+A). Emptying the selection is a change of what is shown, not
-        of the document, so the drawing is not marked unsaved (issue #38)."""
-        n = len(self.viewport.scene.selection)
-        self.viewport.scene.clear_selection()
-        self.viewport.notify_scene_changed()
-        self.statusBar().showMessage(
-            tr("Selection cleared ({n} entities)", n=n), 2500)
-
     # ---- Undo / redo --------------------------------------------------------
     # ---- File handling ------------------------------------------------------
     # ---- The document's camera (issue #60) ---------------------------------
@@ -6985,18 +6257,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         if view is not None:
             self.tray.scenes.show_view(view)
             return open_camera(self, view)
-
-    def _reset_camera_home(self) -> None:
-        """A new drawing opens on the default view (iso, 20 m out), not on
-        wherever the previous one was left (issue #60)."""
-        from core.camera import OrbitCamera
-        fresh = OrbitCamera()
-        cam = self.viewport.camera
-        cam.target = fresh.target
-        for k in self._CAMERA_FIELDS:
-            setattr(cam, k, getattr(fresh, k))
-        cam.reset_lens()
-        self.viewport.update()
 
     @staticmethod
     def _new_window_command() -> list[str]:
@@ -7297,23 +6557,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
             self.activate_document(doc)
         return doc
 
-    def _start_blank_document(self) -> None:
-        """What a new drawing starts with: the units for new documents,
-        the scale figure, the default view, a clean title."""
-        self.viewport.inference.reset()
-        self._forget_coordinate()
-        self._reset_camera_home()
-        self._apply_new_document_units()
-        self._insert_scale_figure()
-        self.viewport.notify_scene_changed()
-        self._sync_style_menu()
-        self._sync_section_menu()
-        self._update_title()
-        if self._session_path:
-            self._active_file = None
-            self._session_unsaved_doc = self._doc
-            self._refresh_worksession()
-
     def _step_document(self, step: int) -> None:
         nxt = self._project_tabs.neighbour(self._doc, step)
         if nxt is not None:
@@ -7434,7 +6677,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
 
     #: Width of the picture a save keeps in the file (px): the start page's
     #: tiles and Continue card are ~200 pt wide, so twice that on Retina.
-    SAVE_PICTURE_PX = 560
 
     def _document_picture(self, doc):
         """The picture a save keeps in the file (``thumbnail.png``): the
@@ -7871,21 +7113,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
             act.setChecked(anim.enabled)
             act.blockSignals(False)
 
-    def set_scene_transitions(self, on: bool) -> None:
-        """Turn the active project's scene transitions on or off."""
-        scene = self.viewport.scene
-        anim = scene.animation
-        if anim.enabled == bool(on):
-            return
-        from core.scene_animation import SceneAnimation
-        scene.animation = SceneAnimation(enabled=bool(on),
-                                         transition=anim.transition,
-                                         pause=anim.pause)
-        if not on:
-            self.scene_player.stop()
-        scene.version += 1                 # the document changed: title «*»
-        self._sync_animation_menu()
-
     def _on_player_active(self, on: bool) -> None:
         act = self.__dict__.get("_act_play_scenes")
         if act is not None and act.isChecked() != (
@@ -7893,48 +7120,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
             act.blockSignals(True)
             act.setChecked(on and self.scene_player.is_playing())
             act.blockSignals(False)
-
-    def _shown_scene_index(self) -> int:
-        """The place of the scene marked in the tabs (−1: none)."""
-        views = list(getattr(self.viewport.scene, "saved_views", []) or [])
-        marked = self._scene_tabs.tabs.marked_view()
-        for i, v in enumerate(views):
-            if v is marked:
-                return i
-        return -1
-
-    def play_scenes(self, on: bool = True) -> None:
-        """Run through the active project's scenes (on), or stop (off)."""
-        player = self.scene_player
-        if not on:
-            player.stop()
-            return
-        scene = self.viewport.scene
-        views = list(getattr(scene, "saved_views", []) or [])
-        if not views:
-            self._on_player_active(False)
-            self.statusBar().showMessage(tr(
-                "This project has no scenes to play: keep a view as a scene "
-                "first (Scenes panel, «+ Scene»)."), 4000)
-            return
-        anim = scene.animation
-        start = self._shown_scene_index() + 1
-        tray = self.tray.scenes
-        player.play(views, start, anim.transition, anim.pause,
-                    lambda v: tray.finish_view(v, False))
-        self._on_player_active(True)
-        self.statusBar().showMessage(tr(
-            "Playing the scenes: Esc or a click in the view stops."), 3000)
-
-    def step_scene(self, step: int) -> None:
-        """Glide to the next (1) or previous (−1) scene, round the ends."""
-        views = list(getattr(self.viewport.scene, "saved_views", []) or [])
-        if not views:
-            return
-        at = self._shown_scene_index()
-        if at < 0:
-            at = -1 if step > 0 else 0
-        self.tray.scenes.show_view(views[(at + step) % len(views)])
 
     def export_video(self) -> None:
         """The scenes as a video (views/video_export.py)."""
@@ -8407,43 +7592,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
             _dialogs.warning(self, tr("New Window"),
                                 tr("Could not start another Built window."))
 
-    def _on_new(self) -> None:
-        """File ▸ New: a new project in a tab of its own (#1066). An
-        untouched untitled tab in front is simply started over instead."""
-        if self._workspace is not None and hasattr(self._workspace, "new"):
-            self._workspace.new()
-            return
-        self._leave_empty_area()
-        self.viewport.end_group_edit()
-        if not self._doc_is_blank():
-            self._new_document()
-            self._start_blank_document()
-            return
-        self.viewport.inference.reset()
-        # Nothing was drawn there, but an untitled slot may still hold an
-        # earlier copy: it dies with the drawing it was for.
-        from core import autosave
-        autosave.clear(self._current_path, untitled=self._doc.untitled_no)
-        self._autosaved_version = None
-        scene = self.viewport.scene
-        scene.clear()
-        scene.version += 1
-        self.viewport.history.clear()
-        # Document boundary: the old drawing's textures go back to the driver.
-        self.viewport.reset_texture_cache()
-        self._current_path = None
-        self._import_name = None
-        self._saved_version = scene.version
-        self._start_blank_document()
-        self.settle_heap()
-
-    def _apply_new_document_units(self) -> None:
-        """A new, empty document starts in the units chosen for new documents
-        in Preferences (#121). Not a change to the document: no version bump,
-        so it does not ask to be saved."""
-        from core import units as _units
-        _units.apply_units(self.viewport.scene, _units.new_document_units())
-
     def _on_recover_discarded(self) -> None:
         """Open one of the retired auto-save copies as a NEW, unsaved
         document: Save then asks where to put it, never over the file the
@@ -8818,23 +7966,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         self._saved_version = self.viewport.scene.version
         QTimer.singleShot(0, self.close)
 
-    def settle_heap(self) -> None:
-        """After a document loads: one clean collection over its static
-        object graph, and the young-generation threshold that keeps the
-        collector out of the way while drawing (see ``GC_THRESHOLD0``)."""
-        import gc
-        import sys
-        gc.unfreeze()                 # (in case an older session froze it)
-        # Python 3.13 (the macOS bundle) still uses threshold2. Zero
-        # schedules an expensive full-heap pass at every generation-1
-        # opportunity; 3.14's incremental collector had ignored this slot.
-        gc.set_threshold(self.GC_THRESHOLD0, 10, 10)
-        # Past 40 M blocks (the plaza is 3 M; the model of #158, 58.6 M) a
-        # full collection is seconds of a window that does not answer, and
-        # the desktop says so: skipped, as the autosave housekeeping is.
-        if sys.getallocatedblocks() <= 40_000_000:
-            gc.collect()
-
     def _on_save(self) -> None:
         if self._workspace is not None:
             self._workspace.save()
@@ -8971,60 +8102,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         self._refresh_worksession()
         self._saved_version = vp.scene.version
         self._update_title()
-
-    def _insert_scale_figure(self) -> None:
-        """Place the scale figure in a fresh document, the classic way: OFF
-        to the left of the origin, so the origin stays visible as the
-        drawing reference (user request). 1.70 m
-        tall. A plain group — select and Delete removes it. Added outside
-        the undo history and without dirtying the document. Left out when
-        Preferences say so (#221: parts for a 3D printer start on an empty
-        sheet)."""
-        from core import scale_figure
-        figure = scale_figure.chosen()
-        if figure is None:
-            # Still a clean new document: nothing to ask about on close.
-            self._saved_version = self.viewport.scene.version
-            return
-        # The classic placement, measured by the user: 60-70 cm to the left
-        # and 60 cm forward (toward the viewer) of the origin.
-        from ingetrazo_core import Vec3 as QVector3D
-        at = QVector3D(-0.65, -0.60, 0.0)
-        # The Engineer by default since 26-09 (Marco: «el personaje Sumari no
-        # me gusta mucho, ¿ponemos el del ingeniero?»); Preferences choose
-        # another person or the user's own picture (#655).
-        group = self._make_billboard_person(figure.image, figure.height,
-                                            figure.name, position=at)
-        if group is None:
-            group = self._make_billboard_person(position=at)
-        if group is None:
-            return
-        scale_figure.mark(group)
-        scene = self.viewport.scene
-        scene.groups.append(group)
-        scene.version += 1
-        self._saved_version = scene.version
-
-    def _make_billboard_person(self, image: str = "person_billboard.png",
-                               height: float = 1.75,
-                               name: str | None = None, position=None):
-        """A face-me scale figure (arch-viz cutout). ``image``: a file of
-        resources/components, or a full path (the user's own picture)."""
-        from pathlib import Path
-        from PySide6.QtGui import QImageReader
-        from core.group import make_billboard_group
-        from core.paths import app_root
-        path = Path(image)
-        if not path.is_absolute():
-            path = app_root() / "resources" / "components" / image
-        if not path.exists():
-            return None
-        size = QImageReader(str(path)).size()   # the file's header: no decoding
-        if not size.isValid() or size.height() == 0:
-            return None
-        return make_billboard_group(str(path), height, name or tr("Person"),
-                                    size.width() / size.height(),
-                                    position=position)
 
     def _on_insert_person_2d(self, image: str = "person_billboard.png",
                              height: float = 1.75,
@@ -9314,8 +8391,7 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         drops it — instead of dumping it at the origin. ``align_to_face``
         (3D text) re-orients the group onto the face under the cursor;
         ``anchor`` is the point the cursor holds (default: base centre)."""
-        from tools.place_group import PlaceGroupTool
-        self.viewport.set_active_tool(PlaceGroupTool(
+        self.viewport.set_active_tool(transient_tool_class("place_group")(
             group, align_to_face=align_to_face, anchor=anchor))
         for action in self._tool_actions.values():
             action.setChecked(False)
@@ -10163,28 +9239,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         remove()
         self.statusBar().showMessage(
             tr("Launcher removed from the applications menu"), 5000)
-
-    def _on_explode_image(self) -> None:
-        """Explode the selected reference images into real geometry: each
-        becomes a group holding one face textured with its picture, where the
-        image was (#687: an imported image could not be painted with, sampled
-        or exploded — it is a tracing underlay until you say otherwise). One
-        undo step puts the images back."""
-        from core.history import (CompoundCommand, DeleteImagePlanesCommand,
-                                  InsertGroupCommand)
-        from core.image_plane import ImagePlane
-        scene = self.viewport.scene
-        images = [e for e in scene.selection if isinstance(e, ImagePlane)]
-        pairs = [(im, im.as_group()) for im in images]
-        pairs = [(im, g) for im, g in pairs if g is not None]
-        if not pairs:
-            return
-        cmds = [DeleteImagePlanesCommand([im for im, _g in pairs])]
-        cmds += [InsertGroupCommand(g) for _im, g in pairs]
-        self.viewport.history.execute(CompoundCommand(cmds))
-        scene.selection.update(g for _im, g in pairs)
-        scene.version += 1
-        self.viewport.update()
 
     def _on_toggle_image_lock(self) -> None:
         """Lock an image so clicks fall through to what you are drawing on top

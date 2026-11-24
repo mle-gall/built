@@ -357,7 +357,7 @@ _OWN = {"viewport", "documents", "active_document", "activate_document",
         # Optional per-instance attachments and QWidget probes. A lookup
         # before installation must not load the Classic window class.
         "_host_window", "_doc_area", "_lib_installed", "_mac_chrome",
-        "_panel_view", "_vcb_name", "_vcb_value", "isWindow"}
+        "_panel_view", "_vcb_name", "_vcb_value", "isWindow", "scenes_dock"}
 
 #: What a borrowed method may reach for that the shell has nothing for:
 #: answered with a no-op, as a window with that panel closed would.
@@ -481,6 +481,12 @@ class ShellWindow(WindowDocumentCommands, QObject):
         self._act_bridge = self._registry_actions["menu:bridge"]
         self._act_make_faces = self._registry_actions["menu:make_faces"]
         self._act_3dtext = self._registry_actions["menu:text3d"]
+
+    def _on_player_active(self, on):
+        self._host.request_frame()
+
+    def _sync_animation_menu(self):
+        self._host.request_frame()
 
     def _setup_autosave(self):
         self._configure_recovery(self._autosave_timer)
@@ -974,6 +980,11 @@ class ShellWindow(WindowDocumentCommands, QObject):
     def _dxf_options(self, path, header_scale=None):
         from app_shell import files
         return files.dxf_options(self, path, header_scale)
+
+    @staticmethod
+    def _clipboard_available():
+        from ingetrazo_render import ModelClipboard
+        return ModelClipboard.available()
 
     def _sync_foreign_clipboard(self):
         from app_shell import files

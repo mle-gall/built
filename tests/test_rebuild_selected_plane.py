@@ -3,18 +3,11 @@ a 3D model, the plane of the selected faces is rebuilt and the rest is left
 alone; with nothing selected the tool keeps its whole-flat-drawing rule."""
 from __future__ import annotations
 
+import pytest
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication
 
 from core.mesh import Face
-
-_app = QApplication.instance() or QApplication([])
-
-
-def _window():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    return win
+from tests.shell_isolation import restore_shell_patches  # noqa: F401 (autouse)
 
 
 def _square(mesh, x, y, s, z=0.0):
@@ -35,60 +28,59 @@ def _ground(mesh):
             if all(abs(v.position.z()) < 1e-6 for v in f.loop)]
 
 
-def _scene():
-    win = _window()
-    sc = win.viewport.scene
+@pytest.fixture
+def drawing(tmp_path):
+    from app_shell.host import Host
+    host = Host(0, 1280, 800, 2.0, settings=str(tmp_path / "settings"))
+    sc = host.window.viewport.scene
     _raised_box(sc.mesh)
     a = _square(sc.mesh, 0, 0, 2)
     _square(sc.mesh, 1, 1, 2)            # overlaps the first one
     sc.version += 1
-    return win, sc, a
+    yield host, sc, a
+    host.close()
 
 
-def test_the_selected_plane_is_rebuilt_in_a_3d_model():
-    win, sc, a = _scene()
+def test_the_selected_plane_is_rebuilt_in_a_3d_model(drawing):
+    host, sc, a = drawing
     box_before = len(sc.mesh.faces) - 2
     sc.select([a])
-    win._on_rebuild_planar()
+    host.menu("rebuild_planar")
     ground = _ground(sc.mesh)
     # Two overlapping squares become their three regions.
     assert len(ground) == 3
     assert len(sc.mesh.faces) - len(ground) == box_before   # box untouched
-    win._saved_version = sc.version
-    win.close()
+    assert not host.state()["errors"]
 
 
-def test_faces_on_different_planes_are_refused():
-    win, sc, a = _scene()
+def test_faces_on_different_planes_are_refused(drawing):
+    host, sc, a = drawing
     top = next(f for f in sc.mesh.faces
                if all(abs(v.position.z() - 2) < 1e-6 for v in f.loop))
     before = len(sc.mesh.faces)
     sc.select([a, top])
-    win._on_rebuild_planar()
+    host.menu("rebuild_planar")
     assert len(sc.mesh.faces) == before
-    assert "one plane" in win.statusBar().currentMessage() or \
-        "mismo plano" in win.statusBar().currentMessage()
-    win._saved_version = sc.version
-    win.close()
+    assert "one plane" in host.window.statusBar().currentMessage() or \
+        "mismo plano" in host.window.statusBar().currentMessage()
+    assert not host.state()["errors"]
 
 
-def test_nothing_selected_keeps_the_flat_only_rule():
-    win, sc, a = _scene()
+def test_nothing_selected_keeps_the_flat_only_rule(drawing):
+    host, sc, a = drawing
     before = len(sc.mesh.faces)
     sc.clear_selection()
-    win._on_rebuild_planar()
+    host.menu("rebuild_planar")
     assert len(sc.mesh.faces) == before      # 3D model: left alone, as before
-    win._saved_version = sc.version
-    win.close()
+    assert not host.state()["errors"]
 
 
-def test_one_undo_puts_the_plane_back():
-    win, sc, a = _scene()
+def test_one_undo_puts_the_plane_back(drawing):
+    host, sc, a = drawing
     before = len(_ground(sc.mesh))
     sc.select([a])
-    win._on_rebuild_planar()
-    win.viewport.history.undo()
+    host.menu("rebuild_planar")
+    host.menu("undo")
     assert len(_ground(sc.mesh)) == before
     assert all(isinstance(f, Face) for f in sc.mesh.faces)
-    win._saved_version = sc.version
-    win.close()
+    assert not host.state()["errors"]

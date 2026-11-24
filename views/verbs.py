@@ -107,8 +107,10 @@ def facts(scene, sel, win=None, view=None, *, locked_group=None, locked_image=No
         f["image_locked"] = bool(getattr(one, "locked", False))
     f["path_polygon"] = any(len(getattr(e, "points", ()) or ()) >= 3 for e in sel if _type(e) == "GeoPath")
     if not sel:
-        from formats import clip as clip_transfer
-        f.update(paste=bool(getattr(vp, "clipboard", None) or clip_transfer.available()),
+        available = getattr(win, "_clipboard_available", None)
+        if available is None:
+            from formats.clip import available
+        f.update(paste=bool(getattr(vp, "clipboard", None) or available()),
                  isolated=vp.__dict__.get("_isolate_base") is not None or bool(getattr(vp, "_previous_views", None)),
                  guides=bool(list(getattr(scene, "guides", ()) or ())))
     elif view is not None:

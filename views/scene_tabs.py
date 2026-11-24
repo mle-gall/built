@@ -35,10 +35,6 @@ from PySide6.QtWidgets import (QHBoxLayout, QStyle, QStyleOptionTab, QTabBar,
 
 from core.i18n import tr
 
-#: A project shows its scenes as tabs unless its tab's menu turned them off.
-SCENE_TABS_DEFAULT = True
-
-
 class SceneTabBar(QTabBar):
     """The scenes' tabs, hanging from the view's lower edge, with an accent
     line under the name of the scene shown."""

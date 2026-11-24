@@ -314,11 +314,14 @@ def test_menu_edit_commands(host, tmp_path):
     assert host.state()["selection"] == 0
 
 
-def test_mainwindow_members_are_borrowed_on_demand(host):
-    from app_shell.window import BORROWED, ShellWindow
-    assert "_on_select_all" not in vars(ShellWindow) or "_on_select_all" in BORROWED
-    host.window._on_select_all()
-    assert "_on_select_all" in BORROWED
+def test_selection_commands_have_a_native_owner(host):
+    from app_shell.window import BORROWED
+    from views.document_commands import WindowDocumentCommands
+    before = set(BORROWED)
+    for verb in ("select_all", "invert_selection", "select_none"):
+        host.menu(verb)
+    assert BORROWED == before
+    assert host.window._on_select_all.__func__ is WindowDocumentCommands._on_select_all
     with pytest.raises(AttributeError):
         host.window.no_such_member_anywhere  # noqa: B018
 

@@ -5,21 +5,8 @@ import re
 
 
 def registry(root):
-    tree = ast.parse((root / 'views/main_window.py').read_text())
     from ingetrazo_render import window_tool_types
     result = dict(window_tool_types())
-    # Tools handed straight to set_active_tool (component placement after
-    # Insert / Link / the tray) have no toolbar key: they are listed under
-    # their class name in snake case.
-    for node in ast.walk(tree):
-        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
-                and node.func.attr == 'set_active_tool' and node.args
-                and isinstance(node.args[0], ast.Call)
-                and isinstance(node.args[0].func, ast.Name)
-                and node.args[0].func.id.endswith('Tool')):
-            cls = node.args[0].func.id
-            key = re.sub(r'(?<!^)(?=[A-Z])', '_', cls[:-4]).lower()
-            result.setdefault(key, cls)
     solids = ast.parse((root / 'tools/solid_host.py').read_text())
     for node in solids.body:
         if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == 'SOLID_TOOLS' for t in node.targets):
