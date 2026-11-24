@@ -424,7 +424,8 @@ class Host:
     def pointer(self, kind, x, y, button=0, held=0, modifiers=0, timestamp=0):
         from app_shell.events import ContextMenuEvent, MouseEvent
         self.input_state.pointer(x, y, held, modifiers)
-        if kind == "press":
+        if kind in ("press", "double"):
+            self.window.scene_player.stop()
             self._front()
         view = self.view
         if kind == "leave":
@@ -444,6 +445,7 @@ class Host:
         self.input_state.pointer(x, y, held, modifiers)
         if self._modal():
             return
+        self.window.scene_player.stop()
         ev = WheelEvent(x, y, pixel_dx, pixel_dy, angle_dx, angle_dy, phase, modifiers, held, inverted, touch_screen)
         self._guard("wheel", self.view.wheelEvent, ev)
         self.request_frame()
@@ -453,6 +455,7 @@ class Host:
         self.input_state.pointer(x, y, self.input_state.buttons, modifiers)
         if self._modal():
             return
+        self.window.scene_player.stop()
         ev = NativeGestureEvent(kind, value, x, y, modifiers=modifiers)
         self._guard("gesture", self.view.event, ev)
         self.request_frame()
@@ -489,6 +492,9 @@ class Host:
                 else:
                     self._guard("job key", cd.job_key, self.window, ev)
             self.request_frame()
+            return True
+        if pressed and key == Qt.Key_Escape and self.window.scene_player.is_active():
+            self.window.scene_player.stop()
             return True
         if pressed:
             override = ShortcutOverride(key, modifiers, text, repeat)
@@ -642,6 +648,7 @@ class Host:
         if vars(self.window).get("_action_observer") is not None:
             from app_shell.legacy_actions import close
             close(self.window)
+        self.window.scene_player.cancel()
         self.timers.cancel_all()
         for doc in list(self.window._documents):
             self.window._release_document_watch(doc)

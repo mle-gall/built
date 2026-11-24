@@ -560,32 +560,30 @@ def test_page_up_and_down_are_no_other_commands_shortcut(win):
 
 
 def test_the_settings_change_the_document(win, monkeypatch):
-    import views.scene_player as sp
+    forms = []
+    monkeypatch.setattr("views.chrome_forms.show", lambda _, form: forms.append(form))
     before = win.viewport.scene.version
-    monkeypatch.setattr(sp, "ask_animation_settings",
-                        lambda parent, cur: SceneAnimation(transition=5.0))
     win.ask_animation()
+    form = forms.pop()
+    form.receive("transition", "5")
+    form.press("ok")
     assert win.viewport.scene.animation.transition == 5.0
     assert win.viewport.scene.version > before
-    # Cancelled, or the same again: nothing changes.
     after = win.viewport.scene.version
-    monkeypatch.setattr(sp, "ask_animation_settings", lambda p, c: None)
     win.ask_animation()
+    forms.pop().press("cancel")
     assert win.viewport.scene.version == after
 
 
-def test_the_settings_dialog_reads_and_returns_the_times(monkeypatch):
-    from PySide6.QtWidgets import QDialog, QDoubleSpinBox
-
-    import views.scene_player as sp
-
-    def fake_exec(dlg):
-        dlg.findChild(QDoubleSpinBox, "animation_transition").setValue(3.0)
-        dlg.findChild(QDoubleSpinBox, "animation_pause").setValue(0.5)
-        return QDialog.Accepted
-    monkeypatch.setattr(QDialog, "exec", fake_exec)
-    got = sp.ask_animation_settings(None, SceneAnimation())
-    assert got == SceneAnimation(transition=3.0, pause=0.5)
+def test_the_settings_dialog_reads_and_returns_the_times(win, monkeypatch):
+    forms = []
+    monkeypatch.setattr("views.chrome_forms.show", lambda _, form: forms.append(form))
+    win.ask_animation()
+    form = forms.pop()
+    form.receive("transition", "3")
+    form.receive("pause", "0.5")
+    form.press("ok")
+    assert win.viewport.scene.animation == SceneAnimation(transition=3.0, pause=0.5)
 
 
 def test_the_menu_turns_the_transitions_off_and_on(win):
@@ -631,16 +629,6 @@ def test_the_toggle_shows_the_choice_of_the_project_in_front(win):
 
 
 # ---- The video ---------------------------------------------------------------
-def _need_video():
-    """Skip where Qt Multimedia cannot load. Not only when it is missing:
-    on a Linux machine without PulseAudio (the CI's) the module is there
-    but its import fails on libpulse.so.0 — an ImportError that
-    ``pytest.importorskip`` does not treat as a reason to skip."""
-    from views.video_export import multimedia_available
-    if not multimedia_available():
-        pytest.skip("Qt Multimedia does not load here")
-
-
 def test_a_video_shows_the_first_scene_glides_and_ends_on_the_last():
     from core.scene_animation import video_at, video_frame_count, video_seconds
     poses = [_pose(x=0), _pose(x=10), _pose(x=20)]
@@ -660,17 +648,12 @@ def test_a_video_shows_the_first_scene_glides_and_ends_on_the_last():
 
 
 def test_the_mkv_writer_writes_a_matroska_file(tmp_path):
-    _need_video()
-    from PySide6.QtGui import QColor, QImage
-
     from views.video_export import MkvWriter
     path = tmp_path / "prueba.mkv"
-    writer = MkvWriter(path, 65, 48, 10)               # odd → even
+    writer = MkvWriter(path, 65, 48, 10)
     assert (writer.width, writer.height) == (64, 48)
     for i in range(12):
-        img = QImage(64, 48, QImage.Format_ARGB32)
-        img.fill(QColor.fromHsv(i * 30, 200, 200))
-        writer.write(img)
+        writer.write(bytes((i * 20, 128, 128, 255)) * (64 * 48))
     writer.close()
     assert writer.frames == 12
     data = path.read_bytes()
@@ -679,93 +662,44 @@ def test_the_mkv_writer_writes_a_matroska_file(tmp_path):
 
 
 def test_a_discarded_video_leaves_no_file(tmp_path):
-    _need_video()
-    from PySide6.QtGui import QImage
-
     from views.video_export import MkvWriter
     path = tmp_path / "a-medias.mkv"
     writer = MkvWriter(path, 64, 48, 10)
-    writer.write(QImage(64, 48, QImage.Format_ARGB32))
+    writer.write(bytes(64 * 48 * 4))
     writer.discard()
     assert not path.exists()
 
 
-class _EventLog:
-    """Stands in for the writer's QApplication: notes when the event loop
-    runs, and runs it."""
-
-    def __init__(self, app, log):
-        self._app, self._log = app, log
-
-    def processEvents(self, *args):  # noqa: N802 — Qt's name
-        import time
-        self._log.append(("events", time.monotonic()))
-        self._app.processEvents(*args)
-
-
-def _cancel_right_after_the_first_frame(tmp_path, monkeypatch, old_qt):
-    """Write one frame, discard; return (stop time, event-loop times after
-    it), with the Qt version check answering ``old_qt``."""
-    import time
-
-    from PySide6.QtGui import QImage
-
-    from views import video_export
-    monkeypatch.setattr(video_export, "finalizer_deletes_off_thread",
-                        lambda: old_qt)
-    writer = video_export.MkvWriter(tmp_path / "cancel.mkv", 64, 48, 10)
-    writer.write(QImage(64, 48, QImage.Format_ARGB32))
-    log: list = []
-    rec = writer._recorder
-    real_stop = rec.stop
-
-    def stop():
-        log.append(("stop", time.monotonic()))
-        real_stop()
-    rec.stop = stop
-    writer._app = _EventLog(writer._app, log)
+def test_cancel_after_first_frame_keeps_existing_destination(tmp_path):
+    from views.video_export import MkvWriter
+    path = tmp_path / "existing.mkv"
+    path.write_bytes(b"previous export")
+    writer = MkvWriter(path, 64, 48, 10)
+    writer.write(bytes(64 * 48 * 4))
+    assert path.read_bytes() == b"previous export"
     writer.discard()
-    assert not (tmp_path / "cancel.mkv").exists()
-    stopped = [t for k, t in log if k == "stop"]
-    assert stopped
-    after = [t for k, t in log if k == "events" and t > stopped[0]]
-    assert after                      # it still waits for Stopped after
-    return stopped[0], after
+    assert path.read_bytes() == b"previous export"
+    assert list(tmp_path.iterdir()) == [path]
 
 
-def test_the_event_loop_stays_still_while_qt_finishes_the_file(
-        tmp_path, monkeypatch):
-    """#1488: after ``stop()`` Qt's FFmpeg finalizer (before 6.12) deletes
-    its recording engine from another thread while calls queued for it
-    wait on the main thread; delivering them meanwhile (Cancel right after
-    the first frame) landed on freed memory and segfaulted on macOS. On
-    such a Qt the event loop runs again only once the file has stopped
-    growing."""
-    _need_video()
-    from views import video_export
-    stopped, after = _cancel_right_after_the_first_frame(
-        tmp_path, monkeypatch, old_qt=True)
-    assert after[0] - stopped >= 0.9 * video_export.SETTLE
+def test_finishing_a_video_does_not_pump_the_ui_thread(tmp_path, monkeypatch):
+    from views.video_export import MkvWriter
+    from PySide6.QtWidgets import QApplication
+    monkeypatch.setattr(QApplication, "processEvents", lambda *a: pytest.fail("reentrant finalization"))
+    writer = MkvWriter(tmp_path / "complete.mkv", 2, 2, 24)
+    writer.write(bytes(16))
+    writer.close()
 
 
-def test_on_qt_6_12_the_event_loop_is_not_held(tmp_path, monkeypatch):
-    """Qt 6.12 deletes the engine on its own thread: nothing to wait for.
-    Only on a real 6.12: on an older Qt, not waiting is the very crash."""
-    _need_video()
-    from views import video_export
-    if video_export.finalizer_deletes_off_thread():
-        pytest.skip("Qt before 6.12: skipping the wait would segfault")
-    stopped, after = _cancel_right_after_the_first_frame(
-        tmp_path, monkeypatch, old_qt=False)
-    assert after[0] - stopped < video_export.SETTLE
+def test_writer_finalization_needs_no_qt_version_probe(tmp_path, monkeypatch):
+    from PySide6.QtCore import QLibraryInfo
+    from views.video_export import MkvWriter
+    monkeypatch.setattr(QLibraryInfo, "version", lambda: pytest.fail("Qt version probe"))
+    writer = MkvWriter(tmp_path / "one.mkv", 2, 2, 30)
+    writer.write(bytes(16))
+    writer.close()
+    assert writer.frames == 1
 
-
-def test_the_qt_version_decides():
-    from PySide6.QtCore import QLibraryInfo, QVersionNumber
-
-    from views.video_export import finalizer_deletes_off_thread
-    assert finalizer_deletes_off_thread() is (
-        QLibraryInfo.version() < QVersionNumber(6, 12))
 
 def _fake_render(win, log):
     """The tests' window is never shown, so it has no GL: each frame is
@@ -784,7 +718,6 @@ def _fake_render(win, log):
 
 def test_export_video_renders_every_frame_and_puts_the_view_back(
         win, tmp_path):
-    _need_video()
     from views.video_export import export_video
     _with_layer(win, "Muebles")
     _scenes(win, ("Vista", "iso", set()), ("Planta", "top", {"Muebles"}))
@@ -813,7 +746,6 @@ def test_export_video_renders_every_frame_and_puts_the_view_back(
 
 
 def test_cancelling_the_video_removes_the_file(win, tmp_path):
-    _need_video()
     from views.video_export import export_video
     _scenes(win, ("A", "iso", set()), ("B", "top", set()))
     _fake_render(win, [])
@@ -830,28 +762,32 @@ def test_no_scenes_no_video(win, tmp_path):
 
 
 def test_the_video_options_offer_sizes_fps_and_the_length(win):
-    from views.video_export import VideoOptionsDialog
-    _scenes(win, ("A", "iso", set()), ("B", "top", set()),
-            ("C", "front", set()))
-    dlg = VideoOptionsDialog(win, win.viewport.scene, (1001, 601))
-    (size, fps) = dlg.choice()
-    assert size == (1920, 1080) and fps == 30
-    sizes = [dlg.size_box.itemData(i) for i in range(dlg.size_box.count())]
-    assert (1000, 600) in sizes                     # like the view, even
-    # 3 scenes, 2 s glide + 1 s pause: 1 + 2·3 = 7 s, 211 frames at 30.
-    assert "7.0" in dlg.length.text() and "211" in dlg.length.text()
-    dlg.fps_box.setCurrentIndex(dlg.fps_box.findData(24))
-    assert "169" in dlg.length.text()
+    from ingetrazo_render import OperationForm
+    from core.scene_animation import video_seconds
+    model = OperationForm.video(1001, 601, 3, video_seconds(3, 2., 1.))
+    assert model.values() == dict(width=1920, height=1080, fps=30)
+    model.receive("size", "4")
+    assert (model.values()["width"], model.values()["height"]) == (1000, 600)
+    assert "7.0" in model.rows()[2][3] and "211 frames" in model.rows()[2][3]
+    model.receive("fps", "0")
+    assert "169 frames" in model.rows()[2][3]
 
 
-def test_the_video_is_in_file_export_and_in_the_animation_menu(win):
-    from PySide6.QtWidgets import QMenu
+def test_invalid_transition_can_be_disabled_without_losing_saved_time():
+    from ingetrazo_render import OperationForm
+    model = OperationForm.animation(True, 2.345, 0.075)
+    model.receive("transition", "-")
+    assert model.invalid_range() == (0, 60)
+    model.receive("enabled", "0")
+    assert model.invalid_range() is None
+    assert model.values() == dict(enabled=False, transition=2.345, pause=0.075)
 
-    from core.i18n import tr
-    entries = {(m.title(), a.text()) for m in win.findChildren(QMenu)
-               for a in m.actions()}
-    assert (tr("Export"), tr("Scenes as Video (.mkv)…")) in entries
-    assert (tr("Animation"), tr("Export Video (.mkv)…")) in entries
+
+def test_the_video_is_in_file_export_and_in_the_animation_menu():
+    from ingetrazo_render import command_registry
+    paths = {menu_id: path for _, path, _, _, _, menu_id in command_registry([], [])}
+    assert paths["export:video"] == "File ▸ Export"
+    assert paths["animation_video"] == "Camera ▸ Animation"
 
 
 def _without_multimedia(monkeypatch):
@@ -861,29 +797,44 @@ def _without_multimedia(monkeypatch):
     monkeypatch.setitem(sys.modules, "PySide6.QtMultimedia", None)
 
 
-def test_without_multimedia_the_writer_says_why(monkeypatch, tmp_path):
-    from views.video_export import (MkvWriter, VideoError,
-                                    multimedia_available, no_video_message)
+def test_without_qt_multimedia_the_writer_still_encodes(monkeypatch, tmp_path):
+    from views.video_export import MkvWriter
     _without_multimedia(monkeypatch)
-    assert not multimedia_available()
-    with pytest.raises(VideoError) as err:
-        MkvWriter(tmp_path / "x.mkv", 64, 48, 10)
-    assert str(err.value) == no_video_message()
-    assert not (tmp_path / "x.mkv").exists()
+    path = tmp_path / "video.mkv"
+    writer = MkvWriter(path, 64, 48, 10)
+    writer.write(bytes(64 * 48 * 4))
+    writer.close()
+    assert path.read_bytes().startswith(b"\x1a\x45\xdf\xa3")
 
 
-def test_without_multimedia_the_export_says_so_and_asks_nothing(
-        win, monkeypatch):
-    from PySide6.QtWidgets import QMessageBox
-
+def test_without_qt_multimedia_export_still_offers_a_destination(win, monkeypatch):
     import views.video_export as ve
     from views.filedialogs import file_dialogs
     _scenes(win, ("A", "iso", set()))
     _without_multimedia(monkeypatch)
-    said, asked = [], []
-    monkeypatch.setattr(QMessageBox, "critical",
-                        lambda *a, **k: said.append(a[2]))
-    monkeypatch.setattr(file_dialogs, "getSaveFileName",
-                        lambda *a, **k: asked.append(a) or ("", ""))
+    asked = []
+    monkeypatch.setattr(file_dialogs, "getSaveFileName", lambda *a, **k: asked.append(a) or ("", ""))
     ve.run_export(win)
-    assert said == [ve.no_video_message()] and asked == []
+    assert len(asked) == 1
+
+
+def test_independent_decoder_reads_every_frame_at_requested_rate(tmp_path):
+    import json
+    import shutil
+    import subprocess
+    from ingetrazo_core import MkvWriter
+    probe = shutil.which("ffprobe")
+    if probe is None:
+        pytest.skip("optional independent Matroska decoder")
+    path = tmp_path / "short.mkv"
+    writer = MkvWriter(path, 64, 32, 24)
+    for i in range(26):
+        writer.write(bytes((i * 8, 16, 80, 255)) * (64 * 32))
+    writer.close()
+    data = subprocess.check_output([probe, "-v", "error", "-count_frames", "-show_streams",
+                                    "-show_format", "-of", "json", str(path)])
+    info = json.loads(data)
+    video, = info["streams"]
+    assert (video["codec_name"], video["width"], video["height"]) == ("mjpeg", 64, 32)
+    assert video["nb_read_frames"] == "26" and video["avg_frame_rate"] == "24/1"
+    assert float(info["format"]["duration"]) == pytest.approx(26 / 24, abs=.001)

@@ -8299,14 +8299,8 @@ class MainWindow(WorksessionMixin, QMainWindow):
 
     def ask_animation(self) -> None:
         """The document's transition settings, in a small dialog."""
-        from views.scene_player import ask_animation_settings
-        scene = self.viewport.scene
-        fresh = ask_animation_settings(self, scene.animation)
-        if fresh is None or fresh == scene.animation:
-            return
-        scene.animation = fresh
-        scene.version += 1                 # the document changed: title «*»
-        self._sync_animation_menu()
+        from views.scene_playback import edit_animation
+        edit_animation(self)
 
     def _build_scene_bar_menu(self):
         """The scene row's own right-click menu (off the tabs): play the

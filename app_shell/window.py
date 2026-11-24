@@ -210,14 +210,30 @@ class ShellScenes:
         if view is not None:
             view._ui_tabs = None
 
-    def show_view(self, view, animate: bool = False):
+    def show_view(self, view, animate: bool = True):
+        player = self._win.scene_player
+        player.cancel()
+        if view is None:
+            return
+        vp = self._vp()
+        seconds = vp.scene.animation.glide_seconds() if animate else 0.0
+        if (self._win.view.renderer is not None and seconds > 0
+                and player.glide_to(view, seconds, lambda v: self.finish_view(v, False))):
+            self._win._scene_tabs.mark_view(view)
+            return
+        self.finish_view(view)
+
+    def finish_view(self, view, camera=True):
         if view is None:
             return
         from core.saved_views import shown_state
         vp = self._vp()
         scene = vp.scene
         before = shown_state(scene)
-        view.apply(scene, vp.camera)
+        if camera:
+            view.apply(scene, vp.camera)
+        else:
+            view.apply_state(scene)
         self._win._scene_tabs.mark_view(view)
         if shown_state(scene) != before:
             self._touch()
@@ -228,7 +244,7 @@ class ShellScenes:
                 stand_in._ui_tabs = None
                 stand_in.update()
 
-    finish_view = activate_view = show_view
+    activate_view = finish_view
 
     def add_scene(self):
         from core.i18n import tr
@@ -344,7 +360,7 @@ _OWN = {"viewport", "documents", "active_document", "activate_document",
 _QUIET = ("_sync_style_menu", "_sync_section_menu", "_refresh_layer_views",
           "_refresh_sheet_tabs", "_refresh_worksession", "persist_worksession",
           "_light_views_button", "_sync_projection_buttons", "_show_renderer_note",
-          "_refresh_vcb", "_forget_panel_caches", "_show_panels_again",
+          "_sync_component_edit_menu", "_refresh_vcb", "_forget_panel_caches", "_show_panels_again",
           "on_active_view_changed", "keep_other_views_style", "settle_heap_later")
 
 
@@ -416,6 +432,7 @@ class ShellWindow(QObject):
                                            toggled=self._on_toggle_eyedropper)
         self._tool_actions = {}
         self._style_before_xray = (None, None)
+        self._rest_shown_mode = "fade"
         self._status = ShellStatusBar(host)
         self._tool_filter = None
         self._doc = None
@@ -423,6 +440,8 @@ class ShellWindow(QObject):
         self._project_tabs = ShellProjectTabs(self)
         self._scene_tabs = _SceneRow()
         self.tray = _Tray(self)
+        from views.scene_playback import WindowPlayback
+        self.scene_player = WindowPlayback(self, host.timers)
         # MainWindow's own state the borrowed methods read.
         self._workspace = None
         self._empty_on = False
@@ -553,6 +572,7 @@ class ShellWindow(QObject):
         old = self._doc
         if doc is old:
             return
+        self.scene_player.cancel()
         if old is not None and old.viewport is not None:
             from views.inspector_bridge import leave_camera
             leave_camera(old)
