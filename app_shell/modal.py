@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import time
 
-from app_shell import native
+from app_shell import native, qt_host
 
 _HOST = None
 #: How deep the waits are nested (a question asked while one waits).
@@ -127,6 +127,7 @@ def tick(min_interval: float = 1 / 30) -> None:
 def _turn(h, timeout_ms):
     for ev in native.pump(h.ns_view, timeout_ms):
         dispatch(h, ev)
+    qt_host.pump()
     h.modal_frame()
 
 

@@ -328,6 +328,10 @@ def plugin_paint(target, draw):
     """An extension requesting a Qt painter contributes its own transparent layer."""
     if not hasattr(target, "composite_plugin"):
         return draw(target)
+    from core.input_types import NATIVE
+    if NATIVE:
+        from app_shell.qt_host import enable_plugin_widgets
+        enable_plugin_widgets()
     from PySide6.QtGui import QImage, QPainter
     image = QImage(target.width(), target.height(), QImage.Format_RGBA8888_Premultiplied)
     image.fill(0)

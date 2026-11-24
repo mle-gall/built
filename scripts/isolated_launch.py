@@ -26,7 +26,7 @@ def run(args, *, env=None, settings=None, home=None, **options):
         settings = str(settings or Path(folder) / "settings")
         Path(settings).mkdir(parents=True, exist_ok=True)
         child = dict(os.environ if env is None else env)
-        child.update(HOME=home, CFFIXED_USER_HOME=home, BUILT_SETTINGS_DIR=settings, BUILT_BACKGROUND="1",
+        child.update(HOME=home, CFFIXED_USER_HOME=home, BUILT_SETTINGS_DIR=settings,
                      XDG_CONFIG_HOME=settings, XDG_DATA_HOME=str(Path(settings) / "data"))
         before = preferences_mtime()
         try:

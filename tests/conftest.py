@@ -1,60 +1,149 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""Worker-local native settings, application data and document state."""
+"""One full QApplication for the whole test session, created BEFORE any test
+module imports. Test files that need widgets (MainWindow, the tray) and
+files that only need fonts used to create their own app at import time —
+a QGuiApplication first meant every later widget test aborted, so the
+outcome depended on which files were on the command line."""
 import os
 import sys
-import tempfile
 
-os.environ.setdefault("BUILT_BACKGROUND", "1")
-# Also suppress activation in independently launched legacy test processes.
-os.environ.setdefault("QT_MAC_DISABLE_FOREGROUND_APPLICATION_TRANSFORM", "1")
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+# Test windows never take the user's focus (macOS): the native shell runs as a
+# background app, and a Qt test app that does show windows stays out of front.
+os.environ.setdefault("BUILT_BACKGROUND", "1")
+os.environ.setdefault("QT_MAC_DISABLE_FOREGROUND_APPLICATION_TRANSFORM", "1")
 
-# Set these before importing product code, including collection-time imports.
-from scripts.isolated_launch import preferences_mtime
-
-_real_preferences_before = preferences_mtime()
-_profile_root = tempfile.TemporaryDirectory(prefix="built-pytest-")
-_home = os.path.join(_profile_root.name, "home")
-_data_dir = os.path.join(_profile_root.name, "data")
-_settings_dir = os.path.join(_profile_root.name, "settings")
-for directory in (_home, _data_dir, _settings_dir):
-    os.makedirs(directory)
-os.environ.update(HOME=_home, CFFIXED_USER_HOME=_home, XDG_DATA_HOME=_data_dir,
-                  XDG_CONFIG_HOME=_settings_dir, BUILT_SETTINGS_DIR=_settings_dir)
-if sys.platform == "win32":
-    os.environ.update(USERPROFILE=_home, APPDATA=_data_dir, LOCALAPPDATA=_data_dir)
-
-from core import worker_gc
+# As main.py does: a collection a worker thread starts frees nothing, so
+# no Qt object a test let go of is destroyed off the main thread.
+from core import worker_gc  # noqa: E402
 
 worker_gc.install()
 
-import pytest  # noqa: E402
-from core import settings as product_settings  # noqa: E402
-from tests.shell_isolation import native_host  # noqa: E402,F401
+# The user's own extensions folder stays out of the suite, like their
+# settings below. Every MainWindow a test built loaded whatever the developer
+# had installed (core.extensions.user_plugins_dir): 09-10, with three
+# extensions installed from the manager, tests/test_outliner.py went from
+# 29 s to 174 s and the fast suite from 12 min to over an hour — and a
+# result could depend on someone's extensions. Same for the app's local
+# data (the manager's screenshot cache). Set before anything reads it.
+import tempfile  # noqa: E402
 
-product_settings.use_native(_settings_dir)
+_data_dir = tempfile.mkdtemp(prefix="ingetrazo-tests-data-")
+os.environ["XDG_DATA_HOME"] = _data_dir
+if sys.platform == "darwin":
+    # Foundation resolves QStandardPaths independently from HOME. Give each
+    # pytest worker its own Application Support and untitled recovery slots.
+    os.environ["CFFIXED_USER_HOME"] = _data_dir
+if sys.platform == "win32":
+    os.environ["APPDATA"] = _data_dir
+    # core.paths.user_log_dir reads it: without this every test that rolls
+    # a command back wrote its traceback into the developer's real
+    # %LOCALAPPDATA%\IngeTrazo\ingetrazo-errors.log (ronda Windows 0.5.9).
+    os.environ["LOCALAPPDATA"] = _data_dir
+
+# Windows: the offscreen platform has NO font database there (fontconfig
+# finds the fonts on Linux; on Windows nothing looks), so every glyph drew
+# as an empty box — 3D text lost the O's counter and built faces for
+# spaces, and every test that measures a label's width measured boxes.
+# Pointed at the system fonts, and with the faces the app gets from the
+# native platform (Segoe UI 9 pt; the "Sans" alias the tests and the
+# Linux defaults name resolves to a sans-serif, not the alphabetically
+# first family), the suite sees the text a Windows user sees.
+_WIN_OFFSCREEN = (sys.platform == "win32"
+                  and os.environ["QT_QPA_PLATFORM"] == "offscreen")
+if _WIN_OFFSCREEN:
+    os.environ.setdefault("QT_QPA_FONTDIR", os.path.join(
+        os.environ.get("WINDIR", r"C:\Windows"), "Fonts"))
+
+from PySide6.QtWidgets import QApplication  # noqa: E402
+
+if QApplication.instance() is None:
+    QApplication(sys.argv[:1])
+
+# Match Qt startup before any test creates its first widget.
+from views.theme import install_dark_palette  # noqa: E402
+
+install_dark_palette(QApplication.instance())
+
+if _WIN_OFFSCREEN:
+    from PySide6.QtGui import QFont  # noqa: E402
+    for _alias in ("Sans", "Sans Serif", "DejaVu Sans"):
+        QFont.insertSubstitutions(_alias, ["Segoe UI", "Arial"])
+    QApplication.setFont(QFont("Segoe UI", 9))
+
+# And a QSettings store of its own, thrown away with the session. The suite
+# is not read-only about preferences: a test that exercises «new items
+# inherit the last style» writes that style out, so it landed in the
+# developer's real settings and POISONED ITS OWN NEXT RUN — the cota style
+# test placed a cota with text_pos="below" and then failed the next day
+# asserting "above". Isolating the store makes every run start from the
+# same place, here and on the CI runner.
+import tempfile  # noqa: E402
+
+from PySide6.QtCore import QSettings  # noqa: E402
+
+_settings_dir = tempfile.mkdtemp(prefix="ingetrazo-tests-settings-")
+os.environ["BUILT_SETTINGS_DIR"] = _settings_dir
+QSettings.setDefaultFormat(QSettings.IniFormat)
+
+
+#: The store the current test module writes (``_settings_per_module``).
+_module_settings = [_settings_dir]
+
+
+def _session_settings_paths():
+    QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, _module_settings[0])
+    QSettings.setPath(QSettings.IniFormat, QSettings.SystemScope, os.path.join(_module_settings[0], "system"))
+
+
+_session_settings_paths()
+
+
+import pytest  # noqa: E402
+from tests.shell_isolation import native_host  # noqa: E402,F401
 
 
 @pytest.fixture(autouse=True, scope="module")
 def _settings_per_module():
-    """Isolate preferences between modules even when xdist reuses a worker."""
+    """Each test file starts from an empty settings store of its own. A
+    MainWindow saves its geometry and docks when it closes and the next one
+    restores them, a style test saves «the last style used»: under
+    pytest-xdist a file met whatever the files before it on its worker had
+    left (a 173 px viewport in test_join_segments). Within a file the tests
+    still share the store, in the order they always ran."""
     folder = tempfile.mkdtemp(prefix="module-", dir=_settings_dir)
+    _module_settings[0] = folder
     os.environ["BUILT_SETTINGS_DIR"] = folder
-    product_settings.use_native(folder)
+    _session_settings_paths()
     yield
+    _module_settings[0] = _settings_dir
     os.environ["BUILT_SETTINGS_DIR"] = _settings_dir
-    product_settings.use_native(_settings_dir)
+    _session_settings_paths()
 
 
 @pytest.fixture
-def private_settings(tmp_path, monkeypatch):
+def private_settings(tmp_path):
+    """A settings store of this test's own (user and system scope, INI), put
+    back to the file's store afterwards. Use it instead of calling
+    ``QSettings.setPath`` in a test: the leak guard fails a test that leaves
+    the settings location changed."""
     folder = tmp_path / "settings"
-    folder.mkdir()
-    monkeypatch.setenv("BUILT_SETTINGS_DIR", str(folder))
-    from ingetrazo_core import NativeSettings
-    monkeypatch.setattr(product_settings, "_store", NativeSettings(folder))
-    return folder
+    folder.mkdir(exist_ok=True)
+    QSettings.setDefaultFormat(QSettings.IniFormat)
+    for scope in (QSettings.UserScope, QSettings.SystemScope):
+        QSettings.setPath(QSettings.IniFormat, scope, str(folder))
+    yield folder
+    QSettings.setDefaultFormat(QSettings.IniFormat)
+    _session_settings_paths()
+
+
+@pytest.fixture(autouse=True)
+def _restore_settings_paths():
+    # setPath changes process-wide defaults. A private user profile must
+    # never inherit another test's saved window state via SystemScope.
+    yield
+    _session_settings_paths()
 
 
 @pytest.fixture(autouse=True)
@@ -91,12 +180,27 @@ def _process_environment():
 
 
 @pytest.fixture(autouse=True)
-def _process_units():
-    """Restore the document whose units the formatters and value field read."""
+def _process_qt_and_units():
+    """Process-wide state a test can change in passing, put back after it:
+
+    - the application and organization names, which name the settings file
+      (a test that cleared them sent every later test on its worker to
+      «Unknown Organization/Python.ini»);
+    - the scene whose units the formatters and the value field read
+      (``core.units.bind_scene``): every window binds its own, so the last
+      one's inches were how test_vcb_comma_lists read «200,100»."""
+    from PySide6.QtCore import QCoreApplication
     from core import units
+    names = (QCoreApplication.organizationName(), QCoreApplication.organizationDomain(),
+             QCoreApplication.applicationName())
     bound = units._SCENE
     yield
     units._SCENE = bound
+    if names != (QCoreApplication.organizationName(), QCoreApplication.organizationDomain(),
+                 QCoreApplication.applicationName()):
+        QCoreApplication.setOrganizationName(names[0])
+        QCoreApplication.setOrganizationDomain(names[1])
+        QCoreApplication.setApplicationName(names[2])
 
 
 @pytest.fixture(autouse=True)
@@ -174,7 +278,15 @@ _ENV_OWNED_ELSEWHERE = {"PYTEST_CURRENT_TEST"}
 
 
 def _process_state():
-    return {"environment": dict(os.environ)}
+    from PySide6.QtCore import QCoreApplication, QSettings
+    return {
+        "environment": dict(os.environ),
+        "application names": (QCoreApplication.organizationName(),
+                              QCoreApplication.organizationDomain(),
+                              QCoreApplication.applicationName()),
+        "settings file": (QSettings().fileName(), int(QSettings.defaultFormat().value)
+                          if hasattr(QSettings.defaultFormat(), "value") else str(QSettings.defaultFormat())),
+    }
 
 
 def _leaked(before, after, owned=frozenset()):
@@ -184,26 +296,45 @@ def _leaked(before, after, owned=frozenset()):
         if key in _ENV_OWNED_ELSEWHERE or key in owned or env_a.get(key) == env_b.get(key):
             continue
         out.append(f"environment {key}: {env_a.get(key)!r} -> {env_b.get(key)!r}")
+    for name in ("application names", "settings file"):
+        if name not in owned and before[name] != after[name]:
+            out.append(f"{name}: {before[name]!r} -> {after[name]!r}")
     return out
 
 
 def _owned_by_module(request):
-    """The native host may select its module fixture's data and settings paths."""
+    """What a module-scoped fixture of the test's module sets up for all its
+    tests and puts back at its end: the native shell's tests start one Qt
+    host per process (tests/shell_isolation.py), whose profile, names and
+    data folder stay for the module."""
     if "restore_shell_patches" not in request.fixturenames:
         return frozenset()
     from tests.shell_isolation import _ENV
-    return frozenset(_ENV)
+    return frozenset(_ENV) | {"application names", "settings file"}
 
 
 @pytest.fixture(autouse=True)
-def _leak_guard(request, _process_environment, _paint_tool_choice):
-    """Identify tests that leave process-wide environment or profile changes."""
+def _leak_guard(request, _process_environment, _process_qt_and_units, _restore_settings_paths):
+    """Fail a test that leaves the process environment, the Qt application
+    names or the settings file location changed (docs/testing.md). The
+    fixtures above put them back anyway; this one says which test changed
+    them, so a new leak is fixed where it starts instead of showing up as
+    another file's failure under pytest-xdist. It asks for those fixtures,
+    so it is torn down after the test's own monkeypatch has undone its
+    changes and before they restore anything (autouse fixtures of one scope
+    otherwise run in name order). ``BUILT_LEAK_GUARD=0`` turns it off."""
     if os.environ.get("BUILT_LEAK_GUARD") == "0":
         yield
         return
     before = _process_state()
+    main_imported = "main" in sys.modules
     yield
     owned = _owned_by_module(request)
+    if not main_imported and "main" in sys.modules:
+        # main.py sets the process up when first imported (the settings
+        # profile and data folder named by BUILT_SETTINGS_DIR, as the app
+        # starts): once per process, and put back by the fixtures above.
+        owned |= {"XDG_DATA_HOME", "settings file"}
     leaks = _leaked(before, _process_state(), owned)
     if leaks:
         pytest.fail("This test left process-wide state changed:\n  " + "\n  ".join(leaks)
@@ -269,12 +400,36 @@ def pytest_configure(config):
         config.option.maxworkerrestart = 8
 
 
-@pytest.hookimpl(trylast=True)
+_exit_status = [0]
+
+
 def pytest_sessionfinish(session, exitstatus):
-    """A change to the real macOS preferences domain invalidates the run."""
-    if not hasattr(session.config, "workerinput") and preferences_mtime() != _real_preferences_before:
-        pytest.exit("The real Built preferences plist changed during the test session",
-                    returncode=pytest.ExitCode.TESTS_FAILED)
+    """Leave no Python-owned clipboard entry (``formats.clip.ClipMime``) in
+    Qt's clipboard while the interpreter tears down — a Copy in a test puts
+    one there, and the CI run of 9393ef5 passed and then segfaulted on exit."""
+    _exit_status[0] = int(exitstatus)
+    try:
+        from PySide6.QtWidgets import QApplication
+        if QApplication.instance() is not None:
+            from formats import clip
+            clip.flush()
+            QApplication.clipboard().clear()
+    except Exception:  # noqa: BLE001 - teardown must not fail the run
+        pass
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_unconfigure(config):
+    """Leave without tearing the interpreter down. The windows the tests
+    build can outlive them,
+    and destroying them all at exit, in whatever order Python picks, is
+    not something the app ever does: the public CI of 0.5.8 passed every
+    test and then two batches segfaulted on exit («shared QObject was
+    deleted directly»). Everything is reported by now; the status is
+    pytest's own."""
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(_exit_status[0])
 
 
 @pytest.fixture
