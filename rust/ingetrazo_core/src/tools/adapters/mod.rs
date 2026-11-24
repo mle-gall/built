@@ -61,6 +61,7 @@ mod host_api;
 mod image_tool_api;
 mod line_tool_api;
 mod move_host_api;
+mod namespace;
 mod north_tool_api;
 mod offset_host_api;
 mod paint_host_api;
@@ -117,6 +118,7 @@ fn screen<'py>(ctx: &Obj<'py>) -> PyResult<(Obj<'py>, Obj<'py>)> {
 
 fn registration(module: &str, name: &str) -> Option<(&'static [Method], &'static str)> {
     Some(match (module, name) {
+        ("tools.scale_host", "_Grip") => (scale::GRIP_METHODS, "scale"),
         ("tools.scale_host", "ScaleHost") => (scale::METHODS, stringify!(scale)),
         ("tools.texture_position_metal", "TexturePreview") => {
             (texture_preview::METHODS, stringify!(texture_preview))
@@ -376,6 +378,70 @@ pub fn register_tool_functions(namespace: &Bound<'_, PyDict>) -> PyResult<()> {
 }
 
 pub fn register_interaction(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    use crate::{annotation_geometry, document_snap, pick_index};
+    m.add_function(wrap_pyfunction!(pick_index::rays::index_ray_hits, m)?)?;
+    m.add_function(wrap_pyfunction!(pick_index::rays::ray_aabb_span, m)?)?;
+    m.add_function(wrap_pyfunction!(pick_index::lazy::pick_lazy_table, m)?)?;
+    m.add_function(wrap_pyfunction!(pick_index::lazy::pick_materialize, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        pick_index::prototypes::pick_instance_set,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        pick_index::prototypes::start_pick_warmup,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        pick_index::prototypes::pick_lazy_native,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        pick_index::prototypes::pick_lazy_selectable,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(pick_index::hits::face_hits, m)?)?;
+    m.add_function(wrap_pyfunction!(pick_index::hits::index_ray_distance, m)?)?;
+    m.add_function(wrap_pyfunction!(pick_index::hits::cached_face_hits, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        pick_index::footprint::pick_depth_limits,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(pick_index::footprint::depth_hidden, m)?)?;
+    m.add_function(wrap_pyfunction!(pick_index::footprint::footprint_need, m)?)?;
+    m.add_function(wrap_pyfunction!(pick_index::footprint::footprint_rows, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        pick_index::footprint::visible_depth_limit,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        pick_index::footprint::placements_under_px,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        pick_index::occluders::static_occluders,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(pick_index::occluders::static_ray_rows, m)?)?;
+    m.add_function(wrap_pyfunction!(pick_index::occluders::flat_pick_index, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        pick_index::occluders::outer_loose_meshes,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        pick_index::occluders::loose_mesh_wrapper,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(pick_index::edges::pick_edge_distance, m)?)?;
+    m.add_function(wrap_pyfunction!(pick_index::edges::linework_edge_rows, m)?)?;
+    m.add_function(wrap_pyfunction!(pick_index::edges::linework_groups, m)?)?;
+    m.add_function(wrap_pyfunction!(pick_index::edges::edge_cursor_point, m)?)?;
+    m.add_function(wrap_pyfunction!(pick_index::hits::drop_past_cut, m)?)?;
+    annotation_geometry::register(m)?;
+    pick_index::visibility::register(m)?;
+    document_snap::register(m)?;
+    m.add_function(wrap_pyfunction!(pick_index::document_pick_index, m)?)?;
+    m.add_function(wrap_pyfunction!(namespace::install_tool_modules, m)?)?;
+    m.add_function(wrap_pyfunction!(namespace::tool_module_classes, m)?)?;
     m.add_function(wrap_pyfunction!(tool_preview_hooks, m)?)?;
     m.add_function(wrap_pyfunction!(register_tool_adapter, m)?)?;
     m.add_function(wrap_pyfunction!(register_tool_functions, m)?)?;

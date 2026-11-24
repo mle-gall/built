@@ -58,3 +58,24 @@ pub(super) fn register(m: &Bound<PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(register_document_host, m)?)?;
     Ok(())
 }
+
+/// Document and view bindings owned by the interaction lane.
+pub(super) fn register_interaction(m: &Bound<PyModule>) -> PyResult<()> {
+    crate::document_bindings::register(m)?;
+    self::register(m)?;
+    crate::document_camera::register(m)?;
+    crate::document_input::register(m)?;
+    crate::document_chunks::register(m)?;
+    crate::document_records::register(m)?;
+    crate::document_state::register(m)?;
+    crate::document_environment::register(m)?;
+    crate::document_cache::register(m)?;
+    crate::document_grid::register(m)?;
+    crate::document_edits::register(m)?;
+    crate::document_targets::register(m)?;
+    crate::document_hlr::register(m)?;
+    crate::document_placements::register(m)?;
+    crate::document_annotations::register(m)?;
+    crate::document_planes::register(m)?;
+    Ok(())
+}

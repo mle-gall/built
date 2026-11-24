@@ -16,6 +16,7 @@ _FLAT = 1e-6
 _AXIS_NAMES = ("Red", "Green", "Blue")     # X east, Y north, Z up (Z-up)
 
 
+@register_tool_adapter
 class _Grip:
     """One scaling grip: box-parameter position + the axes it scales."""
 
@@ -24,13 +25,6 @@ class _Grip:
     def __init__(self, params: tuple, mask: tuple) -> None:
         self.params = params               # (tx, ty, tz), each 0 / 0.5 / 1
         self.mask = mask                   # axis indices this grip scales
-
-    def kind(self, active_axes: int) -> str:
-        n = len(self.mask)
-        if n >= active_axes:
-            return "corner"
-        return "edge" if n == 2 else "face"
-
 
 @register_tool_adapter
 class ScaleHost:
@@ -73,11 +67,5 @@ class ScaleHost:
         "intersection_face", "center", "origin",
         "on_edge", "on_line", "from_point", "close", "guide",
         "component_origin", "arc_midpoint", "face_center"})
-
-    def on_key_release(self, viewport, key):
-        if key != Qt.Key_Control:
-            return False
-        return self._send(viewport, {"type": "key_release", "key": "Control",
-                                     "tapped": getattr(viewport, "ctrl_tapped", lambda: True)()})["consumed"]
 
     _factors = property(lambda self: self._gesture.factors)

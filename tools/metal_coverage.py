@@ -15,10 +15,10 @@ def registry(root):
 
 
 def table(root=None):
-    from ingetrazo_core import tool_preview_hooks
+    from ingetrazo_core import tool_module_classes, tool_preview_hooks
     from views.wgpu_tools import TOOL_DISPATCH
     root = Path(root) if root else Path(__file__).resolve().parents[1]
-    classes = {}
+    classes = {name: (module, [base], "") for module, name, base in tool_module_classes()}
     for file in (root / 'tools').glob('*.py'):
         source = file.read_text()
         lines = source.splitlines()

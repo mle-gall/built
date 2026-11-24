@@ -892,8 +892,50 @@ fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
     (text, pos).into_bound_py_any(py)
 }
 
+fn grip_kind<'py>(a: &Args<'py>) -> Reply<'py> {
+    let count = a.get_item(0)?.getattr("mask")?.len()?;
+    let active = a.get_item(1)?.extract::<i64>()?;
+    (if count as i64 >= active {
+        "corner"
+    } else if count == 2 {
+        "edge"
+    } else {
+        "face"
+    })
+    .into_bound_py_any(a.py())
+}
+
+pub(super) const GRIP_METHODS: &[Method] = &[(
+    "kind",
+    Mode::Method,
+    grip_kind,
+    &["self", "active_axes:int"],
+    "str",
+    "",
+)];
+
+fn on_key_release<'py>(a: &Args<'py>) -> Reply<'py> {
+    let py = a.py();
+    let [tool, viewport, key] = unpack::<3>(a.as_any())?;
+    if key.ne(py
+        .import("tools.scale_host")?
+        .getattr("Qt")?
+        .getattr("Key_Control")?)?
+    {
+        return false.into_bound_py_any(py);
+    }
+    let tapped = match viewport.getattr_opt("ctrl_tapped")? {
+        Some(call) => call.call0()?,
+        None => true.into_bound_py_any(py)?,
+    };
+    let event = fields!(py;"type"=>"key_release","key"=>"Control","tapped"=>tapped);
+    tool.call_method1("_send", (viewport, event))?
+        .get_item("consumed")
+}
+
 #[rustfmt::skip]
 pub(super) const METHODS: &[Method] = &[
+    ("on_key_release", Mode::Method, on_key_release, &["self","viewport","key"], "", ""),
     ("uses_snap", Mode::Property, uses_snap, &["self"], "bool", "Only while a grip is held: then a corner, a midpoint or an edge\nof ANOTHER object sets the size — scale «to» it (issue #233,\n@ales-limon). Before the grab, the grips take the click, not the\ngeometry."),
     ("host_activate_box", Mode::Method, host_activate_box, &["self", "viewport", "_"], "None", ""),
     ("host_deactivate_box", Mode::Method, host_deactivate_box, &["self", "viewport", "_"], "None", ""),

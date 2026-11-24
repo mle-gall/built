@@ -53,3 +53,17 @@ def test_tool_module_discovery_and_reexports(name):
         assert getattr(module, key) is value
         if isinstance(value, type):
             assert pickle.loads(pickle.dumps(value)) is value
+
+
+def test_native_host_modules_preserve_public_class_and_subclass_binding():
+    from tools.flip_host import FlipHost
+    from tools.paste_host import PasteHost
+    from tools.texture_position_metal import TexturePreview
+    from tools.rust_tools import FlipTool, PasteTool
+
+    assert issubclass(FlipTool, FlipHost)
+    assert issubclass(PasteTool, PasteHost)
+    for cls in (FlipHost, PasteHost, TexturePreview):
+        assert pickle.loads(pickle.dumps(cls)) is cls
+    view = object()
+    assert TexturePreview(view=view).view is view

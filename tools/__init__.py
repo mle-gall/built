@@ -11,3 +11,8 @@ def _plugin_method(native):
     def method(*args, **kwargs):
         return native(*args, **kwargs)
     return method
+
+
+from ingetrazo_core import install_tool_modules as _install_tool_modules
+
+_install_tool_modules(__path__)
