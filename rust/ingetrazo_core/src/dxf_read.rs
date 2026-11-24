@@ -14,6 +14,9 @@ use std::{
     collections::{BTreeMap, HashMap},
     path::{Path, PathBuf},
 };
+#[path = "dxf_ascii.rs"]
+mod ascii;
+
 type Obj<'p> = Bound<'p, PyAny>;
 type Ring = Vec<DVec3>;
 #[derive(Default)]
@@ -117,13 +120,28 @@ fn unit(code: i64) -> Option<f64> {
 #[pyfunction]
 fn dxf_read_unit_scale(path: &Obj<'_>) -> PyResult<(Option<f64>, i64)> {
     let py = path.py();
+    if let Ok(doc) = path.cast::<PreparedDrawing>() {
+        let code = doc.borrow().source.units();
+        return Ok((unit(code), code));
+    }
     let doc = if path.hasattr("header")? {
         path.clone()
     } else {
-        match dxf_open_document(py, path.extract()?) {
-            Ok(d) => d.into_bound(py),
-            Err(_) => return Ok((None, 0)),
-        }
+        let path = path.extract::<PathBuf>()?;
+        let result = DocumentOpen::stage(py, None, move |py, _| {
+            if let Some(doc) = py.detach(|| NativeDocument::read(&path)) {
+                let code = doc.units();
+                return Ok((unit(code), code).into_pyobject(py)?.into_any().unbind());
+            }
+            Ok(dxf_read_unit_scale(&document(py, &path)?)?
+                .into_pyobject(py)?
+                .into_any()
+                .unbind())
+        });
+        return match result {
+            Ok(value) => value.extract(py),
+            Err(_) => Ok((None, 0)),
+        };
     };
     let code = doc
         .getattr("header")?
@@ -166,10 +184,13 @@ fn sample_sizes(e: &Obj<'_>, sizes: &mut Vec<f64>) -> PyResult<()> {
 #[pyfunction]
 fn dxf_suggest_unit_scale(py: Python<'_>, doc: Py<PyAny>) -> PyResult<Py<PyAny>> {
     DocumentOpen::stage(py, None, move |py, _| {
-        Ok(suggest_unit(doc.bind(py))?
-            .into_pyobject(py)?
-            .into_any()
-            .unbind())
+        let suggestion = if let Ok(d) = doc.bind(py).cast::<PreparedDrawing>() {
+            let d = d.borrow();
+            (d.source.suggestion(), d.source.units())
+        } else {
+            suggest_unit(doc.bind(py))?
+        };
+        Ok(suggestion.into_pyobject(py)?.into_any().unbind())
     })
 }
 fn suggest_unit(doc: &Obj<'_>) -> PyResult<(Option<f64>, i64)> {
@@ -573,20 +594,82 @@ fn sheet_records(text: &str) -> Option<Drawing> {
     }
     end.then_some(m)
 }
-fn sheet_file(path: &Path) -> Option<Drawing> {
-    use std::io::Read;
-    let mut file = std::fs::File::open(path).ok()?;
-    let mut prefix = [0; 19];
-    file.read_exact(&mut prefix).ok()?;
-    if &prefix != b"0\nSECTION\n2\nTABLES\n" {
-        return None;
+enum NativeDocument {
+    Sheet(std::sync::Arc<Drawing>),
+    Cad(ascii::Document),
+}
+impl NativeDocument {
+    fn read(path: &Path) -> Option<Self> {
+        use std::io::{BufRead, BufReader, Read};
+        let mut file = BufReader::new(std::fs::File::open(path).ok()?);
+        // Binary DXF goes directly to the compatibility reader.
+        if file.fill_buf().ok()?.starts_with(b"AutoCAD Binary DXF") {
+            return None;
+        }
+        let mut raw = String::new();
+        file.read_to_string(&mut raw).ok()?;
+        let text = raw.as_str();
+        if text.starts_with("0\nSECTION\n2\nTABLES\n") {
+            if let Some(sheet) = sheet_records(text) {
+                return Some(Self::Sheet(std::sync::Arc::new(sheet)));
+            }
+        }
+        ascii::decode(text).map(Self::Cad)
     }
-    let mut text = String::from_utf8(prefix.to_vec()).ok()?;
-    file.read_to_string(&mut text).ok()?;
-    sheet_records(&text)
+    fn units(&self) -> i64 {
+        match self {
+            Self::Sheet(_) => 6,
+            Self::Cad(doc) => doc.units,
+        }
+    }
+    fn suggestion(&self) -> Option<f64> {
+        match self {
+            Self::Sheet(sheet) => infer_unit(Some(1.), sheet.sample.clone()),
+            Self::Cad(doc) => doc.suggestion(),
+        }
+    }
+    fn model(&self, tolerance: f64) -> Option<std::sync::Arc<Drawing>> {
+        match self {
+            Self::Sheet(sheet) => Some(sheet.clone()),
+            Self::Cad(doc) => doc.drawing(tolerance).map(std::sync::Arc::new),
+        }
+    }
+}
+/// An isolated, strictly convex CAD facet has no welds, crossings, shared
+/// edges or straight corners for the stitching pipeline to repair. Use a
+/// generous angular and model-space margin around the kernel tolerances.
+fn isolated_facet(points: &[DVec3]) -> bool {
+    if !(3..=4).contains(&points.len()) {
+        return false;
+    }
+    let mut turns = Vec::with_capacity(points.len());
+    for i in 0..points.len() {
+        let p = points[i];
+        let ab = points[(i + 1) % points.len()] - p;
+        let ac = points[(i + points.len() - 1) % points.len()] - p;
+        let cross = ab.cross(ac);
+        if ab.length() < 0.001
+            || ac.length() < 0.001
+            || cross.length() <= 0.001 * ab.length().max(ac.length())
+            || ab.normalize().dot(ac.normalize()).abs() >= 0.99
+        {
+            return false;
+        }
+        turns.push(cross.normalize());
+    }
+    turns.iter().all(|n| n.dot(turns[0]) > 0.999999)
 }
 fn stitch(mesh: &Obj<'_>, faces: &[Ring], scale: f64, offset: DVec3) -> PyResult<()> {
     let py = mesh.py();
+    if let [ring] = faces {
+        if mesh.getattr("vertices")?.len()? == 0 {
+            let points = ring.iter().map(|p| *p * scale - offset).collect::<Vec<_>>();
+            if isolated_facet(&points) {
+                let _ = mesh.call_method1("add_face", (verts(py, &points)?,));
+                return Ok(());
+            }
+        }
+    }
     let added = PySet::empty(py)?;
     let keys = PySet::empty(py)?;
     let key = py.import("core.topology")?.getattr("_key")?;
@@ -617,43 +700,82 @@ fn stitch(mesh: &Obj<'_>, faces: &[Ring], scale: f64, offset: DVec3) -> PyResult
 fn build<'p>(py: Python<'p>, b: &Bucket, scale: f64, offset: DVec3) -> PyResult<Obj<'p>> {
     let mesh = new_mesh(py)?;
     let mut pts = vec![];
-    let mut left = vec![];
-    let mut right = vec![];
-    let flags = PyList::empty(py);
+    let mut endpoints = Vec::new();
+    let mut curves = Vec::new();
     for (i, (run, curved)) in b.runs.iter().enumerate() {
         if i % 512 == 0 {
             checkpoint(py)?;
         }
-        let curve = if *curved && run.len() > 2 {
-            Some(mesh.call_method0("next_curve_id")?)
+        let curve: i64 = if *curved && run.len() > 2 {
+            mesh.call_method0("next_curve_id")?.extract()?
         } else {
-            None
+            -1
         };
-        let base = pts.len() / 3;
+        let base = (pts.len() / 3) as i64;
         for p in run {
             pts.extend((*p * scale - offset).to_array());
         }
-        for k in 1..run.len() {
-            left.push((base + k - 1) as i64);
-            right.push((base + k) as i64);
-            flags.append((false, &curve, py.None()))?;
+        for k in 1..run.len() as i64 {
+            endpoints.extend([base + k - 1, base + k]);
+            curves.push(curve);
         }
     }
     if !pts.is_empty() {
-        let array = Array2::from_shape_vec((pts.len() / 3, 3), pts)
+        let positions = Array2::from_shape_vec((pts.len() / 3, 3), pts)
             .unwrap()
             .into_pyarray(py);
-        let (v, ids): (Obj<'p>, Obj<'p>) = mesh.call_method1("bulk_weld", (array,))?.extract()?;
-        let ids = py.import("numpy")?.call_method1("asarray", (ids,))?;
-        mesh.call_method1(
-            "add_edges_welded",
-            (
-                v,
-                ids.get_item(left.into_pyarray(py))?,
-                ids.get_item(right.into_pyarray(py))?,
-                flags,
-            ),
-        )?;
+        let edges = Array2::from_shape_vec((curves.len(), 2), endpoints)
+            .unwrap()
+            .into_pyarray(py);
+        let store_api = py.import("core.store_mesh")?;
+        if mesh.get_type().is(&store_api.getattr("StoreMesh")?)
+            && mesh
+                .getattr("_store")?
+                .getattr("_model_frame")?
+                .is_truthy()?
+        {
+            // This mesh is new. Weld points and insert edges in a single store
+            // construction, without allocating a temporary Python vertex view
+            // for every point and rebuilding the store to append its edges.
+            let live = mesh.getattr("_store")?;
+            let empty = Vec::<i64>::new().into_pyarray(py);
+            let curves = curves.into_pyarray(py);
+            let kw = store_api
+                .call_method0("_weld_args")?
+                .cast_into::<PyDict>()?;
+            let block = live.get_type().call_method(
+                "from_block",
+                (
+                    live.getattr("namespace")?,
+                    positions,
+                    edges,
+                    py.None(),
+                    curves,
+                    py.None(),
+                    PyList::empty(py),
+                    &empty,
+                    &empty,
+                    &empty,
+                ),
+                Some(&kw),
+            )?;
+            live.call_method1("_extend_bulk", (block,))?;
+            mesh.setattr("_chunk_dirty", true)?;
+            mesh.setattr("_mut_serial", mesh.getattr("_mut_serial")?.add(1)?)?;
+        } else {
+            let (v, ids): (Obj<'p>, Obj<'p>) =
+                mesh.call_method1("bulk_weld", (positions,))?.extract()?;
+            let ids = py.import("numpy")?.call_method1("asarray", (ids,))?;
+            let ends = ids.get_item(edges)?.getattr("T")?;
+            let flags = PyList::empty(py);
+            for curve in curves {
+                flags.append((false, (curve >= 0).then_some(curve), py.None()))?;
+            }
+            mesh.call_method1(
+                "add_edges_welded",
+                (v, ends.get_item(0)?, ends.get_item(1)?, flags),
+            )?;
+        }
     }
     if !b.parts.is_empty() {
         let key = py.import("core.topology")?.getattr("_key")?;
@@ -805,19 +927,28 @@ fn prepare<'p>(
     Ok((groups, tags, stats).into_pyobject(py)?.into_any())
 }
 #[pyclass]
-struct PreparedSheet(std::sync::Arc<Drawing>);
+struct PreparedDrawing {
+    source: std::sync::Arc<NativeDocument>,
+    path: PathBuf,
+}
 
 /// The options dialog and the import command share the same decoded drawing.
 /// Keep open_document's public ezdxf API for scripts that inspect arbitrary CAD records.
 #[pyfunction]
 fn dxf_prepare_import(py: Python<'_>, path: PathBuf) -> PyResult<Py<PyAny>> {
     DocumentOpen::stage(py, None, move |py, _| {
-        if let Some(mut sheet) = py.detach(|| sheet_file(&path)) {
-            // ezdxf supplies metres when it reconstructs a headerless R12 document.
-            let suggestion = infer_unit(Some(1.), std::mem::take(&mut sheet.sample));
-            let source = Py::new(py, PreparedSheet(std::sync::Arc::new(sheet)))?;
+        if let Some(decoded) = py.detach(|| NativeDocument::read(&path)) {
+            let suggestion = decoded.suggestion();
+            let source = Py::new(
+                py,
+                PreparedDrawing {
+                    source: std::sync::Arc::new(decoded),
+                    path,
+                },
+            )?;
             Ok((source, suggestion).into_pyobject(py)?.into_any().unbind())
         } else {
+            checkpoint(py)?;
             let doc = document(py, &path)?;
             let (suggestion, _) = suggest_unit(&doc)?;
             Ok((doc, suggestion).into_pyobject(py)?.into_any().unbind())
@@ -842,24 +973,32 @@ fn dxf_load<'p>(
     let result = DocumentOpen::stage(py, progress, move |py, cb| {
         cb.call1((0.05, "Reading file…"))?;
         let source = doc.map(|d| d.into_bound(py));
-        let model = match source.as_ref().and_then(|s| s.cast::<PreparedSheet>().ok()) {
-            Some(sheet) => sheet.borrow().0.clone(),
+        let tolerance = (0.01 / scale).max(1e-6);
+        let cached = source
+            .as_ref()
+            .and_then(|s| s.cast::<PreparedDrawing>().ok())
+            .map(|s| {
+                let d = s.borrow();
+                (d.source.clone(), d.path.clone())
+            });
+        let model = if let Some((d, _)) = &cached {
+            py.detach(|| d.model(tolerance))
+        } else if source.is_none() {
+            py.detach(|| NativeDocument::read(&path)?.model(tolerance))
+        } else {
+            None
+        };
+        let model = match model {
+            Some(model) => model,
             None => {
-                let simple = if source.is_none() {
-                    py.detach(|| sheet_file(&path))
-                } else {
-                    None
+                checkpoint(py)?;
+                let doc = match (cached, source) {
+                    (Some((_, original)), _) => document(py, &original)?,
+                    (_, Some(doc)) => doc,
+                    _ => document(py, &path)?,
                 };
-                std::sync::Arc::new(if let Some(model) = simple {
-                    model
-                } else {
-                    let doc = match source {
-                        Some(d) => d,
-                        None => document(py, &path)?,
-                    };
-                    cb.call1((0.2, "Collecting entities…"))?;
-                    drawing(&doc, (0.01 / scale).max(1e-6))?
-                })
+                cb.call1((0.2, "Collecting entities…"))?;
+                std::sync::Arc::new(drawing(&doc, tolerance)?)
             }
         };
         let stem = path.file_stem().unwrap_or_default().to_string_lossy();
