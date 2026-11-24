@@ -3301,6 +3301,10 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(tree_grouping::row_actions::tree_header_state, m)?)?;
     m.add_function(wrap_pyfunction!(tree_grouping::row_actions::tree_purge_tags, m)?)?;
     m.add_function(wrap_pyfunction!(tree_grouping::row_actions::tree_delete_tag, m)?)?;
+    m.add_function(wrap_pyfunction!(tree_grouping::tag_visibility::isolate_tags, m)?)?;
+    m.add_function(wrap_pyfunction!(tree_grouping::tag_visibility::has_tag_actions, m)?)?;
+    m.add_function(wrap_pyfunction!(tree_grouping::tag_visibility::viewport_tag_menu, m)?)?;
+    m.add_function(wrap_pyfunction!(tree_grouping::tag_visibility::choose_merge_tag, m)?)?;
     m.add_function(wrap_pyfunction!(tree_grouping::row_actions::tree_tag_action, m)?)?;
     m.add_function(wrap_pyfunction!(tree_grouping::row_actions::tree_delete_rows, m)?)?;
     m.add_function(wrap_pyfunction!(tree_grouping::tree_group_rows, m)?)?;

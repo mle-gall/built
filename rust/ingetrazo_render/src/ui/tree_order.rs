@@ -46,8 +46,8 @@ impl Sort {
                     return kind;
                 }
                 let state = match self {
-                    Self::Visible => (y.eye == 1).cmp(&(x.eye == 1)),
-                    Self::Locked => (y.lock > 0).cmp(&(x.lock > 0)),
+                    Self::Visible => (if y.eye == 2 { 0 } else { y.eye }).cmp(&(if x.eye == 2 { 0 } else { x.eye })),
+                    Self::Locked => y.lock.min(1).cmp(&x.lock.min(1)),
                     _ => Ordering::Equal,
                 };
                 state.then_with(|| {

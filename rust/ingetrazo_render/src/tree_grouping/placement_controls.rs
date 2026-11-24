@@ -196,7 +196,9 @@ pub(super) fn act(win: &Bound<'_, PyAny>, clicked: &Bound<'_, PyAny>, verb: &str
                     continue;
                 }
                 if selectable(&scene, g)? {
-                    if !scene.getattr("selection")?.contains(g)? { adopt.push(g); }
+                    if !scene.getattr("selection")?.contains(g)? {
+                        adopt.push(g);
+                    }
                 } else {
                     kept_rows.push(g.clone());
                 }
@@ -205,7 +207,9 @@ pub(super) fn act(win: &Bound<'_, PyAny>, clicked: &Bound<'_, PyAny>, verb: &str
             for g in &kept_rows {
                 selection.call_method1("discard", (g,))?;
             }
-            if !adopt.is_empty() { scene.call_method1("select", (PyList::new(py, adopt)?, true))?; }
+            if !adopt.is_empty() {
+                scene.call_method1("select", (PyList::new(py, adopt)?, true))?;
+            }
         }
     }
     remember(&scene, &model_ids(&scene)?, &kept_rows)?;

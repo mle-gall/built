@@ -3,7 +3,7 @@
 """The eye and the padlock of one of several selected rows act on all of
 them, as the material panel does. The press used to select that one row
 first, so only it was hidden or locked; it now acts at once and leaves the
-selection alone. Real mouse presses on the tree's viewport."""
+selection alone. The renderer tests exercise the matching pointer gestures."""
 from __future__ import annotations
 
 import pytest
@@ -93,3 +93,17 @@ def test_a_selection_made_in_the_view_drops_the_kept_rows(model):
     assert browser_selection(scene) == {id(a)}
     scene.select([c])
     assert browser_selection(scene) == {id(c)}
+
+
+def test_closed_row_inside_the_open_edit_stays_highlighted(native_host):
+    from tests.test_project_drawing_filters import Project
+    scene = native_host.viewport.scene
+    parent, child = _group("Building"), _group("Room")
+    parent.children = [child]
+    scene.groups.append(parent)
+    scene.begin_group_edit(parent)
+    child.hidden = True
+    press(native_host, child, "pickrow")
+    rows = Project(scene=scene).rows()
+    assert any(name == "Room" and flags[9] == 1 for name, flags in rows.values())
+    assert not scene.selection

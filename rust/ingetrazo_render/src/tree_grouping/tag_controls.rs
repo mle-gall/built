@@ -24,7 +24,7 @@ pub fn set_new_tags_hidden(py: Python<'_>, on: bool) -> PyResult<()> {
     Ok(())
 }
 
-fn editable_tag_selection(scene: &Bound<'_, PyAny>) -> PyResult<bool> {
+pub(super) fn editable_tag_selection(scene: &Bound<'_, PyAny>) -> PyResult<bool> {
     let py = scene.py();
     let group = py.import("core.group")?.getattr("Group")?;
     let links = py.import("core.links")?;

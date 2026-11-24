@@ -247,11 +247,12 @@ fn loose(scene: &Bound<'_, PyAny>, depth: usize, query: &str) -> PyResult<Option
     Ok(matches.then_some(r))
 }
 
-#[pyfunction]
+#[pyfunction(signature = (scene, query, expanded, browser_selected=None))]
 pub(crate) fn project_context_rows(
     scene: &Bound<'_, PyAny>,
     query: &str,
     expanded: HashSet<String>,
+    browser_selected: Option<HashSet<usize>>,
 ) -> PyResult<Vec<Row>> {
     let group = scene.getattr("edit_group")?;
     let mut rows = Vec::new();
@@ -303,7 +304,10 @@ pub(crate) fn project_context_rows(
                     depth,
                     1,
                     0,
-                    usize::from(selection.contains(&g)?),
+                    usize::from(match &browser_selected {
+                        Some(ids) => ids.contains(&(g.as_ptr() as usize)),
+                        None => selection.contains(&g)?,
+                    }),
                 );
                 placement_controls(&mut r, &g)?;
                 r.1[7] = i64::from(children.is_truthy()?);

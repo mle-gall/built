@@ -443,6 +443,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(hatch_file::import_hatch_file, m)?)?;
     m.add_function(wrap_pyfunction!(style_files::tag_template_file, m)?)?;
     m.add_function(wrap_pyfunction!(style_files::export_style_file, m)?)?;
+    m.add_function(wrap_pyfunction!(style_edit::tags_in_saved_views, m)?)?;
     m.add_function(wrap_pyfunction!(style_edit::edit_line_type, m)?)?;
     m.add_function(wrap_pyfunction!(style_edit::edit_tag_folder, m)?)?;
     m.add_function(wrap_pyfunction!(style_edit::document_piece, m)?)?;

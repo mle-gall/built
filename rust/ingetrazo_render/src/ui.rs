@@ -2307,8 +2307,8 @@ impl Ui {
                 ("-", ""), ("linkopen", "Edit source"), ("linkfinder", "Show in Finder"),
                 ("linkreload", "Reload"), ("linkrelink", "Locate…"), ("linkunlink", "Unlink")];
             let section_menu: &[(&str, &str)] = &[("sectioncut", "Toggle cut"), ("eye", "Show / hide"), ("deleterows", "Delete")];
-            let tag_menu: &[(&str, &str)] = &[("newtag", "New tag"), ("rename", "Rename"), ("tagactive", "Make active"), ("tagassign", "Move selection here"), ("tagselect", "Select items"), ("tagisolate", "Isolate"), ("deletetag", "Delete"), ("purgetags", "Purge unused tags…")];
-            let menu = if key.starts_with("preview-tag:") { tag_menu } else if key.starts_with("preview-folder:") { &[("newtag", "New tag in folder")] } else if key.starts_with("section:") { section_menu } else if row == 0 && key.starts_with("n:link") { link_menu } else if row == 0 { node_menu }
+            let tag_menu: &[(&str, &str)] = &[("newtag", "New tag"), ("rename", "Rename"), ("tagactive", "Make active"), ("tagassign", "Move selection here"), ("tagselect", "Select items"), ("tagisolate", "Toggle tag isolation"), ("mergetag", "Merge into…"), ("scenetaghide", "Hide in all saved scenes"), ("scenetagshow", "Show in all saved scenes"), ("deletetag", "Delete"), ("purgetags", "Purge unused tags…")];
+            let menu = if key.starts_with("preview-tag:") { tag_menu } else if key.starts_with("preview-folder:") { &[("newtag", "New tag in folder"), ("tagisolate", "Toggle tag isolation")] } else if key.starts_with("section:") { section_menu } else if row == 0 && key.starts_with("n:link") { link_menu } else if row == 0 { node_menu }
                 else if row == 5 { comp_menu } else { item_menu };
             let resp = egui::Area::new(egui::Id::new("row_menu"))
                 .fixed_pos(at + vec2(4.0, 4.0))
@@ -2320,7 +2320,7 @@ impl Ui {
                         let row = col.nodes.iter().find(|n| n.key == key);
                         let editable_file = row.is_some_and(|n| n.icon.starts_with("file:") && !n.badge.starts_with("via "));
                         for (id, label) in menu {
-                            if matches!(*id, "rename" | "deletetag") && key == "preview-tag:Layer 0" { continue; }
+                            if matches!(*id, "rename" | "deletetag" | "mergetag" | "tagisolate") && key == "preview-tag:Layer 0" { continue; }
                             if row.is_some_and(|n| n.icon == "file:missing") &&
                                 matches!(*id, "contents" | "isolate" | "zoom" | "linkopen" | "linkfinder" | "linkreload") { continue; }
                             if matches!(*id, "linkreload" | "linkrelink" | "linkunlink") &&
@@ -2353,6 +2353,7 @@ impl Ui {
                                         col.renaming = Some((key.clone(), name));
                                         col.focus_rename = true;
                                     }
+                                    "tagisolate" if row.is_some() => actions.push(col.styles.isolate_action(row.unwrap())),
                                     "lockitem" if row.is_some_and(|n| n.local_placement) => actions.push(format!("rowlock\u{1f}{key}")),
                                     "kind" => { col.kind_menu = Some((key.clone(), pos2(rect.max.x + 4.0, rect.min.y))); }
                                     _ => actions.push(format!("{id}\u{1f}{key}")),
@@ -2426,6 +2427,10 @@ impl Ui {
                                             close = true;
                                         }
                                     }
+                                }
+                                if col.styles.catalog.tag_isolation && menu_row(ui, &("endtagisolate".into(), "End tag isolation".into(), String::new(), String::new(), -1, true)) {
+                                    actions.push("isolatetags\u{1f}[]".into());
+                                    close = true;
                                 }
                                 if col.lens == Lens::Drawing && menu_row(ui, &("purgetags".into(), "Purge unused tags…".into(), String::new(), String::new(), -1, true)) {
                                     actions.push("purgetags\u{1f}".into());
@@ -3476,8 +3481,11 @@ fn an_eye_gesture_never_opens_or_drags_its_occurrence() {
     let Some(mut ui) = test_chrome() else { return };
     ui.ctx = test_context();
     ui.set_tree(["House", "Shed"].into_iter().map(|name|
-        (vec![format!("i:{name}"), name.into()], vec![0, 0, 0, 0, 1, 1, 0])
+        (vec![format!("i:{name}"), name.into(), "".into(), "".into(), "group".into(), "Hidden by Building".into(), "Locked by Building".into()], vec![0, 0, 0, 0, 1, 2, 2])
     ).collect(), 0);
+    let house = &ui.column.as_ref().unwrap().nodes[0];
+    assert!(house.dim && house.cells.is_empty());
+    assert_eq!(house.control_tips, ["Hidden by Building", "Locked by Building"]);
     for _ in 0..3 { tree_frame(&mut ui, vec![]); }
     let at = tree_frame(&mut ui, vec![]);
     let eye = pos2(at["Name"].x - 26., at["House"].y);

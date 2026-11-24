@@ -3,6 +3,7 @@ pub mod paint;
 pub mod placement_controls;
 pub mod row_actions;
 pub mod tag_controls;
+pub mod tag_visibility;
 use super::model_edit::translated;
 use pyo3::{
     prelude::*,

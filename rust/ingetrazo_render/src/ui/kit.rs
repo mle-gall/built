@@ -850,7 +850,7 @@ pub mod molecules {
         let slot = |dx| Rect::from_center_size(pos2(count_right - dx, y), vec2(16., 16.));
         let (e, l) = (slot(64.), slot(44.));
         if show && eye >= 0 {
-            paint_eye(ui, e, eye == 1);
+            paint_row_eye(ui, e, eye);
         }
         if show && lock >= 0 {
             atoms::paint_row_lock(ui, l, lock);
