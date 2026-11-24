@@ -102,6 +102,14 @@ def _write_repro(mesh, op, reason: str) -> str | None:
     return str(path)
 
 
+def _write_conversion_failure(reason: str) -> None:
+    from core.store_mesh import _note_refusal
+    try:
+        _note_refusal("to_store: " + reason)
+    except Exception:  # noqa: BLE001 — a count, never a failure of its own
+        pass
+
+
 def _project_loop_2d(loop, normal):
     u, v = plane_basis(normal)
     return [(QVector3D.dotProduct(p, u), QVector3D.dotProduct(p, v)) for p in loop]
@@ -561,6 +569,48 @@ class PushPullOperation:
         # click, Esc, a tool change or the user's own undo closes it — the
         # same window contract Rotate already has (tools/rotate.py).
         self._last: dict | None = None
+
+    def _ensure_store(self, scene) -> bool:
+        """A push runs on a store: a Python mesh (one materialised after
+        another operation's refusal, or made with ``INGETRAZO_STORE=0``)
+        becomes store-backed first (``store_mesh.to_store``), outside any
+        History step, and what this operation and the selection hold is
+        carried over to the new elements. False when the store refuses the
+        mesh: the push does not start."""
+        from core.store_mesh import StoreMesh, StoreRefusal, to_store
+        mesh = self._target_mesh(scene)
+        if type(mesh) is StoreMesh:
+            return True
+        # The annotations on it reattach by position, as when an edit
+        # context rebuilds a mesh with fresh keys (Scene._leave_level).
+        root = getattr(scene, "_scene", scene)
+        refresh = getattr(root, "_refresh_dimension_holds", None)
+        swap = getattr(root, "_attachment_swap", None)
+        if refresh is not None:
+            refresh()
+        refs = swap() if swap is not None else ()
+        try:
+            views = to_store(mesh)
+        except (StoreRefusal, ValueError) as e:
+            _write_conversion_failure(str(e))
+            return False
+        if refs:
+            root._restore_attachments(refs)
+        if refresh is not None:
+            refresh()
+
+        def carry(x):
+            return views.get(id(x), x)
+        self.base_face = carry(self.base_face)
+        self.hovered_face = carry(self.hovered_face)
+        self._extra_faces = [carry(f) for f in self._extra_faces]
+        selection = getattr(scene, "selection", None)
+        if selection is not None:
+            held = [carry(x) for x in selection]
+            selection.clear()
+            selection.update(held)
+        scene.version += 1
+        return True
 
     def _target_scene(self, scene):
         """The scene the machinery edits: the real one, or a facade over the

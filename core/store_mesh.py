@@ -2773,3 +2773,66 @@ def faces_arrays(m):
                  np.asarray(a["ring_counts"], dtype=np.int64), model_f64=True)
     out.edge_face_counts = np.diff(a["ef_start"])
     return out
+
+
+def to_store(m) -> dict:
+    """Make the Python mesh ``m`` (a plain one, or one materialised after a
+    refusal) store-backed in place, list orders kept: its vertices, edges
+    and faces in their order, edge flags, curves and tags, each face's
+    attrs dict (the same dict, as the face's own) and interior flag.
+    Returns ``{id(old element): view}`` for the caller's holders: the
+    elements get new keys (a Python mesh's keys are not the store's).
+
+    Call it between History steps only: the steps before keep their
+    Python snapshots, and undoing one turns the mesh back into those
+    objects (``restore_state``); the step after captures a store state.
+    Raises :class:`StoreRefusal` when the store would not hold the mesh as
+    it is (welded vertices, a duplicate edge, a dropped face)."""
+    if m.__class__ is StoreMesh:
+        return {}
+    from core import _native
+    mod = _native.available()
+    verts = list(m.vertices)
+    edges = list(m.edges)
+    faces = list(m.faces)
+    vi = {id(v): i for i, v in enumerate(verts)}
+    pos = np.array([v.position.toTuple() for v in verts], dtype=np.float64).reshape(-1, 3)
+    ends = np.array([(vi[id(e.v0)], vi[id(e.v1)]) for e in edges], dtype=np.int64).reshape(-1, 2)
+    flags = np.array([(1 if e.soft else 0) | (2 if e.hidden else 0)
+                      | (4 if e.soft and getattr(e, "flat", False) else 0)
+                      for e in edges], dtype=np.uint8)
+    curves = np.array([-1 if e.curve is None else e.curve for e in edges], dtype=np.int64)
+    names: list = []
+    at: dict = {}
+    layers = np.array([-1 if e.layer is None else at.setdefault(e.layer, len(at))
+                       for e in edges], dtype=np.int64)
+    names = sorted(at, key=at.get)
+    rings, sizes, counts = [], [], []
+    for f in faces:
+        loops = [f.loop, *f.hole_loops]
+        counts.append(len(loops))
+        for lp in loops:
+            sizes.append(len(lp))
+            rings.extend(vi[id(v)] for v in lp)
+    store = mod.MeshStore.from_block(
+        next(_mesh._KEY_NAMESPACES), pos, ends, flags, curves, layers, names,
+        np.asarray(rings, dtype=np.int64), np.asarray(sizes, dtype=np.int64),
+        np.asarray(counts, dtype=np.int64), None, sequential=True, **_weld_args())
+    keys = {k: store.keys(k) for k in ("vertex", "edge", "face")}
+    if (len(keys["vertex"]), len(keys["edge"]), len(keys["face"])) != (len(verts), len(edges), len(faces)):
+        raise StoreRefusal("to_store: the store would weld or drop elements of this mesh")
+    for f, k in zip(faces, keys["face"]):
+        if f.interior:
+            store.set_face_flags(k, 1)
+    own = {k: f.attrs for f, k in zip(faces, keys["face"]) if f.attrs}
+    m.__dict__.pop("_objmap", None)
+    become_store(m, store, [], own)
+    m._dirty()
+    m._chunk_dirty = True
+    views = {}
+    for objs, ks, cls in ((verts, keys["vertex"], VertexView),
+                          (edges, keys["edge"], EdgeView),
+                          (faces, keys["face"], FaceView)):
+        for o, k in zip(objs, ks):
+            views[id(o)] = cls(m, k)
+    return views
