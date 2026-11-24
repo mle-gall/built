@@ -871,3 +871,45 @@ impl AnnotationCanvas {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_drawn_region_covers_the_ink_and_nothing_outside_it_is_inked() {
+        // 2x: a 200 x 100 logical canvas.
+        let mut canvas = AnnotationCanvas::new(400, 200, 200.).unwrap();
+        assert_eq!(canvas.drawn_region(), None);
+        canvas.pen(Color([255, 0, 0, 255]), 2., false);
+        canvas.line((20., 30.), (60., 30.)).unwrap();
+        canvas.circle((150., 70.), 5.).unwrap();
+        let r = canvas.drawn_region().unwrap();
+        // The line reaches x 40..120, y 60 physical; the ring 290..310, 130..150.
+        assert!(r[0] <= 38 && r[1] <= 58 && r[2] >= 312 && r[3] >= 152, "{r:?}");
+        assert!(r[2] <= 400 && r[3] <= 200);
+        let layer = canvas.overlay.as_ref().unwrap();
+        for y in 0..200u32 {
+            for x in 0..400u32 {
+                let inside = x >= r[0] && x < r[2] && y >= r[1] && y < r[3];
+                if !inside {
+                    assert_eq!(layer.pixel(x, y).unwrap().alpha(), 0, "ink at {x},{y} outside {r:?}");
+                }
+            }
+        }
+        // The region's straight RGBA is the layer's, demultiplied.
+        let rgba = canvas.region_rgba(r);
+        let w = (r[2] - r[0]) as usize;
+        let (x, y) = (60usize, 60usize);
+        let at = ((y - r[1] as usize) * w + (x - r[0] as usize)) * 4;
+        assert_eq!(&rgba[at..at + 4], &[255, 0, 0, 255]);
+    }
+
+    #[test]
+    fn off_canvas_drawing_leaves_no_region() {
+        let mut canvas = AnnotationCanvas::new(100, 100, 100.).unwrap();
+        canvas.pen(Color([0, 0, 0, 255]), 1., false);
+        canvas.line((-50., -50.), (-20., -40.)).unwrap();
+        assert_eq!(canvas.drawn_region(), None);
+    }
+}

@@ -2234,7 +2234,7 @@ impl Renderer {
         self.overlay.center_cue(&self.queue, &self.camera_data,
             [self.config.width, self.config.height], center, radius, cursor, scale);
     }
-    fn set_annotation_layer(&mut self, mut layer: PyRefMut<'_, annotation_canvas::AnnotationCanvas>) -> PyResult<()> {
+    fn set_annotation_layer(&mut self, layer: PyRef<'_, annotation_canvas::AnnotationCanvas>) -> PyResult<()> {
         let (w, h) = layer.size();
         if (w, h) != (self.config.width, self.config.height) {
             return Err(PyValueError::new_err("overlay must match physical surface dimensions"));
