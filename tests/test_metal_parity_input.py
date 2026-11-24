@@ -180,7 +180,6 @@ def test_copy_move_array_and_undo(view):
 
 
 def test_context_group_and_locked_target(view, monkeypatch):
-    from views import context_menu
     mesh = Mesh()
     mesh.add_face([QVector3D(), QVector3D(2, 0, 0), QVector3D(0, 2, 0)])
     group = Group(mesh)
@@ -188,23 +187,24 @@ def test_context_group_and_locked_target(view, monkeypatch):
     view.scene.version += 1
     view.set_scene(view.scene)
     view.pick_row = lambda *a: 0
-    calls = []
-    def build(window, view, **targets):
-        calls.append(targets)
-        return context_menu.Menu("group", "Group", "")
-
-    monkeypatch.setattr(context_menu, "build", build)
+    # The window the menu's facts read (viewport_menu.rs): every check "no".
+    win = SimpleNamespace(viewport=view.source_viewport, _hideable=lambda sel: False,
+                          _makes_faces=lambda sel: False, _bridgeable=lambda sel: False,
+                          _single_textured_face=lambda: None, _replacement_choices=lambda sel: [],
+                          _clipboard_available=lambda: False, view=view)
+    monkeypatch.setattr(view.source_viewport, "window", lambda: win)
     view._ui_attached = True
     view.renderer = SimpleNamespace(ui_over_chrome=lambda x, y: False,
                                     ui_set_context_menu=lambda *args: None)
     event = QContextMenuEvent(QContextMenuEvent.Mouse, QPoint(400, 300))
     view.contextMenuEvent(event)
     assert view.scene.selection == {group}
+    assert view._ctx_menu.kind == "group" and view._ctx_menu.locked_group is None
     group.locked = True
     view.scene.clear_selection()
     view.contextMenuEvent(event)
     assert not view.scene.selection
-    assert calls[-1]['locked_group'] is group
+    assert view._ctx_menu.locked_group is group
 
 
 def test_selection_marks_and_preview_bridge(view):

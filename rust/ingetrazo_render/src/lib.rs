@@ -47,6 +47,7 @@ mod model_views;
 mod pane_dividers;
 /// The one verb source: kinds, menu rows, inspector verbs, dispatch.
 mod verbs;
+mod viewport_menu;
 pub mod ui;
 mod host_context;
 mod inspector;
@@ -2661,7 +2662,7 @@ impl Renderer {
     fn ui_project_tab_rects(&self) -> Vec<Option<(f32, f32, f32, f32)>> {
         self.ui.as_ref().map_or_else(Vec::new, |ui| ui.project_tab_rects())
     }
-    /// The right-click menu at (x, y) (views/context_menu.py): header, then
+    /// The right-click menu at (x, y) (viewport_menu.rs): header, then
     /// rows of (family label, [(id, label, key, enabled, checked)]).
     fn ui_set_context_menu(&mut self, x: f32, y: f32, title: String, subtitle: String,
                            rows: Vec<(String, Vec<(String, String, String, bool, i8)>)>) {
@@ -3232,6 +3233,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     component_replacement::register(m)?;
     inspection_edits::register(m)?;
     context_edits::register(m)?;
+    viewport_menu::register(m)?;
     native_view_actions::register(m)?;
     plugin_workspace::register(m)?;
     m.add_class::<link_watch::LinkWatch>()?;

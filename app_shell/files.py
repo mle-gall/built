@@ -150,8 +150,8 @@ def command(win, name, *args):
         from views import wgpu_tabs
         return wgpu_tabs.open_link_source(win, Path(arg))
     if kind == "ctx_demo":
-        from app_shell import harness
-        return harness.context_menu_for(win, arg)
+        from ingetrazo_render import context_menu_demo
+        return context_menu_demo(win, arg)
     if kind == "close_doc":
         docs = win._documents
         return close_document(win, docs[int(arg)] if arg else None)

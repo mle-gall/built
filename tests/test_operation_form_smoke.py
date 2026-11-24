@@ -728,13 +728,13 @@ def dispatch(self, command):
         wgpu_ui._tree_action(self.window,self.view,wgpu_ui.SEP.join(("rename","preview-tag:"+tag.key,"Unused survey tag")))
         wgpu_ui._tree_action(self.window,self.view,wgpu_ui.SEP.join(("purgetags","")))
     elif command=="fixture-selection-tag":
-        from views import context_menu
+        from ingetrazo_render import context_menu_build, context_menu_run
         from core.group import Group
         group=Group(name="Loose tag target")
         scene.groups.append(group)
         scene.select([group])
-        menu_state=context_menu.build(self.window,self.view)
-        context_menu.run(self.window,self.view,menu_state.kind,"selectiontag",menu_state.sel)
+        menu_state=context_menu_build(self.window,self.view)
+        context_menu_run(self.window,self.view,menu_state.kind,"selectiontag",menu_state.sel)
     elif command=="fixture-merge-tag":
         from core.layers import Layer
         if scene.layer_by_key("Merge me") is None:

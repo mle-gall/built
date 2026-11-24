@@ -603,17 +603,10 @@ def _selection(view, win, active) -> None:
 
 def _commands(win, sel):
     """(id, label, shortcut, run, enabled, in More) for the inspector's
-    verbs: the verb source's (views/verbs.py, verbs.rs), the very entries
-    the right-click menu offers this selection, run the same way."""
-    import json
-    from views import context_menu, verbs
-    view = getattr(getattr(win, "_doc", None), "stand_in", None)
-    facts = verbs.facts(win.viewport.scene, sel, win, view)
-    kind = verbs.verbs_kind(json.dumps(facts))
-    sel = list(sel)
-    return [(vid, label, key, (lambda vid=vid: context_menu.run(win, view, kind, vid, sel, facts=facts)),
-             enabled, more)
-            for vid, label, key, enabled, more in verbs.verbs_inspector(json.dumps(facts))]
+    verbs: the verb source's (verbs.rs), the very entries the right-click
+    menu offers this selection, run the same way (viewport_menu.rs)."""
+    from ingetrazo_render import inspector_verbs
+    return inspector_verbs(win, list(sel))
 
 
 def _show_all(vp) -> None:
@@ -2128,17 +2121,17 @@ def _inspector(view, win) -> None:
     from ingetrazo_render import inspector_tag_row
     tag_row = inspector_tag_row(scene)
     groups = [g for g in sel if isinstance(g, Group)]
-    from views import verbs
-    sel_kind = verbs.kind_of(scene, sel)
+    from ingetrazo_render import selection_kind, verbs_name_editable, verbs_offered, verbs_read_only
+    sel_kind = selection_kind(scene, sel)
     if len(sel) == 1 and groups:
         g = groups[0]
         rec = g.ifc or {}
         key = data.get("node_of", {}).get(id(g)) or structure.node_of(g)
         filed_ok = key in nodes
         recipe = data.get("recipes", {}).get(key, {})
-        name_cell = _edit(f"groupname:{g.uid}", g.name or "") if verbs.name_editable(sel_kind) else (g.name or "")
+        name_cell = _edit(f"groupname:{g.uid}", g.name or "") if verbs_name_editable(sel_kind) else (g.name or "")
         rows = [("Name", name_cell), *tag_row]
-        if verbs.read_only(sel_kind):
+        if verbs_read_only(sel_kind):
             rows.append(("Edits", "Read-only here"))
         if g.is_component():
             same = sum(1 for o, _s, _r in structure._placements(scene) if o.mesh is g.mesh)
@@ -2152,7 +2145,7 @@ def _inspector(view, win) -> None:
         else:
             needs = [("Status", _status_text(rec) or "Missing")]
         sections = [("Item", rows), ("What it needs", needs)]
-        if rec.get("class") and verbs.offers(sel_kind, "status"):
+        if rec.get("class") and verbs_offered(sel_kind, "status"):
             sections.append(("Actions", [("status:" + v, v.capitalize()) for v in STATUS_CHOICES]))
         if sel_kind == "linked_part":
             sections.append(("Actions", [("linkfile", "Select its linked file"), ("linkopen", "Edit source")]))
@@ -2167,7 +2160,7 @@ def _inspector(view, win) -> None:
             sections.append(("Actions", [("cutlist", "Cut list…")]))
         from ingetrazo_core import solid_inspector_sections
         solid = solid_inspector_sections(scene, g, view.__dict__.get("_ui_lens") == 2)
-        if solid and not verbs.offers(sel_kind, "repair"):
+        if solid and not verbs_offered(sel_kind, "repair"):
             solid = [s_ for s_ in solid if s_[0] != "Actions"]
         if solid:
             sections += solid
@@ -2277,9 +2270,9 @@ def _linked_inspector(view, win, data, key):
             rows.insert(2, ("Via", " › ".join(stems[:-1])))
         if node.get("merged"):
             rows.append(("Top node", node["merged"]))
-        # The file verbs first (the verb source, views/verbs.py), then what any row offers.
-        from views import verbs
-        acts = [("lnk:" + v + ":" + key, label) for v, label in verbs.file_verb_rows(not top, state)]
+        # The file verbs first (the verb source, verbs.rs), then what any row offers.
+        from ingetrazo_render import verbs_file
+        acts = [("lnk:" + v + ":" + key, label) for v, label in verbs_file(not top, state)]
         if len(copies) == 1:
             from ingetrazo_core import link_subset_rows
             rows.extend(link_subset_rows(copies[0]))
@@ -2639,8 +2632,8 @@ def _run(win, actions, source_view=None) -> None:
             from views import wgpu_tabs
             wgpu_tabs.action(win, getattr(getattr(win, "_doc", None), "stand_in", None), arg)
         elif kind == "ctx":
-            from views import context_menu
-            context_menu.action(win, getattr(getattr(win, "_doc", None), "stand_in", None), arg)
+            from ingetrazo_render import context_menu_action
+            context_menu_action(win, getattr(getattr(win, "_doc", None), "stand_in", None), arg)
         elif kind == "tab":
             view = getattr(getattr(win, "_doc", None), "stand_in", None)
             if arg == "model":

@@ -1596,8 +1596,8 @@ class MetalView(ViewNavigation):
         if wgpu_sheets.context_menu(self, event):   # the sheet's own menus
             return
         point = event.pos()
-        from views import context_menu
-        chrome = context_menu.chrome_menu_available(self)
+        from ingetrazo_render import context_menu_available, context_menu_open_at
+        chrome = context_menu_available(self)
         if chrome and self.renderer.ui_over_chrome(float(point.x()), float(point.y())):
             return
         self.tools.sync()
@@ -1614,7 +1614,7 @@ class MetalView(ViewNavigation):
         if not chrome:
             source.flash_status("Built could not draw the context menu.")
             return
-        context_menu.open_at(self, point.x(), point.y())
+        context_menu_open_at(self, point.x(), point.y())
 
     @_tool_frame
     def mouseDoubleClickEvent(self, event):

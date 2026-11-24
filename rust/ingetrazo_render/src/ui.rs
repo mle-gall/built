@@ -20,7 +20,7 @@ mod plugins;
 pub use activity::ActivityRow;
 /// Project tabs in the top bar (views/wgpu_tabs.py).
 mod tabs;
-/// The viewport right-click menu (views/context_menu.py, docs/context-menu.md).
+/// The viewport right-click menu (viewport_menu.rs, docs/context-menu.md).
 mod context_menu;
 
 mod lens;

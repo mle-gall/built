@@ -711,19 +711,9 @@ class ShellWindow(WindowDocumentCommands, object if NATIVE else QObject):
         wgpu_sheets.to_sheets(self)
 
     def show_viewport_context_menu(self, global_pos=None, locked_image=None, locked_group=None):
-        """The right-click menu (views/context_menu.py). With the chrome on,
-        WgpuView.contextMenuEvent hands it to the chrome before this is
-        reached; without a surface (headless) the menu is only built, for
-        the scripted runs and tests that read it."""
-        from views import context_menu
-        view = self.view
-        menu = context_menu.build(self, view, locked_image=locked_image, locked_group=locked_group)
-        px = getattr(self.viewport, "_context_pixel", None) or (0.0, 0.0)
-        menu.at = (float(px[0]), float(px[1]))
-        if view is not None:
-            view._ctx_menu = menu
-            context_menu.send(view, menu)
-        return menu
+        """The right-click menu (viewport_menu.rs)."""
+        from ingetrazo_render import context_menu_show
+        return context_menu_show(self, locked_image, locked_group)
 
     # ---- a Built project (app_shell/project.py) ------------------------
     def open_project(self, path):
