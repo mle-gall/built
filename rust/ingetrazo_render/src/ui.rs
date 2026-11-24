@@ -3208,6 +3208,18 @@ fn occurrence_menu_runs_the_document_action_and_closes() {
     assert!(ui.column.unwrap().row_menu.is_none());
 }
 
+#[cfg(test)]
+fn tree_drag(ui: &mut Ui, from: Pos2, to: Pos2) -> Vec<String> {
+    let button = |pos, pressed| egui::Event::PointerButton {
+        pos, button: egui::PointerButton::Primary, pressed, modifiers: Default::default()
+    };
+    tree_frame(ui, vec![egui::Event::PointerMoved(from), button(from, true)]);
+    tree_frame(ui, vec![egui::Event::PointerMoved(from + vec2(8., 0.))]);
+    tree_frame(ui, vec![egui::Event::PointerMoved(to)]);
+    tree_frame(ui, vec![button(to, false)]);
+    ui.take_actions()
+}
+
 #[test]
 fn dragging_sorted_drawing_rows_files_tags_and_folders_by_key() {
     let Some(mut ui) = test_chrome() else { return };
@@ -3229,22 +3241,12 @@ fn dragging_sorted_drawing_rows_files_tags_and_folders_by_key() {
     ui.column.as_mut().unwrap().lens = Lens::Drawing;
     for _ in 0..3 { tree_frame(&mut ui, vec![]); }
     let at = tree_frame(&mut ui, vec![]);
-    let drag = |ui: &mut Ui, from: Pos2, to: Pos2| {
-        let button = |pos, pressed| egui::Event::PointerButton {
-            pos, button: egui::PointerButton::Primary, pressed, modifiers: Default::default()
-        };
-        tree_frame(ui, vec![egui::Event::PointerMoved(from), button(from, true)]);
-        tree_frame(ui, vec![egui::Event::PointerMoved(from + vec2(8., 0.))]);
-        tree_frame(ui, vec![egui::Event::PointerMoved(to)]);
-        tree_frame(ui, vec![button(to, false)]);
-        ui.take_actions()
-    };
     for (source, dest, tags, folders, parent) in [
         ("Brick", "Section", vec!["z"], vec![], "f"),
         ("Plans", "Elevations", vec![], vec!["f"], "g"),
         ("Section", "Name", vec!["inside"], vec![], ""),
     ] {
-        let actions = drag(&mut ui, at[source], at[dest]);
+        let actions = tree_drag(&mut ui, at[source], at[dest]);
         let expected = serde_json::json!({"owner":0,"tags":tags,"folders":folders,"parent":parent});
         assert!(actions.contains(&format!("tree:tagfolder\u{1f}batch\u{1f}{expected}")), "{source}: {actions:?}");
     }
@@ -3259,7 +3261,7 @@ fn dragging_sorted_drawing_rows_files_tags_and_folders_by_key() {
             }]);
         }
     }
-    let actions = drag(&mut ui, at["Brick"], at["Elevations"]);
+    let actions = tree_drag(&mut ui, at["Brick"], at["Elevations"]);
     let expected = serde_json::json!({"owner":0,"tags":["a","z"],"folders":["f"],"parent":"g"});
     assert!(actions.contains(&format!("tree:tagfolder\u{1f}batch\u{1f}{expected}")), "{actions:?}");
     tree_click(&mut ui, at["Brick"], egui::PointerButton::Primary);
@@ -3312,6 +3314,22 @@ fn name_sort_uses_the_new_label_and_unknown_preferences_restore_project_order() 
     assert_eq!(ui.column.as_ref().unwrap().ordered, [1, 0]);
     ui.set_tree_sort(usize::MAX);
     assert_eq!(ui.column.as_ref().unwrap().ordered, [0, 1]);
+}
+
+#[test]
+fn the_drop_band_files_beside_or_into_an_occurrence() {
+    let Some(mut ui) = test_chrome() else { return };
+    ui.ctx = test_context();
+    ui.set_tree(["House", "Shed"].into_iter().map(|name|
+        (vec![format!("i:{name}"), name.into()], vec![0, 0, 0, 0, 1, -1, -1])
+    ).collect(), 0);
+    for _ in 0..3 { tree_frame(&mut ui, vec![]); }
+    let at = tree_frame(&mut ui, vec![]);
+    for (offset, verb) in [(0.35, "into"), (-0.43, "beside")] {
+        let to = at["House"] + vec2(0., ROW_H * offset);
+        assert_eq!(tree_drag(&mut ui, at["Shed"], to), [format!("tree:{verb}\x1fi:Shed\x1fi:House")]);
+    }
+    assert_eq!(tree_drag(&mut ui, at["Shed"], at["Name"]), ["tree:root\x1fi:Shed"]);
 }
 
 #[test]

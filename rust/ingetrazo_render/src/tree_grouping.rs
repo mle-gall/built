@@ -262,6 +262,8 @@ pub fn tree_group_rows(
         };
     push("paintrows", "Choose material…", None, tree.refusal(scene, &tree.targets, false)?)?;
     if !clicked.is_instance_of::<PyList>() {
+        push("isolaterows", "Isolate", None, "")?;
+        push("deleterows", "Delete", None, "")?;
         let why = tree.refusal(scene, &tree.targets, true)?;
         if tree.targets.len() > 1 {
             push("group", "Make Group", None, why)?;
@@ -269,8 +271,6 @@ pub fn tree_group_rows(
         push("component", "Make Component", None, why)?;
         push("explode", "Explode Group", None, why)?;
     }
-    push("isolaterows", "Isolate", None, "")?;
-    push("deleterows", "Delete", None, "")?;
     let comps = tree.components()?;
     if !comps.is_empty() {
         push(

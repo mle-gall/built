@@ -135,3 +135,14 @@ def test_unchanged_project_rows_reuse_the_model_index(monkeypatch):
     project.scene.version += 1
     project.rows()
     assert model.call_count == 2
+
+
+def test_a_drop_on_the_header_restores_the_top_level_and_keeps_the_tag(model):
+    host, vp, _, level, _ = model
+    from core.layers import Layer
+    part = level.children[0]
+    vp.scene.layers.append(Layer("Walls"))
+    part.layer = "Walls"
+    action(host, "root", "c:" + part.uid)
+    assert part in vp.scene.groups and part not in level.children and part.layer == "Walls"
+    assert vp.history.undo() and part in level.children and part.layer == "Walls"

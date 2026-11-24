@@ -640,6 +640,7 @@ pub fn command_description(label: &str, key: &str) -> Option<&'static str> {
             "tool:change_axes" => "Set a new origin and direction for the modelling axes.",
             "tool:scale_manager" => "Manage drawing scales for this model.",
             "tool:texture_position" => "Place and size the texture on a face.",
+            "view:axes" => "Show or hide the model’s drawing axes. Inference along the axes stays active.",
             "view:back_edges" => "Draw the edges hidden behind faces as dashed lines.",
             "view:camera" => "Edit the projection, lens and position of the camera.",
             "view:form-shadows" => "Set the sun position and shadow appearance.",

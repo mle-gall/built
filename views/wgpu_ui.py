@@ -1430,7 +1430,7 @@ def _tree_action(win, view, action) -> None:
         elif verb == "deleterows":
             from ingetrazo_render import tree_delete_rows
             target = (next((p for p in scene.section_planes if str(p.uid) == ident), None)
-                      if kind == "section" else copies() if kind == "d" else item())
+                      if kind == "section" else item())
             tree_delete_rows(vp, target)
             rebuild()
         elif verb in ("isolaterows", "pickrow", "roweye", "toggleitem", "group", "component", "explode", "unique", "instances"):
