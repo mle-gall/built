@@ -34,10 +34,15 @@ pub(crate) fn coplanar_plane<'py>(
     for p in points.try_iter()? {
         add(p?)?;
     }
-    let Some([_, n]) =
-        drawing::drawing_plane_with_tol(coords.iter().copied(), Hypot::LibStdCxx, tol)
-    else {
-        return Ok(None);
+    let n = if coords.len() < 3 {
+        [0., 0., 1.]
+    } else {
+        // The materialised API rejects distances strictly above tolerance.
+        let plane = drawing::drawing_plane_where(coords.iter().copied(), Hypot::LibStdCxx, |d| {
+            d.partial_cmp(&tol) != Some(std::cmp::Ordering::Greater)
+        });
+        let Some([_, n]) = plane else { return Ok(None) };
+        n
     };
     let o = match origin {
         Some(p) => p,
@@ -64,8 +69,8 @@ pub(crate) fn has_plane_edge(
             continue;
         }
         if let Some((o, n)) = plane {
-            if (xyz(&e.getattr("a")?)? - o).dot(n).abs() >= 1e-4
-                || (xyz(&e.getattr("b")?)? - o).dot(n).abs() >= 1e-4
+            if !((xyz(&e.getattr("a")?)? - o).dot(n).abs() < 1e-4
+                && (xyz(&e.getattr("b")?)? - o).dot(n).abs() < 1e-4)
             {
                 continue;
             }

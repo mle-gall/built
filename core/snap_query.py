@@ -40,7 +40,7 @@ def point_result(query, edges, radius, hidden, *, midpoints=False, quadrants=(),
                            COLOR_ON_FACE)
     extras = [(p.toTuple(), context is not None) for p, context in centers]
     quads = [p.toTuple() for p in quadrants]
-    occluded = PointVisibility(hidden, hidden_many) if hidden else None
+    occluded = PointVisibility(hidden, hidden_many or None) if hidden else None
     choice = query.points(radius, midpoints, quads, extras, occluded, line)
     if choice is not None:
         point, index, kind = choice

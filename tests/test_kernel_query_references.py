@@ -198,3 +198,30 @@ def test_materialised_drawing_rollback_and_replay(monkeypatch):
     assert history.undo() and mesh.capture_state() == before
     assert history.redo() and mesh.capture_state() == after
     assert mesh.edges[-1] is edge and mesh.faces[0] is face
+
+
+def test_plane_tolerance_and_small_input():
+    from core.arrangement import coplanar_plane
+    o = V(0, 0, 0)
+    ring = [o, V(1, 0, 0), V(0, 1, 0)]
+    assert coplanar_plane([o, V(1e60, -1e60, 0)])[0] is o
+    assert coplanar_plane(ring + [V(1, 2, .01)], .01)[0] is o
+    assert coplanar_plane(ring + [V(1, 2, .0101)], .01) is None
+    assert coplanar_plane(ring + [V(1, 2, 4)], float("nan"))[0] is o
+
+
+def test_unscanned_rebuild_face_limit(monkeypatch):
+    from core import scan_index
+    monkeypatch.setenv('INGETRAZO_STORE', '0')
+    monkeypatch.setattr(scan_index, 'scan', lambda mesh: None)
+    scene = Scene()
+    for i in range(400):
+        scene.mesh.add_face([V(i, 0, 0), V(i + 1, 0, 0), V(i, 1, 0)])
+    points = [V(0, 0, 0), V(1, 0, 0)]
+    commands = []
+    edits._append_face_plane_rebuild(scene, commands, points)
+    assert len(commands) == 1
+    scene.mesh.add_face([V(400, 0, 0), V(401, 0, 0), V(400, 1, 0)])
+    commands.clear()
+    edits._append_face_plane_rebuild(scene, commands, points)
+    assert commands == []
