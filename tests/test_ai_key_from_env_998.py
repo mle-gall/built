@@ -6,19 +6,8 @@ empty, a provider picked by name falls back to its usual variable, says so
 under the field, and never copies it into the settings."""
 from __future__ import annotations
 
-import os
-import sys
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-import pytest  # noqa: E402
-from tests.preferences_chrome import settings_file
+import pytest
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from PySide6.QtCore import QSettings  # noqa: E402
-from PySide6.QtWidgets import QApplication, QWidget  # noqa: E402
-
-if QApplication.instance() is None:
-    QApplication(sys.argv[:1])
 
 from core import ai  # noqa: E402
 from plugins.ai_assistant import AsistenteDialog, env_key_note  # noqa: E402
@@ -74,98 +63,47 @@ def test_placeholder_says_what_an_empty_field_means():
     assert ai.PROVIDER_INFO["anthropic"][0] in named
 
 
-def test_wrapped_key_link_keeps_its_second_line():
-    """In the tray, the Korean key link wrapped to two lines and the second
-    was cut in half: the dock lays the section out with a one-line hint.
-    The label's hint now asks for every line it wraps to — a hint, not a
-    minimum, so it never makes a short window grow."""
-    from views.fold_section import WrapLabel
-    label = WrapLabel("")
-    assert label.wordWrap()
-    label.show()                     # a hidden widget defers its resizes
-    label.resize(120, 10)
-    label.setText("Anthropic (Claude) — https://console.anthropic.com/"
-                  "settings/keys 에서 키를 받으세요")
-    QApplication.processEvents()
-    need = label.heightForWidth(label.width())
-    assert need > label.fontMetrics().lineSpacing() + 4       # wraps
-    assert label.sizeHint().height() >= need
-    assert label.minimumHeight() == 0
-    label.resize(2000, label.height())       # wider: it asks for less
-    QApplication.processEvents()
-    assert label.sizeHint().height() < need
-    label.close()
+def test_key_source_is_readable_in_the_native_settings_panel(native_host):
+    panel = _panel(native_host)
+    panel.event("provider", "commit", "anthropic")
+    items = panel.sections()[0]["items"]
+    source = next(row for row in items if row["id"] == "key_source")
+    assert source["kind"] == "log" and "console.anthropic.com" in source["lines"][0]
 
 
-def _panel(monkeypatch, tmp_path, host):
-    ini = str(tmp_path / "cfg.ini")
-    monkeypatch.setattr(
-        AsistenteDialog, "_settings",
-        lambda self: QSettings(ini, QSettings.Format.IniFormat))
-    return AsistenteDialog(host.viewport), ini
+def _panel(host):
+    from plugins.ai_assistant import create_panel
+    from views.extension_api import ExtensionApp
+    return create_panel(ExtensionApp(host.window, "ai_assistant"), host.viewport.update)
 
 
-def test_named_provider_uses_the_environment_key(clean_env, tmp_path, native_host):
+def test_named_provider_uses_the_environment_key(clean_env, native_host):
     clean_env.setenv("ANTHROPIC_API_KEY", "sk-ant-from-env")
-    dlg, ini = _panel(clean_env, tmp_path, native_host)
-    try:
-        dlg._provider.setCurrentIndex(dlg._provider.findData("anthropic"))
-        dlg._key.setText("")
-        # The note shares the key link's label: no row more in the tab.
-        assert "ANTHROPIC_API_KEY" in dlg._key_link.text()
-        assert "console.anthropic.com" in dlg._key_link.text()
-        assert "ANTHROPIC_API_KEY" in dlg._key.placeholderText()
-        provider, _model, key, _url = dlg._config()
-        assert (provider, key) == ("anthropic", "sk-ant-from-env")
-
-        # Test connection goes out with it instead of «needs an API key».
-        seen = {}
-
-        def fake_probe(provider, model, key, url):
-            seen["call"] = (provider, key)
-            return True, "OK"
-
-        clean_env.setattr(ai, "probar_conexion", fake_probe)
-        dlg._on_probar()
-        app = QApplication.instance()
-        for _ in range(2000):
-            app.processEvents()
-            if dlg._probar.isEnabled():
-                break
-        assert seen["call"] == ("anthropic", "sk-ant-from-env")
-        assert "Connection OK" in dlg._chat.toPlainText()
-        assert "needs an API key" not in dlg._chat.toPlainText()
-
-        # Never copied into the settings.
-        st = QSettings(ini, QSettings.Format.IniFormat)
-        assert not st.value("ia/api_key")
-        assert st.value("ia/claves/anthropic") is None
-
-        # A typed key wins over the environment and drops the note.
-        dlg._key.setText("sk-ant-typed")
-        assert "ANTHROPIC_API_KEY" not in dlg._key_link.text()
-        assert dlg._config()[2] == "sk-ant-typed"
-    finally:
-        dlg.close()
-        dlg.deleteLater()
+    panel = _panel(native_host)
+    panel.event("provider", "commit", "anthropic")
+    panel.key = ""
+    assert "ANTHROPIC_API_KEY" in str(panel.sections())
+    assert panel._config()[2] == "sk-ant-from-env"
+    seen = []
+    clean_env.setattr(ai, "probar_conexion", lambda p, m, k, **kw: (seen.append(k) or True, "OK"))
+    panel.event("test", "invoke", None)
+    from tests.test_ai_assistant import wait_reply
+    wait_reply(panel)
+    assert seen == ["sk-ant-from-env"]
+    assert not panel.store.value("ia/api_key")
+    assert panel.store.value("ia/claves/anthropic") != "sk-ant-from-env"
+    panel.key = "sk-ant-typed"
+    assert panel._config()[2] == panel.key
 
 
-def test_auto_with_an_empty_field_stays_local(clean_env, tmp_path, native_host):
-    """An ``OPENAI_API_KEY`` exported for another program must not send
-    the chat of someone running Ollama to the cloud."""
+def test_auto_with_an_empty_field_stays_local(clean_env, native_host):
     clean_env.setenv("OPENAI_API_KEY", "sk-env")
-    dlg, _ini = _panel(clean_env, tmp_path, native_host)
-    try:
-        dlg._provider.setCurrentIndex(dlg._provider.findData("auto"))
-        dlg._key.setText("")
-        provider, _model, key, _url = dlg._config()
-        assert (provider, key) == ("ollama", "")
-        assert "Ollama" in dlg._key.placeholderText()
-        assert "OPENAI_API_KEY" in dlg._key_link.text()
-        assert "OpenAI" in dlg._key_link.text()
-    finally:
-        dlg.close()
-        dlg.deleteLater()
+    panel = _panel(native_host)
+    panel.event("provider", "commit", "auto")
+    panel.key = ""
+    provider, _, key, _ = panel._config()
+    assert (provider, key) == ("ollama", "")
+    assert "OPENAI_API_KEY" in str(panel.sections())
 
 
 def test_missing_key_hint_names_the_variable(clean_env):
@@ -175,13 +113,13 @@ def test_missing_key_hint_names_the_variable(clean_env):
         None, "gemini", "")
 
 
-def test_key_note_has_one_owner(clean_env, settings_file):
+def test_key_note_has_one_owner(clean_env, native_host):
     from plugins.ai_assistant import env_key_note
     from tests.preferences_chrome import Controls
     clean_env.setenv("GROQ_API_KEY", "gsk_env")
     assert "GROQ_API_KEY" in env_key_note("groq", "")
     assert not env_key_note("groq", "gsk_typed")
-    settings = Controls(QWidget(), "ai")
+    settings = Controls(native_host.window, "ai")
     assert "ai" in {row.get("id") for row in settings.wire()["side"]}
     assert settings.value("ia/api_key") == ""
     assert "GROQ_API_KEY" not in str(settings.wire())

@@ -248,142 +248,34 @@ class ExtensionApp:
     def add_panel(self, title: str, widget, name: str | None = None, *,
                   panel: str | None = None, stretch: int = 0,
                   start_hidden: bool = False, icon=None):
-        """Put ``widget`` in the side tray as a tab of its own, beside
-        Properties / BIM / Terrain. Returns the dock.
+        """Register a factory(app, invalidate) for a panel in each document."""
+        key = panel or (f"{self.key}_{name}" if name else self.key)
+        if not callable(widget):
+            raise TypeError("add_panel requires a native panel factory")
+        self._window._panel_factories.setdefault(key, widget)
+        return key
 
-        ``name`` tells apart several panels of one extension; the dock's
-        object name (``extension_<key>`` or ``extension_<key>_<name>``) is
-        what the window layout remembers it by, so keep it stable. The panel
-        goes back where the user left it last session and is listed in
-        Window ▸ Panels. Asking again for a panel that exists returns it
-        (the new ``widget`` is not used), so an extension may call this
-        whenever its tool runs.
-
-        With ``panel`` several extensions share ONE tab (object name
-        ``extension_<panel>``): the first call creates it, named ``title``;
-        the next ones stack their widget under the previous (``stretch`` as
-        in ``QBoxLayout.addWidget``) — the assistant and the MCP bridge both
-        live in the «AI» tab.
-
-        ``start_hidden``: the panel starts closed the first time (for a
-        panel few users need open all the time); Window ▸ Panels opens it,
-        and from then on the user's choice is kept.
-
-        ``icon``: what the panel's tab shows — the tabs show only an icon,
-        the name being their tooltip and the panel's heading. A QIcon, or
-        the key of one of IngeTrazo's drawn icons (``"panel_render"``…),
-        which then follows the theme. Without one the tab shows the
-        title's initial in a rounded square."""
-        from PySide6.QtWidgets import QDockWidget, QVBoxLayout, QWidget
-        win = self._window
-        shared = getattr(win, "_shared_panels", None)
-        if shared is None:
-            shared = win._shared_panels = {}
-        if panel is not None and panel in shared:
-            dock, box = shared[panel]
-            box.addWidget(widget, stretch)
-            if icon is not None and not dock.property("ingetrazo_icon"):
-                self._set_panel_icon(dock, icon)
-            return dock
-        if panel is not None:
-            object_name = f"extension_{panel}"
-        else:
-            object_name = f"extension_{self.key}" + (f"_{name}" if name else "")
-            existing = win.extension_panels().get(object_name)
-            if existing is not None:
-                return existing
-        if panel is not None:
-            holder = QWidget()
-            box = QVBoxLayout(holder)
-            box.setContentsMargins(0, 0, 0, 0)
-            box.setSpacing(4)
-            box.addWidget(widget, stretch)
-            widget = holder
-        dock = QDockWidget(title, win)
-        dock.setObjectName(object_name)
-        if start_hidden:
-            if not hasattr(win, "_start_hidden"):
-                win._start_hidden = set()
-            win._start_hidden.add(object_name)
-        dock.setWidget(widget)
-        dock.setTitleBarWidget(QWidget(dock))   # the window puts its header
-        if icon is not None:
-            self._set_panel_icon(dock, icon)
-        win._register_extension_dock(dock)
-        if panel is not None:
-            shared[panel] = (dock, box)
-        tray = getattr(win, "tray", None)
-        if tray is not None:
-            tray.raise_()                   # Properties stays the one in front
-        return dock
-
-    def _set_panel_icon(self, dock, icon) -> None:
-        dock.setProperty("ingetrazo_icon", True)
-        self._window.set_dock_icon(dock, icon)
-
-    def show_panel(self, dock) -> None:
-        """Bring a tab from :meth:`add_panel` to the front — shown again
-        if the user hid it from Window ▸ Panels."""
-        self._window.set_tray_shown(dock, True)
+    def show_panel(self, key):
+        from core.plugin_panels import open_panel
+        return open_panel(self._window, key)
 
     def add_menu_action(self, text: str, fn, shortcut: str | None = None,
                         tip: str | None = None):
         """An entry in the Extensions menu that calls ``fn()``; a
         ``shortcut`` already taken by the app is left off, and ``tip`` —
         what it does, in a sentence — shows in the status bar and in F3.
-        Returns the QAction (``None`` outside a window with that menu)."""
+        Returns the registered command (``None`` outside a window with that menu)."""
         if menus := vars(self._window).get("_extension_menus"):
             return menus.root(self.key).add_command(text, fn, shortcut, tip)
-        from PySide6.QtGui import QAction, QKeySequence
-        win = self._window
-        menu = getattr(win, "_ext_menu", None)
-        if menu is None:
-            return None
-        action = QAction(text, win)
-        if tip:
-            action.setStatusTip(tip)
-        if shortcut:
-            seq = QKeySequence(shortcut).toString()
-            taken = getattr(win, "_ext_taken_keys", set())
-            if seq and seq not in taken:
-                action.setShortcut(QKeySequence(shortcut))
-                taken.add(seq)
-        action.triggered.connect(lambda _c=False: fn())
-        # Whose it is, to gather one extension's loose entries in a submenu.
-        win.__dict__.setdefault("_ext_action_owner", {})[action] = self.key
-        anchor = getattr(win, "_ext_anchor", None)
-        if anchor is not None:
-            # Above the menu's own entries (examples, manager, plugins
-            # folder, guide), as in 0.5.7: since setup() runs after the
-            # window is up (#440) those entries already exist, and an
-            # appended action landed under «Develop an extension…».
-            menu.insertAction(anchor, action)
-        else:
-            menu.addAction(action)
-        return action
+        return None
 
     def add_menu(self, title: str):
         """A submenu of its own in the Extensions menu («Windowizer ▸»),
-        for an extension with several commands; returns the QMenu to fill
+        for an extension with several commands; returns the native submenu to fill
         (``None`` outside a window with that menu)."""
         if menus := vars(self._window).get("_extension_menus"):
             return menus.root(self.key).addMenu(title)
-        menu = getattr(self._window, "_ext_menu", None)
-        if menu is None:
-            return None
-        # Its name, for the submenu of its right-click entries.
-        self._window.__dict__.setdefault("_ext_menu_titles", {}).setdefault(
-            self.key, title.replace("&", ""))
-        anchor = getattr(self._window, "_ext_anchor", None)
-        if anchor is None:
-            sub = menu.addMenu(title)
-        else:
-            from PySide6.QtWidgets import QMenu
-            sub = QMenu(title, menu)
-            menu.insertMenu(anchor, sub)    # above the menu's own entries
-        self._window.__dict__.setdefault(
-            "_ext_action_owner", {})[sub.menuAction()] = self.key
-        return sub
+        return None
 
     def add_outliner_kind(self, fn) -> None:
         """Say what YOUR container groups are, in the Browser:
@@ -403,10 +295,9 @@ class ExtensionApp:
 
     def add_context_menu(self, fn) -> None:
         """``fn(menu, selection)`` adds entries to the viewport's
-        right-click menu (a QMenu), after the ones for the selection and
+        native right-click menu, after the ones for the selection and
         before Paste and Undo; ``selection`` is a list of what is
-        selected. Open dialogs from the entries with
-        ``QTimer.singleShot(0, …)``, after the menu has closed.
+        selected. An action can open a native form.
 
         Several entries from one extension go into a submenu with its
         name; with many extensions they all go under «Extensions ▸»."""

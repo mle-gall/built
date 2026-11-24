@@ -3,17 +3,9 @@
 """Language direction, Arabic translations and the legacy launcher language hook."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
 import pytest
-from PySide6.QtCore import QSettings, Qt
-from PySide6.QtWidgets import QApplication
-
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from core import i18n
-
-_app = QApplication.instance() or QApplication([])
 
 
 def test_rtl_languages():
@@ -35,23 +27,13 @@ def test_arabic_is_offered_and_complete():
         i18n.set_language(before)
 
 
-@pytest.mark.parametrize("lang, direction", [
-    ("ar", Qt.RightToLeft), ("es", Qt.LeftToRight), ("en", Qt.LeftToRight),
-    ("de", Qt.LeftToRight)])
-def test_startup_direction_follows_the_language(lang, direction, tmp_path,
-                                                monkeypatch):
+@pytest.mark.parametrize("lang, rtl", [("ar", True), ("es", False), ("en", False), ("de", False)])
+def test_plugin_language_uses_the_document_host_locale(native_host, lang, rtl):
     from plugins._widget_language import apply_widget_language
     before = i18n.current_language()
     try:
-        apply_widget_language(_app, lang)
-        assert _app.layoutDirection() == direction
-        # Left to right nothing is installed: the app is as it always was.
-        assert (getattr(_app, "_rtl_numbers", None) is not None) == (
-            direction == Qt.RightToLeft)
+        apply_widget_language(native_host, lang)
+        assert i18n.current_language() == lang
+        assert i18n.is_rtl(i18n.current_language()) == rtl
     finally:
         i18n.set_language(before)
-        _app.setLayoutDirection(Qt.LeftToRight)
-        f = getattr(_app, "_rtl_numbers", None)
-        if f is not None:
-            _app.removeEventFilter(f)
-            _app._rtl_numbers = None

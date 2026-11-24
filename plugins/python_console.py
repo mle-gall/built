@@ -50,12 +50,7 @@ class _ConsoleExecution:
         from core.scene import Scene
 
         vp = self._viewport
-        from core.input_types import NATIVE
-        if NATIVE:
-            app = vp.window()._host
-        else:
-            from PySide6.QtWidgets import QApplication
-            app = QApplication.instance()
+        app = getattr(vp.window(), "_host", None)
         self._scope.update(
             app=app, window=vp.window(), viewport=vp,
             document=getattr(vp.window(), "_doc", None),

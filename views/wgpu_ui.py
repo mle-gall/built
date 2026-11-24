@@ -14,11 +14,7 @@ from core.timers import later
 from ingetrazo_render import shortcut_text
 from core.shortcuts import action_keys
 
-# Inter 400/500/600 (SIL OFL, resources/fonts/inter); the system font if missing.
-FONT = str(Path(__file__).resolve().parents[1] / "resources" / "fonts" / "inter")
-if not os.path.isdir(FONT):
-    FONT = "/System/Library/Fonts/SFNS.ttf"
-
+from plugins._widget_language import FONT
 from ingetrazo_render import rail_icon as _icon_rgba
 
 
