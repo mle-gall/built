@@ -1272,7 +1272,10 @@ class PushPullTool(PushPullOperation, Tool):
             edges.append(hovered)
         best = None
         for edge in edges:
-            if edge in self._stage_new or getattr(edge, "guide", False):
+            # A guide or an image border is a SimpleNamespace (unhashable):
+            # never staged geometry.
+            if getattr(edge, "guide", False) or (
+                    type(edge).__hash__ is not None and edge in self._stage_new):
                 continue
             a, b = QVector3D(edge.a), QVector3D(edge.b)
             if (a - b).lengthSquared() < 1e-18:

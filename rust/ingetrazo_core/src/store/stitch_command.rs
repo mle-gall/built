@@ -66,7 +66,122 @@ pub(super) fn junctions(
     Ok(hits)
 }
 
+/// What `Store::stitch_connect` did: the dedupe's `(dropped, kept)`
+/// pairs (the facade carries attrs across) and the dirty bumps.
+pub struct Connected {
+    pub welded: bool,
+    pub deduped: Vec<(u32, u32)>,
+    pub splits: usize,
+    pub collapses: usize,
+    pub bumps: usize,
+}
+
 impl Store {
+    /// Phases 0–2 of `history.run_stitch` as one op: weld coincident
+    /// vertices, drop faces stacked on one cycle (`dedupe`), split the
+    /// edges reaching the seed box at the vertices on them, round after
+    /// round (`topology.sweep_tjunctions`, scoped as
+    /// `push_scans.tjunction_arrays` scopes it), then collapse collinear
+    /// valence-2 vertices. `seeds` are `topology._key` positions (none:
+    /// the whole mesh). A step the store refuses is an error: the caller
+    /// (`op_all`) puts the state back.
+    pub fn stitch_connect(
+        &mut self,
+        seeds: &[Point],
+        dedupe: bool,
+        tol: f64,
+        h: Hypot,
+        ch: &mut super::edit::Change,
+    ) -> Result<Connected, super::topo::OpError> {
+        let (welded, mut bumps) = self.weld_coincident(ch)?;
+        let deduped = if dedupe {
+            let (pairs, b) = self.dedupe_faces(ch);
+            bumps += b;
+            pairs
+        } else {
+            Vec::new()
+        };
+        let bounds = (!seeds.is_empty()).then(|| {
+            let mut lo = [f64::INFINITY; 3];
+            let mut hi = [f64::NEG_INFINITY; 3];
+            for p in seeds {
+                for k in 0..3 {
+                    lo[k] = lo[k].min(p[k]);
+                    hi[k] = hi[k].max(p[k]);
+                }
+            }
+            [lo.map(|x| x - tol), hi.map(|x| x + tol)]
+        });
+        let mut splits = 0;
+        loop {
+            let (verts, edges) = self.junction_scope(bounds, tol);
+            if verts.is_empty() || edges.is_empty() {
+                break;
+            }
+            let at: HashMap<u32, i64> = verts.iter().enumerate().map(|(i, &v)| (v, i as i64)).collect();
+            let points: Vec<Point> = verts.iter().map(|&v| *self.state.vpos.get(v as usize)).collect();
+            let ends: Vec<[i64; 2]> = edges
+                .iter()
+                .map(|&e| self.state.ends.get(e as usize).map(|v| at[&v]))
+                .collect();
+            let hits = junctions(&points, &ends, bounds, tol).map_err(super::topo::OpError::Fallback)?;
+            if hits.is_empty() {
+                break;
+            }
+            for (e, v) in hits {
+                self.split_edge_at(edges[e], verts[v], ch)?;
+                bumps += 3;
+                splits += 1;
+            }
+        }
+        let (collapses, b, refused) = self.collapse_collinear(h, ch);
+        bumps += b;
+        if refused.is_some() {
+            return Err(super::topo::OpError::Fallback("a collinear vertex the store will not collapse"));
+        }
+        Ok(Connected { welded, deduped, splits, collapses, bumps })
+    }
+
+    /// The vertices and edges a T-junction round can touch, in list order:
+    /// every one without bounds; with them, the edges whose box meets the
+    /// bounds and the vertices inside the union of their boxes grown by
+    /// `tol` (`pushscan::scan_tjunction_arrays`).
+    fn junction_scope(&self, bounds: Option<[Point; 2]>, tol: f64) -> (Vec<u32>, Vec<u32>) {
+        let live_e = self.live_slots(Kind::Edge);
+        let live_v = self.live_slots(Kind::Vertex);
+        let Some([lo, hi]) = bounds else {
+            return (live_v, live_e);
+        };
+        let pos = |v: u32| *self.state.vpos.get(v as usize);
+        let edges: Vec<u32> = live_e
+            .into_iter()
+            .filter(|&e| {
+                let [a, b] = self.state.ends.get(e as usize).map(pos);
+                (0..3).all(|k| a[k].max(b[k]) >= lo[k] && a[k].min(b[k]) <= hi[k])
+            })
+            .collect();
+        if edges.is_empty() {
+            return (Vec::new(), edges);
+        }
+        let mut bx = [f64::INFINITY, f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
+        for &e in &edges {
+            for p in self.state.ends.get(e as usize).map(pos) {
+                for k in 0..3 {
+                    bx[k] = bx[k].min(p[k]);
+                    bx[k + 3] = bx[k + 3].max(p[k]);
+                }
+            }
+        }
+        let g = tol * (1.0 + 1e-6) + 1e-12;
+        let verts = live_v
+            .into_iter()
+            .filter(|&v| {
+                let p = pos(v);
+                (0..3).all(|k| p[k] >= bx[k] - g && p[k] <= bx[k + 3] + g)
+            })
+            .collect();
+        (verts, edges)
+    }
     /// Ordered admission, including the discovery order used to populate the
     /// editor's face set. A failed dissolve resumes at the next starting face.
     pub(super) fn stitch_region(

@@ -151,7 +151,7 @@ impl Store {
         vector(self.state.vpos.get(slot as usize).map(|p| p))
     }
 
-    fn cap_frame(&self, ring: &[u32], h: Hypot, compensated: bool) -> (V3, V3, f64) {
+    pub(super) fn cap_frame(&self, ring: &[u32], h: Hypot, compensated: bool) -> (V3, V3, f64) {
         let pos: Vec<_> = ring.iter().map(|&s| self.cap_point(s)).collect();
         let order: Vec<_> = (0..pos.len() as u32).collect();
         let (normal, len) = face_normal_length(&pos, &order, h);

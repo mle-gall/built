@@ -3268,6 +3268,11 @@ def run_stitch(mesh, seedkeys: set, new_faces: Optional[set] = None,
     twice — material on both sides) or "drop both" (an emptied region) — by
     parity, where the pair's two crossings cancel. Deduping it early restores
     the material reading and the collapse never classifies."""
+    # A store does phases 0–2 in one native call (Store::stitch_connect).
+    if type(mesh).__name__ == "StoreMesh" and mesh.stitch_connect(seedkeys, dedupe):
+        if coplanar_merge:
+            _coplanar_phase(mesh, seedkeys, new_faces)
+        return
     # Phase 0 — weld coincident vertices (a translated cap landing flush on the
     # ring it came from); merges duplicate edges, drops degenerated faces. Then
     # drop faces stacked on an identical cycle (a shared wall built twice).
@@ -3303,8 +3308,11 @@ def run_stitch(mesh, seedkeys: set, new_faces: Optional[set] = None,
     # first collapsible vertex in list order, until none is left
     # (``Mesh.collapse_collinear``; a store-backed mesh does it natively).
     mesh.collapse_collinear()
-    if not coplanar_merge:
-        return
+    if coplanar_merge:
+        _coplanar_phase(mesh, seedkeys, new_faces)
+
+
+def _coplanar_phase(mesh, seedkeys, new_faces) -> None:
     # Phase 3 — coplanar-merge, seeded to the operation. Fuses the whole coplanar
     # component (every shared edge, any number of faces) at once, but only when it
     # includes a face this operation created (so user diagonals survive).

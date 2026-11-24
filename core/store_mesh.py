@@ -1612,6 +1612,27 @@ class StoreMesh(Mesh):
         self._dirty(n)
         return changed
 
+    def stitch_connect(self, seedkeys, dedupe: bool) -> bool:
+        """``run_stitch``'s phases 0–2 in one native call (weld, dedupe,
+        the scoped T-junction rounds, the collinear collapse). False when
+        the store refused a step: nothing changed."""
+        h = _hypot()
+        if h is None:
+            return False
+        from core.mesh import _STITCH_TOL
+        try:
+            (pairs, n), _ch = self._store.stitch_connect(
+                sorted(seedkeys or ()), dedupe, _STITCH_TOL, h)
+        except _fallback():
+            _note_refusal("stitch_connect")
+            return False
+        self._dirty(n)
+        for d, k in pairs:
+            drop, keep = FaceView(self, d), FaceView(self, k)
+            if drop.attrs and not keep.attrs:
+                keep.attrs = dict(drop.attrs)
+        return True
+
     def dedupe_faces(self) -> int:
         (pairs, n), _ch = self._store.dedupe_faces()
         self._dirty(n)

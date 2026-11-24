@@ -2430,6 +2430,60 @@ impl PyMeshStore {
         self.op_all(|s, ch| s.weld_coincident(ch))
     }
 
+    /// `run_stitch`'s phases 0–2 as one op (weld, dedupe, the scoped
+    /// T-junction rounds, the collinear collapse):
+    /// `(((dropped, kept)…), bumps), change)`. All or nothing: a step the
+    /// store refuses puts the state back (StoreFallback).
+    #[allow(clippy::type_complexity)]
+    #[pyo3(signature = (seeds, dedupe, tolerance, hypot))]
+    fn stitch_connect(
+        &mut self,
+        seeds: Vec<[f64; 3]>,
+        dedupe: bool,
+        tolerance: f64,
+        hypot: &str,
+    ) -> PyResult<((Vec<(u128, u128)>, usize), PyChange)> {
+        let h = crate::hypot_of(hypot)?;
+        let (r, ch) = self.op_all(|s, ch| s.stitch_connect(&seeds, dedupe, tolerance, h, ch))?;
+        let s = &self.inner;
+        let pairs = r.deduped.iter().map(|&(d, k)| (s.key(Kind::Face, d), s.key(Kind::Face, k))).collect();
+        Ok(((pairs, r.bumps), ch))
+    }
+
+    /// The push's plane-rebuild fixpoint and its trailing stitch, native
+    /// (`store/push_rebuild.rs`). The fresh faces start as `listed` (keys
+    /// in list order) or as the faces of `now` not in `before`. `own` and
+    /// `rows`: the paint class of each face's own dict and of each attribute
+    /// row (0: none). `((painted [(face, class)], deduped [(dropped, kept)],
+    /// bumps), change)`; all or nothing (StoreFallback).
+    #[allow(clippy::too_many_arguments, clippy::type_complexity)]
+    #[pyo3(signature = (listed, now, before, seeds, keep, removing, own, rows, compensated, hypot))]
+    fn rebuild_push_planes(
+        &mut self,
+        listed: Option<Vec<u128>>,
+        now: Option<Vec<u128>>,
+        before: Option<Vec<u128>>,
+        seeds: Vec<[f64; 3]>,
+        keep: bool,
+        removing: bool,
+        own: std::collections::HashMap<u128, u32>,
+        rows: Vec<u32>,
+        compensated: bool,
+        hypot: &str,
+    ) -> PyResult<((Vec<(u128, u32)>, Vec<(u128, u128)>, usize), PyChange)> {
+        let h = crate::hypot_of(hypot)?;
+        let fresh = match (listed, now, before) {
+            (Some(keys), _, _) => super::Fresh::Listed(keys),
+            (None, Some(now), Some(before)) => super::Fresh::Since { now, before },
+            _ => return Err(PyValueError::new_err("listed, or now and before")),
+        };
+        let mut paint = super::Paint::new(own, rows);
+        let (r, ch) = self.op_all(|s, ch| {
+            s.rebuild_push_planes(fresh, &seeds, keep, removing, &mut paint, compensated, h, ch)
+        })?;
+        Ok(((r.painted, r.deduped, r.bumps), ch))
+    }
+
     /// `Mesh.dedupe_faces()`: `(([(dropped, kept)], bumps), change)`.
     #[allow(clippy::type_complexity)]
     fn dedupe_faces(&mut self) -> PyResult<((Vec<(u128, u128)>, usize), PyChange)> {
