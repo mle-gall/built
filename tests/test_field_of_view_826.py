@@ -5,24 +5,18 @@ while the composer frames already offered 10°–120°. Camera ▸ Field of
 View… sets it; the document and its scenes keep it."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-from PySide6.QtWidgets import QApplication  # noqa: E402
-
-if QApplication.instance() is None:
-    QApplication([])
-
-from core.saved_views import SavedView  # noqa: E402
+from core.saved_views import SavedView
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 
 def test_field_of_view_is_set_kept_and_reset(tmp_path):
-    from views.main_window import MainWindow
-    win = MainWindow()
+    from app_shell.host import Host
+    host = Host(0, 900, 600, 1., settings=str(tmp_path / "profile"))
+    win = host.window
+    win.new_document()
     try:
         cam = win.viewport.camera
-        assert win._act_field_of_view.text()
+        assert win._registry_actions["menu:verb:field_of_view"].text()
         cam.perspective = True
         eye = cam.eye()
         assert win.set_field_of_view(70.0)
@@ -36,14 +30,14 @@ def test_field_of_view_is_set_kept_and_reset(tmp_path):
         assert view.to_dict()["fov"] == 70.0
         # The document keeps it.
         win._saved_version = win.viewport.scene.version
-        path = tmp_path / "fov.igz"
-        win._do_save(path)
+        path = tmp_path / "fov.built"
+        host.menu(f"save_to:{path}")
         cam.fov_deg = 45.0
         win._saved_version = win.viewport.scene.version
         # A copy: the same file would only bring its tab back (#1066).
         import shutil
-        shutil.copy(path, tmp_path / "copy.igz")
-        assert win.open_path(tmp_path / "copy.igz")
+        shutil.copy(path, tmp_path / "copy.built")
+        assert win.open_path(tmp_path / "copy.built")
         cam = win.viewport.camera
         assert cam.fov_deg == 70.0
         # Parallel has no angle: refused, nothing changes.
@@ -52,4 +46,4 @@ def test_field_of_view_is_set_kept_and_reset(tmp_path):
         assert cam.fov_deg == 70.0
     finally:
         win._saved_version = win.viewport.scene.version
-        win.close()
+        host.close()

@@ -377,4 +377,4 @@ quit
     preview, cancelled, joined, undo = states[:4]
     assert preview["input"]["dialog"] and not cancelled["input"]["dialog"]
     assert [s["edges"] for s in (preview, cancelled, joined, undo)] == [3, 3, 1, 3]
-    assert all(s["errors"] == 0 and s["borrowed"] == 0 for s in states), proc.stderr
+    assert all(s["errors"] == 0 and not s["classic_window_loaded"] for s in states), proc.stderr

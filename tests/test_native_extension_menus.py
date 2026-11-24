@@ -147,5 +147,5 @@ quit
     states = [json.loads(line.removeprefix("[built] state ")) for line in
               result.stdout.splitlines() if line.startswith("[built] state ")]
     assert states and all(s["errors"] == 0 and s["edges"] > 0 for s in states), result.stderr
-    assert all(s["borrowed"] == 0 for s in states)
+    assert all(not s["classic_window_loaded"] for s in states)
     assert plugin.with_suffix(".host").read_text() == "native"

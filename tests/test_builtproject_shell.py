@@ -143,10 +143,11 @@ def test_opening_an_igzproj_converts_it_in_place(host, tmp_path):
     assert str(path.with_suffix(".builtproject").resolve()) in rows and str(path.resolve()) not in rows
 
 
-def test_open_path_no_longer_hands_projects_to_classic(host, tmp_path, monkeypatch):
-    from app_shell import files
-    monkeypatch.setattr(files, "open_in_classic", lambda *a, **k: pytest.fail("handed to Classic"))
-    assert files.open_path(host.window, three_member_project(tmp_path / "job"))
+def test_open_path_uses_the_native_project_session(host, tmp_path):
+    from app_shell import files, project
+    path = three_member_project(tmp_path / "job")
+    assert files.open_path(host.window, path)
+    assert Path(project.session(host.window).path) == path.resolve()
 
 
 def test_locate_a_missing_member_relocates_it_in_the_manifest(host, tmp_path):

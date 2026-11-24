@@ -125,11 +125,7 @@ fn link_watcher<'py>(win: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     if let Some(watcher) = d.get_item("_links_watch")?.filter(|v| !v.is_none()) {
         return Ok(watcher);
     }
-    let watcher = win
-        .py()
-        .import("views.link_watcher")?
-        .getattr("LinkWatcher")?
-        .call1((win,))?;
+    let watcher = Bound::new(win.py(), super::link_watch::LinkWatch::new(win)?)?.into_any();
     d.set_item("_links_watch", &watcher)?;
     Ok(watcher)
 }

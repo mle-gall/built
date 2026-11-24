@@ -1023,14 +1023,6 @@ fn check(args: &Args) -> i32 {
 }
 
 fn main() {
-    #[cfg(built_bundle)]
-    if std::env::args_os().nth(1).as_deref() == Some(std::ffi::OsStr::new("--qt")) {
-        use std::os::unix::process::CommandExt;
-        let classic = std::env::current_exe().unwrap().with_file_name("ingetrazo");
-        let error = std::process::Command::new(classic).args(std::env::args_os().skip(2)).exec();
-        eprintln!("built: launching classic app: {error}");
-        std::process::exit(1);
-    }
     let process = Instant::now();
     let args = match parse_args(std::env::args().skip(1)) {
         Ok(a) => a,
@@ -1173,6 +1165,12 @@ fn main() {
 #[cfg(test)]
 mod profile_tests {
     use super::*;
+
+    #[test]
+    fn retired_qt_launcher_is_an_unknown_option() {
+        assert_eq!(parse_args(["--qt", "--check"].map(str::to_owned).into_iter()).err().as_deref(),
+                   Some("unknown option --qt"));
+    }
 
     #[test]
     fn appkit_launch_replays_include_options_and_the_positional_file() {

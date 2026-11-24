@@ -38,13 +38,12 @@ test -n "$LIB" && test -f "$APP/Contents/Frameworks/Python" || {
 }
 install_name_tool -change "$LIB" '@executable_path/../Frameworks/Python' "$EXE"
 /usr/libexec/PlistBuddy -c 'Set :CFBundleExecutable built' "$APP/Contents/Info.plist"
-# PyInstaller signs the nested code at collection. Seal both launchers and
-# the updated plist together and recursively verify the resulting product.
-codesign -f -s - "$APP/Contents/MacOS/ingetrazo"
+# The collector supplies the embedded Python libraries. The signed product
+# has a single executable entry point.
+rm "$APP/Contents/MacOS/ingetrazo"
 codesign -f -s - "$APP"
 codesign --verify --deep --strict "$APP"
 "$PYTHON" scripts/isolated_launch.py "$EXE" --check
-"$PYTHON" scripts/isolated_launch.py "$EXE" --qt --check
 codesign --verify --deep --strict "$APP"
 if [[ -e "$OUT/Built.app" ]]; then mv "$OUT/Built.app" "$STAGE/previous.app"; fi
 mv "$APP" "$OUT/Built.app" || {

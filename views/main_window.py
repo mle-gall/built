@@ -613,22 +613,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
             print(f"Built: 3D mouse unavailable ({exc!r})",
                   file=_sys.stderr)
 
-    def _on_ndof_motion(self, sample, dt: float) -> None:
-        # Only the window being worked in moves (New Window makes several).
-        if not self.isActiveWindow():
-            return
-        from core.ndof import apply_ndof
-        from views.ndof_input import current_settings
-        vp = self.viewport
-        if apply_ndof(vp.camera, sample, dt, vp.height(), current_settings()):
-            vp.update()
-
-    def _on_ndof_button(self, number: int, down: bool) -> None:
-        # The two buttons every model has: both fit the model, the usual
-        # default for the right one and the most useful single command.
-        if down and number in (0, 1) and self.isActiveWindow():
-            self._on_zoom_extents()
-
     def _pack_toolbars(self) -> None:
         """Re-seat every docked toolbar so each takes exactly the length of
         what it holds, in the area, order and rows it already has.
@@ -1248,6 +1232,18 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
                 if tip and tip not in act.toolTip():
                     act.setToolTip(f"{act.toolTip()}\n{tip}")
 
+    def _wake_link_watch(self):
+        timer = self.__dict__.get("_link_poll_timer")
+        if timer is None:
+            timer = self._link_poll_timer = QTimer(self, singleShot=True)
+            timer.timeout.connect(self._poll_links)
+        timer.start(0)
+
+    def _poll_links(self):
+        delay = self._link_watcher().poll()
+        if delay is not None:
+            self._link_poll_timer.start(delay)
+
     def _sync_projection_buttons(self, mode: str) -> None:
         act = self._projection_actions.get(mode)
         if act is not None and not act.isChecked():
@@ -1257,12 +1253,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         """Parallel, perspective or two-point, in the active view only."""
         vp = self._active_view()
         vp.set_projection(mode)
-        self._sync_projection_buttons(vp.camera.projection_mode())
-
-    def _toggle_projection(self) -> None:
-        """Shift+P, in the active view only."""
-        vp = self._active_view()
-        vp.toggle_projection()
         self._sync_projection_buttons(vp.camera.projection_mode())
 
     def on_active_view_changed(self) -> None:
@@ -4278,107 +4268,10 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         self._refresh_vcb()
         self._update_status_hint()
 
-    @_repeatable("Make Unique")
-    def _on_make_unique(self) -> None:
-        """Make Unique. On a linked file's placement it breaks the link and
-        keeps the geometry (core.history.UnlinkCommand): the placement
-        becomes this model's own, editable, looking as it did, and the
-        file's other placements stay linked. On anything else — what holds
-        a link included, whose link stays linked — the usual Make Unique."""
-        from core import links
-        from core.history import MakeUniqueCommand, UnlinkCommand
-        comps = [g for g in self.viewport.scene.selection
-                 if isinstance(g, Group) and g.is_component()]
-        linked = [g for g in comps if links.is_linked(g)]
-        for g in comps:
-            if g not in linked:
-                self.viewport.history.execute(MakeUniqueCommand(g, rename=True))
-        if linked:
-            cmd = UnlinkCommand(linked)
-            if cmd.groups:
-                self.viewport.history.execute(cmd)
-                if self.viewport.history.undo_stack[-1:] == [cmd]:
-                    self._unlinked(cmd)
-                    self.viewport.flash_status(tr(
-                        "“{name}” is no longer linked: its geometry is now "
-                        "part of this model",
-                        name=", ".join(Path(p).name for p in cmd.paths)), 5000)
-        self.viewport.update()
-
-    def _unlinked(self, cmd=None) -> None:
-        """A link was broken or brought back (Make Unique of a link, or
-        its undo / redo): watch the sources still linked, and update
-        the drawing rows."""
-        self.viewport.notify_scene_changed()
-        self._link_watcher().refresh()
-        self._refresh_layer_views()
-
     def _on_scale_dialog(self, group) -> None:
         tool = self._tools["scale_manager"]
         tool.target = group
         self._activate_tool("scale_manager")
-
-    def keep_component(self, definition, keep: bool = True) -> None:
-        """Keep in File on or off for ``definition``'s component (an
-        instance or a kept template), undoable."""
-        from core.history import KeepComponentCommand
-        self.viewport.history.execute(KeepComponentCommand(definition, keep))
-        self.viewport.notify_scene_changed()
-        if keep:
-            text = tr("{name} is kept in the file, even with no copy placed",
-                      name=definition.name)
-        else:
-            text = tr("{name} is no longer kept in the file",
-                      name=definition.name)
-        self.statusBar().showMessage(text, 4000)
-
-    def keep_selected_components(self, keep: bool = True) -> None:
-        """Keep in File, on or off, for every component definition the
-        selection uses — one undo step."""
-        from core.history import CompoundCommand, KeepComponentCommand
-        seen: set = set()
-        cmds = []
-        for g in self.viewport.scene.selection:
-            if (isinstance(g, Group) and g.is_component()
-                    and id(g.mesh) not in seen):
-                seen.add(id(g.mesh))
-                cmds.append(KeepComponentCommand(g, keep))
-        if not cmds:
-            return
-        self.viewport.history.execute(
-            cmds[0] if len(cmds) == 1 else CompoundCommand(cmds))
-        self.viewport.notify_scene_changed()
-        if keep:
-            text = tr("{n} components kept in the file", n=len(cmds))
-        else:
-            text = tr("{n} components no longer kept in the file",
-                      n=len(cmds))
-        self.statusBar().showMessage(text, 4000)
-
-    def rename_component(self, definition) -> None:
-        """Rename a component definition: every copy, placed or nested,
-        and the kept template take the new name, as one undo step."""
-        def rename(name):
-            name = (name or "").strip()
-            if not name or name == definition.name:
-                return
-            self._rename_component_to(definition, name)
-        _forms.ask_text(self, tr("Rename Component"), tr("Component name:"),
-                        text=definition.name or "", done=rename)
-
-    def _rename_component_to(self, definition, name) -> None:
-        from core.history import CompoundCommand, RenameGroupCommand
-        from core.kept_components import copies_of, kept_template
-        scene = self.viewport.scene
-        targets = copies_of(scene, definition.mesh)
-        kept = kept_template(scene, definition.mesh)
-        if kept is not None and kept not in targets:
-            targets.append(kept)
-        if definition not in targets:
-            targets.append(definition)
-        self.viewport.history.execute(CompoundCommand(
-            [RenameGroupCommand(g, name) for g in targets]))
-        self.viewport.notify_scene_changed()
 
     def _on_components_from_file(self) -> None:
         start = (str(self._current_path.parent)
@@ -4424,27 +4317,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         self.viewport.history.execute(AddKeptComponentsCommand(templates))
         self.viewport.notify_scene_changed()
         return len(templates)
-
-    @_repeatable("Merge Groups")
-    def _on_merge_groups(self) -> None:
-        from core.history import MergeGroupsCommand
-        groups = [e for e in self.viewport.scene.selection
-                  if isinstance(e, Group)]
-        if len(groups) < 2:
-            return
-        self.viewport.end_group_edit()
-        self.viewport.history.execute(MergeGroupsCommand(groups))
-        self.viewport.update()
-        self.statusBar().showMessage(
-            tr("{n} groups merged into one", n=len(groups)), 3000)
-
-    def _on_change_axes(self, group) -> None:
-        """Right-click ▸ Change Axes: three clicks give the group or
-        component new local axes (tools/change_axes.py)."""
-        tool = self._tools["change_axes"]
-        tool.target = group
-        self._activate_tool("change_axes")
-        self.viewport.flash_status(tr("Click the new origin"), 4000)
 
     def _fill_intersect_menu(self, menu) -> None:
         from core.intersect import WITH_CONTEXT, WITH_MODEL, WITH_SELECTION
@@ -4537,64 +4409,10 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         self.viewport.scene.show_axes = bool(on)
         self.viewport.update()
 
-    def prompt_section_name(self, plane, *, automatic=True) -> None:
-        """Ask for the section label. A cancelled placement keeps its defaults."""
-        if automatic and str(QSettings().value("section/ask_name", "1")) == "0":
-            return
-        from ingetrazo_render import OperationForm
-        from core.history import RenameSectionPlaneCommand
-        from views import chrome_forms
-        vp = self.viewport
-        scene = vp.scene
-
-        def apply(values):
-            if self.viewport is not vp or vp.scene is not scene or plane not in scene.section_planes:
-                return
-            name, symbol = values["name"] or plane.name, values["symbol"] or plane.symbol
-            if (name, symbol) != (plane.name, plane.symbol):
-                vp.history.execute(RenameSectionPlaneCommand(plane, name, symbol))
-                vp.notify_scene_changed()
-            if values["skip"]:
-                QSettings().setValue("section/ask_name", "0")
-
-        chrome_forms.show(self, chrome_forms.OperationForm(
-            tr("Name Section Plane"), OperationForm.section(plane.name, plane.symbol, automatic), apply))
-
     def _selected_section_planes(self) -> list:
         from core.section import SectionPlane
         return [p for p in self.viewport.scene.selection
                 if isinstance(p, SectionPlane)]
-
-    def _on_reverse_section(self) -> None:
-        from core.history import ReverseSectionPlaneCommand
-        for plane in self._selected_section_planes():
-            self.viewport.history.execute(ReverseSectionPlaneCommand(plane))
-        self.viewport.update()
-
-    def _on_toggle_active_section(self) -> None:
-        from core.history import SetActiveSectionCommand
-        planes = self._selected_section_planes()
-        if not planes:
-            return
-        plane = planes[0]
-        self.viewport.history.execute(
-            SetActiveSectionCommand(None if plane.active else plane))
-        self.viewport.update()
-
-    def _on_align_view_to_section(self) -> None:
-        """Align View: look straight at the cut face."""
-        import math as _math
-        planes = self._selected_section_planes()
-        plane = planes[0] if planes else self.viewport.scene.active_section()
-        if plane is None:
-            return
-        cam = self.viewport.camera
-        n = plane.normal
-        cam.target = QVector3D(plane.point)
-        cam.pitch = _math.asin(max(-1.0, min(1.0, n.z())))
-        if abs(n.x()) > 1e-9 or abs(n.y()) > 1e-9:
-            cam.yaw = _math.atan2(n.y(), n.x())
-        self.viewport.update()
 
     # ---- Display styles ----------------------------------------------------
     def _active_view(self):
@@ -4747,14 +4565,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         panel = getattr(self, "shadows_panel", None)
         if panel is not None:
             panel.refresh()
-
-    def _on_toggle_path_closed(self) -> None:
-        from georef.geopath import GeoPath
-        from core.history import ToggleGeoPathClosedCommand
-        paths = [p for p in self.viewport.scene.selection if isinstance(p, GeoPath)]
-        if paths:
-            self.viewport.history.execute(ToggleGeoPathClosedCommand(paths))
-            self.viewport.update()
 
     def release_eyedropper(self) -> None:
         """Called back by the tool once it has sampled: the button pops out
@@ -5203,79 +5013,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
 
         menu.exec(global_pos)
 
-    def _on_align_view_to_face(self, face) -> None:
-        """Look along the selected face's world-space normal."""
-        import math
-
-        cam = self.viewport.camera
-        normal = face.normal()
-        cam.target = face.centroid()
-        cam.pitch = math.asin(max(-1.0, min(1.0, normal.z())))
-        if abs(normal.x()) > 1e-9 or abs(normal.y()) > 1e-9:
-            cam.yaw = math.atan2(normal.y(), normal.x())
-        if cam.projection_mode() == "two_point":
-            self.viewport.set_projection("perspective")
-        else:
-            self.viewport.update()
-
-    def _single_textured_face(self):
-        """``(face, side)``: the one selected face with an image texture on
-        the side the right-click saw — the Texture menu acts on the
-        side you click; when only the other side carries an image, that
-        one (Marco painted the underside of a slab from above, 2026-09-15).
-        ``None`` otherwise."""
-        from core.mesh import Face
-        from tools.paint import clicked_back_side
-        from tools.texture_position import TexturePositionTool
-        faces = [e for e in self.viewport.scene.selection if isinstance(e, Face)]
-        if len(faces) != 1:
-            return None
-        face = faces[0]
-        px = getattr(self.viewport, "_context_pixel", None)
-        clicked = "front"
-        if px is not None and clicked_back_side(self.viewport, face, None, px[0], px[1]):
-            clicked = "back"
-        other = "back" if clicked == "front" else "front"
-        for side in (clicked, other):
-            if TexturePositionTool.side_texture(face, side) is not None:
-                return face, side
-        return None
-
-    def _on_texture_position(self) -> None:
-        """Texture ▸ Position: the pins on the tile under the right-click."""
-        hit = self._single_textured_face()
-        if hit is None:
-            return
-        face, side = hit
-        tool = self._tools["texture_position"]
-        at = None
-        px = getattr(self.viewport, "_context_pixel", None)
-        if px is not None:
-            from core.snap import face_plane_world
-            origin, direction = self.viewport._pixel_to_ray(px[0], px[1])
-            if origin is not None:
-                p0, n = face_plane_world(face, None)
-                at = self.viewport._ray_plane(origin, direction, p0, n)
-        self._activate_tool("texture_position")
-        if not tool.begin(self.viewport, face, at, side=side):
-            self._activate_tool("select")
-
-    def _on_texture_reset(self) -> None:
-        """Texture ▸ Reset Position: back to the default planar projection
-        (no per-face map, no rotation) on the clicked side."""
-        hit = self._single_textured_face()
-        if hit is None:
-            return
-        face, side = hit
-        from tools.texture_position import TexturePositionTool
-        tex = TexturePositionTool.side_texture(face, side) or {}
-        if "uvw" not in tex and "rot" not in tex:
-            return
-        flat = {k: v for k, v in tex.items() if k not in ("uvw", "rot")}
-        self.viewport.history.execute(
-            TexturePositionTool.side_command(face, side, flat))
-        self.viewport.update()
-
     def _add_select_submenu(self, menu, sel) -> None:
         """Right-click ▸ Select: grow the selection by what it
         touches or what it shares (issue #106, @pacaeiro). Each entry acts
@@ -5362,36 +5099,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
                 sub.addAction(tr("Make this layer active"),
                               lambda: panel.set_active(names[0]))
 
-    def _assign_layer(self, name: str) -> None:
-        """Move the selection's taggable entities onto ``name`` (created if
-        new), undoable."""
-        from core.history import AssignLayerCommand
-        from core.layers import layer_of, taggable
-        targets = [e for e in taggable(self.viewport.scene.selection)
-                   if layer_of(e) != name]
-        if not targets:
-            return
-        self.viewport.history.execute(AssignLayerCommand(targets, name))
-        self.viewport.update()
-        self.statusBar().showMessage(
-            tr("{n} entities moved to '{layer}'", n=len(targets), layer=name),
-            2500)
-
-    def _assign_new_layer(self) -> None:
-        from PySide6.QtWidgets import QInputDialog
-        scene = self.viewport.scene
-        base = tr("Layer")
-        n = 1
-        while scene.layer(f"{base} {n}") is not None:
-            n += 1
-
-        def assign(name):
-            name = (name or "").strip()
-            if name:
-                self._assign_layer(name)
-        _forms.ask_text(self, tr("New layer"), tr("Layer name:"),
-                        text=f"{base} {n}", done=assign)
-
     def _on_toggle_shadows(self, on: bool) -> None:
         """Camera ▸ Shadows: flip the scene's sun on/off (the tray panel
         holds the date/time/darkness detail)."""
@@ -5404,67 +5111,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         if panel is not None:
             panel.refresh()
         self.viewport.update()
-
-    @_repeatable("Explode Curve")
-    def _on_explode_curve(self) -> None:
-        """Explode Curve: the selected curves become plain segments, in one
-        undo step; the geometry does not move."""
-        from core.history import ExplodeCurvesCommand
-        scene = self.viewport.scene
-        edges = [e for e in scene.selection if isinstance(e, Edge)
-                 and e in scene.mesh.edges]
-        if not any(getattr(e, "curve", None) is not None for e in edges):
-            self.statusBar().showMessage(tr("No curve selected."), 3000)
-            return
-        cmd = ExplodeCurvesCommand(edges)
-        self.viewport.history.execute(cmd)
-        self.statusBar().showMessage(
-            tr("{n} curves exploded into segments", n=cmd.curves), 3000)
-        self.viewport.update()
-
-    def _on_flip_along(self, axis: str) -> None:
-        """Right-click ▸ Flip Along ▸ Red / Green / Blue (issue #178)."""
-        from tools.flip import FlipTool
-        FlipTool().flip(self.viewport, axis)
-
-    def _on_soften_edges(self) -> None:
-        from ingetrazo_render import OperationForm
-        from views import chrome_forms
-        view = self.viewport
-        scene = view.scene
-        if not scene.selection:
-            view.flash_status(
-                tr("Select faces, edges or groups to soften"), 4000)
-            return
-        saved = QSettings().value("tools/soften_angle", 30.0)
-        chrome_forms.show(self, chrome_forms.OperationForm(
-            tr("Soften / Smooth Edges"), OperationForm.soften(str(saved)),
-            lambda options: self._apply_soften_edges(view, options), note=tr(
-                "Edges between faces at this angle or less become smooth; "
-                "sharper edges stay hard. Selected groups include their nested "
-                "geometry, and component copies share the change.")))
-
-    def _apply_soften_edges(self, view, options):
-        from core.soften import SoftenByAngleCommand, selected_edges
-        angle = options["angle"]
-        if angle is not None:
-            QSettings().setValue("tools/soften_angle", angle)
-        command = SoftenByAngleCommand(
-            selected_edges(view.scene), angle or 0.0,
-            coplanar=options["coplanar"], harden=options["harden"],
-            materials=options["materials"], smooth=options["smooth"])
-        command.changes = command.prepare()
-        if not command.changes:
-            view.flash_status(tr("No edges need changing"), 4000)
-            return
-        view.history.execute(command)
-        view.flash_status(
-            tr("Smoothed {n} edge(s)", n=sum(1 for c in command.changes
-                                             if c[3][0]))
-            if not options["harden"] else
-            tr("Unsoftened {n} edge(s)", n=len(command.changes)), 3000)
-        view.update()
-        view.notify_scene_changed()
 
     def _sync_foreign_clipboard(self) -> None:
         # A copy made in ANOTHER IngeTrazo window wins over this window's
@@ -5533,11 +5179,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         if grid is not None:                 # every view shown frames it
             grid.fit_box(bounds[0], bounds[1])
 
-    def _camera_pose(self) -> tuple:
-        cam = self.viewport.camera
-        t = cam.target
-        return (t.x(), t.y(), t.z(), cam.distance, cam.yaw, cam.pitch)
-
     def _on_smart_zoom(self) -> None:
         """A trackpad's smart zoom (two-finger double tap): Zoom Extents;
         another one with the view untouched since goes back to where it
@@ -5567,26 +5208,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         grid = self._doc.view_grid
         if grid is not None:                 # every view shown frames it,
             grid.fit_box(lo, hi)             # as Zoom Extents does
-
-    def _ensure_composer(self):
-        """The composer window, created but not shown — the sheet strip's
-        menu manages sheets through it without opening it."""
-        if getattr(self, "_composer", None) is None:
-            from views.documents import DocumentHost
-            from views import wgpu_sheets
-            # Sheets are a workspace of this window (views/wgpu_sheets.py):
-            # the document's sheets, never a window of their own.
-            comp = wgpu_sheets.composer_class()(self)
-            # One per project: it keeps reading ITS project's model while
-            # another tab is in front (#1066).
-            host = DocumentHost(self, self._doc)
-            comp._window = host
-            panel = getattr(comp, "views_panel", None)
-            if panel is not None and hasattr(panel, "_window"):
-                panel._window = host
-            self._composer = comp
-            self._update_title()
-        return self._composer
 
     def _sheet_tab_menu(self, index: int, global_pos) -> None:
         self._ensure_composer().sheet_tab_menu(index, global_pos, self)
@@ -5644,12 +5265,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
             return
         panel._on_delete()
 
-    def _on_open_composer(self) -> None:
-        """Open (or raise) the sheet composer — see docs/composer-plan.md.
-        Minimised, it comes back out of the taskbar."""
-        from views.window_front import bring_to_front
-        bring_to_front(self._ensure_composer())
-
     # ---- Model / sheet tabs (the strip at the bottom) -----------------------
     def _refresh_sheet_tabs(self) -> None:
         """This window shows the model, so its strip always marks «Model».
@@ -5706,14 +5321,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
             bring_to_front(self)
         self._refresh_sheet_tabs()
 
-    def _show_sheet(self, index: int) -> None:
-        """A sheet tab: the composer opens on that sheet. This window keeps
-        showing the model, so its own strip snaps back to «Model»."""
-        self._last_sheet = index
-        self._on_open_composer()
-        self._composer.show_sheet(index)
-        self._refresh_sheet_tabs()
-
     def _show_new_sheet(self) -> None:
         """The «+» tab: the composer on a NEW sheet. A document without
         sheets gets its first one just by opening the composer."""
@@ -5741,15 +5348,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
             self.viewport.camera.set_view(key)
         self.viewport.update()
 
-    def _on_terrain_profile(self) -> None:
-        """Open the terrain chart in the chrome's bottom bar."""
-        from views.inspector_bridge import action
-        view = getattr(self._doc, "stand_in", None)
-        if getattr(view, "renderer", None) is None:
-            self.statusBar().showMessage(tr("The terrain profile needs an active renderer."))
-            return
-        action(self, view, '["terrain.open",null]')
-
     # ---- Terrain-surface fill (Track G) -------------------------------------
     def _surface_dem(self, datum):
         """Shared DEM sampler for surface fills, rebuilt when the datum changes."""
@@ -5762,16 +5360,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         self._surf_sampler.changed.connect(self._rebuild_surfaces)
         self._surf_sampler.changed.connect(self._build_terrain)
         return self._surf_sampler
-
-    def _on_set_surface(self, mode) -> None:
-        from georef.geopath import GeoPath
-        from core.history import SetGeoPathSurfaceCommand
-        paths = [p for p in self.viewport.scene.selection
-                 if isinstance(p, GeoPath) and len(p.points) >= 3]
-        if not paths:
-            return
-        self.viewport.history.execute(SetGeoPathSurfaceCommand(paths, mode))
-        self._rebuild_surfaces()
 
     def _rebuild_surfaces(self) -> None:
         """(Re)compute the 3D triangles of every surfaced path from the DEM."""
@@ -5908,51 +5496,9 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
     # ---- Undo / redo --------------------------------------------------------
     # ---- File handling ------------------------------------------------------
     # ---- The document's camera (issue #60) ---------------------------------
-    #: The angles the field of view may take — the camera's own range
-    #: (``core.camera.FOV_RANGE``), down to 1° for a long lens.
-    from core.camera import FOV_RANGE
-
-    def set_field_of_view(self, degrees: float) -> bool:
-        """Give the perspective camera a new angle of view. The eye stays
-        where it is, so a wider angle takes more in around the same point.
-        A parallel view has no angle — there it would only zoom — so it is
-        refused with a word in the status bar."""
-        vp = self._active_view()         # with several views, the active one
-        cam = vp.camera
-        if not cam.perspective:
-            self.statusBar().showMessage(tr(
-                "Field of view applies to perspective; switch to "
-                "Perspective first."), 5000)
-            return False
-        lo, hi = self.FOV_RANGE
-        cam.fov_deg = float(min(hi, max(lo, degrees)))
-        vp.update()
-        return True
-
-    def _ask_field_of_view(self) -> None:
-        cam = self._active_view().camera
-        if not cam.perspective:
-            self.set_field_of_view(cam.fov_deg)     # says why, changes nothing
-            return
-        from PySide6.QtWidgets import QInputDialog
-        lo, hi = self.FOV_RANGE
-
-        def apply(value):
-            if value is not None:
-                self.set_field_of_view(value)
-        _forms.ask_number(self, tr("Field of view"),
-                          tr("Field of view in degrees (1–120):"),
-                          float(cam.fov_deg), lo, hi, 1, done=apply, suffix="°")
-
     def _show_camera_settings(self):
         from views.inspector_bridge import open_camera
         return open_camera(self)
-
-    def edit_scene_camera(self, view):
-        from views.inspector_bridge import open_camera
-        if view is not None:
-            self.tray.scenes.show_view(view)
-            return open_camera(self, view)
 
     @staticmethod
     def _new_window_command() -> list[str]:
@@ -7735,75 +7281,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         from views.wgpu_library import open_library
         open_library(self, "components", scope="s:online")
 
-    def _selected_text3d(self):
-        """The one selected 3D-text container (a letter picked inside the
-        open container counts, through its owner), else ``None``."""
-        from core.group import Group
-        sel = [e for e in self.viewport.scene.selection if isinstance(e, Group)]
-        if len(sel) != 1:
-            return None
-        g = sel[0]
-        if getattr(g, "text3d", None):
-            return g
-        ctx = self.viewport.scene.edit_group
-        if ctx is not None and getattr(ctx, "text3d", None):
-            kids = ctx.children or ()
-            if g in kids or getattr(g, "owner", None) in kids:
-                return ctx
-        return None
-
-    def _on_edit_3d_text(self, group=None) -> None:
-        """Reopen the 3D Text dialog on an existing text and lay the letters
-        out again in place — the right-click's «Edit 3D Text…» (Rafael,
-        2026-09-16: «... tampoco»; double-click keeps its usual
-        meaning and enters the group). Letters pushed or painted by hand
-        are regenerated."""
-        from core.text3d import text_is_pristine
-        group = group if group is not None else self._selected_text3d()
-        if group is None or not getattr(group, "text3d", None):
-            return
-        if not text_is_pristine(group):
-            self.viewport.flash_status(tr(
-                "This text's letters were edited by hand, so it can no "
-                "longer be regenerated as text."), 5000)
-            return
-        from views.font_picker import text3d
-        text3d(self, group.text3d, lambda params: self._apply_text3d(group, params))
-
-    def _apply_text3d(self, group, params):
-        from core.history import EditText3DCommand
-        from core.text3d import make_text_group, TEXT_KEYS
-        if params is None or params == {k: group.text3d.get(k) for k in TEXT_KEYS}:
-            return
-        if make_text_group(params) is None:
-            _dialogs.warning(self, tr("3D Text"),
-                                tr("Could not build geometry for that text."))
-            return
-        if self.viewport.scene.edit_group is group:
-            self.viewport.end_group_edit()
-        self.viewport.history.execute(EditText3DCommand(group, params))
-        self.viewport.scene.select([group])
-        self.viewport.update()
-
-    DOCUMENTATION_URL = "https://ingetrazo-docs.pages.dev/"
-
-    def _on_documentation(self) -> None:
-        from core.desktop_open import open_url
-        open_url(self.DOCUMENTATION_URL)
-
-    def _on_get_models(self) -> None:
-        _dialogs.information(
-            self, tr("Get more models and textures"),
-            tr("Free sources that open directly in Built:") + "<br><br>"
-            "<b>Poly Haven</b> — <a href='https://polyhaven.com'>"
-            "polyhaven.com</a> " + tr("(CC0: models OBJ and PBR textures)")
-            + "<br><b>ambientCG</b> — <a href='https://ambientcg.com'>"
-            "ambientcg.com</a> " + tr("(CC0 textures — drop the PNG into "
-                                      "resources/textures)")
-            + "<br><b>Sketchfab</b> — <a href='https://sketchfab.com'>"
-            "sketchfab.com</a> " + tr("(filter by CC licence, download OBJ)"))
-
-
     _pump_file_command = staticmethod(QApplication.processEvents)
 
     def _import_progress(self, title, *, monotonic=False):
@@ -8014,74 +7491,12 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
                 self, tr("Import IngeTrazo document"),
                 tr("“{name}” has no geometry.", name=path.name))
 
-    def _on_image_size(self) -> None:
-        """Resize a placed reference image to a real-world width.
-
-        This is the step that makes a scan usable: you place it roughly, then
-        measure one thing on it you already know — a wall, a scale bar — and
-        type that. Proportions are kept by default, and the image grows from
-        its origin corner so what you already traced stays put relative to it.
-        """
-        from PySide6.QtWidgets import QInputDialog
-        from core.image_plane import ImagePlane
-        from core.history import TransformImagePlaneCommand
-        sel = [e for e in self.viewport.scene.selection
-               if isinstance(e, ImagePlane)]
-        if not sel:
-            return
-        image = sel[0]
-
-        def resize(width):
-            if width is None or width <= 0.0:
-                return
-            u, v = image.scaled(width, keep_aspect=True)
-            self.viewport.history.execute(
-                TransformImagePlaneCommand(image, u=u, v=v))
-            self.viewport.update()
-            self.statusBar().showMessage(
-                tr("Image resized to {size}", size=fmt_pair(u.length(), v.length())), 4000)
-        _forms.ask_number(self, tr("Image size"), tr("Width (m):"),
-                          image.width(), 0.0001, 1_000_000.0, 4, done=resize, suffix="m")
-
-    def _on_image_opacity(self) -> None:
-        """Fade a reference image so the model and its lines read over it
-        (the same control the base map has)."""
-        from PySide6.QtWidgets import QInputDialog
-        from core.image_plane import ImagePlane
-        from core.history import SetImagePlaneOpacityCommand
-        sel = [e for e in self.viewport.scene.selection
-               if isinstance(e, ImagePlane)]
-        if not sel:
-            return
-        image = sel[0]
-
-        def fade(pct):
-            if pct is None:
-                return
-            self.viewport.history.execute(
-                SetImagePlaneOpacityCommand(image, pct / 100.0))
-            self.viewport.update()
-        _forms.ask_number(self, tr("Image opacity"), tr("Opacity (%):"),
-                          int(round(100 * float(getattr(image, "opacity", 1.0)))), 5, 100,
-                          done=fade, suffix="%", step=5)
-
     def _on_import_orthophoto(self):
         from views.survey_import import import_orthophoto
         import_orthophoto(self)
 
     def _set_survey_capture(self, datum, lo, hi):
         self.georef_tray.base_map.setup_for_bounds(datum, lo, hi)
-
-    def _unlock_image(self, image) -> None:
-        """Unlock one reference image (from the right-click over it) and
-        select it, so the next click can move, resize or delete it."""
-        image.locked = False
-        scene = self.viewport.scene
-        scene.select([image])
-        scene.version += 1
-        self.viewport.update()
-        self.statusBar().showMessage(
-            tr("Image unlocked: {name}", name=image.name), 3000)
 
     def _lock_groups(self, groups) -> None:
         """Lock the groups (the right-click's Lock): one undoable step,
@@ -8097,23 +7512,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
                for g in groups):
             self.viewport.end_group_edit()
         self.viewport.history.execute(LockCommand(groups, True))
-        self.viewport.update()
-
-    def _unlock_group(self, group) -> None:
-        """Unlock one group (from the right-click over it), one undoable
-        step, and select it, so the next click can move or open it."""
-        from core.history import LockCommand
-        scene = self.viewport.scene
-        self.viewport.history.execute(LockCommand([group], False))
-        if scene.entity_selectable(group):
-            scene.select([group])
-        self.viewport.update()
-
-    def _delete_image(self, image) -> None:
-        """Delete one reference image (from the right-click over it)."""
-        from core.history import DeleteImagePlanesCommand
-        self.viewport.history.execute(DeleteImagePlanesCommand([image]))
-        self.viewport.scene.selection.discard(image)
         self.viewport.update()
 
     def add_appimage_to_menu(self) -> None:
@@ -8136,21 +7534,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         remove()
         self.statusBar().showMessage(
             tr("Launcher removed from the applications menu"), 5000)
-
-    def _on_toggle_image_lock(self) -> None:
-        """Lock an image so clicks fall through to what you are drawing on top
-        of it — the usual state once a scan is aligned."""
-        from core.image_plane import ImagePlane
-        for image in [e for e in self.viewport.scene.selection
-                      if isinstance(e, ImagePlane)]:
-            image.locked = not image.locked
-        self.viewport.scene.version += 1
-        self.viewport.update()
-
-    def activate_select_tool(self) -> None:
-        """Back to Select — what the Image tool calls once a picture is
-        placed, so the next click doesn't stamp a second copy."""
-        self._activate_tool("select")
 
     def _on_import_dwg(self) -> None:
         path_str, _ = file_dialogs.getOpenFileName(
