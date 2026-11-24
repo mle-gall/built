@@ -322,7 +322,11 @@ def test_the_preview_panel_paints_and_cancel_leaves_the_model_alone(host):
     form = chrome_forms.current(win)
     assert form.field("join_reason_join").label.startswith("2  ")
     from ingetrazo_core import Matrix4
-    assert sorted(form.join_marks.project(Matrix4().data(), 2, 2)) == [(0, 2.0, 1.0), (0, 3.0, 1.0)]
+    matrix = Matrix4()
+    matrix.scale(0.5)
+    assert sorted(form.join_marks.project(matrix.data(), 100, 80, (50, 20))) == [
+        (0, 125.0, 60.0), (0, 150.0, 60.0)]
+    assert form.join_marks.project(Matrix4().data(), 2, 2) == [(0, 2.0, 1.0)]
     form.press("cancel")
     assert len(scene.mesh.edges) == 3
     assert chrome_forms.current(win) is None

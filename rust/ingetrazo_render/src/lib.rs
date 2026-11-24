@@ -2576,8 +2576,9 @@ impl Renderer {
                      fields: Vec<ui::dialog::Field>, buttons: Vec<ui::dialog::Button>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_dialog(seq, title, note, width, fields, buttons); }
     }
-    fn ui_set_join_marks(&mut self, seq: &str, marks: PyRef<'_, edge_commands::JoinMarks>, matrix: [f64; 16], width: f64, height: f64) {
-        if let Some(ui) = self.ui.as_mut() { ui.set_join_marks(seq, marks.project(matrix, width, height)); }
+    #[pyo3(signature=(seq, marks, matrix, width, height, origin=(0.0, 0.0)))]
+    fn ui_set_join_marks(&mut self, seq: &str, marks: PyRef<'_, edge_commands::JoinMarks>, matrix: [f64; 16], width: f64, height: f64, origin: (f64, f64)) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_join_marks(seq, marks.project(matrix, width, height, origin)); }
     }
     fn ui_dialog_open(&self) -> bool { self.ui.as_ref().is_some_and(|ui| ui.dialog_open()) }
     fn ui_font_picker(&mut self, draft: &str) -> PyResult<()> {

@@ -321,11 +321,8 @@ pub(super) fn fields(ui: &mut egui::Ui, d: &mut Dialog, out: &mut Vec<String>) {
                 let index = match &id["join_reason_".len()..] {
                     "join" => 0, "kink" => 1, "branch" => 2, "flags" => 3, _ => 4,
                 };
-                ui.horizontal(|ui| {
-                    let (r, _) = ui.allocate_exact_size(vec2(12.0, 16.0), Sense::hover());
-                    ui.painter().circle_filled(r.center(), 4.0, reason_color(index));
-                    ui.label(egui::RichText::new(label).font(body()).color(INK));
-                }).response.on_hover_text(tip);
+                ui.scope(|ui| super::kit::status_chip(ui, label, reason_color(index)))
+                    .response.on_hover_text(tip);
             }
             "text" => {
                 egui::Frame::NONE.inner_margin(Margin { left: 4, right: 4, top: 0, bottom: 2 }).show(ui, |ui| {

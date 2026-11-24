@@ -205,23 +205,25 @@ pub(crate) struct JoinMarks {
 
 #[pymethods]
 impl JoinMarks {
+    #[pyo3(signature=(matrix, width, height, origin=(0.0, 0.0)))]
     pub(crate) fn project(
         &self,
         matrix: [f64; 16],
         width: f64,
         height: f64,
+        origin: (f64, f64),
     ) -> Vec<(u8, f32, f32)> {
         let mvp = glam::DMat4::from_cols_array(&matrix);
         self.points
             .iter()
             .filter_map(|(kind, point)| {
                 let clip = mvp * glam::DVec3::from_array(*point).extend(1.0);
-                if clip.w <= 0.0 {
+                if clip.w <= 0.0 || clip.x.abs() > clip.w || clip.y.abs() > clip.w {
                     return None;
                 }
                 let x = (clip.x / clip.w + 1.0) * width / 2.0;
                 let y = (1.0 - clip.y / clip.w) * height / 2.0;
-                Some((*kind, x as f32, y as f32))
+                Some((*kind, (x + origin.0) as f32, (y + origin.1) as f32))
             })
             .collect()
     }
