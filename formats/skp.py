@@ -171,12 +171,10 @@ def apply_payload(scene, payload, progress=None, *, consume: bool | None = None)
     A consumed payload must be parsed again to retry after a failed import.
     SnapshotImport redo restores the built groups, without reading the payload.
     ``consume=False`` retains the input geometry explicitly."""
+    if payload.get("backend") == "openskp":
+        from ingetrazo_core import skp_apply
+        return skp_apply(scene, payload, progress, consume=consume)
     import gc
-    from ingetrazo_core import Vec3 as QVector3D
-    from core.group import Group
-    from core.mesh import Mesh
-    from formats.dae import _add_fused
-    from formats.fuse import fuse_coplanar_loops, soften_smooth_edges
 
     # Mass object construction ahead (vertices/edges/faces per group): the
     # generational GC re-scans the ever-growing heap throughout and can cost
@@ -298,11 +296,6 @@ def _apply_payload_inner(scene, payload, progress=None, *, consume=False) -> str
                 continue
 
     def _build_mesh(faces, soft_edges=None, loose_edges=None, curves=None):
-        if soft_edges is not None and payload.get("backend") == "openskp":
-            from ingetrazo_core import skp_definition
-            mesh = Mesh()
-            if hasattr(mesh, "_store"):
-                return skp_definition(mesh, faces, soft_edges, loose_edges, curves)
         mesh = _build_faces(faces, soft_edges)
         _add_lines(mesh, loose_edges)
         for segments in curves or ():

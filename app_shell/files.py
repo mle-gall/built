@@ -287,6 +287,9 @@ def open_path(win, path: Path) -> bool:
     if suffix in (".obj", ".stl"):
         # Unitless meshes need an answer before an Open creates a tab.
         return win._mesh_import_options(path, open_tab=lambda load: _open_in_tab(win, load)) == "chrome"
+    if suffix == ".skp" and host.ns_view:
+        from views.document_open import install_skp, start
+        return start(win, path, install_skp)
     if suffix not in IMPORTS and host.ns_view:
         from views.document_open import start
         from functools import partial

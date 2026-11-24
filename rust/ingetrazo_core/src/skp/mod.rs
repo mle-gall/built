@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Metadata carried in .skp VFF model.dat records. Tags are little-endian.
 mod apply;
-pub use apply::{skp_apply_folders, skp_apply_geometry, skp_apply_metadata};
+pub use apply::{skp_apply, skp_apply_folders, skp_apply_geometry, skp_apply_metadata};
 mod annotations;
 pub use annotations::{skp_annotations, skp_definition_spans};
+mod insertion;
+pub use insertion::SkpInsertion;
+mod materials;
+pub use materials::{skp_materials, skp_read_pbr};
 mod mfc;
-pub use mfc::{SkpArchiveCursor, skp_mfc_object};
+pub use mfc::{SkpArchiveCursor, skp_mfc_object, skp_mfc_readers};
 mod definition;
 pub use definition::skp_definition;
 mod geometry;

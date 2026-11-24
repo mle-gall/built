@@ -5,17 +5,21 @@ from core.i18n import tr
 from views import chrome_dialogs as cd
 
 
-def start(win, path, install):
+def start(win, path, install, *, target=None):
     from ingetrazo_core import DocumentOpen
     pending = win.__dict__.get("_pending_open")
     if pending is not None:
-        if path != pending.path and path not in pending.queue:
-            pending.queue.append(path)
+        request = (path, target)
+        if request != (pending.path, pending.target) and request not in pending.requests:
+            pending.requests.append(request)
+            if target is None:
+                pending.queue.append(path)
         return True
 
-    worker = DocumentOpen(path)
-    bar = cd.ChromeBar(win, tr("Opening {name}…", name=path.name), exclusive=False)
-    bar.path, bar.queue = path, []
+    worker = DocumentOpen(path) if target is None else DocumentOpen(path, insert=True)
+    bar = cd.ChromeBar(win, tr("Opening {name}…", name=path.name), exclusive=target is not None)
+    bar.path, bar.target = path, target
+    bar.queue, bar.requests = [], []
     bar.canceled.connect(worker.cancel)
     bar.set_cancellable(True)
     win._pending_open = bar
@@ -35,14 +39,21 @@ def start(win, path, install):
                     bar.job.update(*worker.progress())
                     if worker.ready():
                         announced = True
-                        bar.job.update(0.99, tr("Sending the model to the graphics card…"))
+                        phase = (tr("Adding the model to the drawing…") if target is not None
+                                 else tr("Sending the model to the graphics card…"))
+                        bar.job.update(0.99, phase)
                     return
                 staged = worker.take()
                 if staged is None:
                     return
                 if timer is not None:
                     timer.stop()
-                if not win._doc_is_blank():
+                if target is not None:
+                    if target not in win._documents:
+                        raise ValueError(tr("The drawing was closed during import."))
+                    if win._doc is not target:
+                        win.activate_document(target)
+                elif not win._doc_is_blank():
                     win._new_document()
                 win._opening_document = True
                 if install(win, path, bar, staged):
@@ -76,8 +87,11 @@ def start(win, path, install):
             if hasattr(type(win), "closeEvent"):
                 QTimer.singleShot(0, win, win.close)
         else:
-            for queued in bar.queue:
-                win.open_path(queued)
+            for queued, destination in bar.requests:
+                if destination is None:
+                    win.open_path(queued)
+                elif destination in win._documents:
+                    start(win, queued, install_insertion, target=destination)
 
     callbacks = win.__dict__.setdefault("_open_callbacks", {}).setdefault(path, [])
     timer = None
@@ -108,3 +122,57 @@ def pending(win, path) -> bool:
     """Whether ``path`` is opening or queued to open in ``win``."""
     bar = win.__dict__.get("_pending_open")
     return bool(bar) and (path == bar.path or path in bar.queue)
+
+
+def install_skp(win, path, bar, staged):
+    """Attach the worker-owned drawing, undo history and prepared geometry."""
+    scene, prepared, history, empty = staged
+    vp, doc = win.viewport, win._doc
+    if getattr(doc, "_renderer_wgpu", False) and not hasattr(win, "_host"):
+        doc._awaiting_picture = True
+        doc._after_picture = []
+    vp.set_document(scene, history)
+    win._import_name = path.name
+    win._autosaved_version = None
+    win._saved_version = -1
+    if not empty:
+        win._on_zoom_extents()
+    if hasattr(win, "_host"):
+        win.view.set_scene(scene, opening=True, prepared=prepared)
+        win.view._shell_resident_version = scene.version
+        for callback in win.view.after_open:
+            win._host.after_picture(callback)
+        win.view.after_open = []
+    elif getattr(doc, "_renderer_wgpu", False):
+        display = doc.stand_in
+        display._refresh_timer.stop()
+        display._rebuild(progress=bar.job.update, prepared=prepared)
+        doc._after_picture.extend(display.after_open)
+        display.after_open = []
+        display._refresh_timer.start(0)
+    if getattr(win, "_session_path", None) and not win._opening_session:
+        win._refresh_worksession()
+    win._refresh_scene_tabs()
+    win._update_title()
+    vp.update()
+    message = (tr("{name} has no geometry — nothing to import.") if empty
+               else tr("Imported {name}"))
+    win.statusBar().showMessage(message.format(name=path.name), 8000 if empty else 3000)
+    return True
+
+
+def install_insertion(win, path, bar, command):
+    history = win.viewport.history
+    history.execute(command)
+    if history.last_error or history.last_rejected:
+        raise ValueError(history.last_error or history.last_rejected)
+    win._import_name = path.name
+    if not command.empty:
+        win._on_zoom_extents()
+    win._refresh_scene_tabs()
+    win._update_title()
+    win.viewport.update()
+    message = (tr("{name} has no geometry — nothing to import.") if command.empty
+               else tr("Imported {name}"))
+    win.statusBar().showMessage(message.format(name=path.name), 8000 if command.empty else 3000)
+    return True

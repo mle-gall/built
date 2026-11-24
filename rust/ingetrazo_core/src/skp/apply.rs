@@ -21,14 +21,14 @@ fn opt<'py>(dict: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py, PyAny>> 
     dict.call_method1("get", (key,))
 }
 
-fn register_materials(
+pub(super) fn material_names(
     py: Python<'_>,
     scene: &Bound<'_, PyAny>,
     payload: &Bound<'_, PyDict>,
-) -> PyResult<()> {
+) -> PyResult<HashMap<String, String>> {
     let mats = rows(payload, "materials")?;
     if !mats.is_truthy()? {
-        return Ok(());
+        return Ok(HashMap::new());
     }
     let module = py.import("core.materials")?;
     let decode = module.getattr("Material")?.getattr("from_dict")?;
@@ -53,6 +53,15 @@ fn register_materials(
             remap.insert(name, actual);
         }
     }
+    Ok(remap)
+}
+
+fn register_materials(
+    py: Python<'_>,
+    scene: &Bound<'_, PyAny>,
+    payload: &Bound<'_, PyDict>,
+) -> PyResult<()> {
+    let remap = material_names(py, scene, payload)?;
     if remap.is_empty() {
         return Ok(());
     }
@@ -357,6 +366,28 @@ pub fn skp_apply_geometry<'py>(
     release: &Bound<'py, PyAny>,
     tick: &Bound<'py, PyAny>,
 ) -> PyResult<()> {
+    let build = |rec: &Bound<'py, PyAny>| -> PyResult<Bound<'py, PyAny>> {
+        let mesh = make_mesh.call1((
+            rec.get_item("faces")?,
+            opt(rec, "soft_edges")?,
+            opt(rec, "loose_edges")?,
+            opt(rec, "curves")?,
+        ))?;
+        release.call1((rec,))?;
+        Ok(mesh)
+    };
+    apply_geometry(scene, payload, build, |step| {
+        tick.call1((step,))?;
+        Ok(())
+    })
+}
+
+fn apply_geometry<'py>(
+    scene: &Bound<'py, PyAny>,
+    payload: &Bound<'py, PyDict>,
+    mut build: impl FnMut(&Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>>,
+    mut report: impl FnMut(usize) -> PyResult<()>,
+) -> PyResult<()> {
     let py = scene.py();
     let roots = scene.getattr("groups")?;
     let used = scene
@@ -372,19 +403,9 @@ pub fn skp_apply_geometry<'py>(
         namespace: opt(payload, "identity_namespace")?,
         uuid: py.import("uuid")?.into_any(),
     };
-    let build = |rec: &Bound<'py, PyAny>| -> PyResult<Bound<'py, PyAny>> {
-        tick.call1((1,))?;
-        let mesh = make_mesh.call1((
-            rec.get_item("faces")?,
-            opt(rec, "soft_edges")?,
-            opt(rec, "loose_edges")?,
-            opt(rec, "curves")?,
-        ))?;
-        release.call1((rec,))?;
-        Ok(mesh)
-    };
     for row in rows(payload, "groups")?.try_iter()? {
         let row = row?;
+        report(1)?;
         let mesh = build(&row)?;
         if !mesh.getattr("faces")?.is_truthy()? && !mesh.getattr("edges")?.is_truthy()? {
             continue;
@@ -412,6 +433,7 @@ pub fn skp_apply_geometry<'py>(
         roots.call_method1("append", (group,))?;
     }
     for row in &defs.records {
+        report(1)?;
         defs.meshes.push(build(row)?);
     }
     for index in 0..defs.records.len() {
@@ -423,7 +445,7 @@ pub fn skp_apply_geometry<'py>(
         {
             continue;
         }
-        tick.call1((1,))?;
+        report(1)?;
         let layers = rows(&row, "instance_layers")?;
         let names = rows(&row, "instance_names")?;
         let identities = rows(&row, "instance_identities")?;
@@ -437,7 +459,7 @@ pub fn skp_apply_geometry<'py>(
         for (i, xf) in rows(&row, "instances")?.try_iter()?.enumerate() {
             if i % 128 == 0 && i > 0 {
                 py.detach(std::thread::yield_now);
-                tick.call0()?;
+                report(0)?;
             }
             let group = defs.place(
                 index,
@@ -451,4 +473,93 @@ pub fn skp_apply_geometry<'py>(
         }
     }
     Ok(())
+}
+
+#[pyfunction]
+#[pyo3(signature=(scene,payload,progress=None,*,consume=None))]
+pub fn skp_apply<'py>(
+    scene: &Bound<'py, PyAny>,
+    payload: &Bound<'py, PyDict>,
+    progress: Option<&Bound<'py, PyAny>>,
+    consume: Option<bool>,
+) -> PyResult<String> {
+    let py = scene.py();
+    let consume = match consume {
+        Some(v) => v,
+        None => opt(payload, "_consume_geometry")?.is_truthy()?,
+    };
+    let mut remaining = HashMap::new();
+    let mut total = 0;
+    for (key, weight) in [("groups", 1), ("protos", 2)] {
+        let items = rows(payload, key)?;
+        total += items.len()? * weight;
+        if consume {
+            for row in items.try_iter()? {
+                *remaining.entry(row?.as_ptr()).or_insert(0usize) += 1;
+            }
+        }
+    }
+    let create = py.import("core.store_mesh")?.getattr("empty_store_mesh")?;
+    let mut done = 0usize;
+    let mut last = None;
+    skp_apply_metadata(scene, payload)?;
+    apply_geometry(
+        scene,
+        payload,
+        |rec| {
+            let mesh = super::skp_definition(
+                py,
+                create.call0()?,
+                &rec.get_item("faces")?,
+                &opt(rec, "soft_edges")?,
+                &opt(rec, "loose_edges")?,
+                &opt(rec, "curves")?,
+            )?;
+            if let Some(count) = remaining.get_mut(&rec.as_ptr()) {
+                *count -= 1;
+                if *count == 0 {
+                    rec.set_item("faces", PyList::empty(py))?;
+                    for key in ["soft_edges", "loose_edges", "curves"] {
+                        rec.call_method1("pop", (key, py.None()))?;
+                    }
+                }
+            }
+            Ok(mesh)
+        },
+        |step| {
+            done += step;
+            if let Some(report) = progress {
+                let now = std::time::Instant::now();
+                if last
+                    .is_none_or(|t| now.duration_since(t) >= std::time::Duration::from_millis(100))
+                {
+                    report.call1((
+                        0.75 + 0.21 * (done as f64 / total.max(1) as f64).min(1.),
+                        "Building geometry…",
+                    ))?;
+                    last = Some(now);
+                }
+            }
+            Ok(())
+        },
+    )?;
+    if consume {
+        payload.set_item("groups", PyList::empty(py))?;
+        payload.set_item("protos", PyList::empty(py))?;
+    }
+    let back = opt(payload, "back_color")?;
+    if back.is_truthy()? && scene.getattr("back_face_color")?.is_none() {
+        scene.setattr(
+            "back_face_color",
+            py.get_type::<pyo3::types::PyTuple>().call1((back,))?,
+        )?;
+    }
+    for dim in scene.getattr("dimensions")?.try_iter()? {
+        let dim = dim?;
+        if dim.hasattr("bind")? {
+            dim.call_method1("bind", (scene,))?;
+        }
+    }
+    scene.setattr("version", scene.getattr("version")?.extract::<u64>()? + 1)?;
+    payload.call_method1("get", ("backend", "?"))?.extract()
 }

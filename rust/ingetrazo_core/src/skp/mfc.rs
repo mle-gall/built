@@ -193,18 +193,482 @@ pub fn skp_mfc_object<'py>(
     r: &Bound<'py, SkpArchiveCursor>,
     expect: Option<&Bound<'py, PyAny>>,
 ) -> PyResult<Bound<'py, PyAny>> {
+    let cursor = || r.borrow().pos;
+    let fail = |msg: &str| archive_error(py, format!("{msg} @0x{:x}", cursor()));
+    let slots = archive
+        .getattr("slots")?
+        .cast_into::<pyo3::types::PyDict>()?;
+    let classes = archive.getattr("class_slot")?;
     let record = tag(&mut *r.try_borrow_mut()?, py)?;
-    match record {
-        Tag::Null => Ok((py.None(), py.None(), py.None())
-            .into_pyobject(py)?
-            .into_any()),
-        Tag::Class(slot) => archive.call_method1("_new_of_class", (r, slot, expect)),
-        Tag::Object(slot) => archive.call_method1("_backref", (slot, r)),
+    let class = match record {
+        Tag::Null => {
+            return Ok((py.None(), py.None(), py.None())
+                .into_pyobject(py)?
+                .into_any())
+        }
+        Tag::Object(slot) => {
+            let mut walker = i64::from(slot);
+            for band in archive.getattr("burns")?.try_iter()? {
+                let (start, width) = band?.extract::<(i64, i64)>()?;
+                if i64::from(slot) < start {
+                    break;
+                }
+                if i64::from(slot) < start + width {
+                    return Ok((slot, "reserved", py.None()).into_pyobject(py)?.into_any());
+                }
+                walker -= width;
+            }
+            if let Some(entry) = slots.get_item(walker)? {
+                if entry.get_item(0)?.eq("class")? {
+                    return Err(fail("back-reference to a class"));
+                }
+                return Ok((walker, entry.get_item(1)?, entry.get_item(2)?)
+                    .into_pyobject(py)?
+                    .into_any());
+            }
+            if walker < archive.getattr("walk_base")?.extract::<i64>()? {
+                return Ok((walker, "premodel", py.None())
+                    .into_pyobject(py)?
+                    .into_any());
+            }
+            return Err(fail("unresolved object back-reference"));
+        }
+        Tag::Class(slot) => {
+            if let Some(entry) = slots.get_item(slot)? {
+                if !entry.get_item(0)?.eq("class")? {
+                    return Err(fail("class reference points to an object"));
+                }
+                entry.get_item(1)?.extract::<String>()?
+            } else {
+                let name = expect
+                    .ok_or_else(|| fail("unresolved class reference"))?
+                    .extract::<String>()?;
+                slots.set_item(slot, ("class", &name, py.None()))?;
+                classes.set_item(&name, slot)?;
+                name
+            }
+        }
         Tag::Declaration(name, schema) => {
             let slot = archive.call_method1("alloc", (("class", &name, schema),))?;
-            archive.getattr("class_slot")?.set_item(&name, slot)?;
+            classes.set_item(&name, slot)?;
             archive.getattr("class_schema")?.set_item(&name, schema)?;
-            archive.call_method1("_new_obj", (r, name))
+            name
         }
+    };
+    archive.setattr("_as_item", archive.getattr("in_entity_list")?)?;
+    archive.setattr("in_entity_list", false)?;
+    let slot = archive.call_method1("alloc", (("obj", &class, py.None()),))?;
+    let reader = archive.getattr("readers")?.call_method1("get", (&class,))?;
+    if reader.is_none() {
+        return Err(fail(&format!("unknown class {class}")));
     }
+    let prev_class = archive.getattr("current_class")?;
+    let prev_slot = archive.getattr("current_obj_slot")?;
+    archive.setattr("current_class", &class)?;
+    archive.setattr("current_obj_slot", &slot)?;
+    let value = reader.call1((archive, r));
+    archive.setattr("current_class", prev_class)?;
+    archive.setattr("current_obj_slot", prev_slot)?;
+    let value = value?;
+    slots.set_item(&slot, ("obj", &class, &value))?;
+    if matches!(class.as_str(), "CDimensionLinear" | "CText") {
+        archive.setattr("annot_watermark", archive.getattr("next_slot")?)?;
+    }
+    Ok((slot, class, value).into_pyobject(py)?.into_any())
+}
+
+/// No cursor borrow crosses a nested object read. Its body may define a class
+/// and recurse into this same cursor before returning to the containing record.
+struct Entity<'a, 'py> {
+    ar: &'a Bound<'py, PyAny>,
+    r: &'a Bound<'py, SkpArchiveCursor>,
+    py: Python<'py>,
+    ver: u16,
+}
+impl<'a, 'py> Entity<'a, 'py> {
+    fn object(&self, class: Option<&str>) -> PyResult<Bound<'py, PyAny>> {
+        self.ar.call_method1("read_object", (self.r, class))
+    }
+    fn u8(&self) -> PyResult<u8> {
+        self.r.borrow_mut().u8(self.py)
+    }
+    fn u16(&self) -> PyResult<u16> {
+        self.r.borrow_mut().u16(self.py)
+    }
+    fn u32(&self) -> PyResult<u32> {
+        self.r.borrow_mut().u32(self.py)
+    }
+    fn peek(&self) -> PyResult<u16> {
+        self.r.borrow().peek_u16(self.py)
+    }
+    fn doubles(&self, n: usize) -> PyResult<Bound<'py, PyTuple>> {
+        self.r.borrow_mut().f64s(self.py, n)
+    }
+    fn string(&self) -> PyResult<String> {
+        self.r.borrow_mut().utf16(self.py)
+    }
+    fn skip(&self, n: usize) -> PyResult<()> {
+        let mut r = self.r.borrow_mut();
+        r.bytes(self.py, n)?;
+        r.pos += n;
+        Ok(())
+    }
+    fn error(&self, msg: &str) -> PyErr {
+        archive_error(self.py, format!("{} @0x{:x}", msg, self.r.borrow().pos))
+    }
+    fn preamble(&self) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>, u64)> {
+        let attributes = self.object(Some("CAttributeContainer"))?;
+        let mut pid = 0;
+        if self.ar.getattr("has_pid")?.is_truthy()? {
+            let mask = self.u8()?;
+            for bit in 0..8 {
+                if mask & (1 << bit) != 0 {
+                    pid |= u64::from(self.u8()?) << (8 * bit);
+                }
+            }
+        }
+        Ok((attributes.get_item(0)?, attributes.get_item(2)?, pid))
+    }
+    fn draw(&self) -> PyResult<Bound<'py, pyo3::types::PyDict>> {
+        let n = if self.ver < 4 {
+            5
+        } else if self.ver < 5 {
+            7
+        } else {
+            8
+        };
+        let mut bytes = [0; 8];
+        {
+            let mut r = self.r.borrow_mut();
+            bytes[..n].copy_from_slice(r.bytes(self.py, n)?);
+            r.pos += n;
+        }
+        let tag = self.peek()?;
+        let layer = if self
+            .ar
+            .getattr("class_slot")?
+            .call_method1("get", ("CLayer",))?
+            .extract::<Option<u32>>()?
+            .is_some_and(|id| u32::from(tag) == 0x8000 | id)
+        {
+            self.object(Some("CLayer"))?;
+            0
+        } else if tag == 0x7fff {
+            self.u16()?;
+            if self.u32()? & 0x80000000 != 0 {
+                return Err(self.error("unexpected inline layer class"));
+            }
+            0
+        } else {
+            self.u16()?
+        };
+        if self.ver < 4 {
+            bytes = [0; 8];
+        }
+        let db = pyo3::types::PyDict::new(self.py);
+        db.set_item("layer", layer)?;
+        db.set_item("mat", u16::from_le_bytes([bytes[0], bytes[1]]))?;
+        db.set_item("hidden", bytes[2])?;
+        db.set_item("soft", bytes[5])?;
+        db.set_item("smooth", bytes[6])?;
+        Ok(db)
+    }
+    fn guid(&self) -> PyResult<String> {
+        let bytes = self.r.borrow_mut().word::<16>(self.py)?;
+        use std::fmt::Write;
+        let mut guid = String::with_capacity(32);
+        for b in bytes {
+            write!(guid, "{b:02X}").unwrap();
+        }
+        Ok(guid)
+    }
+    fn read(&self, cls: &str) -> PyResult<Bound<'py, pyo3::types::PyDict>> {
+        use pyo3::types::{PyDict, PyList};
+        let out = PyDict::new(self.py);
+        let pre = if (self.ver < 4 && matches!(cls, "CVertex" | "CEdgeUse" | "CLoop" | "CMaterial"))
+            || matches!(cls, "CDib" | "CCamera")
+        {
+            (
+                self.py.None().into_bound(self.py),
+                self.py.None().into_bound(self.py),
+                0,
+            )
+        } else {
+            self.preamble()?
+        };
+        let kind = match cls {
+            "CVertex" => {
+                out.set_item("xyz", self.doubles(3)?)?;
+                "vertex"
+            }
+            "CEdge" => {
+                out.set_item("db", self.draw()?)?;
+                for end in ["v1", "v2"] {
+                    out.set_item(end, self.object(Some("CVertex"))?.get_item(0)?)?;
+                }
+                let curve = self.object(None)?;
+                if !matches!(
+                    curve.get_item(1)?.extract::<Option<String>>()?.as_deref(),
+                    None | Some("CCurve" | "CArcCurve")
+                ) {
+                    return Err(self.error("invalid edge curve reference"));
+                }
+                out.set_item("curve", curve.get_item(0)?)?;
+                out.set_item("curve_value", curve.get_item(2)?)?;
+                "edge"
+            }
+            "CCurve" => {
+                self.skip(1)?;
+                out.set_item("n", self.u32()?)?;
+                "curve"
+            }
+            "CArcCurve" => {
+                self.skip(5)?;
+                let v = self.doubles(14)?;
+                let frame = PyDict::new(self.py);
+                for (key, i) in [("center", 0), ("normal", 3), ("x_axis", 6), ("y_axis", 11)] {
+                    frame.set_item(key, v.get_slice(i, i + 3))?;
+                }
+                frame.set_item("start_angle", v.get_item(9)?)?;
+                frame.set_item("end_angle", v.get_item(10)?)?;
+                out.set_item("params", frame)?;
+                "arccurve"
+            }
+            "CEdgeUse" => {
+                out.set_item("edge", self.object(Some("CEdge"))?.get_item(0)?)?;
+                out.set_item("sense", self.u8()?)?;
+                let start = self.r.borrow().pos;
+                let parent = match self.u16()? {
+                    0 => None,
+                    0x7fff => {
+                        let s = self.u32()?;
+                        if s & 0x80000000 != 0 {
+                            return Err(self.error("invalid edge-use parent"));
+                        }
+                        Some(i64::from(s))
+                    }
+                    s if s & 0x8000 == 0 => Some(i64::from(s)),
+                    _ => return Err(self.error("invalid edge-use parent")),
+                };
+                let delta = self.ar.getattr("cum_delta")?.extract::<i64>()?;
+                let expected = self
+                    .ar
+                    .getattr("current_loop")?
+                    .extract::<Option<i64>>()?
+                    .map(|v| v + delta);
+                if parent != expected {
+                    let burn = parent.zip(expected).map_or(0, |(a, b)| a - b);
+                    if (1..=4096).contains(&burn) && !self.ar.getattr("annot_watermark")?.is_none()
+                    {
+                        self.py
+                            .import("openskp.legacy")?
+                            .call_method1("_register_burn", (self.ar, burn))?;
+                    } else {
+                        self.r.borrow_mut().pos = start;
+                        return Err(self.error("edge-use does not reference its loop"));
+                    }
+                }
+                "edgeuse"
+            }
+            "CLoop" => {
+                self.skip(2)?;
+                let prev = self.ar.getattr("current_loop")?;
+                // The enclosing object's slot was assigned before its preamble.
+                self.ar
+                    .setattr("current_loop", self.ar.getattr("current_obj_slot")?)?;
+                let result = (|| -> PyResult<_> {
+                    let uses = PyList::empty(self.py);
+                    while self.peek()? != 0 {
+                        uses.append(self.object(Some("CEdgeUse"))?.get_item(2)?)?;
+                    }
+                    self.skip(2)?;
+                    Ok(uses)
+                })();
+                self.ar.setattr("current_loop", prev)?;
+                out.set_item("uses", result?)?;
+                "loop"
+            }
+            "CFace" => {
+                let db = self.draw()?;
+                let mut attrs = pre.1;
+                if self.ver < 4
+                    && attrs.cast::<PyDict>().is_ok()
+                    && attrs.call_method1("get", ("k",))?.eq("material")?
+                {
+                    db.set_item("mat", pre.0)?;
+                    attrs = self.py.None().into_bound(self.py);
+                }
+                out.set_item("attrs", attrs)?;
+                out.set_item("db", db)?;
+                out.set_item("plane", self.doubles(4)?)?;
+                let n = self.u32()?;
+                if n > 10000 {
+                    return Err(self.error("invalid face loop count"));
+                }
+                let loops = PyList::empty(self.py);
+                for _ in 0..n {
+                    loops.append(self.object(Some("CLoop"))?.get_item(2)?)?;
+                }
+                out.set_item("loops", loops)?;
+                out.set_item("back_mat", self.u16()?)?;
+                "face"
+            }
+            "CGroup" | "CComponentInstance" => {
+                out.set_item("db", self.draw()?)?;
+                let def = self.object(Some("CComponentDefinition"))?;
+                if !def.get_item(1)?.eq("CComponentDefinition")? {
+                    return Err(self.error("invalid placement definition"));
+                }
+                out.set_item("def", def.get_item(0)?)?;
+                out.set_item("xf", self.doubles(13)?)?;
+                let named = self.ver >= 5
+                    || self.r.borrow().peek(self.py, 3).as_bytes() == [0xff, 0xfe, 0xff];
+                out.set_item("name", if named { self.string()? } else { String::new() })?;
+                out.set_item(
+                    "guid",
+                    if self.ver >= 14 {
+                        self.guid()?
+                    } else {
+                        String::new()
+                    },
+                )?;
+                out.set_item("attrs", pre.1)?;
+                out.set_item("persistent_id", pre.2)?;
+                "instance"
+            }
+            "CImage" => {
+                out.set_item("db", self.draw()?)?;
+                out.set_item("def", self.object(None)?.get_item(0)?)?;
+                out.set_item("xform", self.doubles(12)?)?;
+                self.skip(8)?;
+                self.string()?;
+                out.set_item("guid", self.guid()?)?;
+                "image"
+            }
+            "CFaceTextureCoords" => {
+                self.skip(4)?;
+                let values = self.doubles(24)?;
+                out.set_item("front", values.get_slice(0, 9))?;
+                out.set_item("back", values.get_slice(12, 21))?;
+                for key in ["front_pins", "back_pins"] {
+                    let list = PyList::empty(self.py);
+                    for _ in 0..self.u32()? {
+                        list.append(self.doubles(4)?)?;
+                    }
+                    out.set_item(key, list)?;
+                }
+                out.set_item("front_projected", self.u32()? & 2 != 0)?;
+                out.set_item("back_projected", self.u32()? & 2 != 0)?;
+                "ftc"
+            }
+            "CDib" => {
+                out.set_item("subtype", self.u32()?)?;
+                let size = self.u32()? as usize;
+                out.set_item("data", self.r.borrow_mut().raw(self.py, size)?)?;
+                "dib"
+            }
+            "CCamera" => {
+                self.skip(139)?;
+                self.string()?;
+                self.skip(if self.ver >= 6 { 33 } else { 10 })?;
+                "camera"
+            }
+            "CThumbnail" => {
+                let mut dib = self.py.None().into_bound(self.py);
+                if self.ver < 4 {
+                    self.skip(129)?;
+                } else {
+                    self.object(Some("CCamera"))?;
+                    if self.ver >= 6 {
+                        dib = self.object(Some("CDib"))?.get_item(2)?;
+                    }
+                }
+                out.set_item("dib", dib)?;
+                "thumbnail"
+            }
+            "CSkFont" => {
+                self.string()?;
+                self.skip(15)?;
+                "font"
+            }
+            "CAttributeContainer" => {
+                let items = PyList::empty(self.py);
+                while self.peek()? != 0 {
+                    let attr = self.object(Some("CAttributeNamed"))?;
+                    items.append((attr.get_item(1)?, attr.get_item(2)?))?;
+                }
+                self.skip(2)?;
+                out.set_item("children", items)?;
+                "attrs"
+            }
+            "CMaterial" => {
+                out.set_item("name", self.string()?)?;
+                if self.u16()? == 0 {
+                    let rgba = self.r.borrow_mut().word::<4>(self.py)?;
+                    out.set_item("rgba", PyTuple::new(self.py, rgba)?)?;
+                    self.string()?;
+                    self.skip(8)?;
+                    out.set_item("opacity", self.r.borrow_mut().f64(self.py)?)?;
+                    out.set_item("use_opacity", self.u8()?)?;
+                } else {
+                    let tex = self
+                        .py
+                        .import("openskp.legacy")?
+                        .call_method1("_texture_block", (self.ar, self.r))?;
+                    out.call_method1("update", (tex,))?;
+                }
+                "material"
+            }
+            _ => return Err(self.error("unknown MFC entity")),
+        };
+        out.set_item("k", kind)?;
+        Ok(out)
+    }
+}
+
+#[pyfunction]
+fn skp_mfc_entity<'py>(
+    class: &str,
+    archive: &Bound<'py, PyAny>,
+    r: &Bound<'py, SkpArchiveCursor>,
+) -> PyResult<Bound<'py, pyo3::types::PyDict>> {
+    Entity {
+        py: r.py(),
+        ar: archive,
+        r,
+        ver: archive.getattr("ver")?.extract()?,
+    }
+    .read(class)
+}
+
+#[pyfunction]
+pub fn skp_mfc_readers(legacy: &Bound<'_, PyAny>) -> PyResult<()> {
+    let py = legacy.py();
+    let partial = py.import("functools")?.getattr("partial")?;
+    let readers = legacy.getattr("_READERS")?;
+    let dispatch = pyo3::wrap_pyfunction!(skp_mfc_entity, py)?;
+    for (class, method) in [
+        ("CVertex", "vertex"),
+        ("CEdge", "edge"),
+        ("CCurve", "curve"),
+        ("CArcCurve", "arccurve"),
+        ("CEdgeUse", "edgeuse"),
+        ("CLoop", "loop"),
+        ("CFace", "face"),
+        ("CGroup", "instance"),
+        ("CComponentInstance", "instance"),
+        ("CImage", "image"),
+        ("CFaceTextureCoords", "ftc"),
+        ("CCamera", "camera"),
+        ("CThumbnail", "thumbnail"),
+        ("CDib", "dib"),
+        ("CSkFont", "skfont"),
+        ("CAttributeContainer", "attr_container"),
+        ("CMaterial", "material"),
+    ] {
+        let handle = partial.call1((&dispatch, class))?;
+        readers.set_item(class, &handle)?;
+        legacy.setattr(format!("_read_{method}"), handle)?;
+    }
+    Ok(())
 }

@@ -118,7 +118,9 @@ def apply() -> bool:
         return False
     from openskp import _core
     from functools import partial
-    from ingetrazo_core import SkpArchiveCursor, skp_mfc_object, skp_geometry_nodes
+    from ingetrazo_core import SkpArchiveCursor, skp_mfc_object, skp_mfc_readers, skp_geometry_nodes
+    if L._R is not SkpArchiveCursor:
+        skp_mfc_readers(L)
     L._R = SkpArchiveCursor
     L._Archive.read_object = lambda ar, r, expect=None: skp_mfc_object(ar, r, expect)
     if hasattr(_core, "_GeometryRecordNode"):
@@ -143,30 +145,9 @@ def apply() -> bool:
 
 def _keep_legacy_pids(L):
     """Carry 2017+ entity IDs through the two places upstream drops them."""
-    preamble, reader, fill = L._preamble, L._read_instance, L._fill_builder
-    if getattr(reader, "_keeps_pid", False):
+    fill = L._fill_builder
+    if getattr(fill, "_keeps_pid", False):
         return
-
-    def read_preamble(ar, r):
-        start = r.pos
-        result = preamble(ar, r)
-        for frame in getattr(_parse_tables, "pid_frames", ()):
-            if frame[:2] == (id(r), start):
-                frame[2]["pid"] = result.get("pid")
-        return result
-
-    def read_instance(ar, r):
-        frames = getattr(_parse_tables, "pid_frames", None)
-        if frames is None:
-            frames = _parse_tables.pid_frames = []
-        captured = {}
-        frames.append((id(r), r.pos, captured))
-        try:
-            result = reader(ar, r)
-            result["persistent_id"] = captured.get("pid")
-            return result
-        finally:
-            frames.pop()
 
     def fill_builder(builder, ents, slots):
         start = len(builder.instances)
@@ -177,10 +158,7 @@ def _keep_legacy_pids(L):
             instance["persistent_id"] = record.get("persistent_id")
         return result
 
-    read_instance._keeps_pid = True
-    L._preamble = read_preamble
-    L._read_instance = read_instance
-    L._READERS["CGroup"] = L._READERS["CComponentInstance"] = read_instance
+    fill_builder._keeps_pid = True
     L._fill_builder = fill_builder
 
 
@@ -793,94 +771,7 @@ WORKFLOW_CLASSIC, WORKFLOW_PBR = 0, 1
 NORMAL_STYLE_OPENGL, NORMAL_STYLE_DIRECTX = 0, 1
 
 
-def _xml_float(el, default):
-    try:
-        v = float((el.text or "").strip()) if el is not None else default
-    except ValueError:
-        return default
-    return v if v == v and abs(v) != float("inf") else default
-
-
-def _xml_flag(el) -> bool:
-    return el is not None and (el.text or "").strip() == "1"
-
-
-def _pbr_map(zf, xml_name, el, x_scale, y_scale):
-    """The ``Texture`` an ``<mat:*_texture path= file_name=>`` element names,
-    or ``None`` when absent or its image is not in the container. ``path``
-    is relative to the material's folder (``./x.png``); ``file_name`` is
-    the name the image had when it was loaded."""
-    if el is None:
-        return None
-    from openskp import _core
-    from openskp.model import Texture
-    folder = xml_name.rsplit("/", 1)[0]
-    path = (el.get("path") or "").replace("\\", "/")
-    while path.startswith("./"):
-        path = path[2:]
-    file_name = el.get("file_name") or ""
-    names = set(zf.namelist())
-    for cand in (f"{folder}/{path}" if path else None, path or None,
-                 f"{folder}/{file_name}" if file_name else None):
-        if cand and cand in names:
-            _core._validate_zip_entry_size(zf, cand)
-            return Texture(filename=file_name or cand.rsplit("/", 1)[-1],
-                           width=x_scale, height=y_scale,
-                           data=zf.read(cand))
-    return None
-
-
-def read_pbr(zf, xml_name, mat_elem, ns):
-    """A material's PBR recipe from its ``<mat:pbrMR>`` block, as a
-    :class:`types.SimpleNamespace` shaped like the upstream-ready
-    ``openskp.model.PbrMaterial`` (docs/skp-pbr-format.md): the enable
-    flags, the factors (float32 in the file, rounded to 6 decimals) and
-    one ``Texture`` per map (``None`` when unset), tiled by the block's own
-    ``xScale``/``yScale`` (inches). ``None`` for a classic material — every
-    2025+ material has the block, enabled or not, so ``workflow`` decides."""
-    from types import SimpleNamespace
-    try:
-        workflow = int(mat_elem.get("workflow", WORKFLOW_CLASSIC) or 0)
-    except ValueError:
-        workflow = WORKFLOW_CLASSIC
-    block = mat_elem.find("mat:pbrMR", ns)
-    if workflow != WORKFLOW_PBR or block is None:
-        return None
-
-    def child(tag):
-        return block.find(f"mat:{tag}", ns)
-
-    def num(tag, default):
-        return round(_xml_float(child(tag), default), 6)
-
-    xs = _xml_float(SimpleNamespace(text=block.get("xScale")), 0.0)
-    ys = _xml_float(SimpleNamespace(text=block.get("yScale")), 0.0)
-
-    def tex(tag):
-        return _pbr_map(zf, xml_name, child(tag), xs, ys)
-
-    try:
-        style = int(round(_xml_float(child("normalMapStyle"),
-                                     NORMAL_STYLE_OPENGL)))
-    except (TypeError, ValueError):
-        style = NORMAL_STYLE_OPENGL
-    return SimpleNamespace(
-        workflow=workflow,
-        metalness_enabled=_xml_flag(child("enable_metalness")),
-        metallic_factor=num("metallicFactor", 1.0),
-        metallic_texture=tex("metallic_texture"),
-        roughness_enabled=_xml_flag(child("enable_roughness")),
-        roughness_factor=num("roughnessFactor", 1.0),
-        roughness_texture=tex("roughness_texture"),
-        roughness_texture_inverted=_xml_flag(child("roughness_texture_invert")),
-        normal_enabled=_xml_flag(child("enable_normal")),
-        normal_texture=tex("normal_texture"),
-        normal_scale=num("normalScale", 1.0),
-        normal_style=style,
-        ao_enabled=_xml_flag(child("enable_occlusion")),
-        ao_texture=tex("occlusion_texture"),
-        ao_strength=num("occlusionStrength", 1.0),
-    )
+from ingetrazo_core import skp_read_pbr as read_pbr
 
 
 def _keep_pbr() -> bool:
