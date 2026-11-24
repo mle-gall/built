@@ -55,7 +55,7 @@ def text3d(win, params, done):
 
 
 def annotation(win):
-    from views.settings_sheet import Env, _scene_changed
+    from ingetrazo_render.settings_sheet import Env, _scene_changed
     env = Env(win)
     style = env.scene.dimension_style
 

@@ -4,7 +4,7 @@ import pytest
 from core.input_types import Qt
 from tests.scene_controls import choose, prompt
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from views.settings_sheet import SettingsSheet
+from ingetrazo_render.settings_sheet import SettingsSheet
 
 
 KEYS = ("scene_show", "scene_add", "scene_update", "scene_rename", "scene_duplicate", "scene_delete")

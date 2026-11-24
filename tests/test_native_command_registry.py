@@ -7,7 +7,7 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 def test_tools_views_and_menus_reassign_and_reset_across_windows(tmp_path, monkeypatch):
     from app_shell.host import Host
-    from views import settings_sheet
+    from ingetrazo_render import settings_sheet
     from views.shortcuts import action_key
     from ingetrazo_render import view_commands
 
@@ -64,7 +64,7 @@ def test_tools_views_and_menus_reassign_and_reset_across_windows(tmp_path, monke
 
 def test_keyboard_prompt_roundtrips_platform_text_and_reserved_keys():
     from ingetrazo_render import shortcut_alternatives, shortcut_text
-    from views.settings_sheet import _keys_text, _parse_keys
+    from ingetrazo_render.settings_sheet import _keys_text, _parse_keys
 
     for source in ("⌥⇧⌘É", "Ctrl+Alt+Shift+É"):
         assert _parse_keys(source) == ["Ctrl+Alt+Shift+É"]

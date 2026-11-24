@@ -115,23 +115,20 @@ class _HoverEvent:
         return self._mods
 
 
-def _active_cut(scene):
-    return ingetrazo_core.active_cut(scene)
+_active_cut = ingetrazo_core.active_cut
 
 
 _SnapEdge = ingetrazo_render.SnapEdge
 
 
-def _copy_snap_edge(e: _SnapEdge) -> _SnapEdge:
-    return ingetrazo_render.copy_snap_edge(e)
+_copy_snap_edge = ingetrazo_render.copy_snap_edge
 
 
 def _snap_context_of(vp, place):
     return ingetrazo_core.snap_context_of(vp, place)
 
 
-def _group_pseudo_edge(idx, i: int) -> _SnapEdge:
-    return ingetrazo_core.group_pseudo_edge(idx, i)
+_group_pseudo_edge = ingetrazo_core.group_pseudo_edge
 
 
 #: The depth slack of a line the Select tool may take: a fraction of the
@@ -245,8 +242,7 @@ class _LazyChunk(dict):
 _OCCL_NATIVE = True
 
 
-def _occlusion_native():
-    return ingetrazo_render.occlusion_native()
+_occlusion_native = ingetrazo_render.occlusion_native
 
 
 #: Lazy placements are filtered by core._native's spatial index before
@@ -287,8 +283,7 @@ _SHARED_BAKES = ("_group_chunks", "_inst_chunks", "_fp_memo",
                  "_proto_wrappers")
 
 
-def _bake_store_of(scene) -> dict:
-    return ingetrazo_render.bake_store_of(scene)
+_bake_store_of = ingetrazo_render.bake_store_of
 
 
 def _drop_bake_store(key, ref) -> None:
@@ -304,8 +299,7 @@ def _bind_bake_store(vp) -> None:
 _LIVE_VIEWS: "weakref.WeakSet" = weakref.WeakSet()
 
 
-def _several_views_shown() -> bool:
-    return ingetrazo_render.several_views_shown()
+_several_views_shown = ingetrazo_render.several_views_shown
 
 
 #: Texture images decoded once per file, for every GL context that
@@ -317,8 +311,7 @@ _DECODED_TEXTURES: dict = {}
 _DECODED_BUDGET = 256 * 1024 * 1024
 
 
-def _decoded_texture(path: str):
-    return ingetrazo_render.decoded_texture(path)
+_decoded_texture = ingetrazo_render.decoded_texture
 
 
 def _array_bake():
@@ -332,12 +325,10 @@ def _proto_wrapper(vp, mesh, paint=None):
     return ingetrazo_render.proto_wrapper(vp, mesh, paint)
 
 
-def _fp_winding(fp) -> int:
-    return ingetrazo_render.fp_winding(fp)
+_fp_winding = ingetrazo_render.fp_winding
 
 
-def _flags_read(mesh, entry: dict) -> None:
-    return ingetrazo_render.flags_read(mesh, entry)
+_flags_read = ingetrazo_render.flags_read
 
 
 #: flat look.
@@ -354,8 +345,7 @@ def _layer_look_sig(scene, style=None) -> tuple:
 _VCOLOR_MODES = ("textures", "shaded", "xray")
 
 
-def _front_tint(style):
-    return ingetrazo_render.front_tint(style)
+_front_tint = ingetrazo_render.front_tint
 
 
 def _with_front_tint(paint, style):
@@ -366,8 +356,7 @@ def _paint_of(vp, group):
     return ingetrazo_render.paint_of(vp, group)
 
 
-def _ghost_edge_points(scene) -> array:
-    return ingetrazo_render.ghost_edge_points(scene)
+_ghost_edge_points = ingetrazo_render.ghost_edge_points
 
 
 def _cache_ver(vp):
@@ -378,8 +367,7 @@ def _content_ver(vp):
     return ingetrazo_render.content_ver(vp)
 
 
-def _plan_curved_edges(plan):
-    return ingetrazo_core.plan_curved_edges(plan)
+_plan_curved_edges = ingetrazo_core.plan_curved_edges
 
 
 def _lazy_edge_may_be_curve(mesh, a, b, tol=1e-3) -> bool:
@@ -394,8 +382,7 @@ def _px_near(x, y, ok, px, py, thr, pts=None, seen=None):
     return ingetrazo_core.px_near(x, y, ok, px, py, thr, pts, seen)
 
 
-def _nearest_within(d, radius, cap):
-    return ingetrazo_core.document_nearest_within(d, radius, cap)
+_nearest_within = ingetrazo_core.document_nearest_within
 
 
 #: The cursor's edge and the snap's read off one search in an event
@@ -431,20 +418,17 @@ def _qv_hypot3():
     return _QV_HYPOT3
 
 
-def _unit_rays(eye, pts):
-    return ingetrazo_core.document_unit_rays(eye, pts)
+_unit_rays = ingetrazo_core.document_unit_rays
 
 
 # Barycentric roundoff on a shared triangle edge can reject both faces.
 _BARY_EPS = 1e-14
 
 
-def _occlusion_block(o, d, v0, e1, e2):
-    return ingetrazo_core.occlusion_block(o, d, v0, e1, e2)
+_occlusion_block = ingetrazo_core.occlusion_block
 
 
-def _placed_maps(xf):
-    return ingetrazo_render.placed_maps(xf)
+_placed_maps = ingetrazo_render.placed_maps
 
 
 def _batch_instances(base, xfs, tri_parts, hard_parts, soft_parts,
@@ -452,12 +436,10 @@ def _batch_instances(base, xfs, tri_parts, hard_parts, soft_parts,
     return ingetrazo_render.batch_hlr_instances(base, xfs, tri_parts, hard_parts, soft_parts, n_parts)
 
 
-def _cat_kept(vp, slot, parts):
-    return ingetrazo_render.cat_kept(vp, slot, parts)
+_cat_kept = ingetrazo_render.cat_kept
 
 
-def _offset_kept(vp, te, offset):
-    return ingetrazo_render.offset_kept(vp, te, offset)
+_offset_kept = ingetrazo_render.offset_kept
 
 
 _moller_trumbore = ingetrazo_core.ray_triangles
@@ -475,8 +457,7 @@ EDIT_REST_MODES = ("normal", "fade", "hide")
 #: tests.
 EDIT_REST_FADE = 0.75
 
-def edit_fade_color(background) -> tuple:
-    return ingetrazo_render.edit_fade_color(background)
+edit_fade_color = ingetrazo_render.edit_fade_color
 
 #: X-ray: how opaque each translucent face layer is. Layers stack, so a face
 #: seen through another reads darker and an opening (no face) stays clear.
@@ -493,41 +474,19 @@ SELECTION_DOT_COLOR = (0.95, 0.45, 0.16)
 SELECTION_DOT_ALT_COLOR = (0.10, 0.25, 0.85)
 
 
-def selection_dot_color(surface) -> tuple:
-    return ingetrazo_render.selection_dot_color(surface)
+selection_dot_color = ingetrazo_render.selection_dot_color
 
 
-def _box_edges(frame, lo, hi) -> bytes:
-    return ingetrazo_render.box_edges(frame, lo, hi)
+_box_edges = ingetrazo_render.box_edges
 
 
-def _load_edit_rest_mode() -> str:
-    return ingetrazo_render.load_edit_rest_mode()
+_load_edit_rest_mode = ingetrazo_render.load_edit_rest_mode
 
 
-def _load_edit_rest_fade() -> float:
-    return ingetrazo_render.load_edit_rest_fade()
+_load_edit_rest_fade = ingetrazo_render.load_edit_rest_fade
 
 
-def _load_hide_similar() -> bool:
-    return ingetrazo_render.load_hide_similar()
-
-
-def _load_invert_wheel() -> bool:
-    from core.settings import settings as QSettings
-    return str(QSettings().value("nav/invert_wheel", "0")) != "0"
-
-
-def _load_invert_orbit_y() -> bool:
-    """Preferences ▸ orbit with the vertical axis reversed.
-
-    Off by default: `OrbitCamera.orbit` grabs the model in both axes, the
-    classic way. This is for the hands that learned the other feel —
-    including the ones that learned it from IngeTrazo before 0.3.16, when
-    the vertical axis was inverted by mistake.
-    """
-    from core.settings import settings as QSettings
-    return str(QSettings().value("nav/invert_orbit_y", "0")) != "0"
+_load_hide_similar = ingetrazo_render.load_hide_similar
 
 
 #: Soft sun shadows (#1281), Preferences ▸ General: off (0) or a level, and
@@ -537,8 +496,7 @@ def _load_invert_orbit_y() -> bool:
 SOFT_SHADOW_SPREAD = {1: 0.012, 2: 0.03, 3: 0.06}
 
 
-def _load_soft_shadows() -> int:
-    return ingetrazo_render.load_soft_shadows()
+_load_soft_shadows = ingetrazo_render.load_soft_shadows
 
 
 _AXIS_DIRS = {"x": (1.0, 0.0, 0.0), "y": (0.0, 1.0, 0.0), "z": (0.0, 0.0, 1.0)}
@@ -668,28 +626,17 @@ def _face_geometry(f, memo, triangulate):
     return ingetrazo_render.face_geometry(f, memo, triangulate)
 
 
-def _finite_point(p) -> bool:
-    return ingetrazo_render.finite_point(p)
+_finite_point = ingetrazo_render.finite_point
 
 
-def _curved_faces(mesh) -> set:
-    return ingetrazo_render.curved_faces(mesh)
+_curved_faces = ingetrazo_render.curved_faces
 
 
-def _smooth_vcol(face, base, flat_rgb, smoother, tris, light) -> list:
-    return ingetrazo_render.smooth_vcol(face, base, flat_rgb, smoother, tris, light)
+_smooth_vcol = ingetrazo_render.smooth_vcol
 
 
 from views.document_tools import DocumentTools
 from views.view_navigation import ViewNavigation
-
-
-def _publish_scene_version(viewport, version):
-    watch = viewport.__dict__.get("_document_watch")
-    if watch is None:
-        viewport.sceneVersionChanged.emit(version)
-    else:
-        watch.observe()
 
 
 class DocumentInteraction(DocumentTools, ViewNavigation):
@@ -697,37 +644,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
     def _render_framed_image(self, width_px, overlays, annotations_only,
                              sharp_shadows, transparent, *, raster=False):
-        render = self.render_raster if raster else self.render_image
-        lw, lh = max(self.width(), 1), max(self.height(), 1)
-        from core.camera import frame_rect
-        rect = frame_rect(lw, lh, getattr(self.camera, "frame_aspect",
-                                           None))
-        if rect is not None and (rect[2] < lw - 0.5
-                                 or rect[3] < lh - 0.5):
-            fx, fy, fw, fh = rect
-            aspect = self.camera.frame_aspect
-            out_w = max(int(width_px), 64)
-            out_h = max(int(round(out_w / aspect)), 1)
-            full = render(
-                max(int(round(out_w * lw / fw)), 64), None, overlays,
-                annotations_only, sharp_shadows, transparent, False)
-            if full is None:
-                return None
-            if raster:
-                return full.frame_region((fx / lw, fy / lh, fw / lw, fh / lh), out_w, out_h)
-            sx = full.width() / lw
-            sy = full.height() / lh
-            x = int(round(fx * sx))
-            y = int(round(fy * sy))
-            w = min(int(round(fw * sx)), full.width() - x)
-            h = min(int(round(fh * sy)), full.height() - y)
-            image = full.copy(x, y, w, h)
-            if (image.width(), image.height()) != (out_w, out_h):
-                image = image.scaled(out_w, out_h, Qt.IgnoreAspectRatio,
-                                     Qt.SmoothTransformation)
-            return image
-        return render(width_px, None, overlays, annotations_only,
-                                 sharp_shadows, transparent, False)
+        return ingetrazo_render.framed_image(self, width_px, overlays, annotations_only, sharp_shadows, transparent, raster)
 
     def _configure_surface(self):
         pass
@@ -826,35 +743,10 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         ingetrazo_render.init_document_interaction(self)
         if not NATIVE:
             _AltWatch.watch(self)
-        self._invert_wheel = _load_invert_wheel()
-        self._invert_orbit_y = _load_invert_orbit_y()
-        from ingetrazo_render import trackpad_nav
-        self._trackpad_slide = trackpad_nav.load_slide_mode()
-        # Camera navigation state (middle button)
-        self._last_pos = None
-        self._pan_mode = False
-        self._middle_drag_active = False
-        #: where the current orbit gesture turns (#164); None = the target
-        self._orbit_pivot = None
-        # A mouse-look drag for a tool with ``on_look`` (First Person):
-        # (button, last local point) while a button is held, else None.
-        self._look_drag = None
-        # Navigation mode for trackpad users with no middle
-        # mouse button: when set ("orbit" / "pan"), a left-drag drives the
-        # camera instead of the active tool. None means a drawing tool is in
-        # charge of the left button.
-        self.nav_mode: Optional[str] = None
-
-        # Zoom Window rubber-band (nav_mode == "zoom_window").
-        self._zoom_box_active = False
-        self._zoom_box_start: Optional[QPointF] = None
-        self._zoom_box_cur: Optional[QPointF] = None
-
+        ingetrazo_render.init_navigation(self)
 
     def _fb_size(self) -> tuple[int, int]:
-        """Framebuffer pixel size (logical size × device pixel ratio)."""
-        dpr = self.devicePixelRatioF()
-        return max(int(round(self.width() * dpr)), 1), max(int(round(self.height() * dpr)), 1)
+        return ingetrazo_render.framebuffer_size(self)
 
     def _sync_axes(self) -> None:
         """Make the drawing axes the current context's (issue #44) — the
@@ -863,82 +755,13 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         _axes.sync(getattr(self.scene, "drawing_frame", None))
 
     def _sync_projection(self) -> None:
-        """Tell the quick buttons when the projection changed. Scenes,
-        saved views, the geo path and the composer all set the camera's
-        fields directly, so the check runs on every paint: whatever set
-        it, the next frame shows it and the buttons follow."""
-        mode = self.camera.projection_mode()
-        if mode != getattr(self, "_shown_projection", None):
-            self._shown_projection = mode
-            self.projectionChanged.emit(mode)
+        return ingetrazo_render.synced_projection(self)
 
     def _sync_depth_reach(self) -> None:
-        """Tell the camera what the view holds, for the depth range of a
-        parallel view (``OrbitCamera.parallel_depth``, issue #874): the
-        model's box, the reference images and figures, and the drawing
-        axes' origin. ``None`` — the old ±far range — while a base map or
-        a survey shows, whose extent the model's box does not know."""
-        cam = self.camera
-        if cam.perspective:
-            return                       # perspective does not read it
-        sc = self.scene
-        layer = getattr(sc, "tile_layer", None)
-        survey = getattr(sc, "photo_mesh", None)
-        if (layer is not None and getattr(layer, "visible", False)) \
-                or (survey is not None and getattr(survey, "visible", False)):
-            cam.depth_reach = None
-            return
-        from core import axes as _axes
-        lo, hi = sc.bounds()
-        pts = [_axes.ORIGIN]
-        if lo is not None:
-            pts += [lo, hi]
-        for im in getattr(sc, "image_planes", None) or ():
-            if sc.entity_visible(im):
-                pts.extend(im.corners())
-        for g in sc.groups:
-            if getattr(g, "billboard", False) and sc.entity_visible(g):
-                xf = g.xform
-                pts.append(QVector3D(xf.column(3).x(), xf.column(3).y(),
-                                     xf.column(3).z())
-                           if xf is not None else QVector3D())
-                pts.append(pts[-1] + QVector3D(0.0, 0.0, 3.0))
-        xs = [p.x() for p in pts]
-        ys = [p.y() for p in pts]
-        zs = [p.z() for p in pts]
-        a = QVector3D(min(xs), min(ys), min(zs))
-        b = QVector3D(max(xs), max(ys), max(zs))
-        cam.depth_reach = ((a + b) * 0.5, (b - a).length() * 0.5)
+        return ingetrazo_render.sync_reach(self)
 
     def _navigation_detail(self, mvp, mode):
-        """Defer edge linework during camera movement in dense assemblies.
-
-        Keep faces/materials intact and repaint at rest even if no mouse event
-        follows. Exports, line styles and editing contexts retain full detail.
-        """
-        if self._export_size is not None:
-            return False
-        cam = tuple(mvp.data())
-        previous = getattr(self, "_nav_detail_camera", None)
-        self._nav_detail_camera = cam
-        pool = getattr(self, "_inst_pool", None)
-        eligible = (pool is not None and len(pool[1]) >= 2000
-                    and mode in ("shaded", "textures", "monochrome")
-                    and self.scene.edit_group is None
-                    and not self.scene.selection)
-        if not eligible:
-            self._nav_detail_until = 0.0
-            return False
-        now = _time_mod.monotonic()
-        if previous is not None and previous != cam:
-            self._nav_detail_until = now + 0.35
-            timer = getattr(self, "_nav_detail_timer", None)
-            if timer is None:
-                timer = self._nav_detail_timer = window_timer(self, self.update)
-            timer.start(370)
-        if now < getattr(self, "_nav_detail_until", 0.0):
-            return True
-        return False
+        return ingetrazo_render.navigation_detail(self, mvp, mode)
 
 
     #: This picture's background is alpha 0 (``render_image``'s ``transparent``).
@@ -955,91 +778,13 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     painting = 0
 
     def _depth_fit_refused(self) -> bool:
-        """Whether this frame keeps the automatic near/far: something
-        drawn may lie outside the model's boxes, or the boxes are not
-        known (shared by the Metal view, whose camera this is)."""
-        sc = self.scene
-        if (not self.camera.perspective or sc.edit_group is not None
-                or getattr(self, "_preview_groups", None)
-                or getattr(self, "_frozen_cache_version", None) is not None
-                or self._base_map_showing() or self._terrain_showing()
-                or self._photo_showing()
-                or getattr(sc, "guides", None)
-                or getattr(getattr(sc, "shadows", None), "enabled", False)
-                or getattr(sc, "show_hidden_objects", False)
-                or getattr(sc, "show_hidden_geometry", False)):
-            return True
-        # A tool's live preview (Push/Pull's box, a pasted copy, Follow
-        # Me) can reach toward the eye past the model's nearest box.
-        tool = getattr(self, "active_tool", None)
-        provider = getattr(tool, "preview_faces", None) if tool else None
-        try:
-            if callable(provider) and provider():
-                return True
-        except Exception:
-            return True
-        return bool(getattr(tool, "wireframe_depth_tested", False))
+        return ingetrazo_render.refuse_depth(self)
 
     def _fit_scene_depth(self):
-        """Fit the perspective near/far to the visible placements' boxes
-        (``OrbitCamera.fit_depth_range``) for this frame. The boxes are
-        walked once per content and placement epoch; a refusal (a box not
-        known) is cached too, so the walk is not repeated per frame."""
-        import numpy as np
-        self.camera._depth_range = None
-        if self._depth_fit_refused():
-            return
-        key = (self._placements_epoch(), _content_ver(self), id(self.scene.mesh))
-        memo = getattr(self, "_depth_boxes", None)
-        if memo is None or memo[0] != key:
-            memo = self._depth_boxes = (key, *self._depth_fit_boxes())
-        if memo[1] is not None:
-            self.camera.fit_depth_range(memo[1], memo[2])
+        return ingetrazo_render.fit_scene(self)
 
     def _depth_fit_boxes(self):
-        """``(lo, hi)`` arrays of world boxes covering everything drawn,
-        or ``(None, None)`` when one placement's box is not known."""
-        import numpy as np
-        from core.lazy_mesh import entity_count
-        boxes = []
-        for g in self._placements():
-            if not self.scene.entity_visible(g):
-                continue
-            if getattr(g, "billboard", False):
-                verts = self._billboard_mesh(g).vertices
-                if verts:
-                    a = np.asarray([v.position.toTuple() for v in verts])
-                    lo, hi = a.min(axis=0), a.max(axis=0)
-                    # Face-me figures turn about their vertical axis.
-                    ctr = (lo + hi) * .5
-                    radius = np.linalg.norm(hi[:2] - lo[:2]) * .5
-                    boxes.append(((ctr[0] - radius, ctr[1] - radius, lo[2]),
-                                  (ctr[0] + radius, ctr[1] + radius, hi[2])))
-                continue
-            box = (self._placement_bbox(g) if g.xform is not None
-                   else self._group_chunk(g).get("bbox"))
-            if box is None:
-                if entity_count(g.mesh) == 0:
-                    continue            # an empty container draws nothing
-                return None, None
-            boxes.append(box)
-        # Loose geometry has no placement box. A still-deferred mesh is
-        # read from its plan, not built.
-        from core.lazy_mesh import plan_of
-        planned = plan_of(self.scene.mesh)
-        a = (planned.pos if planned is not None else
-             np.asarray([v.position.toTuple() for v in self.scene.mesh.vertices]))
-        if len(a):
-            a = np.asarray(a, float).reshape(-1, 3)
-            boxes.append((a.min(axis=0), a.max(axis=0)))
-        for im in getattr(self.scene, "image_planes", ()) or ():
-            if self.scene.entity_visible(im):
-                a = np.asarray([p.toTuple() for p in im.corners()])
-                boxes.append((a.min(axis=0), a.max(axis=0)))
-        if not boxes:
-            return None, None
-        a = np.asarray(boxes, dtype=float).reshape(-1, 2, 3)
-        return a[:, 0], a[:, 1]
+        return ingetrazo_render.depth_boxes(self)
 
 
 
@@ -1130,22 +875,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     _INST_MIN_PX = 1.0
 
     def _instances_below_a_pixel(self, pool, scale=1.0):
-        """Mask of the pool's placements whose bounding sphere comes out
-        under ``_INST_MIN_PX`` (× ``scale``) framebuffer pixels across on
-        this frame.
-
-        From the whole plant of #158, 70 % of the instanced faces belonged
-        to placements under a pixel — bolts and fittings a hundred metres
-        off — and the GPU spent two thirds of every orbit frame on them.
-        The sphere is the box's (its half diagonal), so the test only ever
-        errs toward drawing; a box that reaches the eye plane always draws."""
-        import numpy as np
-        memo = getattr(self, "_inst_sphere_memo", None)
-        if memo is None or memo[0] is not pool:
-            memo = self._inst_sphere_memo = (
-                pool, *self._bounding_spheres(pool[2], pool[3]))
-        return self._spheres_below_a_pixel(memo[1], memo[2],
-                                           self._INST_MIN_PX * scale)
+        return ingetrazo_render.instance_pixel_mask(self, pool, scale)
 
     @staticmethod
     def _bounding_spheres(lo, hi):
@@ -1153,11 +883,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return bounding_spheres(lo, hi)
 
     def _spheres_below_a_pixel(self, ctr, rad, floor=None):
-        from ingetrazo_core import small_spheres
-        height = (self._export_size or self._fb_size())[1]
-        scale = abs(self.camera.projection_matrix().data()[5]) * height
-        return small_spheres(ctr, rad, self._np_mvp()[3], scale, self.camera.perspective,
-                             self._INST_MIN_PX if floor is None else floor)
+        return ingetrazo_render.small_pixel_spheres(self, ctr, rad, floor)
 
     def _edit_rest_fade(self, group):
         return ingetrazo_render.edit_rest_fade(self, group)
@@ -1298,25 +1024,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     _GROUND_RGB = (0.815, 0.820, 0.815)
 
     def _horizon_ndc_y(self, mvp, camera=None) -> float:
-        """Screen-space NDC y of the horizon (the ground plane at infinity),
-        from the camera orientation. Returns a value that may exceed ±1 when the
-        horizon is off-screen (looking straight down = all ground)."""
-        camera = camera or self.camera
-        eye = camera.eye()
-        fwd = camera.target - eye
-        # Horizontal component of the view direction → its vanishing point.
-        dh = QVector3D(fwd.x(), fwd.y(), 0.0)
-        if dh.length() < 1e-5:
-            # Looking straight down/up: no horizon on screen.
-            return 2.0 if fwd.z() < 0 else -2.0
-        dh = dh.normalized()
-        # A point very far along the horizontal heading, at eye height: as the
-        # distance → ∞ it converges to the horizon, so it stays put on zoom.
-        far = eye + dh * 1.0e6
-        clip = mvp.map(QVector4D(far.x(), far.y(), far.z(), 1.0))
-        if abs(clip.w()) < 1e-9:
-            return 2.0 if fwd.z() < 0 else -2.0
-        return clip.y() / clip.w()
+        return ingetrazo_render.horizon_y(self, mvp, camera)
 
     #: NDC span over which each half of the backdrop completes its ramp.
     _SKY_GRAD_SPAN = 1.4
@@ -1362,15 +1070,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return ingetrazo_render.prune_stale_selection(self)
 
     def notify_scene_changed(self) -> None:
-        """Force a redraw and emit the version-changed signal.
-
-        Use this when an outside system (load, undo, redo) has mutated the
-        scene and wants subscribers (title-bar dirty flag, etc.) to react
-        without waiting for the next paint.
-        """
-        self.prune_stale_selection()
-        _publish_scene_version(self, self.scene.version)
-        self.update()
+        return ingetrazo_render.document_scene_changed(self)
 
     def begin_groups_preview(self, groups=(), external: bool = False) -> None:
         return ingetrazo_render.begin_groups_preview(self, groups, external)
@@ -1446,13 +1146,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return ingetrazo_render.set_hover(self, entity, placement)
 
     def flash_status(self, text: str, msec: int = 2500) -> None:
-        """Briefly show ``text`` in the main window's status bar (e.g. Push/Pull
-        saying how far the solid lets it go). No-op if there is no status bar
-        yet."""
-        window = self.window()
-        bar = window.statusBar() if window is not None else None
-        if bar is not None:
-            bar.showMessage(text, msec)
+        return ingetrazo_render.document_status(self, text, msec)
 
     def set_suppressed_faces(self, faces) -> None:
         return ingetrazo_render.set_suppressed_faces(self, faces)
@@ -1632,10 +1326,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
     def _draw_occluded_segment(self, painter: QPainter, p3a: QVector3D,
                                p3b: QVector3D, samples: int = 16) -> None:
-        from ingetrazo_core import annotation_strokes
-        mvp = self.camera.projection_matrix() * self.camera.view_matrix()
-        for a, b in annotation_strokes(self, p3a, p3b, mvp, samples):
-            painter.drawLine(QPointF(*a), QPointF(*b))
+        return ingetrazo_render.document_draw_strokes(self, painter, p3a, p3b, samples)
 
     def _project_samples(self, pts: list[QVector3D]):
         from ingetrazo_core import annotation_samples
@@ -1708,80 +1399,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     def _camera_planar_work_plane(
         self, cursor: Optional[tuple[float, float]] = None,
     ) -> Optional[tuple[QVector3D, QVector3D]]:
-        """Choose XY as floor/ceiling when preferred, otherwise XZ or YZ.
-
-        The vertical planes compete by their alignment with the local cursor
-        ray. XY remains the ground (or ceiling when viewed from below), with
-        a depth preference that avoids mapping a nearby cursor to an
-        implausibly distant point on the floor.
-        """
-        from core import axes
-        origin = axes.origin()
-        view = self.camera.target - self.camera.eye()
-        if view.lengthSquared() < 1e-18:
-            return None
-        view.normalize()
-        ray_origin = self.camera.eye()
-        ray_direction = view
-        cursor_origin: Optional[QVector3D] = None
-        cursor_direction: Optional[QVector3D] = None
-        if cursor is not None:
-            cursor_origin, cursor_direction = self._pixel_to_ray(*cursor)
-            if cursor_origin is not None and cursor_direction is not None:
-                ray_origin = cursor_origin
-                ray_direction = cursor_direction.normalized()
-
-        normals = {name: axes.axis(name) for name in ("x", "y", "z")}
-        hits: dict[str, tuple[QVector3D, float]] = {}
-        if ray_origin is not None:
-            for name, normal in normals.items():
-                hit = self._ray_plane(
-                    ray_origin, ray_direction, origin, normal,
-                    allow_grazing=True)
-                if hit is None:
-                    continue
-                depth = (
-                    (hit - self.camera.eye()).length()
-                    if self.camera.perspective
-                    else QVector3D.dotProduct(hit - self.camera.eye(), view)
-                )
-                if depth >= 0:
-                    hits[name] = hit, depth
-
-        horizontal_angle = math.degrees(math.asin(min(
-            1.0, abs(QVector3D.dotProduct(view, normals["z"])))))
-        if "z" in hits:
-            vertical_depths = [
-                hits[name][1] for name in ("x", "y") if name in hits]
-            depth_ratio = (
-                self.GROUND_DEPTH_PREFERENCE_RATIO
-                if horizontal_angle <= self.GROUND_PREFERENCE_ANGLE_DEG
-                else self.PERSPECTIVE_GROUND_DEPTH_PREFERENCE_RATIO
-            )
-            if (not vertical_depths
-                    or hits["z"][1] <= min(vertical_depths) * depth_ratio):
-                return origin, normals["z"]
-
-        alignment = {
-            name: abs(QVector3D.dotProduct(ray_direction, normals[name]))
-            for name in ("x", "y")
-        }
-        candidates = {"x", "y"}
-        if cursor_origin is not None and cursor_direction is not None:
-            candidates = {
-                name for name in candidates
-                if self._ray_plane(
-                    cursor_origin, cursor_direction, origin, normals[name],
-                    allow_grazing=True) is not None
-            }
-        if not candidates:
-            candidates = {"x", "y"}
-        normal_name = max(candidates, key=alignment.__getitem__)
-        if (candidates == {"x", "y"}
-                and abs(alignment["x"] - alignment["y"])
-                <= self.PLANE_ALIGNMENT_TIE_MARGIN):
-            normal_name = "y"
-        return origin, normals[normal_name]
+        return ingetrazo_render.planar_camera(self, cursor)
 
     # When the camera is at least this tilted off the horizon, the work plane
     # stays horizontal (XY) — that covers top, iso, and most architectural
@@ -1849,63 +1467,19 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return ingetrazo_render.ray_hit_plane(self, cursor, plane)
 
     def _start_point_plane(self, tool, start):
-        """The camera-aware plane through the active start point."""
-        forward = (self.camera.target - self.camera.eye())
-        if forward.length() < 1e-9:
-            return start, QVector3D(0.0, 0.0, 1.0)
-        forward = forward.normalized()
-        # Tools that drag geometry up and down (Move) use a camera-facing
-        # vertical plane through the grab point, so pulling the mouse up raises
-        # the geometry rigidly instead of sliding it across the ground (which
-        # shears connected faces and looks disordered). The plane contains the
-        # world Z axis; its normal is the camera's horizontal heading. Only when
-        # looking nearly straight down — where height is unreadable anyway — does
-        # it fall back to the horizontal plane.
-        if getattr(tool, "prefers_vertical_drag", False):
-            horiz = QVector3D(forward.x(), forward.y(), 0.0)
-            if horiz.length() >= math.sin(math.radians(self.HORIZON_PITCH_THRESHOLD_DEG)):
-                return start, horiz.normalized()
-            return start, QVector3D(0.0, 0.0, 1.0)
-        # |forward.z| ≈ sin(pitch). Anything tilted more than the threshold
-        # keeps the horizontal plane.
-        vertical = self._near_horizon_vertical(start)
-        if vertical is not None:
-            return vertical
-        return start, QVector3D(0.0, 0.0, 1.0)
+        return ingetrazo_render.start_plane(self, tool, start)
 
     def _near_horizon_vertical(
         self, start: QVector3D
     ) -> Optional[tuple[QVector3D, QVector3D]]:
-        """The vertical work plane through ``start`` when the camera sits near
-        the horizon — the only orientation where cursor→ground is ambiguous
-        and dragging up must move in Z. ``None`` at steeper tilts."""
-        forward = (self.camera.target - self.camera.eye())
-        if forward.length() < 1e-9:
-            return None
-        forward = forward.normalized()
-        if abs(forward.z()) >= math.sin(
-                math.radians(self.HORIZON_PITCH_THRESHOLD_DEG)):
-            return None
-        # Pick the vertical plane whose normal is more end-on to the camera
-        # so cursor motion maps cleanly to it.
-        if abs(forward.x()) >= abs(forward.y()):
-            return start, QVector3D(1.0, 0.0, 0.0)
-        return start, QVector3D(0.0, 1.0, 0.0)
+        return ingetrazo_render.horizon_vertical(self, start)
 
 
     #: Eye depth (m) a segment is cut at when it runs behind the camera.
     _CLIP_W = 1e-3
 
     def _clip_w(self) -> float:
-        """Where a segment is cut in front of the eye: 1 mm, or the near
-        plane when the camera has come closer than that would allow — at a
-        few millimetres from a small part, 1 mm cut away the very line
-        being drawn (#653, #692)."""
-        cam = self.camera
-        if not getattr(cam, "perspective", True):
-            return self._CLIP_W
-        near = getattr(cam, "near_plane", None)
-        return min(self._CLIP_W, near()) if callable(near) else self._CLIP_W
+        return ingetrazo_render.clip_distance(self)
 
     def _segment_to_pixels(self, p0: QVector3D, p1: QVector3D):
         mvp = self.camera.projection_matrix() * self.camera.view_matrix()
@@ -1913,25 +1487,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
                                                  self.width(), self.height())
 
     def _draw_extension_overlays(self, painter: QPainter) -> None:
-        """Extensions' overlays (``ExtensionApp.add_overlay``): whatever the
-        active tool, and never able to break the frame. Each call is fenced
-        by save/restore, and one that raises is logged ONCE and dropped: a
-        paint handler failing on every frame would flood the log and leave
-        the view half drawn for good."""
-        for fn in list(getattr(self, "_ext_overlays", ())):
-            painter.save()
-            try:
-                fn(self, painter)
-            except Exception:  # noqa: BLE001 — a plugin never breaks paint
-                import logging
-                logging.getLogger("ingetrazo.plugins").exception(
-                    "extension overlay %r failed; removed", fn)
-                try:
-                    self._ext_overlays.remove(fn)
-                except ValueError:
-                    pass
-            finally:
-                painter.restore()
+        return ingetrazo_render.document_paint_extensions(self, painter)
 
     def world_to_pixel(self, world: QVector3D) -> Optional[tuple[float, float]]:
         """Public API (extensions): world point (metres) → widget pixel
@@ -1949,27 +1505,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return self._project_px(np.asarray(pts, dtype=float).reshape(-1, 3))
 
     def _pixel_projector(self):
-        """:meth:`_world_to_pixel` with the camera as it is NOW: the matrix
-        is made once and the same Qt arithmetic maps every point, so a
-        snap search asking for thousands of points per pointer move (20 000
-        on the plant of #158) gets the very pixels it got before without
-        rebuilding the view and projection for each one. Only for work the
-        camera cannot move under (one snap search)."""
-        if "_world_to_pixel" in vars(self):
-            return self._world_to_pixel     # a test's stand-in wins
-        mvp = self.camera.projection_matrix() * self.camera.view_matrix()
-        w, h = self.width(), self.height()
-        vec4 = QVector4D
-
-        def world_to_pixel(world):
-            clip = mvp.map(vec4(world.x(), world.y(), world.z(), 1.0))
-            if clip.w() <= 0:
-                return None
-            ndc_x = clip.x() / clip.w()
-            ndc_y = clip.y() / clip.w()
-            return ((ndc_x * 0.5 + 0.5) * w, (1.0 - (ndc_y * 0.5 + 0.5)) * h)
-        world_to_pixel.snap_projection = (mvp.data(), (w, h))
-        return world_to_pixel
+        return ingetrazo_render.pixel_projector(self)
 
 
     @staticmethod
@@ -2042,23 +1578,13 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return ingetrazo_render.chunk_cache_store(self, mesh, entry)
 
     def _np_mvp(self):
-        """Current MVP as a (4, 4) float64 NumPy matrix (row-major indexing).
-        ``QMatrix4x4.data()`` is column-major, hence the Fortran reshape."""
-        m = self.camera.projection_matrix() * self.camera.view_matrix()
-        return np.asarray(m.data(), dtype=np.float64).reshape(4, 4, order="F")
+        return ingetrazo_render.camera_matrix_array(self)
 
     def _camera_px(self):
-        """``(mvp, width, height)``: what the native pick kernels project
-        with (``mvp`` column-major, as ``Matrix4.data()``)."""
-        m = self.camera.projection_matrix() * self.camera.view_matrix()
-        return list(m.data()), float(self.width()), float(self.height())
+        return ingetrazo_render.camera_transform(self)
 
     def _project_px(self, pts):
-        """Batch world points (N, 3) → ``(px, py, in_front)`` arrays — the
-        exact math of :meth:`_world_to_pixel` (``ingetrazo_core.project_px``)."""
-        points = np.ascontiguousarray(pts, dtype=np.float64).reshape(-1, 3)
-        matrix = self._np_mvp().ravel(order="F").tolist()
-        return ingetrazo_core.project_px(points, matrix, float(self.width()), float(self.height()))
+        return ingetrazo_render.document_project_batch(self, pts)
 
     @staticmethod
     def _frustum_planes(mvp):
@@ -2226,17 +1752,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     def _pick_edge(self, screen_x: float, screen_y: float,
                    visible_only: bool, which: str = "sel", hidden=None,
                    with_distance: bool = False):
-        """``which``: "sel" for the edges a click means, "snap" for the ones a
-        reference may hold — the rest of the model's loose edges, drawn
-        around an open group / component, are snappable and not selectable.
-        ``hidden``: the visibility test of ``visible_only`` (default
-        :meth:`_is_occluded`). ``with_distance``: ``(edge, pixels)``,
-        ``(None, inf)`` for no edge."""
-        found = self._pick_edge_d(screen_x, screen_y, visible_only, which,
-                                  hidden)
-        if with_distance:
-            return found if found is not None else (None, float("inf"))
-        return found[0] if found is not None else None
+        return ingetrazo_render.document_edge_result(self, screen_x, screen_y, visible_only, which, hidden, with_distance)
 
     def _pick_edge_d(self, screen_x, screen_y, visible_only, which, hidden):
         return ingetrazo_core.pick_edge_distance(self, screen_x, screen_y, visible_only, which, hidden)
@@ -2486,25 +2002,13 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return ingetrazo_render.pick_group(self, screen_x, screen_y)
 
     def _pointer_for_tool(self, key, plus=False):
-        factory = getattr(getattr(self, "_host", None), "tool_cursor", None)
-        if factory is None:
-            from views.icons import tool_cursor as factory
-        return factory(key, plus)
+        return ingetrazo_render.document_tool_pointer(self, key, plus)
 
     def _apply_tool_cursor(self) -> None:
         return ingetrazo_render.apply_tool_cursor(self)
 
     def _apply_nav_cursor(self) -> None:
-        """The pointer for a camera nav mode: orbit / pan / the magnifier
-        (each navigation tool shows its own icon)."""
-        if self.nav_mode in ("orbit", "pan", "zoom", "zoom_window"):
-            cur = self._pointer_for_tool(self.nav_mode)
-            if cur is not None:
-                self.setCursor(cur)
-                return
-            self.setCursor(Qt.CrossCursor
-                           if self.nav_mode in ("zoom", "zoom_window")
-                           else Qt.OpenHandCursor)
+        return ingetrazo_render.nav_cursor(self)
 
     # ---- Copy / paste -------------------------------------------------------
     def copy_selection(self, *, publish=True) -> bool:

@@ -344,116 +344,17 @@ def arc_sweep_midpoint(points, fit=None) -> Optional[QVector3D]:
     return QVector3D(*point) if point is not None else None
 
 
-def _boundary_runs(loop) -> list:
-    """Split a boundary loop into runs of consecutive segments that belong
-    to one circle or arc, as ``[[vertex, ...], ...]`` (each run's vertices
-    in order). A drawn curve says so with its ``curve`` id; an imported
-    one usually only with ``soft`` segments; a bare polyline gives itself
-    away by equal segments turning by a constant angle — the shape of every
-    circle and arc a CAD program ever wrote."""
-    n = len(loop)
-    if n < 3:
-        return []
-    segs = []
-    for i in range(n):
-        v0, v1 = loop[i], loop[(i + 1) % n]
-        edge = next((e for e in getattr(v0, "edges", ()) if e.other(v0) == v1),
-                    None)
-        cid = getattr(edge, "curve", None) if edge is not None else None
-        soft = bool(getattr(edge, "soft", False)) if edge is not None else False
-        segs.append((cid, soft))
-
-    def turn(i):
-        a = loop[i - 1].position if i > 0 else loop[n - 1].position
-        b = loop[i].position
-        c = loop[(i + 1) % n].position
-        u, w = (b - a), (c - b)
-        lu, lw = u.length(), w.length()
-        if lu < 1e-9 or lw < 1e-9:
-            return None, lu, lw
-        cosang = max(-1.0, min(1.0, QVector3D.dotProduct(u, w) / (lu * lw)))
-        return math.degrees(math.acos(cosang)), lu, lw
-
-    # One key per segment: the curve id, else "soft", else the geometric
-    # signature (turn at its start vertex, rounded), else None.
-    keys: list = []
-    for i in range(n):
-        cid, soft = segs[i]
-        if cid is not None:
-            keys.append(("id", cid))
-        elif soft:
-            keys.append(("soft",))
-        else:
-            t, lu, lw = turn(i)
-            tn, lu2, lw2 = turn((i + 1) % n)
-            same = (t is not None and tn is not None and 2.0 < t < 60.0
-                    and abs(t - tn) < 1.5
-                    and abs(lu2 - lw) < 0.05 * max(lw, 1e-9))
-            keys.append(("geo",) if same else None)
-    # Runs of equal keys; "geo" and "soft" runs may wrap around the loop.
-    runs: list = []
-    if all(k is not None and k == keys[0] for k in keys):
-        return [(list(loop), keys[0][0] == "id")]   # the whole loop is one curve
-    # rotate so the loop does not start mid-run
-    start = 0
-    for j in range(n):
-        if keys[j] != keys[j - 1]:
-            start = j
-            break
-    order = [(start + j) % n for j in range(n)]
-    cur: list = []
-    cur_key = None
-    for j in order:
-        k = keys[j]
-        if k is not None and k == cur_key:
-            cur.append(j)
-        else:
-            if cur_key is not None and len(cur) >= 2:
-                runs.append(cur)
-            cur, cur_key = ([j] if k is not None else []), k
-    if cur_key is not None and len(cur) >= 2:
-        runs.append(cur)
-    out = []
-    for r in runs:
-        verts = [loop[j] for j in r] + [loop[(r[-1] + 1) % n]]
-        out.append((verts, keys[r[0]][0] == "id"))
-    return out
+_boundary_runs = kernel.boundary_runs
 
 
 def curve_centers_of_face(face, xform=None) -> list:
-    """The *Center* inference: the centre of every circle or arc on
-    the face's boundary — a circle face gives one, a rounded corner one
-    per corner, a circular hole its own. ``[(centre, radius, key)]`` in
-    world space (``xform`` places a component's face). ``key`` tells the
-    arcs of one face apart.
-
-    Drawn curves carry a ``curve`` id; imported ones usually only ``soft``
-    segments; and a plain polyline is read by its shape (see
-    :func:`_boundary_runs`) — the plaza's circle came from a file with
-    neither."""
-    out: list = []
-    translation = xform.map(QVector3D()) if xform is not None and xform.isAffine() else None
-    for li, loop in enumerate([face.loop]
-                              + list(getattr(face, "hole_loops", []) or [])):
-        for ri, (verts, drawn) in enumerate(_boundary_runs(loop)):
-            # Three points always sit on SOME circle, and four often do
-            # (every isosceles trapezoid of a revolved surface is cyclic):
-            # a run read from its shape or its soft flags needs five to
-            # mean anything. A drawn curve says what it is: three suffice.
-            if len(verts) < (3 if drawn else 5):
-                continue
-            pts = [v.position for v in verts]
-            if translation is not None:
-                # Fit at the definition's origin so a large placement cannot
-                # change the radius or center through cancellation.
-                pts = [xform.mapVector(p) for p in pts]
-            elif xform is not None:
-                pts = [xform.map(QVector3D(p)) for p in pts]
-            fit = fit_circle(pts)
-            if fit is not None:
-                center = fit[0] if translation is None else fit[0] + translation
-                out.append((center, fit[1], (li, ri)))
-    return out
+    """Return (world center, radius, (ring, run)) for each circular boundary run."""
+    from core.store_mesh import FaceView, _store_of
+    if isinstance(face, FaceView):
+        store = _store_of(face._m)
+        if store is not None and store.is_live(face.key):
+            return store.curve_centers(face.key, xform)
+    return kernel.curve_centers(face, xform)
 
 
 def face_center_of_face(face, xform=None) -> Optional[QVector3D]:

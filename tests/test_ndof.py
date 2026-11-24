@@ -462,7 +462,7 @@ def test_preferences_ok_untouched_keeps_the_motion(tmp_path, monkeypatch):
     from PySide6.QtWidgets import QApplication, QWidget
     QApplication.instance() or QApplication([])
     from ingetrazo_render import chrome_sheet
-    from views import settings_sheet
+    from ingetrazo_render import settings_sheet
     from views import ndof_input
     path = tmp_path / "p.ini"
     mk = lambda: QSettings(str(path), QSettings.IniFormat)   # noqa: E731
