@@ -1201,6 +1201,14 @@ impl PyMeshStore {
             .map(|r: super::command_facade::Healed| (r.faces,r.dirty)))
     }
 
+    #[staticmethod]
+    #[pyo3(signature=(mesh, group_mesh, transform=None, paint=None))]
+    fn command_explode_geometry(mesh: &Bound<'_,PyAny>,group_mesh:&Bound<'_,PyAny>,transform:Option<[f64;16]>,paint:Option<&Bound<'_,PyAny>>)
+        -> PyResult<Option<(Vec<u128>,Py<PyAny>,usize,usize)>> {
+        Ok(super::command_facade::command_explode_geometry(mesh,group_mesh,transform,paint)?
+            .map(|r: super::command_facade::Exploded| (r.added,r.copies,r.planes_rebuilt,r.dirty)))
+    }
+
     fn drawing_paint_owners(
         &self,
         before: &PyStoreSnapshot,

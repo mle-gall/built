@@ -87,6 +87,22 @@ fn scoped(
     )
 }
 
+pub(super) fn rebuild_face_keys(
+    mesh: &Obj<'_>,
+    store: &Obj<'_>,
+    origin: Point,
+    normal: Point,
+    keys: &[u128],
+) -> PyResult<Option<usize>> {
+    scoped(
+        mesh,
+        store,
+        &vector(mesh.py(), origin)?,
+        &vector(mesh.py(), normal)?,
+        keys,
+    )
+}
+
 fn regions_on_plane(
     mesh: &Obj<'_>,
     store: &Obj<'_>,
@@ -139,11 +155,15 @@ pub(crate) fn command_rebuild_plane(
     };
     let start = serial(mesh)?;
     let store = mesh.getattr("_store")?;
-    let origin = vector(mesh.py(), origin)?;
-    let normal = vector(mesh.py(), normal)?;
     let count = match faces {
-        Some(keys) => scoped(mesh, &store, &origin, &normal, &keys)?,
-        None => regions_on_plane(mesh, &store, &origin, &normal, &hypot)?,
+        Some(keys) => rebuild_face_keys(mesh, &store, origin, normal, &keys)?,
+        None => regions_on_plane(
+            mesh,
+            &store,
+            &vector(mesh.py(), origin)?,
+            &vector(mesh.py(), normal)?,
+            &hypot,
+        )?,
     };
     Ok(Some(RebuiltPlane {
         ran: count.is_some(),

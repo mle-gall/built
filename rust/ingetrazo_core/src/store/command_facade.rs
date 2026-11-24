@@ -2,6 +2,8 @@
 //! History command entry points. The caller enlists the facade in the document
 //! transaction. Going through its store also publishes edits to an open definition.
 mod erase;
+mod explode;
+pub(crate) use explode::{command_explode_geometry, Exploded};
 mod vertices;
 mod plane;
 pub(crate) use plane::{command_rebuild_plane, command_rebuild_planar, RebuiltPlane, RebuiltPlanar};
