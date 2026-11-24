@@ -46,6 +46,7 @@ mod annotation_tool_api;
 mod arc_base_api;
 mod arc_tool_api;
 mod center_arc_tool_api;
+mod change_axes_tool_api;
 mod dimension_tool_api;
 mod eraser_host_api;
 mod eye_host_api;
@@ -228,6 +229,10 @@ fn registration(module: &str, name: &str) -> Option<(&'static [Method], &'static
         ("tools.rust_tools", "FreehandTool") => {
             (freehand_tool_api::METHODS, stringify!(freehand_tool_api))
         }
+        ("tools.rust_tools", "ChangeAxesTool") => (
+            change_axes_tool_api::METHODS,
+            stringify!(change_axes_tool_api),
+        ),
         ("tools.pushpull", "PushPullTool") => (pushpull::METHODS, stringify!(pushpull)),
         _ => return None,
     })

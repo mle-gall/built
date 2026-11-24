@@ -37,7 +37,6 @@ class SelectTool(RustTool):
 
     _MODE_MODS = {"replace": 0, "add": 0x04000000, "toggle": 0x02000000, "remove": 0x06000000}
 
-
 from tools.base import AxisMagnet, PlaneLock
 
 
@@ -124,9 +123,6 @@ class RotatedRectangleTool(AxisMagnet, _PlanarMachine):
 
     base_point = _point_property("base_point")
 
-
-
-
 # ---- Arcs ---------------------------------------------------------------------
 
 #: Magenta of the arc tangent to BOTH edges of a corner, the fillet.
@@ -181,6 +177,7 @@ class ArcTool(_ArcBase, metaclass=_LastFillet):
                 "bulge": lambda: "Bulge " + fmt_len(value)}[kind]()
         return text, Vec3(*mid)
 
+
 @register_tool_adapter
 class ThreePointArcTool(_ArcBase):
     """3-point arc: the circle through the three clicks."""
@@ -199,7 +196,6 @@ class CenterArcTool(_ArcBase):
     vcb_label = "Angle"
 
     arm_point = _point_property("arm_point")
-
 
 class PieTool(CenterArcTool):
     """Pie: the centre arc whose two radii close the wedge into a face."""
@@ -360,6 +356,7 @@ class FreehandTool(RustTool):
     _stroke = property(lambda self: self._state("stroke"))
 
 
+@register_tool_adapter
 class ChangeAxesTool(RustTool):
     kind = "change_axes"
     shortcut = None
@@ -368,35 +365,6 @@ class ChangeAxesTool(RustTool):
     start_point = _point_property("start_point")
     red_point = _point_property("red_point")
     hover_point = _point_property("hover_point")
-
-    def host_axes_target(self, vp, _):
-        return self.target.uid if self.target is not None else None
-
-    def host_axes_message(self, vp, key):
-        from core.i18n import tr
-        if key == "collinear":
-            vp.flash_status(tr("The green direction cannot run along red — click off the red axis"), 4000)
-        elif key == "done":
-            vp.flash_status(tr("Axes changed"), 2500)
-        else:
-            labels = {"empty": "Select one group or component first", "red": "Click along the new red axis",
-                      "green": "Click to set the green direction"}
-            vp.flash_status(tr(labels[key]))
-
-    def on_click(self, ctx):
-        vp = ctx.viewport
-        if self._send(vp, self._pointer("click", ctx))["committed"]:
-            self.target = None
-            window = vp.window() if hasattr(vp, "window") else None
-            if hasattr(window, "_activate_tool"):
-                window._activate_tool("select")
-        vp.update()
-
-    def value_label(self):
-        from core.i18n import tr
-        if self.start_point is not None and self.hover_point is not None:
-            return (tr("Red axis") if self.red_point is None else tr("Green axis")), self.hover_point
-
 
 from tools.followme_host import FollowMeHost
 
@@ -448,7 +416,6 @@ from tools.move_host import MoveHost, rotation_grips, gather_targets, gather_ima
 
 class MoveTool(MoveHost):
     kind = "move"
-
 
 
 register_tool_functions(globals())
