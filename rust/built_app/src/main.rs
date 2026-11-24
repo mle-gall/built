@@ -14,6 +14,7 @@
 #[cfg(not(target_os = "macos"))]
 mod clipboard;
 mod keys;
+mod launcher;
 mod gestures;
 #[cfg(target_os = "macos")]
 mod menu;
@@ -1111,6 +1112,7 @@ fn check(args: &Args) -> i32 {
 }
 
 fn main() {
+    launcher::register_launcher();
     let process = Instant::now();
     let args = match parse_args(std::env::args().skip(1)) {
         Ok(a) => a,
@@ -1159,7 +1161,7 @@ fn main() {
             args.file.get_or_insert_with(|| layout.root.join("examples/slab-and-cube.igz"));
             args
         };
-        let result = check(&args);
+        let result = launcher::self_check(&layout).max(check(&args));
         python::shutdown_workers();
         std::process::exit(result);
     }
@@ -1254,7 +1256,7 @@ fn main() {
         w.host.call0("close");
     }
     python::shutdown_workers();
-    std::process::exit(app.exit_code);
+    launcher::exit_now(app.exit_code);
 }
 
 
