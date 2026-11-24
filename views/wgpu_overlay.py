@@ -1,14 +1,11 @@
-"""Rasterize logical-pixel tool primitives offscreen for native compositing.
-
-The Metal widget cannot host QPainter. Painting into a straight-alpha RGBA
-image preserves Qt text and glyph rendering without sibling window stacking.
-"""
+"""Logical-pixel tool primitives and the snap marker on the annotation
+canvas (``ingetrazo_render.AnnotationCanvas``), which the renderer
+composites over the scene."""
 from dataclasses import dataclass
 import math
 
 import numpy as np
-from core.input_types import QPointF, QRectF, Qt
-from views.paint_types import QColor, QFont, QPen, QPolygonF
+from core.input_types import Qt
 
 
 @dataclass(frozen=True)
@@ -25,53 +22,39 @@ class Primitive:
 
 
 def rasterize(primitives, width, height, scale, annotations=None):
-    """Return an owned image at physical resolution, drawing in logical units."""
-    from PySide6.QtGui import QImage, QPainter
-    image = QImage(max(1, int(width * scale)), max(1, int(height * scale)),
-                   QImage.Format_RGBA8888)
+    """The primitives on a fresh annotation canvas, as a straight-alpha
+    QImage at physical resolution (scripts and tests read its pixels)."""
+    from ingetrazo_render import AnnotationCanvas
+    from PySide6.QtGui import QImage
+    w, h = max(1, int(width * scale)), max(1, int(height * scale))
+    canvas = AnnotationCanvas(w, h, float(width))
+    paint_layer(canvas, primitives, annotations)
+    rgba = canvas.composite(bytes(w * h * 4))
+    image = QImage(rgba, w, h, w * 4, QImage.Format_RGBA8888).copy()
     image.setDevicePixelRatio(scale)
-    image.fill(Qt.transparent)
-    painter = QPainter(image)
-    painter.setRenderHint(QPainter.Antialiasing)
-    try:
-        paint_layer(painter, primitives, annotations)
-    finally:
-        painter.end()
     return image
 
 
 def paint_layer(painter, primitives, annotations=None):
+    """The document's annotations (``annotations(painter)``), then the tool
+    primitives, on the annotation canvas (``AnnotationCanvas.draw_primitives``)."""
     if annotations is not None:
         annotations(painter)
-    for primitive in primitives:
-        if primitive.kind == "snap":
-            from types import SimpleNamespace
-            c = QColor(primitive.color)
-            snap = SimpleNamespace(kind=primitive.snap_kind, point=primitive.points[0],
-                                   color=c.getRgbF()[:3], guide=None, guides=(),
-                                   axis=None, label=primitive.text, context=None)
-            draw_snap_indicator(painter, snap, lambda p: p,
-                                lambda a, b: (a, b), labels=False)
-            continue
-        pen = QPen(QColor(primitive.color), primitive.width, primitive.pen_style)
-        if primitive.dash:
-            pen.setDashPattern(primitive.dash)
-            pen.setCapStyle(Qt.FlatCap)
-        painter.setPen(pen)
-        painter.setBrush(QColor(primitive.fill) if primitive.fill else Qt.NoBrush)
-        points = [QPointF(*p) for p in primitive.points]
-        if primitive.kind == "polyline":
-            painter.drawPolyline(QPolygonF(points))
-        elif primitive.kind == "polygon":
-            painter.drawPolygon(QPolygonF(points))
-        elif primitive.kind == "rectangle":
-            painter.drawRect(QRectF(points[0], points[1]).normalized())
-        elif primitive.kind == "point":
-            painter.drawEllipse(points[0], primitive.width, primitive.width)
-        elif primitive.kind == "text":
-            painter.drawText(points[0], primitive.text)
-        else:
-            raise ValueError(f"Unknown overlay primitive: {primitive.kind}")
+    if primitives:
+        painter.draw_primitives([
+            (p.kind, [(float(x), float(y)) for x, y in p.points], _colour(p.color),
+             float(p.width), str(p.text), None if not p.fill else _colour(p.fill),
+             [float(v) for v in p.dash],
+             int(getattr(p.pen_style, "value", p.pen_style)), p.snap_kind)
+            for p in primitives])
+
+
+def _colour(c):
+    """A colour string as Qt names one, from a string or a QColor."""
+    if isinstance(c, str):
+        return c
+    r, g, b, a = c.getRgb()
+    return f"#{a:02x}{r:02x}{g:02x}{b:02x}"
 
 
 def pixels(image):
@@ -119,133 +102,58 @@ def axes(origin, directions, length=32):
 
 def draw_snap_indicator(painter, snap, project, clip_line, *, labels=True,
                         scene=None):
-    """Paint a full SnapResult using GL's glyphs, halos, guides and labels.
+    """Paint a SnapResult on the annotation canvas: its guides, glyph and
+    label (``AnnotationCanvas.draw_snap``, annotation_canvas.rs).
 
-    P1 calls from the rasterize annotation callback, passing its world-to-logical
-    pixel projector and a clipped screen-line function (a,b)->(a,b) or None.
-    Colors come from SnapResult, including group/context and guide overrides.
-    No marker or guide is painted for axis/axis_inference snaps.
-    """
-    from views.document_interaction import DocumentInteraction
-    from core.i18n import tr
-    # Axis-lock and inference state is conveyed by the coloured rubber
-    # band; no badge follows the cursor along the lock line. Only the
-    # discrete point snaps get a marker.
+    ``project`` maps world to logical pixels and ``clip_line`` clips a
+    screen segment, (a, b) -> (a, b) or None. Colours come from the
+    SnapResult, guides included. Axis snaps draw nothing."""
     if snap.kind in ("axis_inference", "axis"):
         return
     pixel = project(snap.point)
     if pixel is None:
         return
     r, g, b = snap.color
-    color = QColor.fromRgbF(r, g, b, 1.0)
-    # Dashed guide line (the extension inference shows the edge's dashed
-    # continuation to the cursor).
+    guides = []
     if snap.guide is not None:
-        gp0 = project(snap.guide[0])
-        gp1 = project(snap.guide[1])
+        # The 'from point' guide is axis-coloured while the point is green.
+        gc = snap.guide_color if snap.guide_color is not None else (r, g, b)
+        guides.append((*snap.guide, gc))
+    guides.extend(snap.guides or ())
+    segments = []
+    for ga, gb, gc in guides:
+        gp0, gp1 = project(ga), project(gb)
         if gp0 is not None and gp1 is not None:
-            # A snap can colour its guide differently from the marker (the
-            # 'from point' guide is axis-coloured while the point is green).
-            gc = snap.guide_color if snap.guide_color is not None else (r, g, b)
-            dash = QPen(QColor.fromRgbF(gc[0], gc[1], gc[2], 0.9), 2.0, Qt.DashLine)
-            painter.setPen(dash)
             vis = clip_line(gp0, gp1)
             if vis is not None:
-                painter.drawLine(QPointF(*vis[0]), QPointF(*vis[1]))
-    for ga, gb_, gc in (snap.guides or []):
-        gp0 = project(ga)
-        gp1 = project(gb_)
-        if gp0 is not None and gp1 is not None:
-            painter.setPen(QPen(QColor.fromRgbF(gc[0], gc[1], gc[2], 0.9), 2.0, Qt.DashLine))
-            vis = clip_line(gp0, gp1)
-            if vis is not None:
-                painter.drawLine(QPointF(*vis[0]), QPointF(*vis[1]))
-    # A white halo under the marker lifts it off busy geometry, then
-    # the coloured marker on top — bigger and bolder than before so the
-    # snap point reads at a glance (a common request: the dots were too
-    # small to aim with).
-    halo = QPen(QColor(255, 255, 255, 230), 4.5)
-    mark = QPen(color, 2.6)
-    painter.setBrush(QColor.fromRgbF(r, g, b, 0.30))
-    px, py = pixel
-    if snap.kind == "intersection":
-        # X marker at the crossing (drawn line × projected guide).
-        for pen in (halo, mark):
-            painter.setPen(pen)
-            painter.drawLine(QPointF(px - 8, py - 8), QPointF(px + 8, py + 8))
-            painter.drawLine(QPointF(px - 8, py + 8), QPointF(px + 8, py - 8))
-    elif snap.kind == "center":
-        # The centre of a circle: a filled dot.
-        painter.setPen(halo)
-        painter.setBrush(Qt.NoBrush)
-        painter.drawEllipse(QPointF(px, py), 6.5, 6.5)
-        painter.setPen(mark)
-        painter.setBrush(QColor.fromRgbF(r, g, b, 0.85))
-        painter.drawEllipse(QPointF(px, py), 6.5, 6.5)
-    elif snap.kind in ("endpoint", "origin", "component_origin", "on_edge",
-                       "on_axis", "intersection_edge", "intersection_face",
-                       "on_line", "extension", "from_point", "aligned",
-                       "tangent"):
-        rect = QRectF(px - 7, py - 7, 14, 14)
-        painter.setPen(halo)
-        painter.setBrush(Qt.NoBrush)
-        painter.drawRect(rect)
-        painter.setPen(mark)
-        painter.setBrush(QColor.fromRgbF(r, g, b, 0.30))
-        painter.drawRect(rect)
-    elif snap.kind in ("midpoint", "arc_midpoint"):
-        # Cyan diamond.
-        diamond = QPolygonF([
-            QPointF(px, py - 9), QPointF(px + 9, py),
-            QPointF(px, py + 9), QPointF(px - 9, py),
-        ])
-        painter.setPen(halo)
-        painter.setBrush(Qt.NoBrush)
-        painter.drawPolygon(diamond)
-        painter.setPen(mark)
-        painter.setBrush(QColor.fromRgbF(r, g, b, 0.30))
-        painter.drawPolygon(diamond)
-    elif snap.kind == "on_face":
-        painter.setPen(halo)
-        painter.drawEllipse(QPointF(px, py), 5.5, 5.5)
-        painter.setPen(mark)
-        painter.drawEllipse(QPointF(px, py), 5.5, 5.5)
-    elif snap.kind == "close":
-        painter.setPen(halo)
-        painter.drawEllipse(QPointF(px, py), 9.0, 9.0)
-        painter.setPen(mark)
-        painter.drawEllipse(QPointF(px, py), 9.0, 9.0)
-    elif snap.kind in ("reference", "through_point", "perp_face"):
-        painter.setPen(halo)
-        painter.drawEllipse(QPointF(px, py), 6.5, 6.5)
-        painter.setPen(mark)
-        painter.drawEllipse(QPointF(px, py), 6.5, 6.5)
+                segments.append((tuple(vis[0]), tuple(vis[1]), tuple(gc[:3])))
+    painter.draw_snap(snap.kind, tuple(pixel), (r, g, b), segments,
+                      _snap_label(snap, scene) if labels else None)
 
-    # Tooltip text next to the marker ("On Edge", etc.).
-    label = DocumentInteraction._SNAP_LABELS.get(snap.kind) if labels else None
+
+def _snap_label(snap, scene):
+    """The words beside the marker ("On Edge", "in group"), translated."""
+    from views.document_interaction import DocumentInteraction
+    from core.i18n import tr
+    label = DocumentInteraction._SNAP_LABELS.get(snap.kind)
     if snap.kind == "aligned" and snap.axis == "z":
         label = "Level with point"
     if label:
         label = tr(label)
-    if labels and getattr(snap, "label", None):
+    if getattr(snap, "label", None):
         label = snap.label               # an extension's own words
-    if label:
-        ctx_ = getattr(snap, "context", None)
-        if ctx_ == "component":
-            label += " " + tr("in component")
-        elif ctx_ == "group":
-            label += " " + tr("in group")
-        elif ctx_ == "outside" and scene is not None:
-            # As GL's DocumentInteraction._snap_context_suffix (#1327): geometry
-            # outside the group or component open for editing.
-            is_comp = (scene.edit_definition() is not None
-                       if scene.edit_group is not None else None)
-            label += " " + tr("outside the component" if is_comp
-                              else "outside the group")
-        font = QFont()
-        font.setPointSize(9)
-        painter.setFont(font)
-        painter.setPen(QPen(QColor(255, 255, 255, 220)))
-        painter.drawText(QPointF(px + 11, py + 17), label)
-        painter.setPen(QPen(color))
-        painter.drawText(QPointF(px + 10, py + 16), label)
+    if not label:
+        return None
+    ctx_ = getattr(snap, "context", None)
+    if ctx_ == "component":
+        label += " " + tr("in component")
+    elif ctx_ == "group":
+        label += " " + tr("in group")
+    elif ctx_ == "outside" and scene is not None:
+        # As DocumentInteraction._snap_context_suffix (#1327): geometry
+        # outside the group or component open for editing.
+        is_comp = (scene.edit_definition() is not None
+                   if scene.edit_group is not None else None)
+        label += " " + tr("outside the component" if is_comp
+                          else "outside the group")
+    return label

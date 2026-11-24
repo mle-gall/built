@@ -18,6 +18,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np  # noqa: E402
 import pytest  # noqa: E402
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
@@ -49,12 +50,10 @@ def _placed(mesh, name, x, y):
 
 
 @pytest.fixture
-def vp():
+def vp(native_host):
     from core.group import Group
-    from views.main_window import MainWindow
-    win = MainWindow()
-    v = win.viewport
-    v.resize(1000, 700)
+    native_host.resize(1000, 700, 1.)
+    v = native_host.viewport
     sc = v.scene
     sc.guides.clear()
     post = _box(curved=True)
@@ -71,11 +70,7 @@ def vp():
     v.camera.set_view("iso")
     v.camera.fit_to(V(-7, -7, 0), V(17, 11, 2))
     v._PICK_LAZY_MIN_FACES = 1
-    try:
-        yield v
-    finally:
-        win._saved_version = sc.version
-        win.close()
+    return v
 
 
 def _tables(vp):
@@ -294,77 +289,29 @@ def test_the_static_list_across_a_group_opened_and_closed_reads_as_made_afresh(
     assert lamps <= set(k)
 
 
-def test_the_browser_reads_only_the_rows_a_group_opened_or_closed_changes():
-    # Opening or closing a group: the rows of the open path, old and new,
-    # and of the copies of a component whose count moved read differently;
-    # the others are not read again. Each answer is the full read's.
-    from core.group import Group
+def test_the_browser_reads_only_the_rows_a_group_opened_or_closed_changes(native_host, vp):
     from core.history import SetFaceColorCommand
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        sc = vp.scene
-        post = _box()
-        lamp = _box(s=0.5)
-        for k in range(3):
-            sc.groups.append(_placed(post, f"P{k}", 2.0 * k, 0.0))
-            sc.groups.append(_placed(lamp, f"L{k}", 2.0 * k, 5.0))
-        room = Group(_box(-6.0, -6.0, 2.0), name="room")
-        room.children = [_placed(post, "inner", -5.0, -5.0),
-                         Group(_box(-4.0, -4.0, 0.5), name="shelf")]
-        sc.groups.append(room)
-        sc.version += 1
-        panel = win.project_browser.outliner
-        panel.refresh()
-
-        def dump():
-            out = []
-
-            def walk(item, depth):
-                for i in range(item.childCount()):
-                    c = item.child(i)
-                    out.append((depth, tuple(c.text(k) for k in range(8)),
-                                c.font(0).bold(), c.toolTip(1)))
-                    walk(c, depth + 1)
-            walk(panel._root, 0)
-            return out
-        read = []
-        real = panel._row_state
-        panel._row_state = lambda g, *a: (read.append(g.name), real(g, *a))[1]
-        shelf = room.children[1]
-        steps = [lambda: vp.begin_group_edit(room),
-                 lambda: vp.begin_group_edit(shelf),      # one level down
-                 lambda: vp.end_one_group_edit(),
-                 lambda: vp.end_group_edit(),
-                 lambda: vp.begin_group_edit(
-                     next(g for g in sc.groups if g.name == "L1")),
-                 lambda: vp.end_group_edit()]
-        for i, step in enumerate(steps):
-            read.clear()
-            step()
-            panel.refresh(rows_if_changed=True)
-            got = dump()
-            assert len(read) <= 4, (i, read)
-            assert not any(n.startswith("P") for n in read), (i, read)
-            panel._update_rows(sc)                          # the full read
-            assert dump() == got, i
-        # A paint inside a component, then out: a command, all read again.
-        vp.begin_group_edit(next(g for g in sc.groups if g.name == "L1"))
-        vp.history.execute(SetFaceColorCommand(list(sc.mesh.faces),
-                                               (0.9, 0.1, 0.1)))
-        panel.refresh(rows_if_changed=True)
-        direct = sc.mesh.__dict__.get("_instance_definition") is not None
-        read.clear()
-        vp.end_group_edit()
-        panel.refresh(rows_if_changed=True)
-        got = dump()
-        assert len(read) <= 4 if direct else len(read) > 4
-        panel._update_rows(sc)
-        assert dump() == got
-    finally:
-        win._saved_version = vp.scene.version
-        win.close()
+    from tests.native_tree import FilingRows
+    room = next(g for g in vp.scene.groups if g.name == "room")
+    inner = room.children[0]
+    lamp = next(g for g in vp.scene.groups if g.name == "L1")
+    browser = FilingRows(native_host, ["i:" + room.uid])
+    browser.read()
+    model = browser.model
+    for step in (lambda: vp.begin_group_edit(room), lambda: vp.begin_group_edit(inner),
+                 vp.end_one_group_edit, vp.end_group_edit,
+                 lambda: vp.begin_group_edit(lamp), vp.end_group_edit):
+        step()
+        got = browser.read()
+        assert got == browser.read(fresh=True)
+        assert browser.model is model
+        if vp.scene.edit_group is not None:
+            assert any(t[0] == "context:fold" for t, _ in got)
+    vp.begin_group_edit(lamp)
+    vp.history.execute(SetFaceColorCommand(list(vp.scene.mesh.faces), (.9, .1, .1)))
+    assert browser.read() == browser.read(fresh=True)
+    vp.end_group_edit()
+    assert browser.read() == browser.read(fresh=True)
 
 
 def test_plain_group_retention_counts_open_edits_as_one_step(vp):

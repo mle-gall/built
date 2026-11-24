@@ -1306,7 +1306,7 @@ class SetTagStateCommand(Command):
         from copy import deepcopy
         from core import layers as L, links
         self.before = L.layer_state(scene)
-        self.links_before = deepcopy({k: e.get("overrides") for k, e in links.registry(scene).items()
+        self.links_before = deepcopy({k: e.get("overrides") for k, e in links.registry_view(scene).items()
                                       if isinstance(e, dict)})
         if self.visible is not None:
             for key in self.folders:
@@ -1324,7 +1324,7 @@ class SetTagStateCommand(Command):
     def undo(self, scene):
         from core import layers as L, links
         L.apply_layer_state(scene, self.before)
-        for key, entry in links.registry(scene).items():
+        for key, entry in links.registry_view(scene).items():
             if isinstance(entry, dict) and key in self.links_before:
                 entry["overrides"] = dict(self.links_before[key] or {})
         scene.version += 1
@@ -1489,7 +1489,7 @@ def edit_material(history, name, color=None, opacity=None, tile=None):
         size = None
         if tile is not None:
             size = (float(tile[0]), float(tile[1]), float(tex.get("rot", 0.0)))
-        tint = tuple(color) if color is not None else (tuple(mat.color) if mat.color is not None else None)
+        tint = tuple(color) if color is not None else tex.get("tint")
         history.execute(EditTexturedMaterialCommand(name, tint, size=size))
         return _answer(history, before)
     if tile is not None and not mat.texture:

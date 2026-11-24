@@ -16,8 +16,7 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-import numpy as np  # noqa: E402
-import pytest  # noqa: E402
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
@@ -93,15 +92,6 @@ def _close(win):
     win.close()
 
 
-def _look(vp):
-    cam = vp.camera
-    cam.perspective = True
-    cam.target = V(10, 4, 1)
-    cam.distance, cam.yaw, cam.pitch = 45.0, 0.3, 0.5
-    vp._frame_planes = vp._frustum_planes(
-        cam.projection_matrix() * cam.view_matrix())
-
-
 def _fresh(vp, fn, *names):
     keep = {n: getattr(vp, n, None) for n in names}
     for n in names:
@@ -137,130 +127,88 @@ def _steps(vp, gs, box, plain):
         yield "undo"
 
 
-def test_the_lists_and_the_lazy_table_read_as_made_afresh():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp, gs, box, plain, glass = _scene(win)
-        vp._PICK_LAZY_MIN_FACES = 1
-        _lazy(vp)
+def test_the_lists_and_the_lazy_table_read_as_made_afresh(native_host):
+    vp, gs, box, plain, glass = _scene(native_host)
+    vp._PICK_LAZY_MIN_FACES = 1
+    _lazy(vp)
+    placements = vp._placements()
+    vp._static_draw_groups(placements)
+    for what in _steps(vp, gs, box, plain):
+        got = _lazy(vp)
+        assert got == _fresh(vp, lambda: _lazy(vp), "_pick_lazy_memo"), what
         placements = vp._placements()
-        vp._static_draw_groups(placements)
-        for what in _steps(vp, gs, box, plain):
-            got = _lazy(vp)
-            assert got == _fresh(vp, lambda: _lazy(vp), "_pick_lazy_memo"), what
-            placements = vp._placements()
-            stat = [id(g) for g in vp._static_draw_groups(placements)]
-            fresh = _fresh(vp, lambda: [id(g) for g in vp._static_draw_groups(
-                placements)], "_static_groups_memo")
-            assert stat == fresh, what
-    finally:
-        _close(win)
+        stat = [id(g) for g in vp._static_draw_groups(placements)]
+        fresh = _fresh(vp, lambda: [id(g) for g in vp._static_draw_groups(
+            placements)], "_static_groups_memo")
+        assert stat == fresh, what
 
 
-def test_an_object_kept_is_one_whose_whole_subtree_reads_the_same():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp, gs, box, plain, glass = _scene(win)
-        old = vp._placements_epoch()
-        m = QMatrix4x4(box.children[1].xform)
-        m.translate(0.0, 0.5, 0.0)
-        box.children[1].xform = m              # inside the container
-        vp.scene.version += 1
-        kept = vp._epoch_kept_tops(old)
-        assert id(box) not in kept
-        assert {id(g) for g in vp.scene.groups} - kept == {id(box)}
-        old = vp._placements_epoch()
-        vp.scene.layers[0].visible = not vp.scene.layers[0].visible
-        vp.scene.version += 1
-        assert vp._epoch_kept_tops(old) is None   # the rest changed too
-    finally:
-        _close(win)
+def test_an_object_kept_is_one_whose_whole_subtree_reads_the_same(native_host):
+    vp, gs, box, plain, glass = _scene(native_host)
+    old = vp._placements_epoch()
+    m = QMatrix4x4(box.children[1].xform)
+    m.translate(0.0, 0.5, 0.0)
+    box.children[1].xform = m              # inside the container
+    vp.scene.version += 1
+    kept = vp._epoch_kept_tops(old)
+    assert id(box) not in kept
+    assert {id(g) for g in vp.scene.groups} - kept == {id(box)}
+    old = vp._placements_epoch()
+    vp.scene.layers[0].visible = not vp.scene.layers[0].visible
+    vp.scene.version += 1
+    assert vp._epoch_kept_tops(old) is None   # the rest changed too
 
 
-def _pump(n=6):
-    for _ in range(n):
-        _app.processEvents()
-
-
-def test_the_browser_takes_rows_out_and_puts_them_in_as_a_rebuild_would():
+def test_the_browser_takes_rows_out_and_puts_them_in_as_a_rebuild_would(native_host):
     from core.group import copy_group
     from core.history import DeleteGroupCommand, InsertGroupCommand
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp, gs, box, plain, glass = _scene(win)
-        panel = win.project_browser.outliner
-        panel.refresh()
-
-        def dump():
-            out = []
-
-            def walk(item, depth):
-                for i in range(item.childCount()):
-                    c = item.child(i)
-                    out.append((depth, tuple(c.text(k) for k in range(8)),
-                                c.toolTip(1)))
-                    walk(c, depth + 1)
-            walk(panel._root, 0)
-            return out
-
-        rebuilds = []
-        real = panel._rebuild
-        panel._rebuild = lambda scene: (rebuilds.append(1), real(scene))[1]
-        h = vp.history
-        cmds = [DeleteGroupCommand(gs[2]), DeleteGroupCommand(box),
-                InsertGroupCommand(copy_group(gs[5], V(0.0, -6.0, 0.0))),
-                InsertGroupCommand(copy_group(box, V(4.0, 0.0, 0.0)))]
-        for cmd in cmds:
-            h.execute(cmd)
-            panel.refresh(rows_if_changed=True)
-            got = dump()
-            assert not rebuilds, type(cmd).__name__
-            panel._shape = None
-            panel.refresh()                          # made afresh
-            rebuilds.clear()
-            assert dump() == got, type(cmd).__name__
-        for _ in cmds:
-            h.undo()
-            panel.refresh(rows_if_changed=True)
-            got = dump()
-            assert not rebuilds
-            panel._shape = None
-            panel.refresh()
-            rebuilds.clear()
-            assert dump() == got
-        # A paste of a component counts one copy more in its siblings' rows.
-        from core import outliner
-        from views.outliner import COL_COPIES
-        n = outliner.instance_counts(vp.scene.groups)[id(gs[1].mesh)]
-        assert panel._items[id(gs[1])].text(COL_COPIES) == str(n)
-        h.execute(InsertGroupCommand(copy_group(gs[1], V(0.0, 5.0, 0.0))))
-        panel.refresh(rows_if_changed=True)
-        assert not rebuilds
-        assert panel._items[id(gs[1])].text(COL_COPIES) == str(n + 1)
-        assert panel._items[id(box.children[1])].text(COL_COPIES) == str(n + 1)
-    finally:
-        _close(win)
+    from tests.native_tree import FilingRows
+    vp, groups, box, *_ = _scene(native_host)
+    browser = FilingRows(native_host, ["i:" + box.uid])
+    browser.read()
+    model = browser.model
+    h = vp.history
+    commands = [DeleteGroupCommand(groups[2]), DeleteGroupCommand(box),
+                InsertGroupCommand(copy_group(groups[5], V(0, -6, 0))),
+                InsertGroupCommand(copy_group(box, V(4, 0, 0)))]
+    for cmd in commands:
+        h.execute(cmd)
+        assert browser.read() == browser.read(fresh=True)
+        assert browser.model is model
+    for _ in commands:
+        assert h.undo()
+        assert browser.read() == browser.read(fresh=True)
+        assert browser.model is model
+    from core.outliner import instance_counts
+    n = instance_counts(vp.scene.groups)[id(groups[1].mesh)]
+    def badges():
+        return {t[0]: t[3] for t, _ in browser.read()}
+    keys = ["i:" + groups[1].uid, "c:" + box.children[1].uid]
+    before = badges()
+    assert all(before[k] == f"×{n}" for k in keys)
+    h.execute(InsertGroupCommand(copy_group(groups[1], V(0, 5, 0))))
+    browser.view._ui_exp.add(f"d::{id(groups[1].mesh)}")
+    after = badges()
+    assert all(after[k] == f"×{n + 1}" for k in keys)
+    assert browser.model is model
 
 
-def test_a_rename_between_two_deletes_makes_the_rows_read_again():
+def test_a_rename_between_two_deletes_makes_the_rows_read_again(native_host):
     from core.history import DeleteGroupCommand
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp, gs, box, plain, glass = _scene(win)
-        panel = win.project_browser.outliner
-        panel.refresh()
-        vp.history.execute(DeleteGroupCommand(gs[2]))
-        gs[4].name = "renombrado"           # not through a command
-        vp.scene.version += 1
-        vp.history.execute(DeleteGroupCommand(gs[3]))
-        panel.refresh(rows_if_changed=True)
-        assert panel._items[id(gs[4])].text(0) == "renombrado"
-    finally:
-        _close(win)
+    from tests.test_tree_links import _View
+    from views import wgpu_ui
+    vp, groups, *_ = _scene(native_host)
+    view = _View()
+    view._ui_exp = {"n:"}
+    wgpu_ui._tree(view, native_host.window)
+    vp.history.execute(DeleteGroupCommand(groups[2]))
+    groups[4].name = "External rename"
+    vp.scene.version += 1
+    vp.history.execute(DeleteGroupCommand(groups[3]))
+    wgpu_ui._tree(view, native_host.window)
+    names = {t[0]: t[1] for t, _ in view.renderer.calls["ui_set_tree"][0]}
+    assert names["i:" + groups[4].uid] == "External rename"
+    assert all("i:" + g.uid not in names for g in groups[2:4])
 
 
 def test_the_materials_panel_reads_only_the_meshes_that_came():
@@ -374,24 +322,96 @@ def test_the_flow_layout_answers_a_new_width_and_a_new_item():
     assert lay.heightForWidth(100) > h2
 
 
-def test_only_groups_only_commands_carry_the_groups_mark_forward():
+def test_only_groups_only_commands_carry_the_groups_mark_forward(native_host):
     from core.group import copy_group
     from core.history import (CompoundCommand, DeleteGroupCommand,
                               InsertGroupCommand, SetFaceColorCommand)
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp, gs, box, plain, glass = _scene(win)
-        h = vp.history
-        cv = lambda: vp.scene.content_version            # noqa: E731
-        h.feed.readers.mark("mesh_paint", cv())
-        h.execute(DeleteGroupCommand(gs[0]))
-        h.execute(CompoundCommand([InsertGroupCommand(copy_group(gs[1]))]))
-        h.undo()
-        assert h.feed.readers.current("mesh_paint", cv())
-        h.execute(SetFaceColorCommand(list(plain[0].mesh.faces), (1, 0, 0)))
-        from core.protocol.keys import mesh_key
-        assert (not h.feed.readers.current("mesh_paint", cv())
-                or mesh_key(plain[0].mesh) in h.feed.readers.dirty_paint_meshes())
-    finally:
-        _close(win)
+    vp, gs, box, plain, glass = _scene(native_host)
+    h = vp.history
+    cv = lambda: vp.scene.content_version            # noqa: E731
+    h.feed.readers.mark("mesh_paint", cv())
+    h.execute(DeleteGroupCommand(gs[0]))
+    h.execute(CompoundCommand([InsertGroupCommand(copy_group(gs[1]))]))
+    h.undo()
+    assert h.feed.readers.current("mesh_paint", cv())
+    h.execute(SetFaceColorCommand(list(plain[0].mesh.faces), (1, 0, 0)))
+    from core.protocol.keys import mesh_key
+    assert (not h.feed.readers.current("mesh_paint", cv())
+            or mesh_key(plain[0].mesh) in h.feed.readers.dirty_paint_meshes())
+
+
+def test_inserting_a_nested_link_rebuilds_the_filing_projection(native_host, tmp_path):
+    from core.group import Group
+    from core.history import InsertGroupCommand
+    from tests.native_tree import FilingRows
+    browser = FilingRows(native_host)
+    browser.read()
+    before = browser.model
+    link = Group(name="Detached link")
+    link.ext = {"link": {"path": str(tmp_path / "Annex.igz")}}
+    holder = Group(name="Site")
+    holder.children = [link]
+    native_host.viewport.history.execute(InsertGroupCommand(holder))
+    rows = browser.read()
+    assert rows == browser.read(fresh=True)
+    assert any(t[0] == "n:link:Annex" for t, _ in rows)
+    assert browser.model is not before
+    assert native_host.viewport.history.undo()
+    assert browser.read() == browser.read(fresh=True)
+
+
+def test_two_panes_readdress_a_repeated_uid_and_undo_independently(native_host):
+    from core.group import Group
+    from core.history import InsertGroupCommand
+    from tests.native_tree import FilingRows
+
+    def branch(name):
+        top = Group(name=name)
+        top.children = [Group(name=name + " leaf", uid="shared-leaf")]
+        return top
+
+    vp = native_host.viewport
+    left, right = branch("Left"), branch("Right")
+    vp.history.execute(InsertGroupCommand(left))
+    panes = [FilingRows(native_host, ["i:" + g.uid for g in (left, right)]) for _ in range(2)]
+
+    def leaves(pane):
+        rows = pane.read()
+        assert rows == pane.read(fresh=True)
+        return {t[0]: t[1] for t, _ in rows if t[0].startswith("c:")}
+
+    assert all(leaves(p) == {"c:shared-leaf": "Left leaf"} for p in panes)
+    models = [p.model for p in panes]
+    vp.history.execute(InsertGroupCommand(right))
+    for p in reversed(panes):
+        addressed = leaves(p)
+        assert set(addressed.values()) == {"Left leaf", "Right leaf"}
+        assert all(key.startswith("c:@[") for key in addressed)
+    assert vp.history.undo()
+    for p, model in zip(panes, models):
+        assert leaves(p) == {"c:shared-leaf": "Left leaf"}
+        assert p.model is model
+
+
+def test_worker_prepared_tree_can_receive_edits_before_its_first_frame(native_host):
+    from core.group import Group
+    from core.history import InsertGroupCommand
+    from tests.native_tree import FilingRows
+    from views.wgpu_ui import prepare_tree_model
+
+    vp = native_host.viewport
+    vp.history.execute(InsertGroupCommand(Group(name="Site")))
+    panes = [FilingRows(native_host) for _ in range(2)]
+    for p in panes:
+        # The worker prepares membership before the view can see the feed.
+        p.view._ui_tree_model = ((id(vp.scene), vp.scene.content_version),
+                                 prepare_tree_model(vp.scene))
+    initial = panes[0].model
+    panes[0].read()
+    assert panes[0].model is initial
+    vp.history.execute(InsertGroupCommand(Group(name="Tower")))
+    for p in panes:
+        rows = p.read()
+        assert rows == p.read(fresh=True)
+        assert "Tower" in {t[1] for t, _ in rows}
+    assert panes[0].model is initial

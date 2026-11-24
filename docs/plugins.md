@@ -101,6 +101,7 @@ whole), and publishes one change-feed record.
 |---|---|
 | An edit the editor already has | `core.protocol.commands.run(history, name, **args)`, or the function of that name (`lock`, `rename_placement`, `paint_placements`, `move_placements`, `erase`, …). Arguments are keys, placement uids or, in process, the placement handles. The answer is `{"ok", "step", "error", "rejected"}`. These are the same verbs MCP uses. |
 | A typed native step to combine with others | `from ingetrazo_core import NativeCommand`: `NativeCommand.rename(group, name)`, `NativeCommand.rename_each(groups, names)`, `NativeCommand.lock(groups, locked)`, `NativeCommand.paint(groups, paint_or_None)`. |
+| An annotation, section, guide, image, scene, sheet, group or component edit | The editor's own step classes keep their names and constructors (`core.history.AddDimensionCommand(dim)`, `InsertGroupCommand(group)`, …). They are native `ingetrazo_core.RecordStep` subclasses: combine them freely, and `isinstance(step, core.history.Command)` stays true. |
 | Several steps as one | `core.history.CompoundCommand([step, ...])`. |
 | Any mesh, group or tag change written in Python | `core.history.SnapshotImport(mutate)`, below. |
 | A step with your own inverse | Subclass `core.history.Command` and implement `do(scene)` and `undo(scene)`. Set `doc_undo = True` when everything it changes is document state: the Rust history then undoes and redoes it from its transaction and never calls your `undo`. |

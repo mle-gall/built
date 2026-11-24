@@ -13,6 +13,19 @@ import pytest
 from formats import dwg_bridge
 
 
+@pytest.fixture(autouse=True)
+def _own_temp_dir(tmp_path, monkeypatch):
+    """Each test's conversions use a temporary directory of its own: the
+    leftover-folder checks below count ``ingetrazo-dwg-*`` folders, and
+    in the shared system one another process's conversion showed up."""
+    import tempfile
+    own = tmp_path / "tmp"
+    own.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(own))
+    monkeypatch.setenv("TMPDIR", str(own))
+    return own
+
+
 def _pairs(*items):
     return "\n".join(str(x) for x in items)
 
@@ -199,11 +212,14 @@ def _temp_dirs_left():
     return list(Path(tempfile.gettempdir()).glob("ingetrazo-dwg-*"))
 
 
-def test_sync_path_still_converts_headless(fake_converter, tmp_path):
+def test_sync_path_still_converts_headless(fake_converter, tmp_path, _own_temp_dir):
     fake_converter("ok")
     dxf = dwg_bridge.dwg_to_dxf(tmp_path / "a.dwg")
     try:
         assert dxf.is_file()
+        # The conversion's folder is in the test's own temporary directory,
+        # where the leftover checks look.
+        assert dxf.is_relative_to(_own_temp_dir) and _temp_dirs_left()
     finally:
         dwg_bridge.discard_temp_dxf(dxf)
 

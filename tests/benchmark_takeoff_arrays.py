@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Read-only takeoff timing; separate processes keep both runs genuinely cold.
 
-Run with INGETRAZO_RUST=1 QT_QPA_PLATFORM=offscreen. The optional native wheel
-is not required. Output profiles and quantity snapshots stay in the worktree.
+Run against a model fixture with the native core wheel installed. The output
+prefix names the profile and the adjacent quantity snapshot.
 """
 import argparse
 import cProfile
@@ -20,7 +20,7 @@ def main():
     parser.add_argument('model', type=Path)
     parser.add_argument('--output', required=True, type=Path)
     parser.add_argument('--reference', type=Path, help='baseline quantity JSON to compare')
-    parser.add_argument('--tray-repeats', type=int, default=1)
+    parser.add_argument('--inspector-repeats', '--tray-repeats', type=int, default=1)
     args = parser.parse_args()
     from core.scene import Scene
     from core.bim import collect_objects, object_quantities
@@ -60,23 +60,16 @@ def main():
         print('quantity mismatches:', mismatches, flush=True)
         if mismatches:
             raise AssertionError('quantities differ from the reference')
-    from types import SimpleNamespace
-    from PySide6.QtWidgets import QApplication
-    from views.tray import BimPanel
-    app = QApplication.instance() or QApplication([])
-    start = perf_counter()
-    panel = BimPanel(SimpleNamespace(viewport=SimpleNamespace(scene=scene)))
-    print('tray construction and initial size check:', perf_counter() - start, flush=True)
-    panel._measure_all = True
-    for repeat in range(args.tray_repeats):
-        panel.__dict__.pop('_takeoff_key', None)
-        panel._takeoff_memo = {}
+    from core.history import History
+    from ingetrazo_core import InspectorTakeoff
+    history = History(scene)
+    for repeat in range(args.inspector_repeats):
+        takeoff = InspectorTakeoff()
         start = perf_counter()
-        panel.refresh()
-        print('tray refresh, warm arrays/fresh memo', repeat + 1,
+        takeoff.refresh(history)
+        print('inspector measurement, warm arrays/fresh memo', repeat + 1,
               perf_counter() - start, flush=True)
-    panel.close()
-    app.processEvents()
+        assert takeoff.count == len(objects)
 
 
 if __name__ == '__main__':

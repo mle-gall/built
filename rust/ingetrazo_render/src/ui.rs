@@ -28,6 +28,7 @@ use lens::Lens;
 mod tree_order;
 mod tree_filter;
 mod tree_keys;
+mod tree_rows;
 mod drawing;
 mod drawing_catalog;
 mod drawing_hatches;
@@ -450,33 +451,7 @@ impl Ui {
             inspector_title: String::new(),
             inspector: Vec::new(), highlighted: None, focused_row: None,
         });
-        let g = |v: &Vec<i64>, i: usize| v.get(i).copied().unwrap_or(0);
-        let s = |v: &Vec<String>, i: usize| v.get(i).cloned().unwrap_or_default();
-        let mut linked_ancestors: Vec<bool> = Vec::new();
-        col.nodes = rows.into_iter().map(|(mut t, n)| {
-            let raw = s(&t, 2);
-            let (kind, tip) = match raw.split_once('\u{1e}') {
-                Some((k, tip)) => (k.to_string(), tip.to_string()),
-                None => (raw, String::new()),
-            };
-            linked_ancestors.truncate(g(&n, 0) as usize);
-            let key = s(&t, 0);
-            let linked = linked_ancestors.last().copied().unwrap_or(false) || key.starts_with("n:link:") || s(&t, 4) == "link";
-            linked_ancestors.push(linked);
-            Node {
-            control_tips: if (g(&n, 5) == 2 || g(&n, 6) == 2) && t.len() >= 7 {
-                let lock = t.pop().unwrap();
-                [t.pop().unwrap(), lock]
-            } else { Default::default() },
-            dim: g(&n, 11) != 0 || g(&n, 5) == 2,
-            local_placement: !linked && matches!(g(&n, 4), 1 | 2) && (key.starts_with("i:") || key.starts_with("c:")),
-            key, name: s(&t, 1), kind, tip, badge: s(&t, 3), icon: s(&t, 4),
-            depth: g(&n, 0) as usize, count: g(&n, 1) as u32, problems: g(&n, 2) as u32, active: g(&n, 3) != 0,
-            row: g(&n, 4) as u8, eye: g(&n, 5) as i8, lock: g(&n, 6) as i8, expandable: g(&n, 7) != 0,
-            expanded: g(&n, 8) != 0, selected: g(&n, 9) as u32, mark: g(&n, 10) as u8,
-            hatch: kit::hatch_override(t.get(5..).unwrap_or_default()).map(Box::new),
-            cells: t.get(5..).map(|c| c.to_vec()).unwrap_or_default(),
-        }}).collect();
+        col.nodes = tree_rows::reconcile(std::mem::take(&mut col.nodes), rows);
         if col.highlighted.as_ref().is_some_and(|k| !k.starts_with("n:") && !k.starts_with("preview-tag:") &&
             !col.nodes.iter().any(|n| &n.key == k && n.selected > 0)) {
             col.highlighted = None;
@@ -1005,9 +980,13 @@ impl Ui {
     /// The value field's facts for this frame (ui/value_field.rs): `start`
     /// is the tool's start point on screen, `revision` that of what the value
     /// acts on (the document; the lens for Zoom).
-    pub fn set_cursor_value(&mut self, caption: String, value: String, typing: bool, x: f32, y: f32,
+    pub fn set_cursor_value(&mut self, caption: String, value: String, typing: bool, x: Option<f32>, y: Option<f32>,
                             start: Option<(f32, f32)>, revision: u64) {
-        self.cursor.set(caption, value, typing, pos2(x, y), start.map(|(x, y)| pos2(x, y)), revision);
+        let at = x.zip(y).map(|(x, y)| pos2(x, y)).unwrap_or_else(|| {
+            let pointer = self.ctx.input(|i| i.pointer.hover_pos()).unwrap_or(self.screen.center());
+            self.cursor.retype_anchor(revision).unwrap_or(pointer - egui::vec2(0., 22.))
+        });
+        self.cursor.set(caption, value, typing, at, start.map(|(x, y)| at), revision);
     }
     pub fn set_selection(&mut self, summary: String, actions: Vec<(String, String, String, bool, bool)>) {
         self.selection = (!summary.is_empty()).then_some((summary, actions));
