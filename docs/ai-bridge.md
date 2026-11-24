@@ -6,7 +6,13 @@ el agente dibuja, consulta y **ve** el modelo en vivo — y cada acción suya
 es un paso de undo transaccional (si su código falla, el documento se
 revierte entero; el guard de hermeticidad valida sus recetas).
 
-## Uso
+En la aplicación nativa, `built --mcp` inicia el servidor MCP por entrada y
+salida estándar. Para operar sobre un documento abierto hace falta además el
+puente dentro de la aplicación. Su implementación actual depende de Qt y
+acepta órdenes de procesos locales sin autenticación. El ejecutable nativo
+mantiene desactivado ese componente.
+
+## Uso en la interfaz clásica
 
 1. En IngeTrazo: pestaña **IA** de la barra lateral ▸ sección **Puente IA
    (MCP)** ▸ **Encender puente** (o **Extensiones ▸ Puente IA (MCP)**, que
