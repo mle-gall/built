@@ -28,7 +28,7 @@ from contextvars import ContextVar
 from typing import Iterable, Optional
 from itertools import count
 
-from ingetrazo_core import Vec3 as QVector3D, polygon_centroid, polygon_net_area, polygon_newell
+from ingetrazo_core import object_drawing, Vec3 as QVector3D, polygon_centroid, polygon_net_area, polygon_newell
 
 
 # Weld tolerance — two positions within this many decimals (~0.1 mm at metric
@@ -1400,25 +1400,7 @@ class Mesh:
         first face in mesh order. Removed faces retire their keys."""
         self._chunk_dirty = True
         self._mut_serial += 1
-        seen: dict = {}
-        removed = 0
-        for f in list(self.faces):
-            sig = frozenset(
-                frozenset((f.loop[i].key, f.loop[(i + 1) % len(f.loop)].key))
-                for i in range(len(f.loop))
-            )
-            other = seen.get(sig)
-            if other is None:
-                seen[sig] = f
-                continue
-            drop, keep = ((other, f) if len(f.hole_loops) > len(other.hole_loops)
-                          else (f, other))
-            if drop.attrs and not keep.attrs:
-                keep.attrs = dict(drop.attrs)
-            self.remove_face(drop)
-            seen[sig] = keep
-            removed += 1
-        return removed
+        return object_drawing.dedupe_faces(self)
 
     def _weld_into(self, keep: Vertex, dup: Vertex) -> None:
         """Keep ``keep``'s key and retire ``dup``. Surviving faces keep keys.
@@ -1434,21 +1416,7 @@ class Mesh:
         T-junction: ``edge`` runs past a vertex that belongs to another face),
         or ``None``. Splitting there is what makes mismatched subdivisions share
         connectivity instead of leaving a naked seam."""
-        a = edge.v0.position
-        b = edge.v1.position
-        ab = b - a
-        length = ab.length()
-        if length < _STITCH_TOL:
-            return None
-        for v in self.vertices:
-            if v == edge.v0 or v == edge.v1:
-                continue
-            t = QVector3D.dotProduct(v.position - a, ab) / (length * length)
-            if t <= _STITCH_TOL / length or t >= 1.0 - _STITCH_TOL / length:
-                continue
-            if (v.position - (a + ab * t)).length() < _STITCH_TOL:
-                return v
-        return None
+        return object_drawing.interior_vertex(self, edge, _STITCH_TOL)
 
     def split_edge_at(self, edge: Edge, mid: Vertex) -> dict:
         """Split ``edge`` at the *existing* vertex ``mid`` on its interior.
@@ -1468,24 +1436,7 @@ class Mesh:
         are collinear and border the same faces, so it is a spurious subdivision
         of a straight boundary (no edge or face needs it); a surface model keeps
         no such vertex. Removing it lets two coplanar faces share a single edge again."""
-        if len(v.edges) != 2:
-            return False
-        e1, e2 = list(v.edges)
-        d1 = v.position - e1.other(v).position
-        d2 = e2.other(v).position - v.position
-        if d1.length() < _STITCH_TOL or d2.length() < _STITCH_TOL:
-            return False
-        if QVector3D.dotProduct(d1.normalized(), d2.normalized()) < 0.999:
-            return False
-        if set(e1.faces) != set(e2.faces):
-            return False
-        # A loop of three keeps its corners, however thin: a sliver hole in
-        # an STL import lost one and became a hole of two, and the model
-        # could no longer be saved (IndexError in _maximal_holes; Windows
-        # round 0.6.2, already in 0.6.1).
-        return not any(len(loop) <= 3 and v in loop
-                       for face in e1.faces
-                       for loop in (face.loop, *face.hole_loops))
+        return object_drawing.collapsible(v, _STITCH_TOL)
 
     def collapse_vertex(self, v: Vertex) -> dict:
         """Remove the redundant valence-2 collinear vertex ``v`` (see
@@ -1495,31 +1446,7 @@ class Mesh:
         key, retiring both old edges and the removed vertex. A new joined
         edge runs from the end with the smaller position (as a tuple) to the
         other."""
-        e1, e2 = list(v.edges)
-        n1, n2 = e1.other(v), e2.other(v)
-        # The joined edge runs from the end with the smaller position: the
-        # two edges came in set order (object addresses), so its direction
-        # differed from run to run (design decision 5). Faces in e1's order.
-        if n2.position.toTuple() < n1.position.toTuple():
-            e1, e2, n1, n2 = e2, e1, n2, n1
-        faces = list({f.key: f for f in e1.faces}.values())
-        self.remove_edge(e1)
-        self.remove_edge(e2)
-        new_edge_existed = self.find_edge(n1, n2) is not None
-        new_edge = self._link_edge(n1, n2)
-        for face in faces:
-            for loop in (face.loop, *face.hole_loops):
-                if v in loop:
-                    loop.remove(v)
-            if face not in new_edge.faces:
-                new_edge.faces.append(face)
-        if v in self.vertices:
-            self.vertices.remove(v)
-        if self._registry.get(_key(v.position)) is v:
-            del self._registry[_key(v.position)]
-        return {"kind": "collapse", "v": v, "e1": e1, "e2": e2, "n1": n1,
-                "n2": n2, "new_edge": new_edge, "new_edge_new": not new_edge_existed,
-                "faces": faces}
+        return object_drawing.collapse_vertex(self, v, _key)
 
     def collapse_collinear(self) -> int:
         """Phase 2 of ``core.history.run_stitch``: while a listed vertex is
@@ -1575,24 +1502,7 @@ class Mesh:
             from ingetrazo_core import revert_object_split
             revert_object_split(self, rec)
         elif kind == "collapse":
-            v = rec["v"]
-            if v not in self.vertices:
-                self.vertices.append(v)
-            self._registry.setdefault(_key(v.position), v)
-            if rec["new_edge_new"]:
-                self.remove_edge(rec["new_edge"])
-            else:
-                for face in rec["faces"]:
-                    if face in rec["new_edge"].faces:
-                        rec["new_edge"].faces.remove(face)
-            self.relink_edge(rec["e1"])
-            self.relink_edge(rec["e2"])
-            for face in rec["faces"]:
-                self._insert_into_face_loops(face, rec["n1"], rec["n2"], v)
-                if face not in rec["e1"].faces:
-                    rec["e1"].faces.append(face)
-                if face not in rec["e2"].faces:
-                    rec["e2"].faces.append(face)
+            object_drawing.revert_collapse(self, rec, _key)
         elif kind in ("merge", "merge_pair"):
             from ingetrazo_core import revert_recorded_union
             revert_recorded_union(self, rec, kind == "merge_pair")

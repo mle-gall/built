@@ -13,7 +13,7 @@ fn side(a: XY, b: XY, p: XY) -> f64 {
 fn segments<T>(ring: &[T]) -> impl Iterator<Item = (&T, &T)> {
     ring.iter().zip(ring.iter().cycle().skip(1))
 }
-pub(super) fn inside(p: XY, poly: &[XY], strict: bool) -> bool {
+pub(crate) fn inside(p: XY, poly: &[XY], strict: bool) -> bool {
     let mut result = false;
     for (&b, &a) in segments(poly) {
         let dx = b[0] - a[0];
@@ -28,7 +28,7 @@ pub(super) fn inside(p: XY, poly: &[XY], strict: bool) -> bool {
     }
     result
 }
-fn locate(r: &[P], p: P, h: Hypot) -> Option<(usize, bool)> {
+pub(crate) fn locate(r: &[P], p: P, h: Hypot) -> Option<(usize, bool)> {
     if let Some(i) = r.iter().position(|&q| key(q) == key(p)) {
         return Some((i, false));
     }
@@ -224,7 +224,8 @@ impl Outline {
         }
         self.solid_at(p)
     }
-    pub(super) fn solid_at(&self, p: P) -> bool {
+    pub(crate) fn solid_at(&self, p: P) -> bool {
+        if self.rings.first().is_none_or(Vec::is_empty) { return false; }
         let q = self.proj(p);
         inside(q, &self.polygon(&self.rings[0]), false)
             && !self
@@ -331,7 +332,7 @@ fn on_segment(p: P, a: P, b: P, h: Hypot) -> bool {
     (-1e-4..=1.0001).contains(&t)
         && length(vector(p).sub(vector(a).add(ab.mul(t))), h) < 1e-4
 }
-pub(super) fn refine(r: &[P], points: &[P], tol: f64, h: Hypot) -> Ring {
+pub(crate) fn refine(r: &[P], points: &[P], tol: f64, h: Hypot) -> Ring {
     let mut out = vec![];
     for (&a, &b) in segments(r) {
         out.push(a);

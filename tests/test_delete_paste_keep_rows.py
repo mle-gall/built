@@ -16,8 +16,7 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-import numpy as np  # noqa: E402
-import pytest  # noqa: E402
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
@@ -93,15 +92,6 @@ def _close(win):
     win.close()
 
 
-def _look(vp):
-    cam = vp.camera
-    cam.perspective = True
-    cam.target = V(10, 4, 1)
-    cam.distance, cam.yaw, cam.pitch = 45.0, 0.3, 0.5
-    vp._frame_planes = vp._frustum_planes(
-        cam.projection_matrix() * cam.view_matrix())
-
-
 def _fresh(vp, fn, *names):
     keep = {n: getattr(vp, n, None) for n in names}
     for n in names:
@@ -137,51 +127,36 @@ def _steps(vp, gs, box, plain):
         yield "undo"
 
 
-def test_the_lists_and_the_lazy_table_read_as_made_afresh():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp, gs, box, plain, glass = _scene(win)
-        vp._PICK_LAZY_MIN_FACES = 1
-        _lazy(vp)
+def test_the_lists_and_the_lazy_table_read_as_made_afresh(native_host):
+    vp, gs, box, plain, glass = _scene(native_host)
+    vp._PICK_LAZY_MIN_FACES = 1
+    _lazy(vp)
+    placements = vp._placements()
+    vp._static_draw_groups(placements)
+    for what in _steps(vp, gs, box, plain):
+        got = _lazy(vp)
+        assert got == _fresh(vp, lambda: _lazy(vp), "_pick_lazy_memo"), what
         placements = vp._placements()
-        vp._static_draw_groups(placements)
-        for what in _steps(vp, gs, box, plain):
-            got = _lazy(vp)
-            assert got == _fresh(vp, lambda: _lazy(vp), "_pick_lazy_memo"), what
-            placements = vp._placements()
-            stat = [id(g) for g in vp._static_draw_groups(placements)]
-            fresh = _fresh(vp, lambda: [id(g) for g in vp._static_draw_groups(
-                placements)], "_static_groups_memo")
-            assert stat == fresh, what
-    finally:
-        _close(win)
+        stat = [id(g) for g in vp._static_draw_groups(placements)]
+        fresh = _fresh(vp, lambda: [id(g) for g in vp._static_draw_groups(
+            placements)], "_static_groups_memo")
+        assert stat == fresh, what
 
 
-def test_an_object_kept_is_one_whose_whole_subtree_reads_the_same():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp, gs, box, plain, glass = _scene(win)
-        old = vp._placements_epoch()
-        m = QMatrix4x4(box.children[1].xform)
-        m.translate(0.0, 0.5, 0.0)
-        box.children[1].xform = m              # inside the container
-        vp.scene.version += 1
-        kept = vp._epoch_kept_tops(old)
-        assert id(box) not in kept
-        assert {id(g) for g in vp.scene.groups} - kept == {id(box)}
-        old = vp._placements_epoch()
-        vp.scene.layers[0].visible = not vp.scene.layers[0].visible
-        vp.scene.version += 1
-        assert vp._epoch_kept_tops(old) is None   # the rest changed too
-    finally:
-        _close(win)
-
-
-def _pump(n=6):
-    for _ in range(n):
-        _app.processEvents()
+def test_an_object_kept_is_one_whose_whole_subtree_reads_the_same(native_host):
+    vp, gs, box, plain, glass = _scene(native_host)
+    old = vp._placements_epoch()
+    m = QMatrix4x4(box.children[1].xform)
+    m.translate(0.0, 0.5, 0.0)
+    box.children[1].xform = m              # inside the container
+    vp.scene.version += 1
+    kept = vp._epoch_kept_tops(old)
+    assert id(box) not in kept
+    assert {id(g) for g in vp.scene.groups} - kept == {id(box)}
+    old = vp._placements_epoch()
+    vp.scene.layers[0].visible = not vp.scene.layers[0].visible
+    vp.scene.version += 1
+    assert vp._epoch_kept_tops(old) is None   # the rest changed too
 
 
 def test_the_browser_takes_rows_out_and_puts_them_in_as_a_rebuild_would():
@@ -245,22 +220,22 @@ def test_the_browser_takes_rows_out_and_puts_them_in_as_a_rebuild_would():
         _close(win)
 
 
-def test_a_rename_between_two_deletes_makes_the_rows_read_again():
+def test_a_rename_between_two_deletes_makes_the_rows_read_again(native_host):
     from core.history import DeleteGroupCommand
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp, gs, box, plain, glass = _scene(win)
-        panel = win.project_browser.outliner
-        panel.refresh()
-        vp.history.execute(DeleteGroupCommand(gs[2]))
-        gs[4].name = "renombrado"           # not through a command
-        vp.scene.version += 1
-        vp.history.execute(DeleteGroupCommand(gs[3]))
-        panel.refresh(rows_if_changed=True)
-        assert panel._items[id(gs[4])].text(0) == "renombrado"
-    finally:
-        _close(win)
+    from tests.test_tree_links import _View
+    from views import wgpu_ui
+    vp, groups, *_ = _scene(native_host)
+    view = _View()
+    view._ui_exp = {"n:"}
+    wgpu_ui._tree(view, native_host.window)
+    vp.history.execute(DeleteGroupCommand(groups[2]))
+    groups[4].name = "External rename"
+    vp.scene.version += 1
+    vp.history.execute(DeleteGroupCommand(groups[3]))
+    wgpu_ui._tree(view, native_host.window)
+    names = {t[0]: t[1] for t, _ in view.renderer.calls["ui_set_tree"][0]}
+    assert names["i:" + groups[4].uid] == "External rename"
+    assert all("i:" + g.uid not in names for g in groups[2:4])
 
 
 def test_the_materials_panel_reads_only_the_meshes_that_came():
@@ -374,24 +349,19 @@ def test_the_flow_layout_answers_a_new_width_and_a_new_item():
     assert lay.heightForWidth(100) > h2
 
 
-def test_only_groups_only_commands_carry_the_groups_mark_forward():
+def test_only_groups_only_commands_carry_the_groups_mark_forward(native_host):
     from core.group import copy_group
     from core.history import (CompoundCommand, DeleteGroupCommand,
                               InsertGroupCommand, SetFaceColorCommand)
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp, gs, box, plain, glass = _scene(win)
-        h = vp.history
-        cv = lambda: vp.scene.content_version            # noqa: E731
-        h.feed.readers.mark("mesh_paint", cv())
-        h.execute(DeleteGroupCommand(gs[0]))
-        h.execute(CompoundCommand([InsertGroupCommand(copy_group(gs[1]))]))
-        h.undo()
-        assert h.feed.readers.current("mesh_paint", cv())
-        h.execute(SetFaceColorCommand(list(plain[0].mesh.faces), (1, 0, 0)))
-        from core.protocol.keys import mesh_key
-        assert (not h.feed.readers.current("mesh_paint", cv())
-                or mesh_key(plain[0].mesh) in h.feed.readers.dirty_paint_meshes())
-    finally:
-        _close(win)
+    vp, gs, box, plain, glass = _scene(native_host)
+    h = vp.history
+    cv = lambda: vp.scene.content_version            # noqa: E731
+    h.feed.readers.mark("mesh_paint", cv())
+    h.execute(DeleteGroupCommand(gs[0]))
+    h.execute(CompoundCommand([InsertGroupCommand(copy_group(gs[1]))]))
+    h.undo()
+    assert h.feed.readers.current("mesh_paint", cv())
+    h.execute(SetFaceColorCommand(list(plain[0].mesh.faces), (1, 0, 0)))
+    from core.protocol.keys import mesh_key
+    assert (not h.feed.readers.current("mesh_paint", cv())
+            or mesh_key(plain[0].mesh) in h.feed.readers.dirty_paint_meshes())

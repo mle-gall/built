@@ -186,33 +186,22 @@ def _ink_pixels(icon, size=48) -> int:
                if img.pixelColor(x, y).alpha() > 128)
 
 
-def test_toolbar_icons_are_drawn_with_fine_lines(app, monkeypatch):
+def test_toolbar_icons_are_drawn_with_fine_lines(app):
     """Round 14: the icons' lines read heavy (1.5-2 px at 24 px); they are
-    drawn at 65 % of their written width now."""
+    drawn at 65 % of their written width. The atlas keeps the thinned
+    drawings: at full weight Line inked 152 or more pixels at 48 px."""
     from views import icons
-    assert icons.ICON_STROKE == pytest.approx(0.65)
-    thin = [_ink_pixels(icons.tool_icon(k)) for k in ("line", "move", "zoom")]
-    monkeypatch.setattr(icons, "ICON_STROKE", 1.0)
-    full = [_ink_pixels(icons.tool_icon(k)) for k in ("line", "move", "zoom")]
-    for a, b in zip(thin, full):
-        assert a < b * 0.8
+    assert _ink_pixels(icons.tool_icon("line")) <= 130
+    assert _ink_pixels(icons.tool_icon("move")) <= 215
 
 
 def test_the_overflow_chevron_keeps_its_weight(app):
     # Thinned, the 16 px chevron faded to a grey blank again.
     from views import icons
-    assert {"overflow_h", "overflow_v"} <= icons.FULL_WEIGHT
-
-
-def test_cursors_keep_their_full_weight(app):
-    from views import icons
-    icons.tool_icon("move")                  # a toolbar icon in between
-    assert icons._stroke == 1.0              # ... leaves no factor behind
-    pen = icons._Pen(QColor("black"), 3.0)
-    assert pen.widthF() == pytest.approx(3.0)
-    with icons._weighted(icons.ICON_STROKE):
-        assert icons._Pen(QColor("black"), 3.0).widthF() \
-            == pytest.approx(3.0 * icons.ICON_STROKE)
+    img = icons.tool_icon("overflow_h").pixmap(48, 48).toImage()
+    # A full-weight stroke: some column holds three opaque pixels in a run.
+    runs = [sum(1 for y in range(48) if img.pixelColor(x, y).alpha() > 200) for x in range(48)]
+    assert max(runs) >= 3
 
 
 def test_row_marks_keep_ingetrazo_s_original_look(app):

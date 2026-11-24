@@ -214,7 +214,7 @@ def test_panels_forget_what_they_drew_for_the_other_project(win):
         win.viewport.scene.version += 1
         assert [r[0] for r in wgpu_ui._components_in_model(view, win)] == [name]
         wgpu_ui._tree(view, win)
-        assert view._ui_tree_cv[0] == id(win.viewport.scene)
+        assert view._ui_tree_model[0][0] == id(win.viewport.scene)
 
 
 def test_materials_let_go_of_the_meshes_of_the_project_left(win):

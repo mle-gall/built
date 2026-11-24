@@ -20,6 +20,8 @@ pub struct Gesture {
     angle: f64,
     magnet: Option<f64>,
     screen: Option<f64>,
+    #[pyo3(default = 5.0)]
+    max_axis_reach: f64,
     threshold: f64,
     et: f64,
     diagonal: bool,
@@ -56,18 +58,19 @@ impl Gesture {
         let d = sub(self.world, s);
         let reach = norm(d);
         let mut axis = None;
-        if reach >= 1e-6 {
-            if let (Some(radius), Some((x, y))) = (self.screen, q.pixel(s)) {
-                let samples = self
-                    .axes
-                    .map(|a| q.pixel(along(s, a, reach)).map(|(x, y)| [x, y]));
+        if self.screen.is_some() && reach >= 1e-6 {
+            if let (Some(radius), Some((x, y))) = (self.screen, q.pixel(s)?) {
+                let mut samples = [None; 3];
+                for (slot, a) in samples.iter_mut().zip(self.axes) {
+                    *slot = q.pixel(along(s, a, reach))?.map(|(x, y)| [x, y]);
+                }
                 if let Some(k) = crate::snap::screen_axis([x, y], samples, q.cursor, radius)
                     .filter(|&k| self.in_plane(k))
                 {
                     let locked: P = frame
                         .call_method1("project_line", (s, self.axes[k]))?
                         .extract()?;
-                    if norm(sub(locked, s)) <= 5. * reach {
+                    if norm(sub(locked, s)) <= self.max_axis_reach * reach {
                         axis = Some(k);
                     }
                 }
@@ -189,7 +192,7 @@ pub fn resolve_snap<'py>(q: &SnapQuery, frame: &Bound<'py, PyAny>) -> PyResult<B
             if let Some(p) = g.acquired {
                 let d = sub(p, s);
                 let draw = sub(g.world, s);
-                if q.distance(p) > g.threshold && g.projectable && aligned(draw, d, g.angle) {
+                if q.distance(p)? > g.threshold && g.projectable && aligned(draw, d, g.angle) {
                     return frame
                         .call_method1("direction_result", ("through_point", s, unit(d), Some(p)));
                 }
@@ -217,7 +220,7 @@ pub fn resolve_snap<'py>(q: &SnapQuery, frame: &Bound<'py, PyAny>) -> PyResult<B
         if let (Some(s), Some(k), Some([a, b])) = (line, axis, edge) {
             let dir = g.axes[k];
             if let Some(p) = crate::snap::lock_crossing(s, dir, a, b, 1e-3) {
-                if q.distance(p) <= g.et && !frame.call_method1("hidden", (p,))?.is_truthy()? {
+                if q.distance(p)? <= g.et && !frame.call_method1("hidden", (p,))?.is_truthy()? {
                     return frame.call_method1("crossing_result", (p, s));
                 }
             } else if kind == "on_edge"
@@ -239,7 +242,7 @@ pub fn resolve_snap<'py>(q: &SnapQuery, frame: &Bound<'py, PyAny>) -> PyResult<B
                 let mut hits = Vec::new();
                 for (k, dir) in g.axes.iter().enumerate() {
                     if let Some(hit) = crate::snap::lock_crossing(ref_pt, *dir, a, b, 1e-3) {
-                        let distance = q.distance(hit);
+                        let distance = q.distance(hit)?;
                         if distance <= g.threshold && norm(sub(hit, ref_pt)) >= 1e-4 {
                             hits.push((distance, hit, k));
                         }

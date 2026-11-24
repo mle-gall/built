@@ -12,8 +12,9 @@ decimal places (≈ 0.1 mm at metric scale) are treated as the same node.
 """
 from __future__ import annotations
 
+import ingetrazo_core as kernel
+
 import math
-from collections import deque
 from typing import Iterable, Optional
 
 from ingetrazo_core import Vec3 as QVector3D, polygon_is_planar as is_planar
@@ -181,11 +182,7 @@ class CycleGraph:
         if self._scan is not None:
             self._scan.append(edge)
             return
-        ea, eb = self._key(edge.a), self._key(edge.b)
-        if ea == eb:
-            return
-        self.adj.setdefault(ea, []).append((eb, edge.b))
-        self.adj.setdefault(eb, []).append((ea, edge.a))
+        kernel.object_drawing.graph_insert(self.adj, self._key, edge)
 
     def remove(self, edge) -> bool:
         """Take ``edge`` out. False if it was not found as it was added —
@@ -196,64 +193,10 @@ class CycleGraph:
                     self._scan.remove(candidate)
                     return True
             return False
-        ea, eb = self._key(edge.a), self._key(edge.b)
-        if ea == eb:
-            return True
-        for u, v, pos in ((ea, eb, edge.b), (eb, ea, edge.a)):
-            row = self.adj.get(u, ())
-            for i, (v_key, v_pos) in enumerate(row):
-                if v_pos is pos and v_key == v:
-                    del row[i]
-                    break
-            else:
-                return False
-        return True
+        return kernel.object_drawing.graph_remove(self.adj, self._key, edge)
 
 
-def _smallest_cycle(adj, a, b, ka, kb, max_len: int = 32,
-                    skip=frozenset(), direct: bool = False):
-    """Breadth-first search from ``b`` to ``a`` over ``adj``, never entering a
-    node of ``skip`` — the same search ``adj`` built without the edges that
-    touch those nodes would make (adjacency lists keep the edge order).
-
-    ``direct``: ``adj`` still holds segment ``a``–``b`` itself (a
-    :class:`CycleGraph`), and the search must not take it — the step from
-    ``b`` straight to ``a`` is the only place it could."""
-    if ka not in adj or kb not in adj:
-        return None
-    if skip and not (any(v not in skip for v, _p in adj[ka])
-                     and any(v not in skip for v, _p in adj[kb])):
-        return None             # an end with no edge left once ``skip`` goes
-
-    parent: dict = {kb: None}
-    parent_pos: dict = {kb: b}
-    q = deque([kb])
-    found = False
-    while q:
-        u = q.popleft()
-        if u == ka:
-            found = True
-            break
-        for v_key, v_pos in adj.get(u, ()):
-            if direct and u == kb and v_key == ka:
-                continue
-            if v_key not in parent and v_key not in skip:
-                parent[v_key] = u
-                parent_pos[v_key] = v_pos
-                q.append(v_key)
-
-    if not found:
-        return None
-
-    path: list[QVector3D] = []
-    cur = ka
-    while cur is not None:
-        path.append(parent_pos[cur])
-        cur = parent[cur]
-    # path is [a, ..., b]. Cycle = path + implicit closing a–b.
-    if len(path) < 3 or len(path) > max_len:
-        return None
-    return path
+_smallest_cycle = kernel.object_drawing.smallest_cycle
 
 
 def segment_intersection(
@@ -274,79 +217,7 @@ def segment_intersection(
     edges. Collinear overlaps return ``None`` — those are a merge problem,
     handled separately, not a crossing.
     """
-    d1 = p2 - p1
-    d2 = p4 - p3
-    len1 = d1.length()
-    len2 = d2.length()
-    if len1 < tol or len2 < tol:
-        return None
-
-    # Solve with unit directions. Guide lines are represented as segments of
-    # +/- 10 km; using the raw vectors makes ``a*c - b*b`` subtract values
-    # around 1e17 in float32 and loses the determinant for ordinary crossings.
-    # Keeping the direction products near one avoids that cancellation while
-    # preserving the segment parameters below in world units.
-    components = lambda vector: (float(vector.x()), float(vector.y()),
-                                 float(vector.z()))
-    d1c = components(d1)
-    d2c = components(d2)
-    u1 = tuple(component / len1 for component in d1c)
-    u2 = tuple(component / len2 for component in d2c)
-    dot = lambda left, right: sum(left[i] * right[i] for i in range(3))
-    a = dot(u1, u1)
-    b = dot(u1, u2)
-    c = dot(u2, u2)
-    w0 = p1 - p3
-    w = components(w0)
-    d = dot(u1, w)
-    e = dot(u2, w)
-    denom = a * c - b * b
-    if denom < 1e-12:
-        return None  # parallel or collinear
-
-    s = (b * e - c * d) / denom
-    t = (a * e - b * d) / denom
-
-    # Allow a hair past the endpoints (proportional to length) so a touch
-    # exactly at a vertex still registers; same_position decides interior
-    # vs endpoint later.
-    margin1 = tol / len1
-    margin2 = tol / len2
-    if not (-margin1 <= s / len1 <= 1.0 + margin1):
-        return None
-    if not (-margin2 <= t / len2 <= 1.0 + margin2):
-        return None
-
-    p1c = components(p1)
-    p3c = components(p3)
-    point_on_1 = tuple(p1c[i] + u1[i] * s for i in range(3))
-    point_on_2 = tuple(p3c[i] + u2[i] * t for i in range(3))
-    gap = sum((point_on_1[i] - point_on_2[i]) ** 2 for i in range(3)) ** 0.5
-    # QVector3D stores endpoints as float32. Long guide segments therefore
-    # carry a small, length-dependent rounding error after normalization.
-    distance_tol = max(tol, 1.0e-7 * max(len1, len2))
-    if gap > distance_tol:
-        return None  # skew: lines pass without meeting
-    return QVector3D(*((point_on_1[i] + point_on_2[i]) * 0.5
-                       for i in range(3)))
-
-
-def _order_along(a: QVector3D, b: QVector3D, points: list[QVector3D]) -> list[QVector3D]:
-    """Deduplicate ``points`` and order them by their projection along a→b,
-    dropping any that coincide with an endpoint.
-
-    Coincidence is by real distance, not the rounded ``same_position`` key —
-    two points can sit 1e-5 apart yet straddle a rounding cell, and a chain
-    piece that short welds to a degenerate edge downstream."""
-    d = b - a
-    uniq: list[QVector3D] = []
-    for p in points:
-        if (p - a).length() <= _SPLIT_TOLERANCE or (p - b).length() <= _SPLIT_TOLERANCE:
-            continue
-        if not any((p - q).length() <= _SPLIT_TOLERANCE for q in uniq):
-            uniq.append(p)
-    uniq.sort(key=lambda p: QVector3D.dotProduct(p - a, d))
-    return uniq
+    return kernel.segment_hit(p1, p2, p3, p4, tol)
 
 
 def plan_edge_split(
@@ -368,30 +239,7 @@ def plan_edge_split(
     plan = _store_edge_plan(edges)
     if plan is not None:
         return plan.split_plan(a, b, whole=True)
-    new_cuts: list[QVector3D] = []
-    edge_cuts: dict[Edge, QVector3D] = {}
-    for e in edges:
-        point = segment_intersection(a, b, e.a, e.b)
-        if point is None:
-            continue
-        # Snap a graze to the vertex it grazes. A float32 tangency (circle
-        # vertex snapped onto an edge endpoint) lands the crossing a hair past
-        # the vertex; the rounded ``same_position`` key can miss the pair when
-        # it straddles a rounding cell, and the resulting sub-weld split plans
-        # an edge the mesh rejects as degenerate. Distance-based on purpose.
-        for anchor in (e.a, e.b, a, b):
-            if (point - anchor).length() <= _SPLIT_TOLERANCE:
-                point = anchor
-                break
-        if not (same_position(point, a) or same_position(point, b)):
-            new_cuts.append(point)
-        if not (same_position(point, e.a) or same_position(point, e.b)):
-            edge_cuts[e] = point
-
-    ordered = _order_along(a, b, new_cuts)
-    chain = [a, *ordered, b]
-    new_segments = [(chain[i], chain[i + 1]) for i in range(len(chain) - 1)]
-    return new_segments, edge_cuts
+    return kernel.split_edges(edges, a, b)
 
 
 def face_exists(faces: Iterable[Face], cycle: list[QVector3D]) -> bool:
@@ -421,20 +269,7 @@ def _strictly_inside_2d(p, poly: list[tuple[float, float]]) -> bool:
     """Ray-cast point-in-polygon, strict: points on the boundary are *not*
     inside (they signal a shared-edge case, which is a chord split, not a
     hole)."""
-    n = len(poly)
-    j = n - 1
-    inside = False
-    for i in range(n):
-        if _on_segment_2d(p, poly[i], poly[j]):
-            return False
-        xi, yi = poly[i]
-        xj, yj = poly[j]
-        if (yi > p[1]) != (yj > p[1]):
-            xint = xi + (xj - xi) * (p[1] - yi) / (yj - yi)
-            if p[0] < xint:
-                inside = not inside
-        j = i
-    return inside
+    return kernel.polygon_contains_2d(p, poly, True)
 
 
 def _drawing_store(face):
@@ -464,52 +299,7 @@ def loop_inside_face(mother: Face, loop: list[QVector3D],
     if store is not None:
         from core._native import qt_hypot
         return store.loop_inside_face(mother.key, [p.toTuple() for p in loop], outside_holes, qt_hypot())
-    if len(mother.vertices) < 3 or len(loop) < 3:
-        return False
-    normal = mother.normal()
-    origin = mother.vertices[0]
-    # Coplanarity: every loop vertex on the mother's plane.
-    for v in loop:
-        if abs(QVector3D.dotProduct(normal, v - origin)) > _PLANAR_TOLERANCE:
-            return False
-
-    from core.triangulate import plane_axes
-
-    u, w = plane_axes(normal)
-
-    def proj(p):
-        rel = p - origin
-        return (QVector3D.dotProduct(rel, u), QVector3D.dotProduct(rel, w))
-
-    poly2 = [proj(p) for p in mother.vertices]
-    if not all(_strictly_inside_2d(proj(v), poly2) for v in loop):
-        return False
-    if outside_holes:
-        loop2 = [proj(v) for v in loop]
-        lx = [q[0] for q in loop2]
-        ly = [q[1] for q in loop2]
-        lx0, lx1, ly0, ly1 = min(lx), max(lx), min(ly), max(ly)
-        gap = 1e-6
-        for hole in mother.holes:
-            hole2 = [proj(p) for p in hole]
-            # An opening whose box stands clear of the loop's neither holds
-            # a corner of it, nor has one inside it, nor crosses it.
-            hx = [q[0] for q in hole2]
-            if min(hx) > lx1 + gap or max(hx) < lx0 - gap:
-                continue
-            hy = [q[1] for q in hole2]
-            if min(hy) > ly1 + gap or max(hy) < ly0 - gap:
-                continue
-            if any(_strictly_inside_2d(q, hole2) for q in loop2):
-                return False
-            # A loop that wraps or straddles the hole without a corner in
-            # it overlaps the opening all the same; punched as a second hole
-            # the two crossed, the face triangulated over its own opening
-            # and the next rebuild filled it (#519).
-            if (any(_strictly_inside_2d(q, loop2) for q in hole2)
-                    or _loops_cross_2d(loop2, hole2)):
-                return False
-    return True
+    return kernel.FaceOutline(mother).contains(loop, outside_holes)
 
 
 def _loops_cross_2d(a: list, b: list) -> bool:
@@ -799,45 +589,7 @@ def refine_loop_with_points(
         ring = mesh._store.refine_ring([p.toTuple() for p in loop],
                                        [p.toTuple() for p in points], tol, hypot)
         return [QVector3D(*p) for p in ring]
-    import numpy as np
-    out: list[QVector3D] = []
-    n = len(loop)
-    pts = list(points)
-    # A point on a segment's interior lies inside its box (grown by the
-    # tolerance): only those reach the exact test below, in their order. The
-    # pushed face's loop against every vertex of a 25 797-face group was
-    # ~80 000 same_position calls per push (09-10).
-    xyz = (np.array([(p.x(), p.y(), p.z()) for p in pts], dtype=np.float64)
-           if pts else np.zeros((0, 3)))
-    for i in range(n):
-        a = loop[i]
-        b = loop[(i + 1) % n]
-        out.append(a)
-        ab = b - a
-        length = ab.length()
-        if length < tol:
-            continue
-        g = 2.0 * tol + 1e-6 * max(abs(a.x()), abs(a.y()), abs(a.z()),
-                                   abs(b.x()), abs(b.y()), abs(b.z()))
-        lo = np.array([min(a.x(), b.x()), min(a.y(), b.y()),
-                       min(a.z(), b.z())]) - g
-        hi = np.array([max(a.x(), b.x()), max(a.y(), b.y()),
-                       max(a.z(), b.z())]) + g
-        near = np.flatnonzero(((xyz >= lo) & (xyz <= hi)).all(axis=1))
-        on: list[tuple[float, QVector3D]] = []
-        for j in near:
-            p = pts[j]
-            if same_position(p, a) or same_position(p, b):
-                continue
-            t = QVector3D.dotProduct(p - a, ab) / (length * length)
-            if t <= tol / length or t >= 1.0 - tol / length:
-                continue
-            if (p - (a + ab * t)).length() < tol:
-                on.append((t, p))
-        on.sort(key=lambda it: it[0])
-        for _, p in on:
-            out.append(QVector3D(p))
-    return out
+    return kernel.refined_ring(loop, points, tol)
 
 
 def classify_push_edge(
@@ -930,33 +682,8 @@ def face_is_bordered(face: Face, faces: Iterable[Face]) -> bool:
 
 # ---- Chord split (a new edge divides an existing face) ---------------------
 
-def _point_on_segment_3d(
-    p: QVector3D, a: QVector3D, b: QVector3D, tol: float = _SPLIT_TOLERANCE
-) -> bool:
-    """Whether ``p`` lies on the *interior* of segment ``a``–``b`` (endpoints
-    excluded — those are handled as vertex hits)."""
-    ab = b - a
-    length = ab.length()
-    if length < tol:
-        return False
-    t = QVector3D.dotProduct(p - a, ab) / (length * length)
-    if t < tol or t > 1.0 - tol:
-        return False
-    return (p - (a + ab * t)).length() < tol
-
-
-def _locate_on_loop(vertices: list[QVector3D], p: QVector3D):
-    """Where ``p`` sits on a face's boundary loop: ``("vertex", i)`` if it is
-    vertex ``i``; ``("edge", i)`` if it lies on edge ``i → i+1``; else ``None``."""
-    kp = _key(p)
-    for i, v in enumerate(vertices):
-        if _key(v) == kp:
-            return ("vertex", i)
-    n = len(vertices)
-    for i in range(n):
-        if _point_on_segment_3d(p, vertices[i], vertices[(i + 1) % n]):
-            return ("edge", i)
-    return None
+def _locate_on_loop(vertices, point):
+    return kernel.locate_boundary(vertices, point)
 
 
 def split_face_by_chord(
@@ -977,59 +704,7 @@ def split_face_by_chord(
         from core._native import qt_hypot
         pieces = store.split_face_loops(face.key, [a.toTuple(), b.toTuple()], True, qt_hypot())
         return None if pieces is None else tuple([QVector3D(*p) for p in ring] for ring in pieces)
-    if face.holes or len(face.vertices) < 3:
-        return None
-    la = _locate_on_loop(face.vertices, a)
-    lb = _locate_on_loop(face.vertices, b)
-    if la is None or lb is None:
-        return None
-
-    # Build an augmented loop with any on-edge endpoints inserted in order.
-    on_edge: dict[int, list[QVector3D]] = {}
-    if la[0] == "edge":
-        on_edge.setdefault(la[1], []).append(QVector3D(a))
-    if lb[0] == "edge":
-        on_edge.setdefault(lb[1], []).append(QVector3D(b))
-
-    aug: list[QVector3D] = []
-    for i, v in enumerate(face.vertices):
-        aug.append(v)
-        if i in on_edge:
-            base = v
-            for p in sorted(on_edge[i], key=lambda q: (q - base).length()):
-                aug.append(p)
-
-    keys = [_key(v) for v in aug]
-    ia = keys.index(_key(a))
-    ib = keys.index(_key(b))
-    if ia > ib:
-        ia, ib = ib, ia
-    m = len(aug)
-    # Adjacent positions mean the "chord" is just a boundary edge.
-    if ib - ia <= 1 or (ia == 0 and ib == m - 1):
-        return None
-
-    # The chord must run through the interior, not outside a concave face.
-    normal = face.normal()
-    origin = face.vertices[0]
-    from core.triangulate import plane_axes
-
-    u, w = plane_axes(normal)
-
-    def proj(p):
-        rel = p - origin
-        return (QVector3D.dotProduct(rel, u), QVector3D.dotProduct(rel, w))
-
-    mid = (a + b) * 0.5
-    poly2 = [proj(v) for v in face.vertices]
-    if not _strictly_inside_2d(proj(mid), poly2):
-        return None
-
-    loop_a = aug[ia : ib + 1]
-    loop_b = aug[ib:] + aug[: ia + 1]
-    if len(loop_a) < 3 or len(loop_b) < 3:
-        return None
-    return loop_a, loop_b
+    return kernel.FaceOutline(face).split((a, b), True)
 
 
 def find_chord_split(
@@ -1098,22 +773,6 @@ def split_edge_in_faces(
 
 # ---- Loop subtraction (a face drawn against another's boundary) -------------
 
-def _face_plane_proj(face: Face):
-    """Return ``(proj, poly2)`` — a projector to the face's 2D plane and the
-    face's boundary projected with it."""
-    from core.triangulate import plane_axes
-
-    normal = face.normal()
-    origin = face.vertices[0]
-    u, w = plane_axes(normal)
-
-    def proj(p):
-        rel = p - origin
-        return (QVector3D.dotProduct(rel, u), QVector3D.dotProduct(rel, w))
-
-    return proj, [proj(v) for v in face.vertices]
-
-
 def find_subdividing_chain(
     face: Face, loop: list[QVector3D]
 ) -> Optional[list[QVector3D]]:
@@ -1137,58 +796,7 @@ def find_subdividing_chain(
         from core._native import qt_hypot
         chain = store.subdividing_chain(face.key, [p.toTuple() for p in loop], qt_hypot())
         return None if chain is None else [QVector3D(*p) for p in chain]
-    if len(face.vertices) < 3 or len(loop) < 3:
-        return None
-    proj, poly2 = _face_plane_proj(face)
-    normal, origin = face.normal(), face.vertices[0]
-
-    labels: list[str] = []
-    for v in loop:
-        if _locate_on_loop(face.vertices, v) is not None:
-            labels.append("bdry")
-        elif (abs(QVector3D.dotProduct(normal, v - origin)) <= _PLANAR_TOLERANCE
-              and _strictly_inside_2d(proj(v), poly2)):
-            labels.append("in")
-        else:
-            # The loop pokes outside the face, or off its plane → not a clean
-            # subdivision. The projection alone is not enough: a window drawn
-            # against a box's corner edge has its far corners 3 m in front of
-            # the side wall, projected onto that wall's edge, and float noise
-            # on a turned box put them a hair inside it — the side wall was
-            # carved into a face 2.9 m off its plane.
-            return None
-    if "in" not in labels or "bdry" not in labels:
-        return None
-
-    n = len(loop)
-    start = labels.index("bdry")
-    runs: list[list[int]] = []
-    cur: list[int] = []
-    for k in range(n):
-        idx = (start + k) % n
-        if labels[idx] == "in":
-            cur.append(idx)
-        elif cur:
-            runs.append(cur)
-            cur = []
-    if cur:
-        runs.append(cur)
-    if len(runs) != 1:
-        return None
-
-    run = runs[0]
-    p = loop[(run[0] - 1) % n]
-    q = loop[(run[-1] + 1) % n]
-    if same_position(p, q):
-        return None
-    return [p, *(loop[i] for i in run), q]
-
-
-def _arc(seq: list, i: int, j: int) -> list:
-    """Cyclic slice of ``seq`` from index ``i`` to ``j`` inclusive, forward."""
-    if i <= j:
-        return seq[i : j + 1]
-    return seq[i:] + seq[: j + 1]
+    return kernel.FaceOutline(face).chain(loop)
 
 
 def split_face_by_chain(
@@ -1202,31 +810,7 @@ def split_face_by_chain(
         from core._native import qt_hypot
         pieces = store.split_face_loops(face.key, [p.toTuple() for p in chain], False, qt_hypot())
         return None if pieces is None else tuple([QVector3D(*p) for p in ring] for ring in pieces)
-    p, q = chain[0], chain[-1]
-    middles = list(chain[1:-1])
-    on_edge: dict[int, list[QVector3D]] = {}
-    for pt in (p, q):
-        loc = _locate_on_loop(face.vertices, pt)
-        if loc is None:
-            return None
-        if loc[0] == "edge":
-            on_edge.setdefault(loc[1], []).append(QVector3D(pt))
-
-    aug: list[QVector3D] = []
-    for i, v in enumerate(face.vertices):
-        aug.append(v)
-        if i in on_edge:
-            for pp in sorted(on_edge[i], key=lambda r: (r - v).length()):
-                aug.append(pp)
-
-    keys = [_key(x) for x in aug]
-    ip = keys.index(_key(p))
-    iq = keys.index(_key(q))
-    region_pq = _arc(aug, ip, iq) + list(reversed(middles))
-    region_qp = _arc(aug, iq, ip) + middles
-    if len(region_pq) < 3 or len(region_qp) < 3:
-        return None
-    return region_pq, region_qp
+    return kernel.FaceOutline(face).split(chain, False)
 
 
 def subtract_loop_from_face(
@@ -1271,49 +855,7 @@ def carve_loop_by_chords(
         from core._native import qt_hypot
         pieces = store.carve_face(face.key, [p.toTuple() for p in loop], qt_hypot())
         return None if pieces is None else [[QVector3D(*p) for p in ring] for ring in pieces]
-    if len(face.vertices) < 3 or len(loop) < 3:
-        return None
-    if any(_locate_on_loop(face.vertices, v) is None for v in loop):
-        return None
-    proj, poly2 = _face_plane_proj(face)
-    chords = []
-    n = len(loop)
-    for i in range(n):
-        a, b = loop[i], loop[(i + 1) % n]
-        mid = (a + b) * 0.5
-        if _locate_on_loop(face.vertices, mid) is not None:
-            continue                          # runs along the boundary
-        if not _strictly_inside_2d(proj(mid), poly2):
-            return None                       # leaves the face
-        chords.append([QVector3D(a), QVector3D(b)])
-    if not chords:
-        return None
-
-    class _Piece:
-        __slots__ = ("vertices",)
-
-        def __init__(self, vertices):
-            self.vertices = vertices
-
-    pieces = [[QVector3D(v) for v in face.vertices]]
-    for chord in chords:
-        for idx, piece in enumerate(pieces):
-            mid = (chord[0] + chord[1]) * 0.5
-            p2 = [proj(v) for v in piece]
-            if not _strictly_inside_2d(proj(mid), p2):
-                continue
-            split = split_face_by_chain(_Piece(piece), chord)
-            if split is None:
-                return None
-            pieces[idx:idx + 1] = [list(split[0]), list(split[1])]
-            break
-        else:
-            return None
-    loop_keys = frozenset(_key(v) for v in loop)
-    rest = [p for p in pieces if frozenset(_key(v) for v in p) != loop_keys]
-    if len(rest) != len(pieces) - 1:
-        return None                           # the loop is not one of them
-    return rest
+    return kernel.FaceOutline(face).carve(loop)
 
 
 # ---- Multiple-cycle detection ----------------------------------------------
@@ -1463,17 +1005,7 @@ def _interior_point(loop: list[QVector3D], normal: QVector3D):
 
 
 def _point_inside_2d(pt, poly) -> bool:
-    x, y = pt
-    inside = False
-    n = len(poly)
-    j = n - 1
-    for i in range(n):
-        xi, yi = poly[i]
-        xj, yj = poly[j]
-        if ((yi > y) != (yj > y)) and (x < (xj - xi) * (y - yi) / (yj - yi) + xi):
-            inside = not inside
-        j = i
-    return inside
+    return kernel.polygon_contains_2d(pt, poly, False)
 
 
 def _maximal_holes(holes: list) -> list:
@@ -1559,19 +1091,7 @@ def _g_inside_a_hole(face: Face, loop: list[QVector3D]) -> bool:
 def _point_in_face_solid(face: Face, point: QVector3D) -> bool:
     """Whether ``point`` lies in ``face``'s solid region — inside its outer loop
     and outside every hole."""
-    from core.triangulate import plane_axes
-    n = face.normal()
-    u, w = plane_axes(n)
-    origin = face.vertices[0]
-
-    def proj(p):
-        rel = p - origin
-        return (QVector3D.dotProduct(rel, u), QVector3D.dotProduct(rel, w))
-
-    pt = proj(point)
-    if not _point_inside_2d(pt, [proj(v) for v in face.vertices]):
-        return False
-    return not any(_point_inside_2d(pt, [proj(v) for v in h]) for h in face.holes)
+    return kernel.FaceOutline(face).solid_at(point)
 
 
 def winding_footprint(mesh):

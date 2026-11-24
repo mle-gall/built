@@ -9,15 +9,11 @@ and tags, never the selection, so a view-only change keeps it; an edit
 or an undo still re-measures."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-import pytest  # noqa: E402
+import pytest
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
-from PySide6.QtWidgets import QApplication  # noqa: E402
-
-_app = QApplication.instance() or QApplication([])
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
+from tests.test_bim_takeoff_untagged_moves import measure
+from tests.native_tree import inspector
 
 from core.group import Group  # noqa: E402
 from core.mesh import Mesh  # noqa: E402
@@ -37,36 +33,23 @@ def _bar(x):
     return g
 
 
-def test_a_selection_keeps_the_takeoff_and_an_edit_remeasures(monkeypatch):
-    from views.main_window import MainWindow
-    import core.bim as bim
-    win = MainWindow()
-    try:
-        scene = win.viewport.scene
-        bars = [_bar(i) for i in range(3)]
-        scene.groups += bars
-        scene.version += 1
-        panel = win.bim_tray.bim
-        panel.refresh()
-        assert panel.tree.topLevelItemCount() == 3
-        calls = []
-        real = bim.collect_objects
-        monkeypatch.setattr(bim, "collect_objects",
-                            lambda s, *a: calls.append(1) or real(s, *a))
-        scene.select([bars[0]])
-        scene.select(bars, mode="add")
-        scene.clear_selection()
-        panel.refresh()
-        assert calls == []                    # nothing to re-measure
-        assert panel.tree.topLevelItemCount() == 3
-        bars[0].xform.scale(2.0)              # an edit
-        scene.version += 1
-        panel.refresh()
-        assert calls == [1]
-        assert panel.tree.topLevelItem(0).text(3) == "8.00"   # 2³ m³
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_a_selection_keeps_the_takeoff_and_an_edit_remeasures(native_host, monkeypatch):
+    from core import bim
+    from tests.test_bim_takeoff_untagged_moves import _counting
+    scene = native_host.viewport.scene
+    bars = [_bar(i) for i in range(3)]
+    scene.groups += bars
+    scene.version += 1
+    assert measure(native_host).count == 3
+    calls = _counting(monkeypatch)
+    for selection in ([bars[0]], bars, []):
+        inspector(native_host, selection)
+    assert calls == []
+    bars[0].xform.scale(2.)
+    scene.version += 1
+    rows = inspector(native_host, [bars[0]])
+    assert calls == [1]
+    assert float(rows["Quantities"]["kg"]) == pytest.approx(8 * bim.STEEL_DENSITY)
 
 
 def test_an_edit_remeasures_only_the_object_it_touched():
@@ -95,21 +78,13 @@ def test_an_edit_remeasures_only_the_object_it_touched():
     assert collect_objects(scene)[0] is not collect_objects(scene)[0]
 
 
-def test_skipped_takeoff_reports_elapsed_and_measure_anyway(monkeypatch):
-    from views.main_window import MainWindow
-    import views.tray as tray
-    win = MainWindow()
-    try:
-        scene = win.viewport.scene
-        scene.groups.append(_bar(0))
-        scene.version += 1
-        panel = win.bim_tray.bim
-        monkeypatch.setattr(tray, 'LIVE_TAKEOFF_FACE_LIMIT', 1)
-        panel.refresh()
-        assert 'Size check:' in panel.too_many.text()
-        assert panel.measure_btn.isHidden() is False
-        panel.measure_btn.click()
-        assert panel.tree.topLevelItemCount() == 1
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_takeoff_waits_until_asked_and_reports_elapsed(native_host, monkeypatch):
+    from tests.test_bim_takeoff_untagged_moves import _counting
+    vp = native_host.viewport
+    vp.scene.groups.append(_bar(0))
+    vp.scene.version += 1
+    calls, status = _counting(monkeypatch), []
+    monkeypatch.setattr(vp, "flash_status", status.append)
+    assert measure(native_host, auto=True) is None and not calls
+    assert measure(native_host).count == 1 and calls == [1]
+    assert status[-1].startswith("Measured 1 items in ") and status[-1].endswith(" s")

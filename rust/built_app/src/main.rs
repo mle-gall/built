@@ -206,9 +206,12 @@ struct Win {
     last_key_text: Option<String>,
     contact: Option<(u64, (f64, f64), bool)>,
     second_contact: Option<(u64, (f64, f64))>,
+    /// The part of the finger slide not yet handed over (gestures::carry).
+    slide_carry: (f64, f64),
 }
 
-/// `BUILT_PERF=1`: pointer-move handler and frame times, reported (and
+/// `BUILT_PERF=1`: pointer-move, wheel (slide, notch) and gesture (pinch,
+/// rotate) handler times and frame times, reported (and
 /// reset) by each scripted `state` step (docs/rust-tools.md §13).
 mod perf {
     use std::sync::Mutex;
@@ -226,13 +229,20 @@ mod perf {
         }
     }
 
+    /// A sample measured elsewhere, in milliseconds.
+    pub fn note_ms(what: &'static str, ms: f64) {
+        if on() {
+            SAMPLES.lock().unwrap().push((what, ms));
+        }
+    }
+
     pub fn report() {
         if !on() {
             return;
         }
         let samples = std::mem::take(&mut *SAMPLES.lock().unwrap());
         let mut parts = Vec::new();
-        for what in ["move_ms", "frame_ms", "open_stall_ms", "open_total_ms", "open_handover_ms"] {
+        for what in ["move_ms", "wheel_ms", "gesture_ms", "frame_ms", "py_frame_ms", "open_stall_ms", "open_total_ms", "open_handover_ms"] {
             let mut v: Vec<f64> = samples.iter().filter(|(w, _)| *w == what).map(|(_, x)| *x).collect();
             if v.is_empty() {
                 continue;
@@ -628,11 +638,7 @@ impl App {
                     h.call("text", (text,));
                 }
             }
-            Step::Wheel(x, y, dy, phase) => {
-                if let Some(h) = self.host(id) {
-                    h.call("wheel", (x, y, 0.0, dy, 0.0, dy * 2.0, phase.as_str(), 0u32, 0u32, true));
-                }
-            }
+            Step::Wheel(x, y, dy, phase) => self.slide(id, (x, y), (0.0, dy), &phase, false, true),
             Step::Notch(x, y, n) => {
                 if let Some(h) = self.host(id) {
                     h.call("wheel", (x, y, 0.0, 0.0, 0.0, n * 120.0, "none", 0u32, 0u32, false));
@@ -737,6 +743,7 @@ impl App {
         };
         let ns_view = if platform == "cocoa" { window_id } else { 0 };
         native::configure_window(ns_view);
+        if self.args.background() { native::send_window_back(ns_view); }
         let size = window.inner_size();
         let scale = window.scale_factor();
         let host = python::Host::new(
@@ -757,7 +764,7 @@ impl App {
         let id = window.id();
         self.wins.push((id, Win {
             window, host, ns_view, cursor: (0.0, 0.0), held: 0, last_press: None, last_key_text: None,
-            contact: None, second_contact: None, open_frame: None, after_open: None,
+            contact: None, second_contact: None, slide_carry: (0., 0.), open_frame: None, after_open: None,
         }));
         self.focused = Some(id);
         Ok(id)
@@ -1305,9 +1312,13 @@ impl App {
             }
             WindowEvent::RedrawRequested => pyo3::Python::attach(|_| {
                 let t0 = Instant::now();
-                let drew = self.win(id).is_some_and(|w| w.host.frame().is_some());
-                if drew {
+                let out = self.win(id).and_then(|w| w.host.frame());
+                let drew = out.is_some();
+                if let Some((cpu, _, _)) = out {
                     perf::note("frame_ms", t0);
+                    // The frame call less the renderer's own encode: Python
+                    // glue and the Rust calls it makes (docs/render-glue-port.md).
+                    perf::note_ms("py_frame_ms", (t0.elapsed().as_secs_f64() * 1e3 - cpu).max(0.));
                 }
                 if drew {
                     let win = self.win_mut(id).unwrap();

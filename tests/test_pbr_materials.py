@@ -4,6 +4,7 @@ from pathlib import Path
 import zipfile
 
 import numpy as np
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
 from PySide6.QtGui import QColor, QImage
 from ingetrazo_core import Vec3 as V
@@ -175,36 +176,20 @@ def test_linked_recipe_on_nested_group_with_name_collision(tmp_path):
     assert paint["pbr"] == host.materials[paint["mat"]].pbr == mat.pbr
 
 
-def test_edit_pbr_dialog_applies_one_undoable_recipe(tmp_path):
-    from PySide6.QtCore import QTimer
-    from PySide6.QtWidgets import QApplication, QDialog, QDoubleSpinBox, QLineEdit
-    from views.main_window import MainWindow
-    from views.tray import MaterialsPanel
-    win = MainWindow()
-    try:
-        panel = win.findChildren(MaterialsPanel)[0]
-        scene = win.viewport.scene
-        mat = Material("Editor alloy", (.5, .5, .5))
-        scene.materials[mat.name] = mat
-        face = triangle(scene.mesh)
-        face.attrs.update(mat.face_attrs())
-        path = image(tmp_path / "normal.png", (128, 128, 255))
-
-        def choose():
-            dialog = QApplication.activeModalWidget()
-            if isinstance(dialog, QDialog):
-                dialog.findChildren(QDoubleSpinBox)[0].setValue(.77)
-                # Spin boxes also have an internal line editor.
-                next(w for w in dialog.findChildren(QLineEdit)
-                     if w.isClearButtonEnabled()).setText(path)
-                dialog.accept()
-
-        QTimer.singleShot(0, choose)
-        panel._edit_pbr(mat)
-        assert scene.materials[mat.name].pbr["metallic"] == .77
-        assert face.attrs["pbr"]["normal_map"]["path"] == path
-        assert win.viewport.history.undo()
-        assert "pbr" not in face.attrs and scene.materials[mat.name].pbr is None
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_edit_pbr_in_the_inspector_and_undo_each_change(native_host, tmp_path, monkeypatch):
+    from views import wgpu_library as library
+    win = native_host.window
+    scene = win.viewport.scene
+    mat = Material("Editor alloy", (.5, .5, .5))
+    scene.materials[mat.name] = mat
+    face = triangle(scene.mesh)
+    face.attrs.update(mat.face_attrs())
+    path = image(tmp_path / "normal.png", (128, 128, 255))
+    monkeypatch.setattr(library, "_pick_image", lambda *_: path)
+    library.edit_field(win, win.view, "percent_metallic:" + mat.name, "77")
+    library.action(win, win.view, "map:m:" + mat.name + ":normal_map")
+    assert scene.materials[mat.name].pbr["metallic"] == .77
+    assert face.attrs["pbr"]["normal_map"]["path"] == path
+    assert win.viewport.history.undo() and "normal_map" not in face.attrs["pbr"]
+    assert win.viewport.history.undo()
+    assert "pbr" not in face.attrs and scene.materials[mat.name].pbr is None
