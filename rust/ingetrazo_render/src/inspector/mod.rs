@@ -2,6 +2,7 @@
 pub(crate) mod bevel;
 mod parts;
 mod records;
+mod record_editor;
 mod rule;
 mod terrain;
 
@@ -82,6 +83,7 @@ impl Panels {
                 &data["records"],
                 data["selection_count"].as_u64().unwrap_or_default() as usize,
             );
+            self.records.editor = record_editor::Editor::load(&data);
         }
         if key == "bevel" {
             if data.is_null()

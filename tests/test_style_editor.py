@@ -9,20 +9,10 @@ library — that is what lets a composer frame reference a saved style by
 """
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
 import pytest
-from PySide6.QtCore import QSettings
-from PySide6.QtWidgets import QApplication
-
-_inst = QApplication.instance()
-if _inst is None:
-    _app = QApplication([])
-elif not isinstance(_inst, QApplication):
-    pytest.skip("a non-widget QGuiApplication is already active",
-                allow_module_level=True)
+from ingetrazo_core import NativeSettings
+from tests.preferences_chrome import Controls
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 import core.style as style_mod  # noqa: E402
 from core.scene import Scene  # noqa: E402
@@ -38,10 +28,9 @@ from core.style import (  # noqa: E402
 @pytest.fixture
 def settings_file(tmp_path, monkeypatch):
     """Point the style library at a throwaway INI file."""
-    path = tmp_path / "styles.ini"
-    monkeypatch.setattr(style_mod, "_settings",
-                        lambda: QSettings(str(path), QSettings.IniFormat))
-    return path
+    store = NativeSettings(str(tmp_path))
+    monkeypatch.setattr(style_mod, "_settings", store.fresh)
+    return store
 
 
 def test_save_load_round_trip(settings_file):
@@ -85,92 +74,41 @@ def test_style_by_name_resolves_user_styles_as_copies(settings_file):
 
 
 def test_broken_settings_entry_is_dropped(settings_file):
-    s = QSettings(str(settings_file), QSettings.IniFormat)
+    s = settings_file
     s.setValue("styles/user", "{esto no es json")
     s.sync()
     assert user_styles() == []
 
 
-# ---- The tray panel ----------------------------------------------------------
-
-class _Win:
-    """Just enough main window for the panel."""
-
-    def __init__(self):
-        class _VP:
-            def __init__(self):
-                self.scene = Scene()
-
-            def update(self):
-                pass
-
-        self.viewport = _VP()
-
-    def _sync_style_menu(self):
-        # The real one refreshes menu + panel; tests drive refresh directly.
-        pass
+@pytest.fixture
+def editor(native_host, settings_file):
+    return Controls(native_host.window, "appearance")
 
 
-@pytest.mark.classic_pending
-def test_panel_pick_applies_a_preset(settings_file):
-    from views.tray import StylesPanel
-    win = _Win()
-    panel = StylesPanel(win)
-    idx = panel._combo.findData("Hidden line")
-    assert idx >= 0
-    panel._on_pick(idx)
-    assert win.viewport.scene.display_style.face_mode == "hidden_line"
-    assert win.viewport.scene.display_style.sky is False
+def test_panel_pick_applies_a_preset(editor):
+    assert "Hidden line" in editor.options("style_preset")
+    editor.set("style_preset", "Hidden line")
+    assert editor.env.scene.display_style.face_mode == "hidden_line"
+    assert not editor.env.scene.display_style.sky
 
 
-@pytest.mark.classic_pending
-def test_panel_edits_the_active_style_live(settings_file):
-    from views.tray import StylesPanel
-    win = _Win()
-    panel = StylesPanel(win)
-    panel._edges.setChecked(False)
-    panel._mode.setCurrentIndex(panel._mode.findData("xray"))
-    style = win.viewport.scene.display_style
-    assert style.edges is False
-    assert style.face_mode == "xray"
+def test_panel_edits_the_active_style_live(editor):
+    editor.set("edges", False)
+    editor.set("face_mode", "xray")
+    assert not editor.env.win.active_style().edges
+    assert editor.env.win.active_style().face_mode == "xray"
 
 
-@pytest.mark.classic_pending
-def test_every_swatch_stays_editable_and_hints_when_invisible(settings_file):
-    """Every colour is editable in every mode — you build a look, then see
-    each piece where it applies (disabling them read as "can't change the
-    sky/front color", live, 2026-08-31). What changes with the mode is the
-    HINT: edits that can't show right now say why; edits that show say
-    nothing."""
-    from views.tray import StylesPanel
-    win = _Win()
-    panel = StylesPanel(win)
-    style = win.viewport.scene.display_style
-
-    # Default style: textures + sky + edges + section fill.
-    for sw in (panel._edge_c, panel._front_c, panel._sky_c,
-               panel._ground_c, panel._bg_c, panel._fill_c):
-        assert sw.isEnabled()
-    assert panel._color_hint("front_color") is None  # default faces (#776)
-    assert panel._color_hint("background")         # sky covers it
-    assert panel._color_hint("sky_color") is None  # sky is on: visible
-    assert panel._color_hint("edge_color") is None
-
-    style.face_mode = "hidden_line"
-    style.sky = False
-    style.edges = False
-    style.section_fill = False
-    assert panel._color_hint("front_color") is None
-    assert panel._color_hint("background") is None
-    assert panel._color_hint("sky_color")          # sky off now
-    assert panel._color_hint("edge_color")         # edges off
-    assert panel._color_hint("section_fill_color")
-    style.face_mode = "wireframe"
-    assert panel._color_hint("front_color")        # no faces drawn
-    style.face_mode = "hidden_line"
-
-    style.face_mode = "wireframe"
-    assert panel._color_hint("edge_color") is None  # wireframe always draws
+def test_every_swatch_stays_editable_and_hints_when_invisible(editor):
+    swatches = ("edge_color", "front_color", "back_color", "sky_color", "ground_color", "background", "section_fill_color")
+    assert all(editor.enabled(k) for k in swatches)
+    assert {k for k in swatches if editor.row(k).tip} == {"background"}
+    for k in ("sky", "edges", "section_fill"):
+        editor.set(k, False)
+    assert {k for k in swatches if editor.row(k).tip} == {"sky_color", "ground_color", "edge_color", "section_fill_color"}
+    editor.set("face_mode", "wireframe")
+    assert editor.row("front_color").tip and not editor.row("edge_color").tip
+    assert all(editor.enabled(k) for k in swatches)
 
 
 def test_sky_gradient_ramps_from_haze_to_the_picked_tones():
@@ -217,21 +155,14 @@ def test_sky_and_ground_colors_are_style_data(settings_file):
     assert legacy.ground_color == Viewport._GROUND_RGB
 
 
-@pytest.mark.classic_pending
-def test_panel_combo_lists_saved_styles_and_arms_delete(settings_file):
-    from views.tray import StylesPanel
+def test_panel_combo_lists_saved_styles_and_arms_delete(editor):
     save_user_style(Style(name="Obra", face_mode="hidden_line"))
-    win = _Win()
-    panel = StylesPanel(win)
-    idx = panel._combo.findData("Obra")
-    assert idx >= 0
-    panel._on_pick(idx)
-    panel.refresh()
-    assert win.viewport.scene.display_style.name == "Obra"
-    assert panel._del_btn.isEnabled()                  # a user style: deletable
-    panel._on_pick(panel._combo.findData("Default"))
-    panel.refresh()
-    assert not panel._del_btn.isEnabled()              # a built-in: not
+    assert "Obra" in editor.options("style_preset")
+    editor.set("style_preset", "Obra")
+    assert editor.value("style_preset") == "Obra" and editor.enabled("delete_style")
+    editor.row("delete_style").press(editor.env)
+    assert "Obra" not in editor.options("style_preset")
+    assert editor.value("style_preset") == "Default" and not editor.enabled("delete_style")
 
 
 # ---- Back color (the usual Front/Back color pair) ----------------------------
@@ -269,36 +200,17 @@ def test_back_color_precedence_style_then_document_then_default():
     assert effective_back_color(style, scene) == (0.1, 0.8, 0.3)
 
 
-@pytest.mark.classic_pending
-def test_panel_back_swatch_shows_the_tint_that_draws(settings_file,
-                                                     monkeypatch):
-    from PySide6.QtGui import QColor
-    from views import tray
-    from views.tray import StylesPanel
-    win = _Win()
-    panel = StylesPanel(win)
-    style = win.viewport.scene.display_style
-    # Automatic: the swatch shows the default blue-grey (158,178,199).
-    assert "rgb(158,178,199)" in panel._back_c.styleSheet()
-
-    import views.color_dialog as color_dialog
-    monkeypatch.setattr(color_dialog.QColorDialog, "getColor",
-                        staticmethod(lambda *a, **k: QColor(255, 0, 0)))
-    panel._pick_color("Back color", "back_color")
-    assert style.back_color == (1.0, 0.0, 0.0)
-    assert "rgb(255,0,0)" in panel._back_c.styleSheet()
-    assert style.front_color == (1.0, 1.0, 1.0)     # front untouched
+def test_panel_back_swatch_shows_the_tint_that_draws(editor):
+    assert editor.value("back_color") == "#9eb2c7"
+    editor.env.scene.back_face_color = (0.5, 0.5, 0.5)
+    assert editor.value("back_color") == "#808080"
+    editor.set("back_color", "#ff0000")
+    assert editor.env.win.active_style().back_color == (1., 0., 0.)
+    assert editor.value("back_color") == "#ff0000"
+    assert editor.value("front_color") == "#ffffff"
 
 
-@pytest.mark.classic_pending
-def test_back_color_hint_only_where_back_faces_cannot_show(settings_file):
-    from views.tray import StylesPanel
-    win = _Win()
-    panel = StylesPanel(win)
-    style = win.viewport.scene.display_style
-    for mode in ("textures", "shaded", "monochrome", "xray"):
-        style.face_mode = mode
-        assert panel._color_hint("back_color") is None, mode
-    for mode in ("hidden_line", "wireframe"):
-        style.face_mode = mode
-        assert panel._color_hint("back_color"), mode
+def test_back_color_hint_only_where_back_faces_cannot_show(editor):
+    for mode in ("textures", "shaded", "monochrome", "xray", "hidden_line", "wireframe"):
+        editor.set("face_mode", mode)
+        assert bool(editor.row("back_color").tip) == (mode in ("hidden_line", "wireframe"))

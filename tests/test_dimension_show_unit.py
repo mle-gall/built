@@ -9,14 +9,9 @@ inches together keep their marks: 5'3" without them reads «5 3». Documents
 and sheets saved before the option open with the unit, as they were."""
 from __future__ import annotations
 
-import sys
-from types import SimpleNamespace
-
 import pytest
-from PySide6.QtWidgets import QApplication
-
-if QApplication.instance() is None:
-    QApplication(sys.argv[:1])
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
+from tests.preferences_chrome import Controls
 
 from core.composition import Composicion, CotaItem, CotaRadialItem  # noqa: E402
 from core.units import format_length  # noqa: E402
@@ -134,17 +129,12 @@ def test_document_keeps_the_choice_and_old_documents_show_the_unit(tmp_path):
     assert again.dimension_style["show_unit"] is True
 
 
-@pytest.mark.classic_pending
-def test_dimension_style_panel_switches_it():
-    from core.scene import Scene
-    from views.tray import DimensionStylePanel
-    scene = Scene()
-    vp = SimpleNamespace(scene=scene, update=lambda: None)
-    panel = DimensionStylePanel(SimpleNamespace(viewport=vp))
-    assert panel._show_unit.isChecked()
-    v0 = scene.version
-    panel._show_unit.setChecked(False)
-    assert scene.dimension_style["show_unit"] is False
-    assert scene.version > v0                       # the viewport redraws
-    panel._show_unit.setChecked(True)
+def test_dimension_style_panel_switches_it(native_host):
+    scene = native_host.window.viewport.scene
+    controls = Controls(native_host.window, "dimensions")
+    assert controls.value("dim_show_unit")
+    before = scene.version
+    controls.set("dim_show_unit", False)
+    assert scene.dimension_style["show_unit"] is False and scene.version > before
+    controls.set("dim_show_unit", True)
     assert scene.dimension_style["show_unit"] is True

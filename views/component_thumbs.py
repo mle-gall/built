@@ -14,8 +14,6 @@ from __future__ import annotations
 
 import math
 
-from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QColor, QPainter, QPen, QPixmap, QPolygonF
 
 #: Icon side, in pixels.
 SIZE = 40
@@ -130,6 +128,8 @@ def _rgb(attrs, inherited):
 def thumbnail(definition, size: int = SIZE) -> QPixmap:
     """The icon for ``definition`` (a component instance or a kept
     template), from the cache when nothing it shows has changed."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QPixmap
     # Imported family previews survive save/load in the definition extension.
     encoded = (getattr(definition, "ext", None) or {}).get("rfa", {}).get("preview_png_base64")
     if encoded:
@@ -155,7 +155,7 @@ def thumbnail(definition, size: int = SIZE) -> QPixmap:
     return pm
 
 
-def _draw(definition, size: int) -> QPixmap:
+def _polygons(definition):
     from core.mesh import face_count, DeferredMesh
     from core.lazy_mesh import plan_of
     from formats.igz import _face_attrs_from_json
@@ -210,31 +210,14 @@ def _draw(definition, size: int) -> QPixmap:
             depth = sum(p.x() * _E[0] + p.y() * _E[1] + p.z() * _E[2]
                         for p in pts) / len(pts)
             polys.append((depth, xy, _rgb(attrs, paint), lam))
-    pm = QPixmap(size, size)
-    pm.fill(Qt.transparent)
-    if not polys:
-        return pm
-    xs = [x for _d, xy, _c, _s in polys for x, _y in xy]
-    ys = [y for _d, xy, _c, _s in polys for _x, y in xy]
-    span = max(max(xs) - min(xs), max(ys) - min(ys)) or 1.0
-    margin = 2.0
-    scale = (size - 2 * margin) / span
-    ox = margin + (size - 2 * margin - (max(xs) - min(xs)) * scale) / 2
-    oy = margin + (size - 2 * margin - (max(ys) - min(ys)) * scale) / 2
-    x0, y0 = min(xs), min(ys)
-    polys.sort(key=lambda r: r[0])          # far first: nearer ones cover
-    p = QPainter(pm)
-    p.setRenderHint(QPainter.Antialiasing, True)
-    for _d, xy, rgb, lam in polys:
-        k = 0.5 + 0.5 * lam
-        col = QColor.fromRgbF(*(min(1.0, c * k) for c in rgb))
-        p.setBrush(col)
-        p.setPen(QPen(col.darker(150), 0.6))
-        p.drawPolygon(QPolygonF([QPointF(ox + (x - x0) * scale,
-                                         oy + (y - y0) * scale)
-                                 for x, y in xy]))
-    p.end()
-    return pm
+    return polys
+
+
+def _draw(definition, size: int):
+    from PySide6.QtGui import QImage, QPixmap
+    from ingetrazo_render import component_pixels
+    pixels = component_pixels(definition, size)
+    return QPixmap.fromImage(QImage(pixels, size, size, 4 * size, QImage.Format_RGBA8888_Premultiplied))
 
 
 def _normal(pts):

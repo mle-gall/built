@@ -77,6 +77,27 @@ def test_a_selection_leaves_the_in_model_lists_as_they_are(win, monkeypatch):
     assert len(comp) == len(mat) == 2
 
 
+def test_component_selection_changes_actions_without_rescanning_either_provider(win, monkeypatch):
+    from tests.test_replace_component import _component, _quad
+    scene = win.viewport.scene
+    chair, table = [_component(_quad(), name) for name in ("Chair", "Table")]
+    scene.groups.extend([chair, table])
+    scene.version += 1
+    comp = _count_calls(monkeypatch, library.provider("components"), "items")
+    mat = _count_calls(monkeypatch, library.provider("materials"), "items")
+    library.open_library(win, "components", scope="s:model")
+
+    def eligible():
+        return {row["label"] for row in tiles(frame(win)) if any(verb == "replace" for verb, _ in row["menu"])}
+
+    assert not eligible()
+    scene.select([chair])
+    assert eligible() == {"Table"}
+    scene.select([table])
+    assert eligible() == {"Chair"}
+    assert len(comp) == len(mat) == 1
+
+
 def test_hidden_panels_let_the_previous_document_go(win):
     from core.group import Group
     from views import wgpu_ui
