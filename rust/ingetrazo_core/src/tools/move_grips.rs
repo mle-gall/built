@@ -33,10 +33,10 @@ pub fn rotation_grips(axes: [P3; 3], lo: P3, hi: P3, eye: P3) -> Vec<(P3, P3, P3
     grips
 }
 
-pub fn hover_hull(points: Vec<[f64; 2]>, cursor: [f64; 2], margin: f64) -> bool {
-    let mut pts: Vec<DVec2> = points.into_iter().map(DVec2::from).collect();
+pub(super) fn convex_hull(mut pts: Vec<DVec2>) -> Vec<DVec2> {
     pts.sort_by(|a, b| a.x.total_cmp(&b.x).then_with(|| a.y.total_cmp(&b.y)));
     pts.dedup();
+    if pts.len() <= 1 { return pts; }
     fn chain(points: impl Iterator<Item = DVec2>) -> Vec<DVec2> {
         let mut out: Vec<DVec2> = Vec::new();
         for p in points {
@@ -55,6 +55,11 @@ pub fn hover_hull(points: Vec<[f64; 2]>, cursor: [f64; 2], margin: f64) -> bool 
     }
     let mut hull = chain(pts.iter().copied());
     hull.extend(chain(pts.iter().copied().rev()));
+    hull
+}
+
+pub fn hover_hull(points: Vec<[f64; 2]>, cursor: [f64; 2], margin: f64) -> bool {
+    let hull = convex_hull(points.into_iter().map(DVec2::from).collect());
     hull.len() >= 3
         && hull
             .iter()

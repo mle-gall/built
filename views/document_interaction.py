@@ -1321,15 +1321,6 @@ EDIT_REST_MODES = ("normal", "fade", "hide")
 #: tests.
 EDIT_REST_FADE = 0.75
 
-#: The edit box must sit clear of the geometry. A tight box disappears on a
-#: cuboid because every dotted segment lands exactly on a model edge. Keep a
-#: small screen-space gutter, allowed to grow a little with a large object but
-#: capped so a long beam does not acquire a huge empty envelope.
-EDIT_BOX_PAD_MIN_PX = 8.0
-EDIT_BOX_PAD_MAX_PX = 32.0
-EDIT_BOX_PAD_RATIO = 0.05
-
-
 def edit_fade_color(background) -> tuple:
     """What the rest of the model fades TOWARDS while a group is edited: a
     grey half way between the background and a neutral mid grey. Fading
@@ -1484,29 +1475,9 @@ def _axes_vertices(spacing: float, pos_len: float = 1.0e5):
 
 
 def _box_edge_vertices(corners):
-    """The twelve edges of a box (``corners`` in ``oriented_box_corners``
-    order) as world-space LINES for the GL pass — so the part behind the
-    geometry is hidden like any line, the way guides are (issue #23). The
-    edit box used to be painted in the QPainter overlay, which has no depth:
-    inside a cube its back edges showed through the faces (Marco, 23-09).
-
-    Whole edges, not dashes: the pattern is the shader's (u_stipple 4,
-    measured in window pixels, like Back Edges). Tessellating dashes here
-    sized them by camera distance, and the count scaled as
-    edge_length/(0.012·distance) — zooming into a large open group pushed
-    it past a million segments rebuilt and re-uploaded EVERY frame (the
-    «viewport dies when I zoom in close» report: 5.8 s/frame at 5 cm on a
-    50 m box)."""
+    from ingetrazo_core import box_edge_vertices
     coords = array("f")
-    for i in range(8):
-        for bit in (1, 2, 4):
-            j = i | bit
-            if j == i:
-                continue
-            a, b = corners[i], corners[j]
-            if (b - a).length() < 1e-9:
-                continue
-            coords.extend([a.x(), a.y(), a.z(), b.x(), b.y(), b.z()])
+    coords.frombytes(memoryview(box_edge_vertices(corners)).cast("B"))
     return coords
 
 
@@ -1522,55 +1493,7 @@ def shown_guides(scene) -> list:
     return [g for g in guides if visible(g)]
 
 
-def _point_in_screen_hull(x: float, y: float, points,
-                          tolerance_px: float = 1.5) -> bool:
-    """Whether a screen point lies in the convex hull of ``points``.
-
-    The projection of a 3D box is a convex polygon (usually a hexagon), not
-    its axis-aligned screen rectangle. Testing that hull makes the visible
-    dotted frame the honest boundary for leaving group edit: its empty corner
-    triangles do not silently count as inside. The small tolerance keeps a
-    click directly on a one-pixel dotted edge inside the context.
-    """
-    pts = sorted({(float(px), float(py)) for px, py in points
-                  if math.isfinite(px) and math.isfinite(py)})
-    if not pts:
-        return False
-
-    def cross(a, b, p):
-        return ((b[0] - a[0]) * (p[1] - a[1])
-                - (b[1] - a[1]) * (p[0] - a[0]))
-
-    def half(seq):
-        out = []
-        for p in seq:
-            while len(out) >= 2 and cross(out[-2], out[-1], p) <= 0.0:
-                out.pop()
-            out.append(p)
-        return out
-
-    if len(pts) == 1:
-        return math.hypot(x - pts[0][0], y - pts[0][1]) <= tolerance_px
-    lower, upper = half(pts), half(reversed(pts))
-    hull = lower[:-1] + upper[:-1]
-    if len(hull) == 2:
-        a, b = hull
-        dx, dy = b[0] - a[0], b[1] - a[1]
-        length2 = dx * dx + dy * dy
-        t = (0.0 if length2 <= 1e-12 else
-             max(0.0, min(1.0, ((x - a[0]) * dx + (y - a[1]) * dy)
-                              / length2)))
-        return math.hypot(x - (a[0] + t * dx),
-                          y - (a[1] + t * dy)) <= tolerance_px
-    point = (float(x), float(y))
-    for i, a in enumerate(hull):
-        b = hull[(i + 1) % len(hull)]
-        edge_len = math.hypot(b[0] - a[0], b[1] - a[1])
-        if cross(a, b, point) < -tolerance_px * max(edge_len, 1.0):
-            return False
-    return True
-
-
+from ingetrazo_core import point_in_screen_hull as _point_in_screen_hull
 from ingetrazo_core import MIN_CIRCLE_DASHES as _MIN_CIRCLE_DASHES
 
 
@@ -4669,64 +4592,12 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
             painter.drawText(QPointF(px + 10, py + 16), label)
 
     def _edit_group_box_corners(self):
-        """The eight corners of the dashed box around the group being edited
-        — the visual cue that you are INSIDE it (the classic dashed
-        box) — or None. Drawn in the GL pass, depth-tested."""
-        group = self.scene.edit_group
-        if group is None:
-            return None
-        if not group.mesh.vertices and not getattr(group, "children", None):
-            return None     # nothing to wrap
-        # A CONTAINER's own mesh is usually empty — its geometry is in its
-        # children — so testing that mesh alone left you inside a group with
-        # no box at all, the one cue that tells you where you are.
-        # In the group's OWN axes, like the selection cue: on a rotated
-        # object a world-aligned box reads as skewed and wraps mostly air.
-        from core.group import oriented_box_corners
-        frame, lo, hi = self._group_obb(group)
-        tight = oriented_box_corners(frame, lo, hi)
-
-        # Size the gutter in screen pixels. This keeps the dotted cue clearly
-        # separate from a cuboid's solid edges at every useful zoom level,
-        # without making the box of a long object needlessly large.
-        projected = [p for p in (self._world_to_pixel(c) for c in tight)
-                     if p is not None]
-        extent_px = 0.0
-        if projected:
-            xs, ys = zip(*projected)
-            extent_px = max(max(xs) - min(xs), max(ys) - min(ys))
-        pad_px = min(EDIT_BOX_PAD_MAX_PX,
-                     max(EDIT_BOX_PAD_MIN_PX,
-                         extent_px * EDIT_BOX_PAD_RATIO))
-
-        centre = sum(tight[1:], QVector3D(tight[0])) / len(tight)
-        span = float(self.camera.distance)
-        if self.camera.perspective:
-            depth = QVector3D.dotProduct(
-                centre - self.camera.eye(), self.camera.forward())
-            if math.isfinite(depth) and depth > 1e-9:
-                span = depth
-        world_per_px = (2.0 * max(span, 1e-9)
-                        * math.tan(math.radians(self.camera.fov_deg) / 2.0)
-                        / max(self.height(), 1))
-        pad = pad_px * world_per_px
-        padded_lo = tuple(float(v) - pad for v in lo)
-        padded_hi = tuple(float(v) + pad for v in hi)
-        return oriented_box_corners(frame, padded_lo, padded_hi)
+        from ingetrazo_core import edit_group_box
+        return edit_group_box(self)
 
     def edit_group_box_contains_pixel(self, x: float, y: float) -> bool:
-        """Whether ``(x, y)`` lies inside the visible dotted edit box.
-
-        This is the click boundary for stepping out of a group/component.
-        Geometry need not fill its box: clicking the deliberate empty margin,
-        or a hole in an irregular object, keeps the current edit context.
-        """
-        corners = self._edit_group_box_corners()
-        if corners is None:
-            return False
-        projected = [p for p in (self._world_to_pixel(c) for c in corners)
-                     if p is not None]
-        return _point_in_screen_hull(x, y, projected)
+        from ingetrazo_core import edit_box_contains_pixel
+        return edit_box_contains_pixel(self, x, y)
 
     # ---- Section planes ------------------------------------------------------
 

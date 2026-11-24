@@ -350,6 +350,10 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(tools::arc::py_last_fillet_d, m)?)?;
     m.add_function(wrap_pyfunction!(tools::py::select_mode, m)?)?;
     m.add_function(wrap_pyfunction!(tools::py::select_pick, m)?)?;
+    m.add_function(wrap_pyfunction!(tools::edit_box::box_edge_vertices, m)?)?;
+    m.add_function(wrap_pyfunction!(tools::edit_box::point_in_screen_hull, m)?)?;
+    m.add_function(wrap_pyfunction!(tools::edit_box::edit_group_box, m)?)?;
+    m.add_function(wrap_pyfunction!(tools::edit_box::edit_box_contains_pixel, m)?)?;
     m.add("MIN_CIRCLE_DASHES", guide_vertices::MIN_CIRCLE_DASHES)?;
     m.add_function(wrap_pyfunction!(guide_vertices::guide_vertices, m)?)?;
     m.add_function(wrap_pyfunction!(pick::ray_triangles, m)?)?;
