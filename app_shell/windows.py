@@ -113,10 +113,6 @@ def transfer(src_win, doc, dst_host) -> bool:
     if view is not None:
         view.move_timers(dst_host)
         view.renderer = None
-    try:
-        doc.viewport.sceneVersionChanged.connect(lambda *_: dst._update_title())
-    except Exception:  # noqa: BLE001
-        pass
     dst._documents.append(doc)
     dst.activate_document(doc)
     for d in blank:

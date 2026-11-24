@@ -230,6 +230,10 @@ class DocumentTools:
             scene._bounds_cache = (scene.version, cached[1], scene._bounds_key())
         self.scene = scene
         self.history = history
+        watch = self.__dict__.get("_document_watch")
+        if watch is not None and old[1] is not history:
+            self._unsubscribe_changes()
+            self._unsubscribe_changes = history.feed.subscribe(watch)
         self._bind_bake_store()        # the incoming document's shared bakes
         from core import units as _units
         _units.bind_scene(scene)

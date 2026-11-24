@@ -6484,7 +6484,8 @@ class ComposerWindow(QMainWindow):
         self._auto_timer.setSingleShot(True)
         self._auto_timer.setInterval(400)
         self._auto_timer.timeout.connect(self._auto_render_stale)
-        if vp is not None and hasattr(vp, "sceneVersionChanged"):
+        if (vp is not None and vp.__dict__.get("_document_watch") is None
+                and hasattr(vp, "sceneVersionChanged")):
             vp.sceneVersionChanged.connect(self._on_model_version)
         self.render_cache: dict[int, QImage] = {}
         self.hlr_cache: dict[int, object] = {}
@@ -7326,7 +7327,7 @@ class ComposerWindow(QMainWindow):
             "graphics — instead of one list in stacking order."))
         from core.settings import settings as QSettings
         self.items_group_check.setChecked(
-            str(_QS().value("composer/items_grouped", "0")) == "1")
+            str(QSettings().value("composer/items_grouped", "0")) == "1")
         self.items_group_check.toggled.connect(self._on_items_grouping)
         self.items_list = QTreeWidget()
         # QGIS's Items panel: an eye and a padlock per item, then its name.

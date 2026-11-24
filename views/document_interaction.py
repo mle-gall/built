@@ -2003,6 +2003,14 @@ from views.document_tools import DocumentTools
 from views.view_navigation import ViewNavigation
 
 
+def _publish_scene_version(viewport, version):
+    watch = viewport.__dict__.get("_document_watch")
+    if watch is None:
+        viewport.sceneVersionChanged.emit(version)
+    else:
+        watch.observe()
+
+
 class DocumentInteraction(DocumentTools, ViewNavigation):
     """Editing and input shared by the document presentation hosts."""
 
@@ -3852,7 +3860,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         without waiting for the next paint.
         """
         self.prune_stale_selection()
-        self.sceneVersionChanged.emit(self.scene.version)
+        _publish_scene_version(self, self.scene.version)
         self.update()
 
     def begin_groups_preview(self, groups=(), external: bool = False) -> None:
@@ -4138,7 +4146,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
     def _announce_queued_version(self) -> None:
         self._announce_queued = False
-        self.sceneVersionChanged.emit(self._version_to_announce)
+        _publish_scene_version(self, self._version_to_announce)
 
     def _sync_content_key(self) -> tuple:
         """What the edge and face buffers of ``_sync_edges`` depend on:

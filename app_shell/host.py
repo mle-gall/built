@@ -263,6 +263,7 @@ class Host:
             self.request_frame()
         view = self.view
         scene = self.viewport.scene
+        self.viewport._document_watch.observe()
         # MainWindow._install_wgpu_display's present(): a scene whose
         # version moved since the resident pack is packed again.
         if view.renderer is not None and (scene is not getattr(view, "scene", None)
@@ -627,6 +628,7 @@ class Host:
         windows.unregister(self)
         self.timers.cancel_all()
         for doc in list(self.window._documents):
+            self.window._release_document_watch(doc)
             view = doc.stand_in
             if view is not None:
                 self._guard("close", view.closeEvent, None)

@@ -221,6 +221,9 @@ class ExtensionApp:
         panel can show the current data (:attr:`scene` is then the
         project in front)."""
         win = self._window
+        if self.viewport.__dict__.get("_document_watch") is not None:
+            win.__dict__.setdefault("_doc_change_hooks", []).append(fn)
+            return
         if hasattr(win, "_wire_viewport"):
             # Projects in tabs: every viewport, the ones opened later too,
             # and each answers only while its project is in front.

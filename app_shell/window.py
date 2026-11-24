@@ -442,7 +442,6 @@ def _doc_attr(name):
 
 
 class ShellWindow(QObject):
-    documentChanged = Signal()
 
     def __init__(self, host):
         super().__init__()
@@ -577,10 +576,7 @@ class ShellWindow(QObject):
         doc.stand_in = view
         doc._renderer_wgpu = True
         doc.saved_content = vp.scene.content_version
-        try:
-            vp.sceneVersionChanged.connect(lambda *_: self._update_title())
-        except Exception:  # noqa: BLE001
-            pass
+        self._watch_document(doc)
         at = self._documents.index(self._doc) + 1 if self._doc in self._documents else len(self._documents)
         self._documents.insert(at, doc)
         vp.set_active_tool(None)
@@ -631,16 +627,43 @@ class ShellWindow(QObject):
         _axes.sync(getattr(doc.viewport.scene, "drawing_frame", None))
         self._scene_tabs.mark_view(None)
         self._activate_tool("select")
-        doc.viewport.notify_scene_changed()
-        self.documentChanged.emit()
-        self._update_title()
+        doc.viewport.prune_stale_selection()
+        doc.viewport.update()
+        doc.viewport._document_watch.observe(force=True)
+        self._host.request_frame()
+
+    def _watch_document(self, doc):
+        from ingetrazo_core import DocumentWatch
+        vp = doc.viewport
+        vp._document_watch = DocumentWatch(doc)
+        vp._unsubscribe_changes = vp.history.feed.subscribe(vp._document_watch)
+
+    def _release_document_watch(self, doc):
+        vp = doc.viewport
+        unsubscribe = vp.__dict__.pop("_unsubscribe_changes", None)
+        if unsubscribe is not None:
+            unsubscribe()
+        vp.__dict__.pop("_document_watch", None)
+
+    def _document_changed(self, doc, version):
+        if doc is self._doc:
+            self._update_title()
+            for fn in tuple(self.__dict__.get("_doc_change_hooks", ())):
+                self._host._guard("extension document changed", fn)
+        else:
+            self._update_tab(doc)
+        if doc.composer is not None:
+            doc.composer._on_model_version(version)
         self._host.request_frame()
 
     def _retire_document(self, doc) -> None:
         from core import autosave
         if doc not in self._documents:
             return
+        self._release_document_watch(doc)
         self._documents.remove(doc)
+        for fn in tuple(self.__dict__.get("_doc_close_hooks", ())):
+            self._host._guard("extension document closed", fn, doc.viewport.scene)
         try:
             autosave.clear(doc.path, untitled=doc.untitled_no)
         except Exception:  # noqa: BLE001
@@ -663,10 +686,7 @@ class ShellWindow(QObject):
         doc.stand_in = view
         doc._renderer_wgpu = True
         doc.saved_content = viewport.scene.content_version
-        try:
-            viewport.sceneVersionChanged.connect(lambda *_: self._update_title())
-        except Exception:  # noqa: BLE001
-            pass
+        self._watch_document(doc)
         self._documents = [doc]
         self._doc = doc
 
