@@ -104,6 +104,22 @@ fn insert_scale_figure(win: &Bound<'_, PyAny>) -> PyResult<()> {
 }
 
 #[pyfunction]
+fn cold_start_document(win: &Bound<'_, PyAny>) -> PyResult<()> {
+    win.getattr("_host")?.call_method1(
+        "_guard",
+        ("untitled recovery", win.getattr("_offer_untitled_recovery")?),
+    )?;
+    if win.call_method0("_doc_is_blank")?.is_truthy()? {
+        win.call_method0("_start_blank_document")?;
+        let start = win.py().import("views.wgpu_start")?;
+        if start.call_method1("wants_at_start", (false,))?.is_truthy()? {
+            start.call_method1("show", (win,))?;
+        }
+    }
+    Ok(())
+}
+
+#[pyfunction]
 fn start_blank_document(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let vp = win.getattr("viewport")?;
     vp.getattr("inference")?.call_method0("reset")?;
@@ -128,18 +144,32 @@ fn start_blank_document(win: &Bound<'_, PyAny>) -> PyResult<()> {
 }
 /// Start another tab, or release all document-owned resources and reuse an
 /// untouched tab. Recovery slots follow the drawing rather than the tab.
-#[pyfunction]
-fn new_document_command(win: &Bound<'_, PyAny>) -> PyResult<()> {
+#[pyfunction(signature = (win, add_tab=false))]
+fn new_document_command(win: &Bound<'_, PyAny>, add_tab: bool) -> PyResult<()> {
     let py = win.py();
     let workspace = win.getattr("_workspace")?;
     if !workspace.is_none() && workspace.hasattr("new")? {
         workspace.call_method0("new")?;
         return Ok(());
     }
+    if add_tab {
+        if !workspace.is_none() {
+            return Ok(());
+        }
+        let start = py.import("views.wgpu_start")?;
+        if start.call_method1("shown", (win,))?.is_truthy()? {
+            start.call_method1("new_model", (win,))?;
+            return Ok(());
+        }
+    }
+    let empty_area = add_tab && win.getattr("_empty_on")?.is_truthy()?;
     win.call_method0("_leave_empty_area")?;
     let vp = win.getattr("viewport")?;
     vp.call_method0("end_group_edit")?;
-    if !win.call_method0("_doc_is_blank")?.is_truthy()? {
+    if empty_area {
+        return start_blank_document(win);
+    }
+    if add_tab || !win.call_method0("_doc_is_blank")?.is_truthy()? {
         win.call_method0("_new_document")?;
         win.call_method0("_start_blank_document")?;
         return Ok(());
@@ -186,6 +216,7 @@ fn settle_document_heap(py: Python<'_>, threshold: usize) -> PyResult<()> {
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(new_document_command, m)?)?;
     m.add_function(wrap_pyfunction!(settle_document_heap, m)?)?;
+    m.add_function(wrap_pyfunction!(cold_start_document, m)?)?;
     m.add_function(wrap_pyfunction!(start_blank_document, m)?)?;
     m.add_function(wrap_pyfunction!(reset_home, m)?)?;
     m.add_function(wrap_pyfunction!(insert_scale_figure, m)?)?;

@@ -154,6 +154,12 @@ impl Host {
             .and_then(|v| v.extract()).unwrap_or(false))
     }
 
+    pub fn aborting_open(&self) -> bool {
+        self.opening() && Python::attach(|py| self.obj.bind(py).getattr("window")
+            .and_then(|win| win.getattr("_open_aborted"))
+            .and_then(|value| value.extract()).unwrap_or(false))
+    }
+
     /// `Host.idle()`: `(frame_wanted, wake_ms, cursor, title)`.
     pub fn idle(&self) -> (bool, Option<f64>, Option<String>, Option<String>, bool) {
         Python::attach(|py| {

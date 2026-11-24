@@ -216,22 +216,13 @@ def test_a_suffix_already_claimed_is_refused_not_overwritten(native_window, capl
     assert any("already taken" in r.message for r in caplog.records)
 
 
-def test_the_launcher_hands_an_extension_file_to_the_window():
-    """A double-click or a command-line path of a registered type reaches
-    ``open_path`` (main._open_document_in), like an .igz."""
-    import main
-
-    class W:
-        file_openers = {".xyz": None}
-        opened = []
-
-        def open_path(self, p):
-            self.opened.append(p)
-
-    w = W()
-    main._open_document_in(w, Path("/tmp/a.xyz"))
-    main._open_document_in(w, Path("/tmp/b.unknown"))
-    assert w.opened == [Path("/tmp/a.xyz")]
+def test_the_launcher_hands_an_extension_file_to_the_window(native_host, tmp_path, monkeypatch):
+    opened = []
+    _app_for(native_host.window).add_file_opener(".xyz", lambda path: opened.append(path) or True)
+    monkeypatch.setattr("views.chrome_dialogs.warning", lambda *args, **kwargs: None)
+    assert native_host.open_path(tmp_path / "a.xyz")
+    assert not native_host.open_path(tmp_path / "b.unknown")
+    assert opened == [tmp_path / "a.xyz"]
 
 
 # ---- workspaces -----------------------------------------------------------------------

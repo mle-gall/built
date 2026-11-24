@@ -11,6 +11,7 @@ from core.group import Group
 from core.mesh import Mesh
 from core.scene import Scene
 from core.history import History
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 
 class Agent(RecordTools, InspectionTools):
@@ -141,12 +142,11 @@ def test_invalid_csv_and_paging_are_atomic(model):
         a._tool_query_vocabulary(schema='invalid')
 
 
-def test_bridge_record_round_trip(monkeypatch):
+def test_bridge_record_round_trip(native_host, monkeypatch):
     from tests.test_ai_bridge import _ask
     from plugins.ai_bridge import _Bridge
-    from views.main_window import MainWindow
     monkeypatch.setenv('INGETRAZO_AI_PORT', '0')
-    win = MainWindow()
+    win = native_host.window
     bridge = _Bridge(win.viewport)
     try:
         g = Group(Mesh(), 'Agent target')
@@ -161,8 +161,6 @@ def test_bridge_record_round_trip(monkeypatch):
         assert next(t for t in tools if t['name'] == 'query_registry')['annotations']['readOnlyHint']
     finally:
         bridge.stop()
-        win._saved_version = win.viewport.scene.version
-        win.close()
 
 
 def test_hundreds_of_placements_and_read_only_queries(model):

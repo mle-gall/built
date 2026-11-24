@@ -10,44 +10,28 @@ overwritten with it. These tests drive the real window and read back the
 real file, on every path that writes one."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
+import time
 from pathlib import Path
 
-import pytest  # noqa: E402
-from PySide6.QtCore import QEventLoop, QTimer  # noqa: E402
+import pytest
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
 
-from core import autosave  # noqa: E402
+from core import autosave
+from core.history import AddEdgeCommand
+from core.scene import Scene
+from formats import igz as igz_format
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
+from views.filedialogs import file_dialogs
 
 
 def _autosave_now(win, timeout=10.0):
-    """One auto-save tick, waited out: the fork writes the recovery slots
-    in the background (core.background_autosave), so the slot is there
-    once the manager is idle, not when the tick returns."""
-    import time
-    from PySide6.QtWidgets import QApplication
     win._on_autosave_tick()
-    manager = getattr(win, "_background_autosave", None)
+    manager = win._background_autosave
     end = time.monotonic() + timeout
-    while manager is not None and manager.busy:
+    while manager.busy:
         assert time.monotonic() < end, "the auto-save never finished"
-        QApplication.processEvents()
+        win._host.idle()
         time.sleep(0.005)
-from core.history import AddEdgeCommand  # noqa: E402
-from core.scene import Scene  # noqa: E402
-from formats import igz as igz_format  # noqa: E402
-
-_app = QApplication.instance() or QApplication([])
-
-
-def _settle(ms: int = 0) -> None:
-    loop = QEventLoop()
-    QTimer.singleShot(ms, loop.quit)
-    loop.exec()
 
 
 def _edges(view, n) -> None:
@@ -75,25 +59,23 @@ def _new_tab(win, n, path=None):
 
 def _pane(win, n=7):
     """What a split-view extension assigns: a view on another scene."""
-    from tests.controller_surface import ControllerSurface as Viewport
-    pane = Viewport(win)
-    pane.hide()
+    from app_shell.view import ShellView
+    from views.document_controller import DocumentController
+    pane = DocumentController(win._host)
+    display = ShellView(win._host)
+    display.source_viewport = pane
+    display.camera = pane.camera
+    pane.keys_stand_in = display
     _edges(pane, n)
     return pane
 
 
 @pytest.fixture
-def win(tmp_path, monkeypatch):
+def win(native_host, tmp_path, monkeypatch):
     slots = tmp_path / "autosave"
     slots.mkdir()
     monkeypatch.setattr(autosave, "autosave_dir", lambda: slots)
-    from views.main_window import MainWindow
-    w = MainWindow()
-    yield w
-    for d in w.documents():
-        d.saved_content = d.viewport.scene.content_version
-    w.close()
-    _settle()
+    return native_host.window
 
 
 # ---- A view of an extension in front ---------------------------------------
@@ -109,11 +91,10 @@ def test_save_writes_the_tab_and_not_the_view_in_front(win, tmp_path):
 
 def test_save_as_writes_the_tab_and_not_the_view_in_front(win, tmp_path,
                                                           monkeypatch):
-    from views import main_window as mw
     path = tmp_path / "named.built"
     doc = _new_tab(win, 3)
     win.viewport = _pane(win)
-    monkeypatch.setattr(mw.file_dialogs, "getSaveFileName",
+    monkeypatch.setattr(file_dialogs, "getSaveFileName",
                         lambda *a, **k: (str(path), ""))
     win._on_save_as()
     assert _edges_in_file(path) == 3
@@ -387,26 +368,24 @@ def test_quitting_saves_all_each_to_its_own_file(win, tmp_path, monkeypatch):
 
 def test_cancelling_a_save_as_on_quit_stays_and_writes_nothing_wrong(
         win, tmp_path, monkeypatch):
-    from views import main_window as mw
     a = _new_tab(win, 3, tmp_path / "a.built")
     _new_tab(win, 2)                                # untitled: Save As
     monkeypatch.setattr("views.chrome_dialogs.ask", lambda *a, **kw: "save")
-    monkeypatch.setattr(mw.file_dialogs, "getSaveFileName",
+    monkeypatch.setattr(file_dialogs, "getSaveFileName",
                         lambda *a, **k: ("", ""))
     assert not win._confirm_quit()
     assert _edges_in_file(a.path) == 3
 
 
 def test_a_failed_save_on_quit_stays(win, tmp_path, monkeypatch):
-    from views import main_window as mw
     path = tmp_path / "a.built"
     a = _new_tab(win, 3, path)
     _new_tab(win, 2, tmp_path / "b.built")
 
     def fail(*_a, **_k):
         raise OSError("disk full")
-    monkeypatch.setattr(mw.igz_format, "save_scene", fail)
-    monkeypatch.setattr(QMessageBox, "critical", lambda *a, **k: None)
+    monkeypatch.setattr(igz_format, "save_scene", fail)
+    monkeypatch.setattr("views.chrome_dialogs.save_failed", lambda *a, **k: None)
     monkeypatch.setattr("views.chrome_dialogs.ask", lambda *a, **kw: "save")
     assert not win._confirm_quit()
     assert win._doc_is_dirty(a)
@@ -417,12 +396,11 @@ def test_save_as_retires_the_recovery_copy_of_the_old_name(win, tmp_path,
                                                            monkeypatch):
     """Its work is safe under the new name: the slot of the old one would
     offer that stale copy back whenever the old file is opened again."""
-    from views import main_window as mw
     old, new = tmp_path / "old.built", tmp_path / "new.built"
     _new_tab(win, 3, old)
     _autosave_now(win)
     assert autosave.pending(old) is not None
-    monkeypatch.setattr(mw.file_dialogs, "getSaveFileName",
+    monkeypatch.setattr(file_dialogs, "getSaveFileName",
                         lambda *a, **k: (str(new), ""))
     win._on_save_as()
     assert autosave.pending(old) is None
@@ -454,7 +432,6 @@ def test_the_camera_saved_is_the_one_of_each_tab(win, tmp_path):
 def test_saving_legacy_document_offers_built_and_export_keeps_active_path(win, tmp_path, monkeypatch):
     import json
     import zipfile
-    from views import main_window as mw
     legacy = tmp_path / "legacy.igz"
     native = legacy.with_suffix(".built")
     igz_format.save_scene(Scene(), legacy)
@@ -465,15 +442,98 @@ def test_saving_legacy_document_offers_built_and_export_keeps_active_path(win, t
         assert Path(suggested) == native
         assert "*.built" in filters
         return str(native), filters
-    monkeypatch.setattr(mw.file_dialogs, "getSaveFileName", choose_built)
+    monkeypatch.setattr(file_dialogs, "getSaveFileName", choose_built)
     win._on_save()
     assert win._current_path == native
     assert legacy.read_bytes() == original
     _edges(win.viewport, 1)
     target = tmp_path / "compat.igz"
-    monkeypatch.setattr(mw.file_dialogs, "getSaveFileName", lambda *args: (str(target), ""))
+    monkeypatch.setattr(file_dialogs, "getSaveFileName", lambda *args: (str(target), ""))
     win._on_export_igz()
     assert win._current_path == native and win._is_dirty()
     with zipfile.ZipFile(target) as archive:
         assert json.loads(archive.read("document.json"))["igz_format"] == 3
     assert _edges_in_file(target) == _edges_in_file(native) + 1
+
+
+def test_closing_a_clean_tab_asks_nothing(win, tmp_path, monkeypatch):
+    asked = []
+    monkeypatch.setattr(win, "_confirm_discard",
+                        lambda prompt: asked.append(prompt) or True)
+    _edges(win.viewport, 1)
+    win._saved_version = win.viewport.scene.version
+    win._on_new()
+    assert win.close_document()
+    assert asked == []
+    assert len(win.documents()) == 1
+
+
+def test_closing_asks_only_about_that_project(win, monkeypatch):
+    _edges(win.viewport, 1)
+    a = win.active_document()
+    win._on_new()
+    _edges(win.viewport, 1)
+    b = win.active_document()
+    asked = []
+    monkeypatch.setattr(win, "_confirm_discard",
+                        lambda prompt: asked.append(prompt) or False)
+    assert not win.close_document(b)              # cancelled: stays
+    assert len(asked) == 1 and b in win.documents()
+    monkeypatch.setattr(win, "_confirm_discard",
+                        lambda prompt: asked.append(prompt) or True)
+    assert win.close_document(b)
+    assert len(asked) == 2
+    assert win.documents() == [a]
+    assert win.active_document() is a
+    assert win._doc_is_dirty(a)                   # A's work untouched
+
+
+def test_closing_the_last_tab_leaves_an_empty_project(win, monkeypatch):
+    monkeypatch.setattr(win, "_confirm_discard", lambda prompt: True)
+    _edges(win.viewport, 1)
+    old = win.active_document()
+    assert win.close_document()
+    assert len(win.documents()) == 1
+    assert win.active_document() is not old
+    assert win._doc_is_blank()
+
+
+def test_quitting_asks_once_for_every_modified_project(win, monkeypatch):
+    _edges(win.viewport, 1)
+    win._on_new()
+    _edges(win.viewport, 1)
+    win._on_new()                                  # a clean third one
+    boxes = []
+
+    def answer(*args, checklist, **kw):
+        boxes.append(checklist)
+        return "cancel"
+    monkeypatch.setattr("views.chrome_dialogs.ask", answer)
+    assert not win._confirm_quit()
+    assert len(boxes) == 1
+    assert len(boxes[0]) == 2 and all("Untitled" in label and checked for label, checked in boxes[0])
+    monkeypatch.setattr("views.chrome_dialogs.ask", lambda *a, **kw: "discard")
+    assert win._confirm_quit()
+
+
+def test_cancelling_quit_in_a_later_window_keeps_the_first_window_recoverable(
+        native_host, win, tmp_path, monkeypatch):
+    from app_shell.host import Host
+    first = _new_tab(win, 3, tmp_path / "first.built")
+    _autosave_now(win)
+    slot = autosave.pending(first.path)
+    assert _edges_in_file(slot) == 3
+    other = Host(0, 900, 600, 1., settings=native_host.settings_dir)
+    try:
+        _new_tab(other.window, 2, tmp_path / "second.built")
+        answers = iter(["discard", "cancel"])
+        monkeypatch.setattr("views.chrome_dialogs.ask", lambda *a, **k: next(answers))
+        assert native_host.confirm_window_close()
+        assert not other.confirm_window_close()
+        assert not win._closed and not other.window._closed
+        assert slot == autosave.pending(first.path) and win._doc_is_dirty(first)
+        monkeypatch.setattr("views.chrome_dialogs.ask", lambda *a, **k: "discard")
+        assert native_host.request_close()
+        assert autosave.pending(first.path) is None and win._closed
+    finally:
+        other.close()

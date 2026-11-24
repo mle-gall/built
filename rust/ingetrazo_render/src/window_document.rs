@@ -110,6 +110,19 @@ pub fn build_tools(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
     Ok(tools)
 }
 
+/// Restoring an owned viewport dismisses its tab's replacement even when
+/// another tab is active. An independent extension view belongs to the front tab.
+#[pyfunction]
+fn set_front_view(win: &Bound<'_, PyAny>, view: &Bound<'_, PyAny>) -> PyResult<()> {
+    for doc in win.getattr("_documents")?.try_iter()? {
+        let doc = doc?;
+        if doc.getattr("viewport")?.is(view) {
+            return doc.setattr("front_view", win.py().None());
+        }
+    }
+    win.getattr("_doc")?.setattr("front_view", view)
+}
+
 #[pyfunction]
 pub fn document_blank(doc: &Bound<'_, PyAny>) -> PyResult<bool> {
     let vp = doc.getattr("viewport")?;
@@ -454,6 +467,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(build_tools, m)?)?;
     m.add_function(wrap_pyfunction!(window_tool_types, m)?)?;
     m.add_function(wrap_pyfunction!(transient_tool_class, m)?)?;
+    m.add_function(wrap_pyfunction!(set_front_view, m)?)?;
     m.add_function(wrap_pyfunction!(document_blank, m)?)?;
     m.add_function(wrap_pyfunction!(document_dirty, m)?)?;
     m.add_function(wrap_pyfunction!(saved_content, m)?)?;
