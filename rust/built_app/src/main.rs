@@ -1124,6 +1124,14 @@ fn main() {
     // AppKit may replay existing paths from argv as open-document events,
     // including operands of options such as --script and --shots.
     app.cli_files = app.args.launch_paths();
+    // AppKit replays every argv operand as an open-document event, including
+    // option values such as `--size 1280x800`: ignore each of them once.
+    for a in std::env::args().skip(1).filter(|a| !a.starts_with('-')) {
+        let p = absolute(Path::new(&a));
+        if !app.cli_files.iter().any(|q| same_path(q, &p)) {
+            app.cli_files.push(p);
+        }
+    }
     if let Err(e) = event_loop.run_app(&mut app) {
         eprintln!("built: {e}");
         app.exit_code = 1;
