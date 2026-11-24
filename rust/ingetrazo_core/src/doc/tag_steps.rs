@@ -20,13 +20,13 @@ fn host<'py>(py: Python<'py>, name: &str) -> PyResult<Obj<'py>> {
     py.import("core.history_commands")?.getattr(name)
 }
 
-fn all_placements(items: &[Obj<'_>]) -> bool {
+pub(super) fn all_placements(items: &[Obj<'_>]) -> bool {
     items.iter().all(|e| e.is_instance_of::<PyPlacement>())
 }
 
 /// The meshes owning the targets that keep `field` outside the document:
 /// faces and edges (and anything else that is not a placement or record).
-fn carriers<'py>(items: &[Obj<'py>], field: &str) -> PyResult<Vec<Obj<'py>>> {
+pub(super) fn carriers<'py>(items: &[Obj<'py>], field: &str) -> PyResult<Vec<Obj<'py>>> {
     let mut seen = HashSet::new();
     let mut out = Vec::new();
     for e in items {
@@ -76,7 +76,7 @@ fn set_hidden(e: &Obj<'_>, hidden: bool) -> PyResult<()> {
     }
 }
 
-fn layer_of<'py>(e: &Obj<'py>) -> PyResult<Obj<'py>> {
+pub(super) fn layer_of<'py>(e: &Obj<'py>) -> PyResult<Obj<'py>> {
     let py = e.py();
     let value = match e.getattr_opt("attrs")?.filter(|a| !a.is_none()) {
         Some(attrs) => attrs.call_method1("get", ("layer",))?,
@@ -85,7 +85,7 @@ fn layer_of<'py>(e: &Obj<'py>) -> PyResult<Obj<'py>> {
     Ok(if value.is_truthy()? { value } else { pyo3::types::PyString::new(py, DEFAULT_LAYER).into_any() })
 }
 
-fn assign_layer(e: &Obj<'_>, name: &Obj<'_>) -> PyResult<()> {
+pub(super) fn assign_layer(e: &Obj<'_>, name: &Obj<'_>) -> PyResult<()> {
     let py = e.py();
     let value = if name.eq(DEFAULT_LAYER)? { py.None().into_bound(py) } else { name.clone() };
     match e.getattr_opt("attrs")?.filter(|a| !a.is_none()) {

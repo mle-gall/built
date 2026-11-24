@@ -1,51 +1,30 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""Outstanding bundled extension menu ordering and shortcut coverage."""
-import pytest
+"""Native bundled panel order and shortcut precedence."""
+import sys
+from types import SimpleNamespace
+from unittest.mock import Mock
+
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 
-def _close(w):
-    w._saved_version = w.viewport.scene.version   # no "save?" modal
-    w.close()
+def test_the_python_console_comes_after_the_model_tools(native_host):
+    panels = list(native_host.window._panel_factories)
+    assert panels.index("model_info") < panels.index("solid_inspector") < panels.index("python_console")
 
 
-@pytest.fixture
-def deferred():
-    from views.main_window import MainWindow
-    w = MainWindow(defer_extensions=True)
-    yield w
-    _close(w)
+def test_an_extension_cannot_take_a_bundled_tools_shortcut(native_host, monkeypatch):
+    from plugins.python_console import PythonConsoleTool
+    from views.extension_api import ExtensionApp
 
-
-@pytest.mark.classic_pending
-def test_the_python_console_comes_after_the_model_tools(deferred):
-    # Marco, 09-10: Model Info, Solid Inspector, then the Python Console —
-    # a tool for developers — not in between by file name.
-    deferred.load_extensions()
-    texts = _menu_texts(deferred)
-    order = [texts.index(t) for t in ("Model Info", "Solid Inspector",
-                                      "Python Console") if t in texts]
-    assert order == sorted(order) and len(order) == 3, texts
-
-
-@pytest.mark.classic_pending
-def test_an_extension_cannot_take_a_bundled_tools_shortcut(tmp_path, monkeypatch):
-    # Extension bench (10-10): Point Cloud Splat's setup() asked for
-    # Ctrl+Shift+P before the Python Console's entry was made, and the
-    # console lost its key. The tools that ship with IngeTrazo reserve theirs.
-    from core import extensions
-    from core.paths import app_root
-    from views.main_window import MainWindow
-    (tmp_path / "grabby.py").write_text(
-        "def setup(app):\n"
-        "    app.add_menu_action('Grabby', lambda: None, 'Ctrl+Shift+P')\n")
-    monkeypatch.setattr(extensions, "plugin_dirs",
-                        lambda: [app_root() / "plugins", tmp_path])
-    w = MainWindow(defer_extensions=True)
-    try:
-        w.load_extensions()
-        acts = {a.text(): a for a in w._ext_menu.actions()}
-        assert acts["Python Console"].shortcut().toString() == "Ctrl+Shift+P"
-        assert acts["Grabby"].shortcut().isEmpty()
-    finally:
-        _close(w)
+    # The host fixture has no OS menu bar. Supply the native console item at
+    # the same boundary the binary uses to publish its accelerators.
+    tool = PythonConsoleTool()
+    console = SimpleNamespace(id="panel:python_console", name=tool.name, keys=tool.shortcut,
+                              path="Plugins", isEnabled=lambda: True, set_shortcut=Mock())
+    monkeypatch.setitem(sys.modules, "built_shell", SimpleNamespace(menu_commands=lambda: [console]))
+    win = native_host.window
+    ExtensionApp(win, "grabby").add_menu_action("Grabby", lambda: None, tool.shortcut)
+    win._extension_menus.refresh(win)
+    action = win._registry_actions["menu:panel:python_console"]
+    assert action.portable_keys() == ["Ctrl+Shift+P"]
+    assert next(row[3] for row in win._extension_menus.rows() if row[2] == "Grabby") == ""

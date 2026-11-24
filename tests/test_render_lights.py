@@ -13,7 +13,8 @@ import shutil
 import subprocess
 
 import pytest
-from PySide6.QtCore import QPointF, Qt
+from core.input_types import QPointF, Qt
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_core import Vec3 as V
 from PySide6.QtWidgets import QApplication
 
@@ -85,48 +86,26 @@ def test_night_and_overcast_have_no_sun_and_lights_off_stay_out(tmp_path):
 # ---- The panel -----------------------------------------------------------------
 
 @pytest.fixture
-def window(monkeypatch, tmp_path):
-    from core import extensions
-    # Only the bundled plugins: the Render tab must come from THEM.
-    from core.paths import app_root
-    monkeypatch.setattr(extensions, "plugin_dirs",
-                        lambda: [app_root() / "plugins"])
-    monkeypatch.setattr(rb, "find_blender",
-                        lambda saved=None: rb.BlenderFound(["/x/blender"],
-                                                           "/x/blender"))
-    from views.main_window import MainWindow
-    win = MainWindow()
-    yield win
-    win._saved_version = win.viewport.scene.version
-    win.close()
+def window(native_host):
+    return native_host.window
 
 
 def _panel(win):
-    for dock in win._extension_docks:
-        w = dock.widget()
-        if type(w).__name__ == "RenderPanel":
-            return w
-    raise AssertionError("no Render tab in the side tray")
+    from views.extension_api import ExtensionApp
+    return win._panel_factories["render_blender"](ExtensionApp(win, "render_blender"), win.viewport.update)
 
 
-@pytest.mark.classic_pending
-def test_the_extensions_entry_brings_back_the_render_tab(window):
-    # The tab is the tool; Extensions only brings it forward, even hidden
-    # (Marco: «no aparece en el menú Extensiones»).
-    panel = _panel(window)
-    dock = next(d for d in window._extension_docks if d.widget() is panel)
-    window.set_tray_shown(dock, False)
-    entry = next(a for a in window._ext_menu.actions()
-                 if "Blender" in a.text())
-    entry.trigger()
-    assert not dock.isHidden()
+def test_the_extensions_entry_brings_back_the_render_tab(window, monkeypatch):
+    view = attach_render_surface(window, monkeypatch)
+    window._host.menu("panel:render_blender")
+    panel = next(b for b in view._plugin_bindings.values() if b.key == "render_blender")
+    view.renderer.ui_plugin_open.assert_called_with(panel.instance)
 
 
-@pytest.mark.classic_pending
 def test_a_light_clicked_onto_the_model_is_kept_and_undone(window, tmp_path):
     panel = _panel(window)
     vp = window.viewport
-    panel._begin_pick("new", "spot")
+    panel.event("spot", "invoke", None)
     tool = vp.active_tool
     assert tool.uses_snap
     from core.snap import SnapResult
@@ -141,10 +120,9 @@ def test_a_light_clicked_onto_the_model_is_kept_and_undone(window, tmp_path):
     assert lights[0]["pos"] == pytest.approx([3, 4, 5.2])
     assert lights[0]["dir"] == [0.0, 0.0, -1.0]
     assert type(vp.active_tool).__name__ != type(tool).__name__  # back to Select
-    assert panel._lights.count() == 1
+    assert panel.selected == "0"
     # Saved with the document, ambience included.
-    panel._ambience.setCurrentIndex(panel._ambience.findData("night"))
-    panel._on_ambience(0)
+    panel.event("ambience", "commit", "night")
     path = tmp_path / "noche.igz"
     from formats import igz
     igz.save_scene(vp.scene, path)
@@ -158,7 +136,6 @@ def test_a_light_clicked_onto_the_model_is_kept_and_undone(window, tmp_path):
     assert not (panel.app.document_data({}) or {}).get("lights")
 
 
-@pytest.mark.classic_pending
 def test_a_point_light_clicked_on_a_face_sits_a_hand_above_it(window):
     panel = _panel(window)
     panel.add_light("point", V(1, 1, 0), on_face=True)
@@ -166,11 +143,10 @@ def test_a_point_light_clicked_on_a_face_sits_a_hand_above_it(window):
     assert lt["pos"][2] == pytest.approx(0.1)
 
 
-@pytest.mark.classic_pending
 def test_esc_while_placing_cancels(window):
     panel = _panel(window)
     vp = window.viewport
-    panel._begin_pick("new", "point")
+    panel.event("point", "invoke", None)
     tool = vp.active_tool
     assert tool.on_key(vp, Qt.Key_Escape, Qt.NoModifier) is True
     assert vp.active_tool is not tool
@@ -195,29 +171,22 @@ def test_a_night_render_with_lights(tmp_path):
     assert (tmp_path / "render.png").is_file()
 
 
-@pytest.mark.classic_pending
 def test_the_lights_are_drawn_over_the_viewport(window):
     """The overlay paints a bulb at each light (an overlay that raised would
     only be logged and skipped, so draw it here and look at the pixels)."""
-    from PySide6.QtGui import QImage, QPainter
-    import importlib
+    from ingetrazo_render import AnnotationCanvas
+    from views.wgpu_overlay import paint_layer
     panel = _panel(window)
     vp = window.viewport
-    vp.resize(400, 300)
-    vp.camera.set_aspect(400, 300)
+    window._host.resize(400, 300, 1.0)
     vp.camera.target = V(0, 0, 0)
     vp.camera.distance = 10
     panel.add_light("spot", V(0, 0, 1))
-    panel._lights.setCurrentRow(0)
-    mod = importlib.import_module(type(panel).__module__)
-    img = QImage(400, 300, QImage.Format_ARGB32)
-    img.fill(0)
-    painter = QPainter(img)
-    mod.draw_lights(panel.app, panel, vp, painter)
-    painter.end()
-    px = vp._world_to_pixel(V(0, 0, 1))
-    assert px is not None
-    assert img.pixelColor(int(px[0]), int(px[1])).alpha() > 0
+    canvas = AnnotationCanvas(400, 300, 400.0)
+    paint_layer(canvas, list(panel.overlay(vp)))
+    rgba = canvas.composite(bytes(400 * 300 * 4))
+    x, y = vp._world_to_pixel(V(0, 0, 1))
+    assert rgba[(int(y) * 400 + int(x)) * 4 + 3] > 0
 
 
 # ---- Temperature, aim, the sun, the image window (Marco's second round) ------
@@ -245,46 +214,41 @@ def test_a_spot_aims_by_heading_and_tilt(heading, tilt):
         assert h == pytest.approx(heading, abs=0.1)
 
 
-@pytest.mark.classic_pending
 def test_the_panel_sets_temperature_aim_and_sun(window):
     panel = _panel(window)
     panel.add_light("spot", V(0, 0, 4))
-    panel._lights.setCurrentRow(0)
-    panel._kelvin_spin.setValue(5000)
-    panel._on_light_edited()
-    panel._heading.setValue(90)
-    panel._tilt.setValue(45)
-    panel._on_aim_edited()
+    panel.event("lights", "selection", "0")
+    panel.event("kelvin", "commit", 5000)
+    panel.event("tilt", "commit", 45)
+    panel.event("heading", "commit", 90)
     lt = panel.app.document_data({})["lights"][0]
     assert lt["kelvin"] == 5000
     assert lt["dir"] == pytest.approx(rb.aim_from_angles(90, 45))
-    panel._sun_scale.setValue(150)
-    panel._on_sun_scale()
+    panel.event("sun_scale", "commit", 1.5)
     assert panel.app.document_data({})["sun_scale"] == 1.5
 
 
 def attach_render_surface(window, monkeypatch):
-    from types import SimpleNamespace
     from unittest.mock import Mock
-    view = SimpleNamespace(_ui_attached=True, renderer=Mock(), update=lambda: None)
-    monkeypatch.setattr(window._doc, "stand_in", view)
+    view = window.view
+    monkeypatch.setattr(view, "renderer", Mock())
+    monkeypatch.setattr(view, "_ui_attached", True, raising=False)
     return view
 
 
-@pytest.mark.classic_pending
 def test_a_finished_render_reuses_the_image_utility(window, tmp_path, monkeypatch):
     from PySide6.QtGui import QImage
     view = attach_render_surface(window, monkeypatch)
     panel = _panel(window)
-    panel._work = tmp_path
+    panel.image = tmp_path / "render.png"
     img = QImage(64, 40, QImage.Format_RGB32)
     img.fill(0x336699)
-    img.save(str(tmp_path / "render.png"))
-    panel._finished(0, None)
-    first = panel._viewer
-    assert first.model.slot == "utility" and first.model.path == str(tmp_path / "render.png")
-    panel._finished(0, None)
-    assert panel._viewer is first and view.renderer.ui_plugin_open.call_count == 2
+    assert img.save(str(panel.image))
+    panel._show_result()
+    first = panel.viewer
+    assert first.model.slot == "utility" and first.model.path == str(panel.image)
+    panel._show_result()
+    assert panel.viewer is first and view.renderer.ui_plugin_open.call_count == 2
     assert view.renderer.ui_plugin_open.call_args.args == (first.instance,)
 
 
@@ -297,58 +261,47 @@ def test_the_sun_strength_reaches_the_job(tmp_path):
 
 # ---- The tray layout (Marco's third round) --------------------------------------
 
-@pytest.mark.classic_pending
 def test_sections_fold_and_remember_it(window):
-    from PySide6.QtCore import QSettings
     panel = _panel(window)
-    import importlib
-    mod = importlib.import_module(type(panel).__module__)
-    sections = {s.header.text(): s for s in panel.findChildren(mod.FoldSection)}
-    lights = sections[mod.tr("Lights")]
-    lights.header.setChecked(False)
-    assert lights.body.isHidden()
-    assert str(QSettings().value("render/open_lights")) == "0"
-    again = mod._Section("x", "lights")                # a new panel: folded
-    assert again.body.isHidden()
-    lights.header.setChecked(True)
-    assert not lights.body.isHidden()
+    panel.event("lights_open", "commit", False)
+    again = _panel(window)
+    def controls():
+        return {c["id"] for section in again.sections() for c in section["items"]}
+    assert "lights_open" in controls() and "lights" not in controls()
+    again.event("lights_open", "commit", True)
+    assert "lights" in controls()
 
 
-
-
-@pytest.mark.classic_pending
 def test_save_and_open_folder_live_in_the_image_utility(window, tmp_path, monkeypatch):
     from PySide6.QtGui import QImage
     from unittest.mock import Mock
     attach_render_surface(window, monkeypatch)
     panel = _panel(window)
-    panel._work = tmp_path
+    panel.image = tmp_path / "render.png"
     img = QImage(32, 20, QImage.Format_RGB32)
     img.fill(0x808080)
-    img.save(str(tmp_path / "render.png"))
-    save, folder = Mock(), Mock()
-    monkeypatch.setattr(panel, "_save_image", save)
-    monkeypatch.setattr(panel, "_open_folder", folder)
-    panel._finished(0, None)
-    model = panel._viewer.model
+    assert img.save(str(panel.image))
+    folder = Mock()
+    from plugins import _blender_panel
+    from views.filedialogs import file_dialogs
+    saved = tmp_path / "saved.png"
+    monkeypatch.setattr(file_dialogs, "getSaveFileName", lambda *_: (str(saved), ""))
+    monkeypatch.setattr(_blender_panel, "open_url", folder)
+    panel._show_result()
+    model = panel.viewer.model
     controls = {i["id"] for s in model.sections() for i in s["items"]}
     assert {"image", "save", "folder", "follow"} <= controls
     model.event("save", "invoke", None)
     model.event("folder", "invoke", None)
-    save.assert_called_once()
-    folder.assert_called_once()
-    assert "href" in panel._status.text()
+    assert saved.read_bytes() == panel.image.read_bytes()
+    folder.assert_called_once_with(tmp_path)
 
 
-@pytest.mark.classic_pending
 def test_change_date_and_time_drops_the_shadows_panel(window, monkeypatch):
-    """The button under the day's sun opens the Shadows panel from its
-    toolbar button (its tooltip carries a line of help under the title)."""
-    from PySide6.QtWidgets import QToolButton
-    opened = []
-    monkeypatch.setattr(QToolButton, "showMenu",
-                        lambda self: opened.append(self.menu()))
-    _panel(window)._open_shadows()
-    assert len(opened) == 1
-    assert window.shadows_panel in [a.defaultWidget() for a in opened[0].actions()
-                                    if hasattr(a, "defaultWidget")]
+    from unittest.mock import Mock
+    run = Mock()
+    monkeypatch.setattr(window, "run_command", run)
+    panel = _panel(window)
+    assert any(i["id"] == "shadows" for section in panel.sections() for i in section["items"])
+    panel.event("shadows", "invoke", None)
+    run.assert_called_once_with("view:form-shadows")

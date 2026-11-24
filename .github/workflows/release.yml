@@ -181,7 +181,7 @@ jobs:
           cp -a dist/ingetrazo/. build/snap-stage/payload/
           cp resources/icons/ingetrazo_256.png build/snap-stage/snap/gui/ingetrazo.png
           # Desktop entry: same as the tarball's, with the snap's icon path.
-          sed -e 's|^Exec=.*|Exec=ingetrazo %f|' -e 's|^Icon=.*|Icon=${SNAP}/meta/gui/ingetrazo.png|' \
+          sed -e 's|^Exec=built |Exec=ingetrazo |' -e 's|^Icon=.*|Icon=${SNAP}/meta/gui/ingetrazo.png|' \
               packaging/ingetrazo.desktop > build/snap-stage/snap/gui/ingetrazo.desktop
 
       - name: Build the snap
