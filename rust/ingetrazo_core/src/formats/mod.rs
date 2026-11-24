@@ -22,6 +22,7 @@ mod geotiff;
 mod ground;
 mod paths;
 mod photo;
+mod services;
 mod tiles;
 use pyo3::prelude::*;
 
@@ -153,5 +154,6 @@ pub(super) fn register_formats(m: &Bound<'_, PyModule>) -> PyResult<()> {
     tiles::register(m)?;
     paths::register(m)?;
     ground::register(m)?;
+    services::register(m)?;
     Ok(())
 }
