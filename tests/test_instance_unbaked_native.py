@@ -311,7 +311,6 @@ def test_placements_without_a_box_hide_as_baked_and_empty_ones_cost_nothing(
     group, a container of others): over the plant of #158 every ray
     visited its 1 410 of them. Those of no triangles are left out of the
     rays' BVH; those with triangles and no box are still asked."""
-    import time
     rng = np.random.default_rng(900 + seed)
     protos = [_proto(rng) for _ in range(4)]
     empty = (np.zeros((0, 3)), np.zeros((0, 3)), np.zeros((0, 3)),
@@ -364,17 +363,13 @@ def test_placements_without_a_box_hide_as_baked_and_empty_ones_cost_nothing(
         assert bool(hid[r]) == want, r
         hidden += want
     assert 100 < hidden < len(pts) - 100
-    # Each ray as fast as without the empty ones (it was ~10x slower).
+    # The empty ones cost a ray nothing: they are not among what it can
+    # visit (counted, not timed: a 5 ms wall-clock bound failed under load),
+    # and the unboxed ones with triangles are always asked.
+    assert full.ray_members() == bare.ray_members() == (P - int(unboxed.sum()), int(unboxed.sum()))
     few = np.arange(P, dtype=np.int64)
-
-    def best(iset, c):
-        ts = []
-        for _ in range(7):
-            t = time.perf_counter()
-            iset.occluded(c, tuple(o), D, limit)
-            ts.append(time.perf_counter() - t)
-        return min(ts)
-    assert best(full, cand) < 3.0 * best(bare, few) + 2e-3
+    np.testing.assert_array_equal(full.occluded(cand, tuple(o), D, limit)[0],
+                                  bare.occluded(few, tuple(o), D, limit)[0])
 
 
 @pytest.mark.parametrize("seed", range(4))

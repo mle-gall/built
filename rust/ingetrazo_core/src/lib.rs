@@ -1174,6 +1174,13 @@ impl InstanceSet {
         self.places.len()
     }
 
+    /// What a ray can be asked about: ``(placements in the rays' BVH,
+    /// placements always asked)``. Placements of no triangles are in
+    /// neither (tests count them instead of timing rays).
+    fn ray_members(&self) -> (usize, usize) {
+        self.bvh.members()
+    }
+
     /// Placement ``row`` as built: its prototype and its 16 matrix values
     /// in the order given (the snap index reads committed rows here, not
     /// from a copy of the instance table).
