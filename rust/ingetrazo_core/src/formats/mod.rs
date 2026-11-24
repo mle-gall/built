@@ -18,6 +18,7 @@ fn path_obj<'p>(py: Python<'p>, p: &std::path::Path) -> PyResult<Obj<'p>> {
     py.import("pathlib")?.call_method1("Path", (p,))
 }
 mod geotiff;
+mod photo;
 use pyo3::prelude::*;
 
 pub(super) fn register_formats(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -143,5 +144,6 @@ pub(super) fn register_formats(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(file_geometry::igz_points, m)?)?;
     m.add_function(wrap_pyfunction!(igz::igz_read_geometry, m)?)?;
     geotiff::register(m)?;
+    photo::register(m)?;
     Ok(())
 }
