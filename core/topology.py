@@ -2388,7 +2388,7 @@ def _mesh_is_flat(mesh) -> bool:
     if len(faces) < 2:
         return True
     from core import push_scans
-    got = push_scans.mesh_is_flat_from(mesh, 1, _PLANAR_TOLERANCE)
+    got = push_scans.mesh_is_flat(mesh, _PLANAR_TOLERANCE)
     if got is not None:
         return got
     n0 = faces[0].normal()

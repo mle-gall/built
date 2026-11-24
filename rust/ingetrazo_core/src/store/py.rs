@@ -1128,6 +1128,10 @@ impl PyMeshStore {
             .map(|f| self.inner.key(Kind::Face, f))
             .collect()
     }
+    fn faces_are_flat(&self, tolerance: f64, hypot: &str) -> PyResult<Option<bool>> {
+        Ok(self.inner.faces_are_flat(tolerance, crate::hypot_of(hypot)?))
+    }
+
     fn heal_plan(
         &self,
         coverage: f64,
@@ -2612,6 +2616,16 @@ impl PyMeshStore {
         let snap = Snapshot { state: empty, revision: self.inner.revision, lineage: self.inner.lineage };
         self.inner.restore(&snap, None).map_err(PyValueError::new_err)?;
         Ok(self.net_change(&before))
+    }
+
+    fn apply_orientation(&mut self, marks: Vec<(u128, bool)>, flips: Vec<u128>) -> PyResult<()> {
+        let marks = marks.into_iter()
+            .map(|(key, interior)| Ok((live_of(&self.inner, Kind::Face, key)?, interior)))
+            .collect::<PyResult<Vec<_>>>()?;
+        let flips = flips.into_iter().map(|key| live_of(&self.inner, Kind::Face, key))
+            .collect::<PyResult<Vec<_>>>()?;
+        self.inner.apply_orientation(&marks, &flips);
+        Ok(())
     }
 
     fn reverse_faces(&mut self, keys: Vec<u128>) -> PyResult<PyChange> {

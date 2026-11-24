@@ -1833,6 +1833,12 @@ def turn_face_over(face) -> None:
 
     The explicit Reverse Faces command (``FlipFacesCommand``) swaps nothing,
     by design: there the material follows the front, the classic behaviour."""
+    swap_orientation_paint(face)
+    face.reverse_rings()
+
+
+def swap_orientation_paint(face) -> None:
+    """Keep explicit front and back paint on their geometric sides at a flip."""
     attrs = face.attrs if face.attrs is not None else {}
     back = attrs.get("back")
     if isinstance(back, dict):
@@ -1842,7 +1848,6 @@ def turn_face_over(face) -> None:
         if front:
             attrs["back"] = front
         face.attrs = attrs
-    face.reverse_rings()
 
 
 def _dominant_attrs(faces) -> dict:
