@@ -382,7 +382,7 @@ class Workspace:
                 if frame.style == "vectorial" and not comp.frame_is_perspective(frame):
                     got = wgpu_sheet_frames.drawing(self.view.source_viewport, frame)
                     if got is not None:
-                        segs, kinds = got
+                        segs, kinds, _fills = got
                         renderer.page_frame_lines(key, np.ascontiguousarray(segs, np.float32),
                                                   np.ascontiguousarray(kinds, np.uint8))
                 else:
@@ -848,11 +848,14 @@ class Workspace:
         troubled = []
         try:
             with chrome_dialogs.busy(parent, f"{labels[kind]} · {name}", output_path=path):
-                if kind == "pdf":
-                    comp.refresh_all_frames()
-                    comp.export_pdf(path)
-                elif kind == "pdf_all":
-                    troubled = comp.export_all_pdf(path)
+                if kind in ("pdf", "pdf_all"):
+                    from views import wgpu_sheet_frames
+                    comps = [comp.comp] if kind == "pdf" else list(comp._scene().compositions)
+                    if self._ground is None:
+                        self._ground = wgpu_sheet_frames.Ground(self._touch)
+                    troubled = wgpu_sheet_frames.export_pdf(
+                        self.view, comps, path, self._ground,
+                        getattr(comp._window, "_current_path", None))
                 elif kind == "png":
                     comp.refresh_all_frames()
                     comp.export_image(path, comp.IMAGE_EXPORT_DPI)

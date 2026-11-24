@@ -248,7 +248,7 @@ def test_frames_show_the_vector_pass_and_the_renders(host, monkeypatch):
 
     def drawing(source, frame):
         assert frame.style == "vectorial"
-        return np.array([[0, 0, 10, 0], [0, 0, 0, 5]], float), np.array([0, 1], np.int8)
+        return np.array([[0, 0, 10, 0], [0, 0, 0, 5]], float), np.array([0, 1], np.int8), []
     monkeypatch.setattr(wgpu_sheet_frames, "drawing", drawing)
     shaded = []
 
@@ -539,3 +539,7 @@ def test_export_pdf_from_the_workspace(host, tmp_path, monkeypatch):
     assert asked and asked[0][1].endswith(".pdf")                    # next to the document
     assert Path(asked[0][1]).parent == Path(host.window._current_path).parent
     assert ws.last_export == str(out)
+    pymupdf = pytest.importorskip("pymupdf")
+    doc = pymupdf.open(str(out))                                     # the Rust writer's
+    assert doc.page_count == 1 and "Inter" in " ".join(f[3] for f in doc[0].get_fonts())
+    assert "Top (plan)" in doc[0].get_text()
