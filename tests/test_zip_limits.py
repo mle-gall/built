@@ -126,7 +126,7 @@ def test_a_skp_whose_thumbnail_is_a_bomb_reads_as_not_empty(tmp_path):
     """The thumbnail only tells an empty .skp from one the parser could not
     read; a bomb in its place is «any doubt»: not empty."""
     from types import SimpleNamespace
-    from formats import skp_openskp
+    from formats import skp_reader
     path = _bomb(tmp_path / "bomb.skp", "meta/model_thumbnail.png")
     model = SimpleNamespace(definitions=None, root=SimpleNamespace())
-    assert skp_openskp._is_empty_model(model, path, False) is False
+    assert skp_reader._is_empty_model(model, path, False) is False

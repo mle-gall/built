@@ -7,7 +7,7 @@ import pytest
 from PySide6.QtCore import QBuffer
 from PySide6.QtGui import QImage, qRgba
 
-from formats import skp_openskp as skp
+from formats import skp_reader as skp
 
 
 @pytest.fixture(autouse=True)

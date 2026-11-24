@@ -1,5 +1,23 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Metadata carried in .skp VFF model.dat records. Tags are little-endian.
+mod lifetime;
+pub use lifetime::{image_stage_geometry, FlatGeometry, PrototypeGeometry};
+mod finish;
+pub use finish::{
+    skp_cached_colorize, skp_empty_model, skp_file_layers, skp_inverted_png, skp_merge_protos,
+    skp_needs_tint, skp_texture_dir,
+};
+mod collect;
+pub use collect::{
+    skp_collect, skp_curve_segments, skp_defn_geom, skp_instance_identity, skp_loose_segments,
+    skp_soft_segments, skp_world_points,
+};
+mod tree;
+pub use tree::{skp_adapt_inner, skp_parse};
+mod vff;
+pub use vff::skp_vff_model;
+mod images;
+pub use images::{skp_image_attached, skp_image_bounds, skp_image_faces, skp_mark_drapes};
 mod surface;
 pub use surface::{skp_face_entry, skp_positioned_uvs, skp_ring};
 mod apply;

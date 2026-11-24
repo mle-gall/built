@@ -16,7 +16,7 @@ import pytest
 
 pytest.importorskip("openskp")
 
-from formats import openskp_compat, skp_openskp  # noqa: E402
+from formats import openskp_compat, skp_reader  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -24,7 +24,7 @@ def _legacy_flattening(monkeypatch):
     """These cases cover the old flattening of small shared definitions,
     kept behind ``EXACT_TREE = False``; the default tree is checked by
     test_skp_exact_tree.py."""
-    monkeypatch.setattr(skp_openskp, "EXACT_TREE", False)
+    monkeypatch.setattr(skp_reader, "EXACT_TREE", False)
 
 
 _ID = [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1]
@@ -86,7 +86,7 @@ def _protos_by_name(payload):
 
 def test_a_small_component_copied_at_the_top_level_is_shared(kinds):
     kinds({7})
-    protos = _protos_by_name(skp_openskp._adapt(_model(), "m"))
+    protos = _protos_by_name(skp_reader._adapt(_model(), "m"))
     shelf = protos["panela_prateleira"]
     assert len(shelf["instances"]) == 3 and shelf["component"] is True
     # Placed once: a component, as before.
@@ -100,7 +100,7 @@ def test_a_small_component_copied_at_the_top_level_is_shared(kinds):
 
 def test_without_the_kinds_nothing_changes(kinds):
     openskp_compat.reset_group_definitions()        # kinds unknown
-    protos = _protos_by_name(skp_openskp._adapt(_model(), "m"))
+    protos = _protos_by_name(skp_reader._adapt(_model(), "m"))
     assert "panela_prateleira" not in protos
     assert protos["Agrupar#1"]["component"] is True
 
@@ -141,7 +141,7 @@ def test_lines_on_a_hidden_tag_stay_out():
     model = NS(definitions={0: root, 5: lines},
                layers=[NS(name="CVL_CURV", hidden=True),
                        NS(name="limite", hidden=False)])
-    payload = skp_openskp._adapt(model, "plaza")
+    payload = skp_reader._adapt(model, "plaza")
     got = [seg for part in payload["groups"] + payload["protos"]
            for seg in part.get("loose_edges") or []]
     assert sorted(round(a[0] / 0.0254) for a, _b in got) == [20, 40]

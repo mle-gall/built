@@ -3,7 +3,7 @@
 How a .skp 2025+ file stores a material's PBR data (metallic,
 roughness, normal map and ambient occlusion), and how IngeTrazo imports it.
 Read by `formats/openskp_compat.py` (`read_pbr`, `attach_pbr`) and mapped to
-`core.materials.Material.pbr` by `formats/skp_openskp.py` (`_pbr_attrs`).
+`core.materials.Material.pbr` by `rust/ingetrazo_core/src/skp/materials.rs`.
 
 ## How this was established (2026-11-19)
 
@@ -103,7 +103,7 @@ A disabled channel's value is a leftover default, not a setting.
 
 ## Mapping to `Material.pbr`
 
-`formats.skp_openskp._pbr_attrs`, contract in `core/materials.py`:
+The Rust material reader populates the fields defined in `core/materials.py`.
 
 | file | `pbr` key |
 |---|---|

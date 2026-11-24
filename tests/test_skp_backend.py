@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """SKP import seam (``formats/skp.py``) + the OpenSKP adapter
-(``formats/skp_openskp.py``): container detection, the parse→apply flow, the
+(``formats/skp_reader.py``): container detection, the parse→apply flow, the
 NeedsConverter fallback, and OpenSKP model → payload adaptation (fake model, so
 no ``openskp`` package or ``.skp`` file is needed)."""
 from __future__ import annotations
@@ -14,7 +14,7 @@ import pytest
 from core.scene import Scene
 from core.texture import clear_texture_cache, texture_cache_stats
 from formats import skp as skp_format
-from formats import skp_openskp
+from formats import skp_reader
 
 
 def _skp_header_bytes() -> bytes:
@@ -182,7 +182,7 @@ def test_openskp_adapter_resolves_a_face_ring_in_metres():
         faces={20: [[(10, 1), (11, 1), (12, 1)]]},
     )
     model = NS(definitions={0: root})
-    payload = skp_openskp._adapt(model, "tri")
+    payload = skp_reader._adapt(model, "tri")
     assert payload["backend"] == "openskp"
     faces = payload["groups"][0]["faces"]
     assert len(faces) == 1
@@ -212,7 +212,7 @@ def test_face_ring_reads_the_same_square_under_either_coedge_contract(senses,
         faces={20: [[]]},
     )
     loop = list(zip((10, 11, 12, 13), senses))
-    ring = skp_openskp._ring_raw(defn, loop)
+    ring = skp_reader._ring_raw(defn, loop)
     corners = [(p[0], p[1]) for p in ring]
     square = [(0, 0), (100, 0), (100, 100), (0, 100)]
     assert any(corners == square[k:] + square[:k] for k in range(4)), era
@@ -240,7 +240,7 @@ def test_openskp_adapter_places_instances_with_transform():
     root = _fake_definition(
         id=0, name="ROOT_MODEL", verts={}, edges={}, faces={}, instances=[inst])
     model = NS(definitions={0: root, 5: child})
-    payload = skp_openskp._adapt(model, "inst")
+    payload = skp_reader._adapt(model, "inst")
     # The definition keeps its own coordinates and the placement rides on the
     # instance matrix — that is what lets the group know its own axes.
     proto = payload["protos"][0]
@@ -270,7 +270,7 @@ def test_openskp_adapter_scales_an_instance_matrix_by_element_12():
     root = _fake_definition(
         id=0, name="ROOT_MODEL", verts={}, edges={}, faces={}, instances=[inst])
     model = NS(definitions={0: root, 5: child})
-    payload = skp_openskp._adapt(model, "instw")
+    payload = skp_reader._adapt(model, "instw")
     proto = payload["protos"][0]
     assert len(proto["instances"]) == 1
     from ingetrazo_core import Vec3 as QVector3D
@@ -283,7 +283,7 @@ def test_openskp_adapter_scales_an_instance_matrix_by_element_12():
 
 def test_openskp_adapter_returns_none_without_geometry():
     root = _fake_definition(id=0, name="ROOT_MODEL", verts={}, edges={}, faces={})
-    assert skp_openskp._adapt(NS(definitions={0: root}), "empty") is None
+    assert skp_reader._adapt(NS(definitions={0: root}), "empty") is None
 
 
 def _vff_skp(tmp_path, thumb_pixels) -> Path:
@@ -320,7 +320,7 @@ def test_an_empty_skp_file_opens_empty_instead_of_asking_for_the_converter(tmp_p
     # converter, so on
     # Windows opening a blank page meant installing a program first.
     skp = _vff_skp(tmp_path, thumb_pixels=[])
-    payload = skp_openskp._adapt(_empty_vff_model(), "plantilla", skp_path=skp)
+    payload = skp_reader._adapt(_empty_vff_model(), "plantilla", skp_path=skp)
     assert payload is not None and payload["empty"] is True
     assert payload["groups"] == [] and payload["protos"] == []
 
@@ -329,7 +329,7 @@ def test_a_file_whose_thumbnail_shows_geometry_still_falls_back(tmp_path):
     # The parse found nothing but the thumbnail shows something: the parser missed
     # it, and the converter must still get its chance.
     skp = _vff_skp(tmp_path, thumb_pixels=[(3, 3)])
-    assert skp_openskp._adapt(_empty_vff_model(), "m", skp_path=skp) is None
+    assert skp_reader._adapt(_empty_vff_model(), "m", skp_path=skp) is None
 
 
 def test_an_empty_legacy_file_still_falls_back(tmp_path):
@@ -337,7 +337,7 @@ def test_an_empty_legacy_file_still_falls_back(tmp_path):
     skp = _vff_skp(tmp_path, thumb_pixels=[])
     model = _empty_vff_model()
     model.version = "{17.2.2555}"
-    assert skp_openskp._adapt(model, "m", skp_path=skp) is None
+    assert skp_reader._adapt(model, "m", skp_path=skp) is None
 
 
 def test_parse_skp_accepts_an_empty_payload(tmp_path, monkeypatch):
@@ -369,11 +369,11 @@ def test_openskp_adapter_resolves_face_colours_via_materials_by_id():
     mat = NS(name="Wood", color=(255, 0, 51), transparency=1.0, id=29491)
 
     with_join = NS(definitions={0: root}, materials_by_id={29491: mat})
-    attrs = skp_openskp._adapt(with_join, "m")["groups"][0]["faces"][0][2]
+    attrs = skp_reader._adapt(with_join, "m")["groups"][0]["faces"][0][2]
     assert attrs == {"color": [1.0, 0.0, 0.2], "mat": "Wood"}
 
     without_join = NS(definitions={0: root})   # PyPI 0.2.0: no materials_by_id
-    attrs = skp_openskp._adapt(without_join, "m")["groups"][0]["faces"][0][2]
+    attrs = skp_reader._adapt(without_join, "m")["groups"][0]["faces"][0][2]
     assert attrs is None
 
 
@@ -400,7 +400,7 @@ def test_openskp_adapter_extracts_textures_to_the_app_cache(tmp_path, monkeypatc
     src.mkdir()
     skp = src / "casa.skp"
     skp.write_bytes(b"")
-    attrs = skp_openskp._adapt(model, "casa", skp_path=skp)
+    attrs = skp_reader._adapt(model, "casa", skp_path=skp)
     attrs = attrs["groups"][0]["faces"][0][2]
 
     img = Path(attrs["texture"]["path"])
@@ -420,15 +420,15 @@ def test_texture_cache_dir_is_per_file_and_clearable(tmp_path, monkeypatch):
     monkeypatch.setenv("INGETRAZO_TEXTURE_CACHE", str(cache))
     skp = tmp_path / "casa.skp"
     skp.write_bytes(b"one")
-    first = skp_openskp._texture_dir(skp)
-    assert first == skp_openskp._texture_dir(skp)
+    first = skp_reader._texture_dir(skp)
+    assert first == skp_reader._texture_dir(skp)
     assert first.parent == cache / "skp"
 
     (first / "t.png").write_bytes(b"img")
     assert texture_cache_stats() == (1, 3)
 
     skp.write_bytes(b"edited, longer")
-    assert skp_openskp._texture_dir(skp) != first
+    assert skp_reader._texture_dir(skp) != first
 
     assert clear_texture_cache() == 1
     assert not cache.exists()
@@ -454,7 +454,7 @@ def test_openskp_adapter_groups_per_top_level_instance():
     child = _tri_def(5, "Farola")
     ins = NS(ref_idx=5, matrix=[1, 0, 0, 0, 1, 0, 0, 0, 1, 100, 0, 0, 1])
     root = _tri_def(0, "ROOT_MODEL", instances=[ins])
-    payload = skp_openskp._adapt(NS(definitions={0: root, 5: child}), "obra")
+    payload = skp_reader._adapt(NS(definitions={0: root, 5: child}), "obra")
 
     # The root's loose faces stay a group; the placed definition is a proto.
     assert sorted(g["name"] for g in payload["groups"]) == ["obra"]
@@ -474,7 +474,7 @@ def test_openskp_adapter_shares_repeated_components(monkeypatch):
     i2 = NS(ref_idx=5, matrix=[1, 0, 0, 0, 1, 0, 0, 0, 1, 100, 0, 0, 1])
     root = _fake_definition(id=0, name="ROOT_MODEL", verts={}, edges={},
                             faces={}, instances=[i1, i2])
-    payload = skp_openskp._adapt(NS(definitions={0: root, 5: child}), "obra")
+    payload = skp_reader._adapt(NS(definitions={0: root, 5: child}), "obra")
 
     assert payload["groups"] == []
     assert len(payload["protos"]) == 1
@@ -504,7 +504,7 @@ def test_openskp_adapter_inherits_instance_material():
     wood = NS(name="Wood", color=(255, 0, 0), transparency=1.0, id=77,
               texture=None)
     model = NS(definitions={0: root, 5: child}, materials_by_id={77: wood})
-    payload = skp_openskp._adapt(model, "obra")
+    payload = skp_reader._adapt(model, "obra")
 
     attrs = _placed(payload)["faces"][0][2]
     # Painting the component paints BOTH sides of its default faces (the
@@ -524,7 +524,7 @@ def test_openskp_adapter_face_material_beats_inherited():
             88: NS(name="B", color=(0, 0, 255), transparency=1, id=88,
                    texture=None)}
     model = NS(definitions={0: root, 5: child}, materials_by_id=mats)
-    payload = skp_openskp._adapt(model, "obra")
+    payload = skp_reader._adapt(model, "obra")
 
     # The face's OWN material fronts; the unpainted back side shows the
     # instance's inherited paint (the .skp two-sided rule).
@@ -559,7 +559,7 @@ def test_openskp_adapter_bakes_positioned_texture_uvs(tmp_path):
 
     skp = tmp_path / "m.skp"
     skp.write_bytes(b"")
-    payload = skp_openskp._adapt(model, "m", skp_path=skp)
+    payload = skp_reader._adapt(model, "m", skp_path=skp)
     outer, holes, attrs = payload["groups"][0]["faces"][0]
     uvw = attrs["texture"]["uvw"]
     uvs = affine_uv(uvw, outer)
@@ -609,7 +609,7 @@ def test_openskp_adapter_image_entities_become_billboards(tmp_path):
                materials_by_id=mats)
     skp = tmp_path / "m.skp"
     skp.write_bytes(b"")
-    payload = skp_openskp._adapt(model, "m", skp_path=skp)
+    payload = skp_reader._adapt(model, "m", skp_path=skp)
 
     by_name = {g["name"]: g for g in payload["groups"]}
     assert by_name["imagen#1"]["billboard"] is True     # cutout -> face-me
@@ -661,7 +661,7 @@ def test_a_cutout_image_stuck_on_a_face_stays_put(tmp_path):
                materials_by_id=mats)
     skp = tmp_path / "m.skp"
     skp.write_bytes(b"")
-    payload = skp_openskp._adapt(model, "m", skp_path=skp)
+    payload = skp_reader._adapt(model, "m", skp_path=skp)
 
     by_name = {g["name"]: g for g in payload["groups"]}
     assert by_name["logo"]["billboard"] is False        # glued -> static
@@ -671,7 +671,7 @@ def test_a_cutout_image_stuck_on_a_face_stays_put(tmp_path):
 def test_openskp_adapter_default_mapping_is_local(tmp_path, monkeypatch):
     # Two flattened copies (the legacy path); exact-tree copies share one
     # prototype, so they sample the same patch by construction.
-    monkeypatch.setattr(skp_openskp, "EXACT_TREE", False)
+    monkeypatch.setattr(skp_reader, "EXACT_TREE", False)
     # The .skp format's default texture mapping runs in the component's LOCAL frame:
     # two copies of the same textured component must sample the same patch of
     # the tile (identical UVs), regardless of where each copy sits in world.
@@ -699,7 +699,7 @@ def test_openskp_adapter_default_mapping_is_local(tmp_path, monkeypatch):
     model = NS(definitions={0: root, 5: child}, materials_by_id={9: mat})
     skp = tmp_path / "m.skp"
     skp.write_bytes(b"")
-    payload = skp_openskp._adapt(model, "m", skp_path=skp)
+    payload = skp_reader._adapt(model, "m", skp_path=skp)
 
     uv_sets = []
     for gp in payload["groups"]:
@@ -728,7 +728,7 @@ def test_openskp_adapter_own_back_material_beats_instance_paint():
             40: NS(name="Blue", color=(65, 105, 225), transparency=1,
                    id=40, texture=None)}
     model = NS(definitions={0: root, 5: child}, materials_by_id=mats)
-    payload = skp_openskp._adapt(model, "m")
+    payload = skp_reader._adapt(model, "m")
 
     attrs = _placed(payload)["faces"][0][2]
     assert attrs == {"color": [128 / 255.0] * 3,
@@ -746,7 +746,7 @@ def test_openskp_adapter_back_painted_face_flips_and_paints():
     grass = NS(name="Grass", color=(0, 200, 0), transparency=1.0, id=7,
                texture=None)
     model = NS(definitions={0: root}, materials_by_id={7: grass})
-    payload = skp_openskp._adapt(model, "m")
+    payload = skp_reader._adapt(model, "m")
 
     outer, holes, attrs = payload["groups"][0]["faces"][0]
     assert attrs == {"color": [0.0, 200 / 255.0, 0.0], "mat": "Grass"}
@@ -769,7 +769,7 @@ def test_openskp_adapter_face_camera_component_becomes_billboard():
     mats = {9: NS(name="Shirt", color=(0, 128, 0), transparency=1, id=9,
                   texture=None)}
     model = NS(definitions={0: root, 5: susan}, materials_by_id=mats)
-    payload = skp_openskp._adapt(model, "m")
+    payload = skp_reader._adapt(model, "m")
 
     g = {gp["name"]: gp for gp in payload["groups"]}["Susan"]
     assert g["billboard"] is True
@@ -803,7 +803,7 @@ def test_openskp_adapter_splits_prototypes_by_inherited_material(monkeypatch):
             2: NS(name="G", color=(0, 255, 0), transparency=1, id=2,
                   texture=None)}
     model = NS(definitions={0: root, 5: child}, materials_by_id=mats)
-    payload = skp_openskp._adapt(model, "obra")
+    payload = skp_reader._adapt(model, "obra")
 
     assert len(payload["protos"]) == 2      # one per inherited material
     counts = sorted(len(p["instances"]) for p in payload["protos"])
@@ -831,7 +831,7 @@ def test_openskp_adapter_translucent_material_carries_opacity(tmp_path):
     model = NS(definitions={0: root}, materials_by_id={9: mat})
     skp = tmp_path / "m.skp"
     skp.write_bytes(b"")
-    payload = skp_openskp._adapt(model, "m", skp_path=skp)
+    payload = skp_reader._adapt(model, "m", skp_path=skp)
 
     attrs = payload["groups"][0]["faces"][0][2]
     assert attrs["opacity"] == 0.27
@@ -860,7 +860,7 @@ def test_openskp_adapter_colorized_material_tints_shared_texture(tmp_path):
     model = NS(definitions={0: root}, materials_by_id={7: mat})
     skp = tmp_path / "m.skp"
     skp.write_bytes(b"")
-    payload = skp_openskp._adapt(model, "m", skp_path=skp)
+    payload = skp_reader._adapt(model, "m", skp_path=skp)
 
     attrs = payload["groups"][0]["faces"][0][2]
     path = attrs["texture"]["path"]
@@ -883,7 +883,7 @@ def test_openskp_adapter_carries_file_layers_with_visibility():
         NS(name="Muros", visible=True, default=False),
         NS(name="Curvas", visible=False, default=False),
     ])
-    payload = skp_openskp._adapt(model, "m")
+    payload = skp_reader._adapt(model, "m")
     assert payload["layers"] == [{"name": "Muros", "visible": True},
                                  {"name": "Curvas", "visible": False}]
 
@@ -894,7 +894,7 @@ def test_openskp_adapter_top_level_instance_layer_on_group():
               layer="Vegetacion")
     root = _fake_definition(id=0, name="ROOT_MODEL", verts={}, edges={},
                             faces={}, instances=[inst])
-    payload = skp_openskp._adapt(NS(definitions={0: root, 5: child}), "m")
+    payload = skp_reader._adapt(NS(definitions={0: root, 5: child}), "m")
     # The tag rides per PLACEMENT now (copies of one component can sit on
     # different layers), which is the same mechanism nested tagged instances
     # already used.
@@ -914,7 +914,7 @@ def test_openskp_adapter_keeps_a_nested_tagged_instance_a_tagged_child():
     top = NS(ref_idx=5, matrix=[1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1])
     root = _fake_definition(id=0, name="ROOT_MODEL", verts={}, edges={},
                             faces={}, instances=[top])
-    payload = skp_openskp._adapt(
+    payload = skp_reader._adapt(
         NS(definitions={0: root, 5: container, 7: leaf}), "m")
     by_name = {p["name"]: p for p in payload["protos"]}
     (kid,) = by_name["Jardinera"]["children"]
@@ -926,7 +926,7 @@ def test_openskp_adapter_keeps_a_nested_tagged_instance_a_tagged_child():
 def test_openskp_adapter_face_layer_lands_in_attrs():
     root = _tri_def(0, "ROOT_MODEL")
     root.faces[20].layer = "Banderas"
-    payload = skp_openskp._adapt(NS(definitions={0: root}), "m")
+    payload = skp_reader._adapt(NS(definitions={0: root}), "m")
     attrs = payload["groups"][0]["faces"][0][2]
     assert attrs["layer"] == "Banderas"
 
@@ -1025,7 +1025,7 @@ def test_openskp_adapter_carries_scenes_in_metres():
            up=(0.0, 0.0, 1.0), fov=35.0, parallel=True, ortho_height=100.0,
            hidden_layers=["Curvas"]),
     ])
-    payload = skp_openskp._adapt(model, "m")
+    payload = skp_reader._adapt(model, "m")
     sc = payload["scenes"][0]
     assert sc["name"] == "Escena1"
     assert sc["eye"] == pytest.approx([2.54, 0.0, 0.0])
@@ -1086,7 +1086,7 @@ def test_openskp_adapter_carries_dimensions_in_metres():
         NS(a=(0.0, 0.0, 0.0), b=(0.0, 0.0, 100.0), offset=20.0,
            normal=(-1.0, 0.0, 0.0), plane_x=(0.0, 1.0, 0.0), text=""),
     ])
-    payload = skp_openskp._adapt(model, "m")
+    payload = skp_reader._adapt(model, "m")
     dm = payload["dimensions"][0]
     assert dm["a"] == pytest.approx([0.0, 0.0, 0.0])
     assert dm["b"] == pytest.approx([0.0, 0.0, 2.54])       # 100 in = 2.54 m
@@ -1160,7 +1160,7 @@ def test_openskp_adapter_keeps_a_component_placed_once_a_component():
     ins = NS(ref_idx=5, matrix=[1, 0, 0, 0, 1, 0, 0, 0, 1, 100, 0, 0, 1])
     root = _fake_definition(id=0, name="ROOT_MODEL", verts={}, edges={},
                             faces={}, instances=[ins])
-    payload = skp_openskp._adapt(NS(definitions={0: root, 5: child}), "obra")
+    payload = skp_reader._adapt(NS(definitions={0: root, 5: child}), "obra")
     assert [p["name"] for p in payload["protos"]] == ["Parrilla"]
     assert payload["groups"] == []          # nothing flattened
 
@@ -1177,7 +1177,7 @@ def test_openskp_adapter_a_face_me_piece_leaves_its_prototype_as_a_billboard():
     top = NS(ref_idx=5, matrix=[1, 0, 0, 0, 1, 0, 0, 0, 1, 100, 0, 0, 1])
     root = _fake_definition(id=0, name="ROOT_MODEL", verts={}, edges={},
                             faces={}, instances=[top])
-    payload = skp_openskp._adapt(
+    payload = skp_reader._adapt(
         NS(definitions={0: root, 5: container, 7: leaf}), "obra")
     (patio,) = [p for p in payload["protos"] if p["name"] == "Patio"]
     assert len(patio["faces"]) == 1                 # its own face, not Susan's
@@ -1202,7 +1202,7 @@ def test_openskp_adapter_keeps_a_group_with_tagged_subgroups_nested():
         NS(ref_idx=6, matrix=eye)])
     root = _fake_definition(id=0, name="ROOT_MODEL", verts={}, edges={},
                             faces={}, instances=[NS(ref_idx=5, matrix=eye)])
-    payload = skp_openskp._adapt(NS(definitions={
+    payload = skp_reader._adapt(NS(definitions={
         0: root, 5: storey, 6: doors, 7: wall, 8: door}), "obra")
     assert payload["groups"] == []                  # nothing flattened
     by_name = {p["name"]: p for p in payload["protos"]}
@@ -1241,7 +1241,7 @@ def _tagged_container_with_extracted_parts(monkeypatch, *, nested):
         placed = NS(ref_idx=4, matrix=eye)
     defs[0] = _fake_definition(id=0, name="ROOT_MODEL", verts={}, edges={},
                                faces={}, instances=[placed])
-    return skp_openskp._adapt(NS(definitions=defs), "m")
+    return skp_reader._adapt(NS(definitions=defs), "m")
 
 
 @pytest.mark.parametrize("nested", [False, True])
@@ -1288,7 +1288,7 @@ def test_openskp_adapter_an_extracted_part_keeps_its_own_tag(monkeypatch):
     root = _fake_definition(id=0, name="ROOT_MODEL", verts={}, edges={},
                             faces={}, instances=[
                                 NS(ref_idx=5, matrix=eye, layer="Fachada")])
-    payload = skp_openskp._adapt(
+    payload = skp_reader._adapt(
         NS(definitions={0: root, 5: container, 8: person}), "m")
     groups = {gp["name"]: gp for gp in payload["groups"]}
     assert groups["Susan"].get("layer") == "Gente"
@@ -1316,7 +1316,7 @@ def test_vff_dimension_offset_vector_follows_the_constraint_axis():
     for axis, expect in ((1, (0.0, 0.254, 0.0)), (2, (-0.254, 0.0, 0.0))):
         dm = _vff_dim(vff_axis=axis)
         model = NS(definitions={0: root}, dimensions=[dm], root=root)
-        payload = skp_openskp._adapt(model, "m")
+        payload = skp_reader._adapt(model, "m")
         (entry,) = payload["dimensions"]
         assert entry["offset_vector"] == pytest.approx(expect)
         assert "offset" not in entry
@@ -1340,7 +1340,7 @@ def test_vff_owned_dimension_and_text_are_lifted_by_the_placement():
     root = _fake_definition(id=0, name="ROOT_MODEL", verts={}, edges={},
                             faces={}, instances=[place])
     model = NS(definitions={0: root, 40: child}, dimensions=[], root=root)
-    payload = skp_openskp._adapt(model, "m")
+    payload = skp_reader._adapt(model, "m")
     (entry,) = payload["dimensions"]
     assert entry["a"] == pytest.approx([2.54, 0.0, 0.0])
     assert entry["b"] == pytest.approx([5.08, 0.0, 0.0])

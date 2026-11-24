@@ -9,7 +9,7 @@ from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.mesh import Mesh
 from core.scene import Scene
-from formats import igz, skp, skp_openskp
+from formats import igz, skp, skp_reader
 
 
 _IDENTITY = QMatrix4x4()
@@ -24,10 +24,10 @@ def _payload():
                                   curve_id=17 if i >= 2 else None)
                for i in range(4)})
     segments = []
-    skp_openskp._soft_edge_segments(source, QMatrix4x4(), segments)
-    square = skp_openskp._world_points(
+    skp_reader._soft_edge_segments(source, QMatrix4x4(), segments)
+    square = skp_reader._world_points(
         np.array([(v.x, v.y, v.z) for v in source.vertices.values()])
-        * skp_openskp._INCH, QMatrix4x4())
+        * skp_reader._INCH, QMatrix4x4())
     faces = [(square, [], {"color": [0.2, 0.4, 0.6], "back": True})]
     # A point first welds to the neighbouring cell; a later point claims
     # its own cell. vertex_at must resolve against that FINAL registry.

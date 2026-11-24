@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from formats.skp_openskp import file_layer_records
+from formats.skp_reader import file_layer_records
 
 
 @dataclass

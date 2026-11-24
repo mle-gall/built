@@ -169,7 +169,7 @@ pub fn skp_materials<'py>(
     let ids = ids.cast::<PyDict>()?;
     let module = py.import("core.materials")?;
     let mut images = Images {
-        adapter: py.import("formats.skp_openskp")?.into_any(),
+        adapter: py.import("formats.skp_reader")?.into_any(),
         source,
         directory: None,
     };

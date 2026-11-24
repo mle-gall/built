@@ -12,7 +12,7 @@ from types import SimpleNamespace as NS
 import pytest
 from ingetrazo_core import Matrix4 as QMatrix4x4
 
-from formats import skp_openskp
+from formats import skp_reader
 
 
 @pytest.fixture(autouse=True)
@@ -20,7 +20,7 @@ def _legacy_flattening(monkeypatch):
     """These cases cover the old flattening of small shared definitions,
     kept behind ``EXACT_TREE = False``; the default tree is checked by
     test_skp_exact_tree.py."""
-    monkeypatch.setattr(skp_openskp, "EXACT_TREE", False)
+    monkeypatch.setattr(skp_reader, "EXACT_TREE", False)
 
 
 
@@ -63,7 +63,7 @@ def _mirror_x():
 def test_a_mirrored_placement_keeps_the_face_front_up():
     door = _square_def(6, "Door")
     out: list = []
-    skp_openskp._collect(door, _mirror_x(), {6: door}, {}, out, 0, frozenset())
+    skp_reader._collect(door, _mirror_x(), {6: door}, {}, out, 0, frozenset())
     assert len(out) == 1
     outer, holes, _attrs = out[0]
     assert _ring_normal_z(outer) > 0, "mirrored copy shows its back"
@@ -72,7 +72,7 @@ def test_a_mirrored_placement_keeps_the_face_front_up():
 def test_an_unmirrored_placement_is_left_as_it_was():
     door = _square_def(6, "Door")
     out: list = []
-    skp_openskp._collect(door, QMatrix4x4(), {6: door}, {}, out, 0, frozenset())
+    skp_reader._collect(door, QMatrix4x4(), {6: door}, {}, out, 0, frozenset())
     assert _ring_normal_z(out[0][0]) > 0
 
 
@@ -94,7 +94,7 @@ def test_a_nested_door_and_its_mirrored_twin_both_face_out(matrix, mirrored):
     root = _empty_def(0, "ROOT_MODEL",
                       instances=[NS(ref_idx=5, matrix=[1, 0, 0, 0, 1, 0, 0, 0, 1,
                                                        0, 0, 0, 1])])
-    payload = skp_openskp._adapt(NS(definitions={0: root, 5: cupboard, 6: door}),
+    payload = skp_reader._adapt(NS(definitions={0: root, 5: cupboard, 6: door}),
                                  "kitchen")
     faces = [f for p in payload.get("protos", []) for f in p["faces"]]
     faces += [f for g in payload.get("groups", []) for f in g["faces"]]

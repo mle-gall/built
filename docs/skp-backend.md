@@ -71,21 +71,11 @@ Backends implement `available()`, `supports(fmt)`, `parse(path, progress)`.
    way around it (export COLLADA or OBJ from the program that made it). There is no
    converter behind it any more.
 
-## The OpenSKP adapter — `formats/skp_openskp.py`
+## Native reader
 
-Isolated so `import openskp` is lazy. OpenSKP 0.2.0 model (by introspection):
+Both hosts open a .skp drawing with `ingetrazo_core.DocumentOpen`. Rust reads the modern VFF container and builds definition-local mesh stores. Placements retain the file's group/component tree, local axes, names and tags. The classic MFC reader uses the OpenSKP class registry. Coordinates are Z-up and convert from inches to metres.
 
-- `SkpFile.open(path).parse()` → `SkpModel(definitions, materials, layers,
-  version)`.
-- `Definition(id, name, vertices{id→Vertex(x,y,z)}, edges{id→Edge(v1_id,v2_id)},
-  faces{id→Face}, instances[Instance])`.
-- `Face(loops, normal, material_id)`; each loop is `[(edge_id, sense), …]`,
-  first = outer, rest = holes; `sense` 1 walks `v1→v2`.
-- `Instance(matrix[13], ref_idx→def id, children)` — 3×3 row-major + translation.
-
-The .skp format is **inches, Z-up** (same up axis as IngeTrazo) → scale ×0.0254, no
-axis swap. The instance tree is flattened to world-space polygons (reference
-geometry, one group). Enable/disable via `_OpenSkpBackend` in `formats/skp.py`.
+`formats/skp.py` provides the scripting entry points. The format, parity fixtures and host measurements are described in [.skp import in Rust](rust-skp-import.md).
 
 ## What works / what's missing (measured with `scripts/skp_diff.py`)
 

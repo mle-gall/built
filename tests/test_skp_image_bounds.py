@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 from ingetrazo_core import Vec3 as QVector3D
 
-from formats import skp_openskp as adapter
+from formats import skp_reader as adapter
 
 
 def panel(ident=1, offset=0.):
@@ -22,16 +22,13 @@ def quad(x=0., z=0.):
 
 
 def without_broadphase(monkeypatch, roots, by_id, points):
-    with monkeypatch.context() as patch:
-        patch.setattr(adapter, '_image_geometry_bounds', lambda d: None)
-        return adapter._rests_on_a_face(roots, by_id, points)
+    return adapter._rests_on_a_face(roots, by_id, points, broad=False)
 
 
-def test_distant_geometry_does_not_resolve_rings(monkeypatch):
+def test_distant_geometry_does_not_resolve_rings():
     d=panel()
-    def unexpected(*args):
-        pytest.fail('distant definition resolved its face rings')
-    monkeypatch.setattr(adapter, '_face_boxes', unexpected)
+    # Accessing a ring would raise before reaching a result.
+    d.faces[0].loops = object()
     assert not adapter._rests_on_a_face([d], {1:d}, quad(100.))
 
 

@@ -5,7 +5,7 @@ import gc
 from types import SimpleNamespace as NS
 import weakref
 
-from formats import skp_openskp
+from formats import skp_reader
 
 
 class _Definition(NS):
@@ -27,8 +27,8 @@ def test_adapter_releases_definitions_without_a_gc_sweep():
     gc.collect()
     gc.disable()
     try:
-        payload = skp_openskp._adapt(model, "model")
-        again = skp_openskp._adapt(model, "model")
+        payload = skp_reader._adapt(model, "model")
+        again = skp_reader._adapt(model, "model")
         assert model.definitions[0] is root
         assert not hasattr(root, "_geom")
         assert payload == again

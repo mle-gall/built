@@ -1,24 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""SKP import seam — IngeTrazo's own reader, behind one seam.
+""".skp document import.
 
-IngeTrazo aims to open **any** ``.skp`` (old → recent). This module is the
-single seam between IngeTrazo and *how* an ``.skp`` is read, so the parser can
-evolve independently of the app. The backend is **OpenSKP**
-(https://github.com/iamahsanmehmood/openskp, MIT) or a maintained fork: pure
-Python, offline, no Wine, no proprietary code. (Until 2026-09-28 a second
-path ran a proprietary SDK through the former external converter for files
-the reader could not open; it has been removed.)
-
-**Parse then apply.** A backend *parses* a file into a plain **payload** (world-
-space face loops, no ``Scene`` touched). The heavy parse runs outside the undo
-history; :func:`apply_payload` then adds the geometry cheaply inside a command.
-When no backend can produce geometry, :func:`parse_skp` raises
-:class:`NeedsConverter` before any mutation and the UI says the file could
-not be read -- so a failed parse never leaves a half-applied edit.
-
-Nothing here imports a parser at module load — a missing OpenSKP is just an
-unavailable backend.
+The Rust reader builds definition-local geometry and placement records on the
+document worker. The classic model provider is loaded only for MFC files.
+`parse_skp` also exposes the detached payload to scripts. Applying it is a
+separate document transaction, so a failed read cannot partially change a scene.
 """
 from __future__ import annotations
 
@@ -66,25 +53,14 @@ def detect_format(path) -> str:
 
 
 class _OpenSkpBackend:
-    """Pure-Python OpenSKP backend. Parses via :mod:`formats.skp_openskp`, which
-    imports ``openskp`` lazily. ``available()`` is True only when the package is
-    importable; ``supports`` covers any recognised ``.skp`` file (OpenSKP reads
-    a broad version range). A parse that yields no geometry returns ``None`` from
-    :meth:`parse`, so the seam falls back to the converter."""
+    """Native .skp reader. The classic provider is loaded on demand."""
 
     name = "openskp"
 
     def available(self) -> bool:
         try:
-            import openskp  # noqa: F401
-        except Exception as exc:  # noqa: BLE001 — optional dependency
-            # NEVER silent: a broken editable install (it happened when the
-            # repo moved and ~/openskp died) otherwise degrades every .skp
-            # to the Wine converter and reads as "slow / does not open".
-            import sys
-            print(f"IngeTrazo: openskp backend unavailable ({exc!r}); "
-                  f".skp imports fall back to the external converter",
-                  file=sys.stderr)
+            from ingetrazo_core import skp_vff_model  # noqa: F401
+        except ImportError:
             return False
         return True
 
@@ -92,11 +68,11 @@ class _OpenSkpBackend:
         return fmt == "skp"
 
     def parse(self, path, progress=None):
-        from formats import skp_openskp
-        return skp_openskp.parse(path, progress=progress)
+        from formats import skp_reader
+        return skp_reader.parse(path, progress=progress)
 
 
-#: Ordered list of pure-Python backends. Extend/replace as coverage grows.
+#: Reader order for import and capability queries.
 _BACKENDS: list = [_OpenSkpBackend()]
 
 

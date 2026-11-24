@@ -22,7 +22,7 @@ pytest.importorskip("openskp")
 _app = QApplication.instance() or QApplication([])
 
 from core.scene import Scene  # noqa: E402
-from formats import skp, skp_openskp  # noqa: E402
+from formats import skp, skp_reader  # noqa: E402
 
 from tests.test_skp_nested_parts_866 import _ID, _box  # noqa: E402
 
@@ -45,7 +45,7 @@ def _tree(g):
 
 def test_small_shared_components_keep_their_place_in_the_tree():
     scene = Scene()
-    skp.apply_payload(scene, skp_openskp._adapt(_model(), "exact_tree"))
+    skp.apply_payload(scene, skp_reader._adapt(_model(), "exact_tree"))
     [frame] = scene.groups
     assert _tree(frame) == ("Frame", 0, [("Beam", 6, [("Plate", 6, [])]),
                                          ("Beam", 6, [("Plate", 6, [])])])
@@ -55,8 +55,8 @@ def test_small_shared_components_keep_their_place_in_the_tree():
 
 
 def test_the_flag_still_restores_the_old_flattening(monkeypatch):
-    monkeypatch.setattr(skp_openskp, "EXACT_TREE", False)
+    monkeypatch.setattr(skp_reader, "EXACT_TREE", False)
     scene = Scene()
-    skp.apply_payload(scene, skp_openskp._adapt(_model(), "exact_tree"))
+    skp.apply_payload(scene, skp_reader._adapt(_model(), "exact_tree"))
     [frame] = scene.groups
     assert len(frame.mesh.faces) == 24 and not frame.children

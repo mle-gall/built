@@ -20,7 +20,7 @@ from types import SimpleNamespace as NS
 import pytest
 
 from formats import openskp_compat
-from formats import skp_openskp
+from formats import skp_reader
 
 DATA = Path(__file__).parent / "data"
 FIXTURE = DATA / "skp_pbr_2025.skp"
@@ -45,7 +45,7 @@ def cache(tmp_path, monkeypatch):
 
 
 def _materials(path):
-    payload = skp_openskp.parse(path)
+    payload = skp_reader.parse(path)
     return payload, {m["name"]: m for m in payload["materials"]}
 
 
@@ -229,7 +229,7 @@ def test_a_map_missing_from_the_container_drops_only_that_map(cache, tmp_path):
 def test_classic_files_import_unchanged(cache, name):
     # These 2025-written files carry a pbrMR block on workflow="0"
     # materials: still no recipe.
-    payload = skp_openskp.parse(DATA / name)
+    payload = skp_reader.parse(DATA / name)
     assert all("pbr" not in m for m in payload.get("materials", []))
 
 
@@ -249,7 +249,7 @@ def test_an_upstream_material_pbr_is_used_as_is(tmp_path, monkeypatch):
     model = NS(materials=[mat], materials_by_id={7: mat})
     skp = tmp_path / "m.skp"
     skp.write_bytes(b"")
-    attrs, registry = skp_openskp._material_attrs(model, skp)
+    attrs, registry = skp_reader._material_attrs(model, skp)
     got = attrs[7]["pbr"]
     assert got["metallic"] == 1.0                      # clamped to 0..1
     assert got["roughness"] == pytest.approx(0.3)

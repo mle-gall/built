@@ -297,7 +297,7 @@ pub fn skp_resolve_annotations(
     if let Some(root) = root {
         if !has_texts && members(&root, "texts")?.is_empty() {
             let mut boxes = std::collections::HashMap::new();
-            let class = py.import("openskp.model")?.getattr("TextEntity")?;
+            let class = py.import("types")?.getattr("SimpleNamespace")?;
             for rec in skp_annotations(py, false, data, vertices, transforms)? {
                 let def = owner(rec.get_item("offset")?.extract()?).unwrap_or(&root);
                 let bbox = match boxes.entry(def.as_ptr()) {
@@ -436,7 +436,7 @@ fn text_entry<'py>(
     Ok(Some(entry))
 }
 
-fn placed_matrix(m: &[f64]) -> PyResult<glam::DMat4> {
+pub(super) fn placed_matrix(m: &[f64]) -> PyResult<glam::DMat4> {
     if m.len() < 12 {
         return Err(pyo3::exceptions::PyValueError::new_err(
             "incomplete instance transform",
