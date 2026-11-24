@@ -12,7 +12,7 @@
 
 use crate::store::geometry::{self as facegeom, Hypot, V3};
 use crate::orient::{geom_of, Geom};
-use crate::scans::{MeshScan, FFLAGS, RINGS};
+use crate::scans::{MeshScan, EFACES, FFLAGS, RINGS};
 use crate::store::keys::Kind;
 use crate::store::py::{PyMeshStore, PyStoreSnapshot};
 use pyo3::prelude::*;
@@ -205,36 +205,210 @@ pub fn scan_lateral_exit(
     scan.need_parts(py, FFLAGS)?;
     let g: std::sync::Arc<Geom> = geom_of(py, &mut scan, hypot, compensated)?;
     let s: &MeshScan = &scan;
-    let h = g.h;
     let d = V3(direction.0, direction.1, direction.2);
     let n = V3(n.0, n.1, n.2);
     let qs: Vec<V3> = samples.iter().map(|q| V3(q.0, q.1, q.2)).collect();
-    Ok(py.detach(|| {
-        (0..s.n_faces())
-            .into_par_iter()
-            .filter_map(|f| {
-                if Some(f as u32) == skip || s.finterior[f] {
-                    return None;
-                }
-                let gn = facegeom::normalized(g.normal[f], h);
-                if (gn.dot(n, h) as f64).abs() > 0.999 {
-                    return None;
-                }
-                let mut best: Option<f64> = None;
-                for t in g.tris_of(f) {
-                    let (a, b, c) = (g.pos[t[0] as usize], g.pos[t[1] as usize], g.pos[t[2] as usize]);
-                    for &q in &qs {
-                        if let Some(tt) = ray_triangle(q, d, a, b, c, h) {
-                            if tt > 1e-4 && best.is_none_or(|bb| tt < bb) {
-                                best = Some(tt);
-                            }
+    Ok(py.detach(|| lateral_exit_t(s, &g, &qs, d, n, skip)))
+}
+
+/// The least `t > 1e-4` at which a ray from one of `samples` along `d`
+/// crosses a triangle of a face that is not `skip`, not interior and not
+/// parallel to the unit `n` (`scan_lateral_exit`'s answer).
+fn lateral_exit_t(s: &MeshScan, g: &Geom, qs: &[V3], d: V3, n: V3, skip: Option<u32>) -> Option<f64> {
+    let h = g.h;
+    (0..s.n_faces())
+        .into_par_iter()
+        .filter_map(|f| {
+            if Some(f as u32) == skip || s.finterior[f] {
+                return None;
+            }
+            let gn = facegeom::normalized(g.normal[f], h);
+            if (gn.dot(n, h) as f64).abs() > 0.999 {
+                return None;
+            }
+            let mut best: Option<f64> = None;
+            for t in g.tris_of(f) {
+                let (a, b, c) = (g.pos[t[0] as usize], g.pos[t[1] as usize], g.pos[t[2] as usize]);
+                for &q in qs {
+                    if let Some(tt) = ray_triangle(q, d, a, b, c, h) {
+                        if tt > 1e-4 && best.is_none_or(|bb| tt < bb) {
+                            best = Some(tt);
                         }
                     }
                 }
-                best
-            })
-            .reduce_with(|a, b| if b < a { b } else { a })
-    }))
+            }
+            best
+        })
+        .reduce_with(|a, b| if b < a { b } else { a })
+}
+
+fn plane_basis(n: V3, h: Hypot) -> (V3, V3) {
+    let n = facegeom::normalized(n, h);
+    let mut r = V3(1.0, 0.0, 0.0);
+    if r.dot(n, h).abs() > 0.9 {
+        r = V3(0.0, 1.0, 0.0);
+    }
+    let u = facegeom::normalized(r.sub(n.mul(r.dot(n, h))), h);
+    (u, facegeom::normalized(n.cross(u, h), h))
+}
+
+/// `core.arrangement._point_in_polygon`: even-odd ray cast.
+fn in_polygon(p: [f64; 2], poly: &[[f64; 2]]) -> bool {
+    let (x, y) = (p[0], p[1]);
+    let mut inside = false;
+    let mut j = poly.len().wrapping_sub(1);
+    for i in 0..poly.len() {
+        let (xi, yi) = (poly[i][0], poly[i][1]);
+        let (xj, yj) = (poly[j][0], poly[j][1]);
+        if (yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi + 1e-30) + xi {
+            inside = !inside;
+        }
+        j = i;
+    }
+    inside
+}
+
+/// `core.push_pull._loops_overlap_2d`: an interior point of one inside the
+/// other, or a vertex of either strictly inside the other.
+fn loops_overlap(py: Python<'_>, a: &[[f64; 2]], b: &[[f64; 2]]) -> PyResult<bool> {
+    let ia = crate::store::planar::plane_interior_point(py, a.to_vec())?;
+    if in_polygon([ia.0, ia.1], b) {
+        return Ok(true);
+    }
+    let ib = crate::store::planar::plane_interior_point(py, b.to_vec())?;
+    if in_polygon([ib.0, ib.1], a) {
+        return Ok(true);
+    }
+    Ok(a.iter().any(|&p| in_polygon(p, b)) || b.iter().any(|&p| in_polygon(p, a)))
+}
+
+/// How far a face may be pushed INTO the solid (`PushPullOperation.
+/// _compute_inward_limit`, docs/rust-tools.md §19): None for unbounded.
+///
+/// - A parallel face on the material side that overlaps the base laterally
+///   and stands behind the WHOLE base (#1076) blocks at its distance; one
+///   the base, carried back, lies strictly inside is a through-hole target.
+/// - A backing wall that leans away from the push overflows at any depth:
+///   0 (#710: judged in metres, the far end's stray from square).
+/// - The swept loop leaving the solid through a non-parallel face, a hair
+///   short of the graze.
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+pub fn scan_inward_limit(
+    py: Python<'_>,
+    mut scan: PyRefMut<'_, MeshScan>,
+    base: u32,
+    n: (f64, f64, f64),
+    anchor: (f64, f64, f64),
+    stitch_tol: f64,
+    hypot: &str,
+    compensated: bool,
+) -> PyResult<Option<f64>> {
+    scan.need_parts(py, RINGS | EFACES | FFLAGS)?;
+    let g: std::sync::Arc<Geom> = geom_of(py, &mut scan, hypot, compensated)?;
+    let s: &MeshScan = &scan;
+    let h = g.h;
+    let b = base as usize;
+    let n = facegeom::normalized(V3(n.0, n.1, n.2), h);
+    let anchor = V3(anchor.0, anchor.1, anchor.2);
+    let rings = s.rings_of(b);
+    let Some(outer) = rings.first() else { return Ok(None) };
+    let base_pts: Vec<V3> = outer.iter().map(|&v| g.pos[v as usize]).collect();
+    let (pu, pv) = plane_basis(n, h);
+    let project = |pts: &[V3]| -> Vec<[f64; 2]> { pts.iter().map(|p| [p.dot(pu, h), p.dot(pv, h)]).collect() };
+    let base_xy = project(&base_pts);
+    let mut limit: Option<f64> = None;
+
+    // Parallel blockers.
+    for f in 0..s.n_faces() {
+        if f == b {
+            continue;
+        }
+        let gn = facegeom::normalized(g.normal[f], h);
+        if gn.dot(n, h).abs() < 0.999 {
+            continue; // not parallel
+        }
+        let c = g.centroid[f];
+        let dist = anchor.sub(c).dot(n, h);
+        if dist <= 1e-6 {
+            continue; // coplanar or on the outward side
+        }
+        if base_pts.iter().map(|v| v.sub(c).dot(n, h)).fold(f64::INFINITY, f64::min) <= stitch_tol {
+            continue; // not behind the whole base (#1076)
+        }
+        let grings = s.rings_of(f);
+        let Some(gouter) = grings.first() else { continue };
+        let back: Vec<[f64; 3]> = base_pts.iter().map(|v| { let q = v.sub(n.mul(dist)); [q.0, q.1, q.2] }).collect();
+        let outline = crate::store::Outline::from_rings(
+            grings.iter().map(|r| r.iter().map(|&v| { let p = g.pos[v as usize]; [p.0, p.1, p.2] }).collect()).collect(),
+            g.normal[f], h);
+        if outline.contains(&back, false) {
+            continue; // a through-hole target, not a blocker
+        }
+        let gpts: Vec<V3> = gouter.iter().map(|&v| g.pos[v as usize]).collect();
+        if !loops_overlap(py, &base_xy, &project(&gpts))? {
+            continue; // laterally elsewhere
+        }
+        if limit.is_none_or(|l| dist < l) {
+            limit = Some(dist);
+        }
+    }
+
+    // Immediate lateral exit: a backing wall leaning away from the push.
+    let direction = n.mul(-1.0);
+    let mut edge_of: std::collections::HashMap<(u32, u32), u32> = std::collections::HashMap::new();
+    for e in 0..s.n_edges() {
+        let [a, z] = s.edge_ends(e);
+        edge_of.entry((a.min(z), a.max(z))).or_insert(e as u32);
+    }
+    for ring in &rings {
+        let cnt = ring.len();
+        for i in 0..cnt {
+            let (a, z) = (ring[i], ring[(i + 1) % cnt]);
+            let Some(&e) = edge_of.get(&(a.min(z), a.max(z))) else { continue };
+            for &f in s.faces_of_edge(e as usize) {
+                let f = f as usize;
+                if f == b || f >= s.n_faces() || s.finterior[f] {
+                    continue;
+                }
+                let gn = facegeom::normalized(g.normal[f], h);
+                if gn.dot(n, h).abs() > 0.999 {
+                    continue; // parallel: not a lateral wall
+                }
+                let lean = direction.dot(gn, h);
+                if lean <= 1e-6 {
+                    continue;
+                }
+                let root = g.pos[a as usize];
+                let depth = s.rings_of(f).first().map(|r| r.iter()
+                    .map(|&v| g.pos[v as usize].sub(root).dot(direction, h))
+                    .fold(f64::NEG_INFINITY, f64::max)).unwrap_or(f64::NEG_INFINITY);
+                if lean * depth > stitch_tol {
+                    return Ok(Some(0.0));
+                }
+            }
+        }
+    }
+
+    // Lateral exit bound: march inward from points just inside the base.
+    let (u, w) = plane_basis(n, h);
+    let origin3 = base_pts[0];
+    let loop_xy: Vec<[f64; 2]> = base_pts.iter().map(|p| { let r = p.sub(origin3); [r.dot(u, h), r.dot(w, h)] }).collect();
+    let ip = crate::store::planar::plane_interior_point(py, loop_xy)?;
+    let ip3 = origin3.add(u.mul(ip.0)).add(w.mul(ip.1));
+    let mut samples = vec![ip3];
+    for (i, p) in base_pts.iter().enumerate() {
+        samples.push(p.add(ip3.sub(*p).mul(1e-3)));
+        let mid = p.add(base_pts[(i + 1) % base_pts.len()]).mul(0.5);
+        samples.push(mid.add(ip3.sub(mid).mul(1e-3)));
+    }
+    if let Some(t) = py.detach(|| lateral_exit_t(s, &g, &samples, direction, n, Some(base))) {
+        let t = (t - 1e-3).max(0.0);
+        if limit.is_none_or(|l| t < l) {
+            limit = Some(t);
+        }
+    }
+    Ok(limit)
 }
 
 /// Listed vertices (list order) inside any of `boxes` (`[x0, y0, z0, x1,
