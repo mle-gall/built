@@ -9,21 +9,10 @@ pero no invertir.
 """
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
 import pytest
-from PySide6.QtCore import QPoint
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication, QMenu
-
-_inst = QApplication.instance()
-if _inst is None:
-    _app = QApplication([])
-elif not isinstance(_inst, QApplication):
-    pytest.skip("a non-widget QGuiApplication is already active",
-                allow_module_level=True)
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
+from views import context_menu
 
 
 def _V(x, y, z=0.0):
@@ -31,54 +20,38 @@ def _V(x, y, z=0.0):
 
 
 @pytest.fixture
-def ventana():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    yield win
-    win._saved_version = win.viewport.scene.version
-    win.close()
+def ventana(native_host):
+    return native_host.window
 
 
-class _MenuSinModal(QMenu):
-    """Un QMenu de verdad al que se le quita el `exec`, que bloquearía la
-    prueba esperando a un ratón que no existe."""
-
-    abiertos: list = []
-
-    def exec(self, *args, **kwargs):        # noqa: A003 - el nombre es de Qt
-        _MenuSinModal.abiertos.append(self)
-        return None
+def _entries(win, selection):
+    win.viewport.scene.select(selection)
+    return context_menu.build(win, win.view)
 
 
-def _entradas(win, monkeypatch, seleccion):
-    """Textos del menú contextual con esa selección."""
-    import views.main_window as mw
-    _MenuSinModal.abiertos.clear()
-    monkeypatch.setattr(mw, "QMenu", _MenuSinModal)
-    win.viewport.scene.select(list(seleccion))
-    win.show_viewport_context_menu(QPoint(0, 0))
-    assert _MenuSinModal.abiertos, "no se llegó a abrir ningún menú"
-    return [a.text() for a in _MenuSinModal.abiertos[0].actions()]
+def _choose(win, menu, verb):
+    assert verb in menu.ids()
+    assert context_menu.run(win, win.view, menu.kind, verb, menu.sel, facts=menu.facts)
 
 
 def _cara(scene):
     return scene.mesh.add_face([_V(0, 0), _V(2, 0), _V(2, 2), _V(0, 2)])
 
 
-def test_con_una_cara_seleccionada_el_menu_ofrece_invertir(ventana, monkeypatch):
+def test_con_una_cara_seleccionada_el_menu_ofrece_invertir(ventana):
     cara = _cara(ventana.viewport.scene)
-    assert "Reverse Faces" in _entradas(ventana, monkeypatch, [cara])
+    assert "reverse" in _entries(ventana, [cara]).ids()
 
 
-def test_solo_con_aristas_no_aparece(ventana, monkeypatch):
+def test_solo_con_aristas_no_aparece(ventana):
     """Invertir una arista no significa nada: la entrada es de caras."""
     cara = _cara(ventana.viewport.scene)
     arista = ventana.viewport.scene.mesh.edges[0]
     assert cara is not None
-    textos = _entradas(ventana, monkeypatch, [arista])
-    assert "Reverse Faces" not in textos
+    textos = _entries(ventana, [arista]).ids()
+    assert "reverse" not in textos
     # «Hide» since 2026-09-18: the one entry hides objects and edges alike.
-    assert "Hide" in textos, "y las aristas siguen con lo suyo"
+    assert "hide" in textos, "y las aristas siguen con lo suyo"
 
 
 def test_invertir_desde_el_menu_da_la_vuelta_a_la_cara(ventana):
@@ -86,8 +59,7 @@ def test_invertir_desde_el_menu_da_la_vuelta_a_la_cara(ventana):
     scene = ventana.viewport.scene
     cara = _cara(scene)
     antes = cara.normal()
-    scene.select([cara])
-    ventana._on_reverse_faces()
+    _choose(ventana, _entries(ventana, [cara]), "reverse")
     assert QVector3D.dotProduct(cara.normal(), antes) < -0.99
     ventana.viewport.history.undo()
     assert QVector3D.dotProduct(cara.normal(), antes) > 0.99
@@ -99,26 +71,22 @@ def test_invertir_desde_el_menu_da_la_vuelta_a_la_cara(ventana):
     [_V(0, 0), _V(0, 2), _V(0, 2, 3), _V(0, 0, 3)],
     [_V(0, 0), _V(2, 0, 2), _V(2, 2, 2), _V(0, 2)],
 ])
-def test_align_view_from_face_menu(ventana, monkeypatch, vertices):
+def test_align_view_from_face_menu(ventana, vertices):
     scene = ventana.viewport.scene
     face = scene.mesh.add_face(vertices)
     camera = ventana.viewport.camera
     camera.set_projection("parallel")
     distance = camera.distance
-    assert "Align View" in _entradas(ventana, monkeypatch, [face])
-    next(a for a in _MenuSinModal.abiertos[-1].actions()
-         if a.text() == "Align View").trigger()
+    _choose(ventana, _entries(ventana, [face]), "alignview")
     assert (camera.target - face.centroid()).length() < 1e-5
     assert QVector3D.dotProduct(camera.forward(), face.normal()) < -0.99999
     assert camera.distance == distance
     assert camera.projection_mode() == "parallel"
 
 
-def test_align_view_only_for_one_face(ventana, monkeypatch):
+def test_align_view_only_for_one_face(ventana):
     scene = ventana.viewport.scene
     first = _cara(scene)
     second = scene.mesh.add_face([_V(3, 0), _V(4, 0), _V(4, 1), _V(3, 1)])
-    assert "Align View" not in _entradas(ventana, monkeypatch, [scene.mesh.edges[0]])
-    assert "Align View" not in _entradas(ventana, monkeypatch, [first, second])
-
-
+    assert "alignview" not in _entries(ventana, [scene.mesh.edges[0]]).ids()
+    assert "alignview" not in _entries(ventana, [first, second]).ids()

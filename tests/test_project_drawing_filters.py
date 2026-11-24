@@ -135,3 +135,42 @@ def test_move_the_selection_here_from_the_rows_menu():
     p.action("filehere", "n:sections")
     assert structure.node_of(loose) == "sections" and scene.layer(loose.layer).name == "Track Sections"
     assert p.win.viewport.history.undo() and structure.node_of(loose) is None
+
+
+def drawing_edit(project, verb, data):
+    import json
+    project.action(verb, json.dumps(data))
+
+
+def test_eye_on_a_selected_row_acts_on_every_selected_row():
+    project = Project(*(Layer(name) for name in "ABC"))
+    scene = project.scene
+    drawing_edit(project, "tagstate", {"tags": ["A", "B"], "visible": False})
+    assert [scene.layer(n).visible for n in "ABC"] == [False, False, True]
+    project.action("lock", "preview-tag:C")
+    assert scene.layer("C").locked
+    history = project.win.viewport.history
+    assert history.undo() and not scene.layer("C").locked
+    assert history.undo() and all(scene.layer(n).visible for n in "ABC")
+
+
+def test_look_menus_set_the_line_and_opacity():
+    project = Project(Layer("A"))
+    drawing_edit(project, "drawingpatch", [["A"], {"linetype": "dotted", "weight": "0.25", "opacity": "0.5"}])
+    tag = project.scene.layer("A")
+    assert (tag.linetype, tag.lineweight, tag.opacity) == ("dotted", .25, .5)
+
+
+def test_several_selected_rows_take_one_colour_and_one_look():
+    project = Project(*(Layer(name) for name in "ABC"))
+    scene = project.scene
+    style = {"color": "#ff0000", "linetype": "dashed", "weight": "0.5", "opacity": "0.5"}
+    drawing_edit(project, "drawingpatch", [["A", "B"], style])
+    for tag in (scene.layer("A"), scene.layer("B")):
+        assert tuple(tag.color) == (1, 0, 0)
+        assert (tag.linetype, tag.lineweight, tag.opacity) == ("dashed", .5, .5)
+    assert scene.layer("C").color is None
+    drawing_edit(project, "tagstate", {"tags": ["A", "B"], "visible": False})
+    assert [scene.layer(n).visible for n in "ABC"] == [False, False, True]
+    drawing_edit(project, "drawingpatch", [["A", "B"], {"color": ""}])
+    assert scene.layer("A").color is None and scene.layer("B").color is None

@@ -4,23 +4,12 @@
 undo step."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
 import pytest
-from PySide6.QtCore import QPoint
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication, QMenu
-
+from ingetrazo_render import rail_layout
 from core.orient import is_closed
-
-_inst = QApplication.instance()
-if _inst is None:
-    _app = QApplication([])
-elif not isinstance(_inst, QApplication):
-    pytest.skip("a non-widget QGuiApplication is already active",
-                allow_module_level=True)
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
+from views import context_menu
 
 
 def V(x, y, z=0.0):
@@ -28,33 +17,13 @@ def V(x, y, z=0.0):
 
 
 @pytest.fixture
-def win():
-    from views.main_window import MainWindow
-    w = MainWindow()
-    yield w
-    w._saved_version = w.viewport.scene.version
-    w.close()
+def win(native_host):
+    return native_host.window
 
 
-class _NoExecMenu(QMenu):
-    """A real QMenu whose ``exec`` would block the test on a mouse that
-    is not there."""
-
-    opened: list = []
-
-    def exec(self, *args, **kwargs):        # noqa: A003 - Qt's name
-        _NoExecMenu.opened.append(self)
-        return None
-
-
-def _context_entries(win, monkeypatch, selection):
-    import views.main_window as mw
-    _NoExecMenu.opened.clear()
-    monkeypatch.setattr(mw, "QMenu", _NoExecMenu)
-    win.viewport.scene.select(list(selection))
-    win.show_viewport_context_menu(QPoint(0, 0))
-    assert _NoExecMenu.opened
-    return [a.text() for a in _NoExecMenu.opened[0].actions()]
+def _context_entries(win, selection):
+    win.viewport.scene.select(selection)
+    return context_menu.build(win, win.view).ids()
 
 
 def _two_squares(scene):
@@ -64,28 +33,16 @@ def _two_squares(scene):
     return a, b
 
 
-def _tools_menu(win):
-    bar = win.menuBar()
-    return next(a.menu() for a in bar.actions() if a.text() == "Tools")
-
-
 def test_tools_menu_has_bridge(win):
-    texts = [a.text() for a in _tools_menu(win).actions()]
-    assert "Bridge" in texts
-    # Next to Follow Me, with the tools that build faces out of others.
-    assert texts.index("Bridge") == texts.index("Follow Me") + 3
+    assert win._command_paths["menu:bridge"] == "Tools"
+    assert win._registry_actions["menu:bridge"].text() == "Bridge"
 
 
 def test_modify_toolbar_has_a_bridge_button_after_fillet(win):
-    actions = win.toolbars["modify"].actions()
-    bridge = win._act_bridge
-    assert bridge in actions
-    assert actions.index(bridge) == actions.index(
-        win._tool_actions["fillet"]) + 1
-    assert not bridge.icon().isNull()
-    # One action for the button and the menu entry, and no key of its own.
-    assert bridge in _tools_menu(win).actions()
-    assert bridge.shortcuts() == []
+    tools = next(family for family in rail_layout() if ("bridge", "_act_bridge") in family)
+    assert tools[tools.index(("fillet", "")) + 1] == ("bridge", "_act_bridge")
+    assert win._act_bridge is win._registry_actions["menu:bridge"]
+    assert win._act_bridge.portable_keys() == []
 
 
 def test_the_button_bridges_the_selection(win):
@@ -119,10 +76,10 @@ def test_a_wrong_selection_changes_nothing(win):
     assert not win.viewport.history.undo_stack
 
 
-def test_right_click_offers_bridge_only_when_it_can(win, monkeypatch):
+def test_right_click_offers_bridge_only_when_it_can(win):
     a, b = _two_squares(win.viewport.scene)
-    assert "Bridge" in _context_entries(win, monkeypatch, [a, b])
-    assert "Bridge" not in _context_entries(win, monkeypatch, [a])
+    assert "bridge" in _context_entries(win, [a, b])
+    assert "bridge" not in _context_entries(win, [a])
 
 
 def test_right_click_keeps_texture_on_one_textured_face(win, monkeypatch):
@@ -130,8 +87,8 @@ def test_right_click_keeps_texture_on_one_textured_face(win, monkeypatch):
     # along: one textured face (never bridgeable) lost Texture ▸ Position.
     a, _b = _two_squares(win.viewport.scene)
     monkeypatch.setattr(win, "_single_textured_face", lambda: (a, "front"))
-    entries = _context_entries(win, monkeypatch, [a])
-    assert "Texture" in entries and "Bridge" not in entries
+    entries = _context_entries(win, [a])
+    assert "texpos" in entries and "bridge" not in entries
 
 
 def test_a_big_selection_is_not_walked(win, monkeypatch):

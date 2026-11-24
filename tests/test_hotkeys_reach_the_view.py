@@ -226,23 +226,6 @@ def test_a_floating_tray_still_fires_the_tool_keys(win):
     dock.setFloating(False)
 
 
-@pytest.mark.parametrize("win", ["0", "1"], indirect=True)
-def test_clean_screen_keeps_tool_shortcuts_and_measurements(win):
-    display = win._doc.stand_in or win.viewport
-    win._act_clean_screen.setChecked(True)
-    settle()
-    assert win.statusBar().isVisible()
-    assert focus() is display
-    QTest.keyClick(display, Qt.Key_R)
-    assert tool_name(win) == "RectangleTool"
-    QTest.keyClicks(display, "3;4")
-    buffer = display.tools.value_buffer if display is not win.viewport else display._value_buffer
-    assert buffer == "3;4"
-    win._act_clean_screen.setChecked(False)
-    QTest.keyClick(display, Qt.Key_L)
-    assert tool_name(win) == "LineTool"
-
-
 @pytest.mark.parametrize("shortcut,entry,count,x", [
     (Qt.Key_L, "3", 1, 3.0),
     (Qt.Key_R, "3;1", 4, 3.0),

@@ -45,14 +45,6 @@ def win():
     QSettings().remove("ui/window_geometry")
 
 
-def test_the_layers_tab_sits_beside_the_browser_and_left_properties(win):
-    order = [d.objectName() for d in win._default_tray_order()]
-    assert order[:3] == ["tray_properties", "tray_project_browser",
-                         "tray_layers"]
-    assert not hasattr(win.tray, "layers")
-    assert not win.layers_dock.isHidden()
-
-
 def test_the_add_buttons_sit_left_of_the_filter_icon_only(win):
     from PySide6.QtWidgets import QPushButton, QToolButton
     panel = win.layers_dock.panel
@@ -115,44 +107,6 @@ def test_purge_lives_in_the_right_click_and_asks_with_the_count(win,
          if a.text() == "Purge unused layers…").trigger()
     assert asked and "2" in asked[0]
     assert [ly.name for ly in scene.layers] == [DEFAULT_LAYER]
-
-
-def test_a_layers_tab_left_in_a_block_of_its_own_rejoins_the_tabs(win):
-    """A layout saved before the tab existed put it apart from the other
-    tabs; at start-up it goes back beside the Browser."""
-    dock = win.layers_dock
-    win.removeDockWidget(dock)
-    win.addDockWidget(Qt.RightDockWidgetArea, dock)      # a block apart
-    dock.show()
-    _app.processEvents()
-    assert win.project_browser not in win.tabifiedDockWidgets(dock)
-    win._seat_new_trays()
-    _app.processEvents()
-    assert win.project_browser in win.tabifiedDockWidgets(dock)
-
-
-def test_a_layers_tab_moved_alone_to_the_other_side_stays(win, monkeypatch):
-    dock = win.layers_dock
-    win.removeDockWidget(dock)
-    win.addDockWidget(Qt.LeftDockWidgetArea, dock)
-    dock.show()
-    monkeypatch.setattr(win, "restoreDockWidget", lambda d: True)
-    win._seat_new_trays()
-    assert win.dockWidgetArea(dock) == Qt.LeftDockWidgetArea
-
-
-def test_eye_on_a_selected_row_acts_on_every_selected_row(win):
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers += [Layer("A"), Layer("B"), Layer("C")]
-    panel.refresh()
-    for name in ("A", "B"):
-        panel.item_for(name).setSelected(True)
-    panel._on_item_clicked(panel.item_for("A"), 2)          # COL_EYE
-    _app.processEvents()
-    assert [scene.layer(n).visible for n in "ABC"] == [False, False, True]
-    panel.click_cell(("layer", "C"), 3)                     # COL_LOCK
-    assert scene.layer("C").locked
 
 
 def test_folder_row_shows_hides_and_counts(win):
@@ -480,34 +434,6 @@ def test_a_real_drag_and_drop_moves_the_selected_rows(win):
     assert scene.layer("A").folder == scene.layer("B").folder == "Arq"
 
 
-def test_several_selected_rows_take_one_colour_and_one_look(win,
-                                                            monkeypatch):
-    from PySide6.QtGui import QColor
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers += [Layer("A"), Layer("B"), Layer("C")]
-    panel.refresh()
-    for n in ("A", "B"):
-        panel.item_for(n).setSelected(True)
-    monkeypatch.setattr("views.color_dialog.get_color",
-                        lambda *a, **k: QColor.fromRgbF(1.0, 0.0, 0.0))
-    panel._on_item_clicked(panel.item_for("A"), 4)         # COL_COLOR
-    _app.processEvents()
-    assert scene.layer("A").color == scene.layer("B").color == (1.0, 0.0, 0.0)
-    assert scene.layer("C").color is None
-    panel.set_style(["A", "B"], linetype="dashed", lineweight=0.5,
-                    opacity=0.5)
-    assert {(scene.layer(n).linetype, scene.layer(n).lineweight,
-             scene.layer(n).opacity) for n in "AB"} == {("dashed", 0.5, 0.5)}
-    panel.click_cell(("layer", "A"), 2, ["A", "B"])        # eye on both
-    assert not scene.layer("A").visible and not scene.layer("B").visible
-    menu = QMenu()
-    panel.fill_menu(menu, panel.item_for("A"))
-    reset = next(a for a in menu.actions() if a.text() == "Automatic colour")
-    reset.trigger()
-    assert scene.layer("A").color is None and scene.layer("B").color is None
-
-
 def _shown(panel):
     return sorted(panel._key(it)[1] for it in panel._all_items()
                   if panel._key(it)[0] == "layer" and not it.isHidden())
@@ -629,15 +555,6 @@ def test_context_menu_offers_the_layer_actions(win):
     merge = next(a.menu() for a in menu.actions() if a.text() == "Merge into")
     next(a for a in merge.actions() if a.text() == "B").trigger()
     assert scene.layer("A") is None
-
-
-def test_look_menus_set_the_line_and_opacity(win):
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers.append(Layer("A"))
-    panel.set_style(["A"], linetype="dotted", lineweight=0.25, opacity=0.5)
-    ly = scene.layer("A")
-    assert (ly.linetype, ly.lineweight, ly.opacity) == ("dotted", 0.25, 0.5)
 
 
 def test_template_export_and_import_through_the_panel(win, tmp_path):

@@ -15,18 +15,57 @@ pub fn inspector_totals(scene: &Bound<'_, PyAny>, selection: &Bound<'_, PyAny>) 
     let net_area = py.import("core.bim")?.getattr("face_net_area")?;
     let units = py.import("core.units")?;
     let settings = scene.getattr("units")?;
+    let mut rows = Rows::new();
+    let single = selection.len()? == 1;
     let mut area = None;
     let mut length = None;
     for entity in selection.try_iter()? {
         let entity = entity?;
         if entity.is_instance(&face)? {
+            if single {
+                rows.push((
+                    "Vertices".into(),
+                    entity.getattr("vertices")?.len()?.to_string(),
+                ));
+                let attrs = entity.getattr("attrs")?;
+                let texture = attrs.call_method1("get", ("texture",))?;
+                let path = if texture.is_truthy()? {
+                    texture
+                        .call_method1("get", ("path",))?
+                        .extract::<Option<String>>()?
+                } else {
+                    None
+                };
+                let material = if let Some(path) = path.filter(|p| !p.is_empty()) {
+                    std::path::Path::new(&path)
+                        .file_stem()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .into_owned()
+                } else if let Some(rgb) = attrs
+                    .call_method1("get", ("color",))?
+                    .extract::<Option<Vec<f64>>>()?
+                    .filter(|v| v.len() >= 3)
+                {
+                    let byte =
+                        |i: usize| (rgb[i] * 255.0).round_ties_even().clamp(0.0, 255.0) as u8;
+                    format!(
+                        "\u{1d}swatch\u{1d}#{:02X}{:02X}{:02X}",
+                        byte(0),
+                        byte(1),
+                        byte(2)
+                    )
+                } else {
+                    "—".into()
+                };
+                rows.push(("Material".into(), material));
+            }
             *area.get_or_insert(0.0) += net_area.call1((entity,))?.extract::<f64>()?;
         } else if entity.is_instance(&edge)? {
             let chord = entity.getattr("b")?.sub(entity.getattr("a")?)?;
             *length.get_or_insert(0.0) += chord.call_method0("length")?.extract::<f64>()?;
         }
     }
-    let mut rows = Rows::new();
     for (label, formatter, value) in [
         ("Area", "fmt_area_with", area),
         ("Length", "fmt_len_with", length),

@@ -2517,7 +2517,8 @@ impl Renderer {
     fn ui_input_state(&self) -> std::collections::HashMap<&'static str, bool> {
         self.ui.as_ref().map(ui::Ui::input_state).unwrap_or_default()
     }
-    fn ui_claims_key(&self, name: &str) -> bool { self.ui.as_ref().is_some_and(|ui| ui.claims_key(name)) }
+    #[pyo3(signature = (name, mods=0))]
+    fn ui_claims_key(&self, name: &str, mods: u8) -> bool { self.ui.as_ref().is_some_and(|ui| ui.claims_key(name, mods)) }
     fn ui_key(&mut self, name: &str, pressed: bool, modifiers: u8) -> bool {
         self.ui.as_mut().is_some_and(|ui| ui.key(name, pressed, modifiers))
     }
@@ -2550,6 +2551,9 @@ impl Renderer {
         if key == "selection" { self.preview_parts(Vec::new())?; }
         if let Some(ui) = self.ui.as_mut() { ui.panels.set(key, value); }
         Ok(())
+    }
+    fn ui_toggle_review(&mut self) {
+        if let Some(ui) = self.ui.as_mut() { ui.toggle_review(); }
     }
     fn ui_show_inspector(&mut self) {
         if let Some(ui) = self.ui.as_mut() { ui.show_inspector(); }
@@ -3254,6 +3258,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(inspector_geometry::inspector_totals, m)?)?;
     m.add_function(wrap_pyfunction!(inspector_geometry::inspector_curve, m)?)?;
     m.add_function(wrap_pyfunction!(inspector_geometry::inspector_rename, m)?)?;
+    m.add_function(wrap_pyfunction!(tree_grouping::tree_move, m)?)?;
     m.add_function(wrap_pyfunction!(tree_grouping::tree_group_rows, m)?)?;
     m.add_function(wrap_pyfunction!(tree_grouping::tree_group_action, m)?)?;
     m.add_function(wrap_pyfunction!(model_escape, m)?)?;

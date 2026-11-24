@@ -830,20 +830,10 @@ class _Tree(SideTree):
         from PySide6.QtCore import QEvent
         editing = self.state() == QAbstractItemView.EditingState
         if (ev.type() == QEvent.ShortcutOverride and not editing
-                and (ev.key() in _TREE_KEYS
-                     or ev.key() in (Qt.Key_Tab, Qt.Key_Backtab))
+                and ev.key() in _TREE_KEYS
                 and not (ev.modifiers() & (Qt.ControlModifier
                                            | Qt.AltModifier))):
             ev.accept()
-            return True
-        # Tab moves the focus before keyPressEvent ever sees it.
-        if (ev.type() == QEvent.KeyPress and not editing
-                and ev.key() in (Qt.Key_Tab, Qt.Key_Backtab)):
-            if ev.key() == Qt.Key_Backtab or \
-                    ev.modifiers() & Qt.ShiftModifier:
-                self._panel.outdent()
-            else:
-                self._panel.indent()
             return True
         return super().event(ev)
 
@@ -2879,41 +2869,14 @@ class OutlinerPanel(QWidget):
         self.refresh()
         return True
 
-    _REPARENT_REFUSED = {
-        "cycle": "A group cannot go inside itself or a group it holds",
-        "component": "Components keep their parts: Make Unique first to "
-                     "change what is inside one",
-        "locked": "Unlock it first",
-    }
-
     def reparent(self, groups, target) -> bool:
-        """Put ``groups`` into ``target`` (``None``: the model) — one
-        undoable step, nothing moves in the world."""
-        from core.history import ReparentGroupsCommand
-        scene = self._scene()
-        moving = outliner.needs_moving(scene.groups, groups, target)
-        if not moving:
+        from ingetrazo_render import tree_move
+        if not tree_move(self._window.viewport, list(groups), target,
+                         "root" if target is None else "into"):
             return False
-        problem = outliner.reparent_problem(scene.groups, moving, target)
-        if problem is not None:
-            self._window.viewport.flash_status(
-                tr(self._REPARENT_REFUSED[problem]), 4000)
-            return False
-        # The tools work on what is open: re-nesting under them is not
-        # safe, and the view closes them as a click outside would.
-        self._window.viewport.end_group_edit()
-        self._window.viewport.history.execute(
-            ReparentGroupsCommand(moving, target))
-        self._window.viewport.update()
         self.refresh()
         if target is not None:
             self._items[id(target)].setExpanded(True)
-        first = self._items.get(id(moving[0]))
-        if first is not None:
-            self._reveal(first)
-            self.tree.setCurrentItem(first, COL_NAME,
-                                     QItemSelectionModel.NoUpdate)
-            self.tree.scrollToItem(first)
         return True
 
     def delete_row(self) -> None:
@@ -2993,37 +2956,6 @@ class OutlinerPanel(QWidget):
         self.refresh()
         viewport.update()
         viewport.notify_scene_changed()
-
-    def indent(self) -> None:
-        """Tab: into the group just above, at the same level."""
-        current = self.tree.currentItem()
-        group = self._group_of(current)
-        if group is None:
-            return
-        parent = current.parent()
-        index = parent.indexOfChild(current) if parent is not None else -1
-        above = None
-        while index > 0:
-            index -= 1
-            candidate = parent.child(index)
-            if not candidate.isHidden():
-                above = self._group_of(candidate)
-                break
-        if above is None:
-            return
-        self.reparent(self._selected_groups() or [group], above)
-
-    def outdent(self) -> None:
-        """Shift+Tab: out of the group it is in, one level up."""
-        group = self._group_of(self.tree.currentItem())
-        if group is None:
-            return
-        scene = self._scene()
-        path = outliner.path_to(scene.groups, group)
-        if not path:
-            return
-        self.reparent(self._selected_groups() or [group],
-                      path[-2] if len(path) > 1 else None)
 
     # ---- Columns ---------------------------------------------------------
     #: Columns of a fixed width: the eye, the padlock and the target.
@@ -3970,9 +3902,6 @@ class OutlinerPanel(QWidget):
                 tr("Scale…"), lambda: QTimer.singleShot(
                     0, lambda: self.ask_scale(group)))
             scale_act.setEnabled(len(targets) == 1)
-            if outliner.path_to(self._scene().groups, group):
-                menu.addAction(tr("Move out of the group (Shift+Tab)"),
-                               lambda: self.outdent())
             menu.addSeparator()
             self._batch_menu(menu, targets)
             menu.addSeparator()

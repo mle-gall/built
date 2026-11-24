@@ -66,3 +66,47 @@ quit
     assert looking["tool"] == "LookAroundTool" and looking["camera_forward"] != turned["camera_forward"]
     assert walking["tool"] == "WalkTool" and walked["camera_eye"] != pytest.approx(walking["camera_eye"])
     assert done["tool"] == "LineTool"
+
+
+def test_review_exit_and_modelling_keys(tmp_path):
+    """The top-bar exit restores the workspace while tool and measurement keys stay live."""
+    import sys
+    from scripts.isolated_launch import run
+    root = Path(__file__).resolve().parents[1]
+    binary = Path(os.environ.get("BUILT_BINARY", root / "rust/built_app/target/debug/built"))
+    if not binary.is_file():
+        pytest.skip("build the native built_app binary for the windowed smoke test")
+    profile = tmp_path / "settings"
+    plugin = profile / "data/ingetrazo/plugins/review_probe.py"
+    plugin.parent.mkdir(parents=True)
+    plugin.write_text("""def setup(app):
+    def measure():
+        from app_shell.modal import _HOST
+        from pathlib import Path
+        Path(__file__).with_suffix(".txt").write_text(_HOST.view.tools.value_buffer)
+    app.add_menu_action("Read measurements", measure)
+""")
+    modifier = "cmd" if sys.platform == "darwin" else "ctrl"
+    steps = tmp_path / "steps"
+    steps.write_text(f"""wait 500
+key 0 {modifier}
+wait 200
+key r
+type 3;4
+menu extension:review_probe:0
+state
+click-command exit_review
+wait 200
+key l
+state
+quit
+""")
+    result = run([binary, "--root", root, "--venv", root / ".venv", "--new-instance",
+                  "--script", steps, root / "tests/fixtures/shell/slab-and-cube.igz"],
+                 settings=profile, capture_output=True, text=True, timeout=60, check=True)
+    before, after, *_ = [json.loads(line.removeprefix("[built] state ")) for line in result.stdout.splitlines()
+                     if line.startswith("[built] state ")]
+    assert before["input"]["review"] and "exit_review" in before["cluster"]
+    assert before["tool"] == "RectangleTool" and plugin.with_suffix(".txt").read_text() == "3;4"
+    assert not after["input"]["review"] and "exit_review" not in after["cluster"]
+    assert after["tool"] == "LineTool" and before["errors"] == after["errors"] == 0

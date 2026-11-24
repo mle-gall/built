@@ -29,7 +29,7 @@ class FakeRenderer:
     def ui_set_icons(self, icons):
         self.calls.append(("icons", [i[0] for i in icons]))
 
-    def ui_claims_key(self, name):
+    def ui_claims_key(self, name, mods=0):
         return True
 
     def sheet(self):

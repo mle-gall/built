@@ -8,17 +8,9 @@ hidden or locked layer, and nothing outside the group being edited.
 """
 from __future__ import annotations
 
-import os
-import sys
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-from PySide6.QtGui import QKeySequence
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
-
-if QApplication.instance() is None:
-    QApplication(sys.argv[:1])
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
+from views.shortcuts import action_keys, collect_actions
 
 from core.group import Group
 from core.layers import Layer, assign_layer
@@ -166,27 +158,24 @@ def test_inside_a_group_only_its_contents_count():
 
 # ---- the window: menu, shortcut, status bar ---------------------------------
 
-def test_edit_menu_offers_it_with_the_usual_shortcut():
-    from PySide6.QtGui import QAction
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        acts = [a for a in win.findChildren(QAction)
-                if a.shortcut() == QKeySequence("Ctrl+Shift+I")]
-        assert len(acts) == 1                     # one owner: never ambiguous
+def test_edit_menu_offers_it_with_the_usual_shortcut(native_host, monkeypatch):
+    win = native_host.window
+    actions = [a for a in collect_actions(win) if "Ctrl+Shift+I" in action_keys(a)]
+    assert len(actions) == 1
 
-        scene = win.viewport.scene
-        a = _square(scene.mesh, 0)
-        b = _square(scene.mesh, 5)
-        scene.select([a])
-        seen: list = []
-        win.viewport.sceneVersionChanged.connect(seen.append)
+    scene = win.viewport.scene
+    a = _square(scene.mesh, 0)
+    b = _square(scene.mesh, 5)
+    scene.select([a])
+    seen = []
+    notify = win.viewport.notify_scene_changed
 
-        acts[0].trigger()
+    def record(*args, **kwargs):
+        seen.append(scene.version)
+        return notify(*args, **kwargs)
 
-        assert b in scene.selection and a not in scene.selection
-        assert seen and seen[-1] == scene.version  # the tray hears about it
-        assert win.statusBar().currentMessage()
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    monkeypatch.setattr(win.viewport, "notify_scene_changed", record)
+    actions[0].trigger()
+    assert b in scene.selection and a not in scene.selection
+    assert seen and seen[-1] == scene.version
+    assert win.statusBar().currentMessage()

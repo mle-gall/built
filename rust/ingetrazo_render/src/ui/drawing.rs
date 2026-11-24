@@ -19,6 +19,7 @@ impl DraggedRow {
             Self::Placement { key, .. } if !parent.is_empty() => {
                 Some(format!("fileitem\u{1f}{key}\u{1f}{parent}"))
             }
+            Self::Placement { key, .. } if parent.is_empty() => Some(format!("root\u{1f}{key}")),
             _ => None,
         }
     }
@@ -42,6 +43,41 @@ pub(super) fn drop_on(
         .and_then(|row| row.action(parent))
     {
         actions.push(action);
+    }
+}
+
+pub(super) fn drop_on_occurrence(
+    ui: &egui::Ui,
+    target: &egui::Response,
+    key: &str,
+    actions: &mut Vec<String>,
+) {
+    let Some(payload) = target.dnd_hover_payload::<DraggedRow>() else {
+        return;
+    };
+    let DraggedRow::Placement { key: source, .. } = payload.as_ref() else {
+        return;
+    };
+    if source == key {
+        return;
+    }
+    let beside = ui.input(|i| {
+        i.pointer
+            .hover_pos()
+            .is_some_and(|p| p.y < target.rect.top() + target.rect.height() * 0.2)
+    });
+    if beside {
+        ui.painter().hline(
+            target.rect.x_range(),
+            target.rect.top(),
+            egui::Stroke::new(2.0_f32, super::ACCENT),
+        );
+    } else {
+        kit::paint_focus(ui, target.rect, super::R_ROW);
+    }
+    if target.dnd_release_payload::<DraggedRow>().is_some() {
+        let verb = if beside { "beside" } else { "into" };
+        actions.push(format!("{verb}\u{1f}{source}\u{1f}{key}"));
     }
 }
 
@@ -81,6 +117,17 @@ impl StyleEditor {
         n.cells
             .get(5)
             .is_some_and(|key| self.selected.contains_key(key))
+    }
+
+    pub fn state_action(&self, n: &Node, lock: bool) -> Option<String> {
+        if !self.selected(n) { return None; }
+        let tags: Vec<_> = self.selected.keys().collect();
+        let edit = if lock {
+            serde_json::json!({"tags":tags, "locked": n.lock == 0})
+        } else {
+            serde_json::json!({"tags":tags, "visible": n.eye == 0})
+        };
+        Some(format!("tagstate\u{1f}{edit}"))
     }
 
     pub fn pick(&mut self, n: &Node, extend: bool) {

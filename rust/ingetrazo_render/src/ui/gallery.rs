@@ -698,6 +698,7 @@ impl Gallery {
                     editor.show(ui,&mut curve,&outline);
                     ui.data_mut(|d|d.insert_temp(id,(editor,curve)));
                 });
+                material_readout(ui, "Material", super::SWATCH_FALLBACK, "#808080");
                 disclosure(ui, "gallery-export", "Export details", true, |ui| {
                     prop_row(ui, "IFC class", "IfcWall");
                     prop_row(ui, "Predefined type", "STANDARD");
