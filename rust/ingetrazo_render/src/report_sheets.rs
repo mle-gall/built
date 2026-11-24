@@ -872,7 +872,51 @@ fn show_report_sheet<'py>(py: Python<'py>, win: &Bound<'py, PyAny>, sid: &str) -
     chrome.call_method1("open", (win, provider))
 }
 
+/// A document-scoped, read-only text result supplied by an extension.
+#[pyclass]
+struct PluginTextReport {
+    #[pyo3(get)]
+    title: String,
+    text: String,
+    copy: String,
+    acknowledgement: String,
+    copied: bool,
+}
+
+#[pymethods]
+impl PluginTextReport {
+    #[classattr]
+    #[pyo3(name = "slot")]
+    const SLOT: &'static str = "utility";
+
+    #[classattr]
+    #[pyo3(name = "id")]
+    const ID: &'static str = "report";
+
+    #[new]
+    fn new(title: String, text: String, copy: String, acknowledgement: String) -> Self {
+        Self { title, text, copy, acknowledgement, copied: false }
+    }
+
+    fn sections<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let label = if self.copied { &self.acknowledgement } else { &self.copy };
+        let data = serde_json::json!([{"id":"report", "title":"", "items":[
+            {"kind":"log", "id":"text", "lines":self.text.lines().collect::<Vec<_>>()},
+            {"kind":"button", "id":"copy", "label":label}
+        ]}]);
+        json_loads(py, &data.to_string())
+    }
+
+    fn event(&mut self, py: Python<'_>, control: &str, event: &str, _value: &Bound<'_, PyAny>) -> PyResult<()> {
+        if (control, event) == ("copy", "invoke") {
+            self.copied = copy_text(py, &self.text)?;
+        }
+        Ok(())
+    }
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<PluginTextReport>()?;
     m.add_class::<AboutSheet>()?;
     m.add_class::<CutListSheet>()?;
     m.add_class::<ExtensionsSheet>()?;

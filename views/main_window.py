@@ -1734,13 +1734,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         from ingetrazo_render import show_report_sheet
         show_report_sheet(self, "extensions")
 
-    @staticmethod
-    def example_extensions() -> list:
-        """``(path, title, blurb)`` of each extension shipped with the app
-        (``examples/extensions``); the extension manager installs them."""
-        from core.extension_manager import example_extension_files
-        return example_extension_files()
-
     # ---- Extension panels (views.extension_api.ExtensionApp.add_panel) -------
     def _register_extension_dock(self, dock) -> None:
         """Give an extension's panel what the built-in trays get for free.
