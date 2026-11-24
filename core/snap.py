@@ -141,35 +141,13 @@ def project_to_view_plane(point: QVector3D, ref: QVector3D,
     the measurement in the plane of the drawing. Oblique views return the
     point untouched (true 3-D distance, the classic behaviour).
     """
-    if hasattr(_native.native, 'drawing_axis'):
-        plane = first_point_work_plane(forward, ref, threshold)
-        if plane is None:
-            return point
-        a = plane[1]
-        # Do the cancellation in doubles before returning the Qt point.
-        offset = sum((r-p)*v for r,p,v in zip(ref.toTuple(),point.toTuple(),a.toTuple()))
-        return QVector3D(*(p+offset*v for p,v in zip(point.toTuple(),a.toTuple())))
-    if forward.length() < 1e-9:
+    plane = first_point_work_plane(forward, ref, threshold)
+    if plane is None:
         return point
-    f = forward.normalized()
-    from core import axes as _axes
-    if not _axes.is_world():
-        # Inside a turned group the standard views face ITS axes (#44).
-        lf = _axes.to_local(f)
-        comps = [(abs(lf.x()), "x"), (abs(lf.y()), "y"), (abs(lf.z()), "z")]
-        best, name = max(comps)
-        if best < threshold:
-            return point
-        a = _axes.AXES[name]
-        return point + a * QVector3D.dotProduct(ref - point, a)
-    ax, ay, az = abs(f.x()), abs(f.y()), abs(f.z())
-    if max(ax, ay, az) < threshold:
-        return point
-    if ax >= ay and ax >= az:
-        return QVector3D(ref.x(), point.y(), point.z())
-    if ay >= az:
-        return QVector3D(point.x(), ref.y(), point.z())
-    return QVector3D(point.x(), point.y(), ref.z())
+    a = plane[1]
+    # Do the cancellation in doubles before returning the Qt point.
+    offset = sum((r-p)*v for r,p,v in zip(ref.toTuple(),point.toTuple(),a.toTuple()))
+    return QVector3D(*(p+offset*v for p,v in zip(point.toTuple(),a.toTuple())))
 
 
 def first_point_work_plane(forward: QVector3D, scene_center: QVector3D,
@@ -662,52 +640,16 @@ def _two_point_snap(
     if len(pts) < 2:
         return None
     best = None
-    axes = list(_AXIS_VECTORS.items())
-    if hasattr(_native.native, 'reference_crossings'):
-        hits = _native.native.reference_crossings([p.toTuple() for p in pts], _axis_tuples())
-        for point, i, k, j, l in hits:
-            cross = QVector3D(*point)
-            pixel = world_to_pixel(cross)
-            if pixel is None:
-                continue
-            d = math.hypot(pixel[0]-cx, pixel[1]-cy)
-            if d <= threshold_px and (best is None or d < best[0]):
-                if is_occluded is None or not is_occluded(cross):
-                    best = (d, cross, pts[i], "xyz"[k], pts[j], "xyz"[l])
-    else:
-        for i in range(len(pts)):
-            for j in range(i + 1, len(pts)):
-                p, q = pts[i], pts[j]
-                for ka, a in axes:
-                    for kb, b in axes:
-                        if ka == kb:
-                            continue
-                        # Closest points of the two lines p + a·s and q + b·t.
-                        w = p - q
-                        ab = QVector3D.dotProduct(a, b)
-                        denom = 1.0 - ab * ab
-                        if denom < 1e-9:
-                            continue
-                        wa = QVector3D.dotProduct(w, a)
-                        wb = QVector3D.dotProduct(w, b)
-                        s_ = (ab * wb - wa) / denom
-                        t_ = (wb - ab * wa) / denom
-                        pa = p + a * s_
-                        pb = q + b * t_
-                        if (pa - pb).length() > 1e-3:
-                            continue                    # skew: no crossing
-                        if abs(s_) < 1e-3 or abs(t_) < 1e-3:
-                            continue                    # on a point itself
-                        px = world_to_pixel(pa)
-                        if px is None:
-                            continue
-                        d = math.hypot(px[0] - cx, px[1] - cy)
-                        if d > threshold_px:
-                            continue
-                        if is_occluded is not None and is_occluded(pa):
-                            continue
-                        if best is None or d < best[0]:
-                            best = (d, pa, p, ka, q, kb)
+    hits = kernel.reference_crossings([p.toTuple() for p in pts], _axis_tuples())
+    for point, i, k, j, l in hits:
+        cross = QVector3D(*point)
+        pixel = world_to_pixel(cross)
+        if pixel is None:
+            continue
+        d = math.hypot(pixel[0]-cx, pixel[1]-cy)
+        if d <= threshold_px and (best is None or d < best[0]):
+            if is_occluded is None or not is_occluded(cross):
+                best = (d, cross, pts[i], "xyz"[k], pts[j], "xyz"[l])
     if best is None:
         return None
     _, cross, p, ka, q, kb = best
@@ -738,52 +680,14 @@ def _first_point_from_point(
     free placements) — reads the foot off the cursor RAY instead, so an
     elevated corner still offers its horizontal 'level with' line while the
     cursor sits on the ground (#1095)."""
-    if (free_3d and project_onto_line is not None) or hasattr(_native.native, 'reference_feet'):
-        if free_3d and project_onto_line is not None:
-            feet = ((axis, project_onto_line(ref, a)) for axis, a in _AXIS_VECTORS.items())
-        else:
-            feet = (("xyz"[i], QVector3D(*p)) for i, p in _native.native.reference_feet(
-                ref.toTuple(), candidate.toTuple(), _axis_tuples(),
-                plane_normal.toTuple() if plane_normal is not None else None))
-        best = None
-        for axis, foot in feet:
-            fp = world_to_pixel(foot)
-            if fp is None:
-                continue
-            d = math.hypot(fp[0] - cx, fp[1] - cy)
-            if d > threshold_px:
-                continue
-            if is_occluded is not None and is_occluded(foot):
-                continue
-            if best is None or d < best[0]:
-                best = (d, foot, axis)
-        if best is None:
-            return None
-        _, foot, axis = best
-        return SnapResult(foot, "from_point", COLOR_ENDPOINT,
-                          guide=(QVector3D(ref), foot),
-                          guide_color=AXIS_COLORS[axis], axis=axis)
+    if free_3d and project_onto_line is not None:
+        feet = ((axis, project_onto_line(ref, a)) for axis, a in _AXIS_VECTORS.items())
+    else:
+        feet = (("xyz"[i], QVector3D(*p)) for i, p in kernel.reference_feet(
+            ref.toTuple(), candidate.toTuple(), _axis_tuples(),
+            plane_normal.toTuple() if plane_normal is not None else None))
     best = None
-    n = None
-    if plane_normal is not None and plane_normal.length() > 1e-9:
-        n = plane_normal.normalized()
-    for axis, a in _AXIS_VECTORS.items():
-        an = QVector3D.dotProduct(a, n) if n is not None else 0.0
-        if abs(an) < 1e-6:
-            # The axis line runs parallel to the plane (or there is none):
-            # its foot — which lies in the plane exactly when the line does.
-            s = QVector3D.dotProduct(candidate - ref, a)
-            if abs(s) < 1e-3:
-                continue                    # that is ``ref`` itself
-            if n is not None and abs(QVector3D.dotProduct(ref - candidate, n)) > 1e-4:
-                continue                    # …and here it does not
-            foot = ref + a * s
-        else:
-            # The line pierces the plane: the one point of it on the face.
-            t = QVector3D.dotProduct(candidate - ref, n) / an
-            if abs(t) < 1e-3:
-                continue                    # that is ``ref`` itself
-            foot = ref + a * t
+    for axis, foot in feet:
         fp = world_to_pixel(foot)
         if fp is None:
             continue
@@ -864,28 +768,11 @@ def _in_plane_with_point_snap(
     beats the point, and this one never beats the line it generalises."""
     if plane_normal is None or plane_normal.length() < 1e-9:
         return None
-    n = plane_normal.normalized()
     best = None
-    def feet():
-        if hasattr(_native.native, 'plane_alignments'):
-            for k, foot, d in _native.native.plane_alignments(
-                    ref.toTuple(), candidate.toTuple(), plane_normal.toTuple(), _axis_tuples()):
-                yield "xyz"[k], QVector3D(*foot), QVector3D(*d)
-            return
-        for axis, a in _AXIS_VECTORS.items():
-            d = QVector3D.crossProduct(a, n)
-            if d.length() < 1e-5:     # normalized() gives the NULL vector below this
-                continue      # the axis plane is parallel to the face: no line
-            d = d.normalized()
-            # In the face, square to the line: the way the cursor has to move
-            # to reach the plane through ``ref``.
-            m = QVector3D.crossProduct(n, d)
-            ma = QVector3D.dotProduct(m, a)                       # = |a × n|, > 0
-            s = QVector3D.dotProduct(candidate - ref, a)
-            foot = candidate - m * (s / ma)
-            yield axis, foot, d
-
-    for axis, foot, d in feet():
+    alignments = kernel.plane_alignments(ref.toTuple(), candidate.toTuple(),
+                                        plane_normal.toTuple(), _axis_tuples())
+    for k, coords, direction in alignments:
+        axis, foot, d = "xyz"[k], QVector3D(*coords), QVector3D(*direction)
         fp = world_to_pixel(foot)
         if fp is None:
             continue
@@ -1532,33 +1419,11 @@ def face_crossing_near_ray(px, py, origin, direction, f_plane, g_plane,
     face_crossing``)."""
     p_f, n_f = f_plane
     p_g, n_g = g_plane
-    if hasattr(_native.native, 'plane_cut_ray'):
-        hit = _native.native.plane_cut_ray(origin.toTuple(), direction.toTuple(),
-                  (p_f.toTuple(), n_f.toTuple()), (p_g.toTuple(), n_g.toTuple()))
-        if hit is None:
-            return None
-        x, sample = (QVector3D(*p) for p in hit)
-    else:
-        u = QVector3D.crossProduct(n_f, n_g)
-        if u.length() < 0.02:                   # (near) coplanar: no crossing
-            return None
-        o, d = origin, direction
-        # The crossing line: the point of both planes nearest the origin…
-        d_f = QVector3D.dotProduct(n_f, p_f)
-        d_g = QVector3D.dotProduct(n_g, p_g)
-        uu = QVector3D.dotProduct(u, u)
-        l0 = (QVector3D.crossProduct(n_g, u) * d_f
-              + QVector3D.crossProduct(u, n_f) * d_g) / uu
-        # …then its point nearest the cursor ray.
-        un = u / math.sqrt(uu)
-        w0 = l0 - o
-        b = QVector3D.dotProduct(un, d)
-        den = 1.0 - b * b
-        if den < 1e-9:                          # the line runs along the ray
-            return None
-        s = (b * QVector3D.dotProduct(w0, d) - QVector3D.dotProduct(w0, un)) / den
-        x = l0 + un * s
-        sample = x + un * max(1e-3, (x - o).length() * 1e-2)
+    hit = kernel.plane_cut_ray(origin.toTuple(), direction.toTuple(),
+              (p_f.toTuple(), n_f.toTuple()), (p_g.toTuple(), n_g.toTuple()))
+    if hit is None:
+        return None
+    x, sample = (QVector3D(*p) for p in hit)
     pix = world_to_pixel(x)
     if pix is None or math.hypot(pix[0] - px, pix[1] - py) > reach_px:
         return None
@@ -1587,39 +1452,13 @@ def _lock_reference_snap(
     ``(point, normal, ref)``; skew and parallel cases offer nothing."""
     if hover_edge is not None:
         a, b = hover_edge.a, hover_edge.b
-        if hasattr(_native.native, 'lock_on_extension'):
-            pair = _native.native.lock_on_extension(start_point.toTuple(), line_dir.toTuple(),
-                                                      a.toTuple(), b.toTuple())
-            if pair is not None:
-                hit, end = (QVector3D(*p) for p in pair)
-                if world_to_pixel(hit) is not None:
-                    return SnapResult(hit, "intersection_edge", COLOR_LOCK_INTERSECT,
-                                      guide=(end, hit), guide_color=COLOR_EXTENSION)
-        else:
-            v = b - a
-            if v.lengthSquared() > 1e-12:
-                w0 = start_point - a
-                bb = QVector3D.dotProduct(line_dir, v)
-                cc = QVector3D.dotProduct(v, v)
-                dd = QVector3D.dotProduct(line_dir, w0)
-                ee = QVector3D.dotProduct(v, w0)
-                uu = QVector3D.dotProduct(line_dir, line_dir)
-                den = cc * uu - bb * bb
-                if abs(den) > 1e-9 * cc * uu:
-                    s = (bb * ee - cc * dd) / den
-                    t = (ee * uu - bb * dd) / den
-                    on_line = start_point + line_dir * s
-                    on_edge = a + v * t
-                    if ((on_line - on_edge).length() <= 1e-3
-                            and (on_edge - start_point).length() > 1e-6
-                            and world_to_pixel(on_edge) is not None):
-                        # Beyond an end of the edge that stretch is the dotted
-                        # extension; inside it, the crossing rule answered.
-                        near_end = a if t < 0.5 else b
-                        return SnapResult(on_edge, "intersection_edge",
-                                          COLOR_LOCK_INTERSECT,
-                                          guide=(near_end, on_edge),
-                                          guide_color=COLOR_EXTENSION)
+        pair = kernel.lock_on_extension(start_point.toTuple(), line_dir.toTuple(),
+                                                  a.toTuple(), b.toTuple())
+        if pair is not None:
+            hit, end = (QVector3D(*p) for p in pair)
+            if world_to_pixel(hit) is not None:
+                return SnapResult(hit, "intersection_edge", COLOR_LOCK_INTERSECT,
+                                  guide=(end, hit), guide_color=COLOR_EXTENSION)
     if hover_plane is not None:
         p0, n, ref = hover_plane
         den = QVector3D.dotProduct(n, line_dir)
