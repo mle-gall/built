@@ -1,5 +1,6 @@
 """Projects share registry and IFC identity across independently loaded hosts."""
 import pytest
+from copy import deepcopy
 from core import project, bim_registry
 from core.scene import Scene
 from core.history import SetRegistryCommand
@@ -8,7 +9,7 @@ from formats import project as storage, igz
 
 def test_project_roundtrip_sharing_and_undo(tmp_path):
     a, b = Scene(), Scene()
-    path = tmp_path / 'project.igzproj'
+    path = tmp_path / 'project.builtproject'
     project.create(a, path, tmp_path / 'a.igz')
     project.attach(b, path, tmp_path / 'b.igz')
     value = bim_registry.get(a)
@@ -27,17 +28,48 @@ def test_project_roundtrip_sharing_and_undo(tmp_path):
     assert storage.load(path)['files'][0]['path'] == 'a.igz'
 
 
-def test_conflict_warns_and_last_writer_wins(tmp_path):
+def test_registry_writes_merge_and_conflicts_keep_ours(tmp_path):
+    """docs/builtproject-format.md §4: entries only one side changed are
+    merged; an entry both changed keeps the later writer's and warns."""
     a, b = Scene(), Scene()
-    path = tmp_path / 'project.igzproj'
+    path = tmp_path / 'project.builtproject'
+    project.create(a, path)
+    project.attach(b, path)
+    seen_by_b = bim_registry.get(b)
+    mine = bim_registry.get(a)
+    mine['systems']['ride'] = {'name': 'Ride', 'ifc_class': 'IfcSystem', 'description': ''}
+    project.write_registry(a, mine)
+    theirs = deepcopy(seen_by_b)
+    theirs['project']['name'] = 'B'
+    project.write_registry(b, theirs, base=seen_by_b)
+    merged = bim_registry.get(a)
+    assert merged['project']['name'] == 'B' and 'ride' in merged['systems']
+    clash = bim_registry.get(a)
+    clash['project']['name'] = 'A'
+    project.write_registry(a, clash)
+    later = deepcopy(seen_by_b)
+    later['project']['name'] = 'C'
+    with pytest.warns(RuntimeWarning, match='yours kept: project.name'):
+        project.write_registry(b, later, base=seen_by_b)
+    assert bim_registry.get(a)['project']['name'] == 'C'
+    assert 'project.name' in b.project_warning
+
+
+def test_undo_reverts_only_its_own_entry(tmp_path):
+    a, b = Scene(), Scene()
+    path = tmp_path / 'project.builtproject'
     project.create(a, path)
     project.attach(b, path)
     value = bim_registry.get(a)
-    project.write_registry(a, value)
-    value['project']['name'] = 'B'
-    with pytest.warns(RuntimeWarning, match='last writer wins'):
-        project.write_registry(b, value)
-    assert bim_registry.get(a)['project']['name'] == 'B'
+    value['project']['name'] = 'Shared'
+    command = SetRegistryCommand(value)
+    command.do(a)
+    other = bim_registry.get(b)
+    other['storeys']['L1'] = {'elevation': 3.0}
+    project.write_registry(b, other)
+    command.undo(a)
+    after = bim_registry.get(b)
+    assert 'name' not in after['project'] and after['storeys'] == {'L1': {'elevation': 3.0}}
 
 
 def test_export_project_guid(tmp_path):
@@ -45,7 +77,7 @@ def test_export_project_guid(tmp_path):
     from ingetrazo_core import Vec3 as QVector3D
     from formats.ifc import save_ifc
     a, b = Scene(), Scene()
-    path = tmp_path / 'shared.igzproj'
+    path = tmp_path / 'shared.builtproject'
     project.create(a, path)
     project.attach(b, path)
     guid = storage.load(path)['ifc_identity']['project']
@@ -79,7 +111,7 @@ def test_agent_links_and_project(tmp_path):
     uid = agent._tool_link_document(str(source), {'uids': [src.groups[0].uid]})['uid']
     assert agent._tool_query_links()[0]['uid'] == uid
     assert agent._tool_reload_link(str(source))[0]['stable_uid_count'] == 1
-    path = tmp_path / 'shared.igzproj'
+    path = tmp_path / 'shared.builtproject'
     project.create(Scene(), path)
     agent._tool_set_project(str(path))
-    assert agent._tool_query_project()['version'] == 1
+    assert agent._tool_query_project()['built_project'] == 1

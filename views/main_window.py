@@ -8890,7 +8890,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             self,
             tr("Open Built document"),
             "",
-            built.DOCUMENT_FILTER + ";;IngeTrazo projects (*.igzproj);;All files (*)",
+            built.DOCUMENT_FILTER + ";;Built projects (*.builtproject *.igzproj);;All files (*)",
         )
         if not path_str:
             return
@@ -8907,7 +8907,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         (``ExtensionApp.add_file_opener``); anything else needs the model,
         so a workspace in front of it is left first."""
         path = Path(path)
-        if path.suffix.lower() == '.igzproj':
+        if path.suffix.lower() in ('.builtproject', '.igzproj'):
             try:
                 return self.open_project(path)
             except (OSError, ValueError) as exc:
