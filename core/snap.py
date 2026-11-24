@@ -489,8 +489,7 @@ def _from_point_snap(
     if adir is None:
         return None
     if query is None:
-        from core.snap_query import make_query
-        query = make_query(scene.edges, world_to_pixel, (cx, cy))
+        query = kernel.snap_query.make_query(scene.edges, world_to_pixel, (cx, cy))
     def hidden(p):
         return is_occluded(QVector3D(*p))
 
@@ -567,8 +566,7 @@ def _intersection_snap(
     guides, which live outside the mesh, and any unsplit crossing."""
 
     from core.axes import plane_axes
-    from core.snap_query import make_query
-    query = make_query(scene.edges, world_to_pixel, (cx, cy))
+    query = kernel.snap_query.make_query(scene.edges, world_to_pixel, (cx, cy))
     circles = []
     if candidate_world is not None:
         for circle in getattr(scene, "circles", ()):
@@ -697,18 +695,16 @@ def _lock_line_snaps(
             return SnapResult(QVector3D(chain_first_point), "close", COLOR_CLOSE)
 
     if query is None:
-        from core.snap_query import make_query
-        query = make_query(scene.edges, world_to_pixel, (cx, cy))
-    from core.snap_query import point_result
+        query = kernel.snap_query.make_query(scene.edges, world_to_pixel, (cx, cy))
     line = (start_point.toTuple(), line_dir.toTuple())
-    hit = point_result(query, scene.edges, threshold_px, is_occluded, line=line, hidden_many=are_occluded)
+    hit = kernel.snap_query.point_result(query, scene.edges, threshold_px, is_occluded, line=line, hidden_many=are_occluded)
     if hit is not None:
         return hit
     points = [QVector3D(*p) for p, _ in query.crossings(threshold_px, line)]
     k = _first_visible(points, is_occluded, are_occluded)
     if k is not None:
         return SnapResult(points[k], "intersection", COLOR_ENDPOINT, guide=(start_point,points[k]))
-    hit = point_result(query, scene.edges, threshold_px, is_occluded, line=line, midpoints=True, hidden_many=are_occluded)
+    hit = kernel.snap_query.point_result(query, scene.edges, threshold_px, is_occluded, line=line, midpoints=True, hidden_many=are_occluded)
     if hit is not None:
         return hit
     # 'From point' along the lock line: line up with a corner (green) or
@@ -796,8 +792,6 @@ def compute_snap(
     start_edges=None,
 ) -> SnapResult:
     options = locals()
-    from core.snap_query import make_query
-    query = make_query(scene.edges, world_to_pixel, candidate_pixel)
-    from core.snap_frame import SnapFrame
-    frame = SnapFrame(options, query)
+    query = kernel.snap_query.make_query(scene.edges, world_to_pixel, candidate_pixel)
+    frame = kernel.snap_frame.SnapFrame(options, query)
     return kernel.resolve_snap(query, frame, frame.state)
