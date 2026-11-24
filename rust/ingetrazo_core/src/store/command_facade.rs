@@ -65,3 +65,80 @@ pub(crate) fn command_draw_edge(
         dirty,
     }))
 }
+
+pub(crate) struct AddedFace {
+    pub(crate) face: u128,
+    pub(crate) dirty: u32,
+    pub(crate) mother: Option<u128>,
+    pub(crate) remainder: Vec<u128>,
+    pub(crate) hole_swaps: bool,
+}
+
+pub(super) type FaceResult = (u128, u32, Option<u128>, Vec<u128>, bool);
+
+impl AddedFace {
+    pub(super) fn fields(self) -> FaceResult {
+        (
+            self.face,
+            self.dirty,
+            self.mother,
+            self.remainder,
+            self.hole_swaps,
+        )
+    }
+}
+
+pub(crate) fn command_add_face(
+    mesh: &Bound<'_, PyAny>,
+    outer: Vec<[f64; 3]>,
+    holes: Option<Vec<Vec<[f64; 3]>>>,
+    attrs: Option<&Bound<'_, PyDict>>,
+    interior: bool,
+    divide: bool,
+) -> PyResult<Option<AddedFace>> {
+    let Some(hypot) = store_hypot(mesh)? else {
+        return Ok(None);
+    };
+    let py = mesh.py();
+    let holes = holes.unwrap_or_default();
+    let mask = super::py::PyMeshStore::maximal_holes(holes.clone(), &hypot)?;
+    let mut rings = Vec::with_capacity(1 + holes.len());
+    for ring in std::iter::once(outer).chain(
+        holes
+            .into_iter()
+            .zip(mask)
+            .filter_map(|(ring, keep)| keep.then_some(ring)),
+    ) {
+        rings.push(
+            ring.into_iter()
+                .map(|p| input_point(mesh, p))
+                .collect::<PyResult<Vec<_>>>()?,
+        );
+    }
+    let owner = py
+        .import("core.store_mesh")?
+        .call_method1("_attribute_owner", (mesh,))?;
+    let scan = divide
+        && py
+            .import("core.scan_index")?
+            .call_method0("enabled")?
+            .is_truthy()?;
+    let result: Option<FaceResult> = mesh
+        .getattr("_store")?
+        .call_method1(
+            "_add_command_face",
+            (rings, attrs, interior, divide, scan, hypot, owner),
+        )?
+        .extract()?;
+    let Some((face, dirty, mother, remainder, hole_swaps)) = result else {
+        return Ok(None);
+    };
+    mesh.call_method1("_dirty", (dirty,))?;
+    Ok(Some(AddedFace {
+        face,
+        dirty,
+        mother,
+        remainder,
+        hole_swaps,
+    }))
+}
