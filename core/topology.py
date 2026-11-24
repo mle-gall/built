@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import ingetrazo_core as kernel
 
-import math
 from typing import Iterable, Optional
 
 from ingetrazo_core import Vec3 as QVector3D, polygon_is_planar as is_planar
@@ -110,16 +109,7 @@ def _cycle_adjacency(edges, ka, kb, key=_key) -> dict:
     """``adj[u] -> [(v_key, v_pos), …]`` of the edge graph, in edge order,
     without an existing copy of segment ``ka``–``kb`` (the cycle would just
     find itself, a length-2 loop a→b→a)."""
-    adj: dict[tuple, list[tuple[tuple, QVector3D]]] = {}
-    for edge in edges:
-        ea, eb = key(edge.a), key(edge.b)
-        if ea == eb:
-            continue
-        if {ea, eb} == {ka, kb}:
-            continue
-        adj.setdefault(ea, []).append((eb, edge.b))
-        adj.setdefault(eb, []).append((ea, edge.a))
-    return adj
+    return kernel.object_drawing.graph_adjacency(edges, ka, kb, key)
 
 
 class CycleGraph:

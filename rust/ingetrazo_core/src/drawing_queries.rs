@@ -107,14 +107,6 @@ impl Nearby {
         }
         Ok(Self { boxes })
     }
-    #[staticmethod]
-    fn _points_box(pts: &Obj<'_>) -> PyResult<Bounds> {
-        points_box(pts)
-    }
-    #[staticmethod]
-    fn _window(pts: &Obj<'_>) -> PyResult<Bounds> {
-        window(pts)
-    }
     fn edges<'py>(
         &mut self,
         edges: &Obj<'py>,

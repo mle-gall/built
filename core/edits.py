@@ -80,13 +80,14 @@ def plan_edge_commands(
         # scan's, edited as the plan goes, and their searches ask it.
         simulated = _ScanEdges(sc)
         faces_snapshot = _ScanFaces(sc)
-        near = _ScanNearby()
+        near = None
     else:
         simulated = _PlanEdges(scene.edges)
         faces_snapshot = list(scene.faces)
         near = _Nearby(simulated, faces_snapshot)
-    near.key = KeyMemo()            # nothing moves while a plan is made
-    simulated.key = near.key
+    simulated.key = KeyMemo()       # nothing moves while a plan is made
+    if near is not None:
+        near.key = simulated.key
 
     return object_drawing.plan_segments(simulated, faces_snapshot, near, segments,
                                         sc is not None, detect_faces, close_cycles,
@@ -128,24 +129,6 @@ def _ScanEdges(scan):
 
 def _ScanFaces(scan):
     return object_drawing.ScanOverlay(scan, False)
-
-
-class _ScanNearby:
-    """``_Nearby`` for the scan's lists: their own :meth:`_ScanList.pick`."""
-
-    key = None
-
-    @staticmethod
-    def edges(edges, a, b):
-        return edges.pick((a, b))
-
-    @staticmethod
-    def faces(faces, a, b):
-        return faces.pick((a, b))
-
-    @staticmethod
-    def faces_around(faces, pts):
-        return faces.pick(list(pts))
 
 
 def _scene_has_curves(scene) -> bool:

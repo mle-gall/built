@@ -77,3 +77,21 @@ def overlay_results(monkeypatch):
 
 def test_scanned_face_overlay_order(monkeypatch):
     assert overlay_results(monkeypatch) == '8f63c08af006b799abdeadead54e5cdeb7799f155083081ac6f459029874b9fa'
+
+
+def graph_digest():
+    from core.topology import _cycle_adjacency
+    results = []
+    for seed in range(24):
+        rng = random.Random(seed)
+        points = [Vec3(rng.randrange(-8, 9)/2, rng.randrange(-8, 9)/2, 0) for _ in range(24)]
+        edges = [Edge(rng.choice(points), rng.choice(points)) for _ in range(64)]
+        def key(p):
+            return round(p.x()), round(p.y())
+        adj = _cycle_adjacency(iter(edges), key(points[0]), key(points[-1]), key)
+        results.append([(k, [(j, p.toTuple()) for j, p in neighbours]) for k, neighbours in adj.items()])
+    return hashlib.sha256(json.dumps(results).encode()).hexdigest()
+
+
+def test_custom_graph_keys_preserve_neighbour_order():
+    assert graph_digest() == 'b0bc13c39afbd9f77832703f98d5ad9e8459658c070730882a3447c874645b2c'

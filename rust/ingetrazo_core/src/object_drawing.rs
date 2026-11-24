@@ -508,6 +508,7 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     sub.add_function(wrap_pyfunction!(crate::object_edge_edits::revert_collapse, &sub)?)?;
     sub.add_function(wrap_pyfunction!(crate::object_edge_edits::dedupe_faces, &sub)?)?;
     sub.add_function(wrap_pyfunction!(crate::draw_plan::plan_segments, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::draw_plan::graph_adjacency, &sub)?)?;
     sub.add_function(wrap_pyfunction!(crate::draw_plan::graph_insert, &sub)?)?;
     sub.add_function(wrap_pyfunction!(crate::draw_plan::graph_remove, &sub)?)?;
     sub.add_function(wrap_pyfunction!(crate::draw_plan::smallest_cycle, &sub)?)?;
