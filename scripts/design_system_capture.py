@@ -94,7 +94,7 @@ def capture(prefix, directory):
     r.ui_set_large_sheet(json.dumps(library_sheet()))
     shot(f"{prefix}-library")
     from types import SimpleNamespace
-    from views.settings_sheet import SettingsSheet
+    from ingetrazo_render.settings_sheet import SettingsSheet
     settings = SettingsSheet("navigation").build(SimpleNamespace(win=None))
     r.ui_set_large_sheet(json.dumps(settings.wire()))
     shot(f"{prefix}-settings")

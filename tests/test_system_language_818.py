@@ -26,7 +26,7 @@ elif not isinstance(_inst, QApplication):
                 allow_module_level=True)
 
 from tests.preferences_chrome import Controls, settings_file
-from views.settings_sheet import _PENDING
+from ingetrazo_render.settings_sheet import _PENDING
 
 
 @pytest.mark.parametrize("locales, expected", [

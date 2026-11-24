@@ -206,7 +206,7 @@ pub fn run_model_menu(win: &Bound<'_, PyAny>, id: &str) -> PyResult<bool> {
             .call_method1("set_edit_rest_mode", (mode,))?,
         Handler::DisplaySettings => win
             .py()
-            .import("views.settings_sheet")?
+            .import("ingetrazo_render.settings_sheet")?
             .call_method1("show", (win, "display"))?,
         Handler::Review => {
             let view = win.getattr("view")?;
