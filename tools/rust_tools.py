@@ -9,7 +9,7 @@ native viewport host handles picks, document queries and protocol commands.
 Python retains tool identities for extensions, UI readouts and view callbacks.
 """
 from __future__ import annotations
-from ingetrazo_core import register_tool_adapter
+from ingetrazo_core import register_tool_adapter, register_tool_functions
 
 import json
 
@@ -158,13 +158,6 @@ class RotatedRectangleTool(AxisMagnet, _PlanarMachine):
     base_point = _point_property("base_point")
 
 
-def _degrees(value) -> float:
-    """An angle typed in the value box: the parser reads a bare field as a
-    LENGTH in the document's unit (90 → 0.09 in millimetres); an angle has
-    none."""
-    from core.units import bare_number_scale
-    scale = bare_number_scale()
-    return float(value) / scale if scale else float(value)
 
 
 # ---- Arcs ---------------------------------------------------------------------
@@ -173,89 +166,13 @@ def _degrees(value) -> float:
 COLOR_FILLET = (0.85, 0.30, 0.80)
 
 
+@register_tool_adapter
 class _ArcBase(AxisMagnet, _PlanarMachine):
     """The arcs (``rust/ingetrazo_core/src/tools/arc.rs``): the machine owns
     the clicks, the plane lock, the segment count and the commit; this keeps
     the viewport glue (status, colours, readouts)."""
 
     wireframe_color = None
-
-
-    @property
-    def segments(self):
-        return self._state("segments")
-
-    @segments.setter
-    def segments(self, n):
-        self._machine.set("segments", None if n is None else int(n))
-
-    def _after(self, viewport):
-        if self.start_point is None:
-            self.wireframe_color = None
-        viewport.update()
-
-    def value_is_unitless(self) -> bool:
-        """Before the first click the typed number is a COUNT (#176)."""
-        return self.start_point is None
-
-    def on_activate(self, viewport) -> None:
-        self._send_framed(viewport, {"type": "activate"})
-        self.wireframe_color = None
-
-    def on_deactivate(self, viewport) -> None:
-        self._send_framed(viewport, {"type": "deactivate"})
-        self.wireframe_color = None
-
-    def on_cancel(self, viewport) -> None:
-        self._send_framed(viewport, {"type": "cancel"})
-        self._after(viewport)
-
-    def on_click(self, ctx) -> None:
-        self.note_plane(ctx.viewport)
-        self._viewport = ctx.viewport
-        self._send_framed(ctx.viewport, self._pointer("click", ctx))
-        self._after(ctx.viewport)
-
-    def on_hover(self, ctx) -> None:
-        self.note_plane(ctx.viewport)
-        self._viewport = ctx.viewport
-        self._send_framed(ctx.viewport, self._pointer("hover", ctx))
-        self.wireframe_color = self._cue_colour()
-        ctx.viewport.update()
-
-    def _cue_colour(self):
-        return self.lock_color()
-
-    def on_value(self, viewport, value) -> bool:
-        self._viewport = viewport
-        if isinstance(value, tuple):
-            return False
-        consumed = self._send_framed(viewport, {"type": "value", "value": float(value)})["consumed"]
-        self._after(viewport)
-        return consumed
-
-    def on_segments_value(self, viewport, n) -> bool:
-        self._viewport = viewport
-        consumed = self._send_framed(viewport, {"type": "segments", "count": int(n)})["consumed"]
-        if consumed:
-            viewport.update()
-        return consumed
-
-    def on_key(self, viewport, key, modifiers) -> bool:
-        return self.plane_lock_key(viewport, key)
-
-    def _query(self, what, arg=None):
-        if self._viewport is not None:
-            self._frame(self._viewport)
-        return self._machine.query(what, arg)
-
-    def _axes(self):
-        u, v = self._query("axes")
-        return Vec3(*u), Vec3(*v)
-
-    def _reset(self):
-        self._machine.set("reset", True)
-        self.wireframe_color = None
 
 
 class _LastFillet(type(RustTool)):
@@ -273,6 +190,7 @@ class _LastFillet(type(RustTool)):
         arc_last_fillet_d(None if value is None else float(value), True)
 
 
+@register_tool_adapter
 class ArcTool(_ArcBase, metaclass=_LastFillet):
     """2-point arc. The host answers the topology the fillet reads (the
     ``host_*`` queries) and projects points to pixels."""
@@ -281,71 +199,6 @@ class ArcTool(_ArcBase, metaclass=_LastFillet):
     vcb_label = "Bulge"
 
     end_point = _point_property("end_point")
-
-    def magnet_on(self) -> bool:
-        # The chord end is a direction from the start; the bulge is not.
-        return self.end_point is None
-
-    @property
-    def _fillet(self):
-        f = self._state("fillet")
-        return None if f is None else tuple(Vec3(*p) for p in f)
-
-    @property
-    def _equidistant(self):
-        e = self._state("equidistant")
-        return None if e is None else (Vec3(*e[0]), Vec3(*e[1]), self._handles.get(e[2]))
-
-    @property
-    def _start_edge(self):
-        e = self._state("start_edge")
-        return None if e is None else (self._handles.get(e[0]), Vec3(*e[1]))
-
-    def _tangent_at_start(self, viewport):
-        """The direction an existing arc leaves the start (``host_tangent_at``)."""
-        if self.start_point is None:
-            return None
-        t = _Host(viewport, self._handles, self).arc_tangent(self.start_point.toTuple())
-        return None if t is None else Vec3(*t)
-
-    @property
-    def _bulge_kind(self):
-        return self._state("kind")
-
-    @property
-    def _snap_bulge(self):
-        return self._state("snap_bulge")
-
-    @property
-    def _tangent_dir(self):
-        return self._point("tangent_dir")
-
-    def _cue_colour(self):
-        from core.snap import COLOR_MIDPOINT, COLOR_TANGENT
-        cue = self._state("cue")
-        colour = {"tangent": COLOR_TANGENT, "fillet": COLOR_FILLET, "half": COLOR_MIDPOINT}.get(cue)
-        return (*colour, 1.0) if colour is not None else self.lock_color()
-
-    def vcb_caption(self) -> str:
-        if self.start_point is None:
-            return "Segments"
-        return "Radius" if self._fillet is not None else "Bulge"
-
-    def on_double_click(self, ctx) -> None:
-        self.note_plane(ctx.viewport)
-        self._viewport = ctx.viewport
-        self._send_framed(ctx.viewport, self._pointer("double_click", ctx))
-        self._after(ctx.viewport)
-
-    def on_radius_value(self, viewport, radius) -> bool:
-        """«2r»: the radius instead of the bulge."""
-        self._viewport = viewport
-        consumed = self._send_framed(viewport, {"type": "radius", "value": float(radius)})["consumed"]
-        self._after(viewport)
-        return consumed
-
-    def rubber_band_lines(self):
-        return RustTool.rubber_band_lines(self)
 
     def value_label(self):
         label = self._state("label")
@@ -361,20 +214,7 @@ class ArcTool(_ArcBase, metaclass=_LastFillet):
                 "bulge": lambda: "Bulge " + fmt_len(value)}[kind]()
         return text, Vec3(*mid)
 
-    def plane_points(self):
-        if self.start_point is None:
-            return []
-        return [self.start_point, self.end_point if self.end_point is not None else self.hover_point]
-
-    def _points(self, cursor, bulge=None):
-        return [Vec3(*p) for p in self._query("points", (_tuple(cursor), bulge))]
-
-    def _bulge_for(self, cursor):
-        return self._query("bulge_for", (_tuple(cursor),))
-
-    def _tangent_bulge(self):
-        return self._query("tangent_bulge")
-
+@register_tool_adapter
 class ThreePointArcTool(_ArcBase):
     """3-point arc: the circle through the three clicks."""
 
@@ -383,22 +223,8 @@ class ThreePointArcTool(_ArcBase):
 
     mid_point = _point_property("mid_point")
 
-    def on_value(self, viewport, value) -> bool:
-        if isinstance(value, tuple) or self.start_point is not None:
-            return False
-        return _ArcBase.on_value(self, viewport, value)
 
-    def plane_points(self):
-        if self.start_point is None:
-            return []
-        if self.mid_point is None:
-            return [self.start_point, self.hover_point]
-        return [self.start_point, self.mid_point, self.hover_point]
-
-    def _points(self, end):
-        return [Vec3(*p) for p in self._query("points", (_tuple(end),))]
-
-
+@register_tool_adapter
 class CenterArcTool(_ArcBase):
     """Centre arc: centre, the 0° arm, the sweep."""
 
@@ -406,37 +232,6 @@ class CenterArcTool(_ArcBase):
     vcb_label = "Angle"
 
     arm_point = _point_property("arm_point")
-
-    def value_is_unitless(self) -> bool:
-        """A segment count and a sweep angle are not lengths (#176)."""
-        return self.start_point is None or self.arm_point is not None
-
-    def vcb_caption(self) -> str:
-        if self.start_point is None:
-            return "Segments"
-        return "Angle" if self.arm_point is not None else "Radius"
-
-    def value_label(self):
-        label = self._state("label")
-        if label is None:
-            return None
-        kind, value, at = label
-        if kind == "radius":
-            from core.units import fmt_len
-            return "R " + fmt_len(value), Vec3(*at)
-        from core.units import fmt_angle_deg
-        return fmt_angle_deg(value, signed=True), Vec3(*at)
-
-    def plane_points(self):
-        if self.start_point is None:
-            return []
-        return [self.start_point, self.arm_point if self.arm_point is not None else self.hover_point]
-
-    def _sweep_to(self, cursor):
-        return self._query("sweep_to", (_tuple(cursor),))
-
-    def _points(self, sweep_deg):
-        return [Vec3(*p) for p in self._query("points", (float(sweep_deg),))]
 
 
 class PieTool(CenterArcTool):
@@ -717,11 +512,5 @@ class MoveTool(MoveHost):
     kind = "move"
 
 
-def commit_arc(viewport, pts, close_to=None, trim=None):
-    """Draw an arc polyline (Freehand's commit): the protocol's ``add_arc``."""
-    args = {"points": [list(_tuple(p)) for p in pts]}
-    if close_to is not None:
-        args["center"] = list(_tuple(close_to))
-    if trim:
-        args["trim"] = [[list(_tuple(a)), list(_tuple(b))] for a, b in trim]
-    return _Host(viewport).run("add_arc", json.dumps(args))
+
+register_tool_functions(globals())

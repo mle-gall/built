@@ -42,6 +42,9 @@ fn unpack<'py, const N: usize>(value: &Obj<'py>) -> PyResult<[Obj<'py>; N]> {
     row.try_into()
         .map_err(|_| pyo3::exceptions::PyValueError::new_err("invalid row"))
 }
+mod arc_base_api;
+mod arc_tool_api;
+mod center_arc_tool_api;
 mod eye_host_api;
 mod fillet_host_api;
 mod first_person_host_api;
@@ -63,6 +66,7 @@ mod scale;
 mod select_tool_api;
 mod texture;
 mod texture_preview;
+mod three_point_arc_tool_api;
 mod walk_host_api;
 type Args<'py> = Bound<'py, PyTuple>;
 type Reply<'py> = PyResult<Obj<'py>>;
@@ -151,6 +155,16 @@ fn registration(module: &str, name: &str) -> Option<(&'static [Method], &'static
         ("tools.rust_tools", "RectangleTool") => {
             (rectangle_tool_api::METHODS, stringify!(rectangle_tool_api))
         }
+        ("tools.rust_tools", "_ArcBase") => (arc_base_api::METHODS, stringify!(arc_base_api)),
+        ("tools.rust_tools", "ArcTool") => (arc_tool_api::METHODS, stringify!(arc_tool_api)),
+        ("tools.rust_tools", "ThreePointArcTool") => (
+            three_point_arc_tool_api::METHODS,
+            stringify!(three_point_arc_tool_api),
+        ),
+        ("tools.rust_tools", "CenterArcTool") => (
+            center_arc_tool_api::METHODS,
+            stringify!(center_arc_tool_api),
+        ),
         ("tools.pushpull", "PushPullTool") => (pushpull::METHODS, stringify!(pushpull)),
         _ => return None,
     })
@@ -231,6 +245,7 @@ pub fn register_tool_adapter<'py>(cls: &Obj<'py>) -> Reply<'py> {
     Ok(cls.clone())
 }
 
+mod curve_functions;
 mod move_functions;
 mod offset_functions;
 mod paint_functions;
@@ -249,6 +264,7 @@ pub fn register_tool_functions(namespace: &Bound<'_, PyDict>) -> PyResult<()> {
         "tools.offset_host" => offset_functions::METHODS,
         "tools.move_host" => move_functions::METHODS,
         "tools.walkthrough_host" => walk_functions::METHODS,
+        "tools.rust_tools" => curve_functions::METHODS,
         _ => {
             return Err(pyo3::exceptions::PyValueError::new_err(format!(
                 "Unknown tool module {module}"
