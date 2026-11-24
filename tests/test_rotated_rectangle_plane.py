@@ -15,7 +15,7 @@ assigned — so `_perp` always fell back to world +Z:
 """
 from __future__ import annotations
 
-from PySide6.QtCore import QPointF, Qt
+from core.input_types import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.mesh import Mesh
@@ -49,8 +49,8 @@ class _VP:
 
 
 def _ctx(vp, world):
-    return ToolContext(viewport=vp, world=world, screen=QPointF(0.0, 0.0),
-                       modifiers=Qt.NoModifier, snap=None)
+    return ToolContext(viewport=vp, world=world, screen=ScreenPoint(0.0, 0.0),
+                       modifiers=Input.NoModifier, snap=None)
 
 
 def _wall_face():

@@ -9,15 +9,11 @@ the ray and its plane — and grazing rays are still refused."""
 from __future__ import annotations
 
 import math
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np  # noqa: E402
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
-_app = QApplication.instance() or QApplication([])
 
 from views.document_interaction import _moller_trumbore, _ray_triangle
 from tests.controller_surface import ControllerSurface as Viewport
@@ -73,8 +69,6 @@ def test_the_scalar_and_the_batched_test_agree_on_a_small_triangle():
     assert hit[0]
     ts = _ray_triangle(V(*o), V(*d), V(0, 0, 0), V(s, 0, 0), V(0, s, 0))
     assert ts is not None and abs(ts - t[0]) < 1e-9
-
-
 
 
 def test_ray_batches_keep_row_order_across_array_layouts():

@@ -17,9 +17,8 @@ from __future__ import annotations
 import math
 
 import pytest
-from PySide6.QtCore import QPointF, Qt
+from core.input_types import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
 
 from core.edits import build_add_edges
 from tools.arc import COLOR_FILLET, ArcTool
@@ -28,11 +27,6 @@ from tools.base import ToolContext
 
 @pytest.fixture(scope="module")
 def viewport():
-    app = QApplication.instance()
-    if app is None:
-        app = QApplication([])
-    elif not isinstance(app, QApplication):
-        pytest.skip("another Qt application flavour is already running")
     from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
     vp.resize(1000, 700)
@@ -55,11 +49,11 @@ def _square(vp, size=2.0):
     assert len(vp.scene.mesh.faces) == 1
 
 
-def _ctx(vp, world, screen=None, modifiers=Qt.NoModifier):
+def _ctx(vp, world, screen=None, modifiers=Input.NoModifier):
     if screen is None:
         px = vp._world_to_pixel(world)
         assert px is not None
-        screen = QPointF(*px)
+        screen = ScreenPoint(*px)
     return ToolContext(viewport=vp, world=QVector3D(world), screen=screen,
                        modifiers=modifiers, snap=None)
 
@@ -107,7 +101,7 @@ def test_the_adjacent_edge_snaps_at_the_same_distance_from_the_corner(viewport):
     P2 = QVector3D(2.0, 0.5, 0)
     # Slightly off the equidistant point (a couple of pixels): it snaps.
     px = viewport._world_to_pixel(P2)
-    near = QPointF(px[0] + 3, px[1] - 2)
+    near = ScreenPoint(px[0] + 3, px[1] - 2)
     world = viewport._world_from_pixel(int(near.x()), int(near.y()))
     tool.on_hover(_ctx(viewport, world, near))
     assert tool._equidistant is not None
@@ -189,7 +183,7 @@ def test_alt_keeps_the_corner_stubs(viewport):
     P2 = QVector3D(2.0, 0.5, 0)
     tool.on_hover(_ctx(viewport, P2))
     tool.on_click(_ctx(viewport, P2))
-    tool.on_double_click(_ctx(viewport, P2, modifiers=Qt.AltModifier))
+    tool.on_double_click(_ctx(viewport, P2, modifiers=Input.AltModifier))
     assert tool.start_point is None
     assert not _corner_gone(mesh, (2, 0, 0))
     assert len(mesh.faces) == 2                    # the corner sliver stays

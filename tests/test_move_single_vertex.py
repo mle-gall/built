@@ -11,8 +11,8 @@ from __future__ import annotations
 
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QMouseEvent
+from core.input_types import ScreenPoint, Input
+from ingetrazo_render import MouseEvent
 from ingetrazo_core import Vec3 as V
 
 from core.history import History
@@ -62,8 +62,8 @@ class _Vp:
 def _ctx(vp, world, kind="endpoint", context=None):
     snap = SnapResult(V(world), kind)
     snap.context = context
-    return ToolContext(viewport=vp, world=V(world), screen=QPointF(0, 0),
-                       modifiers=Qt.NoModifier, snap=snap)
+    return ToolContext(viewport=vp, world=V(world), screen=ScreenPoint(0, 0),
+                       modifiers=Input.NoModifier, snap=snap)
 
 
 def _grabbed(tool):
@@ -158,7 +158,7 @@ def _window(native_host):
 
 
 def _hover(vp, x, y):
-    vp._last_mouse_pos = QPointF(x, y)
+    vp._last_mouse_pos = ScreenPoint(x, y)
     vp._refresh_snap()
     s = vp.last_snap
     return s.kind, (round(s.point.x(), 4), round(s.point.y(), 4),
@@ -167,9 +167,9 @@ def _hover(vp, x, y):
 
 def _click(vp, x, y):
     _hover(vp, x, y)
-    vp._dispatch_tool_click(QMouseEvent(
-        QMouseEvent.MouseButtonPress, QPointF(x, y), Qt.LeftButton,
-        Qt.LeftButton, Qt.NoModifier))
+    vp._dispatch_tool_click(MouseEvent(
+        "press", x, y, Input.LeftButton,
+        Input.LeftButton, Input.NoModifier))
 
 
 def test_in_the_viewport_a_corner_grabs_one_vertex(native_host):

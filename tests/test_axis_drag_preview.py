@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import math
 
-from PySide6.QtCore import QPointF, Qt
+from core.input_types import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import History
@@ -62,7 +62,7 @@ class _Vp:
 
 def _ctx(vp, x, y, z=0.0):
     return ToolContext(viewport=vp, world=V(float(x), float(y), float(z)),
-                       screen=QPointF(0, 0), modifiers=Qt.NoModifier,
+                       screen=ScreenPoint(0, 0), modifiers=Input.NoModifier,
                        snap=None)
 
 

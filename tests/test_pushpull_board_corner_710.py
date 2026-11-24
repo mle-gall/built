@@ -12,19 +12,14 @@ truly leans still stops the push.
 """
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from core.history import History  # noqa: E402
 from core.orient import is_closed  # noqa: E402
 from core.scene import Scene  # noqa: E402
 from tests.test_fuzz_engine import _push  # noqa: E402
 
-_app = QApplication.instance() or QApplication([])
 
 # The loose board of the reporter's file, verbatim: x = 2.8772 … 2.8922, a
 # sloped top, and a 39 × 15 mm corner drawn on its front face (the last but

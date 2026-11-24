@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import math
 
-from PySide6.QtCore import QPointF, Qt
+from core.input_types import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import History
@@ -52,10 +52,10 @@ class _Vp:
         return None
 
 
-def _ctx(vp, x, y, z=0.0, mods=Qt.NoModifier):
+def _ctx(vp, x, y, z=0.0, mods=Input.NoModifier):
     return ToolContext(viewport=vp, world=QVector3D(float(x), float(y),
                                                     float(z)),
-                       screen=QPointF(0, 0), modifiers=mods, snap=None)
+                       screen=ScreenPoint(0, 0), modifiers=mods, snap=None)
 
 
 def _marker(scene, x=2.0, y=0.0):
@@ -83,7 +83,7 @@ def _rotate_copy(vp, tool, deg: float):
     *deg* — the gesture the array window opens after."""
     tool.on_click(_ctx(vp, 0, 0))                     # centre
     tool.on_click(_ctx(vp, 2, 0))                     # reference arm
-    tool.on_key(vp, Qt.Key_Control, Qt.NoModifier)    # Ctrl: copy
+    tool.on_key(vp, Input.Key_Control, Input.NoModifier)    # Ctrl: copy
     r = 2.0
     tool.on_click(_ctx(vp, r * math.cos(math.radians(deg)),
                        r * math.sin(math.radians(deg))))
