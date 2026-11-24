@@ -105,14 +105,6 @@ pub const TWO_POINT_TOOLS: [&str; 10] = ["vista", "etiqueta", "llamada", "perfil
 /// The placement tools whose points snap to the drawing.
 pub const SNAP_PLACE_TOOLS: [&str; 8] = ["linea", "flecha", "terreno", "rect", "elipse", "poligono", "etiqueta", "nivel"];
 
-/// What a frame shows: its line drawing, paper mm in the frame, with a
-/// line class each (0 edge, 1 profile, 2 cut, 3 hidden), or a picture.
-#[derive(Default)]
-pub struct Lines {
-    pub segs: Vec<[f32; 4]>,
-    pub kinds: Vec<u8>,
-}
-
 #[derive(Clone, Debug, PartialEq)]
 enum Drag {
     /// Moving the selection: where it was grabbed (mm) and the rects it started from.
@@ -136,7 +128,6 @@ pub struct Page {
     origin: Pos2,
     fit: Option<bool>,
     zoom_to: Option<f32>,
-    lines: HashMap<u64, Lines>,
     /// A vector frame's drawing as a display list (frame-local mm).
     ops: HashMap<u64, J>,
     /// Frames rendered on the GPU straight into a texture (no read-back):
@@ -207,7 +198,6 @@ impl Page {
         self.preview.retain(|k, r| doc.items.iter().any(|i| i.key == *k && i.rect != *r));
         let keys: Vec<u64> = doc.items.iter().map(|i| i.key).collect();
         self.selection.retain(|k| keys.contains(k));
-        self.lines.retain(|k, _| keys.contains(k));
         self.ops.retain(|k, _| keys.contains(k));
         self.snaps.retain(|k, _| keys.contains(k));
         let gone: Vec<u64> = self.natives.keys().filter(|k| !keys.contains(k)).copied().collect();
@@ -535,7 +525,6 @@ impl Page {
     /// A frame's picture as a GPU texture already registered with the UI
     /// painter (``id``); the one it replaces is freed after the next frame.
     pub fn set_native(&mut self, key: u64, texture: wgpu::Texture, id: egui::TextureId) {
-        self.lines.remove(&key);
         self.ops.remove(&key);
         if let Some((_, old)) = self.natives.insert(key, (texture, id)) {
             self.freed.push(old);
@@ -543,22 +532,15 @@ impl Page {
     }
     /// A vector frame's drawing (sheets::items_d `paint_vector_content`).
     pub fn set_ops(&mut self, key: u64, ops: J) {
-        self.lines.remove(&key);
         self.drop_native(key);
         self.ops.insert(key, ops);
     }
-    pub fn set_lines(&mut self, key: u64, segs: Vec<[f32; 4]>, kinds: Vec<u8>) {
-        self.ops.remove(&key);
-        self.drop_native(key);
-        self.lines.insert(key, Lines { segs, kinds });
-    }
     pub fn forget_content(&mut self, key: u64) {
-        self.lines.remove(&key);
         self.ops.remove(&key);
         self.drop_native(key);
     }
     pub fn has_content(&self, key: u64) -> bool {
-        self.lines.contains_key(&key) || self.ops.contains_key(&key) || self.natives.contains_key(&key)
+        self.ops.contains_key(&key) || self.natives.contains_key(&key)
     }
     pub fn set_selection(&mut self, keys: Vec<u64>) {
         self.selection = keys;
@@ -1175,26 +1157,9 @@ impl Page {
 
     fn paint_frame(&self, painter: &egui::Painter, item: &Item, rect: Rect) {
         let f = &item.data["frame"];
-        let z = self.zoom;
         let inner = painter.with_clip_rect(rect.intersect(painter.clip_rect()));
         if let Some(&(_, id)) = self.natives.get(&item.key) {
             inner.image(id, rect, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
-        } else if let Some(lines) = self.lines.get(&item.key) {
-            let pens: Vec<f32> = f["pens"].as_array().map(|a| a.iter().map(|p| p.as_f64().unwrap_or(0.18) as f32).collect())
-                .unwrap_or_else(|| vec![0.18, 0.35, 0.5, 0.18]);
-            let o = rect.min;
-            for (s, k) in lines.segs.iter().zip(&lines.kinds) {
-                let pen = pens.get(*k as usize).copied().unwrap_or(0.18);
-                let stroke = Stroke::new((pen * z).max(0.6), INK_ON_PAPER);
-                let a = o + vec2(s[0] * z, s[1] * z);
-                let b = o + vec2(s[2] * z, s[3] * z);
-                if *k == 3 {
-                    // Hidden lines: dashed 1.5 / 0.8 mm, as the sheet inks them.
-                    inner.extend(egui::Shape::dashed_line(&[a, b], stroke, 1.5 * z, 0.8 * z));
-                } else {
-                    inner.line_segment([a, b], stroke);
-                }
-            }
         }
         if !f["border"].as_bool().unwrap_or(false) {
             // A borderless frame still reads as a frame on screen (never printed).

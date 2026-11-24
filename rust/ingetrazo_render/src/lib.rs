@@ -2098,19 +2098,6 @@ impl Renderer {
     fn page_clear(&mut self) {
         if let Some(ui) = self.ui.as_mut() { ui.page.clear(); }
     }
-    /// A frame's line drawing: ``segs`` (N,4) paper mm in the frame,
-    /// ``kinds`` (N,) 0 edge, 1 profile, 2 cut, 3 hidden.
-    fn page_frame_lines(&mut self, key: u64, segs: numpy::PyReadonlyArray2<'_, f32>,
-                        kinds: PyReadonlyArray1<'_, u8>) -> PyResult<()> {
-        let a = segs.as_array();
-        let kinds = kinds.as_slice()?.to_vec();
-        if a.nrows() != kinds.len() || (a.nrows() > 0 && a.ncols() != 4) {
-            return Err(PyValueError::new_err("segs (N,4) and kinds (N,) must agree"));
-        }
-        let segs = (0..a.nrows()).map(|i| [a[[i, 0]], a[[i, 1]], a[[i, 2]], a[[i, 3]]]).collect();
-        if let Some(ui) = self.ui.as_mut() { ui.page.set_lines(key, segs, kinds); }
-        Ok(())
-    }
     /// A vector frame's drawing as a display list (JSON, frame-local mm).
     fn page_frame_ops(&mut self, key: u64, ops: &str) -> PyResult<()> {
         let v: serde_json::Value = serde_json::from_str(ops).map_err(|e| PyValueError::new_err(e.to_string()))?;
