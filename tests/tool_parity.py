@@ -1001,6 +1001,48 @@ def run_rotate(steps):
     return out
 
 
+OFFSET_SCENARIOS = {
+    "inward_retype_refuse_and_undo": [("hover", 2, .1), ("click", 2, .1), ("hover", 3, .5),
+                                      ("value", 1.), ("value", 3.), ("value", .25), ("undo",)],
+    "outward_click": [("hover", .1, 2), ("click", .1, 2), ("hover", -.5, 2), ("click", -.5, 2)],
+    "zero_and_cancel": [("hover", 2, .1), ("click", 2, .1), ("click", 2, 0), ("value", 0.),
+                        ("hover", 3, .25), ("cancel",), ("value", .5)],
+    "armed_edge_chain": [("arm",), ("hover", 2, .1), ("click", 2, .1), ("hover", 2, .5),
+                         ("value", .25), ("value", .5), ("undo",)],
+}
+
+
+def run_offset(steps):
+    from tests.test_offset_reference import Viewport, context
+    from tools.offset import OffsetTool
+    view, tool = Viewport(), OffsetTool()
+    tool.on_activate(view)
+    out = []
+    for kind, *args in steps:
+        result = None
+        if kind in ("hover", "click"):
+            ctx = context(view, *args)
+            (tool.on_hover if kind == "hover" else tool.on_click)(ctx)
+        elif kind == "arm":
+            view.scene.selection = set(view.scene.mesh.edges[:2])
+            tool.on_activate(view)
+        elif kind == "value":
+            result = tool.on_value(view, *args)
+        elif kind == "cancel":
+            tool.on_cancel(view)
+        elif kind == "undo":
+            view.history.undo()
+        label = tool.value_label()
+        out.append({"distance": round(tool.distance, 9), "drag": tool.dragging,
+                    "lines": sorted(sorted([_pt(a), _pt(b)]) for a, b in tool.rubber_band_lines()),
+                    "reference": [_pt(p) for p in tool._offset_reference or ()],
+                    "label": None if label is None else [label[0], _pt(label[1])],
+                    "areas": sorted(round(f.area(), 8) for f in view.scene.mesh.faces),
+                    "vertices": sorted(_pt(v.position) for v in view.scene.mesh.vertices),
+                    "undo": len(view.history.undo_stack), "result": result})
+    return out
+
+
 WALKTHROUGH_SCENARIOS = {
     "place_drag_offset": ("PositionCameraTool", [("click", (3, 2, 0), (100, 100)),
         ("hover", (4, 6, 0), (106, 100)), ("hover", (4, 6, 0), (107, 100)),
@@ -1095,6 +1137,9 @@ def record(which=("line", "select", "rectangle", "move", "circle", "rotated_rect
     if "rotated_rectangle" in which:
         rot = {name: run_rot(steps) for name, steps in ROT_SCENARIOS.items()}
         (FIXTURES / "rotated_rectangle.json").write_text(_compact(rot))
+    if "offset" in which:
+        cases = {name: run_offset(steps) for name, steps in OFFSET_SCENARIOS.items()}
+        (FIXTURES / "offset.json").write_text(_compact(cases))
     if "walkthrough" in which:
         cases = {name: run_walkthrough(*case) for name, case in WALKTHROUGH_SCENARIOS.items()}
         (FIXTURES / "walkthrough.json").write_text(_compact(cases))

@@ -109,3 +109,8 @@ def test_rotate_matches_the_recorded_python_tool(name):
 @pytest.mark.parametrize("name", sorted(tp.WALKTHROUGH_SCENARIOS))
 def test_walkthrough_matches_the_recorded_python_tool(name):
     assert tp.run_walkthrough(*tp.WALKTHROUGH_SCENARIOS[name]) == tp.load("walkthrough")[name]
+
+
+@pytest.mark.parametrize("name", sorted(tp.OFFSET_SCENARIOS))
+def test_offset_matches_the_recorded_python_tool(name):
+    assert tp.run_offset(tp.OFFSET_SCENARIOS[name]) == tp.load("offset")[name]
