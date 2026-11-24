@@ -4,7 +4,7 @@
 use crate::math::{xyz, Vec3};
 use pyo3::{
     prelude::*,
-    types::{PyDict, PyList, PySet, PySlice},
+    types::{PyDict, PyList, PySet, PySlice, PyString},
 };
 
 type Obj<'py> = Bound<'py, PyAny>;
@@ -39,8 +39,13 @@ fn copy_field<'py>(v: &Obj<'py>, kind: CopyField) -> PyResult<Obj<'py>> {
     match kind {
         Value => Ok(v.clone()),
         Point => Ok(Vec3::from(xyz(v)?).into_pyobject(py)?.into_any()),
+        List if v.is_exact_instance_of::<PyList>() => {
+            let list = v.cast::<PyList>()?;
+            Ok(list.get_slice(0, list.len()).into_any())
+        }
         List => py.get_type::<PyList>().call1((v,)),
         Set => py.get_type::<PySet>().call1((v,)),
+        Dict if v.is_exact_instance_of::<PyDict>() => Ok(v.cast::<PyDict>()?.copy()?.into_any()),
         Dict => py.get_type::<PyDict>().call1((v,)),
         Rings => {
             let rings = PyList::empty(py);
@@ -61,13 +66,12 @@ fn capture<'py>(mesh: &Obj<'py>) -> PyResult<Bound<'py, PyDict>> {
         for &(column, field, kind) in fields {
             let data = PyDict::new(py);
             snap.set_item(column, &data)?;
-            columns.push((data, field, kind));
+            columns.push((data, PyString::intern(py, field), kind));
         }
-        for obj in handles.try_iter()? {
-            let obj = obj?;
-            let key = obj.getattr("key")?;
+        for obj in handles.cast::<PyList>()?.iter() {
+            let key = obj.getattr(pyo3::intern!(py, "key"))?;
             for (data, field, kind) in &columns {
-                data.set_item(&key, copy_field(&obj.getattr(*field)?, *kind)?)?;
+                data.set_item(&key, copy_field(&obj.getattr(field)?, *kind)?)?;
             }
         }
         snap.set_item(name, handles)?;

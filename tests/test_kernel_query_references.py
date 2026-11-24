@@ -167,3 +167,34 @@ def test_circle_and_crossing_guides():
                      [xyz(p) for p in snap._segment_circle_intersections(c-V(2, 0, 0), probe, c, r, n)],
                      None if cross is None else (xyz(cross.point), cross.guide_color, xyz(cross.guides[0][0]))))
     assert digest(rows) == '2ffdec4a58015b899bc96492591447ef9acd8d1679bbe383381bc3b94659e7cc'
+
+
+def test_materialised_drawing_rollback_and_replay(monkeypatch):
+    from core.history import AddEdgeCommand, History, SnapshotCompound
+    monkeypatch.setenv('INGETRAZO_STORE', '0')
+    scene = Scene()
+    mesh = scene.mesh
+    history = History(scene)
+    face = mesh.add_face([V(0, 0, 0), V(4, 0, 0), V(0, 4, 0)])
+    face.attrs['paint'] = 'red'
+    mesh.edges[0].hidden = True
+    before = mesh.capture_state()
+    cmd = SnapshotCompound([AddEdgeCommand(V(7, 0, 0), V(8, 0, 0))], heal=False)
+
+    def fail_after_changes():
+        face.attrs['paint'] = 'blue'
+        mesh.edges[0].hidden = False
+        raise RuntimeError('injected after the drawing edit')
+    with monkeypatch.context() as ctx:
+        ctx.setattr(mesh, 'resplit_curves', fail_after_changes)
+        history.execute(cmd)
+        assert 'injected after the drawing edit' in history.last_error
+    assert mesh.capture_state() == before
+    assert not history.undo()
+
+    history.execute(cmd)
+    edge = mesh.edges[-1]
+    after = mesh.capture_state()
+    assert history.undo() and mesh.capture_state() == before
+    assert history.redo() and mesh.capture_state() == after
+    assert mesh.edges[-1] is edge and mesh.faces[0] is face

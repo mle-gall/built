@@ -2,7 +2,7 @@
 //! The document transaction enclosing a host tool invocation.
 use super::py::PyTransaction;
 use pyo3::prelude::*;
-use pyo3::types::PyList;
+use pyo3::types::{PyDict, PyList};
 use std::collections::HashSet;
 
 fn owner<'py>(mesh: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
@@ -24,7 +24,8 @@ pub(super) fn execute<'py>(
     let active = scene.getattr("mesh")?;
     let parts = PyList::empty(py);
     let mutation = api.getattr("SnapshotMutation")?;
-    let snapshot_commands = (&mutation, api.getattr("SnapshotCompound")?).into_pyobject(py)?;
+    let compound = api.getattr("SnapshotCompound")?;
+    let snapshot_commands = (&mutation, &compound).into_pyobject(py)?;
     let auto_tags = (
         api.getattr("AddDimensionCommand")?,
         api.getattr("AddTextLabelCommand")?,
@@ -72,7 +73,21 @@ pub(super) fn execute<'py>(
         if !owners.contains(&owner(&active)?.as_ptr()) {
             rollback = Some(active.call_method0("capture_state")?);
         }
-        cmd.call_method1("do", (&scene,))?;
+        // A fresh materialised drawing step and the transaction both need the
+        // same pre-edit state. Keep the transaction's strong reference until
+        // document commit, including any failing tag or attachment callbacks.
+        let mut kwargs = None;
+        if let Some(before) = &rollback {
+            if cmd.get_type().is(&compound)
+                && cmd.getattr("after")?.is_none()
+                && !cmd.getattr("__dict__")?.contains("do")?
+            {
+                let kw = PyDict::new(py);
+                kw.set_item("rollback_state", before)?;
+                kwargs = Some(kw);
+            }
+        }
+        cmd.call_method("do", (&scene,), kwargs.as_ref())?;
         if !tag_objects.is_none() {
             host.call_method0("_follow_text_placements")?;
         }
