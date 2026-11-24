@@ -8,6 +8,10 @@ a stored value. One table (``UNITS``) holds every unit, ``format_*`` turn
 a base value into text, ``parse`` turns text into a base value or a
 message, and ``convert`` moves a number between units of one kind.
 
+The table, the parser and the formatters live in Rust
+(``rust/ingetrazo_core/src/units.rs`` and ``units_format.rs``); this module
+is their Python face, plus the document binding and the preferences.
+
 Model lengths are metres. A dimension style (or a sheet cota) picks how
 they read: metric (``m`` / ``cm`` / ``mm``), decimal imperial (``in``,
 ``ft``, ``ft-in``) or fractional imperial the way a carpenter writes it
@@ -18,10 +22,10 @@ fractional forms the precision field picks the finest denominator:
 from __future__ import annotations
 
 import math
-import re
 from contextlib import contextmanager
 from dataclasses import dataclass
-from fractions import Fraction
+
+import ingetrazo_core as _rs
 
 IN_M = 0.0254
 FT_M = 0.3048
@@ -78,73 +82,14 @@ def convert(value: float, from_unit: str, to_unit: str) -> float:
     return float(value) * a.factor / b.factor
 
 
-def _frac_inches(inches: float, decimals: int) -> str:
-    """``6.5`` → ``6 1/2``; ``0.75`` → ``3/4``; ``6.0`` → ``6``."""
-    denom = _FRAC_DENOMS.get(max(0, min(4, int(decimals))), 16)
-    total = Fraction(round(inches * denom)), denom
-    q = Fraction(total[0], total[1])
-    whole = int(q)
-    rest = q - whole
-    if rest == 0:
-        return str(whole)
-    if whole == 0:
-        return f"{rest.numerator}/{rest.denominator}"
-    return f"{whole} {rest.numerator}/{rest.denominator}"
-
-
-def _fixed(value: float, n: int) -> str:
-    """``value`` to ``n`` decimals the way a person rounds it: half up on
-    the number as written (1.2345 m is 123.45 cm, shown to one decimal
-    «123.5 cm», not the «123.4» of its binary 123.4499…), and never
-    «-0.00»: a value that rounds to zero has no sign to show."""
-    from decimal import ROUND_HALF_UP, Decimal
-    if not math.isfinite(value):
-        return f"{value}"
-    exact = Decimal(f"{value:.12g}")
-    txt = f"{exact.quantize(Decimal(1).scaleb(-n), rounding=ROUND_HALF_UP):f}"
-    return txt[1:] if txt.startswith("-") and float(txt) == 0 else txt
-
-
 def format_length(metres: float, units: str = "m", decimals: int = 2,
                   show_unit: bool = True) -> str:
-    """``metres`` in ``units`` to ``decimals``. ``show_unit=False`` leaves
-    the bare number — «1.30», not «1.30 m» — for drawings that state the
-    unit once, in the title block or a note (#374, #637). Feet and inches
-    together keep their marks: without them 5'3" reads «5 3»."""
-    n = max(0, min(6, int(decimals)))
-    u = units or "m"
-    metres = float(metres)
-    if not math.isfinite(metres):
-        return "—"                       # never «nan m», never a crash
-    if u == "in":
-        return f"{_fixed(metres / IN_M, n)}" + ('"' if show_unit else "")
-    if u == "ft":
-        return f"{_fixed(metres / FT_M, n)}" + ("'" if show_unit else "")
-    if u in ("ft-in", "ft-in-frac", "in-frac"):
-        sign = "-" if metres < 0 else ""
-        total_in = abs(metres) / IN_M
-        if u == "in-frac":
-            txt = _frac_inches(total_in, n)
-            return (f"{sign if txt != '0' else ''}{txt}"
-                    + ('"' if show_unit else ""))
-        feet = int(total_in // 12)
-        inches = total_in - feet * 12
-        if u == "ft-in":
-            if round(inches, n) >= 12:
-                feet, inches = feet + 1, 0.0
-            txt = f"{inches:.{n}f}"
-            zero = feet == 0 and float(txt) == 0
-            return f"{'' if zero else sign}{feet}'{txt}\""
-        txt = _frac_inches(inches, n)
-        if txt == "12":
-            feet, txt = feet + 1, "0"
-        zero = feet == 0 and txt == "0"
-        return f"{'' if zero else sign}{feet}'{txt}\""
-    row = UNITS.get(u)
-    if row is not None and row.kind == "length" and u not in ("in", "ft"):
-        number = _fixed(metres / row.factor, n)
-        return f"{number} {row.symbol}" if show_unit else number
-    return f"{_fixed(metres, n)} m" if show_unit else _fixed(metres, n)
+    """``metres`` in ``units`` to ``decimals`` (0–6), rounded half up as
+    written. ``show_unit=False`` leaves the bare number — «1.30», not
+    «1.30 m» — for drawings that state the unit once (#374, #637). Feet
+    and inches together keep their marks: without them 5'3" reads «5 3»."""
+    return _rs.units_format_length(float(metres), units or "m", int(decimals),
+                                   bool(show_unit))
 
 
 def _length_per_metre(units: str) -> float:
@@ -189,19 +134,8 @@ def format_signed_level(metres: float, units: str = "m",
     """A level mark's number. Metres stay «+0.15» / «-0.30» / «±0.00» —
     the text already printed on every sheet. Any other unit is that same
     sign in front of :func:`format_length` («+0'5.91"», «±0.00 cm»)."""
-    u = units or "m"
-    d = max(0, int(decimals))
-    v = float(metres)
-    if u == "m":
-        if round(v, d) == 0:
-            return "±" + f"{0.0:.{d}f}"
-        return f"{v:+.{d}f}"
-    shown = format_length(abs(v), u, d)
-    if shown == format_length(0.0, u, d):
-        return "±" + shown
-    if v < 0:
-        return format_length(v, u, d)
-    return "+" + shown
+    return _rs.units_format_signed_level(float(metres), units or "m",
+                                         int(decimals))
 
 
 # ---- The model's units (issue #33, @pacaeiro) -------------------------------
@@ -239,63 +173,15 @@ def bind_scene(scene) -> None:
 
 def model_units_of(scene) -> dict:
     """The validated units of a scene — or of a raw document payload (a
-    dict), which is how the .igz loader reads them."""
+    dict), which is how the .igz loader reads them. Optional settings
+    (``area``, ``area_precision``, ``volume``, ``volume_precision``,
+    ``angle``, ``angle_precision``, ``decimal``) appear only when valid and
+    not at their default."""
     if isinstance(scene, dict):
         u = scene.get("units")
     else:
         u = getattr(scene, "units", None) if scene is not None else None
-    if isinstance(u, dict) and u.get("length") in _BARE_SCALE:
-        out = {"length": u["length"], "precision": _precision(u.get("precision"), 2)}
-        for key, ok in _OPTIONAL.items():
-            if key in u and ok(u[key]) and u[key] != _OPTIONAL_DEFAULTS[key]:
-                out[key] = int(u[key]) if key.endswith("precision") else u[key]
-        return out
-    return dict(DEFAULT_MODEL_UNITS)
-
-
-def _precision(value, default: int) -> int:
-    try:
-        return max(0, min(6, int(value)))
-    except (TypeError, ValueError):
-        return default
-
-
-def _is_precision(value) -> bool:
-    return isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= 6
-
-
-def _of_kind(kind: str):
-    return lambda code: code == "auto" or (
-        isinstance(code, str) and code in UNITS and UNITS[code].kind == kind)
-
-
-#: The units panel's settings beyond the length (issue #33's two keys): each
-#: optional, absent = its default, so a document that never touched them —
-#: and every .igz written before them — reads exactly as it always did.
-#: ``area``/``volume`` "auto" follow the length (mm → mm², ft → ft²);
-#: ``area_precision`` None follows its precision, as areas always have.
-#: Volumes kept the three decimals they were always shown with.
-_OPTIONAL_DEFAULTS = {"area": "auto", "area_precision": None,
-                      "volume": "auto", "volume_precision": 3,
-                      "angle": "deg", "angle_precision": 1, "decimal": "."}
-_OPTIONAL = {
-    "area": _of_kind("area"), "area_precision": _is_precision,
-    "volume": _of_kind("volume"), "volume_precision": _is_precision,
-    "angle": lambda c: c in ("deg", "rad", "grad"),
-    "angle_precision": _is_precision,
-    "decimal": lambda c: c in (".", ","),
-}
-
-
-def unit_setting(key: str, settings: dict | None = None):
-    """One setting of ``settings`` (default: the document's), its default
-    when absent."""
-    u = model_units() if settings is None else settings
-    if key in u:
-        return u[key]
-    if key == "area_precision":
-        return u.get("precision", 2)
-    return _OPTIONAL_DEFAULTS[key]
+    return _rs.units_clean(u)
 
 
 #: QSettings key of the units a NEW document starts with (issue #121: «I
@@ -394,12 +280,8 @@ FRACTION_LABELS = ('1"', '1/4"', '1/16"', '1/32"', '1/64"')
 #: precision; everything else goes back to following the length (areas
 #: in its square, volumes in its cube, angles in degrees). The decimal
 #: separator is the reader's, not the profile's, and stays as it is.
-PROFILES = {
-    "metric": {"length": "m", "precision": 2},
-    "centimetric": {"length": "cm", "precision": 1},
-    "millimetric": {"length": "mm", "precision": 0},
-    "imperial": {"length": "ft-in-frac", "precision": 2},
-}
+PROFILES = {name: {"length": length, "precision": precision}
+            for name, length, precision in _rs.units_profiles()}
 PROFILE_LABELS = {"metric": "Metric (m)", "centimetric": "Centimetric (cm)",
                   "millimetric": "Millimetric (mm)",
                   "imperial": "Imperial (ft-in)", "custom": "Custom"}
@@ -407,22 +289,13 @@ PROFILE_LABELS = {"metric": "Metric (m)", "centimetric": "Centimetric (cm)",
 
 def profile_of(settings: dict) -> str:
     """The profile ``settings`` match, or ``"custom"``."""
-    clean = {k: v for k, v in model_units_of({"units": settings}).items()
-             if k != "decimal"}
-    for name, units in PROFILES.items():
-        if clean == units:
-            return name
-    return "custom"
+    return _rs.units_profile_of(settings)
 
 
 def with_profile(settings: dict, name: str) -> dict:
     """``settings`` switched to the profile ``name`` (its decimal separator
     kept)."""
-    out = dict(PROFILES[name])
-    sep = unit_setting("decimal", model_units_of({"units": settings}))
-    if sep != ".":
-        out["decimal"] = sep
-    return out
+    return _rs.units_with_profile(settings, name)
 
 
 #: Set while the value being read is not a length (see ``unitless_numbers``).
@@ -455,22 +328,17 @@ def unitless_numbers():
 def localized(text: str, settings: dict | None = None) -> str:
     """``text`` with the document's decimal separator (``1,25 m`` when the
     document reads with a comma). Typing takes both, always."""
-    if unit_setting("decimal", settings) == ",":
-        return text.replace(".", ",")
-    return text
+    u = model_units() if settings is None else settings
+    return text.replace(".", ",") if u.get("decimal", ".") == "," else text
 
+
+# The readouts in the document's units (``model_units``): tool labels,
+# Entity Info, the status bar. ``*_with`` take a units dictionary instead.
 
 def fmt_len(metres: float) -> str:
     """A length in the model's units and precision — the one formatter
     every readout uses (tool labels, Entity Info, status bar)."""
-    return localized(format_length(float(metres), model_unit(),
-                                    model_precision()))
-
-
-#: The mark a bare typed number gets in each unit: what the number MEANS
-#: (``bare_number_scale``), shown while it is typed.
-_TYPED_MARK = {"m": " m", "cm": " cm", "mm": " mm", "in": '"', "ft": "'",
-               "ft-in": '"', "in-frac": '"', "ft-in-frac": '"'}
+    return _rs.units_fmt_len_with(float(metres), model_units())
 
 
 def typed_value_text(buffer: str) -> str:
@@ -479,87 +347,84 @@ def typed_value_text(buffer: str) -> str:
     one it will be read in -- «500» in a millimetre document is 500 mm, and
     showing «500 m» told the user the opposite (issue #149). Anything that
     already carries a unit or a mark is shown as typed."""
-    import re
-
-    text = (buffer or "").strip()
-    if text and re.fullmatch(r"[-+]?[\d.]+(\s*[,;]\s*[-+]?[\d.]+)*", text):
-        return text + _TYPED_MARK.get(model_unit(), " m")
-    return text
+    return _rs.units_typed_value_text(buffer or "", model_unit())
 
 
 def fmt_num(metres: float) -> str:
     """The number alone, for ``a × b`` pairs; imperial forms keep their
     marks because the mark IS the unit."""
-    u = model_unit()
-    if u in ("m", "cm", "mm"):
-        factor = {"m": 1.0, "cm": 100.0, "mm": 1000.0}[u]
-        return localized(_fixed(float(metres) * factor, model_precision()))
-    return fmt_len(metres)
+    return _rs.units_fmt_num_with(float(metres), model_units())
 
 
 def fmt_pair(a: float, b: float) -> str:
     """``3.00 × 2.00 m`` (metric: one unit at the end) or
     ``3'0" × 2'0"`` (imperial: each number carries its mark)."""
-    u = model_unit()
-    if u in ("m", "cm", "mm"):
-        return f"{fmt_num(a)} × {fmt_len(b)}"
-    return f"{fmt_len(a)} × {fmt_len(b)}"
-
-
-#: The fewest decimals that still resolve a millimetre (or 1/16") in each
-#: unit — what a parts list needs whatever the document's display
-#: precision is: a 4 mm hinge leaf in a document shown to the centimetre
-#: read «0.00 m» and looked like a sheet with no thickness at all.
-_FINE_DECIMALS = {"m": 3, "cm": 1, "mm": 0, "in": 2, "ft": 3,
-                  "ft-in": 2, "in-frac": 2, "ft-in-frac": 2}
+    return _rs.units_fmt_pair_with(float(a), float(b), model_units())
 
 
 def fine_precision() -> int:
-    """The document's precision, raised to millimetre resolution."""
-    return max(model_precision(), _FINE_DECIMALS.get(model_unit(), 3))
+    """The document's precision, raised to millimetre resolution (what a
+    parts list needs: a 4 mm leaf must not read «0.00 m»)."""
+    return _rs.units_fine_precision(model_units())
 
 
 def fmt_len_fine(metres: float) -> str:
     """:func:`fmt_len` at least to the millimetre — for part sizes and cut
     lists, where a thickness is the number that matters."""
-    return localized(format_length(float(metres), model_unit(),
-                                    fine_precision()))
+    return _rs.units_fmt_len_fine_with(float(metres), model_units())
 
 
 def fmt_triple(a: float, b: float, c: float, fine: bool = False) -> str:
     """``0.58 × 0.45 × 0.04 m`` — a part's length × width × thickness, in
     the same idiom as :func:`fmt_pair`. ``fine`` resolves the millimetre
     (:func:`fmt_len_fine`)."""
-    u = model_unit()
-    n = fine_precision() if fine else model_precision()
-    if u in ("m", "cm", "mm"):
-        factor = {"m": 1.0, "cm": 100.0, "mm": 1000.0}[u]
-        a_, b_ = (_fixed(float(v) * factor, n) for v in (a, b))
-        return localized(f"{a_} × {b_} × {format_length(float(c), u, n)}")
-    return localized(" × ".join(format_length(float(v), u, n)
-                                 for v in (a, b, c)))
+    return _rs.units_fmt_triple_with(float(a), float(b), float(c),
+                                     model_units(), bool(fine))
 
 
 def fmt_area(square_metres: float) -> str:
     """An area in the document's area unit — by default its length unit
     squared."""
-    return fmt_area_with(square_metres, model_units())
+    return _rs.units_fmt_area_with(float(square_metres), model_units())
+
+
+def fmt_volume(cubic_metres: float) -> str:
+    """A volume in the document's volume unit — by default its length unit
+    cubed (a millimetre model, which would read billions of mm³, shows
+    cm³)."""
+    return _rs.units_fmt_volume_with(float(cubic_metres), model_units())
+
+
+def fmt_angle(radians: float, signed: bool = False) -> str:
+    """An angle in the document's angle unit and precision — what the
+    Rotate, Protractor and Arc tools show (``+45.0°`` by default)."""
+    return _rs.units_fmt_angle_with(float(radians), model_units(), bool(signed))
+
+
+def fmt_angle_deg(degrees: float, signed: bool = False) -> str:
+    """:func:`fmt_angle` for the tools that measure in degrees."""
+    return fmt_angle(math.radians(float(degrees)), signed)
+
+
+def fmt_len_with(metres: float, settings: dict) -> str:
+    return _rs.units_fmt_len_with(float(metres), settings)
 
 
 def fmt_area_with(square_metres: float, settings: dict) -> str:
-    unit = unit_setting("area", settings)
-    n = unit_setting("area_precision", settings)
-    if unit != "auto":
-        return localized(format_area(square_metres, unit, n), settings)
-    u = settings.get("length", "m")
-    if u in ("m", "cm", "mm"):
-        factor = {"m": 1.0, "cm": 1e4, "mm": 1e6}[u]
-        txt = f"{_fixed(float(square_metres) * factor, n)} {u}²"
-    elif u.startswith("ft"):
-        txt = f"{_fixed(float(square_metres) / (FT_M * FT_M), n)} ft²"
-    else:
-        txt = f"{_fixed(float(square_metres) / (IN_M * IN_M), n)} in²"
-    return localized(txt, settings)
+    return _rs.units_fmt_area_with(float(square_metres), settings)
+
+
+def fmt_volume_with(cubic_metres: float, settings: dict) -> str:
+    return _rs.units_fmt_volume_with(float(cubic_metres), settings)
+
+
+def fmt_angle_with(radians: float, settings: dict, signed: bool = False) -> str:
+    return _rs.units_fmt_angle_with(float(radians), settings, bool(signed))
+
+
+def preview_text(settings: dict) -> str:
+    """The units panel's preview: 1.2345 m, m², m³ and rad in ``settings``."""
+    return _rs.units_preview_text(settings)
 
 
 # ---- Any quantity, shown and typed -------------------------------------------
@@ -571,20 +436,12 @@ def fmt_area_with(square_metres: float, settings: dict) -> str:
 def format_value(value: float, unit: str, decimals: int = 2,
                  symbol: bool = True) -> str:
     """``value`` (in the BASE unit of its kind) shown in ``unit`` — a code
-    of the table, or one of the length forms of :data:`UNIT_CHOICES`.
-    Rounding is for the eye only: the value itself is never changed."""
-    if unit in _BARE_SCALE and unit not in ("m", "cm", "mm"):
-        return format_length(value, unit, decimals)     # the imperial forms
-    row = UNITS[unit]
-    value = float(value)
-    if not math.isfinite(value):
-        return "—"
-    n = max(0, min(6, int(decimals)))
-    txt = _fixed(value / row.factor, n)
-    if not symbol:
-        return txt
-    glue = "" if row.symbol in ("°", '"', "'") else " "
-    return f"{txt}{glue}{row.symbol}"
+    of the table, or one of the length forms of :data:`UNIT_CHOICES`
+    (``KeyError`` for another). Rounding is for the eye only: the value
+    itself is never changed."""
+    if not isinstance(unit, str):
+        raise KeyError(unit)
+    return _rs.units_format_value(float(value), unit, int(decimals), bool(symbol))
 
 
 def format_area(square_metres: float, unit: str, decimals: int = 2) -> str:
@@ -602,79 +459,14 @@ def format_angle(radians: float, unit: str = "deg", decimals: int = 1) -> str:
     return format_value(radians, unit, decimals)
 
 
-#: The area and volume units that go with each length form, for a
-#: document that shows its areas «in the length's unit squared».
-_SQUARE_OF = {"m": "m2", "cm": "cm2", "mm": "mm2", "km": "m2", "in": "in2",
-              "in-frac": "in2", "ft": "ft2", "ft-in": "ft2", "ft-in-frac": "ft2",
-              "yd": "yd2", "mi": "acre"}
-_CUBE_OF = {"m": "m3", "cm": "cm3", "mm": "cm3", "km": "m3", "in": "in3",
-            "in-frac": "in3", "ft": "ft3", "ft-in": "ft3", "ft-in-frac": "ft3",
-            "yd": "yd3", "mi": "yd3"}
-
-
 def area_unit_for(length_unit: str) -> str:
-    return _SQUARE_OF.get(length_unit, "m2")
+    """The area unit that goes with a length form (mm → mm², ft-in → ft²)."""
+    return _rs.units_area_unit_for(length_unit or "")
 
 
 def volume_unit_for(length_unit: str) -> str:
-    return _CUBE_OF.get(length_unit, "m3")
-
-
-def fmt_volume(cubic_metres: float) -> str:
-    """A volume in the document's volume unit — by default its length unit
-    cubed (a millimetre model, which would read billions of mm³, shows
-    cm³)."""
-    return fmt_volume_with(cubic_metres, model_units())
-
-
-def fmt_volume_with(cubic_metres: float, settings: dict) -> str:
-    unit = unit_setting("volume", settings)
-    if unit == "auto":
-        unit = volume_unit_for(settings.get("length", "m"))
-    return localized(format_volume(cubic_metres, unit,
-                                    unit_setting("volume_precision", settings)),
-                      settings)
-
-
-def fmt_angle(radians: float, signed: bool = False) -> str:
-    """An angle in the document's angle unit and precision — what the
-    Rotate, Protractor and Arc tools show (``+45.0°`` by default)."""
-    return fmt_angle_with(radians, model_units(), signed)
-
-
-def fmt_angle_deg(degrees: float, signed: bool = False) -> str:
-    """:func:`fmt_angle` for the tools that measure in degrees."""
-    return fmt_angle(math.radians(float(degrees)), signed)
-
-
-def fmt_angle_with(radians: float, settings: dict, signed: bool = False) -> str:
-    txt = format_angle(radians, unit_setting("angle", settings),
-                       unit_setting("angle_precision", settings))
-    if signed and not txt.startswith(("-", "—")):
-        txt = "+" + txt
-    return localized(txt, settings)
-
-
-def fmt_len_with(metres: float, settings: dict) -> str:
-    return localized(format_length(metres, settings.get("length", "m"),
-                                    settings.get("precision", 2)), settings)
-
-
-#: The value the units panel shows its preview with: 1.2345 m (and m², m³,
-#: rad), long enough to show what the precision does.
-PREVIEW_VALUE = 1.2345
-
-
-def preview_text(settings: dict) -> str:
-    v = PREVIEW_VALUE
-    given = localized(f"{v}", settings)
-    rows = (
-        (f"{given} m", fmt_len_with(v, settings)),
-        (f"{given} m²", fmt_area_with(v, settings)),
-        (f"{given} m³", fmt_volume_with(v, settings)),
-        (f"{given} rad", fmt_angle_with(v, settings)),
-    )
-    return "\n".join(f"{src} → {shown}" for src, shown in rows)
+    """The volume unit that goes with a length form (mm → cm³)."""
+    return _rs.units_volume_unit_for(length_unit or "")
 
 
 #: The largest number a field takes (in whatever unit it is typed): a UTM
@@ -809,6 +601,4 @@ def display_step(unit: str | None = None, decimals: int | None = None) -> float:
     in a metre one to two decimals, 1/16" in fractional inches."""
     u = unit or model_unit()
     n = model_precision() if decimals is None else int(decimals)
-    if u in ("in-frac", "ft-in-frac"):
-        return IN_M / _FRAC_DENOMS.get(max(0, min(4, n)), 16)
-    return 10.0 ** -max(0, n) * _bare_factor("length", u)
+    return _rs.units_display_step(u, n)

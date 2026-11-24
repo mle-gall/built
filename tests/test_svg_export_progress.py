@@ -23,9 +23,9 @@ from PySide6.QtWidgets import QApplication              # noqa: E402
 from core import progress as P                         # noqa: E402
 from core import vista_caras as VC                      # noqa: E402
 from core.vista_caras import FaceFill                   # noqa: E402
-from tests.test_view_faces_cost import _scene           # noqa: E402
-import ingetrazo_render as wgpu_deliveries
-from views import chrome_dialogs
+from tests.vista_caras_reference import _scene        # noqa: E402
+import ingetrazo_render as wgpu_deliveries              # noqa: E402
+from views import chrome_dialogs                        # noqa: E402
 from tests.test_export_view_svg import _export_sheet
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
@@ -37,50 +37,19 @@ def _faces(n=300):
 # ---- The visible faces say how far they have come --------------------------
 
 def test_the_visible_faces_tell_how_far_they_have_come(monkeypatch):
-    from core import _native
-    monkeypatch.setattr(_native, "native", None)      # the Python pass's own
+    """The engine's pass reports between its batches, and reporting changes
+    nothing of what comes out (stopping it: test_visible_parts_rust)."""
     monkeypatch.setattr(P, "REPORT_EVERY", 0.0)
     told = []
     plain = VC._visible_parts(_faces())
     with P.reporting(told.append):
         reported = VC._visible_parts(_faces())
     assert P._report is None
-    assert len(set(told)) > 100
+    assert len(told) >= 4
     assert told == sorted(told)
     assert 0.0 <= told[0] and told[-1] < 1.0
-    # Reporting changes nothing of what comes out.
     assert ([(f.depth, [r.tolist() for r in f.rings]) for f in reported]
             == [(f.depth, [r.tolist() for r in f.rings]) for f in plain])
-
-
-def test_a_report_that_raises_stops_the_work_there(monkeypatch):
-    from core import _native
-    monkeypatch.setattr(_native, "native", None)      # counts _take_away
-    monkeypatch.setattr(P, "REPORT_EVERY", 0.0)
-    done = []
-    real = VC._take_away
-
-    def counted(visible, covers):
-        done.append(1)
-        return real(visible, covers)
-
-    monkeypatch.setattr(VC, "_take_away", counted)
-    VC._visible_parts(_faces())
-    whole = len(done)
-    done.clear()
-
-    class Enough(Exception):
-        pass
-
-    def stop(at):
-        if at > 0.25:
-            raise Enough()
-
-    with pytest.raises(Enough):
-        with P.reporting(stop):
-            VC._visible_parts(_faces())
-    assert P._report is None
-    assert 0 < len(done) < 0.5 * whole
 
 
 def test_every_stretch_of_the_work_is_heard(monkeypatch):
@@ -110,13 +79,9 @@ def test_every_stretch_of_the_work_is_heard(monkeypatch):
     _sunny(scene)
     with P.reporting(lambda done: None):
         VC.view_faces(scene, cam, shadows=True)
-    # Gathering, cutting down (the Python pass or the Rust engine's
-    # batches), the shadows — and the grid, when the Python pass runs.
+    # Gathering, cutting down (the Rust engine's batches), the shadows.
     assert {"view_faces", "_cast_shadows"} <= set(heard)
     assert any(name.startswith("_visible_parts") for name in heard)
-    from core import _native
-    if _native.native is None:
-        assert "__init__" in heard
     # And the hidden lines drawn over them (8.7 s of the plaza's export
     # after the faces, with nothing said).
     from core.hlr import hlr_drawing

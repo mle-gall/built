@@ -77,6 +77,7 @@ mod shadow_fit;
 mod textures;
 pub mod tool_cursors;
 pub mod icon_art;
+mod billboards;
 mod annotation_canvas;
 mod tool_overlay;
 mod image_assets;
@@ -2528,7 +2529,7 @@ impl Renderer {
     /// typed, its anchor (points), the tool's start on screen and the
     /// document's revision (a commit is read from them, ui/value_field.rs).
     #[pyo3(signature = (caption, value, typing, x, y, start=None, revision=0))]
-    fn ui_set_cursor_value(&mut self, caption: String, value: String, typing: bool, x: f32, y: f32,
+    fn ui_set_cursor_value(&mut self, caption: String, value: String, typing: bool, x: Option<f32>, y: Option<f32>,
                            start: Option<(f32, f32)>, revision: u64) {
         if let Some(ui) = self.ui.as_mut() { ui.set_cursor_value(caption, value, typing, x, y, start, revision); }
     }
@@ -3282,6 +3283,9 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(icon_art::icon_keys, m)?)?;
     m.add_function(wrap_pyfunction!(icon_art::letter_art, m)?)?;
     m.add_function(wrap_pyfunction!(icon_art::row_icon_art, m)?)?;
+    m.add_function(wrap_pyfunction!(billboards::billboard_stances, m)?)?;
+    m.add_function(wrap_pyfunction!(billboards::billboard_worlds, m)?)?;
+    m.add_function(wrap_pyfunction!(billboards::sprite_mapping, m)?)?;
     m.add_function(wrap_pyfunction!(tool_cursors::tool_cursor_name, m)?)?;
     m.add_function(wrap_pyfunction!(tool_cursors::tool_cursor_art, m)?)?;
     m.add_function(wrap_pyfunction!(image_assets::texture_has_alpha,m)?)?;

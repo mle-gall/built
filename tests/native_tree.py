@@ -41,3 +41,26 @@ def tag_picker(host, selection):
             index, choices = json.loads(value.split("\x1d", 2)[2])
             return choices[index][0], dict(choices)
     return None
+
+
+class FilingRows:
+    """Compare the displayed Filing rows with an independently built pane."""
+
+    def __init__(self, host, expanded=()):
+        from tests.test_tree_links import _View
+        self.window = host.window
+        self.view = _View()
+        self.view._ui_exp = {"n:", *expanded}
+
+    def read(self, fresh=False):
+        from tests.test_tree_links import _View
+        view = self.view
+        if fresh:
+            view = _View()
+            view._ui_exp = self.view._ui_exp.copy()
+        wgpu_ui._tree(view, self.window)
+        return view.renderer.calls["ui_set_tree"][0]
+
+    @property
+    def model(self):
+        return self.view._ui_tree_model[1]

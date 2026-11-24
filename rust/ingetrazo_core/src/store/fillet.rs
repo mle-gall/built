@@ -503,9 +503,72 @@ fn inward(s: &impl FilletMesh, f: u32, [a, b]: [u32; 2], h: Hypot) -> Option<V3>
     }
     None
 }
+/// Conservative plane-distance bound used to reject separated hole boxes.
+pub(crate) struct HoleBoxes {
+    boxes: Vec<([f64; 3], [f64; 3])>,
+    world: ([f64; 3], [f64; 3]),
+    margin: f64,
+}
+impl HoleBoxes {
+    pub(crate) fn new(holes: &[Vec<V3>]) -> Self {
+        let mut world = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
+        let boxes = holes
+            .iter()
+            .map(|ring| {
+                let mut lo = [f64::INFINITY; 3];
+                let mut hi = [f64::NEG_INFINITY; 3];
+                for &p in ring {
+                    let point = xyz(p);
+                    for k in 0..3 {
+                        lo[k] = lo[k].min(point[k]);
+                        hi[k] = hi[k].max(point[k]);
+                    }
+                }
+                for k in 0..3 {
+                    world.0[k] = world.0[k].min(lo[k]);
+                    world.1[k] = world.1[k].max(hi[k]);
+                }
+                (lo, hi)
+            })
+            .collect();
+        let extent = world
+            .0
+            .into_iter()
+            .chain(world.1)
+            .map(f64::abs)
+            .fold(0., f64::max);
+        Self {
+            boxes,
+            world,
+            margin: 1e-3 + 1e-5 * extent,
+        }
+    }
+    pub(crate) fn gap(&self, origin: V3, normal: V3) -> f64 {
+        let p = xyz(origin);
+        let n = xyz(normal);
+        let (mut low, mut high) = (0., 0.);
+        for k in 0..3 {
+            let a = (self.world.0[k] - p[k]) * n[k];
+            let b = (self.world.1[k] - p[k]) * n[k];
+            low += a.min(b);
+            high += a.max(b);
+        }
+        2. * low.abs().max(high.abs()) + self.margin
+    }
+    pub(crate) fn near(&self, i: usize, j: usize, gap: f64) -> bool {
+        let (a, b) = self.boxes[i];
+        let (c, d) = self.boxes[j];
+        (0..3).all(|k| c[k] <= b[k] + gap && d[k] >= a[k] - gap)
+    }
+}
+
 // Mesh.add_face drops holes nested inside a larger hole. Area is measured
 // in XY, while containment uses the inner hole's plane, as in topology.py.
 pub(crate) fn maximal_holes(holes: &[Vec<V3>], h: Hypot) -> Vec<bool> {
+    maximal_holes_with_sum(holes,h,true)
+}
+
+pub(crate) fn maximal_holes_with_sum(holes: &[Vec<V3>], h: Hypot, compensated:bool) -> Vec<bool> {
     let areas: Vec<f64> = holes
         .iter()
         .map(|r| {
@@ -515,6 +578,7 @@ pub(crate) fn maximal_holes(holes: &[Vec<V3>], h: Hypot) -> Vec<bool> {
                 / 2.
         })
         .collect();
+    let boxes = HoleBoxes::new(holes);
     let mut keep = Vec::with_capacity(holes.len());
     for (i, inner) in holes.iter().enumerate() {
         let normal = (inner[1] - inner[0]).cross(inner[2] - inner[0], h);
@@ -526,13 +590,14 @@ pub(crate) fn maximal_holes(holes: &[Vec<V3>], h: Hypot) -> Vec<bool> {
             crate::store::geometry::plane_axes(crate::store::geometry::normalized(normal, h), h);
         let project = |p: V3| (p.dot(u, h), p.dot(v, h));
         let average = |axis: usize| {
-            crate::store::geometry::py_sum(inner.iter().map(|&p| xyz(p)[axis]), true)
+            crate::store::geometry::py_sum(inner.iter().map(|&p| xyz(p)[axis]), compensated)
                 / inner.len() as f64
         };
         let centre = V3(average(0), average(1), average(2));
+        let gap = boxes.gap(inner[0], crate::store::geometry::normalized(normal, h));
         let mut interior = None;
         let nested = holes.iter().enumerate().any(|(j, outer)| {
-            if areas[j] <= areas[i] + 1e-6 {
+            if areas[j] <= areas[i] + 1e-6 || !boxes.near(i, j, gap) {
                 return false;
             }
             let poly: Vec<_> = outer.iter().map(|&p| project(p - outer[0])).collect();
