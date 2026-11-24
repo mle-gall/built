@@ -234,13 +234,11 @@ def picture(view_widget, frame):
     return w, h, px.tobytes()
 
 
-def _hlr(source, frame, tags: bool = False, **kw):
-    """The frame's hidden-line pass (Rust camera and geometry, with each
-    triangle's and line's tag when ``tags``) and the map from its camera
-    plane to frame paper mm; None when its view is gone."""
+def _frame_pass(source, frame, tags: bool = False):
+    """What the frame's hidden-line pass runs on: the scene as its view
+    shows it, its camera and its geometry (Rust), with each triangle's and
+    line's tag when ``tags``; None when its view is gone."""
     from core._native import qt_hypot
-    from core.composition import model_height_for_frame
-    from core.hlr import hlr_drawing
     scene = source.scene
     view = saved_view(scene, frame)
     if view is False:
@@ -251,6 +249,19 @@ def _hlr(source, frame, tags: bool = False, **kw):
                                                    view or None, qt_hypot() or "libc++-fma", tags)
     if tags:
         geometry = (*geometry, *(np.array(t, dtype=object) for t in tagged))
+    return facade, camera, geometry
+
+
+def _hlr(source, frame, tags: bool = False, **kw):
+    """The frame's hidden-line pass (Rust camera and geometry, with each
+    triangle's and line's tag when ``tags``) and the map from its camera
+    plane to frame paper mm; None when its view is gone."""
+    from core.composition import model_height_for_frame
+    from core.hlr import hlr_drawing
+    got = _frame_pass(source, frame, tags)
+    if got is None:
+        return None
+    facade, camera, geometry = got
     d = hlr_drawing(facade, camera, geometry=geometry, layers=tags, **kw)
     model_h = model_height_for_frame(frame.h_mm, frame.scale_n)
     k = frame.h_mm / model_h                       # paper mm per metre
@@ -468,6 +479,43 @@ def frame_contents(view_widget, comps, ground=None, providers=None):
                 if comp.name not in troubled:
                     troubled.append(comp.name)
     return contents, pictures, profiles or None, troubled
+
+
+def export_dxf(source, frame, path) -> int:
+    """``frame``'s hidden-line view as DXF at its scale, in model units (the
+    composer's ``export_frame_dxf``): each model layer as a DXF layer of its
+    own with its colour and line type when the model has layers, else one
+    per line class; the cut's hatches and fills as the frame draws them
+    (formats.dxf_views). Returns the lines written, None when its view is
+    gone."""
+    from core.composition import frame_view_name, model_height_for_frame
+    from core.hlr import hlr_drawing
+    from core.layers import export_labels, layer_lines_wanted, line_styles
+    from formats.dxf_out import save_dxf_layers
+    from formats.dxf_views import dxf_cut_layers, dxf_groups_by_class, dxf_groups_by_layer
+    got = _frame_pass(source, frame, True)
+    if got is None:
+        return None
+    facade, camera, geometry = got
+    hidden = bool(getattr(frame, "hidden_lines", False))
+    by_layer = layer_lines_wanted(facade) or len(getattr(facade, "layers", ())) > 1
+    d = hlr_drawing(facade, camera, geometry=geometry if by_layer else geometry[:4], layers=by_layer,
+                    profiles=bool(getattr(frame, "profiles", True)), fills=False, hidden=hidden)
+    layer = frame_view_name(frame).split(" — ")[0]
+    texts = []
+    if d.layers is not None:
+        d.styles, d.labels = line_styles(facade, True), export_labels(facade)
+        groups = dxf_groups_by_layer(d, layer, hidden, texts)
+    else:
+        groups = dxf_groups_by_class(d, layer, hidden)
+    lines, solids = [], []
+    if (getattr(frame, "cut_fill", "solid") or "solid") != "none":
+        scale_n = float(frame.scale_n or 100.0)
+        lines, solids = dxf_cut_layers(facade, camera, scale_n,
+                                       frame.h_mm / model_height_for_frame(frame.h_mm, scale_n),
+                                       max(0.2, float(getattr(frame, "cut_hatch_mm", 1.5) or 1.5) / 1.5),
+                                       geometry=geometry)
+    return save_dxf_layers(path, groups + lines, solids, texts)
 
 
 def export_pdf(view_widget, comps, path, ground=None, doc_path=None, providers=None) -> list:

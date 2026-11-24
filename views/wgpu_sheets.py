@@ -1111,7 +1111,9 @@ class Workspace:
                         self.view, comp.comp, path, 200.0, self._ground,
                         getattr(comp._window, "_current_path", None), getattr(comp._window, "_ext_sheet_annots", None))
                 elif kind == "dxf":
-                    comp.export_frame_dxf(self._frame(), path)
+                    from views import wgpu_sheet_frames
+                    if wgpu_sheet_frames.export_dxf(self.view.source_viewport, self._frame(), path) is None:
+                        troubled = [comp.comp.name]
                 elif kind == "svg":
                     comp.export_frame_svg(self._frame(), path)
         except Exception as exc:  # noqa: BLE001 — say it, never lose the workspace

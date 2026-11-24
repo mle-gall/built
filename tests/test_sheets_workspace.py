@@ -750,6 +750,42 @@ def test_a_frame_s_model_annotations_are_the_composer_s(host):
     assert host.window._ext_sheet_annots == [provider]     # told each frame's own scale, never failed
 
 
+@pytest.mark.parametrize("layered", [False, True])
+def test_a_frame_s_dxf_is_the_composer_s(host, tmp_path, layered):
+    """A frame's DXF from the workspace (wgpu_sheet_frames.export_dxf: Rust
+    camera and geometry, formats.dxf_views) is the composer's
+    export_frame_dxf, line for line: by line class, or each model layer as
+    its own with its hatched cut."""
+    from ingetrazo_core import Vec3
+    from core.layers import Layer
+    from core.section import SectionPlane
+    from views import wgpu_sheet_frames
+    ws = _sheets(host)
+    comp = ws.composer
+    plan = comp.comp.frames[0]
+    scene = comp._scene()
+    if layered:
+        scene.layers.append(Layer("Muros", hatch="brick", color=(0.8, 0.4, 0.3)))
+        scene.layers.append(Layer("Ejes", linetype="center", color=(0.2, 0.4, 0.9)))
+        for f in scene.mesh.faces:
+            f.attrs["layer"] = "Ejes" if min(v.x() for v in f.vertices) >= 5.99 else "Muros"
+        sp = SectionPlane(Vec3(0.0, 0.0, 1.0), Vec3(0.0, 0.0, 1.0))
+        scene.section_planes.append(sp)
+        scene.set_active_section(sp)
+    scene.version += 1
+    comp._invalidate_geometry_caches()
+    mine, theirs = tmp_path / "mine.dxf", tmp_path / "theirs.dxf"
+    n = wgpu_sheet_frames.export_dxf(host.view.source_viewport, plan, mine)
+    assert n == comp.export_frame_dxf(plan, str(theirs)) > 10
+
+    def entities(path):
+        import re
+        body = path.read_text().split("ENTITIES", 1)[1]
+        return sorted(re.sub(r"(-?\d+\.\d{4})\d*", r"\1", body).split("\n  0\n"))
+    assert entities(mine) == entities(theirs)
+    assert ("MUROS-TRAMA" in mine.read_text()) == layered
+
+
 def NATIVE_display(frame, content):
     import ingetrazo_core as NATIVE
     return NATIVE.sheet_frame_display(frame, content, True)
