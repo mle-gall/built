@@ -493,8 +493,19 @@ impl App {
             }
             Step::Move(x, y) => self.pointer(id, "move", x, y, 0, 0),
             Step::ClickCommand(command) => {
-                if let Some(center) = self.host(id).and_then(|h| h.command_center(&command)) {
-                    self.steps.push_front(Step::Click(center.0, center.1, 1, 0));
+                // A rendered command can move after the preceding tool or
+                // document change. Hit-test and click the same frame, then
+                // present its input before another scripted gesture begins.
+                if let Some(h) = self.host(id) {
+                    h.frame();
+                }
+                if let Some((x, y)) = self.host(id).and_then(|h| h.command_center(&command)) {
+                    self.pointer(id, "move", x, y, 0, 0);
+                    if let Some(h) = self.host(id) { h.frame(); }
+                    self.pointer(id, "press", x, y, 1, 0);
+                    if let Some(h) = self.host(id) { h.frame(); }
+                    self.pointer(id, "release", x, y, 1, 0);
+                    if let Some(h) = self.host(id) { h.frame(); }
                 } else {
                     eprintln!("[built] no visible top-bar command {command}");
                     self.exit_code = 1;
