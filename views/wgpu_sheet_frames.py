@@ -479,18 +479,17 @@ def frame_contents(view_widget, comps, ground=None, providers=None):
     return contents, pictures, profiles or None, troubled
 
 
-def export_dxf(source, frame, path) -> int:
-    """``frame``'s hidden-line view as DXF at its scale, in model units (the
-    composer's ``export_frame_dxf``): each model layer as a DXF layer of its
-    own with its colour and line type when the model has layers, else one
-    per line class; the cut's hatches and fills as the frame draws them
-    (formats.dxf_views). Returns the lines written, None when its view is
-    gone."""
-    from core.composition import frame_view_name, model_height_for_frame
+def _line_groups(source, frame):
+    """A frame's hidden-line view as the line groups the DXF and SVG
+    exports write (formats.dxf_out.save_dxf_layers), in model units — each
+    model layer as a layer of its own with its colour and line type when the
+    model has layers, else one per line class (formats.dxf_views) — with
+    the words layer line types write, and what the pass ran on; None when
+    its view is gone."""
+    from core.composition import frame_view_name
     from core.hlr import hlr_drawing
     from core.layers import export_labels, layer_lines_wanted, line_styles
-    from formats.dxf_out import save_dxf_layers
-    from formats.dxf_views import dxf_cut_layers, dxf_groups_by_class, dxf_groups_by_layer
+    from formats.dxf_views import dxf_groups_by_class, dxf_groups_by_layer
     got = _frame_pass(source, frame, True)
     if got is None:
         return None
@@ -506,6 +505,21 @@ def export_dxf(source, frame, path) -> int:
         groups = dxf_groups_by_layer(d, layer, hidden, texts)
     else:
         groups = dxf_groups_by_class(d, layer, hidden)
+    return groups, texts, (facade, camera, geometry)
+
+
+def export_dxf(source, frame, path) -> int:
+    """``frame``'s hidden-line view as DXF at its scale, in model units (the
+    composer's ``export_frame_dxf``): its line groups and the cut's hatches
+    and fills as the frame draws them (formats.dxf_views). Returns the lines
+    written, None when its view is gone."""
+    from core.composition import model_height_for_frame
+    from formats.dxf_out import save_dxf_layers
+    from formats.dxf_views import dxf_cut_layers
+    got = _line_groups(source, frame)
+    if got is None:
+        return None
+    groups, texts, (facade, camera, geometry) = got
     lines, solids = [], []
     if (getattr(frame, "cut_fill", "solid") or "solid") != "none":
         scale_n = float(frame.scale_n or 100.0)
@@ -514,6 +528,23 @@ def export_dxf(source, frame, path) -> int:
                                        max(0.2, float(getattr(frame, "cut_hatch_mm", 1.5) or 1.5) / 1.5),
                                        geometry=geometry)
     return save_dxf_layers(path, groups + lines, solids, texts)
+
+
+def export_svg(source, frame, path) -> int:
+    """``frame``'s hidden-line view as SVG at 1:``scale_n`` with the frame's
+    cut / profile / edge pens (the composer's ``export_frame_svg`` of the
+    lines alone). Returns the segments, None when its view is gone."""
+    from pathlib import Path
+    from formats.svg_out import svg_text
+    got = _line_groups(source, frame)
+    if got is None:
+        return None
+    edge = max(0.05, float(getattr(frame, "pen_edge_mm", 0.18) or 0.18))
+    pens = {"cut": max(0.05, float(getattr(frame, "pen_cut_mm", 0.5) or 0.5)),
+            "profile": max(0.05, float(getattr(frame, "pen_profile_mm", 0.35) or 0.35)), "edge": edge}
+    text, n = svg_text(got[0], float(getattr(frame, "scale_n", 100.0) or 100.0), pens, None, True, None, None)
+    Path(path).write_text(text, encoding="utf-8")
+    return n
 
 
 def export_pdf(view_widget, comps, path, ground=None, doc_path=None, providers=None) -> list:

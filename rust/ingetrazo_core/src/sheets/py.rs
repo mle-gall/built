@@ -110,6 +110,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(super::create::sheet_new_radial, m)?)?;
     m.add_function(wrap_pyfunction!(super::create::sheet_new_angular, m)?)?;
     m.add_function(wrap_pyfunction!(super::create::sheet_new_image, m)?)?;
+    m.add_function(wrap_pyfunction!(super::create::sheet_from_template, m)?)?;
     m.add_function(wrap_pyfunction!(super::anchors::sheet_follow_anchors, m)?)?;
     m.add_function(wrap_pyfunction!(super::annots::sheet_frame_annotations, m)?)?;
     m.add_function(wrap_pyfunction!(super::annots::sheet_frame_annots, m)?)?;

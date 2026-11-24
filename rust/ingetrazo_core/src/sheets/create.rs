@@ -206,6 +206,30 @@ pub fn sheet_new_item<'py>(py: Python<'py>, comp: &Bound<'py, PyAny>, tool: &str
     Ok(Some(item))
 }
 
+/// A new sheet from the template file ``path`` (the composer's
+/// `_composition_from_template`): its page, border and items, each frame
+/// with an identity of its own and the dimensions bound to no model; None
+/// for a missing or broken file.
+#[pyfunction]
+pub fn sheet_from_template<'py>(py: Python<'py>, path: std::path::PathBuf) -> PyResult<Option<Bound<'py, PyAny>>> {
+    let Ok(text) = std::fs::read_to_string(&path) else { return Ok(None) };
+    let Ok(data) = py.import("json")?.call_method1("loads", (text,)) else { return Ok(None) };
+    let Ok(comp) = py.import("core.composition")?.getattr("Composicion")?.call_method1("from_dict", (data,)) else {
+        return Ok(None);
+    };
+    let uuid = py.import("uuid")?;
+    for f in comp.getattr("frames")?.try_iter()? {
+        f?.setattr("uid", uuid.call_method0("uuid4")?.getattr("hex")?)?;
+    }
+    for ct in comp.getattr("cotas")?.try_iter()? {
+        let ct = ct?;
+        ct.setattr("anchor_uid", "")?;
+        ct.setattr("a_world", py.None())?;
+        ct.setattr("b_world", py.None())?;
+    }
+    Ok(Some(comp))
+}
+
 /// The document's length unit and precision a new annotation is born with
 /// (`_document_length_style`), and whether a cota shows its unit symbol.
 fn length_style<'py>(py: Python<'py>, scene: Option<&Bound<'py, PyAny>>, kw: &Bound<'py, PyDict>) -> PyResult<()> {

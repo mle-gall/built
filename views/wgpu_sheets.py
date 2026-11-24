@@ -101,81 +101,161 @@ def embeds(win) -> bool:
     return bool(getattr(doc, "_renderer_wgpu", False))
 
 
-_CLASS = None
+#: The rail's tools: their icon (views/icons.py) and their name.
+TOOL_ICONS = {"select": "select", "pan": "pan", "zoom": "zoom", "zoom_ventana": "zoom_window",
+              "estilo": "eyedropper", "vista": "comp_vista", "texto": "text", "etiqueta": "comp_etiqueta",
+              "nivel": "comp_nivel", "llamada": "comp_llamada", "imagen": "image", "cajetin": "comp_cajetin",
+              "escala": "comp_escala", "norte": "comp_norte", "leyenda": "comp_leyenda", "perfil": "comp_perfil",
+              "linea": "line", "flecha": "comp_flecha", "terreno": "comp_terreno", "rect": "rectangle",
+              "elipse": "circle", "poligono": "polygon", "cota": "dimension", "cota_cadena": "dimension_chain",
+              "cota_base": "dimension_baseline", "cota_ang": "dimension_angular",
+              "cota_radio": "dimension_radius"}
+TOOL_NAMES = {"select": "Select", "pan": "Pan", "zoom": "Zoom", "zoom_ventana": "Zoom window",
+              "estilo": "Format painter", "vista": "Model view", "texto": "Text", "etiqueta": "Label",
+              "nivel": "Level mark", "llamada": "Detail callout", "imagen": "Image", "cajetin": "Title block",
+              "escala": "Scale bar", "norte": "North arrow", "leyenda": "Layer legend",
+              "perfil": "Terrain profile", "linea": "Line", "flecha": "Arrow", "terreno": "Ground line",
+              "rect": "Rectangle", "elipse": "Ellipse", "poligono": "Polygon", "cota": "Dimension",
+              "cota_cadena": "Chain dimension", "cota_base": "Baseline dimension",
+              "cota_ang": "Angular dimension", "cota_radio": "Radius dimension"}
+
+
+class SheetHost:
+    """A document's sheets as the window holds them (``_ensure_composer``,
+    ``doc.composer``): the open sheet, the armed tool and whether the views
+    render on their own; showing it opens the workspace and hiding it
+    leaves. Not a window: the page, the dock and the exports are the
+    workspace's (and Rust's)."""
+
+    EMBEDDED = True
+
+    def __init__(self, main_window):
+        from core.settings import settings
+        self._window = main_window
+        self.comp = None
+        self.tool_mode = "select"
+        self._auto_render = str(settings().value("composer/auto_render", "1")) != "0"
+        self._ws = Workspace(self)
+
+    # The window's calls on it (MainWindow: open a sheet, switch documents, close).
+    def setVisible(self, on):  # noqa: N802
+        self._ws.enter() if on else self._ws.leave()
+
+    def show(self):
+        self.setVisible(True)
+
+    def hide(self):
+        self.setVisible(False)
+
+    def isVisible(self):  # noqa: N802
+        return bool(self._ws.shown)
+
+    def isMinimized(self):  # noqa: N802
+        return False
+
+    def showMinimized(self):  # noqa: N802
+        pass
+
+    def raise_(self):
+        pass
+
+    def activateWindow(self):  # noqa: N802
+        pass
+
+    def set_document_title(self, name) -> None:
+        pass
+
+    def _covers(self, other):
+        return True
+
+    def close(self):
+        self._ws.leave()
+        self._ws.detach()
+        return True
+
+    def _show_model(self):
+        self.hide()
+        self._refresh_sheet_tabs()
+
+    # ---- The document's sheets ----------------------------------------------------
+    def _scene(self):
+        return self._window.viewport.scene
+
+    def _sheets(self):
+        return self._scene().compositions
+
+    def _adopt_document(self) -> None:
+        """Coming on screen: the document's sheets are the workspace's (a
+        document without any gets its first one)."""
+        from core.composition import Composicion
+        from core.i18n import tr
+        scene = self._scene()
+        if not scene.compositions:
+            comp = Composicion(name=tr("Sheet {n}", n=1))
+            comp.frames.append(comp.default_frame())
+            scene.compositions.append(comp)
+        if self.comp not in scene.compositions:
+            self.comp = scene.compositions[0]
+
+    def _on_comp_switched(self, index: int) -> None:
+        comps = self._sheets()
+        if 0 <= index < len(comps) and comps[index] is not self.comp:
+            self.comp = comps[index]
+            self._ws.sheet_changed()
+        self._refresh_sheet_tabs()
+
+    def show_sheet(self, index: int) -> None:
+        """Sheet ``index`` in the workspace (a tab or the list, from either app)."""
+        self._on_comp_switched(index)
+        self.show()
+
+    def step_sheet(self, step: int) -> None:
+        """The sheet ``step`` places before or after this one — no wrap-around."""
+        comps = self._sheets()
+        if self.comp in comps and 0 <= comps.index(self.comp) + step < len(comps):
+            self.show_sheet(comps.index(self.comp) + step)
+
+    def _reload_comp_combo(self) -> None:
+        """Sheets added, renamed, moved or deleted: the lists show it."""
+        self._ws.sheet_changed()
+        self._refresh_sheet_tabs()
+
+    def _refresh_sheet_tabs(self) -> None:
+        comps = self._sheets()
+        if self.comp in comps:
+            win = getattr(self._window, "_host_window", self._window)
+            win._last_sheet = comps.index(self.comp)
+        sync = getattr(self._window, "_refresh_sheet_tabs", None)
+        if sync is not None:
+            sync()
+
+    def _on_comp_add(self) -> None:
+        self._ws._add_sheet()
+
+    def _new_sheet_tab(self) -> None:
+        self._on_comp_add()
+        self.show()
+
+    def _on_model_version(self, version) -> None:
+        """The model changed (the window tells, as it paints a new version)."""
+        self._ws.model_changed(version)
+
+    def frame_is_perspective(self, frame) -> bool:
+        return bool(getattr(frame, "perspective", False))
+
+    def export_all_pdf(self, path: str, sheets=None) -> list:
+        """Sheets ``sheets`` (all by default) as one PDF (sheets::pdf)."""
+        from views import wgpu_sheet_frames
+        view = self._ws.view or self._ws._front_view()
+        comps = list(self._sheets()) if sheets is None else list(sheets)
+        return wgpu_sheet_frames.export_pdf(view, comps, path, wgpu_sheet_frames.Ground(lambda: None),
+                                            getattr(self._window, "_current_path", None),
+                                            getattr(self._window, "_ext_sheet_annots", None))
 
 
 def composer_class():
-    """``ComposerWindow`` as the workspace's: never on screen; showing it
-    opens the workspace and hiding it leaves (the main window's sheet
-    calls — open a sheet, switch documents, close — stay as they were)."""
-    global _CLASS
-    if _CLASS is not None:
-        return _CLASS
-    from views.composer import ComposerWindow
-
-    class SheetComposer(ComposerWindow):
-        EMBEDDED = True
-
-        def __init__(self, main_window):
-            self._ws = None
-            super().__init__(main_window)
-            self._ws = Workspace(self)
-
-        # A widget that is never shown: setVisible is the one way Qt
-        # itself would show it, so it never reaches QWidget.
-        def setVisible(self, on):  # noqa: N802
-            ws = self.__dict__.get("_ws")
-            if ws is not None:
-                ws.enter() if on else ws.leave()
-
-        def show(self):
-            self.setVisible(True)
-
-        def hide(self):
-            self.setVisible(False)
-
-        def isVisible(self):  # noqa: N802
-            ws = self.__dict__.get("_ws")
-            return bool(ws is not None and ws.shown)
-
-        def isMinimized(self):  # noqa: N802
-            return False
-
-        def showMinimized(self):  # noqa: N802
-            pass
-
-        def raise_(self):
-            pass
-
-        def activateWindow(self):  # noqa: N802
-            pass
-
-        def _show_model(self):
-            self.hide()
-            sync = getattr(self._window, "_refresh_sheet_tabs", None) if not is_shell(self._window) else None
-            if sync is not None:
-                sync()
-
-        def _covers(self, other):
-            return True
-
-        def _new_sheet_tab(self):
-            self._on_comp_add()
-            self.show()
-            self._refresh_sheet_tabs()
-
-        def close(self):
-            ws = self.__dict__.get("_ws")
-            if ws is not None:
-                ws.leave()
-                ws.detach()
-            classic = self.__dict__.get("_classic")
-            if classic is not None and _alive(classic):
-                classic.close()
-            return super().close()
-
-    _CLASS = SheetComposer
-    return _CLASS
+    """What ``MainWindow._ensure_composer`` makes for a document: its sheets."""
+    return SheetHost
 
 
 def composer_for(win):
@@ -230,6 +310,19 @@ def _cajetin_template():
     return str(Path(base) / "cajetines"), name
 
 
+def _sheet_template():
+    """The template file a new sheet starts from (the composer's
+    ``default_template_name`` in its ``templates_dir``), or None."""
+    from PySide6.QtCore import QStandardPaths
+    from core.settings import settings
+    name = str(settings().value("composer/default_template", "") or "")
+    if not name:
+        return None
+    base = (QStandardPaths.writableLocation(QStandardPaths.AppDataLocation)
+            or str(Path.home() / ".ingetrazo"))
+    return str(Path(base) / "plantillas" / f"{name}.json")
+
+
 def _int(v) -> int:
     """A Qt enum or flag (or the shell's plain int) as an int."""
     return int(getattr(v, "value", v))
@@ -271,6 +364,10 @@ class Workspace:
         self._holds = {}                # (item key, attr) → session hold on a vertex
         self._tried = {}                # frame key → the page a render was tried on
         self._more = False              # frames still to render after this turn
+        self._message = ("", 0.0)       # a passing message and until when it shows
+        self._own_versions = set()      # the scene versions the sheet's own edits made
+        self._model_version = None      # the model version the views were last worked out for
+        self._stale = False             # the model changed since: auto-render re-renders
         self._selection = None          # the keys the page and the composer agree on
         self._pending = None            # the dock question's subject
         self._prompt = None             # (title, body, field, buttons) to send
@@ -303,6 +400,7 @@ class Workspace:
             except Exception:  # noqa: BLE001
                 pass
         self.composer._adopt_document()
+        self._auto_render_stale()
         self._sent = {}
         self._page = None
         self._content = {}
@@ -352,8 +450,15 @@ class Workspace:
             view.update()
 
     def flash(self, text: str, msec: int = 4000) -> None:
-        self.composer.statusBar().showMessage(text, msec)
+        """A passing message in the bottom bar for ``msec``."""
+        import time
+        self._message = (text, time.monotonic() + msec / 1000.0)
         self._touch()
+
+    def _passing(self) -> str:
+        import time
+        text, until = self._message
+        return text if time.monotonic() < until else ""
 
     # ---- The page (ingetrazo_core sheets::page → ingetrazo_render ui/page.rs) ------
     def _send_page(self, renderer) -> None:
@@ -440,16 +545,12 @@ class Workspace:
     def _run(self, inner) -> None:
         """A sheet edit as one step of the document's history."""
         from core.history import SheetCommand
-        self.composer._window.viewport.history.execute(SheetCommand(inner))
+        self._execute(SheetCommand(inner))
 
     def _forget_render(self, model) -> None:
         """A frame whose window on the model changed: worked out again."""
         from core.composition import MarcoVista
         if isinstance(model, MarcoVista):
-            comp = self.composer
-            comp._stale.add(id(model))
-            comp.hlr_cache.pop(id(model), None)
-            comp.render_cache.pop(id(model), None)
             self._content.pop(model._doc_key, None)
             self._tried.pop(model._doc_key, None)
             self._annotated.pop(model._doc_key, None)
@@ -459,7 +560,7 @@ class Workspace:
 
     def _refresh_all(self) -> None:
         """Update all views: every frame worked out again from the model."""
-        self.composer._invalidate_geometry_caches()
+        self._stale = False
         for frame in list(self.composer.comp.frames):
             self._forget_render(frame)
         self._touch()
@@ -707,13 +808,9 @@ class Workspace:
         self.view.renderer.page_select([item._doc_key])
 
     def _tool(self, name: str) -> None:
-        """Arm a tool of the rail (the composer's tool state, until the
-        workspace keeps its own)."""
-        comp = self.composer
-        comp.tool_mode = name
-        act = comp._tool_actions.get(name)
-        if act is not None:
-            act.setChecked(True)
+        """Arm a tool of the rail (the page follows: ui_set_sheet_active)."""
+        self.composer.tool_mode = name if name in NATIVE_TOOLS else "select"
+        self._touch()
 
     def _font(self, model) -> None:
         """The font picker for a sheet text; the choice is one history step."""
@@ -790,19 +887,14 @@ class Workspace:
 
     def _tool_groups(self):
         from views import wgpu_ui
-        comp = self.composer
-        icons = {m: icon for m, icon, _tip, _drag in comp.TOOLS}
         groups = []
         for keys in RAIL:
             row = []
             for mode in keys:
-                if mode not in icons:
+                if mode not in TOOL_ICONS:
                     continue
-                w, h, rgba = wgpu_ui._icon_rgba(icons[mode])
-                name = comp.TOOL_NAMES.get(mode, mode)
-                if mode not in NATIVE_TOOLS:
-                    name += " (classic sheet editor)"
-                row.append((mode, name, "", w, h, rgba))
+                w, h, rgba = wgpu_ui._icon_rgba(TOOL_ICONS[mode])
+                row.append((mode, TOOL_NAMES.get(mode, mode), "", w, h, rgba))
             if row:
                 groups.append(row)
         return groups
@@ -843,8 +935,8 @@ class Workspace:
             from core.composition import format_scale
             scale = "No scale" if getattr(frame, "perspective", False) else format_scale(frame.scale_n)
         mode = comp.tool_mode if comp.tool_mode in NATIVE_TOOLS else "select"
-        tool = comp.TOOL_NAMES.get(mode, mode)
-        hint = comp.statusBar().currentMessage()   # a passing message; the page says the rest
+        tool = TOOL_NAMES.get(mode, mode)
+        hint = self._passing()                     # a passing message; the page says the rest
         renderer = getattr(self.view, "renderer", None)
         at = renderer.page_pointer_mm() if renderer is not None else None
         cursor = f"x: {at[0]:.1f} mm  y: {at[1]:.1f} mm" if at else ""
@@ -863,9 +955,8 @@ class Workspace:
         menu = [("Zoom", [item("Fit page", self.fit), item("Fit width", lambda: self.fit(True)),
                           *[item(f"{p}%", lambda p=p: self.zoom_to(str(p))) for p in (50, 100, 200, 400)]]),
                 ("Sheet", [item("Update all views", self._refresh_all),
-                           item("Auto-render views", lambda: comp.auto_check.toggle(),
+                           item("Auto-render views", lambda: self.set_auto_render(not comp._auto_render),
                                 checked=int(bool(comp._auto_render))),
-                           item("Open in classic sheet editor…", self.open_classic),
                            item("Back to the model", lambda: to_model(comp._window))])]
         self._actions = acts
         return cluster, menu
@@ -876,13 +967,10 @@ class Workspace:
         comp = self.composer
         comps = comp._scene().compositions
         if verb == "tool":
-            act = comp._tool_actions.get(rest)
-            if rest not in NATIVE_TOOLS:
-                self.open_classic(tool=rest)
-            elif rest == "imagen":
+            if rest == "imagen":
                 self._add_image()
-            elif act is not None:
-                act.trigger()
+            elif rest in NATIVE_TOOLS:
+                self._tool(rest)
         elif verb == "select":
             pass                         # the page keeps its selection; the dock reads it
         elif verb == "rects":
@@ -931,7 +1019,7 @@ class Workspace:
             j = i + (-1 if verb == "up" else 1)
             if 0 <= i < len(comps) and 0 <= j < len(comps):
                 from core.history import MoveSheetCommand
-                comp._window.viewport.history.execute(MoveSheetCommand(comps[i], j))
+                self._execute(MoveSheetCommand(comps[i], j))
                 comp._reload_comp_combo()
         elif verb == "del":
             i = int(rest)
@@ -942,8 +1030,6 @@ class Workspace:
                                 None, [("del", "Delete"), ("cancel", "Cancel")])
         elif verb == "answer":
             self._answer(*rest.split(SEP, 1)) if SEP in rest else self._answer(rest, "")
-        elif verb == "button" and rest == "classic" or verb == "classic":
-            self.open_classic()
         elif verb == "export":
             self.export(rest)
         elif verb == "zoom":
@@ -968,25 +1054,24 @@ class Workspace:
         return self.composer._window.viewport.history
 
     def _show(self, index: int) -> None:
-        comp = self.composer
-        comp._reload_comp_combo()
         index = max(0, min(index, len(self._sheets()) - 1))
-        if self._sheets()[index] is not comp.comp:
-            comp._on_comp_switched(index)
+        self.composer._on_comp_switched(index)
+        self.sheet_changed()
 
     def _add_sheet(self) -> None:
         """A new sheet at the end, from the default template when there is one."""
         from core.composition import Composicion
         from core.history import InsertSheetCommand
         from core.i18n import tr
-        comp, sheets = self.composer, self._sheets()
-        default = comp.default_template_name()
-        new = comp._composition_from_template(default) if default else None
+        import ingetrazo_core as NATIVE
+        sheets = self._sheets()
+        template = _sheet_template()
+        new = NATIVE.sheet_from_template(template) if template else None
         if new is None:
             new = Composicion()
             new.frames.append(new.default_frame())
         new.name = tr("Sheet {n}", n=len(sheets) + 1)
-        self._history().execute(InsertSheetCommand(new))
+        self._execute(InsertSheetCommand(new))
         self._show(len(sheets) - 1)
 
     def _duplicate_sheet(self, index: int) -> None:
@@ -999,7 +1084,7 @@ class Workspace:
         src = sheets[index]
         dup = Composicion.from_dict(src.to_dict())
         dup.name = src.name + tr(" (copy)")
-        self._history().execute(InsertSheetCommand(dup, index + 1))
+        self._execute(InsertSheetCommand(dup, index + 1))
         self._show(index + 1)
 
     def _delete_sheet(self, index: int) -> None:
@@ -1008,11 +1093,60 @@ class Workspace:
         if not 0 <= index < len(sheets) or len(sheets) <= 1:
             return
         current = self.composer.comp is sheets[index]
-        self._history().execute(RemoveSheetCommand(sheets[index]))
+        self._execute(RemoveSheetCommand(sheets[index]))
         if current:
             self._show(index)
         else:
             self.composer._reload_comp_combo()
+
+    def sheet_changed(self) -> None:
+        """Another sheet is open, or the list changed: the page and the dock
+        are sent again."""
+        self._page = None
+        self._sent.pop("list", None)
+        self._touch()
+
+    def _execute(self, command) -> None:
+        """A sheet command as a step of the document's history; the scene
+        versions it makes (the window may report them while it runs) are
+        the sheet's own, not model changes."""
+        self._in_edit = True
+        try:
+            self._history().execute(command)
+        finally:
+            self._in_edit = False
+            self._own_versions.add(getattr(self.composer._scene(), "version", None))
+            if len(self._own_versions) > 256:
+                self._own_versions = set(sorted(v for v in self._own_versions if v is not None)[-128:])
+
+    def model_changed(self, version) -> None:
+        """The model changed (not one of the sheet's own edits): with
+        Auto-render on, the shaded views render again; a drawn vector view
+        waits for Update (its exact pass costs seconds on a real model)."""
+        if self.__dict__.get("_in_edit"):
+            self._own_versions.add(version)
+            return
+        if version in self._own_versions or version == self._model_version:
+            return
+        self._model_version = version
+        self._stale = True
+        if self.shown:
+            self._auto_render_stale()
+
+    def _auto_render_stale(self) -> None:
+        if not (self._stale and self.composer._auto_render):
+            return
+        self._stale = False
+        for frame in list(self.composer.comp.frames):
+            if frame.style != "vectorial" or self.composer.frame_is_perspective(frame):
+                self._forget_render(frame)
+        self._touch()
+
+    def set_auto_render(self, on: bool) -> None:
+        from core.settings import settings
+        self.composer._auto_render = bool(on)
+        settings().setValue("composer/auto_render", "1" if on else "0")
+        self._auto_render_stale()
 
     def _keep_a_sheet(self) -> None:
         """An undo or redo took the open sheet away: its neighbour shows."""
@@ -1020,40 +1154,6 @@ class Workspace:
         if self.composer.comp not in sheets and len(sheets):
             self._show(0)
 
-
-    # ---- The escape hatch ----------------------------------------------------------------
-    def open_classic(self, tool: str = "") -> None:
-        """What the dock does not cover yet (pens, colours, cajetín designs,
-        guides, rulers…): the classic sheet editor. In the Qt app that is
-        the composer's own window on this document, with the workspace
-        left for the model; in the native shell, the classic app."""
-        comp = self.composer
-        win = comp._window
-        real = getattr(win, "_host_window", win)
-        if self._shell:
-            from app_shell import files
-            files.open_in_classic(real, why="The classic sheet editor")
-            return
-        from views.composer import ComposerWindow
-        from views.window_front import bring_to_front
-        from views.documents import DocumentHost
-        classic = comp.__dict__.get("_classic")
-        if classic is None or not _alive(classic):
-            classic = ComposerWindow(real)
-            host = DocumentHost(real, getattr(win, "_host_doc", None) or real._doc)
-            classic._window = host
-            panel = getattr(classic, "views_panel", None)
-            if panel is not None and hasattr(panel, "_window"):
-                panel._window = host
-            comp._classic = classic
-        comps = comp._scene().compositions
-        index = comps.index(comp.comp) if comp.comp in comps else 0
-        to_model(win)
-        bring_to_front(classic)
-        classic.show_sheet(index)
-        act = classic._tool_actions.get(tool) if tool else None
-        if act is not None:
-            act.trigger()
 
     # ---- Exports ------------------------------------------------------------------------------
     _EXPORTS = {"pdf": ("Export PDF…", ".pdf", "PDF (*.pdf)"),
@@ -1121,7 +1221,9 @@ class Workspace:
                     if wgpu_sheet_frames.export_dxf(self.view.source_viewport, self._frame(), path) is None:
                         troubled = [comp.comp.name]
                 elif kind == "svg":
-                    comp.export_frame_svg(self._frame(), path)
+                    from views import wgpu_sheet_frames
+                    if wgpu_sheet_frames.export_svg(self.view.source_viewport, self._frame(), path) is None:
+                        troubled = [comp.comp.name]
         except Exception as exc:  # noqa: BLE001 — say it, never lose the workspace
             import traceback
             traceback.print_exc()
@@ -1184,7 +1286,7 @@ class Workspace:
         return True
 
     def context_menu(self, event) -> None:
-        self.flash("The sheet's context menu is in the classic sheet editor for now", 2500)
+        self.flash("The page has no context menu yet: the dock and the shortcuts have its commands", 2500)
 
     def _shortcuts(self):
         comp = self.composer
@@ -1255,12 +1357,9 @@ class Workspace:
 
     # ---- The shell's loop -------------------------------------------------------------------
     def timers_pending(self) -> bool:
-        """The composer's own timers (auto-render, coalesced edits), or
-        frames still to render: the shell pumps Qt only while something is due."""
-        if self._more:
-            return True
-        t = getattr(self.composer, "_auto_timer", None)
-        return t is not None and t.isActive()
+        """Frames still to render, or a passing message still showing: the
+        shell pumps Qt only while something is due."""
+        return self._more or bool(self._passing())
 
 
 # ---- Hooks (views/wgpu_view.py, views/wgpu_ui.py) ---------------------------------------------

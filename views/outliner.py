@@ -3812,9 +3812,9 @@ class OutlinerPanel(QWidget):
         if page is not None and open_sheet:
             self._window._show_sheet(
                 self._scene().compositions.index(page))
-        composer = getattr(self._window, "_composer", None)
-        if composer is not None:
-            composer.views_panel.show_scene_row(title)
+        panel = getattr(getattr(self._window, "_composer", None), "views_panel", None)
+        if panel is not None:
+            panel.show_scene_row(title)
         return view
 
     def create_cut_view(self, plane, sheet: bool = True,
@@ -4902,6 +4902,6 @@ class ProjectBrowser(QDockWidget):
 
     def on_scene_changed(self) -> None:
         self.outliner.on_scene_changed()
-        composer = getattr(self._window, "_composer", None)
-        if composer is not None:
-            composer.views_panel.on_scene_changed()
+        panel = getattr(getattr(self._window, "_composer", None), "views_panel", None)
+        if panel is not None:
+            panel.on_scene_changed()
