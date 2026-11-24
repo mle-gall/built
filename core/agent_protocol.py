@@ -30,3 +30,10 @@ class ProtocolTools:
                        vertices=vertices, mode=mode)
         self._viewport.update()
         return out
+
+    def _tool_scale_selection(self, anchor, factors, vertices=(), placements=(), images=(), axes=None):
+        from core.protocol.commands import run
+        out = run(self._viewport.history, "scale_selection", anchor=anchor, factors=factors,
+                  vertices=vertices, placements=placements, images=images, axes=axes)
+        self._viewport.update()
+        return {**out, "step": out["step"].to_json() if out["step"] else None}

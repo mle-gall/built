@@ -6,6 +6,8 @@
 //! `py.rs` is the only PyO3 face, and `tests.rs` drives the machines
 //! against a fake host.
 
+mod scale_grip;
+mod scale_tool;
 pub mod gesture;
 pub mod line;
 pub mod move_tool;
@@ -111,6 +113,8 @@ pub enum ToolEvent {
     /// names a point of the model (None: no kind known), before an event.
     Frame { axes: [P3; 4], names_point: Option<bool> },
     Value(Value),
+    AbsoluteValue(Value),
+    ScaleFactors(P3),
     /// A segment or side count typed as `Ns` (Circle, Polygon, Arc).
     Segments(i64),
     /// A radius typed as `2r` (the 2-point Arc).
@@ -339,6 +343,7 @@ pub fn new_tool(kind: &str) -> Option<Box<dyn Tool>> {
         "arc3" => Some(Box::new(arc::ThreePointArcTool::default())),
         "center_arc" => Some(Box::new(arc::CenterArcTool::center())),
         "pie" => Some(Box::new(arc::CenterArcTool::pie())),
+        "scale" => Some(Box::new(scale_tool::ScaleTool::default())),
         "move" => Some(Box::new(move_tool::MoveTool::default())),
         _ => None,
     }

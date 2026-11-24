@@ -77,7 +77,14 @@ class _Host:
         history = self.vp.history
         before = self.revision()
         faces = len(self.vp.scene.faces)
-        answer = run(history, name, **args)
+        try:
+            answer = run(history, name, **args)
+        except (KeyError, ValueError) as error:
+            if name != "scale_selection":
+                raise
+            # A stale target during hot retype must leave the machine
+            # free to redo the original command.
+            return False, before, 0, str(error)
         after = self.revision()
         return (after != before, after, len(self.vp.scene.faces) - faces,
                 answer.get("error"))
@@ -1682,3 +1689,11 @@ class PieTool(CenterArcTool):
 
     kind = "pie"
     shortcut = None
+
+
+from tools.scale_host import ScaleHost
+
+
+class ScaleTool(ScaleHost, RustTool):
+    kind = "scale"
+    uses_snap = ScaleHost.uses_snap

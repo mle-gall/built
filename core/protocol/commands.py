@@ -381,6 +381,44 @@ def copy_placements(history, placements, delta, count=1, mode="x"):
     return answer
 
 
+def scale_selection(history, anchor, factors, vertices=(), placements=(), images=(), axes=None):
+    """Scale loose vertex keys, placement uids/paths and reference image indices
+    about an open-mesh point. Optional axes orient the grip box. One undo step."""
+    from math import isfinite
+    from core.coordinate_frame import point_in_frame
+    from core.history import (CompoundCommand, ScaleGroupCommand, ScaleImagePlanesCommand,
+                              ScaleVerticesCommand)
+    from ingetrazo_core import Vec3
+    factors = tuple(map(float, factors))
+    if len(factors) != 3 or any(not isfinite(f) or abs(f) < 1e-4 for f in factors):
+        raise ValueError("three finite, nonzero scale factors required")
+    if len(anchor) != 3 or not all(map(isfinite, anchor)):
+        raise ValueError("three finite anchor coordinates required")
+    if axes is not None:
+        if len(axes) != 3 or any(len(a) != 3 or not all(map(isfinite, a)) for a in axes):
+            raise ValueError("three finite box axes required")
+        axes = tuple(Vec3(*a) for a in axes)
+    mesh = history.scene.mesh
+    origin = getattr(store_of(mesh), "frame_origin", None)
+    center = point_in_frame(anchor, origin) if origin is not None else Vec3(*anchor)
+    groups = _placements(history, placements)
+    vs = _need(mesh, "vertex", dict.fromkeys(vertices))
+    planes = history.scene.image_planes
+    if any(type(i) is not int or not 0 <= i < len(planes) for i in images):
+        raise KeyError("unknown image plane")
+    refs = [planes[i] for i in dict.fromkeys(images)]
+    packed = factors[0] if factors[0] == factors[1] == factors[2] else factors
+    cmds = [ScaleGroupCommand(g, center, packed, axes) for g in groups]
+    if vs:
+        cmds.append(ScaleVerticesCommand([v.position for v in vs], center, packed, axes))
+    if refs:
+        cmds.append(ScaleImagePlanesCommand(refs, center, packed, axes))
+    before = history.revision
+    if cmds:
+        history.execute(cmds[0] if len(cmds) == 1 else CompoundCommand(cmds))
+    return _answer(history, before)
+
+
 def move_selection(history, delta, placements=None, vertices=None, edges=None,
                    faces=None, copy=False, count=1, mode="x"):
     """Move (or copy) what is named — placements by uid, loose vertices,
@@ -1170,7 +1208,7 @@ COMMANDS = {"set_location": set_location, "set_model_units": set_model_units, "s
             "add_edge": add_edge, "add_edges": add_edges, "add_face": add_face,
             "add_guide_circle": add_guide_circle, "add_arc": add_arc,
             "move_placements": move_placements, "copy_placements": copy_placements,
-            "move_selection": move_selection,
+            "move_selection": move_selection, "scale_selection": scale_selection,
             "divide_edges": divide_edges, "join_edges": join_edges,
             "move_vertices": move_vertices, "erase": erase,
             "reverse_faces": reverse_faces, "push_pull": push_pull, "orient_faces": orient_faces,

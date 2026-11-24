@@ -263,3 +263,14 @@ for _name, _description, _props, _required in [
 ]:
     BUILTIN_TOOLS.append(dict(name=_name, description=_description,
         inputSchema=dict(type="object", properties=_props, required=_required)))
+
+_SCALE_TRIPLE = {"type": "array", "items": {"type": "number"}, "minItems": 3, "maxItems": 3}
+BUILTIN_TOOLS.append(dict(
+    name="scale_selection", mutates=True,
+    description="Scale the named open-mesh vertices, placements and reference images about an anchor in metres.",
+    inputSchema=dict(type="object", properties={
+        "anchor": _SCALE_TRIPLE, "factors": _SCALE_TRIPLE, "vertices": _KEYS,
+        "placements": {"type": "array", "items": {"oneOf": [{"type": "string"}, _KEYS]}},
+        "images": {"type": "array", "items": {"type": "integer", "minimum": 0}},
+        "axes": {"type": "array", "items": _SCALE_TRIPLE, "minItems": 3, "maxItems": 3},
+    }, required=["anchor", "factors"])))
