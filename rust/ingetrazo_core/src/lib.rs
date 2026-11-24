@@ -110,6 +110,7 @@ mod draw_overlay;
 mod draw_plan;
 mod drawing_queries;
 mod object_outline;
+mod object_planes;
 mod object_push_edges;
 mod object_edge_edits;
 mod planar_edits;

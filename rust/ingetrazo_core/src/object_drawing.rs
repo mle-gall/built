@@ -487,6 +487,9 @@ fn prune_soft_edges(mesh: &Obj<'_>) -> PyResult<()> {
 }
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let sub = PyModule::new(m.py(), "object_drawing")?;
+    sub.add_function(wrap_pyfunction!(crate::object_planes::coplanar_plane, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_planes::has_plane_edge, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_planes::face_rebuild_plane, &sub)?)?;
     sub.add_class::<crate::draw_overlay::ScanOverlay>()?;
     sub.add_class::<crate::drawing_queries::Nearby>()?;
     sub.add_function(wrap_pyfunction!(crate::drawing_queries::touching_segments, &sub)?)?;
