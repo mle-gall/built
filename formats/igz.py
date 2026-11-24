@@ -81,7 +81,7 @@ from ingetrazo_core import (
     igz_build_geometry as _build_geometry,
     igz_load_mesh as _load_mesh,
     igz_load_mesh_json as _load_mesh_json,
-    igz_without_nonfinite as _without_nonfinite,
+    igz_finite_points as _finite_points, igz_without_nonfinite as _without_nonfinite,
     igz_normalize_text_curve_ids as _normalize_text_curve_ids,
     igz_in_worker as _in_worker,
     igz_decode_document as _decode_document,

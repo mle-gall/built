@@ -188,6 +188,35 @@ fn igz_document_geometry_arrays<'p>(meta: &Obj<'p>, geom: &Obj<'p>) -> PyResult<
     )?;
     api(py)?.call_method("_geometry_arrays", (meta, blob), Some(&kw))
 }
+fn finite_point(point: &Obj<'_>) -> PyResult<bool> {
+    let py = point.py();
+    let float = py.import("builtins")?.getattr("float")?;
+
+    let result = (|| -> PyResult<bool> {
+        for c in point.try_iter()? {
+            if !float.call1((c?,))?.extract::<f64>()?.is_finite() {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    })();
+    match result {
+        Err(e) if e.is_instance_of::<PyTypeError>(py) || e.is_instance_of::<PyValueError>(py) => {
+            Ok(false)
+        }
+        other => other,
+    }
+}
+
+#[pyfunction(signature=(*points))]
+fn igz_finite_points(points: &Bound<'_, PyTuple>) -> PyResult<bool> {
+    for point in points.iter() {
+        if !finite_point(&point)? {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
 #[pyfunction]
 fn igz_without_nonfinite<'p>(payload: &Obj<'p>) -> PyResult<Obj<'p>> {
     let py = payload.py();
@@ -200,32 +229,13 @@ fn igz_without_nonfinite<'p>(payload: &Obj<'p>) -> PyResult<Obj<'p>> {
     {
         return Ok(payload.clone());
     }
-    let float = py.import("builtins")?.getattr("float")?;
-    let finite = |point: &Obj<'p>| -> PyResult<bool> {
-        let result = (|| -> PyResult<bool> {
-            for c in point.try_iter()? {
-                if !float.call1((c?,))?.extract::<f64>()?.is_finite() {
-                    return Ok(false);
-                }
-            }
-            Ok(true)
-        })();
-        match result {
-            Err(e)
-                if e.is_instance_of::<PyTypeError>(py) || e.is_instance_of::<PyValueError>(py) =>
-            {
-                Ok(false)
-            }
-            other => other,
-        }
-    };
     let edges = PyList::empty(py);
     let faces = PyList::empty(py);
     let mut skipped = 0;
     for e in rows(payload, "edges")?.try_iter()? {
         let e = e?;
-        if finite(&e.call_method1("get", ("a", PyTuple::empty(py)))?)?
-            && finite(&e.call_method1("get", ("b", PyTuple::empty(py)))?)?
+        if finite_point(&e.call_method1("get", ("a", PyTuple::empty(py)))?)?
+            && finite_point(&e.call_method1("get", ("b", PyTuple::empty(py)))?)?
         {
             edges.append(e)?
         } else {
@@ -243,7 +253,7 @@ fn igz_without_nonfinite<'p>(payload: &Obj<'p>) -> PyResult<Obj<'p>> {
         );
         'outer: for l in loops {
             for v in l.try_iter()? {
-                if !finite(&v?)? {
+                if !finite_point(&v?)? {
                     ok = false;
                     break 'outer;
                 }
@@ -756,6 +766,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(igz_build_geometry, m)?)?;
     m.add_function(wrap_pyfunction!(igz_load_mesh, m)?)?;
     m.add_function(wrap_pyfunction!(igz_load_mesh_json, m)?)?;
+    m.add_function(wrap_pyfunction!(igz_finite_points, m)?)?;
     m.add_function(wrap_pyfunction!(igz_without_nonfinite, m)?)?;
     m.add_function(wrap_pyfunction!(igz_normalize_text_curve_ids, m)?)
 }

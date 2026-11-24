@@ -16,15 +16,17 @@ struct Report {
     cb: Py<PyAny>,
     base: f64,
     span: f64,
-    propagate: bool,
+    scope: Option<Py<PyAny>>,
 }
 #[pymethods]
 impl Report {
     fn __call__(&self, fraction: f64, phase: &Obj<'_>) -> PyResult<()> {
         let py = phase.py();
         match self.cb.call1(py, (self.base + fraction * self.span, phase)) {
-            Err(e) if self.propagate && e.is_instance_of::<PyException>(py) => {
+            Err(e) if self.scope.is_some() && e.is_instance_of::<PyException>(py) => {
                 let stop = LinkInterrupted::new_err(());
+                stop.value(py)
+                    .setattr("scope", self.scope.as_ref().unwrap().bind(py))?;
                 stop.set_cause(py, Some(e));
                 Err(stop)
             }
@@ -37,7 +39,7 @@ fn report<'p>(
     cb: Option<&Obj<'p>>,
     base: f64,
     span: f64,
-    propagate: bool,
+    scope: Option<&Obj<'p>>,
 ) -> PyResult<Option<Py<Report>>> {
     cb.map(|cb| {
         Py::new(
@@ -46,7 +48,7 @@ fn report<'p>(
                 cb: cb.clone().unbind(),
                 base,
                 span,
-                propagate,
+                scope: scope.map(|s| s.clone().unbind()),
             },
         )
     })
@@ -85,11 +87,11 @@ fn igz_load_into<'p>(
         let cb = progress.filter(|c| c.is_truthy().unwrap_or(false));
         codec.call_method1(
             "_load_into_inner",
-            (scene, path, report(py, cb, 0., 0.8, false)?, link_meshes),
+            (scene, path, report(py, cb, 0., 0.8, None)?, link_meshes),
         )?;
         codec.call_method1(
             "_load_links",
-            (scene, path, include_links, report(py, cb, 0.8, 0.2, false)?),
+            (scene, path, include_links, report(py, cb, 0.8, 0.2, None)?),
         )?;
         if let Some(root) = scene.getattr("_root").ok().filter(|r| !r.is_none()) {
             root.call_method0("_index_assemblies")?;
@@ -149,13 +151,19 @@ fn igz_load_links<'p>(
         scene.setattr("groups", keep)?;
     } else if linked.is_truthy()? {
         let kw = PyDict::new(py);
+        // Only the link load that wrapped the caller's exception can unwrap
+        // it. An inner load must let it cross the recoverable-source handler.
+        let scope = PyDict::new(py).into_any();
         if let Some(cb) = progress {
-            kw.set_item("progress", report(py, Some(cb), 0., 1., true)?)?
+            kw.set_item("progress", report(py, Some(cb), 0., 1., Some(&scope))?)?
         }
         match links.call_method("resolve", (scene, path), Some(&kw)) {
             Ok(_) => (),
             Err(e) if e.is_instance_of::<LinkInterrupted>(py) => {
-                return Err(e.cause(py).unwrap_or(e))
+                if e.value(py).getattr("scope")?.is(&scope) {
+                    return Err(e.cause(py).unwrap_or(e));
+                }
+                return Err(e);
             }
             Err(e) if e.is_instance_of::<PyException>(py) => {
                 let errors = PyDict::new(py);
