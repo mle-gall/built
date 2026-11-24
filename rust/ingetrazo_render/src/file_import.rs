@@ -33,7 +33,7 @@ fn dxf_options(win: &Bound<'_, PyAny>, header_scale: Option<f64>) -> PyResult<Op
     kwargs.set_item("cancel", "cancel")?;
     kwargs.set_item("checklist", &checklist)?;
     let answer = py.import("views.chrome_dialogs")?.call_method("ask", (
-        win, translated(py, "Import DXF", None)?,
+        win, translated(py, "What unit is this drawing in?", None)?,
         translated(py, "What unit is this drawing in? (CAD headers often lie)", None)?, buttons,
     ), Some(&kwargs))?;
     let choice = answer.extract::<Option<&str>>()?.unwrap_or(default.0);
