@@ -1835,87 +1835,22 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
     # ---- Base-map tiles (Track G) -------------------------------------------
     def _base_map_showing(self) -> bool:
-        """True when a georeferenced base map is currently visible."""
-        layer = getattr(self.scene, "tile_layer", None)
-        return (layer is not None and getattr(layer, "visible", False)
-                and getattr(self.scene, "georef", None) is not None)
+        return ingetrazo_render.base_map_showing(self)
 
     def _ensure_tile_fetcher(self):
-        """Create the tile fetcher on first use (needs a running app)."""
-        if self._tile_fetcher is None:
-            from georef.tile_fetcher import TileFetcher
-            self._tile_fetcher = TileFetcher(parent=self)
-            self._tile_fetcher.tileReady.connect(self._on_tile_ready)
-        return self._tile_fetcher
+        return ingetrazo_render.ensure_tile_fetcher(self)
 
     def _on_tile_ready(self, source_id, x, y, z, image) -> None:
-        """A downloaded tile arrived: stash its image and schedule a repaint."""
-        layer = getattr(self.scene, "tile_layer", None)
-        if (layer is not None and layer.source.id == source_id
-                and z == layer.zoom):
-            layer.images[(x, y, z)] = image
-            self.tilesChanged.emit()
-            self.update()
+        return ingetrazo_render.on_tile_ready(self, source_id, x, y, z, image)
 
     def _disk_cached_tile(self, source, x, y, z):
-        """Tile ``(x, y, z)`` of ``source`` from the on-disk cache, or None.
-        The same cache the fetcher fills, read without the fetcher: safe
-        inside paintGL, where the fetcher's network manager must not be
-        created (#327)."""
-        if z < 0 or z > source.max_zoom:
-            return None
-        if self._tile_fetcher is not None:
-            cache = self._tile_fetcher.cache
-        else:
-            cache = getattr(self, "_tile_disk_cache", None)
-            if cache is None:
-                from georef.tiles import TileCache, default_cache_dir
-                cache = self._tile_disk_cache = TileCache(default_cache_dir())
-        data = cache.get(source.id, x, y, z)
-        if data is None:
-            return None
-        from ingetrazo_render import SurveyRaster
-        return SurveyRaster.decode(data)
+        return ingetrazo_render.disk_cached_tile(self, source, x, y, z)
 
     def _schedule_tile_requests(self) -> None:
-        """Start missing tile requests after the current GL paint returns."""
-        if self._tile_requests_scheduled:
-            return
-        self._tile_requests_scheduled = True
-        if NATIVE:
-            later(self, 0, self._request_missing_tiles)
-        else:
-            QTimer.singleShot(0, self._request_missing_tiles)
+        return ingetrazo_render.schedule_tile_requests(self)
 
     def _request_missing_tiles(self) -> None:
-        """Fetch the current layer's missing images outside ``paintGL``.
-
-        Cache hits are copied into the layer immediately and repaint once;
-        network misses are delivered later by :meth:`_on_tile_ready`.
-        Reading the current scene here also makes a callback queued just before
-        a source/location change harmless.
-        """
-        self._tile_requests_scheduled = False
-        layer = getattr(self.scene, "tile_layer", None)
-        datum = getattr(self.scene, "georef", None)
-        if layer is None or datum is None or not getattr(layer, "visible", False):
-            return
-        try:
-            tiles = layer.flat_tiles(datum)
-        except Exception:
-            return
-        fetcher = self._ensure_tile_fetcher()
-        cached = False
-        for x, y in tiles:
-            key = (x, y, layer.zoom)
-            if key in layer.images:
-                continue
-            image = fetcher.request(layer.source, x, y, layer.zoom)
-            if image is not None:
-                layer.images[key] = image
-                cached = True
-        if cached:
-            self.update()
+        return ingetrazo_render.request_missing_tiles(self)
 
     #: Per-document caches keyed by ``id()`` of the document's groups,
     #: meshes and placements — the render/pick chunks and what hangs off
@@ -1956,13 +1891,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
 
     def reset_tiles(self) -> None:
-        """Discard tiles for the previous capture and cancel its pending requests."""
-        if self._tile_fetcher is not None:
-            self._tile_fetcher.cancel_all()
-        layer = getattr(self.scene, "tile_layer", None)
-        if layer is not None:
-            layer.images.clear()
-        self.update()
+        return ingetrazo_render.reset_tiles(self)
 
     # Max NEW GL textures created per frame. Uploading hundreds at once (a big
     # capture) overwhelms Mesa and reads back as garbage (black/green tears at
@@ -1976,20 +1905,10 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
 
     def _terrain_showing(self) -> bool:
-        t = getattr(self.scene, "terrain", None)
-        return t is not None and getattr(t, "visible", False)
+        return ingetrazo_render.terrain_showing(self)
 
     def prefetch_tiles(self, source, tile_list, zoom) -> None:
-        """Request the given tiles so their images populate ``tile_layer.images``
-        (used to build the 3D terrain mosaic even when the flat map is hidden)."""
-        layer = getattr(self.scene, "tile_layer", None)
-        if layer is None:
-            return
-        fetcher = self._ensure_tile_fetcher()
-        for (x, y) in tile_list:
-            img = fetcher.request(source, x, y, zoom)
-            if img is not None:
-                layer.images[(x, y, zoom)] = img
+        return ingetrazo_render.prefetch_tiles(self, source, tile_list, zoom)
 
 
 
@@ -2033,34 +1952,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
     @staticmethod
     def _sky_gradient(sky_rgb, ground_rgb, hy):
-        """Corner colours of the backdrop gradient: the style's sky tone at
-        the zenith and ground tone underfoot, both hazed toward white at the
-        horizon (atmosphere — the one-colour input stays the one the user
-        picked). Computed against the UNCLAMPED horizon ``hy``, so a pitched
-        camera sees the right slice of the ramp (all zenith when looking up,
-        all ground when looking down). Returns ``(sky_bottom, sky_top,
-        ground_top, ground_bottom, horizon_line)``; the ramps are linear in
-        NDC y, so colouring only the quad corners is exact."""
-        def mix(a, b, t):
-            return (a[0] + (b[0] - a[0]) * t,
-                    a[1] + (b[1] - a[1]) * t,
-                    a[2] + (b[2] - a[2]) * t)
-
-        white = (1.0, 1.0, 1.0)
-        sky_h = mix(sky_rgb, white, 0.55)
-        gnd_h = mix(ground_rgb, white, 0.30)
-
-        def sky_at(y):
-            t = min(1.0, max(0.0, (y - hy) / DocumentInteraction._SKY_GRAD_SPAN))
-            return mix(sky_h, sky_rgb, t)
-
-        def gnd_at(y):
-            t = min(1.0, max(0.0, (hy - y) / DocumentInteraction._GROUND_GRAD_SPAN))
-            return mix(gnd_h, ground_rgb, t)
-
-        y0 = max(-1.0, min(1.0, hy))
-        line = mix(mix(sky_h, gnd_h, 0.5), (0.0, 0.0, 0.0), 0.12)
-        return sky_at(y0), sky_at(1.0), gnd_at(y0), gnd_at(-1.0), line
+        return ingetrazo_render.sky_gradient(sky_rgb, ground_rgb, hy)
 
     # ---- Sun shadows (core/sun.py) ------------------------------------------
     _SHADOW_MAP_SIZE = 2048
@@ -2075,69 +1967,20 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     _SHADOW_OPACITY_MIN = 0.7
 
     def _sun_dir_now(self):
-        """Unit vector toward the sun for the scene's shadow settings —
-        ``None`` when there is nothing to cast (shadows off, kill switch
-        ``INGETRAZO_NO_SHADOWS``, a sheet plan style, night, or a date that
-        does not exist in a hand-edited file)."""
-        import os
-        if os.environ.get("INGETRAZO_NO_SHADOWS"):
-            return None
-        if self.plano_style is not None:
-            return None
-        from core.sun import scene_sun_direction
-        return scene_sun_direction(self.scene)
+        return ingetrazo_render.sun_dir_now(self)
 
 
     @staticmethod
     def _shadow_footprint(light_vp) -> tuple[float, float]:
-        """Metres across one side of the map and along its depth range.
-        The light's view is a rigid motion, so each row of the orthographic
-        projection keeps its scale: 2 / width and 2 / depth."""
-        def span(row: int) -> float:
-            n = light_vp.row(row).toVector3D().length()
-            return 2.0 / n if n > 1e-12 else 1.0
-        return span(0), span(2)
+        return ingetrazo_render.shadow_footprint(light_vp)
 
     @staticmethod
     def _light_vp(d, lo, hi, fit=None):
-        """The sun's orthographic view-projection fitted around the model —
-        and around the z=0 ground patch that receives. Ortho keeps the
-        packed depth linear.
-
-        ``fit`` = ``(cx, cy, half)`` in the sun's view plane narrows the map
-        to that square (#958: what the settled view shows, see
-        ``_settle_shadow_fit``); along the sun it still spans the whole
-        model, so a caster off screen still throws its shadow in."""
-        view, r = DocumentInteraction._light_view(d, lo, hi)
-        proj = QMatrix4x4()
-        # Eye sits 2r from center; everything lives within r of it.
-        if fit is None:
-            proj.ortho(-r, r, -r, r, r * 0.5, r * 3.5)
-        else:
-            cx, cy, half = fit
-            proj.ortho(cx - half, cx + half, cy - half, cy + half,
-                       r * 0.5, r * 3.5)
-        return proj * view
+        return ingetrazo_render.light_vp(d, lo, hi, fit)
 
     @staticmethod
     def _light_view(d, lo, hi):
-        """The sun's view matrix round the model, and the radius ``r`` of
-        the sphere the model and its ground patch fit in."""
-        cx = (lo.x() + hi.x()) / 2.0
-        cy = (lo.y() + hi.y()) / 2.0
-        loz = min(lo.z(), 0.0)
-        cz = (loz + hi.z()) / 2.0
-        # Half-diagonal of the dominant extent (≤ 0.87×max side), with
-        # margin so rims never clip against the map's edge.
-        r = max(hi.x() - lo.x(), hi.y() - lo.y(), hi.z() - loz, 2.0) * 0.87
-        r *= 1.25
-        center = QVector3D(cx, cy, cz)
-        eye = center + QVector3D(d[0], d[1], d[2]) * (r * 2.0)
-        up = (QVector3D(0.0, 0.0, 1.0) if abs(d[2]) < 0.95
-              else QVector3D(0.0, 1.0, 0.0))
-        view = QMatrix4x4()
-        view.lookAt(eye, center, up)
-        return view, r
+        return ingetrazo_render.light_view(d, lo, hi)
 
     #: How long the view must stay put before the fitted map is drawn (#958).
     SHADOW_SETTLE_MS = 200
