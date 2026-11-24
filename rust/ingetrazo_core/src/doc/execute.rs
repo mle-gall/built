@@ -43,6 +43,7 @@ pub(super) fn execute<'py>(
     let depth: usize = doc.call_method1("begin", (document,))?.extract()?;
     let mut rollback = None;
     let mut annotation = None;
+    let mut share_before = false;
     let result = (|| {
         if !parts.is_empty() && replay {
             cmd.setattr("_journal_geometry", depth == 1)?;
@@ -76,18 +77,18 @@ pub(super) fn execute<'py>(
         // A fresh materialised drawing step and the transaction both need the
         // same pre-edit state. Keep the transaction's strong reference until
         // document commit, including any failing tag or attachment callbacks.
-        let mut kwargs = None;
-        if let Some(before) = &rollback {
-            if cmd.get_type().is(&compound)
-                && cmd.getattr("after")?.is_none()
-                && !cmd.getattr("__dict__")?.contains("do")?
-            {
-                let kw = PyDict::new(py);
-                kw.set_item("rollback_state", before)?;
-                kwargs = Some(kw);
-            }
+        share_before = rollback.is_some()
+            && cmd.get_type().is(&compound)
+            && cmd.getattr("after")?.is_none()
+            && !cmd.getattr("_journal_geometry")?.is_truthy()?
+            && !cmd.getattr("__dict__")?.contains("do")?;
+        if share_before {
+            let kw = PyDict::new(py);
+            kw.set_item("transaction_captured_before", true)?;
+            cmd.call_method("do", (&scene,), Some(&kw))?;
+        } else {
+            cmd.call_method1("do", (&scene,))?;
         }
-        cmd.call_method("do", (&scene,), kwargs.as_ref())?;
         if !tag_objects.is_none() {
             host.call_method0("_follow_text_placements")?;
         }
@@ -101,6 +102,11 @@ pub(super) fn execute<'py>(
         }
         doc.call_method0("commit")
     })();
+    // Publish only after user callbacks finished. In particular a callback must
+    // never be able to mutate the transaction's private recovery dictionary.
+    if let Some(state) = rollback.as_ref().filter(|_| share_before) {
+        cmd.setattr("before", state)?;
+    }
     let txn = match result {
         Ok(txn) => txn,
         Err(error) => {
