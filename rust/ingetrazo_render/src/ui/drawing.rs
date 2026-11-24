@@ -14,15 +14,33 @@ pub(super) struct DrawingDrag {
 impl DrawingDrag {
     pub fn begin(styles: &StyleEditor, row: &Node) -> Option<Self> {
         let (verb, tags, folder) = if let Some(tag) = row.key.strip_prefix("preview-tag:") {
-            if tag == "Layer 0" { return None; }
+            if tag == "Layer 0" {
+                return None;
+            }
             let tags = if styles.selected(row) {
-                styles.selected.keys().filter(|k| *k != "Layer 0").cloned().collect()
-            } else { vec![tag.to_owned()] };
+                styles
+                    .selected
+                    .keys()
+                    .filter(|k| *k != "Layer 0")
+                    .cloned()
+                    .collect()
+            } else {
+                vec![tag.to_owned()]
+            };
             ("file", tags, String::new())
         } else {
-            ("move", Vec::new(), row.key.strip_prefix("preview-folder:")?.to_owned())
+            (
+                "move",
+                Vec::new(),
+                row.key.strip_prefix("preview-folder:")?.to_owned(),
+            )
         };
-        Some(Self { owner: styles.owner, verb, tags, folder })
+        Some(Self {
+            owner: styles.owner,
+            verb,
+            tags,
+            folder,
+        })
     }
 
     fn action(&self, folder: &str) -> String {
@@ -31,10 +49,20 @@ impl DrawingDrag {
     }
 }
 
-pub(super) fn drawing_drop(ui: &egui::Ui, response: &egui::Response, nodes: &[Node],
-                           index: Option<usize>, owner: usize, actions: &mut Vec<String>) {
-    let Some(payload) = response.dnd_hover_payload::<DrawingDrag>() else { return };
-    if payload.owner != owner { return; }
+pub(super) fn drawing_drop(
+    ui: &egui::Ui,
+    response: &egui::Response,
+    nodes: &[Node],
+    index: Option<usize>,
+    owner: usize,
+    actions: &mut Vec<String>,
+) {
+    let Some(payload) = response.dnd_hover_payload::<DrawingDrag>() else {
+        return;
+    };
+    if payload.owner != owner {
+        return;
+    }
     let mut target = "";
     if let Some(index) = index {
         let row = &nodes[index];
@@ -46,9 +74,13 @@ pub(super) fn drawing_drop(ui: &egui::Ui, response: &egui::Response, nodes: &[No
                     target = parent.key.strip_prefix("preview-folder:").unwrap_or("");
                 }
             }
-        } else { return; }
+        } else {
+            return;
+        }
     }
-    if payload.verb == "move" && payload.folder == target { return; }
+    if payload.verb == "move" && payload.folder == target {
+        return;
+    }
     kit::paint_focus(ui, response.rect, super::R_ROW);
     if response.dnd_release_payload::<DrawingDrag>().is_some() {
         actions.push(payload.action(target));
@@ -152,6 +184,9 @@ pub(super) struct StyleEditor {
     pattern_source: String,
     patterns: BTreeMap<String, serde_json::Value>,
     hatch_filter: String,
+    hatch_group: String,
+    choosing_hatch_group: bool,
+    hatch_cursor: Option<usize>,
     samples: BTreeMap<String, Option<kit::PaperMarks>>,
     // Tag keys, not row labels: two filing nodes can refer to one tag.
     selected: BTreeMap<String, (String, Vec<String>)>,
@@ -174,7 +209,9 @@ impl StyleEditor {
     }
 
     pub fn state_action(&self, n: &Node, lock: bool) -> Option<String> {
-        if !self.selected(n) { return None; }
+        if !self.selected(n) {
+            return None;
+        }
         let tags: Vec<_> = self.selected.keys().collect();
         let edit = if lock {
             serde_json::json!({"tags":tags, "locked": n.lock == 0})
@@ -249,7 +286,9 @@ impl StyleEditor {
         if !tags.is_empty() {
             let count: Option<u64> = tags.iter().map(|tag| self.counts.count(tag)).sum();
             let value = count.map_or_else(|| "Counting…".to_string(), |n| n.to_string());
-            kit::property_control(ui, "Entities", |ui| { ui.label(value); });
+            kit::property_control(ui, "Entities", |ui| {
+                ui.label(value);
+            });
         }
         let fields_height =
             (ui.available_height() - super::BUTTON_H - super::SPACE_S).max(super::CONTROL_H);
@@ -394,6 +433,7 @@ impl StyleEditor {
                     ) {
                         self.patch.insert("brick".into(), size);
                     }
+                    continue;
                 }
                 self.field(
                     ui,
@@ -459,17 +499,12 @@ impl StyleEditor {
                 if current.is_none() {
                     kit::caption_plain(ui, "Mixed");
                 }
-            } else if matches!(field, "brick" | "hatch_offset") {
+            } else if field == "hatch_offset" {
                 let mut text = current.clone().unwrap_or_default();
-                let hint = if field == "brick" {
-                    "L, W, H, bed, head"
-                } else {
-                    "X, Y"
-                };
                 if ui
                     .add(
                         kit::field(&mut text)
-                            .hint_text(hint)
+                            .hint_text("X, Y")
                             .desired_width(ui.available_width()),
                     )
                     .changed()
@@ -486,22 +521,38 @@ impl StyleEditor {
                 }
             } else if matches!(field, "color" | "hatch_ground" | "hatch_color") {
                 if field != "color" {
+                    let colors: &[(&str, &str)] = if field == "hatch_ground" {
+                        &[
+                            ("Automatic", ""),
+                            ("By tag", "layer"),
+                            ("White", "#ffffff"),
+                            ("Light grey", "#e0e0e0"),
+                            ("Custom", "#808080"),
+                        ]
+                    } else {
+                        &[
+                            ("Automatic", ""),
+                            ("By tag", "layer"),
+                            ("Black", "#000000"),
+                            ("Dark grey", "#666666"),
+                            ("Custom", "#808080"),
+                        ]
+                    };
                     let mode = match current.as_deref() {
                         None => "Mixed",
-                        Some("layer") => "By tag",
-                        Some("") => "Automatic",
-                        _ => "Custom",
+                        Some(value) => colors
+                            .iter()
+                            .find(|(_, v)| *v == value)
+                            .map_or("Custom", |(label, _)| label),
                     };
                     egui::ComboBox::from_id_salt(field)
                         .width(82.)
                         .selected_text(mode)
                         .show_ui(ui, |ui| {
-                            for (label, value) in [
-                                ("Automatic", ""),
-                                ("By tag", "layer"),
-                                ("Custom", "#808080"),
-                            ] {
-                                if ui.selectable_label(mode == label, label).clicked()
+                            for &(label, value) in colors {
+                                if ui
+                                    .selectable_label(current.as_deref() == Some(value), label)
+                                    .clicked()
                                     && mode != label
                                 {
                                     self.patch.insert(field.into(), value.into());
@@ -621,89 +672,155 @@ impl StyleEditor {
     }
 
     fn pick_hatch(&mut self, ui: &mut egui::Ui, current: Option<&str>) -> Option<String> {
-        let label = |key: &str| {
-            if key.is_empty() {
-                "Automatic".into()
-            } else {
-                self.hatches
-                    .labels
-                    .get(key)
-                    .cloned()
-                    .unwrap_or_else(|| key.trim_start_matches("pat:").replace('_', " "))
-            }
-        };
         let mut choice = None;
-        egui::ComboBox::from_id_salt("drawing hatch")
+        let tag = self.common(0, "color");
+        let ground = super::drawing_hatches::preview_color(
+            self.common(11, "hatch_ground").as_deref(),
+            tag.as_deref(),
+            true,
+        );
+        let ink = super::drawing_hatches::preview_color(
+            self.common(12, "hatch_color").as_deref(),
+            tag.as_deref(),
+            false,
+        );
+        let popup = egui::ComboBox::from_id_salt("drawing hatch")
+            .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
             .width(ui.available_width().min(168.))
-            .selected_text(current.map(label).unwrap_or_else(|| "Mixed".into()))
+            .selected_text(
+                current
+                    .map(|key| self.hatches.label(key))
+                    .unwrap_or_else(|| "Mixed".into()),
+            )
             .show_ui(ui, |ui| {
-                ui.add(kit::search(&mut self.hatch_filter, "Find a hatch"));
-                let query = self.hatch_filter.trim().to_lowercase();
-                let imported = self
-                    .patterns
-                    .iter()
-                    .map(|(k, v)| (format!("pat:{k}"), Some(v)));
-                let standard = std::iter::once("")
-                    .chain(kit::HATCH_KEYS.lines())
-                    .map(|k| (k.to_owned(), None));
-                let shortcuts = self
-                    .hatches
-                    .favourites
-                    .iter()
-                    .chain(&self.hatches.recent)
-                    .filter(|key| {
-                        self.hatches.labels.contains_key(*key)
-                            || key
-                                .strip_prefix("pat:")
-                                .is_some_and(|k| self.patterns.contains_key(k))
-                    })
-                    .map(|k| {
-                        (
-                            k.clone(),
-                            k.strip_prefix("pat:")
-                                .and_then(|name| self.patterns.get(name)),
-                        )
-                    });
-                let mut seen = std::collections::BTreeSet::new();
-                for (key, pattern) in shortcuts.chain(imported).chain(standard) {
-                    if !seen.insert(key.clone()) {
-                        continue;
-                    }
-                    let text = label(&key);
-                    let description = pattern.and_then(|p| p["label"].as_str()).unwrap_or("");
-                    if !text.to_lowercase().contains(&query)
-                        && !description.to_lowercase().contains(&query)
+                let (down, up, enter) = ui.input_mut(|i| {
+                    (
+                        i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown),
+                        i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp),
+                        i.consume_key(egui::Modifiers::NONE, egui::Key::Enter),
+                    )
+                });
+                if ui
+                    .add(kit::search(&mut self.hatch_filter, "Find a hatch"))
+                    .changed()
+                {
+                    self.hatch_cursor = None;
+                }
+                let groups = self.hatches.sections(&self.patterns);
+                if !groups.iter().any(|(name, _)| name == &self.hatch_group) {
+                    self.hatch_group.clear();
+                }
+                let scope = if self.hatch_group.is_empty() {
+                    "All hatches"
+                } else {
+                    &self.hatch_group
+                };
+                if kit::quiet(ui, scope).clicked() {
+                    self.choosing_hatch_group = !self.choosing_hatch_group;
+                }
+                if self.choosing_hatch_group {
+                    for category in
+                        std::iter::once("").chain(groups.iter().map(|(name, _)| name.as_str()))
                     {
-                        continue;
+                        let text = if category.is_empty() {
+                            "All hatches"
+                        } else {
+                            category
+                        };
+                        if ui
+                            .selectable_label(category == self.hatch_group, text)
+                            .clicked()
+                        {
+                            self.hatch_cursor = None;
+                            self.hatch_group = category.to_owned();
+                            self.choosing_hatch_group = false;
+                        }
                     }
-                    let (rect, row) = kit::list_row(ui, super::ROW_H, current == Some(&key));
-                    if ui.is_rect_visible(rect) {
-                        let sample = egui::Rect::from_center_size(
-                            rect.left_center() + egui::vec2(22., 0.),
-                            egui::vec2(36., 14.),
-                        );
-                        let marks = pattern.and_then(|p| {
-                            self.samples
-                                .entry(key.clone())
-                                .or_insert_with(|| kit::imported_hatch(&p["families"]))
-                                .as_ref()
-                        });
-                        kit::hatch_sample(ui, sample, &key, marks);
-                        ui.painter().text(
-                            rect.left_center() + egui::vec2(46., 0.),
-                            egui::Align2::LEFT_CENTER,
-                            text,
-                            super::body(),
-                            super::INK,
-                        );
+                    return;
+                }
+                let shown = self.hatches.matching(
+                    groups,
+                    &self.patterns,
+                    &self.hatch_group,
+                    &self.hatch_filter,
+                );
+                if shown.is_empty() {
+                    kit::caption_plain(ui, "No matching hatches");
+                }
+                let mut index = 0;
+                let all: Vec<_> = shown.iter().flat_map(|(_, keys)| keys).collect();
+                if !all.is_empty() && (up || down) {
+                    let was = self
+                        .hatch_cursor
+                        .or_else(|| all.iter().position(|key| Some(key.as_str()) == current));
+                    self.hatch_cursor = Some(
+                        was.map_or(0, |i| if up { i.saturating_sub(1) } else { i + 1 })
+                            .min(all.len() - 1),
+                    );
+                }
+                if enter {
+                    if let Some(key) = self.hatch_cursor.and_then(|i| all.get(i)) {
+                        choice = Some((*key).clone());
+                        ui.memory_mut(|m| m.close_popup());
+                        return;
                     }
-                    if row.on_hover_text(description).clicked() {
-                        choice = Some(key);
-                        self.hatch_filter.clear();
-                        ui.close_menu();
+                }
+                for (title, keys) in shown {
+                    kit::caption_plain(ui, &title);
+                    for key in keys {
+                        let text = self.hatches.label(&key);
+                        let pattern = key.strip_prefix("pat:").and_then(|k| self.patterns.get(k));
+                        let description =
+                            pattern.and_then(|p| p["label"].as_str()).unwrap_or(&text);
+                        let active = self
+                            .hatch_cursor
+                            .map_or(current == Some(&key), |i| i == index);
+                        let (rect, row) = kit::list_row(ui, super::ROW_H, active);
+                        if active && (up || down) {
+                            row.scroll_to_me(None);
+                        }
+                        index += 1;
+                        if ui.is_rect_visible(rect) {
+                            let sample = egui::Rect::from_center_size(
+                                rect.left_center() + egui::vec2(22., 0.),
+                                egui::vec2(36., 14.),
+                            );
+                            let marks = pattern.and_then(|p| {
+                                self.samples
+                                    .entry(key.clone())
+                                    .or_insert_with(|| kit::imported_hatch(&p["families"]))
+                                    .as_ref()
+                            });
+                            kit::hatch_swatch(ui, sample, &key, marks, ground, ink);
+                            row.clone().on_hover_ui(|ui| {
+                                kit::caption_plain(ui, description);
+                                let (preview, _) = ui.allocate_exact_size(
+                                    egui::vec2(112., 48.),
+                                    egui::Sense::hover(),
+                                );
+                                kit::hatch_swatch(ui, preview, &key, marks, ground, ink);
+                            });
+                            ui.painter().text(
+                                rect.left_center() + egui::vec2(46., 0.),
+                                egui::Align2::LEFT_CENTER,
+                                &text,
+                                super::body(),
+                                super::INK,
+                            );
+                        }
+                        if row.clicked() {
+                            choice = Some(key);
+                            self.hatch_filter.clear();
+                            ui.memory_mut(|m| m.close_popup());
+                        }
                     }
                 }
             });
+        if popup.inner.is_none() {
+            self.hatch_cursor = None;
+            self.choosing_hatch_group = false;
+            self.hatch_filter.clear();
+        }
         choice
     }
 
@@ -732,5 +849,103 @@ impl StyleEditor {
                 kit::caption_plain(ui, "Change a field to apply.");
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod picker_tests {
+    use super::*;
+
+    #[test]
+    fn search_keyboard_and_discard_in_the_hatch_inspector() {
+        let ctx = super::super::test_context();
+        let mut editor = StyleEditor::default();
+        let mut node = Node {
+            name: "Walls".into(),
+            cells: vec![String::new(); 20],
+            ..Default::default()
+        };
+        node.cells[4] = "brick".into();
+        node.cells[5] = "wall".into();
+        editor.pick(&node, false);
+        node.cells[5] = "slab".into();
+        editor.pick(&node, true);
+        let frame = |editor: &mut StyleEditor, events| {
+            let mut actions = vec![];
+            let mut points = BTreeMap::new();
+            let raw = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(480., 620.),
+                )),
+                events,
+                ..Default::default()
+            };
+            let frame = ctx.run(raw, |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    editor.field(ui, 4, "hatch", "Hatch", vec![], &mut actions);
+                    editor.apply_row(ui, &mut actions);
+                });
+            });
+            for shape in frame.shapes {
+                if let egui::Shape::Text(text) = shape.shape {
+                    let pos = text.visual_bounding_rect().center();
+                    if shape.clip_rect.contains(pos) {
+                        points.insert(text.galley.text().to_owned(), pos);
+                    }
+                }
+            }
+            (points, actions)
+        };
+        let click = |editor: &mut StyleEditor, pos| {
+            let mut result = vec![];
+            for pressed in [true, false] {
+                let (_, actions) = frame(
+                    editor,
+                    vec![
+                        egui::Event::PointerMoved(pos),
+                        egui::Event::PointerButton {
+                            pos,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: Default::default(),
+                        },
+                    ],
+                );
+                result.extend(actions);
+            }
+            result
+        };
+        let key = |key| egui::Event::Key {
+            key,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: Default::default(),
+        };
+        let points = frame(&mut editor, vec![]).0;
+        click(&mut editor, points["brick"]);
+        frame(&mut editor, vec![]);
+        let points = frame(&mut editor, vec![]).0;
+        click(&mut editor, points["Find a hatch"]);
+        frame(&mut editor, vec![egui::Event::Text("diagonal".into())]);
+        let points = frame(&mut editor, vec![]).0;
+        assert!(points.contains_key("diagonal") && !points.contains_key("solid"));
+        frame(&mut editor, vec![key(egui::Key::ArrowDown)]);
+        frame(&mut editor, vec![key(egui::Key::Enter)]);
+        assert_eq!(editor.common(4, "hatch").as_deref(), Some("diagonal"));
+        let points = frame(&mut editor, vec![]).0;
+        let sent = click(&mut editor, points["Apply to 2 tags"]);
+        let wire = sent
+            .iter()
+            .find_map(|s| s.strip_prefix("drawingpatch\u{1f}"))
+            .unwrap();
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(wire).unwrap(),
+            serde_json::json!([["slab","wall"],{"hatch":"diagonal"}])
+        );
+        click(&mut editor, points["Discard"]);
+        assert!(editor.patch.is_empty());
+        assert_eq!(editor.common(4, "hatch").as_deref(), Some("brick"));
     }
 }

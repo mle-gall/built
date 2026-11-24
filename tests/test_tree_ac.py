@@ -518,6 +518,14 @@ def test_imported_hatch_angle_and_scale_are_undoable_in_drawing(ui, tmp_path, mo
     path.write_text("*SURVEY,Site survey\n45,0,0,0,2,3,-1")
     monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *_: (str(path), "PAT"))
     act("lens", "1")
+    original = dict(scene.hatch_patterns)
+    for invalid in (tmp_path / "missing.pat", tmp_path / "invalid.pat"):
+        if invalid.name == "invalid.pat":
+            invalid.write_bytes(b"\xff\xfe not a pattern")
+        monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *_, p=invalid: (str(p), "PAT"))
+        act("importpat", "")
+        assert scene.hatch_patterns == original
+    monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *_: (str(path), "PAT"))
     act("importpat", "")
     assert view.renderer.calls["ui_set_style_catalog"][2]["SURVEY"]["label"] == "Site survey"
     tag = scene.layer("Paths")
@@ -527,6 +535,10 @@ def test_imported_hatch_angle_and_scale_are_undoable_in_drawing(ui, tmp_path, mo
     assert win.viewport.history.undo() and (tag.hatch, tag.hatch_angle, tag.hatch_scale) == old
     assert win.viewport.history.undo() and "SURVEY" not in scene.hatch_patterns
     assert win.viewport.history.redo() and "SURVEY" in scene.hatch_patterns
+    assert win.viewport.history.redo() and tag.hatch == "pat:SURVEY"
+    act("drawingpatch", json.dumps([[tag.key], {"hatch": ""}]))
+    assert tag.hatch is None
+
 
 
 @pytest.mark.parametrize("operation", ["group", "insert", "paste", "link", "group_selection"])

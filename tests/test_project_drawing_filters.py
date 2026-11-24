@@ -240,3 +240,34 @@ def test_drawing_drops_and_entity_counts_follow_the_document():
     drawing_edit(p, "drawingpatch", [["C"], {"color": "#ff0000"}])
     p.action("toggle", "preview-folder:Plans")
     assert scene.layer("C").color == (1., 0., 0.)
+
+
+def test_hatch_edits_restore_each_tag_and_keep_document_piece_kinds_separate():
+    import json
+    p = Project(Layer("Wall", hatch="brick", hatch_ground="layer", brick=(250, 110, 60, 8)),
+                Layer("Slab", hatch="brick_bond", hatch_angle=15),
+                Layer("Block", hatch="block", brick=(390, 90, 190, 10)))
+    p.action("lens", "1")
+    scene, history = p.scene, p.win.viewport.history
+    wall, slab, block = [scene.layer(name) for name in ("Wall", "Slab", "Block")]
+    before = [tag.to_dict() for tag in (wall, slab, block)]
+    drawing_edit(p, "drawingpatch", [["Wall", "Slab"], {
+        "hatch": "brick", "hatch_ground": "#ffffff", "hatch_color": "layer",
+        "hatch_angle": "45", "hatch_scale": "2", "hatch_offset": "3, -4",
+        "joints": "double", "mortar": "1", "brick": "300,150,80,12,8"}])
+    for tag in wall, slab:
+        assert tag.hatch == "brick" and tag.hatch_ground == (1., 1., 1.)
+        assert tag.hatch_color == "layer" and tag.hatch_on_paper is None
+        assert (tag.hatch_angle, tag.hatch_scale, tag.hatch_offset) == (45., 2., (3., -4.))
+        assert tag.mortar and tag.joints == "double" and tag.brick == (300., 150., 80., 12., 8.)
+    assert history.undo() and [tag.to_dict() for tag in (wall, slab, block)] == before
+    assert history.redo()
+    p.action("documentpiece", "brick" + wgpu_ui.SEP + json.dumps([290, 140, 71, 10]))
+    assert scene.bricks["brick"] == (290., 140., 71., 10.)
+    assert wall.brick is None and slab.brick is None and block.to_dict() == before[2]
+    assert history.undo() and wall.brick == slab.brick == (300., 150., 80., 12., 8.)
+    drawing_edit(p, "drawingpatch", [["Wall"], {"hatch": "block", "hatch_on_paper": "1",
+                                                 "hatch_color": "#666666", "hatch_ground": ""}])
+    assert wall.hatch == "block" and wall.brick is None and wall.hatch_on_paper
+    assert wall.hatch_ground is None and wall.hatch_color == (.4, .4, .4)
+    assert slab.hatch == "brick" and slab.hatch_on_paper is None

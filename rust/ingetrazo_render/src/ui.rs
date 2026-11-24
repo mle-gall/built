@@ -3233,6 +3233,13 @@ fn dragging_sorted_drawing_rows_files_tags_and_folders_by_key() {
         let expected = serde_json::json!({"tags":tags,"folder":folder,"parent":parent});
         assert!(actions.contains(&format!("tree:tagfolder\u{1f}{verb}\u{1f}{expected}")), "{source}: {actions:?}");
     }
+    let col = ui.column.as_mut().unwrap();
+    col.styles.pick(&col.nodes[3], false);
+    col.styles.pick(&col.nodes[4], true);
+    let actions = drag(&mut ui, at["Brick"], at["Plans"]);
+    let expected = serde_json::json!({"tags":["a","z"],"folder":"","parent":"f"});
+    assert!(actions.contains(&format!("tree:tagfolder\u{1f}file\u{1f}{expected}")), "{actions:?}");
+
 }
 
 #[test]

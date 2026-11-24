@@ -689,7 +689,19 @@ def dispatch(self, command):
     elif command=="fixture-hatch":
         wgpu_ui._tree_action(self.window,self.view,"drawingpatch"+wgpu_ui.SEP+json.dumps([["Paths"],dict(hatch="brick",mortar="1",hatch_ground="layer")]))
         act("documentpiece","brick",[250,115,60,8])
-        self.view.renderer.ui_hatch_preference("pin","brick")
+        from core.settings import settings
+        pref=self.view.renderer.ui_hatch_preference
+        for key in ("glass","brick","glass","glass"):
+            pref("pin",key)
+        for key in ("brick","glass","brick"):
+            pref("recent",key)
+        own=json.dumps(["brick",[300,150,80,12,8]])
+        pref("piece",own)
+        self.fixture_hatch_prefs=dict(pinned=settings().value("layers/favourite_hatches"),
+            recent=settings().value("layers/recent_hatches"),
+            saved=json.loads(settings().value("layers/own_pieces")))
+        pref("piece",own)
+        self.fixture_hatch_prefs["removed"]=json.loads(settings().value("layers/own_pieces"))
         file_dialogs.getSaveFileName=lambda *args: ({str(output)!r},"")
         wgpu_ui._tree_action(self.window,self.view,"exportpat"+wgpu_ui.SEP)
     elif command=="fixture-folder":
@@ -729,6 +741,7 @@ def facts(self):
     paths=scene.layer("Paths")
     row=self.window._scene_tabs.marked_view()
     return dict(state(self), photo=getattr(self,"fixture_photo",False), restored=getattr(self,"fixture_restored",False),
+        hatch_prefs=getattr(self,"fixture_hatch_prefs",False),
         paint_sheet=getattr(self,"fixture_paint_sheet",None), row_paint=getattr(self,"fixture_row_paint",None),
         swatch=getattr(self,"fixture_swatch",False), editor=self.renderer.ui_input_state()["drawing_line"],
         line=paths.linetype, hatch=paths.hatch, mortar=paths.mortar, size=scene.bricks.get("brick"),
@@ -767,6 +780,8 @@ quit
               if line.startswith("[built] state ")]
     assert states[3]["paint_sheet"] == "tree-material" and states[3]["row_paint"].startswith("RAL 1000"), log
     opened, saved, edited = states[:3]
+    assert edited["hatch_prefs"] == {"pinned": ["brick", "glass"], "recent": ["brick", "glass"],
+                                     "saved": {"brick": [[300, 150, 80, 12, 8]]}, "removed": {}}
     assert opened["editor"] and not saved["editor"] and saved["line"] == "lin:Boundary", log
     assert edited["hatch"] == "brick" and edited["mortar"] and edited["size"] == [250, 115, 60, 8], log
     assert edited["folder"] == "Survey" and edited["scene_folder"] == "Field views", log
