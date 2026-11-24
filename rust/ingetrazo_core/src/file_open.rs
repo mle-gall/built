@@ -211,6 +211,78 @@ impl DocumentOpen {
     #[new]
     #[pyo3(signature=(path, *, insert=false))]
     fn new(path: Py<PyAny>, insert: bool) -> PyResult<Self> {
+        Self::spawn(move |py, worker| prepare(py, path, worker, insert))
+    }
+
+    pub(crate) fn cancel(&self) {
+        self.state.cancel();
+    }
+
+    /// Called after the native event loop exits, before unloading Qt/Python.
+    #[staticmethod]
+    fn shutdown(py: Python<'_>) {
+        let workers = std::mem::take(&mut *WORKERS.lock().unwrap());
+        for (state, _) in &workers {
+            if let Some(state) = state.upgrade() {
+                state.cancel();
+            }
+        }
+        py.detach(move || {
+            for (_, thread) in workers {
+                let _ = thread.join();
+            }
+        });
+    }
+
+    pub(crate) fn ready(&self) -> bool {
+        self.state.ready.load(Ordering::Acquire)
+    }
+
+    pub(crate) fn progress(&self) -> (f64, String) {
+        self.state.progress.lock().unwrap().clone()
+    }
+
+    /// Headless hosts have no frame pump. Keep the same worker and handoff.
+    pub(crate) fn wait(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let receiver = self
+            .state
+            .result
+            .lock()
+            .unwrap()
+            .take()
+            .ok_or_else(|| PyInterruptedError::new_err("Opening cancelled"))?;
+        py.detach(move || receiver.recv())
+            .map_err(|_| PyInterruptedError::new_err("Document worker exited"))?
+    }
+
+    fn take(&self) -> PyResult<Option<Py<PyAny>>> {
+        self.state
+            .result
+            .lock()
+            .unwrap()
+            .as_ref()
+            .and_then(|rx| rx.try_recv().ok())
+            .transpose()
+    }
+}
+
+impl DocumentOpen {
+    pub(crate) fn parse(
+        job: impl for<'py> FnOnce(Python<'py>, Bound<'py, PyAny>) -> OpenResult + Send + 'static,
+    ) -> PyResult<Self> {
+        Self::spawn(move |py, worker| {
+            let progress = Progress {
+                state: worker.clone(),
+                base: 0.,
+                span: 1.,
+            };
+            job(py, Py::new(py, progress)?.into_bound(py).into_any())
+        })
+    }
+
+    fn spawn(
+        job: impl FnOnce(Python<'_>, &Arc<State>) -> OpenResult + Send + 'static,
+    ) -> PyResult<Self> {
         let (sender, receiver) = sync_channel(0);
         let state = Arc::new(State {
             cancelled: false.into(),
@@ -249,7 +321,7 @@ impl DocumentOpen {
                         let previous = gc.call_method0("get_threshold")?;
                         let budget = (4096, 4, i32::MAX);
                         gc.call_method1("set_threshold", budget)?;
-                        let result = prepare(py, path, &worker, insert);
+                        let result = job(py, &worker);
                         if gc
                             .call_method0("get_threshold")?
                             .extract::<(i32, i32, i32)>()?
@@ -286,57 +358,6 @@ impl DocumentOpen {
         workers.retain(|(_, t)| !t.is_finished());
         workers.push((Arc::downgrade(&state), thread));
         Ok(Self { state })
-    }
-
-    fn cancel(&self) {
-        self.state.cancel();
-    }
-
-    /// Called after the native event loop exits, before unloading Qt/Python.
-    #[staticmethod]
-    fn shutdown(py: Python<'_>) {
-        let workers = std::mem::take(&mut *WORKERS.lock().unwrap());
-        for (state, _) in &workers {
-            if let Some(state) = state.upgrade() {
-                state.cancel();
-            }
-        }
-        py.detach(move || {
-            for (_, thread) in workers {
-                let _ = thread.join();
-            }
-        });
-    }
-
-    fn ready(&self) -> bool {
-        self.state.ready.load(Ordering::Acquire)
-    }
-
-    fn progress(&self) -> (f64, String) {
-        self.state.progress.lock().unwrap().clone()
-    }
-
-    /// Headless hosts have no frame pump. Keep the same worker and handoff.
-    fn wait(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        let receiver = self
-            .state
-            .result
-            .lock()
-            .unwrap()
-            .take()
-            .ok_or_else(|| PyInterruptedError::new_err("Opening cancelled"))?;
-        py.detach(move || receiver.recv())
-            .map_err(|_| PyInterruptedError::new_err("Document worker exited"))?
-    }
-
-    fn take(&self) -> PyResult<Option<Py<PyAny>>> {
-        self.state
-            .result
-            .lock()
-            .unwrap()
-            .as_ref()
-            .and_then(|rx| rx.try_recv().ok())
-            .transpose()
     }
 }
 
