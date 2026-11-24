@@ -147,3 +147,23 @@ def test_scalar_edge_reference(monkeypatch):
 
 def test_guides_and_visibility_reference():
     assert digest(snap_rows()) == '6f84d059578ff4161efd18b9599853470e1e6256d48b5386b6ae56800787df1c'
+
+
+def test_circle_and_crossing_guides():
+    from types import SimpleNamespace
+    rows = []
+    for seed in range(40):
+        n = V(0, 0, 1) if seed % 2 else V(1, 1, 0).normalized()
+        c = V(650000 + seed, 2, 1)
+        r = float(seed % 5)
+        probe = c + V(seed % 4, seed % 3, 4)
+        circle = SimpleNamespace(center=c, normal=n, radius=r)
+        px = lambda p: (p.x() - c.x(), p.y())
+        dist, hit = snap._closest_on_circle(circle, probe, 0., 2., px, 10.)
+        cross = snap._two_point_snap([None, c, c+V(1, 2, 0)], probe, 1, 2, px, 5.)
+        rows.append((None if hit is None else (round(dist, 9), xyz(hit)),
+                     [xyz(p) for p in snap._circle_quadrants(c, r, n)],
+                     [xyz(p) for p in snap._circle_circle_intersections(c, r, n, c+V(1, 0, 0), 1., n)],
+                     [xyz(p) for p in snap._segment_circle_intersections(c-V(2, 0, 0), probe, c, r, n)],
+                     None if cross is None else (xyz(cross.point), cross.guide_color, xyz(cross.guides[0][0]))))
+    assert digest(rows) == '2ffdec4a58015b899bc96492591447ef9acd8d1679bbe383381bc3b94659e7cc'

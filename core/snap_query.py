@@ -2,7 +2,7 @@
 from ingetrazo_core import Vec3 as QVector3D
 import numpy as np
 
-from ingetrazo_core import SnapQuery
+from ingetrazo_core import SnapQuery, PointVisibility
 
 
 def edge_tag(edge):
@@ -40,19 +40,8 @@ def point_result(query, edges, radius, hidden, *, midpoints=False, quadrants=(),
                            COLOR_ON_FACE)
     extras = [(p.toTuple(), context is not None) for p, context in centers]
     quads = [p.toTuple() for p in quadrants]
-    visibility = {}
-
-    def occluded(points):
-        keys = [QVector3D(*p).toTuple() for p in points]
-        missing = list(dict.fromkeys(k for k in keys if k not in visibility))
-        if missing:
-            vectors = [QVector3D(*k) for k in missing]
-            mask = (hidden_many(vectors) if hidden_many and len(vectors) > 1
-                    else map(hidden, vectors))
-            visibility.update(zip(missing, mask))
-        return [visibility[k] for k in keys]
-
-    choice = query.points(radius, midpoints, quads, extras, occluded if hidden else None, line)
+    occluded = PointVisibility(hidden, hidden_many) if hidden else None
+    choice = query.points(radius, midpoints, quads, extras, occluded, line)
     if choice is not None:
         point, index, kind = choice
         context = (getattr(edges[index], 'context', None) if index >= 0 else
