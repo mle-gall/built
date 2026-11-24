@@ -89,37 +89,9 @@ class Ctx:
 
 # ---- usage --------------------------------------------------------------------
 
-def material_uses(scene) -> Counter:
-    """Objects wearing each registry material: one per mesh with a face (front
-    or back) in it, plus one per container painted whole. Kept per content
-    version; a store-backed mesh answers from its rows."""
-    sig = (id(scene), scene.content_version)
-    cached = getattr(scene, "_lib_uses", None)
-    if cached is not None and cached[0] == sig:
-        return cached[1]
-    from core.purge import iter_groups
-    from core.purge import _document_groups, iter_meshes
-    from core.store_parts import material_names
-    uses = Counter()
-    for mesh in iter_meshes(scene):
-        names = material_names(mesh)
-        if names is None:
-            names = set()
-            for f in mesh.faces:
-                names.add(f.attrs.get("mat"))
-                back = f.attrs.get("back")
-                if isinstance(back, dict):
-                    names.add(back.get("mat"))
-        for n in names:
-            if n:
-                uses[n] += 1
-    for top in _document_groups(scene):
-        for g in iter_groups((top,)):
-            paint = getattr(g, "material", None) or {}
-            if paint.get("mat"):
-                uses[paint["mat"]] += 1
-    scene._lib_uses = (sig, uses)
-    return uses
+def material_uses(scene, history=None) -> Counter:
+    from ingetrazo_core import material_survey
+    return material_survey(scene, history)[0]
 
 
 def linked_material_uses(scene) -> dict:
@@ -239,7 +211,9 @@ class MaterialsProvider(Provider):
     id, label = "materials", "Materials"
 
     def _model_items(self, ctx):
-        uses = material_uses(ctx.scene)
+        from ingetrazo_core import material_survey
+        history = getattr(getattr(ctx, "vp", None), "history", None)
+        uses, colours, worn = material_survey(ctx.scene, history)
         out = []
         for name, mat in (getattr(ctx.scene, "materials", None) or {}).items():
             tex = (mat.texture or {}).get("path")
@@ -247,11 +221,11 @@ class MaterialsProvider(Provider):
                         "base": "image" if tex else "colour",
                         "uses": uses.get(name, 0), "hex": _hex(mat.color), "thumb": tex,
                         "verbs": ("apply", "edit", "select", "-", "duplicate", "rename", "keep", "-", "delete")})
-        for key, entry in unnamed_colours_cached(ctx.scene).items():
-            n = len(entry["faces"]) + len(entry["groups"])
+        out.extend(worn)
+        for key, (color, _opacity, n) in colours.items():
             out.append({"key": f"uc:{key}", "name": key.split("@")[0], "source": "model",
                         "category": "Unnamed colours", "base": "colour", "uses": n,
-                        "hex": _hex(entry["color"]), "thumb": None, "verbs": ("apply", "select", "-", "name")})
+                        "hex": _hex(color), "thumb": None, "verbs": ("apply", "select", "-", "name")})
         return out
 
     def _mine_items(self, ctx):
@@ -287,10 +261,12 @@ class MaterialsProvider(Provider):
         return model + linked + self._mine_items(ctx) + [dict(e) for e in self._bundled_cache]
 
     def type_actions(self, ctx):
+        from ingetrazo_core import material_survey
         from core.purge import unused_materials
         n = len(unused_materials(ctx.scene))
+        _, colours, _ = material_survey(ctx.scene, getattr(getattr(ctx, "vp", None), "history", None))
         acts = [("purge", f"Purge unused materials ({n})" if n else "Purge unused materials (none)")]
-        k = len(unnamed_colours_cached(ctx.scene))
+        k = len(colours)
         if k:
             acts.insert(0, ("name", f"Name these: {k} unnamed colour" + ("s" if k != 1 else "")))
         return acts
@@ -324,7 +300,7 @@ class MaterialsProvider(Provider):
         key, name = item["key"], item["name"]
         kind = key.partition(":")[0]
         if verb == "apply":
-            if kind in ("uc", "my"):
+            if kind in ("uc", "my", "worn"):
                 _, recipe = self.paint_recipe(ctx, item)
                 if recipe:
                     _pick_paint(ctx.win, recipe=recipe)
@@ -347,7 +323,7 @@ class MaterialsProvider(Provider):
             ctx.view._ui_mat_focus = key
             if hasattr(ctx.view.renderer, "ui_show_inspector"):
                 ctx.view.renderer.ui_show_inspector()
-        elif verb == "select" and kind in ("m", "lk"):
+        elif verb == "select" and kind in ("m", "lk", "worn"):
             n = select_material_uses(ctx, name)
             ctx.flash(f"{n} selected wearing {name}" if n else f"Nothing in the open context wears {name}")
         elif verb == "duplicate" and kind == "m":
@@ -771,6 +747,7 @@ class LibrarySheet(_chrome_sheet().Provider):
         return active, counts
 
     def build(self, ctx):
+        from ingetrazo_core import material_survey
         cs = _chrome_sheet()
         from views.wgpu_ui import _current_material_name
         view, st = self.view, _state(self.view)
@@ -797,8 +774,8 @@ class LibrarySheet(_chrome_sheet().Provider):
         out = json.loads(library_sheet(json.dumps({
             "type": prov.id, "items": items, "st": browse,
             "current": current if prov.id == "materials" else None,
-            "model_uses": dict(material_uses(scene)) if prov.id == "materials" else {},
-            "unnamed": len(unnamed_colours_cached(scene)) if prov.id == "materials" else 0}, default=str)))
+            "model_uses": dict(material_uses(scene, ctx.win.viewport.history)) if prov.id == "materials" else {},
+            "unnamed": len(material_survey(scene, ctx.win.viewport.history)[1]) if prov.id == "materials" else 0}, default=str)))
         for path in out["thumbs"]:
             _thumb(view, path)
         st["scope"], searching, online = out["scope"], out["searching"], out["online"]
@@ -1113,7 +1090,7 @@ def palette_items(view, win) -> list:
     cur = _current_material_name()
     out = []
     mats = list((getattr(scene, "materials", None) or {}).items())
-    uses = material_uses(scene)
+    uses = material_uses(scene, win.viewport.history)
     # The model's, most used first (what you paint with most is under the hand).
     mats = [mats[i] for i in library_by_use([n for n, _m in mats], [uses.get(n, 0) for n, _m in mats])]
     for name, mat in mats[:STRIP_MODEL]:
