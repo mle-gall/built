@@ -43,13 +43,11 @@ def test_a_stroke_lays_the_edge_graph_out_once(monkeypatch):
     monkeypatch.setenv("INGETRAZO_SCANS", "0")
     scene, _hist = _slab_with_cylinders(3)
     built = []
-    real_init = CycleGraph.__init__
-
-    def init(self, edges, key=topology._key):
+    def make_graph(edges, key=topology._key):
         built.append(len(edges))
-        real_init(self, edges, key)
+        return CycleGraph(edges, key)
 
-    monkeypatch.setattr(CycleGraph, "__init__", init)
+    monkeypatch.setattr(topology, "CycleGraph", make_graph)
     monkeypatch.setattr(
         topology, "_cycle_adjacency",
         lambda *a, **k: (_ for _ in ()).throw(

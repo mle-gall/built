@@ -1,16 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""Open a folder, a file or a web page with the desktop's own program.
-
-A frozen Linux build runs with an environment made for IT: PyInstaller's
-``LD_LIBRARY_PATH`` points at the bundled libraries, and the AppImage's
-AppRun points ``GIO_MODULE_DIR`` at an empty folder of ours. Qt hands that
-environment to ``xdg-open``, and the host's file manager or browser loads
-our libraries and dies without a word — «Open extensions folder» did
-nothing in the AppImage (#456). There we launch ``xdg-open`` ourselves with
-the host's environment back; everywhere else (source, Flatpak and snap,
-which go through their portals, Windows, macOS) Qt does it as before.
-"""
+"""Open files and URLs with the desktop's registered applications."""
 from __future__ import annotations
 
 import os
@@ -22,7 +12,7 @@ from pathlib import Path
 
 def _launch_ourselves(environ=None) -> bool:
     env = os.environ if environ is None else environ
-    if not sys.platform.startswith("linux") or not getattr(sys, "frozen", False):
+    if not sys.platform.startswith("linux") or not (getattr(sys, "frozen", False) or env.get("APPIMAGE")):
         return False
     return not env.get("FLATPAK_ID") and not env.get("SNAP")
 
@@ -40,47 +30,23 @@ def host_env(environ=None) -> dict:
 
 
 def open_url(target) -> bool:
-    """Open ``target`` — a ``Path``, a path string, an ``http(s)`` URL or a
-    ``QUrl`` — with the desktop's program for it."""
-    if "built_shell" in sys.builtin_module_names:
-        if hasattr(target, "isLocalFile"):
-            arg = target.toLocalFile() if target.isLocalFile() else target.toString()
+    """Open a path or URL with the operating system's registered handler."""
+    if hasattr(target, "isLocalFile"):
+        target = target.toLocalFile() if target.isLocalFile() else target.toString()
+    arg = str(target)
+    try:
+        if sys.platform == "win32":
+            os.startfile(arg)
         else:
-            arg = str(target)
-        try:
-            if sys.platform == "win32":
-                os.startfile(arg)
-            else:
-                opener = "/usr/bin/open" if sys.platform == "darwin" else "xdg-open"
-                subprocess.Popen([opener, arg], env=host_env(), stdin=subprocess.DEVNULL,
-                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                 start_new_session=True)
-            return True
-        except OSError:
-            return False
-    from PySide6.QtCore import QUrl
-    if isinstance(target, Path):
-        url = QUrl.fromLocalFile(str(target))
-    elif isinstance(target, QUrl):
-        url = target
-    elif "://" in str(target):
-        url = QUrl(str(target))
-    else:
-        url = QUrl.fromLocalFile(str(target))
-    opener = shutil.which("xdg-open") if _launch_ourselves() else None
-    if opener:
-        arg = url.toLocalFile() if url.isLocalFile() else url.toString()
-        try:
-            subprocess.Popen([opener, arg], env=host_env(),
-                             stdin=subprocess.DEVNULL,
-                             stdout=subprocess.DEVNULL,
-                             stderr=subprocess.DEVNULL,
-                             start_new_session=True)
-            return True
-        except OSError:
-            pass
-    from PySide6.QtGui import QDesktopServices
-    return QDesktopServices.openUrl(url)
+            opener = "/usr/bin/open" if sys.platform == "darwin" else shutil.which("xdg-open")
+            if not opener:
+                return False
+            subprocess.Popen([opener, arg], env=host_env() if sys.platform == "darwin" or _launch_ourselves() else None,
+                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL, start_new_session=True)
+        return True
+    except OSError:
+        return False
 
 
 def reveal(path) -> bool:

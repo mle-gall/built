@@ -6,7 +6,7 @@ use pyo3::{exceptions::PyValueError, prelude::*};
 use crate::math::{xyz, Vec3};
 use crate::tools::plane::{plane_axes, Axes};
 
-fn raw_newell(points: &[DVec3]) -> DVec3 {
+pub(crate) fn raw_newell(points: &[DVec3]) -> DVec3 {
     let mut normal = DVec3::ZERO;
     for (a, b) in points.iter().zip(points.iter().cycle().skip(1)) {
         normal.x += (a.y - b.y) * (a.z + b.z);

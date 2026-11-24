@@ -10,7 +10,7 @@ smoke() {
     local dest; dest=$(mktemp -d)
     vulkaninfo --summary > "$dest/vulkan.log"
     built --check "$fixture" > "$dest/check.log"
-    printf '%s\n' wait-open 'wait 300' 'move 400 300' 'capture frame' state quit > "$dest/steps"
+    printf '%s\n' wait-open 'wait 300' 'click-command app-menu:Tools' 'wait 100' 'click-command app-item:tool:line' 'wait 150' 'move 400 300' 'capture frame' state quit > "$dest/steps"
     timeout 90 built --script "$dest/steps" --shots "$dest" "$fixture" > "$dest/session.log"
     /work/.venv/bin/python - "$dest" <<'PY'
 import json, sys
@@ -19,6 +19,8 @@ from PIL import Image
 root = Path(sys.argv[1])
 for filename, prefix in [('check.log', '[built] check ok '), ('session.log', '[built] state ')]:
     state = json.loads(next(line[len(prefix):] for line in (root / filename).read_text().splitlines() if line.startswith(prefix)))
+    if filename == 'session.log':
+        assert state['tool'] == 'LineTool', state
     assert Path(state['path']).name == 'slab-and-cube.igz' and not state['opening'], state
     assert (state['faces'], state['edges']) == (6, 16), state
     assert state['instances'] == 1 and state['errors'] == 0 and not state['qt_modules'], state

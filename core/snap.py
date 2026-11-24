@@ -275,19 +275,7 @@ def _closest_on_segment_2d(
 ) -> tuple[float, float]:
     """Closest point on 2D segment ``ab`` to ``p``. Returns ``(distance, t)``
     where ``t`` in [0, 1] is the parameter along ``ab`` of that closest point."""
-    ax, ay = a
-    bx, by = b
-    px, py = p
-    dx = bx - ax
-    dy = by - ay
-    denom = dx * dx + dy * dy
-    if denom == 0.0:
-        return math.hypot(px - ax, py - ay), 0.0
-    t = ((px - ax) * dx + (py - ay) * dy) / denom
-    t = max(0.0, min(1.0, t))
-    qx = ax + t * dx
-    qy = ay + t * dy
-    return math.hypot(px - qx, py - qy), t
+    return kernel.snap_surfaces.closest_segment(p, a, b)
 
 
 def _line_segment_intersection(
@@ -304,14 +292,7 @@ def _point_on_segment_world(
     p: QVector3D, a: QVector3D, b: QVector3D, tol: float = 1e-3
 ) -> bool:
     """Whether ``p`` lies on segment ``a``–``b`` (within ``tol`` world units)."""
-    ab = b - a
-    length_sq = QVector3D.dotProduct(ab, ab)
-    if length_sq < 1e-12:
-        return (p - a).length() < tol
-    t = QVector3D.dotProduct(p - a, ab) / length_sq
-    if t < -1e-6 or t > 1.0 + 1e-6:
-        return False
-    return (p - (a + ab * t)).length() < tol
+    return kernel.snap_surfaces.point_on_segment(p, a, b, tol)
 
 
 def fit_circle(points, tol_rel: float = 0.01):
@@ -508,8 +489,7 @@ def _from_point_snap(
     if adir is None:
         return None
     if query is None:
-        from core.snap_query import make_query
-        query = make_query(scene.edges, world_to_pixel, (cx, cy))
+        query = kernel.snap_query.make_query(scene.edges, world_to_pixel, (cx, cy))
     def hidden(p):
         return is_occluded(QVector3D(*p))
 
@@ -560,22 +540,7 @@ def _pairs_that_may_meet(edges):
     ``max(tol, 1e-7 * length)``, so each box grows by more than that.
     Pairs apart are never asked — 1128 pairs under the cursor on the plant
     of #158, most of them edges a metre away from each other."""
-    n = len(edges)
-    if n < 8:
-        return ((i, j) for i in range(n) for j in range(i + 1, n))
-    import numpy as np
-    from core.topology import _SPLIT_TOLERANCE as tol
-    ends = np.array([(e.a.x(), e.a.y(), e.a.z(), e.b.x(), e.b.y(), e.b.z())
-                     for e in edges], dtype=np.float64).reshape(n, 2, 3)
-    lo, hi = ends.min(axis=1), ends.max(axis=1)
-    length = np.linalg.norm(ends[:, 1] - ends[:, 0], axis=1)
-    grow = (2.5 * tol + 2e-7 * length
-            + 1e-6 * np.abs(ends).max(axis=(1, 2)))[:, None]
-    lo, hi = lo - grow, hi + grow
-    apart = ((lo[:, None, :] > hi[None, :, :])
-             | (lo[None, :, :] > hi[:, None, :])).any(axis=2)
-    ii, jj = np.nonzero(np.triu(~apart, 1))
-    return zip(ii.tolist(), jj.tolist())
+    return iter(kernel.snap_surfaces.pairs_that_may_meet(edges))
 
 
 def _intersection_snap(
@@ -601,8 +566,7 @@ def _intersection_snap(
     guides, which live outside the mesh, and any unsplit crossing."""
 
     from core.axes import plane_axes
-    from core.snap_query import make_query
-    query = make_query(scene.edges, world_to_pixel, (cx, cy))
+    query = kernel.snap_query.make_query(scene.edges, world_to_pixel, (cx, cy))
     circles = []
     if candidate_world is not None:
         for circle in getattr(scene, "circles", ()):
@@ -644,50 +608,10 @@ def _edge_face_snap(
     membership test. The crossing counts only INSIDE the face (outer
     loop, outside every hole), on the edge's own span, and under the cursor.
     An edge lying in the face's plane has no single crossing and is skipped."""
-    if isinstance(outline, SurfacePatch):
-        origin, n, inside, context = outline
-        if n is None or n.length() < 1e-12:
-            return None
-        n = n.normalized()
-    else:
-        from core.topology import _point_inside_2d
-        from core.triangulate import plane_axes
-        outer, holes, context = outline
-        if len(outer) < 3:
-            return None
-        nx = ny = nz = 0.0
-        for i in range(len(outer)):
-            a, b = outer[i], outer[(i + 1) % len(outer)]
-            nx += (a.y() - b.y()) * (a.z() + b.z())
-            ny += (a.z() - b.z()) * (a.x() + b.x())
-            nz += (a.x() - b.x()) * (a.y() + b.y())
-        n = QVector3D(nx, ny, nz)
-        if n.length() < 1e-12:
-            return None
-        n = n.normalized()
-        origin = outer[0]
-        u, w = plane_axes(n)
-
-        def proj(p):
-            rel = p - origin
-            return (QVector3D.dotProduct(rel, u), QVector3D.dotProduct(rel, w))
-
-        outer2 = [proj(p) for p in outer]
-        holes2 = [[proj(p) for p in h] for h in holes if len(h) >= 3]
-
-        def inside(p):
-            pt = proj(p)
-            return (_point_inside_2d(pt, outer2)
-                    and not any(_point_inside_2d(pt, h) for h in holes2))
-
-    if query is None:
-        from core.snap_query import make_query
-        query = make_query(scene.edges, world_to_pixel, (cx, cy))
-    for coords in query.plane_crossings(et, origin.toTuple(), n.toTuple()):
-        hit = QVector3D(*coords)
-        if inside(hit) and (is_occluded is None or not is_occluded(hit)):
-            return SnapResult(hit, "intersection", COLOR_ENDPOINT, context=context)
-    return None
+    hit = kernel.snap_surfaces.pierce(outline, isinstance(outline, SurfacePatch),
+                                     scene, world_to_pixel, (cx, cy), et, is_occluded, query)
+    if hit is not None:
+        return SnapResult(hit[0], "intersection", COLOR_ENDPOINT, context=hit[1])
 
 def face_crossing_near_ray(px, py, origin, direction, f_plane, g_plane,
                            world_to_pixel, reach_px, side_px=3.0):
@@ -704,26 +628,8 @@ def face_crossing_near_ray(px, py, origin, direction, f_plane, g_plane,
     views share; each asks its own picks which face shows at the probes
     (``Viewport._crossing_on_screen``, ``views.wgpu_inference.
     face_crossing``)."""
-    p_f, n_f = f_plane
-    p_g, n_g = g_plane
-    hit = kernel.plane_cut_ray(origin.toTuple(), direction.toTuple(),
-              (p_f.toTuple(), n_f.toTuple()), (p_g.toTuple(), n_g.toTuple()))
-    if hit is None:
-        return None
-    x, sample = (QVector3D(*p) for p in hit)
-    pix = world_to_pixel(x)
-    if pix is None or math.hypot(pix[0] - px, pix[1] - py) > reach_px:
-        return None
-    # Either side of the crossing on screen: one face, then the other.
-    q = world_to_pixel(sample)
-    if q is None:
-        return None
-    sx, sy = q[0] - pix[0], q[1] - pix[1]
-    ln = math.hypot(sx, sy)
-    if ln < 1e-9:
-        return None
-    nx, ny = -sy / ln * side_px, sx / ln * side_px
-    return x, ((pix[0] + nx, pix[1] + ny), (pix[0] - nx, pix[1] - ny))
+    return kernel.snap_surfaces.face_crossing_near_ray(
+        px, py, origin, direction, f_plane, g_plane, world_to_pixel, reach_px, side_px)
 
 
 def _lock_reference_snap(
@@ -789,18 +695,16 @@ def _lock_line_snaps(
             return SnapResult(QVector3D(chain_first_point), "close", COLOR_CLOSE)
 
     if query is None:
-        from core.snap_query import make_query
-        query = make_query(scene.edges, world_to_pixel, (cx, cy))
-    from core.snap_query import point_result
+        query = kernel.snap_query.make_query(scene.edges, world_to_pixel, (cx, cy))
     line = (start_point.toTuple(), line_dir.toTuple())
-    hit = point_result(query, scene.edges, threshold_px, is_occluded, line=line, hidden_many=are_occluded)
+    hit = kernel.snap_query.point_result(query, scene.edges, threshold_px, is_occluded, line=line, hidden_many=are_occluded)
     if hit is not None:
         return hit
     points = [QVector3D(*p) for p, _ in query.crossings(threshold_px, line)]
     k = _first_visible(points, is_occluded, are_occluded)
     if k is not None:
         return SnapResult(points[k], "intersection", COLOR_ENDPOINT, guide=(start_point,points[k]))
-    hit = point_result(query, scene.edges, threshold_px, is_occluded, line=line, midpoints=True, hidden_many=are_occluded)
+    hit = kernel.snap_query.point_result(query, scene.edges, threshold_px, is_occluded, line=line, midpoints=True, hidden_many=are_occluded)
     if hit is not None:
         return hit
     # 'From point' along the lock line: line up with a corner (green) or
@@ -888,7 +792,6 @@ def compute_snap(
     start_edges=None,
 ) -> SnapResult:
     options = locals()
-    from core.snap_query import make_query
-    query = make_query(scene.edges, world_to_pixel, candidate_pixel)
-    from core.snap_frame import SnapFrame
-    return kernel.resolve_snap(query, SnapFrame(options, query))
+    query = kernel.snap_query.make_query(scene.edges, world_to_pixel, candidate_pixel)
+    frame = kernel.snap_frame.SnapFrame(options, query)
+    return kernel.resolve_snap(query, frame, frame.state)

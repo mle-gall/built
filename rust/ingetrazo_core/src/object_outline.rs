@@ -9,12 +9,12 @@ use pyo3::prelude::*;
 type Point = [f64; 3];
 type Ring = Vec<Point>;
 
-fn positions(ring: &Bound<'_, PyAny>) -> PyResult<Ring> {
+pub(crate) fn positions(ring: &Bound<'_, PyAny>) -> PyResult<Ring> {
     ring.try_iter()?
         .map(|item| Ok(xyz(&item?)?.to_array()))
         .collect()
 }
-fn vectors(ring: Ring) -> Vec<Vec3> {
+pub(crate) fn vectors(ring: Ring) -> Vec<Vec3> {
     ring.into_iter()
         .map(|p| Vec3::from(DVec3::from_array(p)))
         .collect()
@@ -26,7 +26,7 @@ pub(crate) struct FaceOutline(Outline);
 #[pymethods]
 impl FaceOutline {
     #[new]
-    fn new(face: &Bound<'_, PyAny>) -> PyResult<Self> {
+    pub(crate) fn new(face: &Bound<'_, PyAny>) -> PyResult<Self> {
         let mut rings = vec![positions(&face.getattr("vertices")?)?];
         for hole in face.getattr("holes")?.try_iter()? {
             rings.push(positions(&hole?)?);
@@ -39,10 +39,10 @@ impl FaceOutline {
             Hypot::LibStdCxx,
         )))
     }
-    fn contains(&self, ring: &Bound<'_, PyAny>, outside_holes: bool) -> PyResult<bool> {
+    pub(crate) fn contains(&self, ring: &Bound<'_, PyAny>, outside_holes: bool) -> PyResult<bool> {
         Ok(self.0.contains(&positions(ring)?, outside_holes))
     }
-    fn split(
+    pub(crate) fn split(
         &self,
         chain: &Bound<'_, PyAny>,
         chord: bool,
@@ -52,21 +52,21 @@ impl FaceOutline {
             (vectors(pieces.pop().unwrap()), vectors(second))
         }))
     }
-    fn chain(&self, ring: &Bound<'_, PyAny>) -> PyResult<Option<Vec<Vec3>>> {
+    pub(crate) fn chain(&self, ring: &Bound<'_, PyAny>) -> PyResult<Option<Vec<Vec3>>> {
         Ok(self.0.chain(&positions(ring)?).map(vectors))
     }
-    fn solid_at(&self, p: &Bound<'_, PyAny>) -> PyResult<bool> {
+    pub(crate) fn solid_at(&self, p: &Bound<'_, PyAny>) -> PyResult<bool> {
         Ok(self.0.solid_at(xyz(p)?.to_array()))
     }
 
-    fn merged_hole(&self, ring: &Bound<'_, PyAny>) -> PyResult<Option<(usize, Vec<Vec3>)>> {
+    pub(crate) fn merged_hole(&self, ring: &Bound<'_, PyAny>) -> PyResult<Option<(usize, Vec<Vec3>)>> {
         Ok(self
             .0
             .merged_hole(ring.py(), &positions(ring)?)?
             .map(|(i, r)| (i, vectors(r))))
     }
 
-    fn carve(&self, ring: &Bound<'_, PyAny>) -> PyResult<Option<Vec<Vec<Vec3>>>> {
+    pub(crate) fn carve(&self, ring: &Bound<'_, PyAny>) -> PyResult<Option<Vec<Vec<Vec3>>>> {
         Ok(self
             .0
             .carve(&positions(ring)?)
