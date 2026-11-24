@@ -20,7 +20,8 @@ from ingetrazo_core import Vec3 as QVector3D
 from ingetrazo_core import NativeCommand
 # Group and component steps (rust/ingetrazo_core/src/doc/group_steps.rs).
 from ingetrazo_core import (ReplaceComponentCommand, KeepComponentCommand, AddKeptComponentsCommand, GroupToComponentCommand, EditText3DCommand, ReparentGroupsCommand, MergeGroupsCommand, MakeUniqueCommand, InsertGroupCommand, DeleteGroupCommand, SetStructureNodeCommand, SplitIntoPiecesCommand,
-                            SetMaterialFinishCommand)
+                            SetMaterialFinishCommand, MakeGroupCommand, MakeNestedGroupCommand,
+                            MakeComponentOfCommand, GroupInContextCommand)
 # Annotation, section, guide, image, survey, saved-scene and sheet steps
 # (rust/ingetrazo_core/src/doc/steps.rs): the retired classes' names.
 from ingetrazo_core import (RecordStep, AddDimensionCommand, DeleteDimensionsCommand, AddTextLabelCommand, MoveTextLabelsCommand, MoveGuidesCommand, RotateGuidesCommand, MoveDimensionsCommand, EditTextLabelCommand, EditDimensionTextCommand, DeleteTextLabelsCommand, AddGuideCommand, PlaceSectionPlaneCommand, DeleteSectionPlanesCommand, ReverseSectionPlaneCommand, SetActiveSectionCommand, SetSectionModeCommand, SetSectionFillCommand, RenameSectionPlaneCommand, AddSheetCommand, PlaceViewCommand, SheetCommand, InsertSheetCommand, RemoveSheetCommand, MoveSheetCommand, CreatePlanCommand, AddSceneCommand, DeleteScenesCommand, UpdateSceneCommand, SceneTreeCommand, MoveSectionPlanesCommand, RotateSectionPlanesCommand, ChangeGuideCommand, DeleteGuidesCommand, AddImagePlaneCommand, DeleteImagePlanesCommand, TransformImagePlaneCommand, SetImagePlaneOpacityCommand, MoveImagePlanesCommand, RotateImagePlanesCommand, ScaleImagePlanesCommand, AddGeoPathCommand, DeleteGeoPointsCommand, DeleteGeoPathsCommand, ToggleGeoPathClosedCommand, SetGeoPathSurfaceCommand, MoveGeoPathNodeCommand)
@@ -142,6 +143,10 @@ class MeshCommand(Command):
     and the document field journal. Object meshes retain the command inverse."""
     def geometry_meshes(self, scene):
         return (scene.mesh,)
+
+
+# A native mesh step: History enlists its store (``geometry_meshes``).
+MeshCommand.register(MakeGroupCommand)
 
 
 class FaceAttributeCommand(MeshCommand):
@@ -2444,73 +2449,6 @@ class MeshSnapshotCommand(MeshCommand):
             scene.version += 1
 
 
-class MakeGroupCommand(MeshCommand):
-    """Encapsulate the selected faces and edges into a new Group with its own
-    mesh, removing them from the loose mesh so they no longer weld to the rest.
-    Snapshot undo (geometry crosses meshes — too tangled for a per-op inverse)."""
-
-    doc_undo = True
-
-    def doc_after(self, scene, phase):
-        if phase == "undo":
-            if not self._journal_geometry:
-                scene.mesh.restore_state(self.snapshot)
-            scene.selection.discard(self.group)
-        else:
-            if not self._journal_geometry:
-                scene.mesh.restore_state(self._after)
-            scene.selection.clear()
-            scene.selection.add(self.group)
-        scene.version += 1
-
-    def __init__(self, faces: Iterable[Face], edges: Iterable[Edge],
-                 component: bool = False, name: str | None = None) -> None:
-        # ``component=True`` builds the fresh mesh in LOCAL coordinates
-        # (origin at the selection's min corner) and hands back an INSTANCE
-        # (Group with an xform) — Make Component: copies of it
-        # share the definition through the existing prototype machinery.
-        self._component = component
-        self._name = name
-        from ingetrazo_core import GroupGeometry
-        self._geometry = GroupGeometry(faces, edges)
-        self.snapshot = self.group = None
-
-    def do(self, scene) -> None:
-        m = scene.mesh
-        self.snapshot = self._direct_snapshot(m)
-        # Built once: a redo puts back the SAME group, the one the next
-        # commands (Explode, Move, paint…) hold — a fresh one each time
-        # left them pointing at a group no longer in the model, and
-        # their redo was lost (#737).
-        if self.group is None:
-            self.group = self._build(scene)
-        self._take_off_loose(scene)
-        if not self._journal_geometry:
-            self._after = m.capture_state()
-        scene.groups.append(self.group)
-        from ingetrazo_core import file_created_placement
-        self._filing = file_created_placement(scene, self.group)
-        scene.selection.clear()
-        scene.selection.add(self.group)
-        scene.version += 1
-
-    def _build(self, scene) -> Group:
-        return self._geometry.build(scene, self._component, self._name)
-
-    def _take_off_loose(self, scene) -> None:
-        m = scene.mesh
-        return self._geometry.take_off(m, scene.selection.discard)
-
-    def undo(self, scene) -> None:
-        if getattr(self, "_filing", None) is not None:
-            self._filing.undo(scene)
-        if self.group in scene.groups:
-            scene.groups.remove(self.group)
-        scene.selection.discard(self.group)
-        scene.mesh.restore_state(self.snapshot)
-        scene.version += 1
-
-
 def _move_holds(scene, placements, moved) -> None:
     """The dimensions held on a vertex inside ``placements`` hold the
     same vertex in its copy now: ``moved`` maps ``id`` of each part and
@@ -2806,166 +2744,6 @@ def _nested_pairs(old, new) -> list:
             meshes.add(id(part.mesh))
             out.append((part.mesh, twin.mesh))
     return out
-
-
-class MakeNestedGroupCommand(Command):
-    """Make Group when the selection already holds groups.
-
-    Until 2026-09-11 this was refused: a container baked its children the
-    moment you opened it, so nesting would have dissolved the bench and the
-    pergola you just grouped. With the edit stack in place (Scene) that is
-    gone, and grouping groups is what it says.
-
-    The loose part of the selection, if any, becomes the container's OWN
-    mesh — the classic behaviour: inside the new group you find the
-    loose faces AND the groups, each still a group. Reusing
-    :class:`MakeGroupCommand` for that half keeps one code path for taking
-    geometry off the loose mesh.
-    """
-
-    def __init__(self, faces: Iterable[Face], edges: Iterable[Edge],
-                 groups: Iterable[Group], name: str | None = None) -> None:
-        faces, edges, groups = list(faces), list(edges), list(groups)
-        self._inner = (MakeGroupCommand(faces, edges, name=name)
-                       if (faces or edges) else None)
-        self.groups = groups
-        self.name = name
-        self.container: Optional[Group] = None
-        self._indices: list = []
-        self._xform0 = None
-
-    doc_undo = True
-
-    def doc_after(self, scene, phase) -> None:
-        if self._inner is not None:
-            self._inner.doc_after(scene, phase)
-        scene.selection.clear()
-        if phase == "redo":
-            scene.selection.add(self.container)
-        scene.version += 1
-
-    def do(self, scene) -> None:
-        if self._inner is not None:
-            self._inner.do(scene)
-            self.container = self._inner.group
-        elif self.container is None:
-            self.container = Group(Mesh(), name=self.name)
-        self._xform0, self._indices = _placements.nest(
-            scene.groups, self.container, self.groups, scene.selection.discard)
-        if self._inner is None:
-            from ingetrazo_core import file_created_placement
-            self._filing = file_created_placement(scene, self.container)
-        scene.selection.clear()
-        scene.selection.add(self.container)
-        scene.version += 1
-
-    def undo(self, scene) -> None:
-        if getattr(self, "_filing", None) is not None:
-            self._filing.undo(scene)
-        _placements.unnest(scene.groups, self.container, self._xform0, self._indices)
-        if self._inner is not None:
-            self._inner.undo(scene)        # loose geometry back, group gone
-        elif self.container in scene.groups:
-            scene.groups.remove(self.container)
-        scene.selection.clear()
-        scene.version += 1
-
-
-class GroupInContextCommand(Command):
-    """Make Group, Make Component or Explode while a group is open: what
-    it makes goes INTO the open group, as whatever you create while editing
-    a group belongs to it (#490, #561 — «making a new group directly while
-    you are inside another one is the part still missing»), and what
-    Explode lets out stays in it.
-
-    ``inner`` is the usual command (:class:`MakeGroupCommand`,
-    :class:`MakeNestedGroupCommand`, :class:`MakeComponentOfCommand`,
-    :class:`ExplodeGroupCommand`), run
-    with the open group's children standing in for the model's top level:
-    those commands take groups from and add groups to ``scene.groups``, and
-    inside a group the siblings are its children. Entering a container
-    already pushed its matrix down into them, so their coordinates are the
-    world's, the same the tools draw in. The open group gets the identity
-    matrix a group holding groups always has (``Group.adopt``), as a group.
-
-    Callers refuse it inside a component (``outliner.editing_inside_component``):
-    components keep their parts, as the Browser's drag and drop says."""
-
-    def __init__(self, inner, context) -> None:
-        self.inner = inner
-        self.context = context
-        self._state = None
-
-    def doc_undo(self, scene) -> bool:
-        """By its transaction when its inner command would be: the open
-        group's children are document lists, swapped in by key."""
-        return _uses_doc_undo(self.inner, scene)
-
-    def doc_after(self, scene, phase) -> None:
-        self.inner.doc_after(scene, phase)
-        scene.version += 1
-
-    @property
-    def group(self):
-        return getattr(self.inner, "group", None) or getattr(
-            self.inner, "container", None)
-
-    def _run(self, scene, step) -> None:
-        ctx = self.context
-        if ctx.children is None:
-            ctx.children = []
-        # The document's lists cannot be swapped like Python lists:
-        # the scene reads its top level from ``ctx`` meanwhile.
-        d = scene.__dict__
-        prev = d.get("_groups_owner")
-        d["_groups_owner"] = ctx
-        try:
-            step(scene)
-        finally:
-            d["_groups_owner"] = prev
-        return
-
-    def do(self, scene) -> None:
-        from ingetrazo_core import Matrix4 as QMatrix4x4
-        ctx = self.context
-        self._state = (ctx.xform, ctx.component)
-        self._run(scene, self.inner.do)
-        if ctx.children and ctx.xform is None:
-            ctx.xform = QMatrix4x4()
-            ctx.component = False
-        scene.version += 1
-
-    def undo(self, scene) -> None:
-        self._run(scene, self.inner.undo)
-        self.context.xform, self.context.component = self._state
-        scene.version += 1
-
-
-class MakeComponentOfCommand(Command):
-    """Make Component over a selection that holds groups (or groups and
-    loose geometry): ONE component containing them, each still a group
-    inside — not one component per group (Marco, 24-09, with issue #90).
-    It is Make Group's container, made a component."""
-
-    doc_undo = True
-
-    def doc_after(self, scene, phase):
-        self._nest.doc_after(scene, phase)
-
-    def __init__(self, faces, edges, groups, name=None) -> None:
-        self._nest = MakeNestedGroupCommand(faces, edges, groups, name=name)
-
-    @property
-    def container(self):
-        return self._nest.container
-
-    def do(self, scene) -> None:
-        self._nest.do(scene)
-        self._nest.container.component = True
-        scene.version += 1
-
-    def undo(self, scene) -> None:
-        self._nest.undo(scene)
 
 
 class ExplodeGroupCommand(MeshCommand):

@@ -21,11 +21,14 @@ use pyo3::prelude::*;
 use pyo3::PyClassInitializer;
 use pyo3::types::{PyDict, PyList, PyTuple};
 use pyo3::PyTraverseError;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
 pub(super) type Obj<'py> = Bound<'py, PyAny>;
 pub(super) type Run = for<'py> fn(&RecordStep, Python<'py>, &Obj<'py>) -> PyResult<()>;
 /// A step's own after-effect, in place of the shared pick and bump.
+#[derive(Clone, Copy)]
+pub(super) struct Meshes(pub for<'py> fn(&RecordStep, Python<'py>, &Obj<'py>) -> PyResult<Vec<Obj<'py>>>);
 #[derive(Clone, Copy)]
 pub(super) struct After(pub for<'py> fn(&RecordStep, Python<'py>, &Obj<'py>, Option<&str>) -> PyResult<()>);
 
@@ -76,6 +79,12 @@ pub struct RecordStep {
     /// Results an execute publishes under the retired class's attribute
     /// names (`_owner`, `index`): None until it runs.
     named: Mutex<Vec<(&'static str, Option<Py<PyAny>>)>>,
+    /// The meshes whose store a History step enlists (a mesh step).
+    meshes: Option<Meshes>,
+    /// History journals the enlisted stores (`_journal_geometry`).
+    journal: AtomicBool,
+    /// Set while a direct `undo` (outside History's replay) runs.
+    direct: AtomicBool,
 }
 
 impl RecordStep {
@@ -93,6 +102,9 @@ impl RecordStep {
             memory: Mutex::new(Vec::new()),
             own: Mutex::new(None),
             named: Mutex::new(Vec::new()),
+            meshes: None,
+            journal: AtomicBool::new(false),
+            direct: AtomicBool::new(false),
         }
     }
     fn paint(mut self) -> Self {
@@ -106,6 +118,27 @@ impl RecordStep {
     pub(super) fn groups(mut self) -> Self {
         self.keeps_groups = true;
         self
+    }
+    /// A mesh step: History enlists these meshes' stores for the step.
+    pub(super) fn on_meshes(mut self, meshes: Meshes) -> Self {
+        self.meshes = Some(meshes);
+        self
+    }
+    /// Whether History journals the step's stores (else its snapshots undo them).
+    pub(super) fn journalled(&self) -> bool {
+        self.journal.load(Ordering::Relaxed)
+    }
+    /// Whether the replay running is a direct undo, outside History.
+    pub(super) fn is_direct(&self) -> bool {
+        self.direct.load(Ordering::Relaxed)
+    }
+    fn read_journal(slf: &Bound<'_, Self>) -> PyResult<()> {
+        let flag = match slf.as_any().getattr_opt("_journal_geometry")? {
+            Some(v) => v.is_truthy()?,
+            None => false,
+        };
+        slf.get().journal.store(flag, Ordering::Relaxed);
+        Ok(())
     }
     pub(super) fn hook(mut self, after: After) -> Self {
         self.hook = Some(after);
@@ -280,6 +313,7 @@ impl RecordStep {
             lock().begin(Some(key)).ok_or_else(|| PyRuntimeError::new_err("Document writer reservation lost"))?;
         }
         let pins = lock().open.as_ref().map_or(0, |o| o.pins.len());
+        Self::read_journal(slf)?;
         let result = (me.run)(me, py, scene);
         let own = match (&result, outer) {
             (Ok(()), 0) => {
@@ -330,7 +364,11 @@ impl RecordStep {
             py.import("core.doc_model")?.call_method0("flush")?;
             txn.call_method0("undo")?;
         }
-        me.after(py, scene, Some("undo"))
+        Self::read_journal(slf)?;
+        me.direct.store(true, Ordering::Relaxed);
+        let r = me.after(py, scene, Some("undo"));
+        me.direct.store(false, Ordering::Relaxed);
+        r
     }
 
     fn bind_transaction(slf: &Bound<'_, Self>, txn: &Obj<'_>) -> PyResult<()> {
@@ -339,8 +377,17 @@ impl RecordStep {
 
     /// What a transaction undo or redo still does beside the document.
     #[pyo3(signature = (scene, phase = None))]
-    fn doc_after(&self, py: Python<'_>, scene: &Obj<'_>, phase: Option<&str>) -> PyResult<()> {
-        self.after(py, scene, phase)
+    fn doc_after(slf: &Bound<'_, Self>, scene: &Obj<'_>, phase: Option<&str>) -> PyResult<()> {
+        Self::read_journal(slf)?;
+        slf.get().after(slf.py(), scene, phase)
+    }
+
+    /// The meshes a mesh step's History transaction enlists.
+    fn geometry_meshes<'py>(&self, py: Python<'py>, scene: &Obj<'py>) -> PyResult<Bound<'py, PyTuple>> {
+        match self.meshes {
+            Some(Meshes(f)) => PyTuple::new(py, f(self, py, scene)?),
+            None => PyTuple::new(py, [scene.getattr("mesh")?]),
+        }
     }
 
     fn __repr__(&self) -> String {
