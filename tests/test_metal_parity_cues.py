@@ -168,16 +168,18 @@ def test_route_marker_and_extension_overlays_paint():
 
 def test_snap_tooltip_is_painted():
     # GL labels the marker ("Endpoint in group"); Metal passed labels=False.
+    from ingetrazo_render import AnnotationCanvas
     snap = SnapResult(kind="endpoint", point=V(60, 50, 0), color=(.16, .62, .36))
     snap.context = "group"
     project = lambda p: (p.x(), p.y())
     clip = lambda a, b: (a, b)
-    gl = SimpleNamespace(_world_to_pixel=project, _clip_pixel_line=clip,
-                         _SNAP_LABELS=Viewport._SNAP_LABELS)
-    gl._snap_context_suffix = lambda c: Viewport._snap_context_suffix(gl, c)
-    expected = painted(lambda p: Viewport._draw_snap_indicator(gl, p, snap), SIZE)
-    bare = painted(lambda p: draw_snap_indicator(p, snap, project, clip, labels=False), SIZE)
-    assert np.abs(pixels(expected).astype(int) - pixels(bare).astype(int)).max() > 1
+
+    def drawn(labels):
+        canvas = AnnotationCanvas(SIZE[0], SIZE[1], float(SIZE[0]))
+        draw_snap_indicator(canvas, snap, project, clip, labels=labels)
+        return np.frombuffer(canvas.composite(bytes(SIZE[0] * SIZE[1] * 4)), np.uint8)
+    labelled, bare = drawn(True), drawn(False)
+    assert np.abs(labelled.astype(int) - bare.astype(int)).max() > 1
     from views.wgpu_mesh_tools import MeshToolAccess
     import inspect
     source = inspect.getsource(MeshToolAccess.draw_annotations)
