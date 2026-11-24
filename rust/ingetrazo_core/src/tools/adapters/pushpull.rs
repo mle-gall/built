@@ -52,7 +52,11 @@ fn host_activate<'py>(a: &Args<'py>) -> Reply<'py> {
     let selection = scene.getattr("selection")?;
     match selection.len()? {
         1 => {
-            let item = selection.try_iter()?.next().transpose()?.ok_or_else(|| pyo3::exceptions::PyStopIteration::new_err(()))?;
+            let item = selection
+                .try_iter()?
+                .next()
+                .transpose()?
+                .ok_or_else(|| pyo3::exceptions::PyStopIteration::new_err(()))?;
             if item.is_instance(&module(py)?.getattr("MeshFace")?)?
                 && scene.getattr("mesh")?.getattr("faces")?.contains(&item)?
             {
@@ -584,23 +588,255 @@ fn on_redo<'py>(a: &Args<'py>) -> Reply<'py> {
     }
     false.into_bound_py_any(a.py())
 }
+
+fn on_click<'py>(a: &Args<'py>) -> Reply<'py> {
+    let py = a.py();
+    let ctx = a.get_item(1)?;
+    let tool = a.get_item(0)?;
+    tool.call_method1("_pointer_event", ("click", &ctx))?;
+    Ok(none(py))
+}
+fn on_hover<'py>(a: &Args<'py>) -> Reply<'py> {
+    let py = a.py();
+    let ctx = a.get_item(1)?;
+    let tool = a.get_item(0)?;
+    tool.call_method1("_pointer_event", ("hover", &ctx))?;
+    Ok(none(py))
+}
+fn on_double_click<'py>(a: &Args<'py>) -> Reply<'py> {
+    let py = a.py();
+    let ctx = a.get_item(1)?;
+    let tool = a.get_item(0)?;
+    tool.call_method1("_pointer_event", ("double_click", &ctx))?;
+    Ok(none(py))
+}
+fn on_release<'py>(a: &Args<'py>) -> Reply<'py> {
+    let py = a.py();
+    let module = py.import("tools.pushpull")?;
+    let tool = a.get_item(0)?;
+    let viewport = a.get_item(1)?;
+    let mods = if tool.getattr("dragging")?.is_truthy()? {
+        module.call_method1(
+            "_mods",
+            (module.getattr("input_state")?.call_method(
+                "modifiers",
+                (&viewport,),
+                Some(&fields!(py; "query" => true)),
+            )?,),
+        )?
+    } else {
+        0.into_bound_py_any(py)?
+    };
+    tool.call_method1(
+        "_send",
+        (
+            &viewport,
+            fields!(py; "type" => "release", "mods" => &mods).into_any(),
+        ),
+    )?;
+    Ok(none(py))
+}
+fn host_preview<'py>(a: &Args<'py>) -> Reply<'py> {
+    let tool = a.get_item(0)?;
+    let viewport = a.get_item(1)?;
+    tool.call_method1("_preview_at", (&viewport, tool.getattr("_ctx")?))?;
+    tool.getattr("dragging")
+}
+fn host_close_retype<'py>(a: &Args<'py>) -> Reply<'py> {
+    let py = a.py();
+    let tool = a.get_item(0)?;
+    tool.setattr("_last", none(py))?;
+    Ok(none(py))
+}
+fn host_tiny_push<'py>(a: &Args<'py>) -> Reply<'py> {
+    let py = a.py();
+    let module = py.import("tools.pushpull")?;
+    let viewport = a.get_item(1)?;
+    viewport.call_method1(
+        "flash_status",
+        (
+            module.call_method1(
+                "tr",
+                ("Too small a push — drag further or type a distance",),
+            )?,
+            4000,
+        ),
+    )?;
+    Ok(none(py))
+}
+fn refuse_python_mesh<'py>(a: &Args<'py>) -> Reply<'py> {
+    let py = a.py();
+    let module = py.import("tools.pushpull")?;
+    let tool = a.get_item(0)?;
+    let viewport = a.get_item(1)?;
+    tool.setattr("base_face", none(py))?;
+    tool.setattr("_extra_faces", PyList::empty(py).into_any())?;
+    tool.setattr("_extra_normals", PyList::empty(py).into_any())?;
+    viewport.call_method1("flash_status", (module.call_method1("tr", ("Push refused: the geometry kernel could not take this mesh (left it unchanged)",))?, 6000,))?;
+    Ok(none(py))
+}
+fn rubber_band_lines<'py>(a: &Args<'py>) -> Reply<'py> {
+    let tool = a.get_item(0)?;
+    tool.getattr("_light_wires")
+}
+fn preview_faces<'py>(a: &Args<'py>) -> Reply<'py> {
+    let tool = a.get_item(0)?;
+    tool.getattr("_light_faces")
+}
+fn build_light_faces<'py>(a: &Args<'py>) -> Reply<'py> {
+    let py = a.py();
+    let module = py.import("tools.pushpull")?;
+    let tool = a.get_item(0)?;
+    let push_light_faces = py.import("ingetrazo_core")?.getattr("push_light_faces")?;
+    push_light_faces.call1((&tool, module.getattr("_MIN_EXTRUDE")?))
+}
+fn present<'py>(a: &Args<'py>) -> Reply<'py> {
+    let py = a.py();
+    let module = py.import("tools.pushpull")?;
+    let mode = a.get_item(2)?;
+    let tool = a.get_item(0)?;
+    let viewport = a.get_item(1)?;
+    let present_push_preview = py
+        .import("ingetrazo_core")?
+        .getattr("present_push_preview")?;
+    present_push_preview.call1((
+        &tool,
+        &viewport,
+        &mode,
+        module.getattr("_MIN_EXTRUDE")?,
+        module.getattr("_STITCH_TOL")?,
+    ))?;
+    Ok(none(py))
+}
+fn show_light_preview<'py>(a: &Args<'py>) -> Reply<'py> {
+    let py = a.py();
+    let tool = a.get_item(0)?;
+    let viewport = a.get_item(1)?;
+    tool.call_method1("_present", (&viewport, "overlay"))?;
+    Ok(none(py))
+}
+fn refuse_closed_group<'py>(a: &Args<'py>) -> Reply<'py> {
+    let py = a.py();
+    let module = py.import("tools.pushpull")?;
+    let viewport = a.get_item(1)?;
+    viewport.call_method1("flash_status", (module.call_method1("tr", ("That face belongs to a group — double-click to open it first, then push inside",))?, 4000,))?;
+    Ok(none(py))
+}
+fn show_prism_preview<'py>(a: &Args<'py>) -> Reply<'py> {
+    let py = a.py();
+    let tool = a.get_item(0)?;
+    let viewport = a.get_item(1)?;
+    tool.call_method1("_present", (&viewport, "prism"))?;
+    Ok(none(py))
+}
+fn show_staged_preview<'py>(a: &Args<'py>) -> Reply<'py> {
+    let py = a.py();
+    let tool = a.get_item(0)?;
+    let viewport = a.get_item(1)?;
+    tool.call_method1("_present", (&viewport, "stage"))?;
+    Ok(none(py))
+}
+fn on_key<'py>(a: &Args<'py>) -> Reply<'py> {
+    let py = a.py();
+    let module = py.import("tools.pushpull")?;
+    let key = a.get_item(2)?;
+    let modifiers = a.get_item(3)?;
+    let tool = a.get_item(0)?;
+    let viewport = a.get_item(1)?;
+    if key.eq(module.getattr("Qt")?.getattr("Key_Control")?)? {
+        return Ok(tool.call_method1("_send", (&viewport, fields!(py; "type" => "key", "key" => "Control", "mods" => module.call_method1("_mods", (&modifiers,))?).into_any(),))?.get_item("consumed")?);
+    }
+    py.import("builtins")?
+        .getattr("super")?
+        .call1((module.getattr("PushPullTool")?, &tool))?
+        .call_method1("on_key", (&viewport, &key, &modifiers))
+}
+fn on_key_release<'py>(a: &Args<'py>) -> Reply<'py> {
+    let py = a.py();
+    let module = py.import("tools.pushpull")?;
+    let key = a.get_item(2)?;
+    let tool = a.get_item(0)?;
+    let viewport = a.get_item(1)?;
+    if key.ne(module.getattr("Qt")?.getattr("Key_Control")?)? {
+        return false.into_bound_py_any(py);
+    }
+    Ok(tool.call_method1("_send", (&viewport, fields!(py; "type" => "key_release", "key" => "Control", "tapped" => tool.call_method1("ctrl_tapped", (&viewport,))?).into_any(),))?.get_item("consumed")?)
+}
+fn host_modifier<'py>(a: &Args<'py>) -> Reply<'py> {
+    let py = a.py();
+    let tool = a.get_item(0)?;
+    let values = a.get_item(2)?;
+    {
+        let [part0, part1] = unpack::<2>(&values)?;
+        tool.setattr("_keep_mode", part0)?;
+        tool.setattr("_keep_base", part1)?;
+    }
+    Ok(none(py))
+}
+fn host_show_mode<'py>(a: &Args<'py>) -> Reply<'py> {
+    let py = a.py();
+    let module = py.import("tools.pushpull")?;
+    let enabled = a.get_item(2)?;
+    let tool = a.get_item(0)?;
+    let viewport = a.get_item(1)?;
+    viewport.call_method1(
+        "flash_status",
+        ((if enabled.is_truthy()? {
+            module.call_method1("tr", ("Keep the base: on",))?
+        } else {
+            module.call_method1("tr", ("Keep the base: off",))?
+        }),),
+    )?;
+    tool.call_method1("refresh_hint", (&viewport,))?;
+    viewport.call_method0("update")?;
+    Ok(none(py))
+}
+fn status_clause<'py>(a: &Args<'py>) -> Reply<'py> {
+    let py = a.py();
+    let module = py.import("tools.pushpull")?;
+    let tool = a.get_item(0)?;
+    module.call_method1(
+        "ctrl_clause",
+        (
+            tool.getattr("_keep_mode")?,
+            "keep the base",
+            "move the base",
+        ),
+    )
+}
 #[rustfmt::skip]
 pub(super) const METHODS: &[Method] = &[
     ("busy", Mode::Method, busy, &["self"], "", ""),
     ("host_reading", Mode::Method, host_reading, &["self", "viewport", "args"], "", ""),
     ("_pointer_event", Mode::Method, pointer_event, &["self", "kind", "ctx"], "", ""),
+    ("on_click", Mode::Method, on_click, &["self", "ctx"], "", ""),
+    ("on_hover", Mode::Method, on_hover, &["self", "ctx"], "", ""),
+    ("on_double_click", Mode::Method, on_double_click, &["self", "ctx"], "", ""),
+    ("on_release", Mode::Method, on_release, &["self", "viewport"], "", ""),
     ("host_activate", Mode::Method, host_activate, &["self", "viewport", "args"], "None", ""),
     ("host_deactivate", Mode::Method, host_deactivate, &["self", "viewport", "args"], "None", ""),
     ("drag_plane", Mode::Method, drag_plane, &["self", "viewport"], "", "Mid-drag, the plane through the anchor that CONTAINS the push\naxis and faces the camera — the cursor ray always hits it, so the\nviewport keeps delivering hovers and clicks wherever the cursor\ngoes. The ground it used otherwise stops answering above the\nhorizon (or when the ray merely grazes it), and then the box froze\nmid-pull and the click on its top was lost: «hago clic aquí para que\nquede fijado… no me deja, tengo que venirme al lateral» (Rafael,\n2026-09-16, camera at ground level). The distance itself is still\nread off the pixel (``_project_to_lock_line``); the plane only has\nto exist. Looking straight along the axis, where no plane contains\nit face-on, the base plane answers as before."),
     ("host_hover_face", Mode::Method, host_hover_face, &["self", "viewport", "args"], "", ""),
+    ("host_preview", Mode::Method, host_preview, &["self", "viewport", "args"], "", ""),
     ("_preview_at", Mode::Method, preview_at, &["self", "viewport", "ctx"], "", ""),
     ("host_begin", Mode::Method, host_begin, &["self", "viewport", "pick"], "", ""),
+    ("host_close_retype", Mode::Method, host_close_retype, &["self", "viewport", "args"], "", ""),
+    ("host_tiny_push", Mode::Method, host_tiny_push, &["self", "viewport", "args"], "", ""),
     ("host_commit", Mode::Method, host_commit, &["self", "viewport", "distance"], "", ""),
     ("_grab_point", Mode::Method, grab_point, &["self", "viewport", "ctx:ToolContext"], "QVector3D | None", "The clicked spot on the face's plane, or ``None`` (the centroid\nthen stands in).\n\nThe drag is measured along the line through this point: the cursor\nstays on it. Through the centroid instead, a click near a corner of\na 12 m slab read -3.39 m for a 0.3 m pull, and a ring's centroid lies\nin its hole -- 1 m of cursor gave 0.13 m walls (tutorial hunt 2,\nA13/B5)."),
+    ("_refuse_python_mesh", Mode::Method, refuse_python_mesh, &["self", "viewport"], "None", ""),
     ("host_restore_retype", Mode::Method, host_restore_retype, &["self", "viewport", "args"], "", "Recover the last push's handles only while its undo entry is still on top."),
     ("host_cancel", Mode::Method, host_cancel, &["self", "viewport", "args"], "", ""),
     ("on_redo", Mode::Method, on_redo, &["self", "viewport"], "bool", "Redo mid-drag abandons the push first, then lets the redo run (False)\n— on the clean model. Run under a staged preview, it would land on the\nstaged result and leave that in the model with no undo entry."),
+    ("rubber_band_lines", Mode::Method, rubber_band_lines, &["self"], "", ""),
+    ("preview_faces", Mode::Method, preview_faces, &["self"], "", ""),
+    ("_build_light_faces", Mode::Method, build_light_faces, &["self"], "", ""),
+    ("_present", Mode::Method, present, &["self", "viewport", "mode"], "", ""),
+    ("_show_light_preview", Mode::Method, show_light_preview, &["self", "viewport"], "", ""),
+    ("_refuse_closed_group", Mode::Method, refuse_closed_group, &["self", "viewport"], "None", "A face inside a group that has not been opened is not pushable.\n\nThe tool used to push it anyway — an instance even opened a short\nediting session behind your back and shared the result to every copy\n(2026-06-10). In a real drawing that reads as\nthe model changing where you did not point: a group is a box, and you\nopen a box before reaching inside (Marco, 2026-09-10) — the usual\nconvention: double-click the group or component to edit it first.\n\nRefusing has to SPEAK: a tool that does nothing without a word is the\none that reads as broken."),
+    ("_show_prism_preview", Mode::Method, show_prism_preview, &["self", "viewport"], "None", ""),
     ("_cap_vertices", Mode::Method, cap_vertices, &["self", "scene"], "list", "The Vertex OBJECTS the cap loop stands on, resolved once."),
+    ("_show_staged_preview", Mode::Method, show_staged_preview, &["self", "viewport"], "None", ""),
     ("inference_marker", Mode::Method, inference_marker, &["self"], "", "Return ``(world_point, kind)`` for the marker the viewport draws\nwhen the distance inference is locked onto model geometry, or\n``None``. The kind selects the matching snap colour and label,\nincluding the cyan midpoint cue."),
     ("inference_guide_lines", Mode::Method, inference_guide_lines, &["self"], "", "The «level with that point» reference segment, from the geometry\nthe distance inference locked onto to the moving cap, as\n``(reference, moved_anchor, kind)`` — ``[]`` while nothing is\nengaged."),
     ("value_label", Mode::Method, value_label, &["self"], "", "Return ``(text, midpoint_world)`` for the floating distance label.\nUses the anchor captured at drag start, which stays fixed even while a\nprism cap deforms the real geometry live."),
@@ -610,4 +846,9 @@ pub(super) const METHODS: &[Method] = &[
     ("_reference_face", Mode::Static, reference_face, &["viewport", "x", "y"], "", ""),
     ("_selected_faces", Mode::Static, selected_faces, &["scene"], "list", "The selected Faces of the loose mesh."),
     ("_take_extras", Mode::Method, take_extras, &["self", "face", "scene"], "None", "A drag starting on one of two or more selected faces takes the\nothers along; on any other face it is the ordinary single push.\n\nThe selection is read HERE, at every drag's start, not kept from the\nactivation: the pushed caps stay selected, and pushing the same\nfaces again moved only the one under the cursor."),
+    ("on_key", Mode::Method, on_key, &["self", "viewport", "key", "modifiers"], "", ""),
+    ("on_key_release", Mode::Method, on_key_release, &["self", "viewport", "key"], "", ""),
+    ("host_modifier", Mode::Method, host_modifier, &["self", "viewport", "values"], "", ""),
+    ("host_show_mode", Mode::Method, host_show_mode, &["self", "viewport", "enabled"], "", ""),
+    ("status_clause", Mode::Method, status_clause, &["self"], "str", ""),
 ];

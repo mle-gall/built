@@ -77,19 +77,6 @@ class PushPullTool(PushPullOperation, RustTool):
         PushPullOperation.__init__(self)
         self._ctx = None
 
-    def on_click(self, ctx):
-        self._pointer_event("click", ctx)
-
-    def on_hover(self, ctx):
-        self._pointer_event("hover", ctx)
-
-    def on_double_click(self, ctx):
-        self._pointer_event("double_click", ctx)
-
-    def on_release(self, viewport):
-        mods = _mods(input_state.modifiers(viewport, query=True)) if self.dragging else 0
-        self._send(viewport, {"type": "release", "mods": mods})
-
     name = "Push / Pull"
 
     #: P is the usual key for this tool (Marco, 2026-09-10). U, the one
@@ -124,98 +111,12 @@ class PushPullTool(PushPullOperation, RustTool):
     # result, and it costs a dot product each.
     preview_cull_back = True
 
-    # ---- Spatial input ------------------------------------------------------
-    def host_preview(self, viewport, args):
-        self._preview_at(viewport, self._ctx)
-        return self.dragging
-
-    def host_close_retype(self, viewport, args):
-        self._last = None
-
-    def host_tiny_push(self, viewport, args):
-        viewport.flash_status(tr("Too small a push — drag further or type a distance"), 4000)
-
-    def _refuse_python_mesh(self, viewport) -> None:
-        self.base_face = None
-        self._extra_faces = []
-        self._extra_normals = []
-        viewport.flash_status(tr("Push refused: the geometry kernel could not take "
-                                 "this mesh (left it unchanged)"), 6000)
-
-    # ---- Visual preview -----------------------------------------------------
     # A free face and a Ctrl-copy show the naive sweep as overlay faces
     # (``preview_faces``) plus its own wireframe (``rubber_band_lines``); the
     # commit replaces both with the real stitched geometry. A prism or staged
     # preview shows the model itself and leaves both empty.
-    def rubber_band_lines(self):
-        return self._light_wires
-
-    def preview_faces(self):
-        return self._light_faces
-
-    def _build_light_faces(self):
-        from ingetrazo_core import push_light_faces
-        return push_light_faces(self, _MIN_EXTRUDE)
-
-    def _present(self, viewport, mode):
-        from ingetrazo_core import present_push_preview
-        present_push_preview(self, viewport, mode, _MIN_EXTRUDE, _STITCH_TOL)
-
-    def _show_light_preview(self, viewport):
-        self._present(viewport, "overlay")
-
-    def _refuse_closed_group(self, viewport) -> None:
-        """A face inside a group that has not been opened is not pushable.
-
-        The tool used to push it anyway — an instance even opened a short
-        editing session behind your back and shared the result to every copy
-        (2026-06-10). In a real drawing that reads as
-        the model changing where you did not point: a group is a box, and you
-        open a box before reaching inside (Marco, 2026-09-10) — the usual
-        convention: double-click the group or component to edit it first.
-
-        Refusing has to SPEAK: a tool that does nothing without a word is the
-        one that reads as broken.
-        """
-        viewport.flash_status(tr(
-            "That face belongs to a group — double-click to open it first, "
-            "then push inside"), 4000)
-
-    def _show_prism_preview(self, viewport) -> None:
-        self._present(viewport, "prism")
-
     #: A stage (one pipeline run, snapshot work included) slower than this, in
     #: seconds, ends staging for the drag: leaving every parked interval shows
     #: the overlay, and a release outside them runs the pipeline as before.
     #: One pause per drag on a big model instead of one per reversal.
     _SLOW_STAGE_S = 0.25
-
-    def _show_staged_preview(self, viewport) -> None:
-        self._present(viewport, "stage")
-
-    # ---- Modifier: Ctrl keeps the starting face -----------------------------
-    def on_key(self, viewport, key, modifiers):
-        if key == Qt.Key_Control:
-            return self._send(viewport, {"type": "key", "key": "Control", "mods": _mods(modifiers)})["consumed"]
-        return super().on_key(viewport, key, modifiers)
-
-    def on_key_release(self, viewport, key):
-        if key != Qt.Key_Control:
-            return False
-        return self._send(viewport, {"type": "key_release", "key": "Control",
-                                     "tapped": self.ctrl_tapped(viewport)})["consumed"]
-
-    def host_modifier(self, viewport, values):
-        self._keep_mode, self._keep_base = values
-
-    def host_show_mode(self, viewport, enabled):
-        viewport.flash_status(tr("Keep the base: on") if enabled else tr("Keep the base: off"))
-        self.refresh_hint(viewport)
-        viewport.update()
-
-    def status_clause(self) -> str:
-        # Short on purpose: the clause rides the same line as the hint, and
-        # the classic bar spends a whole one on «Ctrl = Crear un nuevo punto
-        # de partida». "Keep the base" / "move the base" is the same idea in
-        # the tool's own words (base_face, _keep_base).
-        return ctrl_clause(self._keep_mode, "keep the base", "move the base")
