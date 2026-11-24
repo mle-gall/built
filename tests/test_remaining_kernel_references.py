@@ -173,3 +173,19 @@ def test_public_kernel_module_paths_round_trip():
                      ('push_scans', scans.faces_on_segment), ('arrangement', ar.arc_command)):
         assert importlib.import_module('core.' + name).__name__ == 'core.' + name
         assert pickle.loads(pickle.dumps(fn)) is fn
+
+
+def test_two_argument_snap_resolver():
+    from inspect import signature
+    from core.snap import compute_snap
+    from core.snap_frame import SnapFrame
+    from ingetrazo_core import resolve_snap
+
+    scene = SimpleNamespace(edges=[SimpleNamespace(a=V(2, 0, 0), b=V(8, 0, 0))])
+    project = lambda point: point.toTuple()[:2]
+    cursor = (2., 0.)
+    options = signature(compute_snap).bind(V(2, 0, 0), cursor, scene, project, 1.)
+    options.apply_defaults()
+    query = sq.make_query(scene.edges, project, cursor)
+    hit = resolve_snap(query, SnapFrame(dict(options.arguments), query))
+    assert (hit.kind, hit.point.toTuple()) == ("endpoint", (2., 0., 0.))
