@@ -346,7 +346,7 @@ fn import_kept_components(win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> Py
 }
 
 #[pyfunction]
-fn choose_kept_components(win: &Bound<'_, PyAny>) -> PyResult<()> {
+pub(super) fn choose_kept_components(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = win.py();
     let title = translated(py, "Components from File", None)?;
     let path = win.getattr("_current_path")?;

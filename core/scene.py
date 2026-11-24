@@ -1104,6 +1104,7 @@ class Scene:
         kept: dict = {}
         from core.lazy_mesh import plan_of
         from core.group import _local_points
+        from ingetrazo_core import group_placed_box
         for g, m in self.placements(precise=True):
             key = id(g.mesh)
             arr = per_mesh.get(key)
@@ -1139,12 +1140,11 @@ class Scene:
                     local, d, (minx, miny, minz), (maxx, maxy, maxz)):
                 continue                    # it cannot widen the box
             else:
-                if d is not None:
-                    rot = np.array([[d[0], d[4], d[8]],
-                                    [d[1], d[5], d[9]],
-                                    [d[2], d[6], d[10]]])
-                    arr = arr @ rot.T + np.array([d[12], d[13], d[14]])
-                glo, ghi = arr.min(axis=0), arr.max(axis=0)
+                # The prototype's points through the placement, and their
+                # box (``rust/ingetrazo_core/src/group_frame.rs``).
+                glo, ghi = group_placed_box(
+                    np.ascontiguousarray(arr, dtype=np.float64),
+                    None if d is None else [float(v) for v in d])
                 if lazy:
                     part = (per_mesh[key][0], glo, ghi)
             if part is not None:

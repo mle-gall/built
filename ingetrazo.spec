@@ -123,11 +123,7 @@ hiddenimports = [
     'core.textlabel',
 ]
 
-# ezdxf (DXF/DWG import) is imported INSIDE functions — without this the
-# packaged build ships with CAD import dead (the core.ai lesson again).
-# collect_submodules because ezdxf lazy-loads its own internals too.
 from PyInstaller.utils.hooks import collect_submodules
-hiddenimports += collect_submodules('ezdxf')
 # manifold3d (Solid Tools) is imported inside core.solids' functions — one
 # self-contained native extension module (libstdc++/libm/libc only).
 hiddenimports += ['manifold3d', 'core.solids', 'tools.solid_tools']

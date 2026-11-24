@@ -5,3 +5,4 @@ import sys
 from ingetrazo_render import trackpad_nav
 
 zoom_steps = trackpad_nav.zoom_steps
+TRACKPAD_ZOOM_GAIN = trackpad_nav.TRACKPAD_ZOOM_GAIN

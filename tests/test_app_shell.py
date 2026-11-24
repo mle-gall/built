@@ -109,7 +109,8 @@ def test_window_input_answers_from_winit(host):
 
 def test_rail_matches_classic_groups_and_dispatches(host):
     from unittest.mock import Mock
-    from views import wgpu_library, wgpu_ui
+    from ingetrazo_render import wgpu_library
+    from views import wgpu_ui
 
     host.open(FIXTURE)
     win, view = host.window, host.view

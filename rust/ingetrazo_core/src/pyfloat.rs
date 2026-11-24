@@ -102,6 +102,20 @@ pub fn hypot(coords: &[f64]) -> f64 {
     vector_norm(&mut vec, max, found_nan)
 }
 
+/// `math.sin` / `math.cos`: the C library's, each on its own. An optimised
+/// build merges a `sin(x)` and a `cos(x)` of one value into a single
+/// `sincos` call, and Apple's rounds differently from the two in about 1 of
+/// 4,000 arguments: opaque arguments keep them apart.
+#[inline]
+pub fn sin(x: f64) -> f64 {
+    std::hint::black_box(x).sin()
+}
+
+#[inline]
+pub fn cos(x: f64) -> f64 {
+    std::hint::black_box(x).cos()
+}
+
 /// `round(x, n)`: correctly rounded, half to even.
 pub fn round(x: f64, n: usize) -> f64 {
     if !x.is_finite() {

@@ -111,7 +111,7 @@ fn cold_start_document(win: &Bound<'_, PyAny>) -> PyResult<()> {
     )?;
     if win.call_method0("_doc_is_blank")?.is_truthy()? {
         win.call_method0("_start_blank_document")?;
-        let start = win.py().import("views.wgpu_start")?;
+        let start = win.py().import("ingetrazo_render.wgpu_start")?;
         if start.call_method1("wants_at_start", (false,))?.is_truthy()? {
             start.call_method1("show", (win,))?;
         }
@@ -156,7 +156,7 @@ fn new_document_command(win: &Bound<'_, PyAny>, add_tab: bool) -> PyResult<()> {
         if !workspace.is_none() {
             return Ok(());
         }
-        let start = py.import("views.wgpu_start")?;
+        let start = py.import("ingetrazo_render.wgpu_start")?;
         if start.call_method1("shown", (win,))?.is_truthy()? {
             start.call_method1("new_model", (win,))?;
             return Ok(());

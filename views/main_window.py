@@ -103,11 +103,11 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
     """Top-level IngeTrazo window."""
 
     def show_home(self):
-        from views import wgpu_start
+        from ingetrazo_render import wgpu_start
         wgpu_start.show(self)
 
     def _dismiss_home(self):
-        from views import wgpu_start
+        from ingetrazo_render import wgpu_start
         wgpu_start.hide(self)
 
     def __init__(self, defer_extensions: bool = False) -> None:
@@ -2898,7 +2898,7 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         this small size instead (``render_image``: resident geometry, no
         egui, the surface untouched): no repack and no full-size render,
         so it stays cheap on a huge model."""
-        from views.wgpu_start import blank_picture
+        from ingetrazo_render.wgpu_start import blank_picture
         view = getattr(doc, "stand_in", None)
         if view is not None and getattr(view, "renderer", None) is not None:
             image = None
@@ -3665,7 +3665,7 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         self._update_title()
 
     def _on_open_library(self) -> None:
-        from views.wgpu_library import open_library
+        from ingetrazo_render.wgpu_library import open_library
         open_library(self, "components", scope="s:online")
 
     _pump_file_command = staticmethod(QApplication.processEvents)

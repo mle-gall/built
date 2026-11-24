@@ -631,10 +631,10 @@ def test_rename_reaches_every_copy_and_the_kept_template(native_components, monk
 
 
 def test_rename_is_in_the_list_menu(native_components):
-    from views.wgpu_library import ComponentsProvider, Ctx
+    from ingetrazo_render import wgpu_library as library
     win, _, _, _ = native_components
-    provider = ComponentsProvider()
-    chair = next(e for e in provider.items(Ctx(win, win.view)) if e["name"] == "Silla")
+    provider = library.ComponentsProvider()
+    chair = next(e for e in provider.items(library.Ctx(win, win.view)) if e["name"] == "Silla")
     assert "rename" in chair["verbs"]
 
 
@@ -657,15 +657,22 @@ def test_components_from_another_file_arrive_kept_and_placeable(tmp_path, native
 
     win = native_host.window
     scene = win.viewport.scene
-    from views import wgpu_library as library
+    from ingetrazo_render import wgpu_library as library
+    from tests.test_library_sheet import Renderer, act, frame
+    from core.i18n import tr
     from views.filedialogs import file_dialogs
     from views import chrome_dialogs
     monkeypatch.setattr(chrome_dialogs, "warning", lambda _, title, msg: pytest.fail(f"{title}: {msg}"))
     monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *_: (str(path), ""))
-    p = library.ComponentsProvider()
-    ctx = library.Ctx(win, win.view)
-    assert "import" in dict(p.type_actions(ctx))
-    p.type_action(ctx, "import")
+    monkeypatch.setattr(win.view, "renderer", Renderer())
+    monkeypatch.setattr(win.view, "_ui_attached", True, raising=False)
+    assert library.open_library(win, "components", scope="s:model")
+    blocks = frame(win)["content"]["blocks"]
+    buttons = {b["id"]: b["label"] for block in blocks if block["kind"] == "buttons"
+               for b in block["buttons"]}
+    assert buttons["typeact:import"] == tr("Components from File…")
+    assert "typeact:purge" in buttons
+    act(win, "verb", "typeact:import")
     assert len(scene.kept_components) == 3                       # Silla, Mesa and Lámpara
     names = sorted(t.name for t in scene.kept_components)
     assert "Lámpara" in names and "Silla" in names and "Mesa" in names

@@ -6,7 +6,8 @@ from __future__ import annotations
 import pytest
 
 from tests.shell_isolation import native_host, restore_shell_patches  # noqa: F401
-from views import wgpu_start, wgpu_tabs
+from ingetrazo_render import wgpu_start
+from views import wgpu_tabs
 
 
 @pytest.fixture

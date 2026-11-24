@@ -8,6 +8,11 @@ use std::{
     f64::consts::{FRAC_PI_2, TAU},
 };
 
+#[path = "dxf_curves.rs"]
+mod curves;
+#[path = "dxf_polyface.rs"]
+mod polyface;
+
 #[derive(Debug)]
 struct Entity {
     layer: String,
@@ -15,9 +20,13 @@ struct Entity {
 }
 #[derive(Debug)]
 enum Shape {
+    Ignored(String),
+    Empty,
     Line(DVec3, DVec3),
+    Curve(Vec<curves::Cubic>, Vec<f64>),
     Polyline(Ring, bool),
     Face(Ring),
+    Part(Vec<Ring>),
     Arc {
         center: DVec3,
         radius: f64,
@@ -29,12 +38,14 @@ enum Shape {
 #[derive(Debug)]
 struct Block {
     base: DVec3,
-    supported: bool,
+
     entities: Vec<Entity>,
 }
 #[derive(Debug, Default)]
 pub(super) struct Document {
     pub(super) units: i64,
+    pub(super) kinds: Vec<String>,
+    pub(super) layouts: Vec<String>,
     entities: Vec<Entity>,
     blocks: BTreeMap<String, Block>,
 }
@@ -60,14 +71,67 @@ impl<'a> Tags<'a> {
     }
     fn name(&self, code: i32) -> Option<String> {
         let s = self.get(code)?;
-        // The full decoder handles escaped Unicode and legacy encodings.
-        (!s.is_empty() && !s.contains('\\')).then(|| s.to_owned())
+        (!s.is_empty()).then(|| s.to_owned())
+    }
+    fn numbers(&self, code: i32) -> Option<Vec<f64>> {
+        self.0
+            .iter()
+            .filter(|(k, _)| *k == code)
+            .map(|(_, s)| {
+                let v: f64 = s.trim().parse().ok()?;
+                v.is_finite().then_some(v)
+            })
+            .collect()
+    }
+    fn points(&self, code: i32) -> Option<Vec<DVec3>> {
+        let mut out = vec![];
+        for &(k, s) in &self.0 {
+            if k == code || k == code + 10 || k == code + 20 {
+                let n: f64 = s.trim().parse().ok()?;
+                if !n.is_finite() {
+                    return None;
+                }
+                if k == code {
+                    out.push(DVec3::new(n, 0., 0.));
+                } else if k == code + 10 {
+                    out.last_mut()?.y = n;
+                } else {
+                    out.last_mut()?.z = n;
+                }
+            }
+        }
+        Some(out)
+    }
+    fn integer(&self, code: i32, default: i32) -> Option<i32> {
+        match self.get(code) {
+            Some(v) => v.trim().parse().ok(),
+            None => Some(default),
+        }
+    }
+    fn basis(&self) -> Option<DMat4> {
+        let z = DVec3::new(
+            self.number(210, 0.)?,
+            self.number(220, 0.)?,
+            self.number(230, 1.)?,
+        )
+        .try_normalize()?;
+        if z == DVec3::Z {
+            return Some(DMat4::IDENTITY);
+        }
+        let reference = if z.x.abs() < 1. / 64. && z.y.abs() < 1. / 64. {
+            DVec3::Y
+        } else {
+            DVec3::Z
+        };
+        let x = reference.cross(z).normalize();
+        Some(DMat4::from_cols(
+            x.extend(0.),
+            z.cross(x).extend(0.),
+            z.extend(0.),
+            glam::DVec4::W,
+        ))
     }
     fn entity(&self, kind: &str) -> Option<Entity> {
-        if self.number(210, 0.)? != 0. || self.number(220, 0.)? != 0. || self.number(230, 1.)? != 1.
-        {
-            return None;
-        }
         let layer = if self.get(8).is_some() {
             self.name(8)?
         } else {
@@ -93,9 +157,12 @@ impl<'a> Tags<'a> {
             }
             "CIRCLE" | "ARC" => {
                 let center = self.point(10)?;
-                let radius = self.number(40, f64::NAN)?;
-                if radius <= 0. {
-                    return None;
+                let radius = self.number(40, f64::NAN)?.abs();
+                if radius == 0. {
+                    return Some(Entity {
+                        layer,
+                        shape: Shape::Empty,
+                    });
                 }
                 let (start, span) = if kind == "CIRCLE" {
                     (0., -TAU)
@@ -103,48 +170,85 @@ impl<'a> Tags<'a> {
                     let a = self.number(50, 0.)?;
                     let b = self.number(51, 360.)?;
                     if a == b {
-                        return None;
+                        return Some(Entity {
+                            layer,
+                            shape: Shape::Empty,
+                        });
                     }
                     let span = (b - a).rem_euclid(360.);
-                    if span == 0. {
-                        return None;
-                    }
-                    (a.to_radians(), span.to_radians())
+                    (
+                        a.to_radians(),
+                        if span == 0. { -TAU } else { span.to_radians() },
+                    )
                 };
-                Shape::Arc {
-                    center,
-                    radius,
-                    start,
-                    span,
+                let basis = self.basis()?;
+                if basis == DMat4::IDENTITY {
+                    Shape::Arc {
+                        center,
+                        radius,
+                        start,
+                        span,
+                    }
+                } else {
+                    Shape::Curve(
+                        curves::elliptic(
+                            basis.transform_point3(center),
+                            basis.x_axis.truncate() * radius,
+                            basis.y_axis.truncate() * radius,
+                            start,
+                            span,
+                        ),
+                        vec![radius * 2.],
+                    )
                 }
+            }
+            "SPLINE" => Shape::Curve(curves::spline(self)?, vec![]),
+            "ELLIPSE" => {
+                let major = self.point(11)?;
+                let minor = self
+                    .basis()?
+                    .z_axis
+                    .truncate()
+                    .cross(major)
+                    .try_normalize()?
+                    * major.length()
+                    * self.number(40, 1.)?;
+                let start = self.number(41, 0.)?;
+                let end = self.number(42, TAU)?;
+                if start == end {
+                    return Some(Entity {
+                        layer,
+                        shape: Shape::Empty,
+                    });
+                }
+                let span = (end - start).rem_euclid(TAU);
+                let span = if span.abs() < 1e-12 { -TAU } else { span };
+                Shape::Curve(
+                    curves::elliptic(self.point(10)?, major, minor, start, span),
+                    vec![],
+                )
             }
             "LWPOLYLINE" => {
-                let mut points = vec![];
                 let z = self.number(38, 0.)?;
-                for &(c, s) in &self.0 {
-                    match c {
-                        10 => points.push(DVec3::new(s.trim().parse().ok()?, f64::NAN, z)),
-                        20 => points.last_mut()?.y = s.trim().parse().ok()?,
-                        42 if s.trim().parse::<f64>().ok()? != 0. => return None,
-                        _ => (),
+                let mut points = self.points(10)?;
+                for p in &mut points {
+                    p.z = z;
+                }
+                if points.len() < 2 || self.get(90)?.trim().parse::<usize>().ok()? != points.len() {
+                    return None;
+                }
+                let mut bulges = vec![];
+                for &(k, s) in &self.0 {
+                    if k == 10 {
+                        bulges.push(0.);
+                    } else if k == 42 {
+                        *bulges.last_mut()? = s.trim().parse::<f64>().ok()?;
                     }
                 }
-                if points.len() < 2
-                    || points.iter().any(|p| !p.is_finite())
-                    || self.get(90)?.trim().parse::<usize>().ok()? != points.len()
-                {
-                    return None;
-                }
                 let closed = self.get(70).unwrap_or("0").trim().parse::<i32>().ok()? & 1 != 0;
-                Shape::Polyline(points, closed)
+                polyface::path(points, &bulges, closed, self.basis()?)
             }
             "INSERT" => {
-                if self.number(70, 1.)? != 1.
-                    || self.number(71, 1.)? != 1.
-                    || self.number(66, 0.)? != 0.
-                {
-                    return None;
-                }
                 let scale = DVec3::new(
                     self.number(41, 1.)?,
                     self.number(42, 1.)?,
@@ -155,20 +259,46 @@ impl<'a> Tags<'a> {
                 }
                 Shape::Insert(
                     self.name(2)?,
-                    DMat4::from_scale_rotation_translation(
-                        scale,
-                        DQuat::from_rotation_z(self.number(50, 0.)?.to_radians()),
-                        self.point(10)?,
-                    ),
+                    self.basis()?
+                        * DMat4::from_scale_rotation_translation(
+                            scale,
+                            DQuat::from_rotation_z(self.number(50, 0.)?.to_radians()),
+                            self.point(10)?,
+                        ),
                 )
             }
-            _ => return None,
+            "MESH" => polyface::mesh(self)?,
+            _ => Shape::Ignored(kind.to_owned()),
         };
         Some(Entity { layer, shape })
     }
 }
 
+pub(super) fn from_object(
+    kind: &str,
+    header: &[(i32, String)],
+    vertices: &[Vec<(i32, String)>],
+    tol: f64,
+) -> Option<Bucket> {
+    fn tags(src: &[(i32, String)]) -> Tags<'_> {
+        Tags(src.iter().map(|(k, s)| (*k, s.as_str())).collect())
+    }
+    let head = tags(header);
+    let e = if kind == "POLYLINE" {
+        let vertices = vertices.iter().map(|s| tags(s)).collect::<Vec<_>>();
+        polyface::classic(&head, &vertices)?
+    } else {
+        head.entity(kind)?
+    };
+    let mut b = Bucket::default();
+    e.shape.add(&mut b, tol)?;
+    Some(b)
+}
 pub(super) fn decode(text: &str) -> Option<Document> {
+    decode_mode(text, false, false)
+}
+
+pub(super) fn decode_mode(text: &str, recover: bool, inspect: bool) -> Option<Document> {
     let mut doc = Document::default();
     let mut lines = text.lines();
     let mut kind = None;
@@ -179,14 +309,26 @@ pub(super) fn decode(text: &str) -> Option<Document> {
     let mut block = None;
     let mut tags_read = 0usize;
     let mut eof = false;
-    let mut modern = false;
+    let mut poly: Option<(Tags, Vec<Tags>)> = None;
+    let mut modern_owners = false;
     loop {
         tags_read += 1;
         if tags_read % 4096 == 0 && crate::file_open::cancelled() {
             return None;
         }
         let pair = match lines.next() {
-            Some(c) => Some((c.trim().parse::<i32>().ok()?, lines.next()?)),
+            Some(c) => {
+                let c = c.trim_start_matches('\u{feff}').trim();
+                if recover && c.is_empty() {
+                    continue;
+                }
+                let code = c.parse::<i32>().ok()?;
+                let value = lines.next()?;
+                if code == 999 {
+                    continue;
+                }
+                Some((code, value))
+            }
             None => None,
         };
         if let Some((code, value)) = pair {
@@ -208,8 +350,7 @@ pub(super) fn decode(text: &str) -> Option<Document> {
                 if section == "HEADER" {
                     for pair in tags.0.windows(2) {
                         if pair[0] == (9, "$ACADVER") {
-                            modern = pair[1].0 == 1
-                                && matches!(pair[1].1, "AC1021" | "AC1024" | "AC1027" | "AC1032")
+                            modern_owners = pair[1].0 == 1 && pair[1].1 > "AC1009";
                         }
                         if pair[0] == (9, "$INSUNITS") {
                             if pair[1].0 != 70 {
@@ -222,6 +363,11 @@ pub(super) fn decode(text: &str) -> Option<Document> {
             }
             Some("ENDSEC") if !section.is_empty() && block.is_none() => section = "",
             Some("EOF") if section.is_empty() && !eof => eof = true,
+            Some("LAYOUT") if section == "OBJECTS" && inspect => {
+                if let Some(name) = tags.name(1) {
+                    doc.layouts.push(name);
+                }
+            }
             Some("BLOCK_RECORD")
                 if section == "TABLES"
                     && tags
@@ -241,7 +387,6 @@ pub(super) fn decode(text: &str) -> Option<Document> {
                         name.clone(),
                         Block {
                             base,
-                            supported: true,
                             entities: vec![],
                         },
                     )
@@ -252,30 +397,51 @@ pub(super) fn decode(text: &str) -> Option<Document> {
                 block = Some(name)
             }
             Some("ENDBLK") if section == "BLOCKS" && block.take().is_some() => (),
-            Some(k) if section == "BLOCKS" => {
-                let b = doc.blocks.get_mut(block.as_ref()?)?;
-                if b.supported {
-                    match tags.entity(k) {
-                        Some(entity) if !matches!(entity.shape, Shape::Insert(..)) => {
-                            b.entities.push(entity)
-                        }
-                        _ => {
-                            b.supported = false;
-                            b.entities.clear();
-                        }
+            Some(k) if matches!(section, "ENTITIES" | "BLOCKS") => {
+                let record = match k {
+                    "POLYLINE" => {
+                        poly = Some((Tags(std::mem::take(&mut tags.0)), vec![]));
+                        None
                     }
-                }
-            }
-            Some(k) if section == "ENTITIES" => {
-                let owner = tags.get(330)?;
-                let paper = tags.number(67, 0.)?;
-                if paper == 0. {
-                    if Some(owner) != model_owner {
-                        return None;
+                    "VERTEX" if poly.is_some() => {
+                        poly.as_mut()?.1.push(Tags(std::mem::take(&mut tags.0)));
+                        None
                     }
-                    doc.entities.push(tags.entity(k)?);
-                } else if Some(owner) == model_owner {
-                    return None;
+                    "SEQEND" if poly.is_some() => {
+                        let (head, vertices) = poly.take()?;
+                        Some((
+                            head.get(330),
+                            head.integer(67, 0)?,
+                            polyface::classic(&head, &vertices)?,
+                        ))
+                    }
+                    "ATTRIB" | "SEQEND" => None,
+                    _ if section == "ENTITIES" && tags.integer(67, 0)? != 0 => None,
+                    _ => {
+                        let entity = tags.entity(k).or_else(|| {
+                            // The adapter drops an unusable curve while retaining its neighbours.
+                            (recover && matches!(k, "SPLINE" | "ELLIPSE" | "LWPOLYLINE" | "MESH"))
+                                .then(|| Entity {
+                                    layer: tags.get(8).unwrap_or("0").into(),
+                                    shape: Shape::Empty,
+                                })
+                        })?;
+                        Some((tags.get(330), tags.integer(67, 0)?, entity))
+                    }
+                };
+                if let Some((owner, paper, entity)) = record {
+                    if section == "BLOCKS" {
+                        doc.blocks.get_mut(block.as_ref()?)?.entities.push(entity);
+                    } else if paper == 0 {
+                        if !recover && modern_owners && owner != model_owner {
+                            return None;
+                        }
+                        if inspect {
+                            doc.kinds
+                                .push(if k == "SEQEND" { "POLYLINE" } else { k }.to_owned());
+                        }
+                        doc.entities.push(entity);
+                    }
                 }
             }
             Some(_) if section.is_empty() || matches!(kind, Some("SECTION" | "EOF" | "ENDSEC")) => {
@@ -290,22 +456,19 @@ pub(super) fn decode(text: &str) -> Option<Document> {
             _ => return None,
         }
     }
-    if !eof || !modern || !seen.contains("ENTITIES") || model_owner.is_none() {
+    let completed = eof || (recover && section.is_empty() && block.is_none() && poly.is_none());
+    if !completed
+        || !seen.contains("ENTITIES")
+        || (!recover && modern_owners && model_owner.is_none())
+    {
         return None;
-    }
-    for e in &doc.entities {
-        if let Shape::Insert(name, _) = &e.shape {
-            if !doc.blocks.get(name).is_some_and(|b| b.supported) {
-                return None;
-            }
-        }
     }
     Some(doc)
 }
 
 // Model-space circular curves use cubic spans of at most 90 degrees.
 // Subdivide each eighth span to the distance tolerance at its midpoint.
-fn arc(center: DVec3, r: f64, start: f64, span: f64, tol: f64) -> Option<Ring> {
+pub(super) fn arc(center: DVec3, r: f64, start: f64, span: f64, tol: f64) -> Option<Ring> {
     let sections = (span.abs() / FRAC_PI_2).ceil() as usize;
     let step = span / sections as f64;
     let arm = (step * 0.25).tan() * 4. / 3.;
@@ -348,6 +511,24 @@ fn arc(center: DVec3, r: f64, start: f64, span: f64, tol: f64) -> Option<Ring> {
     Some(out)
 }
 
+// Nested virtual INSERTs preserve their orthogonal axes and per-axis scale.
+fn virtual_insert(parent: DMat4, child: DMat4) -> DMat4 {
+    let (scale, rotation, origin) = child.to_scale_rotation_translation();
+    let z = parent.transform_vector3(rotation * DVec3::Z).normalize();
+    let x = parent.transform_vector3(rotation * DVec3::X).normalize();
+    let axes = DMat4::from_cols(
+        x.extend(0.),
+        z.cross(x).extend(0.),
+        z.extend(0.),
+        parent.transform_point3(origin).extend(1.),
+    );
+    let lengths = DVec3::new(
+        parent.x_axis.truncate().length(),
+        parent.y_axis.truncate().length() * parent.determinant().signum(),
+        parent.z_axis.truncate().length(),
+    );
+    axes * DMat4::from_scale(scale * lengths)
+}
 impl Document {
     pub(super) fn suggestion(&self) -> Option<f64> {
         let mut samples = vec![];
@@ -358,6 +539,7 @@ impl Document {
             match &e.shape {
                 Shape::Line(a, b) => samples.push(a.distance(*b)),
                 Shape::Arc { radius, .. } => samples.push(2. * radius),
+                Shape::Curve(_, lengths) => samples.extend_from_slice(lengths),
                 Shape::Polyline(p, _) => samples.extend(p.windows(2).map(|w| w[0].distance(w[1]))),
                 _ => (),
             }
@@ -366,47 +548,213 @@ impl Document {
     }
     pub(super) fn drawing(&self, sagitta: f64) -> Option<Drawing> {
         let mut drawing = Drawing::default();
-        let mut placed = HashSet::new();
         for (index, e) in self.entities.iter().enumerate() {
             if index % 256 == 0 && crate::file_open::cancelled() {
                 return None;
             }
-            match &e.shape {
-                Shape::Insert(name, m) => {
-                    let b = self.blocks.get(name)?;
-                    drawing.placements.push(Placement {
-                        name: name.clone(),
-                        layer: e.layer.clone(),
-                        m: *m * DMat4::from_translation(-b.base),
-                    });
-                    if placed.insert(name) {
-                        let mut bucket = Bucket::default();
-                        for item in &b.entities {
-                            item.shape.add(&mut bucket, sagitta)?;
-                        }
-                        drawing.blocks.push((name.clone(), bucket));
-                    }
-                    drawing.entities += 1;
-                }
-                s => {
-                    drawing.entities +=
-                        s.add(drawing.layers.entry(e.layer.clone()).or_default(), sagitta)? as usize
+            if let Shape::Insert(name, m) = &e.shape {
+                self.expand(name, &e.layer, *m, 0, &mut drawing.placements)?;
+                drawing.entities += 1;
+            } else {
+                drawing.entities += e.shape.install(
+                    drawing.layers.entry(e.layer.clone()).or_default(),
+                    sagitta,
+                    DMat4::IDENTITY,
+                    &mut drawing.skipped,
+                )? as usize;
+            }
+        }
+        let mut seen = HashSet::new();
+        for p in &drawing.placements {
+            if seen.insert(&p.name) {
+                let mut bucket = Bucket::default();
+                if let Some(b) = self.block(&p.name) {
+                    self.prototype(
+                        b,
+                        DMat4::IDENTITY,
+                        0,
+                        sagitta,
+                        &mut bucket,
+                        &mut drawing.skipped,
+                    )?;
+                    drawing.blocks.push((p.name.clone(), bucket));
                 }
             }
         }
         Some(drawing)
     }
+    fn block(&self, name: &str) -> Option<&Block> {
+        self.blocks.get(name).or_else(|| {
+            self.blocks
+                .iter()
+                .find(|(k, _)| k.eq_ignore_ascii_case(name))
+                .map(|(_, b)| b)
+        })
+    }
+    fn expand(
+        &self,
+        name: &str,
+        layer: &str,
+        m: DMat4,
+        depth: usize,
+        out: &mut Vec<Placement>,
+    ) -> Option<()> {
+        if crate::file_open::cancelled() {
+            return None;
+        }
+        let Some(block) = self.block(name) else {
+            return Some(());
+        };
+        let matrix = m * DMat4::from_translation(-block.base);
+        let mut children = block
+            .entities
+            .iter()
+            .filter(|e| !matches!(&e.shape,Shape::Ignored(k) if k=="ATTDEF"))
+            .peekable();
+        if depth < 8
+            && children.peek().is_some()
+            && children
+                .clone()
+                .all(|c| matches!(c.shape, Shape::Insert(..)))
+        {
+            for c in children {
+                if let Shape::Insert(id, local) = &c.shape {
+                    self.expand(
+                        id,
+                        if c.layer == "0" { layer } else { &c.layer },
+                        matrix * *local,
+                        depth + 1,
+                        out,
+                    )?;
+                }
+            }
+        } else {
+            out.push(Placement {
+                name: name.to_owned(),
+                layer: layer.to_owned(),
+                m: matrix,
+            });
+        }
+        Some(())
+    }
+    fn prototype(
+        &self,
+        block: &Block,
+        matrix: DMat4,
+        depth: usize,
+        tol: f64,
+        bucket: &mut Bucket,
+        skipped: &mut BTreeMap<String, usize>,
+    ) -> Option<()> {
+        for (i, item) in block.entities.iter().enumerate() {
+            if i % 256 == 0 && crate::file_open::cancelled() {
+                return None;
+            }
+            if let Shape::Insert(name, m) = &item.shape {
+                if depth < 8 {
+                    if let Some(child) = self.block(name) {
+                        self.prototype(
+                            child,
+                            virtual_insert(matrix, *m) * DMat4::from_translation(-child.base),
+                            depth + 1,
+                            tol,
+                            bucket,
+                            skipped,
+                        )?;
+                    }
+                } else {
+                    *skipped.entry("INSERT".into()).or_default() += 1;
+                }
+            } else {
+                item.shape.install(bucket, tol, matrix, skipped)?;
+            }
+        }
+        Some(())
+    }
 }
 impl Shape {
+    fn install(
+        &self,
+        b: &mut Bucket,
+        tol: f64,
+        m: DMat4,
+        skipped: &mut BTreeMap<String, usize>,
+    ) -> Option<bool> {
+        if matches!(self, Self::Empty) {
+            return Some(false);
+        }
+        if let Self::Ignored(k) = self {
+            if !matches!(
+                k.as_str(),
+                "ATTDEF" | "VIEWPORT" | "XLINE" | "RAY" | "ATTRIB"
+            ) {
+                *skipped.entry(k.clone()).or_default() += 1;
+            }
+            return Some(false);
+        }
+        if m == DMat4::IDENTITY {
+            return self.add(b, tol);
+        }
+        let map = |p: DVec3| m.transform_point3(p);
+        let transform_curves =
+            |cs: &[curves::Cubic]| cs.iter().map(|c| c.map(map)).collect::<Vec<_>>();
+        match self {
+            Self::Arc {
+                center,
+                radius,
+                start,
+                span,
+            } => Self::Curve(
+                transform_curves(&curves::elliptic(
+                    *center,
+                    *radius * DVec3::X,
+                    *radius * DVec3::Y,
+                    *start,
+                    *span,
+                )),
+                vec![],
+            )
+            .add(b, tol),
+            Self::Curve(cs, _) => Self::Curve(transform_curves(cs), vec![]).add(b, tol),
+            Self::Part(faces) => Self::Part(
+                faces
+                    .iter()
+                    .map(|r| r.iter().copied().map(map).collect())
+                    .collect(),
+            )
+            .add(b, tol),
+            Self::Face(p) => Self::Face(p.iter().copied().map(map).collect()).add(b, tol),
+            Self::Line(a, z) => Self::Line(map(*a), map(*z)).add(b, tol),
+            Self::Polyline(p, closed) => {
+                Self::Polyline(p.iter().copied().map(map).collect(), *closed).add(b, tol)
+            }
+            _ => None,
+        }
+    }
     fn add(&self, b: &mut Bucket, tol: f64) -> Option<bool> {
         match self {
             Self::Line(a, z) => b.runs.push((vec![*a, *z], false)),
+            Self::Curve(curves, _) => {
+                if curves.is_empty() {
+                    return Some(false);
+                }
+                b.runs.push((curves::flatten(curves, tol)?, true));
+            }
             Self::Polyline(pts, closed) => {
                 let mut pts = pts.clone();
+                if pts.len() < 2 {
+                    return Some(false);
+                }
                 if *closed && pts.first() != pts.last() {
                     pts.push(pts[0])
                 }
                 b.runs.push((pts, false));
+            }
+            Self::Part(faces) => {
+                if faces.is_empty() {
+                    return Some(false);
+                }
+                b.parts.push(faces.clone());
             }
             Self::Face(p) => {
                 if p.len() < 3 {
@@ -422,7 +770,8 @@ impl Shape {
             } => b
                 .runs
                 .push((arc(*center, *radius, *start, *span, tol)?, true)),
-            Self::Insert(..) => return None,
+            Self::Empty => return Some(false),
+            Self::Insert(..) | Self::Ignored(_) => return None,
         }
         Some(true)
     }
@@ -462,6 +811,101 @@ mod tests {
                 .0
                 .len()
                 > 33
+        );
+    }
+    #[test]
+    fn assembly_matches_reference_edges_in_world_space() {
+        let model = decode(include_str!(
+            "../../../tests/fixtures/dxf/mixed-assembly.dxf"
+        ))
+        .unwrap()
+        .drawing(0.01)
+        .unwrap();
+        let expected = [
+            ("Leaf", "Span", vec![[0., 10., -1., 10.]]),
+            ("Leaf", "Bolts", vec![[2., 7., 2., 8.]]),
+            (
+                "Frame",
+                "0",
+                vec![[0., 0., 0., 1.], [8., 4., 8., 6.], [2., 2., 4., 2.]],
+            ),
+            (
+                "Frame",
+                "0",
+                vec![[15., 0., 15., 1.], [23., 4., 23., 6.], [17., 2., 19., 2.]],
+            ),
+        ];
+        assert_eq!(model.placements.len(), expected.len());
+        assert_eq!(model.blocks.len(), 2);
+        for (p, (name, layer, edges)) in model.placements.iter().zip(expected) {
+            assert_eq!((&*p.name, &*p.layer), (name, layer));
+            let (_, b) = model.blocks.iter().find(|(id, _)| id == name).unwrap();
+            assert_eq!(b.runs.len(), edges.len());
+            for ((pts, _), [x, y, u, v]) in b.runs.iter().zip(edges) {
+                assert!(p.m.transform_point3(pts[0]).distance(DVec3::new(x, y, 0.)) < 1e-9);
+                assert!(p.m.transform_point3(pts[1]).distance(DVec3::new(u, v, 0.)) < 1e-9);
+            }
+        }
+    }
+    #[test]
+    fn paths_match_all_ezdxf_vertices_at_two_tolerances() {
+        let doc = decode(include_str!(
+            "../../../tests/fixtures/dxf/curve-records.dxf"
+        ))
+        .unwrap();
+        let mut bytes =
+            include_bytes!("../../../tests/fixtures/dxf/curve-records.points").as_slice();
+        for tol in [0.01, 0.0001] {
+            let drawing = doc.drawing(tol).unwrap();
+            for name in ["bulge", "cubic", "fit", "weighted", "ellipse"] {
+                let (pts, is_curve) = &drawing.layers[name].runs[0];
+                assert!(is_curve);
+                let (count, tail) = bytes.split_at(4);
+                bytes = tail;
+                assert_eq!(
+                    pts.len(),
+                    u32::from_le_bytes(count.try_into().unwrap()) as usize
+                );
+                for p in pts {
+                    for x in p.to_array() {
+                        let (raw, tail) = bytes.split_at(8);
+                        bytes = tail;
+                        let expected = f64::from_le_bytes(raw.try_into().unwrap());
+                        assert!(
+                            (x - expected).abs() < 1e-9,
+                            "{name}: {x} vs {expected} at {tol}"
+                        );
+                    }
+                }
+            }
+        }
+        assert!(bytes.is_empty());
+    }
+    #[test]
+    fn complete_and_empty_arcs_match_the_reference() {
+        let parse = |end: &str| {
+            let tags = Tags(vec![(10, "0"), (20, "0"), (40, "1"), (50, "30"), (51, end)]);
+            let mut b = Bucket::default();
+            tags.entity("ARC").unwrap().shape.add(&mut b, 0.01).unwrap();
+            b
+        };
+        assert!(parse("30").runs.is_empty());
+        for endpoint in ["390", "-330"] {
+            let b = parse(endpoint);
+            let pts = &b.runs[0].0;
+            assert_eq!(pts.len(), 33);
+            assert!(pts[1].distance(DVec3::new(0.9491982852733174, 0.3153074518339141, 0.)) < 1e-9);
+        }
+    }
+    #[test]
+    fn missing_eof_matches_the_recovered_reference_line() {
+        let input = include_str!("../../../tests/fixtures/dxf/recovery.dxf");
+        assert!(decode(input).is_none());
+        let doc = decode_mode(input, true, true).unwrap();
+        assert_eq!(doc.kinds, ["LINE"]);
+        assert_eq!(
+            doc.drawing(0.01).unwrap().layers["Survey"].runs[0].0,
+            [DVec3::new(1.25, 2., 0.), DVec3::new(3.5, 4., 0.)]
         );
     }
     #[test]

@@ -157,7 +157,7 @@ def test_blender_turns_the_finishes_into_materials(tmp_path):
 
 def test_the_material_inspector_sets_and_clears_the_finish(native_host):
     from ingetrazo_core import material_inspector
-    from views import wgpu_library
+    from ingetrazo_render import wgpu_library
     win = native_host.window
     scene = win.viewport.scene
     name = "Mármol travertino"

@@ -1,54 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""Native IngeTrazo document format (``.igz``).
-
-Plain JSON, schema-versioned. Trivial to inspect, edit by hand, and diff
-in source control. Will grow as new entity types (faces, groups,
-components, materials) land — old documents must keep loading.
-
-Layout::
-
-    {
-      "igz_format": 1,
-      "app_version": __version__,
-      "scene": {
-        "edges": [
-          {"a": [x, y, z], "b": [x, y, z]},
-          ...
-        ],
-        "faces": [
-          {"vertices": [[x, y, z], ...]}
-        ]
-      }
-    }
-
-**Textured documents are ZIP containers** (format 2). A texture is an image
-*file*, so a plain-JSON document could only point at one — an absolute path
-that broke the moment the ``.igz`` travelled to another machine. When the scene
-uses textures the document becomes a ZIP holding the very same JSON as
-``document.json`` plus the images under ``textures/``, and each texture entry
-carries ``"embed": "textures/<hash>-<name>"`` instead of ``"path"``. The
-document is then **self-contained and portable**. Opening one unpacks the
-images into the app's texture cache (content-addressed, so documents sharing an
-image share the file and the GPU upload) and points the entries back at real
-paths — the rest of the app keeps seeing ``attrs["texture"]["path"]`` and knows
-nothing about containers.
-
-Untextured documents stay **plain JSON at format 1**: the common case remains
-diffable, hand-editable, and readable by older builds. ``load_into`` sniffs the
-ZIP magic, so both shapes open transparently.
-
-**Large documents are format 3** (see ``_LARGE_DOCUMENT``): always a ZIP, and
-each big mesh is a ``{"geom": {...}}`` block instead of ``edges``/``faces``
-lists — its distinct points once as float32, edges and face rings as int32
-indices, edge flags and a shared table of face attributes, in one raw
-member under ``geom/`` (layout in the JSON, no pickles). Builds that read
-only up to format 2 refuse it with a message instead of opening it empty.
-"""
+"""Built and IGZ document codecs, schema constants and script-facing exceptions."""
 from __future__ import annotations
 from contextvars import ContextVar
 
-from contextlib import contextmanager
 import json
 import math
 from pathlib import Path
@@ -59,6 +14,18 @@ from formats.igz_stream import Fragment, SaveStream
 from formats.native_io import DocumentArchive, native_io
 
 from ingetrazo_core import (
+    igz_empty_mesh as _empty_mesh, igz_note_constant as _note_constant,
+    igz_mesh_blocks as _mesh_blocks,
+    DocumentOutput as _atomic_output,
+    igz_backup_previous as _backup_previous,
+    igz_classify_document as _large_document,
+    igz_live_element_count as _live_element_count,
+    igz_non_finite_where as _non_finite_where,
+    igz_bulk_sized as _bulk_sized,
+    igz_export as export_igz,
+    igz_save_scene as save_scene,
+    igz_write_container as _write_container,
+    igz_write_atomic as _write_atomic,
     igz_load_into as load_into,
     igz_load_links as _load_links,
     igz_unpack_photo_mesh as _unpack_photo_mesh,
@@ -189,79 +156,6 @@ def _group_ifc_record(group):
 _attrs_key = json.JSONEncoder(sort_keys=True, separators=(",", ":")).encode
 
 
-def _bulk_sized(n_edges: int, n_faces: int) -> bool:
-    """Whether a mesh this size is rebuilt in one bulk pass (a rough corner
-    count) — the same test for the JSON reader and the format-3 writer."""
-    return n_edges + n_faces * 4 >= _BULK_MIN
-
-
-def _backup_previous(path: Path) -> bool:
-    """Keep the previous explicit save, including the headless saves that
-    missed the ride-model agent's backup on 2026-11-09."""
-    import shutil
-    from tempfile import TemporaryDirectory
-    from core import general_settings
-
-    if not path.is_file():
-        return True
-    if str(general_settings.value("backup", "1")) == "0":
-        return True
-    try:
-        with TemporaryDirectory(dir=path.parent) as tmp:
-            copy = Path(tmp) / "previous"
-            shutil.copy2(path, copy)
-            copy.replace(path.with_name(path.name + ".bak"))
-    except OSError:
-        return False
-    return True
-
-
-def save_scene(scene, path: Path, *, backup=True, progress=None) -> dict:
-    """Synchronous explicit save; autosave drives the same preparation in slices."""
-    import gc
-
-    enabled = gc.isenabled()
-    gc.disable()
-    try:
-        return _save_scene(scene, path, backup=backup, progress=progress)
-    finally:
-        if enabled:
-            gc.enable()
-
-
-def export_igz(scene, path, confirm_loss, *, progress=None):
-    """Write a compatibility copy. The callback receives maximum displacement in mm."""
-    return _save_scene(scene, path, backup=True, compatibility=True, confirm_loss=confirm_loss,
-                       progress=progress)
-
-
-def _large_document(scene):
-    classify = getattr(native_io(), "igz_large_document", None)
-    if classify and getattr(scene, "_root", None) is not None:
-        return classify(scene.mesh, scene.groups, scene.kept_components, _LARGE_DOCUMENT)
-    return _live_element_count(scene) > _LARGE_DOCUMENT
-
-
-def _live_element_count(scene) -> int:
-    """Faces + edges the document will hold: the loose mesh, and every
-    distinct mesh of the groups (a component prototype is written once,
-    however many times it is placed). Only list lengths."""
-    from core.lazy_mesh import entity_count
-    mesh = scene.mesh if hasattr(scene, "mesh") else scene
-    total = entity_count(mesh)
-    seen: set = set()
-    stack = (list(getattr(scene, "groups", None) or ())
-             + list(getattr(scene, "kept_components", None) or ()))
-    while stack:
-        g = stack.pop()
-        m = getattr(g, "mesh", None)
-        if m is not None and id(m) not in seen:
-            seen.add(id(m))
-            total += entity_count(m)
-        stack.extend(getattr(g, "children", None) or ())
-    return total
-
-
 class NonFiniteDocumentError(ValueError):
     """The document holds a coordinate that is not a number; it is not
     written, so the file on disk keeps its last good version."""
@@ -276,122 +170,7 @@ class NonFiniteDocumentError(ValueError):
             where=where))
 
 
-def _non_finite_where(node, path: str = "scene") -> str:
-    """The first place in the payload holding a NaN or an infinity."""
-    import math as _math
-    stack = [(node, path)]
-    while stack:
-        cur, here = stack.pop()
-        if isinstance(cur, float) and not _math.isfinite(cur):
-            return here
-        if isinstance(cur, dict):
-            stack.extend((v, f"{here} › {k}") for k, v in
-                         reversed(list(cur.items())))
-        elif isinstance(cur, (list, tuple)):
-            stack.extend((v, f"{here}[{i}]") for i, v in
-                         reversed(list(enumerate(cur))))
-    return path
-
-
-@contextmanager
-def _atomic_output(path):
-    """Publish only a closed, complete file; simultaneous saves own separate temps."""
-    output = getattr(native_io(), "AtomicDocument", None)
-    if output:
-        stage = output(path)
-        try:
-            with open(stage.fileno(), "wb", closefd=False) as target:
-                yield target
-            stage.publish()
-        finally:
-            stage.discard()
-        return
-    from uuid import uuid4
-
-    tmp = path.with_name(f".{uuid4().hex}.part")
-    target = tmp.open("xb")
-    try:
-        with target:
-            yield target
-        tmp.replace(path)
-    finally:
-        tmp.unlink(missing_ok=True)
-
-
-def _write_atomic(path: Path, data: bytes | Fragment) -> None:
-    with _atomic_output(path) as dest:
-        writer = getattr(native_io(), "igz_write_plain", None)
-        if writer:
-            if isinstance(data, Fragment):
-                data.file.flush()
-                writer(dest.fileno(), None, (data.file.fileno(), data.offset, data.size))
-            else:
-                writer(dest.fileno(), data, None)
-        elif isinstance(data, Fragment):
-            for chunk in data.chunks():
-                dest.write(chunk)
-        else:
-            dest.write(data)
-
-
-def _write_container(path: Path, doc: str, blobs: dict,
-                     fast: bool = False, deflated: dict | None = None, *, meter=None) -> None:
-    """The ZIP shape: ``document.json`` deflated, images stored as-is (PNG/JPG
-    are already compressed — deflating them again costs time for nothing).
-    ``fast`` deflates at level 1 (see ``_LARGE_DOCUMENT``). ``deflated``
-    holds members compressed like the document — the geometry blocks."""
-    import zipfile
-    with _atomic_output(path) as target:
-        writer = getattr(native_io(), "igz_write_zip", None)
-        if writer is not None:
-            members = []
-            def member(name, data, compressed):
-                if isinstance(data, Fragment):
-                    data.file.flush()
-                    source = data.file.fileno(), data.offset, data.size
-                    members.append((name, compressed, None, source))
-                else:
-                    if isinstance(data, str):
-                        data = data.encode("utf-8")
-                    members.append((name, compressed, data, None))
-            member(_DOC_ENTRY, doc, True)
-            for name in sorted(deflated or ()):
-                member(name, deflated[name], True)
-            for name in sorted(blobs):
-                member(name, blobs[name], False)
-            options = {"meter": meter} if meter is not None else {}
-            if writer(target.fileno(), members, fast, **options):
-                return
-        with zipfile.ZipFile(target, "w") as zf:
-            def write(member, data, compression):
-                info = zipfile.ZipInfo(member, date_time=_ZIP_EPOCH)
-                info.compress_type = compression
-                level = 1 if fast else None
-                if isinstance(data, Fragment):
-                    info.file_size = data.size
-                    info._compresslevel = level
-                    with zf.open(info, "w") as dest:
-                        for chunk in data.chunks():
-                            dest.write(chunk)
-                else:
-                    zf.writestr(info, data, compresslevel=level)
-
-            write(_DOC_ENTRY, doc, zipfile.ZIP_DEFLATED)
-            for member in sorted(deflated or ()):
-                write(member, deflated[member], zipfile.ZIP_DEFLATED)
-            for member in sorted(blobs):
-                write(member, blobs[member], zipfile.ZIP_STORED)
-
-
 _EMPTY = []
-
-
-def _empty_mesh():
-    """The one empty mesh every linked placeholder is written with."""
-    if not _EMPTY:
-        from core.mesh import Mesh
-        _EMPTY.append(Mesh())
-    return _EMPTY[0]
 
 
 #: Entities left out of the document being opened because a coordinate
@@ -403,21 +182,6 @@ _dropped_nonfinite = [0]
 _saw_nonfinite = [False]
 _finite_flag = ContextVar("file_nonfinite", default=_saw_nonfinite)
 _repair_count = ContextVar("file_repairs", default=_dropped_nonfinite)
-
-
-def _note_constant(token: str) -> float:
-    _finite_flag.get()[0] = True
-    return float(token)
-
-
-def _mesh_blocks(payload: dict):
-    """Every local geometry block in the file, including nested placements."""
-    from ingetrazo_core import FileGroups
-    yield payload
-    yield from payload.get("protos", [])
-    for raw in FileGroups.records(payload):
-        if raw.get("xform") is None or "proto" not in raw:
-            yield raw
 
 
 class _GeomMembers(dict):

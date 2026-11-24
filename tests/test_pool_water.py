@@ -13,7 +13,7 @@ from core.scene import Scene
 from formats.igz import load_into, save_scene
 from tools.base import ToolContext
 from tools.paint import PaintTool
-from views.wgpu_library import _catalogue
+from ingetrazo_render.wgpu_library import _catalogue
 from views.wgpu_ui import _paint_with
 
 

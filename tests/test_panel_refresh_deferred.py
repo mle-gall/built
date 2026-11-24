@@ -10,7 +10,7 @@ from ingetrazo_core import Matrix4, Vec3
 from ingetrazo_render import chrome_sheet
 from tests.test_library_sheet import win, frame, tiles  # noqa: F401
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from views import wgpu_library as library
+from ingetrazo_render import wgpu_library as library
 
 
 def _count_calls(monkeypatch, obj, name):
@@ -24,11 +24,9 @@ def _count_calls(monkeypatch, obj, name):
     return calls
 
 
-@pytest.mark.parametrize("kind,provider", [
-    ("components", library.ComponentsProvider), ("materials", library.MaterialsProvider),
-])
-def test_hidden_library_waits_until_shown(win, monkeypatch, kind, provider):
-    calls = _count_calls(monkeypatch, provider, "items")
+@pytest.mark.parametrize("kind", ["components", "materials"])
+def test_hidden_library_waits_until_shown(win, monkeypatch, kind):
+    calls = _count_calls(monkeypatch, library.provider(kind), "items")
     for _ in range(3):
         win.viewport.scene.version += 1
         chrome_sheet.before_frame(win.view, win)
@@ -41,7 +39,7 @@ def test_hidden_library_waits_until_shown(win, monkeypatch, kind, provider):
 def test_a_burst_of_edits_refreshes_the_visible_panels_once(win, monkeypatch):
     from views import wgpu_ui
     p, group, _ = browser_model()
-    comp = _count_calls(monkeypatch, library.ComponentsProvider, "items")
+    comp = _count_calls(monkeypatch, library.provider("components"), "items")
     tree = _count_calls(monkeypatch, wgpu_ui, "prepare_tree_model")
     library.open_library(win, "components")
     frame(win)
@@ -66,8 +64,8 @@ def test_a_selection_leaves_the_in_model_lists_as_they_are(win, monkeypatch):
     group.component = True
     scene.groups.append(group)
     scene.version += 1
-    comp = _count_calls(monkeypatch, library.ComponentsProvider, "items")
-    mat = _count_calls(monkeypatch, library.MaterialsProvider, "items")
+    comp = _count_calls(monkeypatch, library.provider("components"), "items")
+    mat = _count_calls(monkeypatch, library.provider("materials"), "items")
     library.open_library(win, "components")
     frame(win)
     scene.select([group])

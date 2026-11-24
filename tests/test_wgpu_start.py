@@ -15,7 +15,7 @@ from core import recent
 from core.scene import Scene
 from formats import igz
 from ingetrazo_render import chrome_sheet as cs
-from views import wgpu_start as ws
+from ingetrazo_render import wgpu_start as ws
 
 
 class FakeRenderer:

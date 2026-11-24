@@ -773,14 +773,14 @@ class ShellWindow(WindowDocumentCommands, object if NATIVE else QObject):
             view._ui_docs = None
 
     def _show_empty_area(self) -> None:
-        from views import wgpu_start
+        from ingetrazo_render import wgpu_start
         wgpu_start.show(self)
 
     def _leave_empty_area(self) -> None:
         pass
 
     def _dismiss_home(self) -> None:
-        from views import wgpu_start
+        from ingetrazo_render import wgpu_start
         wgpu_start.hide(self)
 
     # Commands from the menu bar, the chrome and the start page land here
