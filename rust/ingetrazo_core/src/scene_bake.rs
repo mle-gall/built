@@ -137,12 +137,13 @@ fn prepare(
     let mut edges: Vec<_> = edge_list
         .into_iter()
         .zip(edge_flags)
-        .filter(|(_, f)| f & 3 == 0 || (retain_hidden && f & 2 != 0))
+        .filter(|(_, flags)| retain_hidden || flags & 3 == 0)
         .collect();
-    if retain_hidden && edges.iter().any(|(_, f)| f & 2 != 0) {
-        edges.sort_by_key(|(_, f)| f & 2 != 0);
+    let visible_edges = edges.iter().filter(|(_, flags)| flags & 3 == 0).count();
+    if visible_edges < edges.len() {
+        // The reveal pass uses the suffix for hidden edges and softened seams.
+        edges.sort_by_key(|(_, flags)| flags & 3 != 0);
     }
-    let visible_edges = edges.iter().filter(|(_, f)| f & 2 == 0).count();
     let edges = edges.into_iter().map(|(e, _)| e).collect();
     Prepared {
         triangles,

@@ -4,6 +4,8 @@ import pytest
 from ingetrazo_core import Vec3 as V, Matrix4 as QMatrix4x4
 from core.mesh import Mesh
 from core.group import Group
+from tests.controller_surface import live_image
+from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
 from tests.test_rendering_surface_regressions import viewport, pixels
 
 
@@ -33,7 +35,7 @@ def test_selected_occurrence_tints_its_interior_edge_only(viewport, nested, hidd
     vp.camera.pitch = 1.2
     vp.camera.yaw = -.8
     vp.scene.select([selected])
-    data = pixels(vp.grabFramebuffer())
+    data = pixels(live_image(vp))
     mvp = vp.camera.projection_matrix()*vp.camera.view_matrix()
     def orange_near(p):
         q=mvp.map(p)
@@ -61,5 +63,9 @@ def test_selected_smooth_tube_tints_profiles(viewport, instance):
     vp.camera.distance = 5
     vp.camera.yaw, vp.camera.pitch = .7, .2
     vp.scene.select([g])
-    vp.grabFramebuffer()
-    assert vp._selected_profile_count >= 4
+    image = pixels(live_image(vp))
+    # The smooth tube has no hard vertical edges. Sample its silhouette
+    # between the end caps to check selection reaches the actual profile.
+    middle = image[image.shape[0] // 2 - 8:image.shape[0] // 2 + 8]
+    marked = (middle[:, :, 0] > 190) & (middle[:, :, 1] > 60) & (middle[:, :, 1] < 160) & (middle[:, :, 2] < 90)
+    assert np.count_nonzero(marked) >= 4
