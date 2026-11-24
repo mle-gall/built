@@ -559,10 +559,7 @@ pub fn document(pages: &[Page], pictures: &HashMap<String, Picture>) -> Vec<u8> 
                 let pic = match pictures.get(source) {
                     Some(p) => Some(p),
                     None => {
-                        file = image::open(source).ok().map(|im| {
-                            let im = im.to_rgba8();
-                            Picture { w: im.width(), h: im.height(), rgba: im.into_raw() }
-                        });
+                        file = load_picture(source);
                         file.as_ref()
                     }
                 };
@@ -724,4 +721,18 @@ pub fn pictures_of(pictures: Option<&Bound<'_, PyDict>>) -> PyResult<HashMap<Str
         }
     }
     Ok(pics)
+}
+
+/// The picture an image op names that is not handed in: an image item's
+/// file, composited as the item shows it (sheets::picture).
+pub fn load_picture(source: &str) -> Option<Picture> {
+    let (path, look) = super::picture::split_source(source);
+    let im = image::open(path).ok()?.to_rgba8();
+    let (w, h) = (im.width(), im.height());
+    let raw = im.into_raw();
+    let (w, h, rgba) = match look {
+        Some(l) => super::picture::composite(&raw, w, h, &l),
+        None => (w, h, raw),
+    };
+    Some(Picture { w, h, rgba })
 }

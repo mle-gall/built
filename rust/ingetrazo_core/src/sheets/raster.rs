@@ -87,10 +87,7 @@ impl Canvas<'_> {
         if !self.loaded.contains_key(source) {
             let made = match self.pictures.get(source) {
                 Some(p) => pixmap_of(p.w, p.h, &p.rgba),
-                None => image::open(source).ok().and_then(|im| {
-                    let im = im.to_rgba8();
-                    pixmap_of(im.width(), im.height(), im.as_raw())
-                }),
+                None => super::pdf::load_picture(source).and_then(|p| pixmap_of(p.w, p.h, &p.rgba)),
             };
             self.loaded.insert(source.to_string(), made);
         }
