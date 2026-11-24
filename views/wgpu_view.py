@@ -873,8 +873,17 @@ class MetalView(ViewNavigation):
             before = time.perf_counter()
             w, h, scale = self.width(), self.height(), self.devicePixelRatioF()
             draw = self.tools.draw_annotations if annotations else None
-            from ingetrazo_render import AnnotationCanvas
-            layer = AnnotationCanvas(max(1, int(w * scale)), max(1, int(h * scale)), w)
+            # One canvas while the size holds: clear() blanks only what the
+            # last frame drew, instead of a new window-sized image a frame.
+            size = (max(1, int(w * scale)), max(1, int(h * scale)), float(w))
+            kept = self.__dict__.get('_annotation_canvas')
+            if kept is not None and kept[0] == size:
+                layer = kept[1]
+                layer.clear()
+            else:
+                from ingetrazo_render import AnnotationCanvas
+                layer = AnnotationCanvas(*size)
+                self._annotation_canvas = (size, layer)
             wgpu_overlay.paint_layer(layer, primitives, draw)
             if section_widgets:
                 self._draw_section_widgets(layer)
