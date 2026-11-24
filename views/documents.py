@@ -260,7 +260,6 @@ class ProjectTabBar(QWidget):
     newRequested = Signal()
     moved = Signal()
     #: The views button: the layouts of the project in front.
-    viewsRequested = Signal()
 
     #: The mark of a project with unsaved changes, after its name.
     DIRTY_MARK = " •"
@@ -273,23 +272,6 @@ class ProjectTabBar(QWidget):
         row.setSpacing(0)
         from PySide6.QtCore import QSize
         from views.icons import tool_icon
-        # The views button, first: one, two, three or four views of the
-        # project in front (views/multi_view.py).
-        views = self.views_button = QToolButton(self)
-        views.setObjectName("project_views")
-        views.setProperty("icon_key", "four_views")
-        views.setIcon(tool_icon("four_views"))
-        views.setIconSize(QSize(18, 18))
-        views.setFixedSize(26, 26)
-        views.setCheckable(True)
-        views.setAutoRaise(True)
-        views.setCursor(Qt.PointingHandCursor)
-        views.setToolTip(tr(
-            "View layout: one, two, three or four views of the model"))
-        views.setAccessibleName(views.toolTip())
-        views.clicked.connect(lambda _c=False: self.viewsRequested.emit())
-        row.addWidget(views, 0, Qt.AlignVCenter)
-        row.addSpacing(4)
         bar = self.tabs = _ProjectTabs(self)
         bar.setObjectName("project_tab_bar")
         # Drawn as the side panels' tabs (no document mode, no style sheet
@@ -353,14 +335,11 @@ class ProjectTabBar(QWidget):
             " border-radius: 4px; background: transparent; padding: 0px; }}"
             "QToolButton#project_tab_close:hover {{"
             " background: rgba({accent_rgb}, 66); }}"
-            "QToolButton#project_tab_new, QToolButton#project_views {{"
+            "QToolButton#project_tab_new {{"
             " border: none; border-radius: 6px; background: transparent;"
             " padding: 0px; }}"
-            "QToolButton#project_tab_new:hover,"
-            " QToolButton#project_views:hover {{"
-            " background: rgba({accent_rgb}, 36); }}"
-            "QToolButton#project_views:checked {{"
-            " background: rgba({accent_rgb}, 60); }}")
+            "QToolButton#project_tab_new:hover {{"
+            " background: rgba({accent_rgb}, 36); }}")
 
     def showEvent(self, ev) -> None:  # noqa: N802 — Qt override
         super().showEvent(ev)

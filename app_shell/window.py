@@ -163,7 +163,7 @@ class ShellScenes:
         self._win = win
 
     def _vp(self):
-        return self._win.viewport
+        return self._win._active_view()
 
     def _touch(self):
         vp = self._vp()
@@ -195,9 +195,9 @@ class ShellScenes:
         scene = vp.scene
         before = shown_state(scene)
         if camera:
-            view.apply(scene, vp.camera)
+            view.apply(scene, vp.camera, self._win.set_active_style)
         else:
-            view.apply_state(scene)
+            view.apply_state(scene, self._win.set_active_style)
         self._win._scene_tabs.mark_view(view)
         if shown_state(scene) != before:
             self._touch()
@@ -273,9 +273,9 @@ class _Tray:
 
 _QUIET = ("_sync_style_menu", "_sync_section_menu", "_refresh_layer_views",
           "_refresh_sheet_tabs",
-          "_light_views_button", "_sync_projection_buttons", "_show_renderer_note",
+          "_sync_projection_buttons", "_show_renderer_note",
           "_sync_component_edit_menu", "_refresh_vcb", "_forget_panel_caches", "_show_panels_again",
-          "on_active_view_changed", "keep_other_views_style", "settle_heap_later")
+          "settle_heap_later")
 
 
 def _doc_attr(name):
@@ -615,7 +615,7 @@ class ShellWindow(WindowDocumentCommands, object if NATIVE else QObject):
         self._host.set_title(title)
 
     def _active_view(self):
-        return self.viewport
+        return self._doc.model_views.command_view(self._doc) if self._doc is not None else None
 
     def _pick_view_layout(self):
         from app_shell.model_views import choose
@@ -644,10 +644,10 @@ class ShellWindow(WindowDocumentCommands, object if NATIVE else QObject):
         self._doc.model_views.maximize(self._doc)
 
     def active_style(self):
-        return self.viewport._view_style()
+        return self._active_view()._view_style()
 
     def own_style(self):
-        vp = self.viewport
+        vp = self._active_view()
         if vp is self._doc.viewport:
             self.keep_other_views_style()
             return vp.scene.display_style
@@ -659,11 +659,12 @@ class ShellWindow(WindowDocumentCommands, object if NATIVE else QObject):
         self._doc.model_views.preserve_peer_styles(self._doc)
 
     def set_active_style(self, style):
-        if self.viewport is self._doc.viewport:
+        vp = self._active_view()
+        if vp is self._doc.viewport:
             self.keep_other_views_style()
-            self.viewport.scene.display_style = style
+            vp.scene.display_style = style
         else:
-            self.viewport.view_style = style
+            vp.view_style = style
         self._host.request_frame()
 
     def _activate_nav(self, key):

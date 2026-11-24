@@ -444,11 +444,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         self._doc_stack = QStackedWidget(area)
         box.addWidget(self._doc_stack, 1)
         self._empty_on = False
-        # The views button: the layouts of the project in front.
-        from views.multi_view import LayoutPicker
-        self._layout_picker = LayoutPicker(self)
-        self._layout_picker.chosen.connect(self.set_view_layout)
-        bar.viewsRequested.connect(self._pick_view_layout)
         self._doc.viewport = self._make_viewport()
         self._doc_stack.addWidget(self._doc.viewport.keys_stand_in or self._doc.viewport)
         bar.add(self._doc)
@@ -996,14 +991,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         vp = self._active_view()
         vp.set_projection(mode)
         self._sync_projection_buttons(vp.camera.projection_mode())
-
-    def on_active_view_changed(self) -> None:
-        """Another of several views is worked in (or back to one view): the
-        Styles and the projection buttons show what that view shows."""
-        self._sync_style_menu()
-        if self.__dict__.get("_projection_actions"):
-            self._sync_projection_buttons(
-                self._active_view().camera.projection_mode())
 
     def _refresh_toolbar_icons(self) -> None:
         """Re-draw the programmatic toolbar icons for the current palette so a
@@ -1664,15 +1651,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         # does the same on the left, next to it so the key can be found.
         window_menu.addAction(self._act_sidebar)
         window_menu.addAction(self._act_left_sidebar)
-        # With several views, the one under the pointer alone and back.
-        maximize_action = QAction(tr("Maximize view"), self)
-        maximize_action.setShortcut(QKeySequence("Ctrl+Space"))
-        maximize_action.setEnabled(False)
-        maximize_action.triggered.connect(self._toggle_maximized_view)
-        self.addAction(maximize_action)
-        window_menu.addAction(maximize_action)
-        self._act_maximize_view = maximize_action
-
         window_menu.addSeparator()
         # Ctrl+U: the units panel straight away (the Preferences page).
         units_action = QAction(tr("Units…"), self)
@@ -3653,9 +3631,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
             display.tools.pick_up()
             display.set_scene(self.viewport.scene)
             display.update()
-        grid = self._doc.view_grid if self.__dict__.get("_doc") else None
-        if grid is not None and key != "select":
-            grid.cross.hide()
         action = self._tool_actions.get(key)
         if action is not None:
             action.setChecked(True)
@@ -3857,73 +3832,19 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
 
     # ---- Display styles ----------------------------------------------------
     def _active_view(self):
-        """The view the Styles and the projection act on: with several views,
-        the one worked in (its label in the accent colour); else the
-        window's own."""
-        doc = self.__dict__.get("_doc")
-        grid = getattr(doc, "view_grid", None) if doc is not None else None
-        if grid is not None and grid.is_enabled():
-            cell = grid.active_cell()
-            vp = cell.viewport if cell is not None else None
-            if vp is not None and not cell.isHidden():
-                return vp
         return self.viewport
 
     def active_style(self):
-        """The style the active view shows (to read: menu, Styles panel)."""
-        vp = self._active_view()
-        if vp is self.viewport:
-            return getattr(vp.scene, "display_style", None)
-        return vp._view_style()
+        return self.viewport.scene.display_style
 
-    def own_style(self):
-        """The style to change in place, the active view's own: a view of
-        several that still showed the window's style gets a copy first, so
-        what is changed there stays there."""
-        vp = self._active_view()
-        style = getattr(vp.scene, "display_style", None)
-        if vp is self.viewport:
-            self.keep_other_views_style()
-            return style
-        if vp.view_style is None and style is not None:
-            vp.view_style = style.copy()
-        return vp.view_style
+    own_style = active_style
 
-    def set_active_style(self, style) -> None:
-        """Give the active view ``style``: the window's view keeps it in the
-        scene (saved with the file); another of several views, its own."""
-        vp = self._active_view()
-        if vp is self.viewport:
-            self.keep_other_views_style()
-            vp.scene.display_style = style
-        else:
-            vp.view_style = style
+    def set_active_style(self, style):
+        self.viewport.scene.display_style = style
         self.repaint_styled()
 
-    def keep_other_views_style(self) -> None:
-        """The window's view is about to change its style (a style, a
-        switch, a scene): the other views shown keep the one they show, so
-        a change in one view never reaches the others."""
-        doc = self.__dict__.get("_doc")
-        grid = getattr(doc, "view_grid", None) if doc is not None else None
-        if grid is None or not grid.is_enabled():
-            return
-        style = getattr(self.viewport.scene, "display_style", None)
-        if style is None:
-            return
-        for vp in grid.extras():
-            if vp.view_style is None:
-                vp.view_style = style.copy()
-
-    def repaint_styled(self) -> None:
-        """Redraw every view shown after a style change: the others keep
-        their own style, and none waits for the mouse to show it."""
+    def repaint_styled(self):
         self.viewport.update()
-        doc = self.__dict__.get("_doc")
-        grid = getattr(doc, "view_grid", None) if doc is not None else None
-        if grid is not None and grid.is_enabled():
-            for vp in grid.visible_extras():
-                vp.update()
 
     def _apply_display_style(self, preset) -> None:
         """Activate a built-in style (a COPY — presets stay pristine) in the
@@ -4609,9 +4530,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         from views.wgpu_ui import free_area   # the panels' free area (B8)
         self.viewport.camera.fit_box(bounds[0], bounds[1], free=free_area(self))
         self.viewport.update()
-        grid = self._doc.view_grid
-        if grid is not None:                 # every view shown frames it
-            grid.fit_box(bounds[0], bounds[1])
 
     def _on_smart_zoom(self) -> None:
         """A trackpad's smart zoom (two-finger double tap): Zoom Extents;
@@ -4639,9 +4557,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         from views.wgpu_ui import free_area   # the panels' free area (B8)
         self.viewport.camera.fit_box(lo, hi, free=free_area(self))
         self.viewport.update()
-        grid = self._doc.view_grid
-        if grid is not None:                 # every view shown frames it,
-            grid.fit_box(lo, hi)             # as Zoom Extents does
 
     def _sheet_tab_menu(self, index: int, global_pos) -> None:
         self._ensure_composer().sheet_tab_menu(index, global_pos, self)
@@ -4769,13 +4684,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
     def _on_standard_view(self, key: str) -> None:
         """A standard view (Views bar, Ctrl+1…7) in the view being worked
         in; one of several extra views takes it as its cell's view."""
-        vp = self._active_view()
-        if vp is not self.viewport:
-            grid = self._doc.view_grid
-            cell = next(c for c in grid.cells if c.viewport is vp)
-            cell.pick_view(key)
-            self._sync_projection_buttons(vp.camera.projection_mode())
-            return
         if key == "iso":
             self.viewport.camera.snap_iso()
         else:
@@ -5327,7 +5235,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
             doc.composer.show()
         self.documentChanged.emit()
         self._refresh_scene_tabs()
-        self._light_views_button()
         vp.setFocus()
 
     # ---- every project closed: the empty area --------
@@ -5350,8 +5257,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         self._activate_tool("select")
         bar = self._project_tabs
         bar.tabs.setVisible(False)
-        bar.views_button.setVisible(False)
-        self._layout_picker.hide()
         self._hide_panels()
         strip = getattr(self, "_sheet_tabs", None)
         if strip is not None:
@@ -5371,7 +5276,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         self._empty_on = False
         bar = self._project_tabs
         bar.tabs.setVisible(True)
-        bar.views_button.setVisible(True)
         self.set_tool_filter(None)
         self._doc_stack.setVisible(True)
         self._show_panels_again()
@@ -5379,7 +5283,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         if strip is not None and self._workspace is None:
             strip.setVisible(True)
         self._refresh_scene_tabs()
-        self._light_views_button()
         self._place_sidebar_handle()
         self.viewport.setFocus()
         self._update_title()
@@ -5410,121 +5313,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         for d in on_top:
             if isValid(d):
                 d.raise_()
-
-    # ---- one, two, three or four views of a project (views/multi_view.py) ---
-    def view_layout(self) -> str:
-        """The project in front's layout: ``single``, ``two``,
-        ``two_wide``, ``three`` or ``four``."""
-        return self._doc.view_layout
-
-    def set_view_layout(self, key: str) -> None:
-        """Show the project in front as ``key`` says; the other projects
-        keep theirs. Not an edit of the document."""
-        from views.multi_view import LAYOUT_KEYS
-        doc = self._doc
-        if key not in LAYOUT_KEYS or key == doc.view_layout:
-            self._light_views_button()
-            return
-        grid = self._view_grid_of(doc, make=key != "single")
-        if grid is None and key != "single":
-            self.statusBar().showMessage(tr(
-                "An extension shows its own views here: close it first."),
-                5000)
-            self._light_views_button()
-            return
-        clean = not self._is_dirty()
-        doc.view_layout = key
-        if grid is not None:
-            grid.set_layout(key)
-        if clean:
-            self._saved_version = self.viewport.scene.version
-        self._light_views_button()
-        self._update_title()
-
-    def _views_dict(self, doc):
-        """How many views ``doc`` shows and where their lines are, for its
-        file; None for one view."""
-        grid = doc.view_grid
-        if grid is None or doc.view_layout == "single":
-            return None
-        return {"layout": doc.view_layout, **grid.lines_state()}
-
-    def _apply_views_home(self) -> None:
-        """Open in the views the file was saved in; a file without them
-        leaves the tab's as they are."""
-        home = getattr(self.viewport.scene, "views_home", None)
-        if not isinstance(home, dict) or not isinstance(home.get("layout"), str):
-            return
-        self.set_view_layout(home["layout"])
-        grid = self._doc.view_grid
-        if grid is not None and self._doc.view_layout == home["layout"]:
-            grid.apply_lines_state(home)
-
-    def _view_grid_of(self, doc, make: bool = False):
-        """``doc``'s grid of views; with ``make``, made now if it has none
-        — its viewport moves into it once, into the tab's slot, the way an
-        extension puts its own widget there. None while an extension's
-        widget holds the slot."""
-        grid = doc.view_grid
-        if grid is not None or not make:
-            return grid
-        from views.wgpu_view import WgpuView
-        if (getattr(doc, "_renderer_wgpu", False)
-                and isinstance(doc.stand_in, WgpuView)):
-            return self._make_metal_grid(doc)
-        return None
-
-    def _make_metal_grid(self, doc):
-        """Under Metal: the native view moves into the grid's window cell
-        (its NSView and the resident scene stay); the other cells get views
-        of that scene (views/wgpu_peer.py). It stays ``doc.stand_in``: the
-        window's Metal paths keep reaching the document's first view."""
-        from views.multi_view import ViewGrid
-        display = doc.stand_in
-        stack = self._doc_stack
-        index = stack.indexOf(display)
-        grid = ViewGrid(doc.viewport, display=display)
-        grid.setObjectName("view_grid")
-        doc.view_grid = grid
-        stack.insertWidget(index if index >= 0 else stack.count(), grid)
-        display.show()
-        if doc is self._doc:
-            stack.setCurrentWidget(grid)
-        return grid
-
-    def _pick_view_layout(self) -> None:
-        self._light_views_button()          # the click toggled it
-        self._layout_picker.show_for(self.view_layout(),
-                                     self._project_tabs.views_button)
-
-    def _light_views_button(self) -> None:
-        button = self.__dict__.get("_project_tabs")
-        doc = self.__dict__.get("_doc")
-        if button is None or doc is None:
-            return
-        button = button.views_button
-        on = doc.view_layout != "single"
-        if button.isChecked() != on:
-            button.setChecked(on)
-        self._sync_maximize_action()
-
-    def _toggle_maximized_view(self) -> None:
-        grid = self._doc.view_grid
-        if grid is not None:
-            grid.toggle_maximized_here()
-
-    def _sync_maximize_action(self) -> None:
-        """Window ▸ Maximize view (Ctrl+Space): only with several views, and
-        Restore views while one fills the area."""
-        act = self.__dict__.get("_act_maximize_view")
-        doc = self.__dict__.get("_doc")
-        if act is None or doc is None:
-            return
-        grid = doc.view_grid
-        act.setEnabled(grid is not None and grid.is_enabled()
-                       and not self.is_empty())
-        full = grid is not None and grid.maximized_index() is not None
-        act.setText(tr("Restore views") if full else tr("Maximize view"))
 
     def _update_tab(self, doc=None) -> None:
         """The tab's name, its unsaved-changes dot and its tooltip."""
@@ -5619,17 +5407,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         if stand_in is not None:
             self._doc_stack.removeWidget(stand_in)
             stand_in.hide()
-        # Its grid of views goes with it, extra viewports and all.
-        grid, doc.view_grid = doc.view_grid, None
-        if grid is not None:
-            grid.release_surfaces()
-            for extra in grid.extras():
-                try:
-                    extra.set_active_tool(None)
-                except Exception:  # noqa: BLE001 — never block closing
-                    pass
-            grid.deleteLater()
-        # Release peer surfaces before closing their shared Metal renderer.
         from views.wgpu_view import WgpuView
         if isinstance(display, WgpuView):
             display._refresh_timer.stop()
@@ -5729,9 +5506,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
     def _follow_in_extra_views(self) -> None:
         """The window's viewport has another document: the project's other
         views go with it, or a tool in one would edit the one left behind."""
-        grid = self._doc.view_grid
-        if grid is not None:
-            grid.follow_document()
 
     def workspace(self):
         """The extension workspace shown instead of the model, or None."""
@@ -5941,7 +5715,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
             self._doc._after_picture = []
             self.viewport.inference.reset()
             self._apply_camera_home()
-            self._apply_views_home()
             self._current_path = path
             self._remember_recent(path)
             self._doc._after_picture.append(self._after_links_loaded)
@@ -5986,13 +5759,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
                           "it to keep the repaired document.",
                           n=repaired, name=path.name)
                 _dialogs.warning(self, tr("Document repaired"), text)
-            # The project's other views show what came in, not what was there.
-            grid = self._doc.view_grid
-            if grid is not None:
-                clean = not self._is_dirty()
-                grid.follow_document()
-                if clean:
-                    self._saved_version = self.viewport.scene.version
             self.viewport.notify_scene_changed()
             # The panels wait for the first picture; the scene tabs row
             # reads the scenes itself and comes up with the document.
@@ -6108,7 +5874,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
             import copy
             scene = copy.copy(doc.viewport.scene)
             scene.camera_home = self._camera_dict(doc.viewport)
-            scene.views_home = self._views_dict(doc)
             stats = igz_format.export_igz(scene, path, confirm)
             if stats and stats["missing"]:
                 _dialogs.warning(self, tr("Saved with missing textures"),
@@ -6133,7 +5898,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
             return
         try:
             vp.scene.camera_home = self._camera_dict(vp)
-            vp.scene.views_home = self._views_dict(doc)
             # Linked files: their paths relative to where this is saved.
             from core import links as _links
             _links.refresh_paths(vp.scene, path)
@@ -6766,8 +6530,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         for doc in self._documents:
             if doc.composer is not None:
                 doc.composer.close()
-            if doc.view_grid is not None:
-                doc.view_grid.release_surfaces()
             if doc.viewport is not None:
                 display = getattr(doc.viewport, "keys_stand_in", None)
                 if display is not None:
