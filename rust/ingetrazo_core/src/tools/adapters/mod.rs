@@ -43,6 +43,7 @@ fn unpack<'py, const N: usize>(value: &Obj<'py>) -> PyResult<[Obj<'py>; N]> {
         .map_err(|_| pyo3::exceptions::PyValueError::new_err("invalid row"))
 }
 mod pushpull;
+mod scale;
 type Args<'py> = Bound<'py, PyTuple>;
 type Reply<'py> = PyResult<Obj<'py>>;
 type Method = (
@@ -69,6 +70,7 @@ fn screen<'py>(ctx: &Obj<'py>) -> PyResult<(Obj<'py>, Obj<'py>)> {
 
 fn registration(module: &str, name: &str) -> Option<(&'static [Method], &'static str)> {
     Some(match (module, name) {
+        ("tools.scale_host", "ScaleHost") => (scale::METHODS, stringify!(scale)),
         ("tools.pushpull", "PushPullTool") => (pushpull::METHODS, stringify!(pushpull)),
         _ => return None,
     })
