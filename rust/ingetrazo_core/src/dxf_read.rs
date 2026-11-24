@@ -585,8 +585,41 @@ fn sheet_file(path: &Path) -> Option<Drawing> {
     file.read_to_string(&mut text).ok()?;
     sheet_records(&text)
 }
+/// An isolated, strictly convex CAD facet has no welds, crossings, shared
+/// edges or straight corners for the stitching pipeline to repair. Use a
+/// generous angular and model-space margin around the kernel tolerances.
+fn isolated_facet(points: &[DVec3]) -> bool {
+    if !(3..=4).contains(&points.len()) {
+        return false;
+    }
+    let mut turns = Vec::with_capacity(points.len());
+    for i in 0..points.len() {
+        let p = points[i];
+        let ab = points[(i + 1) % points.len()] - p;
+        let ac = points[(i + points.len() - 1) % points.len()] - p;
+        let cross = ab.cross(ac);
+        if ab.length() < 0.001
+            || ac.length() < 0.001
+            || cross.length() <= 0.001 * ab.length().max(ac.length())
+            || ab.normalize().dot(ac.normalize()).abs() >= 0.99
+        {
+            return false;
+        }
+        turns.push(cross.normalize());
+    }
+    turns.iter().all(|n| n.dot(turns[0]) > 0.999999)
+}
 fn stitch(mesh: &Obj<'_>, faces: &[Ring], scale: f64, offset: DVec3) -> PyResult<()> {
     let py = mesh.py();
+    if let [ring] = faces {
+        if mesh.getattr("vertices")?.len()? == 0 {
+            let points = ring.iter().map(|p| *p * scale - offset).collect::<Vec<_>>();
+            if isolated_facet(&points) {
+                let _ = mesh.call_method1("add_face", (verts(py, &points)?,));
+                return Ok(());
+            }
+        }
+    }
     let added = PySet::empty(py)?;
     let keys = PySet::empty(py)?;
     let key = py.import("core.topology")?.getattr("_key")?;
@@ -617,43 +650,82 @@ fn stitch(mesh: &Obj<'_>, faces: &[Ring], scale: f64, offset: DVec3) -> PyResult
 fn build<'p>(py: Python<'p>, b: &Bucket, scale: f64, offset: DVec3) -> PyResult<Obj<'p>> {
     let mesh = new_mesh(py)?;
     let mut pts = vec![];
-    let mut left = vec![];
-    let mut right = vec![];
-    let flags = PyList::empty(py);
+    let mut endpoints = Vec::new();
+    let mut curves = Vec::new();
     for (i, (run, curved)) in b.runs.iter().enumerate() {
         if i % 512 == 0 {
             checkpoint(py)?;
         }
-        let curve = if *curved && run.len() > 2 {
-            Some(mesh.call_method0("next_curve_id")?)
+        let curve: i64 = if *curved && run.len() > 2 {
+            mesh.call_method0("next_curve_id")?.extract()?
         } else {
-            None
+            -1
         };
-        let base = pts.len() / 3;
+        let base = (pts.len() / 3) as i64;
         for p in run {
             pts.extend((*p * scale - offset).to_array());
         }
-        for k in 1..run.len() {
-            left.push((base + k - 1) as i64);
-            right.push((base + k) as i64);
-            flags.append((false, &curve, py.None()))?;
+        for k in 1..run.len() as i64 {
+            endpoints.extend([base + k - 1, base + k]);
+            curves.push(curve);
         }
     }
     if !pts.is_empty() {
-        let array = Array2::from_shape_vec((pts.len() / 3, 3), pts)
+        let positions = Array2::from_shape_vec((pts.len() / 3, 3), pts)
             .unwrap()
             .into_pyarray(py);
-        let (v, ids): (Obj<'p>, Obj<'p>) = mesh.call_method1("bulk_weld", (array,))?.extract()?;
-        let ids = py.import("numpy")?.call_method1("asarray", (ids,))?;
-        mesh.call_method1(
-            "add_edges_welded",
-            (
-                v,
-                ids.get_item(left.into_pyarray(py))?,
-                ids.get_item(right.into_pyarray(py))?,
-                flags,
-            ),
-        )?;
+        let edges = Array2::from_shape_vec((curves.len(), 2), endpoints)
+            .unwrap()
+            .into_pyarray(py);
+        let store_api = py.import("core.store_mesh")?;
+        if mesh.get_type().is(&store_api.getattr("StoreMesh")?)
+            && mesh
+                .getattr("_store")?
+                .getattr("_model_frame")?
+                .is_truthy()?
+        {
+            // This mesh is new. Weld points and insert edges in a single store
+            // construction, without allocating a temporary Python vertex view
+            // for every point and rebuilding the store to append its edges.
+            let live = mesh.getattr("_store")?;
+            let empty = Vec::<i64>::new().into_pyarray(py);
+            let curves = curves.into_pyarray(py);
+            let kw = store_api
+                .call_method0("_weld_args")?
+                .cast_into::<PyDict>()?;
+            let block = live.get_type().call_method(
+                "from_block",
+                (
+                    live.getattr("namespace")?,
+                    positions,
+                    edges,
+                    py.None(),
+                    curves,
+                    py.None(),
+                    PyList::empty(py),
+                    &empty,
+                    &empty,
+                    &empty,
+                ),
+                Some(&kw),
+            )?;
+            live.call_method1("_extend_bulk", (block,))?;
+            mesh.setattr("_chunk_dirty", true)?;
+            mesh.setattr("_mut_serial", mesh.getattr("_mut_serial")?.add(1)?)?;
+        } else {
+            let (v, ids): (Obj<'p>, Obj<'p>) =
+                mesh.call_method1("bulk_weld", (positions,))?.extract()?;
+            let ids = py.import("numpy")?.call_method1("asarray", (ids,))?;
+            let ends = ids.get_item(edges)?.getattr("T")?;
+            let flags = PyList::empty(py);
+            for curve in curves {
+                flags.append((false, (curve >= 0).then_some(curve), py.None()))?;
+            }
+            mesh.call_method1(
+                "add_edges_welded",
+                (v, ends.get_item(0)?, ends.get_item(1)?, flags),
+            )?;
+        }
     }
     if !b.parts.is_empty() {
         let key = py.import("core.topology")?.getattr("_key")?;

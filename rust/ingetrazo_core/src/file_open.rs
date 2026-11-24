@@ -74,10 +74,10 @@ impl Progress {
             .max(self.base + self.span * fraction.clamp(0., 1.));
         progress.1 = phase;
         drop(progress);
-        // Small NumPy/extension calls can reacquire the GIL faster than
-        // winit or Qt can take it. Leave a scheduling window between batches.
-        py.detach(|| std::thread::sleep(std::time::Duration::from_millis(1)));
-        Ok(())
+        // Entity batches and phase changes share one yield budget. Publishing
+        // several progress labels for a small drawing should not sleep once
+        // per label. Long imports still release the interpreter between batches.
+        checkpoint(py)
     }
 }
 
