@@ -693,9 +693,9 @@ def bond_marks(key, band, cut: str, scale: float = 1.0,
     (``y``, a section); a paved area or a wall's face moves both ways."""
     if key not in COURSED or band is None or cut not in _BOND_THICKEST:
         return None
-    return masonry_marks(key, band, cut, scale, float(scale_n or 100.0),
+    return masonry_marks(key, tuple(band), cut, float(scale), float(scale_n or 100.0),
                          brick_dims(brick, piece_kind(key)), real_unit(key, brick),
-                         joints, offset)
+                         joints, (float(offset[0]), float(offset[1])) if offset else None)
 
 
 def paper_offset(form) -> tuple | None:
@@ -948,6 +948,9 @@ def hatch_marks(key: str, box, scale: float = 1.0, angle: float = 0.0,
     imported pattern (its families, as :func:`parse_pat` gives them). A
     solid pattern has no marks: the caller fills. ``offset`` — ``(dx,
     dy)`` paper mm — moves the whole pattern."""
+    key = key if isinstance(key, str) else ""
+    scale = float(scale)
+    offset = (float(offset[0]), float(offset[1])) if offset else None
     if families is not None:
         return generate_hatch(key, box, scale, float(angle or 0), clean_families(families),
                               offset, None, None, None)

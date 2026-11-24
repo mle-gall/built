@@ -44,10 +44,17 @@ def test_masonry_courses_and_cut_marks_match_paper_geometry():
         for thickness in (1.1, 3.1, 35.5):
             for cut in ("plan", "vertical"):
                 for joint in ("single", "double"):
-                    band = ((-1.7, 9.8), (-.6, -.8), (.8, -.6), 15.2, thickness)
+                    band = [(-1.7, 9.8), (-.6, -.8), (.8, -.6), 15.2, thickness]
                     offset = (rng.uniform(-250, 250), rng.uniform(-250, 250))
                     brick = (240., 100., 67., 8., 15.)
                     course = hatches.bond_course(key, -3, thickness * 50., brick, -313., 631.)
                     marks = hatches.bond_marks(key, band, cut, 1.5, 50., brick, joint, offset)
                     digest.update(json.dumps(record((course, marks)), sort_keys=True).encode())
     assert digest.hexdigest() == "de3127269e7e033c819f41c95050380b5c6f0a375ccdee009b7067dbdcbc8272"
+
+
+def test_frame_fill_and_serialized_pattern_settings():
+    box = [0., 0., 14., 7.]
+    assert not any(hatches.hatch_marks(None, box, offset=[]).values())
+    assert hatches.hatch_marks("grid", box, "1.5", offset=["3", "2"]) == (
+        hatches.hatch_marks("grid", box, 1.5, offset=(3., 2.)))
