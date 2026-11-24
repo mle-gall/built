@@ -5,17 +5,6 @@ layer, folders, merge, section planes on layers, layer lines on sheets and
 in DXF, templates."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-import pytest
-from PySide6.QtCore import Qt
-from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication, QMenu
-
-_app = QApplication.instance() or QApplication([])
-
 from core import layers as L
 from core.group import Group
 from core.layers import DEFAULT_LAYER, Layer, assign_layer
@@ -23,28 +12,9 @@ from core.mesh import Mesh
 from core.saved_views import SavedView
 from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
 from tests.test_drawing_records import _square
-from core.scene import Scene
 
 
 # ---- The panel -------------------------------------------------------------
-
-@pytest.fixture
-def win():
-    from views.main_window import MainWindow
-    w = MainWindow()
-    w.show()
-    _app.processEvents()
-    yield w
-    w._saved_version = w.viewport.scene.version
-    w.close()
-    # Closing saves the window's layout; some tests here move the Layers tab
-    # to the other side, and the next window of the run (another test file)
-    # would open with trays on both sides — wider than it may be (CI:
-    # test_the_standing_hint_never_widens_the_window). Leave none behind.
-    from PySide6.QtCore import QSettings
-    QSettings().remove("ui/window_state")
-    QSettings().remove("ui/window_geometry")
-
 
 def test_add_opens_the_selected_folder_and_preserves_its_parent(native_host):
     from ingetrazo_core import edit_tag_folder
@@ -79,19 +49,6 @@ def test_purge_asks_for_the_count_and_accepts_only_a_current_confirmation(native
     assert chrome_dialogs.current_sheet(host.window) is None
 
 
-def test_columns_and_indent_follow_the_browser(win):
-    from views.layers_panel import (COL_ACTIVE, COL_COLOR, COL_COUNT,
-                                    COL_EYE, COL_LOCK, COL_NAME)
-    panel = win.layers_dock.panel
-    head = panel.tree.header()
-    order = sorted((COL_EYE, COL_LOCK, COL_NAME, COL_ACTIVE, COL_COLOR,
-                    COL_COUNT), key=head.visualIndex)
-    assert order == [COL_EYE, COL_LOCK, COL_NAME, COL_ACTIVE, COL_COLOR,
-                     COL_COUNT]
-    assert panel.tree.treePosition() == COL_NAME
-    assert panel.tree.indentation() == 12
-
-
 def test_the_eye_and_padlock_headers_act_on_every_layer(native_host):
     from tests.native_tree import action
     scene = native_host.viewport.scene
@@ -102,18 +59,6 @@ def test_the_eye_and_padlock_headers_act_on_every_layer(native_host):
         assert all(getattr(tag, field) == expected for tag in scene.layers)
     assert len(native_host.viewport.history.undo_stack) == 4
     assert native_host.viewport.history.undo() and all(tag.locked for tag in scene.layers)
-
-
-def test_the_target_column_sits_after_the_padlock(win):
-    from views.layers_panel import (COL_EYE, COL_ISOLATE, COL_LOCK,
-                                    COL_NAME, LayersPanel)
-    panel = win.layers_dock.panel
-    head = panel.tree.header()
-    order = [head.logicalIndex(v) for v in range(head.count())]
-    assert order[:4] == [COL_EYE, COL_LOCK, COL_ISOLATE, COL_NAME]
-    assert list(LayersPanel.COLUMN_ORDER) == order
-    zero = panel.item_for(DEFAULT_LAYER)
-    assert zero.icon(COL_ISOLATE).isNull()          # always on: no target
 
 
 def test_a_rows_target_isolates_and_a_second_click_brings_back_what_it_hid(native_host):
@@ -308,24 +253,20 @@ def test_right_click_hides_and_isolates_the_clicked_tag(native_host):
     assert not scene.layer("A").visible and not scene.selection
 
 
-def test_the_default_layer_without_a_colour_shows_a_none_swatch():
-    from views.tree_icons import NO_COLOUR_SLASH, layer_swatch, swatch_icon
-    img = lambda icon: icon.pixmap(18, 18).toImage()
-    zero = Layer(DEFAULT_LAYER)
-    none = img(layer_swatch(zero))
-    # A red slash from the top-left corner to the bottom-right…
-    def red(x, y):
-        c = none.pixelColor(x, y)
-        return c.red() > 150 and c.green() < 120 and c.blue() < 120
-    assert red(9, 9) and red(6, 6) and red(12, 12)
-    assert not red(12, 6) and not red(6, 12)          # …not the other way
-    assert none != img(swatch_icon(L.layer_color(zero)))
-    assert NO_COLOUR_SLASH.red() > 150
-    # …and a picked colour, or any other layer, is a plain swatch.
-    zero.color = (0.2, 0.4, 0.6)
-    assert img(layer_swatch(zero)) == img(swatch_icon((0.2, 0.4, 0.6)))
-    other = Layer("Muros")
-    assert img(layer_swatch(other)) == img(swatch_icon(L.layer_color(other)))
+def test_the_default_tag_swatch_distinguishes_no_colour_from_a_picked_or_automatic_colour():
+    from tests.test_project_drawing_filters import Project
+    project = Project(Layer("Muros"))
+    scene = project.scene
+    def displayed():
+        project.action("lens", "1")
+        return {t[0]: t[25] for t, _ in project.view.renderer.calls["ui_set_tree"][0]
+                if t[0].startswith("preview-tag:")}
+    assert displayed()["preview-tag:Layer 0"] == ""
+    colour = L.layer_color(scene.layer("Muros"))
+    assert displayed()["preview-tag:Muros"] == "#" + "".join(f"{int(v * 255 + 0.5):02x}" for v in colour)
+    scene.layer(DEFAULT_LAYER).color = (0.2, 0.4, 0.6)
+    scene.version += 1
+    assert displayed()["preview-tag:Layer 0"] == "#336699"
 
 
 def test_the_delete_key_deletes_the_current_row(native_host):
@@ -374,64 +315,6 @@ def test_new_tag_at_a_tag_uses_its_folder_and_rejects_a_stale_target(native_host
         assert len(scene.layers) == count
 
 
-def test_behind_another_tab_the_panel_waits_until_shown(win):
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    win.layers_dock.hide()
-    _app.processEvents()
-    assert not panel.isVisible()
-    scene.layers += [Layer("Nueva")]
-    win.viewport.notify_scene_changed()
-    assert panel.item_for("Nueva") is None                 # not rebuilt hidden
-    win.layers_dock.show()
-    _app.processEvents()
-    assert panel.item_for("Nueva") is not None
-# ---- The rebuild waits for the event loop -----------------------------------
-
-def _count_rebuilds(panel):
-    """The panel's rebuild, counted. The deferred timer binds the spy, so a
-    pending one is dropped first."""
-    calls = []
-    real = panel.refresh
-    if getattr(panel, "_refresh_timer", None) is not None:
-        panel._refresh_timer.stop()
-
-    def spy():
-        calls.append(1)
-        real()
-    panel._refresh_timer = None
-    panel.refresh = spy
-    return calls, real
-
-
-def _stop_counting(panel, real):
-    timer = getattr(panel, "_refresh_timer", None)
-    if timer is not None:
-        timer.stop()
-    panel._refresh_timer = None                 # the next one binds the real
-    panel.refresh = real
-
-
-def test_a_scene_change_rebuilds_after_the_event_loop_not_inside_it(win):
-    """``sceneVersionChanged`` reaches the panel from inside ``paintGL``
-    (``_sync_edges``) and from the Layers toolbar's list while Qt is still
-    closing it: clearing the rows there was an access violation. The burst
-    of changes pays one rebuild, on the next turn."""
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    L.add_folder(scene, "Nueva")            # hierarchy changes require a full rebuild
-    calls, real = _count_rebuilds(panel)
-    try:
-        win.viewport.notify_scene_changed()
-        win.viewport.notify_scene_changed()
-        win.viewport.notify_scene_changed()
-        assert calls == []                  # not from inside paint nor a signal
-        _app.processEvents()
-        assert len(calls) == 1              # one rebuild for the burst
-    finally:
-        _stop_counting(panel, real)
-
-
 def test_the_layer_and_folder_of_the_model_selection_stand_out():
     from tests.test_project_drawing_filters import Project
     project = Project(Layer("Walls", folder="Building"))
@@ -447,16 +330,30 @@ def test_the_layer_and_folder_of_the_model_selection_stand_out():
             assert rows[key][1][9] == len(selected)
 
 
-def test_layer_signature_reads_folders_once(monkeypatch):
-    from views.layers_panel import layers_signature
-    scene = Scene()
-    scene.layer_folders = ['one', 'two', 'three']
-    scene.folder_parents = {'two': 'one', 'three': 'missing'}
-    read = L.folders_of
-    calls = []
+def test_folder_projection_is_deferred_until_a_frame_and_reused_across_unchanged_frames(monkeypatch):
+    from tests.test_project_drawing_filters import Project
+    from views import wgpu_ui
+    project = Project()
+    project.action("lens", "1")
+    builds = []
+    original = wgpu_ui.prepare_tree_model
     def counted(scene):
-        calls.append(1)
-        return read(scene)
-    monkeypatch.setattr(L, 'folders_of', counted)
-    assert layers_signature(scene)[2] == (None, 'one', None)
-    assert len(calls) == 1
+        builds.append(scene.content_version)
+        return original(scene)
+    monkeypatch.setattr(wgpu_ui, "prepare_tree_model", counted)
+    project.view.renderer.ui_project_hidden = lambda: True
+    parent = L.add_folder(project.scene, "Outer")
+    child = L.add_folder(project.scene, "Inner", parent=parent)
+    orphan = L.add_folder(project.scene, "Orphan")
+    project.scene.folder_parents = {child: parent, orphan: "missing"}
+    project.scene.version += 1
+    wgpu_ui._sync_project_rows(project.view, project.win)
+    assert not builds
+    project.view.renderer.ui_project_hidden = lambda: False
+    wgpu_ui._sync_project_rows(project.view, project.win)
+    project.action("expandall", "")
+    for _ in range(3):
+        rows = project.rows()
+        assert rows[f"preview-folder:{orphan}"][1][0] == rows[f"preview-folder:{parent}"][1][0] == 0
+        assert rows[f"preview-folder:{child}"][1][0] == 1
+    assert builds == [project.scene.content_version]

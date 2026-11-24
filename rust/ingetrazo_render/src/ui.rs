@@ -718,6 +718,9 @@ impl Ui {
         self.model_panes.push((id, Rect::from_min_size(pos2(x,y), vec2(width,height)), active, label));
     }
 
+    pub fn project_hidden(&self) -> bool {
+        self.review || self.sheets.shown || self.gallery.is_some()
+    }
     pub fn toggle_review(&mut self) { self.set_review(!self.review); }
 
     pub fn set_review(&mut self, on: bool) {
@@ -1931,8 +1934,7 @@ impl Ui {
                                         }
                                         if let Some((a,b)) = cols.swatch {
                                             let sw = Rect::from_center_size(pos2((a+b)*0.5,cy),vec2(12.0,12.0));
-                                            if let Some(color) = parse_hex(&cell(0)) { ui.painter().rect_filled(sw, CornerRadius::same(R_INSET), color); }
-                                            ui.painter().rect_stroke(sw, CornerRadius::same(R_INSET), Stroke::new(1.0_f32, EDGE), egui::StrokeKind::Inside);
+                                            kit::tag_swatch(ui, sw, parse_hex(cells.get(20).or(cells.first()).map_or("", String::as_str)));
                                         }
                                     } else if col.lens == Lens::Export {
                                         let right = rect.right() - SPACE_S;

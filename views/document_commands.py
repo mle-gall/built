@@ -148,7 +148,6 @@ class WindowDocumentCommands:
         the drawing rows."""
         self.viewport.notify_scene_changed()
         self._link_watcher().refresh()
-        self._refresh_layer_views()
 
     def _on_ndof_motion(self, sample, dt: float) -> None:
         # Only the window being worked in moves (New Window makes several).

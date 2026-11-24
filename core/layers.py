@@ -15,6 +15,7 @@ parallel projection with the right layers on IS the plan drawing.
 from __future__ import annotations
 
 from core.group import new_uid
+from ingetrazo_core import TAG_PALETTE as PALETTE, automatic_tag_color
 import re
 
 DEFAULT_LAYER = "Layer 0"
@@ -28,15 +29,6 @@ DEFAULT_LAYER = "Layer 0"
 SURVEY_LAYER = "Survey"
 
 
-#: Colours a layer shows until one is picked for it (the Layers panel swatch
-#: and View ▸ Colour by layer). Mid-tone and told apart from one another, so
-#: the model stays readable with the diffuse shading on top.
-PALETTE = (
-    (0.86, 0.42, 0.36), (0.36, 0.60, 0.84), (0.52, 0.74, 0.40),
-    (0.92, 0.70, 0.30), (0.62, 0.48, 0.80), (0.34, 0.74, 0.72),
-    (0.88, 0.52, 0.70), (0.66, 0.58, 0.44), (0.56, 0.66, 0.30),
-    (0.46, 0.50, 0.70), (0.84, 0.60, 0.48), (0.40, 0.66, 0.56),
-)
 #: The default layer's own colour: the plain model white, so what nobody
 #: sorted onto a layer reads as "not classified".
 DEFAULT_LAYER_COLOR = (0.96, 0.95, 0.925)
@@ -845,9 +837,7 @@ def layer_color(layer) -> tuple:
         return tuple(layer.color[:3])
     if layer.key == DEFAULT_LAYER:
         return DEFAULT_LAYER_COLOR
-    import zlib
-    # The key, not the label: renaming a tag must not repaint it.
-    return PALETTE[zlib.crc32(layer.key.encode("utf-8")) % len(PALETTE)]
+    return automatic_tag_color(layer.key)
 
 
 #: The tag a linked file's untagged content wears in the host

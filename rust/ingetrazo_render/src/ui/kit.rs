@@ -658,6 +658,17 @@ pub mod molecules {
     pub fn number<'a>(value: &'a mut f64, units: &str) -> egui::DragValue<'a> {
         egui::DragValue::new(value).suffix(units)
     }
+    /// The default uncoloured tag has a slash. Other tags show their model colour.
+    pub fn tag_swatch(ui: &egui::Ui, rect: Rect, colour: Option<Color32>) {
+        let painter = ui.painter();
+        let corners = CornerRadius::same(R_INSET);
+        if let Some(colour) = colour {
+            painter.rect_filled(rect, corners, colour);
+        } else {
+            painter.line_segment([rect.left_top(), rect.right_bottom()], Stroke::new(1.5, ERROR));
+        }
+        painter.rect_stroke(rect, corners, Stroke::new(1., EDGE), egui::StrokeKind::Inside);
+    }
     pub fn swatch(ui: &mut egui::Ui, value: &mut Color32) -> egui::Response {
         ui.color_edit_button_srgba(value)
     }
@@ -2026,4 +2037,27 @@ pub fn tag_inspector(ui:&mut egui::Ui, key:&str, name:&str, count:u32, cells:&[S
         prop_row(ui,"Colour",if cells[0].is_empty(){"By material"}else{&cells[0]});
     }
     menu
+}
+
+#[cfg(test)]
+mod tag_swatch_tests {
+    use super::*;
+
+    #[test]
+    fn only_an_uncoloured_tag_has_a_downward_slash() {
+        let ctx = egui::Context::default();
+        for colour in [None, Some(ACCENT)] {
+            let mut rect = Rect::NOTHING;
+            let frame = ctx.run(Default::default(), |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    rect = ui.allocate_exact_size(vec2(16.,16.), Sense::hover()).0;
+                    tag_swatch(ui, rect, colour);
+                });
+            });
+            let slash = frame.shapes.iter().any(|s| matches!(&s.shape,
+                egui::Shape::LineSegment { points, stroke }
+                if *points == [rect.left_top(), rect.right_bottom()] && stroke.color == ERROR));
+            assert_eq!(slash, colour.is_none());
+        }
+    }
 }

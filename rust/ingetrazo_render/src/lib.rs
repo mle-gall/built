@@ -2572,6 +2572,9 @@ impl Renderer {
         if let Some(ui) = self.ui.as_mut() { ui.panels.set(key, value); }
         Ok(())
     }
+    fn ui_project_hidden(&self) -> bool {
+        self.ui.as_ref().is_some_and(|ui| ui.project_hidden())
+    }
     fn ui_toggle_review(&mut self) {
         if let Some(ui) = self.ui.as_mut() { ui.toggle_review(); }
     }

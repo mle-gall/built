@@ -583,6 +583,8 @@ impl Gallery {
         put(ui, Rect::from_min_size(pos2(x, ay + 24.), vec2(260., CONTROL_H)), across(), |ui| {
             badge(ui, "Packed", PACKED);
             swatch(ui, &mut self.swatch);
+            let (sample, _) = ui.allocate_exact_size(vec2(14., 14.), egui::Sense::hover());
+            tag_swatch(ui, sample, None);
             ring(ui);
         });
         // At most three transient results, the oldest fading.

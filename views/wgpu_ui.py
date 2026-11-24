@@ -428,9 +428,7 @@ def before_frame(view) -> None:
     _form(view, win)
     from views import wgpu_deliveries
     wgpu_deliveries.bind(win)
-    _tree(view, win)
-    if view.__dict__.get("_ui_lens") == 1 and view.renderer.ui_tick_tag_counts(win.viewport.history):
-        view.update()
+    _sync_project_rows(view, win)
     from views import wgpu_library
     wgpu_library.before_frame(view, win)
     _inspector(view, win)
@@ -763,6 +761,14 @@ def open_line_type(win, name, tags):
     opened = view.renderer.ui_open_line_type(name, list(tags))
     view.update()
     return opened
+
+
+def _sync_project_rows(view, win):
+    if view.renderer.ui_project_hidden() is True:
+        return
+    _tree(view, win)
+    if view.__dict__.get("_ui_lens") == 1 and view.renderer.ui_tick_tag_counts(win.viewport.history):
+        view.update()
 
 
 def _tree(view, win, *, discover=False):

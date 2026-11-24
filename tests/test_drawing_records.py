@@ -584,9 +584,11 @@ def test_the_view_dxf_writes_each_layer_with_its_colour(native_host, tmp_path,
 
 def test_every_line_type_has_a_name_a_dxf_twin_and_a_pattern(tmp_path):
     from formats.dxf_out import _LTYPES, save_dxf_layers
-    from views.layers_panel import LayersPanel
+    from tests.test_project_drawing_filters import Project
     import numpy as np
-    labels = dict(LayersPanel.LINETYPE_LABELS)
+    project = Project()
+    project.action("lens", "1")
+    labels = project.view.renderer.calls["ui_set_style_catalog"][1]
     assert set(labels) == set(L.LINETYPES)               # each one offered
     assert len(L.LINETYPES) >= 10
     for key, pattern in L.LINETYPES.items():
