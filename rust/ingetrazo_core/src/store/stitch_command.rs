@@ -112,6 +112,18 @@ impl Store {
             }
             [lo.map(|x| x - tol), hi.map(|x| x + tol)]
         });
+        let splits = self.split_junctions(bounds, tol, ch)?;
+        bumps += 3 * splits;
+        let (collapses, b, refused) = self.collapse_collinear(h, ch);
+        bumps += b;
+        if refused.is_some() {
+            return Err(super::topo::OpError::Fallback("a collinear vertex the store will not collapse"));
+        }
+        Ok(Connected { welded, deduped, splits, collapses, bumps })
+    }
+
+    pub(super) fn split_junctions(&mut self, bounds: Option<[Point; 2]>, tol: f64,
+                                  ch: &mut super::edit::Change) -> Result<usize, super::topo::OpError> {
         let mut splits = 0;
         loop {
             let (verts, edges) = self.junction_scope(bounds, tol);
@@ -130,16 +142,10 @@ impl Store {
             }
             for (e, v) in hits {
                 self.split_edge_at(edges[e], verts[v], ch)?;
-                bumps += 3;
                 splits += 1;
             }
         }
-        let (collapses, b, refused) = self.collapse_collinear(h, ch);
-        bumps += b;
-        if refused.is_some() {
-            return Err(super::topo::OpError::Fallback("a collinear vertex the store will not collapse"));
-        }
-        Ok(Connected { welded, deduped, splits, collapses, bumps })
+        Ok(splits)
     }
 
     /// The vertices and edges a T-junction round can touch, in list order:

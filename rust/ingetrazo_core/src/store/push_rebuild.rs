@@ -60,7 +60,7 @@ impl Paint {
     pub fn new(own: HashMap<u128, u32>, rows: Vec<u32>) -> Self {
         Self { own, rows, made: HashMap::new(), order: Vec::new() }
     }
-    fn class(&self, st: &Store, f: u32) -> u32 {
+    pub(super) fn class(&self, st: &Store, f: u32) -> u32 {
         let k = st.key(Kind::Face, f);
         if let Some(&c) = self.made.get(&k).or_else(|| self.own.get(&k)) {
             return c;

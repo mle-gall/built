@@ -523,7 +523,7 @@ class PushPullTool(PushPullOperation, Tool):
         A riser that the commit is going to SOFTEN is left out: pushing a
         circle drew every facet seam of the cylinder's side, so the shape
         arrived streaked with lines and only cleaned up on release (Marco,
-        2026-08-27). The same dihedral rule ``_soften_curve_facets`` applies
+        2026-08-27). The same dihedral rule ``Store::finish_push`` applies
         afterwards decides it here — read off the sweep's own wall normals,
         no mesh needed — so a circle previews as a smooth cylinder while a
         hexagon keeps the edges it will really have. A circle's own segments

@@ -849,11 +849,7 @@ impl PyMeshStore {
         -> Vec<(u128, [f64; 3])> {
         self.inner.live_slots(Kind::Vertex).into_iter().filter_map(|v| {
             let p = *self.inner.state.vpos.get(v as usize);
-            // Match numpy float64 -> int64 (out of range becomes i64::MIN).
-            let cell = p.map(|x| {
-                let n = (x * 1e4).floor();
-                if n >= i64::MIN as f64 && n < -(i64::MIN as f64) { n as i64 } else { i64::MIN }
-            });
+            let cell = super::commands::floor_cell(p);
             near.contains(&cell).then(|| (self.inner.key(Kind::Vertex, v), p))
         }).collect()
     }
@@ -1130,6 +1126,33 @@ impl PyMeshStore {
     }
     fn faces_are_flat(&self, tolerance: f64, hypot: &str) -> PyResult<Option<bool>> {
         Ok(self.inner.faces_are_flat(tolerance, crate::hypot_of(hypot)?))
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn push_translate(&mut self, cap: Vec<[f64; 3]>, delta: [f64; 3], removing: bool, preview: bool,
+                      mut next_curve: i64, own: std::collections::HashMap<u128, u32>, rows: Vec<u32>,
+                      hypot: &str, compensated: bool)
+        -> PyResult<(usize, i64, Vec<(u128, u128)>, Vec<(u128, u32)>, Vec<(u128, u128)>,
+                     Vec<(u128, u128)>, Vec<u128>)> {
+        let h = crate::hypot_of(hypot)?;
+        let mut paint = super::Paint::new(own, rows);
+        let (r, _) = self.op_all(|s, ch| s.push_translate(&cap, delta, removing, preview, &mut next_curve,
+                                                          &mut paint, h, compensated, ch))?;
+        Ok((r.bumps, next_curve, r.before, r.painted, r.after, r.replaced, r.flipped))
+    }
+
+    #[pyo3(signature = (before, base, shift, facet_cos, next_curve, painted, hypot))]
+    fn finish_push(&mut self, before: &PyStoreSnapshot, base: Option<u128>, shift: Option<[f64; 3]>,
+                   facet_cos: f64, mut next_curve: i64, painted: bool, hypot: &str)
+        -> PyResult<(i64, Vec<u128>)> {
+        let old = reader(&before.inner);
+        if old.lineage != self.inner.lineage {
+            return Err(PyValueError::new_err("foreign push snapshot"));
+        }
+        let face = base.and_then(|key| old.slot(Kind::Face, key));
+        let h = crate::hypot_of(hypot)?;
+        let fresh = self.inner.finish_push(&old, face, shift, facet_cos, &mut next_curve, painted, h);
+        Ok((next_curve, fresh))
     }
 
     fn heal_plan(

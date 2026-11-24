@@ -10,7 +10,7 @@ from ingetrazo_core import Vec3 as QVector3D
 
 from core.geometry import Face
 from core.i18n import tr
-from core.mesh import _STITCH_TOL, PAINT_KEYS, Mesh, turn_face_over
+from core.mesh import _STITCH_TOL, PAINT_KEYS, turn_face_over
 from core.history import (
     AddFaceCommand,
     DeleteFaceCommand,
@@ -18,7 +18,6 @@ from core.history import (
     SnapshotMutation,
     run_stitch,
     subtract_loop_from_face,
-    translate_points,
 )
 from core.arrangement import _interior_point, _point_in_polygon, plane_basis
 from core.orient import is_closed, orient_outward
@@ -27,7 +26,6 @@ from core.topology import (
     _key,
     _mesh_is_flat,
     classify_push_edge,
-    heal_overlapping_faces,
     loop_inside_face,
     refine_loop_with_points,
 )
@@ -949,10 +947,7 @@ class PushPullOperation:
         self._refused = False
         target = self._target_scene(scene)
         mesh = target.mesh
-        # The edges there before, to soften only the push's own: by key on
-        # a store-backed mesh (a set of 534k views took 0.65 s on the ride).
-        before_mark = push_scans.mark(mesh)
-        before_edges = set(mesh.edges) if before_mark is None else None
+        before = mesh._store.snapshot()
         # Pushing a tagged face EXTENDS its BIM object: the walls and cap the
         # extrusion creates join the base's tag (thickening a tagged slab, or
         # raising a wall from a rect the active class stamped, yields a fully
@@ -964,11 +959,6 @@ class PushPullOperation:
             if t:
                 base_tag = dict(t)
             base_paint = _paint_of(self.base_face)
-        before_verts = ({v.key for v in mesh.vertices}
-                        if (base_tag is not None or base_paint)
-                        and before_mark is None else None)
-        curve_runs = (self._curve_runs(mesh, self.base_face)
-                      if self.base_face is not None else [])
         from core.store_mesh import _store_of
         self._refused = guarded_push(
             mesh, lambda: self._mutate_inner(scene, preview),
@@ -976,98 +966,19 @@ class PushPullOperation:
         if self._refused:
             return
 
-        self._soften_curve_facets(mesh, before_edges, before_mark)
-        self._tag_moved_curves(mesh, curve_runs)
-        if base_tag is not None or base_paint:
-            # Only faces carrying at least one vertex this push created — the
-            # extrusion's own walls/cap. Rebuilt neighbours (an untagged floor
-            # plane re-emitted over its OLD vertices) are never touched, and a
-            # face that already carries a tag (or its own paint) keeps it. Runs
-            # inside the commit's SnapshotMutation (and the reverted preview),
-            # so undo is exact.
-            #
-            # Reached FROM the new vertices instead of by scanning the model:
-            # a face is fresh exactly when it holds one, so the pass costs the
-            # push rather than the mesh.
-            fresh: set = set()
-            made = push_scans.made_since(mesh, before_mark, "vertex")
-            if made is None and before_verts is None:
-                # Left the store meanwhile: the keys it had, from the mark.
-                before_verts = set(before_mark.keys("vertex"))
-            for v in (mesh.vertices if made is None else made):
-                if made is not None or v.key not in before_verts:
-                    fresh.update(v.faces())
-            for f in fresh:
-                if base_tag is not None and not f.attrs.get("ifc"):
-                    f.attrs["ifc"] = dict(base_tag)
-                if base_paint and not any(k in f.attrs for k in PAINT_KEYS):
-                    f.attrs.update(base_paint)
+        shift = (self._normal * self.extrusion).toTuple() if self._normal is not None else None
+        key = self.base_face.key if self.base_face is not None else None
+        fresh = mesh.finish_push(before, key, shift, self._CURVE_FACET_COS,
+                                 bool(base_tag is not None or base_paint))
+        for face in fresh:
+            if base_tag is not None and not face.attrs.get("ifc"):
+                face.attrs["ifc"] = dict(base_tag)
+            if base_paint and not any(k in face.attrs for k in PAINT_KEYS):
+                face.attrs.update(base_paint)
 
-    @staticmethod
-    def _curve_runs(mesh, face):
-        from ingetrazo_core import outline_curve_runs
-        runs = []
-        for loop in (face.loop, *face.hole_loops):
-            ids = [getattr(mesh.find_edge(v, loop[(i + 1) % len(loop)]), "curve", None)
-                   for i, v in enumerate(loop)]
-            for indices, closed in outline_curve_runs(ids, True):
-                runs.append(([QVector3D(loop[i].position) for i in indices], closed))
-        return runs
-
-    def _tag_moved_curves(self, mesh, runs) -> None:
-        """The base's curves, carried to the moved cap: the ring a pushed
-        circle leaves on top is a curve again, one click selects it all
-        (#626). Only the cap's own edges are looked up -- the cost is the
-        curve's, not the model's."""
-        if not runs or self._normal is None:
-            return
-        shift = self._normal * self.extrusion
-        for pts, closed in runs:
-            moved = [mesh.vertex_at(p + shift) for p in pts]
-            if any(v is None for v in moved):
-                continue
-            pairs = list(zip(moved, moved[1:]))
-            if closed:
-                pairs.append((moved[-1], moved[0]))
-            edges = [mesh.find_edge(a, b) for a, b in pairs]
-            if any(e is None or e.curve is not None for e in edges):
-                continue
-            cid = Mesh.next_curve_id()
-            for e in edges:
-                e.curve = cid
-
-    # The dihedral above which a swept seam reads as a *curve* facet (a
-    # cylinder's side) rather than a real corner. cos(31.8°): a 24-side circle
-    # (15° steps) softens, a hexagon/octagon (≥45°) keeps its visible edges.
+    # Shared with the drag preview. A swept circle softens at a shallow
+    # dihedral while a hexagon or octagon keeps its corners.
     _CURVE_FACET_COS = 0.85
-
-    def _soften_curve_facets(self, mesh, before_edges, before_mark=None) -> None:
-        """Hide the *new* edges between two faces that meet at a shallow dihedral
-        — the vertical facet seams of a swept curve — so a pushed circle reads as
-        a smooth cylinder while its circle outline (and a polygon's flat sides,
-        which meet at a real angle) stay visible. Topology-free: only the render
-        flag changes.
-
-        ``before_mark``: a store snapshot (``push_scans.mark``) in place of
-        ``before_edges`` on a store-backed mesh — the new edges are the keys
-        it lacks, in list order (a view is in a set of views by its key)."""
-        edges = mesh.edges
-        if before_mark is not None:
-            made = push_scans.made_since(mesh, before_mark, "edge")
-            if made is None:
-                # Materialised meanwhile: the views of before, as the set
-                # of views would have held them.
-                before_edges = set(push_scans.views(
-                    mesh, "edge", before_mark.keys("edge")))
-            else:
-                edges, before_edges = made, ()
-        for e in edges:
-            if e in before_edges or e.soft or len(e.faces) != 2:
-                continue
-            d = QVector3D.dotProduct(e.faces[0].normal().normalized(),
-                                     e.faces[1].normal().normalized())
-            if self._CURVE_FACET_COS < d < 0.99995:
-                e.soft = True
 
     def _mutate_inner(self, scene, preview: bool = False) -> None:
         """Apply the push to the target mesh (the scene's, or the locked
@@ -1086,38 +997,9 @@ class PushPullOperation:
         if translate_prism_cap(self._prism_cap, self._keep_base,
                                lambda: self._cap_passes_a_wall_vertex(scene, face, d)):
             normal = self._normal if self._normal is not None else face.normal()
-            translate_points(scene, {_key(p) for p in self._cap_positions},
-                             tuple(n * d for n in normal.toTuple()))
-            seed = list(self._cap_positions) + [p + normal * d
-                                                for p in self._cap_positions]
-            seedkeys = {_key(p) for p in seed}
-            run_stitch(scene.mesh, seedkeys, set(), coplanar_merge=False)
-            # A shrink can land the cap flush on a coplanar neighbour — a bump
-            # pushed back level with its host wall, or a side flank pushed
-            # clear across the bump onto the opposite flank. The weld may then
-            # consume the pushed face itself (the coincident pair must vanish,
-            # not survive as a zero-thickness fin), so the cleanup can't hinge
-            # on it: run the same fixpoint plane rebuild as the extrude path
-            # over every face the translation touched.
-            if not _mesh_is_flat(scene.mesh):
-                listed = [f.key for f in scene.mesh.faces
-                          if any(_key(v) in seedkeys for v in f.vertices)]
-                self._rebuild_planes_fixpoint(scene.mesh, (listed, None, None), seedkeys,
-                                              removing=d < 0)
-            else:
-                # A full collapse flattened the solid. The cap may have landed
-                # on a *subdivided* base (hole-bearing cycles never dedupe as
-                # identical): it is now a redundant mother over the
-                # subdivision — exactly what the flat-drawing heal removes.
-                heal_overlapping_faces(scene.mesh)
-            # Deferred during drag PREVIEW frames, same as the extrude path
-            # below: the state is discarded next frame and the shading is
-            # winding-proof, so a parity pass per mouse move only added lag
-            # (~10 s/frame on an imported 3k-face barbecue). The commit runs
-            # it for real.
-            if not preview:
-                orient_outward(scene.mesh, only=self._touched_faces(
-                    scene.mesh, seedkeys))
+            scene.mesh.push_translate(self._cap_positions, tuple(n * d for n in normal.toTuple()),
+                                      removing=d < 0, preview=preview)
+            scene.version += 1
             return
 
         # Establish the outward invariant *up front* instead of trusting history:

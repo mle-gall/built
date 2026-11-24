@@ -1612,6 +1612,40 @@ class StoreMesh(Mesh):
         self._dirty(n)
         return changed
 
+    def finish_push(self, before, face, shift, facet_cos, painted):
+        """Publish curve allocation and expose the new faces that inherit paint."""
+        _mesh._CURVE_COUNTER, faces = self._store.finish_push(
+            before, face, shift, facet_cos, _mesh._CURVE_COUNTER, painted, _hypot())
+        return [FaceView(self, key) for key in faces]
+
+    def push_translate(self, cap, delta, removing, preview):
+        """Run the prism translation and publish the store's paint transfers."""
+        import sys
+        from core.cap_rebuild import paint_classes
+        from core.mesh import swap_orientation_paint
+        own, rows, reps = paint_classes(self)
+        try:
+            bumps, next_id, before, painted, after, replaced, flipped = self._store.push_translate(
+                [p.toTuple() for p in cap], delta, removing, preview, _mesh._CURVE_COUNTER,
+                own, rows, _hypot(), sys.version_info >= (3, 12))
+        except _fallback():
+            _note_refusal("push_translate")
+            raise
+        _mesh._CURVE_COUNTER = next_id
+        self._dirty(bumps)
+        for old, new in before:
+            FaceView(self, new).attrs = dict(FaceView(self, old).attrs)
+        for key, cls in painted:
+            FaceView(self, key).attrs = _copy_attrs(reps[cls])
+        for old, new in after:
+            drop, keep = FaceView(self, old), FaceView(self, new)
+            if drop.attrs and not keep.attrs:
+                keep.attrs = dict(drop.attrs)
+        for old, new in replaced:
+            FaceView(self, new).attrs = dict(FaceView(self, old).attrs)
+        for key in flipped:
+            swap_orientation_paint(FaceView(self, key))
+
     def stitch_connect(self, seedkeys, dedupe: bool) -> bool:
         """``run_stitch``'s phases 0–2 in one native call (weld, dedupe,
         the scoped T-junction rounds, the collinear collapse). False when

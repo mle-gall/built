@@ -56,13 +56,14 @@ the callback runs, before reading paint, geometry or issuing an edit.
 ```python
 from core.protocol.keys import element
 
-# When the plugin picks a face
-held_mesh, held_key = scene.mesh, face.key
+def remember_face(scene, face):
+    return scene.mesh, face.key
 
-# In the later callback
-face = element(held_mesh, "face", held_key)
-if face is None:
-    return  # Ask for a fresh pick.
+
+def read_face_area(held):
+    mesh, key = held
+    face = element(mesh, "face", key)
+    return face.area() if face is not None else None
 ```
 
 Push/Pull can replace a face during a weld or plane rebuild. It also

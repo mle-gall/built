@@ -43,7 +43,7 @@ def _refuse(name):
     return refusing
 
 
-@pytest.mark.parametrize("where", ["stitch", "fixpoint"])
+@pytest.mark.parametrize("where", ["translate", "stitch", "fixpoint"])
 def test_a_store_refusal_leaves_the_model_and_writes_a_repro(monkeypatch, logs, where):
     scene, hist = _boxed(0, 0, 0, 2, 2, 2)
     mesh = scene.mesh
@@ -51,7 +51,15 @@ def test_a_store_refusal_leaves_the_model_and_writes_a_repro(monkeypatch, logs, 
     top = _face(mesh, (1, 1, 2), (0, 0, 1))
     before = _state(mesh)
     calls = []
-    if where == "stitch":
+    if where == "translate":
+        from ingetrazo_core import MeshStore
+
+        def refused_translate(self, *args):
+            calls.append(1)
+            raise S._fallback()("test: translation refused")
+
+        monkeypatch.setattr(MeshStore, "push_translate", refused_translate)
+    elif where == "stitch":
         refusing = _refuse("stitch_connect")
 
         def counted(self, *a, **k):
@@ -69,7 +77,7 @@ def test_a_store_refusal_leaves_the_model_and_writes_a_repro(monkeypatch, logs, 
     from core.protocol import commands
     monkeypatch.setattr(commands._Headless, "flash_status",
                         lambda self, text, *a: flashes.append(text), raising=False)
-    push_pull(hist, to_json_key(top.key), 0.5)
+    push_pull(hist, to_json_key(top.key), 0.5, keep_base=where != "translate")
     assert type(mesh) is S.StoreMesh            # never handed to Python objects
     assert _state(mesh) == before
     assert len(calls) == 1                      # no shorter push tried
