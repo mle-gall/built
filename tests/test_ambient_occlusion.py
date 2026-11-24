@@ -6,24 +6,17 @@ does not; a flat face seen obliquely gets no vertical bands (#989); the
 foliage mark rides the recorded instanced passes (the native replay gained
 glStencilFunc for it, in the same order on both sides).
 
-The rendering cases need a GL context; skipped where there is none."""
+The raster cases read the hidden native wgpu surface."""
 from __future__ import annotations
 
 import math
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 import pytest
-from PySide6.QtGui import QImage
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
-
-_app = QApplication.instance() or QApplication([])
+from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
 
 from views import ambient_occlusion as ao  # noqa: E402
-import views.document_interaction as viewport  # noqa: E402
 
 
 def test_it_is_off_unless_asked(monkeypatch):
@@ -42,97 +35,72 @@ def test_the_settings_are_kept_in_range(monkeypatch):
     assert s["radius"] > 0 and s["samples"] == 64 and s["intensity"] == 1.0
 
 
-def _lum(img: QImage) -> np.ndarray:
-    img = img.convertToFormat(QImage.Format_RGBA8888)
-    buf = np.frombuffer(img.constBits(), np.uint8)
-    px = buf.reshape(img.height(), img.bytesPerLine())[:, :img.width() * 4]
-    return px.reshape(img.height(), img.width(), 4)[..., :3].astype(
+def _lum(frame) -> np.ndarray:
+    width, height, data = frame
+    return np.frombuffer(data, np.uint8).reshape(height, width, 4)[..., :3].astype(
         np.float32).mean(axis=2)
 
 
 @pytest.fixture
-def box_on_floor():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        win.show()
-        _app.processEvents()
-        vp = win.viewport
-        if not vp.keys_stand_in._can_create_surface():
-            pytest.skip("requires a GPU presentation surface")
-        V = QVector3D
-        scene = vp.scene
-        scene.mesh.add_face([V(-10, -10, 0), V(10, -10, 0), V(10, 10, 0),
-                             V(-10, 10, 0)])
-        p = [V(-1, -1, 0), V(1, -1, 0), V(1, 1, 0), V(-1, 1, 0),
-             V(-1, -1, 2), V(1, -1, 2), V(1, 1, 2), V(-1, 1, 2)]
-        for idx in ((4, 5, 6, 7), (0, 1, 5, 4), (1, 2, 6, 5),
-                    (2, 3, 7, 6), (3, 0, 4, 7)):
-            scene.mesh.add_face([p[i] for i in idx])
-        scene.version += 1
-        vp.camera.set_view("iso")
-        vp.camera.fit_to(V(-4, -4, 0), V(4, 4, 2))
-        for _ in range(5):
-            _app.processEvents()
-        yield vp
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def box_on_floor(native_gpu_host):
+    vp = native_gpu_host.viewport
+    V = QVector3D
+    scene = vp.scene
+    scene.mesh.add_face([V(-10, -10, 0), V(10, -10, 0), V(10, 10, 0),
+                         V(-10, 10, 0)])
+    p = [V(-1, -1, 0), V(1, -1, 0), V(1, 1, 0), V(-1, 1, 0),
+         V(-1, -1, 2), V(1, -1, 2), V(1, 1, 2), V(-1, 1, 2)]
+    for idx in ((4, 5, 6, 7), (0, 1, 5, 4), (1, 2, 6, 5),
+                (2, 3, 7, 6), (3, 0, 4, 7)):
+        scene.mesh.add_face([p[i] for i in idx])
+    scene.version += 1
+    vp.camera.set_view("iso")
+    vp.camera.fit_to(V(-4, -4, 0), V(4, 4, 2))
+    return vp
+
 
 
 @pytest.fixture
-def step_block():
+def step_block(native_gpu_host):
     """The report's step (#989): a slab with a wall set back on it. Seen
     from an oblique camera, the wall's left face is a flat surface whose AO
     used to come out in vertical bands."""
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        win.resize(900, 700)
-        win.show()
-        _app.processEvents()
-        vp = win.viewport
-        if not vp.keys_stand_in._can_create_surface():
-            pytest.skip("requires a GPU presentation surface")
-        V = QVector3D
-        scene = vp.scene
+    vp = native_gpu_host.viewport
+    V = QVector3D
+    scene = vp.scene
 
-        def box(x0, x1, y0, y1, z0, z1):
-            p = [V(x0, y0, z0), V(x1, y0, z0), V(x1, y1, z0),
-                 V(x0, y1, z0), V(x0, y0, z1), V(x1, y0, z1),
-                 V(x1, y1, z1), V(x0, y1, z1)]
-            for idx in ((4, 5, 6, 7), (0, 3, 2, 1), (0, 1, 5, 4),
-                        (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)):
-                scene.mesh.add_face([p[i] for i in idx])
+    def box(x0, x1, y0, y1, z0, z1):
+        p = [V(x0, y0, z0), V(x1, y0, z0), V(x1, y1, z0),
+             V(x0, y1, z0), V(x0, y0, z1), V(x1, y0, z1),
+             V(x1, y1, z1), V(x0, y1, z1)]
+        for idx in ((4, 5, 6, 7), (0, 3, 2, 1), (0, 1, 5, 4),
+                    (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)):
+            scene.mesh.add_face([p[i] for i in idx])
 
-        box(-3, 3, -2, 2, 0, 2)
-        box(-3, 0, 0, 2, 2, 5)
-        scene.version += 1
-        vp.camera.set_view("iso")
-        vp.camera.yaw = math.radians(-135.0)
-        vp.camera.pitch = math.radians(20.0)
-        vp.camera.fit_to(V(-3.2, -2.2, 0), V(3.2, 2.2, 5.2))
-        for _ in range(5):
-            _app.processEvents()
-        # The export is 900x700; give the camera that aspect so the face's
-        # projected corners below land where the pixels do.
-        vp.camera.set_aspect(900, 700)
-        yield vp
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    box(-3, 3, -2, 2, 0, 2)
+    box(-3, 0, 0, 2, 2, 5)
+    scene.version += 1
+    vp.camera.set_view("iso")
+    vp.camera.yaw = math.radians(-135.0)
+    vp.camera.pitch = math.radians(20.0)
+    vp.camera.fit_to(V(-3.2, -2.2, 0), V(3.2, 2.2, 5.2))
+    # The export is 900x700; give the camera that aspect so the face's
+    # projected corners below land where the pixels do.
+    vp.camera.set_aspect(900, 700)
+    return vp
+
 
 
 def _render(vp, monkeypatch, on: str) -> np.ndarray:
     monkeypatch.setenv("INGETRAZO_AO", on)
     monkeypatch.setenv("INGETRAZO_AO_RADIUS", "0.5")
-    return _lum(vp.render_image(400, 300, overlays=False))
+    return _lum(vp.keys_stand_in.render_pixels(400, 300, overlays=False))
 
 
 def _render_at(vp, monkeypatch, on: str, w: int, h: int) -> np.ndarray:
     monkeypatch.setenv("INGETRAZO_AO", on)
     monkeypatch.setenv("INGETRAZO_AO_RADIUS", "0.5")
-    return _lum(vp.render_image(w, h, overlays=False))
+    return _lum(vp.keys_stand_in.render_pixels(w, h, overlays=False))
 
 
 def _pixel(vp, p: QVector3D, w: int, h: int) -> tuple[float, float]:
@@ -157,7 +125,7 @@ def test_the_foot_of_a_box_darkens_and_the_open_floor_does_not(
 
 def test_wireframe_has_none(box_on_floor, monkeypatch):
     vp = box_on_floor
-    vp.plano_style = "lineas"                   # the wireframe face mode
+    vp.scene.display_style.face_mode = "wireframe"                   # the wireframe face mode
     assert np.array_equal(_render(vp, monkeypatch, "0"),
                           _render(vp, monkeypatch, "1"))
 
@@ -188,23 +156,14 @@ def test_a_flat_face_seen_obliquely_gets_no_vertical_bands(
 
 
 @pytest.fixture
-def corner_blocks():
+def corner_blocks(native_gpu_host):
     """Two blocks meeting in an inner vertical corner, the view of the
     0.5.11 round: a block hanging against the side of a taller one. Returns
     a function that builds it with the faces in the colour given."""
     from core.materials import Material
-    from views.main_window import MainWindow
-    wins = []
-
     def build(color):
-        win = MainWindow()
-        wins.append(win)
-        win.resize(1000, 800)
-        win.show()
-        _app.processEvents()
-        vp = win.viewport
-        if not vp.keys_stand_in._can_create_surface():
-            pytest.skip("requires a GPU presentation surface")
+        vp = native_gpu_host.viewport
+        vp.scene.clear()
         V = QVector3D
         attrs = Material("pared", color=color).face_attrs()
 
@@ -222,17 +181,10 @@ def corner_blocks():
         vp.camera.yaw = math.radians(-60.0)
         vp.camera.pitch = math.radians(12.0)
         vp.camera.fit_to(V(-3, -1.5, 0), V(3, 3, 3.5))
-        for _ in range(5):
-            _app.processEvents()
         vp.camera.set_aspect(1000, 800)
         return vp
 
-    try:
-        yield build
-    finally:
-        for win in wins:
-            win._saved_version = win.viewport.scene.version
-            win.close()
+    return build
 
 
 def _corner_light(vp, monkeypatch) -> float:
@@ -303,115 +255,38 @@ def test_the_frame_follows_the_style_unless_the_environment_forces_it(
     assert ao.settings_for(Style(ambient_occlusion=True)) is None
 
 
-def test_the_panel_switch_edits_the_active_style():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        panel = win.styles_panel
-        style = win.viewport.scene.display_style
-        panel.refresh()
-        assert not panel._ao.isChecked() and not panel._ao_dist.isEnabled()
-        panel._ao.setChecked(True)
-        assert style.ambient_occlusion and panel._ao_dist.isEnabled()
-        panel._ao_int.setValue(15)
-        panel._ao_dist.setValue(panel._ao_dist_pos(2.0))
-        assert style.ao_intensity == 1.5 and style.ao_distance == 2.0
-        panel._ao.setChecked(False)
-        assert not style.ambient_occlusion and not panel._ao_int.isEnabled()
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
-
-
-def test_the_distance_is_a_slider_with_its_value_like_the_intensity():
-    """The distance is set like the intensity: a slider and its value as
-    text, nothing to type. The slider is on a log scale over the whole
-    range and writes round values; a value from a file between two steps
-    is kept until the slider moves."""
-    from PySide6.QtWidgets import QLabel, QSlider
-    from core import units
-    from core.style import AO_DISTANCE_RANGE
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        panel = win.styles_panel
-        style = win.viewport.scene.display_style
-        sl = panel._ao_dist
-        assert isinstance(sl, QSlider)
-        assert isinstance(panel._ao_dist_val, QLabel)
-        panel.refresh()
-        assert not sl.isEnabled()                    # follows the switch
-        panel._ao.setChecked(True)
-        assert sl.isEnabled()
-        sl.setValue(sl.minimum())
-        assert style.ao_distance == AO_DISTANCE_RANGE[0]
-        sl.setValue(sl.maximum())
-        assert style.ao_distance == AO_DISTANCE_RANGE[1]
-        # The middle of the travel is near a metre, not 25 m.
-        sl.setValue((sl.minimum() + sl.maximum()) // 2)
-        assert 0.3 < style.ao_distance < 1.5, style.ao_distance
-        # Both values read alike: a bare number, two decimals, the unit
-        # once, in the label.
-        assert panel._ao_dist_val.text() == units.localized(
-            f"{units.length_number(style.ao_distance, units.model_unit()):.2f}")
-        assert panel._ao_int_val.text() == units.localized("1.00")
-        assert "(" in panel._ao_dist_lbl.text()
-        # The default lands on a step: 0.5 m reads as 0.5 m.
-        assert panel._ao_dist_at(panel._ao_dist_pos(0.5)) == 0.5
-        # A value off the steps, from a file: shown and kept as it is.
-        style.ao_distance = 0.37
-        panel.refresh()
-        assert style.ao_distance == 0.37
-        panel._ao_int.setValue(12)                   # another edit
-        assert style.ao_distance == 0.37
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
-
-
 # ---- Stable (0.5.11): silhouettes, sky and flat faces ------------------------
 
-def test_the_sky_round_a_silhouette_is_never_darkened(monkeypatch):
+def test_the_sky_round_a_silhouette_is_never_darkened(native_gpu_host, monkeypatch):
     """The occlusion is worked out at half size. Stretched back without
     looking at depth, the dark value of a frame's corner leaked onto the
     sky next to it: a dark, toothed halo round every slat and column (the
     Windows round of 0.5.10.1). Every pixel that shows sky with nothing in
     the model must show the very same sky with the occlusion on."""
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        win.show()
-        _app.processEvents()
-        vp = win.viewport
-        if not vp.keys_stand_in._can_create_surface():
-            pytest.skip("requires a GPU presentation surface")
-        V = QVector3D
-        vp.camera.set_view("iso")
-        vp.camera.fit_to(V(-3, -3, 0), V(3, 3, 3))
-        for _ in range(3):
-            _app.processEvents()
-        empty = _render(vp, monkeypatch, "0")
-        # A frame of three posts and a lintel: inner corners, against sky.
-        mesh = vp.scene.mesh
+    vp = native_gpu_host.viewport
+    V = QVector3D
+    vp.camera.set_view("iso")
+    vp.camera.fit_to(V(-3, -3, 0), V(3, 3, 3))
+    empty = _render(vp, monkeypatch, "0")
+    # A frame of three posts and a lintel: inner corners, against sky.
+    mesh = vp.scene.mesh
 
-        def box(x0, y0, z0, x1, y1, z1):
-            p = [V(x0, y0, z0), V(x1, y0, z0), V(x1, y1, z0), V(x0, y1, z0),
-                 V(x0, y0, z1), V(x1, y0, z1), V(x1, y1, z1), V(x0, y1, z1)]
-            for idx in ((3, 2, 1, 0), (4, 5, 6, 7), (0, 1, 5, 4),
-                        (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)):
-                mesh.add_face([p[i] for i in idx])
+    def box(x0, y0, z0, x1, y1, z1):
+        p = [V(x0, y0, z0), V(x1, y0, z0), V(x1, y1, z0), V(x0, y1, z0),
+             V(x0, y0, z1), V(x1, y0, z1), V(x1, y1, z1), V(x0, y1, z1)]
+        for idx in ((3, 2, 1, 0), (4, 5, 6, 7), (0, 1, 5, 4),
+                    (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)):
+            mesh.add_face([p[i] for i in idx])
 
-        for x in (-2.0, 0.0, 2.0):
-            box(x - 0.15, -0.15, 0, x + 0.15, 0.15, 2.4)
-        box(-2.3, -0.2, 2.4, 2.3, 0.2, 2.7)
-        vp.scene.version += 1
-        off = _render(vp, monkeypatch, "0")
-        on = _render(vp, monkeypatch, "1")
-        sky = empty == off
-        assert sky.mean() > 0.3
-        # Softly since the horizons and the bounce, but they do.
-        assert (off - on > 2).mean() > 0.0005      # the corners still darken
-        assert np.array_equal(on[sky], off[sky])
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    for x in (-2.0, 0.0, 2.0):
+        box(x - 0.15, -0.15, 0, x + 0.15, 0.15, 2.4)
+    box(-2.3, -0.2, 2.4, 2.3, 0.2, 2.7)
+    vp.scene.version += 1
+    off = _render(vp, monkeypatch, "0")
+    on = _render(vp, monkeypatch, "1")
+    sky = empty == off
+    assert sky.mean() > 0.3
+    # Softly since the horizons and the bounce, but they do.
+    assert (off - on > 2).mean() > 0.0005      # the corners still darken
+    assert np.array_equal(on[sky], off[sky])
+

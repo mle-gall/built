@@ -8,6 +8,8 @@
 //! its value lives: the native preference store (`env.st`), the window's
 //! appliers in `views/settings_apply.py`, or the document (units, dimension
 //! style, north and location, through the protocol and its history).
+mod appearance;
+
 use pyo3::{
     prelude::*,
     types::{IntoPyDict, PyCFunction, PyDict, PyList, PyTuple},
@@ -1092,6 +1094,7 @@ pub fn section_groups<'py>(py: Python<'py>, env: &Bound<'py, PyAny>, section: &s
         "import" => import(py, env),
         "units" => _units(env),
         "dimensions" => dimensions(py, env),
+        "appearance" => appearance::groups(py, env),
         "location" => location(py, env),
         other => Err(pyo3::exceptions::PyKeyError::new_err(other.to_owned())),
     }

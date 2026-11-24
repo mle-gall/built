@@ -467,6 +467,7 @@ const SECTIONS: &[(&str, &str, &str, &str)] = &[
         "model",
         "Saved with this model. A number typed without a unit is in this unit.",
     ),
+    ("appearance", "Appearance", "model", "Applies to the active view of this model."),
     (
         "dimensions",
         "Dimension style",
