@@ -57,6 +57,7 @@ mod pushpull;
 mod radial_tool_api;
 mod rotate_host_api;
 mod rotate_tool_api;
+mod rotated_rectangle_tool_api;
 mod scale;
 mod select_tool_api;
 mod texture;
@@ -142,6 +143,10 @@ fn registration(module: &str, name: &str) -> Option<(&'static [Method], &'static
         ("tools.rust_tools", "_RadialTool") => {
             (radial_tool_api::METHODS, stringify!(radial_tool_api))
         }
+        ("tools.rust_tools", "RotatedRectangleTool") => (
+            rotated_rectangle_tool_api::METHODS,
+            stringify!(rotated_rectangle_tool_api),
+        ),
         ("tools.pushpull", "PushPullTool") => (pushpull::METHODS, stringify!(pushpull)),
         _ => return None,
     })
