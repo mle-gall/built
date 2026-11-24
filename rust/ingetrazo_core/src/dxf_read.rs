@@ -33,6 +33,7 @@ struct Drawing {
     blocks: Vec<(String, Bucket)>,
     placements: Vec<Placement>,
     entities: usize,
+    sample: Vec<f64>,
     skipped: BTreeMap<String, usize>,
 }
 fn read<'p>(py: Python<'p>, path: &Path) -> PyResult<Obj<'p>> {
@@ -183,9 +184,12 @@ fn suggest_unit(doc: &Obj<'_>) -> PyResult<(Option<f64>, i64)> {
         }
         let _ = sample_sizes(&e?, &mut sizes);
     }
+    Ok((infer_unit(declared, sizes), code))
+}
+fn infer_unit(declared: Option<f64>, mut sizes: Vec<f64>) -> Option<f64> {
     sizes.retain(|v| *v > 1e-9);
     if sizes.is_empty() {
-        return Ok((declared, code));
+        return declared;
     }
     let mid = sizes.len() / 2;
     let median = *sizes.select_nth_unstable_by(mid, f64::total_cmp).1;
@@ -198,7 +202,7 @@ fn suggest_unit(doc: &Obj<'_>) -> PyResult<(Option<f64>, i64)> {
                 .find(|s| sane(*s))
         })
         .or(declared);
-    Ok((scale, code))
+    scale
 }
 fn layer(d: &Obj<'_>) -> String {
     d.getattr("layer")
@@ -392,7 +396,7 @@ fn entity(
 }
 fn walk(
     e: &Obj<'_>,
-    inherited: &str,
+    inherited: Option<&str>,
     depth: usize,
     flat: bool,
     model: &mut Drawing,
@@ -400,7 +404,8 @@ fn walk(
 ) -> PyResult<()> {
     let k = kind(e)?;
     let own = layer(&e.getattr("dxf")?);
-    let actual = if own == "0" { inherited } else { &own };
+    // A component prototype combines its internal layers in one mesh.
+    let actual = inherited.map(|parent| if own == "0" { parent } else { own.as_str() });
     if !flat && k == "INSERT" {
         if let Ok(p) = placement(e) {
             model.placements.push(p);
@@ -411,24 +416,15 @@ fn walk(
     if matches!(k.as_str(), "INSERT" | "MINSERT") && depth < 8 {
         if let Ok(kids) = e.call_method0("virtual_entities") {
             for c in kids.try_iter()? {
-                walk(
-                    &c?,
-                    if inherited == "\0" { inherited } else { actual },
-                    depth + 1,
-                    true,
-                    model,
-                    sagitta,
-                )?;
+                walk(&c?, actual, depth + 1, true, model, sagitta)?;
             }
         }
         return Ok(());
     }
-    let name = if flat && inherited == "\0" {
-        "\0"
-    } else {
-        actual
-    };
-    let b = model.layers.entry(name.into()).or_default();
+    let b = model
+        .layers
+        .entry(actual.unwrap_or("0").into())
+        .or_default();
     if entity(b, e, &k, sagitta, &mut model.skipped)? {
         model.entities += 1;
     }
@@ -440,7 +436,7 @@ fn drawing(doc: &Obj<'_>, sagitta: f64) -> PyResult<Drawing> {
         if i % 256 == 0 {
             checkpoint(doc.py())?;
         }
-        walk(&e?, "0", 0, false, &mut m, sagitta)?;
+        walk(&e?, Some("0"), 0, false, &mut m, sagitta)?;
     }
     let raw = std::mem::take(&mut m.placements);
     for p in raw {
@@ -456,7 +452,7 @@ fn drawing(doc: &Obj<'_>, sagitta: f64) -> PyResult<Drawing> {
         };
         let mut local = Drawing::default();
         for e in block.try_iter()? {
-            walk(&e?, "\0", 0, true, &mut local, sagitta)?;
+            walk(&e?, None, 0, true, &mut local, sagitta)?;
         }
         let mut bucket = Bucket::default();
         for (_, mut b) in local.layers {
@@ -481,6 +477,7 @@ fn sheet_records(text: &str) -> Option<Drawing> {
     let mut lines = text.lines();
     let mut m = Drawing::default();
     let mut section = "";
+    let mut entities = false;
     let mut end = false;
     let mut pair =
         || -> Option<(&str, &str)> { Some((lines.next()?.trim(), lines.next()?.trim())) };
@@ -503,17 +500,38 @@ fn sheet_records(text: &str) -> Option<Drawing> {
                     return None;
                 }
                 section = fields[0].1;
+                entities |= section == "ENTITIES";
                 if !matches!(section, "ENTITIES" | "TABLES") {
                     return None;
                 }
             }
-            "ENDSEC" => section = "",
-            "EOF" if section.is_empty() && next.is_none() => {
+            "ENDSEC" if !section.is_empty() && fields.is_empty() => section = "",
+            "EOF" if entities && section.is_empty() && next.is_none() && fields.is_empty() => {
                 end = true;
                 break;
             }
             _ if section == "TABLES" => (),
-            "TEXT" if section == "ENTITIES" => *m.skipped.entry("TEXT".into()).or_default() += 1,
+            "TEXT" if section == "ENTITIES" => {
+                if fields.iter().any(|(code, _)| {
+                    !matches!(
+                        *code,
+                        "8" | "10"
+                            | "20"
+                            | "30"
+                            | "40"
+                            | "1"
+                            | "50"
+                            | "72"
+                            | "11"
+                            | "21"
+                            | "31"
+                            | "73"
+                    )
+                }) {
+                    return None;
+                }
+                *m.skipped.entry("TEXT".into()).or_default() += 1;
+            }
             "LINE" | "SOLID" if section == "ENTITIES" => {
                 let mut coords = [[None; 3]; 4];
                 let mut layer = "0";
@@ -536,7 +554,11 @@ fn sheet_records(text: &str) -> Option<Drawing> {
                 };
                 let b = m.layers.entry(layer.into()).or_default();
                 if k == "LINE" {
-                    b.runs.push((vec![p(0)?, p(1)?], false));
+                    let (start, end) = (p(0)?, p(1)?);
+                    if m.sample.len() < 4000 {
+                        m.sample.push(start.distance(end));
+                    }
+                    b.runs.push((vec![start, end], false));
                 } else {
                     let r = prune([p(0)?, p(1)?, p(3)?, p(2)?], false);
                     if r.len() < 3 {
@@ -673,7 +695,7 @@ fn outlines(mesh: &Obj<'_>, make: bool) -> usize {
 }
 fn prepare<'p>(
     py: Python<'p>,
-    m: Drawing,
+    m: &Drawing,
     name: &str,
     scale: f64,
     make: bool,
@@ -722,30 +744,30 @@ fn prepare<'p>(
     };
     let (mut edges, mut faces, mut made) = (0, 0, 0);
     cb.call1((0.6, "Building geometry…"))?;
-    for (layer, b) in m.layers {
-        let mesh = build(py, &b, scale, shift)?;
+    for (layer, b) in &m.layers {
+        let mesh = build(py, b, scale, shift)?;
         if mesh.getattr("edges")?.len()? == 0 && mesh.getattr("faces")?.len()? == 0 {
             continue;
         }
         made += outlines(&mesh, make);
         edges += mesh.getattr("edges")?.len()?;
         faces += mesh.getattr("faces")?.len()?;
-        let g = group(py, &mesh, if layer == "0" { name } else { &layer })?;
-        tag(&g, &layer)?;
+        let g = group(py, &mesh, if layer == "0" { name } else { layer })?;
+        tag(&g, layer)?;
         groups.append(g)?;
     }
     cb.call1((0.75, "Placing components…"))?;
     let mut protos = HashMap::new();
     let mut counts = BTreeMap::new();
-    for (name, b) in m.blocks {
-        let mesh = build(py, &b, scale, DVec3::ZERO)?;
+    for (name, b) in &m.blocks {
+        let mesh = build(py, b, scale, DVec3::ZERO)?;
         if mesh.getattr("edges")?.len()? > 0 || mesh.getattr("faces")?.len()? > 0 {
             made += outlines(&mesh, make);
-            protos.insert(name, mesh);
+            protos.insert(name.as_str(), mesh);
         }
     }
-    for p in m.placements {
-        let Some(mesh) = protos.get(&p.name) else {
+    for p in &m.placements {
+        let Some(mesh) = protos.get(p.name.as_str()) else {
             continue;
         };
         let mut mat = p.m;
@@ -754,7 +776,7 @@ fn prepare<'p>(
         g.setattr("xform", Py::new(py, crate::math::Matrix4::from(mat))?)?;
         tag(&g, &p.layer)?;
         groups.append(g)?;
-        let n = counts.entry(p.name).or_insert(0usize);
+        let n = counts.entry(p.name.as_str()).or_insert(0usize);
         if *n == 0 {
             edges += mesh.getattr("edges")?.len()?;
         }
@@ -763,7 +785,7 @@ fn prepare<'p>(
     if groups.is_empty() {
         return Err(PyErr::from_value(
             py.import("formats.dxf_in")?
-                .call_method1("NothingToImport", (m.skipped,))?,
+                .call_method1("NothingToImport", (&m.skipped,))?,
         ));
     }
     let stats = PyDict::new(py);
@@ -777,10 +799,30 @@ fn prepare<'p>(
         stats.set_item(key, n)?;
     }
     stats.set_item("components", counts)?;
-    stats.set_item("skipped", m.skipped)?;
+    stats.set_item("skipped", &m.skipped)?;
     stats.set_item("offset", offset)?;
     cb.call1((1., "Done"))?;
     Ok((groups, tags, stats).into_pyobject(py)?.into_any())
+}
+#[pyclass]
+struct PreparedSheet(std::sync::Arc<Drawing>);
+
+/// The options dialog and the import command share the same decoded drawing.
+/// Keep open_document's public ezdxf API for scripts that inspect arbitrary CAD records.
+#[pyfunction]
+fn dxf_prepare_import(py: Python<'_>, path: PathBuf) -> PyResult<Py<PyAny>> {
+    DocumentOpen::stage(py, None, move |py, _| {
+        if let Some(mut sheet) = py.detach(|| sheet_file(&path)) {
+            // ezdxf supplies metres when it reconstructs a headerless R12 document.
+            let suggestion = infer_unit(Some(1.), std::mem::take(&mut sheet.sample));
+            let source = Py::new(py, PreparedSheet(std::sync::Arc::new(sheet)))?;
+            Ok((source, suggestion).into_pyobject(py)?.into_any().unbind())
+        } else {
+            let doc = document(py, &path)?;
+            let (suggestion, _) = suggest_unit(&doc)?;
+            Ok((doc, suggestion).into_pyobject(py)?.into_any().unbind())
+        }
+    })
 }
 #[pyfunction]
 #[pyo3(signature=(scene,path,progress=None,scale=1.,doc=None,name=None,make_faces=false))]
@@ -799,25 +841,31 @@ fn dxf_load<'p>(
     }
     let result = DocumentOpen::stage(py, progress, move |py, cb| {
         cb.call1((0.05, "Reading file…"))?;
-        let native = if doc.is_none() {
-            py.detach(|| sheet_file(&path))
-        } else {
-            None
-        };
-        let model = if let Some(m) = native {
-            m
-        } else {
-            let d = match doc {
-                Some(d) => d.into_bound(py),
-                None => document(py, &path)?,
-            };
-            cb.call1((0.2, "Collecting entities…"))?;
-            drawing(&d, (0.01 / scale).max(1e-6))?
+        let source = doc.map(|d| d.into_bound(py));
+        let model = match source.as_ref().and_then(|s| s.cast::<PreparedSheet>().ok()) {
+            Some(sheet) => sheet.borrow().0.clone(),
+            None => {
+                let simple = if source.is_none() {
+                    py.detach(|| sheet_file(&path))
+                } else {
+                    None
+                };
+                std::sync::Arc::new(if let Some(model) = simple {
+                    model
+                } else {
+                    let doc = match source {
+                        Some(d) => d,
+                        None => document(py, &path)?,
+                    };
+                    cb.call1((0.2, "Collecting entities…"))?;
+                    drawing(&doc, (0.01 / scale).max(1e-6))?
+                })
+            }
         };
         let stem = path.file_stem().unwrap_or_default().to_string_lossy();
         Ok(prepare(
             py,
-            model,
+            &model,
             name.as_deref().filter(|s| !s.is_empty()).unwrap_or(&stem),
             scale,
             make_faces,
@@ -866,6 +914,7 @@ fn dxf_save_lines(path: PathBuf, segments: &Obj<'_>, layer: &str) -> PyResult<us
     crate::sheets::dxf::sheet_dxf(path, vec![g], None, None)
 }
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(dxf_prepare_import, m)?)?;
     m.add_function(wrap_pyfunction!(dxf_open_document, m)?)?;
     m.add_function(wrap_pyfunction!(dxf_load, m)?)?;
     m.add_function(wrap_pyfunction!(dxf_suggest_unit_scale, m)?)?;

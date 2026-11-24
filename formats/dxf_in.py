@@ -3,6 +3,7 @@
 from ingetrazo_core import (
     dxf_load as load_dxf,
     dxf_open_document as open_document,
+    dxf_prepare_import as prepare_import,
     dxf_read_unit_scale as read_unit_scale,
     dxf_suggest_unit_scale as suggest_unit_scale,
 )
