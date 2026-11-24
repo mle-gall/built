@@ -14,7 +14,7 @@ from core.settings import settings
 from core import recent
 from core.scene import Scene
 from formats import igz
-from views import chrome_sheet as cs
+from ingetrazo_render import chrome_sheet as cs
 from views import wgpu_start as ws
 
 

@@ -15,9 +15,8 @@ from __future__ import annotations
 
 import pytest
 from ingetrazo_core import Vec3 as V
-from ingetrazo_render import shortcut_text
+from ingetrazo_render import context_menu_action, shortcut_text
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from views import context_menu
 
 
 @pytest.fixture
@@ -86,7 +85,7 @@ def test_the_right_click_entry_is_repeatable_after_its_menu_dies(win):
     nb = b.normal()
     scene.select([a])
     assert win.show_viewport_context_menu().find("reverse").enabled
-    assert context_menu.action(win, win.view, "reverse")
+    assert context_menu_action(win, win.view, "reverse")
     assert win.view._ctx_menu is None
     scene.select([b])
     assert win.repeat_last_command()
@@ -143,13 +142,13 @@ def test_right_click_offers_the_repeat_first(win):
     scene.select([b])
     first = win.show_viewport_context_menu().verbs()[0]
     assert first.label == "Repeat Reverse Faces" and first.enabled
-    assert context_menu.action(win, win.view, first.id)
+    assert context_menu_action(win, win.view, first.id)
     assert V.dotProduct(b.normal(), nb) < -0.99
 
 
 def test_right_click_disables_repeat_until_a_command_runs(win):
     row = repeat_row(win)
-    assert not row.enabled and not context_menu.action(win, win.view, row.id)
+    assert not row.enabled and not context_menu_action(win, win.view, row.id)
 
 
 def test_keyboard_settings_identify_repeat_independently_of_its_label(win):

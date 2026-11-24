@@ -31,32 +31,6 @@ fn translated(tr: &Bound<'_, PyAny>, source: &str, fields: &[(&str, &str)]) -> P
     tr.call((source,), Some(&args))?.extract()
 }
 
-/// The command can fail before a sheet exists (for example, an unreadable install).
-#[pyfunction]
-pub fn open_extensions<'py>(win: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    let py = win.py();
-    let sheets = py.import("views.report_sheets")?;
-    let chrome = py.import("views.chrome_sheet")?;
-    let opened = sheets.call_method0("Extensions")
-        .and_then(|provider| chrome.call_method1("open", (win, provider)));
-    match opened {
-        Ok(result) => Ok(result),
-        Err(error) if error.is_instance_of::<pyo3::exceptions::PyException>(py) => {
-            crate::extension_setup::log_failure(py, "the extension manager could not open", &error);
-            let tr = py.import("core.i18n")?.getattr("tr")?;
-            let detail = translated(&tr, "Could not load extensions: {error}",
-                                    &[("error", &error.to_string())])?;
-            let kwargs = PyDict::new(py);
-            kwargs.set_item("tone", "warning")?;
-            let title = tr.call1(("Extension manager",))?;
-            py.import("views.chrome_dialogs")?
-                .call_method("notify", (win, title, detail), Some(&kwargs))?;
-            Ok(py.None().into_bound(py))
-        }
-        Err(error) => Err(error),
-    }
-}
-
 const TAGS: &[(&str, &str)] = &[
     ("architecture", "Architecture"),
     ("bim", "BIM"),

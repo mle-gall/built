@@ -129,7 +129,7 @@ fn text_target<'py>(
 
 /// The menu and the editor resolve the same text, including a letter in an open group.
 #[pyfunction]
-fn text_editable(scene: &Bound<'_, PyAny>, group: &Bound<'_, PyAny>) -> PyResult<Option<bool>> {
+pub(crate) fn text_editable(scene: &Bound<'_, PyAny>, group: &Bound<'_, PyAny>) -> PyResult<Option<bool>> {
     let Some(text) = text_target(scene, group)? else {
         return Ok(None);
     };

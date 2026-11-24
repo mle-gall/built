@@ -1,5 +1,5 @@
 //! The viewport right-click menu (docs/context-menu.md; Python builds it in
-//! views/context_menu.py). There is no More › and there are no submenus.
+//! viewport_menu.rs). There is no More › and there are no submenus.
 //! A header names what was hit and where it is filed. Each row is one verb,
 //! or a family of verbs as segments ("Intersect: Model | Selection |
 //! Context"). A click reports `ctx:<id>` and closes the menu.

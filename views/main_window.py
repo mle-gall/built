@@ -1819,8 +1819,8 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
                   max(avail.top(), min(frame.top(), avail.bottom() - frame.height() + 1)))
 
     def _on_manage_extensions(self) -> None:
-        from views.report_sheets import show
-        show(self, "extensions")
+        from ingetrazo_render import show_report_sheet
+        show_report_sheet(self, "extensions")
 
     @staticmethod
     def example_extensions() -> list:
@@ -1895,11 +1895,11 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         tool.on_activate(self.viewport)
 
     def _on_cut_list(self) -> None:
-        from views.report_sheets import show
+        from ingetrazo_render import show_report_sheet as show
         show(self, "cutlist")
 
     def _on_about(self) -> None:
-        from views.report_sheets import show
+        from ingetrazo_render import show_report_sheet as show
         show(self, "about")
 
     def _file_actions(self) -> list[QAction]:
@@ -2046,7 +2046,7 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         actions.append(import_menu)
 
 
-        from views.wgpu_deliveries import export_form
+        from ingetrazo_render import delivery_export_form as export_form
         delivery_export = QAction(tr("Export…"), self)
         delivery_export.triggered.connect(lambda: export_form(self, one_off=True))
         actions.append(delivery_export)
@@ -3334,7 +3334,7 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
     # ---- File handling ------------------------------------------------------
     # ---- The document's camera (issue #60) ---------------------------------
     def _show_camera_settings(self):
-        from views.inspector_bridge import open_camera
+        from ingetrazo_render import open_camera
         return open_camera(self)
 
     # ---- Documents: one project per tab (#1066, views/documents.py) ---------
@@ -3617,7 +3617,7 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         self._enter_document(doc)
 
     def _leave_document(self, doc) -> None:
-        from views.inspector_bridge import leave_camera
+        from ingetrazo_render import leave_camera
         leave_camera(doc)
         vp = doc.viewport
         if vp is None:
@@ -4777,7 +4777,7 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
             dialog.show()
 
     def _on_export_stl(self):
-        from views.wgpu_deliveries import export_form
+        from ingetrazo_render import delivery_export_form as export_form
         return export_form(self, one_off=True, initial_format="stl")
 
     def _on_export_obj(self) -> None:
@@ -4820,7 +4820,7 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         self._export("COLLADA", "dae", tr("COLLADA (*.dae)"), dae_format.save_dae)
 
     def _on_export_view_dxf(self):
-        from views.wgpu_deliveries import export_form
+        from ingetrazo_render import delivery_export_form as export_form
         return export_form(self, one_off=True, initial_format="dxf")
 
     def _export(self, label: str, suffix: str, file_filter, writer) -> None:
@@ -4896,7 +4896,7 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         if not self._confirm_quit():
             event.ignore()
             return
-        from views import chrome_sheet
+        from ingetrazo_render import chrome_sheet
         chrome_sheet.close(self)
         _forms.close_all(self)
         self._release_check = None

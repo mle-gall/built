@@ -5,7 +5,7 @@ typed in, the lens as a focal length, roll, frame shift, clipping and the
 picture's frame — kept by scenes and by the document."""
 from __future__ import annotations
 
-from views.inspector_bridge import open_camera
+from ingetrazo_render import open_camera
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -223,7 +223,7 @@ def test_the_document_keeps_the_lens(tmp_path, native_host):
 # ---- The window -------------------------------------------------------------------
 
 def _edit(win, key, value=None):
-    from views.inspector_bridge import action
+    from ingetrazo_render import inspector_action as action
     import json
 
     view = getattr(win._doc, "stand_in", None) or win.viewport
@@ -564,7 +564,7 @@ def test_typing_the_lens_with_zoom_on(native_host):
     cam.set_projection("perspective")
     vp.set_nav_mode(None)
 
-    from app_shell.events import KeyEvent
+    from ingetrazo_render import KeyEvent
     five = KeyEvent(True, Qt.Key_5, 0, "5", False)
     assert not vp._handle_value_key(five)
     assert vp._value_buffer == ""

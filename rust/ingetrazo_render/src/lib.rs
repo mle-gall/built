@@ -49,6 +49,13 @@ mod model_views;
 mod pane_dividers;
 /// The one verb source: kinds, menu rows, inspector verbs, dispatch.
 mod verbs;
+mod viewport_menu;
+mod shell_commands;
+mod report_sheets;
+mod inspector_host;
+mod shell_events;
+mod deliveries_host;
+mod sheet_runtime;
 pub mod ui;
 mod host_context;
 mod inspector;
@@ -2666,7 +2673,7 @@ impl Renderer {
     fn ui_project_tab_rects(&self) -> Vec<Option<(f32, f32, f32, f32)>> {
         self.ui.as_ref().map_or_else(Vec::new, |ui| ui.project_tab_rects())
     }
-    /// The right-click menu at (x, y) (views/context_menu.py): header, then
+    /// The right-click menu at (x, y) (viewport_menu.rs): header, then
     /// rows of (family label, [(id, label, key, enabled, checked)]).
     fn ui_set_context_menu(&mut self, x: f32, y: f32, title: String, subtitle: String,
                            rows: Vec<(String, Vec<(String, String, String, bool, i8)>)>) {
@@ -2770,7 +2777,7 @@ impl Renderer {
     fn ui_set_form(&mut self, title: String, fields: Vec<ui::FormField>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_form(title, fields); }
     }
-    /// The large sheet (views/chrome_sheet.py): the whole sheet as JSON
+    /// The large sheet (sheet_runtime.rs): the whole sheet as JSON
     /// (ui/large_sheet.rs `Spec`); "" closes it.
     fn ui_set_large_sheet(&mut self, spec: &str) -> PyResult<()> {
         match self.ui.as_mut() {
@@ -3157,7 +3164,7 @@ impl Renderer {
 /// Public so the `built` app can register the module statically
 /// (`append_to_inittab`) and share one renderer with the embedded Python.
 /// Check a large sheet's JSON against the chrome's schema without a
-/// renderer (views/chrome_sheet.py tests): "" when it parses, else why.
+/// renderer (sheet_runtime.rs tests): "" when it parses, else why.
 #[pyfunction]
 fn large_sheet_check(spec: &str) -> String {
     match serde_json::from_str::<ui::large_sheet::Spec>(spec) {
@@ -3242,6 +3249,13 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     component_replacement::register(m)?;
     inspection_edits::register(m)?;
     context_edits::register(m)?;
+    viewport_menu::register(m)?;
+    shell_commands::register(m)?;
+    report_sheets::register(m)?;
+    inspector_host::register(m)?;
+    shell_events::register(m)?;
+    deliveries_host::register(m)?;
+    sheet_runtime::register(m)?;
     native_view_actions::register(m)?;
     plugin_workspace::register(m)?;
     m.add_class::<link_watch::LinkWatch>()?;
@@ -3310,7 +3324,6 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(commands::command_chrome, m)?)?;
     m.add_function(wrap_pyfunction!(commands::activate_view_command, m)?)?;
     m.add_function(wrap_pyfunction!(commands::rail_layout, m)?)?;
-    m.add_function(wrap_pyfunction!(commands::invalidate_command_rails, m)?)?;
     verbs::register(m)?;
     m.add_function(wrap_pyfunction!(ui::tokens::chrome_token, m)?)?;
     m.add_function(wrap_pyfunction!(commands::leave_navigation, m)?)?;
@@ -3341,7 +3354,6 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(preview_texture::preview_materials, m)?)?;
     m.add_function(wrap_pyfunction!(tool_feedback::sync_tool_preview, m)?)?;
     m.add_function(wrap_pyfunction!(transform_marks::prepare_face_marks, m)?)?;
-    m.add_function(wrap_pyfunction!(extensions::open_extensions,m)?)?;
     m.add_class::<extensions::ExtensionBrowser>()?;
     m.add_class::<component_catalogue::ComponentCatalogue>()?;
     m.add_function(wrap_pyfunction!(surfaces::surface_spec, m)?)?;

@@ -19,7 +19,7 @@ def _todos_los_atajos(win):
 
 
 def _pulsar(win, tecla, modificador=Qt.NoModifier):
-    from app_shell.command_action import ShellAction
+    from ingetrazo_render import ShellAction
     disparos = []
     trigger = ShellAction.trigger
     def observar(action):

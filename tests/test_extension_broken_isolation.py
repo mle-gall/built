@@ -245,13 +245,14 @@ def test_a_card_that_cannot_be_built_costs_only_itself(plugins, monkeypatch):
 # ---- the window -----------------------------------------------------------
 
 def test_a_manager_that_fails_to_open_says_so(native_question_host, monkeypatch, tmp_path):
-    from views import chrome_dialogs, report_sheets
+    import ingetrazo_render
+    from views import chrome_dialogs
 
     def explode():
         raise PermissionError(13, "denied")
 
     monkeypatch.setattr("core.paths.user_log_dir", lambda: tmp_path)
-    monkeypatch.setattr(report_sheets, "Extensions", explode)
+    monkeypatch.setattr(ingetrazo_render, "ExtensionsSheet", explode)
     window = native_question_host.window
     native_question_host.menu("extensions")
     notice = chrome_dialogs.history(window)[0]

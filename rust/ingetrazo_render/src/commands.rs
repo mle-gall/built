@@ -362,8 +362,7 @@ pub fn rail_layout() -> Vec<Vec<(&'static str, &'static str)>> {
 }
 
 /// Each document sends its rail to its own renderer when it next draws.
-#[pyfunction]
-pub fn invalidate_command_rails(win: &Bound<'_, PyAny>) -> PyResult<()> {
+pub(crate) fn invalidate_command_rails(win: &Bound<'_, PyAny>) -> PyResult<()> {
     for doc in win.call_method0("documents")?.try_iter()? {
         let view = doc?.getattr("stand_in")?;
         if !view.is_none() {
