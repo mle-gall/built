@@ -1181,6 +1181,14 @@ impl PyMeshStore {
             })?
             .1)
     }
+    #[staticmethod]
+    #[pyo3(signature=(mesh, origin, normal, faces=None))]
+    fn command_rebuild_plane(mesh: &Bound<'_, PyAny>, origin: [f64;3], normal: [f64;3], faces: Option<Vec<u128>>)
+        -> PyResult<Option<(bool,usize,usize)>> {
+        Ok(super::command_facade::command_rebuild_plane(mesh,origin,normal,faces)?
+            .map(|r: super::command_facade::RebuiltPlane| (r.ran,r.rebuilt,r.dirty)))
+    }
+
     fn drawing_paint_owners(
         &self,
         before: &PyStoreSnapshot,
