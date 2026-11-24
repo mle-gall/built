@@ -70,6 +70,7 @@ mod shadow_fit;
 mod textures;
 pub mod tool_cursors;
 pub mod icon_art;
+mod billboards;
 mod annotation_canvas;
 mod tool_overlay;
 mod image_assets;
@@ -3268,6 +3269,9 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(icon_art::icon_keys, m)?)?;
     m.add_function(wrap_pyfunction!(icon_art::letter_art, m)?)?;
     m.add_function(wrap_pyfunction!(icon_art::row_icon_art, m)?)?;
+    m.add_function(wrap_pyfunction!(billboards::billboard_stances, m)?)?;
+    m.add_function(wrap_pyfunction!(billboards::billboard_worlds, m)?)?;
+    m.add_function(wrap_pyfunction!(billboards::sprite_mapping, m)?)?;
     m.add_function(wrap_pyfunction!(tool_cursors::tool_cursor_name, m)?)?;
     m.add_function(wrap_pyfunction!(tool_cursors::tool_cursor_art, m)?)?;
     m.add_function(wrap_pyfunction!(image_assets::texture_has_alpha,m)?)?;
