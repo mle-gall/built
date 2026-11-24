@@ -38,8 +38,7 @@ from PySide6.QtWidgets import (
 )
 
 from core import general_settings as _gs
-from core.i18n import (LANGUAGE_NAMES, SYSTEM, available_languages,
-                       current_language, resolve_language, set_language, tr)
+from core.i18n import current_language, tr
 from views.theme import style as theme_style
 from core.units import fmt_pair
 from views.filedialogs import file_dialogs
@@ -1298,7 +1297,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         prefs_action.triggered.connect(self._on_preferences)
         window_menu.addAction(prefs_action)
         self._act_preferences = prefs_action
-        self._build_language_menu(window_menu)
 
         # Extensions — third-party plugin tools (core.extensions engine).
         self._build_extensions_menu(menubar)
@@ -1345,31 +1343,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         about_action.triggered.connect(self._on_about)
         help_menu.addAction(about_action)
 
-    # ---- Language -----------------------------------------------------------
-    _LANGUAGE_NAMES = LANGUAGE_NAMES
-
-    def _build_language_menu(self, parent_menu) -> None:
-        lang_menu = parent_menu.addMenu(tr("Language"))
-        group = QActionGroup(self)
-        group.setExclusive(True)
-        chosen = str(QSettings().value("language") or SYSTEM)
-        for code in [SYSTEM] + available_languages():
-            if code == SYSTEM:
-                action = QAction(tr("Same as the system"), self)
-            else:
-                action = QAction(self._LANGUAGE_NAMES.get(code, code), self)
-            action.setStatusTip(tr(
-                "Show the menus and messages in this language, from the "
-                "next start."))
-            action.setCheckable(True)
-            action.setChecked(code == chosen)
-            action.triggered.connect(lambda _checked, c=code: self._on_set_language(c))
-            group.addAction(action)
-            lang_menu.addAction(action)
-            if code == SYSTEM:
-                lang_menu.addSeparator()
-
-    # ---- Sidebar strip (LibreOffice-style) ---------------------------------
     #: Trays that start closed until the user opens them (Window ▸
     #: Panels): the specialised workspaces. Properties, the Browser and
     #: the bundled AI and Render tabs open. An extension may
@@ -1549,25 +1522,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
     def _on_preferences(self) -> None:
         """Window ▸ Preferences: the scattered QSettings in one dialog."""
         self.open_preferences()
-
-    def _on_set_language(self, code: str) -> None:
-        """Persist the chosen UI language (applied on next start).
-
-        ``code`` may be :data:`SYSTEM`; switching between it and the
-        language it resolves to is saved without a restart note."""
-        st = QSettings()
-        if code == str(st.value("language") or SYSTEM):
-            return
-        st.setValue("language", code)
-        lang = resolve_language(code)
-        if lang == current_language():
-            return
-        set_language(lang)
-        _dialogs.information(
-            self,
-            tr("Language changed"),
-            tr("Restart Built to apply the new language."),
-        )
 
     def _build_extensions_menu(self, menubar) -> None:
         """The Extensions menu: one entry per plugin tool discovered by

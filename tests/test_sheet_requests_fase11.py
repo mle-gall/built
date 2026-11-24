@@ -8,10 +8,6 @@ a deleted one's render because the caches are keyed on ``id(frame)``.
 """
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
 import pytest
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_core import Vec3 as QVector3D
