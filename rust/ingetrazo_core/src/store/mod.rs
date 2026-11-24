@@ -31,7 +31,7 @@ pub mod cow;
 pub mod diff;
 pub(crate) mod drawing;
 pub(crate) mod commands;
-mod fold;
+pub(crate) mod fold;
 mod landing;
 pub(crate) mod push_band;
 mod soften;

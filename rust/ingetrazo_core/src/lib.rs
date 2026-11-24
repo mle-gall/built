@@ -79,6 +79,7 @@ mod object_replay;
 mod object_relink;
 mod object_vertices;
 mod object_bulk;
+mod object_fold;
 mod object_drawing;
 mod draw_plan;
 mod object_outline;
@@ -498,6 +499,10 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     object_replay::register(m)?;
     object_drawing::register(m)?;
     m.add_class::<object_outline::FaceOutline>()?;
+    m.add_function(wrap_pyfunction!(object_outline::winding_footprint, m)?)?;
+    m.add_function(wrap_pyfunction!(object_outline::object_winding, m)?)?;
+    m.add_function(wrap_pyfunction!(object_outline::heal_objects, m)?)?;
+    m.add_function(wrap_pyfunction!(object_outline::heal_partners, m)?)?;
     m.add_class::<sheets::projection::PageProjection>()?;
     m.add_function(wrap_pyfunction!(object_outline::segment_hit, m)?)?;
     m.add_function(wrap_pyfunction!(object_outline::refined_ring, m)?)?;

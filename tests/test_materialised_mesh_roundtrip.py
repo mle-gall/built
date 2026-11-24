@@ -60,3 +60,30 @@ def test_seeded_materialisation_relink_weld_and_face_recovery():
                 for f in mesh.faces])
 
     assert digest.hexdigest() == "b9856a05e4efedbe2af0b5a51a669b0bb343a8b455620a414502271c3ec5aeaf"
+
+
+def test_seeded_fold_keeps_winding_attributes_and_soft_edges():
+    from math import cos, pi, sin
+    from core.topology import fold_nonplanar_faces, _key
+
+    rng = random.Random(67852)
+    digest = hashlib.sha256()
+    for seed in range(48):
+        n = rng.randint(4, 10)
+        mesh = empty_store_mesh()
+        points = [Vec3(2 * cos(2 * pi * i / n), sin(2 * pi * i / n),
+                       rng.uniform(-0.2, 0.2)) for i in range(n)]
+        face = mesh.add_face(points)
+        face.attrs["seed"] = seed
+        for edge in mesh.edges:
+            edge.curve = 17
+        mesh._materialise()
+        moved = {_key(p) for p in points[:n // 2]} if seed % 2 else set()
+        assert fold_nonplanar_faces(mesh, moved=moved) == [face]
+        def ring(f):
+            coords = [p.toTuple() for p in f.vertices]
+            return min(coords[i:] + coords[:i] for i in range(len(coords)))
+        graph = (sorted((ring(f), f.attrs["seed"]) for f in mesh.faces),
+                 sorted((sorted((e.a.toTuple(), e.b.toTuple())), e.soft) for e in mesh.edges))
+        digest.update(json.dumps(graph, sort_keys=True).encode())
+    assert digest.hexdigest() == "8272ab89c8fab76290fc702e348b93139b42ed04a478706852a6dbb2f341b309"

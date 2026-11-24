@@ -250,5 +250,6 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     sub.add_function(wrap_pyfunction!(crate::object_vertices::bulk_weld, &sub)?)?;
     sub.add_function(wrap_pyfunction!(crate::object_bulk::add_edges_welded, &sub)?)?;
     sub.add_function(wrap_pyfunction!(crate::object_bulk::add_faces_welded, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_fold::fold_objects, &sub)?)?;
     m.add_submodule(&sub)
 }

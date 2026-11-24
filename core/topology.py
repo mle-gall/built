@@ -1106,58 +1106,7 @@ def winding_footprint(mesh):
     from core.store_mesh import StoreMesh, _hypot
     if type(mesh) is StoreMesh and _hypot() is not None:
         return mesh._store.snapshot()
-    return _python_winding_footprint(mesh)
-
-
-def _python_winding_footprint(mesh):
-    out = []
-    for f in mesh.faces:
-        outer = [QVector3D(v) for v in f.vertices]
-        if not outer:
-            continue
-        xs = [v.x() for v in outer]
-        ys = [v.y() for v in outer]
-        zs = [v.z() for v in outer]
-        box = (min(xs), min(ys), min(zs), max(xs), max(ys), max(zs))
-        out.append((f, f.normal(), outer,
-                    [[QVector3D(v) for v in h] for h in f.holes], box))
-    return out
-
-
-def _footprint_normal(footprint, face: Face):
-    """The normal of the pre-edit face that covered ``face``'s interior, or
-    ``None`` when it lies where no face was (a region drawn anew)."""
-    from core.triangulate import plane_axes
-    n = face.normal()
-    point = _interior_point(face.vertices, n)
-    if point is None:
-        return None
-    t = _PLANAR_TOLERANCE
-    px, py, pz = point.x(), point.y(), point.z()
-    for _old, old_n, outer, holes, box in footprint:
-        # After a curve the planar rebuild re-makes EVERY face, and each is
-        # looked up here: the box keeps that from costing a polygon test
-        # per pair.
-        if not (box[0] - t <= px <= box[3] + t and box[1] - t <= py <= box[4] + t
-                and box[2] - t <= pz <= box[5] + t):
-            continue
-        if abs(QVector3D.dotProduct(old_n, n)) < 0.999:
-            continue
-        u, w = plane_axes(old_n)
-        origin = outer[0]
-        if abs(QVector3D.dotProduct(point - origin, old_n)) > _PLANAR_TOLERANCE:
-            continue
-
-        def proj(p):
-            rel = p - origin
-            return (QVector3D.dotProduct(rel, u), QVector3D.dotProduct(rel, w))
-
-        pt = proj(point)
-        if (_point_inside_2d(pt, [proj(v) for v in outer])
-                and not any(_point_inside_2d(pt, [proj(v) for v in h])
-                            for h in holes)):
-            return old_n
-    return None
+    return kernel.winding_footprint(mesh.faces)
 
 
 def orient_coplanar_faces(mesh, footprint=None) -> list:
@@ -1184,51 +1133,24 @@ def orient_coplanar_faces(mesh, footprint=None) -> list:
     if type(mesh) is StoreMesh and (footprint is None or hasattr(footprint, "namespace")) and (hypot := _hypot()) is not None:
         keys = mesh._store.winding_flips(hypot, sys.version_info >= (3, 12), footprint)
         flipped = [FaceView(mesh, k) for k in keys]
-        for face in flipped:
-            outer = list(reversed(face.vertices))
-            holes = face.holes
-            attrs = dict(face.attrs)
-            mesh.remove_face(face)
-            mesh.add_face(outer, holes or None).attrs = attrs
-        return flipped
-    if hasattr(footprint, "namespace"):
-        # A legacy command materialised the mesh after taking the footprint.
-        from core.store_mesh import become_store
-        from core.mesh import Mesh
-        from core import _native
-        old = Mesh()
-        store = _native.native.MeshStore(footprint.namespace)
-        store.restore(footprint, footprint.namespace)
-        become_store(old, store, [])
-        footprint = _python_winding_footprint(old)
-    groups: dict = {}
-    for f in mesh.faces:
-        n = f.normal()
-        axis = (round(abs(n.x()), 2), round(abs(n.y()), 2), round(abs(n.z()), 2))
-        dist = round(abs(QVector3D.dotProduct(n, f.centroid())), 2)
-        groups.setdefault((axis, dist), []).append(f)
-
-    owned = {f.key for f, *_ in footprint} if footprint is not None else set()
-    flipped: list = []
-    for fs in groups.values():
-        if len(fs) < 2:
-            continue
-        dominant = QVector3D(0.0, 0.0, 0.0)
-        for f in fs:
-            dominant += f.normal() * f.area()
-        for f in fs:
-            target = dominant
-            if footprint is not None:
-                if f.key in owned:
-                    continue                      # the user's, as it stands
-                old_n = _footprint_normal(footprint, f)
-                target = dominant if old_n is None else old_n
-            if QVector3D.dotProduct(f.normal(), target) < 0:
-                outer = [QVector3D(v) for v in f.vertices][::-1]
-                holes = [[QVector3D(v) for v in h] for h in f.holes]
-                mesh.remove_face(f)
-                mesh.add_face(outer, holes or None).attrs = dict(f.attrs)
-                flipped.append(f)
+    else:
+        if hasattr(footprint, "namespace"):
+            # A legacy command materialised the mesh after taking the footprint.
+            from core.store_mesh import become_store
+            from core.mesh import Mesh
+            from core import _native
+            old = Mesh()
+            store = _native.native.MeshStore(footprint.namespace)
+            store.restore(footprint, footprint.namespace)
+            become_store(old, store, [])
+            footprint = kernel.winding_footprint(old.faces)
+        flipped = kernel.object_winding(mesh.faces, footprint)
+    for face in flipped:
+        outer = list(reversed(face.vertices))
+        holes = face.holes
+        attrs = dict(face.attrs)
+        mesh.remove_face(face)
+        mesh.add_face(outer, holes or None).attrs = attrs
     return flipped
 
 
@@ -1335,126 +1257,6 @@ def resolve_tjunctions(mesh, max_iter: int = 1000) -> None:
     sweep_tjunctions(mesh)
 
 
-#: The largest warped face folded by the exact search below (O(n³)); a
-#: bigger one keeps earcut's pieces.
-_FOLD_DP_MAX = 96
-
-
-def _flat_on_neighbour(mesh, face, tri) -> bool:
-    """Whether a fold piece of ``face`` would have all three corners on
-    another face — lying in that face's plane, doubling it."""
-    common = None
-    for p in tri:
-        v = mesh.vertex_at(p)
-        if v is None:
-            return False
-        at = mesh.faces_at(v)
-        common = set(at) if common is None else common & at
-        common.discard(face)
-        if not common:
-            return False
-    return bool(common)
-
-
-def _fold_pieces(mesh, face) -> list | None:
-    """The triangles of the least total area that cover ``face`` (a
-    polygon without holes) with no piece flat on another face — the
-    smoothest fold, as a lowered curve makes a ruled ramp. Every piece
-    faces the way the warped face does: one turned over would cut through
-    the solid (a box's corner moved through it onto the far corner) and
-    must stay refused. ``None`` when no such triangulation exists."""
-    pts = [QVector3D(p) for p in face.vertices]
-    n = len(pts)
-    inf = float("inf")
-    facing = face.normal()
-
-    def area(i, k, j):
-        a, b, c = pts[i], pts[k], pts[j]
-        cross = QVector3D.crossProduct(b - a, c - a)
-        if QVector3D.dotProduct(cross, facing) <= 0.0:
-            return 0.0          # turned over: never a piece
-        return cross.length() * 0.5
-
-    cost = [[0.0] * n for _ in range(n)]
-    pick = [[-1] * n for _ in range(n)]
-    for gap in range(2, n):
-        for i in range(0, n - gap):
-            j = i + gap
-            best, at = inf, -1
-            for k in range(i + 1, j):
-                sub = cost[i][k] + cost[k][j]
-                if sub >= best:
-                    continue
-                tri_area = area(i, k, j)
-                if tri_area < 1e-12:
-                    continue
-                if _flat_on_neighbour(mesh, face, (pts[i], pts[k], pts[j])):
-                    continue
-                if sub + tri_area < best:
-                    best, at = sub + tri_area, k
-            cost[i][j], pick[i][j] = best, at
-    if cost[0][n - 1] == inf:
-        return None
-    out = []
-    stack = [(0, n - 1)]
-    while stack:
-        i, j = stack.pop()
-        if j - i < 2:
-            continue
-        k = pick[i][j]
-        out.append((pts[i], pts[k], pts[j]))
-        stack.append((i, k))
-        stack.append((k, j))
-    return out
-
-
-def _strip_triangles(face, moved: set):
-    """The warped ``face`` cut into a strip of triangles between its moved
-    and its unmoved corners, or ``None`` when that does not apply.
-
-    A move that lowers a curved edge onto the floor (#1294) leaves the top
-    face with a fixed back edge and the whole arc on the ground. Earcut
-    happily joins arc points to arc points, and those triangles, all on the
-    ground, merge into a flat piece lying over the floor: the join is then
-    refused as two faces overlapping. A strip uses, in every triangle, a
-    corner from each side — the ruled surface the drag shows.
-
-    Applies to a face with no holes whose corners, going round, are one run
-    of moved corners (position keys in ``moved``) and one run of unmoved
-    ones; every triangle must keep an area and face the way the face did.
-
-    The usual fold of a modeller: the unmoved side first, from the first moved
-    corner, then ONE fan from the last unmoved corner over every moved one
-    — a flat piece and a cone, not a fan from each end. Returns
-    ``(triangles, apex, rim)``: the fan's apex and the moved corners inside
-    the fan, whose fold edges may be soft (:func:`fold_nonplanar_faces`)."""
-    if face.holes:
-        return None
-    loop = face.vertices
-    n = len(loop)
-    flags = [_key(p) in moved for p in loop]
-    if n < 4 or all(flags) or not any(flags):
-        return None
-    starts = [i for i in range(n) if flags[i] and not flags[i - 1]]
-    if len(starts) != 1:
-        return None
-    i0 = starts[0]
-    order = [loop[(i0 + k) % n] for k in range(n)]
-    m = sum(flags)
-    a = order[:m]                    # moved, in loop order
-    b = order[m:][::-1]              # unmoved, against it: b[0] is next to a[0]
-    normal = face.normal()
-    tris = [(a[0], b[j + 1], b[j]) for j in range(len(b) - 1)]
-    tris += [(a[i], a[i + 1], b[-1]) for i in range(len(a) - 1)]
-    for tri in tris:
-        cross = QVector3D.crossProduct(tri[1] - tri[0], tri[2] - tri[0])
-        if (cross.length() < 1e-12
-                or QVector3D.dotProduct(cross, normal) <= 0.0):
-            return None
-    return ([tuple(QVector3D(p) for p in tri) for tri in tris],
-            QVector3D(b[-1]), [QVector3D(p) for p in a[1:-1]])
-
-
 def fold_nonplanar_faces(mesh, tolerance: float = _PLANAR_TOLERANCE,
                          moved: set | None = None) -> list:
     """*Autofold*: split every face a move has warped out of its
@@ -1470,7 +1272,7 @@ def fold_nonplanar_faces(mesh, tolerance: float = _PLANAR_TOLERANCE,
 
     ``moved``: the position keys the move left its vertices at. A face whose
     corners are one run of moved and one run of unmoved ones folds as a
-    strip between the two (:func:`_strip_triangles`, #1294). Where the
+    strip between the two (#1294). Where the
     moved corners run along a curve (an arc's segments), the fold edges of
     its fan are soft, so the cone reads as one smooth surface, as the
     curve's own wall did; the fold between the flat piece and the cone
@@ -1482,112 +1284,9 @@ def fold_nonplanar_faces(mesh, tolerance: float = _PLANAR_TOLERANCE,
         if result is not None:
             return mesh._inherit_face_attrs(*result)
 
-    folded = []
-    # A store-backed mesh names its warped faces itself (the same verdicts,
-    # without reading every face through a view); folding one face changes
-    # no other face's planarity, so the list can be taken up front.
     store_scan = getattr(mesh, "nonplanar_faces", None)
-    faces = (store_scan(tolerance) if store_scan is not None
-             else list(mesh.faces))
-    for face in faces:
-        pts = list(face.vertices)
-        for hole in face.holes:
-            pts += list(hole)
-        if len(pts) <= 3 or is_planar(pts, tolerance):
-            continue
-        strip = _strip_triangles(face, moved) if moved else None
-        tris = strip[0] if strip else face.triangulate()
-        soft = _curve_fan_edges(mesh, face, *strip[1:]) if strip else []
-        if len(tris) < 2:
-            continue
-        exact = False
-        if (not strip and not face.holes and len(face.loop) <= _FOLD_DP_MAX
-                and any(_flat_on_neighbour(mesh, face, t) for t in tris)):
-            # Earcut laid a piece flat on a neighbouring face (#1294): a
-            # curve lowered onto the one below it left three of its points
-            # in the floor's plane, the piece doubled the floor and the
-            # join guard refused the whole move. Fold so no piece does.
-            better = _fold_pieces(mesh, face)
-            if better:
-                tris = better
-                exact = True
-        mesh.remove_face(face)
-        pieces = {
-            mesh.add_face([QVector3D(a), QVector3D(b), QVector3D(c)])
-            for a, b, c in tris
-        }
-        for piece in pieces:  # every planar piece continues the warped mother
-            piece.attrs = dict(face.attrs)
-        merged = True
-        while merged:
-            merged = False
-            for f in list(pieces):
-                if f not in mesh.faces:
-                    pieces.discard(f)
-                    continue
-                lp = f.loop
-                for i in range(len(lp)):
-                    e = mesh.find_edge(lp[i], lp[(i + 1) % len(lp)])
-                    if e is None or len(e.faces) != 2:
-                        continue
-                    g = e.faces[0] if e.faces[1] == f else e.faces[1]
-                    if g == f or g not in pieces:
-                        continue
-                    if strip and not is_planar(f.vertices + g.vertices,
-                                               tolerance):
-                        # A strip's neighbours on a fine curve are within
-                        # the angle below yet not in one plane: merging
-                        # them pinched the result. Truly flat runs only.
-                        continue
-                    # The exact fold's fan of thin pieces turns a little at
-                    # each: merged on nearly parallel normals alone they made
-                    # "faces" millimetres out of their plane (#1294). Half
-                    # the tolerance: is_planar measures from a plane through
-                    # three corners, and which three depends on the merge
-                    # order. Earcut's pieces keep the old rule for now.
-                    if (QVector3D.dotProduct(f.normal().normalized(),
-                                             g.normal().normalized()) > 0.999
-                            and (not exact
-                                 or is_planar(list(f.vertices)
-                                              + list(g.vertices),
-                                              tolerance * 0.5))):
-                        region = mesh.dissolve_edge(e)
-                        if region is not None:
-                            region.attrs = dict(face.attrs)
-                            pieces.discard(f)
-                            pieces.discard(g)
-                            pieces.add(region)
-                            merged = True
-                            break
-                if merged:
-                    break
-        for apex, rim in soft:
-            e = mesh.find_edge(mesh.vertex_at(apex), mesh.vertex_at(rim))
-            if e is not None and len(e.faces) == 2:
-                e.soft = True
-        folded.append(face)
-    return folded
-
-
-def _curve_fan_edges(mesh, face, apex, rim) -> list:
-    """The fan edges ``(apex, rim point)`` to soften: those reaching a rim
-    point that sits inside a curve — both of its sides along the face's
-    loop are segments of a curve (an arc or a circle, ``Edge.curve``). A
-    bent line of plain edges keeps its folds as lines."""
-    loop = face.loop
-    n = len(loop)
-    index = {_key(v.position): i for i, v in enumerate(loop)}
-    out = []
-    for p in rim:
-        i = index.get(_key(p))
-        if i is None:
-            continue
-        sides = (mesh.find_edge(loop[i - 1], loop[i]),
-                 mesh.find_edge(loop[i], loop[(i + 1) % n]))
-        if all(e is not None and getattr(e, "curve", None) is not None
-               for e in sides):
-            out.append((QVector3D(apex), QVector3D(p)))
-    return out
+    faces = store_scan(tolerance) if store_scan is not None else mesh.faces
+    return kernel.object_replay.fold_objects(mesh, faces, tolerance, list(moved or ()))
 
 
 def _box_grid(lo, hi):
@@ -1825,48 +1524,7 @@ _BOX_PAD = 1e-2
 
 
 def _heal_partners(N, A, LO, HI) -> dict:
-    """``{i: rows}``: for each face, the smaller faces parallel to it whose
-    box lies inside its own — the only ones that can be lying on top of it.
-    Faces with none are left out.
-
-    The same test, asked for a block of faces at a time: asked face by
-    face it was four array passes over the whole model per face, and with
-    2000 faces that alone was a fifth of a second after every stroke."""
-    import numpy as np
-    out: dict = {}
-    n = len(A)
-    for start in range(0, n, 512):
-        rows = slice(start, min(start + 512, n))
-        # Parallel and smaller first: few pairs pass, and only those have
-        # their boxes compared.
-        ii, jj = np.nonzero((np.abs(N[rows] @ N.T) > 0.999)
-                            & (A[None, :] < A[rows, None]))
-        if not len(ii):
-            continue
-        gi = ii + start
-        ok = ((LO[jj] >= LO[gi] - _BOX_PAD).all(axis=1)
-              & (HI[jj] <= HI[gi] + _BOX_PAD).all(axis=1))
-        gi, jj = gi[ok], jj[ok]
-        if not len(gi):
-            continue
-        cuts = np.flatnonzero(np.diff(gi)) + 1
-        for block_i, block_j in zip(np.split(gi, cuts), np.split(jj, cuts)):
-            out[int(block_i[0])] = block_j
-    return out
-
-
-def _outer_boxes(faces):
-    """``(lo, hi)``: per face, the bounding box of its outer loop."""
-    import numpy as np
-    if not faces:
-        return np.empty((0, 3)), np.empty((0, 3))
-    lo = np.empty((len(faces), 3))
-    hi = np.empty((len(faces), 3))
-    for i, f in enumerate(faces):
-        pts = np.array([(v.x(), v.y(), v.z()) for v in f.vertices])
-        lo[i] = pts.min(axis=0)
-        hi[i] = pts.max(axis=0)
-    return lo, hi
+    return kernel.heal_partners(N, A, LO, HI, _BOX_PAD)
 
 
 def heal_overlapping_faces(mesh, coverage: float = 0.5, partial=None,
@@ -1938,113 +1596,26 @@ def heal_overlapping_faces(mesh, coverage: float = 0.5, partial=None,
                 outer, [[QVector3D(v) for v in h] for h in keep] or None
             ).attrs = dict(face.attrs)
 
+    import sys
+    compensated = sys.version_info >= (3, 12)
     if store is not None:
-        import sys
         removed_keys, punches = store.heal_plan(
-            coverage, bool(partial), _BOX_PAD, _hypot(), sys.version_info >= (3, 12))
-        removed = [FaceView(mesh, k) for k in removed_keys]
+            coverage, bool(partial), _BOX_PAD, _hypot(), compensated)
+        def face_at(key):
+            return FaceView(mesh, key)
+        removed = [face_at(k) for k in removed_keys]
         if removed_keys:
             store.remove_drawing_faces(removed_keys)
             mesh._dirty(len(removed_keys))
-        for key, smalls in punches:
-            _punch_overlaps(mesh, FaceView(mesh, key), [FaceView(mesh, k) for k in smalls])
-        if not flat:
-            from core.orient import orient_outward
-            orient_outward(mesh)
-        return removed
-
-    # 2. Remove a redundant mother covered by faces that aren't in its holes.
-    removed: list = []
-    # Normals and areas ONCE per face, not once per pair: this sweep is
-    # O(F^2) and it re-derived ``Face.normal()`` (a Newell walk over
-    # QVector3D) inside the inner loop — 4.2M Newell computations, 66 s of
-    # the 82 s a Delete cost on the imported barbecue. Faces are only
-    # REMOVED here, and a removed face stays alive in ``removed``, so no
-    # cached id can be reused under us.
-    import numpy as np
-    snap = list(mesh.faces)
-    N = np.array([[(n := f.normal()).x(), n.y(), n.z()] for f in snap],
-                 dtype=np.float64) if snap else np.empty((0, 3))
-    A = np.array([f.area() for f in snap], dtype=np.float64)
-    LO, HI = _outer_boxes(snap)
-    gone: set = set()
-    partners = _heal_partners(N, A, LO, HI)
-    for i, face in enumerate(snap):
-        a_face = A[i]
-        if a_face < _SPLIT_TOLERANCE:
-            continue
-        # The coplanar partner test for the WHOLE mesh in one dot product.
-        # Same tolerance, same pairs — but the scalar form ran 4.2M times in
-        # Python (66 s of the 82 s a Delete cost inside the imported
-        # barbecue, plus 5 s once its normals were cached). A loop strictly
-        # inside the face sits inside its box too: on a flat plan every face
-        # is coplanar with every other, and the box test is what keeps an
-        # exploded DWG of 700 faces from testing them all (#491).
-        cand = partners.get(i, ())
-        covered = 0.0
-        for j in cand:
-            g = snap[j]
-            if g == face or g.key in gone:
-                continue
-            if (loop_inside_face(face, g.vertices)
-                    and not _g_inside_a_hole(face, g.vertices)):
-                covered += A[j]
-        if covered > coverage * a_face:
+    else:
+        faces = list(mesh.faces)
+        removed_rows, punches = kernel.heal_objects(faces, coverage, bool(partial), _BOX_PAD, compensated)
+        face_at = faces.__getitem__
+        removed = [face_at(i) for i in removed_rows]
+        for face in removed:
             mesh.remove_face(face)
-            removed.append(face)
-            gone.add(face.key)
-
-    # 3. (Flat plans) A small face whose body lies in a bigger coplanar face's
-    #    solid region is a partial overlap the auto-divide missed (a door piece
-    #    drawn over the wall). Don't delete it — the user wants it as its own
-    #    selectable face — instead punch a matching hole in the bigger face so
-    #    they no longer overlap. The small face fills that hole.
-    if partial:
-        from collections import defaultdict
-        # Rebuilt for THIS pass: pass 2 removed faces and the earlier passes
-        # may have rebuilt some, so the pass-2 caches no longer cover the
-        # mesh. Same reason as there — the sweep is O(F^2).
-        snap3 = list(mesh.faces)
-        N3 = np.array([[(n := f.normal()).x(), n.y(), n.z()] for f in snap3],
-                      dtype=np.float64) if snap3 else np.empty((0, 3))
-        A3 = np.array([f.area() for f in snap3], dtype=np.float64)
-        LO3, HI3 = _outer_boxes(snap3)
-        punch: dict = defaultdict(list)
-        for i3, face in enumerate(snap3):
-            if face.key in gone:
-                continue
-            # Guaranteed-interior probes: triangle centroids. A concave face's
-            # polygon centroid can fall OUTSIDE itself (an L around a circular
-            # sector lands inside the sector) and used to punch a bogus hole in
-            # a neighbour it merely borders — require the face's *body* (most of
-            # its triangles) to lie inside the bigger face instead.
-            tris = face.triangulate()
-            if not tris:
-                continue
-            probes = [(t0 + t1 + t2) / 3.0 for t0, t1, t2 in tris]
-            a_face = A3[i3]
-            # Probes are in this face's box and count only inside g's outer
-            # loop, so g's box must meet ours — 2.4 M probe tests, 135 s,
-            # on an exploded DWG plan without it (#491).
-            for j3 in np.flatnonzero((np.abs(N3 @ N3[i3]) > 0.999)
-                                     & (A3 > a_face)
-                                     & (LO3 <= HI3[i3] + _BOX_PAD).all(axis=1)
-                                     & (HI3 >= LO3[i3] - _BOX_PAD).all(axis=1)):
-                g = snap3[j3]
-                if g == face or g.key in gone:
-                    continue
-                if _g_inside_a_hole(g, face.vertices):
-                    continue  # already filling a hole — no overlap
-                inside = sum(1 for p in probes if _point_in_face_solid(g, p))
-                if inside * 2 > len(probes):
-                    punch[g].append(face)
-                    break
-        for g, smalls in punch.items():
-            _punch_overlaps(mesh, g, smalls)
-
-    # 4. (3D) Volumetric winding: a freshly drawn sub-face lands with whatever
-    #    winding the user traced; on a closed solid, orient per face (and
-    #    re-mark interior partitions). No-op on open meshes.
+    for ref, smalls in punches:
+        _punch_overlaps(mesh, face_at(ref), [face_at(i) for i in smalls])
     if not flat:
         from core.orient import orient_outward
         orient_outward(mesh)
