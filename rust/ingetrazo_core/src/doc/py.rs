@@ -2673,7 +2673,7 @@ pub(super) fn doc_get_many<'py>(py: Python<'py>, handles: &Bound<'py, PyAny>, fi
 /// The distinct placements of the trees under `roots`, in document order
 /// (`core.purge.iter_groups`): one call, no list view per node.
 #[pyfunction]
-fn doc_walk<'py>(py: Python<'py>, roots: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyList>> {
+pub(super) fn doc_walk<'py>(py: Python<'py>, roots: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyList>> {
     let members = keys_of(roots)?;
     let hs: Vec<Py<PyAny>> = {
         let mut d = lock();
@@ -3049,11 +3049,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(doc_attr_patch, m)?)?;
     m.add_class::<super::anchor::ElementAnchor>()?;
     m.add_class::<super::history::DocumentHistory>()?;
-    super::commands::register(m)?;
-    super::steps::register(m)?;
-    super::group_steps::register(m)?;
-    super::paint_steps::register(m)?;
-    super::tag_steps::register(m)?;
     m.add_class::<super::feed::FeedReaders>()?;
     m.add_class::<DocRecord>()?;
     m.add_class::<DocAttr>()?;

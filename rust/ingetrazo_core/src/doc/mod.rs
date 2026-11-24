@@ -37,6 +37,7 @@ mod steps;
 mod group_steps;
 mod paint_steps;
 mod tag_steps;
+mod purge;
 mod file_view;
 pub(crate) mod drawing;
 pub mod occurrences;
