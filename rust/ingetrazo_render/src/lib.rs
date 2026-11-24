@@ -26,6 +26,7 @@ pub mod tool_cursors;
 mod annotation_canvas;
 mod image_assets;
 mod survey_raster;
+mod survey_import;
 mod material_textures;
 // R-look: isolated style and background passes.
 mod style;
@@ -2969,6 +2970,11 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(tool_cursors::tool_cursor_art, m)?)?;
     m.add_function(wrap_pyfunction!(image_assets::texture_cutout,m)?)?;
     m.add_function(wrap_pyfunction!(image_assets::readable_tga,m)?)?;
+    m.add_function(wrap_pyfunction!(survey_import::read_survey_mesh,m)?)?;
+    m.add_function(wrap_pyfunction!(survey_import::survey_mesh_datum,m)?)?;
+    m.add_function(wrap_pyfunction!(survey_import::place_survey_mesh,m)?)?;
+    m.add_function(wrap_pyfunction!(survey_import::place_alignment,m)?)?;
+    m.add_function(wrap_pyfunction!(survey_import::place_survey_points,m)?)?;
     m.add_function(wrap_pyfunction!(captured_frame::blank_picture,m)?)?;
     m.add_function(wrap_pyfunction!(captured_frame::archive_thumbnail,m)?)?;
     m.add_function(wrap_pyfunction!(captured_frame::archive_picture_png,m)?)?;

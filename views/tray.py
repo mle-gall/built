@@ -5758,61 +5758,7 @@ class SurveyPointsPanel(QWidget):
         return self._window.viewport.scene
 
     def _on_import(self) -> None:
-        from PySide6.QtWidgets import QFileDialog, QInputDialog
-        from core.history import AddGeoPointsCommand
-        from georef.points import (datum_for_rows, parse_points_csv,
-                                   points_from_rows)
-        path, _ = file_dialogs.getOpenFileName(
-            self, tr("Import survey points CSV"), "",
-            tr("CSV (*.csv *.txt);;All files (*)"))
-        if not path:
-            return
-        try:
-            with open(path, "r", encoding="utf-8", errors="replace") as fh:
-                rows = parse_points_csv(fh.read())
-        except (OSError, ValueError):
-            self._window.statusBar().showMessage(tr(
-                "Could not read survey points (expected P,N,E,Z,desc in UTM)"),
-                5000)
-            return
-        scene = self._scene()
-        datum = scene.georef
-        new_datum = None
-        if datum is None:
-            # A bare CSV doesn't carry its UTM zone — ask, then anchor the
-            # scene datum at the first point.
-            zone, ok = QInputDialog.getInt(
-                self, tr("UTM zone"),
-                tr("UTM zone of the survey (Peru: 17-19):"), 18, 1, 60)
-            if not ok:
-                return
-            hemi, ok = QInputDialog.getItem(
-                self, tr("Hemisphere"), tr("Hemisphere:"),
-                [tr("South"), tr("North")], 0, False)
-            if not ok:
-                return
-            new_datum = datum_for_rows(rows, zone, hemi == tr("North"))
-            datum = new_datum
-        points = points_from_rows(rows, datum)
-        self._window.viewport.history.execute(
-            AddGeoPointsCommand(points, datum=new_datum))
-        self._fit_to(points)
-        self._window.statusBar().showMessage(
-            tr("{n} survey points imported", n=len(points)), 4000)
-        self._window.viewport.update()
-        self.refresh()
-
-    def _fit_to(self, points) -> None:
-        if not points:
-            return
-        xs = [p.position.x() for p in points]
-        ys = [p.position.y() for p in points]
-        zs = [p.position.z() for p in points]
-        from ingetrazo_core import Vec3 as QVector3D
-        pad = 5.0
-        self._window.viewport.camera.fit_to(
-            QVector3D(min(xs) - pad, min(ys) - pad, min(zs) - pad),
-            QVector3D(max(xs) + pad, max(ys) + pad, max(zs) + pad))
+        self._window._on_import_survey_points()
 
     def _on_clear(self) -> None:
         from core.history import DeleteGeoPointsCommand

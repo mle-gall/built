@@ -854,3 +854,42 @@ def test_native_orthomosaic_import_and_undo(tmp_path):
               if line.startswith("[built] state ")]
     assert result.returncode == 0 and len(states) >= 2, result.stderr
     assert states[0]["dirty"] and all(not st["errors"] and not st["blocked_widgets"] for st in states)
+
+
+@pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
+                    reason="requires the native window")
+def test_native_survey_imports_share_datum_and_save(tmp_path):
+    from core.scene import Scene
+    from formats.igz import load_into, save_scene
+    from tests.test_photomesh import _write_odm_tree
+
+    path = tmp_path / "site.built"
+    save_scene(Scene(), path)
+    csv = tmp_path / "control.csv"
+    csv.write_text("1,8278698,717623,1750,origin\n")
+    alignment = tmp_path / "line.geojson"
+    alignment.write_text(json.dumps(dict(type="LineString", coordinates=[[-73., -15.], [-73.001, -15.]])))
+    obj = _write_odm_tree(tmp_path)
+    venv = fixture_venv(tmp_path,
+        "from views.filedialogs import file_dialogs\n"
+        "from georef.tile_fetcher import TileFetcher\n"
+        "TileFetcher.request = lambda *a, **k: None\n"
+        f"paths = {{'*.csv': {str(csv)!r}, '*.obj': {str(obj)!r}, '*.kml': {str(alignment)!r}}}\n"
+        "file_dialogs.getOpenFileName = lambda *a: (next(path for ext, path in paths.items() if ext in a[3]), '')\n")
+    script = tmp_path / "survey-steps"
+    script.write_text("wait 800\nmenu import:survey_points\nwait 300\nstate\nkey escape\nwait 300\nstate\n"
+                      "menu import:survey_points\nwait 300\nkey enter\nwait 300\nstate\n"
+                      "menu import:alignment\nwait 300\nmenu import:photomesh\nwait 700\nstate\n"
+                      "menu save\nwait 900\nquit\n")
+    result = run([str(BIN), "--root", str(ROOT), "--venv", str(venv), "--new-instance",
+                  "--size", "900x700", "--script", str(script), str(path)],
+                 capture_output=True, text=True, timeout=60)
+    states = [json.loads(x.removeprefix("[built] state ")) for x in result.stdout.splitlines()
+              if x.startswith("[built] state ")]
+    assert result.returncode == 0 and len(states) >= 4, result.stderr
+    assert [s["form_open"] for s in states[:4]] == [True, False, False, False]
+    assert all(not s["errors"] and not s["blocked_widgets"] for s in states), result.stderr
+    scene = Scene()
+    load_into(scene, path)
+    assert len(scene.geo_paths) == len(scene.geo_points) == 1
+    assert scene.photo_mesh.triangle_count == 2 and scene.georef.alt == pytest.approx(1750.)
