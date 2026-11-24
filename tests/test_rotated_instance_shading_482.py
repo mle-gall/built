@@ -10,17 +10,11 @@ chunk (copies with glass or painted backs) and the GPU instanced pass."""
 from __future__ import annotations
 
 from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np  # noqa: E402
-import pytest  # noqa: E402
-from PySide6.QtGui import QImage
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
-_app = QApplication.instance() or QApplication([])
 
 from core.group import Group, transformed_mesh  # noqa: E402
 from core.mesh import Mesh  # noqa: E402
@@ -70,11 +64,9 @@ def test_the_cpu_chunk_of_a_turned_copy_matches_the_plain_group():
             == vp._group_chunk(Group(_box(), "x"))["vcol"])
 
 
-def _pixels(img: QImage):
-    a = img.convertToFormat(QImage.Format_RGB32)
-    buf = np.frombuffer(a.constBits(), np.uint8).reshape(
-        a.height(), a.bytesPerLine())[:, :a.width() * 4]
-    return buf.reshape(a.height(), a.width(), 4)[..., :3].astype(int).copy()
+def _pixels(img):
+    rgba = np.frombuffer(img.rgba(), np.uint8).reshape(img.height, img.width, 4)
+    return rgba[..., :3].astype(int)
 
 
 def test_the_gpu_pass_lights_a_turned_copy_like_the_plain_group(native_gpu_host):
@@ -94,10 +86,10 @@ def test_the_gpu_pass_lights_a_turned_copy_like_the_plain_group(native_gpu_host)
     scene.groups += [far, inst]
     scene.version += 1
     assert vp._instanced_eligible(inst)
-    as_copy = _pixels(vp.render_image(300, 300, overlays=False))
+    as_copy = _pixels(vp.render_raster(300, 300, overlays=False))
     scene.groups[:] = [Group(transformed_mesh(_box(), _turn()), "g")]
     scene.version += 1
-    as_group = _pixels(vp.render_image(300, 300, overlays=False))
+    as_group = _pixels(vp.render_raster(300, 300, overlays=False))
     diff = np.abs(as_copy - as_group).sum(axis=2)
     # Face interiors agree to the bake's 1/64 steps; only edge pixels
     # (anti-aliasing) may differ more.

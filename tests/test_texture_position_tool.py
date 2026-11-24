@@ -14,9 +14,8 @@ from __future__ import annotations
 import math
 
 import pytest
-from PySide6.QtCore import QPointF, Qt
+from core.input_types import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
 
 from core.edits import build_add_edges
 from core.texture import face_uv_axes
@@ -27,19 +26,13 @@ from tools.texture_position import (PIN_MOVE, PIN_SCALE_ROTATE,
 
 @pytest.fixture(scope="module")
 def viewport():
-    app = QApplication.instance()
-    if app is None:
-        app = QApplication([])
-    elif not isinstance(app, QApplication):
-        pytest.skip("another Qt application flavour is already running")
     from tests.controller_surface import ControllerSurface as Viewport
-    from tests.qt_window_lifetime import close_window
     vp = Viewport(None)
     vp.resize(1000, 700)
     vp.camera.set_aspect(1000, 700)
     vp.flash_status = lambda *a, **k: None
     yield vp
-    close_window(vp)
+    vp.close()
 
 
 TEX = {"path": "brick.png", "sw": 0.5, "sh": 0.5}
@@ -63,11 +56,11 @@ def _textured_square(vp):
     return face
 
 
-def _ctx(vp, world, modifiers=Qt.NoModifier):
+def _ctx(vp, world, modifiers=Input.NoModifier):
     world = QVector3D(*world) if isinstance(world, tuple) else QVector3D(world)
     px = vp._world_to_pixel(world)
     assert px is not None
-    return ToolContext(viewport=vp, world=world, screen=QPointF(*px),
+    return ToolContext(viewport=vp, world=world, screen=ScreenPoint(*px),
                        modifiers=modifiers, snap=None)
 
 
@@ -170,7 +163,7 @@ def test_done_writes_one_undoable_map_and_esc_restores_then_leaves(viewport):
     tool = _begin(viewport, face)
     _drag(viewport, tool, (0.5, 0, 0), (0.8, 0.2, 0))
     depth = len(viewport.history.undo_stack)
-    assert tool.on_key(viewport, Qt.Key_Return, Qt.NoModifier)
+    assert tool.on_key(viewport, Input.Key_Return, Input.NoModifier)
     assert tool.face is None                      # left the tool
     assert not viewport._suppressed_faces
     assert len(viewport.history.undo_stack) == depth + 1
@@ -238,7 +231,7 @@ def test_the_back_side_texture_is_positioned_and_stored_on_the_back(viewport):
     assert not tool.begin(viewport, face, QVector3D(0.7, 0.3, 0), side="front")
     assert tool.begin(viewport, face, QVector3D(0.7, 0.3, 0), side="back")
     _drag(viewport, tool, (0.5, 0, 0), (0.8, 0.2, 0))
-    assert tool.on_key(viewport, Qt.Key_Return, Qt.NoModifier)
+    assert tool.on_key(viewport, Input.Key_Return, Input.NoModifier)
     assert "texture" not in face.attrs                 # the front stays bare
     back = face.attrs["back"]
     assert back["mat"] == "brick_clay" and len(back["texture"]["uvw"]) == 8
@@ -260,7 +253,7 @@ def _px_per_metre(vp, at=(0.5, 0.0, 0.0)):
     return math.hypot(b[0] - a[0], b[1] - a[1])
 
 
-def _green_to(vp, tool, angle_deg, radius, modifiers=Qt.NoModifier):
+def _green_to(vp, tool, angle_deg, radius, modifiers=Input.NoModifier):
     """Drag the green pin (at (1,0,0) after a fresh begin, red at (0.5,0,0))
     to ``angle_deg`` about the red pin, ``radius`` metres away."""
     a = math.radians(angle_deg)
@@ -299,7 +292,7 @@ def test_ctrl_keeps_the_sweep_free(viewport):
     face = _textured_square(viewport)
     tool = _begin(viewport, face)
     near = (tool.DISC_PX * 1.0) / _px_per_metre(viewport)
-    _green_to(viewport, tool, 87.0, radius=near, modifiers=Qt.ControlModifier)
+    _green_to(viewport, tool, 87.0, radius=near, modifiers=Input.ControlModifier)
     assert not tool._on_tick
     assert abs(_tile_angle(tool) - 87.0) < 0.11
     tool.on_release(viewport)

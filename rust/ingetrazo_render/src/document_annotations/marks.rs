@@ -99,7 +99,12 @@ fn draw_snap_indicator(v: &Obj, p: &Obj, snap: &Obj) -> PyResult<()> {
         && p.cast::<crate::annotation_canvas::AnnotationCanvas>()
             .is_ok()
     {
-        p.call_method1("draw_snap", (kind, at, rgb, segments, label))?;
+        let channels = |[r, g, b]: [f64; 3]| (r, g, b);
+        let guides: Vec<_> = segments
+            .into_iter()
+            .map(|(a, b, color)| (a, b, channels(color)))
+            .collect();
+        p.call_method1("draw_snap", (kind, at, channels(rgb), guides, label))?;
         return Ok(());
     }
     for (a, b, color) in segments {
