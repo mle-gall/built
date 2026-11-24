@@ -25,6 +25,7 @@ pub struct State {
     axis_stop: bool,
     finger: bool,
     manager: Option<gestures::ZwpPointerGesturesV1>,
+    seats: Vec<(u32, wl_seat::WlSeat)>,
     pointers: Vec<(
         wl_seat::WlSeat,
         wl_pointer::WlPointer,
@@ -62,6 +63,29 @@ impl Seat {
         let _ = self.queue.flush();
     }
 }
+impl Drop for Seat {
+    fn drop(&mut self) {
+        for (_, pointer, gesture) in self.state.pointers.drain(..) {
+            if let Some(gesture) = gesture {
+                gesture.destroy();
+            }
+            if pointer.version() >= 3 {
+                pointer.release();
+            }
+        }
+        for (_, seat) in self.state.seats.drain(..) {
+            if seat.version() >= 5 {
+                seat.release();
+            }
+        }
+        if let Some(manager) = self.state.manager.take() {
+            if manager.version() >= 2 {
+                manager.release();
+            }
+        }
+        let _ = self.queue.flush();
+    }
+}
 impl State {
     fn bind_gestures(&mut self, q: &QueueHandle<Self>) {
         if let Some(manager) = &self.manager {
@@ -90,7 +114,8 @@ impl Dispatch<wl_registry::WlRegistry, ()> for State {
         {
             match interface.as_str() {
                 "wl_seat" => {
-                    registry.bind::<wl_seat::WlSeat, _, _>(name, version.min(7), q, ());
+                    let seat = registry.bind(name, version.min(7), q, ());
+                    s.seats.push((name, seat));
                 }
                 "zwp_pointer_gestures_v1" => {
                     s.manager = Some(registry.bind(name, version.min(3), q, ()));

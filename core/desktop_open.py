@@ -41,7 +41,7 @@ def open_url(target) -> bool:
             opener = "/usr/bin/open" if sys.platform == "darwin" else shutil.which("xdg-open")
             if not opener:
                 return False
-            subprocess.Popen([opener, arg], env=host_env() if _launch_ourselves() else None,
+            subprocess.Popen([opener, arg], env=host_env() if sys.platform == "darwin" or _launch_ourselves() else None,
                              stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                              stderr=subprocess.DEVNULL, start_new_session=True)
         return True

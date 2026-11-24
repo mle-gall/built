@@ -61,3 +61,6 @@ fn progress_receives_press_and_release_without_reentering_winit() {
     assert!(!pointer.consumed("release", (15., 20.), 1));
     assert!(linux_pointer::progress(handle, 2., 0).is_empty());
 }
+
+#[path = "support/wayland.rs"]
+mod wayland_protocol;
