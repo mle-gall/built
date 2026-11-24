@@ -27,23 +27,15 @@ takes it.
 """
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFocusEvent, QKeyEvent
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
-
-_app = QApplication.instance() or QApplication([])
 
 
-def _viewport():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    win.show()
-    _app.processEvents()
+def _viewport(native_host):
+    win = native_host.window
     return win, win.viewport
 
 
@@ -63,129 +55,97 @@ def _busy(vp):
     assert vp._tool_busy(vp.active_tool)
 
 
-def _close(win, vp):
-    win._saved_version = vp.scene.version
-    win.close()
-
-
-def test_alt_does_nothing_when_no_operation_is_under_way():
+def test_alt_does_nothing_when_no_operation_is_under_way(native_host):
     """The whole of issue #26: his Alt+Tab happens between operations."""
-    win, vp = _viewport()
-    try:
-        assert vp.linear_inference_mode == "all"
+    win, vp = _viewport(native_host)
+    assert vp.linear_inference_mode == "all"
+    _press(vp, Qt.Key_Alt)
+    _release(vp, Qt.Key_Alt)
+    assert vp.linear_inference_mode == "all"
+
+
+def test_alt_cycles_while_a_line_is_being_drawn(native_host):
+    win, vp = _viewport(native_host)
+    win._activate_tool("line")
+    _busy(vp)
+    for expected in ("off", "parallel_perp", "all"):
         _press(vp, Qt.Key_Alt)
         _release(vp, Qt.Key_Alt)
-        assert vp.linear_inference_mode == "all"
-    finally:
-        _close(win, vp)
+        assert vp.linear_inference_mode == expected
 
 
-def test_alt_cycles_while_a_line_is_being_drawn():
-    win, vp = _viewport()
-    try:
-        win._activate_tool("line")
-        _busy(vp)
-        for expected in ("off", "parallel_perp", "all"):
-            _press(vp, Qt.Key_Alt)
-            _release(vp, Qt.Key_Alt)
-            assert vp.linear_inference_mode == expected
-    finally:
-        _close(win, vp)
-
-
-def test_it_acts_on_the_press_so_the_menu_bar_cannot_steal_it():
+def test_it_acts_on_the_press_so_the_menu_bar_cannot_steal_it(native_host):
     """Qt's menu bar takes focus on the Alt RELEASE. Acting on the press is
     what makes the toggle reach us at all."""
-    win, vp = _viewport()
-    try:
-        win._activate_tool("line")
-        _busy(vp)
-        _press(vp, Qt.Key_Alt)
-        assert vp.linear_inference_mode == "off"      # already done
-    finally:
-        _close(win, vp)
+    win, vp = _viewport(native_host)
+    win._activate_tool("line")
+    _busy(vp)
+    _press(vp, Qt.Key_Alt)
+    assert vp.linear_inference_mode == "off"      # already done
 
 
-def test_the_release_is_swallowed_so_the_menu_bar_never_sees_it():
-    win, vp = _viewport()
-    try:
-        win._activate_tool("line")
-        _busy(vp)
-        _press(vp, Qt.Key_Alt)
-        ev = _release(vp, Qt.Key_Alt)
-        assert ev.isAccepted()
-    finally:
-        _close(win, vp)
+def test_the_release_is_swallowed_so_the_menu_bar_never_sees_it(native_host):
+    win, vp = _viewport(native_host)
+    win._activate_tool("line")
+    _busy(vp)
+    _press(vp, Qt.Key_Alt)
+    ev = _release(vp, Qt.Key_Alt)
+    assert ev.isAccepted()
 
 
-def test_an_idle_alt_release_is_left_alone_for_the_menus():
+def test_an_idle_alt_release_is_left_alone_for_the_menus(native_host):
     """With nothing in progress the key is not ours: Alt must keep opening
     the menu bar like it does in every other program."""
-    win, vp = _viewport()
-    try:
-        _press(vp, Qt.Key_Alt)
-        assert vp._alt_tap is False
-    finally:
-        _close(win, vp)
+    win, vp = _viewport(native_host)
+    _press(vp, Qt.Key_Alt)
+    assert vp._alt_tap is False
 
 
-def test_losing_focus_drops_the_claim_on_the_release():
-    win, vp = _viewport()
-    try:
-        win._activate_tool("line")
-        _busy(vp)
-        _press(vp, Qt.Key_Alt)
-        vp.focusOutEvent(QFocusEvent(QFocusEvent.FocusOut,
-                                     Qt.ActiveWindowFocusReason))
-        assert vp._alt_tap is False
-    finally:
-        _close(win, vp)
+def test_losing_focus_drops_the_claim_on_the_release(native_host):
+    win, vp = _viewport(native_host)
+    win._activate_tool("line")
+    _busy(vp)
+    _press(vp, Qt.Key_Alt)
+    vp.focusOutEvent(QFocusEvent(QFocusEvent.FocusOut,
+                                 Qt.ActiveWindowFocusReason))
+    assert vp._alt_tap is False
 
 
-def test_a_click_mid_operation_does_not_give_the_inferences_back():
+def test_a_click_mid_operation_does_not_give_the_inferences_back(native_host):
     """The second click of a line is not a new gesture."""
     from PySide6.QtCore import QPointF
     from PySide6.QtGui import QMouseEvent
 
-    win, vp = _viewport()
-    try:
-        win._activate_tool("line")
-        _busy(vp)
-        _press(vp, Qt.Key_Alt)
-        vp.mousePressEvent(QMouseEvent(
-            QMouseEvent.MouseButtonPress, QPointF(5, 5), Qt.LeftButton,
-            Qt.LeftButton, Qt.NoModifier))
-        assert vp.linear_inference_mode == "off"
-    finally:
-        _close(win, vp)
+    win, vp = _viewport(native_host)
+    win._activate_tool("line")
+    _busy(vp)
+    _press(vp, Qt.Key_Alt)
+    vp.mousePressEvent(QMouseEvent(
+        QMouseEvent.MouseButtonPress, QPointF(5, 5), Qt.LeftButton,
+        Qt.LeftButton, Qt.NoModifier))
+    assert vp.linear_inference_mode == "off"
 
 
-def test_changing_tool_gives_the_inferences_back():
-    win, vp = _viewport()
-    try:
-        win._activate_tool("line")
-        _busy(vp)
-        _press(vp, Qt.Key_Alt)
-        assert vp.linear_inference_mode == "off"
-        win._activate_tool("select")
-        assert vp.linear_inference_mode == "all"
-    finally:
-        _close(win, vp)
+def test_changing_tool_gives_the_inferences_back(native_host):
+    win, vp = _viewport(native_host)
+    win._activate_tool("line")
+    _busy(vp)
+    _press(vp, Qt.Key_Alt)
+    assert vp.linear_inference_mode == "off"
+    win._activate_tool("select")
+    assert vp.linear_inference_mode == "all"
 
 
-def test_escape_gives_the_inferences_back():
-    win, vp = _viewport()
-    try:
-        win._activate_tool("line")
-        _busy(vp)
-        _press(vp, Qt.Key_Alt)
-        vp.escape()
-        assert vp.linear_inference_mode == "all"
-    finally:
-        _close(win, vp)
+def test_escape_gives_the_inferences_back(native_host):
+    win, vp = _viewport(native_host)
+    win._activate_tool("line")
+    _busy(vp)
+    _press(vp, Qt.Key_Alt)
+    vp.escape()
+    assert vp.linear_inference_mode == "all"
 
 
-def test_the_status_bar_offers_alt_and_names_the_state():
+def test_the_status_bar_offers_alt_and_names_the_state(native_host):
     """The usual status bar puts the offer AND the current state on one line
     while drawing: «Alt = Activar/desactivar "Inferencias lineales"
     (Ninguno activo)»."""
@@ -200,14 +160,11 @@ def test_the_status_bar_offers_alt_and_names_the_state():
     assert "none" in alt_inference_hint("off")
     assert "parallel" in alt_inference_hint("parallel_perp")
 
-    win, vp = _viewport()
-    try:
-        win._activate_tool("line")
-        key = win._tool_key(vp.active_tool)
-        idle = hint_for(key, vp.active_tool, None, "all")
-        _busy(vp)
-        drawing = hint_for(key, vp.active_tool, None, "off")
-        assert "Alt" not in idle, "nothing to offer before the first click"
-        assert "Alt" in drawing and "none" in drawing
-    finally:
-        _close(win, vp)
+    win, vp = _viewport(native_host)
+    win._activate_tool("line")
+    key = win._tool_key(vp.active_tool)
+    idle = hint_for(key, vp.active_tool, None, "all")
+    _busy(vp)
+    drawing = hint_for(key, vp.active_tool, None, "off")
+    assert "Alt" not in idle, "nothing to offer before the first click"
+    assert "Alt" in drawing and "none" in drawing

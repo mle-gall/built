@@ -21,21 +21,17 @@ the point snaps and the square.
 """
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from types import SimpleNamespace
 
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
 from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QMouseEvent
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
 
 from core.snap import compute_snap
 
-_app = QApplication.instance() or QApplication([])
 
 #: The kinds that hold the point on a line through the first corner.
 _LINE_KINDS = {"axis", "axis_inference", "reference", "through_point",
@@ -140,20 +136,17 @@ FIRST = V(0, 1)
 _HALF_PX = 0.005
 
 
-def _scene():
+def _scene(native_host):
     from core.edits import build_add_edges
-    from views.main_window import MainWindow
-    win = MainWindow()
-    win.show()
-    win.resize(1200, 800)
-    _app.processEvents()
+
+    win = native_host.window
+    native_host.resize(1200, 800, 1.0)
     vp = win.viewport
     vp.history.execute(build_add_edges(vp.scene, [WALL, POST]))
     vp.camera.set_view("top")
     vp.camera.target = V(2.5, 1.0, 0.0)
     vp.camera.distance = 8.0
     vp.scene.version += 1
-    _app.processEvents()
     return win, vp
 
 
@@ -168,7 +161,6 @@ def _press(vp, px, py):
     vp._dispatch_tool_click(QMouseEvent(
         QMouseEvent.MouseButtonPress, QPointF(px, py),
         Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
-    _app.processEvents()
 
 
 def _off_axis_px(vp, cursor):
@@ -183,96 +175,81 @@ def _off_axis_px(vp, cursor):
     (V(4.0, 1.05), "reference"),       # square off the wall: the purple line
     (V(5.0, 1.05), "from_point"),      # the post's corner, foot on the diagonal
 ])
-def test_a_thin_rectangle_keeps_its_width(far, rule, monkeypatch):
+def test_a_thin_rectangle_keeps_its_width(native_host, far, rule, monkeypatch):
     # The hover reads the live modifiers: a Shift left over from another
     # test's last key event would lock the axis under this one.
     from PySide6.QtGui import QGuiApplication
     monkeypatch.setattr(QGuiApplication, "keyboardModifiers",
                         staticmethod(lambda: Qt.NoModifier))
-    win, vp = _scene()
-    try:
-        assert _off_axis_px(vp, far) < vp.snap_threshold_px
+    win, vp = _scene(native_host)
+    assert _off_axis_px(vp, far) < vp.snap_threshold_px
 
-        win._activate_tool("rectangle")
-        _app.processEvents()
-        _press(vp, *_hover(vp, FIRST))
-        tool = vp.active_tool
-        first = tool.start_point
-        assert first is not None
+    win._activate_tool("rectangle")
+    _press(vp, *_hover(vp, FIRST))
+    tool = vp.active_tool
+    first = tool.start_point
+    assert first is not None
 
-        # Read as a line, the diagonal really is pulled onto the first
-        # corner's row here: the bug as it was.
-        tool.diagonal_span = False
-        _hover(vp, far)
-        assert vp.last_snap.kind == rule
-        assert abs(tool.hover_point.y() - first.y()) < 1e-6
-        del tool.diagonal_span
+    # Read as a line, the diagonal really is pulled onto the first
+    # corner's row here: the bug as it was.
+    tool.diagonal_span = False
+    _hover(vp, far)
+    assert vp.last_snap.kind == rule
+    assert abs(tool.hover_point.y() - first.y()) < 1e-6
+    del tool.diagonal_span
 
-        # The cursor sits on a whole pixel, so the corner is the cursor's
-        # own point within half a pixel (5 mm here) — and not on the row.
-        px, py = _hover(vp, far)
-        assert vp.last_snap.kind not in _LINE_KINDS, vp.last_snap.kind
-        corner = QVector3D(tool.hover_point)
-        assert abs(corner.y() - far.y()) < _HALF_PX
-        assert abs(corner.x() - far.x()) < _HALF_PX
+    # The cursor sits on a whole pixel, so the corner is the cursor's
+    # own point within half a pixel (5 mm here) — and not on the row.
+    px, py = _hover(vp, far)
+    assert vp.last_snap.kind not in _LINE_KINDS, vp.last_snap.kind
+    corner = QVector3D(tool.hover_point)
+    assert abs(corner.y() - far.y()) < _HALF_PX
+    assert abs(corner.x() - far.x()) < _HALF_PX
 
-        before = len(vp.scene.mesh.faces)
-        _press(vp, px, py)
-        built = vp.scene.mesh.faces[before:]
-        assert len(built) == 1
-        assert built[0].area() == pytest.approx(
-            abs((corner.x() - first.x()) * (corner.y() - first.y())),
-            rel=1e-4)
-    finally:
-        win._saved_version = vp.scene.version
-        win.close()
+    before = len(vp.scene.mesh.faces)
+    _press(vp, px, py)
+    built = vp.scene.mesh.faces[before:]
+    assert len(built) == 1
+    assert built[0].area() == pytest.approx(
+        abs((corner.x() - first.x()) * (corner.y() - first.y())),
+        rel=1e-4)
 
 
-def test_the_far_corner_lines_up_with_a_visited_corner():
+def test_the_far_corner_lines_up_with_a_visited_corner(native_host):
     """The cursor visits the post's top corner, then comes back down to
     give the strip its length: the far corner is held level with that
     corner along X — and the width stays the cursor's."""
-    win, vp = _scene()
-    try:
-        win._activate_tool("rectangle")
-        _app.processEvents()
-        _press(vp, *_hover(vp, FIRST))
-        vp.inference.acquire(*vp._world_to_pixel(POST[1]))
-        assert vp.inference._acquired_point is not None
+    win, vp = _scene(native_host)
+    win._activate_tool("rectangle")
+    _press(vp, *_hover(vp, FIRST))
+    vp.inference.acquire(*vp._world_to_pixel(POST[1]))
+    assert vp.inference._acquired_point is not None
 
-        _hover(vp, V(5.02, 1.05))
-        assert vp.last_snap.kind == "from_point"
-        point = vp.active_tool.hover_point
-        assert abs(point.x() - 5.0) < 1e-6
-        assert abs(point.y() - 1.05) < _HALF_PX
-    finally:
-        win._saved_version = vp.scene.version
-        win.close()
+    _hover(vp, V(5.02, 1.05))
+    assert vp.last_snap.kind == "from_point"
+    point = vp.active_tool.hover_point
+    assert abs(point.x() - 5.0) < 1e-6
+    assert abs(point.y() - 1.05) < _HALF_PX
 
 
-def test_the_rotated_rectangle_reads_its_width_off_the_diagonal_too():
+def test_the_rotated_rectangle_reads_its_width_off_the_diagonal_too(native_host):
     """The Rotated Rectangle's base edge IS a line from the first corner
     (its inferences stay); its width is not. The snap still runs from the
     first corner, and where the second protractor is seen edge-on — a flat
     rectangle drawn from the top view — the tool takes the snapped point
     as it comes: square off the wall, the width came out zero."""
-    win, vp = _scene()
-    try:
-        win._activate_tool("rotated_rect")
-        _app.processEvents()
-        tool = vp.active_tool
-        _press(vp, *_hover(vp, FIRST))
-        _press(vp, *_hover(vp, V(4.0, FIRST.y())))
-        assert tool.base_point is not None
+    win, vp = _scene(native_host)
+    win._activate_tool("rotated_rect")
+    tool = vp.active_tool
+    _press(vp, *_hover(vp, FIRST))
+    _press(vp, *_hover(vp, V(4.0, FIRST.y())))
+    assert tool.base_point is not None
 
-        _hover(vp, V(2.0, 1.05))
-        assert vp.last_snap.kind not in _LINE_KINDS, vp.last_snap.kind
-        width, _angle = tool._width_and_angle(tool.hover_point, tool._locked)
-        # Both clicks sit on whole pixels: within a pixel of 5 cm.
-        assert abs(width - 0.05) < 2 * _HALF_PX
-    finally:
-        win._saved_version = vp.scene.version
-        win.close()
+    _hover(vp, V(2.0, 1.05))
+    assert vp.last_snap.kind not in _LINE_KINDS, vp.last_snap.kind
+    width, _angle = tool._width_and_angle(tool.hover_point, tool._locked)
+    # Both clicks sit on whole pixels: within a pixel of 5 cm.
+    assert abs(width - 0.05) < 2 * _HALF_PX
 
 
 def test_the_rotated_rectangle_base_edge_keeps_its_line_inferences():
@@ -287,21 +264,17 @@ def test_the_rotated_rectangle_base_edge_keeps_its_line_inferences():
     assert tool.diagonal_span
 
 
-def test_an_image_with_a_free_aspect_keeps_its_height():
+def test_an_image_with_a_free_aspect_keeps_its_height(native_host):
     """The Image tool's second click is the opposite corner as well; with
     Shift's free aspect a thin strip lost its height the same way."""
     from tools.image import ImageTool
-    win, vp = _scene()
-    try:
-        tool = ImageTool()
-        tool.load("plan.png", 1.0)
-        vp.set_active_tool(tool)
-        _press(vp, *_hover(vp, FIRST))
-        _hover(vp, V(4.0, 1.05))
-        assert vp.last_snap.kind not in _LINE_KINDS, vp.last_snap.kind
-        tool._free_aspect = True        # Shift, as the hover reads it
-        _u, v = tool._frame(tool.start_point, tool.hover_point)
-        assert abs(v.length() - 0.05) < 2 * _HALF_PX
-    finally:
-        win._saved_version = vp.scene.version
-        win.close()
+    win, vp = _scene(native_host)
+    tool = ImageTool()
+    tool.load("plan.png", 1.0)
+    vp.set_active_tool(tool)
+    _press(vp, *_hover(vp, FIRST))
+    _hover(vp, V(4.0, 1.05))
+    assert vp.last_snap.kind not in _LINE_KINDS, vp.last_snap.kind
+    tool._free_aspect = True        # Shift, as the hover reads it
+    _u, v = tool._frame(tool.start_point, tool.hover_point)
+    assert abs(v.length() - 0.05) < 2 * _HALF_PX
