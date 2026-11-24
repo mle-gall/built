@@ -12,6 +12,8 @@ pub mod move_tool;
 pub mod plane;
 pub mod preview;
 pub mod rectangle;
+pub mod circle;
+pub mod rotated_rectangle;
 pub mod py;
 pub mod select;
 #[cfg(test)]
@@ -108,8 +110,27 @@ pub enum ToolEvent {
     /// names a point of the model (None: no kind known), before an event.
     Frame { axes: [P3; 4], names_point: Option<bool> },
     Value(Value),
+    /// A segment or side count typed as `Ns` (Circle, Polygon, Arc).
+    Segments(i64),
+    /// What only the view knows, before a pointer or value event.
+    View(ViewReading),
     /// The plane the operation keeps to (a face clicked first, a plane lock).
     WorkPlane(Option<(P3, P3)>),
+}
+
+/// What the view reads for a tool that needs more than the snapped point
+/// (the Rotated Rectangle's protractors).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ViewReading {
+    /// The ray under the cursor: origin and unit direction.
+    pub ray: Option<(P3, P3)>,
+    /// The axis the view's axis lock holds, a unit vector.
+    pub axis_lock: Option<P3>,
+    /// A protractor at a fixed screen size: its world radius (None when
+    /// the view could not measure it) and whether the cursor is near its rim.
+    pub protractor: Option<(Option<f64>, bool)>,
+    /// The normal of the plane the view draws on.
+    pub plane_normal: Option<P3>,
 }
 
 /// What a protocol command answered, reduced to what tools read.
@@ -308,6 +329,9 @@ pub fn new_tool(kind: &str) -> Option<Box<dyn Tool>> {
         "select" => Some(Box::new(select::SelectTool::default())),
         "line" => Some(Box::new(line::LineTool::default())),
         "rectangle" => Some(Box::new(rectangle::RectangleTool::default())),
+        "circle" => Some(Box::new(circle::RadialTool::circle())),
+        "polygon" => Some(Box::new(circle::RadialTool::polygon())),
+        "rotated_rectangle" => Some(Box::new(rotated_rectangle::RotatedRectangleTool::default())),
         "move" => Some(Box::new(move_tool::MoveTool::default())),
         _ => None,
     }

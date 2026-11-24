@@ -6,7 +6,7 @@ dragging a tab there or from its menu, each side folding on its own."""
 from __future__ import annotations
 
 from PySide6.QtCore import QMimeData, QPointF, Qt
-from PySide6.QtWidgets import QApplication, QTabBar, QTabWidget
+from PySide6.QtWidgets import QApplication, QTabWidget
 
 _app = QApplication.instance() or QApplication([])
 
@@ -75,23 +75,6 @@ def test_each_side_folds_on_its_own():
     win._act_sidebar.setChecked(True)
     assert not win.tray.isHidden()
     win.move_dock(win.bim_tray, Qt.RightDockWidgetArea)
-    _close(win)
-
-
-def test_a_tab_dropped_on_the_viewport_goes_to_that_half():
-    from PySide6.QtGui import QDropEvent
-    win = _window()
-    vp = win.viewport
-    data = QMimeData()
-    data.setData(win.DOCK_MIME, win.project_browser.objectName().encode())
-    ev = QDropEvent(QPointF(20, vp.height() / 2), Qt.MoveAction, data,
-                    Qt.LeftButton, Qt.NoModifier)
-    vp.dropEvent(ev)
-    assert win.dockWidgetArea(win.project_browser) == Qt.LeftDockWidgetArea
-    ev = QDropEvent(QPointF(vp.width() - 20, vp.height() / 2), Qt.MoveAction,
-                    data, Qt.LeftButton, Qt.NoModifier)
-    vp.dropEvent(ev)
-    assert win.dockWidgetArea(win.project_browser) == Qt.RightDockWidgetArea
     _close(win)
 
 

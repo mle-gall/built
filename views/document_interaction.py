@@ -22,7 +22,6 @@ from typing import Optional
 from core.units import fmt_len as _fmt_len
 from core.units import typed_value_text as _typed_value_text
 from core.units import is_expression
-from core.units import parse as parse_units
 
 # Perf telemetry (INGETRAZO_PERF=1): every operation slower than 50 ms and a
 # once-per-second frame summary land in ~/ingetrazo-perf.log — the tool for
@@ -89,7 +88,6 @@ from core.texture import face_uv_axes
 from core.layers import is_link_untagged
 from core.triangulate import plane_axes
 from tools.base import Tool, ToolContext
-from tools.rust_tools import selection_mode
 from core.inference import InferenceEngine
 
 
@@ -1795,15 +1793,6 @@ def _is_chord(modifiers) -> bool:
         and not (ctrl and alt)
 
 
-def _expression_fields(buffer: str) -> list:
-    """The ``;`` fields of a calculation typed in the value box, each one
-    starting with ``=`` (#630): ``=3/2;1+0,5`` → ``["=3/2", "=1+0,5"]``.
-    A comma followed by a space separates too, as everywhere in the box."""
-    fields = re.split(r";|,\s+", buffer.strip())
-    return [f.strip() if f.strip().startswith("=") else "=" + f.strip()
-            for f in fields]
-
-
 def _expression_result_text(value, plain: bool) -> str:
     """What a calculation drew, for the value box: ``3.725 m``, or the
     number alone for an angle or a factor (``plain``)."""
@@ -1819,6 +1808,151 @@ def _expression_result_text(value, plain: bool) -> str:
     if isinstance(value, tuple):
         return "; ".join(one(v) for v in value)
     return one(value)
+
+
+_VALUE_KEYS = {Qt.Key_Backspace: "backspace", Qt.Key_Escape: "escape"}
+
+
+def _value_accepts(vp, tool, text: str, buffer: str) -> dict:
+    """What the active ``tool`` takes besides lengths, for the Rust field.
+    Whether a copy waits for «x5» is only asked for a bare ``x``."""
+    arrays = bool(getattr(tool, "accepts_array", False))
+    pending = arrays and not buffer and text.lower() == "x" and vp._array_pending()
+    return dict(arrays=arrays, array_pending=bool(pending),
+                profile=hasattr(tool, "on_profile_value"),
+                comma_lists=bool(getattr(tool, "vcb_comma_lists", False)))
+
+
+def _value_claims(vp, text: str, buffer: str) -> bool:
+    from ingetrazo_core import value_claims
+    tool = vp.active_tool
+    zoom = tool is None and getattr(vp, "nav_mode", None) == "zoom"
+    accepts = _value_accepts(vp, tool, text, buffer)
+    accepts.pop("comma_lists")
+    return value_claims(buffer, text, tool is not None, zoom=zoom, **accepts)
+
+
+def _value_key(vp, ev) -> bool:
+    """One key for the value box of ``vp`` (a document view, or the Metal
+    view's tools): True when the box took it."""
+    from ingetrazo_core import value_key
+    tool = vp.active_tool
+    zoom = tool is None and getattr(vp, "nav_mode", None) == "zoom"
+    if tool is None and not zoom:
+        return False
+    key = ev.key()
+    if key in (Qt.Key_Return, Qt.Key_Enter):
+        return _enter_zoom_value(vp) if zoom else _enter_value(vp, tool)
+    typed = value_key(
+        vp._value_buffer, _VALUE_KEYS.get(key, ""), ev.text(),
+        chord=_is_chord(getattr(ev, "modifiers", lambda: Qt.NoModifier)()),
+        zoom=zoom, **({} if zoom else _value_accepts(vp, tool, ev.text(), vp._value_buffer)))
+    if typed is None:
+        return False
+    vp._set_value_buffer(typed)
+    return True
+
+
+def _flash_parse_error(vp, error: str, word: str) -> None:
+    from core.units import Parsed
+    vp.flash_status(Parsed(error=error, word=word).message(), 4000)
+
+
+def _enter_zoom_value(vp) -> bool:
+    """Enter with Zoom on: the lens first, then the box empties."""
+    if not vp._value_buffer:
+        return False
+    from ingetrazo_core import zoom_value_enter
+    typed, error, word = zoom_value_enter(vp._value_buffer)
+    if typed is None:
+        _flash_parse_error(vp, error, word)
+        return True
+    vp.apply_zoom_value(typed)
+    vp._set_value_buffer("")
+    return True
+
+
+def _hand_tagged_value(vp, tool, value) -> bool:
+    """A slope, a segment count, an array, a profile or a radius goes to
+    the tool that declares it (``on_<kind>_value``); True when ``value``
+    was one of them."""
+    kind = value[0] if isinstance(value, tuple) and value and isinstance(value[0], str) else None
+    if kind is None:
+        return False
+    if kind == "ratio":
+        # A slope typed as rise:run reaches angle tools as plain degrees.
+        if getattr(tool, "accepts_angle_ratio", False):
+            tool.on_value(vp, value[1])
+        return True
+    handler = getattr(tool, f"on_{kind}_value", None)
+    if handler is None:
+        return True
+    if kind != "array":
+        handler(vp, value[1])
+    elif len(value) <= 3:
+        handler(vp, value[1], value[2])
+    elif "step" in inspect.signature(handler).parameters:
+        handler(vp, value[1], value[2], step=value[3])
+    else:                                       # "5x10m" means nothing here
+        vp.flash_status(tr("Type the count alone here, e.g. 3x"))
+    return True
+
+
+def _enter_value(vp, tool) -> bool:
+    """Enter with a tool on: the Rust field reads the box, the tool takes
+    the value, and the box then shows what was drawn."""
+    from ingetrazo_core import value_enter
+    from core.units import typed_context, unitless_numbers
+    buffer = vp._value_buffer
+    unitless = getattr(tool, "value_is_unitless", None)
+    plain = callable(unitless) and unitless()
+    length = typed_context("length")
+    if plain:
+        # An angle, a factor or a count is not a length (#176).
+        with unitless_numbers():
+            bare = typed_context("length")[0]
+    else:
+        bare = length[0]
+    entry = value_enter(buffer, bool(getattr(tool, "vcb_comma_lists", False)),
+                        bare, length[1], length[0],
+                        bool(getattr(tool, "accepts_absolute_length", False)))
+    if entry is None:
+        return False
+    if entry[0] == "error":
+        # A calculation that doesn't add up stays in the box with the
+        # reason, to be fixed with Backspace.
+        _flash_parse_error(vp, entry[1], entry[2])
+        return True
+    if entry[0] == "clear":
+        vp._set_value_buffer("")
+        return True
+    _, value, absolute = entry
+    if _hand_tagged_value(vp, tool, value):
+        vp._set_value_buffer("")
+        return True
+    if absolute:
+        value = ("abs_len", value)              # Scale: "2m" is a size
+    # Did this value commit geometry? A chaining tool like Line stays busy
+    # once the segment exists, so "busy" is not "done": the typed length
+    # drops the arrow lock like the second click. A hot retype (typed right
+    # after a commit) replaces the stack's top: the model changed too (#859).
+    history = getattr(vp, "history", None)
+    before = len(history.undo_stack) if history is not None else 0
+    top = history.undo_stack[-1] if before else None
+    tool.on_value(vp, value)
+    drew = history is not None and len(history.undo_stack) > before
+    redrew = (not drew and before > 0 and len(history.undo_stack) == before
+              and history.undo_stack[-1] is not top)
+    vp._set_value_buffer("")
+    # The box shows what was drawn, read as the canvas showed it, not the
+    # preview from before the Enter (#607).
+    if drew or redrew:
+        if is_expression(buffer):
+            vp.measurementChanged.emit(_expression_result_text(value, plain))
+        else:
+            vp.measurementChanged.emit(buffer if plain else _typed_value_text(buffer))
+    vp._release_axis_lock_after_operation(committed=drew)
+    return True
 
 
 def _parse_length_field(field: str):
@@ -13218,17 +13352,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
                     return o + d * ((span[0] + span[1]) * 0.5)
         return QVector3D(self.camera.target)
 
-    def _end_camera_drag(self) -> None:
-        """Forget a camera drag in progress (orbit, pan or zoom by drag)."""
-        self._last_pos = None
-        self._orbit_pivot = None
-        self._pan_mode = False
-        self._middle_drag_active = False
-        if self.nav_mode is not None:
-            self._apply_nav_cursor()
-        else:
-            self._apply_tool_cursor()
-
     def _set_middle_drag_pan_mode(self, pan: bool) -> None:
         """Switch an active MMB drag between orbit and pan."""
         if not self._middle_drag_active or self.nav_mode is not None:
@@ -13278,12 +13401,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
             self.unsetCursor()
         self.update()
 
-    def leaveEvent(self, ev) -> None:
-        if self._hover_entity is not None:
-            self._hover_entity = None
-            self.update()
-        super().leaveEvent(ev)
-
     # ---- Input --------------------------------------------------------------
     def _context_pick(self, x: float, y: float):
         """Right-click at ``(x, y)``: select the thing under the cursor
@@ -13318,136 +13435,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     def _face_or_image_in_front(self, x: float, y: float):
         face = self.pick_face(x, y)
         return self.image_in_front_of(face, x, y) or face
-
-    # ---- A side-tray tab dropped here: the window moves it to that side ----
-    def _dock_drag(self, ev) -> bool:
-        win = self.window()
-        mime = getattr(win, "DOCK_MIME", None)
-        return bool(mime) and ev.mimeData().hasFormat(mime)
-
-    def dragEnterEvent(self, ev) -> None:
-        if self._dock_drag(ev):
-            ev.acceptProposedAction()
-            return
-        super().dragEnterEvent(ev)
-
-    def dragMoveEvent(self, ev) -> None:
-        if self._dock_drag(ev):
-            ev.acceptProposedAction()
-            return
-        super().dragMoveEvent(ev)
-
-    def dropEvent(self, ev) -> None:
-        if self._dock_drag(ev):
-            self.window().drop_dock_on_viewport(ev)
-            return
-        super().dropEvent(ev)
-
-    def contextMenuEvent(self, ev) -> None:
-        """Right-click: select what's under the cursor and open
-        a context menu of actions relevant to the current selection."""
-        win = self.window()
-        # A tool with its own right-click menu (Position Texture: Done /
-        # Reset / Flip / Rotate) takes the click instead.
-        hook = getattr(self.active_tool, "context_menu", None)
-        if callable(hook) and hook(self, ev.globalPos()):
-            return
-        if not hasattr(win, "show_viewport_context_menu"):
-            return
-        x, y = ev.pos().x(), ev.pos().y()
-        # Where the menu was opened, for entries that act at the cursor
-        # (Texture ▸ Position puts its pins on the tile under it).
-        self._context_pixel = (x, y)
-        picked = self._context_pick(x, y)
-        # A locked image under the cursor is offered even when the click
-        # landed on geometry drawn over it (the plaza on its orthomosaic):
-        # the menu is the only way back to Unlock / Delete for it.
-        under = self.pick_locked_image_plane(x, y)
-        # A locked group the same way: it can no longer be selected, and
-        # its Unlock lives here (#782).
-        win.show_viewport_context_menu(
-            ev.globalPos(), locked_image=under if under is not picked else None,
-            locked_group=self.pick_locked_group(x, y))
-
-    def mousePressEvent(self, ev) -> None:
-        # A new gesture starts with the inferences back on: the Alt
-        # toggle lasts ONE operation. Mid-operation (the
-        # second click of a line) the tool is still busy and nothing moves.
-        self._release_linear_mode()
-        self._input_t = _time_mod.monotonic()   # P0: input→paint latency
-        self._input_serial = getattr(self, "_input_serial", 0) + 1
-        if (ev.button() in (Qt.LeftButton, Qt.RightButton)
-                and self.nav_mode is None and self._look_drag is None
-                and callable(getattr(self.active_tool, "on_look", None))):
-            self._begin_look(ev)
-            return
-        if ev.button() == Qt.MiddleButton:
-            self._last_pos = ev.position().toPoint()
-            self._pan_mode = bool(ev.modifiers() & Qt.ShiftModifier)
-            self._middle_drag_active = True
-            self._orbit_pivot = self._orbit_pivot_at(
-                ev.position().x(), ev.position().y())
-            self._pan_depth = self._depth_of(self._orbit_pivot)
-            # While the wheel-drag lasts, the pointer becomes the
-            # orbit (or pan) icon; the tool cursor comes back on release.
-            from views.icons import tool_cursor
-            cur = tool_cursor("pan" if self._pan_mode else "orbit")
-            if cur is not None:
-                self.setCursor(cur)
-            return
-        # Nav buttons: left-drag orbits/pans the camera.
-        # Hold Shift while orbiting to pan temporarily (matches MMB+Shift).
-        if ev.button() == Qt.LeftButton and self.nav_mode is not None:
-            if self.nav_mode == "zoom_window":
-                # Drag a rectangle; the camera zooms to it on release.
-                self._zoom_box_active = True
-                self._zoom_box_start = ev.position()
-                self._zoom_box_cur = ev.position()
-                return
-            self._last_pos = ev.position().toPoint()
-            self._pan_mode = (
-                self.nav_mode == "pan"
-                or bool(ev.modifiers() & Qt.ShiftModifier)
-            )
-            self._orbit_pivot = (
-                self._orbit_pivot_at(ev.position().x(), ev.position().y())
-                if self.nav_mode == "orbit" else None)
-            self._pan_depth = (
-                self._depth_of(self._orbit_pivot_at(
-                    ev.position().x(), ev.position().y()))
-                if self._pan_mode else None)
-            # The orbit/pan icon stays through the drag.
-            self._apply_nav_cursor()
-            return
-        if ev.button() == Qt.LeftButton and self.active_tool is not None:
-            # Triple click: a press landing right after a double-click at the
-            # same spot (Qt has no native triple event): select all
-            # connected.
-            if self._is_triple_click(ev):
-                self._last_double = None
-                ctx = self._build_ctx(ev)
-                if ctx is not None:
-                    self.active_tool.on_triple_click(ctx)
-                    self.update()
-                return
-            # Box-select tools defer the decision to release: a tiny drag is a
-            # click, a real drag is a rubber-band box.
-            if self.active_tool.box_select:
-                self._box_active = True
-                self._box_start = ev.position()
-                self._box_cur = ev.position()
-                return
-            self._dispatch_tool_click(ev)
-
-    def _is_triple_click(self, ev) -> bool:
-        from PySide6.QtWidgets import QApplication
-        last = self._last_double
-        if last is None:
-            return False
-        t, pos = last
-        return (ev.timestamp() - t
-                <= QApplication.doubleClickInterval()
-                and (ev.position() - pos).manhattanLength() < 8)
 
     def _dispatch_tool_click(self, ev, double: bool = False) -> None:
         """Forward a (double-)click to the active tool, then run the shared
@@ -13532,144 +13519,8 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         self.unsetCursor()
         self._apply_tool_cursor()
 
-    def enterEvent(self, ev) -> None:
-        # Coming back from a panel or a dialog is the other moment Windows
-        # shows the arrow over the viewport (#191).
-        self._reassert_tool_cursor()
-        super().enterEvent(ev)
-
-    def mouseDoubleClickEvent(self, ev) -> None:
-        """Qt replaces the second press of a double-click with this event, so
-        route it to ``tool.on_double_click`` — whose default re-runs
-        ``on_click``, keeping fast click-click rhythms working for drawing
-        tools while Push/Pull overrides it to repeat its last distance.
-
-        Box-select tools (Select) get the double-click DIRECTLY (no drag box
-        starts on a double), and the event is remembered so the next press in
-        place counts as a triple click.
-
-        A double click of the wheel recentres the view on the point under
-        the cursor and starts no orbit; the tool in use never hears of it
-        (#979, #1154)."""
-        if ev.button() == Qt.MiddleButton:
-            self._recentre_on(ev.position().x(), ev.position().y())
-            return
-        if ev.button() != Qt.LeftButton or self.active_tool is None \
-                or self.nav_mode is not None:
-            self.mousePressEvent(ev)
-            return
-        self._last_double = (ev.timestamp(), ev.position())
-        if self.active_tool.box_select:
-            ctx = self._build_ctx(ev)
-            if ctx is not None:
-                self.active_tool.on_double_click(ctx)
-                self.update()
-            return
-        self._dispatch_tool_click(ev, double=True)
-
     # ---- Mouse look (a tool with ``on_look``: First Person) -----------------
 
-
-    def _end_look(self) -> None:
-        self._look_drag = None
-        self._apply_tool_cursor()
-
-    def mouseMoveEvent(self, ev) -> None:
-        self._input_t = _time_mod.monotonic()   # P0: input→paint latency
-        self._input_serial = getattr(self, "_input_serial", 0) + 1
-        # An Alt released while another window had the keyboard never
-        # reaches any filter here; the pointer re-reads it on the move.
-        alt = bool(ev.modifiers() & Qt.AltModifier)
-        if alt != self._alt_down:
-            self._apply_alt_cursor(alt)
-        if self._look_drag is not None and ev.buttons() == Qt.NoButton:
-            # The look drag's release was lost (the same hole as the orbit
-            # below): with the pointer hidden and put back on every move it
-            # would be trapped in the window. No button held ends it.
-            self._end_look()
-        if self._look_drag is not None:
-            if callable(getattr(self.active_tool, "on_look", None)):
-                self._look_move(ev)
-                return
-            self._end_look()                    # the tool changed mid-drag
-        if self._last_pos is not None and ev.buttons() == Qt.NoButton:
-            # A camera drag with no button held: its release never reached
-            # us (a Windows mouse or touchpad driver, a click on another
-            # window, a tool switched by keyboard mid-drag). Left alone,
-            # EVERY mouse move orbited the view whatever tool was picked —
-            # «el orbital se mantiene activo… no se desactiva con nada»
-            # (Andrés Rodríguez, Windows 11 + NVIDIA, 0.5.0).
-            self._end_camera_drag()
-        if self._middle_drag_active:
-            self._set_middle_drag_pan_mode(
-                bool(ev.modifiers() & Qt.ShiftModifier))
-        if self._last_pos is not None:
-            p = ev.position().toPoint()
-            dx = p.x() - self._last_pos.x()
-            dy = p.y() - self._last_pos.y()
-            self._last_pos = p
-            if self.nav_mode == "zoom":
-                self.camera.zoom(-dy * 0.035)        # drag up = zoom in
-            elif self._pan_mode:
-                self.camera.pan(dx, dy, self.height(),
-                                depth=getattr(self, "_pan_depth", None))
-            else:
-                pivot = getattr(self, "_orbit_pivot", None)
-                ody = -dy if self._invert_orbit_y else dy
-                if pivot is not None:
-                    self.camera.orbit_about(pivot, dx, ody, self.height())
-                else:
-                    self.camera.orbit(dx, ody, self.height())
-            self.update()
-            return
-
-        if self._box_active:
-            self._box_cur = ev.position()
-            self.update()
-            return
-
-        if self._zoom_box_active:
-            self._zoom_box_cur = ev.position()
-            self.update()
-            return
-
-        # Adaptive hover coalescing: against a big imported model one hover
-        # costs ~25-30 ms (picks + snap) while the mouse delivers 60-125
-        # events/s — processing every event backlogs the queue and the whole
-        # app reads as frozen. Gate by the measured cost of the LAST hover
-        # (a small model gates at ~0 → immediate), and let a trailing-edge
-        # timer process the final position so the highlight never sticks.
-        self._pending_hover = (ev.position(), ev.modifiers())
-        now = _time_mod.monotonic()
-        gate = min(0.06, getattr(self, "_hover_cost", 0.0) * 1.5)
-        elapsed = now - getattr(self, "_hover_last_t", 0.0)
-        if elapsed < gate:
-            timer = getattr(self, "_hover_timer", None)
-            if timer is None:
-                from PySide6.QtCore import QTimer
-                timer = self._hover_timer = QTimer(self)
-                timer.setSingleShot(True)
-                timer.timeout.connect(self._run_pending_hover)
-            if not timer.isActive():
-                timer.start(max(1, int((gate - elapsed) * 1000) + 1))
-            return
-        self._run_pending_hover()
-
-    def _run_pending_hover(self) -> None:
-        pending = getattr(self, "_pending_hover", None)
-        if pending is None:
-            return
-        self._pending_hover = None
-        pos, modifiers = pending
-        t0 = _time_mod.monotonic()
-        self._process_hover(pos, modifiers)
-        self._hover_last_t = _time_mod.monotonic()
-        self._hover_cost = self._hover_last_t - t0
-        if _PERF:
-            # A per-move cost near ~100 ms starves paints during a tool drag
-            # (the push "sticks"): name it in the log instead of hiding
-            # under the frame telemetry's floor.
-            _plog("hover.move", self._hover_cost * 1000.0, floor=80.0)
 
     # -- Snapping inference, delegated to self.inference -----------------
     # The reference state (the hover / acquired edges and points, the centre
@@ -13877,81 +13728,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     # Below this many pixels of drag, a left press/release is a click, not a box.
     BOX_DRAG_THRESHOLD_PX = 4.0
 
-    def mouseReleaseEvent(self, ev) -> None:
-        if self._look_drag is not None and ev.button() == self._look_drag[0]:
-            self._end_look()
-            return
-        if ev.button() == Qt.MiddleButton:
-            self._last_pos = None
-            self._orbit_pivot = None
-            self._pan_mode = False
-            self._middle_drag_active = False
-            if self.nav_mode is not None:
-                self._apply_nav_cursor()
-            else:
-                self._apply_tool_cursor()
-            return
-
-        if ev.button() == Qt.LeftButton and self._zoom_box_active:
-            self._zoom_box_active = False
-            start, end = self._zoom_box_start, self._zoom_box_cur
-            self._zoom_box_start = None
-            self._zoom_box_cur = None
-            if start is not None and end is not None:
-                self._zoom_to_box(start, end)
-            self.update()
-            return
-
-        if ev.button() == Qt.LeftButton and self.nav_mode is not None:
-            self._last_pos = None
-            self._orbit_pivot = None
-            self._pan_mode = False
-            self._apply_nav_cursor()
-            return
-
-        # Stroke tools (the Eraser): notify the release so a press-drag-release
-        # stroke can commit as one step. No-op default on other tools.
-        if (ev.button() == Qt.LeftButton and self.active_tool is not None
-                and not self._box_active and self.nav_mode is None):
-            _before = len(self.history.undo_stack)
-            self.active_tool.on_release(self)
-            self._release_axis_lock_after_operation()
-            if len(self.history.undo_stack) > _before:
-                self._reassert_tool_cursor()     # a drag committed (#191)
-
-        if ev.button() == Qt.LeftButton and self._box_active:
-            self._box_active = False
-            start = self._box_start
-            end = ev.position()
-            self._box_start = None
-            self._box_cur = None
-            tool = self.active_tool
-            if tool is None or start is None:
-                self.update()
-                return
-            dx = end.x() - start.x()
-            dy = end.y() - start.y()
-            # The box reads the same modifiers as a click: Shift
-            # toggles what it catches — the way you rub a wall out of a big
-            # catch — Ctrl adds and Shift+Ctrl removes.
-            mode = selection_mode(ev.modifiers())
-            additive = mode != "replace"
-            if math.hypot(dx, dy) < self.BOX_DRAG_THRESHOLD_PX:
-                # A click: pick the single entity under the cursor.
-                ctx = self._build_ctx(ev)
-                if ctx is not None:
-                    tool.on_click(ctx)
-            else:
-                rect = (
-                    min(start.x(), end.x()), min(start.y(), end.y()),
-                    max(start.x(), end.x()), max(start.y(), end.y()),
-                )
-                crossing = dx < 0  # right-to-left drag = crossing selection
-                tool.on_box_select(self, rect, crossing, additive, mode=mode)
-            self.update()
-
-
-
     def wheelEvent(self, ev) -> None:
         # While a 3D mouse moves the view, wheel notches are its driver's
         # imitation of the same push (3Dconnexion does that for programs it
@@ -14043,23 +13819,11 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return super().event(ev)
 
     def _measurement_claims_key(self, ev, buffer) -> bool:
-        """Reserve measurement text before Qt dispatches window shortcuts."""
+        """Reserve measurement text before Qt dispatches window shortcuts
+        (``value_field::claims``)."""
         if _is_chord(ev.modifiers()):
             return False
-        text = ev.text().lower()
-        zoom = self.active_tool is None and getattr(self, "nav_mode", None) == "zoom"
-        if not text or (self.active_tool is None and not zoom):
-            return False
-        if (text == "=" and not buffer) or (is_expression(buffer) and text.isprintable()):
-            return True
-        if zoom:
-            return (text.isdigit() or text in (".", ",") or
-                    (any(c.isdigit() for c in buffer) and text in "mdeg °"))
-        if buffer:
-            return (text.isdigit() or text in ".,; -:\"'/mcrinftx*s" or
-                    (text == "p" and hasattr(self.active_tool, "on_profile_value")))
-        return (text == "x" and getattr(self.active_tool, "accepts_array", False)
-                and self._array_pending())
+        return _value_claims(self, ev.text().lower(), buffer)
 
     def _tool_claims_key(self, ev) -> bool:
         claims = getattr(self.active_tool, "claims_key", None)
@@ -14577,54 +14341,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
             tool.plane_ref = None
 
     # ---- Zoom: the lens typed in the value box ------------------------------
-    def _handle_zoom_value_key(self, ev) -> bool:
-        """With Zoom on, the value box takes the lens: «35mm» a focal
-        length, «60deg», «60°» or a bare «60» the field of view
-        (:meth:`apply_zoom_value`). Letters only follow a digit, so Zoom's
-        neighbours' shortcuts still work before anything is typed."""
-        key = ev.key()
-        buf = self._value_buffer
-        if key in (Qt.Key_Return, Qt.Key_Enter):
-            if not buf:
-                return False
-            # The lens first: the box, emptied, then reads the new focal.
-            if is_expression(buf):
-                # A lens length has a unit. Bare lens angles are degrees.
-                result = parse_units(buf, "angle", "deg")
-                if result.ok:
-                    buf = f"{math.degrees(result.value):.12f}deg"
-                else:
-                    result = parse_units(buf, "length", "mm")
-                    if not result.ok:
-                        self.flash_status(result.message(), 4000)
-                        return True
-                    buf = f"{result.value * 1000:.12f}mm"
-            self.apply_zoom_value(buf)
-            self._set_value_buffer("")
-            return True
-        if key == Qt.Key_Backspace:
-            if not buf:
-                return False
-            self._set_value_buffer(buf[:-1])
-            return True
-        if key == Qt.Key_Escape and buf:
-            self._set_value_buffer("")
-            return True
-        if _is_chord(getattr(ev, "modifiers", lambda: Qt.NoModifier)()):
-            return False
-        text = ev.text()
-        if not text or len(text) != 1:
-            return False
-        if ((text == "=" and not buf) or (is_expression(buf) and text.isprintable())
-                or text.isdigit() or text in (".", ",")):
-            self._set_value_buffer(buf + text)
-            return True
-        if any(c.isdigit() for c in buf) and (
-                text.lower() in ("m", "d", "e", "g", " ") or text == "°"):
-            self._set_value_buffer(buf + text)
-            return True
-        return False
-
     def apply_zoom_value(self, typed: str) -> bool:
         """Set the lens from what was typed with Zoom on: ``35mm`` is a
         focal length on the camera's sensor (Camera Settings), ``60deg``,
@@ -14656,257 +14372,11 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
     # ---- Numeric value buffer (VCB-style) ----------------------------------
     def _handle_value_key(self, ev) -> bool:
-        """Buffer digit / dot / comma / semicolon / space / backspace.
-
-        Enter applies the buffer via ``active_tool.on_value(...)``.
-
-        Input forms:
-        - ``"5"`` or ``"5,3"`` or ``"5.3"`` → single length (float).
-        - ``"3;4;5"`` or ``"3 4 5"``       → 3D delta from the start point
-                                              (passed as a ``(dx, dy, dz)`` tuple).
-        - ``"-2"``                          → negative value (tools that take a
-                                              direction flip it).
-        - ``"30cm"`` / ``"1500mm"`` / ``"2m"`` → unit suffix per field; bare
-                                              numbers are metres (project unit).
-        Comma is the decimal separator; ``;`` and space are field
-        separators (the usual convention adapted to our locale) -- except for
-        a tool that only takes several values (``vcb_comma_lists``, the
-        Rectangle): there ``200,100`` is two fields (#152).
-        See :meth:`_parse_value_buffer`.
-        """
-        if self.active_tool is None:
-            if getattr(self, "nav_mode", None) == "zoom":
-                return self._handle_zoom_value_key(ev)
-            return False
-
-        text = ev.text()
-        key = ev.key()
-
-        if key in (Qt.Key_Return, Qt.Key_Enter):
-            if not self._value_buffer:
-                return False
-            # An angle, a factor or a count is not a length: the tool says
-            # so and the document's unit stays out of it (#176).
-            unitless = getattr(self.active_tool, "value_is_unitless", None)
-            if callable(unitless) and unitless():
-                from core.units import unitless_numbers
-                with unitless_numbers():
-                    value = self._parse_value_buffer(
-                        self._value_buffer,
-                        comma_lists=getattr(self.active_tool,
-                                            "vcb_comma_lists", False))
-            else:
-                value = self._parse_value_buffer(
-                    self._value_buffer,
-                    comma_lists=getattr(self.active_tool, "vcb_comma_lists",
-                                        False))
-            if value is None and is_expression(self._value_buffer):
-                # A calculation that doesn't add up stays in the box with
-                # the reason, to be fixed with Backspace — not thrown away.
-                self.flash_status(
-                    self._expression_error(self._value_buffer), 4000)
-                return True
-            if value is None:
-                self._set_value_buffer("")
-                return True
-            if isinstance(value, tuple) and value and value[0] == "ratio":
-                # A slope typed as rise:run ("3:12") — only angle
-                # tools understand it; it reaches them as plain degrees.
-                if getattr(self.active_tool, "accepts_angle_ratio", False):
-                    self.active_tool.on_value(self, value[1])
-                self._set_value_buffer("")
-                return True
-            if isinstance(value, tuple) and value and value[0] == "segments":
-                handler = getattr(self.active_tool, "on_segments_value", None)
-                if handler is not None:
-                    handler(self, value[1])
-                self._set_value_buffer("")
-                return True
-            if isinstance(value, tuple) and value and value[0] == "array":
-                # Arrays: "3x" (external) / "/3" (internal) right
-                # after a Move-copy. Only tools that declare it understand.
-                handler = getattr(self.active_tool, "on_array_value", None)
-                if handler is not None:
-                    if len(value) <= 3:
-                        handler(self, value[1], value[2])
-                    elif "step" in inspect.signature(handler).parameters:
-                        handler(self, value[1], value[2], step=value[3])
-                    else:                       # "5x10m" means nothing here
-                        self.flash_status(tr(
-                            "Type the count alone here, e.g. 3x"))
-                self._set_value_buffer("")
-                return True
-            if isinstance(value, tuple) and value and value[0] == "profile":
-                # "0.3p": the profile of a bevel. Only tools that declare
-                # it understand.
-                handler = getattr(self.active_tool, "on_profile_value", None)
-                if handler is not None:
-                    handler(self, value[1])
-                self._set_value_buffer("")
-                return True
-            if isinstance(value, tuple) and value and value[0] == "radius":
-                # "2r": the 2-point arc takes a RADIUS instead
-                # of the bulge. Only tools that declare it understand.
-                handler = getattr(self.active_tool, "on_radius_value", None)
-                if handler is not None:
-                    handler(self, value[1])
-                self._set_value_buffer("")
-                return True
-            if getattr(self.active_tool, "accepts_absolute_length", False):
-                # Scale reads "2" as a factor but "2m" as the new
-                # absolute size; the parser collapses both to metres, so the
-                # unit's presence is re-detected here and tagged, the same
-                # pattern as the arc's "2r" radius suffix.
-                import re as _re
-                if is_expression(self._value_buffer):
-                    absolute = parse_units(self._value_buffer).explicit_measurement
-                else:
-                    absolute = _re.search(r"[\d\"']\s*(mm|cm|m|in|ft)\b|\d\s*[\"']",
-                                          self._value_buffer.lower())
-                if absolute:
-                    value = ("abs_len", value)
-            # Did this value actually commit geometry? Same signal as a
-            # click that commits (see _dispatch_tool_click): a chaining tool
-            # like Line stays busy the instant the segment exists, so "busy"
-            # is not "the operation that used the arrow lock has ended". The
-            # typed length must drop the lock exactly like the second click.
-            history = getattr(self, "history", None)
-            _before = len(history.undo_stack) if history is not None else 0
-            _top = history.undo_stack[-1] if _before else None
-            typed = self._value_buffer
-            self.active_tool.on_value(self, value)
-            _drew = history is not None and len(history.undo_stack) > _before
-            # A hot retype (Push/Pull, Move, Rotate… typed right after a
-            # commit) undoes the last command and commits it again: the
-            # stack keeps its length but its top is a new command. That
-            # also changed the model, and the box went on showing the
-            # value from before the retype (tutorial video, #859).
-            _redrew = (not _drew and _before > 0
-                       and len(history.undo_stack) == _before
-                       and history.undo_stack[-1] is not _top)
-            self._set_value_buffer("")
-            # The box falls back to the live reading, which only refreshes on
-            # a mouse move: it went on showing the preview from BEFORE the
-            # Enter, as if the typed size had been ignored (#607). What was
-            # drawn is what was typed, read as the canvas showed it. Nothing
-            # drawn: the preview the box shows is still the live one.
-            if _drew or _redrew:
-                unitless = getattr(self.active_tool, "value_is_unitless", None)
-                plain = callable(unitless) and unitless()
-                if is_expression(typed):
-                    # «=1.25*2+2.45/2» drew 3.725 m: the box says so.
-                    self.measurementChanged.emit(
-                        _expression_result_text(value, plain))
-                else:
-                    self.measurementChanged.emit(
-                        typed if plain else _typed_value_text(typed))
-            self._release_axis_lock_after_operation(committed=_drew)
-            return True
-
-        if key == Qt.Key_Backspace:
-            if not self._value_buffer:
-                return False
-            self._set_value_buffer(self._value_buffer[:-1])
-            return True
-
-        if _is_chord(getattr(ev, "modifiers", lambda: Qt.NoModifier)()):
-            # Alt+1, Ctrl+2…: a shortcut, not a digit for the value box. It
-            # was taken as one while a value was being typed, so the view
-            # shortcut never fired and each try added a «1» — a 35-digit
-            # number, inf in the geometry's floats, then NaN (#185).
-            return False
-        from core.units import VULGAR_FRACTIONS, plain_marks
-        if text in VULGAR_FRACTIONS:
-            # ⅜, ½…: the fraction as digits, after a space when it follows
-            # a whole number (1⅜ → 1 3/8). A keyboard that types them, or
-            # smart quotes (”), made the value box drop keys (#189).
-            if not self._value_buffer:
-                self._set_value_buffer(plain_marks(text))
-            else:
-                self._set_value_buffer(plain_marks(self._value_buffer + text))
-            return True
-        text = plain_marks(text)
-        if text == "=" and not self._value_buffer:
-            # «=» opens a calculation: =1.25*2+2.45/2 (#630).
-            self._set_value_buffer("=")
-            return True
-        if is_expression(self._value_buffer):
-            # Inside a calculation every printable key is part of it —
-            # operators, parentheses, units — and none is a shortcut.
-            if text and text.isprintable():
-                self._set_value_buffer(self._value_buffer + text)
-            return bool(text and text.isprintable())
-        arrays = getattr(self.active_tool, "accepts_array", False)
-        if arrays and text == "*":
-            # "*3" / "3*": the array multiplier ("x" works too).
-            self._set_value_buffer(self._value_buffer + text)
-            return True
-        if arrays and text.lower() == "x" and (
-                self._current_token_tail()
-                or (not self._value_buffer and self._array_pending())):
-            # "3x" — after a digit; bare X stays the Text tool shortcut,
-            # except right after a copy, where "x5" is the array written
-            # multiplier first (#542), as common a habit as "5x".
-            self._set_value_buffer(self._value_buffer + text)
-            return True
-        if (text.lower() == "p" and self._current_token_tail()
-                and hasattr(self.active_tool, "on_profile_value")):
-            # "0.3p" — only after a digit, and only for a tool that takes a
-            # profile: bare P stays the Push/Pull shortcut.
-            self._set_value_buffer(self._value_buffer + text)
-            return True
-        if arrays and text == "/" and not self._value_buffer:
-            # "/3": the internal-array divisor opens the buffer.
-            self._set_value_buffer(text)
-            return True
-        if text and (text.isdigit()
-                     or text in (".", ",", ";", " ", "-", ":", "\"", "'", "/")
-                     or text.lower() in ("m", "c", "r", "i", "n", "f", "t", "s")):
-            # A field separator (space / ;) with an empty buffer isn't VCB
-            # input — let it fall through so Space can act as the Select
-            # shortcut. It only separates fields mid-number.
-            if text in (";", " ") and not self._value_buffer:
-                return False
-            # A unit letter with an empty buffer is a tool shortcut (M = Move,
-            # C = Circle, R = Rectangle), not VCB input — only buffer it
-            # after a digit. "r" is the radius suffix for arcs (2r), "s"
-            # the segment count of an arc / sides of a circle (16s).
-            if (text.lower() in ("m", "c", "r", "i", "n", "f", "t", "s")
-                    and not self._current_token_tail()):
-                return False
-            # Imperial marks and the fraction bar belong after a digit too:
-            # 2", 1'6", 3/4" (bare they are nothing a tool wants).
-            if text in ("\"", "'", "/") and not self._current_token_tail():
-                return True
-            # Minus only opens a token (a sign, not an operator).
-            if text == "-" and self._current_token_tail():
-                return True
-            # Colon (slope rise:run, "3:12"): mid-token only, once.
-            if text == ":":
-                tail = self._current_token_tail()
-                if not tail or ":" in self._value_buffer:
-                    return True
-            # A second decimal separator in the current numeric token: a
-            # "." is dropped, a "," starts the next value (#598) — dropping
-            # it turned «0.9,2.1» into 0.921.
-            if text in (".", ","):
-                tail = self._current_token_tail()
-                comma_fields = (
-                    getattr(self.active_tool, "vcb_comma_lists", False)
-                    and ";" not in self._value_buffer
-                    and " " not in self._value_buffer)
-                if comma_fields:
-                    # Every comma separates a field here (#152).
-                    tail = tail.rsplit(",", 1)[-1]
-                if "." in tail or "," in tail:
-                    if text == ".":
-                        return True
-                    if not comma_fields:
-                        text = ";"
-            self._set_value_buffer(self._value_buffer + text)
-            return True
-
-        return False
+        """The value box's keys: ``rust/ingetrazo_core/src/value_field.rs``
+        takes or refuses each one (``docs/rust-tools.md`` §20) and reads
+        Enter; :func:`_enter_value` hands the reading to the tool. With
+        Zoom on and no tool, the box takes the lens (``35mm``, ``60deg``)."""
+        return _value_key(self, ev)
 
     @staticmethod
     def _parse_value_buffer(buffer: str, comma_lists: bool = False):
@@ -14925,25 +14395,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         into an array (#542)."""
         pending = getattr(self.active_tool, "array_pending", None)
         return bool(pending(self)) if callable(pending) else False
-
-    @staticmethod
-    def _expression_error(buffer: str) -> str:
-        """Why the calculation in ``buffer`` can't be read, translated."""
-        from core.units import plain_marks
-        buffer = plain_marks(buffer)
-        for field in _expression_fields(buffer):
-            r = parse_units(field, "length")
-            if not r.ok:
-                return r.message()
-        return tr("Type one, two or three values")
-
-    def _current_token_tail(self) -> str:
-        """The portion of the buffer after the last ``;`` or space."""
-        normalized = self._value_buffer.replace(";", " ")
-        idx = normalized.rfind(" ")
-        if idx < 0:
-            return self._value_buffer
-        return self._value_buffer[idx + 1 :]
 
     def _set_value_buffer(self, text: str) -> None:
         if text == self._value_buffer:

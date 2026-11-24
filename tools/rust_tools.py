@@ -66,9 +66,11 @@ class _Host:
     def run(self, name, args):
         from core.protocol.commands import run
         args = json.loads(args)
-        for key in ("a", "b", "eye", "anchor"):
+        for key in ("a", "b", "eye", "anchor", "center"):
             if key in args:
                 args[key] = self._model(args[key])
+        if "outer" in args:
+            args["outer"] = [self._model(p) for p in args["outer"]]
         history = self.vp.history
         before = self.revision()
         faces = len(self.vp.scene.faces)
@@ -177,6 +179,12 @@ class _Host:
         flash = getattr(self.vp, "flash_status", None)
         if callable(flash):
             from core.i18n import tr
+            # A length the machine names («len:2.0») reads in the
+            # document's unit.
+            for key, value in args.items():
+                if value.startswith("len:"):
+                    from core.units import fmt_len
+                    args[key] = fmt_len(float(value[4:]))
             flash(tr(template, **args) if args else tr(template))
 
     def host_verb(self, verb, ident):
@@ -226,7 +234,7 @@ class RustTool(Tool):
         self._machine = ToolMachine(self.kind)
         self._handles = _Handles()
         self._seen = (-1, None)
-        self._points = {}
+        self._held_points = {}
 
     def __init_subclass__(cls, **kw):
         super().__init_subclass__(**kw)
@@ -318,9 +326,9 @@ class RustTool(Tool):
         value = self._state(key)
         if value is None:
             return None
-        held = self._points.get(key)
+        held = self._held_points.get(key)
         if held is None or held[0] != value:
-            held = self._points[key] = (value, Vec3(*value))
+            held = self._held_points[key] = (value, Vec3(*value))
         return held[1]
 
     def rubber_band_lines(self):
@@ -715,3 +723,473 @@ class RectangleTool(_planar_tool(), RustTool):
         from core.i18n import tr
         template, args = self._query("degenerate", _tuple(world))
         return tr(template, **args) if args else tr(template)
+
+
+def _radial_bases():
+    from tools.base import AxisMagnet, PlaneLock
+    return AxisMagnet, PlaneLock
+
+
+class _RadialTool(*_radial_bases(), RustTool):
+    """Circle and Polygon (``rust/ingetrazo_core/src/tools/circle.rs``): a
+    centre, then a radius. The machine owns the plane lock, the side count,
+    the guide mode and the retype window; this keeps the viewport glue (the
+    status, the axis colour, the cursor's ring, the readout)."""
+
+    vcb_label = "Radius"
+    #: Whether Ctrl toggles the guide-circle mode (only the Circle tool).
+    _guide_capable = False
+    wireframe_color = None
+
+    def __init__(self):
+        RustTool.__init__(self)
+        self._viewport = None
+
+    @property
+    def _plane_state(self):
+        state = self.__dict__.get("_plane_proxy")
+        if state is None:
+            state = self.__dict__["_plane_proxy"] = _MachinePlaneLock(self._machine)
+        return state
+
+    start_point = _point_property("start_point")
+    hover_point = _point_property("hover_point")
+
+    @property
+    def work_plane(self):
+        plane = self._state("work_plane")
+        return None if plane is None else (Vec3(*plane[0]), Vec3(*plane[1]))
+
+    @work_plane.setter
+    def work_plane(self, plane):
+        self._machine.set("work_plane", None if plane is None else (_tuple(plane[0]), _tuple(plane[1])))
+
+    @property
+    def sides(self):
+        return int(self._state("sides"))
+
+    @sides.setter
+    def sides(self, n):
+        self._machine.set("sides", int(n))
+
+    @property
+    def _guide_mode(self):
+        return bool(self._state("guide_mode"))
+
+    @_guide_mode.setter
+    def _guide_mode(self, on):
+        self._machine.set("guide_mode", bool(on))
+
+    @property
+    def _last(self):
+        """The retype token of the shape just drawn, or None."""
+        return self._state("last_token")
+
+    def _frame(self, viewport):
+        from core import axes
+        from core.snap import POINT_SNAP_KINDS
+        kind = getattr(self, "snap_kind", None)
+        self._send(viewport, {"type": "frame", "axes": axes.frame(),
+                              "names_point": None if kind is None else kind in POINT_SNAP_KINDS})
+
+    def _send_framed(self, viewport, event):
+        self._frame(viewport)
+        return self._send(viewport, event)
+
+    # ---- the value box ------------------------------------------------------
+    def vcb_caption(self) -> str:
+        """'Sides' before the centre, 'Radius' after — and right after a
+        shape is drawn, while a typed number still resizes it (#414)."""
+        if self.start_point is not None or self._radius_retype_open():
+            return "Radius"
+        return "Sides"
+
+    def _radius_retype_open(self) -> bool:
+        token = self._last
+        return (self.start_point is None and token is not None and self._viewport is not None
+                and _Host(self._viewport).revision() == token)
+
+    def value_is_unitless(self) -> bool:
+        """A side count before the centre (#176); a radius after it, and
+        right after a shape (#414)."""
+        return self.start_point is None and not self._radius_retype_open()
+
+    # ---- events -------------------------------------------------------------
+    def on_activate(self, viewport) -> None:
+        self._send_framed(viewport, {"type": "activate"})
+        self.wireframe_color = None
+
+    def on_deactivate(self, viewport) -> None:
+        self._send_framed(viewport, {"type": "deactivate"})
+        self.wireframe_color = None
+
+    def on_cancel(self, viewport) -> None:
+        self._send_framed(viewport, {"type": "cancel"})
+        self.wireframe_color = None
+        viewport.update()
+
+    def on_click(self, ctx) -> None:
+        self.note_plane(ctx.viewport)
+        self._viewport = ctx.viewport
+        self._send_framed(ctx.viewport, self._pointer("click", ctx))
+        if self.start_point is None:
+            self.wireframe_color = None
+        ctx.viewport.update()
+
+    def on_hover(self, ctx) -> None:
+        self.note_plane(ctx.viewport)
+        self._viewport = ctx.viewport
+        self._send_framed(ctx.viewport, self._pointer("hover", ctx))
+        snap = ctx.snap
+        if (snap is not None and snap.kind == "axis"
+                and self.plane_lock is None and self.plane_ref is None):
+            # A radius magnetised onto an axis rings in the AXIS colour,
+            # not the plane's (#962); a plane lock keeps its own.
+            self.wireframe_color = None
+        else:
+            self.wireframe_color = self.lock_color()
+        ctx.viewport.update()
+
+    def on_segments_value(self, viewport, n: int) -> bool:
+        """«24s»: the side count, typed at any moment; right after a shape,
+        that shape is rebuilt with it, one undo step (#305)."""
+        self._viewport = viewport
+        consumed = self._send_framed(viewport, {"type": "segments", "count": int(n)})["consumed"]
+        if consumed:
+            viewport.update()
+        return consumed
+
+    def on_value(self, viewport, value) -> bool:
+        self._viewport = viewport
+        if isinstance(value, tuple):
+            return False
+        consumed = self._send_framed(viewport, {"type": "value", "value": float(value)})["consumed"]
+        if consumed:
+            if self.start_point is None:
+                self.wireframe_color = None
+            viewport.update()
+        return consumed
+
+    def _refresh(self, viewport):
+        hint = getattr(viewport, "refresh_status_hint", None)
+        if callable(hint):
+            hint()
+        viewport.update()
+
+    def on_key(self, viewport, key, modifiers) -> bool:
+        from PySide6.QtCore import Qt
+        if key == Qt.Key_Control and self._guide_capable:
+            self._send_framed(viewport, {"type": "key", "key": "Control", "mods": _mods(modifiers)})
+            self._refresh(viewport)
+            return True
+        return self.plane_lock_key(viewport, key)
+
+    def on_key_release(self, viewport, key) -> bool:
+        from PySide6.QtCore import Qt
+        if key != Qt.Key_Control:
+            return False
+        tapped = getattr(viewport, "ctrl_tapped", None)
+        reply = self._send_framed(viewport, {"type": "key_release", "key": "Control",
+                                             "tapped": not callable(tapped) or bool(tapped())})
+        if reply["consumed"]:
+            self._refresh(viewport)
+        return reply["consumed"]
+
+    def status_clause(self) -> str:
+        if not self._guide_capable:
+            return ""
+        from core.i18n import tr
+        return tr("Ctrl = guide")   # short: it rides the line of a long hint
+
+    # ---- preview ------------------------------------------------------------
+    def rubber_band_lines(self):
+        if self.hover_point is None:
+            return []
+        if self.start_point is None:
+            return self._cursor_preview()
+        return RustTool.rubber_band_lines(self)
+
+    def guide_preview_lines(self):
+        """The dashed rim of the guide circle the next click leaves."""
+        return [(Vec3(*a), Vec3(*b)) for a, b in self._state("guide_ring") or ()]
+
+    def value_label(self):
+        """The radius DRAWN, the rim projected onto the plane, not the
+        straight distance to the cursor."""
+        r = self._state("radius")
+        if r is None:
+            return None
+        from core.i18n import tr
+        from core.units import fmt_len
+        return ("R " + fmt_len(r) + "  (" + tr("{n} sides", n=self.sides) + ")",
+                self.hover_point)
+
+    def _cursor_preview(self):
+        """The ring on the cursor before the centre, at a fixed screen size
+        on the plane it would take (view glue: it needs the pixel scale)."""
+        import math
+        vp = self._viewport
+        if vp is None:
+            return []
+        from core.axes import plane_axes
+        point, normal = self.preview_plane(vp, self.hover_point)
+        u, v = plane_axes(normal)
+        scale = self.plane_preview_scale(vp, self.hover_point, u, v)
+        if scale is None:
+            return []
+        r = self.PREVIEW_PX * scale
+        n = max(int(self.sides), 3)
+        pts = [self.hover_point + u * (r * math.cos(2 * math.pi * i / n))
+               + v * (r * math.sin(2 * math.pi * i / n)) for i in range(n)]
+        return [(pts[i], pts[(i + 1) % n]) for i in range(n)]
+
+    # ---- what the snap engine and the tests read ------------------------------
+    def plane_points(self):
+        if self.start_point is None:
+            return []
+        return [self.start_point, self.hover_point]
+
+    def _query(self, what, arg):
+        if self._viewport is not None:
+            self._frame(self._viewport)
+        return self._machine.query(what, arg)
+
+    def _axes(self):
+        u, v = self._query("axes", None)
+        return Vec3(*u), Vec3(*v)
+
+    def _points(self, center, rim):
+        return [Vec3(*p) for p in self._query("points", (_tuple(center), _tuple(rim)))]
+
+    def _commit(self, viewport, pts, axes=None, center=None) -> None:
+        """A closed curve with its face through the protocol (``add_face``
+        with ``curve``), outside the machine's retype window."""
+        _Host(viewport).run("add_face", json.dumps(
+            {"outer": [list(_tuple(p)) for p in pts], "curve": True}))
+        viewport.update()
+
+    def _reset(self):
+        self._machine.set("reset", True)
+        self.wireframe_color = None
+
+
+class CircleTool(_RadialTool):
+    kind = "circle"
+    _guide_capable = True
+
+
+class PolygonTool(_RadialTool):
+    kind = "polygon"
+    shortcut = None  # Polygon has no default; G = Make Component
+
+
+class RotatedRectangleTool(*_radial_bases(), RustTool):
+    """Rotated Rectangle (``rust/ingetrazo_core/src/tools/rotated_rectangle.rs``).
+    The machine owns the three clicks, the protractors' rules and the plane
+    lock; this sends what only the view knows (the face under the first
+    click, the cursor's ray, the axis lock, the protractor's screen size)."""
+
+    kind = "rotated_rectangle"
+    shortcut = None
+    # The arrows choose the base edge's plane before the first click; once
+    # the base is down they are the viewport's axis lock, which the width
+    # reads (``ViewReading.axis_lock``).
+    plane_lock_after_the_first_point = False
+    wireframe_color = None
+
+    def __init__(self):
+        RustTool.__init__(self)
+        self._viewport = None
+
+    @property
+    def _plane_state(self):
+        state = self.__dict__.get("_plane_proxy")
+        if state is None:
+            state = self.__dict__["_plane_proxy"] = _MachinePlaneLock(self._machine)
+        return state
+
+    start_point = _point_property("start_point")
+    base_point = _point_property("base_point")
+    hover_point = _point_property("hover_point")
+
+    @property
+    def work_plane(self):
+        plane = self._state("work_plane")
+        return None if plane is None else (Vec3(*plane[0]), Vec3(*plane[1]))
+
+    @work_plane.setter
+    def work_plane(self, plane):
+        self._machine.set("work_plane", None if plane is None else (_tuple(plane[0]), _tuple(plane[1])))
+
+    @property
+    def angle(self):
+        return float(self._state("angle"))
+
+    @angle.setter
+    def angle(self, value):
+        self._machine.set("angle", float(value))
+
+    @property
+    def vcb_label(self) -> str:
+        return "Length; angle" if self.base_point is None else "Width; angle"
+
+    def magnet_on(self) -> bool:
+        # The base edge is a direction from the first corner; the width is
+        # measured square off that edge.
+        return self.base_point is None
+
+    @property
+    def diagonal_span(self) -> bool:
+        # For the width, the span from the first corner is a diagonal (#389).
+        return self.base_point is not None
+
+    # ---- what only the view knows -----------------------------------------
+    def _view(self, viewport, ctx=None):
+        """``ViewReading`` for the event about to go: the cursor's ray, the
+        axis lock, the next protractor's size and nearness, the view's
+        drawing plane."""
+        import math
+        from core.axes import AXES, plane_axes
+        lock = getattr(viewport, "axis_lock", None)
+        reading = {"type": "view",
+                   "axis_lock": _tuple(AXES[lock]) if lock and lock in AXES else None}
+        normal = getattr(viewport, "_work_plane_normal", None)
+        if self.work_plane is None and callable(normal):
+            reading["plane_normal"] = _tuple(normal())
+        if ctx is not None:
+            screen = ctx.screen
+            ray = getattr(viewport, "_pixel_to_ray", None)
+            kind = getattr(getattr(ctx, "snap", None), "kind", None)
+            if (ray is not None and self.base_point is not None
+                    and not self._machine.query("point_snap", kind)):
+                o, d = ray(screen.x(), screen.y())
+                if o is not None and d is not None:
+                    reading["ray"] = (_tuple(o), _tuple(d))
+            disc = self._state("disc")
+            w2p = getattr(viewport, "_world_to_pixel", None)
+            if disc is not None:
+                radius, near = None, False
+                centre = Vec3(*disc[0])
+                u, _v = plane_axes(Vec3(*disc[1]))
+                p0 = p1 = None
+                if w2p is not None:
+                    p0, p1 = w2p(centre), w2p(centre + u)
+                if p0 is not None and p1 is not None:
+                    from tools.protractor import DISC_PX
+                    px = math.hypot(p1[0] - p0[0], p1[1] - p0[1])
+                    if px > 1e-6:
+                        radius = DISC_PX / px
+                    near = math.hypot(screen.x() - p0[0], screen.y() - p0[1]) <= DISC_PX * 1.25
+                reading["protractor"] = (radius, near)
+        self._send(viewport, reading)
+
+    def _face_plane(self, ctx):
+        """The face under the first click, as the plane to draw on."""
+        pick = (getattr(ctx.viewport, "pick_face_placement", None)
+                or getattr(ctx.viewport, "pick_face_any", None))
+        if pick is None:
+            return None
+        face, group = pick(ctx.screen.x(), ctx.screen.y())
+        if face is None:
+            return None
+        from core.snap import face_plane_world
+        _point, normal = face_plane_world(face, getattr(group, "xform", None))
+        if normal is None or normal.lengthSquared() < 0.5:
+            return None
+        return _tuple(ctx.world), _tuple(normal)
+
+    def _framed(self, viewport, event, ctx=None):
+        from core import axes
+        self._send(viewport, {"type": "frame", "axes": axes.frame()})
+        self._view(viewport, ctx)
+        return self._send(viewport, event)
+
+    # ---- events -------------------------------------------------------------
+    def on_activate(self, viewport) -> None:
+        self._framed(viewport, {"type": "activate"})
+
+    def on_deactivate(self, viewport) -> None:
+        self._framed(viewport, {"type": "deactivate"})
+
+    def on_cancel(self, viewport) -> None:
+        self._framed(viewport, {"type": "cancel"})
+        viewport.update()
+
+    def on_click(self, ctx) -> None:
+        self._viewport = ctx.viewport
+        if self.start_point is None:
+            self._send(ctx.viewport, {"type": "work_plane", "plane": self._face_plane(ctx)})
+        self._framed(ctx.viewport, self._pointer("click", ctx), ctx)
+        ctx.viewport.update()
+
+    def on_hover(self, ctx) -> None:
+        self._viewport = ctx.viewport
+        self._framed(ctx.viewport, self._pointer("hover", ctx), ctx)
+        ctx.viewport.update()
+
+    def on_value(self, viewport, value) -> bool:
+        """``3`` = 3 m keeping the angle shown; ``3;90`` = 3 m standing
+        square to the plane. The angle field reads without the document's
+        unit (``_degrees``)."""
+        if isinstance(value, tuple) and len(value) == 2:
+            value = (float(value[0]), _degrees(value[1]))
+        reply = self._framed(viewport, {"type": "value", "value": value})
+        if reply["consumed"]:
+            viewport.update()
+        return reply["consumed"]
+
+    def on_key(self, viewport, key, modifiers) -> bool:
+        return self.plane_lock_key(viewport, key)
+
+    # ---- preview ------------------------------------------------------------
+    def value_label(self):
+        label = self._state("label")
+        if label is None:
+            return None
+        from core.units import fmt_len, fmt_pair
+        if label[0] == "edge":
+            _, length, angle, mid = label
+            text = fmt_len(length) + ("" if angle is None else f"   {angle:.0f}°")
+            return text, Vec3(*mid)
+        _, length, width, angle, mid = label
+        text = fmt_pair(length, width) + (f"   {angle:.0f}°" if abs(angle) > 0.05 else "")
+        return text, Vec3(*mid)
+
+    @property
+    def _locked(self):
+        """The width's direction the axis lock (or Shift) imposes, as of
+        the last hover."""
+        d = self._state("locked")
+        return None if d is None else Vec3(*d)
+
+    def locked_dir(self, viewport):
+        """The direction the view's axis lock imposes on the width, or None
+        (no lock, or the lock is the base edge's own axis)."""
+        self._view(viewport)
+        d = self._machine.query("locked_dir", None)
+        return None if d is None else Vec3(*d)
+
+    def _corners(self, width, angle=None):
+        return [Vec3(*p) for p in self._machine.query("corners", (float(width), angle))]
+
+    def _width_and_angle(self, cursor, forced=None):
+        w, a = self._machine.query("width_and_angle", (_tuple(cursor), _tuple(forced)))
+        return w, a
+
+    def _perp(self):
+        return Vec3(*self._machine.query("perp", None))
+
+    def _normal(self):
+        return Vec3(*self._machine.query("normal", None))
+
+    def _reset(self):
+        self._machine.set("reset", True)
+
+
+def _degrees(value) -> float:
+    """An angle typed in the value box: the parser reads a bare field as a
+    LENGTH in the document's unit (90 → 0.09 in millimetres); an angle has
+    none."""
+    from core.units import bare_number_scale
+    scale = bare_number_scale()
+    return float(value) / scale if scale else float(value)

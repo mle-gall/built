@@ -106,7 +106,7 @@ pub fn number(text: &str) -> Option<f64> {
     (v.is_finite() && v.abs() <= MAX_TYPED).then_some(v)
 }
 
-const VULGAR: &[(char, &str)] = &[
+pub(crate) const VULGAR: &[(char, &str)] = &[
     ('½', "1/2"), ('⅓', "1/3"), ('⅔', "2/3"), ('¼', "1/4"), ('¾', "3/4"), ('⅕', "1/5"), ('⅖', "2/5"),
     ('⅗', "3/5"), ('⅘', "4/5"), ('⅙', "1/6"), ('⅚', "5/6"), ('⅐', "1/7"), ('⅛', "1/8"), ('⅜', "3/8"),
     ('⅝', "5/8"), ('⅞', "7/8"), ('⅑', "1/9"), ('⅒', "1/10"),
@@ -643,19 +643,26 @@ pub fn py_parse(text: &str, kind: &str, bare: f64, hyphen_feet: bool) -> (Option
 #[pyo3(name = "parse_value_buffer")]
 pub fn py_parse_value_buffer<'py>(py: Python<'py>, buffer: &str, comma_lists: bool, bare: f64, hyphen_feet: bool)
     -> PyResult<Bound<'py, PyAny>> {
-    let ctx = Ctx { bare, hyphen_feet };
+    match parse_value_buffer(buffer, comma_lists, Ctx { bare, hyphen_feet }) {
+        None => Ok(py.None().into_bound(py)),
+        Some(t) => typed_to_py(py, t),
+    }
+}
+
+/// A reading as Python has it: a float, a tuple of 2 or 3, or a tagged
+/// tuple.
+pub(crate) fn typed_to_py<'py>(py: Python<'py>, typed: Typed) -> PyResult<Bound<'py, PyAny>> {
     let any = |v: Bound<'py, PyTuple>| v.into_any();
-    Ok(match parse_value_buffer(buffer, comma_lists, ctx) {
-        None => py.None().into_bound(py),
-        Some(Typed::One(v)) => v.into_pyobject(py)?.into_any(),
-        Some(Typed::Two(a, b)) => any((a, b).into_pyobject(py)?),
-        Some(Typed::Three(a, b, c)) => any((a, b, c).into_pyobject(py)?),
-        Some(Typed::Array { count, mode, step: None }) => any(("array", count, mode).into_pyobject(py)?),
-        Some(Typed::Array { count, mode, step: Some(s) }) => any(("array", count, mode, s).into_pyobject(py)?),
-        Some(Typed::Radius(r)) => any(("radius", r).into_pyobject(py)?),
-        Some(Typed::Profile(p)) => any(("profile", p).into_pyobject(py)?),
-        Some(Typed::Segments(n)) => any(("segments", n).into_pyobject(py)?),
-        Some(Typed::Ratio(d)) => any(("ratio", d).into_pyobject(py)?),
+    Ok(match typed {
+        Typed::One(v) => v.into_pyobject(py)?.into_any(),
+        Typed::Two(a, b) => any((a, b).into_pyobject(py)?),
+        Typed::Three(a, b, c) => any((a, b, c).into_pyobject(py)?),
+        Typed::Array { count, mode, step: None } => any(("array", count, mode).into_pyobject(py)?),
+        Typed::Array { count, mode, step: Some(s) } => any(("array", count, mode, s).into_pyobject(py)?),
+        Typed::Radius(r) => any(("radius", r).into_pyobject(py)?),
+        Typed::Profile(p) => any(("profile", p).into_pyobject(py)?),
+        Typed::Segments(n) => any(("segments", n).into_pyobject(py)?),
+        Typed::Ratio(d) => any(("ratio", d).into_pyobject(py)?),
     })
 }
 

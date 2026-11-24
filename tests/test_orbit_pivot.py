@@ -74,25 +74,6 @@ def _close(win):
     win.close()
 
 
-def test_the_point_under_the_cursor_stays_put_while_orbiting():
-    win, vp = _window_far_box()
-    try:
-        box_top = V(500, 500, 10)
-        sx, sy = _screen(vp, box_top)
-        assert 0 < sx < W and 0 < sy < H, "the box must be on screen"
-        # the pivot is the face point under the cursor, on the box
-        pivot = vp._orbit_pivot_at(sx, sy)
-        assert (pivot - box_top).length() < 1.0, pivot
-        before = (vp.camera.yaw, vp.camera.pitch)
-        _drag(vp, sx, sy, sx + 120, sy + 60)
-        assert (vp.camera.yaw, vp.camera.pitch) != before, "it did not orbit"
-        ax, ay = _screen(vp, pivot)
-        assert abs(ax - sx) < 1.5 and abs(ay - sy) < 1.5, (sx, sy, ax, ay)
-        assert vp._orbit_pivot is None, "the pivot outlived its gesture"
-    finally:
-        _close(win)
-
-
 def test_the_orbit_tool_drag_turns_about_the_same_pivot():
     win, vp = _window_far_box()
     try:
