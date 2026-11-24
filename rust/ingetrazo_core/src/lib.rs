@@ -46,6 +46,7 @@ mod dxf_read;
 mod view_svg;
 mod view_dxf;
 mod file_model;
+mod mesh_export;
 mod fuse;
 mod obj_read;
 mod obj_write;
@@ -168,6 +169,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     fuse::register(m)?;
     obj_read::register(m)?;
     obj_write::register(m)?;
+    mesh_export::register(m)?;
     gltf_maps::register(m)?;
     gltf_mesh::register(m)?;
     gltf_write::register(m)?;
