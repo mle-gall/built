@@ -5,15 +5,15 @@ use pyo3::types::PyDict;
 
 #[pyfunction]
 fn init_navigation(v: &Obj) -> PyResult<()> {
-    let h = host(v.py())?;
-    v.setattr("_invert_wheel", h.call_method0("_load_invert_wheel")?)?;
-    v.setattr("_invert_orbit_y", h.call_method0("_load_invert_orbit_y")?)?;
+    for (field, key) in [
+        ("_invert_wheel", "nav/invert_wheel"),
+        ("_invert_orbit_y", "nav/invert_orbit_y"),
+    ] {
+        v.setattr(field, crate::navigation::setting(v.py(), key, "0")? != "0")?;
+    }
     v.setattr(
         "_trackpad_slide",
-        v.py()
-            .import("ingetrazo_render")?
-            .getattr("trackpad_nav")?
-            .call_method0("load_slide_mode")?,
+        crate::navigation::load_slide_mode(v.py())?,
     )?;
     for key in [
         "_last_pos",

@@ -14,7 +14,7 @@ pub fn setting(py: Python<'_>, key: &str, default: &str) -> PyResult<String> {
 }
 
 #[pyfunction]
-fn load_slide_mode(py: Python<'_>) -> PyResult<String> {
+pub(super) fn load_slide_mode(py: Python<'_>) -> PyResult<String> {
     Ok(match setting(py, "nav/trackpad_slide", "zoom")?
         .to_ascii_lowercase()
         .as_str()

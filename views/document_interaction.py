@@ -489,23 +489,6 @@ _load_edit_rest_fade = ingetrazo_render.load_edit_rest_fade
 _load_hide_similar = ingetrazo_render.load_hide_similar
 
 
-def _load_invert_wheel() -> bool:
-    from core.settings import settings as QSettings
-    return str(QSettings().value("nav/invert_wheel", "0")) != "0"
-
-
-def _load_invert_orbit_y() -> bool:
-    """Preferences ▸ orbit with the vertical axis reversed.
-
-    Off by default: `OrbitCamera.orbit` grabs the model in both axes, the
-    classic way. This is for the hands that learned the other feel —
-    including the ones that learned it from IngeTrazo before 0.3.16, when
-    the vertical axis was inverted by mistake.
-    """
-    from core.settings import settings as QSettings
-    return str(QSettings().value("nav/invert_orbit_y", "0")) != "0"
-
-
 #: Soft sun shadows (#1281), Preferences ▸ General: off (0) or a level, and
 #: how fast the penumbra widens with the distance from what casts it, in
 #: world width per world distance. The real sun is about 0.009; the levels
@@ -763,9 +746,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         ingetrazo_render.init_navigation(self)
 
     def _fb_size(self) -> tuple[int, int]:
-        """Framebuffer pixel size (logical size × device pixel ratio)."""
-        dpr = self.devicePixelRatioF()
-        return max(int(round(self.width() * dpr)), 1), max(int(round(self.height() * dpr)), 1)
+        return ingetrazo_render.framebuffer_size(self)
 
     def _sync_axes(self) -> None:
         """Make the drawing axes the current context's (issue #44) — the
@@ -1345,10 +1326,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
     def _draw_occluded_segment(self, painter: QPainter, p3a: QVector3D,
                                p3b: QVector3D, samples: int = 16) -> None:
-        from ingetrazo_core import annotation_strokes
-        mvp = self.camera.projection_matrix() * self.camera.view_matrix()
-        for a, b in annotation_strokes(self, p3a, p3b, mvp, samples):
-            painter.drawLine(QPointF(*a), QPointF(*b))
+        return ingetrazo_render.document_draw_strokes(self, painter, p3a, p3b, samples)
 
     def _project_samples(self, pts: list[QVector3D]):
         from ingetrazo_core import annotation_samples
@@ -1606,11 +1584,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return ingetrazo_render.camera_transform(self)
 
     def _project_px(self, pts):
-        """Batch world points (N, 3) → ``(px, py, in_front)`` arrays — the
-        exact math of :meth:`_world_to_pixel` (``ingetrazo_core.project_px``)."""
-        points = np.ascontiguousarray(pts, dtype=np.float64).reshape(-1, 3)
-        matrix = self._np_mvp().ravel(order="F").tolist()
-        return ingetrazo_core.project_px(points, matrix, float(self.width()), float(self.height()))
+        return ingetrazo_render.document_project_batch(self, pts)
 
     @staticmethod
     def _frustum_planes(mvp):
