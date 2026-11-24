@@ -948,6 +948,7 @@ fn dxf_prepare_import(py: Python<'_>, path: PathBuf) -> PyResult<Py<PyAny>> {
             )?;
             Ok((source, suggestion).into_pyobject(py)?.into_any().unbind())
         } else {
+            checkpoint(py)?;
             let doc = document(py, &path)?;
             let (suggestion, _) = suggest_unit(&doc)?;
             Ok((doc, suggestion).into_pyobject(py)?.into_any().unbind())
@@ -990,6 +991,7 @@ fn dxf_load<'p>(
         let model = match model {
             Some(model) => model,
             None => {
+                checkpoint(py)?;
                 let doc = match (cached, source) {
                     (Some((_, original)), _) => document(py, &original)?,
                     (_, Some(doc)) => doc,

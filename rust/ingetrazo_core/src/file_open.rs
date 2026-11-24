@@ -13,6 +13,16 @@ thread_local! {
     static LAST_YIELD: std::cell::Cell<Option<std::time::Instant>> = const { std::cell::Cell::new(None) };
 }
 
+/// Check detached native parsers without reacquiring the interpreter.
+pub(crate) fn cancelled() -> bool {
+    STAGING.with_borrow(|state| {
+        state
+            .as_ref()
+            .and_then(Weak::upgrade)
+            .is_some_and(|state| state.cancelled.load(Ordering::Acquire))
+    })
+}
+
 /// Large record lists may build thousands of facade objects in one extension
 /// call. Let either event loop take the interpreter between short batches.
 pub(crate) use checkpoint as skp_checkpoint;

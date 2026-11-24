@@ -177,9 +177,14 @@ pub(super) fn decode(text: &str) -> Option<Document> {
     let mut seen = HashSet::new();
     let mut model_owner = None;
     let mut block = None;
+    let mut tags_read = 0usize;
     let mut eof = false;
     let mut modern = false;
     loop {
+        tags_read += 1;
+        if tags_read % 4096 == 0 && crate::file_open::cancelled() {
+            return None;
+        }
         let pair = match lines.next() {
             Some(c) => Some((c.trim().parse::<i32>().ok()?, lines.next()?)),
             None => None,
@@ -325,6 +330,9 @@ fn arc(center: DVec3, r: f64, start: f64, span: f64, tol: f64) -> Option<Ring> {
             while let Some((lo, hi, p, q)) = work.pop() {
                 let mid = (lo + hi) * 0.5;
                 let m = at(mid);
+                if out.len() % 4096 == 0 && crate::file_open::cancelled() {
+                    return None;
+                }
                 if m.distance((p + q) * 0.5) <= tol {
                     out.push(center + q)
                 } else {
@@ -359,7 +367,10 @@ impl Document {
     pub(super) fn drawing(&self, sagitta: f64) -> Option<Drawing> {
         let mut drawing = Drawing::default();
         let mut placed = HashSet::new();
-        for e in &self.entities {
+        for (index, e) in self.entities.iter().enumerate() {
+            if index % 256 == 0 && crate::file_open::cancelled() {
+                return None;
+            }
             match &e.shape {
                 Shape::Insert(name, m) => {
                     let b = self.blocks.get(name)?;
