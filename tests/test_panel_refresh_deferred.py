@@ -1,34 +1,16 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""Side panels never refresh under the user's hands (release_check 09-10).
-
-After every edit the viewport says the model changed. The Components «In
-model» list (its thumbnails' signatures) and the Browser (every row's
-state) answered at once — +20 ms per edit on the Plaza, even with the
-section folded or the tab hidden. Now: hidden, they wait until shown;
-on screen, one refresh 300 ms after the last edit of a burst.
-"""
+"""The Library and Project tree sample document changes when a frame needs them."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-import pytest  # noqa: E402
-from PySide6.QtWidgets import QApplication  # noqa: E402
-
-_app = QApplication.instance() or QApplication([])
-
-
-@pytest.fixture
-def win():
-    from views.main_window import MainWindow
-    w = MainWindow()
-    w.show()
-    _app.processEvents()
-    yield w
-    w._saved_version = w.viewport.scene.version
-    w.close()
+import gc
+import weakref
+import pytest
+from ingetrazo_core import Matrix4, Vec3
+from ingetrazo_render import chrome_sheet
+from tests.test_library_sheet import win, frame, tiles  # noqa: F401
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
+from views import wgpu_library as library
 
 
 def _count_calls(monkeypatch, obj, name):
@@ -42,124 +24,85 @@ def _count_calls(monkeypatch, obj, name):
     return calls
 
 
-def test_a_hidden_components_list_waits_until_it_is_shown(win, monkeypatch):
-    panel = win.tray.components
-    panel.hide()
-    calls = _count_calls(monkeypatch, panel, "refresh_in_model")
+@pytest.mark.parametrize("kind,provider", [
+    ("components", library.ComponentsProvider), ("materials", library.MaterialsProvider),
+])
+def test_hidden_library_waits_until_shown(win, monkeypatch, kind, provider):
+    calls = _count_calls(monkeypatch, provider, "items")
     for _ in range(3):
-        win.viewport.scene.version += 1          # three edits, panel hidden
-        panel.on_scene_changed()
+        win.viewport.scene.version += 1
+        chrome_sheet.before_frame(win.view, win)
     assert calls == []
-    panel.show()
-    _app.processEvents()
-    assert len(calls) == 1                       # caught up on showing
-
-
-def test_hidden_material_swatches_wait_until_shown(win, monkeypatch):
-    """Its tab not shown, the Materials panel scanned every face paint
-    after each edit anyway (~0.15 s on the plant of #158)."""
-    panel = win.tray.materials
-    # The refresh the opening asked for (300 ms) is not the edits': on a
-    # fast machine it was still pending when the test looked.
-    pending = getattr(win.tray, "_mat_refresh_timer", None)
-    if pending is not None:
-        pending.stop()
-    panel.hide()
-    calls = _count_calls(monkeypatch, panel, "refresh_in_model")
-    for _ in range(3):
-        win.viewport.scene.version += 1          # three edits, tab hidden
-        win.tray.on_scene_changed()
-    timer = getattr(win.tray, "_mat_refresh_timer", None)
-    assert calls == [] and (timer is None or not timer.isActive())
-    panel.show()
-    _app.processEvents()
-    assert len(calls) == 1                       # caught up on showing
+    library.open_library(win, kind)
+    frame(win)
+    assert len(calls) == 1
 
 
 def test_a_burst_of_edits_refreshes_the_visible_panels_once(win, monkeypatch):
-    panel = win.tray.components
-    outliner = win.project_browser.outliner
-    if not (panel.isVisible() and outliner.isVisible()):
-        pytest.skip("the factory layout hides one of the panels here")
-    comp_calls = _count_calls(monkeypatch, panel, "refresh_in_model")
-    tree_calls = _count_calls(monkeypatch, outliner, "refresh")
-    for _ in range(5):
+    from views import wgpu_ui
+    p, group, _ = browser_model()
+    comp = _count_calls(monkeypatch, library.ComponentsProvider, "items")
+    tree = _count_calls(monkeypatch, wgpu_ui, "prepare_tree_model")
+    library.open_library(win, "components")
+    frame(win)
+    comp.clear()
+    for i in range(5):
+        group.name = str(i)
+        p.scene.version += 1
         win.viewport.scene.version += 1
-        panel.on_scene_changed()
-        outliner.on_scene_changed()
-    assert comp_calls == [] and tree_calls == []     # nothing inline
-    panel._in_model_timer.timeout.emit()
-    outliner._refresh_timer.timeout.emit()
-    assert len(comp_calls) == 1 and len(tree_calls) == 1
+    assert comp == tree == []
+    frame(win)
+    assert p.rows()["i:" + group.uid][0] == "4"
+    frame(win)
+    p.rows()
+    assert len(comp) == len(tree) == 1
 
 
 def test_a_selection_leaves_the_in_model_lists_as_they_are(win, monkeypatch):
-    """A click bumps only the view: on the plant of #158 it rebuilt the
-    «In model» list and rescanned every material (over a second)."""
-    from ingetrazo_core import Vec3 as V
     from core.group import Group
-    from core.mesh import Mesh
-    m = Mesh()
-    m.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)])
-    g = Group(m, "placed")
-    g.component = True
-    vp = win.viewport
-    vp.scene.groups.append(g)
-    vp.scene.version += 1
-    panel = win.tray.components
-    panel.refresh_in_model()
-    win.tray.materials.refresh_in_model()
-    _app.processEvents()
-    timer = getattr(win.tray, "_mat_refresh_timer", None)
-    if timer is not None:
-        timer.stop()                            # the edit above, done
-    comp_calls = _count_calls(monkeypatch, panel, "refresh_in_model")
-    vp.scene.select([g])                        # a view-only change
-    win.tray.on_scene_changed()
-    timer = getattr(win.tray, "_mat_refresh_timer", None)
-    assert comp_calls == []
-    assert timer is None or not timer.isActive()
-    vp.scene.version += 1                       # an edit refreshes again
-    win.tray.on_scene_changed()
-    if panel._in_model_timer.isActive():
-        panel._in_model_timer.timeout.emit()
-    assert len(comp_calls) == 1
-    assert win.tray._mat_refresh_timer.isActive()
+    scene = win.viewport.scene
+    group = Group(name="Placed")
+    group.xform = Matrix4()
+    group.component = True
+    scene.groups.append(group)
+    scene.version += 1
+    comp = _count_calls(monkeypatch, library.ComponentsProvider, "items")
+    mat = _count_calls(monkeypatch, library.MaterialsProvider, "items")
+    library.open_library(win, "components")
+    frame(win)
+    scene.select([group])
+    frame(win)
+    assert len(comp) == len(mat) == 1
+    group.name = "After edit"
+    scene.version += 1
+    assert any("After edit" in str(row) for row in tiles(frame(win)))
+    assert len(comp) == len(mat) == 2
 
 
 def test_hidden_panels_let_the_previous_document_go(win):
-    """Waiting to be shown, the «In model» list and the Browser kept their
-    rows — and each row holds its group, so after closing the project the whole
-    previous document stayed in memory (+130 MB on the Plaza,
-    release_check 10-10)."""
-    import gc
-    from PySide6.QtCore import QCoreApplication, QEvent
-    from ingetrazo_core import Vec3 as V
     from core.group import Group
-    from core.mesh import Mesh
-    m = Mesh()
-    m.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)])
-    g = Group(m, "previous-document-marker")
-    g.component = True
-    vp = win.viewport
-    vp.scene.groups.append(g)
-    vp.scene.version += 1
-    panel = win.tray.components
-    browser = win.project_browser.outliner
-    panel.refresh_in_model()
-    browser.refresh()
-    assert browser._groups                      # the rows hold the group
-    panel.hide()
-    browser.hide()
-    del g, m, vp
-    assert win.close_document(ask=False)
-    # The retired viewport is owned by Qt until its deferred delete runs.
-    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
-    _app.processEvents()
+    from views import wgpu_ui
+    group = Group(name="previous-document-marker")
+    group.xform = Matrix4()
+    group.component = True
+    scene = win.viewport.scene
+    scene.groups.append(group)
+    scene.version += 1
+    library.open_library(win, "components")
+    assert any(group.name in str(row) for row in tiles(frame(win)))
+    wgpu_ui._tree(win.view, win)
+    # The recording renderer stores the Python arguments; the native renderer
+    # consumes these immediately. Keep the presentation surface itself alive.
+    view = win.view
+    view.renderer.calls.clear()
+    reference = weakref.ref(group.mesh)
+    chrome_sheet.close(win)
+    del group, scene
+    win.new_document()
+    assert win.close_document(win.documents()[0], ask=False)
+    win._reclaim_closed_documents()
     gc.collect()
-    alive = [o for o in gc.get_objects() if isinstance(o, Group)
-             and o.name == "previous-document-marker"]
-    assert alive == []
+    assert view._closed and reference() is None
 
 
 def browser_model():
@@ -188,34 +131,29 @@ def test_a_selection_notice_leaves_the_browser_rows_as_they_are(monkeypatch):
     assert p.rows()["i:" + group.uid][0] == "Renamed" and len(scans) == 1
 
 
-def test_a_move_leaves_the_material_swatches_as_they_are(win):
-    """Moving a group changes no material: on the plant of #158 each drop
-    rescanned every face paint (~0.4 s). A paint does rescan."""
-    from ingetrazo_core import Vec3 as V
+def test_a_move_leaves_the_material_swatches_as_they_are(win, monkeypatch):
+    from core import geometry_arrays
     from core.group import Group
-    from core.history import MoveGroupCommand, SetFaceColorCommand
     from core.mesh import Mesh
-    m = Mesh()
-    f = m.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)])
-    g = Group(m, "moved")
+    from core.history import MoveGroupCommand, SetFaceColorCommand
+    from ingetrazo_core import material_survey
     vp = win.viewport
-    vp.scene.groups.append(g)
+    mesh = Mesh()
+    face = mesh.add_face([Vec3(), Vec3(1, 0, 0), Vec3(1, 1, 0)])
+    group = Group(mesh, "moved")
+    vp.scene.groups.append(group)
     vp.scene.version += 1
-    win.tray.materials.refresh_in_model()
-    _app.processEvents()
-    timer = getattr(win.tray, "_mat_refresh_timer", None)
-    if timer is not None:
-        timer.stop()
-    vp.history.execute(MoveGroupCommand(g, V(2, 0, 0)))
-    win.tray.on_scene_changed()
-    timer = getattr(win.tray, "_mat_refresh_timer", None)
-    assert timer is None or not timer.isActive()
-    vp.history.undo()                           # undoing it: the same
-    win.tray.on_scene_changed()
-    assert timer is None or not timer.isActive()
-    vp.history.execute(SetFaceColorCommand([f], (1.0, 0.0, 0.0)))
-    win.tray.on_scene_changed()
-    assert win.tray._mat_refresh_timer.isActive()
+    def survey():
+        return material_survey(vp.scene, vp.history)
+    survey()
+    scans = _count_calls(monkeypatch, geometry_arrays, "face_attributes")
+    vp.history.execute(MoveGroupCommand(group, Vec3(2, 0, 0)))
+    survey()
+    vp.history.undo()
+    survey()
+    assert scans == []
+    vp.history.execute(SetFaceColorCommand([face], (1.0, 0.0, 0.0)))
+    assert "#FF0000" in survey()[1] and scans
 
 
 def test_a_move_leaves_the_browser_rows_as_they_are(monkeypatch):
@@ -243,35 +181,6 @@ def test_a_move_leaves_the_browser_rows_as_they_are(monkeypatch):
     p.win._outliner_kinds = [lambda g: None]
     move()
     assert len(scans) == 3
-
-
-def test_sliced_refresh_cannot_publish_after_replacement_or_document_switch(monkeypatch):
-    from types import SimpleNamespace
-    from views import panel_refresh
-
-    panel = SimpleNamespace()
-    timers = []
-    ticks = iter(range(20))
-    monkeypatch.setattr(panel_refresh, "monotonic", lambda: next(ticks))
-    monkeypatch.setattr(panel_refresh, "QTimer", SimpleNamespace(
-        singleShot=lambda _ms, _panel, callback: timers.append(callback)))
-    published = []
-
-    def stages(name):
-        yield
-        published.append(name)
-
-    current = True
-    for name in ("old", "replacement"):
-        panel_refresh.refresh_steps(panel, stages(name), deferred=True,
-                                    current=lambda: current)
-    timers.pop(0)()
-    current = False
-    timers.pop(0)()
-    assert not published
-    panel_refresh.refresh_steps(panel, stages("new document"), deferred=False,
-                                current=lambda: True)
-    assert published == ["new document"]
 
 
 def test_a_geometry_edit_leaves_the_browser_rows_as_they_are(monkeypatch):

@@ -213,6 +213,24 @@ fn settle_document_heap(py: Python<'_>, threshold: usize) -> PyResult<()> {
     Ok(())
 }
 
+/// Drop document-owned objects when the tab closes, even if a frame callback
+/// or an extension still holds the presentation surface.
+#[pyfunction]
+fn release_document_view(view: &Bound<'_, PyAny>) -> PyResult<()> {
+    let attrs = view.getattr("__dict__")?.cast_into::<PyDict>()?;
+    for name in ["_ui_tree", "_ui_tree_model", "_ui_comp_cache", "_ui_lib",
+                 "_ui_lib_sheet", "_ui_visibility_cache", "_ui_rules_cache",
+                 "_plugin_bindings", "_plugin_scene"] {
+        if attrs.contains(name)? { attrs.del_item(name)?; }
+    }
+    for name in ["source_viewport", "scene", "packed", "tools", "_tool_source",
+                 "_billboards", "_reference_cache", "_instance_updates",
+                 "_inference_future", "inference_index"] {
+        attrs.set_item(name, view.py().None())?;
+    }
+    Ok(())
+}
+
 /// The retired document and its callbacks have left the close stack. Multiple
 /// closes in one turn share a collection and one allocator trim.
 #[pyfunction]
@@ -225,6 +243,7 @@ fn reclaim_closed_documents(py: Python<'_>) -> PyResult<()> {
 }
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(release_document_view, m)?)?;
     m.add_function(wrap_pyfunction!(reclaim_closed_documents, m)?)?;
     m.add_function(wrap_pyfunction!(new_document_command, m)?)?;
     m.add_function(wrap_pyfunction!(settle_document_heap, m)?)?;
