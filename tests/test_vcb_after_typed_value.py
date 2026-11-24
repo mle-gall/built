@@ -12,7 +12,7 @@ from __future__ import annotations
 import pytest
 from ingetrazo_core import Vec3 as QVector3D
 
-from app_shell.events import KeyEvent
+from ingetrazo_render import KeyEvent
 from core import units
 from core.input_types import QPointF, Qt
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
