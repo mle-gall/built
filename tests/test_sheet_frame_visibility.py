@@ -76,7 +76,7 @@ def _reference(scene, view):
     hide_unprinted(scene)
     vp = SimpleNamespace(scene=scene)
     state = _placement_state(scene)
-    return {id(g): bool(flags & 1) for g, _, _, flags in _placement_records(scene, scene.groups, vp, state)}
+    return {id(g): bool(flags & 1) for g, _, _, flags, _c in _placement_records(scene, scene.groups, vp, state)}
 
 
 @pytest.mark.parametrize("view", [None, "all", "no walls", "folders", "objects", "mixed"])

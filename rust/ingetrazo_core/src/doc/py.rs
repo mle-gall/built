@@ -2750,6 +2750,149 @@ fn igz_large_document(
     Ok(count > limit)
 }
 
+/// The rows the resident renderer packs (``views.wgpu_scene``), with what
+/// each nested placement inherits resolved here instead of per placement
+/// in Python (architecture review 12): ``doc_tree``'s walk, plus per row
+///
+/// - ``flags``: bit 0 hidden (Hide on it or an ancestor, or its tag not
+///   visible), bit 4 hidden by Hide itself or an ancestor, bit 5 its tag
+///   or an ancestor's not visible (the instance flags of the pack);
+/// - ``uid``, ``mesh`` (the definition's geometry, None without one) and
+///   ``billboard``;
+/// - ``paint_layer`` (index into ``names``, -1: the default tag) and
+///   ``material`` (index into ``materials``, -1: none): the tag and the
+///   paint its default faces take (its own or an ancestor's).
+///
+/// ``invisible``: the tags not shown; ``blocked``: those not shown or
+/// locked (a nested part is forced onto such an ancestor's tag);
+/// ``untagged``: the suffix of a linked file's stand-in default tag. Only
+/// for a model with no open group and no navigator filter: the caller
+/// keeps its own walk for those.
+#[pyfunction]
+#[allow(clippy::type_complexity)]
+fn doc_render_rows<'py>(
+    py: Python<'py>,
+    roots: &Bound<'py, PyAny>,
+    invisible: std::collections::HashSet<String>,
+    blocked: std::collections::HashSet<String>,
+    untagged: &str,
+    default_tag: &str,
+) -> PyResult<Bound<'py, pyo3::types::PyDict>> {
+    struct Up { layer: Option<String>, tag: Option<String>, forced: Option<String>, hidden: bool, material: i64,
+                root: usize, flag_hidden: bool, obj: bool, filtered: bool }
+    let members = keys_of(roots)?;
+    let n_hint = members.len();
+    let mut hs: Vec<Py<PyAny>> = Vec::with_capacity(n_hint);
+    let mut parent: Vec<i64> = Vec::with_capacity(n_hint);
+    let mut local: Vec<f64> = Vec::with_capacity(n_hint * 16);
+    let mut has: Vec<bool> = Vec::with_capacity(n_hint);
+    let mut flags: Vec<u32> = Vec::with_capacity(n_hint);
+    let mut uids: Vec<Option<String>> = Vec::with_capacity(n_hint);
+    let mut meshes: Vec<Option<Py<PyAny>>> = Vec::with_capacity(n_hint);
+    let mut billboard: Vec<Py<PyAny>> = Vec::with_capacity(n_hint);
+    let mut paint_layer: Vec<i64> = Vec::with_capacity(n_hint);
+    let mut material: Vec<i64> = Vec::with_capacity(n_hint);
+    let mut names: Vec<String> = Vec::new();
+    let mut name_ix: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
+    let mut materials: Vec<Py<PyAny>> = Vec::new();
+    let mut ups: Vec<Up> = Vec::with_capacity(n_hint);
+    let tagged = |t: &Option<String>| t.as_ref().filter(|t| !t.is_empty()).cloned();
+    fn shown<'a>(t: &'a Option<String>, default_tag: &'a str) -> &'a str { t.as_deref().unwrap_or(default_tag) }
+    let real = |t: &Option<String>| t.as_ref().filter(|t| !t.is_empty() && !t.ends_with(untagged)).cloned();
+    {
+        let mut d = lock();
+        for (m, ptr, _) in &members {
+            d.set_handle(*m, *ptr);
+        }
+        if let Some((m, _, _)) = members.iter().find(|m| d.node(m.0).is_none_or(|n| n.kind != Kind::Placement)) {
+            return Err(PyTypeError::new_err(format!("not a document placement: {m:#x}")));
+        }
+        let mut stack: Vec<(Key, i64)> = members.iter().rev().map(|m| (m.0, -1)).collect();
+        while let Some((k, up)) = stack.pop() {
+            let Some(n) = d.node(k) else { continue };
+            let super::Data::Placement(p) = &n.data else { continue };
+            let i = hs.len();
+            hs.push(d.handle_ref(py, k).ok_or_else(|| PyRuntimeError::new_err("a listed node lost its handle"))?);
+            parent.push(up);
+            match &p.xform {
+                Some(x) => { has.push(true); local.extend(x.doubles()); }
+                None => {
+                    has.push(false);
+                    for j in 0..16 { local.push(if j % 5 == 0 { 1.0 } else { 0.0 }); }
+                }
+            }
+            uids.push(p.uid.clone());
+            meshes.push(p.definition.as_ref().map(|def| def.0.get().geometry.clone_ref(py)));
+            // As the handle reads it: False, True or a mode ("mesh").
+            billboard.push(match p.billboard.as_deref() {
+                None | Some(Value::None) => pyo3::types::PyBool::new(py, false).to_owned().into_any().unbind(),
+                Some(v) => v.to_py(py)?.unbind(),
+            });
+            let own_material = match &p.material {
+                None | Some(Value::None) => None,
+                Some(Value::Dict(items)) if items.is_empty() => None,
+                Some(v) => Some(v),
+            };
+            let mut new_material = |v: &Value| -> PyResult<i64> {
+                materials.push(v.to_py(py)?.unbind());
+                Ok(materials.len() as i64 - 1)
+            };
+            let tag = tagged(&p.tag);
+            let row = if up < 0 {
+                let layer = tag.clone();
+                let mat = match own_material { Some(v) => new_material(v)?, None => -1 };
+                let forced = if blocked.contains(shown(&layer, default_tag)) { layer.clone() } else { None };
+                let invisible_here = invisible.contains(shown(&layer, default_tag));
+                Up { flag_hidden: p.hidden || invisible_here, obj: p.hidden, filtered: invisible_here,
+                     layer, tag: tag.clone(), forced, hidden: p.hidden, material: mat, root: i }
+            } else {
+                let a = &ups[up as usize];
+                let parent_tag = a.tag.clone();
+                let layer = a.forced.clone().or_else(|| real(&p.tag)).or_else(|| a.layer.clone())
+                    .or(parent_tag).or_else(|| tag.clone());
+                let hidden = a.hidden || p.hidden;
+                let mat = match own_material { Some(v) => new_material(v)?, None => a.material };
+                let forced = a.forced.clone().or_else(|| {
+                    layer.as_ref().filter(|l| blocked.contains(l.as_str())).cloned()
+                });
+                let invisible_here = invisible.contains(shown(&layer, default_tag));
+                Up { flag_hidden: hidden || invisible_here || a.flag_hidden, obj: p.hidden || a.obj,
+                     filtered: invisible_here || a.filtered, layer, tag: tag.clone(), forced, hidden,
+                     material: mat, root: a.root }
+            };
+            flags.push(u32::from(row.flag_hidden) | if row.obj { 16 } else { 0 } | if row.filtered { 32 } else { 0 });
+            // The tag the default faces take: its own, else its top-level
+            // object's (a linked file's stand-in counts as none).
+            let paint = real(&row.layer).or_else(|| if up < 0 { None } else { real(&ups[row.root].layer) });
+            paint_layer.push(match paint {
+                None => -1,
+                Some(t) => *name_ix.entry(t.clone()).or_insert_with(|| { names.push(t); names.len() as i64 - 1 }),
+            });
+            material.push(row.material);
+            ups.push(row);
+            for &c in n.children.iter().rev() {
+                stack.push((c, i as i64));
+            }
+        }
+    }
+    drop(members);
+    let n = hs.len();
+    let out = pyo3::types::PyDict::new(py);
+    out.set_item("handles", PyList::new(py, hs)?)?;
+    out.set_item("parent", numpy::PyArray1::from_vec(py, parent))?;
+    out.set_item("local", numpy::PyArray1::from_vec(py, local).reshape([n, 16])?)?;
+    out.set_item("has", numpy::PyArray1::from_vec(py, has))?;
+    out.set_item("flags", numpy::PyArray1::from_vec(py, flags))?;
+    out.set_item("uid", uids)?;
+    out.set_item("mesh", meshes)?;
+    out.set_item("billboard", billboard)?;
+    out.set_item("paint_layer", numpy::PyArray1::from_vec(py, paint_layer))?;
+    out.set_item("material", numpy::PyArray1::from_vec(py, material))?;
+    out.set_item("names", names)?;
+    out.set_item("materials", materials)?;
+    Ok(out)
+}
+
 /// The placements under `roots` as `model_placements` walks them (pre-order,
 /// a shared subtree once per occurrence): `(handles, parent, local, has,
 /// hidden)` — `parent[i]` the index of the placement holding `i` (-1 for a
@@ -2889,6 +3032,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(doc_walk, m)?)?;
     m.add_function(wrap_pyfunction!(igz_large_document, m)?)?;
     m.add_function(wrap_pyfunction!(doc_tree, m)?)?;
+    m.add_function(wrap_pyfunction!(doc_render_rows, m)?)?;
     m.add_function(wrap_pyfunction!(doc_get_many, m)?)?;
     m.add_function(wrap_pyfunction!(doc_serial, m)?)?;
     Ok(())
