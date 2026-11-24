@@ -19,6 +19,14 @@ pub(crate) fn drawing_plane(
     points: impl Iterator<Item = V3> + Clone,
     h: Hypot,
 ) -> Option<[Point; 2]> {
+    drawing_plane_where(points, h, |distance| distance <= 1e-4)
+}
+
+pub(crate) fn drawing_plane_where(
+    points: impl Iterator<Item = V3> + Clone,
+    h: Hypot,
+    accepts_distance: impl Fn(f64) -> bool,
+) -> Option<[Point; 2]> {
     let o = points.clone().next().unwrap_or(V3(0., 0., 0.));
     let offsets = || points.clone().map(|p| p.sub(o));
     let horizontal = Some([point(o), [0., 0., 1.]]);
@@ -34,7 +42,7 @@ pub(crate) fn drawing_plane(
     };
     let n = normalized(cross, h);
     offsets()
-        .all(|d| d.dot(n, h).abs() <= 1e-4)
+        .all(|d| accepts_distance(d.dot(n, h).abs()))
         .then(|| [point(o), point(n)])
 }
 

@@ -2152,12 +2152,13 @@ class SnapshotCompound(MeshCommand):
         self.before: Optional[dict] = None
         self.after: Optional[dict] = None
 
-    def do(self, scene) -> None:
+    def do(self, scene, *, transaction_captured_before=False) -> None:
         if self.after is None:
             # First run: snapshot before, apply the plan, clean up any coplanar
             # overlap it created (redundant nested holes / spurious mother), then
             # snapshot the result so undo/redo restore exactly.
-            self.before = self._direct_snapshot(scene.mesh)
+            if not transaction_captured_before:
+                self.before = self._direct_snapshot(scene.mesh)
             # Which way every face looked before the draw: the heal may
             # align the faces the draw MADE, never the ones already there
             # (a Reverse Faces undone by the next rectangle).

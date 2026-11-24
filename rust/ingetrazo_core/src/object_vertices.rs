@@ -234,14 +234,18 @@ pub(crate) fn bulk_weld<'py>(
 }
 
 #[pyfunction]
+#[pyo3(signature=(mesh,pos,cell,tol2,create,factory=None))]
 pub(crate) fn vertex<'py>(
     mesh: &Obj<'py>,
     pos: &Obj<'py>,
     cell: &Obj<'py>,
     tol2: f64,
     create: bool,
+    factory: Option<&Obj<'py>>,
 ) -> PyResult<Option<Obj<'py>>> {
-    let reg = mesh.getattr("_registry")?.cast_into::<PyDict>()?;
+    let reg = mesh
+        .getattr(pyo3::intern!(mesh.py(), "_registry"))?
+        .cast_into::<PyDict>()?;
     if let Some(v) = reg.get_item(cell)? {
         return Ok(Some(v));
     }
@@ -253,12 +257,18 @@ pub(crate) fn vertex<'py>(
     }
     let py = mesh.py();
     let kw = PyDict::new(py);
-    kw.set_item("key", mesh.getattr("_keys")?.call_method0("__next__")?)?;
-    let v = py
-        .import("core.mesh")?
-        .getattr("Vertex")?
-        .call((pos,), Some(&kw))?;
+    kw.set_item(
+        pyo3::intern!(py, "key"),
+        mesh.getattr(pyo3::intern!(py, "_keys"))?
+            .call_method0(pyo3::intern!(py, "__next__"))?,
+    )?;
+    let factory = match factory {
+        Some(factory) => factory.clone(),
+        None => py.import("core.mesh")?.getattr("Vertex")?,
+    };
+    let v = factory.call((pos,), Some(&kw))?;
     reg.set_item(cell, &v)?;
-    mesh.getattr("vertices")?.call_method1("append", (&v,))?;
+    mesh.getattr(pyo3::intern!(py, "vertices"))?
+        .call_method1(pyo3::intern!(py, "append"), (&v,))?;
     Ok(Some(v))
 }
