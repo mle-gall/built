@@ -55,6 +55,7 @@ mod protractor_host_api;
 mod protractor_tool_api;
 mod pushpull;
 mod radial_tool_api;
+mod rectangle_tool_api;
 mod rotate_host_api;
 mod rotate_tool_api;
 mod rotated_rectangle_tool_api;
@@ -147,6 +148,9 @@ fn registration(module: &str, name: &str) -> Option<(&'static [Method], &'static
             rotated_rectangle_tool_api::METHODS,
             stringify!(rotated_rectangle_tool_api),
         ),
+        ("tools.rust_tools", "RectangleTool") => {
+            (rectangle_tool_api::METHODS, stringify!(rectangle_tool_api))
+        }
         ("tools.pushpull", "PushPullTool") => (pushpull::METHODS, stringify!(pushpull)),
         _ => return None,
     })
