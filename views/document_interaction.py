@@ -2705,59 +2705,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
     # ---- Dynamic uploads ----------------------------------------------------
     def prune_stale_selection(self):
-        """Release references to deleted elements before notifying document consumers."""
-        hover = getattr(self, "_hover_entity", None)
-        cands = [hover] if isinstance(hover, (Edge, Face)) else []
-        cands += [s for s in self.scene.selection
-                  if isinstance(s, (Edge, Face))]
-        if cands:
-            if len(cands) > 64:
-                # Selected/hovered Edge/Face refs only ever point into the
-                # active mesh (loose, or the group being edited) — the old
-                # render_edges()/render_faces() sets walked EVERY group's
-                # entities (~283k) per edit frame after an explode.
-                alive_e: set = set(map(element_identity, self.scene.mesh.edges))
-                alive_f: set = set(map(element_identity, self.scene.mesh.faces))
-
-                def alive(ent):
-                    return ent.key in (alive_e if isinstance(ent, Edge)
-                                       else alive_f)
-            else:
-                # A mesh the experimental engine has not built yet holds no
-                # Edge/Face object, so nothing can be alive in it: asking it
-                # built every lazy group of the villa (~0.5 s) on the first
-                # click inside an opened group (issue #1006). The active
-                # mesh — where a selection inside a group lives — first.
-                act = self.scene.mesh
-                gmeshes = [g.mesh for g in self._placements()
-                           if self.scene.entity_visible(g)
-                           and not getattr(g, "billboard", False)
-                           and "_deferred" not in g.mesh.__dict__]
-                gmeshes.sort(key=lambda gm: gm is not act)
-
-                # A hidden face/edge the hidden view shows is selectable,
-                # and a selection it took must not be dropped here: a
-                # single click on a ghost face looked like nothing (only
-                # a double click, which selected its visible edges too,
-                # seemed to work — Marco, 2026-09-21, issue #53).
-                def shown(ent):
-                    return (self.scene.entity_visible(ent)
-                            or self.scene.entity_selectable(ent))
-
-                def alive(ent):
-                    if isinstance(ent, Edge):
-                        if ent in self.scene.loose_mesh.edges:
-                            return shown(ent)
-                        return any(ent in gm.edges for gm in gmeshes)
-                    if ent in self.scene.loose_mesh.faces:
-                        return shown(ent)
-                    return any(ent in gm.faces for gm in gmeshes)
-
-            if isinstance(hover, (Edge, Face)) and not alive(hover):
-                self._hover_entity = None
-            for s in [s for s in self.scene.selection
-                      if isinstance(s, (Edge, Face)) and not alive(s)]:
-                self.scene.selection.discard(s)
+        return ingetrazo_render.prune_stale_selection(self)
 
     def notify_scene_changed(self) -> None:
         """Force a redraw and emit the version-changed signal.
@@ -2771,66 +2719,13 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         self.update()
 
     def begin_groups_preview(self, groups=(), external: bool = False) -> None:
-        """Enter a groups-only transform preview: the per-version caches
-        freeze, the moving groups leave the consolidated VBOs (one resync)
-        and their chunk arrays upload ONCE to scratch VBOs that paintGL
-        draws with a translated MVP — a drag frame touches no arrays at
-        all. Smooth group dragging on a 230k-face group.
-
-        ``external=True`` previews OFF-scene template groups (Paste's
-        clipboard): same scratch upload, but nothing leaves the consolidated
-        VBOs and the caches stay live — no freeze, no resyncs."""
-        # A component keeps placements inside itself, and THOSE hold the
-        # geometry: previewing only the top-level group uploaded an empty
-        # scratch copy while the children kept drawing, frozen, at the old
-        # spot — the hedge stood still through the whole drag and teleported
-        # on release (Marco: "cuando roto o muevo tiene laj bastante").
-        movers: list = []
-        # Inside an open group the movers sit in its paint: without it a
-        # plain piece turned unpainted for the drag and came back on release
-        # (#1101).
-        open_paint = self.scene.open_group_paint()
-        self._placements()                     # the proxies _preview_chunk bakes
-        for g in groups:
-            self._expand_placements(g, movers, above=open_paint)
-        groups = movers
-        self._preview_external = external
-        if not external:
-            self._frozen_cache_version = self.scene.version
-            self._edges_version = -1      # one resync WITHOUT the movers
-        self._preview_groups = set(map(id, groups))
-        self._preview_epoch = getattr(self, "_preview_epoch", 0) + 1
-        self._preview_offset = QVector3D(0.0, 0.0, 0.0)
+        return ingetrazo_render.begin_groups_preview(self, groups, external)
 
     def _preview_chunk(self, g):
-        """The arrays of a mover's scratch copy. A nested piece handed in as
-        itself bakes through its placement proxy, which knows the paint above
-        it; the piece alone only knows its own (#1101)."""
-        proxies = getattr(self, "_placement_proxies", None) or {}
-        return self._group_chunk(proxies.get(id(g), g))
+        return ingetrazo_render.preview_chunk(self, g)
 
     def end_groups_preview(self) -> None:
-        if not getattr(self, "_preview_external", False):
-            self._frozen_cache_version = None
-            self._edges_version = -1      # resync with the movers back in
-        else:
-            # Off-scene templates never left the consolidated VBOs (nothing
-            # to resync) and their scratch chunks are one-shot — drop them
-            # so a big clipboard doesn't pin megabytes of arrays.
-            scene_ids = {id(g) for g in self._placements()}
-            for cache_name in ("_group_chunks", "_inst_chunks"):
-                cache = getattr(self, cache_name, None)
-                if cache:
-                    for gid in self._preview_groups - scene_ids:
-                        cache.pop(gid, None)
-        self._preview_external = False
-        self._preview_groups = set()
-        self._preview_epoch = getattr(self, "_preview_epoch", 0) + 1
-        self._preview_offset = QVector3D(0.0, 0.0, 0.0)
-        self._preview_matrix = None
-        self._pv_edges_count = 0
-        self._pv_vcol_count = 0
-        self._pv_tex_runs = []
+        return ingetrazo_render.end_groups_preview(self)
 
     def set_groups_preview_offset(self, delta: QVector3D) -> None:
         self._preview_offset = QVector3D(delta)
@@ -2844,16 +2739,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         self.update()
 
     def _groups_preview_transform(self) -> QMatrix4x4:
-        """The world transform the groups preview draws its movers through:
-        the full matrix (Rotate/Scale) or the translation (Move)."""
-        m = getattr(self, "_preview_matrix", None)
-        if m is not None:
-            return QMatrix4x4(m)
-        m = QMatrix4x4()
-        off = getattr(self, "_preview_offset", None)
-        if off is not None:
-            m.translate(off)
-        return m
+        return ingetrazo_render.groups_preview_transform(self)
 
 
     def _newell_of(self, face):
@@ -4702,163 +4588,16 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
     # ---- Copy / paste -------------------------------------------------------
     def copy_selection(self, *, publish=True) -> bool:
-        """Copy the selected faces, edges and groups into the clipboard (as
-        positions, with a reference corner). Returns False if nothing is
-        selected."""
-        faces = [f for f in self.scene.selection if isinstance(f, Face)]
-        edges = [e for e in self.scene.selection if isinstance(e, Edge)]
-        groups = [g for g in self.scene.selection if isinstance(g, Group)]
-        if not faces and not edges and not groups:
-            return False
-        # Attrs (colour, texture, layer, BIM tag) travel with each face — a
-        # deep copy, so later re-paints of the original never touch the
-        # clipboard snapshot.
-        face_data = [
-            ([QVector3D(v) for v in f.vertices],
-             [[QVector3D(v) for v in h] for h in f.holes],
-             copy.deepcopy(f.attrs) if f.attrs else {})
-            for f in faces
-        ]
-        # Keep soft/curve flags so a pasted circle stays ONE selectable curve
-        # (ids are remapped to fresh ones at paste time).
-        edge_data = [(QVector3D(e.a), QVector3D(e.b), e.soft, e.curve)
-                     for e in edges]
-        # Groups are snapshotted NOW (instances keep sharing their prototype;
-        # classic groups deep-copy) so editing or deleting the original later
-        # never changes what Paste stamps. No preview wireframe is built here
-        # any more: Paste previews the groups through the frozen-scratch VBO
-        # pipeline (the old per-edge tuple walk took seconds on a leafy
-        # plant, and again on EVERY preview frame — the piscina hang).
-        group_data = [copy_group(g) for g in groups]
-        # A classic group's snapshot becomes an identity INSTANCE of its
-        # fresh mesh: every stamp is an O(1) sibling of the clipboard
-        # prototype instead of a full deep copy per paste (the 230k-face
-        # hedge took seconds per stamp). Component semantics hold: pasted
-        # copies share the definition until edited — begin_group_edit
-        # already materializes instances on entry. The prototype's chunk is
-        # pre-seeded from the SOURCE group's cached entry (content-identical
-        # deep copy), so preview and stamps skip the from-scratch rebuild.
-        old_clip = getattr(self, "clipboard", None)
-        seed = getattr(self, "_seed_proto_chunk", None)
-        for src, tpl in zip(groups, group_data):
-            if tpl.xform is None:
-                tpl.xform = QMatrix4x4()
-                # Still a GROUP: the matrix is only how the stamps share
-                # until one is edited (issue #90).
-                tpl.component = False
-                if callable(seed):
-                    seed(tpl.mesh, src)
-        # Reference corner (what the cursor holds the set by): min corner of
-        # everything copied, via NumPy — one pass over vertices instead of
-        # four Python min() scans over every edge endpoint.
-        import numpy as np
-        from core.group import placement_points
-        lo = None
-        pts = [p for loop, holes, _a in face_data for p in loop]
-        pts += [p for _, holes, _a in face_data for h in holes for p in h]
-        pts += [p for a, b, _, _ in edge_data for p in (a, b)]
-        if pts:
-            lo = np.array([[p.x(), p.y(), p.z()] for p in pts]).min(axis=0)
-        for g in group_data:
-            # The whole placement, children included: a container's own
-            # mesh is usually empty, and reading only that found nothing to
-            # copy — Ctrl+C on an imported lamp post silently left the
-            # previous clipboard in place, and Ctrl+V pasted the pergola
-            # (Marco, 2026-09-11).
-            arr = placement_points(g)
-            if not len(arr):
-                continue
-            gmin = arr.min(axis=0)
-            lo = gmin if lo is None else np.minimum(lo, gmin)
-        if lo is None:
-            return False
-        ref = QVector3D(float(lo[0]), float(lo[1]), float(lo[2]))
-        drop = getattr(self, "_drop_clip_protos", None)
-        if old_clip and callable(drop):
-            drop(old_clip)
-        # The tags travel with the copy — the loose edges' (parallel to
-        # ``edges``) and the definitions of every tag used, with their
-        # folders — so another document can give the pasted geometry its
-        # tags instead of names it does not know.
-        from core.insert import used_layers
-        from core.layers import layer_of, template_for
-        edge_layers = [layer_of(e) for e in edges]
-        names = used_layers([a for _l, _h, a in face_data], edge_layers,
-                            group_data)
-        self.clipboard = {"faces": face_data, "edges": edge_data,
-                          "registry": {n: m for n, m in getattr(self.scene, "materials", {}).items()
-                                       if m.pbr is not None},
-                          "edge_layers": edge_layers,
-                          "layers": template_for(self.scene, names),
-                          "groups": group_data, "ref": ref}
-        # Also on the system clipboard, so another IngeTrazo window can
-        # paste it (issue #76); encoded only if that window asks.
-        if publish and NATIVE:
-            from app_shell.files import publish_clipboard
-            publish_clipboard(self.window(), self.clipboard)
-        elif publish:
-            from formats import clip as clip_transfer
-            clip_transfer.publish(self.clipboard)
-        return True
+        return ingetrazo_render.copy_selection(self, publish)
 
     def _seed_proto_chunk(self, mesh, src_group) -> None:
-        """Pre-seed the prototype-chunk cache of a clipboard snapshot with
-        its SOURCE group's cached chunk. The snapshot is a content-identical
-        deep copy, so the seeded entry revalidates through the fingerprint
-        self-heal (~120 ms) instead of a from-scratch rebuild (~7 s on the
-        230k-face hedge). A wrong guess is harmless: a fingerprint mismatch
-        just rebuilds."""
-        cache = getattr(self, "_group_chunks", None)
-        if not cache or getattr(src_group, "xform", None) is not None:
-            return
-        src_entry = cache.get(id(src_group))
-        if src_entry is None:
-            return
-        from types import SimpleNamespace
-        wrappers = getattr(self, "_proto_wrappers", None)
-        if wrappers is None:
-            wrappers = self._proto_wrappers = {}
-        w = wrappers.get(id(mesh))
-        if w is None:
-            w = wrappers[id(mesh)] = SimpleNamespace(mesh=mesh, xform=None)
-        cache[id(w)] = dict(src_entry)
+        return ingetrazo_render.seed_proto_chunk(self, mesh, src_group)
 
     def _drop_clip_protos(self, clip) -> None:
-        """A replaced clipboard's prototype chunks are dead weight (hundreds
-        of MB for a big copy) — drop them unless a stamped sibling in the
-        scene still shares the mesh."""
-        wrappers = getattr(self, "_proto_wrappers", None)
-        cache = getattr(self, "_group_chunks", None)
-        if not wrappers:
-            return
-        from core.purge import iter_groups
-        live = {id(pg.mesh) for pg in iter_groups(self.scene.groups)}
-        for g in clip.get("groups", ()):
-            mid = id(g.mesh)
-            if mid in live:
-                continue
-            w = wrappers.pop(mid, None)
-            if w is not None and cache:
-                cache.pop(id(w), None)
+        return ingetrazo_render.drop_clip_protos(self, clip)
 
     def cut_selection(self, *, publish=True) -> bool:
-        """Copy the selection, then erase it (one undoable step)."""
-        copied = self.copy_selection() if publish else self.copy_selection(publish=False)
-        if not copied:
-            return False
-        from core.history import CompoundCommand, DeleteGroupCommand
-        faces = [f for f in self.scene.selection if isinstance(f, Face)]
-        edges = [e for e in self.scene.selection if isinstance(e, Edge)]
-        groups = [g for g in self.scene.selection if isinstance(g, Group)]
-        cmds: list = []
-        if edges or faces:
-            cmds.append(EraseSelectionCommand(edges, faces))
-        cmds.extend(DeleteGroupCommand(g) for g in groups)
-        if cmds:
-            self.history.execute(
-                cmds[0] if len(cmds) == 1 else CompoundCommand(cmds))
-        self.update()
-        return True
+        return ingetrazo_render.cut_selection(self, publish)
 
     # ---- Group-edit context (Groups v2) --------------------------------------
     def _offer_link_source(self, group) -> None:
@@ -4898,15 +4637,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return self._edit_rest_mode
 
     def set_edit_rest_mode(self, mode: str) -> None:
-        if mode not in EDIT_REST_MODES or mode == self._edit_rest_mode:
-            return
-        self._edit_rest_mode = mode
-        from core.settings import settings as QSettings
-        QSettings().setValue("display/edit_rest_mode", mode)
-        # "hide" keeps the rest out of the VBOs entirely, so switching to or
-        # from it changes what is uploaded, not just how it is drawn.
-        self._edges_version = -1
-        self.update()
+        return ingetrazo_render.set_edit_rest_mode(self, mode)
 
     @property
     def edit_rest_fade(self) -> float:
@@ -4915,33 +4646,10 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
                              EDIT_REST_FADE))
 
     def set_edit_rest_fade(self, strength: float) -> None:
-        """Set and persist the rest-of-model fade strength."""
-        strength = max(0.0, min(1.0, float(strength)))
-        if math.isclose(strength, self.edit_rest_fade, abs_tol=1e-9):
-            return
-        self._edit_rest_fade_strength = strength
-        from core.settings import settings as QSettings
-        QSettings().setValue("display/edit_rest_fade", strength)
-        self.update()
+        return ingetrazo_render.set_edit_rest_fade(self, strength)
 
     def set_hide_similar_components(self, on: bool) -> None:
-        """Hide Similar Components: the other instances of the
-        component being edited leave the frame. Persisted like the rest
-        mode; the version bump re-keys the pick index."""
-        on = bool(on)
-        from core.settings import settings as QSettings
-        QSettings().setValue("display/hide_similar_components",
-                             "1" if on else "0")
-        if bool(getattr(self.scene, "hide_similar_components", False)) == on:
-            return
-        self.scene.hide_similar_components = on
-        if on:
-            for ent in list(self.scene.selection):
-                if self.scene.similar_hidden(ent):
-                    self.scene.selection.discard(ent)
-        self.scene.version += 1
-        self._edges_version = -1
-        self.update()
+        return ingetrazo_render.set_hide_similar_components(self, on)
 
     def _rest_is_hidden(self) -> bool:
         """Whether the model outside the edited group is out of this frame."""
