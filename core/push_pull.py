@@ -33,13 +33,11 @@ from core.cap_rebuild import (
     seam_planes,
 )
 from core.topology import (
-    _faces_coplanar,
     _key,
     _mesh_is_flat,
     classify_push_edge,
     heal_overlapping_faces,
     loop_inside_face,
-    _segment_on_face_boundary,
     refine_loop_with_points,
 )
 from core.units import fmt_len
@@ -125,18 +123,9 @@ class _GroupScene:
         self._scene.version = value
 
 
-def _segment_faces(mesh, a, b, faces):
-    """The faces ``classify_push_edge(face, a, b, faces)`` /
-    ``_segment_on_face_boundary(a, b, g)`` can find carrying ``a``–``b``:
-    the native candidates near both points (list order, a superset), or
-    ``faces`` itself with the scans off (``core.push_scans``)."""
-    got = push_scans.faces_on_segment(mesh, a, b)
-    return faces if got is None else got
-
-
 def _classify_edge(face, a, b, mesh, faces, memo):
     """``classify_push_edge`` of ``a``–``b``: over the native candidates
-    near the segment when the scans are on (:func:`_segment_faces`), or
+    near the segment when the scans are on (``push_scans.faces_on_segment``), or
     over ``faces`` with ``memo`` — the coplanar split remembered across
     the edges of one face, valid only while the list asked about is the
     same one each time."""
@@ -266,42 +255,6 @@ def _component_is_closed(mesh, face) -> bool:
                         seen.add(g)
                         stack.append(g)
     return True
-
-
-def _swept_by_push(neighbour: Face, push_normal: QVector3D) -> bool:
-    """Whether ``neighbour`` is *swept* by a push along ``push_normal`` — it has
-    an edge parallel to the push, so translating its shared edge slides the wall
-    along its own length (a prism wall getting taller). A cap perpendicular to
-    the prism axis (a triangular floor/top) has no such edge, so pushing one of
-    *its* edges out would shear it instead — that case must add a coplanar strip
-    (a box bump), not translate/extend."""
-    n = push_normal.normalized()
-    verts = neighbour.vertices
-    m = len(verts)
-    for i in range(m):
-        e = verts[(i + 1) % m] - verts[i]
-        if e.length() > 1e-9 and abs(QVector3D.dotProduct(e.normalized(), n)) > 0.999:
-            return True
-    return False
-
-
-def _corner_dragged(face: Face, rim: set, push_normal: QVector3D) -> bool:
-    """Whether a prism-cap translate moving the ``rim`` positions along
-    ``push_normal`` would bend ``face`` at one of them — any of its vertices
-    on the rim that isn't a straight-through point of an edge running with
-    the push."""
-    n = push_normal.normalized()
-    for loop in [face.vertices, *face.holes]:
-        m = len(loop)
-        for i, v in enumerate(loop):
-            if _key(v) not in rim:
-                continue
-            a, b = loop[i - 1] - v, loop[(i + 1) % m] - v
-            if (a.length() < 1e-9 or b.length() < 1e-9
-                    or abs(QVector3D.dotProduct(a.normalized(), n)) < 0.999
-                    or abs(QVector3D.dotProduct(b.normalized(), n)) < 0.999):
-                return True
-    return False
 
 
 # The smallest extrusion that still moves geometry: anything below the mesh's
@@ -765,7 +718,14 @@ class PushPullOperation:
         """
         if is_closed(mesh) or _mesh_is_flat(mesh):
             return face.normal()
-        return cls._surface_normal(face)
+        return cls._surface_normal(face, mesh)
+
+    @staticmethod
+    def _surface_normal(face, mesh=None) -> QVector3D:
+        """``face``'s unit normal, turned to agree with the majority of its
+        coplanar neighbours: the surface it was cut out of
+        (``pushscan::scan_surface_normal``)."""
+        return push_scans.surface_normal(mesh if mesh is not None else face._m, face)
 
     def _classify_base(self, scene) -> tuple[bool, bool]:
         """Classify the base face for previewing.
@@ -781,46 +741,13 @@ class PushPullOperation:
         coplanar inner panel (a rectangle drawn on a wall) breaks prism_cap —
         translating the cap would leave the panel and rim behind. A hole whose
         rim backs onto perpendicular swept walls (a window tube through the
-        slab) keeps the clean translate.
+        slab) keeps the clean translate. A face with a corner on the rim
+        that is not such a wall (the next room's corner on a wall's edge)
+        would be skewed by the translate: no prism cap then, unless the
+        corner only slides along a straight edge running with the push.
+        The rule is Rust's (``pushscan::scan_classify_base``).
         """
-        faces = scene.faces
-        kinds = []
-        memo: dict = {}
-        for loop in [self.base_face.vertices] + self.base_face.holes:
-            n = len(loop)
-            kinds.extend(
-                _classify_edge(self.base_face, loop[i], loop[(i + 1) % n],
-                               scene.mesh, faces, memo)
-                for i in range(n)
-            )
-        normal = self.base_face.normal()
-        attached = all(kind != "free" for kind, _ in kinds)
-        # A clean prism-cap translate only applies when every backing wall is
-        # *swept* by the push (has an edge along the normal). Otherwise the push
-        # is into a cap that would shear — handle that via the extrude path so it
-        # adds a box bump instead of dragging the whole cross-section.
-        prism_cap = bool(kinds) and all(
-            kind == "perp" and nb is not None and _swept_by_push(nb, normal)
-            for kind, nb in kinds
-        )
-        if prism_cap:
-            # The translate moves every face carrying a rim position. A face
-            # that only touches the rim at a vertex — the next room's corner
-            # landing on a wall's edge — shares no edge with the cap, so it
-            # isn't a wall the push stretches: dragging its corner skews it.
-            # Unless the position only slides along a straight edge of it that
-            # runs with the push (a T-point on the host wall's top edge).
-            walls = {nb.key for _, nb in kinds}
-            rim_pts = [p for loop in [self.base_face.vertices]
-                       + self.base_face.holes for p in loop]
-            rim = {_key(p) for p in rim_pts}
-            # Only a face with a corner on the rim can be dragged by it.
-            near = push_scans.faces_near_points_rings(
-                scene.mesh, [_key(p) for p in rim_pts])
-            prism_cap = not any(
-                _corner_dragged(g, rim, normal)
-                for g in (faces if near is None else near)
-                if g != self.base_face and g.key not in walls)
+        attached, prism_cap = push_scans.classify_base(scene.mesh, self.base_face)
         return attached, prism_cap
 
     def _commit(self, viewport) -> None:
@@ -1333,49 +1260,16 @@ class PushPullOperation:
         if d >= 0:
             return False
         normal = self._normal if self._normal is not None else face.normal()
-        from core.store_mesh import _store_of
-        store = _store_of(scene.mesh)
-        if store is not None:
-            return store.cap_passes_wall(face.key, [p.toTuple() for p in self._cap_positions],
-                                         normal.toTuple(), d)
-        rim = {_key(p) for p in self._cap_positions}
-        origin = self._cap_positions[0] if self._cap_positions else None
-        if origin is None:
-            return False
-        walls = []
-        for g in scene.mesh.faces:
-            if g == face or not any(_key(v) in rim for v in g.vertices):
-                continue
-            walls.append([QVector3D.dotProduct(origin - v, normal)
-                          for v in g.vertices if _key(v) not in rim])
-        from ingetrazo_core import MeshStore
-        return MeshStore.wall_depths_crossed(walls, d)
+        return push_scans.cap_passes_wall(scene.mesh, face, self._cap_positions, normal, d)
 
     @staticmethod
     def _sweeps_a_free_sheet(face, base, base_holes, faces, mesh=None) -> bool:
         """Whether ``face`` is a sheet whose whole rim — outline and holes —
         borders only other sheets on its plane or nothing at all: no face off
-        its plane (a room's wall beside it) stands on any rim edge."""
-        normal = face.normal()
-        segs = [(lp[i], lp[(i + 1) % len(lp)]) for lp in (base, *base_holes)
-                for i in range(len(lp))]
-        near = ([push_scans.faces_on_segment(mesh, a, b) for a, b in segs]
-                if mesh is not None else None)
-        if near is not None and all(c is not None for c in near):
-            # Only the faces near both ends of a rim edge can carry it.
-            return not any(
-                _segment_on_face_boundary(a, b, g)
-                for (a, b), cands in zip(segs, near) for g in cands
-                if g != face and not _faces_coplanar(normal, g.normal()))
-        off_plane = [g for g in faces if g != face
-                     and not _faces_coplanar(normal, g.normal())]
-        for lp in (base, *base_holes):
-            m = len(lp)
-            for i in range(m):
-                a, b = lp[i], lp[(i + 1) % m]
-                if any(_segment_on_face_boundary(a, b, g) for g in off_plane):
-                    return False
-        return True
+        its plane (a room's wall beside it) stands on any rim edge
+        (``pushscan::scan_sweeps_free_sheet``)."""
+        return push_scans.sweeps_free_sheet(mesh if mesh is not None else face._m, face,
+                                            [base, *base_holes])
 
     @staticmethod
     def _touched_faces(mesh, seedkeys: set):

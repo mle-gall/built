@@ -644,6 +644,144 @@ def run_rot(steps):
     return out
 
 
+# ---- Arcs -------------------------------------------------------------------
+
+class ArcView(RotView):
+    """A Rot view whose square face (0..4 × 0..4 on the ground) has corners
+    to round; the wall face stays out of the way at x = 5."""
+
+    def __init__(self):
+        super().__init__()
+        from core.protocol.commands import run
+        run(self.history, "add_face", outer=[[0, 0, 0], [4, 0, 0], [4, 4, 0], [0, 4, 0]])
+        self.history.undo_stack.clear()
+
+
+def _arc_snapshot(view, tool):
+    snap = _line_snapshot_base(view, tool)
+    label = tool.value_label() if hasattr(tool, "value_label") else None
+    second = next((getattr(tool, k) for k in ("end_point", "mid_point", "arm_point") if hasattr(tool, k)), None)
+    colour = getattr(tool, "wireframe_color", None)
+    snap.update(label=None if label is None else [label[0], _pt(label[1])],
+                second=_pt(second), flashed=list(view.flashed),
+                segments=getattr(tool, "segments", None),
+                caption=tool.vcb_caption() if hasattr(tool, "vcb_caption") else None,
+                unitless=bool(tool.value_is_unitless()),
+                colour=None if colour is None else [_r(c) for c in colour],
+                work_plane=None if tool.work_plane is None else [_pt(p) for p in tool.work_plane],
+                plane_lock=tool.plane_lock)
+    view.flashed.clear()
+    return snap
+
+
+ARC_SCENARIOS = {
+    "arc:bulge_by_click": [
+        ("click", (6, 1, 0)), ("hover", (8, 1, 0)), ("click", (8, 1, 0)), ("hover", (7, 1.4, 0)),
+        ("click", (7, 1.4, 0))],
+    "arc:segments_before_and_retyped_after": [
+        ("value", 6.0), ("value", 1.0), ("click", (6, 1, 0)), ("hover", (8, 1, 0)), ("click", (8, 1, 0)),
+        ("hover", (7, 0.5, 0)), ("click", (7, 0.5, 0)), ("segments", 4), ("segments", 1), ("segments", 10)],
+    "arc:typed_bulge_and_tuple": [
+        ("click", (6, 1, 0)), ("hover", (8, 1, 0)), ("click", (8, 1, 0)), ("hover", (7, 0.8, 0)),
+        ("value", (1.0, 2.0)), ("value", 0.3)],
+    "arc:typed_radius": [
+        ("click", (6, 1, 0)), ("hover", (8, 1, 0)), ("click", (8, 1, 0)), ("hover", (7, 1.2, 0)),
+        ("radius", 0.5), ("radius", 1.5)],
+    "arc:half_circle_snap": [
+        ("click", (6, 1, 0)), ("hover", (8, 1, 0)), ("click", (8, 1, 0)), ("hover", (7, 1.98, 0)),
+        ("click", (7, 1.98, 0))],
+    "arc:fillet_on_a_face_corner": [
+        ("click", (1, 0, 0)), ("hover", (0.5, 0.5, 0)), ("hover", (0.02, 1.03, 0)), ("click", (0.02, 1.03, 0)),
+        ("hover", (0.3, 0.3, 0)), ("click", (0.3, 0.3, 0))],
+    "arc:fillet_with_alt_keeps_the_corner": [
+        ("click", (1, 0, 0)), ("hover", (0.02, 1.03, 0)), ("click", (0.02, 1.03, 0)),
+        ("hover", (0.3, 0.3, 0)), ("click", (0.3, 0.3, 0), "alt")],
+    "arc:fillet_radius_typed": [
+        ("click", (1, 0, 0)), ("hover", (0.02, 1.03, 0)), ("click", (0.02, 1.03, 0)),
+        ("hover", (0.5, 0.6, 0)), ("value", 0.5)],
+    "arc:fillet_radius_too_big": [
+        ("click", (1, 0, 0)), ("hover", (0.02, 1.03, 0)), ("click", (0.02, 1.03, 0)),
+        ("hover", (0.5, 0.6, 0)), ("value", 9.0), ("cancel",)],
+    "arc:fillet_then_double_click_repeats_it": [
+        ("click", (1, 0, 0)), ("hover", (0.02, 1.03, 0)), ("click", (0.02, 1.03, 0)),
+        ("hover", (0.3, 0.3, 0)), ("click", (0.3, 0.3, 0)),
+        ("click", (4.02, 0.03, 0)), ("double", (4.02, 0.03, 0))],
+    "arc:a_rounded_corner_still_offers_the_fillet": [
+        ("click", (1, 0, 0)), ("hover", (0.02, 1.03, 0)), ("click", (0.02, 1.03, 0)),
+        ("hover", (0.3, 0.3, 0)), ("click", (0.3, 0.3, 0)),
+        ("click", (2, 0, 0)), ("hover", (0.03, 2.02, 0)), ("click", (0.03, 2.02, 0)), ("hover", (0.6, 0.6, 0)),
+        ("click", (0.6, 0.6, 0))],
+    "arc:tangent_at_the_end_of_an_arc": [
+        ("click", (6, 1, 0)), ("hover", (8, 1, 0)), ("click", (8, 1, 0)), ("hover", (7, 1.5, 0)),
+        ("click", (7, 1.5, 0)), ("click", (8, 1, 0)), ("hover", (10, 1, 0)), ("click", (10, 1, 0)),
+        ("hover", (9, 0.6, 0)), ("hover", (9, 0.55, 0)), ("click", (9, 0.55, 0))],
+    "arc:a_zero_chord_and_cancel": [
+        ("click", (6, 1, 0)), ("click", (6, 1, 0)), ("hover", (7, 2, 0)), ("cancel",), ("value", 3.0)],
+    "arc:plane_lock_arrow": [
+        ("key", "right"), ("click", (6, 1, 0)), ("hover", (6, 2, 1)), ("click", (6, 2, 1)),
+        ("hover", (6, 1.5, 2)), ("click", (6, 1.5, 2))],
+    "arc3:three_points": [
+        ("click", (6, 1, 0)), ("hover", (7, 2, 0)), ("click", (7, 2, 0)), ("hover", (8, 1, 0)),
+        ("click", (8, 1, 0))],
+    "arc3:segments_and_values": [
+        ("value", 5.0), ("value", (1.0, 1.0)), ("segments", 3), ("click", (6, 1, 0)), ("value", 2.0),
+        ("click", (6, 1, 0)), ("click", (7, 1, 0)), ("hover", (8, 1, 0)), ("click", (8, 1, 0))],
+    "center_arc:sweep": [
+        ("click", (6, 1, 0)), ("hover", (7, 1, 0)), ("click", (7, 1, 0)), ("hover", (6, 2, 0)),
+        ("click", (6, 2, 0))],
+    "center_arc:typed_angle_and_segments": [
+        ("value", 4.0), ("click", (6, 1, 0)), ("hover", (7, 1.5, 0)), ("click", (7, 1.5, 0)),
+        ("hover", (6, 0, 0)), ("value", 120.0)],
+    "center_arc:arm_value_refused": [
+        ("click", (6, 1, 0)), ("hover", (7, 1, 0)), ("value", 2.0), ("click", (6, 1, 0)), ("cancel",)],
+    "pie:wedge": [
+        ("click", (6, 1, 0)), ("hover", (7, 1, 0)), ("click", (7, 1, 0)), ("hover", (6.2, 2, 0)),
+        ("click", (6.2, 2, 0))],
+}
+
+
+def run_arc(name, steps):
+    from ingetrazo_core import Vec3
+    from PySide6.QtCore import QPointF, Qt
+    from tools.base import ToolContext
+    from tools.arc import ArcTool, CenterArcTool, PieTool, ThreePointArcTool
+    kind = name.split(":")[0]
+    cls = {"arc": ArcTool, "arc3": ThreePointArcTool, "center_arc": CenterArcTool, "pie": PieTool}[kind]
+    ArcTool.last_fillet_d = None
+    view = ArcView()
+    tool = cls()
+    tool.on_activate(view)
+    out = []
+    for step in steps:
+        what = step[0]
+        result = None
+        if what in ("click", "hover", "double"):
+            w = Vec3(*map(float, step[1]))
+            opt = step[2] if len(step) > 2 else None
+            mods = Qt.AltModifier if opt == "alt" else Qt.NoModifier
+            x, y = view._world_to_pixel(w)
+            ctx = ToolContext(view, w, QPointF(x, y), mods, _Snap("on_face"))
+            {"click": tool.on_click, "hover": tool.on_hover,
+             "double": getattr(tool, "on_double_click", tool.on_click)}[what](ctx)
+        elif what == "value":
+            v = step[1]
+            result = bool(tool.on_value(view, tuple(map(float, v)) if isinstance(v, (list, tuple)) else float(v)))
+        elif what == "segments":
+            result = bool(tool.on_segments_value(view, step[1]))
+        elif what == "radius":
+            result = bool(tool.on_radius_value(view, step[1]))
+        elif what == "key":
+            result = bool(tool.on_key(view, getattr(Qt, _KEYS[step[1]]), Qt.NoModifier))
+        elif what == "cancel":
+            tool.on_cancel(view)
+        snap = _arc_snapshot(view, tool)
+        snap["result"] = result
+        snap["last_fillet_d"] = None if ArcTool.last_fillet_d is None else _r(ArcTool.last_fillet_d)
+        out.append(snap)
+    ArcTool.last_fillet_d = None
+    return out
+
+
 # ---- Move -----------------------------------------------------------------
 
 class MoveView(RectView):
@@ -767,7 +905,7 @@ def _compact(fixture) -> str:
     return "{\n" + ",\n".join(rows) + "\n}\n"
 
 
-def record(which=("line", "select", "rectangle", "move", "circle", "rotated_rectangle")):
+def record(which=("line", "select", "rectangle", "move", "circle", "rotated_rectangle", "arc")):
     FIXTURES.mkdir(parents=True, exist_ok=True)
     if "line" in which:
         line = {name: run_line(steps, far) for name, steps, far in line_cases()}
@@ -787,6 +925,9 @@ def record(which=("line", "select", "rectangle", "move", "circle", "rotated_rect
     if "rotated_rectangle" in which:
         rot = {name: run_rot(steps) for name, steps in ROT_SCENARIOS.items()}
         (FIXTURES / "rotated_rectangle.json").write_text(_compact(rot))
+    if "arc" in which:
+        arcs = {name: run_arc(name, steps) for name, steps in ARC_SCENARIOS.items()}
+        (FIXTURES / "arc.json").write_text(_compact(arcs))
 
 
 def load(tool):

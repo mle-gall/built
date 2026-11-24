@@ -181,6 +181,10 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pushscan::scan_parallel_overlapping, m)?)?;
     m.add_function(wrap_pyfunction!(pushscan::scan_lateral_exit, m)?)?;
     m.add_function(wrap_pyfunction!(pushscan::scan_inward_limit, m)?)?;
+    m.add_function(wrap_pyfunction!(pushscan::scan_classify_base, m)?)?;
+    m.add_function(wrap_pyfunction!(pushscan::scan_sweeps_free_sheet, m)?)?;
+    m.add_function(wrap_pyfunction!(pushscan::scan_surface_normal, m)?)?;
+    m.add_function(wrap_pyfunction!(pushscan::scan_cap_passes_wall, m)?)?;
     m.add_function(wrap_pyfunction!(pushscan::scan_vertices_in_boxes, m)?)?;
     m.add_function(wrap_pyfunction!(pushscan::scan_cracked_edges, m)?)?;
     m.add_function(wrap_pyfunction!(pushscan::scan_faces_meeting_rings, m)?)?;
@@ -218,6 +222,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(snap_curve::snap_circle, m)?)?;
     m.add_class::<inference_state::InferenceMemory>()?;
     m.add_class::<tools::py::ToolMachine>()?;
+    m.add_function(wrap_pyfunction!(tools::arc::py_last_fillet_d, m)?)?;
     m.add_function(wrap_pyfunction!(tools::py::select_mode, m)?)?;
     m.add_function(wrap_pyfunction!(tools::py::select_pick, m)?)?;
     m.add_function(wrap_pyfunction!(pick::ray_triangles, m)?)?;

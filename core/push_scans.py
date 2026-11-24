@@ -356,3 +356,51 @@ def tjunction_arrays(mesh, seed_lo, seed_hi, tol):
         edges = s.native.keys_at("edge", eidx)
     return (np.asarray(pos, dtype=np.float64).reshape(-1, 3),
             np.asarray(ends, dtype=np.int64).reshape(-1, 2), verts, edges)
+
+
+def _native_face(mesh, face):
+    """``(scan, index)`` of ``face`` on a scan of ``mesh`` (built even with
+    the scans off: these questions have no Python loop behind them)."""
+    from core import scan_index
+    s = _scan(mesh) or scan_index.Scan(mesh)
+    got = s.face_indices([face])
+    if not got or got[0] is None:
+        return None, None
+    return s, got[0]
+
+
+def classify_base(mesh, face):
+    """``(attached, prism_cap)`` of a push's base (``pushscan::scan_classify_base``)."""
+    s, i = _native_face(mesh, face)
+    if s is None:
+        return False, False
+    return _mod("scan_classify_base")(s.native, i, *_geom_args())
+
+
+def sweeps_free_sheet(mesh, face, loops) -> bool:
+    """Whether no face off ``face``'s plane stands on an edge of ``loops``
+    (``pushscan::scan_sweeps_free_sheet``)."""
+    s, i = _native_face(mesh, face)
+    if s is None:
+        return True
+    return _mod("scan_sweeps_free_sheet")(
+        s.native, i, [[_xyz(p) for p in lp] for lp in loops], *_geom_args())
+
+
+def surface_normal(mesh, face) -> QVector3D:
+    """``face``'s unit normal turned to agree with its coplanar neighbours
+    (``pushscan::scan_surface_normal``)."""
+    s, i = _native_face(mesh, face)
+    if s is None:
+        return face.normal().normalized()
+    return QVector3D(*_mod("scan_surface_normal")(s.native, i, *_geom_args()))
+
+
+def cap_passes_wall(mesh, face, cap, normal: QVector3D, d: float) -> bool:
+    """Whether shrinking the prism cap ``cap`` by ``d`` passes a vertex
+    partway up a face with a corner on its rim (``pushscan::scan_cap_passes_wall``)."""
+    s, i = _native_face(mesh, face)
+    if s is None:
+        return False
+    return _mod("scan_cap_passes_wall")(s.native, i, [_xyz(p) for p in cap], _xyz(normal),
+                                        float(d), *_geom_args())

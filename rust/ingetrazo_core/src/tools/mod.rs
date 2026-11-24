@@ -12,6 +12,7 @@ pub mod move_tool;
 pub mod plane;
 pub mod preview;
 pub mod rectangle;
+pub mod arc;
 pub mod circle;
 pub mod rotated_rectangle;
 pub mod py;
@@ -112,6 +113,8 @@ pub enum ToolEvent {
     Value(Value),
     /// A segment or side count typed as `Ns` (Circle, Polygon, Arc).
     Segments(i64),
+    /// A radius typed as `2r` (the 2-point Arc).
+    Radius(f64),
     /// What only the view knows, before a pointer or value event.
     View(ViewReading),
     /// The plane the operation keeps to (a face clicked first, a plane lock).
@@ -332,6 +335,10 @@ pub fn new_tool(kind: &str) -> Option<Box<dyn Tool>> {
         "circle" => Some(Box::new(circle::RadialTool::circle())),
         "polygon" => Some(Box::new(circle::RadialTool::polygon())),
         "rotated_rectangle" => Some(Box::new(rotated_rectangle::RotatedRectangleTool::default())),
+        "arc" => Some(Box::new(arc::ArcTool::default())),
+        "arc3" => Some(Box::new(arc::ThreePointArcTool::default())),
+        "center_arc" => Some(Box::new(arc::CenterArcTool::center())),
+        "pie" => Some(Box::new(arc::CenterArcTool::pie())),
         "move" => Some(Box::new(move_tool::MoveTool::default())),
         _ => None,
     }

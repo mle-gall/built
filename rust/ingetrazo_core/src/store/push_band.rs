@@ -72,7 +72,7 @@ impl Store {
 
 /// A cap translation cannot cross an intermediate corner of its wall or
 /// flatten a wall with three corners at the far depth.
-pub(super) fn passes_wall(walls: &[Vec<f64>], distance: f64) -> bool {
+pub(crate) fn passes_wall(walls: &[Vec<f64>], distance: f64) -> bool {
     let far = walls
         .iter()
         .flatten()
