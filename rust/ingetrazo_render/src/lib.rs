@@ -3438,6 +3438,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<camera_inspector::CameraInspector>()?;
     m.add_class::<tree_grouping::paint::TreePaint>()?;
     m.add_class::<registry_editor::RegistryEditor>()?;
+    m.add_function(wrap_pyfunction!(render_result::blender_availability, m)?)?;
     m.add_class::<render_result::RenderResult>()?;
     m.add_function(wrap_pyfunction!(font_lengths::font_length, m)?)?;
     m.add_class::<svg_options::SvgOptions>()?;
