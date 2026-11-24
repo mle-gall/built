@@ -290,6 +290,17 @@ impl NativeCommand {
     }
 }
 
-pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_class::<NativeCommand>()
+/// Every class and function of the commands lane (docs/commands-port.md):
+/// the one registration the shared `lib.rs` calls.
+pub fn register_commands(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<NativeCommand>()?;
+    super::steps::register(m)?;
+    super::group_steps::register(m)?;
+    super::paint_steps::register(m)?;
+    super::tag_steps::register(m)?;
+    super::purge::register(m)?;
+    super::layer_steps::register(m)?;
+    super::transform_steps::register(m)?;
+    super::host_steps::register(m)?;
+    crate::store::tally::register(m)
 }

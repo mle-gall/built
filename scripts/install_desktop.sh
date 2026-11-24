@@ -52,8 +52,8 @@ if [[ ! -x "$binary" ]]; then
 fi
 binary="$(cd "$(dirname "$binary")" && pwd)/$(basename "$binary")"
 while IFS= read -r line; do
-  if [[ "$line" == Exec=* ]]; then
-    printf 'Exec="%s" %%f\n' "$binary"
+  if [[ "$line" == "Exec=built "* ]]; then
+    printf 'Exec="%s" %s\n' "$binary" "${line#Exec=built }"
   else
     printf '%s\n' "$line"
   fi
