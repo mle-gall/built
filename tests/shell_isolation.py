@@ -72,3 +72,15 @@ def restore_shell_patches(tmp_path_factory):
                     delattr(mod, attr)
             else:
                 setattr(mod, attr, value)
+
+
+@pytest.fixture
+def native_window(tmp_path, restore_shell_patches):
+    """A native document and its temporary profile, including host teardown."""
+    from app_shell.host import Host
+    host = Host(0, 900, 600, 1., settings=str(tmp_path / "profile"))
+    try:
+        host.window.new_document()
+        yield host.window
+    finally:
+        host.close()

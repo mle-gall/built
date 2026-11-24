@@ -1,5 +1,6 @@
 """Bind the Rust document commands to each window's active Python controller."""
 import ingetrazo_render as native
+from core.i18n import tr
 
 
 def _repeatable(label: str):
@@ -31,6 +32,114 @@ class WindowDocumentCommands:
     GC_THRESHOLD0 = 50_000
     _RECENT_MAX = 10
     _CAMERA_FIELDS = native.DOCUMENT_CAMERA_FIELDS
+
+
+    def _ensure_composer(self):
+        from views.wgpu_sheets import composer_for
+        return composer_for(self)
+
+    def _on_open_composer(self):
+        self._ensure_composer().show()
+
+    def _show_sheet(self, index):
+        self._last_sheet = index
+        self._ensure_composer().show_sheet(index)
+        self._refresh_sheet_tabs()
+
+    def set_field_of_view(self, degrees):
+        return native.lens_angle(self, self._active_view(), degrees)
+
+    def _ask_field_of_view(self):
+        from core.camera import FOV_RANGE
+        from views.chrome_forms import ask_number
+        view = self._active_view()
+        cam = view.camera
+        if not cam.perspective:
+            native.lens_angle(self, view, cam.fov_deg)
+            return
+        scene = view.scene
+        def apply(value):
+            if value is not None and self._active_view() is view and view.scene is scene:
+                native.lens_angle(self, view, value)
+        ask_number(self, tr("Field of view"), tr("Field of view in degrees (1–120):"),
+                   cam.fov_deg, *FOV_RANGE, 1, done=apply, suffix="°")
+
+    def keep_component(self, definition, keep=True):
+        native.retain_components(self, keep, definition)
+
+    def keep_selected_components(self, keep=True):
+        native.retain_components(self, keep)
+
+    def rename_component(self, definition):
+        from functools import partial
+        from views.chrome_forms import ask_text
+        ask_text(self, tr("Rename Component"), tr("Component name:"), text=definition.name or "",
+                 done=partial(native.name_definition, self, self.viewport.scene, definition))
+
+    def prompt_section_name(self, plane, *, automatic=True):
+        from functools import partial
+        from core.settings import settings
+        from views import chrome_forms
+        if automatic and str(settings().value("section/ask_name", "1")) == "0":
+            return
+        chrome_forms.show(self, chrome_forms.OperationForm(
+            tr("Name Section Plane"), native.OperationForm.section(plane.name, plane.symbol, automatic),
+            partial(native.name_section, self, self.viewport.scene, plane)))
+
+    def _on_soften_edges(self) -> None:
+        from core.settings import settings
+        from views import chrome_forms
+        view = self.viewport
+        scene = view.scene
+        if not scene.selection:
+            view.flash_status(
+                tr("Select faces, edges or groups to soften"), 4000)
+            return
+        saved = settings().value("tools/soften_angle", 30.0)
+        chrome_forms.show(self, chrome_forms.OperationForm(
+            tr("Soften / Smooth Edges"), native.OperationForm.soften(str(saved)),
+            lambda options: native.soften_selection(view, options)
+            if self.viewport is view and view.scene is scene else None, note=tr(
+                "Edges between faces at this angle or less become smooth; "
+                "sharper edges stay hard. Selected groups include their nested "
+                "geometry, and component copies share the change.")))
+
+    def _on_terrain_profile(self) -> None:
+        """Open the terrain chart in the chrome's bottom bar."""
+        from views.inspector_bridge import action
+        view = getattr(self._doc, "stand_in", None)
+        if getattr(view, "renderer", None) is None:
+            self.statusBar().showMessage(tr("The terrain profile needs an active renderer."))
+            return
+        action(self, view, '["terrain.open",null]')
+
+    def _camera_pose(self) -> tuple:
+        cam = self.viewport.camera
+        t = cam.target
+        return (t.x(), t.y(), t.z(), cam.distance, cam.yaw, cam.pitch)
+
+    def edit_scene_camera(self, view):
+        from views.inspector_bridge import open_camera
+        if view is not None:
+            self.tray.scenes.show_view(view)
+            return open_camera(self, view)
+
+    def _on_documentation(self) -> None:
+        from core.desktop_open import open_url
+        open_url("https://ingetrazo-docs.pages.dev/")
+
+    def _on_get_models(self) -> None:
+        from views.chrome_dialogs import information
+        information(
+            self, tr("Get more models and textures"),
+            tr("Free sources that open directly in Built:") + "<br><br>"
+            "<b>Poly Haven</b> — <a href='https://polyhaven.com'>"
+            "polyhaven.com</a> " + tr("(CC0: models OBJ and PBR textures)")
+            + "<br><b>ambientCG</b> — <a href='https://ambientcg.com'>"
+            "ambientcg.com</a> " + tr("(CC0 textures — drop the PNG into "
+                                      "resources/textures)")
+            + "<br><b>Sketchfab</b> — <a href='https://sketchfab.com'>"
+            "sketchfab.com</a> " + tr("(filter by CC licence, download OBJ)"))
 
     def _camera_dict(self, vp=None):
         return native.camera_record(vp or self.viewport)

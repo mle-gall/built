@@ -4318,68 +4318,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         tool.target = group
         self._activate_tool("scale_manager")
 
-    def keep_component(self, definition, keep: bool = True) -> None:
-        """Keep in File on or off for ``definition``'s component (an
-        instance or a kept template), undoable."""
-        from core.history import KeepComponentCommand
-        self.viewport.history.execute(KeepComponentCommand(definition, keep))
-        self.viewport.notify_scene_changed()
-        if keep:
-            text = tr("{name} is kept in the file, even with no copy placed",
-                      name=definition.name)
-        else:
-            text = tr("{name} is no longer kept in the file",
-                      name=definition.name)
-        self.statusBar().showMessage(text, 4000)
-
-    def keep_selected_components(self, keep: bool = True) -> None:
-        """Keep in File, on or off, for every component definition the
-        selection uses — one undo step."""
-        from core.history import CompoundCommand, KeepComponentCommand
-        seen: set = set()
-        cmds = []
-        for g in self.viewport.scene.selection:
-            if (isinstance(g, Group) and g.is_component()
-                    and id(g.mesh) not in seen):
-                seen.add(id(g.mesh))
-                cmds.append(KeepComponentCommand(g, keep))
-        if not cmds:
-            return
-        self.viewport.history.execute(
-            cmds[0] if len(cmds) == 1 else CompoundCommand(cmds))
-        self.viewport.notify_scene_changed()
-        if keep:
-            text = tr("{n} components kept in the file", n=len(cmds))
-        else:
-            text = tr("{n} components no longer kept in the file",
-                      n=len(cmds))
-        self.statusBar().showMessage(text, 4000)
-
-    def rename_component(self, definition) -> None:
-        """Rename a component definition: every copy, placed or nested,
-        and the kept template take the new name, as one undo step."""
-        def rename(name):
-            name = (name or "").strip()
-            if not name or name == definition.name:
-                return
-            self._rename_component_to(definition, name)
-        _forms.ask_text(self, tr("Rename Component"), tr("Component name:"),
-                        text=definition.name or "", done=rename)
-
-    def _rename_component_to(self, definition, name) -> None:
-        from core.history import CompoundCommand, RenameGroupCommand
-        from core.kept_components import copies_of, kept_template
-        scene = self.viewport.scene
-        targets = copies_of(scene, definition.mesh)
-        kept = kept_template(scene, definition.mesh)
-        if kept is not None and kept not in targets:
-            targets.append(kept)
-        if definition not in targets:
-            targets.append(definition)
-        self.viewport.history.execute(CompoundCommand(
-            [RenameGroupCommand(g, name) for g in targets]))
-        self.viewport.notify_scene_changed()
-
     def _on_components_from_file(self) -> None:
         start = (str(self._current_path.parent)
                  if getattr(self, "_current_path", None) else "")
@@ -4536,29 +4474,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         repaint; nothing else depends on the axes being drawn."""
         self.viewport.scene.show_axes = bool(on)
         self.viewport.update()
-
-    def prompt_section_name(self, plane, *, automatic=True) -> None:
-        """Ask for the section label. A cancelled placement keeps its defaults."""
-        if automatic and str(QSettings().value("section/ask_name", "1")) == "0":
-            return
-        from ingetrazo_render import OperationForm
-        from core.history import RenameSectionPlaneCommand
-        from views import chrome_forms
-        vp = self.viewport
-        scene = vp.scene
-
-        def apply(values):
-            if self.viewport is not vp or vp.scene is not scene or plane not in scene.section_planes:
-                return
-            name, symbol = values["name"] or plane.name, values["symbol"] or plane.symbol
-            if (name, symbol) != (plane.name, plane.symbol):
-                vp.history.execute(RenameSectionPlaneCommand(plane, name, symbol))
-                vp.notify_scene_changed()
-            if values["skip"]:
-                QSettings().setValue("section/ask_name", "0")
-
-        chrome_forms.show(self, chrome_forms.OperationForm(
-            tr("Name Section Plane"), OperationForm.section(plane.name, plane.symbol, automatic), apply))
 
     def _selected_section_planes(self) -> list:
         from core.section import SectionPlane
@@ -5427,45 +5342,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         from tools.flip import FlipTool
         FlipTool().flip(self.viewport, axis)
 
-    def _on_soften_edges(self) -> None:
-        from ingetrazo_render import OperationForm
-        from views import chrome_forms
-        view = self.viewport
-        scene = view.scene
-        if not scene.selection:
-            view.flash_status(
-                tr("Select faces, edges or groups to soften"), 4000)
-            return
-        saved = QSettings().value("tools/soften_angle", 30.0)
-        chrome_forms.show(self, chrome_forms.OperationForm(
-            tr("Soften / Smooth Edges"), OperationForm.soften(str(saved)),
-            lambda options: self._apply_soften_edges(view, options), note=tr(
-                "Edges between faces at this angle or less become smooth; "
-                "sharper edges stay hard. Selected groups include their nested "
-                "geometry, and component copies share the change.")))
-
-    def _apply_soften_edges(self, view, options):
-        from core.soften import SoftenByAngleCommand, selected_edges
-        angle = options["angle"]
-        if angle is not None:
-            QSettings().setValue("tools/soften_angle", angle)
-        command = SoftenByAngleCommand(
-            selected_edges(view.scene), angle or 0.0,
-            coplanar=options["coplanar"], harden=options["harden"],
-            materials=options["materials"], smooth=options["smooth"])
-        command.changes = command.prepare()
-        if not command.changes:
-            view.flash_status(tr("No edges need changing"), 4000)
-            return
-        view.history.execute(command)
-        view.flash_status(
-            tr("Smoothed {n} edge(s)", n=sum(1 for c in command.changes
-                                             if c[3][0]))
-            if not options["harden"] else
-            tr("Unsoftened {n} edge(s)", n=len(command.changes)), 3000)
-        view.update()
-        view.notify_scene_changed()
-
     def _sync_foreign_clipboard(self) -> None:
         # A copy made in ANOTHER IngeTrazo window wins over this window's
         # older one, as a system clipboard does (issue #76).
@@ -5533,11 +5409,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         if grid is not None:                 # every view shown frames it
             grid.fit_box(bounds[0], bounds[1])
 
-    def _camera_pose(self) -> tuple:
-        cam = self.viewport.camera
-        t = cam.target
-        return (t.x(), t.y(), t.z(), cam.distance, cam.yaw, cam.pitch)
-
     def _on_smart_zoom(self) -> None:
         """A trackpad's smart zoom (two-finger double tap): Zoom Extents;
         another one with the view untouched since goes back to where it
@@ -5567,26 +5438,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         grid = self._doc.view_grid
         if grid is not None:                 # every view shown frames it,
             grid.fit_box(lo, hi)             # as Zoom Extents does
-
-    def _ensure_composer(self):
-        """The composer window, created but not shown — the sheet strip's
-        menu manages sheets through it without opening it."""
-        if getattr(self, "_composer", None) is None:
-            from views.documents import DocumentHost
-            from views import wgpu_sheets
-            # Sheets are a workspace of this window (views/wgpu_sheets.py):
-            # the document's sheets, never a window of their own.
-            comp = wgpu_sheets.composer_class()(self)
-            # One per project: it keeps reading ITS project's model while
-            # another tab is in front (#1066).
-            host = DocumentHost(self, self._doc)
-            comp._window = host
-            panel = getattr(comp, "views_panel", None)
-            if panel is not None and hasattr(panel, "_window"):
-                panel._window = host
-            self._composer = comp
-            self._update_title()
-        return self._composer
 
     def _sheet_tab_menu(self, index: int, global_pos) -> None:
         self._ensure_composer().sheet_tab_menu(index, global_pos, self)
@@ -5644,12 +5495,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
             return
         panel._on_delete()
 
-    def _on_open_composer(self) -> None:
-        """Open (or raise) the sheet composer — see docs/composer-plan.md.
-        Minimised, it comes back out of the taskbar."""
-        from views.window_front import bring_to_front
-        bring_to_front(self._ensure_composer())
-
     # ---- Model / sheet tabs (the strip at the bottom) -----------------------
     def _refresh_sheet_tabs(self) -> None:
         """This window shows the model, so its strip always marks «Model».
@@ -5706,14 +5551,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
             bring_to_front(self)
         self._refresh_sheet_tabs()
 
-    def _show_sheet(self, index: int) -> None:
-        """A sheet tab: the composer opens on that sheet. This window keeps
-        showing the model, so its own strip snaps back to «Model»."""
-        self._last_sheet = index
-        self._on_open_composer()
-        self._composer.show_sheet(index)
-        self._refresh_sheet_tabs()
-
     def _show_new_sheet(self) -> None:
         """The «+» tab: the composer on a NEW sheet. A document without
         sheets gets its first one just by opening the composer."""
@@ -5740,15 +5577,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         else:
             self.viewport.camera.set_view(key)
         self.viewport.update()
-
-    def _on_terrain_profile(self) -> None:
-        """Open the terrain chart in the chrome's bottom bar."""
-        from views.inspector_bridge import action
-        view = getattr(self._doc, "stand_in", None)
-        if getattr(view, "renderer", None) is None:
-            self.statusBar().showMessage(tr("The terrain profile needs an active renderer."))
-            return
-        action(self, view, '["terrain.open",null]')
 
     # ---- Terrain-surface fill (Track G) -------------------------------------
     def _surface_dem(self, datum):
@@ -5908,51 +5736,9 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
     # ---- Undo / redo --------------------------------------------------------
     # ---- File handling ------------------------------------------------------
     # ---- The document's camera (issue #60) ---------------------------------
-    #: The angles the field of view may take — the camera's own range
-    #: (``core.camera.FOV_RANGE``), down to 1° for a long lens.
-    from core.camera import FOV_RANGE
-
-    def set_field_of_view(self, degrees: float) -> bool:
-        """Give the perspective camera a new angle of view. The eye stays
-        where it is, so a wider angle takes more in around the same point.
-        A parallel view has no angle — there it would only zoom — so it is
-        refused with a word in the status bar."""
-        vp = self._active_view()         # with several views, the active one
-        cam = vp.camera
-        if not cam.perspective:
-            self.statusBar().showMessage(tr(
-                "Field of view applies to perspective; switch to "
-                "Perspective first."), 5000)
-            return False
-        lo, hi = self.FOV_RANGE
-        cam.fov_deg = float(min(hi, max(lo, degrees)))
-        vp.update()
-        return True
-
-    def _ask_field_of_view(self) -> None:
-        cam = self._active_view().camera
-        if not cam.perspective:
-            self.set_field_of_view(cam.fov_deg)     # says why, changes nothing
-            return
-        from PySide6.QtWidgets import QInputDialog
-        lo, hi = self.FOV_RANGE
-
-        def apply(value):
-            if value is not None:
-                self.set_field_of_view(value)
-        _forms.ask_number(self, tr("Field of view"),
-                          tr("Field of view in degrees (1–120):"),
-                          float(cam.fov_deg), lo, hi, 1, done=apply, suffix="°")
-
     def _show_camera_settings(self):
         from views.inspector_bridge import open_camera
         return open_camera(self)
-
-    def edit_scene_camera(self, view):
-        from views.inspector_bridge import open_camera
-        if view is not None:
-            self.tray.scenes.show_view(view)
-            return open_camera(self, view)
 
     @staticmethod
     def _new_window_command() -> list[str]:
@@ -7784,25 +7570,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         self.viewport.history.execute(EditText3DCommand(group, params))
         self.viewport.scene.select([group])
         self.viewport.update()
-
-    DOCUMENTATION_URL = "https://ingetrazo-docs.pages.dev/"
-
-    def _on_documentation(self) -> None:
-        from core.desktop_open import open_url
-        open_url(self.DOCUMENTATION_URL)
-
-    def _on_get_models(self) -> None:
-        _dialogs.information(
-            self, tr("Get more models and textures"),
-            tr("Free sources that open directly in Built:") + "<br><br>"
-            "<b>Poly Haven</b> — <a href='https://polyhaven.com'>"
-            "polyhaven.com</a> " + tr("(CC0: models OBJ and PBR textures)")
-            + "<br><b>ambientCG</b> — <a href='https://ambientcg.com'>"
-            "ambientcg.com</a> " + tr("(CC0 textures — drop the PNG into "
-                                      "resources/textures)")
-            + "<br><b>Sketchfab</b> — <a href='https://sketchfab.com'>"
-            "sketchfab.com</a> " + tr("(filter by CC licence, download OBJ)"))
-
 
     _pump_file_command = staticmethod(QApplication.processEvents)
 

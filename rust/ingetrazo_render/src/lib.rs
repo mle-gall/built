@@ -6,6 +6,7 @@ mod window_timers;
 mod window_document;
 mod close_documents;
 mod component_replacement;
+mod inspection_edits;
 mod component_files;
 mod dwg_process;
 mod edge_commands;
@@ -3024,6 +3025,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     window_document::register(m)?;
     close_documents::register(m)?;
     component_replacement::register(m)?;
+    inspection_edits::register(m)?;
     component_files::register(m)?;
     m.add_class::<dwg_process::DwgConverter>()?;
     edge_commands::register(m)?;

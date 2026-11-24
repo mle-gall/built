@@ -13,6 +13,8 @@ from core.scene import Scene
 from core.soften import SoftenByAngleCommand, selected_edges
 from tests.test_viewport_smooth_shading import _cylinder, _stub
 
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
+
 SEAMS = 12          # the cylinder's side seams: 30° apart
 
 
@@ -209,70 +211,58 @@ def test_metal_rebakes_the_smoothed_definition_without_a_repack(monkeypatch):
     settle()
 
 
-def test_dialog_cancel_and_accept_use_one_undo_step():
-    from views.main_window import MainWindow
+def test_dialog_cancel_and_accept_use_one_undo_step(native_window, monkeypatch):
     from views import chrome_forms
-    from PySide6.QtWidgets import QApplication
-    win = MainWindow()
-    win.show()
-    QApplication.processEvents()
-    try:
-        scene = win.viewport.scene
-        group = Group(_cylinder(Mesh(), soft=False))
-        scene.groups = [group]
-        scene.selection = {group}
-        win._on_soften_edges()
-        chrome_forms.current(win).press("cancel")
-        assert _soft(group.mesh) == 0
-        assert not win.viewport.history.undo_stack
+    win = native_window
+    forms = []
+    monkeypatch.setattr(chrome_forms, "show", lambda _, form: forms.append(form))
+    scene = win.viewport.scene
+    group = Group(_cylinder(Mesh(), soft=False))
+    scene.groups = [group]
+    scene.selection = {group}
+    win._on_soften_edges()
+    forms.pop().press("cancel")
+    assert _soft(group.mesh) == 0
+    assert not win.viewport.history.undo_stack
 
-        win._on_soften_edges()
-        form = chrome_forms.current(win)
-        form.receive("angle", "40")
-        form.press("ok")
-        assert _soft(group.mesh) == SEAMS
-        assert len(win.viewport.history.undo_stack) == 1
-        win.viewport.history.undo()
-        assert _soft(group.mesh) == 0
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    win._on_soften_edges()
+    form = forms.pop()
+    form.receive("angle", "40")
+    form.press("ok")
+    assert _soft(group.mesh) == SEAMS
+    assert len(win.viewport.history.undo_stack) == 1
+    win.viewport.history.undo()
+    assert _soft(group.mesh) == 0
 
 
-def test_smoothing_inside_a_component_reaches_its_copies():
+def test_smoothing_inside_a_component_reaches_its_copies(native_window, monkeypatch):
     """Inside an open component the command runs on its world copy; the
     share-back carries the soft flags to every copy, one undo step."""
-    from views.main_window import MainWindow
     from views import chrome_forms
-    from PySide6.QtWidgets import QApplication
     mesh = _cylinder(Mesh(), soft=False)
     a, b = Group(mesh, name="a"), Group(mesh, name="b")
     a.xform, b.xform = QMatrix4x4(), QMatrix4x4()
     b.xform.translate(5, 0, 0)
-    win = MainWindow()
-    win.show()
-    QApplication.processEvents()
-    try:
-        vp = win.viewport
-        vp.scene.groups.extend([a, b])
-        vp.scene.version += 1
-        steps = len(vp.history.undo_stack)
-        vp.begin_group_edit(a)
-        vp.scene.selection = set(vp.scene.mesh.faces)
+    win = native_window
+    forms = []
+    monkeypatch.setattr(chrome_forms, "show", lambda _, form: forms.append(form))
+    vp = win.viewport
+    vp.scene.groups.extend([a, b])
+    vp.scene.version += 1
+    steps = len(vp.history.undo_stack)
+    vp.begin_group_edit(a)
+    vp.scene.selection = set(vp.scene.mesh.faces)
 
-        win._on_soften_edges()
-        form = chrome_forms.current(win)
-        form.receive("angle", "40")
-        form.press("ok")
-        vp.end_group_edit()
-        assert a.mesh is b.mesh is mesh
-        assert _soft(mesh) == SEAMS
-        assert len(vp.history.undo_stack) == steps + 1
-        vp.history.undo()
-        assert _soft(mesh) == 0
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    win._on_soften_edges()
+    form = forms.pop()
+    form.receive("angle", "40")
+    form.press("ok")
+    vp.end_group_edit()
+    assert a.mesh is b.mesh is mesh
+    assert _soft(mesh) == SEAMS
+    assert len(vp.history.undo_stack) == steps + 1
+    vp.history.undo()
+    assert _soft(mesh) == 0
 
 
 def test_the_dialog_softens_across_materials_by_default_as_.skp():
@@ -376,29 +366,23 @@ def test_the_dialog_has_smooth_normals_ticked_as_.skp():
     assert form.values()["smooth"]
 
 
-def test_the_dialog_passes_smooth_normals_to_the_command(monkeypatch, tmp_path, private_settings):
+def test_the_dialog_passes_smooth_normals_to_the_command(native_window, monkeypatch, tmp_path):
     monkeypatch.setenv("INGETRAZO_AUTOSAVE_DIR", str(tmp_path / "autosave"))
-    from views.main_window import MainWindow
     from views import chrome_forms
-    from PySide6.QtWidgets import QApplication
-    win = MainWindow()
-    win.show()
-    QApplication.processEvents()
-    try:
-        scene = win.viewport.scene
-        group = Group(_cylinder(Mesh(), soft=False))
-        scene.groups = [group]
-        scene.selection = {group}
+    win = native_window
+    forms = []
+    monkeypatch.setattr(chrome_forms, "show", lambda _, form: forms.append(form))
+    scene = win.viewport.scene
+    group = Group(_cylinder(Mesh(), soft=False))
+    scene.groups = [group]
+    scene.selection = {group}
 
-        win._on_soften_edges()
-        form = chrome_forms.current(win)
-        form.receive("angle", "40")
-        form.receive("smooth", "0")
-        form.press("ok")
-        assert _soft(group.mesh) == SEAMS and _flat(group.mesh) == SEAMS
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    win._on_soften_edges()
+    form = forms.pop()
+    form.receive("angle", "40")
+    form.receive("smooth", "0")
+    form.press("ok")
+    assert _soft(group.mesh) == SEAMS and _flat(group.mesh) == SEAMS
 
 
 def _half_soft_only_cylinder():
