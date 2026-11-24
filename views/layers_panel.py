@@ -1133,9 +1133,11 @@ class LayersPanel(QWidget):
     def set_visible(self, names, on: bool) -> None:
         self._remember()
         scene = self._scene()
-        from core.history import SetLayerVisibilityCommand
+        from core.protocol import commands
         previous = scene.active_layer
-        self._window.viewport.history.execute(SetLayerVisibilityCommand(names, on))
+        keys = list(dict.fromkeys(ly.key for ly in map(scene.layer, names) if ly is not None))
+        if keys:
+            commands.set_tag_state(self._window.viewport.history, tags=keys, visible=on)
         released = previous != scene.active_layer
         if not on:
             self._prune_selection(names)
@@ -1143,9 +1145,9 @@ class LayersPanel(QWidget):
         self._touch()
 
     def set_folder_visible(self, key, on):
-        from core.history import SetLayerVisibilityCommand
+        from core.protocol import commands
         self._remember()
-        self._window.viewport.history.execute(SetLayerVisibilityCommand([], on, [key]))
+        commands.set_tag_state(self._window.viewport.history, folders=[key], visible=on)
         self._touch()
 
     def set_locked(self, names, on: bool) -> None:

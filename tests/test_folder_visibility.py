@@ -6,7 +6,8 @@ from views.wgpu_ui import SEP
 
 from core import layers as L
 from core.scene import Scene
-from core.history import History, SetLayerVisibilityCommand
+from core.history import History
+from core.protocol import commands
 
 
 def document():
@@ -24,7 +25,8 @@ def test_independent_flags_and_every_undo_redo():
     for names, folders, on in [([], ['parent'], False), (['A'], [], False),
                                 ([], ['parent'], True)]:
         states.append(L.layer_state(scene))
-        history.execute(SetLayerVisibilityCommand(names, on, folders))
+        commands.set_tag_state(history, tags=[scene.layer(n).key for n in names],
+                               folders=folders, visible=on)
         assert history.last_error is None
     assert not scene.layer('A').visible
     assert not L.effective_visible(scene, scene.layer('A'))
@@ -118,7 +120,7 @@ def test_metal_visibility_uses_instance_updates_without_repack(monkeypatch):
     old_key, old_bounds = _paint_key(scene), scene._bounds_key()
     monkeypatch.setattr('views.wgpu_updates.pack_scene', lambda *a, **k: (_ for _ in ()).throw(AssertionError('repack')))
     history = History(scene)
-    history.execute(SetLayerVisibilityCommand([], False, ['folder']))
+    commands.set_tag_state(history, folders=['folder'], visible=False)
     assert scene._bounds_key() != old_bounds
     assert _paint_key(scene) == old_key
     updates.journal_valid = False

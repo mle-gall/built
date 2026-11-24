@@ -803,42 +803,6 @@ class FlipFacesCommand(FaceAttributeCommand):
         self._flip(scene)
 
 
-class SetLayerVisibilityCommand(Command):
-    """Change own visibility flags without modifying geometry or child flags."""
-    keeps_paint = True
-    keeps_rows = True
-
-    def __init__(self, names, on, folders=()):
-        self.names, self.folders, self.on = list(names), list(folders), bool(on)
-
-    #: Tag flags, folder visibility and the active tag are all in the
-    #: document (slice 2).
-    doc_undo = True
-
-    def doc_after(self, scene, phase) -> None:
-        if phase == "redo":
-            for entity in list(scene.selection):
-                if not scene.entity_visible(entity):
-                    scene.selection.discard(entity)
-        scene.version += 1
-
-    def do(self, scene):
-        from core import layers as L
-        self.before = L.layer_state(scene)
-        for key in self.folders:
-            scene.folder_visibility[key] = self.on
-        L.set_visible(scene, self.names, self.on)
-        for entity in list(scene.selection):
-            if not scene.entity_visible(entity):
-                scene.selection.discard(entity)
-        scene.version += 1
-
-    def undo(self, scene):
-        from core import layers as L
-        L.apply_layer_state(scene, self.before)
-        scene.version += 1
-
-
 class EnsureLayersCommand(Command):
     """Give a document the tags (and tag folders) that pasted geometry
     carries and it lacks — a step of the paste, undone with it. Tags the
