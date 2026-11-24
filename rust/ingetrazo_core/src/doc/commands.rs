@@ -299,5 +299,8 @@ pub fn register_commands(m: &Bound<'_, PyModule>) -> PyResult<()> {
     super::paint_steps::register(m)?;
     super::tag_steps::register(m)?;
     super::purge::register(m)?;
+    super::layer_steps::register(m)?;
+    super::transform_steps::register(m)?;
+    super::host_steps::register(m)?;
     crate::store::tally::register(m)
 }

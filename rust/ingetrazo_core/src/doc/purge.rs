@@ -8,7 +8,7 @@
 //! used only inside one is in use. The Layers panel counts through the same
 //! walk, step by step ([`LayerCountSteps`]).
 use super::py::doc_walk;
-use numpy::{PyArrayMethods, PyReadonlyArray1, PyReadonlyArray2};
+use numpy::PyReadonlyArray1;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PySet, PyTuple};
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -113,7 +113,7 @@ fn purge_annotations<'py>(py: Python<'py>, scene: &Obj<'py>) -> PyResult<Obj<'py
 /// Everything that can carry a tag: faces and edges of every mesh, every
 /// group (nested and kept), the annotations and the survey.
 #[pyfunction]
-fn purge_layer_carriers<'py>(py: Python<'py>, scene: &Obj<'py>) -> PyResult<Obj<'py>> {
+pub(super) fn purge_layer_carriers<'py>(py: Python<'py>, scene: &Obj<'py>) -> PyResult<Obj<'py>> {
     let mut out = Vec::new();
     for mesh in meshes(py, scene)? {
         out.extend(list_of(&mesh.getattr("faces")?)?);
@@ -449,7 +449,7 @@ fn purge_layers_held_by_scenes<'py>(py: Python<'py>, scene: &Obj<'py>) -> PyResu
 
 /// The tags a purge would remove.
 #[pyfunction]
-fn purge_unused_layers<'py>(py: Python<'py>, scene: &Obj<'py>) -> PyResult<Bound<'py, PyList>> {
+pub(super) fn purge_unused_layers<'py>(py: Python<'py>, scene: &Obj<'py>) -> PyResult<Bound<'py, PyList>> {
     let mut keep = used_layers(py, scene)?;
     keep.extend(held_by_scenes(scene)?);
     let mut out = Vec::new();
@@ -502,7 +502,7 @@ fn purge_used_materials<'py>(py: Python<'py>, scene: &Obj<'py>) -> PyResult<Boun
 
 /// Registry material names nothing wears, in registry order.
 #[pyfunction]
-fn purge_unused_materials<'py>(py: Python<'py>, scene: &Obj<'py>) -> PyResult<Bound<'py, PyList>> {
+pub(super) fn purge_unused_materials<'py>(py: Python<'py>, scene: &Obj<'py>) -> PyResult<Bound<'py, PyList>> {
     let used = used_materials(py, scene)?;
     let mut out = Vec::new();
     for name in list_of(&attr_or_none(scene, "materials")?)? {

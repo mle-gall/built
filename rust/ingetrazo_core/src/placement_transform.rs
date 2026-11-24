@@ -43,7 +43,7 @@ fn finish_transform(g: &Obj<'_>, m: &Obj<'_>, texture: bool) -> PyResult<()> {
     Ok(())
 }
 #[pyfunction]
-fn shift_group(scene: &Obj<'_>, g: &Obj<'_>, delta: &Obj<'_>) -> PyResult<()> {
+pub(crate) fn shift_group(scene: &Obj<'_>, g: &Obj<'_>, delta: &Obj<'_>) -> PyResult<()> {
     let pose = scene
         .py()
         .import("core.history_commands")?
@@ -58,7 +58,7 @@ fn shift_group(scene: &Obj<'_>, g: &Obj<'_>, delta: &Obj<'_>) -> PyResult<()> {
     }
 }
 #[pyfunction]
-fn flip_groups(scene: &Obj<'_>, groups: Vec<Obj<'_>>, m: &Obj<'_>) -> PyResult<()> {
+pub(crate) fn flip_groups(scene: &Obj<'_>, groups: Vec<Obj<'_>>, m: &Obj<'_>) -> PyResult<()> {
     let py = scene.py();
     let api = py.import("core.history_commands")?;
     let store = py.import("core.store_mesh")?.getattr("StoreMesh")?;
@@ -429,7 +429,7 @@ fn reframe_mesh(
 }
 
 #[pyfunction]
-fn reframe_world(
+pub(crate) fn reframe_world(
     scene: &Obj<'_>,
     m: &Obj<'_>,
     degrees: f64,
