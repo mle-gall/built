@@ -1368,20 +1368,6 @@ impl PyMeshStore {
         Ok(result)
     }
 
-    #[staticmethod]
-    fn object_push_band(
-        base: Vec<[f64; 3]>,
-        top: Vec<[f64; 3]>,
-        rim: bool,
-        rails: bool,
-        walls: bool,
-        cap: bool,
-    ) -> PyResult<(Vec<[[f64; 3]; 2]>, Vec<Vec<[f64; 3]>>)> {
-        let band = super::push_band::Band::new(&base, &top, rim, rails, walls, cap)
-            .ok_or_else(|| PyValueError::new_err("push rings have different lengths"))?;
-        Ok((band.edges, band.faces))
-    }
-
     fn landing_defects(
         &self,
         py: Python<'_>,

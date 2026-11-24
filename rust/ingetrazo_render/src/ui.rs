@@ -99,6 +99,9 @@ pub struct Ui {
     pub font_picker: Option<FontPicker>,
     gallery: Option<gallery::Gallery>,
     painter: egui_wgpu::Renderer,
+    model_textures: std::collections::HashMap<usize, egui::TextureId>,
+    model_panes: Vec<(egui::TextureId, Rect, bool, String)>,
+    pub(super) model_guides: Vec<[f32; 4]>,
     free_after_frame: Vec<egui::TextureId>,
     start: Instant,
     events: Vec<egui::Event>,
@@ -297,6 +300,9 @@ impl Ui {
             font_picker: None,
             gallery: (std::env::var("BUILT_GALLERY").as_deref() == Ok("1")).then(gallery::Gallery::default),
             painter,
+            model_textures: Default::default(),
+            model_panes: Vec::new(),
+            model_guides: Vec::new(),
             free_after_frame: Vec::new(),
             glass,
             start: Instant::now(),
@@ -649,6 +655,22 @@ impl Ui {
 
     /// Review on or off. Python hears `review:1` / `review:0` and frames the
     /// camera into the area the panels leave (B8, owner decision 2026-11-23).
+    pub fn release_model_texture(&mut self, target: usize) {
+        if let Some(id) = self.model_textures.remove(&target) {
+            self.free_after_frame.push(id);
+        }
+    }
+
+    pub fn add_model_pane(&mut self, device: &wgpu::Device, target: usize, image: &wgpu::Texture,
+                          bounds: [f32; 4], active: bool, label: String) {
+        let id = *self.model_textures.entry(target).or_insert_with(|| {
+            let view = image.create_view(&Default::default());
+            self.painter.register_native_texture(device, &view, wgpu::FilterMode::Linear)
+        });
+        let [x, y, width, height] = bounds;
+        self.model_panes.push((id, Rect::from_min_size(pos2(x,y), vec2(width,height)), active, label));
+    }
+
     pub fn set_review(&mut self, on: bool) {
         if self.review != on {
             self.review = on;
@@ -2473,6 +2495,24 @@ impl Ui {
             if self.cmd_canvas { self.command_palette(ctx, screen); return; }
             if let Some(page) = &mut self.gallery { page.show(ctx); return; }
             self.panels.popup_layers.clear();
+            if !sheet_up && !self.sheets.shown {
+                let painter = ctx.layer_painter(egui::LayerId::background());
+                let uv = Rect::from_min_max(pos2(0.,0.),pos2(1.,1.));
+                for &(id, rect, active, ref label) in &self.model_panes {
+                    painter.image(id, rect, uv, BRIGHT);
+                    let label = painter.layout_no_wrap(label.clone(), caption_font(), INK);
+                    let at = rect.min + vec2(8., 6.);
+                    let tag = Rect::from_min_size(at, label.size() + vec2(10., 4.));
+                    let clipped = painter.with_clip_rect(rect);
+                    clipped.rect_filled(tag, R_INSET, SHEET);
+                    clipped.galley(at + vec2(5., 2.), label, INK);
+                    painter.rect_stroke(rect, 0., Stroke::new(1., if active { ACCENT } else { EDGE }),
+                                        egui::StrokeKind::Inside);
+                }
+                for &[x0,y0,x1,y1] in &self.model_guides {
+                    painter.line_segment([pos2(x0,y0),pos2(x1,y1)], Stroke::new(2., ACCENT));
+                }
+            }
             self.top_bar(ctx, screen);
             let retract = ctx.animate_bool_with_time(egui::Id::new("retract_model_chrome"),
                                                       self.review || sheet_up, large_sheet::ANIM_S);
@@ -2593,6 +2633,8 @@ impl Ui {
         }
         // The caller submits this encoder after paint returns. Textures
         // released during this pass can still occur in its draw commands.
+        self.model_panes.clear();
+        self.model_guides.clear();
         for id in std::mem::replace(&mut self.free_after_frame, out.textures_delta.free) {
             self.painter.free_texture(&id);
         }

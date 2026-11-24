@@ -1,0 +1,32 @@
+{
+"axis_offset": [
+  {"mode":"line","start":null,"measured":null,"label":null,"band":[],"preview":[],"guides":[],"undo":0,"result":null},
+  {"mode":"line","start":[2.0,0.0,0.0],"measured":null,"label":null,"band":[],"preview":[],"guides":[],"undo":0,"result":null},
+  {"mode":"line","start":[2.0,0.0,0.0],"measured":null,"label":["1.00 m",[2.0,0.5,0.0]],"band":[[[2.0,0.0,0.0],[2.0,1.0,0.0]]],"preview":[[[-9998.0,1.0,0.0],[10002.0,1.0,0.0]]],"guides":[],"undo":0,"result":null},
+  {"mode":"line","start":null,"measured":null,"label":null,"band":[],"preview":[],"guides":[[[2.0,-0.75,0.0],[1.0,0.0,0.0],null]],"undo":1,"result":true},
+  {"mode":"line","start":null,"measured":null,"label":null,"band":[],"preview":[],"guides":[],"undo":0,"result":null}],
+"source_point": [
+  {"mode":"line","start":[2.0,1.0,0.0],"measured":null,"label":null,"band":[],"preview":[],"guides":[],"undo":0,"result":null},
+  {"mode":"line","start":[2.0,1.0,0.0],"measured":null,"label":["3.00 m",[2.0,2.5,0.0]],"band":[[[2.0,1.0,0.0],[2.0,4.0,0.0]]],"preview":[],"guides":[],"undo":0,"result":null},
+  {"mode":"line","start":null,"measured":null,"label":null,"band":[],"preview":[],"guides":[[[2.0,3.5,0.0],null,[2.0,1.0,0.0]]],"undo":1,"result":true},
+  {"mode":"line","start":[0.0,0.0,0.0],"measured":null,"label":["4.47 m",[1.0,2.0,0.0]],"band":[[[0.0,0.0,0.0],[2.0,4.0,0.0]]],"preview":[],"guides":[[[2.0,3.5,0.0],null,[2.0,1.0,0.0]]],"undo":1,"result":null},
+  {"mode":"line","start":null,"measured":5.0,"label":null,"band":[],"preview":[],"guides":[[[2.0,3.5,0.0],null,[2.0,1.0,0.0]]],"undo":1,"result":null}],
+"mode_cycle": [
+  {"mode":"point","start":null,"measured":null,"label":null,"band":[],"preview":[],"guides":[],"undo":0,"result":true},
+  {"mode":"point","start":[1.0,2.0,0.0],"measured":null,"label":null,"band":[],"preview":[],"guides":[],"undo":0,"result":null},
+  {"mode":"point","start":null,"measured":null,"label":null,"band":[],"preview":[],"guides":[[[1.0,2.0,0.0],null,null]],"undo":1,"result":null},
+  {"mode":"measure","start":null,"measured":null,"label":null,"band":[],"preview":[],"guides":[[[1.0,2.0,0.0],null,null]],"undo":1,"result":true},
+  {"mode":"measure","start":[0.0,0.0,0.0],"measured":null,"label":null,"band":[],"preview":[],"guides":[[[1.0,2.0,0.0],null,null]],"undo":1,"result":null},
+  {"mode":"measure","start":[0.0,0.0,0.0],"measured":null,"label":["5.00 m",[1.5,2.0,0.0]],"band":[[[0.0,0.0,0.0],[3.0,4.0,0.0]]],"preview":[],"guides":[[[1.0,2.0,0.0],null,null]],"undo":1,"result":null},
+  {"mode":"measure","start":[0.0,0.0,0.0],"measured":null,"label":["5.00 m",[1.5,2.0,0.0]],"band":[[[0.0,0.0,0.0],[3.0,4.0,0.0]]],"preview":[],"guides":[[[1.0,2.0,0.0],null,null]],"undo":1,"result":false},
+  {"mode":"measure","start":null,"measured":5.0,"label":null,"band":[],"preview":[],"guides":[[[1.0,2.0,0.0],null,null]],"undo":1,"result":null},
+  {"mode":"measure","start":null,"measured":5.0,"label":null,"band":[],"preview":[],"guides":[],"undo":0,"result":null}],
+"guide_source": [
+  {"mode":"line","start":null,"measured":null,"label":null,"band":[],"preview":[],"guides":[[[0.0,1.0,0.0],[1.0,0.0,0.0],null]],"undo":0,"result":null},
+  {"mode":"line","start":[2.0,1.0,0.0],"measured":null,"label":null,"band":[],"preview":[],"guides":[[[0.0,1.0,0.0],[1.0,0.0,0.0],null]],"undo":0,"result":null},
+  {"mode":"line","start":[2.0,1.0,0.0],"measured":null,"label":["1.00 m",[2.0,1.5,0.0]],"band":[[[2.0,1.0,0.0],[2.0,2.0,0.0]]],"preview":[[[-9998.0,2.0,0.0],[10002.0,2.0,0.0]]],"guides":[[[0.0,1.0,0.0],[1.0,0.0,0.0],null]],"undo":0,"result":null},
+  {"mode":"line","start":null,"measured":null,"label":null,"band":[],"preview":[],"guides":[[[0.0,1.0,0.0],[1.0,0.0,0.0],null],[[2.0,2.0,0.0],[1.0,0.0,0.0],null]],"undo":1,"result":null},
+  {"mode":"line","start":[2.0,1.0,0.0],"measured":null,"label":["1.00 m",[2.0,1.5,0.0]],"band":[[[2.0,1.0,0.0],[2.0,2.0,0.0]]],"preview":[[[-9998.0,2.0,0.0],[10002.0,2.0,0.0]]],"guides":[[[0.0,1.0,0.0],[1.0,0.0,0.0],null],[[2.0,2.0,0.0],[1.0,0.0,0.0],null]],"undo":1,"result":null},
+  {"mode":"line","start":null,"measured":null,"label":null,"band":[],"preview":[],"guides":[[[0.0,1.0,0.0],[1.0,0.0,0.0],null],[[2.0,2.0,0.0],[1.0,0.0,0.0],null]],"undo":1,"result":null},
+  {"mode":"line","start":null,"measured":null,"label":null,"band":[],"preview":[],"guides":[[[0.0,1.0,0.0],[1.0,0.0,0.0],null]],"undo":0,"result":null}]
+}

@@ -62,20 +62,17 @@ from core import push_scans
 from core.push_pull import (  # noqa: E402,F401  (moved; tests and extensions import them here)
     PushPullOperation,
     _DRAG_PX,
-    _FacesBefore,
     _GroupScene,
     _MIN_EXTRUDE,
     _PushBand,
     _classify_edge,
     _component_is_closed,
     _face_shape,
-    _faces_window,
     _loops_overlap_2d,
     _made_since,
     _paint_of,
     _project_loop_2d,
     _refine_candidates,
-    _seam_planes_along,
 )
 
 
@@ -270,6 +267,10 @@ class PushPullTool(PushPullOperation, Tool):
                 return
             self.base_face = face
             self._take_extras(face, viewport.scene)
+            if not self._ensure_store(viewport.scene):
+                self._refuse_python_mesh(viewport)
+                return
+            face = self.base_face
             self.extrusion = 0.0
             self.dragging = True
             self._group = self._hover_group
@@ -330,6 +331,13 @@ class PushPullTool(PushPullOperation, Tool):
         return hit((ctx.screen.x(), ctx.screen.y()),
                    (self._anchor, self._normal))
 
+    def _refuse_python_mesh(self, viewport) -> None:
+        self.base_face = None
+        self._extra_faces = []
+        self._extra_normals = []
+        viewport.flash_status(tr("Push refused: the geometry kernel could not take "
+                                 "this mesh (left it unchanged)"), 6000)
+
     def on_double_click(self, ctx: ToolContext) -> None:
         """Repeat the last committed distance on the face under the cursor,
         as push/pull users expect. Works both as a fresh double-click (the
@@ -351,6 +359,10 @@ class PushPullTool(PushPullOperation, Tool):
                 return
             self.base_face = face
             self._take_extras(face, viewport.scene)
+            if not self._ensure_store(viewport.scene):
+                self._refuse_python_mesh(viewport)
+                return
+            face = self.base_face
             self.dragging = True
             self._group = grp
             target = self._target_scene(viewport.scene)

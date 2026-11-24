@@ -109,3 +109,48 @@ def test_rotate_matches_the_recorded_python_tool(name):
 @pytest.mark.parametrize("name", sorted(tp.WALKTHROUGH_SCENARIOS))
 def test_walkthrough_matches_the_recorded_python_tool(name):
     assert tp.run_walkthrough(*tp.WALKTHROUGH_SCENARIOS[name]) == tp.load("walkthrough")[name]
+
+
+@pytest.mark.parametrize("name", sorted(tp.OFFSET_SCENARIOS))
+def test_offset_matches_the_recorded_python_tool(name):
+    assert tp.run_offset(tp.OFFSET_SCENARIOS[name]) == tp.load("offset")[name]
+
+
+@pytest.mark.parametrize("name", sorted(tp.PAINT_SCENARIOS))
+def test_paint_matches_the_recorded_python_tool(name):
+    assert tp.run_paint(tp.PAINT_SCENARIOS[name]) == tp.load("paint")[name]
+
+
+@pytest.mark.parametrize("name", sorted(tp.PROTRACTOR_SCENARIOS))
+def test_protractor_matches_the_recorded_python_tool(name):
+    assert tp.run_protractor(tp.PROTRACTOR_SCENARIOS[name]) == tp.load("protractor")[name]
+
+
+@pytest.mark.parametrize("name", sorted(tp.FILLET_SCENARIOS))
+def test_fillet_matches_the_recorded_python_tool(name):
+    assert tp.run_fillet(tp.FILLET_SCENARIOS[name]) == tp.load("fillet")[name]
+
+
+@pytest.mark.parametrize("name", sorted(tp.TAPE_SCENARIOS))
+def test_tape_matches_the_recorded_python_tool(name):
+    assert tp.run_tape(tp.TAPE_SCENARIOS[name]) == tp.load("tape")[name]
+
+
+@pytest.mark.parametrize("name", sorted(tp.PASTE_SCENARIOS))
+def test_paste_matches_the_recorded_python_tool(name):
+    assert tp.run_paste(tp.PASTE_SCENARIOS[name]) == tp.load("paste")[name]
+
+
+@pytest.mark.parametrize("name", sorted(tp.FLIP_SCENARIOS))
+def test_flip_matches_the_recorded_python_tool(name):
+    assert tp.run_flip(tp.FLIP_SCENARIOS[name]) == tp.load("flip")[name]
+
+
+@pytest.mark.parametrize("name", sorted(tp.FREEHAND_SCENARIOS))
+def test_freehand_matches_the_recorded_python_tool(name):
+    assert tp.run_freehand(tp.FREEHAND_SCENARIOS[name]) == tp.load("freehand")[name]
+
+
+@pytest.mark.parametrize("name", sorted(tp.CHANGE_AXES_SCENARIOS))
+def test_change_axes_matches_the_recorded_python_tool(name):
+    assert tp.run_change_axes(tp.CHANGE_AXES_SCENARIOS[name]) == tp.load("change_axes")[name]

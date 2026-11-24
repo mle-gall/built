@@ -44,6 +44,10 @@ class _Event:
     def setAccepted(self, on):
         self._accepted = bool(on)
 
+    def set_local_position(self, x, y):
+        self._global = self.globalPosition()
+        self._pos = QPointF(float(x), float(y))
+
     def spontaneous(self):
         return True
 
@@ -182,7 +186,7 @@ class WheelEvent(_Event):
         return QPointF(self._pos)
 
     def globalPosition(self):
-        return QPointF(self._pos)
+        return QPointF(getattr(self, "_global", self._pos))
 
     def pixelDelta(self):
         return QPoint(self._pixel)
@@ -259,7 +263,7 @@ class NativeGestureEvent(_Event):
         return QPointF(self._pos)
 
     def globalPosition(self):
-        return QPointF(self._pos)
+        return QPointF(getattr(self, "_global", self._pos))
 
     def delta(self):
         return QPointF(self._delta)

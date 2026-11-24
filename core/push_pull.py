@@ -5,7 +5,6 @@ and commit the extrusion, the push-through or the hole. The one
 implementation behind the Push/Pull tool and the protocol's ``push_pull``
 (moved out of ``tools/pushpull.py``, docs/rust-tools.md §18)."""
 from __future__ import annotations
-from core.element_set import ElementSet
 
 from ingetrazo_core import Vec3 as QVector3D
 
@@ -13,7 +12,6 @@ from core.geometry import Face
 from core.i18n import tr
 from core.mesh import _STITCH_TOL, PAINT_KEYS, Mesh, turn_face_over
 from core.history import (
-    AddEdgeCommand,
     AddFaceCommand,
     DeleteFaceCommand,
     PruneOrphanEdgesCommand,
@@ -24,14 +22,7 @@ from core.history import (
 )
 from core.arrangement import _interior_point, _point_in_polygon, plane_basis
 from core.orient import is_closed, orient_outward
-from core.cap_rebuild import (
-    RebuildCache,
-    _canon_loop,
-    apply_rebuild,
-    crack_planes,
-    edges_along,
-    seam_planes,
-)
+from core.cap_rebuild import _canon_loop
 from core.topology import (
     _key,
     _mesh_is_flat,
@@ -43,6 +34,77 @@ from core.topology import (
 from core.units import fmt_len
 from core import push_scans
 from ingetrazo_core import guarded_push, push_region, push_through_face, translate_prism_cap
+
+
+class _Abandoned(Exception):
+    """A store refusal ends a top-out: no shorter push is tried."""
+
+
+#: Repros written this session, by content: a refusal repeated on every
+#: drag frame writes one file.
+_REPROS: set = set()
+
+
+def _write_repro(mesh, op, reason: str) -> str | None:
+    """``push-refusals/<time>.json`` under the log folder: the mesh as it
+    was (the store's dense arrays, the paint rows and own dicts by face
+    index), the push's arguments and the refusal; logged with the refusal
+    counter (``INGETRAZO_REFUSALS``). The path, or None (a repeat, or no
+    writable folder)."""
+    import json
+    import os
+    import time
+    from core.store_mesh import _attribute_owner, _log_refusal
+    st = mesh._store
+    arrays = {k: v.tolist() for k, v in st.arrays().items()}
+    faces = st.keys("face")
+    index = {k: i for i, k in enumerate(faces)}
+
+    def at(face):
+        return index.get(getattr(face, "key", None))
+
+    owner = _attribute_owner(mesh)
+    data = {
+        "reason": reason,
+        "push": {"face": at(op.base_face), "distance": op.extrusion,
+                 "keep_base": bool(op._keep_base),
+                 "normal": None if op._normal is None else list(op._normal.toTuple()),
+                 "extra_faces": [at(f) for f in op._extra_faces]},
+        "mesh": arrays,
+        "attr_table": owner["_attr_table"],
+        "own_attrs": {index[k]: v for k, v in owner["_attr_own"].items() if k in index},
+    }
+    text = json.dumps(data, default=repr, sort_keys=True)
+    digest = hash(text)
+    if digest in _REPROS:
+        return None
+    _REPROS.add(digest)
+    try:
+        from core.paths import user_log_dir
+        folder = user_log_dir() / "push-refusals"
+        folder.mkdir(parents=True, exist_ok=True)
+        path = folder / f"{time.strftime('%Y%m%d-%H%M%S')}-{len(_REPROS)}.json"
+        path.write_text(text, encoding="utf-8")
+    except OSError:
+        return None
+    log = os.environ.get("INGETRAZO_REFUSALS")
+    if log:
+        _log_refusal(log, "push", None, repro=str(path), reason=reason[:200])
+    return str(path)
+
+
+def _write_conversion_failure(reason: str) -> None:
+    from core.store_mesh import _note_refusal
+    try:
+        _note_refusal("to_store: " + reason)
+    except Exception:  # noqa: BLE001 — a count, never a failure of its own
+        pass
+
+
+def _face_keys(mesh) -> list:
+    """The store mesh's live face keys, in list order."""
+    keys = push_scans.live_keys(mesh, "face")
+    return mesh._store.keys("face") if keys is None else keys
 
 
 def _project_loop_2d(loop, normal):
@@ -72,24 +134,12 @@ class _PushBand:
         self.parts = rim, rails, walls, cap
 
     def do(self, scene):
-        from core.store_mesh import StoreMesh
-        from ingetrazo_core import MeshStore
         mesh = scene.mesh
-        if type(mesh) is StoreMesh:
-            dirty, steps = mesh._store.push_band([mesh._input_point(p) for p in self.base],
-                                                 [mesh._input_point(p) for p in self.top], *self.parts)
-            if dirty:
-                mesh._dirty(dirty)
-            scene.version += steps
-            return
-        edges, faces = MeshStore.object_push_band([p.toTuple() for p in self.base],
-                                                  [p.toTuple() for p in self.top], *self.parts)
-        for a, b in edges:
-            AddEdgeCommand(QVector3D(*a), QVector3D(*b)).do(scene)
-        for ring in faces:
-            face = mesh.add_face([QVector3D(*p) for p in ring])
-            face.interior = False
-            scene.version += 1
+        dirty, steps = mesh._store.push_band([mesh._input_point(p) for p in self.base],
+                                             [mesh._input_point(p) for p in self.top], *self.parts)
+        if dirty:
+            mesh._dirty(dirty)
+        scene.version += steps
 
 
 class _GroupScene:
@@ -170,69 +220,6 @@ def _made_since(mesh, snap, kind: str):
     return push_scans.made_since(mesh, snap.snap, kind)
 
 
-class _FacesBefore:
-    """The faces before one plane rebuild, for the two questions the
-    fixpoint asks after it: which faces are new (``set(mesh.faces) -
-    before_faces``, in that set's iteration order, which ``fresh`` and so
-    the next round's planes inherit) and whether a new face's shape is the
-    shape of a face from before that is not fresh (``kept``).
-
-    The first needed a set of every face per plane (53 ms of views on the
-    ride's mesh) and the second the shape of every face but the fresh ones
-    (seconds). A store-backed mesh answers the first by key
-    (``push_scans.set_minus``: the same table, the same order); the second
-    is asked of the faces from before near the new face only — an equal
-    shape has its corners in the same 1e-4 cells, so its box is within a
-    cell of the new face's — through the same ``_face_shape`` of the same
-    elements (a store keeps a removed face's rings readable)."""
-
-    __slots__ = ("keys", "faces", "scan", "_python")
-
-    def __init__(self, mesh) -> None:
-        from core import scan_index
-        self.keys = push_scans.live_keys(mesh, "face")
-        self.faces = set(mesh.faces) if self.keys is None else None
-        # A store scan of the state before (cached per revision; it keeps
-        # that state's faces by key). A Python mesh's faces are scanned
-        # only if a rebuild changed something: they keep their loops, and
-        # a rebuild moves no vertex.
-        self.scan = scan_index.scan(mesh) if self.keys is not None else None
-        self._python = self.keys is None and scan_index.enabled()
-
-    def new_faces(self, mesh):
-        if self.keys is not None:
-            now = push_scans.live_keys(mesh, "face")
-            if now is not None:
-                got = push_scans.set_minus(mesh, "face", now, set(self.keys))
-                if got is not None:
-                    return got
-            self.faces = set(push_scans.views(mesh, "face", self.keys))
-        return set(mesh.faces) - self.faces
-
-    def kept(self, face, fresh) -> bool:
-        shape = _face_shape(face)
-        if self.scan is None and self._python:
-            from core import _native, scan_index
-            self._python = False
-            self.scan = scan_index.Scan.of_faces(_native.native,
-                                                 list(self.faces))
-        if self.scan is None:
-            if self.faces is None:
-                self.faces = set(push_scans.views(
-                    face._m, "face", self.keys))
-            return any(_face_shape(g) == shape for g in self.faces
-                       if g not in fresh)
-        pts = face.vertices
-        m = 2e-4 + 1e-6 * max((max(abs(p.x()), abs(p.y()), abs(p.z()))
-                               for p in pts), default=0.0)
-        lo = (min(p.x() for p in pts) - m, min(p.y() for p in pts) - m,
-              min(p.z() for p in pts) - m)
-        hi = (max(p.x() for p in pts) + m, max(p.y() for p in pts) + m,
-              max(p.z() for p in pts) + m)
-        near = self.scan.faces(self.scan.faces_meeting((lo, hi)))
-        return any(_face_shape(g) == shape for g in near if g not in fresh)
-
-
 def _component_is_closed(mesh, face) -> bool:
     """Whether ``face``'s edge-connected component is watertight — every edge
     reachable from it borders at least two faces. An open sheet (a flat
@@ -298,41 +285,6 @@ def _paint_of(face) -> dict:
         paint["texture"] = {**{k: v for k, v in tex.items() if k != "uvw"},
                             "planar": True}
     return paint
-
-
-def _seam_planes_along(mesh, segments) -> list:
-    """``(origin, normal)`` of each plane where an edge along ``segments``
-    parts two coplanar faces facing the same way with the same paint."""
-    out = []
-    for e in edges_along(mesh, segments):
-        if len(e.faces) != 2:
-            continue
-        fa, fb = e.faces
-        if (fa.interior or fb.interior
-                or (fa.attrs or {}) != (fb.attrs or {})
-                or QVector3D.dotProduct(fa.normal().normalized(),
-                                        fb.normal().normalized()) < 0.9999):
-            continue
-        out.append((fa.centroid(), fa.normal()))
-    return out
-
-
-def _faces_window(faces):
-    """The box around ``faces`` grown by 1 cm (plus a relative term far from
-    the origin), or ``None`` for none — every crack then, as before."""
-    xs, ys, zs = [], [], []
-    for f in faces:
-        for lp in (f.loop, *f.hole_loops):
-            for v in lp:
-                p = v.position
-                xs.append(p.x()); ys.append(p.y()); zs.append(p.z())
-    if not xs:
-        return None
-    lo = (min(xs), min(ys), min(zs))
-    hi = (max(xs), max(ys), max(zs))
-    m = 0.01 + 1e-6 * max(abs(c) for c in lo + hi)
-    return (lo[0] - m, lo[1] - m, lo[2] - m, hi[0] + m, hi[1] + m, hi[2] + m)
-
 
 
 def _face_shape(face) -> tuple:
@@ -504,6 +456,48 @@ class PushPullOperation:
         # click, Esc, a tool change or the user's own undo closes it — the
         # same window contract Rotate already has (tools/rotate.py).
         self._last: dict | None = None
+
+    def _ensure_store(self, scene) -> bool:
+        """A push runs on a store: a Python mesh (one materialised after
+        another operation's refusal, or made with ``INGETRAZO_STORE=0``)
+        becomes store-backed first (``store_mesh.to_store``), outside any
+        History step, and what this operation and the selection hold is
+        carried over to the new elements. False when the store refuses the
+        mesh: the push does not start."""
+        from core.store_mesh import StoreMesh, StoreRefusal, to_store
+        mesh = self._target_mesh(scene)
+        if type(mesh) is StoreMesh:
+            return True
+        # The annotations on it reattach by position, as when an edit
+        # context rebuilds a mesh with fresh keys (Scene._leave_level).
+        root = getattr(scene, "_scene", scene)
+        refresh = getattr(root, "_refresh_dimension_holds", None)
+        swap = getattr(root, "_attachment_swap", None)
+        if refresh is not None:
+            refresh()
+        refs = swap() if swap is not None else ()
+        try:
+            views = to_store(mesh)
+        except (StoreRefusal, ValueError) as e:
+            _write_conversion_failure(str(e))
+            return False
+        if refs:
+            root._restore_attachments(refs)
+        if refresh is not None:
+            refresh()
+
+        def carry(x):
+            return views.get(id(x), x)
+        self.base_face = carry(self.base_face)
+        self.hovered_face = carry(self.hovered_face)
+        self._extra_faces = [carry(f) for f in self._extra_faces]
+        selection = getattr(scene, "selection", None)
+        if selection is not None:
+            held = [carry(x) for x in selection]
+            selection.clear()
+            selection.update(held)
+        scene.version += 1
+        return True
 
     def _target_scene(self, scene):
         """The scene the machinery edits: the real one, or a facade over the
@@ -751,6 +745,13 @@ class PushPullOperation:
         return attached, prism_cap
 
     def _commit(self, viewport) -> None:
+        if self.base_face is not None and not self._ensure_store(viewport.scene):
+            # A drag armed without a click (a script, a test helper) meets
+            # its Python mesh here, still outside the History step.
+            viewport.flash_status(tr("Push refused: the geometry kernel could not take "
+                                     "this mesh (left it unchanged)"), 6000)
+            self._reset()
+            return
         viewport.set_hover(None)  # the hovered face is about to be replaced
         self._light_faces = []
         self._light_rings = []
@@ -787,6 +788,10 @@ class PushPullOperation:
                 "solid", d=fmt_len(abs(self.extrusion))), 4000)
             type(self).last_distance = self.extrusion
             last = self._retype_state(cmd)
+        elif self._refused and self._store_refusal is not None:
+            viewport.flash_status(
+                tr("Push refused: the geometry kernel could not finish it "
+                   "(left it unchanged; a report was saved)"), 6000)
         elif self._refused:
             # The guard rolled the push back to keep the solid watertight; tell
             # the user so the no-op isn't silent — long timeout, it's easy to
@@ -890,14 +895,44 @@ class PushPullOperation:
         def attempt(distance):
             self.extrusion = distance
             self._mutate(scene)
+            if self._store_refusal is not None:
+                # The kernel, not the guard: a shorter push is not tried.
+                raise _Abandoned
             return self.extrusion, self._refused
 
-        self.extrusion, self._refused, partial = push_top_out(
-            self._target_mesh(scene), attempt, self.extrusion, _MIN_EXTRUDE, self._CLAMP_TRIES)
+        wanted = self.extrusion
+        try:
+            self.extrusion, self._refused, partial = push_top_out(
+                self._target_mesh(scene), attempt, self.extrusion, _MIN_EXTRUDE, self._CLAMP_TRIES)
+        except _Abandoned:
+            self.extrusion, self._refused, partial = wanted, True, False
         if partial:
             self._topped_out = True
 
+    #: Why the store refused the last push (None: it did not), for the
+    #: status; set by _mutate.
+    _store_refusal: str | None = None
+
     def _mutate(self, scene, preview: bool = False) -> None:
+        """:meth:`_mutate_guarded` with the store strict: a store step that
+        refuses refuses the push. The mesh is put back as it was, the push
+        reads as refused and a repro is written (:func:`_write_repro`)."""
+        from core.store_mesh import StoreMesh, StoreRefusal, strict
+        self._store_refusal = None
+        mesh = self._target_mesh(scene)
+        snap = mesh.capture_state() if type(mesh) is StoreMesh else None
+        try:
+            with strict():
+                self._mutate_guarded(scene, preview)
+        except StoreRefusal as e:
+            if snap is None:
+                raise
+            mesh.restore_state(snap)
+            self._refused = True
+            self._store_refusal = str(e)
+            _write_repro(mesh, self, str(e))
+
+    def _mutate_guarded(self, scene, preview: bool = False) -> None:
         """Apply the push and stitch watertight, with a **BIM-grade refusal
         guard**: a push on a closed solid must leave a closed solid (or collapse
         it flat). If the operation would leave the mesh cracked — an ill-defined
@@ -1052,8 +1087,7 @@ class PushPullOperation:
                                lambda: self._cap_passes_a_wall_vertex(scene, face, d)):
             normal = self._normal if self._normal is not None else face.normal()
             translate_points(scene, {_key(p) for p in self._cap_positions},
-                             tuple(n*d for n in normal.toTuple()) if "_store" in scene.mesh.__dict__
-                             else normal * d)
+                             tuple(n * d for n in normal.toTuple()))
             seed = list(self._cap_positions) + [p + normal * d
                                                 for p in self._cap_positions]
             seedkeys = {_key(p) for p in seed}
@@ -1066,11 +1100,10 @@ class PushPullOperation:
             # on it: run the same fixpoint plane rebuild as the extrude path
             # over every face the translation touched.
             if not _mesh_is_flat(scene.mesh):
-                listed = [f for f in scene.mesh.faces
+                listed = [f.key for f in scene.mesh.faces
                           if any(_key(v) in seedkeys for v in f.vertices)]
-                self._rebuild_planes_fixpoint(scene.mesh, set(listed), seedkeys,
-                                              removing=d < 0,
-                                              native=([f.key for f in listed], None, None))
+                self._rebuild_planes_fixpoint(scene.mesh, (listed, None, None), seedkeys,
+                                              removing=d < 0)
             else:
                 # A full collapse flattened the solid. The cap may have landed
                 # on a *subdivided* base (hole-bearing cycles never dedupe as
@@ -1144,8 +1177,7 @@ class PushPullOperation:
 
         # The faces there before, by key on a store-backed mesh (see
         # push_scans.set_minus: the same set, iteration order included).
-        before_fkeys = push_scans.live_keys(scene.mesh, "face")
-        before = set(scene.mesh.faces) if before_fkeys is None else None
+        before_fkeys = _face_keys(scene.mesh)
         self._cap_cmd = None
         base_attrs = dict(face.attrs)
         if through is None and not attached_any and self._sweeps_a_free_sheet(
@@ -1172,7 +1204,7 @@ class PushPullOperation:
             )
         from core.coordinate_frame import planned_points
         exact = {}
-        if "_store" in scene.mesh.__dict__ and through is None:
+        if through is None:
             delta = tuple(n * d for n in normal.toTuple())
             for ring, raised in zip([base, *base_holes], [top, *top_holes]):
                 for point, cap in zip(ring, raised):
@@ -1192,18 +1224,11 @@ class PushPullOperation:
         self._far_cmd = None
         if far is not None and far[1] and far[0].face in scene.mesh.faces:
             far[0].face.attrs = dict(far[1])
-        new_faces = None
-        now = None
-        if before_fkeys is not None:
-            now = push_scans.live_keys(scene.mesh, "face")
-            if now is not None:
-                new_faces = push_scans.set_minus(scene.mesh, "face", now,
-                                                 set(before_fkeys))
-            if new_faces is None:
-                before = set(push_scans.views(scene.mesh, "face",
-                                              before_fkeys))
+        now = _face_keys(scene.mesh)
+        new_faces = push_scans.set_minus(scene.mesh, "face", now, set(before_fkeys))
         if new_faces is None:
-            new_faces = set(scene.mesh.faces) - before
+            new_faces = (set(push_scans.views(scene.mesh, "face", now))
+                         - set(push_scans.views(scene.mesh, "face", before_fkeys)))
         if self._keep_base and attached_any and d < 0:
             # The Ctrl-stack grows *into* the solid: its cap is a deliberate
             # interior division (the inward counterpart of the kept base), not
@@ -1231,11 +1256,9 @@ class PushPullOperation:
                    coplanar_merge=not solid and not self._keep_base,
                    dedupe=not solid)
         if solid:
-            self._rebuild_planes_fixpoint(scene.mesh, set(new_faces), seedkeys,
+            self._rebuild_planes_fixpoint(scene.mesh, (None, now, before_fkeys), seedkeys,
                                           keep_mode=self._keep_base,
-                                          removing=d < 0,
-                                          native=(None, now, before_fkeys)
-                                          if now is not None else None)
+                                          removing=d < 0)
         # Give any closed solid a consistent outward orientation — every face's
         # normal pointing out. The extrude can otherwise commit a closed solid
         # wound inconsistently (a flipped cap, or the base of a first flat→solid
@@ -1290,9 +1313,9 @@ class PushPullOperation:
         return hit or None
 
     @staticmethod
-    def _rebuild_planes_fixpoint(mesh, fresh: set, seedkeys: set,
+    def _rebuild_planes_fixpoint(mesh, fresh, seedkeys: set,
                                  keep_mode: bool = False,
-                                 removing: bool = True, native=None) -> None:
+                                 removing: bool = True) -> None:
         """Deterministic root-fix (path C): recompute each touched plane's
         faces from its edges — the planar arrangement finds every region,
         winding-classification keeps the ones inside the solid and drops
@@ -1301,68 +1324,19 @@ class PushPullOperation:
         a wall and the quad overlapping a wall to be notched; crack planes
         cover anything a nested push left unfaced. Shared by the extrude path
         and the prism-translate path (whose flush landings need the same
-        volumetric resolution).
+        volumetric resolution). Rebuilt to a **fixpoint**, planes in sorted
+        key order; then one connectivity stitch.
 
-        Rebuilt to a **fixpoint**: a plane's classification reads the current
-        mesh, so a plane rebuilt while a neighbour still carries its dirty
-        phantom can come out wrong — which made the result depend on iteration
-        order (set order = the Python hash seed). Treating the faces a rebuild
-        adds as fresh re-flags the affected planes next round, and
-        ``apply_rebuild`` returning False on a stable plane makes the loop
-        terminate. Plane keys are sorted, so the whole pass is
-        order-deterministic. No case tree.
-
-        On a store the whole of it runs natively (``Store::
-        rebuild_push_planes``, ``native``: how ``fresh`` was made, see
-        :func:`core.cap_rebuild.rebuild_push_planes_native`)."""
+        One store call (``Store::rebuild_push_planes``,
+        ``store/push_rebuild.rs``). ``fresh`` says how the push's own faces
+        are found: ``(listed, None, None)``, their keys in list order, or
+        ``(None, now, before)``, the faces of ``now`` not in ``before``
+        (:func:`core.cap_rebuild.rebuild_push_planes_native`). A refusal
+        refuses the push (the store is strict there)."""
         from core.cap_rebuild import rebuild_push_planes_native
-        if native is not None and rebuild_push_planes_native(
-                mesh, native, seedkeys, keep_mode, removing):
-            return
-        # The push's own rims, captured by *position* before any rebuild (the
-        # objects die as rounds consolidate them): plane edges lying on none
-        # of these are the user's hand-drawn subdivisions and survive the
-        # union (A.4); edges on them are the op's seams and may dissolve.
-        op_rims: list = []
-        for f in fresh:
-            for lp in (f.loop, *f.hole_loops):
-                cnt = len(lp)
-                for i in range(cnt):
-                    op_rims.append((QVector3D(lp[i].position),
-                                    QVector3D(lp[(i + 1) % cnt].position)))
-        # Per-face memos (normal, centroid, triangles) and the packed parity
-        # set, shared across every plane and round: faces are never mutated in
-        # place inside this loop (rebuilds remove + add), so identity-keyed
-        # entries stay valid. Without it each plane visit re-ran Newell over
-        # the whole mesh — 76k normals per drag frame on the barbecue.
-        cache = RebuildCache()
-        from ingetrazo_core import rebuild_push_planes
-
-        def planes(round_index):
-            nonlocal fresh
-            if round_index:
-                fresh = {f for f in fresh if f in mesh.faces}
-            cache.seed_faces = ElementSet(fresh)
-            candidates = list(seam_planes(mesh, fresh))
-            candidates.extend(crack_planes(mesh, _faces_window(fresh)))
-            candidates.extend(_seam_planes_along(mesh, cache.dropped))
-            cache.dropped = []
-            return candidates
-
-        def rebuild(pair):
-            origin, normal = pair
-            before = _FacesBefore(mesh)
-            changed = apply_rebuild(mesh, origin, normal, fresh, keep_mode,
-                                    removing, op=op_rims, cache=cache)
-            if changed:
-                fresh.update({f for f in before.new_faces(mesh) if not before.kept(f, fresh)})
-            return changed
-
-        rebuild_push_planes(planes, rebuild)
-        # The dissolved seams can leave redundant collinear vertices on the
-        # rebuilt faces' borders (the old cap ring's corners); one more
-        # connectivity pass collapses them. No merge — rebuild already did.
-        run_stitch(mesh, seedkeys, None, coplanar_merge=False)
+        from core.store_mesh import StoreRefusal
+        if not rebuild_push_planes_native(mesh, fresh, seedkeys, keep_mode, removing):
+            raise StoreRefusal("rebuild_push_planes: not a store mesh")
 
     def _extrude_commands(self, face, base, top, base_holes, top_holes, count, attached):
         """Build the cap between the outer rim edges and the inner and outer walls."""

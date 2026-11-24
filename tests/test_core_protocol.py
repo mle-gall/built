@@ -158,11 +158,9 @@ def test_store_changes_since_matches_the_oracle_over_random_ops(seed):
 def test_python_steps_report_the_mesh_replaced():
     sc = _scene(False)
     h = History(sc)
-    face = sc.mesh.faces[0]
-    r = C.run(h, "push_pull", face=str(face.key), distance=1.0)
+    r = C.run(h, "move_vertices", vertices=[str(sc.mesh.vertices[0].key)],
+              delta=[0, 0, 0.25])
     for got in (r, C.run(h, "undo"), C.run(h, "redo"),
-                C.run(h, "move_vertices", vertices=[str(sc.mesh.vertices[0].key)],
-                      delta=[0, 0, 0.25]),
                 C.run(h, "erase", edges=[str(sc.mesh.edges[0].key)])):
         assert got["ok"]
         (change,) = got["step"].meshes
@@ -170,7 +168,25 @@ def test_python_steps_report_the_mesh_replaced():
         assert change.key == mesh_key(sc.mesh)
         assert not any(change.created.values()) and not change.moved
     assert [s.phase for s in h.feed.since(0)["steps"]] == [
-        "execute", "undo", "redo", "execute", "execute"]
+        "execute", "undo", "redo", "execute"]
+
+
+@needs_store
+def test_a_push_on_a_python_mesh_reports_a_store():
+    """A push makes a Python mesh store-backed first (docs/rust-tools.md
+    §24), outside the step: the step reports the store, and so does its
+    undo (it restores the store state the push started from)."""
+    sc = _scene(False)
+    h = History(sc)
+    face = sc.mesh.faces[0]
+    got = C.run(h, "push_pull", face=str(face.key), distance=1.0)
+    assert got["ok"]
+    (change,) = got["step"].meshes
+    assert change.backing == "store"
+    assert change.key == mesh_key(sc.mesh)
+    got = C.run(h, "undo")
+    (change,) = got["step"].meshes
+    assert change.backing == "store" and not change.replaced
 
 
 @pytest.mark.parametrize("store", [False, pytest.param(True, marks=needs_store)])
@@ -529,3 +545,90 @@ def test_bridge_rotates_named_vertices_in_one_undo_step(bridge):
     assert actual == sorted((-y, x, z) for x, y, z in before)
     assert vp.history.undo()
     assert sorted(v.position.toTuple() for v in vp.scene.mesh.faces[-1].loop) == before
+
+
+def test_offset_uses_the_face_key_and_model_frame_for_a_distant_path():
+    from core.protocol.commands import run
+    from core.scene import Scene
+    from core.history import History
+    from ingetrazo_core import Vec3
+    scene = Scene()
+    history = History(scene)
+    face = scene.mesh.add_face([Vec3(0, 0, 0), Vec3(4, 0, 0), Vec3(4, 4, 0), Vec3(0, 4, 0)])
+    assert run(history, "offset_outline", face=str(face.key), distance=.5)["ok"]
+    assert [f.area() for f in scene.mesh.faces if not f.holes] == pytest.approx([9])
+    assert sum(bool(f.holes) for f in scene.mesh.faces) == 1
+    assert history.undo()
+    start = 1_000_000.
+    assert run(history, "offset_outline", points=[[start, 0, 0], [start + 2, 0, 0],
+                                                  [start + 2, 1, 0]],
+               normal=[0, 0, 1], distance=.25)["ok"]
+    coordinates = {v.position.toTuple() for v in scene.mesh.vertices}
+    assert (start, .25, 0) in coordinates and (start + 1.75, 1, 0) in coordinates
+    assert history.undo() and len(scene.mesh.vertices) == 4
+
+
+def test_paint_material_uses_named_recipe_on_the_requested_side_and_preserves_it_on_undo():
+    from core.protocol.commands import run
+    from core.materials import Material
+    from core.scene import Scene
+    from core.history import History
+    from ingetrazo_core import Vec3
+    scene = Scene()
+    history = History(scene)
+    face = scene.mesh.add_face([Vec3(), Vec3(2, 0, 0), Vec3(0, 2, 0)])
+    scene.materials["Blue glass"] = Material("Blue glass", color=(.1, .2, .8), opacity=.4)
+    assert run(history, "paint_material", faces=[str(face.key)], material="Blue glass", back=True)["ok"]
+    assert "color" not in face.attrs and face.attrs["back"]["opacity"] == .4
+    assert face.attrs["back"]["mat"] == "Blue glass"
+    assert history.undo() and dict(face.attrs) == {}
+    assert "Blue glass" in scene.materials
+
+
+def test_bridge_bevels_keyed_edges_and_undoes(bridge):
+    from tests.test_fillet_tool import _box_scene, edge_at
+    win, b = bridge
+    vp = win.viewport
+    mesh = _box_scene(vp)
+    edge = edge_at(mesh, (0, 0, 1), (2, 0, 1))
+    result = _call(b, "bevel_selection", edges=[str(edge.key)], radius=.1, segments=4)
+    assert result["ok"] and result["step"]
+    assert len(mesh.faces) == 10
+    assert vp.history.undo() and len(mesh.faces) == 6
+
+
+def test_bridge_mirrors_and_stamps_the_model_clipboard(bridge):
+    from ingetrazo_core import Vec3
+    win, b = bridge
+    vp = win.viewport
+    face = vp.scene.mesh.faces[-1]
+    original = sorted(v.position.toTuple() for v in face.loop)
+    count = len(vp.scene.mesh.faces)
+    result = _call(b, "flip_selection", center=[0, 0, 0], axis=[1, 0, 0], faces=[str(face.key)])
+    assert result["ok"] and result["step"]
+    assert sorted(v.position.toTuple() for v in face.loop) == sorted((-x, y, z) for x, y, z in original)
+    assert vp.history.undo()
+    vp.clipboard = {"ref": Vec3(), "faces": [([Vec3(), Vec3(1, 0, 0), Vec3(0, 1, 0)], [])], "edges": []}
+    result = _call(b, "paste_clipboard", offset=[8, 2, 1])
+    assert result["ok"] and result["step"] and len(vp.scene.mesh.faces) == count + 1
+    assert vp.history.undo() and len(vp.scene.mesh.faces) == count
+
+
+def test_group_axes_verb_rejects_collinearity_and_preserves_world_points():
+    from core.group import frame_axes, group_frame
+    from core.history import History
+    from core.protocol.commands import run
+    from core.scene import Scene
+    from tests.test_group_axes import _slab, _world_pts
+    scene, group = Scene(), _slab()
+    scene.groups.append(group)
+    history = History(scene)
+    original = _world_pts(group)
+    args = dict(placement=group.uid, origin=[2, 0, 0], red=[2, 2, 0])
+    with pytest.raises(ValueError):
+        run(history, "set_group_axes", **args, green=[2, 1, 0])
+    assert not history.undo_stack
+    assert run(history, "set_group_axes", **args, green=[0, 3, 0])["ok"]
+    assert tuple(frame_axes(group_frame(group))[1].toTuple()) == (0., 1., 0.)
+    assert _world_pts(group) == original
+    assert history.undo() and group_frame(group) is None

@@ -86,15 +86,23 @@ def push_pull(history, face, distance, keep_base=False):
     clamped where the tool clamps (a push stopped at an opposite face)."""
     from core.push_pull import PushPullOperation
     (f,) = _need(history.scene.mesh, "face", [face])
+    op = PushPullOperation()
+    op.base_face = f
+    if not op._ensure_store(history.scene):         # a Python mesh: a store first
+        return _answer(history, history.revision, ok=False)
+    f = op.base_face
     from core.coordinate_frame import ZERO, choose_origin, mesh_frame
     st = store_of(history.scene.mesh)
     origin = choose_origin(st.face_positions(f.key)[0][0]) if st is not None else ZERO
     with mesh_frame(history.scene.mesh, origin):
-        return _push_face(history, f, distance, keep_base, PushPullOperation())
+        return _push_face(history, f, distance, keep_base, op)
 
 
 def _push_face(history, f, distance, keep_base, tool):
     tool.base_face = f
+    if not tool._ensure_store(history.scene):
+        return _answer(history, history.revision, ok=False)
+    f = tool.base_face
     tool.dragging = True
     tool._group = None
     target = tool._target_scene(history.scene)
@@ -111,6 +119,229 @@ def _push_face(history, f, distance, keep_base, tool):
         tool._reset()
         return _answer(history, before, ok=False)
     tool._commit(_Headless(history))
+    return _answer(history, before)
+
+
+def set_group_axes(history, placement, origin, red, green):
+    """Re-express a placement's axes while keeping its geometry in place."""
+    from ingetrazo_core import ToolMachine, Vec3
+    from core.axes import frame_matrix
+    from core.coordinate_frame import point_in_frame, ZERO
+    from core.history import ChangeAxesCommand
+    group, = _placements(history, [placement])
+    basis = ToolMachine.group_axes_basis(origin, red, green)
+    if basis is None:
+        raise ValueError("the red and green points must define a nondegenerate frame")
+    local = point_in_frame(origin, getattr(store_of(history.scene.mesh), "frame_origin", ZERO))
+    frame = frame_matrix(local, *(Vec3(*p) for p in basis))
+    before = history.revision
+    history.execute(ChangeAxesCommand(group, frame))
+    return _answer(history, before)
+
+
+def flip_selection(history, center, axis, copy=False, placements=(), faces=(), edges=()):
+    """Mirror keyed selection across a plane through center with normal axis."""
+    from math import isfinite
+    from core.coordinate_frame import point_in_frame, ZERO
+    from ingetrazo_core import Vec3
+    from core.group import copy_group, transformed_attrs
+    from core.mesh import Mesh
+    from core.history import (AddEdgeCommand, AddFaceCommand, CompoundCommand, FlipGroupsCommand,
+                              FlipVerticesCommand, InsertGroupCommand, mirror_matrix)
+    if len(center) != 3 or len(axis) != 3 or not all(map(isfinite, (*center, *axis))):
+        raise ValueError("flip needs a finite centre and plane normal")
+    if Vec3(*axis).length() < 1e-12:
+        raise ValueError("flip needs a nonzero plane normal")
+    scene = history.scene
+    mesh = scene.mesh
+    centre = point_in_frame(center, getattr(store_of(mesh), "frame_origin", ZERO))
+    n = Vec3(*axis).normalized()
+    groups = _placements(history, placements)
+    faces, edges = _need(mesh, "face", faces), _need(mesh, "edge", edges)
+    positions = {v.key: v.position for f in faces for v in f.loop}
+    positions.update((v.key, v.position) for e in edges for v in (e.v0, e.v1))
+    before = history.revision
+    cmds: list = []
+    if copy:
+        from core.ifc_identity import copied_face_attrs
+        copy_attrs = copied_face_attrs(scene)
+        m = mirror_matrix(centre, n)
+        for g in groups:
+            clone = copy_group(g)
+            cmds.append(InsertGroupCommand(clone))
+            cmds.append(FlipGroupsCommand([clone], centre, n))
+        id_map: dict[int, int] = {}
+        for f in faces:
+            # Mirrored loops are re-reversed so the copy faces OUT.
+            loop = [m.map(Vec3(v)) for v in f.vertices][::-1]
+            holes = [[m.map(Vec3(v)) for v in h][::-1]
+                     for h in f.holes] or None
+            cmds.append(AddFaceCommand(
+                loop, holes=holes, auto=False,
+                attrs=copy_attrs(transformed_attrs(f.attrs, m))))
+        for e in edges:
+            curve = getattr(e, "curve", None)
+            if curve is not None and curve not in id_map:
+                id_map[curve] = Mesh.next_curve_id()
+            cmds.append(AddEdgeCommand(
+                m.map(Vec3(e.a)), m.map(Vec3(e.b)),
+                soft=getattr(e, "soft", False) or None,
+                curve=id_map.get(curve)))
+    else:
+        if groups:
+            cmds.append(FlipGroupsCommand(groups, centre, n))
+        if positions:
+            cmds.append(FlipVerticesCommand(
+                list(positions.values()), centre, n, faces=faces))
+    if cmds:
+        history.execute(cmds[0] if len(cmds) == 1 else CompoundCommand(cmds))
+    return _answer(history, before)
+
+
+def paste_clipboard(history, offset, *, clipboard):
+    """Stamp the bound document clipboard with a model-space displacement."""
+    import math
+    from ingetrazo_core import Vec3
+    from core.paste_ops import stamp_clipboard
+    if len(offset) != 3 or not all(map(math.isfinite, offset)):
+        raise ValueError("paste offset must be a finite vector")
+    before = history.revision
+    ok = clipboard and stamp_clipboard(history, clipboard, Vec3(*offset))
+    return _answer(history, before, ok)
+
+
+def bevel_selection(history, radius, segments=8, profile=.5, measure="radius", corners="round",
+                    shape=None, edges=(), vertices=(), _plan=None):
+    """Round keyed edges or bevel keyed corners of the open mesh in a single step."""
+    from math import isfinite
+    from core.fillet import apply_fillet, plan_fillet
+    from core.vertex_bevel import plan_vertex_bevel
+    from core.history import SnapshotMutation
+    from core.store_face_edit import StoreFaceMutation
+    from core import bevel_profiles
+    if bool(edges) == bool(vertices):
+        raise ValueError("supply edges or vertices")
+    if not isfinite(radius) or radius <= 0 or type(segments) is not int or segments < 1:
+        raise ValueError("bevel needs a positive size and segment count")
+    if not 0 < profile < 1 or measure not in ("radius", "offset", "width", "depth") or corners not in ("round", "cut"):
+        raise ValueError("invalid bevel profile, measure or corner fill")
+    if shape is not None:
+        if vertices or (isinstance(shape, str) and shape not in ("steps", "supports", "cornice", "crown")):
+            raise ValueError("unknown shape for this bevel")
+        if not isinstance(shape, str):
+            if not bevel_profiles.valid(shape):
+                raise ValueError("invalid drawn bevel profile")
+            shape = tuple(tuple(p) for p in shape)
+    mesh = history.scene.mesh
+    before = history.revision
+    plan = _plan
+    if plan is None:
+        if vertices:
+            plan = plan_vertex_bevel(mesh, _need(mesh, "vertex", vertices), radius, segments, profile)
+        else:
+            plan = plan_fillet(mesh, _need(mesh, "edge", edges), radius, segments, profile, measure, corners, shape)
+    if isinstance(plan, str):
+        return {**_answer(history, before, ok=False), "error": plan}
+    constructor = StoreFaceMutation if plan._store_plan is not None else SnapshotMutation
+    history.execute(constructor(lambda scene: apply_fillet(scene.mesh, plan), mesh=mesh))
+    return _answer(history, before)
+
+
+def paint_material(history, *, placement=None, mesh=None, faces=(), seed=None, material=None,
+                   color=None, texture=None, opacity=None, default=False, back=False, plane=None,
+                   _picked_placement=None):
+    """Paint one placement or a list of keyed mesh faces in one history step."""
+    from core.materials import Material
+    from core.material_commands import material_for_paint
+    from core.paint_ops import build_paint
+    from core.protocol.keys import resolve_mesh
+    from ingetrazo_core import Vec3
+    if (placement is None) == (not faces):
+        raise ValueError("paint_material needs a placement or faces")
+    group, target_mesh, targets, clicked = None, None, [], None
+    if placement is not None:
+        # A viewport may supply a transient placement belonging to its own
+        # editing context. Its UID must match the target sent by the machine.
+        if _picked_placement is not None and _picked_placement.uid == placement:
+            group = _picked_placement
+        else:
+            group, = _placements(history, [placement])
+    else:
+        target_mesh = resolve_mesh(history.scene, mesh)
+        targets = _need(target_mesh, "face", faces)
+        clicked = _need(target_mesh, "face", [seed])[0] if seed is not None else targets[0]
+    mat = None
+    if isinstance(material, str):
+        mat = _material(history, material)
+        if color is None and texture is None:
+            color, texture = mat.color, mat.texture
+        if opacity is None:
+            opacity = mat.opacity
+    elif material is not None:
+        mat = Material.from_dict(material)
+    if color is None and texture is None and mat is not None:
+        color, texture = mat.color, mat.texture
+        if opacity is None:
+            opacity = mat.opacity
+    if color is not None and (len(color) != 3 or not all(0 <= c <= 1 for c in color)):
+        raise ValueError("paint colour needs three components from zero to one")
+    if opacity is not None and not 0 <= opacity <= 1:
+        raise ValueError("paint opacity must be between zero and one")
+    if color is None and texture is None and not default:
+        raise ValueError("paint_material needs a colour, texture, or default")
+    if mat is None and not default:
+        mat = material_for_paint(history.scene, color=color, texture=texture, opacity=opacity)
+    source_plane = (Vec3(*plane[0]), float(plane[1])) if plane is not None else None
+    cmd = build_paint(target_mesh, targets, clicked, group, back, default,
+                      color, texture, opacity, mat, source_plane)
+    before = history.revision
+    history.execute(cmd)
+    return _answer(history, before)
+
+
+def offset_outline(history, distance, face=None, points=None, normal=None, closed=False, eye=None):
+    """Offset one keyed face or a coplanar edge path, in model coordinates."""
+    import math
+    from core.coordinate_frame import ZERO, choose_origin, mesh_frame, point_in_frame
+    from core.edits import build_add_edges
+    from core.offset import build_offset_face, OffsetHoleCollision, offset_chain
+    from core.topology import offset_loop
+    from ingetrazo_core import Vec3
+
+    if (face is None) == (points is None):
+        raise ValueError("offset_outline needs one face or point path")
+    if not math.isfinite(distance) or distance == 0:
+        raise ValueError("offset distance must be finite and nonzero")
+    mesh = history.scene.mesh
+    store = store_of(mesh)
+    before = history.revision
+    if face is not None:
+        (target,) = _need(mesh, "face", [face])
+        origin = choose_origin(store.face_positions(target.key)[0][0]) if store is not None else ZERO
+        with mesh_frame(mesh, origin):
+            try:
+                cmd = build_offset_face(mesh, target, distance)
+            except OffsetHoleCollision:
+                return {**_answer(history, before, False), "error": "hole"}
+            if cmd is None:
+                return {**_answer(history, before, False), "error": "collapsed_face"}
+            history.execute(cmd)
+    else:
+        if len(points) < (3 if closed else 2) or normal is None:
+            raise ValueError("an offset path needs points and a plane normal")
+        if not all(len(p) == 3 and all(math.isfinite(v) for v in p) for p in [normal, *points]):
+            raise ValueError("offset path vectors must contain three finite coordinates")
+        if Vec3(*normal).lengthSquared() < 1e-18:
+            raise ValueError("offset path normal must be nonzero")
+        origin = choose_origin(points[0]) if store is not None else ZERO
+        with mesh_frame(mesh, origin):
+            path = [point_in_frame(p, origin) for p in points]
+            shifted = (offset_loop if closed else offset_chain)(path, Vec3(*normal), distance)
+            if shifted is None:
+                return {**_answer(history, before, False), "error": "collapsed_chain"}
+            segments = list(zip(shifted, shifted[1:] + (shifted[:1] if closed else [])))
+            history.execute(build_add_edges(history.scene, segments,
+                            eye=point_in_frame(eye, origin) if eye is not None else None))
     return _answer(history, before)
 
 
@@ -321,6 +552,40 @@ def add_arc(history, points, center=None, trim=None):
         with planned_points(mesh, exact):
             history.execute(cmd)
     return _answer(history, before)
+
+def add_guide(history, point, direction=None, origin=None):
+    """Construction line or point, in open mesh coordinates."""
+    from ingetrazo_core import Vec3
+    from core.coordinate_frame import point_in_frame, ZERO
+    from core.guide import Guide
+    from core.history import AddGuideCommand
+    store = store_of(history.scene.mesh)
+    frame = store.frame_origin if store is not None else ZERO
+    guide = Guide(point_in_frame(point, frame), Vec3(*direction) if direction is not None else None,
+                  point_in_frame(origin, frame) if origin is not None else None)
+    before = history.revision
+    if guide.is_finite() and (direction is None or guide.is_line):
+        history.execute(AddGuideCommand(guide))
+    return _answer(history, before)
+
+
+def change_guide(history, index, direction):
+    """Re-aim an existing construction line, preserving its identity."""
+    from core.guide import Guide
+    from core.history import ChangeGuideCommand
+    from ingetrazo_core import Vec3
+    import math
+    if type(index) is not int or not 0 <= index < len(history.scene.guides):
+        raise ValueError("unknown guide index")
+    guide = history.scene.guides[index]
+    if not isinstance(guide, Guide) or not guide.is_line:
+        raise ValueError("this guide is not a line")
+    if len(direction) != 3 or not all(map(math.isfinite, direction)) or Vec3(*direction).length() < 1e-12:
+        raise ValueError("guide direction must be a finite nonzero vector")
+    before = history.revision
+    history.execute(ChangeGuideCommand(guide, Vec3(*direction)))
+    return _answer(history, before)
+
 
 def add_guide_circle(history, center, normal, radius):
     """An analytic guide circle (the Circle tool with Ctrl): ``center``
@@ -1238,10 +1503,10 @@ COMMANDS = {"set_location": set_location, "set_model_units": set_model_units, "s
             "create_delivery": create_delivery, "edit_delivery": edit_delivery,
             "delete_delivery": delete_delivery, "run_delivery": run_delivery, "follow_me": follow_me, "intersect_faces": intersect_faces,
             "add_edge": add_edge, "add_edges": add_edges, "add_face": add_face,
-            "add_guide_circle": add_guide_circle, "add_arc": add_arc,
+            "add_guide": add_guide, "change_guide": change_guide, "add_guide_circle": add_guide_circle, "add_arc": add_arc,
             "move_placements": move_placements, "copy_placements": copy_placements,
             "move_selection": move_selection, "scale_selection": scale_selection,
-            "rotate_selection": rotate_selection,
+            "set_group_axes": set_group_axes, "flip_selection": flip_selection, "paste_clipboard": paste_clipboard, "bevel_selection": bevel_selection, "rotate_selection": rotate_selection, "offset_outline": offset_outline, "paint_material": paint_material,
             "divide_edges": divide_edges, "join_edges": join_edges,
             "move_vertices": move_vertices, "erase": erase,
             "reverse_faces": reverse_faces, "push_pull": push_pull, "orient_faces": orient_faces,

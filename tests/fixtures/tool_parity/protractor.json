@@ -1,0 +1,33 @@
+{
+"click_and_reaim": [
+  {"centre":[2.0,1.0,0.0],"arm":null,"axis":[0.0,0.0,1.0],"plus":true,"label":null,"guide_preview":[],"guides":[],"undo":0,"result":null},
+  {"centre":[2.0,1.0,0.0],"arm":[5.0,1.0,0.0],"axis":[0.0,0.0,1.0],"plus":true,"label":null,"guide_preview":[],"guides":[],"undo":0,"result":null},
+  {"centre":[2.0,1.0,0.0],"arm":[5.0,1.0,0.0],"axis":[0.0,0.0,1.0],"plus":true,"label":"+90.0\u00b0","guide_preview":[[[2.0,-9999.0,0.0],[2.0,10001.0,0.0]]],"guides":[],"undo":0,"result":null},
+  {"centre":null,"arm":null,"axis":[0.0,0.0,1.0],"plus":true,"label":null,"guide_preview":[],"guides":[[[2.0,1.0,0.0],[0.0,1.0,0.0]]],"undo":1,"result":null},
+  {"centre":null,"arm":null,"axis":[0.0,0.0,1.0],"plus":true,"label":null,"guide_preview":[],"guides":[[[2.0,1.0,0.0],[0.866025404,0.5,0.0]]],"undo":2,"result":true},
+  {"centre":null,"arm":null,"axis":[0.0,0.0,1.0],"plus":true,"label":null,"guide_preview":[],"guides":[[[2.0,1.0,0.0],[0.5,-0.866025404,0.0]]],"undo":3,"result":true},
+  {"centre":null,"arm":null,"axis":[0.0,0.0,1.0],"plus":true,"label":null,"guide_preview":[],"guides":[[[2.0,1.0,0.0],[0.866025404,0.5,0.0]]],"undo":2,"result":null}],
+"typed_clockwise": [
+  {"centre":[0.0,0.0,0.0],"arm":null,"axis":[0.0,0.0,1.0],"plus":true,"label":null,"guide_preview":[],"guides":[],"undo":0,"result":null},
+  {"centre":[0.0,0.0,0.0],"arm":[2.0,0.0,0.0],"axis":[0.0,0.0,1.0],"plus":true,"label":null,"guide_preview":[],"guides":[],"undo":0,"result":null},
+  {"centre":[0.0,0.0,0.0],"arm":[2.0,0.0,0.0],"axis":[0.0,0.0,1.0],"plus":true,"label":"-45.0\u00b0","guide_preview":[[[-7071.067811865,7071.067811865,0.0],[7071.067811865,-7071.067811865,0.0]]],"guides":[],"undo":0,"result":null},
+  {"centre":null,"arm":null,"axis":[0.0,0.0,1.0],"plus":true,"label":null,"guide_preview":[],"guides":[[[0.0,0.0,0.0],[0.707106781,-0.707106781,0.0]]],"undo":1,"result":true},
+  {"centre":null,"arm":null,"axis":[0.0,0.0,1.0],"plus":true,"label":null,"guide_preview":[],"guides":[[[0.0,0.0,0.0],[0.939692621,-0.342020143,0.0]]],"undo":2,"result":true},
+  {"centre":null,"arm":null,"axis":[0.0,0.0,1.0],"plus":true,"label":null,"guide_preview":[],"guides":[[[0.0,0.0,0.0],[0.707106781,-0.707106781,0.0]]],"undo":1,"result":null},
+  {"centre":null,"arm":null,"axis":[0.0,0.0,1.0],"plus":true,"label":null,"guide_preview":[],"guides":[],"undo":0,"result":null},
+  {"centre":null,"arm":null,"axis":[0.0,0.0,1.0],"plus":true,"label":null,"guide_preview":[],"guides":[],"undo":0,"result":false}],
+"measure_only": [
+  {"centre":null,"arm":null,"axis":[0.0,0.0,1.0],"plus":false,"label":null,"guide_preview":[],"guides":[],"undo":0,"result":true},
+  {"centre":[0.0,0.0,0.0],"arm":null,"axis":[0.0,0.0,1.0],"plus":false,"label":null,"guide_preview":[],"guides":[],"undo":0,"result":null},
+  {"centre":[0.0,0.0,0.0],"arm":[1.0,0.0,0.0],"axis":[0.0,0.0,1.0],"plus":false,"label":null,"guide_preview":[],"guides":[],"undo":0,"result":null},
+  {"centre":[0.0,0.0,0.0],"arm":[1.0,0.0,0.0],"axis":[0.0,0.0,1.0],"plus":false,"label":"+30.0\u00b0","guide_preview":[],"guides":[],"undo":0,"result":null},
+  {"centre":null,"arm":null,"axis":[0.0,0.0,1.0],"plus":false,"label":null,"guide_preview":[],"guides":[],"undo":0,"result":null},
+  {"centre":null,"arm":null,"axis":[0.0,0.0,1.0],"plus":false,"label":null,"guide_preview":[],"guides":[],"undo":0,"result":false}],
+"tilt_plane_and_cancel": [
+  {"centre":[0.0,0.0,0.0],"arm":null,"axis":[0.0,0.0,1.0],"plus":true,"label":null,"guide_preview":[],"guides":[],"undo":0,"result":null},
+  {"centre":[0.0,0.0,0.0],"arm":null,"axis":[0.0,0.0,1.0],"plus":true,"label":null,"guide_preview":[],"guides":[],"undo":0,"result":null},
+  {"centre":[0.0,0.0,0.0],"arm":null,"axis":[0.666666667,0.666666667,0.333333333],"plus":true,"label":null,"guide_preview":[],"guides":[],"undo":0,"result":null},
+  {"centre":[0.0,0.0,0.0],"arm":[2.0,0.0,0.0],"axis":[0.666666667,0.666666667,0.333333333],"plus":true,"label":null,"guide_preview":[],"guides":[],"undo":0,"result":null},
+  {"centre":[0.0,0.0,0.0],"arm":[2.0,0.0,0.0],"axis":[0.666666667,0.666666667,0.333333333],"plus":true,"label":"-153.4\u00b0","guide_preview":[[[6664.632186474,-3329.266233278,-6670.731906393],[-6664.632186474,3329.266233278,6670.731906393]]],"guides":[],"undo":0,"result":null},
+  {"centre":null,"arm":null,"axis":[0.0,0.0,1.0],"plus":true,"label":null,"guide_preview":[],"guides":[],"undo":0,"result":null}]
+}

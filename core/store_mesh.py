@@ -2037,21 +2037,52 @@ del _name
 
 # ---- Building, materialising, restoring -------------------------------------
 
+class StoreRefusal(Exception):
+    """A store step refused inside an operation that runs strict
+    (:func:`strict`): the operation refuses instead of finishing on Python
+    objects. The caller puts the mesh back."""
+
+
+_STRICT = [0]
+
+
+class strict:
+    """While held, a store step that would hand the mesh to Python objects
+    (``_py``, ``_materialise``, a refused native call) raises
+    :class:`StoreRefusal` (docs/rust-tools.md §22, decision 1)."""
+
+    def __enter__(self):
+        _STRICT[0] += 1
+        return self
+
+    def __exit__(self, *exc):
+        _STRICT[0] -= 1
+        return False
+
+
 def _note_refusal(step) -> None:
     """With ``INGETRAZO_REFUSALS`` naming a file: one JSON line per store
     step that refused and handed the mesh to Python objects: the step, the
     refusal's message, and the operation on the stack (a push, a cap
     rebuild, a stitch). Measurement for the native push (docs/rust-tools.md
-    §22)."""
+    §22). Under :class:`strict`, the step then raises
+    :class:`StoreRefusal`."""
     import os
-    path = os.environ.get("INGETRAZO_REFUSALS")
-    if not path:
-        return
-    import json
     import sys
     err = sys.exc_info()[1]
+    path = os.environ.get("INGETRAZO_REFUSALS")
+    if path:
+        _log_refusal(path, step, err)
+    if _STRICT[0]:
+        raise StoreRefusal(f"{step}: {err}" if err is not None else step)
+
+
+def _log_refusal(path, step, err, **extra) -> None:
+    import json
+    import os
+    import sys
     ops = []
-    f = sys._getframe(1)
+    f = sys._getframe(2)
     while f is not None:
         name = os.path.basename(f.f_code.co_filename)
         if name in ("push_pull.py", "pushpull.py", "cap_rebuild.py", "history_commands.py",
@@ -2061,7 +2092,7 @@ def _note_refusal(step) -> None:
     test = os.environ.get("PYTEST_CURRENT_TEST", "").split(" ")[0]
     with open(path, "a") as out:
         out.write(json.dumps({"step": step, "reason": "" if err is None else str(err)[:200],
-                              "ops": ops[:6], "test": test}) + "\n")
+                              "ops": ops[:6], "test": test, **extra}) + "\n")
 
 
 def _log_object_fallback(reason):
@@ -2742,3 +2773,66 @@ def faces_arrays(m):
                  np.asarray(a["ring_counts"], dtype=np.int64), model_f64=True)
     out.edge_face_counts = np.diff(a["ef_start"])
     return out
+
+
+def to_store(m) -> dict:
+    """Make the Python mesh ``m`` (a plain one, or one materialised after a
+    refusal) store-backed in place, list orders kept: its vertices, edges
+    and faces in their order, edge flags, curves and tags, each face's
+    attrs dict (the same dict, as the face's own) and interior flag.
+    Returns ``{id(old element): view}`` for the caller's holders: the
+    elements get new keys (a Python mesh's keys are not the store's).
+
+    Call it between History steps only: the steps before keep their
+    Python snapshots, and undoing one turns the mesh back into those
+    objects (``restore_state``); the step after captures a store state.
+    Raises :class:`StoreRefusal` when the store would not hold the mesh as
+    it is (welded vertices, a duplicate edge, a dropped face)."""
+    if m.__class__ is StoreMesh:
+        return {}
+    from core import _native
+    mod = _native.available()
+    verts = list(m.vertices)
+    edges = list(m.edges)
+    faces = list(m.faces)
+    vi = {id(v): i for i, v in enumerate(verts)}
+    pos = np.array([v.position.toTuple() for v in verts], dtype=np.float64).reshape(-1, 3)
+    ends = np.array([(vi[id(e.v0)], vi[id(e.v1)]) for e in edges], dtype=np.int64).reshape(-1, 2)
+    flags = np.array([(1 if e.soft else 0) | (2 if e.hidden else 0)
+                      | (4 if e.soft and getattr(e, "flat", False) else 0)
+                      for e in edges], dtype=np.uint8)
+    curves = np.array([-1 if e.curve is None else e.curve for e in edges], dtype=np.int64)
+    names: list = []
+    at: dict = {}
+    layers = np.array([-1 if e.layer is None else at.setdefault(e.layer, len(at))
+                       for e in edges], dtype=np.int64)
+    names = sorted(at, key=at.get)
+    rings, sizes, counts = [], [], []
+    for f in faces:
+        loops = [f.loop, *f.hole_loops]
+        counts.append(len(loops))
+        for lp in loops:
+            sizes.append(len(lp))
+            rings.extend(vi[id(v)] for v in lp)
+    store = mod.MeshStore.from_block(
+        next(_mesh._KEY_NAMESPACES), pos, ends, flags, curves, layers, names,
+        np.asarray(rings, dtype=np.int64), np.asarray(sizes, dtype=np.int64),
+        np.asarray(counts, dtype=np.int64), None, sequential=True, **_weld_args())
+    keys = {k: store.keys(k) for k in ("vertex", "edge", "face")}
+    if (len(keys["vertex"]), len(keys["edge"]), len(keys["face"])) != (len(verts), len(edges), len(faces)):
+        raise StoreRefusal("to_store: the store would weld or drop elements of this mesh")
+    for f, k in zip(faces, keys["face"]):
+        if f.interior:
+            store.set_face_flags(k, 1)
+    own = {k: f.attrs for f, k in zip(faces, keys["face"]) if f.attrs}
+    m.__dict__.pop("_objmap", None)
+    become_store(m, store, [], own)
+    m._dirty()
+    m._chunk_dirty = True
+    views = {}
+    for objs, ks, cls in ((verts, keys["vertex"], VertexView),
+                          (edges, keys["edge"], EdgeView),
+                          (faces, keys["face"], FaceView)):
+        for o, k in zip(objs, ks):
+            views[id(o)] = cls(m, k)
+    return views

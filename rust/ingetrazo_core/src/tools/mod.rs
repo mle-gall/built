@@ -6,6 +6,16 @@
 //! `py.rs` is the only PyO3 face, and `tests.rs` drives the machines
 //! against a fake host.
 
+mod change_axes;
+mod freehand;
+mod paste;
+mod flip;
+mod tape;
+mod fillet_tool;
+mod protractor;
+mod paint;
+mod offset_tool;
+mod walkthrough;
 mod scale_grip;
 mod scale_tool;
 mod rotate;
@@ -116,10 +126,15 @@ pub enum ToolEvent {
     Value(Value),
     AbsoluteValue(Value),
     ScaleFactors(P3),
+    Navigate(walkthrough::Navigation),
+    ProtractorFrame { basis: [P3; 2], near: bool, exact: bool },
     /// A segment or side count typed as `Ns` (Circle, Polygon, Arc).
     Segments(i64),
     /// A radius typed as `2r` (the 2-point Arc).
     Radius(f64),
+    Profile(f64),
+    PasteAt(P3),
+    FlipAlong { axis: String, copy: bool },
     /// What only the view knows, before a pointer or value event.
     View(ViewReading),
     /// The plane the operation keeps to (a face clicked first, a plane lock).
@@ -334,6 +349,16 @@ pub(crate) fn json_p3(v: &serde_json::Value) -> Option<P3> {
 
 pub fn new_tool(kind: &str) -> Option<Box<dyn Tool>> {
     match kind {
+        "freehand" => Some(Box::new(freehand::Freehand::default())),
+        "change_axes" => Some(Box::new(change_axes::ChangeAxes::default())),
+        "paste" => Some(Box::new(paste::Paste::default())),
+        "flip" => Some(Box::new(flip::Flip::default())),
+        "tape" => Some(Box::new(tape::Tape::default())),
+        "fillet" => Some(Box::new(fillet_tool::Fillet::default())),
+        "protractor" => Some(Box::new(protractor::Protractor::default())),
+        "paint" => Some(Box::new(paint::Paint)),
+        "offset" => Some(Box::new(offset_tool::Offset::default())),
+        "position_camera" | "look_around" | "walk" | "first_person" => Some(Box::new(walkthrough::Walkthrough::new(kind))),
         "select" => Some(Box::new(select::SelectTool::default())),
         "line" => Some(Box::new(line::LineTool::default())),
         "rectangle" => Some(Box::new(rectangle::RectangleTool::default())),

@@ -304,24 +304,21 @@ def test_paint_tool_stamps_a_name_on_a_raw_colour(monkeypatch):
     """The Paint tool's click with a colour from the wheel: the face wears a
     material, registered in the same undo step."""
     from tools.paint import PaintTool
-    sc, h = _painted_scene()
-    face = sc.mesh.add_face([V(0, 5, 0), V(1, 5, 0), V(1, 6, 0)])
+    from tests.test_paint_materials import _FakeViewport, _click, _quad
+    vp = _FakeViewport()
+    sc, h = vp.scene, vp.history
+    face = _quad(sc.mesh)
+    monkeypatch.setattr(PaintTool, "_library_pick", None, raising=False)
+    monkeypatch.setattr(PaintTool, "sample_armed", False)
     monkeypatch.setattr(PaintTool, "current_is_default", False)
     monkeypatch.setattr(PaintTool, "current_texture", None)
     monkeypatch.setattr(PaintTool, "current_material", None)
     monkeypatch.setattr(PaintTool, "current_opacity", None)
     monkeypatch.setattr(PaintTool, "current_color", (0.0, 0.5, 1.0))
-    from core.material_commands import material_for_paint
-    from core.history import CompoundCommand, SetFaceColorCommand, SetFaceMaterialTagCommand
-    # What on_click does before stamping (tools/paint.py, "No anonymous paint").
-    mat = material_for_paint(sc, color=PaintTool.current_color)
-    h.execute(CompoundCommand([SetFaceColorCommand([face], PaintTool.current_color),
-                               SetFaceMaterialTagCommand([face], mat.name, mat)]))
+    _click(vp, face)
     assert face.attrs["mat"] == "Colour #0080FF" and "Colour #0080FF" in sc.materials
     h.undo()
     assert "Colour #0080FF" not in sc.materials
-    import inspect
-    assert "material_for_paint" in inspect.getsource(PaintTool.on_click)
 
 
 def test_unnamed_colours_and_name_these():

@@ -152,7 +152,11 @@ for _name, _description, _props, _required in [
     ("query_camera", "Read the current camera pose and projection.", {}, []),
     ("set_camera", "Set camera pose or a standard view; no document edit.",
      {"preset": {"enum": ["top", "bottom", "front", "back", "right", "left", "iso"]},
-      "eye": _VECTOR, "target": _VECTOR, "up": _VECTOR, "ortho": {"type": "boolean"}}, []),
+      "eye": _VECTOR, "target": _VECTOR, "up": _VECTOR, "ortho": {"type": "boolean"},
+      "direction": dict(_VECTOR, description="Look direction, preserving orbit distance."),
+      "translation": dict(_VECTOR, description="Move eye and target together."),
+      "turn": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2,
+               "description": "Turn right and up in degrees, keeping the eye fixed."}}, []),
     ("zoom_to", "Frame specified groups, selection, or the whole model.", {"uids": _STRINGS}, []),
 ]:
     BUILTIN_TOOLS.append(dict(name=_name, description=_description,
@@ -286,3 +290,60 @@ BUILTIN_TOOLS.append(dict(
         "placements": {"type": "array", "items": {"oneOf": [{"type": "string"}, _KEYS]}},
         "images": _RECORD_INDICES, "guides": _RECORD_INDICES, "sections": _RECORD_INDICES,
     }, required=["center", "axis", "angles"])))
+
+BUILTIN_TOOLS.append(dict(
+    name="offset_outline", mutates=True,
+    description="Offset a keyed face or a coplanar edge path by a signed distance in metres.",
+    inputSchema=dict(type="object", properties={
+        "distance": {"type": "number"}, "face": _KEYS["items"],
+        "points": {"type": "array", "items": _VECTOR}, "normal": _VECTOR,
+        "closed": {"type": "boolean"}, "eye": _VECTOR,
+    }, required=["distance"], oneOf=[{"required": ["face"]}, {"required": ["points", "normal"]}])))
+
+BUILTIN_TOOLS.append(dict(
+    name="set_group_axes", mutates=True,
+    description="Set a placement's axes using an origin, a red-axis point and a green-side point in metres.",
+    inputSchema=dict(type="object", properties={"placement": _OCCURRENCE, "origin": _SCALE_TRIPLE,
+        "red": _SCALE_TRIPLE, "green": _SCALE_TRIPLE}, required=["placement", "origin", "red", "green"])))
+
+BUILTIN_TOOLS.append(dict(
+    name="flip_selection", mutates=True,
+    description="Mirror named faces, edges and placements across a plane, optionally making a copy.",
+    inputSchema=dict(type="object", properties={"center": _SCALE_TRIPLE, "axis": _SCALE_TRIPLE,
+        "placements": {"type": "array", "items": _OCCURRENCE}, "faces": _KEYS, "edges": _KEYS,
+        "copy": {"type": "boolean"}}, required=["center", "axis"])))
+
+BUILTIN_TOOLS.append(dict(
+    name="paste_clipboard", mutates=True,
+    description="Stamp the document's model clipboard at its original position plus an offset in metres.",
+    inputSchema=dict(type="object", properties={"offset": _SCALE_TRIPLE}, required=["offset"])))
+
+BUILTIN_TOOLS.append(dict(
+    name="bevel_selection", mutates=True,
+    description="Round edges or bevel vertex corners of the open mesh. The size is in metres.",
+    inputSchema=dict(type="object", properties={
+        "edges": _KEYS, "vertices": _KEYS, "radius": {"type": "number", "exclusiveMinimum": 0},
+        "segments": {"type": "integer", "minimum": 1}, "profile": {"type": "number"},
+        "measure": {"enum": ["radius", "offset", "width", "depth"]}, "corners": {"enum": ["round", "cut"]},
+        "shape": {"oneOf": [{"enum": ["steps", "supports", "cornice", "crown"]}, {"type": "array"}]},
+    }, required=["radius"], oneOf=[{"required": ["edges"]}, {"required": ["vertices"]}])))
+
+BUILTIN_TOOLS.append(dict(
+    name="paint_material", mutates=True,
+    description="Paint a placement or named faces with a material, or restore the default on one side.",
+    inputSchema=dict(type="object", properties={
+        "placement": _OCCURRENCE, "mesh": {"type": "string"}, "faces": _KEYS,
+        "seed": {"type": "string"}, "material": {"oneOf": [{"type": "string"}, {"type": "object"}]},
+        "color": _VECTOR, "texture": {"type": "object"}, "opacity": {"type": "number"},
+        "default": {"type": "boolean"}, "back": {"type": "boolean"},
+        "plane": {"type": "array", "description": "Source texture plane [normal, signed offset]."}
+    }, oneOf=[{"required": ["placement"]}, {"required": ["faces"]}])))
+
+for _name, _desc, _fields, _required in (
+    ("add_guide", "Create a construction line or guide point.", {"point": _VECTOR, "direction": _VECTOR,
+                                                                   "origin": _VECTOR}, ["point"]),
+    ("change_guide", "Re-aim an existing construction line.", {"index": {"type": "integer", "minimum": 0},
+                                                               "direction": _VECTOR}, ["index", "direction"]),
+):
+    BUILTIN_TOOLS.append(dict(name=_name, description=_desc, mutates=True,
+                              inputSchema=dict(type="object", properties=_fields, required=_required)))

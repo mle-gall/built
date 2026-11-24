@@ -66,8 +66,26 @@ class _Host:
     def run(self, name, args):
         from core.protocol.commands import run
         args = json.loads(args)
+        if name == "paste_clipboard":
+            answer = run(self.vp.history, name, **args, clipboard=self.tool._clip)
+            return answer["ok"], self.revision(), 0, answer.get("error")
+        if name == "bevel_selection":
+            args["_plan"] = self.tool._plan
+        if name == "paint_material":
+            # Painting a closed, lazy group needs no topology or face count.
+            try:
+                answer = run(self.vp.history, name, **args,
+                             _picked_placement=getattr(self.tool, "_container", None))
+            except KeyError as error:
+                # Undo can invalidate a cached viewport pick between events.
+                return False, self.revision(), 0, str(error)
+            return answer["ok"], self.revision(), 0, answer.get("error")
+        if name in ("add_guide", "set_group_axes"):
+            for key in ("point", "origin", "red", "green"):
+                if args.get(key) is not None:
+                    args[key] = self._model(args[key])
         for key in ("a", "b", "eye", "anchor", "center"):
-            if key in args:
+            if args.get(key) is not None:
                 args[key] = self._model(args[key])
         for key in ("outer", "points"):
             if key in args:
@@ -80,7 +98,7 @@ class _Host:
         try:
             answer = run(history, name, **args)
         except (KeyError, ValueError) as error:
-            if name not in ("scale_selection", "rotate_selection"):
+            if name not in ("scale_selection", "rotate_selection", "offset_outline"):
                 raise
             # A stale target during hot retype must leave the machine
             # free to redo the original command.
@@ -1723,3 +1741,196 @@ class RotateTool(RotateHost, RustTool):
     _copy = property(lambda self: bool(self._state("copy")),
                      lambda self, on: self._machine.set("copy", bool(on)))
     _last = property(lambda self: True if self._state("retype") else None)
+
+
+from tools.walkthrough_host import (EyeHost, PositionCameraHost, WalkHost, FirstPersonHost,
+                                    DEFAULT_EYE_HEIGHT, DEFAULT_LOOK_SENSITIVITY, eye_height,
+                                    set_eye_height, look_sensitivity, look_deg_per_px,
+                                    _NO_WALK_REACH, _blocked)
+
+
+class PositionCameraTool(PositionCameraHost, RustTool):
+    kind = "position_camera"
+
+
+class LookAroundTool(EyeHost, RustTool):
+    kind = "look_around"
+    TURN_DEG_PER_WIDTH = 180.
+    PITCH_DEG_PER_HEIGHT = 90.
+
+
+class WalkTool(WalkHost, RustTool):
+    kind = "walk"
+
+
+class FirstPersonTool(FirstPersonHost, RustTool):
+    kind = "first_person"
+
+from tools.offset_host import OffsetHost, _run_from_edge, _run_from_edges
+
+
+class OffsetTool(OffsetHost, RustTool):
+    kind = "offset"
+    uses_snap = OffsetHost.uses_snap
+
+
+from tools.paint_host import (PaintHost, DEFAULT_FACE_COLOR, RECENT_MAX, recent_key,
+                              push_recent, rename_recent, clicked_back_side)
+from core.paint_ops import _face_plane, _surface_commands, _texture_commands
+
+
+class PaintTool(PaintHost, RustTool):
+    kind = "paint"
+
+from tools.protractor_host import ProtractorHost, ProtractorBase, DISC_PX, TICK_DEG
+
+
+class ProtractorTool(ProtractorHost, RustTool):
+    kind = "protractor"
+    _READ_DURING = ("start_point", "ref_point", "guides")
+
+    def __init__(self):
+        RustTool.__init__(self)
+        ProtractorBase.__init__(self)
+
+    def _set_arm(self, key, p):
+        if self._during is None:
+            self._machine.set(key, _tuple(p))
+
+    start_point = property(lambda self: self._point("start_point"),
+                           lambda self, p: self._set_arm("start_point", p))
+    ref_point = property(lambda self: self._point("ref_point"),
+                         lambda self, p: self._set_arm("ref_point", p))
+    _guides = property(lambda self: self._state("guides"),
+                       lambda self, g: self._machine.set("guides", bool(g)))
+    _last = property(lambda self: True if self._state("retype") else None)
+
+from tools.fillet_host import FilletHost
+
+
+class FilletTool(FilletHost, RustTool):
+    kind = "fillet"
+    _READ_DURING = ("sizing",)
+    sizing = property(lambda self: self._state("sizing"),
+                      lambda self, value: self._machine.set("sizing", bool(value)))
+
+    def __init__(self):
+        RustTool.__init__(self)
+        FilletHost.__init__(self)
+
+
+from tools.tape_host import TapeHost
+
+
+class TapeMeasureTool(TapeHost, RustTool):
+    kind = "tape"
+    _READ_DURING = ("start_point", "hover_point", "mode", "direction")
+    start_point = _point_property("start_point")
+    hover_point = _point_property("hover_point")
+    _mode = property(lambda self: self._state("mode"),
+                     lambda self, value: self._machine.set("mode", value))
+    _measured = property(lambda self: self._state("measured"))
+
+    @property
+    def _edge(self):
+        return self._source if self._state("direction") is not None else None
+
+    @_edge.setter
+    def _edge(self, edge):
+        self._source = edge
+        self._machine.set("direction", _tuple(edge.b - edge.a) if edge is not None else None)
+
+from tools.paste_host import PasteHost
+
+
+class PasteTool(PasteHost, RustTool):
+    kind = "paste"
+    shortcut = None
+    description = None
+    start_point = _point_property("start_point")
+    _offset = _point_property("offset")
+
+
+from tools.flip_host import FlipHost
+
+
+class FlipTool(FlipHost, RustTool):
+    kind = "flip"
+    shortcut = None
+    _READ_DURING = ("hover_point", "hover_axis", "lock_axis", "copy")
+    hover_point = _point_property("hover_point")
+    _lock_axis = property(lambda self: self._state("lock_axis"),
+                          lambda self, axis: self._machine.set("lock_axis", axis))
+    _hover_axis = property(lambda self: self._state("hover_axis"),
+                           lambda self, axis: self._machine.set("hover_axis", axis))
+    _copy = property(lambda self: self._state("copy"),
+                     lambda self, value: self._machine.set("copy", bool(value)))
+    cursor_plus = _copy
+
+
+class FreehandTool(RustTool):
+    kind = "freehand"
+    shortcut = None
+    work_plane = None
+    start_point = property(lambda self: self._point("start_point"))
+    _stroke = property(lambda self: self._state("stroke"))
+
+    def _clear(self, viewport, event):
+        self.work_plane = None
+        self._send(viewport, {"type": event})
+
+    def on_activate(self, viewport):
+        self._clear(viewport, "activate")
+
+    def on_deactivate(self, viewport):
+        self._clear(viewport, "deactivate")
+
+    def on_cancel(self, viewport):
+        self._clear(viewport, "cancel")
+        viewport.update()
+
+    def on_release(self, viewport):
+        self._clear(viewport, "release")
+        viewport.update()
+
+    def on_hover(self, ctx):
+        if self._send(ctx.viewport, self._pointer("hover", ctx))["redraw"]:
+            ctx.viewport.update()
+
+
+class ChangeAxesTool(RustTool):
+    kind = "change_axes"
+    shortcut = None
+    description = None
+    target = None
+    start_point = _point_property("start_point")
+    red_point = _point_property("red_point")
+    hover_point = _point_property("hover_point")
+
+    def host_axes_target(self, vp, _):
+        return self.target.uid if self.target is not None else None
+
+    def host_axes_message(self, vp, key):
+        from core.i18n import tr
+        if key == "collinear":
+            vp.flash_status(tr("The green direction cannot run along red — click off the red axis"), 4000)
+        elif key == "done":
+            vp.flash_status(tr("Axes changed"), 2500)
+        else:
+            labels = {"empty": "Select one group or component first", "red": "Click along the new red axis",
+                      "green": "Click to set the green direction"}
+            vp.flash_status(tr(labels[key]))
+
+    def on_click(self, ctx):
+        vp = ctx.viewport
+        if self._send(vp, self._pointer("click", ctx))["committed"]:
+            self.target = None
+            window = vp.window() if hasattr(vp, "window") else None
+            if hasattr(window, "_activate_tool"):
+                window._activate_tool("select")
+        vp.update()
+
+    def value_label(self):
+        from core.i18n import tr
+        if self.start_point is not None and self.hover_point is not None:
+            return (tr("Red axis") if self.red_point is None else tr("Green axis")), self.hover_point

@@ -191,7 +191,7 @@ class MetalView(ViewNavigation):
         return window_handles(self)
 
     def _wrap_renderer(self):
-        from views.wgpu_peer import TargetRenderer
+        from views.resident_peer import TargetRenderer
         if (self.peers() and self.renderer is not None
                 and hasattr(self.renderer, 'bind_target')
                 and not isinstance(self.renderer, TargetRenderer)):
@@ -1660,8 +1660,11 @@ class MetalView(ViewNavigation):
             source = self.source_viewport
             busy = bool(getattr(self, "_look_drag", None) or self.tools.value_buffer
                         or self.tools.start_point is not None or DocumentInteraction._tool_busy_for_delete(self.tools.tool))
-            owner = model_escape(busy, bool(self.scene.selection), source is not None and self.scene.edit_group is not None,
-                                 self.renderer if getattr(self, "_ui_attached", False) else None)
+            from views.resident_peer import raw_renderer
+            chrome = self._shared
+            renderer = raw_renderer(chrome.renderer) if getattr(chrome, "_ui_attached", False) else None
+            owner = model_escape(busy, bool(self.scene.selection),
+                                 source is not None and self.scene.edit_group is not None, renderer)
             self._look_drag = None
             from ingetrazo_render import leave_navigation
             win = self.window() if hasattr(self, "window") else None
