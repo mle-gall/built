@@ -8,7 +8,7 @@ import pytest
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.scene import Scene
-from formats import igz, skp, skp_openskp as adapter
+from formats import igz, skp, skp_reader as adapter
 from formats.skp_consumption import PrototypeGeometry
 from tests.test_skp_backend import _tri_def, _fake_definition
 
@@ -142,6 +142,7 @@ def test_parse_transfers_only_its_private_model_and_keeps_progress(monkeypatch):
     import openskp
     from formats import openskp_compat
     model = _model()
+    monkeypatch.setattr(adapter, "skp_vff_model", lambda path, tables: None)
     monkeypatch.setattr(openskp.SkpFile, "open", lambda path: NS(parse=lambda: model))
     monkeypatch.setattr(openskp_compat, "apply", lambda: None)
     monkeypatch.setattr(openskp_compat, "resolve_face_layers", lambda m: None)

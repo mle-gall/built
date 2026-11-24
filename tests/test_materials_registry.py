@@ -134,10 +134,10 @@ def _fake_model(materials):
 
 
 def test_skp_import_registers_named_material():
-    from formats import skp_openskp
+    from formats import skp_reader
     model = _fake_model({7: NS(name="Concreto visto", color=(158, 153, 148),
                                transparency=1.0, id=7, texture=None)})
-    payload = skp_openskp._adapt(model, "obra")
+    payload = skp_reader._adapt(model, "obra")
     assert payload["materials"] == [
         {"name": "Concreto visto",
          "color": [158 / 255.0, 153 / 255.0, 148 / 255.0]}]
@@ -152,19 +152,19 @@ def test_skp_import_registers_named_material():
 
 
 def test_skp_reimport_does_not_duplicate():
-    from formats import skp_openskp
+    from formats import skp_reader
     model = _fake_model({7: NS(name="Wood", color=(255, 0, 0),
                                transparency=1.0, id=7, texture=None)})
     scene = Scene()
-    skp_format.apply_payload(scene, skp_openskp._adapt(model, "a"))
-    skp_format.apply_payload(scene, skp_openskp._adapt(model, "a"))
+    skp_format.apply_payload(scene, skp_reader._adapt(model, "a"))
+    skp_format.apply_payload(scene, skp_reader._adapt(model, "a"))
     assert list(scene.materials) == ["Wood"]
 
 
 def test_skp_import_remaps_on_conflict_with_document():
     """The document already has a DIFFERENT 'Wood': the import's Wood lands
     as 'Wood (2)' and the imported faces follow the rename."""
-    from formats import skp_openskp
+    from formats import skp_reader
     scene = Scene()
     scene.materials["Wood"] = Material("Wood", color=(0.1, 0.1, 0.1))
     model = _fake_model({7: NS(name="Wood", color=(255, 0, 0),
@@ -173,7 +173,7 @@ def test_skp_import_remaps_on_conflict_with_document():
     model.materials_by_id[8] = NS(name="Stone", color=(10, 20, 30),
                                   transparency=1.0, id=8, texture=None)
     scene.materials["Stone"] = Material("Stone", color=(1., 1., 1.))
-    skp_format.apply_payload(scene, skp_openskp._adapt(model, "a"))
+    skp_format.apply_payload(scene, skp_reader._adapt(model, "a"))
     assert set(scene.materials) == {"Wood", "Wood (2)", "Stone", "Stone (2)"}
     face = scene.groups[0].mesh.faces[0]
     assert face.attrs["mat"] == "Wood (2)"

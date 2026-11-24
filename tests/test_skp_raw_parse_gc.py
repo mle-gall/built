@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from formats import skp_openskp as adapter
+from formats import skp_reader as adapter
 
 
 @pytest.mark.parametrize("initially_enabled", [False, True])

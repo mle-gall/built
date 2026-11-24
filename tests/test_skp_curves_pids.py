@@ -9,7 +9,7 @@ from ingetrazo_core import Matrix4 as QMatrix4x4
 
 from core.scene import Scene
 from formats.skp import apply_payload, load_skp
-from formats.skp_openskp import _collect
+from formats.skp_reader import _collect
 
 DATA = Path(__file__).parent / "data"
 
@@ -91,7 +91,7 @@ def test_flattened_copies_of_polyline_curves_get_separate_ids():
 
 def test_placed_instances_use_pid_not_definition_or_position():
     from openskp.model import Definition, Edge, Vertex, Instance, SkpModel
-    from formats.skp_openskp import _adapt
+    from formats.skp_reader import _adapt
     child = Definition(id=1, name="line", vertices={1: Vertex(1, 0, 0, 0),
                        2: Vertex(2, 10, 0, 0)}, edges={1: Edge(1, 1, 2)})
     instances = [Instance(ref_idx=1, matrix=[1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1])
@@ -111,7 +111,7 @@ def test_placed_instances_use_pid_not_definition_or_position():
 
 
 def test_modern_instance_ids_survive_the_raw_parser_bridge():
-    from formats.skp_openskp import parse
+    from formats.skp_reader import parse
     payload = parse(DATA / "skp_instances_2021.skp")
     assert payload["protos"][0]["instance_identities"] == [("73",), ("74",)]
     scenes = [Scene(), Scene()]

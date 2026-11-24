@@ -6,7 +6,7 @@ from types import SimpleNamespace as NS
 import numpy as np
 import pytest
 
-from formats import skp_openskp as adapter
+from formats import skp_reader as adapter
 
 
 def test_cache_eviction_keeps_active_geometry_and_source():

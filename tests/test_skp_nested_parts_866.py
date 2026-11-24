@@ -20,7 +20,7 @@ pytest.importorskip("openskp")
 _app = QApplication.instance() or QApplication([])
 
 from core.scene import Scene  # noqa: E402
-from formats import skp, skp_openskp  # noqa: E402
+from formats import skp, skp_reader  # noqa: E402
 
 _ID = [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1]
 
@@ -63,7 +63,7 @@ def _model():
 
 def test_the_parts_of_an_assembly_stay_its_children():
     scene = Scene()
-    skp.apply_payload(scene, skp_openskp._adapt(_model(), "repro_nested"))
+    skp.apply_payload(scene, skp_reader._adapt(_model(), "repro_nested"))
     [asm] = scene.groups
     assert asm.name == "Asm"
     assert not asm.mesh.faces                       # nothing merged into it
