@@ -53,6 +53,7 @@ mod fillet_host_api;
 mod first_person_host_api;
 mod flip_host_api;
 mod follow_me_host_api;
+mod freehand_tool_api;
 mod geo_path_tool_api;
 mod image_tool_api;
 mod line_tool_api;
@@ -224,6 +225,9 @@ fn registration(module: &str, name: &str) -> Option<(&'static [Method], &'static
             stringify!(scale_manager_tool_api),
         ),
         ("tools.rust_tools", "LineTool") => (line_tool_api::METHODS, stringify!(line_tool_api)),
+        ("tools.rust_tools", "FreehandTool") => {
+            (freehand_tool_api::METHODS, stringify!(freehand_tool_api))
+        }
         ("tools.pushpull", "PushPullTool") => (pushpull::METHODS, stringify!(pushpull)),
         _ => return None,
     })

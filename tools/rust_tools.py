@@ -351,34 +351,13 @@ class FlipTool(FlipHost, RustTool):
     cursor_plus = _copy
 
 
+@register_tool_adapter
 class FreehandTool(RustTool):
     kind = "freehand"
     shortcut = None
     work_plane = None
     start_point = property(lambda self: self._point("start_point"))
     _stroke = property(lambda self: self._state("stroke"))
-
-    def _clear(self, viewport, event):
-        self.work_plane = None
-        self._send(viewport, {"type": event})
-
-    def on_activate(self, viewport):
-        self._clear(viewport, "activate")
-
-    def on_deactivate(self, viewport):
-        self._clear(viewport, "deactivate")
-
-    def on_cancel(self, viewport):
-        self._clear(viewport, "cancel")
-        viewport.update()
-
-    def on_release(self, viewport):
-        self._clear(viewport, "release")
-        viewport.update()
-
-    def on_hover(self, ctx):
-        if self._send(ctx.viewport, self._pointer("hover", ctx))["redraw"]:
-            ctx.viewport.update()
 
 
 class ChangeAxesTool(RustTool):
