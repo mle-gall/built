@@ -2545,6 +2545,9 @@ impl Renderer {
         if let Some(ui) = self.ui.as_mut() { ui.panels.set(key, value); }
         Ok(())
     }
+    fn ui_toggle_review(&mut self) {
+        if let Some(ui) = self.ui.as_mut() { ui.toggle_review(); }
+    }
     fn ui_show_inspector(&mut self) {
         if let Some(ui) = self.ui.as_mut() { ui.show_inspector(); }
     }

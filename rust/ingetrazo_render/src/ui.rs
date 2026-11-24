@@ -681,6 +681,8 @@ impl Ui {
         self.model_panes.push((id, Rect::from_min_size(pos2(x,y), vec2(width,height)), active, label));
     }
 
+    pub fn toggle_review(&mut self) { self.set_review(!self.review); }
+
     pub fn set_review(&mut self, on: bool) {
         if self.review != on {
             self.review = on;
@@ -1129,7 +1131,9 @@ impl Ui {
                             }
                             if sheet_up { return; }
                             if self.review {
-                                if text_button(ui, "Exit review", "Show the panels again", true) { clicked = Some("review".into()); }
+                                let exit = text_button_response(ui, "Exit review", "Show the panels again", true);
+                                self.cluster_buttons.push(("exit_review".into(), exit.rect.center().into()));
+                                if exit.clicked() { clicked = Some("review".into()); }
                                 bar_divider(ui);
                             }
                             let work = self.tabs.first().and_then(|g| g.iter().find(|i| i.4 == 1)).map_or("Model".to_owned(), |i| i.1.clone());
@@ -1194,7 +1198,7 @@ impl Ui {
             }
         }
         match clicked.as_deref() {
-            Some("review") => self.set_review(!self.review),
+            Some("review") => self.toggle_review(),
             Some(a) => self.actions.push(if a.starts_with("act:") { a.to_owned() } else { format!("tab:{a}") }),
             None => {}
         }
@@ -1496,7 +1500,7 @@ impl Ui {
             });
         if close { self.view_open = false; }
         if toggle_review {
-            self.set_review(!self.review);
+            self.toggle_review();
             self.view_open = false;
         }
         if let Some(id) = clicked { self.actions.push(format!("act:{id}")); }
@@ -2902,6 +2906,10 @@ fn bar_divider(ui: &mut egui::Ui) {
 
 /// A text command in a bar, 28 high, 8 pt padding.
 fn text_button(ui: &mut egui::Ui, label: &str, key: &str, enabled: bool) -> bool {
+    text_button_response(ui, label, key, enabled).clicked()
+}
+
+fn text_button_response(ui: &mut egui::Ui, label: &str, key: &str, enabled: bool) -> egui::Response {
     let galley = ui.painter().layout_no_wrap(label.to_owned(), body(), INK);
     let sense = if enabled { Sense::click() } else { Sense::hover() };
     let (rect, resp) = ui.allocate_exact_size(vec2(galley.size().x + 24.0, 28.0), sense);
@@ -2909,8 +2917,7 @@ fn text_button(ui: &mut egui::Ui, label: &str, key: &str, enabled: bool) -> bool
     paint_state(ui, rect, st, R_CONTROL);
     let ink = if enabled { INK } else { OFF };
     ui.painter().galley(pos2(rect.min.x + 12.0, rect.center().y - galley.size().y / 2.0), galley, ink);
-    let resp = if key.is_empty() { resp } else { resp.on_hover_text(key) };
-    resp.clicked()
+    if key.is_empty() { resp } else { resp.on_hover_text(key) }
 }
 
 /// A palette tool: 30 × 30 cell, glyph about 18 pt (the icon art carries

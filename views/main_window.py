@@ -1800,21 +1800,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
 
         window_menu.addAction(tr("Terrain profile"), self._on_terrain_profile)
 
-        # AutoCAD's Ctrl+0 clean screen: nothing but the model, for
-        # presenting. Added to the WINDOW too, so the shortcut keeps
-        # working while the menu bar itself is hidden.
-        window_menu.addSeparator()
-        clean_action = QAction(tr("Clean screen"), self)
-        clean_action.setStatusTip(tr(
-            "Fold away every toolbar and panel so only the model and the "
-            "status bar show; once more brings them all back."))
-        clean_action.setShortcut(QKeySequence("Ctrl+0"))
-        clean_action.setCheckable(True)
-        clean_action.toggled.connect(self._route_window_toggle(
-            "_act_clean_screen", self._toggle_clean_screen))
-        self.addAction(clean_action)
-        window_menu.addAction(clean_action)
-        self._act_clean_screen = clean_action
         # LibreOffice's Ctrl+F5: the whole sidebar (the three trays) folds
         # away and comes back; the strip at the right edge stays. Ctrl+F6
         # does the same on the left, next to it so the key can be found.
@@ -2297,18 +2282,14 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         y = edge.y() + (area.height() - btn.height()) // 2
         btn.move(x, max(0, y))
         btn.raise_()
-        btn.setVisible(not empty and (
-            not self._act_clean_screen.isChecked()
-            if hasattr(self, "_act_clean_screen") else True))
+        btn.setVisible(not empty)
         left = getattr(self, "_left_handle", None)
         if left is not None:
             start = area.mapTo(self, QPoint(0, 0))
             left.move(max(0, start.x() - left.width() // 2), max(0, y))
             left.raise_()
-            clean = (self._act_clean_screen.isChecked()
-                     if hasattr(self, "_act_clean_screen") else False)
             # Only while something is (or was) on the left.
-            left.setVisible(not clean and not empty and (
+            left.setVisible(not empty and (
                 bool(self._side_docks(Qt.LeftDockWidgetArea))
                 or bool(getattr(self, "_left_was", None))))
 
@@ -2347,71 +2328,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
                                   for a, k in self._icon_actions]
             from PySide6.QtCore import QTimer
             QTimer.singleShot(0, self, self._place_sidebar_handle)   # after the relayout
-
-    def _toggle_clean_screen(self, on: bool) -> None:
-        """Keep the model and Measurements visible while the workspace is folded."""
-        from PySide6.QtWidgets import QDockWidget
-        from views.clean_screen import keep_shortcuts_alive, release_shortcuts
-        if on:
-            self._clean_screen_state = self.saveState()
-            self._clean_screen_actions = keep_shortcuts_alive(self)
-            for tb in self.findChildren(QToolBar):
-                tb.hide()
-            for dock in self.findChildren(QDockWidget):
-                dock.hide()
-            self.menuBar().hide()
-            self.statusBar().show()
-            self._clean_screen_exit_button().show()
-            self._place_clean_screen_exit()
-            if getattr(self, "_sidebar_handle", None) is not None:
-                self._sidebar_handle.hide()
-            if getattr(self, "_left_handle", None) is not None:
-                self._left_handle.hide()
-        else:
-            release_shortcuts(self, getattr(self, "_clean_screen_actions", ()))
-            self._clean_screen_actions = []
-            btn = getattr(self, "_clean_exit_btn", None)
-            if btn is not None:
-                btn.hide()
-            state = getattr(self, "_clean_screen_state", None)
-            if state is not None:
-                self.restoreState(state)
-            self.menuBar().show()
-            self.statusBar().show()
-            from PySide6.QtCore import QTimer
-            QTimer.singleShot(0, self, self._place_sidebar_handle)
-
-        self.viewport.setFocus()
-
-    def _clean_screen_exit_button(self):
-        """A small «Exit clean screen» button floating at the viewport's
-        top-right corner while everything else is hidden — the way out for
-        whoever does not know Ctrl+0 (Marco, 2026-09-14)."""
-        btn = getattr(self, "_clean_exit_btn", None)
-        if btn is not None:
-            return btn
-        from PySide6.QtWidgets import QToolButton
-        # Over the viewport stack, not one viewport: it stays put when the
-        # project in front changes.
-        btn = QToolButton(self._doc_stack)
-        btn.setObjectName("clean_screen_exit")
-        # Over the Metal view: a native view of its own, or it stays under it.
-        btn.setAttribute(Qt.WA_NativeWindow)
-        btn.setText("✕  " + tr("Exit clean screen"))
-        btn.setToolTip(tr("Back to the workspace (Ctrl+0)"))
-        btn.setCursor(Qt.PointingHandCursor)
-        btn.setAutoRaise(True)
-        from views.theme import style as theme_style
-        theme_style(btn,
-            "QToolButton {{ background: rgba(30, 36, 44, 170); color: white;"
-            " border: 1px solid rgba(255, 255, 255, 90); border-radius: 6px;"
-            " padding: 4px 10px; font-weight: bold; }}"
-            "QToolButton:hover {{ background: rgba({accent_rgb}, 220); }}")
-        btn.clicked.connect(lambda: self._act_clean_screen.setChecked(False))
-        btn.hide()
-        self._clean_exit_btn = btn
-        self.viewport.installEventFilter(self)
-        return btn
 
     def _keys_back_to_view(self, _old, new) -> None:
         """Keep the view's keys reachable: focus that lands on a toolbar or
@@ -2460,14 +2376,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
             return stand_in
         return self.viewport
 
-    def _place_clean_screen_exit(self) -> None:
-        btn = getattr(self, "_clean_exit_btn", None)
-        if btn is None or not btn.isVisible():
-            return
-        btn.adjustSize()
-        btn.move(self._shown_viewport().width() - btn.width() - 12, 12)
-        btn.raise_()
-
     def eventFilter(self, obj, event):  # noqa: N802 — Qt override
         from PySide6.QtCore import QEvent
         # ZOrderChange: a tab dragged along a tray's bar restacks the
@@ -2480,7 +2388,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
                 ) and event.type() in (
                 QEvent.Resize, QEvent.Move, QEvent.Show,
                 QEvent.ZOrderChange):
-            self._place_clean_screen_exit()
             self._place_sidebar_handle()
         if event.type() == QEvent.ToolTip and isinstance(obj, QTabBar) \
                 and obj.parent() is self:
@@ -7644,15 +7551,8 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         # arrangement, kept for the next session.
         self._show_panels_again()
         # The window arrangement (toolbars, docks, size) IS a preference.
-        # Closing mid-presentation must remember the WORKSPACE, not the
-        # clean screen's everything-hidden state.
-        act = getattr(self, "_act_clean_screen", None)
-        clean_state = getattr(self, "_clean_screen_state", None)
         st = QSettings()
-        st.setValue("ui/window_state",
-                    clean_state if (act is not None and act.isChecked()
-                                    and clean_state is not None)
-                    else self.saveState())
+        st.setValue("ui/window_state", self.saveState())
         st.setValue("ui/window_geometry", self.saveGeometry())
         for doc in self._documents:
             if doc.composer is not None:

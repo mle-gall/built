@@ -22,6 +22,7 @@ enum Handler {
     Step(i32),
     RestMode(&'static str),
     DisplaySettings,
+    Review,
     Export(&'static str),
 }
 
@@ -75,6 +76,7 @@ fn build_entries() -> Vec<MenuEntry> {
     for (id, key, label) in crate::model_views::presets() {
         add(id, "Window ▸ Model Views", label, "", Argument("set_view_layout", key));
     }
+    add("review", "Window", "Review", "Ctrl+0", Review);
     add("maximize_model_view", "Window", "Maximize / Restore View", "Ctrl+Space", Window("_maximize_model_view"));
     add("export:video","File ▸ Export","Scenes as Video…","",Window("export_video"));
     for (id,label,mode) in [("rest_normal","Show normally","normal"),("rest_fade","Fade","fade"),("rest_hide","Hide (fastest)","hide")] {
@@ -194,6 +196,13 @@ pub fn run_model_menu(win: &Bound<'_, PyAny>, id: &str) -> PyResult<bool> {
             .py()
             .import("views.settings_sheet")?
             .call_method1("show", (win, "display"))?,
+        Handler::Review => {
+            let view = win.getattr("view")?;
+            let renderer = view.getattr("renderer")?;
+            if renderer.is_none() { return Ok(false); }
+            renderer.call_method0("ui_toggle_review")?;
+            view.call_method0("update")?
+        }
         Handler::Playback => {
             let playing = win
                 .getattr("scene_player")?
