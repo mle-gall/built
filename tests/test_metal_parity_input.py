@@ -367,12 +367,13 @@ def test_context_click_uses_current_frame_and_ignores_faded_occluder(view):
     resident = view.packed
     view.inference_index = prepare(resident)
     shown = []
-    def present():
+    def prepare_ids(*, pick_only):
+        assert pick_only
         shown.append(view.scene.edit_group)
         view._pick_frame_dirty = False
-    view.draw_frame = present
+    view._present_frame = prepare_ids
     view.renderer = SimpleNamespace(
-        render=present, set_rest=lambda *_: None, set_highlight=lambda *_: None,
+        render=lambda: pytest.fail("Picking must not present a colour frame"), set_rest=lambda *_: None, set_highlight=lambda *_: None,
         pick=lambda *_: resident.groups.index(outside if shown[-1] else child))
     p = pixel(view, QVector3D(1, 1, 0))
     QTest.mouseDClick(view, Qt.LeftButton, Qt.NoModifier, p)

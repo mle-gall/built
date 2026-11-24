@@ -718,7 +718,7 @@ class MetalView(ViewNavigation):
                 from views.wgpu_inference import rebase
                 self.inference_index = rebase(self.inference_index, packed)
 
-    def _present_frame(self):
+    def _present_frame(self, *, pick_only=False):
         start = time.perf_counter()
         # A scene packed since the last frame goes up BEFORE anything is
         # written per instance: the override write below is sized by the
@@ -732,7 +732,8 @@ class MetalView(ViewNavigation):
             self._upload()
             if self.renderer is None:
                 return None
-        self.tools.sync()
+        if not pick_only:
+            self.tools.sync()
         if self.source_viewport is not None:
             if self.packed.model_translations is None:
                 self.camera = self.source_viewport.camera
@@ -787,7 +788,8 @@ class MetalView(ViewNavigation):
                 self._billboards.key = None
             self._inference_future = None
         self.sync_edit_context()
-        self.sync_selection()
+        if not pick_only:
+            self.sync_selection()
         physical = (self.width(), self.height(), self.devicePixelRatioF())
         if physical != getattr(self, '_physical_size', None):
             self.renderer.resize(*physical)
@@ -816,6 +818,11 @@ class MetalView(ViewNavigation):
         # R3c-2a: section widgets share GL's painter implementation.
         from views.wgpu_sections import sync
         sync(self)
+        if pick_only:
+            # Renderer.pick renders its own ID pass. The tool requesting the pick
+            # can still be inside event(), so its preview cannot be read here.
+            self._pick_frame_dirty = False
+            return None
         section_widgets = bool(getattr(self.scene, 'section_planes', ())) and getattr(self.scene, 'show_section_planes', True)
         # With several views a tool's preview shows in one of them
         # (ViewGrid.set_tool_view): the others draw without it.
@@ -1091,7 +1098,11 @@ class MetalView(ViewNavigation):
             self.set_scene(self.scene)
         self.sync_edit_context()
         if getattr(self, '_pick_frame_dirty', False) and hasattr(self.renderer, 'render'):
-            self.draw_frame()
+            self._drawing_frame = True
+            try:
+                self._present_frame(pick_only=True)
+            finally:
+                self._drawing_frame = False
 
     def pick_row(self, x, y):
         if self.renderer is None or x < 0 or y < 0:
