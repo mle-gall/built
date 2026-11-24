@@ -1431,7 +1431,7 @@ class OutlinerPanel(QWidget):
     def toggle_hidden(self, groups=None) -> None:
         """Show the rows when any of them is hidden, hide them otherwise —
         one undoable step."""
-        from core.history import HideCommand
+        from core.protocol import commands
         if groups is None:
             plane = self._plane_of(self.tree.currentItem())
             if plane is not None:
@@ -1447,8 +1447,8 @@ class OutlinerPanel(QWidget):
         if not groups:
             return
         hide = not any(g.hidden for g in groups)
-        self._window.viewport.history.execute(HideCommand(groups,
-                                                          hidden=hide))
+        from core.protocol import commands
+        (commands.hide if hide else commands.unhide)(self._window.viewport.history, groups)
         self._keep_picked(groups)
         self._adopt_tree_only()
         self._window.viewport.update()
@@ -1945,13 +1945,12 @@ class OutlinerPanel(QWidget):
     def exit_isolation(self) -> None:
         """Show again exactly what Isolate hid — one undoable step; what
         was hidden before isolating stays hidden."""
-        from core.history import HideCommand
+        from core.protocol import commands
         back = self._isolated_now()
         self._isolated = []
         self._kept = []
         if back:
-            self._window.viewport.history.execute(HideCommand(back,
-                                                              hidden=False))
+            commands.unhide(self._window.viewport.history, back)
             self._window.viewport.update()
         self.refresh()
 
@@ -1969,14 +1968,13 @@ class OutlinerPanel(QWidget):
     def isolate_groups(self, keep) -> None:
         """``isolate`` for the groups given — the row's target keeps just
         its own group in view, without touching the selection."""
-        from core.history import HideCommand
+        from core.protocol import commands
         keep = [g for g in keep if g is not None]
         if not keep:
             return
         hide = outliner.isolate_hides(self._scene().groups, keep)
         if hide:
-            self._window.viewport.history.execute(HideCommand(hide,
-                                                              hidden=True))
+            commands.hide(self._window.viewport.history, hide)
             # Remembered, to give back exactly these when leaving it (an
             # isolation inside an isolation adds to it).
             before = self._isolated_now()
@@ -2009,14 +2007,13 @@ class OutlinerPanel(QWidget):
     def show_all(self) -> None:
         """Show every hidden group of the tree, at every level — one
         undoable step; an isolation ends with it."""
-        from core.history import HideCommand
+        from core.protocol import commands
         hidden = [g for g, _p, _d in outliner.walk(self._scene().groups)
                   if g.hidden]
         self._isolated = []
         self._kept = []
         if hidden:
-            self._window.viewport.history.execute(HideCommand(hidden,
-                                                              hidden=False))
+            commands.unhide(self._window.viewport.history, hidden)
             self._window.viewport.update()
         self.refresh()
 

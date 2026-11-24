@@ -203,41 +203,25 @@ fn mesh_names<'py>(py: Python<'py>, mesh: &Bound<'py, PyAny>, with_back: bool) -
     Ok(set.into_any())
 }
 
-/// Objects wearing each registry material: one per mesh with a face (front
-/// or back) in it, plus one per container painted whole. Kept per content
-/// version.
+/// Objects wearing each registry material, counted by the Rust survey
+/// (`ingetrazo_core.material_survey`): paint by mesh and placement, kept
+/// across edits that leave a mesh alone.
 #[pyfunction]
-fn material_uses<'py>(scene: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+#[pyo3(signature = (scene, history=None))]
+fn material_uses<'py>(scene: &Bound<'py, PyAny>, history: Option<Bound<'py, PyAny>>) -> PyResult<Bound<'py, PyAny>> {
+    survey(scene, history)?.get_item(0)
+}
+
+/// `(uses, unnamed colours {key: (colour, opacity, n)}, worn rows)`.
+fn survey<'py>(scene: &Bound<'py, PyAny>, history: Option<Bound<'py, PyAny>>) -> PyResult<Bound<'py, PyAny>> {
     let py = scene.py();
-    let (sig, hit) = cached(scene, "_lib_uses")?;
-    if let Some(hit) = hit {
-        return Ok(hit);
-    }
-    let purge = py.import("core.purge")?;
-    let uses = py.import("collections")?.getattr("Counter")?.call0()?;
-    for mesh in purge.call_method1("iter_meshes", (scene,))?.try_iter()? {
-        for n in mesh_names(py, &mesh?, true)?.try_iter()? {
-            let n = n?;
-            if n.is_truthy()? {
-                let current: i64 = uses.call_method1("get", (&n, 0))?.extract()?;
-                uses.set_item(&n, current + 1)?;
-            }
-        }
-    }
-    for top in purge.call_method1("_document_groups", (scene,))?.try_iter()? {
-        for g in purge.call_method1("iter_groups", (PyTuple::new(py, [top?])?,))?.try_iter()? {
-            let paint = g?.getattr("material").ok().filter(|p| p.is_truthy().unwrap_or(false));
-            if let Some(paint) = paint {
-                let mat = get(&paint, "mat")?;
-                if mat.is_truthy()? {
-                    let current: i64 = uses.call_method1("get", (&mat, 0))?.extract()?;
-                    uses.set_item(&mat, current + 1)?;
-                }
-            }
-        }
-    }
-    scene.setattr("_lib_uses", (sig, &uses))?;
-    Ok(uses)
+    let history = history.unwrap_or_else(|| py.None().into_bound(py));
+    py.import("ingetrazo_core")?.call_method1("material_survey", (scene, history))
+}
+
+/// The open document's history, when the context has a viewport.
+fn ctx_history<'py>(ctx: &Bound<'py, PyAny>) -> Option<Bound<'py, PyAny>> {
+    opt(ctx, "vp").and_then(|vp| opt(&vp, "history"))
 }
 
 /// `{linked file: Counter(material → objects wearing it)}`, per content
@@ -486,7 +470,8 @@ impl MaterialsProvider {
 
     fn _model_items<'py>(&self, py: Python<'py>, ctx: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyList>> {
         let scene = ctx.getattr("scene")?;
-        let uses = material_uses(&scene)?;
+        let got = survey(&scene, ctx_history(ctx))?;
+        let (uses, colours, worn) = (got.get_item(0)?, got.get_item(1)?, got.get_item(2)?);
         let out = PyList::empty(py);
         if let Some(mats) = opt(&scene, "materials").filter(|m| m.is_truthy().unwrap_or(false)) {
             for pair in mats.call_method0("items")?.try_iter()? {
@@ -506,19 +491,21 @@ impl MaterialsProvider {
                 ])?)?;
             }
         }
-        for pair in unnamed_colours_cached(&scene)?.call_method0("items")?.try_iter()? {
+        for row in worn.try_iter()? {
+            out.append(row?)?;
+        }
+        for pair in colours.call_method0("items")?.try_iter()? {
             let pair = pair?;
             let (key, entry) = (pair.get_item(0)?, pair.get_item(1)?);
             let key: String = key.extract()?;
-            let n = entry.get_item("faces")?.len()? + entry.get_item("groups")?.len()?;
             out.append(item(py, &[
                 ("key", s(py, &format!("uc:{key}"))),
                 ("name", s(py, key.split('@').next().unwrap_or(""))),
                 ("source", s(py, "model")),
                 ("category", s(py, "Unnamed colours")),
                 ("base", s(py, "colour")),
-                ("uses", obj(py, n)?.into_bound(py)),
-                ("hex", s(py, &_hex(&entry.get_item("color")?)?)),
+                ("uses", entry.get_item(2)?),
+                ("hex", s(py, &_hex(&entry.get_item(0)?)?)),
                 ("thumb", py.None().into_bound(py)),
                 ("verbs", verbs(py, &["apply", "select", "-", "name"])?),
             ])?)?;
@@ -528,7 +515,7 @@ impl MaterialsProvider {
 
     fn _mine_items<'py>(&self, py: Python<'py>, ctx: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyList>> {
         let out = PyList::empty(py);
-        let uses = material_uses(&ctx.getattr("scene")?)?;
+        let uses = material_uses(&ctx.getattr("scene")?, None)?;
         for (i, e) in mine(py)?.try_iter()?.enumerate() {
             let e = e?;
             if !e.is_instance_of::<PyDict>() {
@@ -573,7 +560,7 @@ impl MaterialsProvider {
             let counts = py.import("builtins")?.getattr("list")?.call1((pair.get_item(1)?.call_method0("items")?,))?;
             files.append((pair.get_item(0)?, counts))?;
         }
-        let uses = py.import("builtins")?.getattr("dict")?.call1((material_uses(&scene)?,))?;
+        let uses = py.import("builtins")?.getattr("dict")?.call1((material_uses(&scene, None)?,))?;
         let got = render(py)?.call_method1("library_linked", (dumps(py, model)?, dumps(py, files.as_any())?, dumps(py, &uses)?))?;
         Ok((loads(py, &got.get_item(0)?)?, loads(py, &got.get_item(1)?)?))
     }
@@ -607,7 +594,7 @@ impl MaterialsProvider {
         let scene = ctx.getattr("scene")?;
         let n = py.import("core.purge")?.call_method1("unused_materials", (&scene,))?.len()?;
         let acts = PyList::empty(py);
-        let k = unnamed_colours_cached(&scene)?.len()?;
+        let k = survey(&scene, ctx_history(ctx))?.get_item(1)?.len()?;
         if k != 0 {
             acts.append(("name", format!("Name these: {k} unnamed colour{}", if k != 1 { "s" } else { "" })))?;
         }
@@ -669,7 +656,7 @@ impl MaterialsProvider {
         let scene = ctx.getattr("scene")?;
         let view = ctx.getattr("view")?;
         match (verb, kind.as_str()) {
-            ("apply", "uc" | "my") => {
+            ("apply", "uc" | "my" | "worn") => {
                 let recipe = slf.call_method1("paint_recipe", (ctx, item))?.get_item(1)?;
                 if recipe.is_truthy()? {
                     lib(py)?.getattr("_pick_paint")?.call((ctx.getattr("win")?,), Some(&[("recipe", recipe)].into_py_dict(py)?))?;
@@ -716,7 +703,7 @@ impl MaterialsProvider {
                     renderer.call_method0("ui_show_inspector")?;
                 }
             }
-            ("select", "m" | "lk") => {
+            ("select", "m" | "lk" | "worn") => {
                 let n = select_material_uses(ctx, &name)?;
                 if n != 0 {
                     flash(ctx, &format!("{n} selected wearing {name_s}"))?;
@@ -1535,8 +1522,10 @@ impl LibrarySheet {
         spec.set_item("items", &items)?;
         spec.set_item("st", &browse_d)?;
         spec.set_item("current", if materials { current } else { py.None().into_bound(py) })?;
-        spec.set_item("model_uses", if materials { py.import("builtins")?.getattr("dict")?.call1((material_uses(&scene)?,))? } else { PyDict::new(py).into_any() })?;
-        spec.set_item("unnamed", if materials { unnamed_colours_cached(&scene)?.len()? } else { 0 })?;
+        let history = ctx.getattr("win")?.getattr("viewport")?.getattr("history")?;
+        let got = if materials { Some(survey(&scene, Some(history))?) } else { None };
+        spec.set_item("model_uses", match &got { Some(g) => py.import("builtins")?.getattr("dict")?.call1((g.get_item(0)?,))?, None => PyDict::new(py).into_any() })?;
+        spec.set_item("unnamed", match &got { Some(g) => g.get_item(1)?.len()?, None => 0 })?;
         let out = loads(py, &render(py)?.call_method1("library_sheet", (dumps(py, spec.as_any())?,))?)?;
         for path in out.get_item("thumbs")?.try_iter()? {
             thumb(&view, &path?)?;
@@ -2075,7 +2064,7 @@ fn palette_items<'py>(view: &Bound<'py, PyAny>, win: &Bound<'py, PyAny>) -> PyRe
         Some(m) => m.call_method0("items")?.try_iter()?.map(|p| { let p = p?; Ok((p.get_item(0)?, p.get_item(1)?)) }).collect::<PyResult<_>>()?,
         None => Vec::new(),
     };
-    let uses = material_uses(&scene)?;
+    let uses = material_uses(&scene, Some(win.getattr("viewport")?.getattr("history")?))?;
     let names: Vec<Bound<'_, PyAny>> = mats.iter().map(|(n, _)| n.clone()).collect();
     let counts: Vec<i64> = mats.iter().map(|(n, _)| uses.call_method1("get", (n, 0)).and_then(|v| v.extract())).collect::<PyResult<_>>()?;
     let order: Vec<usize> = render(py)?.call_method1("library_by_use", (names, counts))?.extract()?;
@@ -2274,7 +2263,7 @@ fn _item_anywhere<'py>(view: &Bound<'py, PyAny>, win: &Bound<'py, PyAny>, key: &
         ("name", s(py, name)),
         ("source", s(py, "model")),
         ("category", s(py, "")),
-        ("uses", material_uses(&scene)?.call_method1("get", (name, 0))?),
+        ("uses", material_uses(&scene, None)?.call_method1("get", (name, 0))?),
         ("hex", s(py, &_hex(&mat.getattr("color")?)?)),
         ("thumb", tex),
         ("verbs", PyTuple::empty(py).into_any()),

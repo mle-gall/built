@@ -52,12 +52,26 @@ impl Ui {
         let Some(menu) = &self.ctx_menu else { return };
         // Last frame's size places it: flipped left off the dock, up off
         // the bottom bar, never over the top bar.
-        let size = ctx.memory(|m| m.area_rect(egui::Id::new("ctx_menu"))).map_or(vec2(WIDTH + 12.0, 300.0), |r| r.size());
         let right = self.free_right(ctx, screen);
+        // Keep every segment readable, including the five selection queries
+        // available on a mixed selection. Narrow viewports keep hover labels.
+        let desired_width = ctx.fonts(|fonts| {
+            menu.rows.iter().filter(|(_, verbs)| verbs.len() > 1).fold(WIDTH, |width, (family, verbs)| {
+                let family_width = if family.is_empty() { 0.0 } else { FAMILY_W };
+                let padding = if family.is_empty() { 24.0 } else { 10.0 };
+                let longest = verbs.iter().map(|seg|
+                    fonts.layout_no_wrap(seg.1.clone(), body(), INK).size().x
+                ).fold(0.0_f32, f32::max);
+                width.max(family_width + verbs.len() as f32 * (longest + padding))
+            })
+        });
+        let width = desired_width.min((right - screen.min.x - 2.0 * GUT - 12.0).max(WIDTH));
+        let size = ctx.memory(|m| m.area_rect(egui::Id::new("ctx_menu"))).map_or(vec2(width + 12.0, 300.0), |r| r.size());
         let mut x = menu.at.x + 2.0;
         if x + size.x > right && menu.at.x - size.x - 2.0 > GUT {
             x = menu.at.x - size.x - 2.0;
         }
+        x = x.clamp(screen.min.x + GUT, (right - width - 12.0).max(screen.min.x + GUT));
         let bottom = if self.review { screen.max.y - GUT } else { screen.max.y - BOT_H - GUT };
         let y = (menu.at.y + 2.0).min(bottom - size.y).max(TOP_H + GUT);
         let mut clicked: Option<String> = None;
@@ -66,18 +80,18 @@ impl Ui {
             .order(egui::Order::Tooltip)
             .show(ctx, |ui| {
                 glass(Surface::Raised).inner_margin(Margin::same(6)).show(ui, |ui| {
-                    ui.set_width(WIDTH);
+                    ui.set_width(width);
                     ui.spacing_mut().item_spacing = vec2(0.0, 1.0);
                     // The header: what was hit, and where it is filed.
                     ui.add_space(SPACE_XS);
                     let title = ui.painter().layout_no_wrap(menu.title.clone(), strong(TYPE_BODY), INK);
                     let mut job = egui::text::LayoutJob::single_section(menu.subtitle.clone(), egui::TextFormat {
                         font_id: meta(), color: FAINT, ..Default::default() });
-                    job.wrap = egui::text::TextWrapping { max_width: WIDTH - 24.0, max_rows: 1, break_anywhere: true,
+                    job.wrap = egui::text::TextWrapping { max_width: width - 24.0, max_rows: 1, break_anywhere: true,
                                                           overflow_character: Some('…') };
                     let sub = ui.painter().layout_job(job);
                     let h = title.size().y + if menu.subtitle.is_empty() { 0.0 } else { sub.size().y + 2.0 } + 8.0;
-                    let (r, _) = ui.allocate_exact_size(vec2(WIDTH, h), Sense::hover());
+                    let (r, _) = ui.allocate_exact_size(vec2(width, h), Sense::hover());
                     ui.painter().galley(pos2(r.min.x + 12.0, r.min.y + 3.0), title.clone(), INK);
                     if !menu.subtitle.is_empty() {
                         ui.painter().galley(pos2(r.min.x + 12.0, r.min.y + 5.0 + title.size().y), sub, FAINT);
@@ -143,7 +157,8 @@ fn segment_row(ui: &mut egui::Ui, family: &str, segs: &[Seg]) -> Option<String> 
         paint_state(ui, r, st, R_ROW);
         let ink = if !*enabled { OFF } else if *checked == 1 { BRIGHT } else { INK };
         let g = ui.painter().layout_no_wrap(label.clone(), body(), ink);
-        let g = if g.size().x > r.width() - 6.0 {
+        let truncated = g.size().x > r.width() - if plain { 22.0 } else { 6.0 };
+        let g = if truncated {
             let mut job = egui::text::LayoutJob::single_section(label.clone(), egui::TextFormat {
                 font_id: body(), color: ink, ..Default::default() });
             job.wrap = egui::text::TextWrapping { max_width: r.width() - 6.0, max_rows: 1, break_anywhere: true,
@@ -156,6 +171,7 @@ fn segment_row(ui: &mut egui::Ui, family: &str, segs: &[Seg]) -> Option<String> 
             ui.painter().vline(r.min.x - 1.0, r.y_range().shrink(6.0), Stroke::new(1.0_f32, EDGE));
         }
         if resp.clicked() && *enabled { out = Some(id.clone()); }
+        if truncated { resp.on_hover_text(label); }
     }
     out
 }

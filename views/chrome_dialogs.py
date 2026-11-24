@@ -261,9 +261,9 @@ def _record(win, title, detail, tone, action_label="", action=None, toast=True):
 
 
 def notify(parent, title, text, *, tone="info", button="OK", action_label="", action=None):
-    """Post a nonmodal toast and retain its action in the activity history."""
-    win = async_host(parent)
-    if win is None:
+    """Keep notices even if the first frame has yet to draw."""
+    win = window_of(parent)
+    if win is None or getattr(win, "_closed", False):
         print(f"{title}: {text}", file=sys.stderr)
         return False
     if "<br" in text:

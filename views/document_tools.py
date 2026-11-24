@@ -150,8 +150,8 @@ class DocumentTools:
             # until it is edited: opening it makes it its own, one undo
             # step, instead of editing every copy like a component
             # (issue #90 — the classic behaviour of groups).
-            from core.history import MakeUniqueCommand
-            self.history.execute(MakeUniqueCommand(group))
+            from core.protocol import commands
+            commands.make_unique(self.history, group)
         was_instance = (getattr(group, "xform", None) is not None
                         and (bool(getattr(group, "component", True))
                              or not getattr(group, "children", None)))
