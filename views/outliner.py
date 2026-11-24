@@ -1596,9 +1596,9 @@ class OutlinerPanel(QWidget):
         step with the menu and the toolbar."""
         w = self._window
         if planes is not None:
-            w._set_section_visibility("show_section_planes", planes)
+            w._set_scene_visibility("show_section_planes", planes)
         if cuts is not None:
-            w._set_section_visibility("show_section_cuts", cuts)
+            w._set_scene_visibility("show_section_cuts", cuts)
         sync = getattr(w, "_sync_section_menu", None)
         if sync is not None:
             sync()

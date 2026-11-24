@@ -7,22 +7,16 @@ brings them back. The render checks need a GL context that really draws;
 skipped where the platform has none or draws nothing."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
 from tests.controller_surface import live_image
-import pytest  # noqa: E402
+from tests.shell_isolation import native_gpu_host, native_window, restore_shell_patches  # noqa: F401
+from tests.test_xray_toggle import _state
+from views import view_commands
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from core.group import Group  # noqa: E402
 from core.mesh import Mesh  # noqa: E402
 from core.scene import Scene  # noqa: E402
 from formats import igz  # noqa: E402
-
-_app = QApplication.instance() or QApplication([])
-
 
 def _square(x0, y0=0.0):
     m = Mesh()
@@ -71,67 +65,29 @@ def test_a_new_document_brings_the_axes_back():
 
 # ---- the menu --------------------------------------------------------------
 
-def _window():
-    from views.main_window import MainWindow
-    w = MainWindow()
-    w.resize(1200, 800)
-    w.show()
-    for _ in range(10):
-        _app.processEvents()
-    return w
-
-
-def test_the_view_menu_switches_the_scene_flag():
-    w = _window()
-    try:
-        act = w._act_show_axes
-        assert act.isCheckable() and act.isChecked()
-        camera_actions = [a for m in w.menuBar().actions() if m.menu()
-                        for a in m.menu().actions()]
-        assert act in camera_actions
-        act.trigger()
-        assert w.viewport.scene.show_axes is False
-        act.trigger()
-        assert w.viewport.scene.show_axes is True
-    finally:
-        w._saved_version = w.viewport.scene.version
-        w.close()
+def test_the_view_menu_switches_the_scene_flag(native_window):
+    for expected in (False, True):
+        assert view_commands.run(native_window, "axes")
+        assert native_window.viewport.scene.show_axes is expected
 
 
 def test_alt_a_is_its_own_shortcut():
-    """Alt+A switches the axes, and no other command of the window has it."""
-    from PySide6.QtGui import QAction, QKeySequence, QShortcut
-    w = _window()
-    try:
-        alt_a = QKeySequence("Alt+A")
-        assert w._act_show_axes.shortcut() == alt_a
-        others = [a.text() for a in w.findChildren(QAction)
-                  if a is not w._act_show_axes and alt_a in a.shortcuts()]
-        others += ["QShortcut" for s in w.findChildren(QShortcut)
-                   if s.key() == alt_a]
-        assert others == []
-    finally:
-        w._saved_version = w.viewport.scene.version
-        w.close()
+    from ingetrazo_render import command_registry
+    assert [r[0] for r in command_registry([], []) if "Alt+A" in r[3]] == ["view:axes"]
 
 
-def test_the_checkmark_follows_the_document():
-    w = _window()
-    try:
-        w.viewport.scene.show_axes = False
-        w._sync_section_menu()
-        assert not w._act_show_axes.isChecked()
-        assert w.viewport.scene.show_axes is False   # syncing did not write
-    finally:
-        w._saved_version = w.viewport.scene.version
-        w.close()
+def test_the_checkmark_follows_the_document(native_window):
+    scene = native_window.viewport.scene
+    for expected in (False, True):
+        scene.show_axes = expected
+        assert _state(native_window, "axes") == int(expected)
+        assert scene.show_axes is expected
 
 
 # ---- the render ------------------------------------------------------------
 
 def _reddish_near(vp, p, radius=3):
     vp.update()
-    _app.processEvents()
     img = live_image(vp)
     x, y = vp._world_to_pixel(p)
     r = img.devicePixelRatio()
@@ -144,40 +100,30 @@ def _reddish_near(vp, p, radius=3):
     return False
 
 
-def test_hiding_drops_the_world_axes_but_an_open_group_keeps_its_own():
-    w = _window()
+def test_hiding_drops_the_world_axes_but_an_open_group_keeps_its_own(native_gpu_host):
+    w = native_gpu_host.window
     vp = w.viewport
-    try:
-        if not vp.keys_stand_in._can_create_surface():
-            pytest.skip("the Qt platform has no native GPU surface")
-        sc = vp.scene
-        sc.groups.clear()
-        comp = Group(_square(-6, -1), name="caja")
-        comp.xform = QMatrix4x4()
-        comp.xform.translate(0, 5, 0)            # its own axes at (0, 5, 0)
-        sc.groups.append(comp)
-        sc.version += 1
-        vp.camera.set_view("top")
-        vp.camera.target = V(2, 2.5, 0)
-        vp.camera.distance = 20
+    sc = vp.scene
+    sc.groups.clear()
+    comp = Group(_square(-6, -1), name="caja")
+    comp.xform = QMatrix4x4()
+    comp.xform.translate(0, 5, 0)            # its own axes at (0, 5, 0)
+    sc.groups.append(comp)
+    sc.version += 1
+    vp.camera.set_view("top")
+    vp.camera.target = V(2, 2.5, 0)
+    vp.camera.distance = 20
 
-        on_world_x = V(3, 0, 0)
-        if not _reddish_near(vp, on_world_x):
-            pytest.skip("the platform draws nothing (offscreen GL)")
-        w._act_show_axes.setChecked(False)
-        assert not _reddish_near(vp, on_world_x)
+    on_world_x = V(3, 0, 0)
+    assert _reddish_near(vp, on_world_x)
+    assert view_commands.run(w, "axes")
+    assert not _reddish_near(vp, on_world_x)
 
-        vp.begin_group_edit(comp)
-        from core import axes as _axes
-        vp.update()
-        _app.processEvents()
-        assert not _axes.is_world()
-        assert _reddish_near(vp, V(3, 5, 0))     # the group's own red axis
-        vp.end_group_edit()
-        assert not _reddish_near(vp, on_world_x)  # back out: still hidden
+    vp.begin_group_edit(comp)
+    assert sc.edit_group is comp and sc.drawing_frame is not None
+    assert _reddish_near(vp, V(3, 5, 0))     # the group's own red axis
+    vp.end_group_edit()
+    assert not _reddish_near(vp, on_world_x)  # back out: still hidden
 
-        w._act_show_axes.setChecked(True)
-        assert _reddish_near(vp, on_world_x)
-    finally:
-        w._saved_version = w.viewport.scene.version
-        w.close()
+    assert view_commands.run(w, "axes")
+    assert _reddish_near(vp, on_world_x)

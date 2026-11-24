@@ -1443,17 +1443,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         bind(self, self._act_hidden_geometry, "hidden_geometry", toggle=True)
         edge_menu.addSeparator()
         edge_menu.addAction(self._act_hidden_geometry)
-        # Camera ▸ Axes (Alt+A): the world's drawing axes on or off.
-        self._act_show_axes = QAction(tr("Axes"), self)
-        self._act_show_axes.setShortcut(QKeySequence("Alt+A"))
-        self._act_show_axes.setStatusTip(tr(
-            "Show the model's red, green and blue drawing axes. Inference "
-            "along them keeps working while they are hidden."))
-        self._act_show_axes.setCheckable(True)
-        self._act_show_axes.setChecked(True)
-        self._act_show_axes.toggled.connect(self._set_show_axes)
-        camera_menu.addAction(self._act_show_axes)
-
         camera_menu.addSeparator()
         for action in self._nav_actions.values():   # Orbit / Pan / Zoom / Zoom Window
             camera_menu.addAction(action)
@@ -3525,7 +3514,7 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
             act.setStatusTip(tip)
 
     # ---- Sections (section planes) -----------------------------------------
-    def _set_section_visibility(self, attr: str, on: bool) -> None:
+    def _set_scene_visibility(self, attr: str, on: bool) -> None:
         setattr(self.viewport.scene, attr, bool(on))
         self.viewport.update()
         browser = getattr(self, "project_browser", None)
@@ -3542,9 +3531,7 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
                 (getattr(self, "_act_hidden_objects", None),
                  getattr(scene, "show_hidden_objects", False)),
                 (getattr(self, "_act_hidden_geometry", None),
-                 getattr(scene, "show_hidden_geometry", False)),
-                (getattr(self, "_act_show_axes", None),
-                 getattr(scene, "show_axes", True))):
+                 getattr(scene, "show_hidden_geometry", False))):
             if act is None:
                 continue
             act.blockSignals(True)
@@ -3591,12 +3578,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
                 if scene.entity_hidden(ent) or getattr(ent, "hidden", False):
                     scene.selection.discard(ent)
         scene.bump_view()
-        self.viewport.update()
-
-    def _set_show_axes(self, on: bool) -> None:
-        """Camera ▸ Axes: a scene flag (it travels in the document) and a
-        repaint; nothing else depends on the axes being drawn."""
-        self.viewport.scene.show_axes = bool(on)
         self.viewport.update()
 
     def _selected_section_planes(self) -> list:

@@ -15,7 +15,7 @@ def _snapshot(win):
     style = win.active_style()
     active = vp.nav_mode or win._tool_key(vp.active_tool) or ""
     flags = {field for field in ("back_edges", "section_fill") if getattr(style, field, False)}
-    flags.update(field for field in ("show_section_planes", "show_section_cuts", "show_hidden_geometry")
+    flags.update(field for field in ("show_section_planes", "show_section_cuts", "show_hidden_geometry", "show_axes")
                  if getattr(scene, field, False))
     if getattr(style, "face_mode", None) == "xray":
         flags.add("xray")
