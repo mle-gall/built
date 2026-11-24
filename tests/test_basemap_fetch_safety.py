@@ -7,16 +7,8 @@ from concurrent.futures import Future
 from georef.datum import SceneDatum
 from georef.tile_fetcher import TileFetcher
 from georef.tiles import PRESETS, TileCache, TileLayer
-import views.document_interaction as viewport_module
+from ingetrazo_render import SurveyRaster
 from tests.controller_surface import ControllerSurface as Viewport
-
-
-class _QueuedTimer:
-    callbacks = []
-
-    @classmethod
-    def singleShot(cls, _delay, *context_and_callback):
-        cls.callbacks.append(context_and_callback[-1])
 
 
 class _Fetcher:
@@ -29,10 +21,16 @@ class _Fetcher:
 
 
 def test_missing_tiles_leave_paint_before_starting_network(monkeypatch):
-    """A texture lookup during paint only queues work; it never enters QtNetwork."""
-    _QueuedTimer.callbacks = []
+    """Two paints coalesce their missing tiles on the window timer queue."""
     viewport = Viewport()
-    monkeypatch.setattr(viewport_module, "QTimer", _QueuedTimer)
+    deliveries = []
+    dispatch = viewport._request_missing_tiles
+
+    def deliver():
+        deliveries.append(None)
+        dispatch()
+
+    monkeypatch.setattr(viewport, "_request_missing_tiles", deliver)
     layer = TileLayer(PRESETS["osm"], zoom=16)
     datum = SceneDatum(-12.0464, -77.0428)
     viewport.scene.tile_layer = layer
@@ -47,12 +45,13 @@ def test_missing_tiles_leave_paint_before_starting_network(monkeypatch):
                               _shared=SimpleNamespace())
     sync(display, {})
     assert fetcher.requests == []
-    assert len(_QueuedTimer.callbacks) == 1
-
-    _QueuedTimer.callbacks.pop()()
+    sync(display, {})
+    assert deliveries == []
+    viewport._host.timers.run_due()
+    assert len(deliveries) == 1
     assert fetcher.requests
     assert viewport._tile_requests_scheduled is False
-    viewport.deleteLater()
+    viewport.close()
 
 
 def test_tile_download_submits_the_tile_url_to_the_worker(tmp_path, monkeypatch):
@@ -78,23 +77,16 @@ def test_a_tile_on_disk_is_read_at_once_without_the_network(tmp_path):
     disk cache must come back in that same paint (deferring it left the
     base map blank in the composer), and reading it must not build the
     fetcher, whose network manager is what may not start inside paintGL."""
-    from PySide6.QtCore import QBuffer, QByteArray, QIODevice
-    from PySide6.QtGui import QColor, QImage
     viewport = Viewport()
     cache = TileCache(tmp_path)
-    img = QImage(4, 4, QImage.Format.Format_RGB32)
-    img.fill(QColor(10, 120, 30))
-    data = QByteArray()
-    buf = QBuffer(data)
-    buf.open(QIODevice.OpenModeFlag.WriteOnly)
-    img.save(buf, "PNG")
-    cache.put("osm", 1, 2, 3, bytes(data))
+    data = SurveyRaster(4, 4, bytes((10, 120, 30, 255)) * 16).png()
+    cache.put("osm", 1, 2, 3, data)
     viewport._tile_disk_cache = cache
     got = viewport._disk_cached_tile(PRESETS["osm"], 1, 2, 3)
     assert got is not None and got.rgba()[:4] == bytes((10, 120, 30, 255))
     assert viewport._disk_cached_tile(PRESETS["osm"], 9, 9, 3) is None
     assert viewport._tile_fetcher is None, "the network manager was built"
-    viewport.deleteLater()
+    viewport.close()
 
 
 def test_the_tile_cache_location_needs_no_network_module():

@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from weakref import proxy
 
 from core.input_codes import Type
-from ingetrazo_core import capture_document_frame as live_image
+from ingetrazo_core import WindowInput, capture_document_frame as live_image
 from ingetrazo_render import WindowTimers
 from views.document_interaction import DocumentInteraction
 from views.view_host import WidgetShim
@@ -32,7 +32,7 @@ class _InputSurface(WidgetShim):
 class ControllerSurface(DocumentInteraction, _InputSurface):
     def __init__(self, parent=None):
         host = SimpleNamespace(width=640, height=480, scale=1., ns_view=0,
-                               timers=WindowTimers(), window=proxy(self),
+                               timers=WindowTimers(), input_state=WindowInput(), window=proxy(self),
                                request_frame=lambda: None, cursor_changed=lambda cursor: None)
         super().__init__(parent, host=host)
 
@@ -45,6 +45,8 @@ class ControllerSurface(DocumentInteraction, _InputSurface):
         self.smartZoomRequested.emit()
 
     def close(self):
+        self.closeEvent(None)
+        self._host.timers.cancel_context(self)
         self._shim_visible = False
         return True
 
