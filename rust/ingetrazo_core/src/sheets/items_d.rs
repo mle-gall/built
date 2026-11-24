@@ -323,6 +323,15 @@ pub fn paint_frame(p: &mut Painter, f: &Fields, x: &Extra, c: &FrameContent) {
         p.fill_rect(r, Rgba(245, 246, 248, 255));
         placeholder(p);
     }
+    paint_frame_overlay(p, f, x);
+}
+
+/// What `paint_frame_mm` draws over the frame's content: the graticule,
+/// the border, the title and the scale label (the page draws the content
+/// itself, from its texture or its lines).
+pub fn paint_frame_overlay(p: &mut Painter, f: &Fields, x: &Extra) {
+    let (w, h) = (f.num("w_mm", 100.0), f.num("h_mm", 100.0));
+    let r = [0.0, 0.0, w, h];
     let grid = f.num("grid_m", 0.0);
     if grid > 0.0 && !f.flag("perspective", false) {
         let model_h = h * f.num("scale_n", 100.0) / 1000.0;

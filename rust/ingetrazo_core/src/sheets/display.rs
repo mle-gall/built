@@ -225,6 +225,8 @@ pub fn paint(kind: ItemKind, f: &Fields, x: &Extra) -> Option<Vec<Op>> {
         ItemKind::Label => items_b::paint_label(&mut p, f, x),
         ItemKind::Profile => items_b::paint_profile(&mut p, f, x),
         ItemKind::Text => super::items_c::paint_text(&mut p, f, x),
+        // On the page: what goes over the content the page draws itself.
+        ItemKind::Frame => super::items_d::paint_frame_overlay(&mut p, f, x),
         ItemKind::TitleBlock => super::items_c::paint_titleblock(&mut p, f, x),
         ItemKind::Image => {
             let path = f.text("path", "");

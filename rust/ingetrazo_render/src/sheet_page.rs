@@ -25,7 +25,6 @@ pub const PT_PER_MM: f32 = 72.0 / 25.4;
 const SNAP_MM: f64 = 2.0;
 /// Handle half-size in points.
 const HANDLE: f32 = 4.0;
-const PT_TO_MM: f32 = 25.4 / 72.0;
 /// The ink of the vector pass and of text without its own colour.
 const INK_ON_PAPER: Color32 = Color32::from_rgb(0x1e, 0x24, 0x2c);
 /// The screen-only guide round a borderless frame and the margin.
@@ -50,6 +49,8 @@ pub struct Snapshot {
     pub size: [f64; 2],
     pub margin: f64,
     pub border: J,
+    /// The sheet border's display list (sheets::items_c), if any.
+    pub raw_border: Option<J>,
     pub guides_v: Vec<f64>,
     pub guides_h: Vec<f64>,
     pub items: Vec<Item>,
@@ -83,6 +84,7 @@ impl Snapshot {
             size: [v["size"][0].as_f64()?, v["size"][1].as_f64()?],
             margin: v["margin"].as_f64().unwrap_or(10.0),
             border: v["border"].clone(),
+            raw_border: v["border_display"].as_array().filter(|a| !a.is_empty()).map(|_| v["border_display"].clone()),
             guides_v: nums(&v["guides"]["v"]),
             guides_h: nums(&v["guides"]["h"]),
             fields: v["fields"].clone(),
@@ -148,17 +150,6 @@ pub struct Page {
     style_clip: Option<(String, serde_json::Map<String, J>)>,
     /// A passing word for the bottom bar (style copied, grouped…).
     flash: Option<(&'static str, std::time::Instant)>,
-}
-
-fn hex(s: &str, fallback: Color32) -> Color32 {
-    let h = s.trim_start_matches('#');
-    if h.len() != 6 {
-        return fallback;
-    }
-    match u32::from_str_radix(h, 16) {
-        Ok(v) => Color32::from_rgb((v >> 16) as u8, (v >> 8) as u8, v as u8),
-        Err(_) => fallback,
-    }
 }
 
 fn snap(value: f64, targets: &[f64]) -> Option<f64> {
@@ -691,18 +682,12 @@ impl Page {
         painter.rect_filled(paper, 0.0, Color32::WHITE);
         let clip = paper.intersect(screen);
         let painter = painter.with_clip_rect(clip);
-        let z = self.zoom;
         let m = doc.margin;
         dashed_rect(&painter, self.screen_rect([m, m, doc.size[0] - 2.0 * m, doc.size[1] - 2.0 * m]), GUIDE_ON_PAPER);
-        if doc.border["on"].as_bool().unwrap_or(false) {
-            let w = (doc.border["mm"].as_f64().unwrap_or(0.5) as f32 * z).max(1.0);
-            let c = hex(doc.border["color"].as_str().unwrap_or(""), INK_ON_PAPER);
-            let r = (doc.border["radius_mm"].as_f64().unwrap_or(0.0) as f32 * z) as u8;
-            let rect = self.screen_rect([m, m, doc.size[0] - 2.0 * m, doc.size[1] - 2.0 * m]);
-            painter.rect_stroke(rect, r, Stroke::new(w, c), egui::StrokeKind::Middle);
-            if doc.border["style"].as_str() == Some("double") {
-                painter.rect_stroke(rect.shrink(w * 3.0), r, Stroke::new(w * 0.5, c), egui::StrokeKind::Middle);
-            }
+        // The sheet's border: its display list (sheets::items_c).
+        if let Some(ops) = doc.raw_border.as_ref() {
+            let place = crate::sheet_display::Place { origin: self.to_screen(0.0, 0.0), zoom: self.zoom };
+            crate::sheet_display::paint(&painter, ctx, &mut self.pictures, ops, place);
         }
         let guide = ACCENT.gamma_multiply(0.45);
         for x in &doc.guides_v {
@@ -717,9 +702,11 @@ impl Page {
             let r = self.rect_of(item);
             let rect = self.screen_rect(r);
             match item.kind.as_str() {
-                "frame" => self.paint_frame(&painter, item, rect),
-                "text" => self.paint_text(&painter, ctx, item, rect),
-                "titleblock" => self.paint_title_block(&painter, item, rect),
+                "frame" => {
+                    self.paint_frame(&painter, item, rect);
+                    let place = crate::sheet_display::Place { origin: rect.min, zoom: self.zoom };
+                    crate::sheet_display::paint(&painter, ctx, &mut self.pictures, &item.data["display"], place);
+                }
                 _ => {
                     let place = crate::sheet_display::Place { origin: rect.min, zoom: self.zoom };
                     crate::sheet_display::paint(&painter, ctx, &mut self.pictures, &item.data["display"], place);
@@ -780,117 +767,16 @@ impl Page {
                 }
             }
         }
-        if f["border"].as_bool().unwrap_or(false) {
-            let w = (f["border_mm"].as_f64().unwrap_or(0.3) as f32 * z).max(1.0);
-            painter.rect_stroke(rect, 0, Stroke::new(w, hex(f["border_color"].as_str().unwrap_or(""), INK_ON_PAPER)),
-                                egui::StrokeKind::Middle);
-        } else {
+        if !f["border"].as_bool().unwrap_or(false) {
+            // A borderless frame still reads as a frame on screen (never printed).
             dashed_rect(painter, rect, GUIDE_ON_PAPER);
         }
         if !self.has_content(item.key) {
             painter.text(rect.left_top() + vec2(6.0, 6.0), Align2::LEFT_TOP, "Updating the view…",
                          FontId::proportional(TYPE_META), FAINT);
         }
-        if f["show_title"].as_bool().unwrap_or(false) {
-            let size = (f["title_mm"].as_f64().unwrap_or(4.0) as f32 * z).max(4.0);
-            let mut title = f["title"].as_str().unwrap_or("").to_string();
-            if f["title_scale"].as_bool().unwrap_or(true) {
-                title = format!("{title}    ESC. {}", f["scale"].as_str().unwrap_or(""));
-            }
-            let above = f["title_pos"].as_str() == Some("above");
-            let y = if above { rect.top() - size * 0.4 } else { rect.bottom() + size * 0.4 };
-            let anchor = if above { Align2::LEFT_BOTTOM } else { Align2::LEFT_TOP };
-            painter.text(pos2(rect.left(), y), anchor, title, FontId::proportional(size), INK_ON_PAPER);
-            let rule_y = if above { y + 0.15 * size } else { y + size * 1.3 };
-            painter.hline(rect.x_range(), rule_y, Stroke::new((0.25 * z).max(0.6), INK_ON_PAPER));
-        }
     }
 
-    fn paint_text(&mut self, painter: &egui::Painter, ctx: &egui::Context, item: &Item, rect: Rect) {
-        let t = &item.data["text"];
-        let z = self.zoom;
-        let size = (t["size_pt"].as_f64().unwrap_or(14.0) as f32 * PT_TO_MM * z).max(1.0);
-        let colour = hex(t["color"].as_str().unwrap_or(""), INK_ON_PAPER);
-        let mut job = egui::text::LayoutJob::default();
-        let format = egui::TextFormat {
-            font_id: FontId::proportional(size),
-            color: colour,
-            italics: t["italic"].as_bool().unwrap_or(false),
-            underline: if t["underline"].as_bool().unwrap_or(false) { Stroke::new((size / 14.0).max(0.6), colour) } else { Stroke::NONE },
-            ..Default::default()
-        };
-        job.append(t["text"].as_str().unwrap_or(""), 0.0, format);
-        job.wrap.max_width = rect.width().max(1.0);
-        job.halign = match t["align"].as_str() {
-            Some("center") => egui::Align::Center,
-            Some("right") => egui::Align::RIGHT,
-            _ => egui::Align::LEFT,
-        };
-        let galley = ctx.fonts(|f| f.layout_job(job));
-        let h = galley.size().y.max(size);
-        self.text_h.insert(item.key, (h / z.max(1e-6)) as f64);
-        let block = Rect::from_min_size(rect.min, vec2(rect.width(), h));
-        let bg = t["bg_color"].as_str().unwrap_or("");
-        if !bg.is_empty() {
-            let a = t["bg_opacity"].as_f64().unwrap_or(1.0).clamp(0.0, 1.0) as f32;
-            painter.rect_filled(block.expand(1.0 * z), 0, hex(bg, Color32::WHITE).gamma_multiply(a));
-        }
-        let x = match t["align"].as_str() {
-            Some("center") => block.center().x,
-            Some("right") => block.right(),
-            _ => block.left(),
-        };
-        painter.galley(pos2(x, block.top()), galley.clone(), colour);
-        if t["bold"].as_bool().unwrap_or(false) {
-            // Faux bold: the font set has one weight.
-            painter.galley(pos2(x + (size / 28.0).max(0.4), block.top()), galley, colour);
-        }
-    }
-
-    fn paint_title_block(&self, painter: &egui::Painter, item: &Item, rect: Rect) {
-        let t = &item.data["titleblock"];
-        let z = self.zoom;
-        let rows: Vec<(String, String)> = t["rows"].as_array().map(|a| a.iter().map(|r| (
-            r[0].as_str().unwrap_or("").to_string(), r[1].as_str().unwrap_or("").to_string())).collect()).unwrap_or_default();
-        let line = hex(t["line_color"].as_str().unwrap_or(""), INK_ON_PAPER);
-        let label_c = hex(t["label_color"].as_str().unwrap_or(""), FAINT);
-        let text_c = hex(t["text_color"].as_str().unwrap_or(""), INK_ON_PAPER);
-        let border = Stroke::new((t["border_mm"].as_f64().unwrap_or(0.5) as f32 * z).max(1.0), line);
-        let grid = Stroke::new((t["line_mm"].as_f64().unwrap_or(0.2) as f32 * z).max(0.6), line);
-        let fill = t["fill_color"].as_str().unwrap_or("");
-        let minimal = t["layout"].as_str() == Some("minimal");
-        let cols = t["columns"].as_i64().unwrap_or(1).max(1) as usize;
-        let per_col = rows.len().div_ceil(cols).max(1);
-        let col_w = rect.width() / cols as f32;
-        let row_h = rect.height() / per_col as f32;
-        let label_w = match t["label_mm"].as_f64().unwrap_or(0.0) as f32 {
-            w if w > 0.0 => w * z,
-            _ => col_w * 0.3,
-        };
-        let size = (row_h * 0.42).min(3.2 * z).max(1.0);
-        for (n, (label, value)) in rows.iter().enumerate() {
-            let (c, r) = (n / per_col, n % per_col);
-            let cell = Rect::from_min_size(pos2(rect.left() + c as f32 * col_w, rect.top() + r as f32 * row_h), vec2(col_w, row_h));
-            let lab = Rect::from_min_max(cell.min, pos2(cell.left() + label_w, cell.bottom()));
-            if !fill.is_empty() {
-                painter.rect_filled(lab, 0, hex(fill, Color32::WHITE));
-            }
-            if !minimal {
-                painter.rect_stroke(cell, 0, grid, egui::StrokeKind::Middle);
-                painter.vline(lab.right(), cell.y_range(), grid);
-            } else if r + 1 < per_col {
-                painter.hline(cell.x_range(), cell.bottom(), grid);
-            }
-            painter.text(pos2(lab.left() + 1.0 * z, lab.center().y), Align2::LEFT_CENTER, label,
-                         FontId::proportional(size * 0.8), label_c);
-            painter.text(pos2(lab.right() + 1.5 * z, cell.center().y), Align2::LEFT_CENTER, value,
-                         FontId::proportional(size), text_c);
-        }
-        painter.rect_stroke(rect, 0, border, egui::StrokeKind::Middle);
-        if t["double_border"].as_bool().unwrap_or(false) {
-            painter.rect_stroke(rect.shrink(1.2 * z), 0, Stroke::new(grid.width, line), egui::StrokeKind::Middle);
-        }
-    }
 }
 
 fn dashed_rect(painter: &egui::Painter, r: Rect, colour: Color32) {
