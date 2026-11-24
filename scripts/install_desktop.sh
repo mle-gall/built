@@ -45,9 +45,19 @@ fi
 
 # ── Launcher ────────────────────────────────────────────────────────────────
 mkdir -p "$APPS"
-# Point Exec at this checkout's venv + main.py.
-sed "s|^Exec=.*|Exec=$ROOT/venv/bin/python $ROOT/main.py %f|" \
-    "$ROOT/packaging/ingetrazo.desktop" > "$APPS/ingetrazo.desktop"
+binary="${BUILT_BINARY:-${CARGO_TARGET_DIR:-$ROOT/rust/built_app/target}/release/built}"
+if [[ ! -x "$binary" ]]; then
+  echo "Missing executable $binary. Build built_app in release mode or set BUILT_BINARY." >&2
+  exit 1
+fi
+binary="$(cd "$(dirname "$binary")" && pwd)/$(basename "$binary")"
+while IFS= read -r line; do
+  if [[ "$line" == "Exec=built "* ]]; then
+    printf 'Exec="%s" %s\n' "$binary" "${line#Exec=built }"
+  else
+    printf '%s\n' "$line"
+  fi
+done < "$ROOT/packaging/ingetrazo.desktop" > "$APPS/ingetrazo.desktop"
 
 # ── Application icon (dock / app grid) ──────────────────────────────────────
 for size in "${APP_SIZES[@]}"; do

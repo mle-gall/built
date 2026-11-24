@@ -278,8 +278,11 @@ excludes = [
     'pytest',
 ]
 
+for package in ('app_shell', 'core', 'formats', 'views', 'tools'):
+    hiddenimports += collect_submodules(package)
+
 a = Analysis(
-    ['main.py'],
+    ['packaging/native_check.py'],
     pathex=[str(ROOT)],
     binaries=_earcut_libs,
     datas=datas,
@@ -288,7 +291,7 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=excludes,
-    noarchive=False,
+    noarchive=True,
 )
 # ── The X client libraries come from the HOST, never from here ───────────────
 # Bundling libX11 puts a SECOND copy of it in the process: Qt loads ours

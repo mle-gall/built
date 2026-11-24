@@ -2,6 +2,21 @@
 use pyo3::prelude::*;
 use serde_json::json;
 
+/// Resolve the executable and explain whether this package can launch it.
+#[pyfunction]
+pub fn blender_availability<'py>(py: Python<'py>, path: &str) -> PyResult<(Option<Bound<'py, PyAny>>, String)> {
+    let backend = py.import("core.render_blender")?;
+    let (found, message) = if backend.call_method0("in_snap")?.is_truthy()? {
+        let steps = backend.call_method1("install_steps", ("snap",))?;
+        (None, steps.get_item(0)?.get_item(0)?.extract::<String>()?)
+    } else {
+        let found = backend.call_method1("find_blender", (path,))?;
+        if found.is_none() { (None, "Choose the Blender executable to render".into()) }
+        else { (Some(found), "Ready".into()) }
+    };
+    Ok((found, py.import("core.i18n")?.call_method1("tr", (message,))?.extract()?))
+}
+
 #[pyclass]
 pub struct RenderResult {
     #[pyo3(get, set)]

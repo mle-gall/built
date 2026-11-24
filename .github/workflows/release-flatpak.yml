@@ -63,7 +63,8 @@ jobs:
           # engine went into the Flatpak, #767; the v0.5.10 tag failed here).
           for EXT in $(awk '/^sdk-extensions:/{f=1;next} f&&/^  - /{print $2;next} f{exit}' \
                          packaging/flatpak/com.ingetrazo.IngeTrazo.yml); do
-            flatpak install --user --noninteractive flathub "$EXT//$VER"
+            [[ "$EXT" == *//* ]] || EXT="$EXT//$VER"
+            flatpak install --user --noninteractive flathub "$EXT"
           done
 
       - name: The metainfo must name the version being shipped

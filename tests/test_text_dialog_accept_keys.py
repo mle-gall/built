@@ -1,55 +1,66 @@
-"""The leader-text dialog accepts with Ctrl+Enter; Enter still adds a line (#696)."""
-from __future__ import annotations
+"""Keyboard submission of a multiline form in the native chrome."""
+import json
+import os
+from pathlib import Path
+import sys
 
 import pytest
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QInputDialog, QPlainTextEdit
 
-from views.prompts import build_multiline_dialog
+from scripts.isolated_launch import run
+from tests.shell_isolation import restore_shell_patches, native_question_host  # noqa: F401
 
-
-def _run(dlg, keys):
-    """Exec the dialog, press ``keys`` once it is up, return its result."""
-    def press():
-        edit = dlg.findChild(QPlainTextEdit)
-        edit.setFocus()
-        edit.moveCursor(edit.textCursor().MoveOperation.End)
-        for key, modifiers in keys:
-            QTest.keyClick(edit, key, modifiers)
-        if dlg.isVisible():          # nothing accepted: close it ourselves
-            dlg.reject()
-    QTimer.singleShot(0, press)
-    return dlg.exec()
+ROOT = Path(__file__).resolve().parents[1]
 
 
-@pytest.mark.parametrize("key, modifiers", [
-    (Qt.Key_Return, Qt.ControlModifier),
-    (Qt.Key_Enter, Qt.ControlModifier | Qt.KeypadModifier),
-])
-def test_ctrl_enter_accepts_and_keeps_the_text(key, modifiers):
-    dlg = build_multiline_dialog(None, "Text", "Label text:", "Muro eje A")
-    assert _run(dlg, [(key, modifiers)]) == QInputDialog.Accepted
-    assert dlg.textValue() == "Muro eje A"
+@pytest.fixture(scope="module")
+def answers(tmp_path_factory):
+    root = tmp_path_factory.mktemp("multiline")
+    profile = root / "profile"
+    folder = profile / "data/ingetrazo/plugins"
+    folder.mkdir(parents=True)
+    (folder / "prompt_probe.py").write_text('''import json
+from pathlib import Path
+from views.chrome_forms import ask_text
+
+def setup(app):
+    def ask():
+        def done(value):
+            with Path(__file__).with_suffix(".jsonl").open("a") as out:
+                out.write(json.dumps(value) + "\\n")
+        ask_text(app._window, "Text", "Label text:", "Muro", done, multiline=True)
+    app.add_menu_action("Try multiline prompt", ask)
+''')
+    script = root / "keys.txt"
+    script.write_text("wait 350\n" + "".join(
+        "menu extension:prompt_probe:0\nwait 160\n" + keys + "\nwait 200\n"
+        for keys in ("key enter ctrl", "key return cmd", "key end\nkey enter\nwait 70\ntype b\nwait 70\nkey enter ctrl")) + "quit\n")
+    binary = Path(os.environ.get("BUILT_BINARY", ROOT / "rust/built_app/target/release/built"))
+    result = run([binary, "--new-instance", "--root", ROOT, "--venv", ROOT / ".venv",
+                  "--size", "800x600", "--script", script, ROOT / "tests/fixtures/shell/slab-and-cube.igz"],
+                 env=dict(os.environ, BUILT_BACKGROUND="1"), settings=profile, capture_output=True, text=True, timeout=75)
+    assert result.returncode == 0, result.stderr
+    path = folder / "prompt_probe.jsonl"
+    assert path.exists(), result.stderr
+    return [json.loads(line) for line in path.read_text().splitlines()]
 
 
-def test_enter_alone_adds_a_line_and_does_not_accept():
-    dlg = build_multiline_dialog(None, "Text", "Label text:", "Muro")
-    result = _run(dlg, [(Qt.Key_Return, Qt.NoModifier),
-                        (Qt.Key_B, Qt.NoModifier)])
-    assert result == QInputDialog.Rejected
-    assert dlg.textValue() == "Muro\nb"
+@pytest.mark.window
+@pytest.mark.parametrize("index", [0, 1], ids=["control-enter", "command-return"])
+def test_ctrl_enter_accepts_and_keeps_the_text(answers, index):
+    assert answers[index] == "Muro"
 
 
-def test_the_dialog_says_how_to_accept():
-    dlg = build_multiline_dialog(None, "Text", "Label text:", "")
-    assert "Ctrl+Enter" in dlg.labelText()
-    assert dlg.labelText().startswith("Label text:")
+@pytest.mark.window
+def test_enter_alone_adds_a_line_and_does_not_accept(answers):
+    assert answers[2:] == ["Muro\nb"]
 
 
-def test_the_editor_filter_releases_its_unparented_dialog():
-    import weakref
-    dlg = build_multiline_dialog(None, "Text", "Label", "")
-    ref = weakref.ref(dlg)
-    del dlg
-    assert ref() is None
+def test_the_dialog_says_how_to_accept(native_question_host):
+    from views import chrome_forms
+    win = native_question_host.window
+    chrome_forms.ask_text(win, "Text", "Label text:", multiline=True)
+    form = chrome_forms.current(win)
+    assert form.field("text").label == "Label text:"
+    assert next(hint for _, _, hint, role in form.wire()[-1] if role == 1) == (
+        "⌘↩" if sys.platform == "darwin" else "Ctrl+Enter")
+    form.press("cancel")

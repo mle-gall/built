@@ -6,6 +6,7 @@ place, turn and scale, its layer, paint and visibility."""
 from __future__ import annotations
 
 import pytest
+from tests.test_library_sheet import win  # noqa: F401
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core.group import Group, copy_group, world_mesh
@@ -13,16 +14,7 @@ from core.history import History, ReplaceComponentCommand
 from core.mesh import Mesh
 from core.scene import Scene
 from core.select_ops import same_definition
-
-
-@pytest.fixture(autouse=True)
-def _no_modal_keep_question(monkeypatch):
-    """Replacing the last copies asks whether to keep the definition; a
-    modal box would wait for a click no test makes. «Let it go» unless a
-    test says otherwise."""
-    from views.main_window import MainWindow
-    monkeypatch.setattr(MainWindow, "_ask_keep_orphans",
-                        lambda self, orphans: False)
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 
 def _quad(size=1.0, z=0.0):
@@ -212,69 +204,40 @@ def test_replacement_survives_the_igz(tmp_path):
 
 # --- the tray's «In model» list ----------------------------------------------
 
-def _row_for(win, name, with_kept=False):
-    from PySide6.QtCore import Qt
-    panel = win.tray.components
-    panel.refresh_in_model()
-    for i in range(panel._in_model.count()):
-        item = panel._in_model.item(i)
-        groups = item.data(Qt.UserRole) or []
-        kept = item.data(Qt.UserRole + 1)
-        definition = groups[0] if groups else kept
-        if definition is not None and definition.name == name:
-            if with_kept:
-                return panel, groups, kept, item.text()
-            return panel, groups
-    raise AssertionError(f"no row for {name}")
+def _provider(win):
+    from ingetrazo_render import wgpu_library as library
+    return library.ComponentsProvider(), library.Ctx(win, win.view)
 
 
-def test_the_in_model_list_selects_and_replaces_from_its_menu():
-    from core.i18n import tr
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        scene = win.viewport.scene
-        _s, _h, sillas, mesas, classic, holder = _model(moved=True)
-        scene.groups.extend(sillas + mesas + [classic, holder])
-        scene.selection.clear()
-
-        panel, groups = _row_for(win, "Silla")
-        actions = panel._in_model_actions(groups)
-        assert actions[0][0] == tr("Select Instances ({n})", n=3)
-        # nothing selected yet: Replace is there, greyed
-        assert actions[1][:2] == (tr("Replace Selection with This"), None)
-        actions[0][1]()
-        assert set(scene.selection) == set(sillas)
-
-        # with the chairs selected, the table row offers to replace them
-        panel, groups = _row_for(win, "Mesa")
-        text, run, _checked, _tip = panel._in_model_actions(groups)[1]
-        assert text == tr("Replace {n} Selected with This", n=3)
-        run()
-        assert all(g.mesh is mesas[0].mesh for g in sillas)
-        win.viewport.history.undo()
-        assert all(g.name == "Silla" for g in sillas)
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def _rows(win):
+    provider, ctx = _provider(win)
+    return {r["name"]: r for r in provider.items(ctx) if r["key"].startswith("cm:")}
 
 
-def test_its_own_row_does_not_offer_to_replace_the_selection():
-    from core.i18n import tr
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        scene = win.viewport.scene
-        _s, _h, sillas, mesas, _c, _holder = _model(moved=True)
-        scene.groups.extend(sillas + mesas)
-        scene.selection.clear()
-        scene.selection.update(sillas)
-        panel, groups = _row_for(win, "Silla")
-        assert panel._in_model_actions(groups)[1][:2] == (
-            tr("Replace Selection with This"), None)
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def _run(win, name, verb):
+    provider, ctx = _provider(win)
+    row = _rows(win)[name]
+    assert verb in row["verbs"]
+    provider.run(ctx, verb, row)
+
+
+def test_the_in_model_list_selects_and_replaces_from_its_menu(native_components, monkeypatch):
+    win, scene, chairs, tables = native_components
+    monkeypatch.setattr(win, "_ask_keep_orphans", lambda _: False)
+    assert "replace" not in _rows(win)["Silla"]["verbs"]
+    _run(win, "Silla", "select")
+    assert set(scene.selection) == set(chairs)
+    _run(win, "Mesa", "replace")
+    assert all(chair.mesh is tables[0].mesh for chair in chairs)
+    assert win.viewport.history.undo()
+    assert all(chair.name == "Silla" for chair in chairs)
+
+
+def test_its_own_row_does_not_offer_to_replace_the_selection(native_components):
+    win, scene, chairs, tables = native_components
+    scene.select(chairs)
+    assert "replace" not in _rows(win)["Silla"]["verbs"]
+    assert "replace" in _rows(win)["Mesa"]["verbs"]
 
 
 # --- Keep in File: definitions with no copy placed ----------------------------
@@ -367,53 +330,28 @@ def test_a_kept_definition_with_no_copy_can_replace_and_be_placed():
     assert g is not t and g.uid != t.uid
 
 
-def test_the_list_shows_a_kept_definition_with_no_copy(monkeypatch):
+def test_the_list_shows_a_kept_definition_with_no_copy(native_components, monkeypatch):
     from core.history import KeepComponentCommand
-    from core.i18n import tr
-    from tools.place_group import PlaceGroupTool
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        scene = win.viewport.scene
-        _s, _h, sillas, mesas, _c, _holder = _model(moved=True)
-        scene.groups.extend(sillas + mesas)
-        win.viewport.history.execute(KeepComponentCommand(mesas[0]))
-        for g in mesas:
-            scene.groups.remove(g)
-        panel, groups, kept, text = _row_for(win, "Mesa", with_kept=True)
-        assert groups == [] and kept is scene.kept_components[0]
-        assert "0×" in text and tr("kept") in text
-        actions = panel._in_model_actions(groups, kept)
-        assert actions[0][1] is None                # nothing to select
-        assert actions[3][0] == tr("Keep in File") and actions[3][2] is True
+    win, scene, chairs, tables = native_components
+    monkeypatch.setattr(win, "_ask_keep_orphans", lambda _: False)
+    win.viewport.history.execute(KeepComponentCommand(tables[0]))
+    for group in tables:
+        scene.groups.remove(group)
+    scene.version += 1
+    scene.select(chairs)
+    kept = scene.kept_components[0]
+    row = _rows(win)["Mesa"]
+    assert row["uses"] == 0 and row["category"] == "Kept, not placed"
+    assert "select" not in row["verbs"] and "unkeepfile" in row["verbs"]
+    _run(win, "Mesa", "replace")
+    assert all(chair.mesh is kept.mesh for chair in chairs)
+    _run(win, "Mesa", "apply")
+    assert win.viewport.active_tool._group.mesh is kept.mesh
+    win.viewport.set_active_tool(None)
+    assert win.viewport.history.undo()
+    _run(win, "Mesa", "unkeepfile")
+    assert not scene.kept_components and "Mesa" not in _rows(win)
 
-        # in the viewport's dialog too, with no copy placed
-        scene.selection.clear()
-        scene.selection.update(sillas)
-        assert [d for _lb, d in win._replacement_choices(sillas)] == [kept]
-
-        # replace the chairs from the row, then place a copy from it
-        panel._in_model_actions(groups, kept)[1][1]()
-        assert all(g.mesh is kept.mesh for g in sillas)
-        panel._in_model_actions(groups, kept)[2][1]()
-        tool = win.viewport.active_tool
-        assert isinstance(tool, PlaceGroupTool)
-        assert tool._group.mesh is kept.mesh
-        win.viewport.set_active_tool(None)
-
-        # untick Keep in File: the row goes once no copy is left
-        win.viewport.history.undo()                 # the chairs again
-        panel, groups, kept, _t = _row_for(win, "Mesa", with_kept=True)
-        panel._in_model_actions(groups, kept)[3][1]()
-        assert scene.kept_components == []
-        with pytest.raises(AssertionError, match="no row"):
-            _row_for(win, "Mesa")
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
-
-
-# --- thumbnails in the «In model» list ----------------------------------------
 
 def _painted_pixels(pm):
     img = pm.toImage()
@@ -452,70 +390,48 @@ def test_an_empty_definition_gives_a_blank_icon():
     assert _painted_pixels(thumbnail(g)) == 0
 
 
-def test_the_list_rows_carry_a_thumbnail():
-    from PySide6.QtCore import Qt
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        scene = win.viewport.scene
-        _s, _h, sillas, mesas, _c, _holder = _model(moved=True)
-        scene.groups.extend(sillas + mesas)
-        panel = win.tray.components
-        panel.refresh_in_model()
-        rows = [panel._in_model.item(i)
-                for i in range(panel._in_model.count())]
-        assert len(rows) == 2
-        assert all(not r.icon().isNull() for r in rows)
-        assert all(r.data(Qt.UserRole) for r in rows)
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def _component_sheet(win):
+    from ingetrazo_render.wgpu_library import open_library
+    from tests.test_library_sheet import frame, tiles
+    open_library(win, "components", scope="s:model")
+    return [r for r in tiles(frame(win)) if r["id"].startswith("cm:")]
 
 
-# --- a long list, and what a purge must leave alone ---------------------------
-
-def test_a_long_list_offers_a_name_filter_that_survives_a_refresh():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        scene = win.viewport.scene
-        names = ["Silla", "Sillón", "Mesa", "Lámpara", "Puerta P1",
-                 "Puerta P2", "Ventana V1", "Ventana V2", "Árbol"]
-        for i, n in enumerate(names):
-            scene.groups.append(_component(_quad(1.0), n, dx=3.0 * i))
-        panel = win.tray.components
-        panel.refresh_in_model()
-        assert not panel._in_model_filter.isHidden()
-
-        def shown():
-            return sorted(panel._in_model.item(i).text().split("  ")[0]
-                          for i in range(panel._in_model.count())
-                          if not panel._in_model.item(i).isHidden())
-        panel._in_model_filter.setText("puerta")
-        assert shown() == ["Puerta P1", "Puerta P2"]
-        panel.refresh_in_model()                    # a scene change
-        assert shown() == ["Puerta P1", "Puerta P2"]
-        panel._in_model_filter.setText("SILL")
-        assert shown() == ["Silla", "Sillón"]
-        panel._in_model_filter.clear()
-        assert len(shown()) == len(names)
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_the_list_rows_carry_a_thumbnail(win):
+    from tests.test_library_sheet import act
+    groups = [_component(_quad(i + 1), name) for i, name in enumerate(("A", "B"))]
+    win.viewport.scene.groups.extend(groups)
+    win.viewport.scene.version += 1
+    tiles = _component_sheet(win)
+    assert len(tiles) == 2
+    act(win, "component-previews", *(r["icon"] for r in tiles))
+    images, = win.view.renderer.last("ui_set_icons")
+    assert {key for key, _, _, _ in images} == {r["icon"] for r in tiles}
+    assert all(w == h == 96 and any(pixels[3::4]) for _, w, h, pixels in images)
 
 
-def test_a_short_list_has_no_filter():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        _s, _h, sillas, mesas, _c, _holder = _model(moved=True)
-        win.viewport.scene.groups.extend(sillas + mesas)
-        panel = win.tray.components
-        panel.refresh_in_model()
-        assert panel._in_model_filter.isHidden()
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_a_long_list_offers_a_name_filter_that_survives_a_refresh(win, monkeypatch):
+    from tests.test_library_sheet import act, frame, tiles
+    from views import component_catalogue
+    monkeypatch.setattr(component_catalogue.library, "index", lambda refresh: [])
+    monkeypatch.setattr(component_catalogue.CatalogueSession, "build", lambda self, sheet, query: sheet)
+    names = ["Silla", "Sillón", "Mesa", "Lámpara", "Puerta P1", "Puerta P2", "Ventana V1", "Árbol"]
+    scene = win.viewport.scene
+    scene.groups.extend(_component(_quad(), n) for n in names)
+    scene.version += 1
+    _component_sheet(win)
+    act(win, "search", "puerta")
+    for _ in range(2):
+        assert sorted(r["label"] for r in tiles(frame(win)) if r["id"].startswith("cm:")) == ["Puerta P1", "Puerta P2"]
+        scene.version += 1
+
+
+def test_short_component_lists_use_the_shared_library_search(win):
+    from tests.test_library_sheet import frame
+    win.viewport.scene.groups.append(_component(_quad(), "Table"))
+    win.viewport.scene.version += 1
+    assert any(r["label"] == "Table" for r in _component_sheet(win))
+    assert frame(win)["search"]
 
 
 def test_purge_keeps_what_only_a_kept_definition_wears():
@@ -536,18 +452,14 @@ def test_purge_keeps_what_only_a_kept_definition_wears():
 
 # --- the four follow-ups -------------------------------------------------------
 
-def _window_with_model():
-    from views.main_window import MainWindow
-    win = MainWindow()
+@pytest.fixture
+def native_components(native_host):
+    win = native_host.window
     scene = win.viewport.scene
     _s, _h, sillas, mesas, classic, holder = _model(moved=True)
     scene.groups.extend(sillas + mesas + [classic, holder])
+    scene.version += 1
     return win, scene, sillas, mesas
-
-
-def _close(win):
-    win._saved_version = win.viewport.scene.version
-    win.close()
 
 
 def test_orphaned_by_names_only_definitions_left_with_no_copy():
@@ -571,163 +483,151 @@ def test_a_copy_nested_elsewhere_still_counts_as_a_copy():
     assert orphaned_by(scene, sillas) == []
 
 
-def test_replacing_the_last_copies_can_keep_them_in_one_undo(monkeypatch):
-    from views.main_window import MainWindow
-    win, scene, sillas, mesas = _window_with_model()
-    try:
-        asked = []
-        monkeypatch.setattr(MainWindow, "_ask_keep_orphans",
-                            lambda self, o: asked.append(
-                                [g.name for g in o]) or True)
-        scene.selection.clear()
-        scene.selection.update(sillas)
-        assert win.replace_selection_with(mesas[0]) == 3
-        assert asked == [["Silla"]]          # asked before swapping
-        kept = scene.kept_components
-        assert [t.name for t in kept] == ["Silla"]
-        assert all(g.mesh is mesas[0].mesh for g in sillas)
-        win.viewport.history.undo()                 # both, in one step
-        assert scene.kept_components == []
-        assert all(g.name == "Silla" for g in sillas)
-    finally:
-        _close(win)
+def test_replacing_the_last_copies_can_keep_them_in_one_undo(native_components, monkeypatch):
+    win, scene, sillas, mesas = native_components
+    asked = []
+    monkeypatch.setattr(win, "_ask_keep_orphans",
+                        lambda o: asked.append(
+                            [g.name for g in o]) or True)
+    scene.selection.clear()
+    scene.selection.update(sillas)
+    assert win.replace_selection_with(mesas[0]) == 3
+    assert asked == [["Silla"]]          # asked before swapping
+    kept = scene.kept_components
+    assert [t.name for t in kept] == ["Silla"]
+    assert all(g.mesh is mesas[0].mesh for g in sillas)
+    win.viewport.history.undo()                 # both, in one step
+    assert scene.kept_components == []
+    assert all(g.name == "Silla" for g in sillas)
 
 
-def test_cancel_in_the_question_replaces_nothing(monkeypatch):
-    from views.main_window import MainWindow
-    win, scene, sillas, mesas = _window_with_model()
-    try:
-        monkeypatch.setattr(MainWindow, "_ask_keep_orphans",
-                            lambda self, o: None)
-        scene.selection.clear()
-        scene.selection.update(sillas)
-        assert win.replace_selection_with(mesas[0]) == 0
-        assert all(g.name == "Silla" for g in sillas)
-        assert not win.viewport.history.undo_stack
-    finally:
-        _close(win)
+def test_cancel_in_the_question_replaces_nothing(native_components, monkeypatch):
+    win, scene, sillas, mesas = native_components
+    monkeypatch.setattr(win, "_ask_keep_orphans",
+                        lambda o: None)
+    scene.selection.clear()
+    scene.selection.update(sillas)
+    assert win.replace_selection_with(mesas[0]) == 0
+    assert all(g.name == "Silla" for g in sillas)
+    assert not win.viewport.history.undo_stack
 
 
-def test_no_question_while_a_copy_remains(monkeypatch):
-    from views.main_window import MainWindow
-    win, scene, sillas, mesas = _window_with_model()
-    try:
-        def boom(self, o):
-            raise AssertionError("should not ask")
-        monkeypatch.setattr(MainWindow, "_ask_keep_orphans", boom)
-        scene.selection.clear()
-        scene.selection.update(sillas[:2])
-        assert win.replace_selection_with(mesas[0]) == 2
-    finally:
-        _close(win)
+def test_no_question_while_a_copy_remains(native_components, monkeypatch):
+    win, scene, sillas, mesas = native_components
+    def boom(o):
+        raise AssertionError("should not ask")
+    monkeypatch.setattr(win, "_ask_keep_orphans", boom)
+    scene.selection.clear()
+    scene.selection.update(sillas[:2])
+    assert win.replace_selection_with(mesas[0]) == 2
 
 
-def test_rename_reaches_every_copy_and_the_kept_template(monkeypatch):
+def test_rename_reaches_every_copy_and_the_kept_template(native_components, monkeypatch):
     from views import chrome_forms
     from core.history import KeepComponentCommand
-    win, scene, sillas, mesas = _window_with_model()
-    try:
-        box = Group(Mesh(), name="Comedor")
-        nested = copy_group(sillas[0], V(0, 5, 0))
-        box.adopt([nested])
-        box.component = False
-        scene.groups.append(box)
-        win.viewport.history.execute(KeepComponentCommand(sillas[0]))
-        win.rename_component(sillas[1])
-        form = chrome_forms.current(win)
-        form.receive("text", "Silla Bistró")
-        form.press("ok")
-        assert {g.name for g in sillas} == {"Silla Bistró"}
-        assert nested.name == "Silla Bistró"
-        assert scene.kept_components[0].name == "Silla Bistró"
-        assert {g.name for g in mesas} == {"Mesa"}
-        win.viewport.history.undo()
-        assert {g.name for g in sillas} == {"Silla"}
-        assert scene.kept_components[0].name == "Silla"
-    finally:
-        _close(win)
+    win, scene, sillas, mesas = native_components
+    box = Group(Mesh(), name="Comedor")
+    nested = copy_group(sillas[0], V(0, 5, 0))
+    box.adopt([nested])
+    box.component = False
+    scene.groups.append(box)
+    win.viewport.history.execute(KeepComponentCommand(sillas[0]))
+    win.rename_component(sillas[1])
+    form = chrome_forms.current(win)
+    form.receive("text", "Silla Bistró")
+    form.press("ok")
+    assert {g.name for g in sillas} == {"Silla Bistró"}
+    assert nested.name == "Silla Bistró"
+    assert scene.kept_components[0].name == "Silla Bistró"
+    assert {g.name for g in mesas} == {"Mesa"}
+    win.viewport.history.undo()
+    assert {g.name for g in sillas} == {"Silla"}
+    assert scene.kept_components[0].name == "Silla"
 
 
-def test_rename_is_in_the_list_menu():
-    from core.i18n import tr
-    win, scene, sillas, _mesas = _window_with_model()
-    try:
-        panel, groups = _row_for(win, "Silla")
-        assert tr("Rename…") in [a[0] for a in panel._in_model_actions(groups)]
-    finally:
-        _close(win)
+def test_rename_is_in_the_list_menu(native_components):
+    from ingetrazo_render import wgpu_library as library
+    win, _, _, _ = native_components
+    provider = library.ComponentsProvider()
+    chair = next(e for e in provider.items(library.Ctx(win, win.view)) if e["name"] == "Silla")
+    assert "rename" in chair["verbs"]
 
 
-def test_components_from_another_file_arrive_kept_and_placeable(tmp_path):
+def test_components_from_another_file_arrive_kept_and_placeable(tmp_path, native_host, monkeypatch):
     from formats import igz
     from core.history import KeepComponentCommand
     # the «library» file: two placed definitions, one kept, a plain group
     lib, hist, sillas, mesas, _c, _h = _model()
+    from core.materials import Material
+    lib.materials["Brass"] = Material("Brass", color=(0.9, 0.8, 0.1))
     lamp = _component(_quad(0.3), "Lámpara")
     for f in lamp.mesh.faces:
-        f.attrs["color"] = (0.9, 0.8, 0.1)
+        f.attrs.update(lib.materials["Brass"].face_attrs())
+        f.attrs["layer"] = "Lighting"
     lib.groups.append(lamp)
     hist.execute(KeepComponentCommand(lamp))
     lib.groups.remove(lamp)
     path = tmp_path / "biblioteca.igz"
     igz.save_scene(lib, path)
 
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        scene = win.viewport.scene
-        n = win.import_kept_components(path)
-        assert n == 3                       # Silla, Mesa and Lámpara
-        names = sorted(t.name for t in scene.kept_components)
-        assert "Lámpara" in names and "Silla" in names and "Mesa" in names
-        assert "Muro" not in names and "Caja" not in names   # groups
-        assert not [g for g in scene.groups if g.name in names]
-        lamp_t = next(t for t in scene.kept_components
-                      if t.name == "Lámpara")
-        assert lamp_t.mesh.faces[0].attrs.get("color") is not None
-        win.viewport.history.undo()
-        assert scene.kept_components == []
-    finally:
-        _close(win)
+    win = native_host.window
+    scene = win.viewport.scene
+    from ingetrazo_render import wgpu_library as library
+    from tests.test_library_sheet import Renderer, act, frame
+    from core.i18n import tr
+    from views.filedialogs import file_dialogs
+    from views import chrome_dialogs
+    monkeypatch.setattr(chrome_dialogs, "warning", lambda _, title, msg: pytest.fail(f"{title}: {msg}"))
+    monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *_: (str(path), ""))
+    monkeypatch.setattr(win.view, "renderer", Renderer())
+    monkeypatch.setattr(win.view, "_ui_attached", True, raising=False)
+    assert library.open_library(win, "components", scope="s:model")
+    blocks = frame(win)["content"]["blocks"]
+    buttons = {b["id"]: b["label"] for block in blocks if block["kind"] == "buttons"
+               for b in block["buttons"]}
+    assert buttons["typeact:import"] == tr("Components from File…")
+    assert "typeact:purge" in buttons
+    act(win, "verb", "typeact:import")
+    assert len(scene.kept_components) == 3                       # Silla, Mesa and Lámpara
+    names = sorted(t.name for t in scene.kept_components)
+    assert "Lámpara" in names and "Silla" in names and "Mesa" in names
+    assert "Muro" not in names and "Caja" not in names   # groups
+    assert not [g for g in scene.groups if g.name in names]
+    lamp_t = next(t for t in scene.kept_components
+                  if t.name == "Lámpara")
+    assert lamp_t.mesh.faces[0].attrs["mat"] == "Brass"
+    assert scene.layer_by_key("Lighting") is not None and "Brass" in scene.materials
+    win.viewport.history.undo()
+    assert not scene.kept_components and scene.layer_by_key("Lighting") is None
+    assert "Brass" not in scene.materials
+    win.viewport.history.redo()
+    assert len(scene.kept_components) == 3 and "Brass" in scene.materials
 
 
-def test_a_file_without_components_changes_nothing(tmp_path):
+def test_a_file_without_components_changes_nothing(tmp_path, native_host):
     from formats import igz
     plain = Scene()
     plain.groups.append(Group(_quad(2.0), name="Muro"))
     path = tmp_path / "muro.igz"
     igz.save_scene(plain, path)
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        assert win.import_kept_components(path) == 0
-        assert win.viewport.scene.kept_components == []
-        assert not win.viewport.history.undo_stack
-    finally:
-        _close(win)
+    win = native_host.window
+    from ingetrazo_render import import_kept_components
+    assert import_kept_components(win, path) == 0
+    assert win.viewport.scene.kept_components == []
+    assert not win.viewport.history.undo_stack
 
 
-def test_clipped_component_list_does_not_build_thumbnails(monkeypatch):
-    from PySide6.QtGui import QRegion
-    from views.main_window import MainWindow
+def test_clipped_component_list_does_not_build_thumbnails(win, monkeypatch):
+    from tests.test_library_sheet import act
     from views import component_thumbs
-    win = MainWindow()
-    try:
-        _, _, chairs, _, _, _ = _model(moved=True)
-        win.viewport.scene.groups.extend(chairs)
-        panel = win.tray.components
-        panel.refresh_in_model()
-        vp = panel._in_model.viewport()
-        calls = []
-        real = component_thumbs.thumbnail
-        monkeypatch.setattr(component_thumbs, 'thumbnail',
-                            lambda g: (calls.append(g), real(g))[1])
-        monkeypatch.setattr(vp, 'visibleRegion', QRegion)
-        panel._draw_visible_thumbs()
-        assert not calls
-        monkeypatch.setattr(vp, 'visibleRegion', lambda: QRegion(vp.rect()))
-        panel._draw_visible_thumbs()
-        assert calls
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    win.viewport.scene.groups.append(_component(_quad(), "Table"))
+    win.viewport.scene.version += 1
+    calls = []
+    draw = component_thumbs._polygons
+    monkeypatch.setattr(component_thumbs, "_polygons", lambda g: (calls.append(g), draw(g))[1])
+    rows = _component_sheet(win)
+    assert not calls
+    act(win, "component-previews")
+    assert not calls
+    act(win, "component-previews", rows[0]["icon"])
+    assert calls == [win.viewport.scene.groups[-1]]

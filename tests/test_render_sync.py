@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 
 import pytest
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from PySide6.QtGui import QColor, QImage
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 from PySide6.QtWidgets import QApplication
@@ -117,31 +118,13 @@ def test_the_camera_key_changes_with_the_camera_only():
 # ---- The panel ------------------------------------------------------------------
 
 @pytest.fixture
-def window(monkeypatch):
-    from core import extensions
-    from core.paths import app_root
-    monkeypatch.setattr(extensions, "plugin_dirs",
-                        lambda: [app_root() / "plugins"])
-    if not HAS_BLENDER:
-        monkeypatch.setattr(rb, "find_blender",
-                            lambda saved=None: rb.BlenderFound(
-                                ["/x/blender"], "/x/blender"))
-    from views.main_window import MainWindow
-    win = MainWindow()
-    yield win
-    for panel in _panels(win):
-        panel._sync.stop()
-    win._saved_version = win.viewport.scene.version
-    win.close()
-
-
-def _panels(win):
-    return [w for d in win._extension_docks
-            for w in [d.widget()] if type(w).__name__ == "RenderPanel"]
+def window(native_host):
+    return native_host.window
 
 
 def test_selecting_does_not_reload_the_synced_scene(window):
-    panel = _panels(window)[0]
+    from tests.test_render_lights import _panel
+    panel = _panel(window)
     scene = window.viewport.scene
     _box(scene)
     scene.version += 1
@@ -154,29 +137,25 @@ def test_selecting_does_not_reload_the_synced_scene(window):
 
 
 def test_no_draft_while_a_mouse_button_is_held(window, monkeypatch):
-    panel = _panels(window)[0]
-    sync = panel._sync
+    from tests.test_render_lights import _panel
+    panel = _panel(window)
     calls = []
-    monkeypatch.setattr(sync, "_load", lambda key: calls.append(key))
-    monkeypatch.setattr(QApplication, "mouseButtons",
-                        staticmethod(lambda: __import__(
-                            "PySide6.QtCore", fromlist=["Qt"]).Qt.LeftButton))
-    sync._seen_key = rb.camera_key(window.viewport.camera)
-    sync._still_since = time.monotonic() - 10
-    sync._poll()
-    assert calls == []
-    monkeypatch.setattr(QApplication, "mouseButtons",
-                        staticmethod(lambda: __import__(
-                            "PySide6.QtCore", fromlist=["Qt"]).Qt.NoButton))
-    sync._still_since = time.monotonic() - 10
-    sync._poll()
+    monkeypatch.setattr(panel.camera_session, "_load", lambda key: calls.append(key))
+    inputs = window._host.input_state
+    inputs.pointer(10, 10, 1, 0)
+    panel._sync_camera()
+    panel._sync_camera()
+    assert not calls
+    inputs.pointer(10, 10, 0, 0)
+    panel._sync_camera()
+    panel._sync_camera()
     assert len(calls) == 1
 
 
-def _run(seconds, until=None):
+def _run(window, seconds, until=None):
     end = time.time() + seconds
     while time.time() < end:
-        QApplication.processEvents()
+        window._host.timers.run_due()
         if until is not None and until():
             return True
         time.sleep(0.02)
@@ -188,23 +167,24 @@ def _run(seconds, until=None):
 def test_a_real_blender_follows_the_camera_when_it_rests(window, monkeypatch):
     from tests.test_render_lights import attach_render_surface
     attach_render_surface(window, monkeypatch)
-    panel = _panels(window)[0]
+    from tests.test_render_lights import _panel
+    panel = _panel(window)
     _box(window.viewport.scene)
     window.viewport.scene.version += 1
-    images = []
-    panel._sync.image.connect(images.append)
-    panel._sync_box.setChecked(True)
-    assert _run(120, lambda: len(images) >= 1), "no first draft"
-    assert panel._viewer is not None and panel._viewer.model.following
-    _run(1.5)
-    assert len(images) == 1                        # at rest: nothing new
+    panel.event("width", "commit", 160)
+    panel.event("height", "commit", 90)
+    panel.event("sync", "commit", True)
+    assert _run(window, 120, lambda: panel.image is not None), panel.status
+    assert panel.viewer.model.following
+    first = panel.image
+    worker = panel.camera_session.process
+    _run(window, 1.5)
+    assert panel.image == first and panel.proc is None
     window.viewport.camera.yaw += 0.7
-    assert _run(60, lambda: len(images) >= 2), "no draft after moving"
-    assert images[-1].is_file() and images[-1] != images[0]
-    panel._viewer.model.event("_panel", "closed", None)
-    _run(0.5)
-    assert not panel._sync.active and not panel._sync_box.isChecked()
-    assert panel._sync._proc is None
+    assert _run(window, 60, lambda: panel.image not in (first, None)), panel.status
+    assert panel.image.is_file() and panel.camera_session.process is worker
+    panel.viewer.model.event("_panel", "closed", None)
+    assert not panel.sync_timer.isActive() and worker.poll() is not None
 
 
 @pytest.mark.slow

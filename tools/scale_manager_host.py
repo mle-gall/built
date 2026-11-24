@@ -1,21 +1,15 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Both hosts' bindings for the scale manager tool gestures."""
+
+from ingetrazo_core import register_tool_adapter
 from tools.rust_tool_base import RustTool
 
 
+@register_tool_adapter
 class ScaleManagerTool(RustTool):
     kind = "scale_manager"
     shortcut = description = None
     _target_group = None
-
-    @property
-    def target(self):
-        return self._target_group
-
-    @target.setter
-    def target(self, group):
-        self._target_group = group
-        self._machine.set("target", group.uid if group is not None else None)
 
     def host_scale_editor(self, vp, uid):
         from core.timers import later
@@ -25,10 +19,6 @@ class ScaleManagerTool(RustTool):
             vp.flash_status(tr("Select one group or component first"))
         else:
             later(vp, 0, lambda: self._run(vp, group))
-
-    def on_deactivate(self, vp):
-        self._target_group = None
-        super().on_deactivate(vp)
 
     @staticmethod
     def _run(vp, group):

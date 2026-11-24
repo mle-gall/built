@@ -8,7 +8,7 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 def test_tools_views_and_menus_reassign_and_reset_across_windows(tmp_path, monkeypatch):
     from app_shell.host import Host
     from ingetrazo_render import settings_sheet
-    from views.shortcuts import action_key
+    from core.shortcuts import action_key
     from ingetrazo_render import view_commands
 
     profile = str(tmp_path / "profile")

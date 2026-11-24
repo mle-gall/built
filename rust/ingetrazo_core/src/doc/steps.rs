@@ -81,7 +81,10 @@ pub struct RecordStep {
     named: Mutex<Vec<(&'static str, Option<Py<PyAny>>)>>,
     /// The meshes whose store a History step enlists (a mesh step).
     meshes: Option<Meshes>,
-    doc_undo: bool,
+    doc_undo: AtomicBool,
+    /// A direct undo runs only the step's own inverse (host state written
+    /// together with document fields by one kernel call).
+    explicit: bool,
     /// History journals the enlisted stores (`_journal_geometry`).
     journal: AtomicBool,
     /// Set while a direct `undo` (outside History's replay) runs.
@@ -104,16 +107,17 @@ impl RecordStep {
             own: Mutex::new(None),
             named: Mutex::new(Vec::new()),
             meshes: None,
-            doc_undo: true,
+            doc_undo: AtomicBool::new(true),
+            explicit: false,
             journal: AtomicBool::new(false),
             direct: AtomicBool::new(false),
         }
     }
-    fn paint(mut self) -> Self {
+    pub(super) fn paint(mut self) -> Self {
         self.keeps_paint = true;
         self
     }
-    fn rows(mut self) -> Self {
+    pub(super) fn rows(mut self) -> Self {
         self.keeps_rows = true;
         self
     }
@@ -129,14 +133,25 @@ impl RecordStep {
     /// A step whose own inverse undoes what History does not journal
     /// (`doc_undo` false): History replays it by its transaction only when
     /// it journals the step's stores.
-    pub(super) fn own_inverse(mut self) -> Self {
-        self.doc_undo = false;
+    pub(super) fn own_inverse(self) -> Self {
+        self.doc_undo.store(false, Ordering::Relaxed);
         self
+    }
+    /// A step undone only by its own inverse, never by a transaction.
+    pub(super) fn explicit_inverse(mut self) -> Self {
+        self.explicit = true;
+        self.doc_undo.store(false, Ordering::Relaxed);
+        self
+    }
+    /// Decide after running whether History may replay by transaction
+    /// (asked right after `do`, as `doc_undo(scene)` was).
+    pub(super) fn set_undo_by_transaction(&self, yes: bool) {
+        self.doc_undo.store(yes, Ordering::Relaxed);
     }
     /// As `own_inverse`, only when `own` holds (a step whose targets may
     /// or may not include mesh elements).
-    pub(super) fn own_inverse_if(mut self, own: bool) -> Self {
-        self.doc_undo = !own;
+    pub(super) fn own_inverse_if(self, own: bool) -> Self {
+        self.doc_undo.store(!own, Ordering::Relaxed);
         self
     }
     /// Whether History journals the step's stores (else its snapshots undo them).
@@ -267,7 +282,7 @@ fn discard<'py>(scene: &Obj<'py>) -> PyResult<Obj<'py>> {
     scene.getattr("selection")?.getattr("discard")
 }
 
-fn vector<'py>(py: Python<'py>, v: &Obj<'py>) -> PyResult<Obj<'py>> {
+pub(super) fn vector<'py>(py: Python<'py>, v: &Obj<'py>) -> PyResult<Obj<'py>> {
     Ok(Bound::new(py, Vec3::from(xyz(v)?))?.into_any())
 }
 
@@ -284,7 +299,7 @@ fn list<'py>(items: &Obj<'py>) -> PyResult<Obj<'py>> {
 
 /// The rigid rotation about `centre`/`axis` that the Python helper
 /// `rotation_matrix` built, operation for operation.
-fn rotation<'py>(py: Python<'py>, centre: &Obj<'py>, axis: &Obj<'py>, deg: f64) -> PyResult<Obj<'py>> {
+pub(super) fn rotation<'py>(py: Python<'py>, centre: &Obj<'py>, axis: &Obj<'py>, deg: f64) -> PyResult<Obj<'py>> {
     let c = xyz(centre)?;
     let a = xyz(axis)?.normalize_or_zero().normalize_or_zero();
     let mut m = DMat4::IDENTITY;
@@ -303,7 +318,7 @@ impl RecordStep {
     /// keeps a real inverse for meshes History does not journal.
     #[getter]
     fn doc_undo(&self) -> bool {
-        self.doc_undo
+        self.doc_undo.load(Ordering::Relaxed)
     }
     #[getter]
     fn history_name(&self) -> &'static str {
@@ -389,11 +404,11 @@ impl RecordStep {
     fn undo(slf: &Bound<'_, Self>, scene: &Obj<'_>) -> PyResult<()> {
         let py = slf.py();
         let me = slf.get();
-        let own = me.own.lock().unwrap().as_ref().map(|t| t.clone_ref(py));
-        let txn = match own {
+        let own = me.own.lock().unwrap().as_ref().map(|t| t.clone_ref(py)).filter(|_| !me.explicit);
+        let txn = if me.explicit { None } else { match own {
             Some(t) => Some(t.into_bound(py)),
             None => slf.as_any().getattr_opt("_doc_txn")?.filter(|t| !t.is_none()),
-        };
+        } };
         if let Some(txn) = txn {
             py.import("core.doc_model")?.call_method0("flush")?;
             txn.call_method0("undo")?;

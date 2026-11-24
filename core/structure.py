@@ -107,18 +107,8 @@ def _patch(group, recipe, registry):
     return {k: v for k, v in fields.items() if old.get(k) != v and (v or k in old)}
 
 
-class _EnsureStructureLayers(EnsureLayersCommand):
-    def do(self, scene):
-        from ingetrazo_core import structure_folder_state, apply_folder_parents
-        self._folders = structure_folder_state(scene)
-        super().do(scene)
-        apply_folder_parents(scene, self._template)
-        scene.version += 1
-
-    def undo(self, scene):
-        from ingetrazo_core import restore_structure_folders
-        super().undo(scene)
-        restore_structure_folders(scene, self._folders)
+# The structure tree's tags, folders and nesting: a native step.
+from ingetrazo_core import EnsureStructureLayersCommand as _EnsureStructureLayers  # noqa: E402
 
 
 class _MoveTag(Command):

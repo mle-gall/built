@@ -39,18 +39,20 @@ def test_render_job(window, monkeypatch, tmp_path, cancel):
     monkeypatch.setattr(rb, "write_job", write_job)
     monkeypatch.setattr(rb, "command", lambda *_: ["mock-blender", "--background"])
     process_class = MagicMock()
-    monkeypatch.setattr(render_blender, "QProcess", process_class)
+    from plugins import _blender_panel
+    monkeypatch.setattr(_blender_panel.subprocess, "Popen", process_class)
     proc = process_class.return_value
     panel = render_blender.create_panel(ExtensionApp(window, "render_blender"), lambda: None)
     panel.event("width", "commit", 384)
     panel.event("engine", "commit", "cycles")
     panel.event("render", "invoke", None)
-    proc.start.assert_called_once_with("mock-blender", ["--background"])
+    assert process_class.call_args.args[0] == ["mock-blender", "--background"]
     assert write_job.call_args.kwargs["width"] == 384
     assert write_job.call_args.kwargs["engine"] == "cycles"
     assert window._chrome_jobs == [panel.job]
-    proc.readAllStandardOutput.return_value = b"INGETRAZO stats Rendering 32 / 64 samples\n"
-    proc.readyReadStandardOutput.connect.call_args.args[0]()
+    (panel.work / "blender.log").write_bytes(b"INGETRAZO stats Rendering 32 / 64 samples\n")
+    proc.poll.return_value = None
+    panel._poll_process()
     assert panel.fraction == panel.job.fraction == .5
     if cancel:
         panel.job.cancel()
@@ -60,7 +62,8 @@ def test_render_job(window, monkeypatch, tmp_path, cancel):
         image = QImage(8, 8, QImage.Format_RGB32)
         image.fill(0x557788)
         assert image.save(str(panel.work / "render.png"))
-    proc.finished.connect.call_args.args[0](0)
+    proc.poll.return_value = 0
+    panel._poll_process()
     assert not window._chrome_jobs
     assert panel.status == ("Cancelled" if cancel else "Complete")
     preview = [i for s in panel.sections() for i in s["items"] if i["kind"] == "image"]

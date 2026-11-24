@@ -359,7 +359,7 @@ def test_native_menu_search_and_persisted_keyboard_binding(tmp_path):
     from PySide6.QtCore import QSettings
     from core.scene import Scene
     from formats.igz import save_scene
-    from views.shortcuts import _store_key
+    from core.shortcuts import _store_key
     model = tmp_path / "empty.built"
     save_scene(Scene(), model)
     profile, home = tmp_path / "profile", tmp_path / "home"
