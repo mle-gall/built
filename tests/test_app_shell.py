@@ -231,6 +231,7 @@ def test_winit_tool_cursors_use_the_same_art_for_tools_and_navigation(host, monk
 
     monkeypatch.setattr(icons, "tool_cursor", lambda *a: pytest.fail("Requested a Qt tool bitmap"))
     host.window._activate_tool("line")
+    host.view._mirror_cursor()
     assert host._cursor == "tool:line"
     art, hotspot = tool_cursor_art("line", 32)
     assert len(art) == 32 * 32 * 4 and tuple(hotspot) == (6, 42)

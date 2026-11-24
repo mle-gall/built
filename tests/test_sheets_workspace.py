@@ -587,3 +587,29 @@ def test_export_pdf_from_the_workspace(host, tmp_path, monkeypatch):
     doc = pymupdf.open(str(out))                                     # the Rust writer's
     assert doc.page_count == 1 and "Inter" in " ".join(f[3] for f in doc[0].get_fonts())
     assert "Top (plan)" in doc[0].get_text()
+
+
+def test_scene_menu_reads_saved_frame_pixels_without_touching_live_lens(host, monkeypatch):
+    from ingetrazo_render import render_scene_photo
+    scene = host.viewport.scene
+    view = scene.saved_views[0]
+    lens = host.viewport.camera.lens_dict()
+    valid = [str(id(scene)), str(scene.content_version), view.name]
+    called = []
+
+    def pixels(w, h, **options):
+        called.append((w, h))
+        assert options["scene"].edit_group is None
+        assert options["camera"](None) is not host.viewport.camera
+        return 2, 2, bytes((200, 2, 3, 128, 200, 2, 3, 128,
+                            3, 4, 205, 200, 3, 4, 205, 200))
+
+    monkeypatch.setattr(host.view, "render_pixels", pixels)
+    assert render_scene_photo(host.window, json.dumps(["old", *valid[1:]])) is None
+    assert render_scene_photo(host.window, json.dumps([valid[0], "old", valid[2]])) is None
+    assert render_scene_photo(host.window, json.dumps([*valid[:2], "gone"])) is None
+    assert not called
+    w, h, rgba = render_scene_photo(host.window, json.dumps(valid))
+    assert len(called) == 1 and (w, h) == (96, 64)
+    assert list(rgba[:4]) == [200, 2, 3, 255] and list(rgba[-4:]) == [3, 4, 205, 255]
+    assert host.viewport.camera.lens_dict() == lens

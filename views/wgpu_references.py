@@ -22,10 +22,12 @@ def _texture(image, fallback, limit):
     return fit_reference_rgba(image.width(), image.height(), bytes(image.constBits()), limit)
 
 
-def sync(view, style):
+def sync(view, style, *, scene=None):
     """Keep per-layer GPU allocations across frames, including peer/capture cameras."""
     source = view.source_viewport
-    scene = source.scene if source is not None else view.scene
+    frame = scene is not None
+    if scene is None:
+        scene = source.scene if source is not None else view.scene
     terrain = getattr(scene, 'terrain', None)
     tiles = getattr(scene, 'tile_layer', None)
     survey = getattr(scene, 'photo_mesh', None)
@@ -50,6 +52,13 @@ def sync(view, style):
                fade=(0., 0., 0., 0.), depth=True):
         texture = _texture(image, fallback, renderer.max_texture_size())
         updates.append((key, geometry, *texture, opacity, fade, depth))
+
+    def visible(entity):
+        off = getattr(scene, "hidden_reference_tags", None)
+        if off is None:
+            return scene.entity_visible(entity)
+        from core.layers import layer_of
+        return layer_of(entity) not in off and not scene.entity_hidden(entity)
 
     datum = getattr(scene, 'georef', None)
     if terrain is not None and terrain.visible:
@@ -77,7 +86,7 @@ def sync(view, style):
                 positions, uvs = zip(*tiles.quad_local(datum, x, y))
                 geometry = _vertices([p.toTuple() for p in positions], uvs, origin)
                 upload(key, geometry, image, opacity=tiles.opacity, depth=False)
-    if survey is not None and survey.visible and scene.entity_visible(survey):
+    if survey is not None and survey.visible and visible(survey):
         for index, material in enumerate(survey.materials):
             key = f'photo/{index}'
             image = survey.images.get(index)
@@ -86,10 +95,10 @@ def sync(view, style):
                 geometry = _vertices(survey.vertices, survey.uvs, origin, triangles)
                 upload(key, geometry, image, (158, 153, 143))
     if images:
-        amount = source._edit_rest_fade(None) if source is not None else 0.
+        amount = source._edit_rest_fade(None) if source is not None and not frame else 0.
         fade = (*style.get('fade_color', (1., 1., 1.)), amount)
         for i, plane in enumerate(images):
-            if amount is None or not scene.entity_visible(plane):
+            if amount is None or not visible(plane):
                 continue
             corners = tuple(p.toTuple() for p in plane.corners())
             key = f'image/{i}'
