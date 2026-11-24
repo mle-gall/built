@@ -42,9 +42,11 @@ fn unpack<'py, const N: usize>(value: &Obj<'py>) -> PyResult<[Obj<'py>; N]> {
     row.try_into()
         .map_err(|_| pyo3::exceptions::PyValueError::new_err("invalid row"))
 }
+mod annotation_tool_api;
 mod arc_base_api;
 mod arc_tool_api;
 mod center_arc_tool_api;
+mod dimension_tool_api;
 mod eye_host_api;
 mod fillet_host_api;
 mod first_person_host_api;
@@ -64,6 +66,7 @@ mod rotate_tool_api;
 mod rotated_rectangle_tool_api;
 mod scale;
 mod select_tool_api;
+mod text_tool_api;
 mod texture;
 mod texture_preview;
 mod three_point_arc_tool_api;
@@ -165,6 +168,16 @@ fn registration(module: &str, name: &str) -> Option<(&'static [Method], &'static
             center_arc_tool_api::METHODS,
             stringify!(center_arc_tool_api),
         ),
+        ("tools.annotation_host", "_AnnotationTool") => (
+            annotation_tool_api::METHODS,
+            stringify!(annotation_tool_api),
+        ),
+        ("tools.annotation_host", "DimensionTool") => {
+            (dimension_tool_api::METHODS, stringify!(dimension_tool_api))
+        }
+        ("tools.annotation_host", "TextTool") => {
+            (text_tool_api::METHODS, stringify!(text_tool_api))
+        }
         ("tools.pushpull", "PushPullTool") => (pushpull::METHODS, stringify!(pushpull)),
         _ => return None,
     })
