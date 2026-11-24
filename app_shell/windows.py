@@ -127,7 +127,7 @@ def transfer(src_win, doc, dst_host) -> bool:
         except Exception:  # noqa: BLE001
             pass
         w._update_title()
-    from views import wgpu_start
+    from ingetrazo_render import wgpu_start
     wgpu_start.hide(dst)
     src_win._host.request_frame()
     dst_host.request_frame()

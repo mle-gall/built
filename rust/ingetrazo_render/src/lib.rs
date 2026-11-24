@@ -59,6 +59,7 @@ mod sheet_runtime;
 mod settings_rows;
 mod settings_host;
 mod library_host;
+mod start_host;
 pub mod ui;
 mod host_context;
 mod inspector;
@@ -3411,7 +3412,8 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<SceneUpload>()?;
     m.add_class::<Renderer>()?;
     // The Library needs library_view's functions and the sheet host above.
-    library_host::register(m)
+    library_host::register(m)?;
+    start_host::register(m)
 }
 #[cfg(test)]
 mod tests {

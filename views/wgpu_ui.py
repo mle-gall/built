@@ -372,7 +372,7 @@ def chrome_frame(view):
         wgpu_tabs.before_frame(view, win)
         _sheet_and_jobs(view, win)
         _chrome_form(view, win)
-        from views import wgpu_start
+        from ingetrazo_render import wgpu_start
         wgpu_start.before_frame(view, win)
         from ingetrazo_render import chrome_sheet
         chrome_sheet.before_frame(view, win)
@@ -403,7 +403,7 @@ def before_frame(view) -> None:
         menus.present(view)
     _sheet_and_jobs(view, win)
     _chrome_form(view, win)
-    from views import wgpu_start
+    from ingetrazo_render import wgpu_start
     wgpu_start.before_frame(view, win)
     from ingetrazo_render import chrome_sheet
     chrome_sheet.before_frame(view, win)
@@ -2552,7 +2552,7 @@ def _run(win, actions, source_view=None) -> None:
             chrome_sheet.action(win, arg)
             continue
         if kind == "start":
-            from views import wgpu_start
+            from ingetrazo_render import wgpu_start
             wgpu_start.action(win, arg)
             continue
         if kind == "sheets":

@@ -104,11 +104,11 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
     """Top-level IngeTrazo window."""
 
     def show_home(self):
-        from views import wgpu_start
+        from ingetrazo_render import wgpu_start
         wgpu_start.show(self)
 
     def _dismiss_home(self):
-        from views import wgpu_start
+        from ingetrazo_render import wgpu_start
         wgpu_start.hide(self)
 
     def __init__(self, defer_extensions: bool = False) -> None:
@@ -4101,7 +4101,7 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         this small size instead (``render_image``: resident geometry, no
         egui, the surface untouched): no repack and no full-size render,
         so it stays cheap on a huge model."""
-        from views.wgpu_start import blank_picture
+        from ingetrazo_render.wgpu_start import blank_picture
         view = getattr(doc, "stand_in", None)
         if view is not None and getattr(view, "renderer", None) is not None:
             image = None
