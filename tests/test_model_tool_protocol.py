@@ -52,15 +52,13 @@ def test_scale_form_keeps_other_axes_and_allows_undo_past_the_placement(monkeypa
     from types import SimpleNamespace
     from core.group_scale import group_scale
     from core.history import InsertGroupCommand
-    from ingetrazo_render import chrome_dialogs
     from ingetrazo_render import chrome_forms
-    from views.scale_dialog import ask_scale
+    from views.scale_editor import ask_scale
 
     vp = _Vp(Scene())
     group, _ = _pair()
     vp.history.execute(InsertGroupCommand(group))
     form_stack = []
-    monkeypatch.setattr(chrome_dialogs, "in_shell", lambda: True)
     monkeypatch.setattr(chrome_forms, "show", lambda window, form: form_stack.append(form))
     ask_scale(SimpleNamespace(viewport=vp), group)
     form, = form_stack
