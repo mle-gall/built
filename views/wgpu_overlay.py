@@ -5,8 +5,7 @@ from dataclasses import dataclass
 import math
 
 import numpy as np
-from core.input_types import QPointF, QRectF, Qt
-from views.paint_types import QColor, QFont, QPen, QPolygonF
+from core.input_types import Qt
 
 
 @dataclass(frozen=True)
@@ -37,37 +36,25 @@ def rasterize(primitives, width, height, scale, annotations=None):
 
 
 def paint_layer(painter, primitives, annotations=None):
+    """The document's annotations (``annotations(painter)``), then the tool
+    primitives, on the annotation canvas (``AnnotationCanvas.draw_primitives``)."""
     if annotations is not None:
         annotations(painter)
-    for primitive in primitives:
-        if primitive.kind == "snap":
-            from types import SimpleNamespace
-            c = QColor(primitive.color)
-            snap = SimpleNamespace(kind=primitive.snap_kind, point=primitive.points[0],
-                                   color=c.getRgbF()[:3], guide=None, guides=(),
-                                   axis=None, label=primitive.text, context=None)
-            draw_snap_indicator(painter, snap, lambda p: p,
-                                lambda a, b: (a, b), labels=False)
-            continue
-        pen = QPen(QColor(primitive.color), primitive.width, primitive.pen_style)
-        if primitive.dash:
-            pen.setDashPattern(primitive.dash)
-            pen.setCapStyle(Qt.FlatCap)
-        painter.setPen(pen)
-        painter.setBrush(QColor(primitive.fill) if primitive.fill else Qt.NoBrush)
-        points = [QPointF(*p) for p in primitive.points]
-        if primitive.kind == "polyline":
-            painter.drawPolyline(QPolygonF(points))
-        elif primitive.kind == "polygon":
-            painter.drawPolygon(QPolygonF(points))
-        elif primitive.kind == "rectangle":
-            painter.drawRect(QRectF(points[0], points[1]).normalized())
-        elif primitive.kind == "point":
-            painter.drawEllipse(points[0], primitive.width, primitive.width)
-        elif primitive.kind == "text":
-            painter.drawText(points[0], primitive.text)
-        else:
-            raise ValueError(f"Unknown overlay primitive: {primitive.kind}")
+    if primitives:
+        painter.draw_primitives([
+            (p.kind, [(float(x), float(y)) for x, y in p.points], _colour(p.color),
+             float(p.width), str(p.text), None if not p.fill else _colour(p.fill),
+             [float(v) for v in p.dash],
+             int(getattr(p.pen_style, "value", p.pen_style)), p.snap_kind)
+            for p in primitives])
+
+
+def _colour(c):
+    """A colour string as Qt names one, from a string or a QColor."""
+    if isinstance(c, str):
+        return c
+    r, g, b, a = c.getRgb()
+    return f"#{a:02x}{r:02x}{g:02x}{b:02x}"
 
 
 def pixels(image):

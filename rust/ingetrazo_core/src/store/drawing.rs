@@ -15,6 +15,48 @@ pub(super) fn point(v: V3) -> Point {
     [v.0, v.1, v.2]
 }
 
+pub(crate) fn drawing_plane(
+    points: impl Iterator<Item = V3> + Clone,
+    h: Hypot,
+) -> Option<[Point; 2]> {
+    let o = points.clone().next().unwrap_or(V3(0., 0., 0.));
+    let offsets = || points.clone().map(|p| p.sub(o));
+    let horizontal = Some([point(o), [0., 0., 1.]]);
+    let Some(dir) = offsets().find(|&d| length(d, h) > 1e-6) else {
+        return horizontal;
+    };
+    let dir = normalized(dir, h);
+    let Some(cross) = offsets()
+        .map(|d| dir.cross(d, h))
+        .find(|&d| length(d, h) > 1e-6)
+    else {
+        return horizontal;
+    };
+    let n = normalized(cross, h);
+    offsets()
+        .all(|d| d.dot(n, h).abs() <= 1e-4)
+        .then(|| [point(o), point(n)])
+}
+
+pub(crate) fn rebuild_plane(
+    planes: impl Iterator<Item = (V3, V3)> + Clone,
+    points: &[Point],
+    cap: usize,
+    h: Hypot,
+) -> Option<[Point; 2]> {
+    let (o, n) = planes.clone().find(|&(o, n)| {
+        n.dot(n, h) >= 0.5
+            && points
+                .iter()
+                .all(|&p| vector(p).sub(o).dot(n, h).abs() < 1e-4)
+    })?;
+    let count = planes
+        .filter(|&(p, m)| p.sub(o).dot(n, h).abs() < 1e-4 && m.dot(n, h).abs() > 0.999)
+        .take(cap.saturating_add(1))
+        .count();
+    (count <= cap).then(|| [point(o), point(n)])
+}
+
 impl Store {
     pub fn drawing_plane(&self, extra: &[Point], h: Hypot) -> Option<[Point; 2]> {
         let vertices = self.state.order[0].live(&self.state.slots[0]);
@@ -25,23 +67,7 @@ impl Store {
                 .chain(extra.iter().copied())
                 .map(vector)
         };
-        let o = points().next().unwrap_or(V3(0., 0., 0.));
-        let offsets = || points().map(|p| p.sub(o));
-        let horizontal = Some([point(o), [0., 0., 1.]]);
-        let Some(dir) = offsets().find(|&d| length(d, h) > 1e-6) else {
-            return horizontal;
-        };
-        let dir = normalized(dir, h);
-        let Some(cross) = offsets()
-            .map(|d| dir.cross(d, h))
-            .find(|&d| length(d, h) > 1e-6)
-        else {
-            return horizontal;
-        };
-        let n = normalized(cross, h);
-        offsets()
-            .all(|d| d.dot(n, h).abs() <= 1e-4)
-            .then(|| [point(o), point(n)])
+        drawing_plane(points(), h)
     }
 
     fn face_plane(&self, face: u32, h: Hypot) -> Option<(V3, V3)> {
@@ -73,21 +99,7 @@ impl Store {
 
     pub fn rebuild_plane(&self, points: &[Point], cap: usize, h: Hypot) -> Option<[Point; 2]> {
         let faces = self.state.order[2].live(&self.state.slots[2]);
-        let (o, n) = faces.iter().filter_map(|&f| self.face_plane(f, h)).find(|&(o, n)| {
-            n.dot(n, h) >= 0.5
-                && points
-                    .iter()
-                    .all(|&p| vector(p).sub(o).dot(n, h).abs() < 1e-4)
-        })?;
-        let count = faces
-            .iter()
-            .filter_map(|&f| self.face_plane(f, h))
-            .filter(|&(p, m)| {
-                p.sub(o).dot(n, h).abs() < 1e-4 && m.dot(n, h).abs() > 0.999
-            })
-            .take(cap.saturating_add(1))
-            .count();
-        (count <= cap).then(|| [point(o), point(n)])
+        rebuild_plane(faces.iter().filter_map(|&f| self.face_plane(f, h)), points, cap, h)
     }
 
     /// Stamp untagged edges whose two ends lie on one path segment. This

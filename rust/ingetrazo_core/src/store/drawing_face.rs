@@ -199,7 +199,7 @@ impl Outline {
 }
 
 impl Outline {
-    pub(super) fn interior(&self) -> Option<P> {
+    pub(crate) fn interior(&self) -> Option<P> {
         if self.rings.first().is_none_or(|r| r.len() < 3) {
             return None;
         }
@@ -239,8 +239,6 @@ impl Outline {
 impl Store {
     pub fn winding_flips(&self, old: Option<&Store>, h: Hypot, compensated: bool) -> Vec<u128> {
         use super::keys::Kind;
-        use crate::store::geometry::py_sum;
-        use std::collections::HashMap;
         let faces = |s: &Store| s.state.order[2].live(&s.state.slots[2]);
         let mut old_regions = Vec::new();
         if let Some(original) = old {
@@ -253,26 +251,33 @@ impl Store {
                 old_regions.push((lo, hi, region));
             }
         }
-        let mut groups = Vec::<(V3, Vec<(u32, V3)>)>::new();
+        let faces = faces(self);
+        let current = faces.iter().map(|&f| self.outline(f,h)).collect::<Vec<_>>();
+        let keys = faces.iter().map(|&f| self.key(Kind::Face,f)).collect::<Vec<_>>();
+        let owned = keys.iter().copied().filter(|&k|old.is_some_and(|s|s.slot(Kind::Face,k).is_some())).collect();
+        outline_winding(&current, &keys, &owned, &old_regions, h, compensated, |x|(x.abs()*100.).round_ties_even().to_bits())
+    }
+}
+
+pub(crate) fn outline_winding(current: &[Outline], keys: &[u128], owned: &std::collections::HashSet<u128>,
+    old_regions: &[(P,P,Outline)], h: Hypot, compensated: bool, round_group: impl Fn(f64)->u64) -> Vec<u128> {
+    use crate::store::geometry::py_sum;
+    use std::collections::HashMap;
+        let mut groups = Vec::<(V3, Vec<(usize, V3)>)>::new();
         let mut index = HashMap::new();
-        for f in faces(self) {
-            let r = self.outer_ring(f);
-            let n = self.ring_normal(&r, h);
-            let positions: Vec<_> = r
-                .iter()
-                .map(|&v| *self.state.vpos.get(v as usize))
-                .collect();
+        for (f, outline) in current.iter().enumerate() {
+            let n = outline.normal;
+            let positions = &outline.rings[0];
             let centroid = std::array::from_fn(|k| {
-                py_sum(positions.iter().map(|p| p[k]), compensated) / r.len().max(1) as f64
+                py_sum(positions.iter().map(|p| p[k]), compensated) / positions.len().max(1) as f64
             });
-            let group = [n.0, n.1, n.2, n.dot(vector(centroid), h)]
-                .map(|x| (x.abs() * 100.).round_ties_even().to_bits());
+            let group = [n.0, n.1, n.2, n.dot(vector(centroid), h)].map(&round_group);
             let idx = *index.entry(group).or_insert_with(|| {
                 groups.push((V3(0., 0., 0.), vec![]));
                 groups.len() - 1
             });
             let mut sum = [0.; 3];
-            for (&a, &b) in segments(&positions) {
+            for (&a, &b) in segments(positions) {
                 for k in 0..3 {
                     let (i, j) = ((k + 1) % 3, (k + 2) % 3);
                     sum[k] += (a[i] - b[i]) * (a[j] + b[j]);
@@ -288,13 +293,12 @@ impl Store {
                 continue;
             }
             for (f, n) in rows {
-                let k = self.key(Kind::Face, f);
-                if old.is_some_and(|s| s.slot(Kind::Face, k).is_some()) {
+                let k = keys[f];
+                if owned.contains(&k) {
                     continue;
                 }
-                let target = if old.is_some() {
-                    self.outline(f, h)
-                        .interior()
+                let target = if !old_regions.is_empty() {
+                    current[f].interior()
                         .and_then(|p| {
                             old_regions
                                 .iter()
@@ -314,8 +318,8 @@ impl Store {
             }
         }
         flips
-    }
 }
+
 
 fn pairsig(a: P, b: P) -> [[u64; 3]; 2] {
     let mut pair = [key(a), key(b)];
@@ -523,7 +527,7 @@ impl Store {
 }
 
 impl Outline {
-    fn hole_contains(&self, other: &Outline, compensated: bool) -> bool {
+    pub(crate) fn hole_contains(&self, other: &Outline, compensated: bool) -> bool {
         use crate::store::geometry::py_sum;
         let inner = &other.rings[0];
         if inner.len() < 3 || self.rings.len() < 2 {
@@ -572,13 +576,21 @@ impl Store {
         h: Hypot,
         compensated: bool,
     ) -> (Vec<u128>, Vec<(u128, Vec<u128>)>) {
-        use super::{
-            drawing_plane::{bounds, tris},
-            keys::Kind,
-        };
-        use std::collections::HashMap;
+        use super::keys::Kind;
         let faces = self.live_slots(Kind::Face);
-        let outlines: Vec<_> = faces.iter().map(|&f| self.outline(f, h)).collect();
+        let outlines = faces.iter().map(|&f| self.outline(f,h)).collect::<Vec<_>>();
+        let keys = faces.iter().map(|&f| self.key(Kind::Face,f)).collect::<Vec<_>>();
+        outline_heal_plan(&outlines, &keys, coverage, partial, pad, h, compensated)
+    }
+}
+
+pub(crate) fn heal_partner(area: f64, other: f64, bounds: (P,P), extra: (P,P), parallel: bool, pad: f64) -> bool {
+    parallel && other < area && (0..3).all(|k| extra.0[k] >= bounds.0[k] - pad && extra.1[k] <= bounds.1[k] + pad)
+}
+
+pub(crate) fn outline_heal_plan(outlines: &[Outline], keys: &[u128], coverage: f64, partial: bool, pad: f64, h: Hypot, compensated: bool) -> (Vec<u128>, Vec<(u128,Vec<u128>)>) {
+        use super::drawing_plane::{bounds,tris};
+        use std::collections::HashMap;
         let boxes: Vec<_> = outlines.iter().map(|o| bounds(&o.rings[0])).collect();
         let areas: Vec<_> = outlines
             .iter()
@@ -597,7 +609,7 @@ impl Store {
             let (a, b) = (point(outlines[i].normal), point(outlines[j].normal));
             (a[0] * b[0] + a[1] * b[1] + a[2] * b[2]).abs() > 0.999
         };
-        let mut gone = vec![false; faces.len()];
+        let mut gone = vec![false; outlines.len()];
         let mut removed = vec![];
         for (i, o) in outlines.iter().enumerate() {
             if areas[i] < 1e-4 {
@@ -605,12 +617,10 @@ impl Store {
             }
             let mut covered = 0.;
             for (j, other) in outlines.iter().enumerate() {
-                if gone[j] || areas[j] >= areas[i] || !parallel(i, j) {
+                if gone[j] || !heal_partner(areas[i], areas[j], boxes[i], boxes[j], parallel(i,j), pad) {
                     continue;
                 }
-                if (0..3).all(|k| {
-                    boxes[j].0[k] >= boxes[i].0[k] - pad && boxes[j].1[k] <= boxes[i].1[k] + pad
-                }) && o.contains(&other.rings[0], false)
+                if o.contains(&other.rings[0], false)
                     && !o.hole_contains(other, compensated)
                 {
                     covered += areas[j]
@@ -618,7 +628,7 @@ impl Store {
             }
             if covered > coverage * areas[i] {
                 gone[i] = true;
-                removed.push(self.key(Kind::Face, faces[i]))
+                removed.push(keys[i])
             }
         }
         let mut punch = Vec::<(u128, Vec<u128>)>::new();
@@ -649,18 +659,18 @@ impl Store {
                     });
                     if probes.iter().filter(|&&p| big.solid_at(p)).count() * 2 > probes.len() {
                         let row = *index.entry(j).or_insert_with(|| {
-                            punch.push((self.key(Kind::Face, faces[j]), vec![]));
+                            punch.push((keys[j], vec![]));
                             punch.len() - 1
                         });
-                        punch[row].1.push(self.key(Kind::Face, faces[i]));
+                        punch[row].1.push(keys[i]);
                         break;
                     }
                 }
             }
         }
         (removed, punch)
-    }
 }
+
 
 /// Geometry changes after insertion of a drawn face. All rings are in model space.
 pub(super) enum Division {
