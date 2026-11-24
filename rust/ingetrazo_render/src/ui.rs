@@ -734,6 +734,25 @@ impl Ui {
         ""
     }
 
+    fn scene_move_key(&self, name: &str, mods: u8) -> Option<bool> {
+        if mods != 1 || self.cmd_open || self.ctx.wants_keyboard_input()
+            || !self.menu.as_ref().is_some_and(|(kind, _)| kind == "scenes") {
+            return None;
+        }
+        match name {
+            "ArrowUp" => Some(true),
+            "ArrowDown" => Some(false),
+            _ => None,
+        }
+    }
+
+    fn can_move_scene(&self, earlier: bool) -> bool {
+        let Some(rows) = self.tabs.get(1) else { return false };
+        let Some(i) = rows.iter().position(|row| row.4 == 1) else { return false };
+        let peers = if earlier { &rows[..i] } else { &rows[i+1..] };
+        peers.iter().any(|row| row.3 == rows[i].3)
+    }
+
     /// Keyboard ownership: the chrome takes a key only while one of its
     /// fields has focus, or Escape while one of its popups is open.
     pub fn claims_key(&self, name: &str, mods: u8) -> bool {
@@ -743,6 +762,7 @@ impl Ui {
         // window's ⌘ shortcuts, views/chrome_sheet.py).
         if self.lsheet.open { return true; }
         if self.sheets.shown { return self.sheets_claims_key(name); }
+        if self.scene_move_key(name, mods).is_some() { return true; }
         let filing = self.column.as_ref().is_some_and(|c| c.filing.is_some() || c.row_menu.is_some()
             || c.kind_menu.is_some() || c.head_menu.is_some() || c.prompt.is_some() || c.edits.contains_key("\u{1d}pick"));
         self.column.as_ref().is_some_and(|c| !self.review && c.claims_row_key(name, mods)) || self.sheet.is_some() || self.dialog.is_some() || self.cmd_open || (name == "Escape" && (self.view_open || self.menu.is_some() || self.form.is_some() || filing
@@ -805,6 +825,12 @@ impl Ui {
         }
         if self.lsheet.open && !self.cmd_open { return self.lsheet_key(name, pressed, mods); }
         if self.sheets.shown { return self.sheets_key(name, pressed, mods); }
+        if let Some(earlier) = self.scene_move_key(name, mods) {
+            if pressed && self.can_move_scene(earlier) {
+                self.actions.push(if earlier { "tab:scene:up" } else { "tab:scene:down" }.into());
+            }
+            return true;
+        }
         if name == "Escape" && self.panels.data["terrain"].is_object() && !self.ctx.wants_keyboard_input() {
             if pressed { self.actions.push(r#"panel:["terrain.close",null]"#.into()); }
             return true;
@@ -1409,24 +1435,12 @@ impl Ui {
                                     rows.push(("scene:down", "Move later".into()));
                                     rows.push(("scene:delete", format!("Delete “{c}”")));
                                 }
-                                let scenes = self.tabs.get(1).map(Vec::as_slice).unwrap_or_default();
-                                let selected = scenes.iter().position(|s| s.4 == 1);
                                 for (id, label) in rows {
-                                    let arrow = match id {
-                                        "scene:up" => Some((egui::Key::ArrowUp, "Alt+↑")),
-                                        "scene:down" => Some((egui::Key::ArrowDown, "Alt+↓")),
-                                        _ => None,
+                                    let (hint, enabled) = match id {
+                                        "scene:up" => ("Alt+↑", self.can_move_scene(true)),
+                                        "scene:down" => ("Alt+↓", self.can_move_scene(false)),
+                                        _ => ("", true),
                                     };
-                                    let enabled = arrow.is_none() || selected.is_some_and(|i| {
-                                        let peers = if id == "scene:up" { &scenes[..i] } else { &scenes[i+1..] };
-                                        peers.iter().any(|row| row.3 == scenes[i].3)
-                                    });
-                                    if let Some((key, _)) = arrow {
-                                        if enabled && !ctx.wants_keyboard_input() && ui.input_mut(|i| i.consume_key(egui::Modifiers::ALT, key)) {
-                                            self.actions.push(format!("tab:{id}"));
-                                        }
-                                    }
-                                    let hint = arrow.map_or("", |(_, hint)| hint);
                                     if menu_row(ui, &(id.to_owned(), label, hint.into(), "check".into(), -1, enabled)) {
                                         clicked = Some(format!("tab:{id}"));
                                     }
@@ -2963,6 +2977,30 @@ fn test_chrome() -> Option<Ui> {
     let adapter = pollster::block_on(instance.request_adapter(&Default::default()))?;
     let (device, _) = pollster::block_on(adapter.request_device(&Default::default(), None)).unwrap();
     Some(Ui::new(&device, wgpu::TextureFormat::Bgra8UnormSrgb))
+}
+
+#[test]
+fn scene_chooser_owns_modified_arrows_and_moves_within_one_folder() {
+    let Some(mut ui) = test_chrome() else { return };
+    let row = |name: &str, folder: &str, marked: i8| {
+        (name.into(), name.into(), String::new(), folder.into(), marked, true)
+    };
+    ui.tabs = vec![vec![], vec![row("A","I",1), row("B","I",0), row("C","II",0)]];
+    assert!(!ui.claims_key("ArrowUp", 1));
+    ui.menu = Some(("scenes".into(), Rect::ZERO));
+    assert!(ui.claims_key("ArrowUp", 1));
+    assert!(!ui.claims_key("ArrowUp", 0));
+    assert!(ui.key("ArrowUp", true, 1));
+    assert!(ui.take_actions().is_empty());
+    assert!(ui.key("ArrowDown", true, 1));
+    assert!(ui.key("ArrowDown", false, 1));
+    assert_eq!(ui.take_actions(), ["tab:scene:down"]);
+    ui.tabs[1][0].4 = 0;
+    ui.tabs[1][1].4 = 1;
+    assert!(ui.key("ArrowDown", true, 1));
+    assert!(ui.take_actions().is_empty());
+    assert!(ui.key("ArrowUp", true, 1));
+    assert_eq!(ui.take_actions(), ["tab:scene:up"]);
 }
 
 #[test]
