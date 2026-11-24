@@ -12,6 +12,7 @@ from ingetrazo_core import Vec3 as V
 
 from core.history import ExplodeCurvesCommand, History
 from core.scene import Scene
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 
 
 def _circle(sc, c, r=1.0, n=24):
@@ -45,57 +46,32 @@ def test_the_circle_becomes_24_segments_and_undo_rejoins_it():
     assert mesh.curve_edges(one) == [one]
 
 
-def test_the_context_menu_offers_it_only_on_a_curve():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        sc = win.viewport.scene
-        _circle(sc, V(0, 0, 0))
-        line = sc.mesh.add_edge(V(3, 0, 0), V(4, 0, 0))
-        arc = next(e for e in sc.mesh.edges if e.curve is not None)
-        win._on_explode_curve()                # nothing selected: no-op
-        assert arc.curve is not None
-        sc.selection.add(line)
-        win._on_explode_curve()                # a plain line: no-op
-        assert arc.curve is not None
-        sc.selection.add(arc)
-        win._on_explode_curve()
-        assert all(e.curve is None for e in sc.mesh.edges)
-        win._on_undo()
-        assert len(sc.mesh.curve_edges(arc)) == 24
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_the_context_menu_offers_it_only_on_a_curve(native_window):
+    win = native_window
+    sc = win.viewport.scene
+    _circle(sc, V(0, 0, 0))
+    line = sc.mesh.add_edge(V(3, 0, 0), V(4, 0, 0))
+    arc = next(e for e in sc.mesh.edges if e.curve is not None)
+    win._on_explode_curve()                # nothing selected: no-op
+    assert arc.curve is not None
+    sc.selection.add(line)
+    win._on_explode_curve()                # a plain line: no-op
+    assert arc.curve is not None
+    sc.selection.add(arc)
+    win._on_explode_curve()
+    assert all(e.curve is None for e in sc.mesh.edges)
+    win._on_undo()
+    assert len(sc.mesh.curve_edges(arc)) == 24
 
 
-def test_right_click_shows_it_on_a_curve_not_on_a_line(monkeypatch):
-    from PySide6.QtCore import QPoint
-    from PySide6.QtWidgets import QMenu
-    import views.main_window as mw
-    from views.main_window import MainWindow
-
-    class _Menu(QMenu):
-        opened: list = []
-
-        def exec(self, *a, **k):
-            _Menu.opened.append(self)
-            return None
-
-    monkeypatch.setattr(mw, "QMenu", _Menu)
-    win = MainWindow()
-    try:
-        sc = win.viewport.scene
-        _circle(sc, V(0, 0, 0))
-        line = sc.mesh.add_edge(V(3, 0, 0), V(4, 0, 0))
-        arc = next(e for e in sc.mesh.edges if e.curve is not None)
-
-        def entries(sel):
-            _Menu.opened.clear()
-            sc.select(sel)
-            win.show_viewport_context_menu(QPoint(0, 0))
-            return [a.text() for a in _Menu.opened[0].actions()]
-        assert "Explode Curve" in entries(sc.mesh.curve_edges(arc))
-        assert "Explode Curve" not in entries([line])
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_right_click_shows_it_on_a_curve_not_on_a_line(native_window):
+    from views import context_menu
+    win = native_window
+    sc = win.viewport.scene
+    _circle(sc, V(0, 0, 0))
+    line = sc.mesh.add_edge(V(3, 0, 0), V(4, 0, 0))
+    arc = next(e for e in sc.mesh.edges if e.curve is not None)
+    sc.select(sc.mesh.curve_edges(arc))
+    assert context_menu.build(win, win.view).find("explodecurve")
+    sc.select([line])
+    assert not context_menu.build(win, win.view).find("explodecurve")

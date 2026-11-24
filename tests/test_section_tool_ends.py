@@ -63,51 +63,45 @@ def test_one_plane_then_back_to_select():
     assert win.prompted and win.activated == ["select"]
 
 
-def test_the_name_prompt_can_be_switched_off(monkeypatch):
-    from views.main_window import MainWindow
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
+
+
+def test_the_name_prompt_can_be_switched_off(monkeypatch, native_window):
+    from core.settings import settings as current_settings
     from views import chrome_forms
     from core.history import PlaceSectionPlaneCommand
     from core.section import SectionPlane
 
     forms = []
     monkeypatch.setattr(chrome_forms, "show", lambda _, form: forms.append(form))
-    win = MainWindow()
-    settings = QSettings()
-    previous = settings.value("section/ask_name")
-    try:
-        settings.setValue("section/ask_name", "1")
-        vp = win.viewport
-        plane = SectionPlane(QVector3D(0, 0, 0), QVector3D(0, 0, 1),
-                             name="Sección 1", symbol="A")
-        vp.history.execute(PlaceSectionPlaneCommand(plane))
-        win.prompt_section_name(plane)
-        form = forms.pop()
-        form.receive("name", "Cancelled")
-        form.receive("skip", "1")
-        form.press("cancel")
-        assert plane.name == "Sección 1" and settings.value("section/ask_name") == "1"
+    win = native_window
+    settings = current_settings()
+    settings.setValue("section/ask_name", "1")
+    vp = win.viewport
+    plane = SectionPlane(QVector3D(0, 0, 0), QVector3D(0, 0, 1),
+                         name="Sección 1", symbol="A")
+    vp.history.execute(PlaceSectionPlaneCommand(plane))
+    win.prompt_section_name(plane)
+    form = forms.pop()
+    form.receive("name", "Cancelled")
+    form.receive("skip", "1")
+    form.press("cancel")
+    assert plane.name == "Sección 1" and settings.value("section/ask_name") == "1"
 
-        win.prompt_section_name(plane)
-        form = forms.pop()
-        form.receive("name", "North")
-        form.receive("symbol", "三四五六")
-        form.receive("skip", "1")
-        form.press("ok")
-        assert (plane.name, plane.symbol) == ("North", "三四五")
-        assert settings.value("section/ask_name") == "0"
-        win.prompt_section_name(plane)
-        assert not forms
-        win.prompt_section_name(plane, automatic=False)
-        assert all(row[0] != "skip" for row in forms.pop().model.rows())
-        vp.history.undo()
-        assert (plane.name, plane.symbol) == ("Sección 1", "A")
-    finally:
-        if previous is None:
-            settings.remove("section/ask_name")
-        else:
-            settings.setValue("section/ask_name", previous)
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    win.prompt_section_name(plane)
+    form = forms.pop()
+    form.receive("name", "North")
+    form.receive("symbol", "三四五六")
+    form.receive("skip", "1")
+    form.press("ok")
+    assert (plane.name, plane.symbol) == ("North", "三四五")
+    assert settings.value("section/ask_name") == "0"
+    win.prompt_section_name(plane)
+    assert not forms
+    win.prompt_section_name(plane, automatic=False)
+    assert all(row[0] != "skip" for row in forms.pop().model.rows())
+    vp.history.undo()
+    assert (plane.name, plane.symbol) == ("Sección 1", "A")
 
 
 # ---- #62, second round -------------------------------------------------

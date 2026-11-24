@@ -257,10 +257,10 @@ class Host:
         self._picture_seen = False
 
     def not_here(self, feature):
-        """Say that ``feature`` needs the classic app (and how to get there)."""
+        """Show which requested operation was unavailable."""
         self.not_here_log.append(feature)
         self.window.statusBar().showMessage(
-            f"{feature} is not in the native app yet — File ▸ Open in Classic App", 6000)
+            f"{feature} is unavailable in this window", 6000)
 
     # ---- one turn of the loop ------------------------------------------
     def idle(self):
@@ -293,11 +293,9 @@ class Host:
         sooner(qt_host.next_timer_ms())
         if getattr(view, "_inference_future", None) is not None or getattr(view, "_inference_queued", False):
             sooner(33)
-        # File changes of linked documents arrive as Qt posted events,
-        # which winit does not see: look for them once a second.
         watch = self.window.__dict__.get("_links_watch")
-        if watch is not None and getattr(watch, "_fs", None) is not None and watch._fs.files():
-            sooner(1000)
+        if watch is not None:
+            sooner(watch.poll())
         if self._after_picture and self._picture_seen:
             fn = self._after_picture.pop(0)
             self._guard("after picture", fn)
@@ -653,7 +651,7 @@ class Host:
                     self.viewport.camera.fit_box(*bounds, free=None if w._doc.model_views.visible else free_area(w))
         elif kind == "verb" and arg in _VERBS:
             # The ported prompts (views/chrome_forms.py), by name: the
-            # window's own MainWindow methods, borrowed.
+            # window's registered document handlers.
             self._guard(f"verb {arg}", getattr(w, _VERBS[arg]))
         else:
             out = self._guard(f"menu {action}", w.run_command, action)
@@ -689,7 +687,6 @@ class Host:
     def state(self):
         """A few facts for scripted runs and the smoke test."""
         from app_shell import windows
-        from app_shell.window import BORROWED
         from views import wgpu_tabs
         scene = self.viewport.scene
         mesh = scene.mesh
@@ -736,7 +733,7 @@ class Host:
             "start_page": bool(getattr(win.__dict__.get("_start_page"), "wanted", False)),
             "errors": len(self.errors),
             "widget_gaps": self.missing(),
-            "borrowed": len(BORROWED),
+            "classic_window_loaded": "views.main_window" in sys.modules,
             "blocked_widgets": list(guard.blocked) if guard is not None else [],
             "not_here": list(self.not_here_log),
             "custom_cursors": len(self._custom_cursors),
@@ -768,7 +765,7 @@ class Host:
         return [t for t in native.pasteboard_types()[0] if "ingetrazo" in t]
 
     def missing(self):
-        """Qt widget/window API the borrowed code asked for and the shell
+        """Widget/window API the document or extension asked for and the shell
         lacks (probes of the code's own lazily set attributes left out)."""
         from PySide6.QtWidgets import QWidget
         from PySide6.QtWidgets import QMainWindow

@@ -25,14 +25,12 @@ def test_modelling_session_uses_native_handlers(tmp_path):
 from pathlib import Path
 def setup(app):
     def snapshot():
-        from app_shell.window import BORROWED
         Path(__file__).with_suffix(".json").write_text(json.dumps({
             "classic": sorted(set(sys.modules) & {
                 "views.main_window", "views.scene_tabs", "views.side_tree",
                 "views.tray", "views.layers_panel", "views.outliner",
             }),
             "qt_pasteboard": "formats.clip" in sys.modules,
-            "borrows": sorted(BORROWED),
             "scenes": [v.name for v in app.scene.saved_views],
         }))
     app.add_menu_action("Inspect the session", snapshot)
@@ -123,7 +121,7 @@ quit
               if l.startswith("[built] state ")]
     (initial, selected, pasted, in_place, cut, restored, grouped, before_line,
      drawn, move, rotate, pushpull, saved, reopened) = states[:14]
-    assert all(s["errors"] == 0 and s["borrowed"] == 0 for s in states), result.stderr
+    assert all(s["errors"] == 0 and not s["classic_window_loaded"] for s in states), result.stderr
     assert selected["selection"] > 0 and pasted["edges"] > initial["edges"]
     assert in_place["clipboard"] and in_place["edges"] >= pasted["edges"]
     assert cut["edges"] < in_place["edges"] and restored["edges"] == in_place["edges"]
@@ -137,7 +135,7 @@ quit
     assert (saved["edges"], saved["faces"], saved["groups"]) == (
         reopened["edges"], reopened["faces"], reopened["groups"])
     snapshot = json.loads(probe.with_suffix(".json").read_text())
-    assert not snapshot["classic"] and snapshot["borrows"] == []
+    assert not snapshot["classic"]
     if sys.platform == "darwin":
         assert not snapshot["qt_pasteboard"]
     assert len(set(snapshot["scenes"])) >= 2

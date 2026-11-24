@@ -420,7 +420,7 @@ def test_a_nested_link_in_the_window_is_watched_and_listed(win, tmp_path):
     host_scene.version += 1
     watcher = win._link_watcher()
     watcher.refresh()
-    watched = lambda: sorted(os.path.normcase(p) for p in watcher._fs.files())
+    watched = lambda: sorted(os.path.normcase(p) for p in watcher.paths)
     both = sorted([links._norm(mid_path), links._norm(leaf_path)])
     assert watched() == both
     host_scene.select([link])
@@ -700,14 +700,14 @@ def test_the_last_placement_is_no_longer_watched(win, tmp_path):
     scene.version += 1
     watcher = win._link_watcher()
     watcher.refresh()
-    assert [os.path.normcase(p) for p in watcher._fs.files()] == [links._norm(src)]
+    assert [os.path.normcase(p) for p in watcher.paths] == [links._norm(src)]
     scene.select([link])
     win._on_make_unique()
-    assert watcher._fs.files() == []
+    assert watcher.paths == []
     win._on_undo()
-    assert [os.path.normcase(p) for p in watcher._fs.files()] == [links._norm(src)]
+    assert [os.path.normcase(p) for p in watcher.paths] == [links._norm(src)]
     win._on_redo()
-    assert watcher._fs.files() == []
+    assert watcher.paths == []
 
 
 def test_make_unique_of_what_holds_a_link_keeps_the_link(win, tmp_path):

@@ -9,10 +9,6 @@ menu.rs), the start page and the chrome's document ▾.
 """
 from __future__ import annotations
 
-import os
-import shutil
-import subprocess
-import sys
 import threading
 from collections import deque
 from pathlib import Path
@@ -71,7 +67,7 @@ class ShellFileDialog:
 
 
 def install(win) -> None:
-    """The shell's pieces in the modules the borrowed code calls."""
+    """Install the shell’s bindings for document commands."""
     from views import filedialogs
     filedialogs.QFileDialog = ShellFileDialog
     # The shell draws with Metal by construction: no probe process, no
@@ -117,7 +113,6 @@ def command(win, name, *args):
         "export_igz": lambda: export_igz(win),
         "link": lambda: link_document(win),
         "reload_links": lambda: win._reload_all_links(),
-        "classic": lambda: open_in_classic(win),
         "prefs": lambda: open_settings(win),
         "library": lambda: open_library(win),
         "select_all": lambda: win._on_select_all(),
@@ -191,6 +186,11 @@ def new_model(win) -> None:
     """File ▸ New (MainWindow._on_new: an untouched untitled one starts
     over, else a new project), and the start page goes."""
     from views import wgpu_start
+    if win._workspace is not None:
+        new = getattr(win._workspace, "new", None)
+        if new is not None:
+            new()
+        return
     if wgpu_start.shown(win):
         return wgpu_start.new_model(win)
     win._on_new()
@@ -218,6 +218,10 @@ def show_start(win) -> None:
 
 # ---- open ------------------------------------------------------------------------
 def open_dialog(win) -> bool:
+    opener = getattr(win._workspace, "open", None)
+    if opener is not None:
+        opener()
+        return True
     from formats import built
     from views.filedialogs import file_dialogs
     win.viewport.end_group_edit()
@@ -253,6 +257,11 @@ def open_path(win, path: Path) -> bool:
     host = win._host
     suffix = path.suffix.lower()
     if win._closed:
+        return False
+    opener = win.file_openers.get(suffix)
+    if opener is not None:
+        return bool(opener(path))
+    if win._workspace is not None and not win.leave_workspace():
         return False
     if suffix in (".builtproject", ".igzproj"):
         # Built projects open here (app_shell/project.py); an .igzproj
@@ -644,6 +653,10 @@ def link_document(win) -> bool:
 
 # ---- save ----------------------------------------------------------------------
 def save(win) -> bool:
+    if win._workspace is not None:
+        result = win._workspace.save()
+        win._update_title()
+        return result is not False
     from formats import built
     win._end_group_edits()
     path = win._current_path
@@ -665,6 +678,10 @@ def _ask_save_path(win, caption, default):
 
 
 def save_as(win) -> bool:
+    if win._workspace is not None:
+        result = win._workspace.save_as()
+        win._update_title()
+        return result is not False
     from formats import built
     win._end_group_edits()
     default = (win._current_path or Path(win._doc.display_name())).with_suffix(built.BUILT_SUFFIX)
@@ -721,6 +738,8 @@ def do_save(win, path: Path, copy: bool = False) -> bool:
     from formats import igz as igz_format
     from views import chrome_dialogs as cd
     from app_shell import project
+    if win._workspace is not None:
+        return False
     doc = win._doc
     vp = doc.viewport
     scene = vp.scene
@@ -839,6 +858,8 @@ def close_document(win, doc=None) -> bool:
     from views import chrome_dialogs as cd
     if cd.current_sheet(win) is not None or cd.modal(win):
         return False
+    if win._workspace is not None and not win.leave_workspace():
+        return False
     if win._doc_is_dirty(doc):
         if doc is not win._doc:
             win.activate_document(doc)
@@ -876,6 +897,8 @@ def request_close(win) -> bool:
     if win._open_in_progress:
         win._open_aborted = True        # the load unwinds at its next step
         return False
+    if win._workspace is not None and not win.leave_workspace():
+        return False
     if not win._confirm_quit():
         return False
     for doc in win._documents:
@@ -904,56 +927,6 @@ def cold_start(win) -> None:
     if win._doc_is_blank():
         win._start_blank_document()
         show_start(win)
-
-
-# ---- the classic app --------------------------------------------------------------
-def classic_command(path=None) -> list:
-    """How to start the Qt app on ``path``: ``BUILT_CLASSIC`` (a command
-    line) when set, else the checkout's main.py with its venv's Python."""
-    from app_shell import host as _host
-    extra = [str(path)] if path else []
-    env = os.environ.get("BUILT_CLASSIC")
-    if env:
-        import shlex
-        return shlex.split(env) + extra
-    root = Path(_host.ROOT or Path(__file__).resolve().parent.parent)
-    venv = _host.VENV
-    python = None
-    if venv:
-        for name in ("python3", "python"):
-            cand = Path(venv) / "bin" / name
-            if cand.exists():
-                python = str(cand)
-                break
-    python = python or shutil.which("python3") or sys.executable
-    return [python, str(root / "main.py"), "--new-window", *extra]
-
-
-def open_in_classic(win, *, why: str | None = None) -> bool:
-    """Open the active document for an explicit Classic command, after the save prompt."""
-    from views import chrome_dialogs as cd
-    doc = win._doc
-    if doc is not None and win._doc_is_dirty(doc):
-        got = cd.ask(win, tr("Save before opening in the classic app?"),
-                     tr("The classic app opens the file on disk. Save your changes first?"),
-                     [("discard", tr("Open Without Saving")), ("cancel", tr("Cancel")),
-                      ("save", tr("Save and Open"))],
-                     default="save", cancel="cancel", discard="discard")
-        if got == "cancel":
-            return False
-        if got == "save" and not save(win):
-            return False
-    path = getattr(doc, "path", None)
-    cmd = classic_command(path)
-    try:
-        subprocess.Popen(cmd, start_new_session=True, stdout=subprocess.DEVNULL,
-                         stderr=subprocess.DEVNULL, cwd=str(Path(cmd[1]).parent) if len(cmd) > 1 else None)
-    except OSError as exc:
-        cd.warning(win, tr("Open in Classic App"), str(exc))
-        return False
-    what = f"{why} open" if why else "Opening"
-    win.statusBar().showMessage(f"{what} in the classic app…", 4000)
-    return True
 
 
 def sync_foreign_clipboard(win):

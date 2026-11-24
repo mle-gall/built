@@ -248,16 +248,14 @@ class SheetHost:
                                             getattr(self._window, "_ext_sheet_annots", None))
 
 
-def composer_class():
-    """What ``MainWindow._ensure_composer`` makes for a document: its sheets."""
-    return SheetHost
-
-
 def composer_for(win):
-    """The composer of ``win``'s front document, made on first use
-    (MainWindow._ensure_composer; the shell borrows it)."""
+    """Keep the workspace bound to the document it was created for across tab switches."""
+    from views.documents import DocumentHost
     win = getattr(win, "_host_window", win)
-    return win._ensure_composer()
+    if win._composer is None:
+        win._composer = SheetHost(DocumentHost(win, win._doc))
+        win._update_title()
+    return win._composer
 
 
 def workspace_of(view):
