@@ -401,7 +401,13 @@ fn collect_geometry<'p>(scene: &Obj<'p>, face_me: Option<&Obj<'p>>) -> PyResult<
 fn collect_geometry_split<'p>(scene: &Obj<'p>, face_me: &Obj<'p>) -> PyResult<Obj<'p>> {
     collect(scene, Some(face_me), true)
 }
+#[pyfunction]
+fn _corner<'p>(p: &Obj<'p>) -> PyResult<Obj<'p>> {
+    p.call_method0("toTuple")
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(_corner, m)?)?;
     smooth::register(m)?;
     world::register(m)?;
     m.add_function(wrap_pyfunction!(material_key, m)?)?;
