@@ -14,6 +14,7 @@ pub mod move_hover;
 pub mod move_gesture;
 pub mod overlay_marks;
 pub mod copy_history;
+pub mod polar_history;
 mod place_group;
 mod eraser;
 mod geopath;

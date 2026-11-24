@@ -372,19 +372,16 @@ impl MoveCopies {
             }
             for (src, placed) in self.faces.iter().zip(&member.faces) {
                 let src = src.bind(py);
-                let kw = PyDict::new(py);
-                let holes = placed.getattr("holes")?;
-                if holes.is_truthy()? {
-                    kw.set_item("holes", holes)?;
-                }
-                kw.set_item("auto", false)?;
-                let transformed =
-                    group.call_method1("transformed_attrs", (src.getattr("attrs")?, &matrix))?;
-                kw.set_item("attrs", attrs.call1((transformed,))?)?;
-                kw.set_item("interior", src.getattr("interior")?)?;
-                let cmd = history
-                    .getattr("AddFaceCommand")?
-                    .call((placed.getattr("vertices")?,), Some(&kw))?;
+                let cmd = copied_face(
+                    &history,
+                    &group,
+                    &attrs,
+                    matrix.bind(py).as_any(),
+                    src,
+                    &placed.getattr("vertices")?,
+                    &placed.getattr("holes")?,
+                    true,
+                )?;
                 faces.push(cmd.clone());
                 commands.push(cmd);
             }
@@ -429,4 +426,31 @@ impl MoveCopies {
             (commands, groups, guides, faces, segments),
         )?))
     }
+}
+
+/// Keep material coordinates and IFC identity remapping common to linear and polar copies.
+pub(super) fn copied_face<'py>(
+    history: &Bound<'py, PyModule>,
+    group: &Bound<'py, PyModule>,
+    attrs: &Bound<'py, PyAny>,
+    matrix: &Bound<'py, PyAny>,
+    source: &Bound<'py, PyAny>,
+    vertices: &Bound<'py, PyAny>,
+    holes: &Bound<'py, PyAny>,
+    carry_interior: bool,
+) -> PyResult<Bound<'py, PyAny>> {
+    let kw = PyDict::new(history.py());
+    if holes.is_truthy()? {
+        kw.set_item("holes", holes)?;
+    }
+    kw.set_item("auto", false)?;
+    let transformed =
+        group.call_method1("transformed_attrs", (source.getattr("attrs")?, matrix))?;
+    kw.set_item("attrs", attrs.call1((transformed,))?)?;
+    if carry_interior {
+        kw.set_item("interior", source.getattr("interior")?)?;
+    }
+    history
+        .getattr("AddFaceCommand")?
+        .call((vertices,), Some(&kw))
 }

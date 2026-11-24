@@ -312,6 +312,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(tools::overlay_marks::tool_overlay_marks, m)?)?;
     m.add_class::<tools::copy_history::CopySelection>()?;
     m.add_class::<tools::copy_history::MoveCopies>()?;
+    m.add_function(wrap_pyfunction!(tools::polar_history::rotation_command, m)?)?;
     m.add_class::<tools::texture_rows::TextureToolRows>()?;
     m.add_class::<tools::push_stage::PushSlide>()?;
     m.add_class::<tools::push_stage::PushStages>()?;
