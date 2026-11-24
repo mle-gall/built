@@ -44,7 +44,7 @@ mod push_through;
 mod push_translate;
 mod push_finish;
 mod overlap;
-mod curve_groups;
+pub(crate) mod curve_groups;
 pub(crate) mod orphan_overlap;
 pub use push_rebuild::{Fresh, Paint};
 mod erase;

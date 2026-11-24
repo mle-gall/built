@@ -542,17 +542,7 @@ def _face_all_edges(face: Face) -> set:
     return edges
 
 
-def _point_on_seg_incl(pt: QVector3D, p: QVector3D, q: QVector3D,
-                       tol: float = _SPLIT_TOLERANCE) -> bool:
-    """Whether ``pt`` lies on segment ``p``–``q``, endpoints included."""
-    pq = q - p
-    length = pq.length()
-    if length < tol:
-        return same_position(pt, p)
-    t = QVector3D.dotProduct(pt - p, pq) / (length * length)
-    if t < -tol or t > 1.0 + tol:
-        return False
-    return (pt - (p + pq * t)).length() < tol
+_point_on_seg_incl = kernel.object_drawing.point_on_segment
 
 
 def _segment_on_face_boundary(a: QVector3D, b: QVector3D, face: Face) -> bool:

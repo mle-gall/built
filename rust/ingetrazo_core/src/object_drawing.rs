@@ -487,6 +487,9 @@ fn prune_soft_edges(mesh: &Obj<'_>) -> PyResult<()> {
 }
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let sub = PyModule::new(m.py(), "object_drawing")?;
+    sub.add_function(wrap_pyfunction!(crate::object_curves::point_on_segment, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_curves::tag_curve, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_curves::resplit_curves, &sub)?)?;
     sub.add_function(wrap_pyfunction!(delete_edges, &sub)?)?;
     sub.add_function(wrap_pyfunction!(delete_face, &sub)?)?;
     sub.add_function(wrap_pyfunction!(divide_face, &sub)?)?;

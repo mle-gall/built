@@ -1851,16 +1851,21 @@ class StoreMesh(Mesh):
             raise ValueError("stitch record has no snapshot of this mesh")
         self.restore_state(undo)
 
-    def resplit_curves(self) -> None:
-        """:meth:`Mesh.resplit_curves` with the scan for curve edges done
-        on the store's arrays; the regrouping walks views and writes the
-        new ids through them."""
+    def tag_curve(self, loop_points, closed=True):
+        if not self._store._model_frame:
+            return super().tag_curve(loop_points, closed)
         self._chunk_dirty = True
         self._mut_serial += 1
-        by_id: dict = {}
-        for cid, k in self._store.curved_edges():
-            by_id.setdefault(cid, []).append(EdgeView(self, k))
-        Mesh._resplit_curve_groups(by_id)
+        if self._store.tag_curve_path([p.toTuple() for p in loop_points], closed, _mesh._CURVE_COUNTER):
+            return self.next_curve_id()
+        return None
+
+    def resplit_curves(self) -> None:
+        if not self._store._model_frame:
+            return super().resplit_curves()
+        self._chunk_dirty = True
+        self._mut_serial += 1
+        _mesh._CURVE_COUNTER = self._store.resplit_curves(_mesh._CURVE_COUNTER)
 
     def clear(self) -> None:
         self._store.clear()
@@ -2022,8 +2027,6 @@ class StoreMesh(Mesh):
 
 
 StoreMesh._rekey = _on_python("_rekey")
-# The legacy curve tagger writes through edge views.
-StoreMesh.tag_curve = Mesh.tag_curve
 
 
 def _fallback():

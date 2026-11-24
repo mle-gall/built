@@ -474,28 +474,8 @@ class Mesh:
         all its pieces tagged. Returns the id, or ``None`` if nothing matched."""
         self._chunk_dirty = True
         self._mut_serial += 1
-        from core.topology import _point_on_seg_incl
-        global _CURVE_COUNTER
-        pts = list(loop_points)
-        if len(pts) < 2:
-            return None
-        cid = _CURVE_COUNTER
-        pairs = list(zip(pts, pts[1:]))
-        if closed:
-            pairs.append((pts[-1], pts[0]))
-        tagged = False
-        for e in self.edges:
-            if e.curve is not None:
-                continue
-            a, b = e.a, e.b
-            for pa, pb in pairs:
-                if _point_on_seg_incl(a, pa, pb) and _point_on_seg_incl(b, pa, pb):
-                    e.curve = cid
-                    tagged = True
-                    break
-        if tagged:
-            _CURVE_COUNTER += 1
-            return cid
+        if object_drawing.tag_curve(self.edges, loop_points, closed, _CURVE_COUNTER):
+            return self.next_curve_id()
         return None
 
     def curve_edges(self, edge) -> list:
@@ -518,74 +498,8 @@ class Mesh:
         curve per segment on every copy, explode or solid operation."""
         self._chunk_dirty = True
         self._mut_serial += 1
-        by_id: dict[int, list[Edge]] = {}
-        for e in self.edges:
-            if e.curve is not None:
-                by_id.setdefault(e.curve, []).append(e)
-        self._resplit_curve_groups(by_id)
-
-    @staticmethod
-    def _resplit_curve_groups(by_id) -> None:
-        """:meth:`resplit_curves` past its scan: ``by_id`` maps each curve
-        id to its edges in mesh order."""
         global _CURVE_COUNTER
-        for cid, edges in by_id.items():
-            eset = set(edges)
-
-            def is_break(v) -> bool:
-                mine = [e for e in v.edges if e in eset]
-                if len(mine) != 2:
-                    return True
-                if len(v.edges) == 2:
-                    return False
-                p = v.position
-                a = mine[0].other(v).position - p
-                b = mine[1].other(v).position - p
-                n = QVector3D.crossProduct(a, b)
-                if n.length() <= 1e-6 * a.length() * b.length():
-                    return True              # straight through: no plane
-                n.normalize()
-                for e in v.edges:
-                    if e in eset:
-                        continue
-                    u = e.other(v).position - p
-                    length = u.length()
-                    if (length <= 1e-12
-                            or abs(QVector3D.dotProduct(u, n)) < 0.05 * length):
-                        return True
-                return False
-
-            # Walk chains between break vertices; a break-free component is a
-            # closed loop (one chain).
-            unvisited = set(edges)
-            chains: list[list[Edge]] = []
-            # Seed from break vertices first so open chains are walked end-to-end.
-            seeds = [e for e in edges if is_break(e.v0) or is_break(e.v1)]
-            for seed in seeds + edges:
-                if seed not in unvisited:
-                    continue
-                start_v = seed.v0 if is_break(seed.v0) else (
-                    seed.v1 if is_break(seed.v1) else seed.v0)
-                chain, v, e = [], start_v, seed
-                while e in unvisited:
-                    unvisited.discard(e)
-                    chain.append(e)
-                    v = e.other(v)
-                    if is_break(v):
-                        break
-                    nxt = next((n for n in v.edges if n in unvisited), None)
-                    if nxt is None:
-                        break
-                    e = nxt
-                chains.append(chain)
-            if len(chains) <= 1:
-                continue  # still one contour — keep the id stable
-            for i, chain in enumerate(chains):
-                new_id = cid if i == 0 else _CURVE_COUNTER
-                if i > 0:
-                    _CURVE_COUNTER += 1
-                for e in chain:
-                    e.curve = new_id
+        _CURVE_COUNTER = object_drawing.resplit_curves(self.edges, _CURVE_COUNTER)
 
     def _link_edge(self, v0: Vertex, v1: Vertex) -> Edge:
         self._chunk_dirty = True

@@ -94,6 +94,7 @@ mod object_registry;
 mod object_vertices;
 mod object_bulk;
 mod object_fold;
+mod object_curves;
 mod object_drawing;
 mod draw_plan;
 mod object_outline;
