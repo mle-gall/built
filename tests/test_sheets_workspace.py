@@ -623,15 +623,61 @@ def test_the_frame_s_circles_are_the_composer_s(host):
     assert sorted(map(tuple, got.round(6).tolist())) == sorted(tuple(round(v, 6) for v in c) for c in want)
 
 
-def test_tools_not_native_yet_open_the_classic_editor(host, monkeypatch):
+def test_every_tool_of_the_rail_runs_on_the_page(host, monkeypatch):
+    from views import wgpu_sheets
     ws = _sheets(host)
     opened = []
     monkeypatch.setattr(type(ws), "open_classic", lambda self, tool="": opened.append(tool))
-    _run_actions(host, "sheets:tool\x1fpoligono")
-    assert opened == ["poligono"] and ws.composer.tool_mode != "poligono"
+    rail = {t for group in wgpu_sheets.RAIL for t in group}
+    assert rail <= wgpu_sheets.NATIVE_TOOLS
+    for tool in sorted(rail - {"imagen"}):
+        _run_actions(host, f"sheets:tool\x1f{tool}")
+    assert opened == []
     groups = host.view.renderer.last("ui_set_sheet_tools")[0]
-    names = {t[0]: t[1] for g in groups for t in g}
-    assert "classic" in names["poligono"] and "classic" not in names["cota"]
+    assert not any("classic" in t[1] for g in groups for t in g)
+
+
+def test_labels_levels_polygons_and_images_from_the_page(host, monkeypatch, tmp_path):
+    import numpy as np
+    from PySide6.QtGui import QImage
+    from views import filedialogs, wgpu_sheet_frames
+    ws = _sheets(host)
+    comp = ws.composer
+    plan = comp.comp.frames[0]
+    pts, wpts, _e, _w, _c = wgpu_sheet_frames.snaps(host.view.source_viewport, plan)
+    hit = {"p": pts[0].tolist(), "world": wpts[0].tolist(), "frame": plan._doc_key, "segment": None}
+    # A label: the spot (bound to the model), then where its text goes.
+    _run_actions(host, "sheets:tool\x1fetiqueta")
+    x0, y0 = pts[0]
+    _run_actions(host, f"sheets:place\x1f{x0}\x1f{y0}\x1f250\x1f240\x1fetiqueta\x1f" + json.dumps(hit))
+    label = comp.comp.etiquetas[-1]
+    assert (label.x_mm, label.y_mm) == (250, 240) and label.anchor_uid == plan.uid
+    assert label.a_world == wpts[0].tolist() and comp.tool_mode == "select"
+    # A second label whose text lands on the first: one more leader to it.
+    n = len(comp.comp.etiquetas)
+    _run_actions(host, "sheets:tool\x1fetiqueta")
+    _run_actions(host, "sheets:place\x1f40\x1f50\x1f251\x1f241\x1fetiqueta")
+    assert len(comp.comp.etiquetas) == n and len(label.leaders) == 1
+    # A level mark on the plan: the plan symbol, bound to the model.
+    _run_actions(host, "sheets:tool\x1fnivel")
+    _run_actions(host, f"sheets:place\x1f{x0}\x1f{y0}\x1f{x0}\x1f{y0}\x1fnivel\x1f" + json.dumps(hit))
+    level = comp.comp.niveles[-1]
+    assert level.symbol == "circle" and level.anchor_uid == plan.uid and (level.x_mm, level.y_mm) == (x0, y0)
+    # A polygon, like the other shapes.
+    _run_actions(host, "sheets:tool\x1fpoligono")
+    _run_actions(host, "sheets:place\x1f30\x1f200\x1f60\x1f230\x1fpoligono")
+    assert comp.comp.shapes[-1].kind == "poligono"
+    # An image: the file, then the item at the margins, in its proportions.
+    pic = tmp_path / "logo.png"
+    img = QImage(200, 100, QImage.Format_RGB32)
+    img.fill(0xff3366aa)
+    img.save(str(pic))
+    monkeypatch.setattr(filedialogs.file_dialogs, "getOpenFileName",
+                        staticmethod(lambda *a, **k: (str(pic), "")))
+    _run_actions(host, "sheets:tool\x1fimagen")
+    image = comp.comp.images[-1]
+    assert (image.path, image.w_mm, image.h_mm) == (str(pic), 60.0, 30.0) and comp.tool_mode == "select"
+    assert np.isfinite(image.z)
 
 
 def test_pan_and_zoom(host):

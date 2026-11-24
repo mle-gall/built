@@ -48,9 +48,11 @@ RAIL = [["select", "pan", "zoom", "zoom_ventana", "estilo"],
 #: classic sheet editor with that tool.
 NATIVE_TOOLS = {"select", "pan", "zoom", "zoom_ventana", "vista", "texto", "llamada", "cajetin", "escala",
                 "norte", "leyenda", "perfil", "linea", "flecha", "terreno", "rect", "elipse", "cota",
-                "cota_cadena", "cota_base", "cota_ang", "cota_radio"}
+                "cota_cadena", "cota_base", "cota_ang", "cota_radio", "poligono", "etiqueta", "nivel",
+                "imagen", "estilo"}
 #: The tools that snap to the frames' model (ui/sheet_tools.rs PICK_TOOLS).
-SNAP_TOOLS = {"cota", "cota_cadena", "cota_base", "cota_ang", "cota_radio"}
+SNAP_TOOLS = {"cota", "cota_cadena", "cota_base", "cota_ang", "cota_radio", "linea", "flecha", "terreno",
+              "rect", "elipse", "poligono", "etiqueta", "nivel"}
 #: Qt cursors for the page's cursor names.
 _CURSORS = {"": Qt.ArrowCursor, "move": Qt.SizeAllCursor, "grab": Qt.OpenHandCursor,
             "grabbing": Qt.ClosedHandCursor, "crosshair": Qt.CrossCursor,
@@ -483,16 +485,45 @@ class Workspace:
             self._page = None
             self.view.renderer.page_select([m._doc_key for m in copies])
 
-    def _place(self, x0, y0, x1, y1, tool: str = "vista") -> None:
+    def _place(self, x0, y0, x1, y1, tool: str = "vista", hit=None) -> None:
         """A placement tool's click or drag: the item it makes there
         (sheets::create), one step of the history, then back to Select. A
-        new text block opens for typing."""
+        new text block opens for typing. ``hit``: the first point caught the
+        model (label, level): the item is bound to it."""
         import ingetrazo_core as NATIVE
-        from core.composition import AddItemCommand
+        from core.composition import AddItemCommand, EditItemCommand
+        from views import wgpu_sheet_frames
         comp = self.composer.comp
-        item = NATIVE.sheet_new_item(comp, tool, x0, y0, x1, y1, self.composer._scene())
+        scene = self.composer._scene()
+        frame = self._models().get(hit.get("frame")) if hit and hit.get("world") else None
+        if tool == "etiqueta":
+            target = self._label_at(x1, y1)
+            if target is not None:
+                # The text landed on a label: one more leader to it.
+                leader = {"ax_mm": x0 - target.x_mm, "ay_mm": y0 - target.y_mm, "anchor_uid": "", "a_world": None}
+                if frame is not None:
+                    leader.update(anchor_uid=wgpu_sheet_frames.frame_uid(frame), a_world=list(hit["world"]))
+                before = [dict(ld) for ld in (target.leaders or [])]
+                self._run(EditItemCommand(target, {"leaders": before + [leader]}, {"leaders": before}))
+                self._page = None
+                self.view.renderer.page_select([target._doc_key])
+                self._tool("select")
+                return
+        item = NATIVE.sheet_new_item(comp, tool, x0, y0, x1, y1, scene)
         if item is None:
             return
+        if tool == "nivel":
+            host = self._frame_at(x0, y0)
+            if host is not None:
+                z = wgpu_sheet_frames.level_at(self.view.source_viewport, host, x0, y0)
+                if z is not None:
+                    item.z_m = z
+        if tool in ("etiqueta", "nivel") and frame is not None:
+            wgpu_sheet_frames.anchor(item, frame, scene, [("a_world", hit)])
+            if tool == "nivel":
+                item.x_mm, item.y_mm = (float(v) for v in hit["p"])
+                if frame.view_key == "std:top":
+                    item.symbol = "circle"
         self._run(AddItemCommand(comp, item))
         self._page = None
         self.view.renderer.page_select([item._doc_key])
@@ -565,6 +596,44 @@ class Workspace:
             renderer.page_frame_snaps(key, *(np.ascontiguousarray(a, float).reshape(-1).tolist() for a in got))
             self._more = True
             return
+
+    def _label_at(self, x, y):
+        """The label whose text block covers page point (x, y), the topmost."""
+        import ingetrazo_core as NATIVE
+        best = None
+        for et in getattr(self.composer.comp, "etiquetas", None) or []:
+            if getattr(et, "locked", False):
+                continue
+            w, h = NATIVE.sheet_item_size(et)
+            if et.x_mm - 0.5 <= x <= et.x_mm + w + 0.5 and et.y_mm - 0.5 <= y <= et.y_mm + h + 0.5:
+                if best is None or et.z >= best.z:
+                    best = et
+        return best
+
+    def _frame_at(self, x, y):
+        """The topmost frame under page point (x, y)."""
+        return next((f for f in reversed(self.composer.comp.frames)
+                     if f.x_mm <= x <= f.x_mm + f.w_mm and f.y_mm <= y <= f.y_mm + f.h_mm), None)
+
+    def _add_image(self) -> None:
+        """The image tool: a picture file, then the item at the margins
+        (sheets::create), one step of the history; back to Select."""
+        import ingetrazo_core as NATIVE
+        from core.composition import AddItemCommand
+        from core.i18n import tr
+        from views.filedialogs import file_dialogs
+        parent = _qt_window(self.composer._window)
+        path, _ = file_dialogs.getOpenFileName(parent, tr("Choose image…"), "", tr("Images (*.png *.jpg *.jpeg)"))
+        self._tool("select")
+        if not path:
+            return
+        item = NATIVE.sheet_new_image(self.composer.comp, path)
+        if item is None:
+            self.flash("That file is not a picture")
+            return
+        self._run(AddItemCommand(self.composer.comp, item))
+        self._page = None
+        self.view.renderer.page_select([item._doc_key])
 
     def _tool(self, name: str) -> None:
         """Arm a tool of the rail (the composer's tool state, until the
@@ -736,6 +805,8 @@ class Workspace:
             act = comp._tool_actions.get(rest)
             if rest not in NATIVE_TOOLS:
                 self.open_classic(tool=rest)
+            elif rest == "imagen":
+                self._add_image()
             elif act is not None:
                 act.trigger()
         elif verb == "select":
@@ -743,9 +814,11 @@ class Workspace:
         elif verb == "rects":
             self._move(rest)
         elif verb == "place":
+            import json
             parts = rest.split(SEP)
             tool = parts[4] if len(parts) > 4 else comp.tool_mode
-            self._place(*(float(v) for v in parts[:4]), tool=tool)
+            hit = json.loads(parts[5]) if len(parts) > 5 else None
+            self._place(*(float(v) for v in parts[:4]), tool=tool, hit=hit)
         elif verb in ("set", "sheet", "set_many"):
             import json
             models = self._models()

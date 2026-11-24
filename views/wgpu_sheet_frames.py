@@ -449,14 +449,45 @@ def capture_hold(scene, item, attr, segment=None) -> bool:
     return False
 
 
-def anchor(item, frame, scene, points) -> None:
-    """Bind ``item`` to ``frame``'s model: its uid (made when it has none),
-    each ``(attr, picked point)`` as a world point with its hold."""
+def frame_uid(frame) -> str:
+    """The frame's uid, made when it has none (what a bound item names)."""
     import uuid
     if not frame.uid:
         frame.uid = uuid.uuid4().hex
-    item.anchor_uid = frame.uid
+    return frame.uid
+
+
+def anchor(item, frame, scene, points) -> None:
+    """Bind ``item`` to ``frame``'s model: its uid (made when it has none),
+    each ``(attr, picked point)`` as a world point with its hold."""
+    item.anchor_uid = frame_uid(frame)
     for attr, pt in points:
         setattr(item, attr, [float(v) for v in pt["world"]])
         if attr in ("a_world", "b_world"):
             capture_hold(scene, item, attr, pt.get("segment"))
+
+
+def level_at(source, frame, x, y):
+    """The model height a page point stands at in ``frame`` (the composer's
+    ``frame_level_at``): in an elevation or a horizontal section the page's
+    vertical is the model's Z; a plan or an axonometric cannot tell (None)."""
+    from core.composition import model_height_for_frame
+    from core.hlr import camera_basis
+    if getattr(frame, "perspective", False) or frame.h_mm <= 0:
+        return None
+    scene = source.scene
+    view = saved_view(scene, frame)
+    if view is False:
+        return None
+    camera = frame_camera(source.camera, frame, view, scene)
+    eye, right, up, fwd = camera_basis(camera)
+    if abs(float(fwd[2])) > 1e-3:              # not a horizontal view
+        return None
+    half_h = model_height_for_frame(frame.h_mm, frame.scale_n) / 2.0
+    if half_h <= 1e-9:
+        return None
+    k = frame.h_mm / (2.0 * half_h)
+    half_w = half_h * (frame.w_mm / frame.h_mm)
+    cx = (x - frame.x_mm) / k - half_w
+    cy = half_h - (y - frame.y_mm) / k
+    return float(eye[2] + right[2] * cx + up[2] * cy)

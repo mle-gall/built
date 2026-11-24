@@ -96,8 +96,14 @@ impl Snapshot {
 
 /// The tools a click or a drag on the page places an item with
 /// (ingetrazo_core sheets::create PLACE_TOOLS).
-pub const PLACE_TOOLS: [&str; 13] = ["vista", "texto", "llamada", "cajetin", "escala", "norte", "leyenda", "perfil",
-                                     "linea", "flecha", "terreno", "rect", "elipse"];
+pub const PLACE_TOOLS: [&str; 16] = ["vista", "texto", "llamada", "cajetin", "escala", "norte", "leyenda", "perfil",
+                                     "linea", "flecha", "terreno", "rect", "elipse", "poligono", "etiqueta", "nivel"];
+/// The placement tools a click (press and release on one spot) does not
+/// finish: the second click does (the composer's `TOOLS` drag flag).
+pub const TWO_POINT_TOOLS: [&str; 10] = ["vista", "etiqueta", "llamada", "perfil", "linea", "flecha", "terreno", "rect",
+                                         "elipse", "poligono"];
+/// The placement tools whose points snap to the drawing.
+pub const SNAP_PLACE_TOOLS: [&str; 8] = ["linea", "flecha", "terreno", "rect", "elipse", "poligono", "etiqueta", "nivel"];
 
 /// What a frame shows: its line drawing, paper mm in the frame, with a
 /// line class each (0 edge, 1 profile, 2 cut, 3 hidden), or a picture.
@@ -114,7 +120,7 @@ enum Drag {
     /// One item by a handle (0..8 clockwise from top-left).
     Resize { key: u64, handle: u8, grab: [f64; 2], from: [f64; 4] },
     /// The View tool's rectangle.
-    Place { from: [f64; 2], to: [f64; 2] },
+    Place { from: [f64; 2], to: [f64; 2], hit: Option<crate::sheet_tools::Pt>, press: Pos2, waiting: bool },
     /// The hand.
     Pan { last: Pos2 },
     /// A press that has not moved yet (a click selects; moving drags).
@@ -166,6 +172,8 @@ pub struct Page {
     hot: Option<crate::sheet_tools::Pt>,
     /// How far apart a baseline run's rows sit (the document's dimension style).
     pub run_step: f64,
+    /// The format painter takes a style on its next click (else pastes).
+    pub painter_armed: bool,
 }
 
 fn snap(value: f64, targets: &[f64]) -> Option<f64> {
@@ -406,6 +414,44 @@ impl Page {
         }
     }
 
+    /// Another tool armed: what the last one gathered is dropped; the
+    /// format painter starts by taking a style.
+    pub fn set_tool(&mut self, tool: String) {
+        self.pick = None;
+        self.hot = None;
+        if matches!(self.drag, Some(Drag::Place { .. })) {
+            self.drag = None;
+        }
+        self.painter_armed = tool == "estilo";
+        self.tool = tool;
+    }
+    /// Where a placement tool's point lands: on the drawing for the tools
+    /// that snap to it (the dot shows), level or plumb from `from` with ⇧
+    /// for the lines.
+    fn place_point(&mut self, mm: [f64; 2], from: Option<[f64; 2]>, mods: u8) -> crate::sheet_tools::Pt {
+        let tool = self.tool.as_str();
+        let thr = 7.0 / f64::from(self.zoom.max(1e-6));
+        self.hot = if SNAP_PLACE_TOOLS.contains(&tool) { crate::sheet_tools::snap_at(&self.snaps, mm, thr) } else { None };
+        let mut pt = self.hot.clone().unwrap_or_else(|| crate::sheet_tools::Pt::free(mm));
+        if let (Some(a), true) = (from, mods & 4 != 0 && matches!(tool, "linea" | "flecha" | "terreno")) {
+            pt = if (pt.p[0] - a[0]).abs() >= (pt.p[1] - a[1]).abs() {
+                crate::sheet_tools::Pt::free([pt.p[0], a[1]])
+            } else {
+                crate::sheet_tools::Pt::free([a[0], pt.p[1]])
+            };
+        }
+        pt
+    }
+    /// `sheets:place␟x0␟y0␟x1␟y1␟tool[␟first point's catch]`.
+    fn place_action(&self, from: [f64; 2], to: [f64; 2], hit: Option<&crate::sheet_tools::Pt>) -> String {
+        let mut a = format!("sheets:place\u{1f}{:.3}\u{1f}{:.3}\u{1f}{:.3}\u{1f}{:.3}\u{1f}{}",
+                            from[0], from[1], to[0], to[1], self.tool);
+        if let Some(h) = hit {
+            a += &format!("\u{1f}{}", h.json());
+        }
+        a
+    }
+
     /// Start typing in text item `key` (its words as the document has them).
     pub fn edit_text(&mut self, key: u64) {
         let text = self.item(key).and_then(|i| i.data["fields"]["text"].as_str().map(str::to_string));
@@ -521,7 +567,8 @@ impl Page {
         match (&self.drag, self.tool.as_str()) {
             (Some(Drag::Move { .. }), _) => "Edges snap to the margins, guides and other items; ⌥ moves freely.",
             (Some(Drag::Resize { .. }), _) => "Edges snap to the margins, guides and other items; ⌥ resizes freely.",
-            (Some(Drag::Place { .. }), _) => "Release to place the view, at the scale that fits.",
+            (Some(Drag::Place { waiting: true, .. }), _) => "Click the second point.",
+            (Some(Drag::Place { .. }), "vista") => "Release to place the view, at the scale that fits.",
             (_, "pan") => "Drag to move the sheet. Scroll pans, ⌘-scroll zooms.",
             (_, "zoom") | (_, "zoom_ventana") => "Click to zoom in, ⌥-click to zoom out.",
             (_, "vista") => "Drag a rectangle to place a model view.",
@@ -711,8 +758,29 @@ impl Page {
                     return;
                 }
                 let mm = self.to_mm(p);
+                if tool == "estilo" {
+                    // The format painter: the first click takes an item's
+                    // style, the next ones paste it on items of its kind.
+                    if let Some(k) = self.hit(mm) {
+                        self.selection = vec![k];
+                        let verb = if self.painter_armed { "copy_style" } else { "paste_style" };
+                        if self.command(verb, out) && verb == "copy_style" {
+                            self.painter_armed = false;
+                        }
+                    }
+                    return;
+                }
                 if PLACE_TOOLS.contains(&tool) {
-                    self.drag = Some(Drag::Place { from: mm, to: mm });
+                    let snapped = self.place_point(mm, None, mods);
+                    if let Some(Drag::Place { from, hit, waiting: true, .. }) = self.drag.take() {
+                        // The second click of click-move-click.
+                        let to = self.place_point(mm, Some(from), mods);
+                        out.push(self.place_action(from, to.p, hit.as_ref()));
+                        self.hot = None;
+                        return;
+                    }
+                    self.drag = Some(Drag::Place { from: snapped.p, to: snapped.p, hit: snapped.world.is_some().then_some(snapped),
+                                                   press: p, waiting: false });
                     return;
                 }
                 if let Some((key, handle)) = self.handle_at(p) {
@@ -783,8 +851,13 @@ impl Page {
                     self.preview.insert(key, [x0, y0, x1 - x0, y1 - y0]);
                     self.cursor = Self::cursor_for_handle(handle);
                 }
-                Some(Drag::Place { from, .. }) => {
-                    self.drag = Some(Drag::Place { from, to: self.to_mm(p) });
+                Some(Drag::Place { from, hit, press, waiting, .. }) => {
+                    let to = self.place_point(self.to_mm(p), Some(from), mods).p;
+                    self.drag = Some(Drag::Place { from, to, hit, press, waiting });
+                    self.cursor = "crosshair";
+                }
+                None if SNAP_PLACE_TOOLS.contains(&tool) => {
+                    self.place_point(self.to_mm(p), None, mods);
                     self.cursor = "crosshair";
                 }
                 _ => {
@@ -831,9 +904,14 @@ impl Page {
                             out.push(Self::rects_action(&[(key, r)]));
                         }
                     }
-                    Some(Drag::Place { from, to }) => {
-                        out.push(format!("sheets:place\u{1f}{:.3}\u{1f}{:.3}\u{1f}{:.3}\u{1f}{:.3}\u{1f}{}",
-                                         from[0], from[1], to[0], to[1], self.tool));
+                    Some(Drag::Place { from, to, hit, press, waiting }) => {
+                        if !waiting && TWO_POINT_TOOLS.contains(&self.tool.as_str()) && (p - press).length() < 4.0 {
+                            // A click, not a drag: the second click finishes it.
+                            self.drag = Some(Drag::Place { from, to, hit, press, waiting: true });
+                            return;
+                        }
+                        out.push(self.place_action(from, to, hit.as_ref()));
+                        self.hot = None;
                     }
                     _ => {}
                 }
@@ -1071,7 +1149,7 @@ impl Page {
                 }
             }
         }
-        if let Some(Drag::Place { from, to }) = &self.drag {
+        if let Some(Drag::Place { from, to, .. }) = &self.drag {
             let r = Rect::from_two_pos(self.to_screen(from[0], from[1]), self.to_screen(to[0], to[1]));
             painter.rect_filled(r, 0, ACCENT.gamma_multiply(0.08));
             painter.rect_stroke(r, 0, Stroke::new(1.0_f32, ACCENT), egui::StrokeKind::Middle);
@@ -1339,6 +1417,25 @@ mod tests {
         assert!((body["a"][1].as_f64().unwrap() - 250.0).abs() < 1e-9);
         assert!((body["a"][0].as_f64().unwrap() - (50.0 + 20f64.hypot(1.0))).abs() < 1e-9);
         assert!((body["r"].as_f64().unwrap() - 8.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn two_clicks_place_a_shape_snapped_and_the_painter_copies_then_pastes() {
+        let mut p = page();
+        p.snaps.insert(1, crate::sheet_tools::FrameSnaps { points: vec![[40.0, 40.0]], world: vec![[0.0, 0.0, 0.0]], ..Default::default() });
+        p.set_tool("rect".into());
+        let mut out = vec![];
+        p.pointer("press", at(&p, 40.3, 40.2), 1, 0, &mut out);
+        p.pointer("release", at(&p, 40.3, 40.2), 1, 0, &mut out);
+        assert!(out.is_empty(), "a click waits for the second");
+        p.pointer("move", at(&p, 70.0, 60.0), 0, 0, &mut out);
+        p.pointer("press", at(&p, 70.0, 60.0), 1, 0, &mut out);
+        assert_eq!(out[0], "sheets:place\u{1f}40.000\u{1f}40.000\u{1f}70.000\u{1f}60.000\u{1f}rect\u{1f}{\"frame\":1,\"p\":[40.0,40.0],\"segment\":null,\"world\":[0.0,0.0,0.0]}");
+        out.clear();
+        p.set_tool("estilo".into());
+        assert!(p.painter_armed);
+        p.pointer("press", at(&p, 50.0, 50.0), 1, 0, &mut out);
+        assert!(!p.painter_armed, "the first click took the frame's style");
     }
 
     #[test]

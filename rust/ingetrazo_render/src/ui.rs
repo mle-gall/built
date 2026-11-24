@@ -2478,7 +2478,9 @@ impl Ui {
                                                       self.review || sheet_up, large_sheet::ANIM_S);
             if self.sheets.shown {
                 let free = self.page_free(ctx, screen);
-                self.page.tool = self.sheets.active.clone();
+                if self.page.tool != self.sheets.active {
+                    self.page.set_tool(self.sheets.active.clone());
+                }
                 self.page.paint(ctx, screen, free);
                 self.free_after_frame.append(&mut self.page.freed);
                 self.sheets_frame(ctx, screen, retract);

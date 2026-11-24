@@ -9,8 +9,8 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
 /// The tools ``sheet_new_item`` makes an item for.
-pub const PLACE_TOOLS: [&str; 13] = ["vista", "texto", "llamada", "cajetin", "escala", "norte", "leyenda", "perfil",
-                                     "linea", "flecha", "terreno", "rect", "elipse"];
+pub const PLACE_TOOLS: [&str; 16] = ["vista", "texto", "llamada", "cajetin", "escala", "norte", "leyenda", "perfil",
+                                     "linea", "flecha", "terreno", "rect", "elipse", "poligono", "etiqueta", "nivel"];
 
 fn new_uid(py: Python<'_>) -> PyResult<String> {
     py.import("uuid")?.call_method0("uuid4")?.getattr("hex")?.extract()
@@ -151,7 +151,34 @@ pub fn sheet_new_item<'py>(py: Python<'py>, comp: &Bound<'py, PyAny>, tool: &str
             }
             make("FormaItem", &kw)?
         }
-        "rect" | "elipse" => {
+        "etiqueta" => {
+            // The first click the pointed-at spot, the second the text.
+            kw.set_item("x_mm", x1)?;
+            kw.set_item("y_mm", y1)?;
+            kw.set_item("ax_mm", x0 - x1)?;
+            kw.set_item("ay_mm", y0 - y1)?;
+            kw.set_item("text", tr("Label")?)?;
+            make("EtiquetaItem", &kw)?
+        }
+        "nivel" => {
+            length_style(py, scene.as_ref(), &kw)?;
+            kw.set_item("x_mm", x0)?;
+            kw.set_item("y_mm", y0)?;
+            let item = make("NivelItem", &kw)?;
+            // A plan (looking down) takes the plan symbol.
+            let frames: Vec<Bound<'py, PyAny>> = comp.getattr("frames")?.try_iter()?.collect::<PyResult<_>>()?;
+            for f in frames.iter().rev() {
+                let n = |k: &str| -> PyResult<f64> { f.getattr(k)?.extract() };
+                if n("x_mm")? <= x0 && x0 <= n("x_mm")? + n("w_mm")? && n("y_mm")? <= y0 && y0 <= n("y_mm")? + n("h_mm")? {
+                    if f.getattr("view_key")?.extract::<String>()? == "std:top" {
+                        item.setattr("symbol", "circle")?;
+                    }
+                    break;
+                }
+            }
+            item
+        }
+        "rect" | "elipse" | "poligono" => {
             kw.set_item("kind", tool)?;
             kw.set_item("x_mm", x)?;
             kw.set_item("y_mm", y)?;
@@ -315,6 +342,24 @@ pub fn sheet_new_angular<'py>(py: Python<'py>, comp: &Bound<'py, PyAny>, vertex:
     kw.set_item("by_mm", b.1 - vertex.1)?;
     kw.set_item("radius_mm", radius_mm.max(2.0))?;
     let item = py.import("core.composition")?.getattr("CotaAngularItem")?.call((), Some(&kw))?;
+    item.setattr("z", super::display::sheet_next_z(comp)?)?;
+    Ok(Some(item))
+}
+
+/// An image item for picture file ``path``, 60 mm wide in its proportions,
+/// at the sheet's top-left margin (`_on_add_image`); None for a file that
+/// is no picture.
+#[pyfunction]
+pub fn sheet_new_image<'py>(py: Python<'py>, comp: &Bound<'py, PyAny>, path: String) -> PyResult<Option<Bound<'py, PyAny>>> {
+    let Ok((w, h)) = image::image_dimensions(&path) else { return Ok(None) };
+    let margin: f64 = comp.getattr("margin_mm")?.extract()?;
+    let kw = PyDict::new(py);
+    kw.set_item("x_mm", margin + 4.0)?;
+    kw.set_item("y_mm", margin + 4.0)?;
+    kw.set_item("w_mm", 60.0)?;
+    kw.set_item("h_mm", if w > 0 { 60.0 * f64::from(h) / f64::from(w) } else { 40.0 })?;
+    kw.set_item("path", path)?;
+    let item = py.import("core.composition")?.getattr("ImagenItem")?.call((), Some(&kw))?;
     item.setattr("z", super::display::sheet_next_z(comp)?)?;
     Ok(Some(item))
 }
