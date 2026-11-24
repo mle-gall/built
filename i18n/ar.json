@@ -2391,7 +2391,7 @@
  "Remove the faces left lying over their own subdivisions after drawing or erasing.": "إزالة الوجوه التي تركت ملقاة على تقسيماتها بعد الرسم أو المسح.",
  "Resize the selection by dragging the grips of its box; the corners keep its proportions.": "قم بتغيير حجم التحديد عن طريق سحب مقابض المربع الخاص به؛ الزوايا تحافظ على نسبها.",
  "Save the document under another name or in another folder.": "احفظ المستند تحت اسم آخر أو في مجلد آخر.",
- "Save the document — the model and every sheet — to its .igz file.": "احفظ المستند - النموذج وكل ورقة - في ملف .igz الخاص به.",
+ "Save the document — the model and every sheet — to its file.": "احفظ المستند - النموذج وكل ورقة - في ملف الخاص به.",
  "Save the model as IFC for BIM software, with what the BIM panel tagged.": "احفظ النموذج كـ IFC لبرنامج BIM، مع ما تم وضع علامة عليه من قبل لوحة BIM.",
  "Save the model as Wavefront OBJ with its materials.": "احفظ النموذج باسم Wavefront OBJ بمواده.",
  "Save the model as an STL mesh for 3D printing.": "احفظ النموذج كشبكة STL للطباعة ثلاثية الأبعاد.",

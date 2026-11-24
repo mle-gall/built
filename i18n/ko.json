@@ -2382,7 +2382,7 @@
  "Remove the faces left lying over their own subdivisions after drawing or erasing.": "그리거나 지운 뒤 자신의 세분 위에 겹쳐 남은 면을 제거합니다.",
  "Resize the selection by dragging the grips of its box; the corners keep its proportions.": "상자의 그립을 드래그해 선택 항목의 크기를 조정합니다. 모퉁이는 비율을 유지합니다.",
  "Save the document under another name or in another folder.": "문서를 다른 이름이나 다른 폴더에 저장합니다.",
- "Save the document — the model and every sheet — to its .igz file.": "문서(모델과 모든 시트)를 .igz 파일에 저장합니다.",
+ "Save the document — the model and every sheet — to its file.": "문서(모델과 모든 시트)를 파일에 저장합니다.",
  "Save the model as IFC for BIM software, with what the BIM panel tagged.": "BIM 패널에서 태그한 내용과 함께 모델을 BIM 소프트웨어용 IFC로 저장합니다.",
  "Save the model as Wavefront OBJ with its materials.": "모델을 재질과 함께 Wavefront OBJ로 저장합니다.",
  "Save the model as an STL mesh for 3D printing.": "모델을 3D 프린팅용 STL 메시로 저장합니다.",
