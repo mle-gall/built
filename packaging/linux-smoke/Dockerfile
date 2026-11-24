@@ -10,6 +10,8 @@ COPY rust rust
 COPY resources resources
 COPY AUTHORS .
 RUN cargo build --locked --manifest-path rust/built_app/Cargo.toml && \
+    profile="$(mktemp -d)" && HOME="$profile" CFFIXED_USER_HOME="$profile" BUILT_SETTINGS_DIR="$(mktemp -d)" BUILT_BACKGROUND=1 BUILT_XVFB_TEST=1 \
+    xvfb-run -a cargo test --locked --manifest-path rust/built_app/Cargo.toml --test linux_progress && \
     .venv/bin/maturin build --locked -m rust/ingetrazo_core/Cargo.toml -o /tmp/wheels && \
     .venv/bin/pip install /tmp/wheels/*.whl && \
     install /target/debug/built /usr/local/bin/built && rm -rf /target /tmp/wheels "$CARGO_HOME/registry"

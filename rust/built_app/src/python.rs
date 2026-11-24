@@ -295,7 +295,6 @@ impl Host {
         })
     }
 
-    #[cfg(target_os = "macos")]
     pub fn model_menu_state(&self) -> Option<(String,bool,bool,bool)> {
         Python::attach(|py| -> PyResult<_> {
             let viewport=self.obj.bind(py).getattr("viewport")?;

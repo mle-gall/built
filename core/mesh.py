@@ -73,10 +73,7 @@ def _key(p: QVector3D) -> tuple[int, int, int]:
     # neighbouring cells are ±1, so the boundary probes in _lookup and
     # weld_coincident need no float rounding — the rounding calls dominated
     # large imports.
-    x, y, z = p.toTuple()
-    return (round(x * _KEY_SCALE),
-            round(y * _KEY_SCALE),
-            round(z * _KEY_SCALE))
+    return object_replay.mesh_key(p)
 
 
 _weld_candidates = object_replay.weld_candidates
@@ -102,10 +99,7 @@ class Vertex:
 
     def faces(self) -> set[Face]:
         """Faces touching this vertex (via its incident edges)."""
-        out: set[Face] = set()
-        for e in self.edges:
-            out.update(e.faces)
-        return out
+        return object_replay.vertex_faces(self.edges)
 
     def __repr__(self) -> str:  # pragma: no cover - debug aid
         p = self.position
@@ -253,9 +247,7 @@ class Face:
 
     def reverse_rings(self) -> None:
         """Reverse the winding of every ring, preserving paint and incidence."""
-        self.loop.reverse()
-        for hole in self.hole_loops:
-            hole.reverse()
+        object_replay.reverse_rings(self)
 
     # ---- Legacy-compatible read interface (positions) -----------------------
     @property
@@ -271,28 +263,10 @@ class Face:
         return polygon_newell(self.vertices)
 
     def normal(self) -> QVector3D:
-        if len(self.loop) < 3:
-            return QVector3D(0.0, 0.0, 1.0)
-        n = self._newell()
-        length = n.length()
-        if length < 1e-9:
-            return QVector3D(0.0, 0.0, 1.0)
-        # Divided by hand, NOT QVector3D.normalized(): Qt returns a NULL
-        # vector for anything shorter than 1e-5 (its float qFuzzyIsNull) —
-        # four orders of magnitude above the guard right above this line. So
-        # a sliver whose Newell normal fell in [1e-9, 1e-5] got (0, 0, 0)
-        # instead of the (0, 0, 1) this function promises, and a zero normal
-        # is a WILDCARD: ``dot(anything, zero) == 0`` passes every plane
-        # test. One 3 mm² sliver imported from a .skp file made every line
-        # drawn anywhere in its group rebuild "its" plane, wiping all 447
-        # faces (Plaza Yanque, 2026-09-10). Dividing keeps the real
-        # direction, which is also strictly more informative.
-        return n / length
+        return object_replay.ring_normal(self.loop)
 
     def area(self) -> float:
-        if len(self.loop) < 3:
-            return 0.0
-        return 0.5 * self._newell().length()
+        return object_replay.loop_area(self.loop)
 
     def net_area(self) -> float:
         return polygon_net_area(self.vertices, self.holes)
@@ -478,10 +452,7 @@ class Mesh:
 
     def curve_edges(self, edge) -> list:
         """All edges sharing ``edge``'s curve id (``[edge]`` if it has none)."""
-        cid = getattr(edge, "curve", None)
-        if cid is None:
-            return [edge]
-        return [e for e in self.edges if e.curve == cid]
+        return object_replay.curve_edges(self, edge)
 
     def resplit_curves(self) -> None:
         """Re-partition curve ids into contiguous contours.
@@ -812,15 +783,7 @@ class Mesh:
     ) -> None:
         """Insert ``mid`` between the consecutive ``v0``/``v1`` pair in the
         face's outer loop or one of its holes (whichever carries that edge)."""
-        for loop in (face.loop, *face.hole_loops):
-            n = len(loop)
-            for i in range(n):
-                j = (i + 1) % n
-                if (loop[i] is v0 and loop[j] is v1) or (
-                    loop[i] is v1 and loop[j] is v0
-                ):
-                    loop.insert(i + 1, mid)  # i+1 == n wraps to an append
-                    return
+        object_replay.insert_between(face, v0, v1, mid)
 
     # ---- Stitch primitives (watertight cleanup, all reversible) -------------
     def weld_coincident(self) -> bool:
@@ -904,15 +867,7 @@ class Mesh:
         :meth:`collapsible_vertex`, collapse the first one in list order.
         Returns how many went. A method so a store-backed mesh does it in
         one native pass (``StoreMesh.collapse_collinear``)."""
-        n = 0
-        while True:
-            for v in list(self.vertices):
-                if self.collapsible_vertex(v):
-                    self.collapse_vertex(v)
-                    n += 1
-                    break
-            else:
-                return n
+        return object_replay.collapse_collinear(self)
 
     def dissolve_edge_recorded(self, edge: Edge) -> Optional[dict]:
         """:meth:`dissolve_edge`, but returning a reversible record (the removed
@@ -1167,13 +1122,7 @@ def _exchange_paint(attrs):
 def _dominant_attrs(faces) -> dict:
     """The attrs of the largest-area face that carries any — the dominant
     contributor when a merge collapses several faces into one survivor."""
-    best: dict = {}
-    best_area = -1.0
-    for f in faces:
-        if f.attrs and f.area() > best_area:
-            best = f.attrs
-            best_area = f.area()
-    return best
+    return object_replay.dominant_attrs(faces)
 
 
 def _trace_loops(outline: list[tuple[Vertex, Vertex]]) -> Optional[list[list[Vertex]]]:
@@ -1198,26 +1147,12 @@ def _orient_union_loops(
     Keep the source face's front side and wind holes opposite to the outer
     boundary, without swapping front/back paint.
     """
-    if QVector3D.dotProduct(Face(outer).normal(), normal) < 0:
-        outer.reverse()
-    for hole in holes:
-        if QVector3D.dotProduct(Face(hole).normal(), normal) > 0:
-            hole.reverse()
+    object_replay.orient_union(outer, holes, normal, Face)
 
 
 def _loop_area(loop: list[Vertex]) -> float:
     """Newell-magnitude area of a vertex loop (orientation-independent)."""
-    n = QVector3D(0.0, 0.0, 0.0)
-    count = len(loop)
-    for i in range(count):
-        cur = loop[i].position
-        nxt = loop[(i + 1) % count].position
-        n = n + QVector3D(
-            (cur.y() - nxt.y()) * (cur.z() + nxt.z()),
-            (cur.z() - nxt.z()) * (cur.x() + nxt.x()),
-            (cur.x() - nxt.x()) * (cur.y() + nxt.y()),
-        )
-    return 0.5 * n.length()
+    return object_replay.loop_area(loop)
 
 
 def element_identity(item):

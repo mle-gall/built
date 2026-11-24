@@ -6,6 +6,9 @@ use crate::store::drawing::intersection;
 use numpy::{PyReadonlyArray2, PyUntypedArrayMethods};
 use pyo3::prelude::*;
 
+#[path = "snap_inputs.rs"]
+pub(crate) mod inputs;
+
 pub(crate) type P = [f64; 3];
 type Line = (P, P);
 pub(crate) fn sub(a: P, b: P) -> P {
@@ -56,6 +59,20 @@ pub struct SnapQuery {
 enum Projection {
     Matrix([f64; 16], [f64; 2]),
     Callback(Py<PyAny>),
+}
+
+impl Projection {
+    fn from_parts(matrix: Option<[f64;16]>, size: Option<[f64;2]>, projector: Option<Py<PyAny>>) -> PyResult<Self> {
+        Ok(match (matrix, size, projector) {
+            (Some(matrix), Some(size), None) => Projection::Matrix(matrix, size),
+            (None, None, Some(callback)) => Projection::Callback(callback),
+            _ => {
+                return Err(pyo3::exceptions::PyValueError::new_err(
+                    "provide matrix and viewport size, or a projector",
+                ))
+            }
+        })
+    }
 }
 
 type Choice = (f64, P, i64, &'static str, bool);
@@ -146,15 +163,7 @@ impl SnapQuery {
                 "snap edge array shape",
             ));
         }
-        let projection = match (matrix, size, projector) {
-            (Some(matrix), Some(size), None) => Projection::Matrix(matrix, size),
-            (None, None, Some(callback)) => Projection::Callback(callback),
-            _ => {
-                return Err(pyo3::exceptions::PyValueError::new_err(
-                    "provide matrix and viewport size, or a projector",
-                ))
-            }
-        };
+        let projection = Projection::from_parts(matrix,size,projector)?;
         let edges = a
             .as_slice()?
             .chunks_exact(3)
@@ -168,6 +177,12 @@ impl SnapQuery {
             projection,
             cursor,
         })
+    }
+
+    #[staticmethod]
+    #[pyo3(signature=(edges,matrix,size,cursor,projector=None))]
+    fn from_objects(edges:&Bound<'_,PyAny>,matrix:Option<[f64;16]>,size:Option<[f64;2]>,cursor:[f64;2],projector:Option<Py<PyAny>>) -> PyResult<Self> {
+        inputs::from_objects(edges, Projection::from_parts(matrix,size,projector)?, cursor)
     }
 
     // Return the nearest and preferred tied point. The nearest must be visible
@@ -259,7 +274,7 @@ impl SnapQuery {
     }
 
     /// Return only directions from edges actually containing the segment start.
-    fn starting_edges(&self, py: Python<'_>, p: P) -> Vec<usize> {
+    pub(crate) fn starting_edges(&self, py: Python<'_>, p: P) -> Vec<usize> {
         self.scan(py, || {
             self.edges
                 .iter()
@@ -368,7 +383,7 @@ impl SnapQuery {
     /// The ray-to-line projection is renderer-defined. Ask for it only when
     /// a foreshortened edge passes the fallback collinearity test on screen.
     #[pyo3(signature=(s,world,radius,projector,normal))]
-    fn extensions(
+    pub(crate) fn extensions(
         &self,
         py: Python<'_>,
         s: P,
@@ -449,7 +464,7 @@ impl SnapQuery {
             .collect())
     }
     #[pyo3(signature=(radius,line=None,forward=None,circles=None))]
-    fn crossings(
+    pub(crate) fn crossings(
         &self,
         py: Python<'_>,
         radius: f64,
@@ -537,7 +552,7 @@ impl SnapQuery {
         })
     }
 
-    fn rim(
+    pub(crate) fn rim(
         &self,
         circle: crate::snap_curve::Circle,
         p: P,
@@ -555,7 +570,7 @@ impl SnapQuery {
     /// Keep projected segment candidates in this frame. Only the nearest
     /// visible segment's ordinal crosses back to the Python topology facade.
     #[pyo3(signature=(radius,rims,projector,visibility,include_ends,skip_clipped,exclude=None,batch_visibility=true))]
-    fn target(
+    pub(crate) fn target(
         &self,
         py: Python<'_>,
         radius: f64,
@@ -659,7 +674,7 @@ impl SnapQuery {
         Ok(None)
     }
 }
-fn contains([a, b]: [P; 2], p: P) -> bool {
+pub(crate) fn contains([a, b]: [P; 2], p: P) -> bool {
     let ab = sub(b, a);
     let l = dot(ab, ab);
     if l < 1e-12 {

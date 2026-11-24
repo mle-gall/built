@@ -13,7 +13,7 @@ type XY = [f64; 2];
 pub(super) type Corner = (i128, Point);
 pub(super) type Rings = Vec<Vec<Corner>>;
 pub(super) type Edge = (Corner, Corner, Vec<i128>);
-pub(super) const DEFECTS: [&str; 6] = [
+pub(crate) const DEFECTS: [&str; 6] = [
     "duplicate_face",
     "overlapping_face",
     "pinched_face",
@@ -22,7 +22,7 @@ pub(super) const DEFECTS: [&str; 6] = [
     "zero_edge",
 ];
 
-pub(super) fn increased<T: PartialOrd>(
+pub(crate) fn increased<T: PartialOrd>(
     before: [T; 6],
     after: [T; 6],
 ) -> impl Iterator<Item = &'static str> {
@@ -199,4 +199,60 @@ impl Store {
             .collect();
         counts(edges, faces, eps, h)
     }
+}
+
+/// Collect live plugin handles in insertion order; a repeated key takes its
+/// latest handle without moving its row, as in the materialised registry.
+pub(crate) fn handle_counts(
+    vs: &pyo3::Bound<'_, pyo3::PyAny>,
+    eps: f64,
+    h: Hypot,
+) -> pyo3::PyResult<[usize; 6]> {
+    use crate::math::xyz;
+    use pyo3::{prelude::*, types::PyDict};
+    let py = vs.py();
+    let key = pyo3::intern!(py, "key");
+    let radial = pyo3::intern!(py, "faces");
+    let edges = PyDict::new(py);
+    for v in vs.try_iter()? {
+        for e in v?.getattr(pyo3::intern!(py, "edges"))?.try_iter()? {
+            let e = e?;
+            edges.set_item(e.getattr(key)?, e)?;
+        }
+    }
+    let corner = |v: &Bound<'_, PyAny>| -> PyResult<Corner> {
+        Ok((
+            v.getattr(key)?.extract()?,
+            xyz(&v.getattr(pyo3::intern!(py, "position"))?)?.to_array(),
+        ))
+    };
+    let faces = PyDict::new(py);
+    let mut graph = Vec::with_capacity(edges.len());
+    for (_, e) in edges.iter() {
+        let mut ids = Vec::new();
+        for f in e.getattr(radial)?.try_iter()? {
+            let f = f?;
+            let id = f.getattr(key)?;
+            ids.push(id.extract()?);
+            faces.set_item(id, f)?;
+        }
+        graph.push((
+            corner(&e.getattr(pyo3::intern!(py, "v0"))?)?,
+            corner(&e.getattr(pyo3::intern!(py, "v1"))?)?,
+            ids,
+        ));
+    }
+    let mut loops = Vec::with_capacity(faces.len());
+    for (_, f) in faces.iter() {
+        let mut face = Vec::new();
+        for r in crate::object_weld::rings(&f)? {
+            face.push(
+                r.try_iter()?
+                    .map(|v| corner(&v?))
+                    .collect::<PyResult<_>>()?,
+            );
+        }
+        loops.push(face);
+    }
+    Ok(counts(graph, loops, eps, h))
 }
