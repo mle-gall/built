@@ -19,7 +19,7 @@ import time
 import traceback
 from pathlib import Path
 
-from app_shell import qt_host
+from app_shell import profile
 
 #: Qt cursor shape → winit CursorIcon name (rust/built_app/src/main.rs).
 _CURSORS = {
@@ -52,7 +52,7 @@ class Host:
                  settings: str | None = None, temporary: bool = False,
                  display: int = 0, platform: str = ""):
         t0 = time.perf_counter()
-        self.settings_dir = qt_host.start(settings, temporary=temporary)
+        self.settings_dir = profile.start(settings, temporary=temporary)
         self.ns_view = int(ns_view)
         self.surface_handles = dict(display=display, platform=platform) if platform else {}
         self.width = max(1, int(round(width)))
@@ -109,9 +109,6 @@ class Host:
         self.window._extension_menus.refresh(self.window)
         from app_shell import windows
         windows.register(self)
-        guard = qt_host.widget_guard()
-        if guard is not None:
-            guard.on_blocked = lambda title: self.not_here(f"“{title}”")
         try:
             self.window._autosave_timer = self.timers.timer(self.window._on_autosave_tick, repeat=True)
             self.window._setup_autosave()
@@ -268,7 +265,6 @@ class Host:
     def idle(self):
         """Qt's posted events and timers; then what the window should do:
         ``(frame_wanted, wake_in_ms or None, cursor or None, title or None)``."""
-        qt_host.pump()
         self._guard("window timers", self.timers.run_due)
         self.window._extension_menus.refresh(self.window)
         pending = self.window.__dict__.get("_pending_open")
@@ -291,8 +287,6 @@ class Host:
             if ms is not None:
                 delay = ms if delay is None else min(delay, ms)
 
-        # Remaining plugin/tool Qt callbacks still need their event pump.
-        sooner(qt_host.next_timer_ms())
         if getattr(view, "_inference_future", None) is not None or getattr(view, "_inference_queued", False):
             sooner(33)
         watch = self.window.__dict__.get("_links_watch")
@@ -702,7 +696,6 @@ class Host:
         mesh = scene.mesh
         tool = self.viewport.active_tool
         win = self.window
-        guard = qt_host.widget_guard()
         return {
             "opening": [(j.label, j.fraction, j.phase) for j in win.__dict__.get("_chrome_jobs", ())],
             "instances": len(self.view.packed.instances) if self.view.packed is not None else 0,
@@ -744,7 +737,7 @@ class Host:
             "errors": len(self.errors),
             "widget_gaps": self.missing(),
             "classic_window_loaded": "views.main_window" in sys.modules,
-            "blocked_widgets": list(guard.blocked) if guard is not None else [],
+            "blocked_widgets": [],
             "not_here": list(self.not_here_log),
             "custom_cursors": len(self._custom_cursors),
             "preedit": self._preedit,
