@@ -26,9 +26,9 @@ from dataclasses import dataclass
 import re
 from pathlib import Path
 
+import ingetrazo_core as _NATIVE
 from ingetrazo_core import Vec3 as QVector3D
 
-from core.triangulate import plane_axes
 
 
 def texture_cache_root() -> Path:
@@ -209,78 +209,25 @@ class Texture:
 VERTICAL_TOLERANCE = 1e-3
 
 
-def projection_basis(normal) -> tuple[tuple[float, float, float],
-                                      tuple[float, float, float]]:
-    """The .skp format's in-plane axes for a face normal ``(nx, ny, nz)`` — the
-    basis its default texture projection AND its per-face texture matrices
-    are expressed in: ``xr = normalize(Z × n)``, ``yr = n × xr``; for a
-    vertical normal ``(X, Y)`` looking up and ``(−X, Y)`` looking down.
-    Plain tuples: the ``.skp`` importer runs this per vertex over large
-    models.
-
-    THE one recipe for the whole app. The renderer, the OBJ/glTF writers and
-    the paste preview used to project with ``core.triangulate.plane_axes``
-    (world X projected onto the plane) while the ``.skp`` importer already
-    used this one: on a wall facing +Y or −X the two differ by 180°, so a
-    texture painted in IngeTrazo showed upside-down against the reference
-    rendering of the very same file (measured through the former external
-    converter, 2026-09-04). Calibrated against that ground truth for every
-    orientation, not just the axis-aligned ones.
-
-    ``Z × n`` is discontinuous at the vertical: for ``n = (ε, 0, 1)`` it
-    points along +Y however small ε is, for ``(0, ε, 1)`` along −X. The .skp
-    reference resolves that with a tolerance, measured (2026-09-04) on
-    faces tilted by ε from 1e-10 to 1e-2: the world axes
-    ``(X, ±Y)`` while ``|Z × n| < 1e-3`` (the sine of the tilt), the cross
-    product from 1.0001e-3 up. The same tolerance here keeps a horizontal
-    face whose normal carries float noise — up to 6e-4 on the small faces
-    of Marco's pool — projected the way the .skp reference projects the
-    plane it reads back from the file; with the old 1e-9 every such face came out
-    turned 90°."""
-    nx, ny, nz = float(normal[0]), float(normal[1]), float(normal[2])
-    ln = (nx * nx + ny * ny + nz * nz) ** 0.5
-    if ln > 1e-30:
-        nx, ny, nz = nx / ln, ny / ln, nz / ln
-    xx, xy = -ny, nx                      # Z × n
-    lx = (xx * xx + xy * xy) ** 0.5
-    if lx < VERTICAL_TOLERANCE:
-        # Measured, not derived: a face looking DOWN gets (−X, +Y), the
-        # 180° turn of the upward (X, Y) — not the (X, −Y) mirror the
-        # reader assumed. Every underside of the pool (slabs, benches,
-        # countertops) came out upside-down until measurement said so.
-        return ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0)) if nz > 0 \
-            else ((-1.0, 0.0, 0.0), (0.0, 1.0, 0.0))
-    xx, xy = xx / lx, xy / lx
-    return (xx, xy, 0.0), (-nz * xy, nz * xx, nx * xy - ny * xx)   # n × xr
-
-
-def projection_axes(normal, rot: float = 0.0) -> tuple[QVector3D, QVector3D]:
-    """:func:`projection_basis` as ``QVector3D`` axes, turned in-plane by
-    ``rot`` degrees (the .skp texture rotation)."""
-    n = QVector3D(normal)
-    xr, yr = projection_basis((n.x(), n.y(), n.z()))
-    u_axis, v_axis = QVector3D(*xr), QVector3D(*yr)
-    if rot:
-        import math
-        a = math.radians(rot)
-        cos_a, sin_a = math.cos(a), math.sin(a)
-        u_axis, v_axis = (u_axis * cos_a + v_axis * sin_a,
-                          v_axis * cos_a - u_axis * sin_a)
-    return u_axis, v_axis
-
-
-def planar_uv(normal: QVector3D, positions, sw: float, sh: float,
-              rot: float = 0.0):
-    """.skp-style planar-projected ``(u, v)`` for each world ``positions``
-    point: project onto the .skp plane basis for ``normal`` (so coplanar
-    faces tile seamlessly), scaled by the tile size. ``rot`` turns the texture
-    in-plane by that many degrees (the .skp texture rotation). ``sw``/``sh``
-    ≤ 0 fall back to 1 to avoid a divide-by-zero."""
-    u_axis, v_axis = projection_axes(normal, rot)
-    sw = sw if abs(sw) > 1e-9 else 1.0
-    sh = sh if abs(sh) > 1e-9 else 1.0
-    return [(QVector3D.dotProduct(p, u_axis) / sw,
-             QVector3D.dotProduct(p, v_axis) / sh) for p in positions]
+# ---- The maths, in Rust (``rust/ingetrazo_core/src/model/texture_maths.rs``)
+#
+# ``projection_basis(normal)``: the .skp format's in-plane axes for a face
+# normal ``(nx, ny, nz)``, the basis its default texture projection AND its
+# per-face texture matrices are expressed in: ``xr = normalize(Z × n)``,
+# ``yr = n × xr``; for a vertical normal ``(X, Y)`` looking up and ``(−X, Y)``
+# looking down, while ``|Z × n| < VERTICAL_TOLERANCE``. THE one recipe for the
+# whole app (renderer, exporters, paste preview, the .skp importer), calibrated
+# against the .skp reference for every orientation (2026-09-04): with the
+# world-X projection a texture on a wall facing +Y or −X came out upside-down,
+# and a horizontal face with float noise in its normal turned 90°.
+#
+# ``projection_axes(normal, rot=0.0)``: that basis as ``QVector3D`` axes, turned
+# in-plane by ``rot`` degrees (the .skp texture rotation). ``planar_uv(normal,
+# positions, sw, sh, rot=0.0)``: .skp-style planar ``(u, v)`` of world points,
+# scaled by the tile size (``sw``/``sh`` near 0 count as 1).
+projection_basis = _NATIVE.texture_projection_basis
+projection_axes = _NATIVE.texture_projection_axes
+planar_uv = _NATIVE.texture_planar_uv
 
 
 def face_uvs(face, tex: dict):
@@ -290,158 +237,25 @@ def face_uvs(face, tex: dict):
                      float(tex.get("rot", 0.0)))
 
 
-def fit_uv_affine(points, uvs):
-    """World→UV affine map ``[gu.xyz, u0, gv.xyz, v0]`` fitted from a polygon's
-    vertices and their explicit UVs (a COLLADA/OBJ import). Any UV assignment
-    on a planar polygon is affine over its plane, so evaluating the map at a
-    vertex reproduces its UV exactly — which lets coplanar triangles of the
-    same original face merge and still texture correctly. Returns ``None``
-    when the polygon is degenerate."""
-    n = len(points)
-    if n < 3 or len(uvs) < n:
-        return None
-    if hasattr(points[0], "x"):
-        pts = [p.toTuple() for p in points]
-    else:
-        pts = points
-    # The edge pair with the largest cross product gives the stablest fit.
-    # The search is O(n²); |a×b|² = |a|²|b|² − (a·b)² keeps it cheap. Small
-    # polygons (the bulk) run pure Python; big ones (imported faces can carry
-    # hundreds of vertices) go through one NumPy Gram matmul — a per-pair
-    # Python loop over those dominated .skp import.
-    x0, y0, z0 = pts[0]
-    d = [(x - x0, y - y0, z - z0) for x, y, z in pts[1:]]
-    m = n - 1
-    if m <= 12:
-        best = 1e-24
-        bi = bj = -1
-        for i in range(m):
-            ax, ay, az = d[i]
-            for j in range(i + 1, m):
-                bx, by, bz = d[j]
-                cx = ay * bz - az * by
-                cy = az * bx - ax * bz
-                cz = ax * by - ay * bx
-                c2 = cx * cx + cy * cy + cz * cz
-                if c2 > best:
-                    best = c2
-                    bi, bj = i, j
-        if bi < 0:
-            return None
-    else:
-        import numpy as np
-        dn = np.asarray(d, dtype=np.float64)
-        gram = dn @ dn.T
-        n2 = np.einsum("ij,ij->i", dn, dn)
-        cl2 = np.multiply.outer(n2, n2) - gram * gram
-        flat = int(np.argmax(cl2))
-        bi, bj = flat // m, flat % m
-        if cl2[bi, bj] <= 1e-24:
-            return None
-    e1x, e1y, e1z = d[bi]
-    e2x, e2y, e2z = d[bj]
-    g11 = e1x * e1x + e1y * e1y + e1z * e1z
-    g12 = e1x * e2x + e1y * e2y + e1z * e2z
-    g22 = e2x * e2x + e2y * e2y + e2z * e2z
-    det = g11 * g22 - g12 * g12
-    if abs(det) < 1e-18:
-        return None
-    i = bi + 1
-    j = bj + 1
-    out = []
-    for k in (0, 1):                       # u, then v
-        d1 = uvs[i][k] - uvs[0][k]
-        d2 = uvs[j][k] - uvs[0][k]
-        a = (d1 * g22 - d2 * g12) / det
-        b = (d2 * g11 - d1 * g12) / det
-        gx = e1x * a + e2x * b
-        gy = e1y * a + e2y * b
-        gz = e1z * a + e2z * b
-        c = uvs[0][k] - (gx * x0 + gy * y0 + gz * z0)
-        out.extend([gx, gy, gz, c])
-    return out
-
-
-def affine_uv(uvw, positions):
-    """Evaluate a fitted world→UV map (see :func:`fit_uv_affine`) at points
-    — ``QVector3D`` or plain ``(x, y, z)`` sequences alike."""
-    ux, uy, uz, uc = uvw[0], uvw[1], uvw[2], uvw[3]
-    vx, vy, vz, vc = uvw[4], uvw[5], uvw[6], uvw[7]
-    out = []
-    for p in positions:
-        if hasattr(p, "x"):
-            x, y, z = p.x(), p.y(), p.z()
-        else:
-            x, y, z = p[0], p[1], p[2]
-        out.append((ux * x + uy * y + uz * z + uc,
-                    vx * x + vy * y + vz * z + vc))
-    return out
-
-
-def face_uv_axes(tex: dict, normal):
-    """The affine world→UV map a textured face renders with, as
-    ``(gu, cu, gv, cv)``: ``u = gu·p + cu`` and ``v = gv·p + cv`` at any
-    world point ``p``.
-
-    ONE definition of "where does the texture sit on this face", so the
-    renderer and the ``.skp`` exporter cannot drift apart — the exporter had
-    no UV recipe at all and wrote textured faces with no mapping, which is
-    why a .skp saved from IngeTrazo opened elsewhere with every texture
-    gone and only its average colour left.
-
-    Two sources, matching what the face carries: a fitted ``uvw`` (an import
-    that brought its own texture coordinates) or, failing that, the .skp
-    planar projection of world position (:func:`projection_axes`), so
-    coplanar faces tile seamlessly and a ``planar`` face — which the .skp
-    exporter writes with NO per-face record — lands in the .skp file exactly
-    where the viewport drew it."""
-    uvw = tex.get("uvw")
-    if uvw:
-        return (QVector3D(uvw[0], uvw[1], uvw[2]), float(uvw[3]),
-                QVector3D(uvw[4], uvw[5], uvw[6]), float(uvw[7]))
-    u_axis, v_axis = projection_axes(normal, float(tex.get("rot", 0.0) or 0.0))
-    sw = tex.get("sw", 1.0) or 1.0
-    sh = tex.get("sh", 1.0) or 1.0
-    return (u_axis / sw, 0.0, v_axis / sh, 0.0)
-
-
-def placement_of(tex: dict, normal) -> tuple[float, float, float] | None:
-    """``(sw, sh, rot)`` — the tile size and in-plane rotation a positioned
-    texture (one carrying a fitted ``uvw``) shows on the face of ``normal``:
-    the lengths of the tile axes dual to the map's gradients, and the angle
-    from the .skp projection basis to the U axis. ``None`` when the map is
-    missing or degenerate. What the eyedropper hands to a face on ANOTHER
-    plane: the map itself only means something on its own plane, but the
-    look — the scale and the turn — travels (Marco, 2026-09-15: «debería
-    poder copiar esa muestra… y aplicarlo a otra cara»). Shear and a mirror
-    have no planar equivalent and are dropped."""
-    import math
-    uvw = tex.get("uvw")
-    if not uvw or len(uvw) != 8:
-        return None
-    n = QVector3D(normal)
-    if n.lengthSquared() < 1e-18:
-        return None
-    n = n.normalized()
-    gu = QVector3D(uvw[0], uvw[1], uvw[2])
-    gv = QVector3D(uvw[4], uvw[5], uvw[6])
-    gu = gu - n * QVector3D.dotProduct(gu, n)
-    gv = gv - n * QVector3D.dotProduct(gv, n)
-    g11 = QVector3D.dotProduct(gu, gu)
-    g12 = QVector3D.dotProduct(gu, gv)
-    g22 = QVector3D.dotProduct(gv, gv)
-    det = g11 * g22 - g12 * g12
-    if abs(det) < 1e-24:
-        return None
-    e_u = (gu * g22 - gv * g12) / det
-    e_v = (gv * g11 - gu * g12) / det
-    sw, sh = e_u.length(), e_v.length()
-    if sw < 1e-9 or sh < 1e-9:
-        return None
-    u_axis, v_axis = projection_axes(n)
-    rot = math.degrees(math.atan2(QVector3D.dotProduct(e_u, v_axis),
-                                  QVector3D.dotProduct(e_u, u_axis)))
-    return sw, sh, rot
+# ``fit_uv_affine(points, uvs)``: the world→UV affine map ``[gu.xyz, u0,
+# gv.xyz, v0]`` fitted from a polygon's vertices and their explicit UVs (a
+# COLLADA/OBJ import), from the edge pair with the largest cross product;
+# ``None`` when degenerate. Any UV assignment on a planar polygon is affine
+# over its plane, so coplanar triangles of one original face merge and still
+# texture correctly. ``affine_uv(uvw, positions)`` evaluates it.
+#
+# ``face_uv_axes(tex, normal)``: the affine map a textured face renders with,
+# ``(gu, cu, gv, cv)`` with ``u = gu·p + cu``: the fitted ``uvw`` it carries,
+# or the .skp planar projection. ONE definition of where the texture sits on
+# a face, for the renderer and the exporters alike.
+#
+# ``placement_of(tex, normal)``: ``(sw, sh, rot)``, the tile size and in-plane
+# turn a fitted map shows on the face of ``normal`` (what the eyedropper hands
+# to a face on another plane; shear and mirror dropped), or ``None``.
+fit_uv_affine = _NATIVE.texture_fit_uv_affine
+affine_uv = _NATIVE.texture_affine_uv
+face_uv_axes = _NATIVE.texture_face_uv_axes
+placement_of = _NATIVE.texture_placement_of
 
 
 def flattened_texture(tex: dict, normal=None) -> dict:
@@ -464,18 +278,10 @@ def flattened_texture(tex: dict, normal=None) -> dict:
     return flat
 
 
-def _rotated_map(gu, cu, gv, cv, axis_point, axis_dir, cos_t, sin_t):
-    """The map ``uv(p) = g·p + c`` carried across a hinge: the new face's
-    map is ``uv(R⁻¹ p)`` for the rotation ``R`` about the shared edge that
-    lays the previous face onto the new one, so the image continues across
-    the edge without a cut. ``g' = R·g``, ``c' = c + g·A − g'·A``."""
-    def rot(v):
-        return (v * cos_t + QVector3D.crossProduct(axis_dir, v) * sin_t
-                + axis_dir * (QVector3D.dotProduct(axis_dir, v) * (1.0 - cos_t)))
-    gu2, gv2 = rot(gu), rot(gv)
-    cu2 = cu + QVector3D.dotProduct(gu, axis_point) - QVector3D.dotProduct(gu2, axis_point)
-    cv2 = cv + QVector3D.dotProduct(gv, axis_point) - QVector3D.dotProduct(gv2, axis_point)
-    return gu2, cu2, gv2, cv2
+#: The map ``uv(p) = g·p + c`` carried across a hinge: ``uv(R⁻¹ p)`` for the
+#: rotation about the shared edge that lays the previous face onto the new
+#: one, so the image continues across the edge without a cut.
+_rotated_map = _NATIVE.texture_rotated_map
 
 
 def continuous_maps(mesh, faces, seed, tex: dict) -> dict:
@@ -538,42 +344,11 @@ def continuous_maps(mesh, faces, seed, tex: dict) -> dict:
     return result
 
 
-def uv_reference_points(points, normal=None):
-    """Three points on the face's plane, forming a well-conditioned triangle,
-    for pinning an affine UV map. ``None`` when the face is degenerate.
-
-    NOT face vertices: the map is affine, so it can be sampled anywhere on
-    the plane, and picking real corners is what broke the first attempt. A
-    long thin face gives three nearly collinear corners — one sampled face in
-    piscina.igz had two of them 1.8 inches apart and the third 19 away — and
-    fitting a map through that sliver amplifies float error enough to come
-    back rotated. A right-angled triad on the face's own plane, sized to the
-    face, is exact and always conditioned."""
-    pts = [QVector3D(p) for p in points]
-    if len(pts) < 3:
-        return None
-    centre = QVector3D()
-    for p in pts:
-        centre += p
-    centre /= float(len(pts))
-    n = QVector3D(normal) if normal is not None else None
-    if n is None or n.lengthSquared() < 1e-18:
-        # Newell over the ring: robust for any polygon, and the caller may
-        # not have a normal to give.
-        n = QVector3D()
-        count = len(pts)
-        for i in range(count):
-            a, b = pts[i], pts[(i + 1) % count]
-            n += QVector3D((a.y() - b.y()) * (a.z() + b.z()),
-                           (a.z() - b.z()) * (a.x() + b.x()),
-                           (a.x() - b.x()) * (a.y() + b.y()))
-    if n.lengthSquared() < 1e-18:
-        return None
-    e1, e2 = plane_axes(n.normalized())
-    span = max((p - centre).length() for p in pts)
-    if span < 1e-9:
-        return None
-    return centre, centre + e1 * span, centre + e2 * span
+#: ``uv_reference_points(points, normal=None)``: three points on the face's
+#: plane forming a right-angled triad sized to the face, for pinning an affine
+#: UV map (NOT face vertices: a long thin face's corners are nearly collinear,
+#: and a map fitted through that sliver came back rotated), or ``None``.
+uv_reference_points = _NATIVE.texture_uv_reference_points
 
 
 # ---- Colourize (tinted .skp materials) -----------------------------------
@@ -590,45 +365,12 @@ def uv_reference_points(points, normal=None):
 
 COLORIZE_SHIFT = 0
 COLORIZE_TINT = 1
-_COLORIZE_TILE_PIXELS = 256 * 1024
 
 
-def rgb_to_hls(rgb):
-    """Vectorized colorsys.rgb_to_hls over an (..., 3) float array in 0..1."""
-    import numpy as np
-    r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
-    maxc = rgb.max(axis=-1)
-    minc = rgb.min(axis=-1)
-    lum = (maxc + minc) / 2.0
-    delta = maxc - minc
-    nz = delta > 1e-12
-    denom = np.where(lum <= 0.5, maxc + minc, 2.0 - maxc - minc)
-    sat = np.where(nz & (denom > 1e-12), delta / np.where(denom > 1e-12, denom, 1.0), 0.0)
-    safe = np.where(nz, delta, 1.0)
-    rc = (maxc - r) / safe
-    gc = (maxc - g) / safe
-    bc = (maxc - b) / safe
-    hue = np.where(maxc == r, bc - gc,
-                   np.where(maxc == g, 2.0 + rc - bc, 4.0 + gc - rc))
-    hue = np.where(nz, (hue / 6.0) % 1.0, 0.0)
-    return hue, lum, sat
-
-
-def hls_to_rgb(hue, lum, sat):
-    """Vectorized colorsys.hls_to_rgb; returns an (..., 3) float array."""
-    import numpy as np
-    m2 = np.where(lum <= 0.5, lum * (1.0 + sat), lum + sat - lum * sat)
-    m1 = 2.0 * lum - m2
-
-    def channel(h):
-        h = h % 1.0
-        return np.where(h < 1.0 / 6.0, m1 + (m2 - m1) * h * 6.0,
-               np.where(h < 0.5, m2,
-               np.where(h < 2.0 / 3.0, m1 + (m2 - m1) * (2.0 / 3.0 - h) * 6.0,
-                        m1)))
-
-    return np.stack([channel(hue + 1.0 / 3.0), channel(hue),
-                     channel(hue - 1.0 / 3.0)], axis=-1)
+#: Vectorized ``colorsys.rgb_to_hls`` over an (..., 3) array in 0..1, and
+#: ``hls_to_rgb(hue, lum, sat)`` back to (..., 3).
+rgb_to_hls = _NATIVE.texture_rgb_to_hls
+hls_to_rgb = _NATIVE.texture_hls_to_rgb
 
 
 def colorize_image(data, target_rgb, ctype=COLORIZE_SHIFT):
@@ -641,42 +383,17 @@ def colorize_image(data, target_rgb, ctype=COLORIZE_SHIFT):
     lightness variation. Alpha is preserved (the chain-link cutout must
     survive). Returns PNG bytes, or ``data`` unchanged on any failure."""
     try:
-        import numpy as np
         from ingetrazo_render import SurveyRaster
         img = SurveyRaster.decode(bytes(data))
         if img is None:
             return data
-        w, h = img.width, img.height
-        px = np.frombuffer(img.rgba(), np.uint8).reshape(h, w, 4)
-        rgb = px[..., :3].astype(np.float64) / 255.0
-        alpha = px[..., 3]
-        vis = alpha > 0
-        avg = rgb[vis].mean(axis=0) if vis.any() else rgb.mean(axis=(0, 1))
-        h0, l0, s0 = rgb_to_hls(avg.reshape(1, 3))
-        ht, lt, st = rgb_to_hls(
-            np.array([[c / 255.0 for c in target_rgb[:3]]]))
-        # Keep the original whole-image reduction (including summation order),
-        # but bound the elementwise HLS intermediates on large texture images.
-        del vis
-        result = np.empty((h * w, 4), dtype=np.uint8)
-        flat = rgb.reshape(-1, 3)
-        for start in range(0, h * w, _COLORIZE_TILE_PIXELS):
-            end = start + _COLORIZE_TILE_PIXELS
-            hue, lum, sat = rgb_to_hls(flat[start:end])
-            if ctype == 1:
-                hue = np.full_like(hue, float(ht[0]))
-                sat = np.full_like(sat, float(st[0]))
-            else:
-                hue = (hue + (float(ht[0]) - float(h0[0]))) % 1.0
-                sat = np.clip(sat + (float(st[0]) - float(s0[0])), 0.0, 1.0)
-            lum = np.clip(lum + (float(lt[0]) - float(l0[0])), 0.0, 1.0)
-            result[start:end, :3] = np.clip(
-                hls_to_rgb(hue, lum, sat) * 255.0 + 0.5, 0, 255).astype(np.uint8)
-        result[:, 3] = alpha.reshape(-1)
-        del rgb, flat
-        return SurveyRaster(w, h, result.tobytes()).material_png(bytes(data))
+        rgba = img.rgba()
+        out = _NATIVE.texture_colorize_pixels(rgba, _NATIVE.texture_mean_visible(rgba),
+                                              tuple(target_rgb[:3]), int(ctype))
+        return SurveyRaster(img.width, img.height, out).material_png(bytes(data))
     except Exception:
         return data
+
 
 def tinted_texture(tex: dict, color, ctype: int = COLORIZE_SHIFT) -> dict:
     """A copy of the ``attrs["texture"]`` dict *tex*, re-tinted toward
