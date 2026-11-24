@@ -58,6 +58,7 @@ mod deliveries_host;
 mod sheet_runtime;
 mod settings_rows;
 mod settings_host;
+mod library_host;
 pub mod ui;
 mod host_context;
 mod inspector;
@@ -3408,7 +3409,9 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(shortcut_text::shortcut_text, m)?)?;
     m.add_function(wrap_pyfunction!(shortcut_text::shortcut_alternatives, m)?)?;
     m.add_class::<SceneUpload>()?;
-    m.add_class::<Renderer>()
+    m.add_class::<Renderer>()?;
+    // The Library needs library_view's functions and the sheet host above.
+    library_host::register(m)
 }
 #[cfg(test)]
 mod tests {

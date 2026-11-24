@@ -423,12 +423,9 @@ def footer() -> str:
 
 
 def _libraries():
-    """The library browser, when one is installed (views/wgpu_library.py)."""
+    """The library browser (ingetrazo_render.wgpu_library)."""
     try:
-        import importlib.util
-        if importlib.util.find_spec("views.wgpu_library") is None:
-            return None
-        from views import wgpu_library
+        from ingetrazo_render import wgpu_library
     except Exception:  # noqa: BLE001
         return None
     for name in ("show", "open", "open_library", "toggle"):

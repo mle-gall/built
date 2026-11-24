@@ -4870,7 +4870,7 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         self._update_title()
 
     def _on_open_library(self) -> None:
-        from views.wgpu_library import open_library
+        from ingetrazo_render.wgpu_library import open_library
         open_library(self, "components", scope="s:online")
 
     _pump_file_command = staticmethod(QApplication.processEvents)

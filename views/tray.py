@@ -3620,7 +3620,7 @@ class BimPanel(QWidget):
             self.refresh()
 
     def _edit_registry(self):
-        from views.wgpu_library import open_library
+        from ingetrazo_render.wgpu_library import open_library
         open_library(self._window, "registry")
 
     def _create_type(self):

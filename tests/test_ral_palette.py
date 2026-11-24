@@ -6,7 +6,7 @@ from core.paths import app_root
 from ingetrazo_core import bundled_materials
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tools.paint import PaintTool
-from views import wgpu_library as library
+from ingetrazo_render import wgpu_library as library
 
 
 def test_picking_a_ral_colour_paints_a_material_with_its_name(native_host):

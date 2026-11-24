@@ -169,8 +169,8 @@ def command(win, name, *args):
 
 
 def open_library(win) -> bool:
-    """Window ▸ Library: the Library sheet (views/wgpu_library.py)."""
-    from views import wgpu_library
+    """Window ▸ Library: the Library sheet (ingetrazo_render.wgpu_library)."""
+    from ingetrazo_render import wgpu_library
     return wgpu_library.open_library(win)
 
 

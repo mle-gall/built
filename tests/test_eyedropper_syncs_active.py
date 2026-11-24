@@ -14,7 +14,8 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.test_tree_links import _View
 from tools.base import ToolContext
 from tools.paint import PaintTool
-from views import wgpu_library, wgpu_ui
+from ingetrazo_render import wgpu_library
+from views import wgpu_ui
 
 
 def _sample(win, face, monkeypatch):
