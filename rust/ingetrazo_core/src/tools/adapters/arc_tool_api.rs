@@ -217,8 +217,41 @@ fn cue_colour<'py>(a: &Args<'py>) -> Reply<'py> {
         tool.call_method0("lock_color")?
     })
 }
+
+fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
+    let py = a.py();
+    let label = a.get_item(0)?.call_method1("_state", ("label",))?;
+    if label.is_none() {
+        return Ok(none(py));
+    }
+    let [kind, value, point] = unpack::<3>(&label)?;
+    let tr = py.import("core.i18n")?.getattr("tr")?;
+    let length = || py.import("core.units")?.call_method1("fmt_len", (&value,));
+    let key: String = kind.extract()?;
+    let text = match key.as_str() {
+        "tangent_edge" => tr.call1(("Tangent to edge",))?,
+        "tangent" => tr.call1(("Tangent at vertex",))?,
+        "fillet" | "half" => {
+            let text = if key == "half" {
+                "Half circle"
+            } else {
+                "Tangent to edge"
+            };
+            tr.call1((text,))?.add("  ")?.add(length()?)?
+        }
+        "bulge" => "Bulge ".into_bound_py_any(py)?.add(length()?)?,
+        _ => return Err(pyo3::exceptions::PyKeyError::new_err(key)),
+    };
+    (
+        text,
+        py.import("tools.rust_tools")?
+            .call_method1("Vec3", positional(&point)?)?,
+    )
+        .into_bound_py_any(py)
+}
 #[rustfmt::skip]
 pub(super) const METHODS: &[Method] = &[
+    ("value_label", Mode::Method, value_label, &["self"], "", ""),
     ("magnet_on", Mode::Method, magnet_on, &["self"], "bool", ""),
     ("_fillet", Mode::Property, fillet, &["self"], "", ""),
     ("_equidistant", Mode::Property, equidistant, &["self"], "", ""),

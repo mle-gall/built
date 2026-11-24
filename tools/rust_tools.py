@@ -163,21 +163,6 @@ class ArcTool(_ArcBase, metaclass=_LastFillet):
 
     end_point = _point_property("end_point")
 
-    def value_label(self):
-        label = self._state("label")
-        if label is None:
-            return None
-        from core.i18n import tr
-        from core.units import fmt_len
-        kind, value, mid = label
-        text = {"tangent_edge": lambda: tr("Tangent to edge"),
-                "half": lambda: tr("Half circle") + "  " + fmt_len(value),
-                "fillet": lambda: tr("Tangent to edge") + "  " + fmt_len(value),
-                "tangent": lambda: tr("Tangent at vertex") + "  " + fmt_len(value),
-                "bulge": lambda: "Bulge " + fmt_len(value)}[kind]()
-        return text, Vec3(*mid)
-
-
 @register_tool_adapter
 class ThreePointArcTool(_ArcBase):
     """3-point arc: the circle through the three clicks."""
