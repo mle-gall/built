@@ -710,12 +710,16 @@ def _tree_model(view, scene, cv, readers):
     rebuilds the rows from it without walking every placement again."""
     cached = view.__dict__.get("_ui_tree_model")
     key = (id(scene), cv)
+    # A tree prepared on the open worker has only the document/version key.
+    # Adopt it at that version and start following this pane's history feed.
+    epoch = readers.filing_epoch(scene.content_version) if readers is not None else None
     if cached is not None and cached[0][:2] == key:
+        if len(cached[0]) == 2:
+            view._ui_tree_model = ((*key, epoch), cached[1])
         return cached[1]
     from ingetrazo_core import refresh_unfiled
-    epoch = readers.filing_epoch(scene.content_version) if readers is not None else None
     if (epoch is not None and cached is not None and cached[0][0] == id(scene)
-            and cached[0][2] == epoch and refresh_unfiled(scene, cached[1]["tree"])):
+            and cached[0][2:] == (epoch,) and refresh_unfiled(scene, cached[1]["tree"])):
         model = cached[1]
     else:
         model = prepare_tree_model(scene)

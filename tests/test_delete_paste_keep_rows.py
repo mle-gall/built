@@ -358,3 +358,60 @@ def test_inserting_a_nested_link_rebuilds_the_filing_projection(native_host, tmp
     assert browser.model is not before
     assert native_host.viewport.history.undo()
     assert browser.read() == browser.read(fresh=True)
+
+
+def test_two_panes_readdress_a_repeated_uid_and_undo_independently(native_host):
+    from core.group import Group
+    from core.history import InsertGroupCommand
+    from tests.native_tree import FilingRows
+
+    def branch(name):
+        top = Group(name=name)
+        top.children = [Group(name=name + " leaf", uid="shared-leaf")]
+        return top
+
+    vp = native_host.viewport
+    left, right = branch("Left"), branch("Right")
+    vp.history.execute(InsertGroupCommand(left))
+    panes = [FilingRows(native_host, ["i:" + g.uid for g in (left, right)]) for _ in range(2)]
+
+    def leaves(pane):
+        rows = pane.read()
+        assert rows == pane.read(fresh=True)
+        return {t[0]: t[1] for t, _ in rows if t[0].startswith("c:")}
+
+    assert all(leaves(p) == {"c:shared-leaf": "Left leaf"} for p in panes)
+    models = [p.model for p in panes]
+    vp.history.execute(InsertGroupCommand(right))
+    for p in reversed(panes):
+        addressed = leaves(p)
+        assert set(addressed.values()) == {"Left leaf", "Right leaf"}
+        assert all(key.startswith("c:@[") for key in addressed)
+    assert vp.history.undo()
+    for p, model in zip(panes, models):
+        assert leaves(p) == {"c:shared-leaf": "Left leaf"}
+        assert p.model is model
+
+
+def test_worker_prepared_tree_can_receive_edits_before_its_first_frame(native_host):
+    from core.group import Group
+    from core.history import InsertGroupCommand
+    from tests.native_tree import FilingRows
+    from views.wgpu_ui import prepare_tree_model
+
+    vp = native_host.viewport
+    vp.history.execute(InsertGroupCommand(Group(name="Site")))
+    panes = [FilingRows(native_host) for _ in range(2)]
+    for p in panes:
+        # The worker prepares membership before the view can see the feed.
+        p.view._ui_tree_model = ((id(vp.scene), vp.scene.content_version),
+                                 prepare_tree_model(vp.scene))
+    initial = panes[0].model
+    panes[0].read()
+    assert panes[0].model is initial
+    vp.history.execute(InsertGroupCommand(Group(name="Tower")))
+    for p in panes:
+        rows = p.read()
+        assert rows == p.read(fresh=True)
+        assert "Tower" in {t[1] for t, _ in rows}
+    assert panes[0].model is initial
