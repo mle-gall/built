@@ -46,7 +46,7 @@ member under ``geom/`` (layout in the JSON, no pickles). Builds that read
 only up to format 2 refuse it with a message instead of opening it empty.
 """
 from __future__ import annotations
-from contextvars import ContextVar, copy_context
+from contextvars import ContextVar
 
 from contextlib import contextmanager
 import json
@@ -61,6 +61,21 @@ from formats.native_io import DocumentArchive, native_io
 
 from ingetrazo_core import (
     Vec3 as QVector3D,
+    igz_in_worker as _in_worker,
+    igz_decode_document as _decode_document,
+    igz_parse_native as _parse_native,
+    igz_parse_document as _parse_document,
+    igz_read_document as _read_document,
+    igz_read_members as _read_members,
+    igz_save_scene_inner as _save_scene,
+    igz_prepare_and_write as _prepare_and_write,
+    igz_spool_json as _spool_json,
+    igz_write_prepared as write_prepared,
+    igz_write_prepared_inner as _write_prepared,
+    igz_texture_slots as _texture_slots,
+    igz_texture_entries as _texture_entries,
+    igz_pack_textures as _pack_textures,
+    igz_unpack_textures as _unpack_textures,
     igz_archive_scene_fields, igz_reset_scene, igz_restore_views, igz_finish_scene,
     igz_pack_geometry as _pack_geometry,
     igz_plan_json as _plan_json,
@@ -125,147 +140,6 @@ _GEOM_DTYPES = frozenset(("<f4", "<i4", "<i8", "|u1"))
 # cost seconds on a 300k-face document.
 _TEXTURE_WALK_SKIP = frozenset(("vertices", "holes", "a", "b", "edges",
                                 "arrays"))
-
-
-def _texture_entries(node):
-    """Yield every ``"texture"`` dict inside a serialized payload — face
-    materials, back-side materials (``attrs["back"]``), and whatever nests one
-    later. Walking the JSON keeps this honest as the schema grows: a new place
-    to hang a texture is embedded without touching this module. Coordinate
-    blocks (:data:`_TEXTURE_WALK_SKIP`) and leaf values are skipped before
-    recursing: entering a generator for every colour, offset and scalar
-    dominates the walk on documents with many small JSON meshes."""
-    for parent, key in _texture_slots(node):
-        yield parent[key]
-
-
-def _texture_slots(node):
-    """Yield ``(parent, key)`` for every ``"texture"`` dict that
-    :func:`_texture_entries` walks, so a caller can put a copy in its place."""
-    if isinstance(node, dict):
-        for key, value in node.items():
-            if key == "texture" and isinstance(value, dict):
-                yield node, key
-            elif key == "pbr" and isinstance(value, dict):
-                # Face and placement payloads can share the live recipe.
-                recipe = node[key] = dict(value)
-                for slot, image in recipe.items():
-                    if slot.endswith("_map") and isinstance(image, dict):
-                        yield recipe, slot
-            elif key not in _TEXTURE_WALK_SKIP:
-                if isinstance(value, dict):
-                    yield from _texture_slots(value)
-                elif (isinstance(value, list) and value
-                      and isinstance(value[0], (dict, list))):
-                    for child in value:
-                        if isinstance(child, (dict, list)):
-                            yield from _texture_slots(child)
-    elif isinstance(node, list):
-        if node and not isinstance(node[0], (dict, list)):
-            return                       # a leaf value list (colour, offsets)
-        for value in node:
-            yield from _texture_slots(value)
-
-
-def _pack_textures(payload, *, blobs=None, resolved=None) -> tuple[dict, int]:
-    """Rewrite the payload's texture entries in place for storage inside the
-    container: ``"path"`` (a machine-local absolute path) → ``"embed"`` (an
-    archive member name). Returns ``({member name: image bytes}, missing)``,
-    where *missing* counts images whose file could not be read — those keep
-    their ``"path"``, so a document whose cache was wiped saves no worse than
-    before instead of losing the reference outright."""
-    import hashlib
-    from core.texture import is_image_file, texture_file_name
-
-    blobs = {} if blobs is None else blobs
-    resolved = {} if resolved is None else resolved
-    missing = 0
-    def _member_for(src):
-        nonlocal missing
-        member = resolved.get(src)
-        if member is None:
-            if not is_image_file(src):
-                resolved[src] = ""
-                missing += 1
-                return ""
-            try:
-                data = Path(src).read_bytes()
-            except OSError:
-                resolved[src] = ""
-                missing += 1
-                return ""
-            digest = hashlib.sha1(data).hexdigest()[:16]
-            # ``src`` is usually a cached file already named ``<hash>-<name>``:
-            # texture_file_name drops that prefix, so the member is always
-            # ``<hash>-<name>`` and never grows with the number of saves.
-            member = f"{_TEX_PREFIX}{digest}-{texture_file_name(Path(src).name)}"
-            resolved[src] = member
-            blobs[member] = data
-        return member
-
-    io = native_io()
-    if io is not None:
-        io.igz_texture_references(payload, _member_for, True)
-        return blobs, missing
-    for parent, key in _texture_slots(payload):
-        # Rewrite a copy, never the dict itself: the payload may still share
-        # it with the live scene (a group's paint went in through a shallow
-        # dict(), #877), and rewriting it there took "path" away for good —
-        # the next save, an autosave included, wrote the texture without its
-        # image.
-        tex = parent[key] = dict(parent[key])
-        src = tex.get("path")
-        if src:
-            member = _member_for(src)
-            if member:
-                tex.pop("path", None)
-                tex["embed"] = member
-        # A colourized entry also carries its UNTINTED source: without it a
-        # document opened on another machine could only re-tint the tinted
-        # image, and "remove colour" would have nothing to go back to. The
-        # blobs map is content-addressed, so a base shared with another
-        # material (or with an untinted face) costs nothing extra.
-        base = tex.get("base")
-        if base:
-            member = _member_for(base)
-            if member:
-                tex.pop("base", None)
-                tex["base_embed"] = member
-    return blobs, missing
-
-
-def _unpack_textures(payload, archive) -> None:
-    """Inverse of :func:`_pack_textures`: extract each embedded image into the
-    app's texture cache and point the entry back at that real file, so
-    everything downstream (renderer, exporters) keeps working with paths. A
-    member the archive lost leaves the entry without a texture path — the face
-    renders untextured rather than the load failing."""
-    from core.texture import cache_image
-
-    unpacked: dict = {}
-
-    def _restore(member):
-        """The cached file for an archive member, or None. cache_image drops
-        the member's hash prefix(es) and re-derives one from the bytes, so the
-        same image lands on the same cached file whether it arrived in a
-        document (even one whose member name was bloated by 0.3.10's
-        stacking) or straight from a .skp."""
-        out = unpacked.get(member)
-        if out is None:
-            try:
-                data = archive.read(member)
-            except KeyError:
-                return None
-            name = member.rsplit("/", 1)[-1]
-            try:
-                out = str(cache_image(data, name, "embedded"))
-            except OSError:
-                out = ""        # unwritable cache: the face loses its image
-            unpacked[member] = out
-        return out or None
-
-    from ingetrazo_core import igz_texture_references
-    igz_texture_references(payload, _restore, False)
 
 
 def _group_ifc_record(group):
@@ -495,53 +369,10 @@ def save_scene(scene, path: Path, *, backup=True, progress=None) -> dict:
             gc.enable()
 
 
-def _save_scene(scene, path, *, backup, confirm_loss=None, compatibility=False, progress=None):
-    from core import project, links
-    if hasattr(scene, "plugin_data") and not compatibility:
-        project.refresh_reference(scene, path)
-        project.sync_files(scene, path)
-        links.refresh_paths(scene, path)
-    native_document = built.is_built(path) and not compatibility
-    if native_document or compatibility or _large_document(scene):
-        with SaveStream(built=native_document, compatibility=compatibility, destination=path) as stream:
-            return _prepare_and_write(scene, path, backup, stream, confirm_loss, progress)
-    return _prepare_and_write(scene, path, backup, None, progress=progress)
-
-
 def export_igz(scene, path, confirm_loss, *, progress=None):
     """Write a compatibility copy. The callback receives maximum displacement in mm."""
     return _save_scene(scene, path, backup=True, compatibility=True, confirm_loss=confirm_loss,
                        progress=progress)
-
-
-def _prepare_and_write(scene, path, backup, stream, confirm_loss=None, progress=None):
-    if progress:
-        progress(0.02, "Preparing the document…")
-    steps = prepare_scene_steps(scene, stream=stream, large=stream is not None, progress=progress)
-    while True:
-        try:
-            next(steps)
-        except StopIteration as done:
-            prepared = done.value
-            break
-    if confirm_loss is not None and stream.displacement_mm > built.WARNING_MM:
-        if not confirm_loss(stream.displacement_mm):
-            return None
-    backup_failed = backup and not _backup_previous(path)
-    if progress:
-        progress(0.76, "Writing the document…")
-    meter_type = getattr(native_io(), "ArchiveProgress", None)
-    meter = meter_type() if progress and meter_type else None
-    def pulse():
-        fraction = meter.fraction() if meter is not None else 0.0
-        progress(0.76 + 0.23 * fraction, "Writing the document…")
-    stats = _in_worker(lambda: write_prepared(prepared, path, stream=stream, meter=meter),
-                       pulse if progress else None, background=native_io() is not None)
-    if progress:
-        progress(1.0, "Saved")
-    if backup_failed:
-        stats["backup_failed"] = True
-    return stats
 
 
 def prepare_scene_steps(scene, mesh_steps=None, *, stream=None, large=None, progress=None):
@@ -715,84 +546,6 @@ def prepare_scene_steps(scene, mesh_steps=None, *, stream=None, large=None, prog
     return payload, geom, large, survey_blobs
 
 
-def _spool_json(value, stream):
-    _, missing = _pack_textures(value, blobs=stream.blobs, resolved=stream.resolved)
-    stream.missing += missing
-    try:
-        return stream.json(value)
-    except ValueError:
-        raise NonFiniteDocumentError(_non_finite_where(value)) from None
-
-
-def write_prepared(prepared, path: Path, background=False, *, stream=None, meter=None) -> dict:
-    """Encode and write a detached payload. Never reads the live scene."""
-    if background:
-        with SaveStream(built=built.is_built(path)) as scratch:
-            return _write_prepared(prepared, path, background, scratch, meter)
-    return _write_prepared(prepared, path, background, stream, meter)
-
-
-def _write_prepared(prepared, path, background, stream, meter=None):
-    payload, geom, large, survey_blobs = prepared
-    if background:
-        geom = stream
-        from formats.igz_snapshot import resolve_geometry
-        resolve_geometry(payload, geom, lambda meta: _spool_json(meta, stream))
-        from formats.igz_snapshot import Survey
-        if isinstance(survey_blobs, Survey):
-            from georef.photomesh import pack_mesh
-            meta, survey_blobs = pack_mesh(survey_blobs.mesh)
-            payload["photo_mesh"] = meta
-    if stream is None:
-        blobs, missing = _pack_textures(payload)
-    else:
-        blobs, missing = _pack_textures(payload, blobs=stream.blobs, resolved=stream.resolved)
-        missing += stream.missing
-    blobs.update(survey_blobs)
-    data = {
-        "igz_format": (GEOMETRY_FORMAT if geom else
-                       CONTAINER_FORMAT if blobs else PLAIN_FORMAT),
-        "app_version": __version__,
-        "scene": payload,
-    }
-    container = bool(blobs or geom)
-    if getattr(stream, "built", False):
-        del data["igz_format"]
-        data["built_format"] = 1
-        container = True
-    elif getattr(stream, "compatibility", False):
-        data["igz_format"] = GEOMETRY_FORMAT
-        container = True
-    try:
-        if stream is not None:
-            doc = stream.document(data)
-        else:
-            from io import BytesIO
-            native = native_io()
-            doc = None
-            if native is not None:
-                output = BytesIO()
-                try:
-                    native.igz_encode_json(data, output.write, Fragment, not large)
-                    doc = output.getvalue()
-                except (TypeError, UnicodeEncodeError):
-                    pass
-            if doc is None:
-                doc = (json.dumps(data, separators=(",", ":"), allow_nan=False)
-                       if large else json.dumps(data, indent=2, allow_nan=False))
-    except ValueError:
-        # A NaN or an infinity in a coordinate (#185). Python would write
-        # it as the bare word NaN — not JSON, and a broken shape for good.
-        # Refuse, and leave the file on disk as it was.
-        raise NonFiniteDocumentError(_non_finite_where(payload)) from None
-    if container:
-        options = {"meter": meter} if meter is not None else {}
-        _write_container(path, doc, blobs, fast=large, deflated=geom, **options)
-    else:
-        _write_atomic(path, doc.encode("utf-8") if isinstance(doc, str) else doc)
-    return {"embedded": len(blobs), "missing": missing}
-
-
 def _large_document(scene):
     classify = getattr(native_io(), "igz_large_document", None)
     if classify and getattr(scene, "_root", None) is not None:
@@ -941,44 +694,6 @@ def _write_container(path: Path, doc: str, blobs: dict,
                 write(member, blobs[member], zipfile.ZIP_STORED)
 
 
-def _in_worker(work, pump=None, *, background=False, cancel=None):
-    """``work()`` — in a worker thread while ``pump`` keeps the window
-    answering, when given. Reading a 3.3 GB document took 24 s in one call,
-    and the desktop flagged IngeTrazo as «not responding» after five (Marco,
-    01-10, the model of #158); the JSON parser and zlib let the main thread
-    in."""
-    import threading
-    if pump is None and (not background or threading.current_thread() is not threading.main_thread()):
-        return work()
-    box: dict = {}
-
-    def run():
-        try:
-            box["data"] = work()
-        except BaseException as exc:  # noqa: BLE001 — re-raised below
-            box["error"] = exc
-    th = threading.Thread(target=copy_context().run, args=(run,), daemon=True)
-    th.start()
-    try:
-        if pump is None:
-            th.join()
-        else:
-            while th.is_alive():
-                th.join(0.1)
-                pump()
-    except BaseException:
-        if cancel is not None:
-            cancel()
-        raise
-    finally:
-        # Keep the scratch ranges and archive handles alive when a progress
-        # callback cancels the operation before its worker returns.
-        th.join()
-    if "error" in box:
-        raise box["error"]
-    return box["data"]
-
-
 def _native_blocks(meta) -> dict:
     """What :func:`_json_arrays` makes of a mesh block, from what the engine
     read of it (ingetrazo_core.json_mesh_blocks): the same arrays, the same
@@ -1100,58 +815,6 @@ def _adopt_native_blocks(data, blocks) -> None:
         adopt(raw)
 
 
-def _parse_native(raw: bytes):
-    """A document's tree with its mesh blocks' arrays read by the engine
-    (under ``"_arrays"``, for :func:`_load_mesh`), or ``None`` when it should
-    go through the plain parser: the engine is off, the document is small, or
-    anything in it is not plain enough (jsondoc.rs). The tree of a 3.3 GB
-    document was 8.8 GB, for the loader to flatten into arrays and drop."""
-    if len(raw) < _NATIVE_JSON_MIN:
-        return None
-    from core import _native
-    mod = _native.native
-    if mod is None or not hasattr(mod, "json_mesh_blocks"):
-        return None
-    got = mod.json_mesh_blocks(raw)
-    if got is None:
-        return None
-    text, blocks = got
-    was = _finite_flag.get()[0]
-    try:
-        data = _decode_document(text)
-        _adopt_native_blocks(data, blocks)
-    except Exception:  # noqa: BLE001 — the plain parser says what is wrong
-        _finite_flag.get()[0] = was
-        return None
-    if _finite_flag.get()[0]:
-        return None                      # _without_nonfinite reads the tree
-    return data
-
-
-def _decode_document(raw):
-    native = native_io()
-    if native is not None and isinstance(raw, bytes):
-        data = native.igz_json_loads(raw)
-        if data is not None:
-            return data
-    try:
-        return json.loads(raw.decode("utf-8"), parse_constant=_note_constant)
-    except RecursionError as exc:
-        raise ValueError("Document nesting exceeds the JSON decoder limit") from exc
-
-
-def _parse_document(read, pump=None):
-    """The tree of the document ``read()`` returns the bytes of (read in the
-    worker too: inflating is most of the wait)."""
-    def work():
-        raw = read()
-        data = _parse_native(raw)
-        if data is not None:
-            return data
-        return _decode_document(raw)
-    return _in_worker(work, pump)
-
-
 def _read_member_flat(archive, name):
     """``archive.read(name)``. A long member goes into a buffer of its size,
     a piece at a time: read() grows its result as it inflates, and for an
@@ -1172,85 +835,6 @@ def _read_member_flat(archive, name):
     if at < len(buf):
         del buf[at:]
     return buf
-
-
-def _read_document(path: Path, pump=None, read_progress=None, *, placements=False):
-    """``(data, archive)`` for a document of either shape — the archive is
-    ``None`` for a plain-JSON one, and stays open while the caller extracts
-    embedded images."""
-    import os
-    io = native_io()
-    stream_reader = getattr(io, "DocumentReader", None)
-    stream_meshes = placements and _NATIVE_JSON_MIN > 0
-
-    def decode(fd, offset, packed, size, method, crc):
-        if stream_reader is None or (size >= _NATIVE_JSON_MIN and not stream_meshes):
-            return None
-        reader = stream_reader(size)
-        def pulse():
-            if read_progress:
-                read_progress(reader.fraction())
-            elif pump:
-                pump()
-        return _in_worker(lambda: reader.parse(fd, offset, packed, method, crc, placements),
-                          pulse if pump or read_progress else None, background=True, cancel=getattr(reader, "cancel", None))
-
-    with path.open('rb') as stream:
-        magic = stream.read(len(_ZIP_MAGIC))
-        if magic != _ZIP_MAGIC:
-            size = os.fstat(stream.fileno()).st_size
-            data = decode(stream.fileno(), 0, size, size, 0, None)
-            if data is not None:
-                return data, None
-            stream.seek(0)
-            return _parse_document(stream.read, pump), None
-    import zipfile
-    from core import zip_limits
-    reader = getattr(native_io(), "igz_read_member", None)
-    if reader is None:
-        archive = zipfile.ZipFile(path)
-    else:
-        archive = DocumentArchive(path)
-    try:
-        # Every later read (geometry blocks, textures, the survey) is from
-        # this archive: one check covers them all.
-        zip_limits.check(archive, path.name)
-    except zipfile.BadZipFile:
-        archive.close()
-        raise
-    try:
-        info = archive.getinfo(_DOC_ENTRY)
-        if stream_reader and (stream_meshes or info.file_size < _NATIVE_JSON_MIN) and not info.flag_bits & 1:
-            with archive.open(info) as member:
-                offset = getattr(member, "_orig_compress_start", None)
-                if offset is not None:
-                    data = decode(archive.fp.fileno(), offset, info.compress_size,
-                                  info.file_size, info.compress_type, info.CRC)
-                    if data is not None:
-                        return data, archive
-        data = _parse_document(lambda: (archive.read(_DOC_ENTRY) if reader else
-                                        _read_member_flat(archive, _DOC_ENTRY)),
-                               pump)
-    except KeyError:
-        archive.close()
-        raise ValueError(
-            f"{path.name} is not an IngeTrazo document (no {_DOC_ENTRY}).")
-    except BaseException:
-        archive.close()
-        raise
-    return data, archive
-
-
-def _read_members(archive, names: list) -> dict:
-    """``{name: bytes}``, inflated side by side (zlib lets go of the
-    interpreter; a big document has hundreds of blocks). A damaged member
-    raises what it raises read alone, the first in ``names`` first."""
-    if len(names) < 2:
-        return {n: archive.read(n) for n in names}
-    import os
-    from concurrent.futures import ThreadPoolExecutor
-    with ThreadPoolExecutor(max_workers=min(8, os.cpu_count() or 2)) as ex:
-        return dict(zip(names, ex.map(archive.read, names)))
 
 
 def _unpack_photo_mesh(payload: dict, archive):

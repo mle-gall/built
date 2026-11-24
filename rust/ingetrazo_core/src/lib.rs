@@ -53,6 +53,8 @@ mod gltf_mesh;
 mod gltf_write;
 mod file_precision;
 mod file_textures;
+mod file_save;
+mod file_read;
 mod file_sheet;
 mod file_groups;
 mod group_geometry;
@@ -149,6 +151,8 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     dxf_read::register(m)?;
     view_svg::register(m)?;
     m.add_function(wrap_pyfunction!(file_model::dae_add_fused, m)?)?;
+    file_save::register(m)?;
+    file_read::register(m)?;
     fuse::register(m)?;
     obj_read::register(m)?;
     obj_write::register(m)?;
@@ -493,6 +497,10 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(file_sheet::igz_load_sheet, m)?)?;
     m.add_function(wrap_pyfunction!(file_sheet::igz_archive_sheet, m)?)?;
     m.add_function(wrap_pyfunction!(file_textures::igz_texture_references, m)?)?;
+    m.add_function(wrap_pyfunction!(file_textures::igz_pack_textures, m)?)?;
+    m.add_function(wrap_pyfunction!(file_textures::igz_unpack_textures, m)?)?;
+    m.add_function(wrap_pyfunction!(file_textures::igz_texture_slots, m)?)?;
+    m.add_function(wrap_pyfunction!(file_textures::igz_texture_entries, m)?)?;
     m.add_function(wrap_pyfunction!(file_json::igz_json_loads, m)?)?;
     m.add_function(wrap_pyfunction!(file_json::igz_encode_json, m)?)?;
     m.add_class::<file_json::FileMatrix>()?;
