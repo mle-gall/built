@@ -1150,6 +1150,27 @@ impl PyMeshStore {
         Ok((result.dirty,result.steps,result.cap,result.removed_faces,result.removed_edges,result.source,result.remainders))
     }
 
+    fn single_plane(&self, origin: [f64;3], normal: [f64;3], hypot: &str, compensated: bool)
+        -> PyResult<Option<Vec<super::caps::Cap>>> {
+        self.inner.single_plane(origin, normal, crate::hypot_of(hypot)?, compensated).map_err(op_err)
+    }
+
+    fn rebuild_single_plane(&mut self, origin: [f64;3], normal: [f64;3], own: std::collections::HashMap<u128,u32>,
+                            rows: Vec<u32>, hypot: &str, compensated: bool) -> PyResult<(usize, Vec<(u128,u32)>)> {
+        let mut paint = super::Paint::new(own, rows);
+        let h = crate::hypot_of(hypot)?;
+        let mut work = self.inner.clone();
+        let mut ch = Change::default();
+        let result = work.rebuild_single_plane(origin, normal, &mut paint, h, compensated, &mut ch).map_err(op_err)?;
+        if result.0 != 0 {
+            let removed: Vec<_> = ch.removed[2].iter().filter_map(|&k| work.slot_any(Kind::Face,k)).collect();
+            if work.dangling(&removed) { return Err(StoreFallback::new_err("a removed cap is still present on an edge")); }
+            work.finish(ch);
+            self.inner = work;
+        }
+        Ok(result)
+    }
+
     fn faces_are_flat(&self, tolerance: f64, hypot: &str) -> PyResult<Option<bool>> {
         Ok(self.inner.faces_are_flat(tolerance, crate::hypot_of(hypot)?))
     }

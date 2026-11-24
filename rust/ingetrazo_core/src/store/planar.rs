@@ -259,6 +259,17 @@ pub(crate) fn plane_scan_point(outer: Ring, holes: Vec<Ring>) -> Option<(f64, f6
 }
 
 #[pyfunction]
+#[pyo3(signature = (regions, creases=Vec::new()))]
+pub(crate) fn union_plane_regions<'py>(regions: &Bound<'py, PyAny>, creases: Vec<[Point;2]>)
+    -> PyResult<Vec<(Vec<Bound<'py,PyAny>>,Vec<Vec<Bound<'py,PyAny>>>)>> {
+    let loops = trace_plane_outline(regions, creases)?;
+    let positions: Vec<Ring> = loops.iter().map(|r| r.iter().map(|p| p.extract()).collect()).collect::<PyResult<_>>()?;
+    Ok(nesting(&Metrics::new(regions.py())?, &positions, false)?.into_iter().map(|(i, holes)| {
+        (loops[i].clone(), holes.into_iter().map(|j| loops[j].clone()).collect())
+    }).collect())
+}
+
+#[pyfunction]
 pub(crate) fn trace_plane_outline<'py>(
     regions: &Bound<'py, PyAny>,
     creases: Vec<[Point; 2]>,

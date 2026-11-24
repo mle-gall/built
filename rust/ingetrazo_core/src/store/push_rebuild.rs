@@ -96,6 +96,7 @@ pub struct Rebuilt {
 
 /// `RebuildCache`, store path: the memo fields Python keeps, with the same
 /// keys (the token), so a stale scope is stale here too.
+#[derive(Default)]
 struct Cache {
     token: i64,
     seeds: Vec<u128>,
@@ -109,6 +110,7 @@ struct Cache {
 }
 
 struct Ctx<'a> {
+    standalone: bool,
     h: Hypot,
     compensated: bool,
     keep: bool,
@@ -378,23 +380,27 @@ impl Store {
         let fresh_set: Vec<u32> = fresh.iter().filter_map(|k| self.live_face(k)).collect();
         let fresh_slots: HashSet<u32> = fresh_set.iter().copied().collect();
         let shadowed = if ctx.keep { self.shadowed(&fresh_set, &scope_faces, cache, ctx) } else { HashSet::new() };
-        self.components(cache);
-        let mut want = BTreeSet::new();
-        for &f in &scope_faces {
-            let k = self.key(Kind::Face, f);
-            let c = cache.comp.as_ref().and_then(|c| c.get(&k).copied());
-            if let Some(c) = c {
-                if self.coplanar_on(f, origin, n, cache, ctx) {
+        if ctx.standalone {
+            self.packed(cache, &shadowed, None, h);
+        } else {
+            self.components(cache);
+            let mut want = BTreeSet::new();
+            for &f in &scope_faces {
+                let k = self.key(Kind::Face, f);
+                let c = cache.comp.as_ref().and_then(|c| c.get(&k).copied());
+                if let Some(c) = c {
+                    if self.coplanar_on(f, origin, n, cache, ctx) {
+                        want.insert(c);
+                    }
+                }
+            }
+            for &f in &fresh_set {
+                if let Some(&c) = cache.comp.as_ref().and_then(|c| c.get(&self.key(Kind::Face, f))) {
                     want.insert(c);
                 }
             }
+            self.packed(cache, &shadowed, (!want.is_empty()).then_some(want), h);
         }
-        for &f in &fresh_set {
-            if let Some(&c) = cache.comp.as_ref().and_then(|c| c.get(&self.key(Kind::Face, f))) {
-                want.insert(c);
-            }
-        }
-        self.packed(cache, &shadowed, (!want.is_empty()).then_some(want), h);
         let mut probes = Vec::with_capacity(regions.len());
         for (outer, holes) in &regions {
             probes.push(planar::region_point(&ctx.metrics, outer, holes).map_err(|_| OpError::Fallback("no region point"))?);
@@ -529,7 +535,7 @@ impl Store {
             let along = rim.iter().any(|&s| [a, b].iter().all(|&p| on_segment(p, s, ARR_TOL / 2.)));
             let first = ctx.paint.class(self, fs[0]);
             let paints = fs[1..].iter().any(|&f| ctx.paint.class(self, f) != first);
-            if crease || !along || paints {
+            if crease || (!ctx.standalone && (!along || paints)) {
                 out.push([a, b]);
             }
         }
@@ -732,6 +738,26 @@ impl Store {
 
     /// The push's plane rebuild to a fixpoint, then the trailing stitch.
     #[allow(clippy::too_many_arguments)]
+    pub(super) fn single_plane(&self, origin: [f64;3], normal: [f64;3], h: Hypot, compensated: bool)
+        -> Result<Option<Vec<super::caps::Cap>>, OpError> {
+        let mut paint = Paint::new(HashMap::new(), Vec::new());
+        let mut ctx = Ctx { standalone: true, h, compensated, keep: false, removing: true, metrics: Metrics::native(compensated), paint: &mut paint };
+        let plan = self.rebuild_cap_plane(v(origin), v(normal), &PySet::from_keys([]), &mut Vec::new(), &mut Cache::default(), &mut ctx)?;
+        Ok(plan.map(|caps| caps.into_iter().map(|(outer, holes, interior)| {
+            let rings = std::iter::once(outer).chain(holes).map(|r| r.into_iter().map(arr).collect()).collect();
+            (rings, interior)
+        }).collect()))
+    }
+
+    pub(super) fn rebuild_single_plane(&mut self, origin: [f64;3], normal: [f64;3], paint: &mut Paint, h: Hypot, compensated: bool, ch: &mut Change)
+        -> Result<(usize, Vec<(u128, u32)>), OpError> {
+        let mut ctx = Ctx { standalone: true, h, compensated, keep: false, removing: true, metrics: Metrics::native(compensated), paint };
+        let mut bumps = 0;
+        self.apply_cap_rebuild(v(origin),v(normal),&PySet::from_keys([]),&mut Vec::new(),&mut Cache::default(),&mut ctx,ch,&mut bumps)?;
+        let painted = ctx.paint.order.iter().map(|k| (*k, ctx.paint.made[k])).collect();
+        Ok((bumps, painted))
+    }
+
     pub fn rebuild_push_planes(
         &mut self,
         fresh: Fresh,
@@ -761,18 +787,8 @@ impl Store {
                 }
             }
         }
-        let mut cache = Cache {
-            token: 0,
-            seeds: Vec::new(),
-            comp: None,
-            comp_token: -1,
-            scope: None,
-            scope_token: -1,
-            packed: None,
-            dropped: Vec::new(),
-            frames: HashMap::new(),
-        };
-        let mut ctx = Ctx { h, compensated, keep, removing, metrics: Metrics::native(compensated), paint };
+        let mut cache = Cache { comp_token: -1, scope_token: -1, ..Cache::default() };
+        let mut ctx = Ctx { standalone: false, h, compensated, keep, removing, metrics: Metrics::native(compensated), paint };
         let mut bumps = 0;
         for round in 0..4 {
             if round > 0 {

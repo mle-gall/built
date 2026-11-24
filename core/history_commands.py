@@ -3258,7 +3258,7 @@ def run_stitch(mesh, seedkeys: set, new_faces: Optional[set] = None,
 
     ``coplanar_merge=False`` runs only phases 0–2 (connectivity repair). Solid
     push/pull uses this: its seams are dissolved by the deterministic per-plane
-    rebuild (:mod:`core.cap_rebuild`) instead of the winding-tolerant merge,
+    rebuild (``Store::rebuild_push_planes``) instead of the winding-tolerant merge,
     which only remains for raw/open geometry where outwardness is undefined.
 
     ``dedupe=False`` skips the identical-cycle face dedupe of phase 0. The

@@ -68,6 +68,66 @@ def _weld_args():
                 fused=False)
 
 
+def _frozen(x):
+    """A hashable stand-in for an attrs value: equal values freeze equal."""
+    if isinstance(x, dict):
+        return ("d", tuple(sorted((k, _frozen(v)) for k, v in x.items())))
+    if isinstance(x, list):
+        return ("l", tuple(_frozen(v) for v in x))
+    if isinstance(x, tuple):
+        return ("t", tuple(_frozen(v) for v in x))
+    hash(x)
+    return x
+
+
+def paint_classes(mesh, *, push=False):
+    """``(own, rows, reps)`` for the native rebuild: the paint class of each
+    face's own attrs dict and of each attribute-table row (equal dicts, one
+    class; 0 for none) and a dict per class."""
+    from core.store_mesh import _attribute_owner
+    owner = _attribute_owner(mesh)
+    reps = [{}]
+    index: dict = {}
+
+    def cls(d):
+        if not d:
+            return 0
+        try:
+            key = _frozen(d)
+        except TypeError:
+            key = None
+        if key is not None:
+            c = index.get(key)
+            if c is None:
+                c = index[key] = len(reps)
+                reps.append(d)
+            return c
+        for c, r in enumerate(reps):
+            if c and r == d:
+                return c
+        reps.append(d)
+        return len(reps) - 1
+
+    rows = [cls(r) for r in owner["_attr_table"]]
+    own = {k: cls(d) for k, d in owner["_attr_own"].items()}
+    if push:
+        from core.mesh import PAINT_KEYS, _exchange_paint
+        # Entry orientation and free-sheet winding can each exchange the sides.
+        # The store also needs the paint-only class inherited by a divided cap.
+        swaps = []
+        for _ in range(2):
+            for d in reps[len(swaps):]:
+                copy = dict(d)
+                if isinstance(copy.get("back"), dict):
+                    _exchange_paint(copy)
+                swaps.append(cls(copy))
+        surface = [cls({k: d[k] for k in PAINT_KEYS if k in d}) for d in list(reps)]
+        swaps.extend(range(len(swaps), len(reps)))
+        surface.extend(range(len(surface), len(reps)))
+        return own, rows, reps, swaps, surface
+    return own, rows, reps
+
+
 def _copy_attrs(d) -> dict:
     """A face's own attrs from a table entry: one level deep, as
     ``formats.igz._face_attrs_from_json`` gives every face its own colour
@@ -1618,10 +1678,21 @@ class StoreMesh(Mesh):
             before, face, shift, facet_cos, _mesh._CURVE_COUNTER, painted, _hypot())
         return [FaceView(self, key) for key in faces]
 
+    def rebuild_cap_plane(self, origin, normal):
+        """Publish the native single-plane edit and the donors of its replacement caps."""
+        import sys
+        own, rows, reps = paint_classes(self)
+        bumps, painted = self._store.rebuild_single_plane(
+            origin.toTuple(), normal.toTuple(), own, rows, _hypot(), sys.version_info >= (3, 12))
+        if bumps:
+            self._dirty(bumps)
+            for key, cls in painted:
+                FaceView(self, key).attrs = _copy_attrs(reps[cls])
+        return bool(bumps)
+
     def push_extrude(self, scene, face, distance, normal, keep, oriented, preview):
         """Publish one store extrusion's paint, selection and editor counters."""
         import sys
-        from core.cap_rebuild import paint_classes
         from core.mesh import swap_orientation_paint
         own, rows, reps, swapped, surface = paint_classes(self, push=True)
         try:
@@ -1645,7 +1716,6 @@ class StoreMesh(Mesh):
     def push_translate(self, cap, delta, removing, preview):
         """Run the prism translation and publish the store's paint transfers."""
         import sys
-        from core.cap_rebuild import paint_classes
         from core.mesh import swap_orientation_paint
         own, rows, reps = paint_classes(self)
         try:
@@ -2831,6 +2901,21 @@ def faces_arrays(m):
                  np.asarray(a["ring_counts"], dtype=np.int64), model_f64=True)
     out.edge_face_counts = np.diff(a["ef_start"])
     return out
+
+
+def plan_cap_plane(mesh, origin, normal):
+    """Read a cap plan. A materialised mesh keeps all its current element keys."""
+    import sys
+    if type(mesh) is not StoreMesh:
+        from copy import copy
+        mesh = copy(mesh)
+        to_store(mesh)
+    plan = mesh._store.single_plane(origin.toTuple(), normal.toTuple(), _hypot(), sys.version_info >= (3, 12))
+    if plan is None:
+        return None
+    def ring(points):
+        return [QVector3D(*p) for p in points]
+    return [(ring(rings[0]), [ring(r) for r in rings[1:]], part) for rings, part in plan]
 
 
 def to_store(m) -> dict:

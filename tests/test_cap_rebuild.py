@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""Deterministic plane rebuild (core.cap_rebuild) — the root-fix "path C".
+"""Deterministic plane rebuild (Store::single_plane) — the root-fix "path C".
 
 Given a plane of a solid, recompute its faces from the plane's edges: run the
 arrangement, classify each minimal region inside/outside the solid by winding
@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from ingetrazo_core import Vec3 as QVector3D
 
-from core.cap_rebuild import rebuild_plane
+from core.store_mesh import plan_cap_plane as rebuild_plane
 from core.mesh import Mesh
 from core.orient import orient_outward
 from core.scene import Scene
@@ -229,13 +229,12 @@ def test_pushed_prism_cap_rebuild_matches_committed_face(perm, normal):
 def test_apply_rebuild_noop_on_stable_plane():
     """A plane already in its rebuilt form reports no change — the property
     that terminates the push's rebuild fixpoint loop."""
-    from core.cap_rebuild import apply_rebuild
     sc, h = _fresh_prism_scene()
     m = sc.mesh
     wall = _walls(sc)[0]
     n = wall.normal().normalized()
     before = len(m.faces)
-    assert apply_rebuild(m, wall.centroid(), n) is False
+    assert m.rebuild_cap_plane(wall.centroid(), n) is False
     assert len(m.faces) == before
 
 
@@ -246,8 +245,6 @@ def test_rebuild_order_independent_on_overhang():
     no order leaves a seam or an internal partition."""
     import itertools
     from ingetrazo_core import Vec3 as QVector3D
-    import core.cap_rebuild as cr
-    import tools.pushpull as pp
     from core.scene import Scene
     from core.history import History
     from tools.pushpull import PushPullTool
@@ -280,36 +277,36 @@ def test_rebuild_order_independent_on_overhang():
         def set_hover(self, e): pass
         def set_suppressed_faces(self, f): pass
 
-    orig = cr.seam_planes
-    try:
-        # 4 seam planes → spot-check a spread of orders incl. identity/reverse.
-        for perm in [(0,1,2,3), (3,2,1,0), (1,3,0,2), (2,0,3,1)]:
-            def reorder(mesh, fresh, _p=perm):
-                out = orig(mesh, fresh)
-                return [out[i] for i in _p if i < len(out)] + \
-                       [o for j, o in enumerate(out) if j >= len(_p)]
-            pp.seam_planes = reorder
-            scene, fwall = build()
-            t = PushPullTool()
-            t.base_face = fwall
-            t.extrusion = -2.0
-            t.dragging = True
-            t._anchor = fwall.centroid()
-            t._normal = fwall.normal()
-            t._attached, t._prism_cap = t._classify_base(scene)
-            t._cap_positions = t._cap_loop_positions(fwall)
-            t._commit(_VP(scene))
-            m = scene.mesh
-            seams = [e for e in m.edges if len(e.faces) == 2 and
-                     QVector3D.dotProduct(e.faces[0].normal().normalized(),
-                                          e.faces[1].normal().normalized()) > 0.999]
-            assert seams == [], f"seam left with order {perm}"
-    finally:
-        pp.seam_planes = orig
+    # Change the real face-list order seen by the store's seam discovery.
+    for perm in [(0,1,2,3), (3,2,1,0), (1,3,0,2), (2,0,3,1)]:
+        scene, fwall = build()
+        rim = list(scene.mesh.faces)[-4:]
+        loops = [f.vertices for f in rim]
+        for f in rim:
+            scene.mesh.remove_face(f)
+        for i in perm:
+            added = scene.mesh.add_face(loops[i])
+            if rim[i] == fwall:
+                fwall = added
+        t = PushPullTool()
+        t.base_face = fwall
+        t.extrusion = -2.0
+        t.dragging = True
+        t._anchor = fwall.centroid()
+        t._normal = fwall.normal()
+        t._attached, t._prism_cap = t._classify_base(scene)
+        t._cap_positions = t._cap_loop_positions(fwall)
+        t._commit(_VP(scene))
+        m = scene.mesh
+        seams = [e for e in m.edges if len(e.faces) == 2 and
+                 QVector3D.dotProduct(e.faces[0].normal().normalized(),
+                                      e.faces[1].normal().normalized()) > 0.999]
+        assert seams == [], f"seam left with order {perm}"
+
 
 
 def test_plane_cycle_keeps_the_first_minimum_and_unbounded_grid_coordinates():
-    from core.cap_rebuild import _canon_loop
+    from ingetrazo_core import plane_cycle as _canon_loop
 
     # The slit returns to the smallest point twice. Reversing its winding
     # changes the shape fingerprint and choosing the second visit changes its start.
@@ -336,7 +333,7 @@ def test_cap_coverage_counts_a_fresh_face_outside_the_seeded_scope():
 
 
 def test_collinear_outline_turns_use_the_runtime_grid_key_order():
-    from core.cap_rebuild import _union_outline
+    from ingetrazo_core import union_plane_regions as _union_outline
 
     for x in (0.0, float(2**51)):
         a, b, c = (x, 0.), (x + 1, 0.), (x, 1.)

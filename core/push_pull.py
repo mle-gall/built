@@ -14,7 +14,7 @@ from core.mesh import _STITCH_TOL, PAINT_KEYS
 from core.history import SnapshotMutation
 from core.arrangement import _interior_point, _point_in_polygon, plane_basis
 from core.orient import is_closed, orient_outward
-from core.cap_rebuild import _canon_loop
+from ingetrazo_core import plane_cycle as _canon_loop
 from core.topology import _mesh_is_flat
 from core.units import fmt_len
 from core import push_scans

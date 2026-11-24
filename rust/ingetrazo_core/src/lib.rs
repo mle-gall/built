@@ -165,6 +165,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(store::planar::plane_nesting, m)?)?;
     m.add_function(wrap_pyfunction!(store::planar::plane_interior_point, m)?)?;
     m.add_function(wrap_pyfunction!(store::planar::plane_scan_point, m)?)?;
+    m.add_function(wrap_pyfunction!(store::planar::union_plane_regions, m)?)?;
     m.add_function(wrap_pyfunction!(store::planar::trace_plane_outline, m)?)?;
     m.add_function(wrap_pyfunction!(store::plane_regions::rebuild_region_faces, m)?)?;
     m.add_function(wrap_pyfunction!(store::plane_repair::object_cap_coverage, m)?)?;

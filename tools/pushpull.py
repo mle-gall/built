@@ -28,7 +28,7 @@ Commit pipeline (the deterministic root-fix, no case tree):
    existing face's plane.
 3. Stitch connectivity (T-junctions, collinear vertices).
 4. On a solid: deterministically rebuild every touched plane (seams, overlaps,
-   cracks) from its edges via ``core.cap_rebuild``; on a flat sheet, fall back
+   cracks) from its edges via ``Store::rebuild_push_planes``; on a flat sheet, fall back
    to the seeded coplanar merge (no outward side exists there).
 5. Orient outward again — every committed solid upholds the invariant.
 

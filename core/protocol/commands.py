@@ -156,13 +156,25 @@ def intersect_faces(history, mode, faces=None, placements=None):
 
 def rebuild_cap(history, face):
     """Rebuild the plane of a seed face with the direct cap planner."""
-    from core.cap_rebuild import apply_rebuild
+    from core.store_mesh import StoreMesh, plan_cap_plane
     from core.history import CommandRejected, SnapshotMutation
     seed, = _need(history.scene.mesh, "face", [face])
     origin, normal = seed.centroid(), seed.normal()
 
     def rebuild(scene):
-        if not apply_rebuild(scene.mesh, origin, normal):
+        mesh = scene.mesh
+        if type(mesh) is StoreMesh:
+            changed = mesh.rebuild_cap_plane(origin, normal)
+        else:
+            from core.arrangement import plane_basis
+            from ingetrazo_core import install_rebuilt_plane, plane_region_point, prune_object_plane
+            direction = normal.normalized()
+            plan = plan_cap_plane(mesh, origin, direction)
+            changed = install_rebuilt_plane(mesh, origin, direction, plan, None, 1e-4,
+                                            lambda *_: None, plane_region_point, plane_basis)
+            if changed:
+                prune_object_plane(mesh, origin, direction, 1e-4)
+        if not changed:
             raise CommandRejected("Cap already matches its plane")
 
     before = history.revision
