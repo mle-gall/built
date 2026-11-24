@@ -308,6 +308,9 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<tools::transform_pose::TransformPose>()?;
     m.add_class::<tools::texture_rows::TextureToolRows>()?;
     m.add_class::<tools::push_stage::PushSlide>()?;
+    m.add_function(wrap_pyfunction!(tools::chunk_selection::chunk_bounds, m)?)?;
+    m.add_function(wrap_pyfunction!(tools::chunk_selection::box_chunk_group, m)?)?;
+    m.add_function(wrap_pyfunction!(tools::push_targets::push_reference_target, m)?)?;
     m.add_function(wrap_pyfunction!(tools::bevel_queries::bevel_nearest_end, m)?)?;
     m.add_function(wrap_pyfunction!(tools::bevel_queries::bevel_selection, m)?)?;
     m.add_function(wrap_pyfunction!(tools::bevel_queries::bevel_targets, m)?)?;

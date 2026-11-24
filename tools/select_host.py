@@ -7,7 +7,7 @@ box-selects placements from the renderer's packed prototype arrays.
 from __future__ import annotations
 
 
-from ingetrazo_core import (box_records, box_placements, box_from_pack as _box_groups_packed,
+from ingetrazo_core import (box_records, box_placements, box_chunk_group, chunk_bounds as _local_bounds, box_from_pack as _box_groups_packed,
                             segment_overlaps_box as _seg_rect_overlap)
 from views import prompts as _prompts
 
@@ -126,167 +126,12 @@ def _box_loose_arrays(viewport, rect, crossing):
     return edges, faces
 
 
-# Bound temporary triangle/edge arrays and camera projections independently
-# of the import's size (#1175). Even-sized batches keep edge pairs together.
-_BOX_BATCH_POINTS = 8192
-
-
-def _box_source(viewport, pg):
-    """A placement's cached world chunk, or its prototype and lazy maps.
-
-    An uncached instance must not materialize its entire transformed mesh
-    just to answer a selection rectangle.
-    """
-    xf = getattr(pg, "xform", None)
-    if xf is None or getattr(pg, "mesh", None) is None:
-        return viewport._group_chunk(pg), None, None
-    from views.document_interaction import _paint_of, _placed_maps, _proto_wrapper
-    base = viewport._group_chunk(
-        _proto_wrapper(viewport, pg.mesh, _paint_of(viewport, pg)))
-    cur = (getattr(viewport, "_inst_chunks", None) or {}).get(id(pg))
-    if cur is not None and cur["ikey"] == (base["uid"], tuple(xf.data())):
-        return cur, None, None
-    _L, tv, tp = _placed_maps(xf)
-    return base, tv, tp
-
-
-def _box_point_batches(ch, tv=None, tp=None):
-    """Yield ``(points, paired_edges)`` in bounded batches, without writes.
-
-    Match the renderer's term order: transform each triangle's origin and
-    directions separately before adding them. Placed edge buffers round to
-    float32, just as an instance chunk does.
-    """
-    import numpy as np
-    v0, e1, e2 = ch["v0"], ch["e1"], ch["e2"]
-    if v0 is not None:
-        for i in range(0, len(v0), _BOX_BATCH_POINTS):
-            sl = slice(i, i + _BOX_BATCH_POINTS)
-            a = tp(v0[sl]) if tp is not None else v0[sl]
-            yield a, False
-            yield a + (tv(e1[sl]) if tv is not None else e1[sl]), False
-            yield a + (tv(e2[sl]) if tv is not None else e2[sl]), False
-    pair = np.frombuffer(ch["edges"], np.float32).reshape(-1, 3)
-    for i in range(0, len(pair), _BOX_BATCH_POINTS):
-        points = pair[i:i + _BOX_BATCH_POINTS].astype(np.float64)
-        if tp is not None:
-            points = tp(points).astype(np.float32).astype(np.float64)
-        yield points, True
-
-
-def _local_bounds(ch):
-    """``(lo, hi)`` of everything the box test reads of chunk ``ch`` (the
-    triangle corners and the edges), cached on it; None when empty."""
-    import numpy as np
-    import weakref
-    # Keyed on the very arrays: a moved chunk gets new ones (a shift
-    # rebuilds them), and stale bounds would answer for where it was.
-    key = (ch["v0"], ch["e1"], ch["e2"], ch["edges"])
-    hit = ch.get("_box_bounds")
-    if (hit is not None and len(hit) == 3 and isinstance(hit[0], tuple)
-            and hit[1] is key[3]
-            and all((ref is None and array is None)
-                    or (array is not None and ref is not None and ref() is array)
-                    for ref, array in zip(hit[0], key[:3]))):
-        return hit[2]
-    lo = hi = None
-    for points, _paired in _box_point_batches(ch):
-        low, high = points.min(axis=0), points.max(axis=0)
-        lo = low if lo is None else np.minimum(lo, low)
-        hi = high if hi is None else np.maximum(hi, high)
-    bounds = (lo, hi) if lo is not None else None
-    # Do not retain obsolete triangle arrays after a chunk changes.
-    refs = tuple(weakref.ref(a) if a is not None else None for a in key[:3])
-    ch["_box_bounds"] = (refs, key[3], bounds)
-    return bounds
-
-
-def _placement_side(viewport, pg, rect):
-    """``"in"`` when everything the box test reads of placement ``pg``
-    projects inside ``rect``, ``"out"`` when all of it lies past one side
-    of it, ``"empty"`` when it has nothing, None when that takes the full
-    test. Decided on the eight
-    corners of its bounding box, all in front of the camera: a projection
-    keeps what is inside a box inside the hull of its corners."""
-    import numpy as np
-    xf = getattr(pg, "xform", None)
-    if xf is None or getattr(pg, "mesh", None) is None:
-        ch = viewport._group_chunk(pg)
-        tp = None
-    else:
-        from views.document_interaction import _paint_of, _placed_maps, _proto_wrapper
-        ch = viewport._group_chunk(
-            _proto_wrapper(viewport, pg.mesh, _paint_of(viewport, pg)))
-        tp = _placed_maps(xf)[2]
-    bb = _local_bounds(ch)
-    if bb is None:
-        return "empty"
-    lo, hi = bb
-    box = np.array([[x, y, z] for x in (lo[0], hi[0])
-                    for y in (lo[1], hi[1]) for z in (lo[2], hi[2])])
-    if tp is not None:
-        box = tp(box)
-    xs, ys, ok = viewport._project_px(box)
-    if not ok.all():
-        return None
-    x0, y0, x1, y1 = rect
-    if ((xs >= x0) & (xs <= x1) & (ys >= y0) & (ys <= y1)).all():
-        return "in"
-    if (xs < x0).all() or (xs > x1).all() or (ys < y0).all() \
-            or (ys > y1).all():
-        return "out"
-    return None
-
-
 def _box_group_fast(viewport, group, rect, crossing):
-    """Vectorized box test for one (non-billboard) group via its chunk
-    arrays. True/False, or None to fall back to the per-vertex walk."""
-    if (getattr(group, "billboard", False)
-            or getattr(viewport, "_group_chunk", None) is None
-            or getattr(viewport, "_project_px", None) is None):
-        return None
-    # A component's geometry lives in the placements it holds, each with its
-    # own chunk: reading only the top-level one found an EMPTY array for an
-    # imported component and dropped the whole test to the per-vertex Python
-    # walk — 1.15M vertices for the hedge.
-    expand = getattr(viewport, "_expand_placements", None)
-    places = expand(group) if expand is not None else [group]
-    seen = False
     try:
-        for pg in places:
-            # A placement whose box lands wholly inside the rectangle, or
-            # wholly past one of its sides, answers without its triangles:
-            # on a model of 2 000 instances the corners of every triangle
-            # carried to world and projected were most of a box's 5 s.
-            side = _placement_side(viewport, pg, rect)
-            if side == "empty":
-                continue
-            seen = True
-            if side == "out":
-                if not crossing:
-                    return False
-                continue
-            if side == "in":
-                if crossing:
-                    return True
-                continue
-            ch, tv, tp = _box_source(viewport, pg)
-            for points, paired in _box_point_batches(ch, tv, tp):
-                xs, ys, ok = viewport._project_px(points)
-                x0, y0, x1, y1 = rect
-                inside = ok & (xs >= x0) & (xs <= x1) & (ys >= y0) & (ys <= y1)
-                if not crossing:
-                    if not inside.all():
-                        return False
-                elif inside.any():
-                    return True
-                elif paired and _seg_rect_mask(
-                        xs[0::2], ys[0::2], xs[1::2], ys[1::2],
-                        ok[0::2] & ok[1::2], rect, True).any():
-                    return True
-    except Exception:  # noqa: BLE001
+        return box_chunk_group(viewport, group, rect, crossing)
+    except (AttributeError, TypeError, ValueError, KeyError, RuntimeError):
+        # A scripted viewport may omit its chunk or projection.
         return None
-    return (not crossing) if seen else None
 
 
 def describe_pick(entity) -> str:

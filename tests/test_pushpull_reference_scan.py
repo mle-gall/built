@@ -229,3 +229,31 @@ def test_the_engine_answers_as_the_questions_did():
             assert got_a == got_b
             if got_a is not None:
                 assert ta._inference_point == tb._inference_point
+
+
+def test_native_grab_snapshot_tracks_the_camera_through_a_topology_change():
+    from core.scene import Scene
+
+    class NativeView(_Vp):
+        def _camera_px(self):
+            view = np.eye(4)
+            view[3, 0] = self.shift
+            return view.ravel(), 1000., 1000.
+
+        def _project_px(self, pts):
+            raise AssertionError("The native camera can project store slots directly")
+
+    vp = NativeView()
+    vp.shift = 0.
+    vp.scene = Scene()
+    corner = vp.scene.mesh.vertex(V(-.5, 0., .25))
+    tool = _tool(None)
+    assert tool._infer_reference_distance(_ctx(vp, 250., 500.)) == .25
+    assert tool._inference_kind == "vertex"
+
+    # Staging moved the live vertex. A camera change reprojects the original grab.
+    corner.position = V(.5, 0., .75)
+    vp.shift = .2
+    assert tool._infer_reference_distance(_ctx(vp, 250., 500.)) is None
+    assert tool._infer_reference_distance(_ctx(vp, 350., 500.)) == .25
+    assert tool._inference_point == V(-.5, 0., .25)

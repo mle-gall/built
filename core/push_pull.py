@@ -253,6 +253,7 @@ class PushPullOperation:
         self._grab: QVector3D | None = None
         self._normal: QVector3D | None = None
         self._cap_positions: list[QVector3D] = []  # original cap vertices
+        self._infer_cache = None
         # The clean model under a STAGED preview (see _show_staged_preview):
         # captured before the drag's first stage and kept until the drag ends
         # — restored whenever a staged model goes back to clean (a restage,
@@ -929,7 +930,6 @@ class PushPullOperation:
         self._inference_point = None
         self._inference_kind = None
         self._infer_cache = None       # per-drag projected-vertex candidates
-        self._infer_boxes = None       # ... and where they fall on screen
         self._refused = False
         self._light_faces = []
         self._light_wires = []
