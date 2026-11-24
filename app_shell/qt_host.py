@@ -111,8 +111,8 @@ def _track_timers():
     until an event. To wake for them, the starts made from Python are
     noted (``QTimer.start`` and ``QTimer.singleShot``) and
     :func:`next_timer_ms` answers how long until the first is due. Timers
-    started from C++ alone are not seen; the view's own are polled too
-    (``Host._qt_timers_pending``)."""
+    started from C++ alone are not seen. Native presentation and autosave
+    deadlines are owned by the window's Rust timer queue."""
     from PySide6.QtCore import QTimer
     if getattr(QTimer, "_shell_tracked", False):
         return

@@ -14,11 +14,12 @@ Requires Python 3.12+.
 ## Running tests
 
 ```bash
-python -m pytest -m "not slow"     # the fast suite (~3,100 tests, ~5 min; what CI runs)
-python -m pytest                   # everything (~3,900), including the slow fuzz sweeps
+python -m pytest -n 8 -m "not slow"   # the fast suite, in parallel (what CI runs)
+python -m pytest -n 8                 # everything, including the slow tests
 ```
 
-Every pull request runs the fast suite. A fix or a feature comes with its
+See [testing.md](testing.md) for xdist, the `slow` marker and keeping
+tests independent. Every pull request runs the fast suite. A fix or a feature comes with its
 test — ideally one that fails without the change. A test that paints
 needs a real OpenGL context: guard it with a skip when there is none, or the
 CI runner (no GPU) fails it.

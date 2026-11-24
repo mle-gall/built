@@ -119,14 +119,21 @@ class MetalView(ViewNavigation):
     def _model_diag(self):
         return float(np.linalg.norm(self.packed.world_bounds[1]-self.packed.world_bounds[0]))
 
-    def __init__(self, parent=None):
+    def _view_timer(self, callback, interval=0):
+        if self._timer_queue is not None:
+            return self._timer_queue.timer(callback, interval)
+        timer = QTimer(self, singleShot=True, interval=interval)
+        timer.timeout.connect(callback)
+        return timer
+
+    def __init__(self, parent=None, *, timers=None):
         super().__init__(parent)
+        self._timer_queue = timers
         # Keep the inspector's trees and forms in Qt's backing store. Making
         # every sibling an NSView turns each splitter step into native layout.
         if QApplication.platformName() == 'cocoa':
             QCoreApplication.setAttribute(Qt.AA_DontCreateNativeWidgetSiblings)
-        self._resize_timer = QTimer(self, singleShot=True, interval=80)
-        self._resize_timer.timeout.connect(self._finish_resize)
+        self._resize_timer = self._view_timer(self._finish_resize, 80)
         if QApplication.platformName() not in ('offscreen', 'minimal'):
             for attr in (Qt.WA_NativeWindow, Qt.WA_PaintOnScreen, Qt.WA_NoSystemBackground):
                 self.setAttribute(attr)
@@ -139,9 +146,7 @@ class MetalView(ViewNavigation):
         self.hover_ms = 0.
         self.selection_ms = 0.
         self._selection_signature = None
-        self._settle_timer = QTimer(self)
-        self._settle_timer.setSingleShot(True)
-        self._settle_timer.timeout.connect(self._settled_frame)
+        self._settle_timer = self._view_timer(self._settled_frame)
         self._last_camera = None
         self.renderer = None
         self.packed = None

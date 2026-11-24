@@ -51,15 +51,18 @@ def _file(path, folders, tags, count, links_to=()):
     return path
 
 
-def build(folder, big=20000, *, suffix=".igz"):
-    """Write C, D, B, A and the host into ``folder``; returns their paths."""
+def build(folder, big=20000, *, suffix=".igz", scale=1.0):
+    """Write C, D, B, A and the host into ``folder``; returns their paths.
+    ``scale`` shrinks C, D and B (600, 900 and 3000 placements) for tests
+    where their size is not the point."""
     folder = Path(folder)
     folder.mkdir(parents=True, exist_ok=True)
-    c = _file(folder / f"C{suffix}", {"Stairs": None}, {"Flights": "Stairs", "Landings": "Stairs"}, 600)
+    n = lambda count: max(1, round(count * scale))  # noqa: E731
+    c = _file(folder / f"C{suffix}", {"Stairs": None}, {"Flights": "Stairs", "Landings": "Stairs"}, n(600))
     d = _file(folder / f"D{suffix}", {"Facilities": None, "Rooms": "Facilities"},
-              {"Toilets": "Rooms", "Kiosks": "Rooms", "Signs": "Facilities"}, 900)
+              {"Toilets": "Rooms", "Kiosks": "Rooms", "Signs": "Facilities"}, n(900))
     b = _file(folder / f"B{suffix}", {"Building": None, "Levels": "Building"},
-              {"Slabs": "Levels", "Walls": "Levels", "Site": "Building"}, 3000)
+              {"Slabs": "Levels", "Walls": "Levels", "Site": "Building"}, n(3000))
     a = _file(folder / f"A{suffix}", {"Ride": None, "Track": "Ride", "Supports": "Ride"},
               {"Rails": "Track", "Ties": "Track", "Columns": "Supports", "Base plates": "Supports",
                "Fasteners": "Ride"}, big, links_to=(c, d))

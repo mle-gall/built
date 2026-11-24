@@ -82,12 +82,15 @@ from PySide6.QtCore import QSettings  # noqa: E402
 _settings_dir = tempfile.mkdtemp(prefix="ingetrazo-tests-settings-")
 os.environ["BUILT_SETTINGS_DIR"] = _settings_dir
 QSettings.setDefaultFormat(QSettings.IniFormat)
-_system_settings_dir = os.path.join(_settings_dir, "system")
+
+
+#: The store the current test module writes (``_settings_per_module``).
+_module_settings = [_settings_dir]
 
 
 def _session_settings_paths():
-    QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, _settings_dir)
-    QSettings.setPath(QSettings.IniFormat, QSettings.SystemScope, _system_settings_dir)
+    QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, _module_settings[0])
+    QSettings.setPath(QSettings.IniFormat, QSettings.SystemScope, os.path.join(_module_settings[0], "system"))
 
 
 _session_settings_paths()
@@ -96,12 +99,95 @@ _session_settings_paths()
 import pytest  # noqa: E402
 
 
+@pytest.fixture(autouse=True, scope="module")
+def _settings_per_module():
+    """Each test file starts from an empty settings store of its own. A
+    MainWindow saves its geometry and docks when it closes and the next one
+    restores them, a style test saves «the last style used»: under
+    pytest-xdist a file met whatever the files before it on its worker had
+    left (a 173 px viewport in test_join_segments). Within a file the tests
+    still share the store, in the order they always ran."""
+    folder = tempfile.mkdtemp(prefix="module-", dir=_settings_dir)
+    _module_settings[0] = folder
+    os.environ["BUILT_SETTINGS_DIR"] = folder
+    _session_settings_paths()
+    yield
+    _module_settings[0] = _settings_dir
+    os.environ["BUILT_SETTINGS_DIR"] = _settings_dir
+    _session_settings_paths()
+
+
 @pytest.fixture(autouse=True)
 def _restore_settings_paths():
     # setPath changes process-wide defaults. A private user profile must
     # never inherit another test's saved window state via SystemScope.
     yield
     _session_settings_paths()
+
+
+@pytest.fixture(autouse=True)
+def _process_environment():
+    """Each test leaves ``os.environ`` as it found it. The app writes it on
+    purpose (``core._native.start_guard`` sets INGETRAZO_RUST=0 for
+    ``--python-engine``), so a test that runs such code without a
+    monkeypatch, or with one that records the written value, changed every
+    later test in the process: under pytest-xdist the bake tests then ran
+    with the engine off. Autouse, so it is set up before and torn down
+    after the test's own monkeypatch."""
+    before = dict(os.environ)
+    yield
+    if dict(os.environ) != before:
+        for key in set(os.environ) - set(before):
+            del os.environ[key]
+        for key, value in before.items():
+            if os.environ.get(key) != value:
+                os.environ[key] = value
+
+
+@pytest.fixture(autouse=True)
+def _process_qt_and_units():
+    """Process-wide state a test can change in passing, put back after it:
+
+    - the application and organization names, which name the settings file
+      (a test that cleared them sent every later test on its worker to
+      «Unknown Organization/Python.ini»);
+    - the scene whose units the formatters and the value field read
+      (``core.units.bind_scene``): every window binds its own, so the last
+      one's inches were how test_vcb_comma_lists read «200,100»."""
+    from PySide6.QtCore import QCoreApplication
+    from core import units
+    names = (QCoreApplication.organizationName(), QCoreApplication.organizationDomain(),
+             QCoreApplication.applicationName())
+    bound = units._SCENE
+    yield
+    units._SCENE = bound
+    if names != (QCoreApplication.organizationName(), QCoreApplication.organizationDomain(),
+                 QCoreApplication.applicationName()):
+        QCoreApplication.setOrganizationName(names[0])
+        QCoreApplication.setOrganizationDomain(names[1])
+        QCoreApplication.setApplicationName(names[2])
+
+
+@pytest.fixture(autouse=True)
+def _paint_tool_choice():
+    """The Paint tool keeps its state on the class, as the app keeps it
+    across documents: the chosen material (``PaintTool.current_*``: colour,
+    texture, opacity, material, library revision), the recent materials and
+    whether the pipette is armed (``sample_armed``). Tests set them
+    directly; under pytest-xdist the next file on the worker painted with
+    another material (test_pool_water, test_library_paint_selection) or
+    sampled instead of painting (test_edit_textured_material_everywhere)."""
+    from copy import copy
+    from tools.paint import PaintTool
+
+    def mine(key):
+        return key.startswith("current_") or key in ("sample_armed", "recent")
+    before = {k: copy(v) for k, v in vars(PaintTool).items() if mine(k)}
+    yield
+    for key in [k for k in vars(PaintTool) if mine(k) and k not in before]:
+        delattr(PaintTool, key)
+    for key, value in before.items():
+        setattr(PaintTool, key, value)
 
 
 @pytest.fixture(autouse=True)
@@ -149,6 +235,21 @@ def _native_per_test(_session_native):
     yield
     import core._native as native_mod
     native_mod.__dict__["native"] = _session_native
+
+
+def pytest_configure(config):
+    """With pytest-xdist (``-n 8``): file-level scheduling, so a file's
+    module fixtures are built once and its tests share a worker, and a
+    crashed worker is replaced, unless ``--dist`` / ``--max-worker-restart``
+    are given. Here rather than in pytest.ini so a venv without xdist still
+    runs, and ``pytest tests/x.py::test`` stays serial (docs/testing.md)."""
+    if not config.pluginmanager.hasplugin("xdist"):
+        return
+    given = " ".join(map(str, config.invocation_params.args))
+    if getattr(config.option, "numprocesses", None) and "--dist" not in given:
+        config.option.dist = "loadfile"
+    if getattr(config.option, "maxworkerrestart", None) is None and "--max-worker-restart" not in given:
+        config.option.maxworkerrestart = 8
 
 
 _exit_status = [0]

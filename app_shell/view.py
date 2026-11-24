@@ -16,8 +16,17 @@ class ShellView(MetalView, WidgetShim):
     _shim_visible = True
 
     def __init__(self, host):
-        super().__init__()
+        super().__init__(timers=host.timers)
         self._host = host
+
+    def _presentation_timers(self):
+        return (self._resize_timer, self._settle_timer, self.__dict__.get("_ui_timer"))
+
+    def move_timers(self, host):
+        self._timer_queue = host.timers
+        for timer in self._presentation_timers():
+            if timer is not None:
+                host.timers.adopt(timer)
 
     def _window_handles(self):
         return self._host.ns_view, self._host.surface_handles
@@ -48,6 +57,9 @@ class ShellView(MetalView, WidgetShim):
 
     def closeEvent(self, event=None):
         self._closed = True
+        for timer in self._presentation_timers():
+            if timer is not None:
+                timer.stop()
         tracker = getattr(self, "_instance_updates", None)
         if tracker is not None and tracker.unsubscribe is not None:
             tracker.unsubscribe()

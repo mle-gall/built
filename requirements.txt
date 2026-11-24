@@ -27,6 +27,7 @@ truststore>=0.10.5; sys_platform == "win32"
 
 # --- Development ---
 pytest>=8.0
+pytest-xdist>=3.8
 
 # --- Planned (NOT yet required; do not install on Python 3.14 — no wheels) ---
 # ifcopenshell   # IFC import/export (BIM bridge with IngePresupuestos)

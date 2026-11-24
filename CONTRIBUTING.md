@@ -20,8 +20,8 @@ Requires Python 3.12+.
 ## Tests and CI
 
 ```bash
-python -m pytest -m "not slow"     # the fast suite (~3,100 tests, ~5 min; what CI runs)
-python -m pytest                   # everything (~3,900), including the slow fuzz sweeps
+python -m pytest -n 8 -m "not slow"   # the fast suite, in parallel (what CI runs)
+python -m pytest -n 8                 # everything, including the slow tests
 ```
 
 **Every pull request runs the fast suite automatically** — your PR gets a
@@ -72,7 +72,7 @@ isolation, and the `SnapshotImport` recipe for modifying the model) is in
 1. **Fork** the repository.
 2. Create a feature branch: `git checkout -b feature/short-description`.
 3. Commit small, focused changes with descriptive messages.
-4. Run the fast suite locally: `python -m pytest -m "not slow"`.
+4. Run the fast suite locally: `python -m pytest -n 8 -m "not slow"` (see `docs/testing.md`).
 5. Push to your fork and open a **Pull Request** — CI will run the suite
    on it automatically.
 6. A maintainer will review. We try to respond within a week.

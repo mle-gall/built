@@ -111,6 +111,7 @@ def transfer(src_win, doc, dst_host) -> bool:
             obj._host = dst_host
     view = doc.stand_in
     if view is not None:
+        view.move_timers(dst_host)
         view.renderer = None
     try:
         doc.viewport.sceneVersionChanged.connect(lambda *_: dst._update_title())

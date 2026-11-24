@@ -264,7 +264,11 @@ def test_a_qt_dialog_the_borrowed_code_shows_is_refused_not_waited_for(host):
     assert got != QMessageBox.Yes
     st = host.state()
     assert st["blocked_widgets"]
-    assert "Classic App" in st["status"]
+    # The note the status bar was given, not whether it still shows: it is
+    # timed (6 s of wall time), and on a loaded machine the dialog's round
+    # trip alone took that long under pytest-xdist.
+    assert host.not_here_log
+    assert "Classic App" in host.window.statusBar()._msg.text()
 
 
 def test_right_click_builds_the_menu_for_what_was_hit(host, tmp_path, monkeypatch):
@@ -316,18 +320,91 @@ def test_mainwindow_members_are_borrowed_on_demand(host):
 
 
 def test_background_autosave_writes_a_recovery_slot(host, tmp_path):
-    """MainWindow's auto-save tick and BackgroundAutosave run on the shell's
-    window: its 16 ms slices are Qt timers the loop's pump delivers."""
+    """The native clock schedules recovery. The retained writer slices finish on the UI thread."""
     import time
-    from app_shell import qt_host
+    from ingetrazo_render import WindowTimer
     from core import autosave
     src = _copy(tmp_path)
     host.open_path(src)
     _draw(host)
-    host.window._setup_autosave()                      # armed as at start
-    host.window._on_autosave_tick()
+    host.window._setup_autosave()
+    timer = host.window._autosave_timer
+    assert isinstance(timer, WindowTimer)
+    timer.start(0)
+    host.idle()
+    timer.stop()
     deadline = time.monotonic() + 20
     while autosave.pending(src) is None and time.monotonic() < deadline:
-        qt_host.pump()
+        host.idle()
         time.sleep(0.02)
     assert autosave.pending(src) is not None
+
+
+def test_window_timers_follow_their_owner_and_nested_turns(host):
+    from ingetrazo_render import WindowTimers
+
+    events = []
+
+    class Handler:
+        def first(self):
+            events.append("first")
+            assert not getattr(self, "inside", False)
+            self.inside = True
+            self.first_timer.start(0)
+            self.second_timer.start(0)
+            other.run_due()
+            host.modal_frame()
+            self.first_timer.stop()
+            self.inside = False
+
+        def second(self):
+            events.append("second")
+
+    handler = Handler()
+    handler.first_timer = host.timers.timer(handler.first, repeat=True)
+    handler.second_timer = host.timers.timer(handler.second)
+    other = WindowTimers()
+    handler.first_timer.start(0)
+    other.adopt(handler.first_timer)
+    host.timers.run_due()
+    assert events == []
+    assert other.next_ms() == 0
+    other.run_due()
+    assert events == ["first", "second"]
+    assert other.next_ms() is None
+    assert not handler.second_timer.isActive()
+
+    handler.first_timer.start(0)
+    host.timers.adopt(handler.first_timer)
+    other.cancel_all()
+    host.timers.run_due()
+    assert events == ["first", "second", "first", "second"]
+
+
+def test_native_view_timers_release_callbacks_on_close(host):
+    import gc
+    import weakref
+    from ingetrazo_render import WindowTimer
+
+    view = host.view
+    assert isinstance(view._settle_timer, WindowTimer)
+    assert isinstance(view._resize_timer, WindowTimer)
+    view._ui_timer = view._view_timer(view.update)
+    for timer in view._presentation_timers():
+        timer.start(60_000)
+    view.closeEvent()
+    assert all(not timer.isActive() for timer in view._presentation_timers())
+
+    class Owner:
+        def tick(self):
+            pytest.fail("cancelled owner received a tick")
+
+    owner = Owner()
+    ref = weakref.ref(owner)
+    timer = host.timers.timer(owner.tick, repeat=True)
+    timer.start(0)
+    del owner
+    gc.collect()
+    assert ref() is None
+    host.timers.run_due()
+    assert not timer.isActive()
