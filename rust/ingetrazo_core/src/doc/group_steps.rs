@@ -52,6 +52,10 @@ fn run_keep(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
 }
 
 fn run_add_kept(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
+    if !s.arg(py, 1).is_none() {
+        scene.getattr("materials")?.call_method1("update", (s.arg(py, 1),))?;
+        scene.getattr("layers")?.call_method1("extend", (s.arg(py, 2),))?;
+    }
     defs::append_members(&scene.getattr("kept_components")?, &s.arg(py, 0))?;
     version(scene)
 }
@@ -267,8 +271,12 @@ impl KeepComponent {
 #[pymethods]
 impl AddKeptComponents {
     #[new]
-    fn new(templates: Obj<'_>) -> PyResult<PyClassInitializer<Self>> {
-        let step = RecordStep::new("AddKeptComponentsCommand", run_add_kept, vec![("templates", list(&templates)?)]);
+    #[pyo3(signature=(templates, materials=None, layers=None))]
+    fn new<'py>(py: Python<'py>, templates: Obj<'py>, materials: Option<Obj<'py>>, layers: Option<Obj<'py>>) -> PyResult<PyClassInitializer<Self>> {
+        let step = RecordStep::new("AddKeptComponentsCommand", run_add_kept, vec![
+            ("templates", list(&templates)?), ("materials", materials.unwrap_or_else(|| none(py))),
+            ("layers", layers.unwrap_or_else(|| PyList::empty(py).into_any())),
+        ]);
         Ok(PyClassInitializer::from(step).add_subclass(Self))
     }
 }

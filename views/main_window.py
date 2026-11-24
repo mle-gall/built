@@ -2171,51 +2171,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         tool.target = group
         self._activate_tool("scale_manager")
 
-    def _on_components_from_file(self) -> None:
-        start = (str(self._current_path.parent)
-                 if getattr(self, "_current_path", None) else "")
-        path, _ = file_dialogs.getOpenFileName(
-            self, tr("Components from File"), start,
-            built.DOCUMENT_FILTER)
-        if not path:
-            return
-        try:
-            n = self.import_kept_components(path)
-        except Exception as exc:  # noqa: BLE001 - any unreadable file
-            _dialogs.warning(self, tr("Components from File"),
-                                tr("Could not read {p}: {e}", p=path, e=exc))
-            return
-        if n:
-            text = tr("{n} components added to the list, ready to place",
-                      n=n)
-        else:
-            text = tr("That file holds no components")
-        self.statusBar().showMessage(text, 5000)
-
-    def import_kept_components(self, path) -> int:
-        """Bring every component definition of another document into this
-        one as KEPT components — in the list, none placed: a library to
-        draw from. Its materials and layers come along by name, as Insert
-        does. Returns how many; nothing changes for a file without one."""
-        from core.history import AddKeptComponentsCommand
-        from core.insert import ensure_layers, merge_materials
-        from core.kept_components import definitions_of
-        from core.scene import Scene as _Scene
-        from formats import igz as _igz
-        temp = _Scene()
-        _igz.load_into(temp, Path(path))       # raises before anything moves
-        templates = definitions_of(temp)
-        if not templates:
-            return 0
-        scene = self.viewport.scene
-        for t in templates:
-            merge_materials(getattr(temp, "materials", {}) or {},
-                            scene.materials, t)
-            ensure_layers(scene, t)
-        self.viewport.history.execute(AddKeptComponentsCommand(templates))
-        self.viewport.notify_scene_changed()
-        return len(templates)
-
     def _fill_intersect_menu(self, menu) -> None:
         from core.intersect import WITH_CONTEXT, WITH_MODEL, WITH_SELECTION
         for mode, label, tip in (

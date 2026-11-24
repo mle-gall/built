@@ -506,10 +506,14 @@ class ComponentsProvider(Provider):
 
     def type_actions(self, ctx):
         n = sum(1 for _n, _f, gs, kept in self._model(ctx) if kept is not None and not gs)
-        return [("purge", f"Stop keeping unplaced components ({n})" if n else "Stop keeping unplaced components (none)")]
+        from core.i18n import tr
+        return [("import", tr("Components from File…")), ("purge", f"Stop keeping unplaced components ({n})" if n else "Stop keeping unplaced components (none)")]
 
     def type_action(self, ctx, action):
-        if action == "purge":
+        if action == "import":
+            from ingetrazo_render import choose_kept_components
+            choose_kept_components(ctx.win)
+        elif action == "purge":
             from core.history import CompoundCommand, KeepComponentCommand
             idle = [kept for _n, _f, gs, kept in self._model(ctx) if kept is not None and not gs]
             if idle:
