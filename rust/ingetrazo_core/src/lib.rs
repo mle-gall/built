@@ -135,6 +135,7 @@ mod units_format;
 mod linetypes;
 mod pyfloat;
 mod selection;
+mod camera_live;
 mod value_field;
 mod inference_state;
 mod snap_curve;
@@ -486,6 +487,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     units_format::register(m)?;
     linetypes::register(m)?;
     selection::register(m)?;
+    camera_live::register(m)?;
     m.add_function(wrap_pyfunction!(value_field::value_key, m)?)?;
     m.add_function(wrap_pyfunction!(value_field::value_enter, m)?)?;
     m.add_function(wrap_pyfunction!(value_field::py_zoom_enter, m)?)?;

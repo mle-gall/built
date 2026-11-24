@@ -162,7 +162,7 @@ class OrbitCamera:
         self.perspective = True
         #: Two-Point Perspective: vertical lines stay vertical
         #: (José Castro Basso, FADU–UDELAR, for teaching architectural
-        #: drawing). Only in perspective; see ``_level_forward``.
+        #: drawing). Only in perspective; see ``view_matrix``.
         self.two_point = False
         #: What the view holds, as a bounding sphere ``(centre, radius)``
         #: the viewport keeps up to date, or ``None`` (unknown). Parallel
@@ -310,48 +310,31 @@ class OrbitCamera:
         return True
 
     # ---- Derived state ------------------------------------------------------
+    # The pose and the projection are computed in Rust
+    # (``rust/ingetrazo_core/src/camera_live.rs`` over the sheets' ``Cam``):
+    # one implementation for the viewport and the sheet frames.
+
     def eye(self) -> QVector3D:
-        cp = math.cos(self.pitch)
-        sp = math.sin(self.pitch)
-        cy = math.cos(self.yaw)
-        sy = math.sin(self.yaw)
-        return self.target + CameraPoint(
-            self.distance * cp * cy,
-            self.distance * cp * sy,
-            self.distance * sp,
-        )
+        """``target + distance·(cos p·cos y, cos p·sin y, sin p)``."""
+        return native.camera_eye(self)
 
     def forward(self) -> QVector3D:
         """Unit view direction, eye → target."""
-        d = self.target - self.eye()
-        return d.normalized() if d.lengthSquared() > 1e-18 else QVector3D(0, 1, 0)
+        return native.camera_forward(self)
 
     def up_vector(self) -> QVector3D:
         """The up vector every projection must use: ``up`` itself, unless
         the sight line runs along it — the exact Top and Bottom views —
-        where ``lookAt`` has no right and a cross product gives nothing.
-        There it is the limit of the view a hair short of vertical: north
-        up the screen in Top (y+ at the default yaw), the same axis the
-        other way in Bottom, so the exact view looks like the 89° one it
-        replaces, only straight. A rolled ``up`` (the composer turning a
-        plan) is never along the sight line and comes back as it is.
+        where ``lookAt`` has no right. There it is the limit of the view a
+        hair short of vertical: north up the screen in Top (y+ at the
+        default yaw), the same axis the other way in Bottom.
 
         A ``roll_deg`` turns that up about the sight line (positive turns
         the camera to the left, the picture to the right). Panning, Zoom
         Extents and the picture itself all read the up from here, so they
         agree. A two-point perspective keeps its verticals upright and
         takes no roll."""
-        f = self.forward()
-        if abs(QVector3D.dotProduct(f, self.up)) < 0.9999:
-            up = self.up
-        else:
-            sign = -1.0 if self.pitch > 0 else 1.0
-            up = QVector3D(sign * math.cos(self.yaw),
-                           sign * math.sin(self.yaw), 0.0)
-        if self.roll_deg and self._level_forward() is None:
-            from ingetrazo_core import Quaternion as QQuaternion
-            up = QQuaternion.fromAxisAndAngle(f, self.roll_deg).rotatedVector(up)
-        return up
+        return native.camera_up_vector(self)
 
     # ---- First person (Position Camera / Look Around / Walk) ---------------
     # The orbit model stays: a walkthrough only ever asks "the eye is HERE,
@@ -393,141 +376,46 @@ class OrbitCamera:
         """Walk: eye and target move together, the look stays the same."""
         self.target = self.target + delta
 
-    #: Two-point perspective gives way to the ordinary one past this pitch
-    #: (about 78°): looking nearly straight down, the frustum shift that
-    #: keeps the target centred grows without bound.
-    _TWO_POINT_MIN_COS = 0.2
-
-    def _level_forward(self) -> QVector3D | None:
-        """The level sight line of a two-point perspective — the view
-        direction with its slope taken out — or ``None`` when the view is
-        an ordinary one (the mode off, parallel, or looking too steeply)."""
-        if not (self.two_point and self.perspective):
-            return None
-        f = self.forward()
-        h = QVector3D(f.x(), f.y(), 0.0)
-        if h.length() < self._TWO_POINT_MIN_COS:
-            return None
-        return h / h.length()
-
     def view_matrix(self) -> QMatrix4x4:
-        m = QMatrix4x4()
-        level = self._level_forward()
-        if level is not None:
-            # The picture plane stands upright, so verticals stay vertical;
-            # the projection's shift (below) puts the target back on centre.
-            eye = self.eye()
-            m.lookAt(eye, eye + level, QVector3D(0.0, 0.0, 1.0))
-            return m
-        m.lookAt(self.eye(), self.target, self.up_vector())
-        return m
+        """``lookAt`` from the eye; a two-point perspective (Camera ▸
+        Two-Point Perspective, below about 78° of pitch) looks along the
+        level sight line so verticals stay vertical."""
+        return native.camera_view_matrix(self)
 
     def projection_matrix(self) -> QMatrix4x4:
-        m = QMatrix4x4()
-        if self.perspective:
-            # The near plane follows the camera in: at any normal working
-            # distance it is the usual 0.1 m, and only when you come right up
-            # to something does it step back out of the way — otherwise the
-            # near plane itself is what stops you.
-            near = self.near_plane()
-            level = self._level_forward()
-            if level is not None:
-                # A view camera's rise: the frustum slides up or down by the
-                # target's height over the level sight line, so what you
-                # orbit around stays in the middle of the screen.
-                half_h = near * math.tan(math.radians(self.fov_deg) / 2.0)
-                half_w = half_h * self.aspect
-                rel = self.target - self.eye()
-                depth = QVector3D.dotProduct(rel, level)
-                shift = rel.z() * near / depth
-                sx, sy = self._shift(half_w, half_h)
-                m.frustum(-half_w + sx, half_w + sx,
-                          -half_h + shift + sy, half_h + shift + sy,
-                          near, self.far_plane())
-                return m
-            if self.shift_x or self.shift_y:
-                half_h = near * math.tan(math.radians(self.fov_deg) / 2.0)
-                half_w = half_h * self.aspect
-                sx, sy = self._shift(half_w, half_h)
-                m.frustum(-half_w + sx, half_w + sx, -half_h + sy,
-                          half_h + sy, near, self.far_plane())
-                return m
-            m.perspective(self.fov_deg, self.aspect, near, self.far_plane())
-        else:
-            # Parallel projection — size derived from camera distance so the
-            # framing matches what the user sees in perspective.
-            half_h = self.distance * math.tan(math.radians(self.fov_deg) / 2.0)
-            half_w = half_h * self.aspect
-            depth = self.parallel_depth()
-            sx, sy = self._shift(half_w, half_h)
-            near = -depth if self.clip_near is None else self.clip_near
-            far = depth if self.clip_far is None else self.clip_far
-            if far <= near:
-                near, far = -depth, depth
-            m.ortho(-half_w + sx, half_w + sx, -half_h + sy, half_h + sy,
-                    near, far)
-        return m
-
-    def _shift(self, half_w: float, half_h: float) -> tuple[float, float]:
-        """The frame shift as offsets of a frustum ``2·half_w`` wide and
-        ``2·half_h`` tall."""
-        return (self.shift_x * 2.0 * half_w, self.shift_y * 2.0 * half_h)
+        """Perspective: the near plane follows the camera in at close range
+        (never closer than :data:`NEAR_FLOOR`), a two-point view slides the
+        frustum by the target's height, the frame shift slides it sideways
+        or up. Parallel: sized from the distance so the framing matches the
+        perspective, deep as :meth:`parallel_depth`. A depth range fitted to
+        the view (:meth:`fit_depth_range`) replaces the automatic planes."""
+        return native.camera_projection_matrix(self, self._fitted_depth_range())
 
     def parallel_depth(self) -> float:
-        """How far in front of and behind the eye a parallel view reaches.
-
-        The depth buffer splits this range evenly, so ±``far_plane()`` —
-        ±10 km — left 1.2 mm steps: a smooth surface and the lines over it
-        traded places in a zigzag that perspective, with its 0.1 m near
-        plane, never showed (issue #874). With what the view holds known
-        (``depth_reach``), the range is a few times its reach from the eye
-        — room for the axes, guides and a drag past it — and never more
-        than before."""
-        far = self.far_plane()
-        reach = self.depth_reach
-        if reach is None:
-            return far
-        centre, radius = reach
-        held = (self.eye() - centre).length() + float(radius)
-        if not math.isfinite(held):
-            return far
-        return min(far, max(self.distance * FAR_PER_DISTANCE,
-                            held * PARALLEL_REACH_MARGIN, 1.0))
+        """How far in front of and behind the eye a parallel view reaches:
+        a few times the reach of what the view holds (``depth_reach``), so
+        the depth buffer is not split over ±10 km (#874); ``far_plane()``
+        when the reach is unknown."""
+        return native.camera_depths(self, self._fitted_depth_range())[2]
 
     def near_plane(self) -> float:
-        """The near clipping distance in perspective: the usual ``znear``
-        at any working distance, stepping back with the camera when you come
-        right up to something — otherwise the near plane itself is what
-        stops you — but never closer than :data:`NEAR_FLOOR`. A ``clip_near``
-        set by hand is used as it is (Camera Settings ▸ Clipping)."""
-        if self.clip_near is not None:
-            return max(float(self.clip_near), NEAR_FLOOR)
-        fitted = self._fitted_depth_range()
-        if fitted is not None:
-            return fitted[0]
-        return min(self.znear, max(self.distance * 0.02, NEAR_FLOOR))
+        """The near clipping distance in perspective: ``clip_near`` set by
+        hand, else the fitted range, else ``znear`` stepping back with the
+        camera at close range — never closer than :data:`NEAR_FLOOR`."""
+        return native.camera_depths(self, self._fitted_depth_range())[0]
 
     def min_distance(self, at: QVector3D | None = None) -> float:
         """How close the camera may come to ``at`` (the target when not
         given): :data:`MIN_DISTANCE` near the origin, rising with the
         distance from it up to :data:`MIN_DISTANCE_FAR`."""
-        p = self.target if at is None else at
-        far = math.sqrt(p.x() * p.x() + p.y() * p.y() + p.z() * p.z())
-        if not math.isfinite(far):
-            return MIN_DISTANCE_FAR
-        return min(MIN_DISTANCE_FAR, max(MIN_DISTANCE, far * _MIN_PER_METRE))
+        return native.camera_min_distance(self.target if at is None else at)
 
     def far_plane(self) -> float:
-        """The far clipping distance: ``zfar`` at any working distance,
-        growing with the orbit distance when zoomed far out (#340); a
-        ``clip_far`` set by hand is used as it is, never nearer than just
-        past the near plane."""
-        if self.clip_far is not None:
-            return max(float(self.clip_far), self.near_plane() * 1.01)
-        fitted = self._fitted_depth_range()
-        if fitted is not None:
-            return fitted[1]
-        return max(self.zfar, self.distance * FAR_PER_DISTANCE)
+        """The far clipping distance: ``clip_far`` set by hand (never
+        nearer than just past the near plane), else the fitted range, else
+        ``zfar`` growing with the orbit distance when zoomed far out
+        (#340)."""
+        return native.camera_depths(self, self._fitted_depth_range())[1]
 
     # ---- Depth range fitted to the view ----------------------------------
     def picking_projection_matrix(self) -> QMatrix4x4:
