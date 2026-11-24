@@ -115,6 +115,86 @@ pub fn extra(py: Python<'_>, handle: &Bound<'_, PyAny>, kind: ItemKind, f: &Fiel
         ItemKind::Profile => {
             profile_extra(py, f, profile, &mut x)?;
         }
+        ItemKind::Frame => {
+            // view_title_texts: the title's strings, fields expanded;
+            // {escala} always reads this frame's scale.
+            let comp = py.import("core.composition")?;
+            let expand = comp.getattr("expand_fields")?;
+            let uid = f.text("uid", "");
+            let persp = f.flag("perspective", false);
+            let shown: String = comp.getattr("format_scale")?.call1((f.num("scale_n", 100.0),))?.extract()?;
+            let scale_field = if persp { tr(py, "no scale", &[])? } else { shown.clone() };
+            let ex = |text: String| -> PyResult<String> {
+                let text = text.replace("{escala}", &scale_field);
+                if text.is_empty() { Ok(text) } else { expand.call1((text, uid.clone()))?.extract() }
+            };
+            let key = f.text("view_key", "");
+            let view_name = if let Some(name) = key.strip_prefix("scene:") {
+                name.to_string()
+            } else if let Some(k) = key.strip_prefix("std:") {
+                let mut label = k.to_string();
+                for pair in comp.getattr("STD_VIEWS")?.try_iter()? {
+                    let (l, kk): (String, String) = pair?.extract()?;
+                    if kk == k {
+                        label = tr(py, &l, &[])?;
+                    }
+                }
+                label
+            } else {
+                tr(py, "View", &[])?
+            };
+            let title = ex(f.text("title_text", ""))?;
+            put("title".into(), Value::Str(if title.is_empty() { view_name } else { title }));
+            put("subtitle".into(), Value::Str(ex(f.text("title_subtitle", ""))?));
+            let scale = if !f.flag("title_scale", true) {
+                String::new()
+            } else if persp {
+                tr(py, "NO SCALE", &[])?
+            } else {
+                format!("ESC. {shown}")
+            };
+            put("scale".into(), Value::Str(scale));
+            put("number".into(), Value::Str(ex(f.text("title_number", ""))?));
+            put("sheet".into(), Value::Str(ex(f.text("title_sheet", ""))?));
+            put("scale_label".into(), Value::Str(handle.call_method0("scale_label")?.extract()?));
+            put("placeholder".into(), Value::Str(tr(py, "Update the view to render", &[])?));
+        }
+        ItemKind::Text => {
+            let expand = py.import("core.composition")?.getattr("expand_fields")?;
+            let s: String = expand.call1((f.text("text", ""), f.text("frame_uid", "")))?.extract()?;
+            put("text".into(), Value::Str(s));
+        }
+        ItemKind::TitleBlock => {
+            // The rows (its own, else the class's labelled fields), expanded;
+            // an empty scale row reads the sheet's main frame.
+            let expand = py.import("core.composition")?.getattr("expand_fields")?;
+            // `str(value or "")`, as Python reads them.
+            let as_str = |v: Bound<'_, PyAny>| -> PyResult<String> {
+                Ok(if v.is_truthy()? { v.str()?.to_string() } else { String::new() })
+            };
+            let mut rows: Vec<(String, String)> = Vec::new();
+            let campos = handle.getattr("campos")?;
+            if campos.is_truthy()? {
+                for row in campos.try_iter()? {
+                    let row = row?;
+                    rows.push((row.get_item(0)?.str()?.to_string(), as_str(row.get_item(1)?)?));
+                }
+            } else {
+                for pair in handle.getattr("FIELDS")?.try_iter()? {
+                    let (label, attr): (String, String) = pair?.extract()?;
+                    rows.push((label, as_str(handle.getattr(attr.as_str())?)?));
+                }
+            }
+            let mut out = Vec::new();
+            for (label, value) in rows {
+                let mut v: String = expand.call1((value,))?.extract()?;
+                if v.is_empty() && matches!(label.trim().to_lowercase().as_str(), "escala" | "scale") {
+                    v = expand.call1(("{escala}",))?.extract()?;
+                }
+                out.push(Value::List(vec![Value::Str(label), Value::Str(v)]));
+            }
+            put("rows".into(), Value::List(out));
+        }
         ItemKind::Callout => {
             let expand = py.import("core.composition")?.getattr("expand_fields")?;
             let uid = f.text("frame_uid", "");
@@ -128,8 +208,8 @@ pub fn extra(py: Python<'_>, handle: &Bound<'_, PyAny>, kind: ItemKind, f: &Fiel
     Ok(x)
 }
 
-/// The item's primitives (item-local paper mm), or None for the kinds the
-/// page still draws its own way (frames, texts, title blocks) or not yet.
+/// The item's primitives (item-local paper mm); for a frame, what goes
+/// over its content (the page and the PDF add the content).
 pub fn paint(kind: ItemKind, f: &Fields, x: &Extra) -> Option<Vec<Op>> {
     let mut p = Painter::default();
     match kind {
@@ -144,11 +224,14 @@ pub fn paint(kind: ItemKind, f: &Fields, x: &Extra) -> Option<Vec<Op>> {
         ItemKind::RadialDimension => items_b::paint_radial(&mut p, f, x),
         ItemKind::Label => items_b::paint_label(&mut p, f, x),
         ItemKind::Profile => items_b::paint_profile(&mut p, f, x),
+        ItemKind::Text => super::items_c::paint_text(&mut p, f, x),
+        // On the page: what goes over the content the page draws itself.
+        ItemKind::Frame => super::items_d::paint_frame_overlay(&mut p, f, x),
+        ItemKind::TitleBlock => super::items_c::paint_titleblock(&mut p, f, x),
         ItemKind::Image => {
             let path = f.text("path", "");
             items::paint_image(&mut p, f, !path.is_empty() && std::path::Path::new(&path).is_file());
         }
-        _ => return None,
     }
     Some(p.ops)
 }
@@ -188,6 +271,14 @@ pub fn size(kind: ItemKind, f: &Fields) -> (f64, f64) {
 pub fn sheet_item_display(py: Python<'_>, item: &Bound<'_, PyAny>, profile: Option<Bound<'_, PyAny>>) -> PyResult<String> {
     py.import("core.doc_model")?.call_method0("flush")?;
     let class = item.get_type().name()?.to_string();
+    if class == "Composicion" {
+        // The sheet itself: its border on the margin rectangle.
+        let (pw, ph): (f64, f64) = item.call_method0("page_size_mm")?.extract()?;
+        let f = super::model::read_fields(crate::doc::py::handle_key(item)?)?;
+        let mut p = super::paint::Painter::default();
+        super::items_c::paint_sheet_border(&mut p, &f, pw, ph);
+        return Ok(ops_json(&p.ops).to_string());
+    }
     let kind = ItemKind::of_class(&class)
         .ok_or_else(|| pyo3::exceptions::PyValueError::new_err(format!("not a sheet item: {class}")))?;
     let key = crate::doc::py::handle_key(item)?;
@@ -195,6 +286,59 @@ pub fn sheet_item_display(py: Python<'_>, item: &Bound<'_, PyAny>, profile: Opti
     let x = extra(py, item, kind, &f, profile.as_ref())?;
     let ops = paint(kind, &f, &x).unwrap_or_default();
     Ok(ops_json(&ops).to_string())
+}
+
+/// A frame's display list (frame-local paper mm) with its content:
+/// ``content`` a dict of ``missing`` (the notice for a scene that is gone),
+/// ``segs`` (N,4) and ``kinds`` (N,) of the vector drawing, ``fills`` (the
+/// cut rings, (M,2) each) and ``image`` (the picture's pixel size; the
+/// writer finds it as ``frame:<key>``).
+#[pyfunction]
+#[pyo3(signature = (frame, content=None))]
+pub fn sheet_frame_display(py: Python<'_>, frame: &Bound<'_, PyAny>, content: Option<Bound<'_, pyo3::types::PyDict>>)
+    -> PyResult<String> {
+    py.import("core.doc_model")?.call_method0("flush")?;
+    let key = crate::doc::py::handle_key(frame)?;
+    let f = super::model::read_fields(key)?;
+    let x = extra(py, frame, ItemKind::Frame, &f, None)?;
+    let c = frame_content(content.as_ref(), key)?;
+    let mut p = super::paint::Painter::default();
+    super::items_d::paint_frame(&mut p, &f, &x, &c);
+    Ok(ops_json(&p.ops).to_string())
+}
+
+pub fn frame_content(d: Option<&Bound<'_, pyo3::types::PyDict>>, key: crate::doc::Key)
+    -> PyResult<super::items_d::FrameContent> {
+    let mut c = super::items_d::FrameContent::default();
+    let Some(d) = d else { return Ok(c) };
+    if let Some(m) = d.get_item("missing")?.filter(|v| !v.is_none()) {
+        let name: String = m.extract()?;
+        c.missing = Some(tr(d.py(), "The scene «{name}» is missing: pick another view for this frame (Item properties ▸ View)",
+                            &[("name", name)])?);
+    }
+    if let Some(s) = d.get_item("segs")?.filter(|v| !v.is_none()) {
+        let rows: Vec<Vec<f64>> = s.call_method0("tolist")?.extract()?;
+        c.segs = Some(rows.into_iter().filter(|r| r.len() >= 4).map(|r| [r[0], r[1], r[2], r[3]]).collect());
+    }
+    if let Some(k) = d.get_item("kinds")?.filter(|v| !v.is_none()) {
+        let kinds: Vec<i64> = k.call_method0("tolist")?.extract()?;
+        c.kinds = Some(kinds.into_iter().map(|k| k as i8).collect());
+    }
+    if let Some(fl) = d.get_item("fills")?.filter(|v| !v.is_none()) {
+        for ring in fl.try_iter()? {
+            let ring = ring?;
+            let pts: Vec<Vec<f64>> = match ring.call_method0("tolist") {
+                Ok(l) => l.extract()?,
+                Err(_) => ring.extract()?,
+            };
+            c.fills.push(pts.into_iter().filter(|q| q.len() >= 2).map(|q| [q[0], q[1]]).collect());
+        }
+    }
+    if let Some(im) = d.get_item("image")?.filter(|v| !v.is_none()) {
+        let (w, h): (u32, u32) = im.extract()?;
+        c.image = Some((w, h, format!("frame:{key}")));
+    }
+    Ok(c)
 }
 
 /// The box of sheet item ``item`` in paper mm: ``(w, h)``.
@@ -211,6 +355,7 @@ pub fn sheet_item_size(py: Python<'_>, item: &Bound<'_, PyAny>) -> PyResult<(f64
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(sheet_item_display, m)?)?;
     m.add_function(wrap_pyfunction!(sheet_item_size, m)?)?;
+    m.add_function(wrap_pyfunction!(sheet_frame_display, m)?)?;
     m.add_function(wrap_pyfunction!(sheet_duplicates, m)?)?;
     m.add_function(wrap_pyfunction!(sheet_next_z, m)?)?;
     Ok(())

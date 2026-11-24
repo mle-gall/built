@@ -223,6 +223,21 @@ def _report_job(win, history, job, fraction):
         raise InterruptedError("Delivery cancelled")
 
 
+def _write_pdf(win, path, sheets) -> list:
+    """The sheets' PDF from the Rust writer (sheets::pdf), the frames
+    rendered by the window's view; the composer's only without one."""
+    view = getattr(getattr(win, "_doc", None), "stand_in", None)
+    if view is None or getattr(view, "renderer", None) is None:
+        from views.wgpu_sheets import composer_for
+        return composer_for(win).export_all_pdf(path, sheets)
+    from views import wgpu_sheet_frames
+    scene = win.viewport.history.scene
+    wanted = None if sheets is None else {s._doc_key for s in sheets}
+    comps = [c for c in scene.compositions if wanted is None or c._doc_key in wanted]
+    return wgpu_sheet_frames.export_pdf(view, comps, path, wgpu_sheet_frames.Ground(lambda: None),
+                                        getattr(win, "_current_path", None))
+
+
 def enqueue(win, key, record):
     history = win.viewport.history
     queue = win.__dict__.setdefault("_delivery_queue", deque())
@@ -235,8 +250,7 @@ def enqueue(win, key, record):
     if current:
         ctx["project_directory"] = Path(current).parent
     if record["format"] == "pdf":
-        from views.wgpu_sheets import composer_for
-        ctx["pdf_writer"] = lambda p, sheets: composer_for(win).export_all_pdf(p, sheets)
+        ctx["pdf_writer"] = lambda p, sheets: _write_pdf(win, p, sheets)
     if record["format"] == "svg":
         ctx.update(_svg_context(win, active, history.scene, record))
     steps = deliveries.write_steps(history.scene, record, **ctx)

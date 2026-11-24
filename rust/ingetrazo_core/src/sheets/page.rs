@@ -180,7 +180,9 @@ pub fn page_json(s: &Sheet) -> Json {
             }
             if let Some(ops) = &i.display {
                 o["display"] = super::paint::ops_json(ops);
-                if let Some(b) = super::paint::bounds(ops) {
+                // Frames, texts and title blocks are picked by their box.
+                let boxed = matches!(i.kind, ItemKind::Frame | ItemKind::Text | ItemKind::TitleBlock);
+                if let Some(b) = super::paint::bounds(ops).filter(|_| !boxed) {
                     // The ink box on the page: what a click picks.
                     o["bounds"] = json!([i.rect[0] + b[0], i.rect[1] + b[1], b[2] - b[0], b[3] - b[1]]);
                 }
@@ -194,6 +196,11 @@ pub fn page_json(s: &Sheet) -> Json {
             Value::Int(x) => Some(*x as f64),
             _ => None,
         }).collect()
+    };
+    let border_display = {
+        let mut p = super::paint::Painter::default();
+        super::items_c::paint_sheet_border(&mut p, f, s.page.0, s.page.1);
+        super::paint::ops_json(&p.ops)
     };
     json!({
         "key": s.key,
@@ -209,6 +216,7 @@ pub fn page_json(s: &Sheet) -> Json {
             "radius_mm": f.num("border_radius_mm", 0.0),
             "style": f.text("border_style", "single"),
         },
+        "border_display": border_display,
         "guides": {"v": num_list("guides_v"), "h": num_list("guides_h")},
         "fields": fields_json(f),
         "items": items,

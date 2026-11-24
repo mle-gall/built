@@ -279,7 +279,7 @@ impl Ui {
     /// has focus, or Escape while one of its popups is open; everything else
     /// is the page's (views/wgpu_sheets.py hands it to the composer).
     pub(super) fn sheets_claims_key(&self, name: &str) -> bool {
-        self.sheet.is_some() || self.cmd_open || self.ctx.wants_keyboard_input()
+        self.sheet.is_some() || self.cmd_open || self.ctx.wants_keyboard_input() || self.page.editing.is_some()
             || (name == "Escape" && (self.view_open || self.menu.is_some() || self.form.is_some() || self.sheets.popup_open()))
     }
     pub(super) fn sheets_key(&mut self, name: &str, pressed: bool, mods: u8) -> bool {
@@ -325,8 +325,14 @@ impl Ui {
         if retract == 0.0 {
             self.sheets_row_menu(ctx);
             self.sheets_pick(ctx);
+            self.page_text_editor(ctx);
         }
         self.sheets_typed_edits(first);
+    }
+
+    /// A text item typed in on the page (sheet_page.rs `text_editor`).
+    fn page_text_editor(&mut self, ctx: &egui::Context) {
+        self.page.text_editor(ctx, &mut self.actions);
     }
 
     /// The inspector's row edits (``edit␟owner:field␟raw``) as the field
@@ -662,6 +668,11 @@ impl Ui {
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         let id = self.painter.register_native_texture(device, &view, wgpu::FilterMode::Linear);
         self.page.set_native(key, texture, id);
+        self.ctx.request_repaint();
+    }
+    /// Type in text item `key` on the page (a new text block opens so).
+    pub fn page_edit_text(&mut self, key: u64) {
+        self.page.edit_text(key);
         self.ctx.request_repaint();
     }
     pub fn page_command(&mut self, name: &str) -> bool {
