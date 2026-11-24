@@ -144,6 +144,7 @@ mod units;
 mod units_format;
 mod linetypes;
 mod pyfloat;
+mod selection;
 mod value_field;
 mod inference_state;
 mod snap_curve;
@@ -488,6 +489,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pick_index::edges::edge_cursor_point, m)?)?;
     m.add_function(wrap_pyfunction!(pick_index::hits::drop_past_cut, m)?)?;
     annotation_geometry::register(m)?;
+    pick_index::visibility::register(m)?;
     document_snap::register(m)?;
     view_culling::register(m)?;
     m.add_function(wrap_pyfunction!(pick_index::document_pick_index, m)?)?;
@@ -504,6 +506,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(units::py_parse_value_buffer, m)?)?;
     units_format::register(m)?;
     linetypes::register(m)?;
+    selection::register(m)?;
     m.add_function(wrap_pyfunction!(value_field::value_key, m)?)?;
     m.add_function(wrap_pyfunction!(value_field::value_enter, m)?)?;
     m.add_function(wrap_pyfunction!(value_field::py_zoom_enter, m)?)?;

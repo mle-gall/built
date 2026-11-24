@@ -2389,7 +2389,7 @@
  "Remove the faces left lying over their own subdivisions after drawing or erasing.": "Remove as faces que ficaram sobre suas próprias subdivisões ao desenhar ou apagar.",
  "Resize the selection by dragging the grips of its box; the corners keep its proportions.": "Redimensiona a seleção arrastando as alças da sua caixa; os cantos mantêm as proporções.",
  "Save the document under another name or in another folder.": "Salva o documento com outro nome ou em outra pasta.",
- "Save the document — the model and every sheet — to its .igz file.": "Salva o documento — o modelo e todas as folhas — no seu arquivo .igz.",
+ "Save the document — the model and every sheet — to its file.": "Salva o documento — o modelo e todas as folhas — no seu arquivo.",
  "Save the model as IFC for BIM software, with what the BIM panel tagged.": "Salva o modelo como IFC para programas BIM, com o que foi marcado no painel BIM.",
  "Save the model as Wavefront OBJ with its materials.": "Salva o modelo como Wavefront OBJ com seus materiais.",
  "Save the model as an STL mesh for 3D printing.": "Salva o modelo como malha STL para impressão 3D.",

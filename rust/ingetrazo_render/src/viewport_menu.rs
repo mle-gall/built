@@ -180,6 +180,13 @@ pub fn read_facts(
     let vp = win.getattr("viewport")?;
     let one = if sel.len() == 1 { Some(&sel[0]) } else { None };
     let contains = |x: &Bound<'_, PyAny>| sel.iter().any(|e| e.is(x));
+    if let Some(actions) = opt(win, "_registry_actions") {
+        let action = actions.call_method1("get", ("menu:repeat_last_command",))?;
+        if !action.is_none() {
+            let keys: Vec<String> = action.call_method0("portable_keys")?.extract()?;
+            f.repeat_key = Some(keys.into_iter().next().unwrap_or_default());
+        }
+    }
     if let Some(last) = opt(win, "_last_command") {
         let label = last.get_item(0)?;
         f.repeat = Some(label.str()?.to_string());

@@ -115,42 +115,16 @@ fn section_frame(
         .collect())
 }
 
-#[pyfunction]
-fn annotation_samples(view: &Obj, pts: &Obj, mvp: &Obj) -> PyResult<Vec<Sample>> {
-    let snap = view.getattr_opt("_depth_snap")?.filter(|s| !s.is_none());
-    let Some(snapshot) = snap else {
-        return pts
-            .try_iter()?
-            .map(|p| {
-                let p = p?;
-                Ok((
-                    view.call_method1("_world_to_pixel", (&p, mvp))?.extract()?,
-                    !view
-                        .call_method1("_occluded_on_screen", (p,))?
-                        .is_truthy()?,
-                ))
-            })
-            .collect();
-    };
+pub(super) fn snapshot_point(snapshot: &Obj, p: DVec3) -> PyResult<bool> {
+    Ok(snapshot_visibility(snapshot)?(p))
+}
+
+fn snapshot_visibility<'py>(snapshot: &Obj<'py>) -> PyResult<impl Fn(DVec3) -> bool + 'py> {
     let (buf, smvp, inverse, sw, sh, eye, fwd): (Obj, Obj, Obj, usize, usize, Obj, Obj) =
         snapshot.extract()?;
-    let m = mat(mvp)?;
     let sm = mat(&smvp)?;
     let inv = mat(&inverse)?;
     let (eye, fwd) = (xyz(&eye)?, xyz(&fwd)?);
-    let (w, h): (f64, f64) = (
-        view.call_method0("width")?.extract()?,
-        view.call_method0("height")?.extract()?,
-    );
-    let project = |p: DVec3| {
-        let c = m * p.extend(1.);
-        (c.w > 0.).then(|| {
-            (
-                (c.x / c.w * 0.5 + 0.5) * w,
-                (1. - (c.y / c.w * 0.5 + 0.5)) * h,
-            )
-        })
-    };
     let depth32 = buf.extract::<PyReadonlyArray2<f32>>().ok();
     let depth64 = if depth32.is_none() {
         Some(buf.extract::<PyReadonlyArray2<f64>>()?)
@@ -166,13 +140,13 @@ fn annotation_samples(view: &Obj, pts: &Obj, mvp: &Obj) -> PyResult<Vec<Sample>>
             "depth snapshot dimensions differ from its viewport",
         ));
     }
-    let depth = |y, x| {
+    let depth = move |y, x| {
         depth32.as_ref().map_or_else(
             || depth64.as_ref().unwrap().as_array()[[y, x]],
             |d| f64::from(d.as_array()[[y, x]]),
         )
     };
-    let visible = |p: DVec3| {
+    Ok(move |p: DVec3| {
         let c = sm * p.extend(1.);
         if c.w <= 1e-9 {
             return true;
@@ -202,6 +176,40 @@ fn annotation_samples(view: &Obj, pts: &Obj, mvp: &Obj) -> PyResult<Vec<Sample>>
         let along = (p - eye).dot(fwd);
         q.w.abs() < 1e-12
             || (q.truncate() / q.w - eye).dot(fwd) >= along - 0.02f64.max(0.003 * along.abs())
+    })
+}
+
+#[pyfunction]
+fn annotation_samples(view: &Obj, pts: &Obj, mvp: &Obj) -> PyResult<Vec<Sample>> {
+    let snap = view.getattr_opt("_depth_snap")?.filter(|s| !s.is_none());
+    let Some(snapshot) = snap else {
+        return pts
+            .try_iter()?
+            .map(|p| {
+                let p = p?;
+                Ok((
+                    view.call_method1("_world_to_pixel", (&p, mvp))?.extract()?,
+                    !view
+                        .call_method1("_occluded_on_screen", (p,))?
+                        .is_truthy()?,
+                ))
+            })
+            .collect();
+    };
+    let visible = snapshot_visibility(&snapshot)?;
+    let m = mat(mvp)?;
+    let (w, h): (f64, f64) = (
+        view.call_method0("width")?.extract()?,
+        view.call_method0("height")?.extract()?,
+    );
+    let project = |p: DVec3| {
+        let c = m * p.extend(1.);
+        (c.w > 0.).then(|| {
+            (
+                (c.x / c.w * 0.5 + 0.5) * w,
+                (1. - (c.y / c.w * 0.5 + 0.5)) * h,
+            )
+        })
     };
     pts.try_iter()?
         .map(|p| {

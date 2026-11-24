@@ -1,274 +1,55 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""One toolbar icon size for the model window AND the sheet composer
-(Marco, 2026-09-14: «no sé si habrás considerado también los iconos de
-composiciones»)."""
-from __future__ import annotations
+"""The native rail, command registry and STL import defaults."""
+from threading import get_ident
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-import pytest
-from PySide6.QtCore import QSettings
-from PySide6.QtWidgets import QApplication, QToolBar
-
-_app = QApplication.instance() or QApplication([])
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 
-@pytest.fixture
-def settings_file(tmp_path, monkeypatch):
-    """A throwaway INI for every QSettings() the windows open — the name
-    imported into views.main_window included, or the MainWindow reads
-    (and, on close, WRITES) the layout of whatever test ran before."""
-    path = tmp_path / "prefs.ini"
-    factory = lambda *a: QSettings(str(path), QSettings.IniFormat)  # noqa: E731
-    import PySide6.QtCore as qc
-    import views.main_window as mw
-    monkeypatch.setattr(qc, "QSettings", factory)
-    monkeypatch.setattr(mw, "QSettings", factory)
-    return path
+def test_save_writes_the_model_from_the_file_menu(native_host, monkeypatch, tmp_path):
+    from views.filedialogs import file_dialogs
+    path = tmp_path / "saved.built"
+    monkeypatch.setattr(file_dialogs, "getSaveFileName", lambda *_: (str(path), ""))
+    native_host.menu("save")
+    assert path.is_file() and native_host.window._current_path == path
 
 
-def test_the_main_toolbar_starts_with_save(settings_file, monkeypatch):
-    """Marco, 2026-09-14: the Save icon on the model's Main bar too, before
-    the Select arrow; it triggers the same save as the menu."""
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        acts = [a for a in win.toolbars["main"].actions() if not a.isSeparator()]
-        assert acts[0] is win._act_save_tb and acts[0].text() == "Save"
-        assert acts[1] is win._tool_actions["select"]
-        called = []
-        monkeypatch.setattr(win, "_on_save", lambda: called.append(True))
-        win._act_save_tb.trigger()
-        assert called == [True]
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_simplify_mesh_is_only_in_the_edit_menu():
+    from ingetrazo_render import command_registry, rail_layout
+    assert any(row[1] == "Edit" and row[5] == "verb:simplify_mesh"
+               for row in command_registry([], []))
+    assert all(key != "simplify_mesh" for group in rail_layout() for key, _ in group)
 
 
-def test_simplify_mesh_is_only_in_the_edit_menu(settings_file):
-    from views.main_window import MainWindow
-
-    win = MainWindow()
-    try:
-        action = win._act_simplify_mesh
-        assert action not in win.toolbars["main"].actions()
-        edit_menu = next(
-            item.menu() for item in win.menuBar().actions()
-            if item.text() == "Edit")
-        assert action in edit_menu.actions()
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
-
-
-def test_stl_simplification_defaults_to_principal_planes(
-        settings_file, monkeypatch, tmp_path):
-    from views.main_window import MainWindow
-    import views.main_window as mw
-
-    old_settings = mw.QSettings()
-    old_settings.setValue("import/stl_simplify", "true")
-    old_settings.sync()
-    monkeypatch.setattr(
-        mw.file_dialogs, "getOpenFileName",
-        lambda *args: (str(tmp_path / "sample.stl"), ""))
-    selected = {}
-
-    def reject_form(_, form):
-        selected["mode"] = form.values()["simplify"]
-        form.press("cancel")
-
-    monkeypatch.setattr("views.chrome_forms.show", reject_form)
-    win = MainWindow()
-    try:
-        win._on_import_stl()
-        assert selected["mode"] == "principal"
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_stl_simplification_defaults_to_principal_planes(native_host, monkeypatch, tmp_path):
+    from core.settings import settings
+    from tests.test_import_failure_reported import _GOOD_STL
+    from views.filedialogs import file_dialogs
+    settings().setValue("import/stl_simplify", "true")
+    path = tmp_path / "sample.stl"
+    path.write_bytes(_GOOD_STL)
+    monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *args: (str(path), ""))
+    forms = []
+    monkeypatch.setattr("views.chrome_forms.show", lambda _w, form: forms.append(form))
+    native_host.menu("import:stl")
+    assert forms[0].values()["simplify"] == "principal"
+    forms[0].press("cancel")
+    assert not native_host.viewport.history.undo_stack
 
 
-def test_stl_parse_runs_on_worker_and_reports_progress_on_ui_thread(
-        settings_file, monkeypatch, tmp_path):
-    import struct
-    from PySide6.QtCore import QThread
-    from PySide6.QtWidgets import QApplication
-    from formats import stl as stl_format
-    from views.main_window import MainWindow
-
+def test_stl_parse_reports_worker_progress_on_the_calling_thread(native_host, tmp_path):
+    from tests.test_import_failure_reported import _GOOD_STL
     path = tmp_path / "triangle.stl"
-    with path.open("wb") as target:
-        target.write(b"binary STL".ljust(80, b"\0"))
-        target.write(struct.pack("<I", 1))
-        target.write(struct.pack(
-            "<12fH", 0, 0, 1,
-            0, 0, 0, 1, 0, 0, 0, 1, 0, 0))
-
-    parsing_threads = []
-    progress_threads = []
-    parse = stl_format.parse_stl
-
-    def track_parse(*args, **kwargs):
-        parsing_threads.append(
-            QThread.currentThread() != QApplication.instance().thread())
-        return parse(*args, **kwargs)
-
-    monkeypatch.setattr(stl_format, "parse_stl", track_parse)
-    win = MainWindow()
-    try:
-        mesh, error = win._parse_stl_threaded(
-            path, 1.0, "none",
-            lambda *_: progress_threads.append(
-                QThread.currentThread() == QApplication.instance().thread()))
-        assert error is None
-        assert len(mesh.faces) == 1
-        assert parsing_threads == [True]
-        assert progress_threads and all(progress_threads)
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    path.write_bytes(_GOOD_STL)
+    threads = []
+    mesh, error = native_host.window._parse_stl_threaded(
+        path, 1., "none", lambda *_: threads.append(get_ident()))
+    assert error is None and len(mesh.faces) == 1
+    assert set(threads) == {get_ident()}
 
 
-def test_a_fresh_install_gets_marcos_layout_and_large_icons(settings_file, monkeypatch):
-    """No saved state → the factory blob (resources/ui/default_layout.state)
-    and 32 px icons: Draw and Annotate stand at the left, the rest along
-    the top, as Marco arranged them (2026-09-14: «así como está… por
-    defecto para cualquier persona que instale el programa»)."""
-    from PySide6.QtCore import Qt
-    from views import icons
-    from views.main_window import MainWindow
-    assert icons.DEFAULT_TOOLBAR_ICON_PX == 24                                # normal, since 14-09
-    win = MainWindow()
-    try:
-        assert win.toolBarArea(win.toolbars["draw"]) == Qt.LeftToolBarArea
-        assert win.toolBarArea(win.toolbars["annotate"]) == Qt.LeftToolBarArea
-        for name in ("main", "modify", "view", "sections", "views"):
-            assert win.toolBarArea(win.toolbars[name]) == Qt.TopToolBarArea, name
-        assert all(tb.iconSize().width() == 24 for tb in win.toolbars.values())
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
-
-
-def test_the_sidebar_handle_sits_on_the_resize_line_and_folds_the_trays(settings_file):
-    """LibreOffice's handle (Marco, 2026-09-14): a slim button on the line
-    between the viewport and the trays, half-way down; click (or Window ▸
-    Sidebar, Ctrl+F5) folds the three trays away, the handle rests at the
-    window's edge, click brings back the trays that were open."""
-    from PySide6.QtWidgets import QApplication
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        win.resize(1200, 800)
-        win.show()
-        QApplication.processEvents()
-        btn = win._sidebar_handle
-        from PySide6.QtCore import Qt
-        docks = [d for d in win._sidebar_docks()        # the right side's
-                 if win.dockWidgetArea(d) != Qt.LeftDockWidgetArea]
-        assert btn.isVisible() and win.tray.isVisible()
-        edge = win.viewport.mapTo(win, win.viewport.rect().topRight()).x()
-        assert abs((btn.x() + btn.width() // 2) - edge) <= 2       # on the line
-        assert abs(btn.y() + btn.height() // 2
-                   - (win.viewport.mapTo(win, win.viewport.rect().topLeft()).y()
-                      + win.viewport.height() // 2)) <= 2           # half-way down
-        assert edge < win.width() - 50                              # trays take room
-        btn.click()                                                 # fold
-        QApplication.processEvents()
-        assert not win._act_sidebar.isChecked()
-        assert not any(d.isVisible() for d in docks)
-        QApplication.processEvents()
-        assert btn.isVisible() and btn.x() + btn.width() >= win.width() - 2   # at the edge
-        win._act_sidebar.setChecked(True)                           # unfold (Ctrl+F5)
-        QApplication.processEvents()
-        assert win.tray.isVisible()
-        # Switching the tabbed trays (Terrain ↔ BIM) must not bury the handle.
-        for dock in (win.bim_tray, win.georef_tray, win.tray):
-            dock.show()
-            dock.raise_()
-            QApplication.processEvents()
-            QApplication.processEvents()
-            top = win.childAt(btn.geometry().center())
-            assert top is btn or btn.isAncestorOf(top), dock.objectName()
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
-
-
-def test_legacy_choice_does_not_resize_the_native_rail(settings_file):
+def test_legacy_choice_does_not_resize_the_native_rail(private_settings):
+    from core.settings import settings
     from views.icons import DEFAULT_TOOLBAR_ICON_PX
-    QSettings().setValue("ui/toolbar_icon_px", 40)
+    settings().setValue("ui/toolbar_icon_px", 40)
     assert DEFAULT_TOOLBAR_ICON_PX == 24
-
-
-def test_the_overflow_button_wears_the_program_chevron(settings_file, monkeypatch):
-    """A toolbar that does not fit grows Qt's extension button; ours shows
-    a double chevron with a tooltip rather than the style's grey stub
-    (Marco, 2026-09-14, on a small window)."""
-    from PySide6.QtCore import Qt
-    from PySide6.QtWidgets import QToolButton
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        win.resize(700, 420)
-        win.show()
-        QApplication.processEvents()
-        draw = win.toolbars["draw"]
-        ext = draw.findChild(QToolButton, "qt_toolbar_ext_button")
-        assert not ext.icon().isNull()
-        assert ext.toolTip()
-        vertical = draw.orientation() == Qt.Vertical
-        icon_v = ext.icon().cacheKey()
-        win.addToolBar(Qt.TopToolBarArea if vertical else Qt.LeftToolBarArea, draw)
-        QApplication.processEvents()
-        assert ext.icon().cacheKey() != icon_v            # re-drawn for the new orientation
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
-
-
-def test_the_walkthrough_toolbar_stands_left_under_annotate(settings_file, monkeypatch):
-    """Fresh install: the factory blob puts Walkthrough at the left, right
-    under Annotate (below 3D Text — Marco, 2026-09-19). A profile whose
-    saved layout predates the toolbar gets the same placement once."""
-    from PySide6.QtCore import Qt
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        win.show()
-        tb, above = win.toolbars["walkthrough"], win.toolbars["annotate"]
-        assert win.toolBarArea(tb) == Qt.LeftToolBarArea
-        assert win.toolBarArea(above) == Qt.LeftToolBarArea
-        assert tb.geometry().top() >= above.geometry().bottom() - 1
-        # A layout saved before the toolbar existed leaves it where Qt
-        # created it — the top. Stand in for that with a state that has
-        # it at the top.
-        win.removeToolBar(tb)
-        win.addToolBar(Qt.TopToolBarArea, tb)
-        tb.show()
-        top_state = bytes(win.saveState())
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
-    from PySide6.QtCore import QSettings
-    st = QSettings()
-    st.remove("ui/placed/walkthrough")
-    st.setValue("ui/window_state", top_state)
-    win = MainWindow()
-    try:
-        assert win.toolBarArea(win.toolbars["walkthrough"]) == Qt.LeftToolBarArea
-        assert QSettings().value("ui/placed/walkthrough") is not None
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
-    # …and once placed, the user's own arrangement is respected.
-    st.setValue("ui/window_state", top_state)
-    win = MainWindow()
-    try:
-        assert win.toolBarArea(win.toolbars["walkthrough"]) == Qt.TopToolBarArea
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()

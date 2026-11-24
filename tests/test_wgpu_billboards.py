@@ -19,6 +19,19 @@ pytestmark = pytest.mark.skipif(
     reason='ingetrazo_core with bake_scene required (maturin develop --release)')
 
 
+def test_billboard_stances_accept_empty_and_unaligned_vertex_buffers():
+    from ingetrazo_render import billboard_stances
+
+    # NumPy permits packed fields after a one-byte tag. The empty slice
+    # retains the odd address and still advertises itself as aligned.
+    record = np.dtype([("tag", "u1"), ("pos", "f4", (3,))])
+    positions = np.zeros(3, dtype=record)["pos"]
+    positions[:] = [(0, 0, 0), (1, 0, 0), (0, 0, 2)]
+    worlds = np.eye(4, dtype=np.float32)[None]
+    assert billboard_stances(positions[:0], [], worlds[:0]) == []
+    assert billboard_stances(positions, [(0, 3)], worlds) == [([0.5, 0, 0], [0, -1])]
+
+
 def figure(kind=True):
     mesh = Mesh()
     face = mesh.add_face([QVector3D(*p) for p in

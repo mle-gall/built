@@ -126,3 +126,14 @@ def test_ray_hits_answers_as_with_one_span_per_chunk(seed):
         assert ga == gb
         hits += int(np.isfinite(a).any())
     assert hits > 20                       # the rays do hit things
+
+
+def test_float32_centroid_at_cell_boundary_keeps_original_order(monkeypatch):
+    monkeypatch.setattr(vv, "_SPAN_CELL_TRIS", 1)
+    lo, mid, hi = -4.218455791473389, 0.591040849685669, 5.400537490844727
+    positions = np.array([(mid, lo, lo), (lo, lo, lo), (hi, hi, hi), (hi, hi, lo),
+                          (hi, lo, hi), (lo, hi, hi), (lo, hi, lo), (lo, lo, hi)],
+                         dtype=np.float32)
+    edges = np.zeros_like(positions)
+    chunk = dict(v0=positions, e1=edges, e2=edges, tri_ent=np.arange(8))
+    assert _split_chunk_spans(chunk, depth=3, force=True)[3].tolist() == [0, 1, 7, 6, 5, 4, 3, 2]

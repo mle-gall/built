@@ -1,59 +1,11 @@
-"""Screen bounds, native dock insets, and coalesced Metal resizing."""
+"""Coalesced Metal resizing."""
 import sys
 from unittest.mock import Mock
 
 import pytest
-from PySide6.QtCore import QRect, QSize, Qt
+from PySide6.QtCore import QSize
 from PySide6.QtGui import QResizeEvent
-from PySide6.QtWidgets import QApplication, QDockWidget, QScrollArea, QWidget
-
-from views.main_window import MainWindow
-
-
-@pytest.fixture
-def win(monkeypatch):
-    window = MainWindow()
-    screen = Mock(availableGeometry=lambda: QRect(0, 0, 1600, 1000))
-    monkeypatch.setattr(window, "screen", lambda: screen)
-    window.resize(1400, 900)
-    window.show()
-    QApplication.processEvents()
-    for _ in range(5):
-        QApplication.processEvents()
-    yield window
-    window.hide()
-    window.deleteLater()
-
-
-def test_restored_oversize_geometry_is_clamped(win):
-    avail = win.screen().availableGeometry()
-    win.resize(avail.width() + 200, avail.height() + 300)
-    win.move(avail.right() - 50, avail.bottom() - 50)
-    win._clamp_to_screen()           # what restoreGeometry is followed by
-    for _ in range(3):
-        QApplication.processEvents()
-    assert avail.contains(win.frameGeometry())
-
-
-def test_wide_extension_scrolls_without_changing_its_contents(win):
-    dock = QDockWidget('Wide form', win)
-    panel = QWidget()
-    panel.setMinimumWidth(900)
-    dock.setWidget(panel)
-    win.addDockWidget(Qt.RightDockWidgetArea, dock)
-    win.tabifyDockWidget(win.tray, dock)
-    dock.show()
-    win._fit_docks_to_screen()
-    QApplication.processEvents()
-    assert isinstance(dock.widget(), QScrollArea)
-    assert dock.widget().widget() is panel
-    dock.raise_()
-    for _ in range(3):
-        QApplication.processEvents()
-    win.resizeDocks([dock], [300], Qt.Horizontal)
-    QApplication.processEvents()
-    assert dock.width() <= 320
-    assert panel.width() >= 900
+from PySide6.QtWidgets import QApplication, QWidget
 
 
 def test_metal_resize_burst_configures_only_final_size():
