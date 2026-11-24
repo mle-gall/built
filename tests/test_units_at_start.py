@@ -120,7 +120,7 @@ def test_a_document_already_open_is_not_asked_about(win, tmp_path):
     from core.scene import Scene
     from formats import igz
     from ingetrazo_core import Vec3
-    from views import wgpu_start
+    from ingetrazo_render import wgpu_start
 
     path = tmp_path / "plano.igz"
     igz.save_scene(Scene(), path)
@@ -136,7 +136,7 @@ def test_a_document_already_open_is_not_asked_about(win, tmp_path):
 
 def test_ctrl_u_opens_the_units_page(win):
     from ingetrazo_render import chrome_sheet
-    from views.shortcuts import collect_actions, action_keys
+    from core.shortcuts import collect_actions, action_keys
     act = win._registry_actions["menu:units"]
     assert [a for a in collect_actions(win) if "Ctrl+U" in action_keys(a)] == [act]
     act.trigger()

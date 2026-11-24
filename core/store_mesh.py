@@ -1851,16 +1851,21 @@ class StoreMesh(Mesh):
             raise ValueError("stitch record has no snapshot of this mesh")
         self.restore_state(undo)
 
-    def resplit_curves(self) -> None:
-        """:meth:`Mesh.resplit_curves` with the scan for curve edges done
-        on the store's arrays; the regrouping walks views and writes the
-        new ids through them."""
+    def tag_curve(self, loop_points, closed=True):
+        if not self._store._model_frame:
+            return super().tag_curve(loop_points, closed)
         self._chunk_dirty = True
         self._mut_serial += 1
-        by_id: dict = {}
-        for cid, k in self._store.curved_edges():
-            by_id.setdefault(cid, []).append(EdgeView(self, k))
-        Mesh._resplit_curve_groups(by_id)
+        if self._store.tag_curve_path([p.toTuple() for p in loop_points], closed, _mesh._CURVE_COUNTER):
+            return self.next_curve_id()
+        return None
+
+    def resplit_curves(self) -> None:
+        if not self._store._model_frame:
+            return super().resplit_curves()
+        self._chunk_dirty = True
+        self._mut_serial += 1
+        _mesh._CURVE_COUNTER = self._store.resplit_curves(_mesh._CURVE_COUNTER)
 
     def clear(self) -> None:
         self._store.clear()
@@ -2022,8 +2027,6 @@ class StoreMesh(Mesh):
 
 
 StoreMesh._rekey = _on_python("_rekey")
-# The legacy curve tagger writes through edge views.
-StoreMesh.tag_curve = Mesh.tag_curve
 
 
 def _fallback():
@@ -2362,107 +2365,29 @@ def bulk_weld(m, pos):
     from core import _native
     mod = _native.available()
     points = _input_positions(pos)
-    w = _weld_args()
     if not len(points):
         return [], np.empty(0, dtype=np.int64)
-    if points.dtype == np.float32:
-        _, ids, origin = mod.weld_points(points, w["scale"], w["tol2"])
-    else:
-        ids, origin = mod.store_weld_indices(points, w["scale"], w["tol2"])
-    ns = next(_mesh._KEY_NAMESPACES)
-    empty_i = np.zeros(0, dtype=np.int64)
-    store = mod.MeshStore.from_block(
-        ns, points, np.zeros((0, 2), dtype=np.int64), None, None, None, [],
-        empty_i, empty_i, empty_i, None, **w)
+    store, indices = mod.MeshStore._bulk_points(next(_mesh._KEY_NAMESPACES), points, **_weld_args())
     if type(m) is StoreMesh:
         m._store._extend_bulk(store)
         store = m._store
     else:
         become_store(m, store, [])
     vobjs = [VertexView(m, k) for k in store.keys("vertex")]
-    m.__dict__["_bulk"] = dict(
-        stage="points", vobjs=vobjs, pos=points,
-        origin=np.asarray(origin, dtype=np.int64),
-        edges=np.zeros((0, 2), dtype=np.int64))
-    return vobjs, np.asarray(ids, dtype=np.int64)
-
-
-def _edge_columns(st):
-    """The store's edges as the block arrays that rebuild them as they are
-    now (flags written through the views since included)."""
-    a = st.arrays()
-    return (a["edges"], a["flags"], a["curve"], a["layer"],
-            list(st.layer_names()))
-
-
-def _rebuild(m, b, edges_v, flags, curves, layers, names, rings=None,
-             sizes=None, counts=None, face_attr=None):
-    from core import _native
-    mod = _native.available()
-    origin = b["origin"]
-    pts = origin[edges_v] if len(edges_v) else np.zeros((0, 2), np.int64)
-    e = np.ascontiguousarray(pts, dtype=np.int64).reshape(-1, 2)
-    empty_i = np.zeros(0, dtype=np.int64)
-    store = mod.MeshStore.from_block(
-        next(_mesh._KEY_NAMESPACES), b["pos"], e,
-        np.ascontiguousarray(flags, dtype=np.uint8),
-        np.ascontiguousarray(curves, dtype=np.int64),
-        np.ascontiguousarray(layers, dtype=np.int64), names,
-        empty_i if rings is None else np.ascontiguousarray(
-            origin[rings], dtype=np.int64),
-        empty_i if sizes is None else sizes,
-        empty_i if counts is None else counts,
-        face_attr, **_weld_args())
-    m._store._extend_bulk(store)
-    return m._store
+    m.__dict__["_bulk"] = dict(stage="points", vobjs=vobjs)
+    return vobjs, indices
 
 
 def _bulk_edges(m, b, ia, ib, flags):
-    """``add_edges_welded`` into a fresh bulk store: rebuilt from the same
-    points with these edges (``from_block`` is that very sequence)."""
-    ia = np.asarray(ia, dtype=np.int64).reshape(-1)
-    ib = np.asarray(ib, dtype=np.int64).reshape(-1)
-    n = len(ia)
-    fl = np.zeros(n, dtype=np.uint8)
-    cv = np.full(n, -1, dtype=np.int64)
-    lv = np.full(n, -1, dtype=np.int64)
-    names: list = []
-    name_ix: dict = {}
-    if flags is not None:
-        for i, row in enumerate(flags):
-            soft, curve, layer = row[:3]
-            bits = 1 if soft else 0
-            if len(row) > 3 and row[3]:
-                bits |= 2
-            if len(row) > 4 and row[4]:
-                bits |= 4
-            fl[i] = bits
-            if curve is not None:
-                cv[i] = curve
-            if layer is not None:
-                if not isinstance(layer, str):
-                    # A non-string tag (never written by the app): only
-                    # Python edges hold it.
-                    _abandon_bulk(m, b)
-                    return m.add_edges_welded(b["vobjs"], ia, ib, flags)
-                j = name_ix.get(layer)
-                if j is None:
-                    j = name_ix[layer] = len(names)
-                    names.append(layer)
-                lv[i] = j
-    edges_v = np.stack([ia, ib], axis=1) if n else np.zeros((0, 2), np.int64)
+    ia = np.ascontiguousarray(ia, dtype=np.int64).reshape(-1)
+    ib = np.ascontiguousarray(ib, dtype=np.int64).reshape(-1)
+    if not m._store._bulk_edges(ia, ib, flags):
+        m._materialise()
+        return m.add_edges_welded(b["vobjs"], ia, ib, flags)
     m._chunk_dirty = True
     m._mut_serial += 1
-    st = _rebuild(m, b, edges_v, fl, cv, lv, names)
     b["stage"] = "edges"
-    vobjs = b["vobjs"]
-    return _EdgeMap(m, vobjs)
-
-
-def _abandon_bulk(m, b) -> None:
-    """Leave the bulk store path: the mesh as Python objects from here."""
-    m.__dict__.pop("_bulk", None)
-    m._materialise()
+    return _EdgeMap(m, b["vobjs"])
 
 
 def _bulk_faces(m, b, inverse, ring_sizes, face_ring_counts, attrs):
@@ -2475,11 +2400,10 @@ def _bulk_faces(m, b, inverse, ring_sizes, face_ring_counts, attrs):
         m._mut_serial += 1
         return []
     if (sizes < 1).any() or (counts_ < 1).any():
-        _abandon_bulk(m, b)
+        m._materialise()
         return m.add_faces_welded(b["vobjs"], inverse, ring_sizes,
                                   face_ring_counts, attrs)
     st = m.__dict__["_store"]
-    edges_v, fl, cv, lv, names = _edge_columns(st)
     table = m.__dict__["_attr_table"]
     fa = None
     if attrs is not None:
@@ -2495,8 +2419,7 @@ def _bulk_faces(m, b, inverse, ring_sizes, face_ring_counts, attrs):
             fa[i] = j
     m._chunk_dirty = True
     m._mut_serial += 1
-    st = _rebuild(m, b, edges_v, fl, cv, lv, names, inverse, sizes, counts_,
-                  fa)
+    st._bulk_faces(inverse, sizes, counts_, fa)
     m.__dict__.pop("_bulk", None)
     return [FaceView(m, k) for k in st.keys("face")]
 
@@ -2775,47 +2698,9 @@ def to_store(m) -> dict:
         return {}
     from core import _native
     mod = _native.available()
-    verts = list(m.vertices)
-    edges = list(m.edges)
-    faces = list(m.faces)
-    vi = {id(v): i for i, v in enumerate(verts)}
-    pos = np.array([v.position.toTuple() for v in verts], dtype=np.float64).reshape(-1, 3)
-    ends = np.array([(vi[id(e.v0)], vi[id(e.v1)]) for e in edges], dtype=np.int64).reshape(-1, 2)
-    flags = np.array([(1 if e.soft else 0) | (2 if e.hidden else 0)
-                      | (4 if e.soft and getattr(e, "flat", False) else 0)
-                      for e in edges], dtype=np.uint8)
-    curves = np.array([-1 if e.curve is None else e.curve for e in edges], dtype=np.int64)
-    names: list = []
-    at: dict = {}
-    layers = np.array([-1 if e.layer is None else at.setdefault(e.layer, len(at))
-                       for e in edges], dtype=np.int64)
-    names = sorted(at, key=at.get)
-    rings, sizes, counts = [], [], []
-    for f in faces:
-        loops = [f.loop, *f.hole_loops]
-        counts.append(len(loops))
-        for lp in loops:
-            sizes.append(len(lp))
-            rings.extend(vi[id(v)] for v in lp)
-    store = mod.MeshStore.from_block(
-        next(_mesh._KEY_NAMESPACES), pos, ends, flags, curves, layers, names,
-        np.asarray(rings, dtype=np.int64), np.asarray(sizes, dtype=np.int64),
-        np.asarray(counts, dtype=np.int64), None, sequential=True, **_weld_args())
-    keys = {k: store.keys(k) for k in ("vertex", "edge", "face")}
-    if (len(keys["vertex"]), len(keys["edge"]), len(keys["face"])) != (len(verts), len(edges), len(faces)):
-        raise StoreRefusal("to_store: the store would weld or drop elements of this mesh")
-    for f, k in zip(faces, keys["face"]):
-        if f.interior:
-            store.set_face_flags(k, 1)
-    own = {k: f.attrs for f, k in zip(faces, keys["face"]) if f.attrs}
+    store, own, views = mod.MeshStore._from_objects(m, next(_mesh._KEY_NAMESPACES), **_weld_args())
     m.__dict__.pop("_objmap", None)
     become_store(m, store, [], own)
     m._dirty()
     m._chunk_dirty = True
-    views = {}
-    for objs, ks, cls in ((verts, keys["vertex"], VertexView),
-                          (edges, keys["edge"], EdgeView),
-                          (faces, keys["face"], FaceView)):
-        for o, k in zip(objs, ks):
-            views[id(o)] = cls(m, k)
     return views

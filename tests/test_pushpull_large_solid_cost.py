@@ -82,23 +82,31 @@ def test_an_orientation_pass_triangulates_each_face_once(monkeypatch):
     assert calls == []
 
 
-def test_a_push_lists_each_neighbours_edges_once_per_question(monkeypatch):
+def test_a_push_lists_each_neighbours_edges_once_per_question():
     from core import topology
 
     scene, hist = _slab_with_cylinders(4)
     face = _circle(scene, hist, 4)
-    seen = []
-    real = topology._face_all_edges
-    monkeypatch.setattr(
-        topology, "_face_all_edges",
-        lambda f: seen.append(f) or real(f))
-    memo: dict = {}
     loop = face.vertices
-    kinds = [topology.classify_push_edge(
-        face, loop[i], loop[(i + 1) % 32], scene.faces, memo)
-        for i in range(32)]
-    assert all(kind == "coplanar" for kind, _g in kinds)
-    assert len(seen) == len(set(seen)), "a face's edges were listed twice"
+    cap = next(f for f in scene.faces if any(loop[0] in ring for ring in f.holes))
+
+    class ObservedCap:
+        reads = 0
+        normal = cap.normal
+        vertices = cap.vertices
+
+        @property
+        def holes(self):
+            self.reads += 1
+            return cap.holes
+
+    observed = ObservedCap()
+    memo = {}
+    for i in range(32):
+        kind, neighbour = topology.classify_push_edge(
+            face, loop[i], loop[(i + 1) % 32], [face, observed], memo)
+        assert kind == "coplanar" and neighbour is observed
+    assert observed.reads == 1
 
 
 def test_the_memo_answers_what_the_plain_question_answers():

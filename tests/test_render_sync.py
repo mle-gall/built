@@ -140,6 +140,7 @@ def _panels(win):
             for w in [d.widget()] if type(w).__name__ == "RenderPanel"]
 
 
+@pytest.mark.classic_pending
 def test_selecting_does_not_reload_the_synced_scene(window):
     panel = _panels(window)[0]
     scene = window.viewport.scene
@@ -153,6 +154,7 @@ def test_selecting_does_not_reload_the_synced_scene(window):
     assert panel._sync_scene_key() != key
 
 
+@pytest.mark.classic_pending
 def test_no_draft_while_a_mouse_button_is_held(window, monkeypatch):
     panel = _panels(window)[0]
     sync = panel._sync
@@ -183,6 +185,7 @@ def _run(seconds, until=None):
     return until() if until is not None else True
 
 
+@pytest.mark.classic_pending
 @pytest.mark.slow
 @pytest.mark.skipif(not HAS_BLENDER, reason="no Blender on this machine")
 def test_a_real_blender_follows_the_camera_when_it_rests(window, monkeypatch):

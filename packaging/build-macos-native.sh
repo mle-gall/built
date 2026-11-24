@@ -18,10 +18,20 @@ PROFILE="$STAGE/profile"
 mkdir -p "$PROFILE/settings"
 isolated() {
     HOME="$PROFILE" CFFIXED_USER_HOME="$PROFILE" XDG_CONFIG_HOME="$PROFILE/settings" \
-        BUILT_SETTINGS_DIR="$PROFILE/settings" "$@"
+        BUILT_SETTINGS_DIR="$PROFILE/settings" BUILT_BACKGROUND=1 "$@"
 }
 
-isolated "$PYTHON" -c 'import PyInstaller, ifcopenshell, ingetrazo_core, ingetrazo_render, ingetrazo_rfa'
+isolated "$PYTHON" -c 'import PyInstaller, ifcopenshell, ingetrazo_core, ingetrazo_render'
+if [[ -d "$ROOT/../rvt-rs" ]]; then
+    isolated "$PYTHON" -c 'import ingetrazo_rfa' || {
+        echo "The sibling rvt-rs checkout is present. Run scripts/build_native.sh to install its reader." >&2
+        exit 1
+    }
+    export BUILT_PACKAGE_RFA=1
+else
+    echo "Warning: no sibling rvt-rs checkout. This package will not support .rfa import." >&2
+    export BUILT_PACKAGE_RFA=0
+fi
 bash packaging/macos-icon.sh "$ROOT" "$WORK"
 export CARGO_TARGET_DIR="$WORK/cargo"
 BUILT_MACOS_BUNDLE=1 cargo build --locked --release --manifest-path rust/built_app/Cargo.toml
@@ -43,7 +53,7 @@ install_name_tool -change "$LIB" '@executable_path/../Frameworks/Python' "$EXE"
 rm "$APP/Contents/MacOS/ingetrazo"
 codesign -f -s - "$APP"
 codesign --verify --deep --strict "$APP"
-"$PYTHON" scripts/isolated_launch.py "$EXE" --check
+BUILT_BACKGROUND=1 "$PYTHON" scripts/isolated_launch.py "$EXE" --check
 codesign --verify --deep --strict "$APP"
 if [[ -e "$OUT/Built.app" ]]; then mv "$OUT/Built.app" "$STAGE/previous.app"; fi
 mv "$APP" "$OUT/Built.app" || {

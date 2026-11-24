@@ -111,7 +111,7 @@ fn cold_start_document(win: &Bound<'_, PyAny>) -> PyResult<()> {
     )?;
     if win.call_method0("_doc_is_blank")?.is_truthy()? {
         win.call_method0("_start_blank_document")?;
-        let start = win.py().import("views.wgpu_start")?;
+        let start = win.py().import("ingetrazo_render.wgpu_start")?;
         if start.call_method1("wants_at_start", (false,))?.is_truthy()? {
             start.call_method1("show", (win,))?;
         }
@@ -156,7 +156,7 @@ fn new_document_command(win: &Bound<'_, PyAny>, add_tab: bool) -> PyResult<()> {
         if !workspace.is_none() {
             return Ok(());
         }
-        let start = py.import("views.wgpu_start")?;
+        let start = py.import("ingetrazo_render.wgpu_start")?;
         if start.call_method1("shown", (win,))?.is_truthy()? {
             start.call_method1("new_model", (win,))?;
             return Ok(());
@@ -213,6 +213,24 @@ fn settle_document_heap(py: Python<'_>, threshold: usize) -> PyResult<()> {
     Ok(())
 }
 
+/// Drop document-owned objects when the tab closes, even if a frame callback
+/// or an extension still holds the presentation surface.
+#[pyfunction]
+fn release_document_view(view: &Bound<'_, PyAny>) -> PyResult<()> {
+    let attrs = view.getattr("__dict__")?.cast_into::<PyDict>()?;
+    for name in ["_ui_tree", "_ui_tree_model", "_ui_comp_cache", "_ui_lib",
+                 "_ui_lib_sheet", "_ui_visibility_cache", "_ui_rules_cache",
+                 "_plugin_bindings", "_plugin_scene"] {
+        if attrs.contains(name)? { attrs.del_item(name)?; }
+    }
+    for name in ["source_viewport", "scene", "packed", "tools", "_tool_source",
+                 "_billboards", "_reference_cache", "_instance_updates",
+                 "_inference_future", "inference_index"] {
+        attrs.set_item(name, view.py().None())?;
+    }
+    Ok(())
+}
+
 /// The retired document and its callbacks have left the close stack. Multiple
 /// closes in one turn share a collection and one allocator trim.
 #[pyfunction]
@@ -225,6 +243,7 @@ fn reclaim_closed_documents(py: Python<'_>) -> PyResult<()> {
 }
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(release_document_view, m)?)?;
     m.add_function(wrap_pyfunction!(reclaim_closed_documents, m)?)?;
     m.add_function(wrap_pyfunction!(new_document_command, m)?)?;
     m.add_function(wrap_pyfunction!(settle_document_heap, m)?)?;

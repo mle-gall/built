@@ -70,3 +70,5 @@ class ShellView(MetalView, WidgetShim):
         self.renderer = None
         if hasattr(self, "_inference_worker"):
             self._inference_worker.shutdown(wait=False, cancel_futures=True)
+        from ingetrazo_render import release_document_view
+        release_document_view(self)

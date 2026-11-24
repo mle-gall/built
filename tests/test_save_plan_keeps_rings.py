@@ -44,12 +44,14 @@ def _square(x, y, s, z=0.0):
 def _doc(tmp_path, monkeypatch, curve=False, layer=False):
     # On file with the nested hole still there: an older save could leave it.
     with monkeypatch.context() as ctx:
-        ctx.setattr(topology, "_maximal_holes", lambda h: h)
+        ctx.setattr(topology, "_maximal_holes", lambda h: h)  # retain legacy rings on save
         ctx.setattr(M, "_store_on", lambda: False)
         scene = Scene()
         m = scene.mesh
-        m.add_face(_square(0, 0, 10), [_square(1, 1, 4), _square(2, 2, 1),
-                                       _square(6, 6, 2)])
+        face = m.add_face(_square(0, 0, 10))
+        for ring in (_square(1, 1, 4), _square(2, 2, 1), _square(6, 6, 2)):
+            m.add_hole(face, ring)
+        assert len(face.hole_loops) == 3
         m.add_face(_square(20, 0, 10), [_square(21, 1, 2)])
         for k in range(4):
             m.add_face(_square(0, 20 + 3 * k, 2))

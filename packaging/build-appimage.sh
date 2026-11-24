@@ -39,10 +39,12 @@ rm -rf "$APPDIR" "$WORK/pyi"
     --distpath "$WORK/pyi" --workpath "$WORK/pyi-work" \
     ingetrazo.spec
 
+PYO3_PYTHON="$PYTHON" packaging/install-native-launcher.sh "$WORK/pyi/ingetrazo"
+
 echo "==> the bundle finds its own data"
 # Before wrapping it in an AppImage, ask the bundle itself. A missing shader
 # or texture starts fine and only fails when the user needs it.
-"$PYTHON" scripts/isolated_launch.py "$WORK/pyi/ingetrazo/ingetrazo" --check
+BUILT_BACKGROUND=1 "$PYTHON" scripts/isolated_launch.py "$WORK/pyi/ingetrazo/built" --check
 
 echo "==> tarball"
 # The same bundle, without the AppImage wrapper: extract and run. For users
@@ -58,8 +60,8 @@ cat > "$TARDIR/README.txt" <<'TXT'
 Built — portable Linux build
 ================================
 
-Run it:            ./ingetrazo          (or: ./ingetrazo model.igz)
-Self-diagnosis:    ./ingetrazo --check
+Run it:            ./built          (or: ./built model.igz)
+Self-diagnosis:    ./built --check
 
 No installation required. To add a launcher and the .igz/.skp icons,
 edit the Exec= line of ingetrazo.desktop to this folder's path and copy
@@ -80,7 +82,7 @@ cp -a "$WORK/pyi/ingetrazo/." "$APPDIR/usr/bin/"
 cp resources/icons/ingetrazo_256.png \
    "$APPDIR/usr/share/icons/hicolor/256x256/apps/ingetrazo.png"
 cp resources/icons/ingetrazo_256.png "$APPDIR/ingetrazo.png"
-sed 's|^Exec=.*|Exec=ingetrazo %f|; s|^Icon=.*|Icon=ingetrazo|' \
+sed 's|^Exec=.*|Exec=built %f|; s|^Icon=.*|Icon=ingetrazo|' \
     packaging/ingetrazo.desktop > "$APPDIR/usr/share/applications/ingetrazo.desktop"
 cp "$APPDIR/usr/share/applications/ingetrazo.desktop" "$APPDIR/ingetrazo.desktop"
 
@@ -90,7 +92,7 @@ mkdir -p "$APPDIR/usr/lib/gio/modules"
 cat > "$APPDIR/AppRun" <<'SH'
 #!/bin/sh
 HERE=$(dirname "$(readlink -f "$0")")
-# main.py selects the Qt platform for wgpu and honors QT_QPA_PLATFORM.
+
 # The bundle carries its own libglib, and the host's GIO modules are built
 # against a different one: they fail to load with `undefined symbol` and
 # print two alarming lines before the app has even started (reported
@@ -98,7 +100,7 @@ HERE=$(dirname "$(readlink -f "$0")")
 # purpose — so it stops scanning the host's. What that gives up is gvfs,
 # which was already failing to load here for the very same reason.
 export GIO_MODULE_DIR="$HERE/usr/lib/gio/modules"
-exec "$HERE/usr/bin/ingetrazo" "$@"
+exec "$HERE/usr/bin/built" "$@"
 SH
 chmod +x "$APPDIR/AppRun"
 
@@ -118,6 +120,6 @@ rm -f "$APPIMAGE"
 ARCH="$ARCH" "$TOOL" --appimage-extract-and-run "$APPDIR" "$APPIMAGE"
 
 echo "==> the AppImage answers --check"
-"$PYTHON" scripts/isolated_launch.py "$APPIMAGE" --check
+BUILT_BACKGROUND=1 "$PYTHON" scripts/isolated_launch.py "$APPIMAGE" --check
 
 printf '\n%s  (%s)\n' "$APPIMAGE" "$(du -h "$APPIMAGE" | cut -f1)"

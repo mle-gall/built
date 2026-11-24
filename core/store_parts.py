@@ -319,64 +319,18 @@ def merge_candidates(mesh, added, tol):
 
 def material_names(mesh):
     """``{f.attrs.get("mat") for f in mesh.faces}`` minus empties, from the
-    attribute rows the faces use and the faces' own dicts — no face gets a
-    dict of its own for the question."""
-    m = _store_mesh(mesh)
-    if m is None:
-        return None
-    d = m.__dict__
-    table, own = d["_attr_table"], d["_attr_own"]
-    st = m._store
-    fa = st.arrays()["face_attr"]
-    if own:
-        keys = st.keys("face")
-        mask = np.array([k not in own for k in keys], dtype=bool)
-        rows = fa[mask] if len(fa) else fa
-        mats = {a.get("mat") for k, a in own.items() if st.is_live(k)}
-    else:
-        rows, mats = fa, set()
-    for r in np.unique(rows).tolist():
-        if r >= 0:
-            mats.add((table[r] or {}).get("mat"))
-    mats.discard(None)
-    mats.discard("")
-    return mats
+    store's attribute rows and the faces' own dicts (Rust: store/tally.rs);
+    None when ``mesh`` is not store-backed."""
+    from ingetrazo_core import store_material_names
+    return store_material_names(mesh)
 
 
 def layer_tally(mesh, tally) -> bool:
     """Add every face's and edge's tag (``layer_of``) to ``tally`` (a
-    ``Counter``; None counts the default tag) from the arrays; False when
-    ``mesh`` is not store-backed."""
-    m = _store_mesh(mesh)
-    if m is None:
-        return False
-    d = m.__dict__
-    table, own = d["_attr_table"], d["_attr_own"]
-    st = m._store
-    a = st.arrays()
-    fa = a["face_attr"]
-    if own:
-        keys = st.keys("face")
-        mask = np.array([k not in own for k in keys], dtype=bool)
-        rows = fa[mask] if len(fa) else fa
-        for k, attrs in own.items():
-            if st.is_live(k):
-                tally[(attrs or {}).get("layer") or None] += 1
-    else:
-        rows = fa
-    if len(rows):
-        uniq, counts = np.unique(rows, return_counts=True)
-        for r, n in zip(uniq.tolist(), counts.tolist()):
-            name = (table[r] or {}).get("layer") if r >= 0 else None
-            tally[name or None] += int(n)
-    layer = a["layer"]
-    if len(layer):
-        names = list(st.layer_names())
-        uniq, counts = np.unique(layer, return_counts=True)
-        for i, n in zip(uniq.tolist(), counts.tolist()):
-            name = names[i] if 0 <= i < len(names) else None
-            tally[name or None] += int(n)
-    return True
+    ``Counter``; None counts the default tag) from the store (Rust:
+    store/tally.rs); False when ``mesh`` is not store-backed."""
+    from ingetrazo_core import store_layer_tally
+    return store_layer_tally(mesh, tally)
 
 
 _ORIGINS = weakref.WeakKeyDictionary()

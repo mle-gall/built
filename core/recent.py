@@ -97,7 +97,7 @@ def query(settings=None):
 
 def meta(path, settings=None):
     """What the start page remembers of a document from when it was open
-    (``views.wgpu_start.note``): project, links, origin, unfiled, problems,
+    (``ingetrazo_render.wgpu_start.note``): project, links, origin, unfiled, problems,
     workspace. Empty when never noted."""
     st = settings or QSettings()
     try:

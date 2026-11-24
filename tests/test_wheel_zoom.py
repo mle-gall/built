@@ -22,6 +22,8 @@ def test_zoom_direction(monkeypatch, platform, touchpad, natural, delta, overrid
                         Qt.NoButton, Qt.NoModifier, Qt.ScrollUpdate, natural,
                         Qt.MouseEventNotSynthesized, device)
     expected = delta / 120
+    if touchpad:
+        expected *= wheel_zoom.TRACKPAD_ZOOM_GAIN
     if platform == 'darwin' and touchpad and natural:
         expected *= -1
     if override:

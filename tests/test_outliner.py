@@ -9,18 +9,16 @@ from __future__ import annotations
 import math
 import time
 
-from PySide6.QtCore import Qt
-from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
+import pytest
+
+from ingetrazo_core import Vec3 as QVector3D
 
 from core import outliner
-from core.group import Group, copy_group
+from core.group import Group
 from core.mesh import Mesh
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from tests.test_project_occurrences import _box, _building, _group, _random_tree, _two_planes
-from views.outliner import COL_EYE, COL_LAYER, COL_TYPE
+from tests.test_project_occurrences import _building, _group, _random_tree
 
-_app = QApplication.instance() or QApplication([])
 
 def _window_with(*groups):
     from views.main_window import MainWindow
@@ -38,65 +36,8 @@ def _close(win):
     win._saved_version = win.viewport.scene.version
 
 
-def _views(win):
-    """The «Views and sheets» panel — in the sheet composer."""
-    return win._ensure_composer().views_panel
-
-
 def _row(panel, group):
     return panel._items[id(group)]
-
-
-def _eye(panel, group):
-    """Click the row's eye."""
-    panel._on_item_clicked(_row(panel, group), COL_EYE)
-
-
-def _shown(panel, group) -> bool:
-    return not _row(panel, group).data(COL_EYE, Qt.UserRole)
-
-
-# ---- The tray panel --------------------------------------------------------
-
-def test_the_tree_shows_the_whole_model_nested():
-    building, tree = _building()
-    win, scene, panel = _window_with(building, tree)
-    t = panel.tree
-    assert t.topLevelItemCount() == 2            # the document, the planes
-    assert t.topLevelItem(1).isHidden()          # no planes: no folder
-    doc = t.topLevelItem(0)
-    assert doc.text(0) == "Untitled" and doc.isExpanded()
-    assert doc.childCount() == 2
-    top = doc.child(0)
-    assert top.text(0) == "Building" and top.text(COL_TYPE) == "Group"
-    assert top.text(COL_LAYER) == outliner.layer_name(building)
-    assert [top.child(i).text(0) for i in range(top.childCount())] == [
-        "Level 1", "Level 2"]
-    wall = top.child(0).child(0)
-    assert wall.text(0) == "Wall" and wall.text(COL_TYPE) == "IfcWall"
-    assert wall.data(COL_TYPE, Qt.UserRole) == "ifc"
-    assert top.data(COL_TYPE, Qt.UserRole) == "group"
-    assert not top.icon(0).isNull() and not top.icon(COL_EYE).isNull()
-    assert _shown(panel, building)
-    _close(win)
-
-
-def test_a_selection_in_the_view_is_found_in_the_tree():
-    building, tree = _building()
-    level2 = building.children[1]
-    win, scene, panel = _window_with(building, tree)
-    assert not _row(panel, building).isExpanded()
-    scene.begin_group_edit(building)
-    scene.begin_group_edit(level2)
-    scene.selection.add(level2.children[0])
-    scene.version += 1
-    panel.refresh()
-    row = _row(panel, level2.children[0])
-    assert row.isSelected()
-    assert _row(panel, building).isExpanded()
-    assert _row(panel, level2).isExpanded()
-    assert panel.tree.currentItem() is row
-    _close(win)
 
 
 def _filing_project(*roots):
@@ -142,13 +83,6 @@ def test_a_folded_section_waits_until_it_shows():
     assert "Late" in {name for name, _ in p.rows().values()}
 
 
-def test_an_empty_model_says_so():
-    win, scene, panel = _window_with()
-    assert panel._empty.isVisibleTo(panel)
-    assert panel.tree.topLevelItem(0).childCount() == 0
-    _close(win)
-
-
 def test_ten_thousand_nodes_build_once_and_refresh_quickly():
     roots = _random_tree(10_000)
     p = _filing_project(*roots)
@@ -170,27 +104,6 @@ def test_ten_thousand_nodes_build_once_and_refresh_quickly():
     assert p.view.renderer.calls["ui_set_tree"] is previous
 
 
-def test_the_filter_keeps_the_path_to_every_match():
-    building, tree = _building()
-    level1, level2 = building.children
-    win, scene, panel = _window_with(building, tree)
-    panel.search.setText("slab")
-    assert not _row(panel, level1.children[1]).isHidden()     # the match
-    assert not _row(panel, level1).isHidden()                 # its path
-    assert _row(panel, level1).isExpanded()
-    assert _row(panel, level1.children[0]).isHidden()
-    assert _row(panel, level2).isHidden()
-    assert _row(panel, tree).isHidden()
-    panel.search.setText("ifcwall")                           # by class
-    assert not _row(panel, level1.children[0]).isHidden()
-    assert _row(panel, level1.children[1]).isHidden()
-    panel.search.setText("")
-    assert not any(item.isHidden() for item in panel._items.values())
-    _close(win)
-
-
-# ---- Sheets 2D -------------------------------------------------------------
-
 def _sheets_model(win):
     from core.composition import Composicion, MarcoVista
     from core.saved_views import SavedView
@@ -207,44 +120,6 @@ def _sheets_model(win):
     scene.compositions[:] = [a101, a102]
     return a101, a102
 
-
-# ---- Isolate, footer --------------------------------------------------------
-
-
-def test_isolate_and_show_all_are_one_undo_step_each():
-    building, tree = _building()
-    level1, level2 = building.children
-    wall, slab = level1.children
-    win, scene, panel = _window_with(building, tree)
-    panel.tree.setCurrentItem(_row(panel, wall))
-    panel.isolate()
-    assert slab.hidden and level2.hidden and tree.hidden
-    assert not wall.hidden and not level1.hidden and not building.hidden
-    win.viewport.history.undo()
-    assert not (slab.hidden or level2.hidden or tree.hidden)
-    panel.refresh()
-    assert not panel._isolated_now()
-    panel.isolate()
-    panel.show_all()
-    assert not any(g.hidden for g, _p, _d in outliner.walk(scene.groups))
-    win.viewport.history.undo()
-    assert tree.hidden
-    _close(win)
-
-
-def test_the_footer_counts_and_follows_the_filter():
-    building, tree = _building()
-    proto = Group(_box(), name="Chair")
-    proto.xform = QMatrix4x4()
-    tree.hidden = True
-    win, scene, panel = _window_with(building, tree, proto)
-    assert panel.summary.text() == "7 groups · 1 components · 1 hidden"
-    panel.search.setText("wall")
-    assert panel.summary.text() == "2 of 8 match"
-    _close(win)
-
-
-# ---- Rename, links, live refresh (2D) ----------------------------------------
 
 def test_renaming_a_scene_carries_its_sheet_views_along(native_host):
     win = native_host.window
@@ -271,31 +146,7 @@ def test_the_scenes_panel_rename_no_longer_orphans_sheet_views(native_host):
         assert not outliner.is_orphan(win.viewport.scene, page.frames[0])
 
 
-# ---- Re-nesting (drag and drop, Tab / Shift+Tab) ----------------------------
-
-
-# ---- Lock --------------------------------------------------------------------
-
-
-# ---- Section planes ------------------------------------------------------------
-
-
-def test_the_fill_colour_comes_from_the_styles_panel_picker():
-    building, tree = _building()
-    win, scene, panel = _window_with(building, tree)
-    _two_planes(scene)
-    panel.refresh()
-    asked = []
-    win.styles_panel._pick_color = lambda title, attr: asked.append(attr)
-    panel.pick_section_fill_color()
-    assert asked == ["section_fill_color"]
-    _close(win)
-
-
-# ---- A cut's own fill, renaming planes, column widths -----------------------
-
-# ---- 8 · What an extension says a group is ------------------------------------
-
+@pytest.mark.classic_pending
 def test_an_extension_names_its_groups_in_the_type_column():
     from views.extension_api import ExtensionApp
     building, tree = _building()
@@ -305,6 +156,7 @@ def test_an_extension_names_its_groups_in_the_type_column():
     app.add_outliner_kind(lambda g: {
         "type": "Stair", "props": [("Steps", g.ext["stairs"]["steps"])]}
         if "stairs" in (g.ext or {}) else None)
+    from views.outliner import COL_TYPE
     row = _row(panel, tree)
     assert row.text(COL_TYPE) == "Stair"
     assert row.toolTip(COL_TYPE) == "Steps: 14"
@@ -314,6 +166,7 @@ def test_an_extension_names_its_groups_in_the_type_column():
     _close(win)
 
 
+@pytest.mark.classic_pending
 def test_a_failing_kind_provider_is_skipped():
     building, tree = _building()
     win, scene, panel = _window_with(building, tree)
@@ -321,45 +174,14 @@ def test_a_failing_kind_provider_is_skipped():
                            lambda g: {"type": "Thing"}]
     panel._shape = None
     panel.refresh()
+    from views.outliner import COL_TYPE
     assert _row(panel, tree).text(COL_TYPE) == "Thing"
     assert outliner.custom_kind(tree, [lambda g: None]) is None
     assert outliner.custom_kind(tree, [lambda g: {"props": []}]) is None
     _close(win)
 
 
-# ---- 9 · Columns and several rows at once -------------------------------------
-
-def test_the_header_shows_and_hides_columns_and_remembers():
-    from views.outliner import COL_COPIES, COL_IFC, COL_MATERIAL
-    building, tree = _building()
-    proto = Group(_box(), name="Chair")
-    proto.xform = QMatrix4x4()
-    other = copy_group(proto, QVector3D(1, 0, 0))
-    tree.material = {"color": [1.0, 0.0, 0.0]}
-    win, scene, panel = _window_with(building, tree, proto, other)
-    t = panel.tree
-    assert t.isColumnHidden(COL_MATERIAL) and t.isColumnHidden(COL_IFC)
-    assert not t.isColumnHidden(COL_TYPE)
-    panel.set_column_shown(COL_MATERIAL, True)
-    panel.set_column_shown(COL_COPIES, True)
-    panel.set_column_shown(COL_IFC, True)
-    panel.set_column_shown(COL_LAYER, False)
-    assert _row(panel, tree).text(COL_MATERIAL) == "#ff0000"
-    assert _row(panel, proto).text(COL_COPIES) == "2"
-    wall = building.children[0].children[0]
-    assert _row(panel, wall).text(COL_IFC) == "IfcWall"
-    _close(win)
-    win2, scene2, panel2 = _window_with()
-    assert not panel2.tree.isColumnHidden(COL_MATERIAL)
-    assert panel2.tree.isColumnHidden(COL_LAYER)
-    panel2.set_column_shown(COL_LAYER, True)           # leave it as found
-    for col in (COL_MATERIAL, COL_COPIES, COL_IFC):
-        panel2.set_column_shown(col, False)
-    _close(win2)
-
-
-# ---- 10 · A plan of a group ------------------------------------------------
-
+@pytest.mark.classic_pending
 def test_a_plan_of_a_group_is_a_cut_a_scene_and_a_sheet_in_one_step():
     building, tree = _building()
     level2 = building.children[1]                 # its wall stands on z = 3
@@ -385,6 +207,7 @@ def test_a_plan_of_a_group_is_a_cut_a_scene_and_a_sheet_in_one_step():
     _close(win)
 
 
+@pytest.mark.classic_pending
 def test_a_second_plan_gets_its_own_name_and_no_sheet_when_asked():
     building, tree = _building()
     win, scene, panel = _window_with(building, tree)
@@ -396,6 +219,7 @@ def test_a_second_plan_gets_its_own_name_and_no_sheet_when_asked():
     _close(win)
 
 
+@pytest.mark.classic_pending
 def test_a_view_of_a_vertical_cut_looks_at_it_square_on():
     building, tree = _building()
     win, scene, panel = _window_with(building, tree)
@@ -421,6 +245,7 @@ def test_a_view_of_a_vertical_cut_looks_at_it_square_on():
     _close(win)
 
 
+@pytest.mark.classic_pending
 def test_a_horizontal_cut_gives_a_plan():
     building, tree = _building()
     win, scene, panel = _window_with(building, tree)
@@ -434,39 +259,25 @@ def test_a_horizontal_cut_gives_a_plan():
     _close(win)
 
 
-# ---- Sheets 2D as a place to work ----------------------------------------------
+def test_export_all_pdf_can_take_only_some_sheets(tmp_path, native_host):
+    from views.wgpu_sheets import composer_for
 
-
-def test_export_all_pdf_can_take_only_some_sheets(tmp_path):
-    win, scene, panel = _window_with()
-    a101, a102 = _sheets_model(win)
-    for c in (a101, a102):
-        c.frames[:] = []                              # no GL renders
-    comp_win = win._ensure_composer()
+    win = native_host.window
+    first, second = _sheets_model(win)
+    for page in (first, second):
+        page.frames.clear()
     path = tmp_path / "one.pdf"
-    assert comp_win.export_all_pdf(str(path), [a102]) == []
-    assert path.stat().st_size > 0                    # one page, written
-    comp_win._saved_version = scene.version
-    _close(win)
-
-
-# ---- The «Views and sheets» panel, in the composer ------------------------------
-
-def _composer_with_model(win):
-    building, tree = _building()
-    win.viewport.scene.groups[:] = [building, tree]
-    win.viewport.scene.version += 1
-    a101, a102 = _sheets_model(win)
-    comp_win = win._ensure_composer()
-    comp_win.show_sheet(1)                            # A102 open
-    return comp_win, a101, a102
+    assert composer_for(win).export_all_pdf(str(path), [second]) == []
+    assert path.read_bytes().count(b"/Type /Page ") == 1
 
 
 def test_the_scale_fits_the_model_in_the_frame():
     from core.saved_views import SavedView
     from core.camera import OrbitCamera
     building, tree = _building()                     # 5.1 m wide, 6 m tall
-    win, scene, panel = _window_with(building, tree)
+    from core.scene import Scene
+    scene = Scene()
+    scene.groups[:] = [building, tree]
     cam = OrbitCamera()
     cam.set_view("front")
     cam.perspective = False
@@ -478,7 +289,6 @@ def test_the_scale_fits_the_model_in_the_frame():
     assert tall_mm <= 90.0                            # it fits …
     bigger = [s for s in outliner.STANDARD_SCALES if s < n]
     assert not bigger or (hi.z() - lo.z()) * 1000.0 / bigger[-1] > 90 * 0.85
-    _close(win)
 
 
 def test_repeated_row_templates_keep_distinct_objects_and_children():

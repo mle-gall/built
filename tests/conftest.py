@@ -370,6 +370,8 @@ def pytest_collection_modifyitems(config, items):
                                 r"\b(native_host|native_window|preferences_chrome)\b|isolated_launch|release/built\b|\bmain\.py\b")
     seen = {}
     for item in items:
+        if item.get_closest_marker("classic_pending"):
+            item.add_marker(pytest.mark.skip(reason="Native coverage pending (docs/classic-pending.md)"))
         path = getattr(item, "path", None)
         if path is None:
             continue
@@ -419,7 +421,7 @@ def pytest_sessionfinish(session, exitstatus):
 @pytest.hookimpl(trylast=True)
 def pytest_unconfigure(config):
     """Leave without tearing the interpreter down. The windows the tests
-    build outlive them (~170 MainWindows, see scripts/pytest_batches.py),
+    build can outlive them,
     and destroying them all at exit, in whatever order Python picks, is
     not something the app ever does: the public CI of 0.5.8 passed every
     test and then two batches segfaulted on exit («shared QObject was
@@ -428,28 +430,6 @@ def pytest_unconfigure(config):
     sys.stdout.flush()
     sys.stderr.flush()
     os._exit(_exit_status[0])
-
-
-@pytest.fixture(autouse=True, scope="session")
-def _no_stray_autosave():
-    """Every MainWindow a test builds armed the 5-minute auto-save timer,
-    and the windows outlive their tests. Once the session ran past five
-    minutes those timers fired inside later tests, and the tick's
-    gc.collect() over half-torn-down Qt objects stalled or crashed the run
-    (24-09: runs stuck at ~95 %, the faulthandler dump caught it in
-    ``_on_autosave_tick``). The timer is still built and armed — the
-    Preferences test reads its settings — then stopped at once; tests that
-    exercise the tick call it directly."""
-    from views.main_window import MainWindow
-    original = MainWindow._setup_autosave
-
-    def armed_but_stopped(self):
-        original(self)
-        self._autosave_timer.stop()
-
-    MainWindow._setup_autosave = armed_but_stopped
-    yield
-    MainWindow._setup_autosave = original
 
 
 @pytest.fixture

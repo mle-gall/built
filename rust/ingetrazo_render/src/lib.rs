@@ -17,6 +17,7 @@ mod document_chunks;
 mod document_records;
 mod document_state;
 mod document_environment;
+mod document_terrain;
 mod document_cache;
 mod document_grid;
 mod document_edits;
@@ -26,6 +27,9 @@ mod document_placements;
 mod document_annotations;
 mod document_planes;
 mod document_host;
+mod document_bindings;
+mod document_registration;
+mod document_camera;
 mod section_display;
 mod inspection_edits;
 mod context_edits;
@@ -71,6 +75,8 @@ mod deliveries_host;
 mod sheet_runtime;
 mod settings_rows;
 mod settings_host;
+mod library_host;
+mod start_host;
 pub mod ui;
 mod host_context;
 mod inspector;
@@ -2536,8 +2542,9 @@ impl Renderer {
     fn ui_set_active(&mut self, id: String) {
         if let Some(ui) = self.ui.as_mut() { ui.set_active(id); }
     }
-    fn ui_set_status(&mut self, status: String, hint: String) {
-        if let Some(ui) = self.ui.as_mut() { ui.set_status(status, hint); }
+    #[pyo3(signature=(status, hint, coordinate="", tooltip=""))]
+    fn ui_set_status(&mut self, status: String, hint: String, coordinate: &str, tooltip: &str) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_status(status, hint, coordinate, tooltip); }
     }
     /// ``kind``: move, press, release, leave; logical points. True when
     /// the chrome takes the event.
@@ -3264,19 +3271,8 @@ fn context_targets(hit: bool, selection: &Bound<'_, PyAny>) -> PyResult<Vec<Py<P
 
 #[pymodule]
 pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    document_input::register(m)?;
-    document_chunks::register(m)?;
-    document_records::register(m)?;
-    document_state::register(m)?;
-    document_environment::register(m)?;
-    document_cache::register(m)?;
-    document_grid::register(m)?;
-    document_edits::register(m)?;
-    document_targets::register(m)?;
-    document_hlr::register(m)?;
-    document_placements::register(m)?;
-    document_annotations::register(m)?;
-    document_planes::register(m)?;
+    document_registration::register_interaction(m)?;
+    document_terrain::register(m)?;
     m.add_class::<tool_instances::InstancePreview>()?;
     window_document::register(m)?;
     close_documents::register(m)?;
@@ -3434,6 +3430,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<camera_inspector::CameraInspector>()?;
     m.add_class::<tree_grouping::paint::TreePaint>()?;
     m.add_class::<registry_editor::RegistryEditor>()?;
+    m.add_function(wrap_pyfunction!(render_result::blender_availability, m)?)?;
     m.add_class::<render_result::RenderResult>()?;
     m.add_function(wrap_pyfunction!(font_lengths::font_length, m)?)?;
     m.add_class::<svg_options::SvgOptions>()?;
@@ -3447,7 +3444,10 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(shortcut_text::shortcut_text, m)?)?;
     m.add_function(wrap_pyfunction!(shortcut_text::shortcut_alternatives, m)?)?;
     m.add_class::<SceneUpload>()?;
-    m.add_class::<Renderer>()
+    m.add_class::<Renderer>()?;
+    // The Library needs library_view's functions and the sheet host above.
+    library_host::register(m)?;
+    start_host::register(m)
 }
 #[cfg(test)]
 mod tests {

@@ -359,7 +359,7 @@ def test_native_menu_search_and_persisted_keyboard_binding(tmp_path):
     from PySide6.QtCore import QSettings
     from core.scene import Scene
     from formats.igz import save_scene
-    from views.shortcuts import _store_key
+    from core.shortcuts import _store_key
     model = tmp_path / "empty.built"
     save_scene(Scene(), model)
     profile, home = tmp_path / "profile", tmp_path / "home"
@@ -790,7 +790,7 @@ def dispatch(self, command):
         self.fixture_photo=bool(pic and len(pic[2])==pic[0]*pic[1]*4 and max(pic[2])>min(pic[2]))
         self.fixture_restored=(cam.shift_y==0.18)
         wgpu_ui._paint_with(self.window,"ral:RAL 1000")
-        from views import wgpu_library
+        from ingetrazo_render import wgpu_library
         from tools.paint import PaintTool
         wgpu_library.edit_field(self.window,self.view,"brush_name:"+PaintTool.current_material.name,"Site paint")
         self.fixture_swatch=(PaintTool.current_material.name=="Site paint" and "Site paint" not in scene.materials)

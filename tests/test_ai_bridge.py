@@ -308,7 +308,7 @@ def test_the_flatpak_ships_the_mcp_script():
     # manifest must copy scripts/ with the rest of the tree.
     from core.paths import app_root
     manifest = (app_root() / "packaging" / "flatpak" / "com.ingetrazo.IngeTrazo.yml").read_text(encoding="utf-8")
-    line = next(l for l in manifest.splitlines() if "cp -a main.py" in l)
+    line = next(l for l in manifest.splitlines() if "cp -a app_shell" in l)
     assert " scripts " in line + " "
 
 
@@ -360,10 +360,9 @@ def test_the_packaged_app_would_notice_a_missing_recipe_book():
     """``--check`` is where a packaging slip is supposed to speak up: the
     Flatpak of 0.4.9 shipped without ``scripts/`` and the MCP door was dead
     with the app running fine. Same family as the .skp scaffold."""
-    import main
-
-    source = Path(main.__file__).read_text(encoding="utf-8")
-    check = source[source.index("def _self_check"):source.index("def main()")]
+    root = Path(__file__).resolve().parents[1]
+    source = (root / "rust/built_app/src/launcher.rs").read_text()
+    check = source.split("pub fn self_check", 1)[1].split("pub fn exit_now", 1)[0]
     assert "ingetrazo_mcp.py" in check
     assert "ai_recipes" in check
 

@@ -169,8 +169,8 @@ def command(win, name, *args):
 
 
 def open_library(win) -> bool:
-    """Window ▸ Library: the Library sheet (views/wgpu_library.py)."""
-    from views import wgpu_library
+    """Window ▸ Library: the Library sheet (ingetrazo_render.wgpu_library)."""
+    from ingetrazo_render import wgpu_library
     return wgpu_library.open_library(win)
 
 
@@ -188,7 +188,7 @@ def step_document(win, step):
 def new_model(win) -> None:
     """File ▸ New (MainWindow._on_new: an untouched untitled one starts
     over, else a new project), and the start page goes."""
-    from views import wgpu_start
+    from ingetrazo_render import wgpu_start
     if win._workspace is not None:
         new = getattr(win._workspace, "new", None)
         if new is not None:
@@ -215,7 +215,7 @@ def move_to_new_window(win, doc=None) -> bool:
 
 
 def show_start(win) -> None:
-    from views import wgpu_start
+    from ingetrazo_render import wgpu_start
     wgpu_start.show(win)
 
 
@@ -248,7 +248,7 @@ def open_recent_index(win, arg) -> bool:
         path = Path(paths[int(arg)])
     except (ValueError, IndexError):
         return False
-    from views import wgpu_start
+    from ingetrazo_render import wgpu_start
     return wgpu_start.open_recent(win, path)
 
 
@@ -457,6 +457,8 @@ def _finish_open(win, path, recovered, slot, bar, cb, prepared=None, initial_asp
     view._shell_resident_version = version
     if clean:
         win._saved_version = vp.scene.version
+    from ingetrazo_render import defer_document_terrain
+    defer_document_terrain(host, vp)
     host.after_picture(win._after_links_loaded)
     for job in list(getattr(view, "after_open", ()) or ()):
         host.after_picture(job)

@@ -52,6 +52,10 @@ fn run_keep(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
 }
 
 fn run_add_kept(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
+    if !s.arg(py, 1).is_none() {
+        scene.getattr("materials")?.call_method1("update", (s.arg(py, 1),))?;
+        scene.getattr("layers")?.call_method1("extend", (s.arg(py, 2),))?;
+    }
     defs::append_members(&scene.getattr("kept_components")?, &s.arg(py, 0))?;
     version(scene)
 }
@@ -202,6 +206,143 @@ fn run_finish(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
     version(scene)
 }
 
+// ------------------------------------------------------------ making groups
+
+/// What a Make Group execute keeps: `[group, mesh, before, after]`.
+fn made<'py>(s: &RecordStep, py: Python<'py>) -> Option<(Obj<'py>, Obj<'py>, Obj<'py>, Obj<'py>)> {
+    Some((s.remembered(py, 0)?, s.remembered(py, 1)?, s.remembered(py, 2)?, s.remembered(py, 3)?))
+}
+
+fn run_make_group(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
+    let mesh = scene.getattr("mesh")?;
+    let geometry = s.arg(py, 0);
+    // Store snapshots are O(1): they undo the mesh when History does not
+    // journal it (an object mesh) and for a direct undo.
+    let before = mesh.call_method0("capture_state")?;
+    // Built once: a redo puts back the same group the next commands hold.
+    let group = match s.remembered(py, 0) {
+        Some(g) => g,
+        None => geometry.call_method1("build", (scene, s.arg(py, 1), s.arg(py, 2)))?,
+    };
+    geometry.call_method1("take_off", (&mesh, discard(scene)?))?;
+    let after = mesh.call_method0("capture_state")?;
+    s.remember(vec![group.clone(), mesh, before.clone(), after]);
+    scene.getattr("groups")?.call_method1("append", (&group,))?;
+    crate::structure::file_created_placement(scene, &group)?;
+    s.publish("group", group.clone());
+    s.publish("snapshot", before);
+    select_only(scene, &group)?;
+    version(scene)
+}
+
+fn after_make_group(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>, phase: Option<&str>) -> PyResult<()> {
+    if let Some((group, mesh, before, after)) = made(s, py) {
+        if phase == Some("undo") {
+            if !s.journalled() || s.is_direct() {
+                mesh.call_method1("restore_state", (before,))?;
+            }
+            discard(scene)?.call1((&group,))?;
+        } else {
+            if !s.journalled() {
+                mesh.call_method1("restore_state", (after,))?;
+            }
+            select_only(scene, &group)?;
+        }
+    }
+    version(scene)
+}
+
+fn run_make_nested(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
+    let inner = s.arg(py, 0);
+    // The loose part of the selection becomes the container's own mesh.
+    let container = if !inner.is_none() {
+        inner.call_method1("do", (scene,))?;
+        inner.getattr("group")?
+    } else {
+        match s.remembered(py, 0) {
+            Some(c) => c,
+            None => {
+                let mesh = py.import("core.mesh")?.getattr("Mesh")?.call0()?;
+                let kw = pyo3::types::PyDict::new(py);
+                kw.set_item("name", s.arg(py, 2))?;
+                py.import("core.group")?.getattr("Group")?.call((mesh,), Some(&kw))?
+            }
+        }
+    };
+    s.remember(vec![container.clone()]);
+    places::nest(&scene.getattr("groups")?, &container, s.items(py, 1)?, &discard(scene)?)?;
+    if inner.is_none() {
+        crate::structure::file_created_placement(scene, &container)?;
+    }
+    s.publish("container", container.clone());
+    select_only(scene, &container)?;
+    version(scene)
+}
+
+fn after_make_nested(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>, phase: Option<&str>) -> PyResult<()> {
+    let inner = s.arg(py, 0);
+    if !inner.is_none() {
+        inner.call_method1("doc_after", (scene, phase))?;
+    }
+    let sel = scene.getattr("selection")?;
+    sel.call_method0("clear")?;
+    if phase == Some("redo") {
+        if let Some(container) = s.remembered(py, 0) {
+            sel.call_method1("add", (container,))?;
+        }
+    }
+    version(scene)
+}
+
+fn run_component_of(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
+    let nest = s.arg(py, 0);
+    nest.call_method1("do", (scene,))?;
+    let container = nest.getattr("container")?;
+    container.setattr("component", true)?;
+    s.publish("container", container);
+    version(scene)
+}
+
+fn after_component_of(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>, phase: Option<&str>) -> PyResult<()> {
+    s.arg(py, 0).call_method1("doc_after", (scene, phase)).map(|_| ())
+}
+
+fn run_in_context(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
+    let (inner, ctx) = (s.arg(py, 0), s.arg(py, 1));
+    if ctx.getattr("children")?.is_none() {
+        ctx.setattr("children", PyList::empty(py))?;
+    }
+    // The scene reads its top level from the open group meanwhile: the
+    // document's lists cannot be swapped like Python lists.
+    let d = scene.getattr("__dict__")?;
+    let prev = d.call_method1("get", ("_groups_owner",))?;
+    d.set_item("_groups_owner", &ctx)?;
+    let ran = inner.call_method1("do", (scene,));
+    d.set_item("_groups_owner", prev)?;
+    ran?;
+    if ctx.getattr("children")?.is_truthy()? && ctx.getattr("xform")?.is_none() {
+        ctx.setattr("xform", py.import("ingetrazo_core")?.getattr("Matrix4")?.call0()?)?;
+        ctx.setattr("component", false)?;
+    }
+    let group = match inner.getattr_opt("group")?.filter(|g| !g.is_none()) {
+        Some(g) => g,
+        None => inner.getattr_opt("container")?.unwrap_or_else(|| none(py)),
+    };
+    s.publish("group", group);
+    version(scene)
+}
+
+fn after_in_context(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>, phase: Option<&str>) -> PyResult<()> {
+    s.arg(py, 0).call_method1("doc_after", (scene, phase))?;
+    version(scene)
+}
+
+fn run_explode_view(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
+    // The parts' matrices, `exploded` and `explode_offset` are document fields.
+    crate::placement_transform::apply_explode(&s.arg(py, 0), s.arg(py, 1).extract()?, &s.arg(py, 2).extract::<String>()?, &none(py))?;
+    version(scene)
+}
+
 // ------------------------------------------------------------ the classes
 
 macro_rules! steps {
@@ -231,6 +372,92 @@ steps! {
     SetStructureNode = "SetStructureNodeCommand";
     SplitIntoPieces = "SplitIntoPiecesCommand";
     SetMaterialFinish = "SetMaterialFinishCommand";
+    MakeGroup = "MakeGroupCommand";
+    MakeNestedGroup = "MakeNestedGroupCommand";
+    MakeComponentOf = "MakeComponentOfCommand";
+    GroupInContext = "GroupInContextCommand";
+    ExplodeView = "ExplodeViewCommand";
+}
+
+#[pymethods]
+impl ExplodeView {
+    /// Pull a component's parts apart to `factor` along `mode`, or put
+    /// them back with `factor=0` (see `core.explode`).
+    #[new]
+    #[pyo3(signature = (container, factor, mode = "outward"))]
+    fn new(py: Python<'_>, container: Obj<'_>, factor: f64, mode: &str) -> PyResult<PyClassInitializer<Self>> {
+        let args = vec![
+            ("container", container),
+            ("factor", factor.into_pyobject(py)?.into_any()),
+            ("mode", pyo3::types::PyString::new(py, mode).into_any()),
+        ];
+        Ok(PyClassInitializer::from(RecordStep::new("ExplodeViewCommand", run_explode_view, args)).add_subclass(Self))
+    }
+}
+
+#[pymethods]
+impl MakeGroup {
+    #[new]
+    #[pyo3(signature = (faces, edges, component = false, name = None))]
+    fn new(py: Python<'_>, faces: Obj<'_>, edges: Obj<'_>, component: bool, name: Option<Obj<'_>>) -> PyResult<PyClassInitializer<Self>> {
+        // `component` builds the mesh in local coordinates and hands back an instance.
+        let geometry = py.import("ingetrazo_core")?.getattr("GroupGeometry")?.call1((faces, edges))?;
+        let component = pyo3::types::PyBool::new(py, component).to_owned().into_any();
+        let args = vec![("_geometry", geometry), ("_component", component), ("_name", name.unwrap_or_else(|| none(py)))];
+        let step = RecordStep::new("MakeGroupCommand", run_make_group, args)
+            .publishes(&["group", "snapshot"])
+            .hook(After(after_make_group));
+        Ok(PyClassInitializer::from(step).add_subclass(Self))
+    }
+}
+
+#[pymethods]
+impl MakeNestedGroup {
+    #[new]
+    #[pyo3(signature = (faces, edges, groups, name = None))]
+    fn new(py: Python<'_>, faces: Obj<'_>, edges: Obj<'_>, groups: Obj<'_>, name: Option<Obj<'_>>) -> PyResult<PyClassInitializer<Self>> {
+        let (faces, edges, name) = (list(&faces)?, list(&edges)?, name.unwrap_or_else(|| none(py)));
+        // Reusing Make Group for the loose half keeps one road off the loose mesh.
+        let inner = if faces.is_truthy()? || edges.is_truthy()? {
+            let kw = pyo3::types::PyDict::new(py);
+            kw.set_item("name", &name)?;
+            py.get_type::<MakeGroup>().call((faces, edges), Some(&kw))?
+        } else {
+            none(py)
+        };
+        let args = vec![("_inner", inner), ("groups", list(&groups)?), ("name", name)];
+        let step = RecordStep::new("MakeNestedGroupCommand", run_make_nested, args)
+            .publishes(&["container"])
+            .hook(After(after_make_nested));
+        Ok(PyClassInitializer::from(step).add_subclass(Self))
+    }
+}
+
+#[pymethods]
+impl MakeComponentOf {
+    #[new]
+    #[pyo3(signature = (faces, edges, groups, name = None))]
+    fn new(py: Python<'_>, faces: Obj<'_>, edges: Obj<'_>, groups: Obj<'_>, name: Option<Obj<'_>>) -> PyResult<PyClassInitializer<Self>> {
+        // Make Group's container, made a component: one component holding the groups.
+        let kw = pyo3::types::PyDict::new(py);
+        kw.set_item("name", name.unwrap_or_else(|| none(py)))?;
+        let nest = py.get_type::<MakeNestedGroup>().call((faces, edges, groups), Some(&kw))?;
+        let step = RecordStep::new("MakeComponentOfCommand", run_component_of, vec![("_nest", nest)])
+            .publishes(&["container"])
+            .hook(After(after_component_of));
+        Ok(PyClassInitializer::from(step).add_subclass(Self))
+    }
+}
+
+#[pymethods]
+impl GroupInContext {
+    #[new]
+    fn new(inner: Obj<'_>, context: Obj<'_>) -> PyClassInitializer<Self> {
+        let step = RecordStep::new("GroupInContextCommand", run_in_context, vec![("inner", inner), ("context", context)])
+            .publishes(&["group"])
+            .hook(After(after_in_context));
+        PyClassInitializer::from(step).add_subclass(Self)
+    }
 }
 
 #[pymethods]
@@ -267,8 +494,12 @@ impl KeepComponent {
 #[pymethods]
 impl AddKeptComponents {
     #[new]
-    fn new(templates: Obj<'_>) -> PyResult<PyClassInitializer<Self>> {
-        let step = RecordStep::new("AddKeptComponentsCommand", run_add_kept, vec![("templates", list(&templates)?)]);
+    #[pyo3(signature=(templates, materials=None, layers=None))]
+    fn new<'py>(py: Python<'py>, templates: Obj<'py>, materials: Option<Obj<'py>>, layers: Option<Obj<'py>>) -> PyResult<PyClassInitializer<Self>> {
+        let step = RecordStep::new("AddKeptComponentsCommand", run_add_kept, vec![
+            ("templates", list(&templates)?), ("materials", materials.unwrap_or_else(|| none(py))),
+            ("layers", layers.unwrap_or_else(|| PyList::empty(py).into_any())),
+        ]);
         Ok(PyClassInitializer::from(step).add_subclass(Self))
     }
 }

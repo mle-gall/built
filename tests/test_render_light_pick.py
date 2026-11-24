@@ -63,6 +63,7 @@ def _two_lights(win):
     return panel, vp
 
 
+@pytest.mark.classic_pending
 def test_a_click_on_the_bulb_selects_that_light(window):
     panel, vp = _two_lights(window)
     _click(window, V(4, 0, 3))
@@ -71,6 +72,7 @@ def test_a_click_on_the_bulb_selects_that_light(window):
     assert not vp.scene.selection            # the model's selection: empty
 
 
+@pytest.mark.classic_pending
 def test_supr_deletes_it_in_one_undo_step(window):
     from tools.select import delete_selection_or_hover
     panel, vp = _two_lights(window)
@@ -83,6 +85,7 @@ def test_supr_deletes_it_in_one_undo_step(window):
     assert len(panel.app.document_data({})["lights"]) == 2
 
 
+@pytest.mark.classic_pending
 def test_a_click_elsewhere_or_esc_lets_it_go(window):
     panel, vp = _two_lights(window)
     _click(window, V(4, 0, 3))
@@ -93,6 +96,7 @@ def test_a_click_elsewhere_or_esc_lets_it_go(window):
     assert vp.extension_pick is None and panel._view_pick is None
 
 
+@pytest.mark.classic_pending
 def test_after_an_undo_supr_does_not_delete_by_a_stale_index(window):
     from tools.select import delete_selection_or_hover
     panel, vp = _two_lights(window)

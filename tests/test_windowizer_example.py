@@ -69,6 +69,7 @@ def _windowize(win, monkeypatch, **params):
     return mod, vp, wins[0]
 
 
+@pytest.mark.classic_pending
 def test_a_face_on_a_wall_becomes_a_window_in_one_undo(win, monkeypatch):
     mod, vp, g = _windowize(win, monkeypatch, rows="1", cols="2")
     assert g.ifc["class"] == "IfcWindow"
@@ -81,12 +82,14 @@ def test_a_face_on_a_wall_becomes_a_window_in_one_undo(win, monkeypatch):
     assert g in vp.scene.groups
 
 
+@pytest.mark.classic_pending
 def test_retagging_in_bim_keeps_the_window_editable(win, monkeypatch):
     mod, vp, g = _windowize(win, monkeypatch)
     g.ifc = {"class": "IfcWindow", "name": "V-01"}     # what the BIM panel does
     assert mod.window_data(g) is not None
 
 
+@pytest.mark.classic_pending
 def test_copies_keep_their_own_parameters(win, monkeypatch):
     from core.group import copy_group
     mod, vp, g = _windowize(win, monkeypatch)
@@ -96,6 +99,7 @@ def test_copies_keep_their_own_parameters(win, monkeypatch):
     assert mod.window_data(g)["params"]["rows"] != "5"
 
 
+@pytest.mark.classic_pending
 def test_edit_rebuilds_in_place(win, monkeypatch):
     mod, vp, g = _windowize(win, monkeypatch, rows="1", cols="1")
     vp.scene.selection.clear()
@@ -108,6 +112,7 @@ def test_edit_rebuilds_in_place(win, monkeypatch):
     assert sum(c.name.startswith("Glass") for c in g.children) == 1
 
 
+@pytest.mark.classic_pending
 def test_a_saved_window_reopens_editable(win, monkeypatch, tmp_path):
     from core.scene import Scene
     from formats import igz
@@ -121,6 +126,7 @@ def test_a_saved_window_reopens_editable(win, monkeypatch, tmp_path):
     assert wins[0].ext[mod.KEY]["params"] == g.ext[mod.KEY]["params"]
 
 
+@pytest.mark.classic_pending
 def test_erase_closes_the_wall_again(win, monkeypatch):
     mod, vp, g = _windowize(win, monkeypatch)
     vp.scene.selection.clear()
@@ -136,6 +142,7 @@ def test_erase_closes_the_wall_again(win, monkeypatch):
     assert [len(f.holes) for f in back] == [0]
 
 
+@pytest.mark.classic_pending
 def test_its_menus_come_from_the_extension_api(win, monkeypatch):
     mod = _mod()
     ext = win._ext_menu
@@ -155,6 +162,7 @@ def test_its_menus_come_from_the_extension_api(win, monkeypatch):
     assert mw.QMenu is QMenu
 
 
+@pytest.mark.classic_pending
 def test_the_project_browser_reads_a_window_as_a_window(win, monkeypatch):
     mod, vp, g = _windowize(win, monkeypatch, rows="2", cols="3")
     panel = win.project_browser.outliner

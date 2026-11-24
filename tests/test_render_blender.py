@@ -14,10 +14,7 @@ import subprocess
 
 import pytest
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
-
-if QApplication.instance() is None:
-    QApplication([])
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 from core import render_blender as rb  # noqa: E402
 from core.camera import OrbitCamera  # noqa: E402
@@ -164,31 +161,21 @@ def test_a_real_render_through_the_users_blender(tmp_path):
     assert _png_size(tmp_path / "render.png") == (160, 90)
 
 
-def test_the_panel_knows_where_blender_is(monkeypatch, tmp_path):
-    from core import extensions
-    monkeypatch.setattr(extensions, "plugin_dirs", lambda: [tmp_path])
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        import importlib.util
-        from views.extension_api import ExtensionApp
-        spec = importlib.util.spec_from_file_location(
-            "_rb_plugin", rb.render_script().parents[2] / "plugins"
-            / "render_blender.py")
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        monkeypatch.setattr(rb, "find_blender",
-                            lambda saved=None: rb.BlenderFound(["/x/blender"],
-                                                               "/x/blender"))
-        monkeypatch.setattr(rb, "in_snap", lambda: False)
-        app = ExtensionApp(win, "render_blender_test")
-        panel = mod.RenderPanel(app)
-        assert panel._where.text() == "/x/blender" and panel._go.isEnabled()
-        monkeypatch.setattr(rb, "in_snap", lambda: True)
-        panel2 = mod.RenderPanel(app)
-        assert not panel2._go.isEnabled()              # Snap: says why
-        panel.deleteLater()
-        panel2.deleteLater()
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_the_panel_knows_where_blender_is(native_host, monkeypatch):
+    from plugins._blender_panel import create_panel
+    from views.extension_api import ExtensionApp
+
+    found = rb.BlenderFound(["/x/blender"], "/x/blender")
+    monkeypatch.setattr(rb, "find_blender", lambda saved: found)
+    monkeypatch.setattr(rb, "in_snap", lambda: False)
+    panel = create_panel(ExtensionApp(native_host.window, "render_blender"), lambda: None)
+    controls = {item["id"]: item for section in panel.sections() for item in section["items"]}
+    assert controls["binary"]["value"] == found.where and controls["render"]["enabled"]
+
+    monkeypatch.setattr(rb, "in_snap", lambda: True)
+    panel.event("binary", "commit", found.where)
+    controls = {item["id"]: item for section in panel.sections() for item in section["items"]}
+    assert not controls["render"]["enabled"]
+    assert "Snap" in controls["activity"]["label"]
+    panel.event("render", "invoke", None)
+    assert panel.proc is None

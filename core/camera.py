@@ -148,6 +148,9 @@ class OrbitCamera:
         if name in ("target", "up") and not isinstance(value, CameraPoint):
             value = CameraPoint(value)
         super().__setattr__(name, value)
+        # The Rust copy of the fields (``_rs_cam``, made on first use by
+        # ``rust/ingetrazo_core/src/camera_live.rs``) no longer holds.
+        self.__dict__.pop("_rs_cam", None)
 
     def __init__(self) -> None:
         self.target = QVector3D(0.0, 0.0, 0.0)
@@ -162,7 +165,7 @@ class OrbitCamera:
         self.perspective = True
         #: Two-Point Perspective: vertical lines stay vertical
         #: (José Castro Basso, FADU–UDELAR, for teaching architectural
-        #: drawing). Only in perspective; see ``_level_forward``.
+        #: drawing). Only in perspective; see ``view_matrix``.
         self.two_point = False
         #: What the view holds, as a bounding sphere ``(centre, radius)``
         #: the viewport keeps up to date, or ``None`` (unknown). Parallel
@@ -310,48 +313,31 @@ class OrbitCamera:
         return True
 
     # ---- Derived state ------------------------------------------------------
+    # The pose and the projection are computed in Rust
+    # (``rust/ingetrazo_core/src/camera_live.rs`` over the sheets' ``Cam``):
+    # one implementation for the viewport and the sheet frames.
+
     def eye(self) -> QVector3D:
-        cp = math.cos(self.pitch)
-        sp = math.sin(self.pitch)
-        cy = math.cos(self.yaw)
-        sy = math.sin(self.yaw)
-        return self.target + CameraPoint(
-            self.distance * cp * cy,
-            self.distance * cp * sy,
-            self.distance * sp,
-        )
+        """``target + distance·(cos p·cos y, cos p·sin y, sin p)``."""
+        return native.camera_eye(self)
 
     def forward(self) -> QVector3D:
         """Unit view direction, eye → target."""
-        d = self.target - self.eye()
-        return d.normalized() if d.lengthSquared() > 1e-18 else QVector3D(0, 1, 0)
+        return native.camera_forward(self)
 
     def up_vector(self) -> QVector3D:
         """The up vector every projection must use: ``up`` itself, unless
         the sight line runs along it — the exact Top and Bottom views —
-        where ``lookAt`` has no right and a cross product gives nothing.
-        There it is the limit of the view a hair short of vertical: north
-        up the screen in Top (y+ at the default yaw), the same axis the
-        other way in Bottom, so the exact view looks like the 89° one it
-        replaces, only straight. A rolled ``up`` (the composer turning a
-        plan) is never along the sight line and comes back as it is.
+        where ``lookAt`` has no right. There it is the limit of the view a
+        hair short of vertical: north up the screen in Top (y+ at the
+        default yaw), the same axis the other way in Bottom.
 
         A ``roll_deg`` turns that up about the sight line (positive turns
         the camera to the left, the picture to the right). Panning, Zoom
         Extents and the picture itself all read the up from here, so they
         agree. A two-point perspective keeps its verticals upright and
         takes no roll."""
-        f = self.forward()
-        if abs(QVector3D.dotProduct(f, self.up)) < 0.9999:
-            up = self.up
-        else:
-            sign = -1.0 if self.pitch > 0 else 1.0
-            up = QVector3D(sign * math.cos(self.yaw),
-                           sign * math.sin(self.yaw), 0.0)
-        if self.roll_deg and self._level_forward() is None:
-            from ingetrazo_core import Quaternion as QQuaternion
-            up = QQuaternion.fromAxisAndAngle(f, self.roll_deg).rotatedVector(up)
-        return up
+        return native.camera_up_vector(self)
 
     # ---- First person (Position Camera / Look Around / Walk) ---------------
     # The orbit model stays: a walkthrough only ever asks "the eye is HERE,
@@ -361,173 +347,59 @@ class OrbitCamera:
     def look_from(self, eye: QVector3D, direction: QVector3D) -> None:
         """Put the eye at ``eye`` looking along ``direction`` (any length).
         A near-vertical look keeps just off the pole, like ``orbit``."""
-        d = QVector3D(direction)
-        if d.lengthSquared() < 1e-18:
-            d = self.forward()
-        d = d.normalized()
-        # eye = target + distance·(cp·cy, cp·sy, sp): the eye sits BEHIND
-        # the target along -forward, so the spherical angles come from -d.
-        pitch = math.asin(max(-1.0, min(1.0, -d.z())))
-        pitch = max(min(pitch, math.radians(89.0)), math.radians(-89.0))
-        if abs(math.cos(pitch)) > 1e-9:
-            yaw = math.atan2(-d.y(), -d.x())
-        else:
-            yaw = self.yaw
-        self.yaw, self.pitch = yaw, pitch
-        self.target = CameraPoint(eye) + d * self.distance
+        native.camera_look_from(self, eye, direction)
 
     def turn(self, d_yaw_deg: float, d_pitch_deg: float) -> None:
         """Turn the head: the eye stays put, the look direction swings by
         ``d_yaw_deg`` to the right (clockwise seen from above) and
         ``d_pitch_deg`` upward."""
-        eye = self.eye()
-        d = self.forward()
-        yaw = math.atan2(d.y(), d.x()) - math.radians(d_yaw_deg)
-        pitch = math.asin(max(-1.0, min(1.0, d.z()))) + math.radians(d_pitch_deg)
-        pitch = max(min(pitch, math.radians(89.0)), math.radians(-89.0))
-        cp = math.cos(pitch)
-        self.look_from(eye, QVector3D(cp * math.cos(yaw), cp * math.sin(yaw),
-                                      math.sin(pitch)))
+        native.camera_turn(self, float(d_yaw_deg), float(d_pitch_deg))
 
     def move_eye(self, delta: QVector3D) -> None:
         """Walk: eye and target move together, the look stays the same."""
         self.target = self.target + delta
 
-    #: Two-point perspective gives way to the ordinary one past this pitch
-    #: (about 78°): looking nearly straight down, the frustum shift that
-    #: keeps the target centred grows without bound.
-    _TWO_POINT_MIN_COS = 0.2
-
-    def _level_forward(self) -> QVector3D | None:
-        """The level sight line of a two-point perspective — the view
-        direction with its slope taken out — or ``None`` when the view is
-        an ordinary one (the mode off, parallel, or looking too steeply)."""
-        if not (self.two_point and self.perspective):
-            return None
-        f = self.forward()
-        h = QVector3D(f.x(), f.y(), 0.0)
-        if h.length() < self._TWO_POINT_MIN_COS:
-            return None
-        return h / h.length()
-
     def view_matrix(self) -> QMatrix4x4:
-        m = QMatrix4x4()
-        level = self._level_forward()
-        if level is not None:
-            # The picture plane stands upright, so verticals stay vertical;
-            # the projection's shift (below) puts the target back on centre.
-            eye = self.eye()
-            m.lookAt(eye, eye + level, QVector3D(0.0, 0.0, 1.0))
-            return m
-        m.lookAt(self.eye(), self.target, self.up_vector())
-        return m
+        """``lookAt`` from the eye; a two-point perspective (Camera ▸
+        Two-Point Perspective, below about 78° of pitch) looks along the
+        level sight line so verticals stay vertical."""
+        return native.camera_view_matrix(self)
 
     def projection_matrix(self) -> QMatrix4x4:
-        m = QMatrix4x4()
-        if self.perspective:
-            # The near plane follows the camera in: at any normal working
-            # distance it is the usual 0.1 m, and only when you come right up
-            # to something does it step back out of the way — otherwise the
-            # near plane itself is what stops you.
-            near = self.near_plane()
-            level = self._level_forward()
-            if level is not None:
-                # A view camera's rise: the frustum slides up or down by the
-                # target's height over the level sight line, so what you
-                # orbit around stays in the middle of the screen.
-                half_h = near * math.tan(math.radians(self.fov_deg) / 2.0)
-                half_w = half_h * self.aspect
-                rel = self.target - self.eye()
-                depth = QVector3D.dotProduct(rel, level)
-                shift = rel.z() * near / depth
-                sx, sy = self._shift(half_w, half_h)
-                m.frustum(-half_w + sx, half_w + sx,
-                          -half_h + shift + sy, half_h + shift + sy,
-                          near, self.far_plane())
-                return m
-            if self.shift_x or self.shift_y:
-                half_h = near * math.tan(math.radians(self.fov_deg) / 2.0)
-                half_w = half_h * self.aspect
-                sx, sy = self._shift(half_w, half_h)
-                m.frustum(-half_w + sx, half_w + sx, -half_h + sy,
-                          half_h + sy, near, self.far_plane())
-                return m
-            m.perspective(self.fov_deg, self.aspect, near, self.far_plane())
-        else:
-            # Parallel projection — size derived from camera distance so the
-            # framing matches what the user sees in perspective.
-            half_h = self.distance * math.tan(math.radians(self.fov_deg) / 2.0)
-            half_w = half_h * self.aspect
-            depth = self.parallel_depth()
-            sx, sy = self._shift(half_w, half_h)
-            near = -depth if self.clip_near is None else self.clip_near
-            far = depth if self.clip_far is None else self.clip_far
-            if far <= near:
-                near, far = -depth, depth
-            m.ortho(-half_w + sx, half_w + sx, -half_h + sy, half_h + sy,
-                    near, far)
-        return m
-
-    def _shift(self, half_w: float, half_h: float) -> tuple[float, float]:
-        """The frame shift as offsets of a frustum ``2·half_w`` wide and
-        ``2·half_h`` tall."""
-        return (self.shift_x * 2.0 * half_w, self.shift_y * 2.0 * half_h)
+        """Perspective: the near plane follows the camera in at close range
+        (never closer than :data:`NEAR_FLOOR`), a two-point view slides the
+        frustum by the target's height, the frame shift slides it sideways
+        or up. Parallel: sized from the distance so the framing matches the
+        perspective, deep as :meth:`parallel_depth`. A depth range fitted to
+        the view (:meth:`fit_depth_range`) replaces the automatic planes."""
+        return native.camera_projection_matrix(
+            self, self._depth_range and self._fitted_depth_range())
 
     def parallel_depth(self) -> float:
-        """How far in front of and behind the eye a parallel view reaches.
-
-        The depth buffer splits this range evenly, so ±``far_plane()`` —
-        ±10 km — left 1.2 mm steps: a smooth surface and the lines over it
-        traded places in a zigzag that perspective, with its 0.1 m near
-        plane, never showed (issue #874). With what the view holds known
-        (``depth_reach``), the range is a few times its reach from the eye
-        — room for the axes, guides and a drag past it — and never more
-        than before."""
-        far = self.far_plane()
-        reach = self.depth_reach
-        if reach is None:
-            return far
-        centre, radius = reach
-        held = (self.eye() - centre).length() + float(radius)
-        if not math.isfinite(held):
-            return far
-        return min(far, max(self.distance * FAR_PER_DISTANCE,
-                            held * PARALLEL_REACH_MARGIN, 1.0))
+        """How far in front of and behind the eye a parallel view reaches:
+        a few times the reach of what the view holds (``depth_reach``), so
+        the depth buffer is not split over ±10 km (#874); ``far_plane()``
+        when the reach is unknown."""
+        return native.camera_depths(self, self._depth_range and self._fitted_depth_range())[2]
 
     def near_plane(self) -> float:
-        """The near clipping distance in perspective: the usual ``znear``
-        at any working distance, stepping back with the camera when you come
-        right up to something — otherwise the near plane itself is what
-        stops you — but never closer than :data:`NEAR_FLOOR`. A ``clip_near``
-        set by hand is used as it is (Camera Settings ▸ Clipping)."""
-        if self.clip_near is not None:
-            return max(float(self.clip_near), NEAR_FLOOR)
-        fitted = self._fitted_depth_range()
-        if fitted is not None:
-            return fitted[0]
-        return min(self.znear, max(self.distance * 0.02, NEAR_FLOOR))
+        """The near clipping distance in perspective: ``clip_near`` set by
+        hand, else the fitted range, else ``znear`` stepping back with the
+        camera at close range — never closer than :data:`NEAR_FLOOR`."""
+        return native.camera_depths(self, self._depth_range and self._fitted_depth_range())[0]
 
     def min_distance(self, at: QVector3D | None = None) -> float:
         """How close the camera may come to ``at`` (the target when not
         given): :data:`MIN_DISTANCE` near the origin, rising with the
         distance from it up to :data:`MIN_DISTANCE_FAR`."""
-        p = self.target if at is None else at
-        far = math.sqrt(p.x() * p.x() + p.y() * p.y() + p.z() * p.z())
-        if not math.isfinite(far):
-            return MIN_DISTANCE_FAR
-        return min(MIN_DISTANCE_FAR, max(MIN_DISTANCE, far * _MIN_PER_METRE))
+        return native.camera_min_distance(self.target if at is None else at)
 
     def far_plane(self) -> float:
-        """The far clipping distance: ``zfar`` at any working distance,
-        growing with the orbit distance when zoomed far out (#340); a
-        ``clip_far`` set by hand is used as it is, never nearer than just
-        past the near plane."""
-        if self.clip_far is not None:
-            return max(float(self.clip_far), self.near_plane() * 1.01)
-        fitted = self._fitted_depth_range()
-        if fitted is not None:
-            return fitted[1]
-        return max(self.zfar, self.distance * FAR_PER_DISTANCE)
+        """The far clipping distance: ``clip_far`` set by hand (never
+        nearer than just past the near plane), else the fitted range, else
+        ``zfar`` growing with the orbit distance when zoomed far out
+        (#340)."""
+        return native.camera_depths(self, self._depth_range and self._fitted_depth_range())[1]
 
     # ---- Depth range fitted to the view ----------------------------------
     def picking_projection_matrix(self) -> QMatrix4x4:
@@ -749,20 +621,7 @@ class OrbitCamera:
     # ---- Navigation presets ------------------------------------------------
     def fit_to(self, min_pt: QVector3D, max_pt: QVector3D, margin: float = 1.3) -> None:
         """Center the camera on the AABB and back up enough to frame it."""
-        center = CameraPoint(
-            (min_pt.x() + max_pt.x()) * 0.5,
-            (min_pt.y() + max_pt.y()) * 0.5,
-            (min_pt.z() + max_pt.z()) * 0.5,
-        )
-        diag = (max_pt - min_pt).length()
-        floor = self.min_distance(center)
-        if diag < 1e-9:
-            diag = _EMPTY_SIZE       # an empty scene still needs a distance
-        diag = max(diag, floor)
-        self.target = center
-        fov_rad = math.radians(self.fov_deg)
-        self.distance = max(diag * margin / (2.0 * math.tan(fov_rad / 2.0)),
-                            floor)
+        native.camera_fit_to(self, min_pt, max_pt, float(margin))
 
     def fit_box(self, min_pt: QVector3D, max_pt: QVector3D,
                 margin: float = 1.1, free=None) -> None:
@@ -795,81 +654,18 @@ class OrbitCamera:
             self.target = anchor + local.target
             self.distance = local.distance
             return
-        f = self.forward()
-        r = QVector3D.crossProduct(f, self.up_vector())
-        if r.lengthSquared() < 1e-18:
-            self.fit_to(min_pt, max_pt)
+        # In the camera's present orientation (camera_live.rs): the box's
+        # corners along its right and up, backed off by how far the box
+        # comes toward a perspective eye, then settled on screen.
+        axes = native.camera_fit_box(self, min_pt, max_pt, float(margin))
+        if axes is None:
             return
-        r = r.normalized()
-        u = QVector3D.crossProduct(r, f)
-        xs = (min_pt.x(), max_pt.x())
-        ys = (min_pt.y(), max_pt.y())
-        zs = (min_pt.z(), max_pt.z())
-        corners = [QVector3D(x, y, z) for x in xs for y in ys for z in zs]
-        center = (min_pt + max_pt) * 0.5
-        pr = [QVector3D.dotProduct(c - center, r) for c in corners]
-        pu = [QVector3D.dotProduct(c - center, u) for c in corners]
-        target = center + r * ((max(pr) + min(pr)) * 0.5) \
-            + u * ((max(pu) + min(pu)) * 0.5)
-        half_w = (max(pr) - min(pr)) * 0.5
-        half_h = (max(pu) - min(pu)) * 0.5
-        t = math.tan(math.radians(self.fov_deg) / 2.0)
-        aspect = self.aspect if self.aspect > 1e-6 else 1.0
-        floor = self.min_distance(target)
-        half = max(half_h, half_w / aspect, floor) * margin
-        distance = half / t
-        if self.perspective:
-            toward = max(-QVector3D.dotProduct(c - target, f)
-                         for c in corners)
-            distance += max(toward, 0.0)
-        self.target = target
-        self.distance = min(max(distance, floor), MAX_DISTANCE)
-        if self.perspective:
-            self._settle_perspective_fit(corners, margin)
+        r, u, f = axes
         if free is not None:
             self.target, self.distance = native.frame_box(
                 min_pt, max_pt, self.target, self.distance, r, u, f, self.fov_deg, self.aspect, self.perspective,
                 (self.shift_x, self.shift_y), tuple(free), margin,
                 self.min_distance(self.target), MAX_DISTANCE)
-
-    def _settle_perspective_fit(self, corners, margin: float) -> None:
-        """The perspective estimate above backs off for the NEAREST corner
-        as if every corner were that close, and centres the box in space,
-        not on screen — a deep box came out at 60 % of the window and low.
-        Measure the real projection: slide the target so the box is centred
-        on screen, then walk the distance in until its wider half-span sits
-        at ``1 / margin`` of the window — never past a corner reaching the
-        camera."""
-        from ingetrazo_core import Vec4 as QVector4D
-        goal = 1.0 / margin
-        t = math.tan(math.radians(self.fov_deg) / 2.0)
-        for _ in range(8):
-            mvp = self.projection_matrix() * self.view_matrix()
-            xs, ys = [], []
-            for c in corners:
-                p = mvp.map(QVector4D(c.x(), c.y(), c.z(), 1.0))
-                if p.w() <= 1e-9:
-                    return
-                xs.append(p.x() / p.w())
-                ys.append(p.y() / p.w())
-            cx = (max(xs) + min(xs)) * 0.5
-            cy = (max(ys) + min(ys)) * 0.5
-            reach = max((max(xs) - min(xs)) * 0.5, (max(ys) - min(ys)) * 0.5)
-            if reach <= 0.0:
-                return
-            if abs(reach - goal) < 0.005 and abs(cx) < 0.005 and abs(cy) < 0.005:
-                return
-            f = self.forward()
-            r = QVector3D.crossProduct(f, self.up_vector()).normalized()
-            u = QVector3D.crossProduct(r, f)
-            half_h = self.distance * t
-            self.target = self.target + r * (cx * half_h * self.aspect) \
-                + u * (cy * half_h)
-            nearest = max(-QVector3D.dotProduct(c - self.target, f)
-                          for c in corners)
-            gap = self.distance - nearest       # eye to the nearest corner
-            self.distance = min(max(nearest + gap * reach / goal,
-                                    self.min_distance()), MAX_DISTANCE)
 
     # Yaw / pitch presets for standard architectural views (Z-up convention).
     # Top and Bottom are EXACTLY vertical: at 89° the parallel projection
@@ -899,30 +695,9 @@ class OrbitCamera:
         self.yaw, self.pitch = preset
 
     def snap_iso(self) -> None:
-        """Snap to the isometric orientation nearest the current camera pose.
-
-        The static ``"iso"`` preset is one fixed corner, so the command
-        always swung the camera there no matter where it was. The eight
-        isometric views (four diagonal yaws, seen from above or below)
-        are the same picture from different corners; the command now
-        lands on whichever one the camera already points nearest to, so
-        the swing is the shortest available. ``set_view("iso")`` stays
-        the deterministic corner for sheets and scripts.
-        """
-        f = self.forward()
-        best_yaw = math.radians(self._ISO_YAWS[0])
-        best_pitch = math.radians(self._ISO_PITCH_DEG)
-        best_dot = -2.0
-        for sign in (1.0, -1.0):
-            pitch = sign * math.radians(self._ISO_PITCH_DEG)
-            cp = math.cos(pitch)
-            sp = math.sin(pitch)
-            for yaw_deg in self._ISO_YAWS:
-                yaw = math.radians(yaw_deg)
-                # The direction the camera looks from that corner.
-                d = QVector3D(-cp * math.cos(yaw), -cp * math.sin(yaw), -sp)
-                dot = QVector3D.dotProduct(f, d)
-                if dot > best_dot:
-                    best_dot = dot
-                    best_yaw, best_pitch = yaw, pitch
-        self.yaw, self.pitch = best_yaw, best_pitch
+        """Snap to the isometric orientation nearest the current camera pose:
+        whichever of the eight isometric views (four diagonal yaws, seen
+        from above or below) the camera already points nearest to, so the
+        swing is the shortest. ``set_view("iso")`` stays the deterministic
+        corner for sheets and scripts."""
+        native.camera_snap_iso(self)

@@ -249,6 +249,12 @@ def test_lock_labels_match_gl(label):
           painted(lambda p: method(ns, p)))
 
 
+def test_unclassified_navigation_point_leaves_the_overlay_transparent():
+    tools = SimpleNamespace(last_snap=SnapResult(kind=None, point=V()), tool=None)
+    image = painted(lambda painter: draw_tool_overlays(painter, tools))
+    assert not pixels(image).any()
+
+
 def test_capture_occlusion_callback_and_painter_state():
     scene, camera = fixture()
     layout = AnnotationLayout(scene, camera, (360, 100), occluded=lambda p: p.x() > 0)

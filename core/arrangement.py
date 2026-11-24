@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import math
 
-from ingetrazo_core import (Vec3 as QVector3D, plane_intersections as _intersections,
+from ingetrazo_core import (Vec3 as QVector3D, object_drawing, plane_intersections as _intersections,
                             plane_segment_parameter as _on_seg)
 
 # Position quantisation (~0.1 mm at metre scale) — coincident points within this
@@ -133,38 +133,14 @@ def coplanar_plane(points, tol: float = 1e-4):
     ``QVector3D``) if they're all coplanar, else ``None``. Collinear or
     degenerate input returns a horizontal plane (the arrangement then yields no
     face), so the caller can still run safely."""
-    pts = list(points)
-    if len(pts) < 3:
-        return (pts[0] if pts else QVector3D(0, 0, 0), QVector3D(0, 0, 1))
-    o = pts[0]
-    d1 = None
-    for p in pts[1:]:
-        if (p - o).length() > 1e-6:
-            d1 = (p - o).normalized()
-            break
-    if d1 is None:
-        return (o, QVector3D(0, 0, 1))
-    n = None
-    for p in pts[1:]:
-        c = QVector3D.crossProduct(d1, p - o)
-        if c.length() > 1e-6:
-            n = c.normalized()
-            break
-    if n is None:  # all collinear — pick any plane containing the line
-        return (o, QVector3D(0, 0, 1))
-    for p in pts:
-        if abs(QVector3D.dotProduct(n, p - o)) > tol:
-            return None  # not coplanar
-    return (o, n)
-
+    return object_drawing.coplanar_plane(points, tol)
 
 
 def flat_drawing(scene, new_points) -> bool:
     """Whether the whole drawing (existing mesh + the new loop) shares one
     plane — the gate for the classic planar arrangement, which forms
     every intersection face deterministically. 3D models keep the naive path."""
-    verts = [v.position for v in scene.mesh.vertices] + list(new_points)
-    return coplanar_plane(verts) is not None
+    return object_drawing.coplanar_plane(new_points, vertices=scene.mesh.vertices) is not None
 
 
 def busy_plane(scene, new_points):
@@ -177,13 +153,7 @@ def busy_plane(scene, new_points):
     plane = coplanar_plane(list(new_points))
     if plane is None:
         return None
-    origin, normal = plane
-    tol = 1e-4
-    for e in scene.mesh.edges:
-        if (abs(QVector3D.dotProduct(e.a - origin, normal)) < tol
-                and abs(QVector3D.dotProduct(e.b - origin, normal)) < tol):
-            return origin, normal
-    return None
+    return plane if object_drawing.has_plane_edge(scene.mesh.edges, plane, False) else None
 
 
 def curve_extras(scene, pts):

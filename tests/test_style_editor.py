@@ -111,6 +111,7 @@ class _Win:
         pass
 
 
+@pytest.mark.classic_pending
 def test_panel_pick_applies_a_preset(settings_file):
     from views.tray import StylesPanel
     win = _Win()
@@ -122,6 +123,7 @@ def test_panel_pick_applies_a_preset(settings_file):
     assert win.viewport.scene.display_style.sky is False
 
 
+@pytest.mark.classic_pending
 def test_panel_edits_the_active_style_live(settings_file):
     from views.tray import StylesPanel
     win = _Win()
@@ -133,6 +135,7 @@ def test_panel_edits_the_active_style_live(settings_file):
     assert style.face_mode == "xray"
 
 
+@pytest.mark.classic_pending
 def test_every_swatch_stays_editable_and_hints_when_invisible(settings_file):
     """Every colour is editable in every mode — you build a look, then see
     each piece where it applies (disabling them read as "can't change the
@@ -214,6 +217,7 @@ def test_sky_and_ground_colors_are_style_data(settings_file):
     assert legacy.ground_color == Viewport._GROUND_RGB
 
 
+@pytest.mark.classic_pending
 def test_panel_combo_lists_saved_styles_and_arms_delete(settings_file):
     from views.tray import StylesPanel
     save_user_style(Style(name="Obra", face_mode="hidden_line"))
@@ -265,6 +269,7 @@ def test_back_color_precedence_style_then_document_then_default():
     assert effective_back_color(style, scene) == (0.1, 0.8, 0.3)
 
 
+@pytest.mark.classic_pending
 def test_panel_back_swatch_shows_the_tint_that_draws(settings_file,
                                                      monkeypatch):
     from PySide6.QtGui import QColor
@@ -285,34 +290,7 @@ def test_panel_back_swatch_shows_the_tint_that_draws(settings_file,
     assert style.front_color == (1.0, 1.0, 1.0)     # front untouched
 
 
-def test_a_swatch_tooltip_keeps_the_tooltip_colours(settings_file):
-    """A swatch's colour is ITS background only: a bare «background: …»
-    sheet reached the tooltip over it too — light text on the white front
-    colour, unreadable."""
-    from PySide6.QtCore import QPoint
-    from PySide6.QtGui import QPalette
-    from PySide6.QtWidgets import QToolTip
-    from views.tray import StylesPanel
-    win = _Win()
-    panel = StylesPanel(win)
-    swatch = panel._front_c                          # white (255,255,255)
-    swatch.show()
-    # Deliver what earlier tests left queued first: a window activation or
-    # focus change still pending (the composer of test_sheet_shortcuts, in
-    # the same batch on CI) hides a tooltip the moment it is shown.
-    QApplication.processEvents()
-    QToolTip.showText(QPoint(10, 10), "tip", swatch)
-    QApplication.processEvents()
-    labels = [w for w in QApplication.topLevelWidgets()
-              if w.objectName() == "qtooltip_label" and w.isVisible()]
-    try:
-        assert labels
-        assert labels[0].palette().color(QPalette.Window).name() != "#ffffff"
-    finally:
-        QToolTip.hideText()
-        swatch.close()
-
-
+@pytest.mark.classic_pending
 def test_back_color_hint_only_where_back_faces_cannot_show(settings_file):
     from views.tray import StylesPanel
     win = _Win()

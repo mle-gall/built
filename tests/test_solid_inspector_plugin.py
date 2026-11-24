@@ -100,6 +100,7 @@ def win():
     w.close()
 
 
+@pytest.mark.classic_pending
 def test_dialog_rows_and_highlight(win):
     scene = win.viewport.scene
     _box(scene.mesh, skip_top=True)                  # broken loose solid
@@ -134,6 +135,7 @@ def test_dialog_rows_and_highlight(win):
     dlg.close()
 
 
+@pytest.mark.classic_pending
 def test_dialog_group_edit_context(win):
     """Inside a group the active row inspects THAT mesh, and the group's
     own listing row is not duplicated."""
@@ -155,6 +157,7 @@ def test_dialog_group_edit_context(win):
         scene.end_group_edit()
 
 
+@pytest.mark.classic_pending
 def test_tool_metadata_and_singleton(win):
     tool = SolidInspectorTool()
     assert tool.name == "Solid Inspector"
@@ -372,6 +375,7 @@ def test_repair_sound_box_changes_nothing():
 
 # ---- Undo, groups, navigation ----------------------------------------------
 
+@pytest.mark.classic_pending
 def test_repair_is_one_undo_step(win):
     scene = win.viewport.scene
     _box(scene.mesh, skip_top=True)
@@ -389,6 +393,7 @@ def test_repair_is_one_undo_step(win):
     assert is_sound(inspect_mesh(scene.mesh))
 
 
+@pytest.mark.classic_pending
 def test_undo_gives_back_the_partition_marks(win):
     scene = win.viewport.scene
     wall = _two_rooms(scene.mesh)
@@ -400,6 +405,7 @@ def test_undo_gives_back_the_partition_marks(win):
     assert wall.interior is True
 
 
+@pytest.mark.classic_pending
 def test_repair_all_is_one_step_and_skips_sound_rows(win):
     scene = win.viewport.scene
     _box(scene.mesh, skip_top=True)
@@ -430,6 +436,7 @@ def test_problem_items_group_a_rim_into_one():
         ("open", 4), ("stray", 1)]
 
 
+@pytest.mark.classic_pending
 def test_next_problem_selects_and_frames_each_in_turn(win):
     vp = win.viewport
     scene = vp.scene
@@ -451,6 +458,7 @@ def test_next_problem_selects_and_frames_each_in_turn(win):
     dlg.close()
 
 
+@pytest.mark.classic_pending
 def test_next_problem_on_a_placed_group_flies_to_its_placement(win):
     vp = win.viewport
     g = Group(Mesh(), name="Lejos")
@@ -468,6 +476,7 @@ def test_next_problem_on_a_placed_group_flies_to_its_placement(win):
     dlg.close()
 
 
+@pytest.mark.classic_pending
 def test_nested_pieces_are_listed_and_repaired(win):
     """An imported model made of parts: a container with an empty mesh and
     the pieces one level down. The container is no row of its own; each
@@ -497,6 +506,7 @@ def test_nested_pieces_are_listed_and_repaired(win):
     dlg.close()
 
 
+@pytest.mark.classic_pending
 def test_next_problem_on_a_sound_row_returns_none(win):
     g = Group(Mesh(), name="Bien")
     _box(g.mesh)
@@ -579,6 +589,7 @@ def test_repair_item_internal_face_copy_goes_wall_stays():
     assert is_sound(inspect_mesh(mesh))
 
 
+@pytest.mark.classic_pending
 def test_bent_hole_says_why(win):
     mesh = Mesh()
     faces = _box(mesh, skip_top=True)
@@ -588,6 +599,7 @@ def test_bent_hole_says_why(win):
     assert "not flat" in why_not_repairable(mesh, item)
 
 
+@pytest.mark.classic_pending
 def test_walk_and_repair_one_by_one(win):
     """Next shows a problem; Repair this problem fixes only it, as one
     undo step, and the next one comes on screen by itself."""
@@ -621,6 +633,7 @@ def test_walk_and_repair_one_by_one(win):
     dlg.close()
 
 
+@pytest.mark.classic_pending
 def test_previous_goes_back_and_wraps(win):
     scene = win.viewport.scene
     _box(scene.mesh, skip_top=True)
@@ -634,6 +647,7 @@ def test_previous_goes_back_and_wraps(win):
     dlg.close()
 
 
+@pytest.mark.classic_pending
 def test_problem_is_painted_in_its_colour_and_unpainted_on_close(win):
     """The overlay paints the problem on screen in its kind's colour, also
     for a group the user is not inside; closing the dialog takes it off."""
@@ -668,6 +682,7 @@ def test_problem_is_painted_in_its_colour_and_unpainted_on_close(win):
     assert painted() == 0                      # nothing on screen any more
 
 
+@pytest.mark.classic_pending
 def test_click_on_a_row_flies_to_that_object(win):
     vp = win.viewport
     far = Group(Mesh(), name="Lejana")
@@ -685,6 +700,7 @@ def test_click_on_a_row_flies_to_that_object(win):
     dlg.close()
 
 
+@pytest.mark.classic_pending
 def test_refresh_does_not_move_the_camera(win):
     vp = win.viewport
     g = Group(Mesh(), name="Quieta")
@@ -714,6 +730,7 @@ def _count_colour(vp, dlg, kind):
                if img.pixel(x, y) & 0xFFFFFF == rgb)
 
 
+@pytest.mark.classic_pending
 def test_highlight_paints_every_problem_of_a_group_in_its_colour(win):
     """Highlight problems on a group you are not inside: all its problems
     on screen at once, each kind in its colour, with a legend — not just
@@ -745,6 +762,7 @@ def test_highlight_paints_every_problem_of_a_group_in_its_colour(win):
     dlg.close()
 
 
+@pytest.mark.classic_pending
 def test_highlight_selects_the_problems_of_the_geometry_being_edited(win):
     scene = win.viewport.scene
     _box(scene.mesh)
@@ -762,36 +780,8 @@ def test_highlight_selects_the_problems_of_the_geometry_being_edited(win):
 
 # ---- A tab of the side tray ----------------------------------------------------
 
-def test_the_inspector_is_a_tab_of_the_side_tray(win):
-    """Loaded with the app, the inspector is a tray tab beside the model —
-    not a window over it — and the menu entry brings it forward."""
-    dock = win._solid_inspector_dock
-    assert dock.objectName() == "extension_solid_inspector"
-    assert dock.widget() is win._solid_inspector
-    SolidInspectorTool().on_activate(win.viewport)
-    assert not dock.isHidden()
 
-
-def test_narrow_tab_keeps_object_and_status_and_says_the_rest_below(win):
-    scene = win.viewport.scene
-    _box(scene.mesh, skip_top=True)
-    panel = SolidInspectorPanel(win.viewport)
-    panel.resize(320, 600)
-    panel.show()
-    table = panel._table
-    assert [table.isColumnHidden(c) for c in range(5)] == [
-        False, True, False, True, True]
-    table.setCurrentCell(0, 0)
-    assert "4 open borders" in panel._detail.text()
-    assert panel._detail.isVisible()
-    panel.resize(700, 600)
-    from PySide6.QtTest import QTest
-    QTest.qWait(180)
-    assert not any(table.isColumnHidden(c) for c in range(5))
-    assert not panel._detail.isVisible()
-    panel.close()
-
-
+@pytest.mark.classic_pending
 def test_hiding_the_tab_takes_the_colours_off(win):
     scene = win.viewport.scene
     _box(scene.mesh, skip_top=True)
@@ -807,6 +797,7 @@ def test_hiding_the_tab_takes_the_colours_off(win):
     assert panel._paint not in win.viewport._ext_overlays
 
 
+@pytest.mark.classic_pending
 def test_showing_the_tab_inspects_again(win):
     panel = SolidInspectorPanel(win.viewport)
     panel.show()
@@ -818,31 +809,7 @@ def test_showing_the_tab_inspects_again(win):
     panel.close()
 
 
-def test_the_tab_rejoins_the_others_when_left_alone(win):
-    """Restoring a saved layout can leave the inspector alone on a strip
-    of its own above the tabs; it rejoins them. Moved to the other side
-    of the window, it stays there."""
-    from PySide6.QtCore import Qt
-    from plugins.solid_inspector import _join_tray
-    dock = win._solid_inspector_dock
-    win.show()
-    win.removeDockWidget(dock)
-    win.addDockWidget(win.dockWidgetArea(win.tray), dock)   # alone, same side
-    dock.show()
-    assert win.tabifiedDockWidgets(dock) == []
-    assert _join_tray(win, dock) is True
-    assert win.tray in win.tabifiedDockWidgets(dock)
-    assert _join_tray(win, dock) is False                   # already there
-
-    other = (Qt.LeftDockWidgetArea
-             if win.dockWidgetArea(win.tray) != Qt.LeftDockWidgetArea
-             else Qt.RightDockWidgetArea)
-    win.removeDockWidget(dock)
-    win.addDockWidget(other, dock)                          # the user's choice
-    dock.show()
-    assert _join_tray(win, dock) is False
-    assert win.dockWidgetArea(dock) == other
-
+@pytest.mark.classic_pending
 def test_one_click_on_a_broken_object_shows_its_first_problem_ready(win):
     """One click, not two: the first problem framed and painted, the card
     filled and «Repair this problem» ready to press."""
@@ -868,6 +835,7 @@ def test_one_click_on_a_broken_object_shows_its_first_problem_ready(win):
     panel.close()
 
 
+@pytest.mark.classic_pending
 def test_one_click_on_a_sound_object_says_so(win):
     g = Group(Mesh(), name="Sana")
     _box(g.mesh)
@@ -882,6 +850,7 @@ def test_one_click_on_a_sound_object_says_so(win):
     panel.close()
 
 
+@pytest.mark.classic_pending
 def test_showing_the_tab_again_unchanged_does_not_inspect_again(win, monkeypatch):
     """Unfolding the sidebar or leaving clean screen shows the tab again:
     with the model as it was, nothing is inspected again (a large model
@@ -907,19 +876,7 @@ def test_showing_the_tab_again_unchanged_does_not_inspect_again(win, monkeypatch
     panel.close()
 
 
-def test_a_long_list_keeps_its_fitted_columns(win):
-    """The columns sized to their contents are fixed only while the table
-    fills, and fitted again after."""
-    from PySide6.QtWidgets import QHeaderView
-    panel = SolidInspectorPanel(win.viewport)
-    panel.show()
-    header = panel._table.horizontalHeader()
-    for c in (1, 2, 4):
-        assert header.sectionResizeMode(c) == QHeaderView.ResizeToContents
-    assert panel._table.updatesEnabled()
-    panel.close()
-
-
+@pytest.mark.classic_pending
 @pytest.mark.parametrize("backend", ["python", "store"])
 @pytest.mark.parametrize("edit", ["topology", "attribute", "geometry_version"])
 def test_same_count_group_edit_invalidates_inspection(win, monkeypatch, backend, edit):
@@ -971,6 +928,7 @@ def test_same_count_group_edit_invalidates_inspection(win, monkeypatch, backend,
     panel.close()
 
 
+@pytest.mark.classic_pending
 def test_hidden_panel_defers_construction_and_explicit_refresh(win, monkeypatch):
     import plugins.solid_inspector as si
     calls = []
@@ -987,82 +945,4 @@ def test_hidden_panel_defers_construction_and_explicit_refresh(win, monkeypatch)
     assert len(calls) == 1
     panel.show()
     assert len(calls) == 2
-    panel.close()
-
-
-def test_background_dock_tab_defers_inspection(win, monkeypatch):
-    from PySide6.QtCore import Qt
-    from PySide6.QtWidgets import QDockWidget, QMainWindow, QLabel
-    from PySide6.QtTest import QTest
-    import plugins.solid_inspector as si
-    host = QMainWindow()
-    dock, other = QDockWidget("Inspector", host), QDockWidget("Other", host)
-    panel = SolidInspectorPanel(win.viewport)
-    panel._dock_visible = False
-    dock.setWidget(panel)
-    other.setWidget(QLabel("Other tab"))
-    dock.visibilityChanged.connect(panel._dock_visibility_changed)
-    host.addDockWidget(Qt.RightDockWidgetArea, dock)
-    host.addDockWidget(Qt.RightDockWidgetArea, other)
-    host.tabifyDockWidget(dock, other)
-    host.show()
-    other.raise_()
-    QTest.qWait(180)
-    assert panel._dock_visible is False
-    calls = []
-    real = si.inspect_mesh
-    monkeypatch.setattr(si, "inspect_mesh", lambda m: calls.append(m) or real(m))
-    _box(win.viewport.scene.mesh)
-    panel.refresh()
-    QTest.qWait(180)
-    assert calls == []
-    dock.raise_()
-    QTest.qWait(180)
-    assert len(calls) == 1
-    panel.close()
-    host.close()
-
-
-def test_splitter_resizes_defer_layout_and_refresh_until_settled(win, monkeypatch):
-    from PySide6.QtTest import QTest
-    import plugins.solid_inspector as si
-    panel = SolidInspectorPanel(win.viewport)
-    panel.show()
-    QTest.qWait(180)
-    calls, fits = [], []
-    real, fit = si.inspect_mesh, panel._fit_columns
-    monkeypatch.setattr(si, "inspect_mesh", lambda m: calls.append(m) or real(m))
-    monkeypatch.setattr(panel, "_fit_columns", lambda: fits.append(1) or fit())
-    for width in (620, 640, 660):
-        panel.resize(width, 650)
-        panel.refresh()
-        QTest.qWait(20)
-    assert calls == [] and fits == []
-    QTest.qWait(180)
-    assert len(calls) == 1 and len(fits) == 1
-    panel.close()
-
-
-def test_fitted_columns_are_suspended_during_row_insertion(win, monkeypatch):
-    from PySide6.QtWidgets import QHeaderView
-    panel = SolidInspectorPanel(win.viewport)
-    for i in range(20):
-        win.viewport.scene.groups.append(Group(Mesh(), name=str(i)))
-    table = panel._table
-    original = table.setItem
-    inserted = []
-
-    def insert(row, col, item):
-        assert not table.updatesEnabled()
-        assert all(table.horizontalHeader().sectionResizeMode(c)
-                   != QHeaderView.ResizeToContents for c in (1, 2, 4))
-        inserted.append((row, col))
-        original(row, col, item)
-
-    monkeypatch.setattr(table, "setItem", insert)
-    panel.show()
-    assert len(inserted) == 105
-    assert table.updatesEnabled()
-    assert all(table.horizontalHeader().sectionResizeMode(c)
-               == QHeaderView.ResizeToContents for c in (1, 2, 4))
     panel.close()

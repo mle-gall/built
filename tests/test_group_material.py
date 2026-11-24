@@ -11,8 +11,6 @@
 """
 from __future__ import annotations
 
-import inspect
-import types
 
 from PySide6.QtCore import QPointF, Qt
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
@@ -26,7 +24,7 @@ from core.scene import Scene
 from formats import igz
 from tools.base import ToolContext
 from tools.paint import PaintTool
-from tests.controller_surface import ControllerSurface as Viewport
+from views.document_interaction import DocumentInteraction
 
 
 def V(x, y, z=0.0):
@@ -115,7 +113,7 @@ def test_explode_leaves_the_paint_on_the_faces_that_wore_it():
 
 # ---- the bake: what the viewport actually draws ---------------------------
 
-class _VP:
+class _VP(DocumentInteraction):
     def __init__(self, scene):
         self.scene = scene
 
@@ -127,19 +125,8 @@ class _VP:
 
 
 def _stub(scene):
-    """A Viewport with no GL: every plain method bound (the recipe of
-    test_chunk_stale_materials)."""
+    """A document surface with no window or disk cache."""
     vp = _VP(scene)
-    for name in dir(Viewport):
-        if name.startswith("__") or hasattr(vp, name):
-            continue
-        attr = inspect.getattr_static(Viewport, name)
-        if isinstance(attr, types.FunctionType):
-            setattr(vp, name, attr.__get__(vp))
-        elif isinstance(attr, staticmethod):
-            setattr(vp, name, attr.__func__)
-        elif not callable(attr) and attr is not None:
-            setattr(vp, name, attr)
     vp.active_tool = None
     vp._chunk_cache_load = None
     vp._chunk_cache_store = None

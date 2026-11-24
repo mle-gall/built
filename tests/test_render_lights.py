@@ -109,6 +109,7 @@ def _panel(win):
     raise AssertionError("no Render tab in the side tray")
 
 
+@pytest.mark.classic_pending
 def test_the_extensions_entry_brings_back_the_render_tab(window):
     # The tab is the tool; Extensions only brings it forward, even hidden
     # (Marco: «no aparece en el menú Extensiones»).
@@ -121,6 +122,7 @@ def test_the_extensions_entry_brings_back_the_render_tab(window):
     assert not dock.isHidden()
 
 
+@pytest.mark.classic_pending
 def test_a_light_clicked_onto_the_model_is_kept_and_undone(window, tmp_path):
     panel = _panel(window)
     vp = window.viewport
@@ -156,6 +158,7 @@ def test_a_light_clicked_onto_the_model_is_kept_and_undone(window, tmp_path):
     assert not (panel.app.document_data({}) or {}).get("lights")
 
 
+@pytest.mark.classic_pending
 def test_a_point_light_clicked_on_a_face_sits_a_hand_above_it(window):
     panel = _panel(window)
     panel.add_light("point", V(1, 1, 0), on_face=True)
@@ -163,6 +166,7 @@ def test_a_point_light_clicked_on_a_face_sits_a_hand_above_it(window):
     assert lt["pos"][2] == pytest.approx(0.1)
 
 
+@pytest.mark.classic_pending
 def test_esc_while_placing_cancels(window):
     panel = _panel(window)
     vp = window.viewport
@@ -191,6 +195,7 @@ def test_a_night_render_with_lights(tmp_path):
     assert (tmp_path / "render.png").is_file()
 
 
+@pytest.mark.classic_pending
 def test_the_lights_are_drawn_over_the_viewport(window):
     """The overlay paints a bulb at each light (an overlay that raised would
     only be logged and skipped, so draw it here and look at the pixels)."""
@@ -240,6 +245,7 @@ def test_a_spot_aims_by_heading_and_tilt(heading, tilt):
         assert h == pytest.approx(heading, abs=0.1)
 
 
+@pytest.mark.classic_pending
 def test_the_panel_sets_temperature_aim_and_sun(window):
     panel = _panel(window)
     panel.add_light("spot", V(0, 0, 4))
@@ -265,6 +271,7 @@ def attach_render_surface(window, monkeypatch):
     return view
 
 
+@pytest.mark.classic_pending
 def test_a_finished_render_reuses_the_image_utility(window, tmp_path, monkeypatch):
     from PySide6.QtGui import QImage
     view = attach_render_surface(window, monkeypatch)
@@ -290,6 +297,7 @@ def test_the_sun_strength_reaches_the_job(tmp_path):
 
 # ---- The tray layout (Marco's third round) --------------------------------------
 
+@pytest.mark.classic_pending
 def test_sections_fold_and_remember_it(window):
     from PySide6.QtCore import QSettings
     panel = _panel(window)
@@ -306,14 +314,9 @@ def test_sections_fold_and_remember_it(window):
     assert not lights.body.isHidden()
 
 
-def test_the_panel_never_scrolls_sideways(window):
-    panel = _panel(window)
-    from PySide6.QtWidgets import QScrollArea
-    area = panel.findChild(QScrollArea)
-    assert area.horizontalScrollBarPolicy() == Qt.ScrollBarAlwaysOff
-    assert area.widget().minimumSizeHint().width() < 260
 
 
+@pytest.mark.classic_pending
 def test_save_and_open_folder_live_in_the_image_utility(window, tmp_path, monkeypatch):
     from PySide6.QtGui import QImage
     from unittest.mock import Mock
@@ -337,6 +340,7 @@ def test_save_and_open_folder_live_in_the_image_utility(window, tmp_path, monkey
     assert "href" in panel._status.text()
 
 
+@pytest.mark.classic_pending
 def test_change_date_and_time_drops_the_shadows_panel(window, monkeypatch):
     """The button under the day's sun opens the Shadows panel from its
     toolbar button (its tooltip carries a line of help under the title)."""

@@ -49,7 +49,7 @@ def test_tool_shortcut_goes_through_shortcut_override(host):
 def test_tool_shortcut_restored_in_new_shell(host, tmp_path):
     from PySide6.QtGui import QKeySequence
     from app_shell.host import Host
-    from views.shortcuts import save_shortcut
+    from core.shortcuts import save_shortcut
 
     action = host.window._tool_actions["line"]
     save_shortcut(action, [QKeySequence("F11")])
@@ -109,7 +109,8 @@ def test_window_input_answers_from_winit(host):
 
 def test_rail_matches_classic_groups_and_dispatches(host):
     from unittest.mock import Mock
-    from views import wgpu_library, wgpu_ui
+    from ingetrazo_render import wgpu_library
+    from views import wgpu_ui
 
     host.open(FIXTURE)
     win, view = host.window, host.view
