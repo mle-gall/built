@@ -17,6 +17,7 @@ pub mod items_c;
 pub mod items_d;
 pub mod metrics;
 pub mod paint;
+pub mod pdf;
 pub mod model;
 pub mod page;
 pub mod py;

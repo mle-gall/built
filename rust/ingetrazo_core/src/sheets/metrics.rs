@@ -57,6 +57,10 @@ pub fn metrics() -> &'static Metrics {
 }
 
 impl Face {
+    /// The kerning between `a` and `b` at a pixel size of 100.
+    pub fn kern(&self, a: char, b: char) -> f64 {
+        self.kern.get(&(a, b)).copied().unwrap_or(0.0)
+    }
     /// Advance of `text` at a pixel size of 100.
     pub fn advance(&self, text: &str) -> f64 {
         let mut w = 0.0;

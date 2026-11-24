@@ -208,8 +208,8 @@ pub fn extra(py: Python<'_>, handle: &Bound<'_, PyAny>, kind: ItemKind, f: &Fiel
     Ok(x)
 }
 
-/// The item's primitives (item-local paper mm), or None for the kinds the
-/// page still draws its own way (frames, texts, title blocks) or not yet.
+/// The item's primitives (item-local paper mm); for a frame, what goes
+/// over its content (the page and the PDF add the content).
 pub fn paint(kind: ItemKind, f: &Fields, x: &Extra) -> Option<Vec<Op>> {
     let mut p = Painter::default();
     match kind {
@@ -232,7 +232,6 @@ pub fn paint(kind: ItemKind, f: &Fields, x: &Extra) -> Option<Vec<Op>> {
             let path = f.text("path", "");
             items::paint_image(&mut p, f, !path.is_empty() && std::path::Path::new(&path).is_file());
         }
-        _ => return None,
     }
     Some(p.ops)
 }
