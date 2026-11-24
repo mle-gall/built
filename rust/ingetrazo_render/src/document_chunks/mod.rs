@@ -22,9 +22,7 @@ fn truth(o: &Obj, k: &str) -> PyResult<bool> {
 fn id(o: &Obj) -> usize {
     o.as_ptr() as usize
 }
-fn host(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("views.document_interaction")
-}
+use crate::document_host::host;
 fn tuple<'py>(o: &Obj<'py>) -> PyResult<Obj<'py>> {
     o.py().import("builtins")?.call_method1("tuple", (o,))
 }
@@ -72,11 +70,17 @@ fn log(
     Ok(())
 }
 mod bake;
+mod billboards;
 mod disk;
+mod faces;
 mod fingerprint;
+mod materials;
 mod placement;
 pub fn register(m: &Bound<PyModule>) -> PyResult<()> {
     fingerprint::register(m)?;
+    materials::register(m)?;
+    faces::register(m)?;
+    billboards::register(m)?;
     bake::register(m)?;
     placement::register(m)?;
     disk::register(m)

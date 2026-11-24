@@ -725,22 +725,7 @@ def _array_bake():
 
 
 def _proto_wrapper(vp, mesh, paint=None):
-    """The stable stand-in a prototype mesh is baked through, one per
-    (mesh, container paint): ``_group_chunk`` caches by the wrapper's id,
-    so the same object must come back for the same mesh — and a painted
-    instance (issue #47) gets a wrapper of its own. Module-level so the
-    stub viewports in tests reach it too."""
-    wrappers = getattr(vp, "_proto_wrappers", None)
-    if wrappers is None:
-        wrappers = vp._proto_wrappers = {}
-    wkey = (id(mesh), _material_sig(paint))
-    w = wrappers.get(wkey)
-    if w is None:
-        w = wrappers[wkey] = types.SimpleNamespace(mesh=mesh, xform=None,
-                                                   material=paint)
-    else:
-        w.material = paint
-    return w
+    return ingetrazo_render.proto_wrapper(vp, mesh, paint)
 
 
 def _fp_winding(fp) -> int:
@@ -751,13 +736,7 @@ def _fp_winding(fp) -> int:
 
 
 def _flags_read(mesh, entry: dict) -> None:
-    """``entry`` has answered for what the mesh's dirty flags announced: they
-    clear, and any other bake of this mesh is left behind (``flags_gen``)."""
-    if getattr(mesh, "_chunk_dirty", True) or getattr(mesh, "_attrs_dirty", False):
-        mesh._flags_gen = getattr(mesh, "_flags_gen", 0) + 1
-    mesh._chunk_dirty = False
-    mesh._attrs_dirty = False
-    entry["flags_gen"] = getattr(mesh, "_flags_gen", 0)
+    return ingetrazo_render.flags_read(mesh, entry)
 
 
 #: flat look.
@@ -765,17 +744,7 @@ _BY_LAYER_MODES = ("textures", "shaded", "xray")
 
 
 def _layer_look_sig(scene, style=None) -> tuple:
-    """What of the layers changes the paint objects are drawn in: Colour by
-    layer, and each layer's colour and transparency — and the style's Front
-    color, which dresses the faces that wear no material. ``style``: the one
-    the view draws with (a view of several has its own); else the scene's."""
-    if style is None:
-        style = getattr(scene, "display_style", None)
-    by_layer = bool(getattr(style, "color_by_layer", False))
-    return (by_layer, getattr(style, "face_mode", None) if by_layer else None,
-            tuple((ly.key, ly.color, ly.opacity)
-                  for ly in getattr(scene, "layers", ())),
-            _front_tint(style))
+    return ingetrazo_render.layer_look_sig(scene, style)
 
 
 #: The face modes that draw the per-vertex colour, where the style's Front
@@ -785,73 +754,15 @@ _VCOLOR_MODES = ("textures", "shaded", "xray")
 
 
 def _front_tint(style):
-    """The colour the faces wearing no material bake to under ``style``
-    when its Front color is not the stock white, else ``None`` (the
-    warm-white default, unchanged). The default is TINTED by the pick
-    rather than replaced, so the stock white keeps the stock look and a
-    picked colour shows as itself (issue #776: the Front color only
-    showed in Hidden line and Monochrome)."""
-    if style is None or getattr(style, "face_mode", None) not in _VCOLOR_MODES:
-        return None
-    front = tuple(float(c) for c in
-                  (getattr(style, "front_color", None) or (1.0, 1.0, 1.0))[:3])
-    if all(c >= 0.999 for c in front):
-        return None
-    from core.style import DEFAULT_FACE_COLOR
-    return tuple(round(d * c, 4) for d, c in zip(DEFAULT_FACE_COLOR, front))
+    return ingetrazo_render.front_tint(style)
 
 
 def _with_front_tint(paint, style):
-    """``paint`` with the style's Front color standing in for the default
-    material when there is no container paint: a front-only paint, so the
-    back faces keep the back tint."""
-    if paint:
-        return paint
-    tint = _front_tint(style)
-    if tint is None:
-        return paint
-    return {"color": tint, "front_only": True}
+    return ingetrazo_render.with_front_tint(paint, style)
 
 
 def _paint_of(vp, group):
-    """The container paint faces are baked with: the object's own paint
-    (issue #47), or — with Colour by layer on — the layer colours
-    (core.layers.layer_paint). ``group`` None is the loose model; a
-    prototype stand-in (``_proto_wrapper``) already carries its paint.
-    Module-level, like ``_proto_wrapper``, so stub viewports reach it.
-    (Its names are the module's: asked 240 000 times to open the plant of
-    #158, an import statement each time was a second of it.)"""
-    if group is not None and not isinstance(group, Group):
-        return effective_material(group)
-    scene = getattr(vp, "scene", None)
-    worn = effective_material(group)
-    if group is not None and group is getattr(scene, "edit_group", None):
-        # Open, its faces draw as the loose mesh and keep what they wore
-        # closed: the nearest painted container's, not only its own (#1101).
-        worn = scene.open_group_paint()
-    if scene is None or getattr(vp, "plano_style", None) is not None:
-        return worn                            # a sheet's technical look
-    style = (getattr(vp, "style_override", None)
-             or getattr(vp, "view_style", None)
-             or getattr(scene, "display_style", None))
-    tint = (getattr(vp, 'view_tint', None) or {}).get(getattr(group, 'uid', None))
-    if tint is not None and getattr(style, 'face_mode', None) in _BY_LAYER_MODES:
-        return {'by_layer': {}, 'color': tint}
-    by_layer = bool(getattr(style, "color_by_layer", False)
-                    and style.face_mode in _BY_LAYER_MODES)
-    memo = getattr(vp, "_layer_paints", None)
-    if memo is None or memo[0] != scene.version:
-        memo = vp._layer_paints = (scene.version, {}, _layers.layer_fx(scene))
-    fx = memo[2]
-    if not by_layer and not fx:
-        return _with_front_tint(worn, style)
-    own = None if by_layer else _with_front_tint(worn, style)
-    key = (by_layer, _layers.object_layer(group), _material_sig(own))
-    paint = memo[1].get(key)
-    if paint is None:
-        base = _layers.layer_paint(scene, group) if by_layer else own
-        paint = memo[1][key] = _layers.layer_look(scene, group, base, fx)
-    return paint
+    return ingetrazo_render.paint_of(vp, group)
 
 
 def _ghost_edge_points(scene) -> array:
@@ -1517,38 +1428,7 @@ class _AltWatch(object if NATIVE else QObject):
 
 
 def _face_geometry(f, memo, triangulate):
-    """``(key, normal, area, triangles, centroid)`` of a mesh face, from
-    ``memo`` when every corner (holes included) is exactly where it was
-    (``memo`` None: computed, not remembered).
-    Triangles are ``((x, y, z), …)`` float tuples — copies, never the live
-    vertex positions, which edits move in place."""
-    loop = [v.position for v in f.loop]
-    holes = [[v.position for v in h] for h in f.hole_loops]
-    if memo is None:
-        key = None                  # a closed group: nothing to remember
-    else:
-        key = (tuple((p.x(), p.y(), p.z()) for p in loop),
-               tuple(tuple((p.x(), p.y(), p.z()) for p in h) for h in holes))
-        hit = memo.get(element_identity(f))
-        if hit is not None and hit[0] == key:
-            return hit
-    if len(loop) < 3:
-        geom = (key, QVector3D(0.0, 0.0, 1.0), 0.0, [], None, {}, (), None)
-    else:
-        n_raw = f._newell()
-        ln = n_raw.length()
-        normal = n_raw / ln if ln > 1e-9 else QVector3D(0.0, 0.0, 1.0)
-        tris = [tuple((t.x(), t.y(), t.z()) for t in tri)
-                for tri in triangulate(loop, holes, normal)]
-        c = f.centroid()
-        flat = tuple(x for tri in tris for corner in tri for x in corner)
-        props = ((normal.x(), normal.y(), normal.z()), (c.x(), c.y(), c.z()))
-        # 5: shaded colour per base colour · 6: triangles as 9 floats each
-        # · 7: the soft-edge silhouette props (normal, centroid)
-        geom = (key, normal, 0.5 * ln, tris, c, {}, flat, props)
-    if memo is not None:
-        memo[element_identity(f)] = geom
-    return geom
+    return ingetrazo_render.face_geometry(f, memo, triangulate)
 
 
 def _finite_point(p) -> bool:
@@ -1559,50 +1439,11 @@ def _finite_point(p) -> bool:
 
 
 def _curved_faces(mesh) -> set:
-    """The faces of ``mesh`` on a curved surface: those a soft edge that
-    smooths (not ``flat``) joins to another face. Only these can have a smooth corner, so
-    every other face keeps its one flat colour and costs nothing."""
-    out: set = set()
-    for e in mesh.edges:
-        if smooths(e) and len(e.faces) > 1:
-            out.update(e.faces)
-    return out
+    return ingetrazo_render.curved_faces(mesh)
 
 
 def _smooth_vcol(face, base, flat_rgb, smoother, tris, light) -> list:
-    """``pos(3) + rgb(3)`` floats of ``face``'s triangles (corners as
-    float tuples), each corner on a curved surface shaded against
-    ``light`` by the SURFACE's normal there
-    (:class:`formats.meshexport.SmoothNormals`, the one the exports
-    write) instead of the face's own: the vertex colours blend across
-    the triangles and a sphere reads round, not faceted (#131). Hard
-    edges split the surface, so a cylinder keeps its crease against its
-    caps.
-
-    Unquantised, unlike ``DocumentInteraction._shaded_color``: the face pass is one
-    draw call whatever its colours, and the 1/32 shade steps would show
-    as rings across a sphere. A corner whose surface normal IS the
-    face's (coplanar faces joined by a soft diagonal) keeps the flat
-    colour, so a flat patch never shows a seam against its neighbour."""
-    corners = smoother.corners(face)
-    flat = smoother.flat(face)
-    rgb_at: dict = {}
-    out: list = []
-    for tri in tris:
-        for p in tri:
-            rgb = rgb_at.get(p)
-            if rgb is None:
-                n = corners.get(p)
-                if n is None or QVector3D.dotProduct(n, flat) > 0.99999:
-                    rgb = flat_rgb
-                else:
-                    d = abs(QVector3D.dotProduct(n, light))
-                    s = 0.62 + 0.38 * d
-                    rgb = (min(1.0, base[0] * s), min(1.0, base[1] * s),
-                           min(1.0, base[2] * s))
-                rgb_at[p] = rgb
-            out.extend((*p, *rgb))
-    return out
+    return ingetrazo_render.smooth_vcol(face, base, flat_rgb, smoother, tris, light)
 
 
 from views.document_tools import DocumentTools
@@ -2295,34 +2136,10 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
 
     def _shade_factor(self, normal) -> float:
-        """Diffuse factor (0.62..1.0) of a face normal against the fixed
-        world light — quantised to 1/32 so it can key texture draw runs
-        without exploding the run count on curved surfaces."""
-        if normal.length() < 1e-9:
-            return 0.84375
-        # abs(): shading depends on the face's plane, not its winding — a
-        # flat plan whose faces happen to wind downward still reads bright,
-        # while a solid keeps its top-bright / sides-toned maquette look.
-        # The 0.62..1.0 range matches the classic default-style contrast
-        # (measured on user models: its shaded walls sit near 0.65 of the
-        # lit tone) — the previous 0.80..1.0 read as "unshaded"/wrong
-        # colour next to a reference render of the same building.
-        d = abs(QVector3D.dotProduct(normal.normalized(), self._LIGHT))
-        return round((0.62 + 0.38 * d) * 32.0) / 32.0
+        return ingetrazo_render.shade_factor(self, normal)
 
     def _shaded_color(self, base, normal):
-        """Multiply ``base`` RGB by a subtle diffuse term from the face normal vs
-        the fixed world light — the matte-model shading. Returns a clamped RGB
-        tuple used as the render key (identical normals/colours group together)."""
-        shade = self._shade_factor(normal)
-        # Quantise to 1/64 steps: the tuple is the DRAW-RUN key, and a model
-        # with thousands of distinct normals (imported trees, curved detail)
-        # otherwise explodes into one draw call per unique shade — 63k draw
-        # calls per frame on a real 100k-face project. 1/64 banding is
-        # invisible; the run count collapses to a few hundred.
-        return (round(min(1.0, base[0] * shade) * 64.0) / 64.0,
-                round(min(1.0, base[1] * shade) * 64.0) / 64.0,
-                round(min(1.0, base[2] * shade) * 64.0) / 64.0)
+        return ingetrazo_render.shaded_color(self, base, normal)
 
     # ---- Line weight for exports --------------------------------------------
     def _line_jitter(self, px: int, w: int, h: int) -> list:
@@ -2743,109 +2560,23 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
 
     def _newell_of(self, face):
-        """The face's raw Newell vector, memoised per scene version — ONE
-        computation feeds normal, area and triangulation (each used to pay
-        its own on an exploded import's edit frame)."""
-        memo = getattr(self, "_newell_memo", None)
-        if memo is None or memo[0] != _cache_ver(self):
-            memo = self._newell_memo = (_cache_ver(self), {})
-        hit = memo[1].get(element_identity(face))
-        if hit is None or hit[0] != face:
-            hit = memo[1][element_identity(face)] = (face, face._newell())
-        return hit[1]
+        return ingetrazo_render.newell_of(self, face)
 
     def _area_of(self, face) -> float:
-        if not hasattr(face, "loop"):
-            return face.area()          # preview face (core.geometry)
-        if len(face.loop) < 3:
-            return 0.0
-        return 0.5 * self._newell_of(face).length()
+        return ingetrazo_render.area_of(self, face)
 
     def _tris_of(self, face):
-        """``face.triangulate()`` memoised per scene version: one edit frame
-        triangulates every loose face for the colour VBOs, the textured
-        VBOs AND the pick index — 3x the earcut/_newell cost on an exploded
-        import. The memo holds the face itself so a recycled id() can never
-        alias, and drops wholesale on the next version bump."""
-        if not hasattr(face, "loop"):
-            return face.triangulate()   # preview face: own earcut, no memo
-        memo = getattr(self, "_tri_memo", None)
-        if memo is None or memo[0] != _cache_ver(self):
-            memo = self._tri_memo = (_cache_ver(self), {})
-        hit = memo[1].get(element_identity(face))
-        if hit is None or hit[0] != face:
-            hit = memo[1][element_identity(face)] = (
-                face, face.triangulate(self._normal_of(face)))
-        return hit[1]
+        return ingetrazo_render.tris_of(self, face)
 
     #: A face this big (corners, holes included) is worth handing to the
     #: native earcut ahead of ``_tris_of``.
     NATIVE_TRIS_MIN_CORNERS = 64
 
     def _seed_tris_native(self, faces) -> None:
-        """Fill ``_tris_of``'s memo for the big faces among ``faces`` in one
-        call to the engine's earcut (``face_geometry``: the same port, node
-        for node, triangulating with the same unit normal — its parity is
-        tests/test_face_geometry_native.py). A vector-art figure from an
-        imported file is faces with thousands of holes: the Python earcut
-        took ~40 s over the villa's 18 (issue #1006). Without the Rust
-        engine nothing happens and ``_tris_of`` works as always."""
-        import sys
-        import numpy as np
-        import core._native as _native
-        nat = _native.native
-        if nat is None or _native.qt_hypot() is None:
-            return
-        memo = getattr(self, "_tri_memo", None)
-        if memo is None or memo[0] != _cache_ver(self):
-            memo = self._tri_memo = (_cache_ver(self), {})
-        big = []
-        for f in faces:
-            if not hasattr(f, "loop") or len(f.loop) < 3:
-                continue
-            hit = memo[1].get(element_identity(f))
-            if hit is not None and hit[0] == f:
-                continue
-            rings = [f.vertices] + [h for h in f.holes if len(h) >= 3]
-            if sum(len(r) for r in rings) >= self.NATIVE_TRIS_MIN_CORNERS:
-                big.append((f, rings))
-        if not big:
-            return
-        pts, sizes, counts = [], [], []
-        for _f, rings in big:
-            counts.append(len(rings))
-            for r in rings:
-                sizes.append(len(r))
-                pts.extend(r)
-        pos = np.array([(p.x(), p.y(), p.z()) for p in pts], np.float64)
-        try:
-            out = nat.face_geometry(
-                pos, np.arange(len(pts), dtype=np.int64),
-                np.asarray(sizes, np.int64), np.asarray(counts, np.int64),
-                _native.qt_hypot(), sys.version_info >= (3, 12))
-        except Exception:  # noqa: BLE001 — then the Python earcut
-            return
-        tris_u, tri_face_u = out[6], out[7]
-        per_face: list = [[] for _ in big]
-        for (a, b, c), fi in zip(tris_u.tolist(), tri_face_u.tolist()):
-            per_face[fi].append((pts[a], pts[b], pts[c]))
-        for (f, _rings), tris in zip(big, per_face):
-            memo[1][element_identity(f)] = (f, tris)
+        return ingetrazo_render.seed_tris_native(self, faces)
 
     def _normal_of(self, face):
-        """``face.normal()`` memoised per scene version (see _tris_of):
-        the shading of every loose face recomputes the Newell normal 3-4
-        times per edit frame otherwise. Tool PREVIEW faces (core.geometry,
-        no ``loop``) take their own methods unmemoised — fresh objects every
-        frame; treating them as mesh faces crashed EVERY paint of a loose
-        paste preview (nothing followed the cursor)."""
-        if not hasattr(face, "loop"):
-            return face.normal()
-        if len(face.loop) < 3:
-            return QVector3D(0.0, 0.0, 1.0)
-        n = self._newell_of(face)
-        return (n.normalized() if n.length() > 1e-9
-                else QVector3D(0.0, 0.0, 1.0))
+        return ingetrazo_render.normal_of(self, face)
 
     def _static_draw_groups(self, groups):
         """Of ``groups`` (the placements in draw order), the ones the
@@ -2975,60 +2706,10 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return memo[1]
 
     def _bucket_back_face(self, face, back):
-        """Build the back-side override copy of a two-side-painted face.
-        Returns ``(kind, payload)`` — ``("bvcol", bytes)`` /
-        ``("btex", (key, bytes))`` for opaque overrides (culled opaque back
-        pass), or ``("btcol", (op, bytes))`` / ``("bttex", ((key, op),
-        bytes))`` for translucent ones (culled blended pass). ``(None,
-        None)`` when the back carries nothing drawable."""
-        op = float(back.get("opacity", 1.0))
-        tex = back.get("texture")
-        if tex is not None and tex.get("path"):
-            tmp: dict = {}
-            self._append_textured_face(tmp, face, tex)
-            for key, arr in tmp.items():
-                if op < 0.999:
-                    return "bttex", ((key, round(op, 3)), arr.tobytes())
-                return "btex", (key, arr.tobytes())
-            return None, None
-        col = back.get("color")
-        if col is None:
-            return None, None
-        r, g, b = self._shaded_color(tuple(col), self._normal_of(face))
-        buf = array("f")
-        for t0, t1, t2 in self._tris_of(face):
-            buf.extend([
-                t0.x(), t0.y(), t0.z(), r, g, b,
-                t1.x(), t1.y(), t1.z(), r, g, b,
-                t2.x(), t2.y(), t2.z(), r, g, b,
-            ])
-        if op < 0.999:
-            return "btcol", (round(op, 3), buf.tobytes())
-        return "bvcol", buf.tobytes()
+        return ingetrazo_render.bucket_back_face(self, face, back)
 
     def _append_textured_face(self, by_texture: dict, face, tex: dict) -> None:
-        """Triangulate ``face`` into ``by_texture[(path, shade)]`` as
-        interleaved ``pos(3) + uv(2)`` floats — the quantised diffuse shade
-        keys the draw run (the run sets ``u_shade``, so textures get the same
-        matte face shading as colour faces). UVs come from
-        ``core.texture.face_uv_axes`` — the face's fitted world→UV affine
-        map when present (``uvw`` — an import carrying its own texture
-        coordinates), else the .skp planar projection of each vertex's
-        world position. The SAME function the .skp exporter writes from, so
-        the viewport cannot drift from what the .skp file will show (it did: a
-        private copy of the projection here used a different basis)."""
-        key = (tex["path"], self._shade_factor(self._normal_of(face)))
-        buf = by_texture.get(key)
-        if buf is None:
-            buf = by_texture[key] = array("f")
-        gu, cu, gv, cv = face_uv_axes(tex, face.normal())
-        for tri in self._tris_of(face):
-            for p in tri:
-                buf.extend([
-                    p.x(), p.y(), p.z(),
-                    QVector3D.dotProduct(gu, p) + cu,
-                    QVector3D.dotProduct(gv, p) + cv,
-                ])
+        return ingetrazo_render.append_textured_face(self, by_texture, face, tex)
 
     def _faceme_dir(self, anchor: QVector3D) -> QVector3D:
         """Direction a face-me sprite at ``anchor`` turns toward (not yet
@@ -3044,214 +2725,19 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return cam.eye() - cam.target
 
     def _figure_token(self, group):
-        """What a face-me figure's cached data (placed mesh, extent, draw
-        arrays) depends on: its OWN mesh — the object and a content
-        fingerprint (coordinates, paint, counts) — and its matrix. Unlike
-        the model's content version it does not move when something ELSE
-        is drawn or painted, or when a group is opened or closed: keyed on
-        that version, every edit re-triangulated the
-        villa's 18 vector-art figures (~4 s per stroke, paint or Esc,
-        issue #1006). The coordinate walk (~3 ms for 9 000 vertices) is
-        paid only when the figure's own mesh was edited."""
-        memo = getattr(self, "_figure_tokens", None)
-        if memo is None:
-            memo = self._figure_tokens = {}
-        mesh = group.mesh
-        cv = _content_ver(self)
-        xf = getattr(group, "xform", None)
-        # The matrix is read every time: a placement can be moved in place
-        # without a version bump (the face-me quad of a moved copy).
-        xft = None if xf is None else tuple(xf.data())
-        hit = memo.get(id(group))
-        if hit is not None and hit[0] == cv and hit[1] is mesh \
-                and hit[2] is group and hit[3][1] == xft:
-            return hit[3]
-        # Geometry moves only through the mesh's mutation primitives, which
-        # bump its serial: while it holds, the coordinate walk is skipped
-        # and only the paint — which bypasses them — is re-read (17 faces).
-        # The serial is not in the token itself: the experimental engine
-        # builds a lazy mesh on first touch (drawing elsewhere does it),
-        # bumping the serial of a figure whose content did not change.
-        serial = getattr(mesh, "_mut_serial", None)
-        if (hit is not None and hit[1] is mesh and serial is not None
-                and hit[4] == serial):
-            geo = hit[5]
-        else:
-            geo = self._mesh_fingerprint(mesh)
-        token = (id(mesh), xft, geo, self._faces_paint_fp(mesh))
-        if len(memo) > 4096:
-            memo.clear()
-        memo[id(group)] = (cv, mesh, group, token, serial, geo)
-        return token
+        return ingetrazo_render.figure_token(self, group)
 
     def _billboard_mesh(self, group):
-        """A billboard's mesh in WORLD space. A face-me placed INSIDE a
-        component — the torito on the arch, brought in with the arch —
-        keeps its prototype in the component's frame and reaches the draw
-        list as a proxy with a matrix; reading the raw mesh put the bull at
-        the file's origin, not on the cornice (Marco, 2026-09-11). Sprites
-        are a face or two, so the placed copy is cached per matrix."""
-        xf = getattr(group, "xform", None)
-        if xf is None:
-            return group.mesh
-        cache = getattr(self, "_billboard_world", None)
-        if cache is None:
-            cache = self._billboard_world = {}
-        key = self._figure_token(group)
-        hit = cache.get(id(group))
-        if hit is not None and hit[0] == key:
-            return hit[1]
-        from core.group import transformed_mesh
-        placed = transformed_mesh(group.mesh, xf)
-        if len(cache) > 256:
-            cache.clear()
-        cache[id(group)] = (key, placed)
-        return placed
+        return ingetrazo_render.billboard_mesh(self, group)
 
     def _billboard_extent(self, group):
-        """(anchor, width, height, texture path) of a billboard as placed,
-        before any turn or drag preview — or ``None`` for an empty one.
-        Remembered per model content: a vector-art figure from an imported
-        file carries thousands of vertices, and the walk over them ran for
-        every figure on every click (38 figures, ~250 ms per click on the
-        villa of issue #1006)."""
-        key = self._figure_token(group)
-        cache = getattr(self, "_billboard_extents", None)
-        if cache is None:
-            cache = self._billboard_extents = {}
-        hit = cache.get(id(group))
-        if hit is not None and hit[0] == key:
-            return hit[1]
-        verts = self._billboard_mesh(group).vertices
-        if not verts:
-            ext = None
-        else:
-            xs = [v.position.x() for v in verts]
-            ys = [v.position.y() for v in verts]
-            zs = [v.position.z() for v in verts]
-            anchor = QVector3D((min(xs) + max(xs)) / 2,
-                               (min(ys) + max(ys)) / 2, min(zs))
-            # Planar width: hypot handles a sprite plane at any yaw (an
-            # imported face-me sits wherever its baked transform left it);
-            # an axis-aligned quad gives the same value as before.
-            w = math.hypot(max(xs) - min(xs), max(ys) - min(ys))
-            h = max(zs) - min(zs)
-            tex = None
-            for f in group.mesh.faces:
-                t = f.attrs.get("texture")
-                if t and t.get("path"):
-                    tex = t["path"]
-                    break
-            # tex may stay None for a vector-art face-me (solid-colour
-            # faces, e.g. a 2D person from an imported file): picking,
-            # outline and snap still need the quad; the legacy textured-quad
-            # render skips texture-less groups.
-            ext = (anchor, w, h, tex)
-        if len(cache) > 4096:
-            cache.clear()
-        cache[id(group)] = (key, ext)
-        return ext
+        return ingetrazo_render.billboard_extent(self, group)
 
     def _billboard_quad(self, group, face_dir=None):
-        """The face-me quad of a billboard group, rotated around its vertical
-        anchor axis to face the camera NOW (or ``face_dir`` when given).
-        Returns (corners[4], tex_path) or ``None``. Shared by the render
-        pass, picking and the shadow casters."""
-        ext = self._billboard_extent(group)
-        if ext is None:
-            return None
-        anchor, w, h, tex = ext
-        # A billboard being Move/Rotate-dragged previews through THIS pass
-        # (its raw mesh quad in the scratch VBOs showed the texture swimming
-        # and ignored the face-me turn): carry the preview transform on the
-        # anchor so the figure follows the cursor, camera-facing, fixed UVs.
-        if id(group) in (getattr(self, "_preview_groups", None) or ()):
-            m = getattr(self, "_preview_matrix", None)
-            if m is not None:
-                anchor = m.map(anchor)
-            else:
-                off = getattr(self, "_preview_offset", None)
-                if off is not None:
-                    anchor = anchor + off
-        if w < 1e-9 or h < 1e-9:
-            return None
-        # Facing: the camera by default; the shadow pass passes the SUN so a
-        # figure's cast silhouette holds still while the camera orbits
-        # (face-me "shadows face sun").
-        d = face_dir if face_dir is not None else self._faceme_dir(anchor)
-        d = QVector3D(d.x(), d.y(), 0.0)
-        if d.length() < 1e-6:
-            d = QVector3D(1.0, 0.0, 0.0)
-        d = d.normalized()
-        r = QVector3D(-d.y(), d.x(), 0.0)
-        up = QVector3D(0.0, 0.0, 1.0)
-        c0 = anchor - r * (w / 2)
-        c1 = anchor + r * (w / 2)
-        return ([c0, c1, c1 + up * h, c0 + up * h], tex)
+        return ingetrazo_render.billboard_quad(self, group, face_dir)
 
     def _faceme_base(self, g):
-        """Cached base data of a mesh face-me billboard: interleaved pos+uv
-        arrays per image, the vertical anchor axis and the horizontal base
-        normal. Rebuilt when the MODEL changes, not on a click: a vector-art
-        figure from an imported file is faces with thousands of holes, and
-        triangulating the villa's 18 again after every selection was the
-        ~5 s per click of issue #1006."""
-        cache = getattr(self, "_faceme_cache", None)
-        if cache is None:
-            cache = self._faceme_cache = {}
-        key = self._figure_token(g)
-        cur = cache.get(id(g))
-        if cur is not None and cur[0] == key:
-            return cur[1]
-        import numpy as np
-        mesh = self._billboard_mesh(g)       # world space, matrix applied
-        self._seed_tris_native(mesh.faces)
-        by_tex: dict = {}
-        by_color: dict = {}      # rgb tuple -> interleaved pos+uv (uv unused)
-        n0 = None
-        best_area = 0.0
-        for f in mesh.faces:
-            area = f.area() if hasattr(f, "area") else 0.0
-            if n0 is None or area > best_area:
-                n0 = f.normal()
-                best_area = area
-            tex = f.attrs.get("texture")
-            if tex is not None and tex.get("path"):
-                self._append_textured_face(by_tex, f, tex)
-                continue
-            # Solid-colour face (a vector-art person from a .skp file):
-            # same interleaved layout, uv ignored, drawn with u_color.
-            col = tuple(f.attrs.get("color") or (0.96, 0.95, 0.925))
-            buf = by_color.setdefault(col, array("f"))
-            for t0, t1, t2 in self._tris_of(f):
-                for p in (t0, t1, t2):
-                    buf.extend([p.x(), p.y(), p.z(), 0.0, 0.0])
-        verts = mesh.vertices
-        entry = None
-        if n0 is not None and verts and (by_tex or by_color):
-            xs = [v.position.x() for v in verts]
-            ys = [v.position.y() for v in verts]
-            zs = [v.position.z() for v in verts]
-            # The anchor is the figure's FEET (x, y, min z), like the simple
-            # quad's: _draw_faceme_mesh aims the face-me from it in 3D. A 2-D
-            # anchor here raised IndexError inside paintGL and left the whole
-            # viewport blank for any model carrying a mesh face-me (Susan in
-            # plaza Yanque(2).skp — v0.3.9 shipped with it).
-            anchor = np.array([(min(xs) + max(xs)) / 2,
-                               (min(ys) + max(ys)) / 2, min(zs)])
-            nh = np.array([n0.x(), n0.y()])
-            ln = float(np.hypot(nh[0], nh[1]))
-            if ln > 1e-9:
-                nh = nh / ln
-                arrays = {p: np.frombuffer(buf.tobytes(),
-                                           dtype=np.float32).reshape(-1, 5)
-                          for p, buf in by_tex.items()}
-                colors = {c: np.frombuffer(buf.tobytes(),
-                                           dtype=np.float32).reshape(-1, 5)
-                          for c, buf in by_color.items()}
-                entry = (arrays, colors, anchor, nh)
-        cache[id(g)] = (key, entry)
-        return entry
+        return ingetrazo_render.faceme_base(self, g)
 
     def set_hover(self, entity, placement=None) -> None:
         """Set the entity (edge/face) highlighted under the cursor and repaint

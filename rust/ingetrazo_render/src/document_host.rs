@@ -10,7 +10,12 @@ pub(super) fn opt<'py>(o: &Obj<'py>, name: &str) -> PyResult<Obj<'py>> {
     Ok(o.getattr_opt(name)?.unwrap_or_else(|| none(o.py())))
 }
 pub(super) fn host(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("views.document_interaction")
+    // The controller imports this extension before its first native call. Consult
+    // the interpreter's module table directly, including when a host reloads it.
+    let modules = unsafe { Bound::from_borrowed_ptr(py, pyo3::ffi::PyImport_GetModuleDict()) };
+    Ok(modules
+        .get_item("views.document_interaction")?
+        .cast_into()?)
 }
 pub(super) fn xyz(p: &Obj) -> PyResult<DVec3> {
     Ok(DVec3::from_array(p.call_method0("toTuple")?.extract()?))
