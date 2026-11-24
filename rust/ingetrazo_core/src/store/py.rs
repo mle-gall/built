@@ -10,6 +10,8 @@
 //! readers run detached from the GIL; single-element ops do not (a
 //! release/reacquire costs more than the op).
 
+mod command_face;
+
 use super::build::{Block, Points as BlockPoints};
 use super::edit::Change;
 use super::keys::Kind;
@@ -1484,6 +1486,17 @@ impl PyMeshStore {
         self.inner.curve_keys(curve)
     }
 
+    /// Create or restamp a command edge. The public result contains only key and change data.
+    #[staticmethod]
+    #[pyo3(signature = (mesh, a, b, soft=None, curve=None, layer=None))]
+    fn command_draw_edge(
+        mesh: &Bound<'_, PyAny>, a: [f64; 3], b: [f64; 3], soft: Option<bool>,
+        curve: Option<i64>, layer: Option<&str>,
+    ) -> PyResult<Option<(Option<u128>, bool, u32)>> {
+        Ok(super::command_facade::command_draw_edge(mesh, a, b, soft, curve, layer)?
+            .map(|r| (r.key, r.flags_changed, r.dirty)))
+    }
+
     /// Draw an edge, stamping optional attributes even on a coincident edge.
     /// Only a new edge belongs to the command. Keep each attribute write's
     /// revision for consumers of the protocol mesh record.
@@ -1895,52 +1908,42 @@ impl PyMeshStore {
     /// per primitive, as published through the protocol before this command.
     fn divide_drawn_face(&mut self, face: u128, holding: Vec<u128>, inside: Vec<u128>, hypot: &str)
         -> PyResult<Option<(usize, Option<u128>, Vec<u128>, bool)>> {
-        use super::drawing_face::Division;
         let f = live_of(&self.inner, Kind::Face, face)?;
-        let plan = self.inner.face_division(f, &self.drawing_candidates(Kind::Face, Some(holding))?,
-            &self.drawing_candidates(Kind::Face, Some(inside))?, crate::hypot_of(hypot)?);
-        let mut dirty = 0;
-        let mut remainder = Vec::new();
-        let mut swapped = false;
-        let paint_source = match plan {
-            None => return Ok(None),
-            Some(Division::Holes { mother, swap, enclosed }) => {
-                if let Some(m) = mother {
-                    let ring = if let Some((i, new)) = swap {
-                        let old = &self.inner.face_rings(m)[i+1];
-                        self.op(|s,ch| { s.remove_hole(m,old,ch); Ok(()) })?;
-                        swapped = true;
-                        new
-                    } else {
-                        self.inner.outer_ring(f).iter().map(|&v| *self.inner.state.vpos.get(v as usize)).collect()
-                    };
-                    dirty += ring.len();
-                    self.op(|s,ch| s.add_hole(m,&ring,ch))?;
-                }
-                for ring in enclosed {
-                    dirty += ring.len();
-                    self.op(|s,ch| s.add_hole(f,&ring,ch))?;
-                }
-                mother.map(|m| self.inner.key(Kind::Face,m))
-            }
-            Some(Division::Carve { mother, pieces }) => {
-                let key = self.inner.key(Kind::Face,mother);
-                self.remove_face(key)?;
-                dirty += 1;
-                for mut rings in pieces {
-                    if rings.len() > 2 {
-                        let keep = Self::maximal_holes(rings[1..].to_vec(), hypot)?;
-                        let mut mask = std::iter::once(true).chain(keep);
-                        rings.retain(|_| mask.next() == Some(true));
-                    }
-                    dirty += 1 + rings.iter().map(Vec::len).sum::<usize>();
-                    let (new,_) = self.op(|s,ch| s.add_face(&rings,ch))?;
-                    remainder.push(self.inner.key(Kind::Face,new));
-                }
-                Some(key)
-            }
-        };
-        Ok(Some((dirty,paint_source,remainder,swapped)))
+        self.divide_face_slots(f, &self.drawing_candidates(Kind::Face, Some(holding))?,
+            &self.drawing_candidates(Kind::Face, Some(inside))?, hypot)
+    }
+
+    #[staticmethod]
+    #[pyo3(signature = (mesh, outer, holes=None, attrs=None, interior=false, divide=true))]
+    fn command_add_face(
+        mesh: &Bound<'_, PyAny>, outer: Vec<[f64;3]>, holes: Option<Vec<Vec<[f64;3]>>>,
+        attrs: Option<&Bound<'_, PyDict>>, interior: bool, divide: bool,
+    ) -> PyResult<Option<super::command_facade::FaceResult>> {
+        Ok(super::command_facade::command_add_face(mesh, outer, holes, attrs, interior, divide)?
+            .map(super::command_facade::AddedFace::fields))
+    }
+
+    #[pyo3(signature = (rings, attrs, interior, divide, scan, hypot, owner))]
+    fn _add_command_face(
+        &mut self, py: Python<'_>, rings: Vec<Vec<[f64;3]>>, attrs: Option<&Bound<'_, PyDict>>,
+        interior: bool, divide: bool, scan: bool, hypot: &str, owner: &Bound<'_, PyDict>,
+    ) -> PyResult<Option<super::command_facade::FaceResult>> {
+        self.add_face_in_frame(py, rings, attrs, interior, divide, scan, hypot, owner)
+    }
+
+    #[staticmethod]
+    fn command_erase_selection(
+        mesh: &Bound<'_, PyAny>, loops: Vec<Vec<[f64;3]>>, segments: Vec<[[f64;3];2]>,
+    ) -> PyResult<Option<(Vec<u128>, Vec<u128>, Vec<([f64;3],[f64;3])>, Vec<u128>, u32, Py<PyAny>)>> {
+        Ok(super::command_facade::command_erase_selection(mesh, loops, segments)?
+            .map(|r| (r.edges, r.faces, r.slit_planes, r.across, r.dirty, r.footprint)))
+    }
+
+    #[staticmethod]
+    fn command_erase_cleanup(mesh: &Bound<'_, PyAny>, footprint: &Bound<'_, PyAny>)
+        -> PyResult<Option<(u32, Vec<u128>, u32, u32)>> {
+        Ok(super::command_facade::command_erase_cleanup(mesh, footprint)?
+            .map(|r| (r.seams, r.healed_faces, r.orphan_vertices, r.dirty)))
     }
 
     fn erase_selection(&mut self, loops: Vec<Vec<[f64;3]>>, ends: Vec<[[f64;3];2]>, hypot: &str)
@@ -1961,6 +1964,20 @@ impl PyMeshStore {
 
     fn erase_soft_seams(&mut self) -> usize {
         self.inner.erase_soft_seams()
+    }
+
+    #[staticmethod]
+    #[pyo3(signature = (mesh, segments, cascade_faces=true))]
+    fn command_delete_edges(mesh: &Bound<'_, PyAny>, segments: Vec<[[f64;3];2]>, cascade_faces: bool)
+        -> PyResult<Option<(Vec<u128>,Vec<u128>,u32)>> {
+        Ok(super::command_facade::command_delete_edges(mesh, segments, cascade_faces)?
+            .map(|r| (r.edges, r.faces, r.dirty)))
+    }
+
+    #[staticmethod]
+    fn command_delete_face(mesh: &Bound<'_, PyAny>, outer: Vec<[f64;3]>)
+        -> PyResult<Option<(Option<u128>,u32)>> {
+        Ok(super::command_facade::command_delete_face(mesh, outer)?.map(|r| (r.face, r.dirty)))
     }
 
     fn delete_face_loop(&mut self, points: Vec<[f64; 3]>, candidates: Vec<u128>)
@@ -2117,7 +2134,7 @@ impl PyMeshStore {
     /// `Mesh.add_face` with the rings as positions (outer first, holes
     /// already filtered): `(key, change)`.
     #[staticmethod]
-    fn maximal_holes(holes: Vec<Vec<[f64; 3]>>, hypot: &str) -> PyResult<Vec<bool>> {
+    pub(super) fn maximal_holes(holes: Vec<Vec<[f64; 3]>>, hypot: &str) -> PyResult<Vec<bool>> {
         if holes.len() < 2 {
             return Ok(vec![true; holes.len()]);
         }
