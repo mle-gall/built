@@ -2909,20 +2909,6 @@ def _mods(event) -> int:
 _BUTTONS = {Qt.LeftButton: 1, Qt.RightButton: 2, Qt.MiddleButton: 3}
 
 
-def title_double_click(view, event) -> bool:
-    """A double-click on the top strip zooms the window, as on a title bar."""
-    if not getattr(view, "_ui_attached", False):
-        return False
-    if not view.renderer.ui_top_empty(float(event.position().x()), float(event.position().y())):
-        return False
-    chrome = getattr(view.window(), "_mac_chrome", None)
-    glass = getattr(chrome, "_glass", None)
-    if glass is not None:
-        glass.zoom()
-        return True
-    return False
-
-
 def wheel(view, event) -> bool:
     if not getattr(view, "_ui_attached", False):
         return False

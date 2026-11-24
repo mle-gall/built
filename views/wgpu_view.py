@@ -42,8 +42,7 @@ def _ui_claims(view, name, event):
     if name == 'mouseReleaseEvent':
         return wgpu_ui.pointer(view, 'release', event)
     if name == 'mouseDoubleClickEvent':
-        return (wgpu_ui.title_double_click(view, event)
-                or wgpu_ui.pointer(view, 'press', event))
+        return wgpu_ui.pointer(view, 'press', event)
     if name == 'keyPressEvent':
         return wgpu_ui.key(view, event, True)
     if name == 'keyReleaseEvent':
