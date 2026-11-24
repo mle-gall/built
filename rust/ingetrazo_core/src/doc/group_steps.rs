@@ -191,6 +191,17 @@ fn run_split(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
     version(scene)
 }
 
+fn run_finish(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
+    // How a named material answers light in a render; the viewport draws
+    // the same. A material no longer in the registry is left alone.
+    let material = scene.getattr("materials")?.call_method1("get", (s.arg(py, 0),))?;
+    if material.is_none() {
+        return Ok(());
+    }
+    material.setattr("finish", s.arg(py, 1))?;
+    version(scene)
+}
+
 // ------------------------------------------------------------ the classes
 
 macro_rules! steps {
@@ -219,6 +230,16 @@ steps! {
     DeleteGroup = "DeleteGroupCommand";
     SetStructureNode = "SetStructureNodeCommand";
     SplitIntoPieces = "SplitIntoPiecesCommand";
+    SetMaterialFinish = "SetMaterialFinishCommand";
+}
+
+#[pymethods]
+impl SetMaterialFinish {
+    #[new]
+    fn new(name: Obj<'_>, finish: Obj<'_>) -> PyClassInitializer<Self> {
+        let step = RecordStep::new("SetMaterialFinishCommand", run_finish, vec![("_name", name), ("_finish", finish)]);
+        PyClassInitializer::from(step).add_subclass(Self)
+    }
 }
 
 #[pymethods]

@@ -19,7 +19,8 @@ from ingetrazo_core import Vec3 as QVector3D
 # whole-placement paint are Rust deltas, created through the protocol verbs.
 from ingetrazo_core import NativeCommand
 # Group and component steps (rust/ingetrazo_core/src/doc/group_steps.rs).
-from ingetrazo_core import (ReplaceComponentCommand, KeepComponentCommand, AddKeptComponentsCommand, GroupToComponentCommand, EditText3DCommand, ReparentGroupsCommand, MergeGroupsCommand, MakeUniqueCommand, InsertGroupCommand, DeleteGroupCommand, SetStructureNodeCommand, SplitIntoPiecesCommand)
+from ingetrazo_core import (ReplaceComponentCommand, KeepComponentCommand, AddKeptComponentsCommand, GroupToComponentCommand, EditText3DCommand, ReparentGroupsCommand, MergeGroupsCommand, MakeUniqueCommand, InsertGroupCommand, DeleteGroupCommand, SetStructureNodeCommand, SplitIntoPiecesCommand,
+                            SetMaterialFinishCommand)
 # Annotation, section, guide, image, survey, saved-scene and sheet steps
 # (rust/ingetrazo_core/src/doc/steps.rs): the retired classes' names.
 from ingetrazo_core import (RecordStep, AddDimensionCommand, DeleteDimensionsCommand, AddTextLabelCommand, MoveTextLabelsCommand, MoveGuidesCommand, RotateGuidesCommand, MoveDimensionsCommand, EditTextLabelCommand, EditDimensionTextCommand, DeleteTextLabelsCommand, AddGuideCommand, PlaceSectionPlaneCommand, DeleteSectionPlanesCommand, ReverseSectionPlaneCommand, SetActiveSectionCommand, SetSectionModeCommand, SetSectionFillCommand, RenameSectionPlaneCommand, AddSheetCommand, PlaceViewCommand, SheetCommand, InsertSheetCommand, RemoveSheetCommand, MoveSheetCommand, CreatePlanCommand, AddSceneCommand, DeleteScenesCommand, UpdateSceneCommand, SceneTreeCommand, MoveSectionPlanesCommand, RotateSectionPlanesCommand, ChangeGuideCommand, DeleteGuidesCommand, AddImagePlaneCommand, DeleteImagePlanesCommand, TransformImagePlaneCommand, SetImagePlaneOpacityCommand, MoveImagePlanesCommand, RotateImagePlanesCommand, ScaleImagePlanesCommand, AddGeoPathCommand, DeleteGeoPointsCommand, DeleteGeoPathsCommand, ToggleGeoPathClosedCommand, SetGeoPathSurfaceCommand, MoveGeoPathNodeCommand)
@@ -1154,34 +1155,6 @@ class SetFaceMaterialTagCommand(_FacePaintCommand):
         if self._registered:
             scene.materials.pop(self._name, None)
             self._registered = False
-        scene.version += 1
-
-
-class SetMaterialFinishCommand(Command):
-    """Choose how a named material answers light in a render (core.finish;
-    ``None`` = guess it from the name again). Only the registry entry
-    changes — the viewport draws the same — so undo is exact and cheap."""
-
-    doc_undo = True
-
-    def __init__(self, name, finish) -> None:
-        self._name = name
-        self._finish = finish
-        self._old = None
-
-    def do(self, scene) -> None:
-        mat = scene.materials.get(self._name)
-        if mat is None:
-            return
-        self._old = mat.finish
-        mat.finish = self._finish
-        scene.version += 1
-
-    def undo(self, scene) -> None:
-        mat = scene.materials.get(self._name)
-        if mat is None:
-            return
-        mat.finish = self._old
         scene.version += 1
 
 
