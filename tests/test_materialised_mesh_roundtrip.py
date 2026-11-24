@@ -87,3 +87,32 @@ def test_seeded_fold_keeps_winding_attributes_and_soft_edges():
                  sorted((sorted((e.a.toTuple(), e.b.toTuple())), e.soft) for e in mesh.edges))
         digest.update(json.dumps(graph, sort_keys=True).encode())
     assert digest.hexdigest() == "8272ab89c8fab76290fc702e348b93139b42ed04a478706852a6dbb2f341b309"
+
+
+def test_seeded_orphan_trim_and_displaced_registry():
+    from core.topology import prune_collinear_orphan_edges
+
+    rng = random.Random(19654)
+    digest = hashlib.sha256()
+    for seed in range(32):
+        mesh = empty_store_mesh()
+        intervals = [(0, 12), (3, 6), (8, 10), (11, 16)]
+        rng.shuffle(intervals)
+        for a, b in intervals:
+            e = mesh.add_edge(Vec3(a, 0, 0), Vec3(b, 0, 0))
+            e.layer = str(a)
+            e.soft = a % 2 == 0
+        ends = [mesh.add_edge(Vec3(i, 4, 0), Vec3(i, 6, 0)).v0 for i in range(4)]
+        mesh._materialise()
+        for v in ends[1:]:
+            mesh.place_vertex(v, ends[0].position)
+        mesh.move_vertex(ends[0], Vec3(2, 2, 0))
+        mesh.move_vertex(ends[rng.randrange(1, 4)], Vec3(-2, 1, 0))
+        removed = prune_collinear_orphan_edges(mesh)
+        debris = mesh.purge_debris()
+        graph = ([(e.a.toTuple(), e.b.toTuple(), e.layer, e.soft) for e in mesh.edges],
+                 [e.layer for e in removed], [mesh.registers(v) for v in ends], debris,
+                 sorted((cell, v.key % 2**40) for cell, v in mesh._registry.items()),
+                 sorted((cell, [v.key % 2**40 for v in vs]) for cell, vs in mesh._displaced.items()))
+        digest.update(json.dumps(graph).encode())
+    assert digest.hexdigest() == "9e36e5bf1ae1499218675f3b412554e1504bc51174e4966b8f1447eb93b91c4d"

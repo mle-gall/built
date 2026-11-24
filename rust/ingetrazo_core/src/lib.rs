@@ -297,7 +297,6 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pushscan::scan_cracked_edges, m)?)?;
     m.add_function(wrap_pyfunction!(pushscan::scan_faces_meeting_rings, m)?)?;
     m.add_function(wrap_pyfunction!(pushscan::store_keys_since, m)?)?;
-    m.add_function(wrap_pyfunction!(pushscan::scan_tjunction_arrays, m)?)?;
     m.add_function(wrap_pyfunction!(pushscan::scan_mesh_is_flat, m)?)?;
     m.add_function(wrap_pyfunction!(orient::scan_face_indices, m)?)?;
     m.add_function(wrap_pyfunction!(occlusion_span, m)?)?;
@@ -499,6 +498,11 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     presentation::register(m)?;
     object_replay::register(m)?;
     object_drawing::register(m)?;
+    m.add_function(wrap_pyfunction!(object_outline::object_hole_mask, m)?)?;
+    m.add_function(wrap_pyfunction!(object_outline::flat_faces, m)?)?;
+    m.add_class::<object_outline::HoleBounds>()?;
+    m.add_function(wrap_pyfunction!(object_outline::interior_point, m)?)?;
+    m.add_function(wrap_pyfunction!(object_outline::inside_loop, m)?)?;
     m.add_class::<object_outline::FaceOutline>()?;
     m.add_function(wrap_pyfunction!(object_outline::winding_footprint, m)?)?;
     m.add_function(wrap_pyfunction!(object_outline::object_winding, m)?)?;

@@ -73,6 +73,43 @@ fn uncovered([a, b]: Segment, cover: &[Segment], h: Hypot) -> Vec<Segment> {
     pieces
 }
 
+pub(crate) fn orphan_pieces(
+    segments: &[Segment],
+    orphans: &[usize],
+    h: Hypot,
+) -> Vec<(usize, Vec<Segment>)> {
+    let mut plans = Vec::new();
+    let boxes: Vec<Box3> = segments
+        .iter()
+        .map(|&[a, b]| {
+            let (a, b): ([f64; 3], [f64; 3]) = (a.into(), b.into());
+            (
+                std::array::from_fn(|i| a[i].min(b[i]) - PLANAR),
+                std::array::from_fn(|i| a[i].max(b[i]) + PLANAR),
+            )
+        })
+        .collect();
+    let queries: Vec<_> = orphans.iter().map(|&i| boxes[i]).collect();
+    let (rows, columns) = touching(&queries, &boxes, false, 0.);
+    let mut hits = rows.into_iter().zip(columns).peekable();
+    let mut gone = vec![false; segments.len()];
+    for (row, &i) in orphans.iter().enumerate() {
+        let mut cover = Vec::new();
+        while let Some((_, col)) = hits.next_if(|&(r, _)| r as usize == row) {
+            let j = col as usize;
+            if j != i && !gone[j] && overlaps(segments[i], segments[j], h) {
+                cover.push(segments[j]);
+            }
+        }
+        if cover.is_empty() {
+            continue;
+        }
+        gone[i] = true;
+        plans.push((i, uncovered(segments[i], &cover, h)));
+    }
+    plans
+}
+
 impl Store {
     pub(super) fn prune_overlapping_edges(
         &mut self,
@@ -100,40 +137,15 @@ impl Store {
                     .map(|v| vector(*self.state.vpos.get(v as usize)))
             })
             .collect();
-        let boxes: Vec<Box3> = segments
-            .iter()
-            .map(|&[a, b]| {
-                let (a, b): ([f64; 3], [f64; 3]) = (a.into(), b.into());
-                (
-                    std::array::from_fn(|i| a[i].min(b[i]) - PLANAR),
-                    std::array::from_fn(|i| a[i].max(b[i]) + PLANAR),
-                )
-            })
-            .collect();
-        let queries: Vec<_> = orphans.iter().map(|&i| boxes[i]).collect();
-        let (rows, columns) = touching(&queries, &boxes, false, 0.);
-        let mut hits = rows.into_iter().zip(columns).peekable();
-        let mut gone = vec![false; edges.len()];
-        for (row, &i) in orphans.iter().enumerate() {
-            let mut cover = Vec::new();
-            while let Some((_, col)) = hits.next_if(|&(r, _)| r as usize == row) {
-                let j = col as usize;
-                if j != i && !gone[j] && overlaps(segments[i], segments[j], h) {
-                    cover.push(segments[j]);
-                }
-            }
-            if cover.is_empty() {
-                continue;
-            }
+        for (i, pieces) in orphan_pieces(&segments, &orphans, h) {
             let e = edges[i];
             let flags = *self.state.eflags.get(e as usize);
             let layer = *self.state.elayer.get(e as usize);
             let curve = *self.state.ecurve.get(e as usize);
             removed.push(self.key(Kind::Edge, e));
             self.remove_edge(e, ch);
-            gone[i] = true;
             bumps += 1;
-            for [a, b] in uncovered(segments[i], &cover, h) {
+            for [a, b] in pieces {
                 let (a, b) = (a.into(), b.into());
                 if self
                     .lookup(a)

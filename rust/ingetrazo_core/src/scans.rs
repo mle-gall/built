@@ -795,6 +795,81 @@ impl MeshScan {
         Ok((p[0], p[1], p[2]))
     }
 
+    /// Ordered T-junction splits. Keep the dense arrays in the scan and only
+    /// return the edge and vertex indices which the facade has to reattach.
+    fn stitch_hits(
+        &mut self,
+        py: Python<'_>,
+        seeds: Vec<[f64; 3]>,
+        tolerance: f64,
+    ) -> PyResult<Vec<(u32, u32)>> {
+        use crate::store::stitch_command::{junction_scope, junctions};
+        self.need(py, EDGES)?;
+        let bounds = (!seeds.is_empty()).then(|| {
+            let mut lo = [f64::INFINITY; 3];
+            let mut hi = [f64::NEG_INFINITY; 3];
+            for p in seeds {
+                for k in 0..3 {
+                    lo[k] = lo[k].min(p[k]);
+                    hi[k] = hi[k].max(p[k]);
+                }
+            }
+            [lo.map(|x| x - tolerance), hi.map(|x| x + tolerance)]
+        });
+        let (verts, edges) = junction_scope(
+            (0..self.n_listed as u32).collect(),
+            (0..self.ends.len() as u32).collect(),
+            bounds,
+            tolerance,
+            |v| self.pos[v as usize],
+            |e| self.ends[e as usize],
+        );
+        if edges.is_empty() || verts.is_empty() {
+            return Ok(vec![]);
+        }
+        let points: Vec<_> = verts.iter().map(|&v| self.pos[v as usize]).collect();
+        let mut local = vec![-1; self.pos.len()];
+        for (i, &v) in verts.iter().enumerate() {
+            local[v as usize] = i as i64;
+        }
+        let ends: Vec<_> = edges
+            .iter()
+            .map(|&e| self.ends[e as usize].map(|v| local[v as usize]))
+            .collect();
+        let hits = junctions(&points, &ends, bounds, tolerance).map_err(PyValueError::new_err)?;
+        Ok(hits
+            .into_iter()
+            .map(|(e, v)| (edges[e], verts[v]))
+            .collect())
+    }
+
+    /// Loose edges to remove and the uncovered stretches to restore, in live-list order.
+    fn orphan_pieces(&mut self, py: Python<'_>) -> PyResult<Vec<(usize, Vec<[[f64; 3]; 2]>)>> {
+        use crate::store::geometry::{Hypot, V3};
+        self.need(py, EFLAGS)?;
+        let orphans: Vec<_> = (0..self.enf.len()).filter(|&e| self.enf[e] == 0).collect();
+        if orphans.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.need(py, EDGES)?;
+        let segments: Vec<_> = self
+            .ends
+            .iter()
+            .map(|ends| {
+                ends.map(|v| {
+                    let [x, y, z] = self.pos[v as usize];
+                    V3(x, y, z)
+                })
+            })
+            .collect();
+        let cuts =
+            crate::store::orphan_overlap::orphan_pieces(&segments, &orphans, Hypot::LibStdCxx);
+        Ok(cuts
+            .into_iter()
+            .map(|(i, pieces)| (i, pieces.into_iter().map(|s| s.map(Into::into)).collect()))
+            .collect())
+    }
+
     /// Edges bounding no face (``soft_only``: soft ones only).
     fn edges_faceless(&mut self, py: Python<'_>, soft_only: bool) -> PyResult<Vec<u32>> {
         self.need(py, EFLAGS)?;

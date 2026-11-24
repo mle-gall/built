@@ -150,10 +150,11 @@ class Scan:
         self._tkey = {}
         return self
 
-    def __init__(self, mesh) -> None:
-        from core import _native
+    def __init__(self, mesh, mod=None) -> None:
         from core import store_mesh
-        mod = _native.native
+        if mod is None:
+            from core import _native
+            mod = _native.native
         self._mesh = weakref.ref(mesh)
         self.store_backed = type(mesh) is store_mesh.StoreMesh
         if self.store_backed:

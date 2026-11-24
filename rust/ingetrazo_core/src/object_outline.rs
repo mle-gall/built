@@ -309,3 +309,119 @@ pub(crate) fn object_winding<'py>(
     let by_key: std::collections::HashMap<_, _> = keys.into_iter().zip(fs).collect();
     Ok(flips.iter().map(|k| by_key[k].clone()).collect())
 }
+
+/// Hole rejection bound exposed for comparison with an exhaustive containment walk.
+#[pyclass(frozen)]
+pub(crate) struct HoleBounds {
+    boxes: crate::store::fillet::HoleBoxes,
+    origins: Option<Vec<V3>>,
+}
+#[pymethods]
+impl HoleBounds {
+    #[new]
+    fn new(holes: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let rings = holes
+            .try_iter()?
+            .map(|r| {
+                Ok(positions(&r?)?
+                    .into_iter()
+                    .map(|[x, y, z]| V3(x, y, z))
+                    .collect::<Vec<_>>())
+            })
+            .collect::<PyResult<Vec<_>>>()?;
+        let origins = rings.iter().map(|r| r.first().copied()).collect();
+        Ok(Self {
+            boxes: crate::store::fillet::HoleBoxes::new(&rings),
+            origins,
+        })
+    }
+    fn maybe_around(
+        &self,
+        i: usize,
+        normal: &Bound<'_, PyAny>,
+        others: Vec<usize>,
+    ) -> PyResult<Vec<usize>> {
+        let Some(ref origins) = self.origins else {
+            return Ok(others);
+        };
+        if i >= origins.len() || others.iter().any(|&j| j >= origins.len()) {
+            return Err(pyo3::exceptions::PyIndexError::new_err(
+                "hole index out of range",
+            ));
+        }
+        let [x, y, z] = xyz(normal)?.to_array();
+        let gap = self.boxes.gap(origins[i], V3(x, y, z));
+        Ok(others
+            .into_iter()
+            .filter(|&j| self.boxes.near(i, j, gap))
+            .collect())
+    }
+}
+
+#[pyfunction]
+pub(crate) fn interior_point(
+    ring: &Bound<'_, PyAny>,
+    normal: &Bound<'_, PyAny>,
+) -> PyResult<Option<Vec3>> {
+    let [x, y, z] = xyz(normal)?.to_array();
+    let outline = Outline::from_rings(vec![positions(ring)?], V3(x, y, z), Hypot::LibStdCxx);
+    Ok(outline.interior().map(|p| Vec3::from(DVec3::from_array(p))))
+}
+
+#[pyfunction]
+pub(crate) fn inside_loop(
+    inner: &Bound<'_, PyAny>,
+    outer: &Bound<'_, PyAny>,
+    normal: &Bound<'_, PyAny>,
+    compensated: bool,
+) -> PyResult<bool> {
+    let [x, y, z] = xyz(normal)?.to_array();
+    let outline = |rings| Outline::from_rings(rings, V3(x, y, z), Hypot::LibStdCxx);
+    let inner = outline(vec![positions(inner)?]);
+    let outer = outline(vec![vec![], positions(outer)?]);
+    Ok(outer.hole_contains(&inner, compensated))
+}
+
+#[pyfunction]
+pub(crate) fn object_hole_mask(holes: &Bound<'_, PyAny>) -> PyResult<Vec<bool>> {
+    let rings = holes
+        .try_iter()?
+        .map(|r| {
+            let ring = positions(&r?)?;
+            if ring.len() < 3 {
+                return Err(pyo3::exceptions::PyIndexError::new_err(
+                    "hole has fewer than three corners",
+                ));
+            }
+            Ok(ring.into_iter().map(|[x, y, z]| V3(x, y, z)).collect())
+        })
+        .collect::<PyResult<Vec<_>>>()?;
+    let v = holes.py().version_info();
+    Ok(crate::store::fillet::maximal_holes_with_sum(
+        &rings,
+        Hypot::LibStdCxx,
+        (v.major, v.minor) >= (3, 12),
+    ))
+}
+
+#[pyfunction]
+pub(crate) fn flat_faces(faces: &Bound<'_, PyAny>, tol: f64) -> PyResult<bool> {
+    if faces.len()? < 2 {
+        return Ok(true);
+    }
+    let plane = |f: &Bound<'_, PyAny>| -> PyResult<_> {
+        let n = xyz(&f.call_method0("normal")?)?;
+        let p = xyz(&f.getattr("vertices")?.get_item(0)?)?;
+        Ok((n, p))
+    };
+    let (n, p) = plane(&faces.get_item(0)?)?;
+    let u = n.normalize_or_zero();
+    let offset = n.dot(p);
+    for face in faces.try_iter()?.skip(1) {
+        let (m, q) = plane(&face?)?;
+        if !(u.dot(m.normalize_or_zero()).abs() > 0.999) || (n.dot(q) - offset).abs() > tol {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}

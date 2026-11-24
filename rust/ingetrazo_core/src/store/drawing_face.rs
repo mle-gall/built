@@ -199,7 +199,7 @@ impl Outline {
 }
 
 impl Outline {
-    pub(super) fn interior(&self) -> Option<P> {
+    pub(crate) fn interior(&self) -> Option<P> {
         if self.rings.first().is_none_or(|r| r.len() < 3) {
             return None;
         }
@@ -527,7 +527,7 @@ impl Store {
 }
 
 impl Outline {
-    fn hole_contains(&self, other: &Outline, compensated: bool) -> bool {
+    pub(crate) fn hole_contains(&self, other: &Outline, compensated: bool) -> bool {
         use crate::store::geometry::py_sum;
         let inner = &other.rings[0];
         if inner.len() < 3 || self.rings.len() < 2 {
