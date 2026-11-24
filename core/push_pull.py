@@ -321,9 +321,8 @@ class PushPullOperation:
         # and frames only slide its cap. Running the pipeline per mouse-move
         # cost ~0.3 s a frame on an imported barbecue.
         self._light_faces: list = []
-        # The sweep's rings, ``[(base_ring, moved_ring), …]`` (outer first,
-        # then holes) — the wireframe is drawn straight off them.
-        self._light_rings: list = []
+        # Top outlines and hard risers from the extrusion preview.
+        self._light_wires: list = []
         # ---- Hot retype ------------------------------------------------------
         # The just-committed push, adjustable by typing (on_value): typing a
         # distance undoes that one command and re-commits the push at the
@@ -634,7 +633,7 @@ class PushPullOperation:
             return
         viewport.set_hover(None)  # the hovered face is about to be replaced
         self._light_faces = []
-        self._light_rings = []
+        self._light_wires = []
         viewport.set_suppressed_faces(set())
         # A held stage showing this very distance is kept as the result;
         # otherwise drop the live preview and redo it for real.
@@ -933,7 +932,7 @@ class PushPullOperation:
         self._infer_boxes = None       # ... and where they fall on screen
         self._refused = False
         self._light_faces = []
-        self._light_rings = []
+        self._light_wires = []
         self._last = None             # the retype window closes with the drag
 
     def _spend_keep_mode(self, viewport) -> None:

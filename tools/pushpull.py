@@ -44,7 +44,7 @@ import math
 import time
 
 from PySide6.QtCore import Qt
-from ingetrazo_core import Vec3 as QVector3D
+from ingetrazo_core import Vec3 as QVector3D, push_sweep_preview, push_guide_reference
 from views import input_state
 
 from core.geometry import Face
@@ -380,7 +380,7 @@ class PushPullTool(PushPullOperation, RustTool):
         self._prism_applied = 0.0
         self._prism_verts = []
         self._light_faces = []
-        self._light_rings = []
+        self._light_wires = []
         self._infer_cache = None
         self._refused = False
         self._topped_out = False
@@ -388,7 +388,7 @@ class PushPullTool(PushPullOperation, RustTool):
 
     def host_cancel(self, viewport, args):
         self._light_faces = []
-        self._light_rings = []
+        self._light_wires = []
         self._revert_preview(viewport)
         viewport.set_hover(None)
         viewport.set_suppressed_faces(set())
@@ -410,99 +410,25 @@ class PushPullTool(PushPullOperation, RustTool):
     # commit replaces both with the real stitched geometry. A prism or staged
     # preview shows the model itself and leaves both empty.
     def rubber_band_lines(self):
-        """The sweep's edges: the base ring, the moved ring, and one riser per
-        corner — for the outer loop and every hole.
-
-        The overlay draws its faces FILLED and nothing else, so without this
-        the forming solid slid under the cursor as a flat silhouette with no
-        edges, and only snapped into a real box once the drag ended (Marco,
-        2026-08-27). The mesh-mutating preview it replaced got its edges for
-        free, from the mesh; the overlay has to say them out loud.
-
-        A riser that the commit is going to SOFTEN is left out: pushing a
-        circle drew every facet seam of the cylinder's side, so the shape
-        arrived streaked with lines and only cleaned up on release (Marco,
-        2026-08-27). The same dihedral rule ``Store::finish_push`` applies
-        afterwards decides it here — read off the sweep's own wall normals,
-        no mesh needed — so a circle previews as a smooth cylinder while a
-        hexagon keeps the edges it will really have. A circle's own segments
-        stay visible either way: the Circle tool does not soften them, only
-        the sweep's verticals are.
-
-        The BASE ring is not drawn at all. Those edges belong to the base
-        face and are already in the mesh, so the model draws them itself —
-        saying them again put a seam across the block the drag was forming,
-        because the preview's polygon offset let the repeat win the depth
-        test against its own faces (Marco, 2026-08-27).
-
-        They cost a handful of points: the rings are the base face's own
-        loops, already built for the sweep. Drawn in ``wireframe_color`` and
-        depth-tested (class attributes above), so the box hides its own back
-        edges and reads like real geometry rather than a loose rubber band."""
-        segs = []
-        for low, high in self._light_rings:
-            n = len(low)
-            if n < 2:
-                continue
-            # Wall i spans low[i]→low[i+1]; its normal is that edge crossed
-            # with the sweep. The riser at corner i divides walls i-1 and i.
-            off = high[0] - low[0]
-            normals = []
-            for i in range(n):
-                nv = QVector3D.crossProduct(low[(i + 1) % n] - low[i], off)
-                normals.append(nv.normalized() if nv.length() > 1e-12 else None)
-            for i in range(n):
-                j = (i + 1) % n
-                segs.append((high[i], high[j]))
-                a, b = normals[i - 1], normals[i]
-                if a is not None and b is not None:
-                    d = QVector3D.dotProduct(a, b)
-                    if self._CURVE_FACET_COS < d < 0.99995:
-                        continue          # curve facet: soft once committed
-                segs.append((low[i], high[i]))
-        return segs
+        return self._light_wires
 
     def preview_faces(self):
         return self._light_faces
 
     def _build_light_faces(self):
-        """The naive sweep of the base face as plain preview polygons: the
-        moved cap (holes carried) and one quad per boundary and hole edge.
-
-        This is the *shape* the push makes, without any of the work that makes
-        it a valid solid — no stitch, no per-plane rebuild, no guard. Those
-        decide how the new geometry MERGES with what is already there, which
-        is exactly what you cannot see while the shape is still moving."""
-        d = self.extrusion
-        self._light_rings = []
-        if (self.base_face is None or self._normal is None
-                or abs(d) < _MIN_EXTRUDE):
+        self._light_wires = []
+        if self.base_face is None or self._normal is None or abs(self.extrusion) < _MIN_EXTRUDE:
             return []
-        out = self._sweep_faces(self.base_face, self._normal * d)
-        for face, n in zip(self._extra_faces, self._extra_normals):
-            out += self._sweep_faces(face, n * d)
-        return out
-
-    def _sweep_faces(self, face, off: QVector3D) -> list:
-        """One face's naive sweep by ``off``; its rings join
-        ``_light_rings``, which the wireframe reads back."""
-        attrs = dict(face.attrs) if face.attrs else None
-        # The walls take the base's PAINT, re-anchored to their own planes —
-        # the same thing the commit stamps on them, so the drag shows the
-        # material the push is about to produce instead of bare cream.
-        wall_attrs = _paint_of(face) or None
-        rings = [(list(face.vertices), [p + off for p in face.vertices])]
-        rings += [(list(h), [p + off for p in h]) for h in face.holes]
-        self._light_rings += rings
-        cap = Face(rings[0][1], [r[1] for r in rings[1:]], attrs=attrs)
-        out = [cap]
-        for low, high in rings:
-            count = len(low)
-            for i in range(count):
-                j = (i + 1) % count
-                out.append(Face([low[i], low[j], high[j], high[i]],
-                                attrs=wall_attrs))
-        return out
+        faces = []
+        for face, normal in zip((self.base_face, *self._extra_faces),
+                                (self._normal, *self._extra_normals)):
+            cap, walls, wires = push_sweep_preview(face, normal * self.extrusion,
+                                                  self._CURVE_FACET_COS)
+            faces.append(Face(cap[0], cap[1:], dict(face.attrs) if face.attrs else None))
+            paint = _paint_of(face) or None
+            faces.extend(Face(wall, attrs=paint) for wall in walls)
+            self._light_wires.extend(wires)
+        return faces
 
     def _show_light_preview(self, viewport) -> None:
         """Drop any applied preview and show the sweep as an overlay instead.
@@ -585,7 +511,7 @@ class PushPullTool(PushPullOperation, RustTool):
         operation, so the two always agree.
         """
         self._light_faces = []
-        self._light_rings = []
+        self._light_wires = []
         viewport.set_suppressed_faces(set())
         delta = self.extrusion - self._prism_applied
         if abs(delta) > 1e-12:
@@ -624,7 +550,7 @@ class PushPullTool(PushPullOperation, RustTool):
         stages anew (_enter_stage). A refused or failed stage, or any new one
         once staging proved slow, shows the overlay instead."""
         self._light_faces = []
-        self._light_rings = []
+        self._light_wires = []
         d = self.extrusion
         if abs(d) < _MIN_EXTRUDE:
             # Nothing to show, as the overlay. Parked, not dropped: the
@@ -1223,48 +1149,8 @@ class PushPullTool(PushPullOperation, RustTool):
         return False
 
     def _infer_guide_line(self, vp, guides, sx, sy, thr):
-        """The guide LINE under the cursor, as (point on it, push distance):
-        the point of the guide nearest the cursor's ray, taken when it lands
-        within the snap threshold on screen. A guide parallel to the push
-        axis says nothing about how far to push, so it is skipped."""
-        lines = [g for g in guides if getattr(g, "direction", None) is not None]
-        to_ray = getattr(vp, "_pixel_to_ray", None)
-        if not lines or to_ray is None:
-            return None
-        origin, direction = to_ray(sx, sy)
-        if origin is None or direction is None:
-            return None
-        best = None
-        for g in lines:
-            gd = getattr(g, "direction", None)
-            if gd is None:
-                continue
-            if abs(QVector3D.dotProduct(gd, self._normal)) > 0.999:
-                continue
-            # closest points between the guide line and the cursor ray
-            w0 = g.point - origin
-            a = QVector3D.dotProduct(gd, gd)
-            b = QVector3D.dotProduct(gd, direction)
-            c = QVector3D.dotProduct(direction, direction)
-            d = QVector3D.dotProduct(gd, w0)
-            e = QVector3D.dotProduct(direction, w0)
-            den = a * c - b * b
-            if abs(den) < 1e-12:
-                continue
-            s_ = (b * e - c * d) / den
-            on = g.point + gd * s_
-            pix = vp._world_to_pixel(on)
-            if pix is None:
-                continue
-            dd = (pix[0] - sx) ** 2 + (pix[1] - sy) ** 2
-            if dd > thr * thr:
-                continue
-            dist = QVector3D.dotProduct(on - self._anchor, self._normal)
-            if abs(dist) < _MIN_EXTRUDE:
-                continue
-            if best is None or dd < best[0]:
-                best = (dd, QVector3D(on), dist)
-        return None if best is None else (best[1], best[2])
+        return push_guide_reference(vp, guides, (sx, sy), thr, self._anchor,
+                                    self._normal, _MIN_EXTRUDE)
 
     @staticmethod
     def _selected_faces(scene) -> list:

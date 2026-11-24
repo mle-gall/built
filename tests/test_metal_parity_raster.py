@@ -175,6 +175,21 @@ def test_tool_wire_draws_over_faces_and_clears(native):
     np.testing.assert_array_equal(original, capture(native))
 
 
+def test_loose_transform_preview_restores_resident_faces(native):
+    vertices, _, _, _, _ = upload(native, 255)
+    native.set_style(dict(sky=False, edges=False))
+    original = capture(native)
+    selected = vertices["pos"][:6].tolist()
+    assert native.begin_tool_geometry(0, vertices.view(np.uint8).ravel(), selected, [0., 0., 0.])
+    transform = np.eye(4)
+    transform[3, 0] = 3.
+    native.pose_tool_geometry(transform.ravel().tolist())
+    moved = capture(native)
+    assert moved[32, 32, 2] > moved[32, 32, 0]
+    native.end_tool_geometry()
+    np.testing.assert_array_equal(original, capture(native))
+
+
 def test_tool_pick_same_pixel_tracks_instance_changes(native):
     _, _, _, _, rows = upload(native, 255)
     assert native.pick(32, 32) == 0

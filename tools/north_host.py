@@ -71,10 +71,6 @@ class NorthTool(RustTool):
         from core.sun import scene_north_deg
         return scene_north_deg(getattr(vp, "scene", None))
 
-    def host_north_pixels(self, vp, pts):
-        project = getattr(vp, "_world_to_pixel", None)
-        return [project(Vec3(*p)) for p in pts] if project else None
-
     def host_north_done(self, vp, result):
         from core.i18n import tr
         from core.units import fmt_angle_deg

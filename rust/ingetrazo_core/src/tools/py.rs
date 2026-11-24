@@ -14,6 +14,9 @@ use super::{new_tool, ViewReading, Answer, Command, Grow, Mods, Pick, PickKind, 
             ToolEvent, ToolHost, Value, P3};
 
 pub fn json_to_py<'py>(py: Python<'py>, v: &serde_json::Value) -> PyResult<Bound<'py, PyAny>> {
+    json_values(py,v,true)
+}
+pub(super) fn json_values<'py>(py: Python<'py>, v: &serde_json::Value, tuples: bool) -> PyResult<Bound<'py, PyAny>> {
     use serde_json::Value as J;
     Ok(match v {
         J::Null => py.None().into_bound(py),
@@ -24,13 +27,13 @@ pub fn json_to_py<'py>(py: Python<'py>, v: &serde_json::Value) -> PyResult<Bound
         },
         J::String(s) => s.into_pyobject(py)?.into_any(),
         J::Array(a) => {
-            let items = a.iter().map(|x| json_to_py(py, x)).collect::<PyResult<Vec<_>>>()?;
-            PyTuple::new(py, items)?.into_any()
+            let items = a.iter().map(|x| json_values(py, x, tuples)).collect::<PyResult<Vec<_>>>()?;
+            if tuples { PyTuple::new(py, items)?.into_any() } else { PyList::new(py,items)?.into_any() }
         }
         J::Object(o) => {
             let d = PyDict::new(py);
             for (k, x) in o {
-                d.set_item(k, json_to_py(py, x)?)?;
+                d.set_item(k, json_values(py, x, tuples)?)?;
             }
             d.into_any()
         }
@@ -245,6 +248,13 @@ impl<'py> PyHost<'_, 'py> {
 
 impl ToolHost for PyHost<'_, '_> {
     fn run(&mut self, cmd: &Command) -> Answer {
+        if let Ok(host) = self.obj.cast::<super::view_queries::ViewportToolHost>() {
+            if self.err.is_some() { return Answer::default(); }
+            return match host.borrow().command(self.py(),cmd.name,&cmd.args) {
+                Ok(answer) => answer,
+                Err(error) => { self.err=Some(error); Answer::default() }
+            };
+        }
         let args = vec![self.s(cmd.name), self.s(&cmd.args.to_string())];
         let v = self.call("run", args);
         let Some((ok, revision, face_delta, error)) = self.take::<(bool, u64, i64, Option<String>)>(v) else {
@@ -352,6 +362,17 @@ impl ToolHost for PyHost<'_, '_> {
     }
     fn close_placement(&mut self) { self.call("close_placement", vec![]); }
     fn call(&mut self, verb: &str, args: serde_json::Value) -> serde_json::Value {
+        if self.err.is_some() { return serde_json::Value::Null; }
+        if let Ok(host) = self.obj.cast::<super::view_queries::ViewportToolHost>() {
+            match host.borrow().service(self.py(), verb, &args) {
+                Ok(Some(result)) => return result,
+                Ok(None) => {}
+                Err(error) => {
+                    self.err = Some(error);
+                    return serde_json::Value::Null;
+                }
+            }
+        }
         let a = match json_to_py(self.py(), &args) {
             Ok(a) => a,
             Err(e) => {

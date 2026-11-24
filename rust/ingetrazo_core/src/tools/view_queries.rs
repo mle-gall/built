@@ -1,5 +1,6 @@
 //! Document interaction queries over a viewport. The viewport supplies the
 //! resident hit-test surface and Python record objects; machines see handles.
+use super::handles::ToolHandles;
 use pyo3::{
     prelude::*,
     types::{PyDict, PyFrozenSet, PyTuple},
@@ -33,6 +34,7 @@ pub(super) fn classify(entity: &Bound<'_, PyAny>) -> PyResult<&'static str> {
             ("core.image_plane", "ImagePlane", "image_plane"),
             ("core.guide", "Guide", "guide"),
             ("core.guide", "GuideCircle", "guide"),
+            ("georef.geopath", "GeoPath", "geopath"),
         ]
         .into_iter()
         .map(|(module, class, kind)| Ok((py.import(module)?.getattr(class)?.unbind(), kind)))
@@ -49,38 +51,59 @@ pub(super) fn classify(entity: &Bound<'_, PyAny>) -> PyResult<&'static str> {
 #[pyclass(module = "ingetrazo_core", subclass)]
 pub struct ViewportToolHost {
     #[pyo3(get)]
-    vp: Py<PyAny>,
+    pub(super) vp: Py<PyAny>,
     #[pyo3(get)]
-    handles: Option<Py<PyAny>>,
+    handles: Option<Py<ToolHandles>>,
     #[pyo3(get)]
-    tool: Option<Py<PyAny>>,
+    pub(super) tool: Option<Py<PyAny>>,
 }
 impl ViewportToolHost {
-    fn id(&self, entity: &Bound<'_, PyAny>) -> PyResult<u64> {
-        self.table(entity.py())?
-            .call_method1("id", (entity,))?
-            .extract()
+    pub(super) fn id(&self, entity: &Bound<'_, PyAny>) -> PyResult<u64> {
+        self.table(entity.py())?.try_borrow_mut()?.id(entity)
     }
-    fn table<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+    fn table<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, ToolHandles>> {
         self.handles
             .as_ref()
             .map(|h| h.bind(py).clone())
             .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("pick without a handle table"))
     }
-    fn object<'py>(&self, py: Python<'py>, id: u64) -> PyResult<Bound<'py, PyAny>> {
-        self.table(py)?.call_method1("get", (id,))
+    pub(super) fn object<'py>(&self, py: Python<'py>, id: u64) -> PyResult<Bound<'py, PyAny>> {
+        Ok(self
+            .table(py)?
+            .try_borrow()?
+            .get(py, Some(id))
+            .unwrap_or_else(|| py.None().into_bound(py)))
     }
 }
 #[pymethods]
 impl ViewportToolHost {
     #[new]
     #[pyo3(signature=(viewport, handles=None, tool=None))]
-    fn new(viewport: Py<PyAny>, handles: Option<Py<PyAny>>, tool: Option<Py<PyAny>>) -> Self {
+    fn new(viewport: Py<PyAny>, handles: Option<Py<ToolHandles>>, tool: Option<Py<PyAny>>) -> Self {
         Self {
             vp: viewport,
             handles,
             tool,
         }
+    }
+    fn arc_tangent(&self, py: Python<'_>, point: [f64; 3]) -> PyResult<Option<[f64; 3]>> {
+        let value = self.arc_service(py, "tangent_at", &serde_json::json!({"point":point}))?;
+        serde_json::from_value(value)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
+    }
+    fn revision(&self, py: Python<'_>) -> PyResult<u64> {
+        self.history_token(py)
+    }
+    fn run(
+        &self,
+        py: Python<'_>,
+        name: &str,
+        args: &str,
+    ) -> PyResult<(bool, u64, i64, Option<String>)> {
+        let arguments = serde_json::from_str(args)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+        let a = self.command(py, name, &arguments)?;
+        Ok((a.ok, a.revision, a.face_delta, a.error))
     }
     fn call<'py>(
         &self,

@@ -2933,22 +2933,22 @@ Native denotes routed, not exhaustive parity acceptance.
 | center_arc | CenterArcTool | native | Rust state machine, rubber_band_lines |
 | pie | PieTool | native | Rust state machine, rubber_band_lines |
 | pushpull | PushPullTool | native | Rust state machine, _pixel_to_ray, _world_to_pixel, pick_face_any, rubber_band_lines |
-| offset | OffsetTool | native | Rust state machine, _pixel_to_ray, _world_to_pixel, pick_face |
+| offset | OffsetTool | native | Rust state machine, _world_to_pixel, pick_face |
 | move | MoveTool | native | Rust state machine, _world_to_pixel, rubber_band_lines, set_groups_preview_offset |
 | rotate | RotateTool | native | Rust state machine, rubber_band_lines, set_groups_preview_matrix |
-| scale | ScaleTool | native | Rust state machine, _pixel_to_ray, begin_groups_preview, end_groups_preview, pick_edge, pick_face, scale_box_state (screen handles), set_groups_preview_matrix |
+| scale | ScaleTool | native | Rust state machine, _pixel_to_ray, end_groups_preview, pick_edge, pick_face, scale_box_state (screen handles), set_groups_preview_matrix |
 | flip | FlipTool | native | Rust state machine, _world_to_pixel |
 | followme | FollowMeTool | native | Rust state machine, pick_edge, pick_face |
 | fillet | FilletTool | native | Rust state machine, rubber_band_lines |
 | texture_position | TexturePositionTool | native | shared viewport / tool base |
-| paint | PaintTool | native | Rust state machine, pick_face_any |
+| paint | PaintTool | native | Rust state machine |
 | dimension | DimensionTool | native | Rust state machine, rubber_band_lines |
-| eraser | EraserTool | native | Rust state machine, pick_edge, rubber_band_lines |
+| eraser | EraserTool | native | Rust state machine, rubber_band_lines |
 | tape | TapeMeasureTool | native | Rust state machine, _world_to_pixel, pick_axis, pick_edge_any, pick_guide |
 | protractor | ProtractorTool | native | Rust state machine, rubber_band_lines |
 | north | NorthTool | native | Rust state machine, rubber_band_lines |
 | text | TextTool | native | Rust state machine, pick_edge, pick_face_any |
-| geopath | GeoPathTool | native | Rust state machine, _world_to_pixel |
+| geopath | GeoPathTool | native | Rust state machine |
 | section | SectionPlaneTool | native — after the crate work | Rust state machine |
 | position_camera | PositionCameraTool | native | Rust state machine |
 | walk | WalkTool | native | Rust state machine |

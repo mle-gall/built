@@ -1254,6 +1254,17 @@ class StoreMesh(Mesh):
             return [edge]
         return [EdgeView(self, k) for k in self._store.curve_keys(cid)]
 
+    def grow_pick(self, entity, grow):
+        result = self._store.tool_selection(entity.key, grow)
+        if result is None:
+            return None
+        edges, faces = result
+        return [EdgeView(self, key) for key in edges] + [FaceView(self, key) for key in faces]
+
+    def surface_of(self, face):
+        result = self.grow_pick(face, "natural")
+        return super().surface_of(face) if result is None else result
+
     # -- what the store answers itself
     def _bump(self):
         self._chunk_dirty = True
@@ -2035,9 +2046,7 @@ class StoreMesh(Mesh):
 
 
 StoreMesh._rekey = _on_python("_rekey")
-# Read-mostly Python code that runs on views as is (curve ids are written
-# through the edge views): tag_curve, resplit_curves, curve_edges,
-# surface_of.
+# The legacy curve tagger writes through edge views.
 StoreMesh.tag_curve = Mesh.tag_curve
 
 

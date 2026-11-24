@@ -189,34 +189,23 @@ impl CopyWire {
         Ok((faces, edges, wire))
     }
 
-    #[pyo3(signature=(mesh, matrix=None))]
-    fn add_placement(
-        &mut self,
-        mesh: &Bound<'_, PyAny>,
-        matrix: Option<[f64; 16]>,
-    ) -> PyResult<()> {
-        let m = matrix
-            .as_ref()
-            .map(DMat4::from_cols_array)
-            .unwrap_or(DMat4::IDENTITY);
-        let d = mesh.getattr("__dict__")?;
-        if let Some(store) = d.cast::<PyDict>()?.get_item("_store")? {
-            let store = store.extract::<PyRef<PyMeshStore>>()?;
-            for slot in store.inner.live_slots(Kind::Edge) {
-                let segment =
-                    store.inner.state.ends.get(slot as usize).map(|v| {
-                        m.transform_point3((*store.inner.state.vpos.get(v as usize)).into())
-                    });
-                self.placements.push(segment);
-            }
-        } else {
-            for edge in mesh.getattr("edges")?.try_iter()? {
-                let edge = edge?;
-                self.placements.push([
-                    m.transform_point3(xyz(&edge.getattr("a")?)?),
-                    m.transform_point3(xyz(&edge.getattr("b")?)?),
-                ]);
-            }
+    fn add_group(&mut self, group: &Bound<'_, PyAny>) -> PyResult<()> {
+        let placements = group
+            .py()
+            .import("core.group")?
+            .call_method1("iter_placements", (group,))?;
+        for p in placements.try_iter()? {
+            let p = p?;
+            let matrix = p.get_item(1)?;
+            self.append_mesh(
+                &p.get_item(0)?.getattr("mesh")?,
+                if matrix.is_none() {
+                    None
+                } else {
+                    Some(matrix.call_method0("data")?.extract()?)
+                },
+                usize::MAX,
+            )?;
         }
         Ok(())
     }
@@ -235,4 +224,219 @@ impl CopyWire {
     fn __len__(&self) -> usize {
         self.placements.len() + self.loose.len()
     }
+}
+
+impl CopyWire {
+    fn append_mesh(
+        &mut self,
+        mesh: &Bound<'_, PyAny>,
+        matrix: Option<[f64; 16]>,
+        limit: usize,
+    ) -> PyResult<()> {
+        let m = matrix
+            .as_ref()
+            .map(DMat4::from_cols_array)
+            .unwrap_or(DMat4::IDENTITY);
+        let d = mesh.getattr("__dict__")?;
+        if let Some(store) = d.cast::<PyDict>()?.get_item("_store")?.filter(|s| !s.is_none()) {
+            let store = PyMeshStore::read(&store)?;
+            for slot in store.inner.live_slots(Kind::Edge).into_iter().take(limit) {
+                let segment =
+                    store.inner.state.ends.get(slot as usize).map(|v| {
+                        m.transform_point3((*store.inner.state.vpos.get(v as usize)).into())
+                    });
+                self.placements.push(segment);
+            }
+        } else {
+            for edge in mesh.getattr("edges")?.try_iter()?.take(limit) {
+                let edge = edge?;
+                self.placements.push([
+                    m.transform_point3(xyz(&edge.getattr("a")?)?),
+                    m.transform_point3(xyz(&edge.getattr("b")?)?),
+                ]);
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Pending component template. Deferred meshes and large assemblies display
+/// their bounds; a single materialized mesh keeps its first 2,000 edges.
+#[pyfunction]
+#[pyo3(signature=(group, aligned, anchor=None))]
+pub fn placement_template(
+    group: &Bound<'_, PyAny>,
+    aligned: bool,
+    anchor: Option<&Bound<'_, PyAny>>,
+) -> PyResult<(Vec3, Vec<[[f64; 3]; 2]>)> {
+    const MAX_EDGES: usize = 2000;
+    let bounds = super::host_geometry::ToolBounds::placement_bounds(group)?;
+    let a = anchor
+        .map(xyz)
+        .transpose()?
+        .unwrap_or_else(|| bounds.anchor(aligned));
+    let py = group.py();
+    let lazy = py.import("core.mesh")?.getattr("DeferredMesh")?;
+    let is_tree = group
+        .getattr_opt("children")?
+        .map(|v| v.is_truthy())
+        .transpose()?
+        .unwrap_or(false);
+    let mut wire = CopyWire::default();
+    if is_tree {
+        let mut total = 0;
+        let mut draw = true;
+        for place in py
+            .import("core.group")?
+            .call_method1("iter_placements", (group,))?
+            .try_iter()?
+        {
+            let mesh = place?.get_item(0)?.getattr("mesh")?;
+            if mesh.get_type().is(&lazy) {
+                draw = false;
+                break;
+            }
+            total += mesh.getattr("edges")?.len()?;
+            if total > MAX_EDGES {
+                draw = false;
+                break;
+            }
+        }
+        if draw {
+            wire.add_group(group)?;
+        }
+    } else {
+        let mesh = group.getattr("mesh")?;
+        if !mesh.get_type().is(&lazy) {
+            wire.append_mesh(&mesh, None, MAX_EDGES)?;
+        }
+    }
+    let lines = if wire.placements.is_empty() {
+        bounds.box_outline(a)
+    } else {
+        wire.placements
+            .into_iter()
+            .map(|segment| segment.map(|p| (p - a).to_array()))
+            .collect()
+    };
+    Ok((a.into(), lines))
+}
+
+/// Resolve all parts of one grab once. Annotation priority is significant
+/// when clicking through text, a section frame, a guide or a dimension.
+#[pyfunction]
+pub fn transform_grab(
+    tool: &Bound<'_, PyAny>,
+    ctx: &Bound<'_, PyAny>,
+    mode: &str,
+) -> PyResult<bool> {
+    let py = ctx.py();
+    let view = ctx.getattr("viewport")?;
+    let scene = view.getattr("scene")?;
+    let mesh = scene.getattr("mesh")?;
+    let selection = scene.getattr("selection")?;
+    let direct = !selection.is_truthy()?;
+    let endpoint = if mode == "move" {
+        move_endpoint(ctx)?
+    } else {
+        None
+    };
+    let (mut groups, mut positions) = if let Some(v) = endpoint {
+        (vec![], vec![Vec3::from(xyz(&v.getattr("position")?)?)])
+    } else {
+        transform_targets(ctx)?
+    };
+    let sections = transform_records(ctx, "section_plane")?;
+    let mut guides = if mode == "move" || !direct {
+        transform_records(ctx, "guide")?
+    } else {
+        Vec::new()
+    };
+    if direct && !sections.is_empty() {
+        groups.clear();
+        positions.clear();
+        guides.clear();
+    }
+    let labels = if mode == "move" {
+        transform_records(ctx, "text_label")?
+    } else {
+        vec![]
+    };
+    if direct && !labels.is_empty() {
+        groups.clear();
+        positions.clear();
+        guides.clear();
+    }
+    let on_guide = direct && !guides.is_empty();
+    if on_guide {
+        groups.clear();
+        positions.clear();
+    }
+    let images = if on_guide {
+        vec![]
+    } else {
+        transform_records(ctx, "image_plane")?
+    };
+    let mut verts = Vec::new();
+    for p in &positions {
+        let v = mesh.call_method1("vertex_at", (Vec3::from(DVec3::from(p.coords())),))?;
+        if !v.is_none() {
+            verts.push(v)
+        }
+    }
+    let dims = if mode == "move" {
+        let dims = transform_records(ctx, "dimension")?;
+        let dims = py
+            .import("core.move_ops")?
+            .call_method1("dimension_modes", (dims, &groups, &verts))?;
+        if direct && dims.is_truthy()? {
+            groups.clear();
+            positions.clear();
+            verts.clear();
+            guides.clear();
+        }
+        dims
+    } else {
+        py.None().into_bound(py)
+    };
+    if groups.is_empty()
+        && positions.is_empty()
+        && labels.is_empty()
+        && guides.is_empty()
+        && sections.is_empty()
+        && images.is_empty()
+        && !dims.is_truthy()?
+    {
+        return Ok(false);
+    }
+    tool.setattr("_groups", groups)?;
+    tool.setattr("_positions", positions)?;
+    tool.setattr("_verts", verts)?;
+    tool.setattr("_moved_guides", guides)?;
+    tool.setattr("_splanes", sections)?;
+    tool.setattr("_images", images)?;
+    if mode == "move" {
+        tool.setattr("_labels", labels)?;
+        tool.setattr("_dims", dims)?;
+    }
+    Ok(true)
+}
+
+#[pyfunction]
+pub fn move_endpoint<'py>(ctx: &Bound<'py, PyAny>) -> PyResult<Option<Bound<'py, PyAny>>> {
+    let scene = ctx.getattr("viewport")?.getattr("scene")?;
+    if scene.getattr("selection")?.is_truthy()? {
+        return Ok(None);
+    }
+    if let Some(s) = ctx.getattr_opt("snap")?.filter(|s| !s.is_none()) {
+        if s.getattr("kind")?.eq("endpoint")? && !s.getattr("context")?.is_truthy()? {
+            return Ok(Some(
+                scene
+                    .getattr("mesh")?
+                    .call_method1("vertex_at", (s.getattr("point")?,))?,
+            )
+            .filter(|v| !v.is_none()));
+        }
+    }
+    Ok(None)
 }

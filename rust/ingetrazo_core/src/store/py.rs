@@ -92,9 +92,8 @@ struct InstanceStore {
 impl InstanceStore {
     fn refresh(slf: &Bound<'_, Self>) -> PyResult<()> {
         let definition = slf.get().definition.bind(slf.py()).try_borrow()?;
-        let mut view = slf.as_super().try_borrow_mut()?;
-        if definition.inner.revision != view.inner.revision {
-            view._publish_frame(&definition)?;
+        if definition.inner.revision != slf.as_super().try_borrow()?.inner.revision {
+            slf.as_super().try_borrow_mut()?._publish_frame(&definition)?;
         }
         Ok(())
     }
@@ -172,6 +171,14 @@ impl InstanceMethod {
 type OrderCache = (u64, Arc<Vec<u32>>, Arc<Vec<u32>>);
 
 impl PyMeshStore {
+    /// Native queries must observe the latest definition when reading an occurrence.
+    pub(crate) fn read<'py>(store: &Bound<'py, PyAny>) -> PyResult<PyRef<'py, Self>> {
+        if let Ok(view) = store.cast::<InstanceStore>() {
+            InstanceStore::refresh(view)?;
+        }
+        Ok(store.extract()?)
+    }
+
     fn wrap(inner: Store) -> Self {
         Self { inner, cache: Mutex::new(Default::default()) }
     }
@@ -709,6 +716,14 @@ impl PyMeshStore {
             });
             crate::pick::nearest_projected(projected, x, y, radius)
         })
+    }
+
+    fn tool_selection(&self, key: u128, grow: &str) -> Option<(Vec<u128>, Vec<u128>)> {
+        crate::tools::selection_growth::selection(&self.inner, key, grow)
+    }
+
+    fn preview_points(&self, py: Python<'_>, keys: Vec<u128>, origin: [f64; 3]) -> Option<Vec<[f64; 3]>> {
+        py.detach(|| crate::tools::loose_preview::preview_points(&self.inner, keys, origin))
     }
 
     /// The maximal degree-two path through an Offset pick.

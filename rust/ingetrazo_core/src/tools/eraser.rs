@@ -56,10 +56,21 @@ impl Tool for Eraser {
                 };
                 let mut picked = vec![];
                 for target in targets {
-                    picked = serde_json::from_value::<Vec<u64>>(
-                        h.call("eraser_pick", json!([target, p.px, self.stroke])),
-                    )
-                    .unwrap_or_default();
+                    let kind = match *target {
+                        "glyph" => "label_block",
+                        "edge" => "visible_edge",
+                        "path" => "geopath",
+                        "label" => "text_label",
+                        kind => kind,
+                    };
+                    if let Some((entity, _)) = h.query(kind, p.px).first() {
+                        picked = if kind == "visible_edge" && self.stroke {
+                            serde_json::from_value(h.call("curve_pick", json!(entity.id)))
+                                .unwrap_or_default()
+                        } else {
+                            vec![entity.id]
+                        };
+                    }
                     if !picked.is_empty() {
                         break;
                     }
@@ -67,7 +78,7 @@ impl Tool for Eraser {
                 if self.stroke {
                     self.marked.extend(picked);
                 } else {
-                    h.call("eraser_hover", json!(picked.first()));
+                    h.set_hover(picked.first().copied());
                 }
             }
             ToolEvent::Activate | ToolEvent::Deactivate | ToolEvent::Cancel => {

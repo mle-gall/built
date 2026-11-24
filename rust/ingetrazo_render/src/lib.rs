@@ -31,6 +31,7 @@ mod axes;
 mod sections;
 mod preview;
 mod preview_texture;
+mod geometry_preview;
 mod tool_instances;
 mod lines;
 mod references;
@@ -86,6 +87,7 @@ struct Scene {
     flags: Vec<u32>,
     rows: Vec<u8>,
     part_preview: Vec<usize>,
+    tool_geometry: Option<geometry_preview::GeometryPreview>,
     protos: wgpu::Buffer,
     prototype_data: Vec<u8>,
     survivors: wgpu::Buffer,
@@ -111,11 +113,6 @@ struct Scene {
     n: u32,
     p: u32,
 }
-/// One more view of the resident scene: its own surface, size-dependent
-/// attachments, view-owned passes and uniforms. Everything that belongs to
-/// the document (geometry, instances, prototypes, materials, textures, the
-/// sun's depth map) stays single in the Renderer; ``bind_target`` swaps one
-/// of these into the live fields, so every existing pass keeps working.
 /// The last CPU read of a pick pixel remains valid across hit queries until
 /// a render or a view / geometry change. A scissored ID pass alone cannot
 /// mark the rest of the ID texture clean.
@@ -128,6 +125,11 @@ impl PickRead {
     const DIRTY: Self = Self { dirty: true, pixel: None };
 }
 
+/// One more view of the resident scene: its own surface, size-dependent
+/// attachments, view-owned passes and uniforms. Everything that belongs to
+/// the document (geometry, instances, prototypes, materials, textures, the
+/// sun's depth map) stays single in the Renderer; ``bind_target`` swaps one
+/// of these into the live fields, so every existing pass keeps working.
 struct Target {
     surface: Option<wgpu::Surface<'static>>,
     config: wgpu::SurfaceConfiguration,
@@ -990,6 +992,7 @@ impl Renderer {
             inst,
             rows: instances.to_vec(),
             part_preview: Vec::new(),
+            tool_geometry: None,
             protos,
             prototype_data: bounds,
             survivors,
@@ -1031,6 +1034,7 @@ impl Renderer {
     /// Append compact replacement ranges while preserving placement identities.
     fn replace_prototype(&mut self, id: usize, vertices: PyReadonlyArray1<'_, u8>,
         indices: PyReadonlyArray1<'_, u8>, bounds: PyReadonlyArray1<'_, u8>, faces: u32) -> PyResult<()> {
+        self.end_tool_geometry();
         self.sun.invalidate();
         let (v, ix, bounds) = (vertices.as_slice()?, indices.as_slice()?, bounds.as_slice()?);
         let s = self.scene.as_mut().ok_or_else(|| PyValueError::new_err("set_scene first"))?;
@@ -1116,6 +1120,34 @@ impl Renderer {
         self.aa.bind_scene(&self.device, &self.camera, &s.inst, &s.survivors, &self.look.buffer, &s.edge_records, &s.viewpoints);
         self.pick_read = PickRead::DIRTY; self.scene_epoch += 1;
         Ok(())
+    }
+
+    fn begin_tool_geometry(&mut self, code:usize, vertices:PyReadonlyArray1<'_,u8>,
+                           points:Vec<[f64;3]>, origin:[f64;3]) -> PyResult<bool> {
+        self.end_tool_geometry();
+        let Some(s)=self.scene.as_mut() else {return Ok(false)};
+        s.tool_geometry=geometry_preview::GeometryPreview::begin(s,code,vertices.as_slice()?,points,origin);
+        Ok(s.tool_geometry.is_some())
+    }
+    fn pose_tool_geometry(&mut self, matrix:[f64;16]) -> PyResult<()> {
+        if matrix.iter().any(|v|!v.is_finite()) {return Err(PyValueError::new_err("invalid preview transform"))}
+        if let Some(s)=&self.scene {
+            if let Some(p)=&s.tool_geometry {
+                p.write(s,&self.queue,Some(glam::DMat4::from_cols_array(&matrix)));
+                self.pick_read=PickRead::DIRTY; self.scene_epoch += 1; self.stable_frames=0;
+                self.sun.invalidate();
+            }
+        }
+        Ok(())
+    }
+    fn end_tool_geometry(&mut self) {
+        if let Some(s)=self.scene.as_mut() {
+            if let Some(p)=s.tool_geometry.take() {
+                p.write(s,&self.queue,None);
+                self.pick_read=PickRead::DIRTY; self.scene_epoch += 1; self.stable_frames=0;
+                self.sun.invalidate();
+            }
+        }
     }
 
     /// A transient assembly offset writes only the resident GPU translation.

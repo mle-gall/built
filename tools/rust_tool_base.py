@@ -2,14 +2,11 @@
 """ToolMachine event conversion, viewport queries and protocol dispatch."""
 from __future__ import annotations
 
-import json
-
-from ingetrazo_core import ToolMachine, Vec3, ViewportToolHost
+from ingetrazo_core import ToolBounds, ToolMachine, ToolHandles, Vec3, ViewportToolHost
 
 from tools.base import Tool
 
-_MASK = (1 << 63) - 1
-
+selection_bounds = ToolBounds.selection
 
 def _mods(modifiers) -> int:
     return int(getattr(modifiers, "value", modifiers) or 0)
@@ -26,111 +23,9 @@ def _tuple(p):
     return None if p is None else (p.toTuple() if hasattr(p, "toTuple") else tuple(p))
 
 
-def selection_bounds(scene, frame=None, *, images=False):
-    """Feed the tool's native bounds query the selected records and placement buffers."""
-    from ingetrazo_core import ToolBounds
-    from core.group import Group, _local_points, model_placements
-    from core.mesh import Edge, Face
-    from core.image_plane import ImagePlane
-    box = ToolBounds(frame)
-    for item in scene.selection:
-        if isinstance(item, Group):
-            for placement, transform in model_placements(item):
-                mesh = placement.mesh
-                store = mesh.__dict__.get("_store")
-                matrix = None if transform is None else transform.ravel()
-                if store is not None:
-                    box.add_store(store, matrix)
-                else:
-                    points = _local_points(mesh)
-                    if points is not None:
-                        box.add_mesh(points, matrix)
-        elif isinstance(item, Edge):
-            box.add_points((item.a, item.b))
-        elif isinstance(item, Face):
-            box.add_points(item.vertices)
-        elif images and isinstance(item, ImagePlane):
-            box.add_points(item.corners())
-    return box
-
-
 class _Host(ViewportToolHost):
     """The machine's ``ToolHost`` over a viewport (the Metal view's
     ``NativeTools``, the controller, or a stand-in with scene and history)."""
-
-    # ---- commits: the protocol only ---------------------------------------
-    def _frame_origin(self):
-        st = self.vp.scene.mesh.__dict__.get("_store")
-        origin = getattr(st, "frame_origin", None) if st is not None else None
-        return tuple(origin) if origin is not None and any(origin) else None
-
-    def _model(self, p):
-        """A tool-frame point as the protocol takes it (the open mesh)."""
-        origin = self._frame_origin()
-        return list(p) if origin is None else [a + o for a, o in zip(p, origin)]
-
-    def run(self, name, args):
-        from core.protocol.commands import run
-        args = json.loads(args)
-        if name == "place_group":
-            answer = run(self.vp.history, name, **args, _pending=self.tool._group,
-                         attachment=self.tool._attachment)
-            return answer["ok"], self.revision(), 0, answer.get("error")
-        if name == "paste_clipboard":
-            answer = run(self.vp.history, name, **args, clipboard=self.tool._clip)
-            return answer["ok"], self.revision(), 0, answer.get("error")
-        if name in ("add_dimension", "add_geo_path", "move_geo_path_node", "add_image_plane",
-                    "place_section_plane", "set_north", "solid_operation", "erase_stroke", "follow_me"):
-            # Document records and keyed selections use the same coordinates as the viewport.
-            # Only mesh drawing commands below need the open store's frame origin.
-            try:
-                answer = run(self.vp.history, name, **args)
-            except (KeyError, IndexError) as error:
-                return False, self.revision(), 0, str(error)
-            return answer["ok"], self.revision(), 0, answer.get("error")
-        if name == "bevel_selection":
-            args["_plan"] = self.tool._plan
-        if name == "paint_material":
-            # Painting a closed, lazy group needs no topology or face count.
-            try:
-                answer = run(self.vp.history, name, **args,
-                             _picked_placement=getattr(self.tool, "_container", None))
-            except KeyError as error:
-                # Undo can invalidate a cached viewport pick between events.
-                return False, self.revision(), 0, str(error)
-            return answer["ok"], self.revision(), 0, answer.get("error")
-        if name in ("add_guide", "set_group_axes"):
-            for key in ("point", "origin", "red", "green"):
-                if args.get(key) is not None:
-                    args[key] = self._model(args[key])
-        for key in ("a", "b", "eye", "anchor", "center"):
-            if args.get(key) is not None:
-                args[key] = self._model(args[key])
-        for key in ("outer", "points"):
-            if key in args:
-                args[key] = [self._model(p) for p in args[key]]
-        if args.get("trim"):
-            args["trim"] = [[self._model(a), self._model(b)] for a, b in args["trim"]]
-        history = self.vp.history
-        before = self.revision()
-        faces = len(self.vp.scene.faces)
-        try:
-            answer = run(history, name, **args)
-        except (KeyError, ValueError) as error:
-            if name not in ("scale_selection", "rotate_selection", "offset_outline"):
-                raise
-            # A stale target during hot retype must leave the machine
-            # free to redo the original command.
-            return False, before, 0, str(error)
-        after = self.revision()
-        return (after != before, after, len(self.vp.scene.faces) - faces,
-                answer.get("error"))
-
-    def revision(self):
-        """The top of the undo stack: a retype may redo the command it
-        made while this is unchanged (``tools.base.retype_open``)."""
-        stack = getattr(self.vp.history, "undo_stack", None) or ()
-        return hash((len(stack), id(stack[-1]) if stack else 0)) & _MASK
 
     def cycle_status(self, index, count, ident):
         from tools import select_host as select
@@ -167,47 +62,15 @@ class _Host(ViewportToolHost):
         select.HOST_VERBS[verb](self.vp, self.handles.get(ident))
 
 
-class _Handles:
-    """Host objects the machine names by number: equal entities (two views
-    of one face) share a number, so a repeated click sees the same picks."""
-
-    LIMIT = 4096
-
-    def __init__(self):
-        self._ids = {}
-        self._objects = {}
-
-    def id(self, entity):
-        try:
-            key = ("v", entity)
-            hash(key)
-        except TypeError:
-            key = ("i", id(entity))
-        ident = self._ids.get(key)
-        if ident is None:
-            if len(self._ids) >= self.LIMIT:
-                self._ids.clear()
-                self._objects.clear()
-            ident = self._ids[key] = len(self._ids) + 1
-            self._objects[ident] = entity
-        return ident
-
-    def get(self, ident):
-        return self._objects.get(ident)
-
-    def clear(self):
-        self._ids.clear()
-        self._objects.clear()
-
-
 class RustTool(Tool):
     """A tool whose state machine is Rust. Subclasses name the machine."""
 
     kind = ""
+    handle_limit = 4096
 
     def __init__(self):
         self._machine = ToolMachine(self.kind)
-        self._handles = _Handles()
+        self._handles = ToolHandles(self.handle_limit)
         self._seen = (-1, None)
         self._held_points = {}
 

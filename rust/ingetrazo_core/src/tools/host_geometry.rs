@@ -53,6 +53,30 @@ pub struct ToolBounds {
     geometry: std::sync::OnceLock<BoxGeometry>,
 }
 impl ToolBounds {
+    pub(super) fn placement_bounds(group: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let mut b = Self::new(None);
+        b.add_group(group)?;
+        Ok(b)
+    }
+    pub(super) fn anchor(&self, back: bool) -> DVec3 {
+        if self.lo.x > self.hi.x {
+            DVec3::ZERO
+        } else {
+            self.point([0.5, if back { 1. } else { 0.5 }, 0.])
+        }
+    }
+    pub(super) fn box_outline(&self, anchor: DVec3) -> Vec<[P3; 2]> {
+        if self.lo.x > self.hi.x {
+            return Vec::new();
+        }
+        let corners: [DVec3; 8] = std::array::from_fn(|i| {
+            self.point(std::array::from_fn(|j| ((i >> j) & 1) as f64)) - anchor
+        });
+        super::record_queries::BOX_EDGES
+            .iter()
+            .map(|&[a, b]| [corners[a].to_array(), corners[b].to_array()])
+            .collect()
+    }
     fn geometry(&self) -> &BoxGeometry {
         self.geometry
             .get_or_init(|| BoxGeometry::new((self.hi - self.lo).to_array()))
@@ -116,6 +140,51 @@ impl ToolBounds {
             self.add(transform.map_or(p, |m| m.transform_point3(p)));
         }
         Ok(())
+    }
+    fn add_group(&mut self, group: &Bound<'_, PyAny>) -> PyResult<()> {
+        let api = group.py().import("core.group")?;
+        for placement in api.call_method1("model_placements", (group,))?.try_iter()? {
+            let pair = placement?;
+            let mesh = pair.get_item(0)?.getattr("mesh")?;
+            let matrix = pair.get_item(1)?;
+            let transform = if matrix.is_none() {
+                None
+            } else {
+                Some(matrix.call_method0("ravel")?.extract()?)
+            };
+            let d = mesh.getattr("__dict__")?;
+            if let Some(st) = d.cast::<PyDict>()?.get_item("_store")?.filter(|s| !s.is_none()) {
+                self.add_store(
+                    &*crate::store::py::PyMeshStore::read(&st)?,
+                    transform,
+                );
+            } else {
+                let points = api.call_method1("_local_points", (mesh,))?;
+                if !points.is_none() {
+                    self.add_mesh(points.extract()?, transform)?;
+                }
+            }
+        }
+        Ok(())
+    }
+    #[staticmethod]
+    #[pyo3(signature=(scene, frame=None, *, images=false))]
+    fn selection(scene: &Bound<'_, PyAny>, frame: Option<[P3; 4]>, images: bool) -> PyResult<Self> {
+        let mut bounds = Self::new(frame);
+        for item in scene.getattr("selection")?.try_iter()? {
+            let item = item?;
+            match super::view_queries::classify(&item)? {
+                "group" => bounds.add_group(&item)?,
+                "edge" => {
+                    bounds.add(xyz(&item.getattr("a")?)?);
+                    bounds.add(xyz(&item.getattr("b")?)?);
+                }
+                "face" => bounds.add_points(&item.getattr("vertices")?)?,
+                "image_plane" if images => bounds.add_points(&item.call_method0("corners")?)?,
+                _ => {}
+            }
+        }
+        Ok(bounds)
     }
     fn limits(&self) -> (Option<Vec3>, Option<Vec3>) {
         if self.lo.x > self.hi.x {
@@ -334,4 +403,56 @@ pub fn move_box_contains(
         }
     }
     Ok(super::move_grips::hover_hull(points, cursor, margin))
+}
+
+#[pyfunction]
+#[pyo3(signature=(view, point, *axes))]
+pub fn cursor_pixel_scale(
+    view: &Bound<'_, PyAny>,
+    point: &Bound<'_, PyAny>,
+    axes: &Bound<'_, pyo3::types::PyTuple>,
+) -> PyResult<Option<f64>> {
+    let p = xyz(point)?;
+    if !view.hasattr("_world_to_pixel")? {
+        return Ok(None);
+    }
+    let camera = Projection::from_view(view)?;
+    let Ok(Some([x, y])) = camera.pixel(p) else {
+        return Ok(None);
+    };
+    let mut longest: f64 = 0.;
+    for a in axes.iter() {
+        if let Ok(Some([u, v])) = camera.pixel(p + 0.25 * xyz(&a)?.normalize_or_zero()) {
+            longest = longest.max((u - x).hypot(v - y));
+        }
+    }
+    Ok((longest > 1e-6).then(|| 0.25 / longest))
+}
+#[pyfunction]
+pub fn cursor_plane_reference(view: &Bound<'_, PyAny>) -> PyResult<Option<(Vec3, &'static str)>> {
+    if let Some(edge) = view.getattr_opt("_hover_edge")?.filter(|e| !e.is_none()) {
+        let d = xyz(&edge.getattr("b")?)? - xyz(&edge.getattr("a")?)?;
+        if d.length() > 1e-9 {
+            return Ok(Some((d.normalize().into(), "edge")));
+        }
+    }
+    if let (Some(pos), Some(pick)) = (
+        view.getattr_opt("_last_mouse_pos")?
+            .filter(|p| !p.is_none()),
+        view.getattr_opt("pick_face_placement")?
+            .filter(|p| p.is_callable()),
+    ) {
+        let pair = pick.call1((pos.call_method0("x")?, pos.call_method0("y")?))?;
+        let face = pair.get_item(0)?;
+        if !face.is_none() {
+            let (_, normal) = super::record_queries::local_plane(
+                &face,
+                pair.get_item(1)?.getattr_opt("xform")?.as_ref(),
+            )?;
+            if normal.length() > 1e-9 {
+                return Ok(Some((normal.normalize().into(), "face")));
+            }
+        }
+    }
+    Ok(None)
 }

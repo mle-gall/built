@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from ingetrazo_core import Matrix4 as QMatrix4x4, ScaleGripSpec, Vec3 as QVector3D
+from ingetrazo_core import TransformPose, ScaleGripSpec, Vec3 as QVector3D
 
 from core.history import scale_matrix
 from core.i18n import tr
@@ -53,6 +53,7 @@ class ScaleHost:
         self._hi: QVector3D | None = None
         self._axes = None                  # (red, green, blue) or None = world
         self._resident_preview = False
+        self._pose = None
         self._orig = None
         self._grips: list[_Grip] = []
         self._box_version = -1
@@ -392,61 +393,18 @@ class ScaleHost:
 
     # ---- Live preview -------------------------------------------------------
     def _capture_originals(self, viewport) -> None:
-        """Where everything that scales stood when the grip was taken. The
-        live preview is computed from THESE on every move — never as a step
-        from the previous frame. Chained steps drift in float32, and a drag
-        that went down to 0.04 and back ended with some vertices a hair off
-        their starting cell: the commit, which finds the vertices by their
-        starting positions, missed them, scaled the rest and tore the
-        faces (a user's video, 25-09: a rounded box shredded on release).
-        Measured: 300 moves of that kind, 194 of 1600 vertices lost."""
-        from ingetrazo_core import Matrix4 as QMatrix4x4
-        self._resident_preview = bool(self._groups and hasattr(viewport, "begin_groups_preview")
-                                      and not self._verts and not self._images)
+        self._resident_preview = not self._images and TransformPose.begin(viewport, self)
         if self._resident_preview:
-            viewport.begin_groups_preview(self._groups)
             return
-        orig_v: list = []
-        orig_x: list = []
-        for group in self._groups:
-            if getattr(group, "xform", None) is not None:
-                orig_x.append((group, QMatrix4x4(group.xform)))
-            else:
-                gmesh = group.mesh
-                orig_v.extend((gmesh, v, QVector3D(v.position))
-                              for v in gmesh.vertices)
-        mesh = viewport.scene.mesh
-        orig_v.extend((mesh, v, QVector3D(v.position)) for v in self._verts)
-        self._orig_v = orig_v
-        self._orig_x = orig_x
-        self._orig_im = [(im, QVector3D(im.origin), QVector3D(im.u),
-                          QVector3D(im.v)) for im in self._images]
+        self._pose = TransformPose(self, viewport.scene, "scale", False)
 
-    def _set_preview(self, viewport, factors: tuple) -> None:
-        """Put everything at *factors* about the anchor, from the originals.
-        At (1, 1, 1) it is an exact restore: the starting positions go back
-        as they were stored, not through a matrix."""
-        if self._resident_preview:
-            viewport.set_groups_preview_matrix(scale_matrix(self._anchor, factors, self._axes))
-            return
-        if getattr(self, "_orig_v", None) is None:
-            return
+    def _set_preview(self, viewport, factors):
         identity = all(abs(f - 1.0) < 1e-12 for f in factors)
-        m = None if identity else scale_matrix(self._anchor, factors,
-                                               self._axes)
-        for mesh, v, p0 in self._orig_v:
-            target = p0 if m is None else m.map(p0)
-            mesh.move_vertex(v, target - v.position)
-        for group, x0 in self._orig_x:
-            group.xform = QMatrix4x4(x0) if m is None else m * x0
-        for im, o0, u0, v0 in self._orig_im:
-            if m is None:
-                im.origin, im.u, im.v = (QVector3D(o0), QVector3D(u0),
-                                         QVector3D(v0))
-            else:
-                im.origin, im.u, im.v = (m.map(o0), m.mapVector(u0),
-                                         m.mapVector(v0))
-        viewport.scene.version += 1
+        matrix = scale_matrix(self._anchor, factors, self._axes)
+        if self._resident_preview:
+            viewport.set_groups_preview_matrix(matrix)
+        elif self._pose is not None:
+            self._pose.apply(viewport.scene, None if identity else matrix)
 
     def _apply_preview(self, viewport, target: tuple) -> None:
         if all(abs(t - f) < 1e-12 for t, f in zip(target, self._factors)):
@@ -487,7 +445,7 @@ class ScaleHost:
         self._grip = None
         self._anchor = None
         self._factors = (1.0, 1.0, 1.0)
-        self._orig_v = None                 # the operation is over
+        self._pose = None                 # the operation is over
         self._box_version = -1              # geometry moved: rebuild the box
         self._refresh_box(viewport)
         viewport.update()
@@ -503,7 +461,7 @@ class ScaleHost:
         self._positions = []
         self._verts = []
         self._images = []
-        self._orig_v = None
+        self._pose = None
         self._box_version = -1
 
     # ---- Feedback -----------------------------------------------------------

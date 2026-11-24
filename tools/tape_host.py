@@ -5,7 +5,6 @@ from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QColor, QPen
 from ingetrazo_core import Vec3 as QVector3D
 
-from core.axes import AXES
 from core.guide import Guide
 from core.i18n import tr
 from core.units import fmt_len, fmt_len_fine
@@ -73,31 +72,6 @@ class TapeHost(Tool):
         viewport.measurementChanged.emit(viewport._measurement_text())
         viewport.update()
         return True
-
-    def host_tape_source(self, vp, args):
-        px, kind, named = args
-        pick = getattr(vp, "pick_edge_any", None) or getattr(vp, "pick_edge", None)
-        edge = pick(*px) if pick else None
-        if edge is None:
-            guide = getattr(vp, "pick_guide", lambda *_: None)(*px)
-            if getattr(guide, "is_line", False):
-                edge = guide
-        point = None
-        if edge is None and not named:
-            snap = self._snap
-            axis = getattr(snap, "axis", None) if kind == "on_axis" else None
-            if axis in AXES:
-                point = snap.point
-            else:
-                axis = getattr(vp, "pick_axis", lambda *_: None)(*px)
-                if axis in AXES:
-                    d = AXES[axis]
-                    point = d * QVector3D.dotProduct(self._click_point, d)
-            if axis in AXES:
-                edge = Guide(QVector3D(), AXES[axis])
-        self._source = edge
-        return None if edge is None else {"a": edge.a.toTuple(), "b": edge.b.toTuple(),
-                                          "point": point.toTuple() if point is not None else None}
 
     def host_clear_source(self, vp, _):
         self._source = self.work_plane = None

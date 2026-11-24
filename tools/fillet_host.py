@@ -4,12 +4,12 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from ingetrazo_core import Vec3 as QVector3D
+from ingetrazo_core import Vec3 as QVector3D, bevel_nearest_end, bevel_selection, bevel_targets
 
 from core.fillet import CIRCULAR, plan_fillet
 from core.units import fmt_len_fine
 from core.i18n import tr
-from core.mesh import Edge, Face
+from core.mesh import Edge
 from core.vertex_bevel import plan_vertex_bevel
 from tools.base import Tool
 
@@ -64,10 +64,7 @@ class FilletHost(Tool):
         scene = getattr(viewport, "scene", None)
         sel = getattr(scene, "selection", None) or ()
         mesh = getattr(scene, "mesh", None)
-        picked = [e for e in sel if isinstance(e, Edge)
-                  and mesh is not None and e in getattr(e.v0, "edges", ())]
-        if self._corners_mode():
-            picked = self._corners_of(sel, mesh)
+        picked = bevel_selection(sel, mesh, self._corners_mode())
         if picked and self._corners_mode():
             self.edges = picked
             viewport.flash_status(tr(
@@ -92,30 +89,7 @@ class FilletHost(Tool):
         self._plan_key = None
         self._message = None
 
-    @staticmethod
-    def _corners_of(items, mesh) -> list:
-        """The vertices of the selected edges and faces, once each."""
-        out: dict[int, object] = {}
-        for it in items:
-            if isinstance(it, Edge):
-                if mesh is None or it not in getattr(it.v0, "edges", ()):
-                    continue
-                vs = (it.v0, it.v1)
-            elif isinstance(it, Face):
-                vs = it.loop
-            else:
-                continue
-            for v in vs:
-                out.setdefault(v.key, v)
-        return list(out.values())
-
-    @staticmethod
-    def _nearest_end(edge, p):
-        """The end of ``edge`` nearer the cursor ``p``."""
-        if p is None:
-            return edge.v0
-        return min((edge.v0, edge.v1),
-                   key=lambda v: (v.position - p).lengthSquared())
+    _nearest_end = staticmethod(bevel_nearest_end)
 
     # ---- Spatial input --------------------------------------------------------
     @property
@@ -126,31 +100,11 @@ class FilletHost(Tool):
         first = self.edges[0]
         return first.a if isinstance(first, Edge) else first.position
 
-    def _target_edges(self, viewport, cursor=None):
-        """The edges a click acts on: the hovered edge, joined by the
-        selection when the click lands on a selected edge. Bevelling
-        corners, the hovered edge's nearer end — or the selection's
-        corners."""
-        edge = getattr(viewport, "_hover_edge", None)
-        if edge is None or not isinstance(edge, Edge):
-            return []
-        sel = getattr(getattr(viewport, "scene", None), "selection", None) or ()
-        if self._corners_mode():
-            if edge in sel:
-                mesh = getattr(getattr(viewport, "scene", None), "mesh", None)
-                return self._corners_of(sel, mesh)
-            return [self._nearest_end(edge, cursor)]
-        if edge in sel:
-            picked = [e for e in sel if isinstance(e, Edge)]
-            if picked:
-                return picked
-        return [edge]
-
     def host_pick_bevel(self, vp, world):
         self._viewport = vp
         point = QVector3D(*world) if world is not None else None
         if not self.edges:
-            self.edges = self._target_edges(vp, point)
+            self.edges = bevel_targets(vp, self._corners_mode(), point)
         if self.edges:
             self.hover_point = point
         return bool(self.edges)
@@ -196,7 +150,7 @@ class FilletHost(Tool):
         if affect == "vertices":
             type(self).shape = None      # outlines are drawn along edges
         if affect == "vertices" and self.edges:
-            self.edges = self._corners_of(self.edges, mesh)
+            self.edges = bevel_selection(self.edges, mesh, True)
         elif affect == "edges":
             self.edges = []
             self._send(viewport, {"type": "key", "key": "AffectEdges"})

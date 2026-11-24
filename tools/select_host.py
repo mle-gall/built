@@ -1,18 +1,14 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""Select's host side: what lies under a pixel, what a box catches, and
-how a pick is selected or erased.
-
-The Select tool itself is a Rust state machine
-(``rust/ingetrazo_core/src/tools/select.rs``, adapter ``tools.rust_tools``):
-the gesture, the modifiers, the click cycle and what a double or triple
-click does. The queries here move to native picking next
-(docs/rust-tools.md §12, docs/python-glue.md).
+"""Select's viewport actions and compatibility paths for materialised meshes.
+Store-backed meshes grow picks through native incidence. The native viewport
+box-selects placements from the renderer's packed prototype arrays.
 """
 from __future__ import annotations
 
 
-from ingetrazo_core import box_records, box_placements, segment_overlaps_box as _seg_rect_overlap
+from ingetrazo_core import (box_records, box_placements, box_from_pack as _box_groups_packed,
+                            segment_overlaps_box as _seg_rect_overlap)
 from views import prompts as _prompts
 
 from core.dimension import Dimension
@@ -128,91 +124,6 @@ def _box_loose_arrays(viewport, rect, crossing):
     seq = mesh.faces
     faces = [f for f in (seq[int(i)] for i in fmask) if sel(f)]
     return edges, faces
-
-
-def _packed_view(viewport):
-    """The packed scene the Metal view draws, when ``viewport`` is its
-    tool facade (the GL viewport has its own chunk caches instead)."""
-    if getattr(viewport, "_group_chunk", None) is not None:
-        return None
-    view = getattr(viewport, "view", None)
-    packed = getattr(view, "packed", None)
-    if (packed is None or getattr(packed, "groups", None) is None
-            or getattr(viewport, "_camera_px", None) is None):
-        return None
-    import numpy as np
-    if not isinstance(getattr(packed, "instances", None), np.ndarray):
-        return None
-    return packed
-
-
-def _packed_points(packed):
-    """``points(code)``: a packed prototype's triangle corners and edge
-    ends, ``((K, 3), (M, 3))`` float64, for the native box catch."""
-    import numpy as np
-    pos = packed.vertices["pos"]
-
-    def points(code):
-        out = []
-        for cmd in (packed.commands[code], packed.edge_commands[code]):
-            first, count, base = int(cmd["first"]), int(cmd["count"]), int(cmd["base"])
-            idx = base + packed.indices[first:first + count].astype(np.int64)
-            out.append(np.ascontiguousarray(pos[idx], dtype=np.float64).reshape(-1, 3))
-        return tuple(out)
-    return points
-
-
-def _box_groups_packed(viewport, candidates, rect, crossing):
-    """Box test of every candidate object at once from the Metal view's
-    packed scene: per instance its prototype's box carried by its matrix
-    and projected (eight corners), and the exact per-point test only for
-    the instances whose box straddles the rectangle — one numpy pass over
-    the instances instead of a Python walk over every vertex of every
-    placement (the ride: 91k placements, 14M faces, minutes on the main
-    thread). A linked file is one candidate, like a component: its
-    placements decide for it as a whole.
-
-    Returns ``(hits, tested)`` — sets of ``id(candidate)`` — or None when
-    there is no packed scene. Candidates with no packed instance at all
-    are not in ``tested``: the caller tests them its usual way."""
-    packed = _packed_view(viewport)
-    if packed is None or not candidates:
-        return None
-    import numpy as np
-    owner_of: dict = {}
-    for i, group in enumerate(candidates):
-        stack = [group]
-        while stack:
-            node = stack.pop()
-            owner_of[id(node)] = i
-            stack.extend(getattr(node, "children", None) or ())
-    groups = packed.groups
-    owner = np.fromiter((owner_of.get(id(g), -1) if g is not None else -1
-                         for g in groups), dtype=np.int64, count=len(groups))
-    if len(owner) != len(packed.instances):
-        return None
-    rows = np.flatnonzero(owner >= 0)
-    tested = {id(candidates[i]) for i in np.unique(owner[rows])}
-    info = packed.instances["info"]
-    if not len(rows):
-        return set(), tested
-    import numpy as np
-    from ingetrazo_core import box_packed_rows
-    codes = info[rows, 0].astype(np.int64)
-    # What the view does not draw (hidden objects, tags off) takes no part.
-    drawn = (info[rows, 2] & 1) == 0
-    used = np.unique(codes)
-    lo = np.zeros((len(packed.commands), 3))
-    hi = np.zeros((len(packed.commands), 3))
-    lo[used] = packed.bounds[used, 0, :3]
-    hi[used] = packed.bounds[used, 1, :3]
-    mvp, w, h = viewport._camera_px()
-    caught = box_packed_rows(
-        np.ascontiguousarray(packed.instances["world"][rows], dtype=np.float64).reshape(-1, 16),
-        codes, np.ascontiguousarray(owner[rows]), np.ascontiguousarray(drawn),
-        lo, hi, len(candidates), mvp, w, h, tuple(map(float, rect)), bool(crossing),
-        _packed_points(packed))
-    return {id(candidates[int(i)]) for i in caught}, tested
 
 
 # Bound temporary triangle/edge arrays and camera projections independently
@@ -393,12 +304,6 @@ def describe_pick(entity) -> str:
         else type(entity).__name__
 
 
-# ---- Host queries for the Rust Select (tools/rust_tools.py) ------------------
-# The machine (rust/ingetrazo_core/src/tools/select.rs) owns the gesture,
-# the modes, the click cycle and what a double or triple click does. These
-# answer what lies under a pixel and apply a selection, until picking is
-# native (docs/rust-tools.md §12, docs/python-glue.md).
-
 #: A repeated plain click within this many pixels takes the next candidate
 #: (the machine's ``CYCLE_PX``).
 CYCLE_PX = 4.0
@@ -441,6 +346,12 @@ def apply(viewport, entities, mode: str, grow: str) -> None:
     ``connected`` (triple click: the whole solid)."""
     picked = []
     for entity in entities:
+        if grow != "natural" and isinstance(entity, (Face, Edge)):
+            query = getattr(viewport.scene.mesh, "grow_pick", None)
+            result = query(entity, grow) if query else None
+            if result is not None:
+                picked.extend(result)
+                continue
         if grow == "connected":
             from core.select_ops import all_connected
             picked.extend(all_connected([entity]))

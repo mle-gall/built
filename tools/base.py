@@ -14,13 +14,11 @@ position, keyboard modifiers and the snap metadata.
 """
 from __future__ import annotations
 
-import math
-
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 from PySide6.QtCore import QPointF, Qt
-from ingetrazo_core import Vec3 as QVector3D
+from ingetrazo_core import Vec3 as QVector3D, cursor_pixel_scale, cursor_plane_reference
 
 from core.snap import POINT_SNAP_KINDS, SnapResult
 
@@ -294,32 +292,8 @@ class PlaneLock:
             return self.plane_color(self.hover_plane[1])
         return None
 
-    @staticmethod
-    def world_per_pixel(viewport, point: QVector3D, along: QVector3D):
-        """Metres per screen pixel at ``point`` along ``along``, or ``None``
-        when the viewport cannot project (headless stand-ins)."""
-        project = getattr(viewport, "_world_to_pixel", None)
-        if project is None:
-            return None
-        try:
-            a = project(point)
-            b = project(point + along.normalized() * 0.25)
-        except Exception:  # noqa: BLE001 — no projection, no preview
-            return None
-        if a is None or b is None:
-            return None
-        d = math.hypot(b[0] - a[0], b[1] - a[1])
-        return 0.25 / d if d > 1e-6 else None
-
-    @classmethod
-    def plane_preview_scale(cls, viewport, point: QVector3D,
-                            u: QVector3D, v: QVector3D):
-        """World scale for a preview glyph, based on its most visible axis."""
-        scales = [
-            scale for axis in (u, v)
-            if (scale := cls.world_per_pixel(viewport, point, axis)) is not None
-        ]
-        return min(scales) if scales else None
+    world_per_pixel = staticmethod(cursor_pixel_scale)
+    plane_preview_scale = staticmethod(cursor_pixel_scale)
 
     def plane_lock_key(self, viewport, key: int) -> bool:
         if (getattr(self, "start_point", None) is not None
@@ -417,27 +391,7 @@ class PlaneLock:
             update()
         return True
 
-    @staticmethod
-    def hovered_reference(viewport):
-        """``(normal, kind)`` of the reference under the cursor: the edge
-        (loose or a group's, as the viewport's hover pick returns it in
-        world space) beats the face, the usual convention; ``None`` over
-        nothing."""
-        edge = getattr(viewport, "_hover_edge", None)
-        if edge is not None:
-            d = QVector3D(edge.b) - QVector3D(edge.a)
-            if d.length() > 1e-9:
-                return d.normalized(), "edge"
-        pos = getattr(viewport, "_last_mouse_pos", None)
-        pick = getattr(viewport, "pick_face_placement", None)
-        if pos is not None and pick is not None:
-            face, grp = pick(pos.x(), pos.y())
-            if face is not None:
-                from core.snap import face_plane_world
-                _p, n = face_plane_world(face, getattr(grp, "xform", None))
-                if n.length() > 1e-9:
-                    return n.normalized(), "face"
-        return None
+    hovered_reference = staticmethod(cursor_plane_reference)
 
     def clear_plane_lock(self) -> None:
         """Both locks off — the shape spent them, or Esc / deactivation. A

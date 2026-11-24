@@ -5,20 +5,15 @@ Each class keeps the name, attributes and methods the hosts, the inference
 and extensions use (``on_click(ctx)``, ``rubber_band_lines()``,
 ``start_point``…), turns the call into an event for its
 ``ingetrazo_core.ToolMachine`` and answers the machine's host calls. The
-machines decide; this module only converts values and runs:
-
-- edits through ``core.protocol.commands.run`` (the one front door);
-- picks and the selection through ``tools.select``'s host queries, until
-  picking is native.
-
-Listed in docs/python-glue.md. Nothing here decides how a tool behaves.
+native viewport host handles picks, document queries and protocol commands.
+Python retains tool identities for extensions, UI readouts and view callbacks.
 """
 from __future__ import annotations
 
 import json
 
 from ingetrazo_core import ToolMachine, Vec3
-from tools.rust_tool_base import RustTool, _Host, _Handles, _mods, _point_property, _tuple, selection_mode
+from tools.rust_tool_base import RustTool, _Host, _mods, _point_property, _tuple, selection_mode
 
 
 class LineTool(RustTool):
@@ -835,10 +830,6 @@ class _LastFillet(type(RustTool)):
         arc_last_fillet_d(None if value is None else float(value), True)
 
 
-def _edge_json(handles, e):
-    return {"id": handles.id(e), "a": _tuple(e.a), "b": _tuple(e.b), "faces": bool(e.faces)}
-
-
 class ArcTool(_ArcBase, metaclass=_LastFillet):
     """2-point arc. The host answers the topology the fillet reads (the
     ``host_*`` queries) and projects points to pixels."""
@@ -871,7 +862,7 @@ class ArcTool(_ArcBase, metaclass=_LastFillet):
         """The direction an existing arc leaves the start (``host_tangent_at``)."""
         if self.start_point is None:
             return None
-        t = self.host_tangent_at(viewport, {"point": _tuple(self.start_point)})
+        t = _Host(viewport, self._handles, self).arc_tangent(self.start_point.toTuple())
         return None if t is None else Vec3(*t)
 
     @property
@@ -940,176 +931,6 @@ class ArcTool(_ArcBase, metaclass=_LastFillet):
 
     def _tangent_bulge(self):
         return self._query("tangent_bulge")
-
-    # ---- what the host answers: topology and pixels -------------------------
-    def _mesh(self, viewport):
-        return getattr(getattr(viewport, "scene", None), "mesh", None)
-
-    def host_edge_under(self, viewport, args):
-        """The edge whose interior holds the point: the hovered one first."""
-        mesh = self._mesh(viewport)
-        if mesh is None:
-            return None
-        from core.topology import _point_on_seg_incl
-        P = Vec3(*args["point"])
-
-        def interior(e) -> bool:
-            if not _point_on_seg_incl(P, e.a, e.b, 1e-4):
-                return False
-            return (P - e.a).length() > 1e-4 and (P - e.b).length() > 1e-4 and e.length() > 1e-6
-        hovered = getattr(viewport, "_hover_edge", None)
-        v0 = getattr(hovered, "v0", None)
-        if v0 is not None and hovered in getattr(v0, "edges", ()) and interior(hovered):
-            return _edge_json(self._handles, hovered)
-        for e in mesh.edges:
-            if interior(e):
-                return _edge_json(self._handles, e)
-        return None
-
-    def host_corner_edges(self, viewport, args):
-        """The edges leaving each end of the start edge."""
-        edge = self._handles.get(args["edge"])
-        rows = []
-        for V in (edge.v0, edge.v1):
-            for B in V.edges:
-                if B == edge:
-                    continue
-                rows.append({"v": _tuple(V.position), "b": _edge_json(self._handles, B),
-                             "far": _tuple(B.other(V).position)})
-        return rows
-
-    def host_rounded_corners(self, viewport, args):
-        """For each end of the edge a curve leaves, the straight edges at the
-        curve's other end (#1354); the machine finds where the lines meet."""
-        mesh = self._mesh(viewport)
-        edge = self._handles.get(args["edge"])
-        rows = []
-        if mesh is None or edge is None:
-            return rows
-        for V in (edge.v0, edge.v1):
-            for C in V.edges:
-                if C is edge or getattr(C, "curve", None) is None:
-                    continue
-                chain = mesh.curve_edges(C)
-                seen = {}
-                for c in chain:
-                    for vv in (c.v0, c.v1):
-                        seen[id(vv)] = (vv, seen.get(id(vv), (vv, 0))[1] + 1)
-                for V2, count in seen.values():
-                    if count != 1 or V2 is V:
-                        continue
-                    for B in V2.edges:
-                        if (B in chain or getattr(B, "curve", None) is not None
-                                or getattr(B, "soft", False)):
-                            continue
-                        rows.append({"v": _tuple(V.position), "edge_far": _tuple(edge.other(V).position),
-                                     "v2": _tuple(V2.position), "far": _tuple(B.other(V2).position),
-                                     "b": _edge_json(self._handles, B)})
-        return rows
-
-    def host_two_edge_corners(self, viewport, args):
-        """Corners where exactly two edges meet, one on a face, both at least
-        ``min_length`` long (a double-click repeats the last fillet there)."""
-        mesh = self._mesh(viewport)
-        rows = []
-        if mesh is None:
-            return rows
-        d = float(args["min_length"])
-        for V in mesh.vertices:
-            edges = list(V.edges)
-            if len(edges) != 2:
-                continue
-            A, B = edges
-            if not (A.faces or B.faces) or A.length() < d or B.length() < d:
-                continue
-            rows.append({"v": _tuple(V.position), "a": _edge_json(self._handles, A),
-                         "b": _edge_json(self._handles, B),
-                         "a_far": _tuple(A.other(V).position), "b_far": _tuple(B.other(V).position)})
-        return rows
-
-    def host_vertex_degree(self, viewport, args):
-        mesh = self._mesh(viewport)
-        vert = mesh.vertex_at(Vec3(*args["point"])) if mesh is not None else None
-        return None if vert is None else len(vert.edges)
-
-    def host_to_px(self, viewport, args):
-        project = getattr(viewport, "_world_to_pixel", None)
-        if not callable(project):
-            return None
-        out = []
-        for p in args["points"]:
-            q = project(Vec3(*p))
-            out.append(None if q is None else [float(q[0]), float(q[1])])
-        return out
-
-    def host_tangent_at(self, viewport, args):
-        """The direction an existing arc leaves its END vertex at the point:
-        the view's resident curves, else the loose mesh and every placement."""
-        mesh = self._mesh(viewport)
-        P = Vec3(*args["point"])
-        if mesh is None:
-            return None
-        resident = getattr(viewport, "reference_tangent", None)
-        if callable(resident):
-            return _tuple(resident(P))
-        spaces = [(mesh, None)]
-        placements = getattr(viewport, "_placements", None)
-        if callable(placements):
-            for g in placements():
-                gm = getattr(g, "mesh", None)
-                if gm is not None and gm.edges and not getattr(g, "billboard", False):
-                    spaces.append((gm, getattr(g, "xform", None)))
-        for gm, xf in spaces:
-            inv = None
-            if xf is not None:
-                inv, ok = xf.inverted()
-                if not ok:
-                    continue
-            t = _tangent_in_mesh(gm, inv.map(P) if inv is not None else P)
-            if t is None:
-                continue
-            if xf is not None:
-                t = xf.mapVector(t)
-                if t.length() < 1e-9:
-                    continue
-                t = t.normalized()
-            return _tuple(t)
-        return None
-
-
-def _tangent_in_mesh(mesh, P):
-    """The tangent at ``P`` of a curve in ``mesh`` that ends there: the
-    circle through the curve's points, square to its radius."""
-    from core.snap import fit_circle
-    for edge in mesh.edges:
-        if getattr(edge, "curve", None) is None:
-            continue
-        if (edge.a - P).length() > 1e-6 and (edge.b - P).length() > 1e-6:
-            continue
-        chain = mesh.curve_edges(edge)
-        incident = [e for e in chain if (e.a - P).length() <= 1e-6 or (e.b - P).length() <= 1e-6]
-        if len(incident) != 1:
-            continue                       # not the arc's end
-        e = incident[0]
-        Q = e.b if (e.a - P).length() <= 1e-6 else e.a
-        pts = {}
-        for c in chain:
-            for vv in (c.v0, c.v1):
-                pts[vv.key] = vv.position
-        fit = fit_circle(list(pts.values())) if len(pts) >= 3 else None
-        if fit is None:
-            continue
-        radial = P - fit[0]
-        if radial.length() < 1e-9:
-            continue
-        r_hat = radial.normalized()
-        leaving = P - Q
-        t = leaving - r_hat * Vec3.dotProduct(leaving, r_hat)
-        if t.length() < 1e-9:
-            continue
-        return t.normalized()
-    return None
-
 
 class ThreePointArcTool(_ArcBase):
     """3-point arc: the circle through the three clicks."""

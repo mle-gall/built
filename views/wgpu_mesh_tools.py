@@ -664,10 +664,48 @@ class MeshToolAccess:
         return DocumentInteraction.pick_extension_item(self, x, y)
 
     _group_obb = _unsupported_pick
+    def begin_loose_preview(self, groups, vertices):
+        view, mesh = self.view, self.scene.mesh
+        renderer = getattr(view, 'renderer', None)
+        if renderer is None or mesh is not self.scene.loose_mesh:
+            return False
+        rows = view.uid_rows.get('loose', ())
+        if len(rows) != 1:
+            return False
+        keys = {v.key for v in vertices}
+        if len(keys) == len(mesh.vertices):
+            self._begin_rows(groups, include_loose=True)
+            return True
+        store = mesh.__dict__.get('_store')
+        if store is None or not hasattr(renderer, 'begin_tool_geometry'):
+            return False
+        packed = view.packed
+        code = int(packed.instances['info'][rows[0], 0])
+        if (getattr(self.scene, 'show_hidden_geometry', False)
+                or np.count_nonzero(packed.instances['info'][:, 0] == code) != 1):
+            return False
+        origin = np.subtract(packed.prototype_origins[code], store.frame_origin)
+        points = store.preview_points(list(keys), origin)
+        if points is None:
+            return False
+        face = packed.commands[code]
+        at, count = int(face['first']), int(face['count'])
+        indices = packed.indices[at:at + count].astype(np.int64) + int(face['base'])
+        corners = packed.vertices[indices].view(np.uint8).reshape(-1)
+        if not renderer.begin_tool_geometry(code, corners, points, origin):
+            return False
+        self._begin_rows(groups, include_loose=False)
+        self._loose_deform = renderer
+        return True
+
     def begin_groups_preview(self, groups):
-        # Their selection boxes stay behind until the commit (GL skips them).
+        self._begin_rows(groups, include_loose=False)
+
+    def _begin_rows(self, groups, include_loose):
         self._moving_groups = tuple(groups)
         selected = {g.uid for g in iter_groups(self._moving_groups)}
+        if include_loose:
+            selected.add('loose')
         self.ids = np.asarray([row for uid in selected
                                for row in self.view.uid_rows.get(uid, ())], np.int64)
         billboards = getattr(self.view, '_billboards', None)
@@ -686,10 +724,19 @@ class MeshToolAccess:
     def set_groups_preview_matrix(self, matrix):
         if self.original is None:
             return
-        rows = self._instance_preview.transformed(matrix.data()).view(self.original.dtype)
-        self.write_rows(rows)
+        transform = matrix.data()
+        if len(self.original):
+            rows = self._instance_preview.transformed(transform).view(self.original.dtype)
+            self.write_rows(rows)
+        renderer = getattr(self, '_loose_deform', None)
+        if renderer is not None:
+            renderer.pose_tool_geometry(transform)
 
     def end_groups_preview(self):
+        renderer = getattr(self, '_loose_deform', None)
+        if renderer is not None:
+            renderer.end_tool_geometry()
+            self._loose_deform = None
         self._moving_groups = ()
         self._instance_preview = None
         self.restore()

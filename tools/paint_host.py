@@ -1,10 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Viewport picks and shared toolbar/tray brush state for the Rust Paint tool."""
 from core.i18n import tr
-from core.mesh import Face
-from core.paint_ops import _face_plane, paint_stamp
+from core.paint_ops import paint_stamp
 from core.style import DEFAULT_FACE_COLOR
-from ingetrazo_core import Vec3
+from ingetrazo_core import Vec3, clicked_back_side
 
 #: How many materials the «Recent» row keeps.
 RECENT_MAX = 6
@@ -47,24 +46,6 @@ def rename_recent(entries: list, old: str, stamp: dict) -> list:
                       for k, v in stamp.items()})
         out.append(e)
     return out
-
-
-def clicked_back_side(viewport, face, group, x: float, y: float) -> bool:
-    """Whether the cursor at ``(x, y)`` sees the BACK of ``face``: the
-    pick ray runs along the face's world normal instead of against it.
-    ``group`` is what ``pick_face_any`` returned beside the face (its
-    transform places the normal). A viewport without a ray (the stubs in
-    tests) reads as the front."""
-    from ingetrazo_core import Vec3 as QVector3D
-    ray = getattr(viewport, "_pixel_to_ray", None)
-    if ray is None:
-        return False
-    origin, direction = ray(x, y)
-    if origin is None or direction is None:
-        return False
-    from core.snap import face_plane_world
-    _p, normal = face_plane_world(face, getattr(group, "xform", None))
-    return QVector3D.dotProduct(normal, direction) > 0.0
 
 
 class PaintHost:
@@ -169,58 +150,6 @@ class PaintHost:
         if self._input("click", ctx)["redraw"]:
             ctx.viewport.update()
 
-    def host_sampler_armed(self, vp, _):
-        return bool(self.sample_armed or getattr(vp, "_alt_down", False))
-
-    def host_probe_container(self, vp, px):
-        from views.array_bake import reading_only
-        with reading_only():
-            self._face, self._owner = vp.pick_face_any(*px)
-        self._container = self._container_under(vp, self._owner, *px)
-        return self._container is not None and self._face is not None
-
-    def host_pick_paint_face(self, vp, px):
-        self._face, self._owner = vp.pick_face_any(*px)
-        return self._face is not None
-
-    def host_clear_paint_hover(self, vp, _):
-        vp.set_hover(None)
-
-    def host_mark_paint_face(self, vp, px):
-        pick = getattr(vp, "pick_face_placement", None)
-        if pick is not None:
-            vp.set_hover(*pick(*px))
-        else:
-            vp.set_hover(vp.pick_face_any(*px)[0])
-
-    def host_sample_image(self, vp, px):
-        if self._face is None:
-            pick = getattr(vp, "image_plane_at", None)
-            image = pick(*px) if pick else None
-        else:
-            pick = getattr(vp, "image_in_front_of", None)
-            image = pick(self._face, *px) if pick else None
-        if image is None:
-            return None
-        tex = image.texture()
-        n = image.normal()
-        opacity = float(getattr(image, "opacity", 1.))
-        return {"attrs": {"texture": tex, "opacity": opacity if opacity < 1. else None},
-                "plane": (n, Vec3.dotProduct(n, image.origin)) if tex.get("uvw") else None}
-
-    def host_sample_face(self, vp, px):
-        from core.group import effective_material
-        from core.materials import effective_attrs
-        face = self._face
-        front = effective_attrs(face.attrs, effective_material(self._owner))
-        # Only material fields cross the bridge; extension attrs can contain arbitrary objects.
-        fields = ("color", "texture", "opacity", "pbr", "mat")
-        back = face.attrs.get("back")
-        return {"front": {k: front[k] for k in fields if k in front},
-                "back": {k: back[k] for k in fields if k in back} if isinstance(back, dict) else back,
-                "back_side": clicked_back_side(vp, face, self._owner, *px),
-                "plane": _face_plane(face)}
-
     def host_adopt_sample(self, vp, sample):
         from core.materials import has_own_material
         cls = type(self)
@@ -258,17 +187,6 @@ class PaintHost:
                 "default": brush.current_is_default, "color": brush.current_color,
                 "texture": brush.current_texture, "opacity": brush.current_opacity,
                 "plane": brush.current_texture_plane if brush.current_texture is not None else None}
-
-    def host_paint_targets(self, vp, args):
-        from core.protocol.keys import mesh_key
-        px, container = args
-        if container:
-            return {"placement": self._container.uid}
-        mesh = self._owner.mesh if self._owner is not None else vp.scene.mesh
-        selected = [f for f in vp.scene.selection if isinstance(f, Face)]
-        faces = selected if self._face in selected else mesh.surface_of(self._face)
-        return {"mesh": mesh_key(mesh), "seed": str(self._face.key), "faces": [str(f.key) for f in faces],
-                "back": clicked_back_side(vp, self._face, self._owner, *px)}
 
     def host_container_painted(self, vp, _):
         flash = getattr(vp, "flash_status", None)

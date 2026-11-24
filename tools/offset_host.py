@@ -104,9 +104,6 @@ class OffsetHost:
         if label is not None:
             return fmt_len(label[0]), QVector3D(*label[1])
 
-    def host_offset_ray(self, viewport, px):
-        return viewport._pixel_to_ray(*px)
-
     def host_clear_offset_picks(self, viewport, _):
         self.hovered_face = self.hovered_edge = self._base_face = None
 
