@@ -55,11 +55,6 @@ SCRIPT = textwrap.dedent(r"""
         opened.append(str(path))
         return real_open(self, path, *a, **k)
     mw.MainWindow.open_path = open_path
-    real_project = mw.MainWindow.open_project
-    def open_project(self, path, *a, **k):
-        opened.append(str(path))
-        return real_project(self, path, *a, **k)
-    mw.MainWindow.open_project = open_project
     def question(parent, title, text, *a, **k):
         asked.append(title)
         return "yes" if recover else "no"

@@ -5,18 +5,13 @@ Blue mirrors the selection in place about its centre in one click, as
 modelling tutorials do — the same mirror as the Flip tool's."""
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 import pytest  # noqa: E402
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from core.group import Group  # noqa: E402
 from core.mesh import Mesh  # noqa: E402
-
-_app = QApplication.instance() or QApplication([])
 
 
 def V(x, y, z=0.0):
@@ -24,12 +19,8 @@ def V(x, y, z=0.0):
 
 
 @pytest.fixture
-def window():
-    from views.main_window import MainWindow
-    w = MainWindow()
-    yield w
-    w._saved_version = w.viewport.scene.version   # no "save?" modal
-    w.close()
+def window(native_window):
+    return native_window
 
 
 def _xs(mesh):

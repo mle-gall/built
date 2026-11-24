@@ -351,8 +351,6 @@ class ShellWindow(WindowDocumentCommands, QObject):
         self._coord_label = _Label()
         self._tool_label = _Label()
         self._vcb_live = ""
-        self._active_file = None
-        self._session_unsaved_doc = None
         from core.i18n import tr
         for key, tool in self._tools.items():
             shortcut = getattr(tool, "shortcut", "") or ""

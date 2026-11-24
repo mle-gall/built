@@ -3,6 +3,7 @@ the view on screen as CAD lines, hidden lines removed — parallel on the
 composer's layers, perspective and two-point as the window frames them."""
 from __future__ import annotations
 
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 import math
 
 import numpy as np
@@ -54,23 +55,18 @@ def test_the_view_goes_out_as_dxf_in_every_projection(tmp_path, monkeypatch):
         win.close()
 
 
-def test_perspective_reads_the_same_from_the_caches_and_the_walk():
+def test_perspective_reads_the_same_from_the_caches_and_the_walk(native_window):
     from core.hlr import hlr_perspective
-    from views.main_window import MainWindow
 
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        vp.resize(800, 600)
-        vp.camera.set_aspect(800, 600)
-        _fountain_like(vp.scene)
-        cam = vp.camera
-        cam.yaw, cam.pitch = math.radians(-50.0), math.radians(20.0)
-        a = hlr_perspective(vp.scene, cam, geometry=vp.hlr_geometry())
-        b = hlr_perspective(vp.scene, cam)
-        la = np.hypot(a[:, 2] - a[:, 0], a[:, 3] - a[:, 1]).sum()
-        lb = np.hypot(b[:, 2] - b[:, 0], b[:, 3] - b[:, 1]).sum()
-        assert la > 0 and abs(la - lb) < 1e-6 * max(la, 1.0)
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    win = native_window
+    vp = win.viewport
+    win._host.resize(800, 600, 1.0)
+    vp.camera.set_aspect(800, 600)
+    _fountain_like(vp.scene)
+    cam = vp.camera
+    cam.yaw, cam.pitch = math.radians(-50.0), math.radians(20.0)
+    a = hlr_perspective(vp.scene, cam, geometry=vp.hlr_geometry())
+    b = hlr_perspective(vp.scene, cam)
+    la = np.hypot(a[:, 2] - a[:, 0], a[:, 3] - a[:, 1]).sum()
+    lb = np.hypot(b[:, 2] - b[:, 0], b[:, 3] - b[:, 1]).sum()
+    assert la > 0 and abs(la - lb) < 1e-6 * max(la, 1.0)

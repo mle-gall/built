@@ -5,16 +5,13 @@ the technical-drawing standards draw them (#741). The sheet drew «\\»,
 135° to the line, and the 3D view drew them square to it."""
 from __future__ import annotations
 
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 import math
-import sys
 
 import pytest
 from PySide6.QtGui import QImage, QPainter
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
 
-if QApplication.instance() is None:
-    QApplication(sys.argv[:1])
 
 from core.composition import CotaAngularItem, CotaItem, CotaRadialItem  # noqa: E402
 
@@ -59,31 +56,26 @@ def _paint(fn, item):
     return p.lines
 
 
-def test_3d_view_draws_oblique_ticks_not_square_ones(monkeypatch):
+def test_3d_view_draws_oblique_ticks_not_square_ones(native_window, monkeypatch):
     from core.dimension import Dimension
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        scene = vp.scene
-        dim = Dimension(QVector3D(0, 0, 0), QVector3D(10, 0, 0),
-                        QVector3D(0, 0, 0))
-        scene.dimensions.append(dim)
-        scene.dimension_style["ends"] = "tick"
+    win = native_window
+    vp = win.viewport
+    scene = vp.scene
+    dim = Dimension(QVector3D(0, 0, 0), QVector3D(10, 0, 0),
+                    QVector3D(0, 0, 0))
+    scene.dimensions.append(dim)
+    scene.dimension_style["ends"] = "tick"
 
-        def to_px(p):
-            return (100.0, 200.0) if p.x() < 5 else (300.0, 200.0)
+    def to_px(p):
+        return (100.0, 200.0) if p.x() < 5 else (300.0, 200.0)
 
-        monkeypatch.setattr(vp, "_world_to_pixel", to_px)
-        monkeypatch.setattr(vp, "_occluded_on_screen", lambda w: False)
-        monkeypatch.setattr(vp, "_draw_occluded_segment", lambda *a: None)
-        img = QImage(400, 400, QImage.Format_ARGB32)
-        img.fill(0xFFFFFFFF)
-        p = _Recorder(img)
-        vp._draw_dimensions(p)
-        p.end()
-        ticks = _ticks(p.lines, 8.0)
-        assert len(ticks) == 2 and all(_is_slash(t) for t in ticks)
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    monkeypatch.setattr(vp, "_world_to_pixel", to_px)
+    monkeypatch.setattr(vp, "_occluded_on_screen", lambda w: False)
+    monkeypatch.setattr(vp, "_draw_occluded_segment", lambda *a: None)
+    img = QImage(400, 400, QImage.Format_ARGB32)
+    img.fill(0xFFFFFFFF)
+    p = _Recorder(img)
+    vp._draw_dimensions(p)
+    p.end()
+    ticks = _ticks(p.lines, 8.0)
+    assert len(ticks) == 2 and all(_is_slash(t) for t in ticks)

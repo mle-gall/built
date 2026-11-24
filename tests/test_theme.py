@@ -66,11 +66,6 @@ def test_the_toolbar_grip_is_one_grey_line(app, vertical):
     assert len(line) <= max(len(px) // 12 + 2, 40)
 
 
-def test_the_floating_title_style_draws_the_same_grip():
-    from views.floating_toolbar import _GripStyle
-    assert issubclass(_GripStyle, theme.ChromeStyle)
-
-
 def test_the_grip_is_one_thin_line():
     # Round 3: one grey line instead of two columns of dots, to save width.
     from PySide6.QtWidgets import QStyle

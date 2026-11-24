@@ -75,12 +75,18 @@ def restore_shell_patches(tmp_path_factory):
 
 
 @pytest.fixture
-def native_window(tmp_path, restore_shell_patches):
-    """A native document and its temporary profile, including host teardown."""
+def native_host(tmp_path, restore_shell_patches):
+    """One native host, including its initial document and private profile."""
     from app_shell.host import Host
     host = Host(0, 900, 600, 1., settings=str(tmp_path / "profile"))
     try:
-        host.window.new_document()
-        yield host.window
+        yield host
     finally:
         host.close()
+
+
+@pytest.fixture
+def native_window(native_host):
+    """A fresh document in the native window."""
+    native_host.window.new_document()
+    return native_host.window

@@ -121,9 +121,9 @@ def op_intersect_apply(ctx):
     from core.edits import build_add_edges
     from core.history import History
     scene = ctx["scene"]
-    from views.main_window import _WELD_LENGTH
+    from core.mesh import _KEY_SCALE
     segs = [(a, b) for a, b in ctx.get("segs", [])
-            if (b - a).length() >= _WELD_LENGTH][:ctx["apply_cap"]]
+            if (b - a).length() >= 1.0 / _KEY_SCALE][:ctx["apply_cap"]]
     ctx["applied"] = len(segs)
     if segs:
         History(scene).execute(build_add_edges(scene, segs,

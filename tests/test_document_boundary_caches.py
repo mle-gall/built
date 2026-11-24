@@ -9,36 +9,26 @@ a group of the opened file could meet the scale figure's entry. Every such
 cache has to go at the document boundary."""
 from __future__ import annotations
 
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 import re
-import sys
 from pathlib import Path
 
-from PySide6.QtWidgets import QApplication
 
-if QApplication.instance() is None:
-    QApplication(sys.argv[:1])
-
-
-def test_open_forgets_every_id_keyed_cache(tmp_path):
+def test_open_forgets_every_id_keyed_cache(native_window, tmp_path):
     from core.scene import Scene
     from formats import igz
-    from views.main_window import MainWindow
     path = tmp_path / "other.igz"
     igz.save_scene(Scene(), path)
-    win = MainWindow()
+    win = native_window
     vp = win.viewport
-    try:
-        _seed_inference_references(vp)
-        for name in vp._DOCUMENT_CACHES:
-            setattr(vp, name, {12345: "stale"})
-        win._saved_version = vp.scene.version
-        assert win.open_path(path)
-        for name in vp._DOCUMENT_CACHES:
-            assert not getattr(vp, name), name
-        _assert_inference_references_cleared(vp)
-    finally:
-        win._saved_version = vp.scene.version
-        win.close()
+    _seed_inference_references(vp)
+    for name in vp._DOCUMENT_CACHES:
+        setattr(vp, name, {12345: "stale"})
+    win._saved_version = vp.scene.version
+    assert win.open_path(path)
+    for name in vp._DOCUMENT_CACHES:
+        assert not getattr(vp, name), name
+    _assert_inference_references_cleared(vp)
 
 
 def _seed_inference_references(vp):
@@ -69,40 +59,30 @@ def _assert_inference_references_cleared(vp):
     assert not inference._dwell_timer.isActive()
 
 
-def test_new_drawing_drops_acquired_inference_references():
-    from views.main_window import MainWindow
+def test_new_drawing_drops_acquired_inference_references(native_window):
 
-    win = MainWindow()
-    try:
-        _seed_inference_references(win.viewport)
-        win._confirm_discard = lambda *_a, **_k: True
-        win._on_new()
-        _assert_inference_references_cleared(win.viewport)
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    win = native_window
+    _seed_inference_references(win.viewport)
+    win._confirm_discard = lambda *_a, **_k: True
+    win._on_new()
+    _assert_inference_references_cleared(win.viewport)
 
 
-def test_undo_drops_acquired_inference_references():
+def test_undo_drops_acquired_inference_references(native_window):
     from ingetrazo_core import Vec3 as QVector3D
 
     from core.history import AddEdgeCommand
-    from views.main_window import MainWindow
 
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        vp.history.execute(AddEdgeCommand(QVector3D(0, 0, 0),
-                                           QVector3D(1, 0, 0)))
-        _seed_inference_references(vp)
-        vp.axis_lock = "x"
-        win._on_undo()
-        _assert_inference_references_cleared(vp)
-        assert vp.axis_lock == "x"
-        assert not vp.history.undo_stack
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    win = native_window
+    vp = win.viewport
+    vp.history.execute(AddEdgeCommand(QVector3D(0, 0, 0),
+                                       QVector3D(1, 0, 0)))
+    _seed_inference_references(vp)
+    vp.axis_lock = "x"
+    win._on_undo()
+    _assert_inference_references_cleared(vp)
+    assert vp.axis_lock == "x"
+    assert not vp.history.undo_stack
 
 
 def test_every_cache_filled_by_id_of_a_group_is_a_document_cache():

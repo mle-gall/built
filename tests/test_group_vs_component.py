@@ -4,6 +4,7 @@ try to make it unique, it explodes all the subgroups»; Marco, 24-09: Make
 Component over several groups must make ONE component holding them)."""
 from __future__ import annotations
 
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 from pathlib import Path
 
 import pytest
@@ -103,30 +104,25 @@ def test_the_flag_survives_the_igz_and_old_files_read_as_groups(tmp_path):
     assert all(len(g.children) == 2 for g in back.groups)
 
 
-def test_a_copied_group_becomes_its_own_when_opened():
+def test_a_copied_group_becomes_its_own_when_opened(native_window):
     """Copies of a GROUP share their geometry only until one is edited —
     editing one never reaches the others, unlike a component."""
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        scene = vp.scene
-        g = _box_group(0, "Muro")
-        scene.groups.append(g)
-        scene.selection.clear()
-        scene.selection.add(g)
-        vp.copy_selection()
-        tpl = vp.clipboard["groups"][0]
-        assert not tpl.is_component()
-        s1, s2 = copy_group(tpl, V(5, 0, 0)), copy_group(tpl, V(9, 0, 0))
-        scene.groups.extend([s1, s2])
-        assert s1.mesh is s2.mesh
-        vp.begin_group_edit(s1)
-        vp.end_group_edit()
-        assert s1.mesh is not s2.mesh
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    win = native_window
+    vp = win.viewport
+    scene = vp.scene
+    g = _box_group(0, "Muro")
+    scene.groups.append(g)
+    scene.selection.clear()
+    scene.selection.add(g)
+    vp.copy_selection()
+    tpl = vp.clipboard["groups"][0]
+    assert not tpl.is_component()
+    s1, s2 = copy_group(tpl, V(5, 0, 0)), copy_group(tpl, V(9, 0, 0))
+    scene.groups.extend([s1, s2])
+    assert s1.mesh is s2.mesh
+    vp.begin_group_edit(s1)
+    vp.end_group_edit()
+    assert s1.mesh is not s2.mesh
 
 
 def test_an_older_file_reads_its_groups_of_groups_as_groups(tmp_path):

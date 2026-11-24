@@ -20,6 +20,7 @@ wins.
 """
 from __future__ import annotations
 
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 import json
 import os
 from types import SimpleNamespace
@@ -146,30 +147,25 @@ def test_a_guide_on_a_hidden_or_locked_layer_is_not_picked():
     assert vp.pick_guide(40.0, 103.0) is None
 
 
-def test_the_window_snaps_and_draws_only_the_shown_guides():
+def test_the_window_snaps_and_draws_only_the_shown_guides(native_window):
     """On the real viewport: the snap scene leaves out a guide whose layer
     is off and keeps it again when the layer comes back."""
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        vp.resize(1200, 800)
-        scene = vp.scene
-        scene.layers.append(Layer("Guías"))
-        p = QVector3D(2.0, 3.0, 0.0)
-        scene.guides.append(Guide(p, layer="Guías"))
+    win = native_window
+    vp = win.viewport
+    win._host.resize(1200, 800, 1.0)
+    scene = vp.scene
+    scene.layers.append(Layer("Guías"))
+    p = QVector3D(2.0, 3.0, 0.0)
+    scene.guides.append(Guide(p, layer="Guías"))
 
-        def has_point():
-            return any((e.a - p).length() < 1e-9 and (e.b - p).length() < 1e-9
-                       for e in vp._snap_scene(600, 400).edges)
-        assert has_point()
-        scene.layer("Guías").visible = False
-        assert not has_point()
-        scene.layer("Guías").visible = True
-        assert has_point()
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    def has_point():
+        return any((e.a - p).length() < 1e-9 and (e.b - p).length() < 1e-9
+                   for e in vp._snap_scene(600, 400).edges)
+    assert has_point()
+    scene.layer("Guías").visible = False
+    assert not has_point()
+    scene.layer("Guías").visible = True
+    assert has_point()
 
 
 # ---- Assigning, the active layer --------------------------------------------

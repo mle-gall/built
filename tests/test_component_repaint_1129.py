@@ -9,16 +9,13 @@ cleared it, so a copy painted as a whole went on drawing its old bake: the
 yellow face came and went with the colour of the container."""
 from __future__ import annotations
 
-import os
 
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 import pytest
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
-_app = QApplication.instance() or QApplication([])
 
 from core.group import Group  # noqa: E402
 from core.history import SetFaceColorCommand, SetGroupMaterialCommand  # noqa: E402
@@ -66,12 +63,8 @@ def _shows_yellow(vp, group):
 
 
 @pytest.fixture
-def win():
-    from views.main_window import MainWindow
-    w = MainWindow()
-    yield w
-    w._saved_version = w.viewport.scene.version
-    w.close()
+def win(native_window):
+    return native_window
 
 
 @pytest.mark.parametrize("first", [0, 1], ids=["plain copy first", "painted first"])
