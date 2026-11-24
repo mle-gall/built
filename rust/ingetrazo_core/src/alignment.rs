@@ -113,13 +113,111 @@ fn parse_kmz(py: Python<'_>, path: PathBuf) -> PyResult<Bound<'_, PyList>> {
     objects(py, py.detach(|| kml(&String::from_utf8_lossy(&blob))))
 }
 
+fn geojson(text: &str) -> Vec<Feature> {
+    use serde_json::Value;
+    fn coords(value: &Value, closed: bool, name: &str, out: &mut Vec<Feature>) {
+        let Some(coords) = value.as_array() else {
+            return;
+        };
+        let points = coords
+            .iter()
+            .filter_map(|c| Some((c.get(1)?.as_f64()?, c.get(0)?.as_f64()?)))
+            .collect();
+        Feature {
+            points,
+            closed,
+            name: name.to_owned(),
+        }
+        .finish(out);
+    }
+    fn collect(value: &Value, name: &str, out: &mut Vec<Feature>) {
+        let c = &value["coordinates"];
+        match value["type"].as_str() {
+            Some("Feature") => {
+                let value_name = &value["properties"]["name"];
+                let name = match value_name {
+                    Value::String(s) => s.clone(),
+                    Value::Bool(true) => "True".into(),
+                    Value::Number(n) if n.as_f64() != Some(0.) => n.to_string(),
+                    _ => String::new(),
+                };
+                collect(&value["geometry"], &name, out);
+            }
+            Some("FeatureCollection" | "GeometryCollection") => {
+                let members = if value["type"] == "FeatureCollection" {
+                    "features"
+                } else {
+                    "geometries"
+                };
+                if let Some(items) = value[members].as_array() {
+                    for item in items {
+                        collect(item, name, out);
+                    }
+                }
+            }
+            Some("LineString") => coords(c, false, name, out),
+            Some("Polygon") => coords(&c[0], true, name, out),
+            Some("MultiLineString") => {
+                if let Some(items) = c.as_array() {
+                    for item in items {
+                        coords(item, false, name, out);
+                    }
+                }
+            }
+            Some("MultiPolygon") => {
+                if let Some(items) = c.as_array() {
+                    for item in items {
+                        coords(&item[0], true, name, out);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut result = Vec::new();
+    if let Ok(value) = serde_json::from_str(text) {
+        collect(&value, "", &mut result);
+    }
+    result
+}
+
+#[pyfunction]
+fn parse_geojson<'py>(py: Python<'py>, text: &str) -> PyResult<Bound<'py, PyList>> {
+    objects(py, py.detach(|| geojson(text)))
+}
+
+#[pyfunction]
+fn load_features(py: Python<'_>, path: PathBuf) -> PyResult<Bound<'_, PyList>> {
+    let ext = path
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if ext == "kmz" {
+        return parse_kmz(py, path);
+    }
+    let features = py.detach(|| -> std::io::Result<_> {
+        let bytes = std::fs::read(path)?;
+        let text = String::from_utf8_lossy(&bytes);
+        Ok(
+            if ext == "kml"
+                || (!matches!(ext.as_str(), "geojson" | "json")
+                    && text.trim_start().starts_with('<'))
+            {
+                kml(&text)
+            } else {
+                geojson(&text)
+            },
+        )
+    })?;
+    objects(py, features)
+}
+
 #[pyfunction]
 fn open_alignment(py: Python<'_>, path: PathBuf) -> PyResult<Py<PyAny>> {
     let worker = crate::file_open::DocumentOpen::parse(move |py, progress| {
         progress.call1((0., "Reading file…"))?;
-        let features = py
-            .import("georef.geoimport")?
-            .call_method1("load_features", (path,))?;
+        let features = load_features(py, path)?.into_any();
         progress.call1((1., "Done"))?;
         Ok(features.unbind())
     })?;
@@ -131,6 +229,8 @@ fn open_alignment(py: Python<'_>, path: PathBuf) -> PyResult<Py<PyAny>> {
 }
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(load_features, m)?)?;
+    m.add_function(wrap_pyfunction!(parse_geojson, m)?)?;
     m.add_function(wrap_pyfunction!(open_alignment, m)?)?;
     m.add_function(wrap_pyfunction!(parse_kml, m)?)?;
     m.add_function(wrap_pyfunction!(parse_kmz, m)?)?;
