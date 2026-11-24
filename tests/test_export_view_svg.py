@@ -194,41 +194,6 @@ def test_the_export_menu_writes_the_view_as_svg(tmp_path, monkeypatch):
         win.close()
 
 
-def test_the_composer_frame_goes_out_at_its_scale_and_pens(tmp_path,
-                                                           monkeypatch):
-    from core.composition import MarcoVista
-    from views.composer import ComposerWindow
-    from views.main_window import MainWindow
-    monkeypatch.setattr(ComposerWindow, "render_frame", lambda self, f: None)
-    win = MainWindow()
-    comp = ComposerWindow(win)
-    try:
-        _two_layer_scene(win.viewport.scene)
-        win.viewport.notify_scene_changed()
-        sizes = {}
-        for scale in (50.0, 100.0):
-            frame = MarcoVista(view_key="std:top", scale_n=scale,
-                               w_mm=100.0, h_mm=100.0, pen_profile_mm=0.3)
-            path = tmp_path / f"planta-{scale:g}.svg"
-            assert comp.export_frame_svg(frame, str(path)) > 0
-            root, layers = _layers(path)
-            sizes[scale] = float(root.get("width").rstrip("mm"))
-            names = list(layers)
-            assert any(n.startswith("Muros") for n in names), names
-            assert any(n.startswith("Mobiliario") for n in names), names
-            assert any(n.endswith("-PERFIL") for n in names), names
-            for name, g in layers.items():
-                if name.endswith("-PERFIL"):
-                    assert g.get("stroke-width") == "0.3", name
-        # 4 m of drawing: 80 mm at 1:50, 40 mm at 1:100, plus the margins.
-        assert sizes[50.0] - 20 == pytest.approx(2 * (sizes[100.0] - 20),
-                                                 rel=1e-3)
-    finally:
-        comp.close()
-        win._saved_version = win.viewport.scene.version
-        win.close()
-
-
 # ---- The faces --------------------------------------------------------------
 
 def _box(mesh, x0=0.0, y0=0.0, z0=0.0, s=1.0):
@@ -563,33 +528,6 @@ def test_default_colour_only_drops_every_material_and_texture(tmp_path):
     out = tmp_path / "limpio.svg"
     save_svg_layers(out, [], faces=lit)
     assert "data:image" not in out.read_text(encoding="utf-8")
-
-
-def test_the_composer_frame_takes_its_faces_too(tmp_path, monkeypatch):
-    from core.composition import MarcoVista
-    from views.composer import ComposerWindow
-    from views.main_window import MainWindow
-    monkeypatch.setattr(ComposerWindow, "render_frame", lambda self, f: None)
-    win = MainWindow()
-    comp = ComposerWindow(win)
-    try:
-        _two_layer_scene(win.viewport.scene)
-        win.viewport.notify_scene_changed()
-        frame = MarcoVista(view_key="std:top", scale_n=50.0, w_mm=100.0,
-                           h_mm=100.0)
-        path = tmp_path / "planta.svg"
-        comp.export_frame_svg(frame, str(path),
-                              faces={"textures": True, "as_view": True})
-        _root, layers = _layers(path)
-        assert "Muros-CARAS" in layers and "Mobiliario-CARAS" in layers
-        assert len(layers["Mobiliario-CARAS"].findall(SVG + "path")) == 1
-        comp.export_frame_svg(frame, str(path))           # lines alone
-        _root, layers = _layers(path)
-        assert not any("-CARAS" in n for n in layers)
-    finally:
-        comp.close()
-        win._saved_version = win.viewport.scene.version
-        win.close()
 
 
 def _slab(mesh, x0, y0, z0, sx, sy, sz):

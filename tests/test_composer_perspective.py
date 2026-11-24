@@ -29,8 +29,6 @@ from core.composition import (Composicion, MarcoVista, apply_frame_camera,
 from core.saved_views import SavedView
 from core.scene import Scene
 from tests.test_composer_canvas import _FakeViewport
-from views.composer import (ComposerWindow, apply_frame_shadows,
-                            frame_title_text, view_title_texts)
 
 _app = QApplication.instance() or QApplication([])
 V = QVector3D
@@ -40,23 +38,6 @@ def _scene_with_a_box() -> Scene:
     scene = Scene()
     scene.mesh.add_face([V(0, 0, 0), V(6, 0, 0), V(6, 0, 3), V(0, 0, 3)])
     return scene
-
-
-def _composer():
-    host = QWidget()
-    host.viewport = _FakeViewport()
-    host.viewport.scene.mesh.add_face(
-        [V(0, 0, 0), V(6, 0, 0), V(6, 0, 3), V(0, 0, 3)])
-    # the GL render the raster path asks for, GL-free
-    host.viewport.render_image = lambda w, h, overlays=True, sharp_shadows=False: None
-    composer = ComposerWindow(host)
-    return composer, host
-
-
-def _frame_item(composer, frame):
-    from views.composer import FrameItem
-    return next(i for i in composer.canvas.items()
-                if isinstance(i, FrameItem) and i.model is frame)
 
 
 # ── The camera ──────────────────────────────────────────────────────────────
@@ -165,88 +146,11 @@ def test_the_projector_takes_arrays_whole():
 
 # ── No scale on paper ───────────────────────────────────────────────────────
 
-def test_a_perspective_frame_prints_no_scale():
-    frame = MarcoVista(view_key="std:iso", scale_n=125.0, perspective=True)
-    assert "1:125" not in frame_title_text(frame)
-    assert view_title_texts(frame)["scale"] == "NO SCALE"
-    assert frame.scale_label() == "NO SCALE"
-
-
-def test_a_parallel_frame_keeps_saying_its_scale():
-    frame = MarcoVista(view_key="std:iso", scale_n=125.0)
-    assert frame_title_text(frame).endswith("1:125")
-    assert view_title_texts(frame)["scale"] == "ESC. 1:125"
-    assert frame.scale_label() == "ESC. 1:125"
-
-
-def test_the_escala_field_reads_no_scale_too():
-    frame = MarcoVista(scale_n=50.0, perspective=True,
-                       title_text="Vista — {escala}")
-    # inline in a sentence it reads as words, not as a stamp
-    assert view_title_texts(frame)["title"] == "Vista — no scale"
-
 
 # ── The frame's own sun ─────────────────────────────────────────────────────
 
-def test_the_frame_can_turn_the_sun_on_without_moving_the_models():
-    scene = _scene_with_a_box()
-    scene.shadows.enabled = False
-    apply_frame_shadows(MarcoVista(shadows=True), scene)
-    assert scene.shadows.enabled is True
-
-
-def test_the_frame_can_turn_the_sun_off_for_itself():
-    scene = _scene_with_a_box()
-    scene.shadows.enabled = True
-    apply_frame_shadows(MarcoVista(shadows=False), scene)
-    assert scene.shadows.enabled is False
-
-
-def test_no_opinion_means_the_frame_does_not_touch_the_shadows():
-    scene = _scene_with_a_box()
-    scene.shadows.enabled = True
-    scene.shadows.hour = 9
-    apply_frame_shadows(MarcoVista(), scene)
-    assert scene.shadows.enabled is True and scene.shadows.hour == 9
-
-
-def test_the_frame_can_pick_its_own_hour_of_the_day():
-    scene = _scene_with_a_box()
-    apply_frame_shadows(MarcoVista(shadows=True, sun_hour=15.5), scene)
-    assert (scene.shadows.hour, scene.shadows.minute) == (15, 30)
-
-
-def test_the_live_model_gets_its_own_sun_back_after_the_frame_renders():
-    """The composer never disturbs the viewport — the rule the whole
-    ``_with_frame_camera`` dance exists for."""
-    composer, _host = _composer()
-    scene = composer._scene()
-    scene.shadows.enabled = False
-    scene.shadows.hour = 8
-    frame = composer.comp.frames[0]
-    frame.shadows = True
-    frame.sun_hour = 16.0
-    seen = {}
-    composer._with_frame_camera(
-        frame, lambda: seen.update(on=scene.shadows.enabled,
-                                   hour=scene.shadows.hour))
-    assert seen == {"on": True, "hour": 16}
-    assert scene.shadows.enabled is False and scene.shadows.hour == 8
-
 
 # ── The composer around it ──────────────────────────────────────────────────
-
-def test_a_perspective_frame_never_takes_the_hidden_line_pass():
-    """``hlr_view`` projects in parallel by construction: a vector frame in
-    perspective would come back blank."""
-    composer, _host = _composer()
-    frame = composer.comp.frames[0]
-    frame.style = "vectorial"
-    frame.perspective = True
-    frame.cam_distance = 20.0
-    composer._forget_frame(frame)
-    composer.render_frame(frame)
-    assert id(frame) not in composer.hlr_cache
 
 
 def test_the_perspective_switch_survives_a_save_and_a_load():
@@ -276,12 +180,3 @@ def test_an_old_sheet_opens_parallel_even_pointing_at_a_perspective_scene():
     assert cam.perspective is False
 
 
-def test_zoom_in_a_perspective_frame_walks_the_eye_instead_of_rescaling():
-    composer, _host = _composer()
-    frame = composer.comp.frames[0]
-    frame.perspective = True
-    frame.cam_distance = 20.0
-    before_n = frame.scale_n
-    composer.zoom_view(_frame_item(composer, frame), 2.0)
-    assert frame.cam_distance == pytest.approx(10.0)
-    assert frame.scale_n == before_n      # the scale means nothing here

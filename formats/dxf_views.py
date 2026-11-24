@@ -93,6 +93,21 @@ def dxf_cut_layers(scene, camera, scale_n: float = DXF_VIEW_SCALE, k=None,
     return groups, solids
 
 
+def dxf_groups_by_class(drawing, view_layer: str, hidden_lines: bool) -> list:
+    """The DXF groups of a view drawing without layers: one DXF layer per
+    line class — the CAD's pen table does the weights — and the hidden
+    lines on their own layer, dashed (#81)."""
+    from core.hlr import KIND_CUT, KIND_EDGE, KIND_HIDDEN, KIND_PROFILE
+    k = drawing.kinds
+    groups = [
+        (view_layer, drawing.segs[k == KIND_EDGE]),
+        (f"{view_layer}-PERFIL", drawing.segs[k == KIND_PROFILE]),
+        (f"{view_layer}-CORTE", drawing.segs[k == KIND_CUT])]
+    if hidden_lines:
+        groups.append((f"{view_layer}-OCULTAS", drawing.segs[k == KIND_HIDDEN], "DASHED"))
+    return groups
+
+
 def dxf_groups_by_layer(drawing, view_layer: str, hidden_lines: bool,
                         texts=None) -> list:
     """The DXF groups of a layer-tagged view drawing: one DXF layer per

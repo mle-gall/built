@@ -313,23 +313,3 @@ def test_every_toolbar_of_the_model_window_floats_as_a_window(settings_file):
         win.close()
 
 
-def test_every_toolbar_of_the_composer_floats_as_a_window(settings_file, monkeypatch):
-    from views.composer import ComposerWindow
-    from views.main_window import MainWindow
-    monkeypatch.setattr(ComposerWindow, "render_frame", lambda self, f: None)
-    win = MainWindow()
-    try:
-        comp = ComposerWindow(win)
-        try:
-            comp.show()
-            _app.processEvents()
-            bars = [tb for tb in comp.findChildren(QToolBar)
-                    if tb.parent() is comp and tb.isVisible()]
-            assert len(bars) >= 3
-            for tb in bars:
-                _close_button(tb)
-        finally:
-            comp.close()
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()

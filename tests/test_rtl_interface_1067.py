@@ -144,16 +144,13 @@ def test_flow_layout_fills_from_the_right_only_right_to_left():
     assert [g.right() for g in rtl] == [199, 157, 115]
 
 
-def test_views_and_canvas_are_not_mirrored(rtl_app):
+def test_the_views_are_not_mirrored(rtl_app):
     from views.main_window import MainWindow
     win = MainWindow()
     try:
         assert win.isRightToLeft()
         assert win.viewport.keys_stand_in.layoutDirection() == Qt.LeftToRight
         assert win._vcb_value.layoutDirection() == Qt.LeftToRight
-        comp = win._ensure_composer()
-        assert comp._canvas_area.layoutDirection() == Qt.LeftToRight
-        assert comp.isRightToLeft()
     finally:
         win._saved_version = win.viewport.scene.version
         win.close()

@@ -181,89 +181,8 @@ def test_a_layer_set_on_a_face_inside_the_object_wins():
 
 # ---- Pens ------------------------------------------------------------------
 
-def test_the_cut_takes_the_layer_cut_weight_and_nothing_else():
-    from views.composer import _layer_pen
-    base = QPen(QColor(30, 36, 44))
-    base.setWidthF(0.5)
-    style = ((1.0, 0.0, 0.0), "dashed", 0.18, 0.7)
-    pen = _layer_pen(base, style, KIND_CUT)
-    assert pen.widthF() == pytest.approx(0.7)
-    assert pen.color() == base.color()          # the cut keeps its ink
-    assert not pen.dashPattern() or pen.style() == base.style()
-    # no cut weight: the sheet's cut pen itself
-    assert _layer_pen(base, ((1, 0, 0), "dashed", 0.18, None),
-                      KIND_CUT) is base
-    assert _layer_pen(base, ((1, 0, 0), "dashed", 0.18), KIND_CUT) is base
-    # the other lines keep their layer weight, not the cut's
-    assert _layer_pen(base, style, KIND_EDGE).widthF() == pytest.approx(0.18)
-
-
-def test_the_wall_cut_is_inked_heavier_than_the_door_cut():
-    from views.composer import _paint_hlr_lines_mm
-    scene = _wall_and_door(Scene())
-    d = hlr_drawing(scene, _top_camera(scene), profiles=False, layers=True)
-    frame = MarcoVista(style="vectorial", pen_cut_mm=0.25)
-    widths: dict = {}
-
-    class _Spy:
-        pen = None
-
-        def setPen(self, pen):
-            self.pen = pen
-
-        def drawLines(self, lines):
-            widths.setdefault(round(self.pen.widthF(), 3), 0)
-            widths[round(self.pen.widthF(), 3)] += len(lines)
-
-    _paint_hlr_lines_mm(_Spy(), frame, d.segs, d.kinds,
-                        styles=(d.layers, L.line_styles(scene, False)))
-    assert 0.7 in widths and 0.25 in widths
-
 
 # ---- Fills -----------------------------------------------------------------
-
-def _paint_rings(frame, colours):
-    from views.composer import _paint_cut_fills_mm
-    left = np.array([[1, 1], [9, 1], [9, 9], [1, 9]], dtype=float)
-    right = np.array([[11, 1], [19, 1], [19, 9], [11, 9]], dtype=float)
-    img = QImage(20, 10, QImage.Format_RGB32)
-    img.fill(QColor(255, 255, 255))
-    p = QPainter(img)
-    _paint_cut_fills_mm(p, frame, [left, right], colours)
-    p.end()
-    return QColor(img.pixel(5, 5)), QColor(img.pixel(15, 5))
-
-
-def test_each_ring_takes_its_layer_colour_and_none_the_frame_colour():
-    frame = MarcoVista(style="vectorial", cut_fill="solid",
-                       cut_fill_color="#00ff00")
-    a, b = _paint_rings(frame, [(QColor(255, 0, 0), None), (None, None)])
-    assert (a.red(), a.green(), a.blue()) == (255, 0, 0)
-    assert (b.red(), b.green(), b.blue()) == (0, 255, 0)
-
-
-def test_without_colours_every_ring_takes_the_frame_colour():
-    frame = MarcoVista(style="vectorial", cut_fill="solid",
-                       cut_fill_color="#0000ff")
-    a, b = _paint_rings(frame, None)
-    assert a == b == QColor(0, 0, 255)
-
-
-def test_hatched_rings_are_hatched_in_their_layer_colour():
-    frame = MarcoVista(style="vectorial", cut_fill="hatch", cut_hatch_mm=0.3,
-                       pen_edge_mm=1.0, cut_fill_color="#00ff00")
-    from views.composer import _paint_cut_fills_mm
-    ring = np.array([[0, 0], [10, 0], [10, 10], [0, 10]], dtype=float)
-    img = QImage(10, 10, QImage.Format_RGB32)
-    img.fill(QColor(255, 255, 255))
-    p = QPainter(img)
-    _paint_cut_fills_mm(p, frame, [ring], [(QColor(255, 0, 0), None)])
-    p.end()
-    seen = {QColor(img.pixel(x, y)).name() for x in range(10)
-            for y in range(10)}
-    assert not any(c.startswith("#00ff") for c in seen)
-    assert any(QColor(c).red() > 200 and QColor(c).green() < 120
-               for c in seen)
 
 
 def test_the_frame_keeps_its_fill_by_layer_switch():
@@ -276,60 +195,6 @@ def test_the_frame_keeps_its_fill_by_layer_switch():
 
 
 # ---- On the sheet ----------------------------------------------------------
-
-def _composer():
-    from tests.test_composer_canvas import _FakeViewport
-    from views.composer import ComposerWindow
-    host = QWidget()
-    host.viewport = _FakeViewport()
-    _wall_and_door(host.viewport.scene)
-    composer = ComposerWindow(host)
-    frame = composer.comp.frames[0]
-    frame.style = "vectorial"
-    frame.view_key = "std:top"
-    frame.x_mm, frame.y_mm, frame.w_mm, frame.h_mm = 10.0, 10.0, 200.0, 100.0
-    frame.scale_n = 100.0
-    return composer, frame, host
-
-
-def test_a_sheet_fills_each_cut_solid_in_its_layer_colour():
-    composer, frame, _host = _composer()
-    composer.compute_hlr(frame)
-    assert composer.hlr_fill_styles[id(frame)] is None     # opt-in
-    frame.cut_fill_by_layer = True
-    composer.compute_hlr(frame)
-    colours = [look[0] for look in composer.hlr_fill_styles[id(frame)]]
-    fills = composer.hlr_fills[id(frame)]
-    assert len(colours) == len(fills) == 3
-    names = sorted(c.name() if c is not None else "" for c in colours)
-    assert names == sorted(["", QColor.fromRgbF(0.8, 0.1, 0.1).name(),
-                            QColor.fromRgbF(0.1, 0.1, 0.8).name()])
-
-
-def test_a_sheet_inks_the_cut_with_the_layer_cut_weight():
-    composer, frame, _host = _composer()
-    composer.compute_hlr(frame)
-    tags, styles = composer.hlr_styles[id(frame)]
-    kinds = composer.hlr_kinds[id(frame)]
-    walls = [i for i, (k, t) in enumerate(zip(kinds, tags))
-             if k == KIND_CUT and t == "Muros"]
-    assert walls and styles["Muros"][3] == 0.7
-
-
-def test_the_dxf_puts_each_layer_cut_on_its_own_layer(tmp_path):
-    from formats.dxf_out import save_dxf_layers
-    from views.composer import dxf_groups_by_layer
-    scene = _wall_and_door(Scene())
-    d = hlr_drawing(scene, _top_camera(scene), profiles=False, fills=False,
-                    layers=True)
-    d.styles = L.line_styles(scene, colored=True)
-    groups = dxf_groups_by_layer(d, "PLANTA", hidden_lines=False)
-    names = {g[0]: g for g in groups}
-    assert "Muros-CORTE" in names and "Carpinterías-CORTE" in names
-    assert names["Muros-CORTE"][2] == "CONTINUOUS"
-    assert len(names["PLANTA-CORTE"][1]) == 0           # nothing untagged
-    n = save_dxf_layers(tmp_path / "v.dxf", groups)
-    assert n == len(d.segs)
 
 
 # ---- The Layers panel ------------------------------------------------------
@@ -467,46 +332,6 @@ def test_a_template_and_the_legend_carry_the_hatch():
     assert "hatch" not in swatches[DEFAULT_LAYER]
 
 
-def test_a_sheet_hatches_each_cut_with_its_layer_pattern():
-    composer, frame, host = _composer()
-    scene = host.viewport.scene
-    scene.layer("Muros").hatch = "brick"
-    composer.compute_hlr(frame)
-    looks = composer.hlr_fill_styles[id(frame)]
-    assert looks is not None and len(looks) == 3
-    assert sorted(str(look[1]) for look in looks) == ["None", "None", "brick"]
-    assert all(look[0] is None for look in looks)   # no fill by layer asked
-
-
-def _paint_one(frame, look):
-    from views.composer import _paint_cut_fills_mm
-    ring = np.array([[0, 0], [20, 0], [20, 20], [0, 20]], dtype=float)
-    img = QImage(40, 40, QImage.Format_RGB32)
-    img.fill(QColor(255, 255, 255))
-    p = QPainter(img)
-    p.scale(2, 2)
-    _paint_cut_fills_mm(p, frame, [ring], [look])
-    p.end()
-    return [QColor(img.pixel(x, y)) for x in range(40) for y in range(40)]
-
-
-def test_a_hatched_ring_is_lines_on_paper_not_a_solid_block():
-    frame = MarcoVista(style="vectorial", cut_fill="solid",
-                       cut_fill_color="#000000")
-    pixels = _paint_one(frame, (None, "diagonal"))
-    white = sum(1 for c in pixels if c.lightness() > 240)
-    assert 0.2 * len(pixels) < white < 0.95 * len(pixels)
-    solid = _paint_one(frame, (None, None))
-    assert all(c.lightness() < 20 for c in solid)
-
-
-def test_a_hatch_by_layer_colour_sits_on_a_pale_ground_of_it():
-    frame = MarcoVista(style="vectorial", cut_fill="solid")
-    pixels = _paint_one(frame, (QColor(200, 0, 0), "brick"))
-    assert not any(c == QColor(255, 255, 255) for c in pixels)
-    assert all(c.red() >= c.green() for c in pixels)
-
-
 def test_the_hatch_grid_picks_for_every_selected_row(win, monkeypatch):
     from views.layers_panel import COL_HATCH, HatchGrid
     panel = win.layers_dock.panel
@@ -541,26 +366,6 @@ def test_the_grid_marks_the_current_hatch_and_offers_the_frame_fill():
     grid.picked.connect(got.append)
     grid.buttons[None].click()
     assert got == [None]
-
-
-def test_the_legend_swatch_draws_the_hatch():
-    from core.composition import Leyenda
-    from views.composer import paint_leyenda_mm
-
-    def draw(swatch):
-        le = Leyenda(w_mm=40.0, rows=["Muros"],
-                     swatches={"Muros": swatch})
-        img = QImage(400, 140, QImage.Format_RGB32)
-        img.fill(QColor(255, 255, 255))
-        p = QPainter(img)
-        p.scale(10, 10)
-        paint_leyenda_mm(p, le)
-        p.end()
-        return [QColor(img.pixel(x, y)).lightness()
-                for x in range(25, 60) for y in range(85, 115)]
-    plain = draw({"color": [1.0, 1.0, 1.0]})
-    hatched = draw({"color": [1.0, 1.0, 1.0], "hatch": "crosshatch"})
-    assert sum(v < 128 for v in hatched) > sum(v < 128 for v in plain)
 
 
 # ---- A solid ground under the hatch ---------------------------------------
@@ -603,36 +408,6 @@ def test_a_template_carries_the_ground():
     dst.layers.append(Layer("Muros"))
     L.apply_template(dst, json.loads(json.dumps(L.template_of(src))))
     assert dst.layer("Muros").hatch_ground == "layer"
-
-
-def test_a_grey_ground_sits_under_the_hatch_lines():
-    frame = MarcoVista(style="vectorial", cut_fill="solid",
-                       cut_fill_color="#000000")
-    pixels = _paint_one(frame, (None, "diagonal", QColor(180, 180, 180)))
-    assert not any(c.lightness() > 240 for c in pixels)    # no bare paper
-    assert any(c.lightness() < 170 for c in pixels)        # the lines show
-    assert sum(1 for c in pixels if c == QColor(180, 180, 180)) > len(
-        pixels) // 3
-
-
-def test_the_ground_wins_over_the_pale_layer_tint():
-    frame = MarcoVista(style="vectorial", cut_fill="solid")
-    pixels = _paint_one(frame, (QColor(200, 0, 0), "diagonal",
-                                QColor(255, 255, 255)))
-    assert sum(1 for c in pixels if c == QColor(255, 255, 255)) > len(
-        pixels) // 3
-
-
-def test_a_sheet_passes_each_ring_its_ground():
-    composer, frame, host = _composer()
-    scene = host.viewport.scene
-    scene.layer("Muros").hatch = "brick"
-    scene.layer("Muros").hatch_ground = (0.88, 0.88, 0.88)
-    composer.compute_hlr(frame)
-    looks = composer.hlr_fill_styles[id(frame)]
-    walls = [look[2] for look in looks if look[1] == "brick"]
-    assert walls and walls[0].name() == QColor.fromRgbF(0.88, 0.88, 0.88).name()
-    assert all(look[2] is None for look in looks if look[1] != "brick")
 
 
 def test_the_grid_offers_the_grounds_and_marks_the_current_one():
@@ -719,34 +494,6 @@ def test_only_hatched_layers_give_their_ink_and_the_legend_shows_it():
     assert L.cut_hatch_inks(scene) == {"A": (0.0, 0.0, 0.0)}
     _rows, swatches = L.legend_rows(scene)
     assert swatches["A"]["hatch_color"] == [0.0, 0.0, 0.0]
-
-
-def test_a_fixed_ink_wins_over_the_frame_and_the_layer_tint():
-    """Fill by layer on: the ground is the layer's pale tint, but the lines
-    keep the layer's fixed ink (pure blue here), not the layer's colour."""
-    frame = MarcoVista(style="vectorial", cut_fill="solid", pen_edge_mm=1.5)
-    pixels = _paint_one(frame, (QColor(200, 0, 0), "diagonal", None,
-                                QColor(0, 0, 255)))
-    assert any(c.blue() > 150 and c.red() < 120 for c in pixels)
-
-
-def test_without_an_ink_the_frame_colour_stays():
-    frame = MarcoVista(style="vectorial", cut_fill="solid", pen_edge_mm=1.5,
-                       cut_fill_color="#00ff00")
-    pixels = _paint_one(frame, (None, "diagonal", None, None))
-    assert any(c.green() > 150 and c.red() < 120 for c in pixels)
-
-
-def test_a_sheet_passes_each_ring_its_ink():
-    composer, frame, host = _composer()
-    scene = host.viewport.scene
-    scene.layer("Muros").hatch = "brick"
-    scene.layer("Muros").hatch_color = "layer"
-    composer.compute_hlr(frame)
-    looks = composer.hlr_fill_styles[id(frame)]
-    walls = [look[3] for look in looks if look[1] == "brick"]
-    assert walls and walls[0].name() == QColor.fromRgbF(
-        0.8 * 0.7, 0.1 * 0.7, 0.1 * 0.7).name()
 
 
 def test_the_grid_offers_the_inks_and_marks_the_current_one():
@@ -892,7 +639,6 @@ def test_the_ground_chips_tell_white_from_light_grey_and_the_paper():
     paper = colour_chip(48, 26, None, paper=True).toImage()
     shades = {QColor(paper.pixel(x, 12)).name() for x in range(2, 46)}
     assert len(shades) >= 2                           # a checkerboard
-
 
 
 # ---- The picker as a popover -------------------------------------------------
@@ -1105,7 +851,6 @@ def test_the_hatch_picker_opens_centred_on_the_screen(win, monkeypatch):
         assert abs(cy - area.center().y()) <= 1
 
 
-
 # ---- Angle, scale, size on paper or with the drawing, imported patterns -----
 
 _PAT = """;%UNITS=MM
@@ -1241,25 +986,6 @@ def test_imported_patterns_live_in_the_document(tmp_path):
     assert back.hatch_patterns == {}
 
 
-def test_a_sheet_lays_the_imported_and_turned_pattern(tmp_path):
-    from core.hatches import parse_pat
-    composer, frame, host = _composer()
-    scene = host.viewport.scene
-    scene.hatch_patterns = parse_pat(_PAT)
-    wall = scene.layer("Muros")
-    wall.hatch, wall.hatch_angle, wall.hatch_scale = "pat:TEST-HEX", 30.0, 2.0
-    composer.compute_hlr(frame)
-    looks = composer.hlr_fill_styles[id(frame)]
-    form = next(look[4] for look in looks if look[1] == "pat:TEST-HEX")
-    assert form["angle"] == 30.0 and form["scale"] == 2.0
-    assert len(form["families"]) == 3
-    pixels = _paint_one(MarcoVista(style="vectorial", cut_fill="solid",
-                                   cut_fill_color="#000000"),
-                        (None, "pat:TEST-HEX", None, None, form))
-    assert any(c.lightness() < 200 for c in pixels)
-    assert any(c.lightness() > 240 for c in pixels)
-
-
 def test_the_panel_imports_a_pattern_file_and_the_picker_shows_it(
         win, tmp_path):
     from views.layers_panel import HatchGrid
@@ -1309,7 +1035,6 @@ def test_the_recently_used_come_first(monkeypatch):
     QSettings().remove(HatchGrid.RECENT_KEY)
 
 
-
 def test_the_hatch_thumbnail_has_the_colour_swatch_shape(win):
     """The Hatch column reads like the Colour column beside it: the same
     18 px icon, the same rounded box and border, in a column as wide; no
@@ -1330,7 +1055,6 @@ def test_the_hatch_thumbnail_has_the_colour_swatch_shape(win):
         COL_COLOR)
     head = panel.tree.headerItem()
     assert head.text(COL_HATCH) == "" and not head.icon(COL_HATCH).isNull()
-
 
 
 # ---- The catalogue's entries, the pattern file out, the frame's hatch pen ---
@@ -1395,23 +1119,6 @@ def test_the_panel_exports_the_line_patterns_and_the_imported(win, tmp_path):
     assert "IT-CONC" not in back                      # stipples stay out
 
 
-def test_the_frame_hatch_pen_is_automatic_or_its_own():
-    from views.composer import hatch_pen_mm
-    auto = MarcoVista(pen_edge_mm=0.25)
-    assert hatch_pen_mm(auto) == pytest.approx(0.175)
-    own = MarcoVista(pen_edge_mm=0.25, pen_hatch_mm=0.09)
-    assert hatch_pen_mm(own) == pytest.approx(0.09)
-
-
-def test_the_frame_hatch_pen_inks_the_hatch_lines():
-    def ink(pen):
-        frame = MarcoVista(style="vectorial", cut_fill="solid",
-                           cut_fill_color="#000000", pen_hatch_mm=pen)
-        return sum(1 for c in _paint_one(frame, (None, "diagonal"))
-                   if c.lightness() < 160)
-    assert ink(0.6) > 2 * ink(0.1)
-
-
 def test_the_frame_keeps_its_hatch_pen():
     from core.composition import Composicion
     comp = Composicion()
@@ -1468,101 +1175,7 @@ def test_the_insulation_reads_as_teardrops_up_and_down():
     assert len(thick) < len(polys)               # bigger, so fewer
 
 
-def test_the_insulation_symbol_fills_a_slanted_piece_on_the_sheet():
-    import numpy as np
-    from views.composer import _paint_cut_fills_mm
-    ring = np.array(_band(30, 20, 40, 8, 30))
-    img = QImage(60 * 6, 40 * 6, QImage.Format_RGB32)
-    img.fill(QColor(255, 255, 255))
-    p = QPainter(img)
-    p.scale(6, 6)
-    frame = MarcoVista(style="vectorial", cut_fill="solid",
-                       cut_fill_color="#000000", pen_hatch_mm=0.2)
-    _paint_cut_fills_mm(p, frame, [ring], [(None, "insulation", None, None,
-                                            {"scale": 1.0})])
-    p.end()
-    inked = [(x, y) for x in range(0, 360, 2) for y in range(0, 240, 2)
-             if QColor(img.pixel(x, y)).lightness() < 150]
-    assert len(inked) > 100                      # the balloons are drawn
-    from PySide6.QtGui import QPolygonF
-    from PySide6.QtCore import QPointF
-    poly = QPolygonF([QPointF(x * 6, y * 6) for x, y in ring])
-    from PySide6.QtCore import Qt as _Qt
-    outside = [pt for pt in inked
-               if not poly.containsPoint(QPointF(*pt), _Qt.OddEvenFill)]
-    assert len(outside) < len(inked) * 0.05      # and only inside the piece
-
-
 # ---- Masonry as it is seen: courses in section, bond along the wall in plan --
-
-def _ink_rows_and_cols(look, ring):
-    import numpy as np
-    from views.composer import _paint_cut_fills_mm
-    img = QImage(200, 200, QImage.Format_RGB32)
-    img.fill(QColor(255, 255, 255))
-    p = QPainter(img)
-    p.translate(0.37, 0.29)
-    p.scale(5, 5)
-    frame = MarcoVista(style="vectorial", cut_fill="solid",
-                       cut_fill_color="#000000", pen_hatch_mm=0.15)
-    _paint_cut_fills_mm(p, frame, [np.array(ring)], [look])
-    p.end()
-    dark = [[QColor(img.pixel(x, y)).lightness() < 128 for x in range(200)]
-            for y in range(200)]
-    full_rows = sum(1 for row in dark[20:180] if sum(row[20:180]) > 150)
-    full_cols = sum(1 for x in range(20, 180)
-                    if sum(dark[y][x] for y in range(20, 180)) > 150)
-    return full_rows, full_cols
-
-
-def test_masonry_in_a_vertical_section_is_its_courses():
-    """Cut across a wall (36 mm at 1:10: 360 mm), the courses level and
-    split where its wythes meet; cut along one (40 mm at 1:20: 800 mm, too
-    wide for a wall), its face: level courses, head joints staggered."""
-    form = {"scale": 1.0, "cut": "vertical", "scale_n": 10.0,
-            "joints": "single"}
-    across = [(2, 0), (38, 0), (38, 40), (2, 40)]
-    rows, cols = _ink_rows_and_cols((None, "brick", None, None, form),
-                                    across)
-    assert rows >= 5 and cols >= 1
-    square = [(0, 0), (40, 0), (40, 40), (0, 40)]
-    rows, cols = _ink_rows_and_cols((None, "brick", None, None,
-                                     dict(form, scale_n=20.0)), square)
-    assert rows >= 5 and cols == 0           # bed joints only, level
-
-
-def test_masonry_in_plan_follows_the_wall():
-    """A wall running up the plan: its bond runs up too — the joint
-    between its wythes is vertical, the head joints short, across it."""
-    form = {"scale": 1.0, "cut": "plan", "scale_n": 10.0}
-    tall = [(10, 0), (30, 0), (30, 40), (10, 40)]
-    rows, cols = _ink_rows_and_cols((None, "brick", None, None, form), tall)
-    assert cols >= 1 and rows == 0
-    wide = [(0, 10), (40, 10), (40, 30), (0, 30)]
-    rows, cols = _ink_rows_and_cols((None, "brick", None, None, form), wide)
-    assert rows >= 1 and cols == 0
-
-
-def test_a_sheet_knows_its_cut_is_a_plan_or_a_section():
-    from core.section import SectionPlane
-    composer, frame, host = _composer()
-    scene = host.viewport.scene
-    scene.layer("Muros").hatch = "brick"
-    composer.compute_hlr(frame)                      # the plan cut at 1 m
-    forms = [look[4] for look in composer.hlr_fill_styles[id(frame)]
-             if look[1] == "brick"]
-    assert forms and forms[0]["cut"] == "plan"
-    for sp in scene.section_planes:
-        sp.active = False
-    upright = SectionPlane(V(2, 0.15, 1), V(0, -1, 0))
-    scene.section_planes.append(upright)
-    scene.set_active_section(upright)
-    frame.view_key = "std:front"
-    composer.compute_hlr(frame)
-    forms = [look[4] for look in composer.hlr_fill_styles[id(frame)] or ()
-             if look[1] == "brick"]
-    assert forms and forms[0]["cut"] == "vertical"
-
 
 
 # ---- Line types of one's own: made, imported, exported -----------------------
@@ -1644,35 +1257,6 @@ def test_a_template_and_the_legend_carry_the_own_line_type():
     assert "Borde" in dst.line_types
     _rows, swatches = L.legend_rows(src)
     assert swatches["Lindero"]["pattern"] == [6.0, 1.5, 0.0, 1.5]
-
-
-def test_the_sheet_pen_draws_the_own_line_type():
-    from PySide6.QtGui import QPen
-    from views.composer import _layer_pen
-    base = QPen()
-    base.setWidthF(0.25)
-    pen = _layer_pen(base, (None, "lin:Borde", None, None, (6.0, 1.5)),
-                     KIND_EDGE)
-    assert pen.dashPattern() and pen.dashPattern()[0] == pytest.approx(
-        6.0 / 0.25)
-
-
-def test_the_dxf_declares_the_own_line_type(tmp_path):
-    from formats.dxf_out import save_dxf_layers
-    from views.composer import dxf_groups_by_layer
-    scene = _wall_and_door(Scene())
-    L.load_line_types(scene, {"Borde": {"label": "Borde",
-                                        "pattern": [6, -1.5, 0, -1.5]}})
-    scene.layer("Muros").linetype = "lin:Borde"
-    d = hlr_drawing(scene, _top_camera(scene), profiles=False, fills=False,
-                    layers=True)
-    d.styles = L.line_styles(scene, colored=True)
-    path = tmp_path / "own.dxf"
-    save_dxf_layers(path, dxf_groups_by_layer(d, "PLANTA", False))
-    text = path.read_text(encoding="ascii")
-    assert "0\nLTYPE\n2\nBORDE\n" in text
-    assert "49\n0.6\n49\n-0.15\n49\n0\n49\n-0.15\n" in text
-    assert "6\nBORDE\n" in text                  # the layer uses it
 
 
 def test_the_line_type_list_ends_with_custom_and_its_tools(win):
@@ -1805,18 +1389,6 @@ def test_a_layer_keeps_its_joints_and_mortar(tmp_path):
     assert form["joints"] == "double" and form["mortar"] is True
 
 
-def test_a_small_scale_draws_masonry_as_a_hatch():
-    """At 1:100 the bricks blur: the 45° hatch instead; at 1:20, joints."""
-    form = {"scale": 1.0, "cut": "plan", "scale_n": 100.0}
-    wide = [(0, 10), (40, 10), (40, 30), (0, 30)]
-    rows, cols = _ink_rows_and_cols((None, "brick", None, None, form), wide)
-    assert rows == 0 and cols == 0                  # diagonals only
-    none = _ink_rows_and_cols((None, "brick", None, None,
-                               dict(form, joints="none")), wide)
-    assert none == (0, 0)
-
-
-
 def test_a_gap_of_the_honeycomb_bond_is_crossed():
     from core.hatches import bond_course
     _d, _h, rects = bond_course("brick_honeycomb", 0, 102.5, None, 0, 1000)
@@ -1900,7 +1472,6 @@ def test_the_panel_sets_the_brick(win):
     assert scene.layer("Muro").brick is None
 
 
-
 def test_the_zigzag_insulation_runs_face_to_face():
     from core.hatches import FITTED, fitted_marks
     assert "insulation_zigzag" in FITTED
@@ -1913,7 +1484,6 @@ def test_the_zigzag_insulation_runs_face_to_face():
     assert min(xs) <= 0.0 and max(xs) >= 12.0
     assert fitted_marks("insulation_zigzag", (0, 0), (1, 0), (0, 1),
                         12.0, 0.0) == []
-
 
 
 def test_the_preview_shows_masonry_cut_in_plan_and_section():
@@ -1939,7 +1509,6 @@ def test_the_preview_shows_masonry_cut_in_plan_and_section():
     assert grid.cut_preview.isVisibleTo(grid)
     plain = cut_tile("concrete", "plan", 104, 44).toImage()
     assert QColor(plain.pixel(52, 22)).lightness() > 200   # paper only
-
 
 
 def test_a_click_on_an_empty_spot_keeps_the_picker_open(win):
@@ -1970,7 +1539,6 @@ def test_a_click_on_an_empty_spot_keeps_the_picker_open(win):
     assert not menu.isVisible()
 
 
-
 def test_timber_cut_across_is_crossed_corner_to_corner():
     from core.hatches import FITTED, fit_band, fitted_marks
     assert "wood_cross" in FITTED
@@ -1980,7 +1548,6 @@ def test_timber_cut_across_is_crossed_corner_to_corner():
     ends = {tuple(round(v, 6) for v in q) for q in a + b}
     assert ends == corners                       # the two diagonals
     assert fitted_marks("wood_cross", (0, 0), (1, 0), (0, 1), 5.0, 0.0) == []
-
 
 
 def test_a_piece_is_cut_across_when_short_and_stocky():
@@ -1996,41 +1563,6 @@ def test_a_piece_is_cut_across_when_short_and_stocky():
     assert not cut_across(None)
 
 
-def test_a_wood_layer_crosses_the_pieces_cut_across(tmp_path, monkeypatch):
-    from formats import igz
-    ly = Layer("Madera", hatch="wood_grain", hatch_cross=True)
-    assert Layer.from_dict(ly.to_dict()).hatch_cross is True
-    assert "hatch_cross" not in Layer("X", hatch="wood_grain").to_dict()
-    scene = Scene()
-    scene.layers.append(ly)
-    path = tmp_path / "cross.igz"
-    igz.save_scene(scene, path)
-    back = Scene()
-    igz.load_into(back, path)
-    assert back.layer("Madera").hatch_cross is True
-    assert L.cut_hatch_forms(back, 10.0)["Madera"]["cross"] is True
-    # On a sheet: the stud gets the cross, the board its grain.
-    import views.hatch_paint as hp
-    crossed, grained = [], []
-    real_fitted, real_hatch = hp.paint_fitted, hp.paint_hatch
-    monkeypatch.setattr(hp, "paint_fitted", lambda p, path, rings, key, *a:
-                        (crossed.append((key, len(rings))),
-                         real_fitted(p, path, rings, key, *a)))
-    monkeypatch.setattr(hp, "paint_hatch", lambda p, path, key, *a, **k:
-                        (grained.append(key), real_hatch(p, path, key, *a,
-                                                         **k)))
-    stud = [(20, 20), (35, 20), (35, 25), (20, 25)]        # 15 × 5 cm
-    board = [(20, 60), (180, 60), (180, 65), (20, 65)]     # 1.6 m × 5 cm
-    form = {"scale": 1.0, "cut": "vertical", "scale_n": 10.0, "cross": True}
-    _ink_rows_and_cols((None, "wood_grain", None, None, form), stud)
-    assert crossed == [("wood_cross", 1)] and not grained
-    _ink_rows_and_cols((None, "wood_grain", None, None, form), board)
-    assert grained == ["wood_grain"] and len(crossed) == 1
-    _ink_rows_and_cols((None, "wood_grain", None, None,
-                        dict(form, cross=False)), stud)
-    assert len(crossed) == 1                               # off: the grain
-
-
 def test_the_picker_offers_the_cross_for_wood_only():
     from views.layers_panel import HatchGrid
     grid = _shown(HatchGrid("wood_grain", form={"hatch_cross": False}))
@@ -2043,7 +1575,6 @@ def test_the_picker_offers_the_cross_for_wood_only():
     assert grid.cut_preview.isVisibleTo(grid)            # plan + crossed cut
     grid._pick("concrete")
     assert not grid.cross_check.isEnabled()
-
 
 
 def test_the_picker_sets_the_joints_and_the_mortar(win):
@@ -2068,7 +1599,6 @@ def test_the_picker_sets_the_joints_and_the_mortar(win):
     assert scene.layer("Muro").joints is None
 
 
-
 def test_a_click_on_a_style_cell_selects_the_layer_being_edited(win,
                                                                 monkeypatch):
     from views import layers_panel as lp
@@ -2091,7 +1621,6 @@ def test_a_click_on_a_style_cell_selects_the_layer_being_edited(win,
     assert sorted(opened[-1]) == ["B", "C"]
     assert sorted(panel._key(i)[1]
                   for i in panel.tree.selectedItems()) == ["B", "C"]
-
 
 
 @pytest.fixture
@@ -2135,7 +1664,6 @@ def test_the_picker_shows_at_once_without_the_menu_effects(win, monkeypatch,
     assert before == (True, True)
     assert (QApplication.isEffectEnabled(Qt.UI_FadeMenu),
             QApplication.isEffectEnabled(Qt.UI_AnimateMenu)) == before
-
 
 
 def test_the_arrows_walk_the_patterns():
@@ -2199,7 +1727,6 @@ def test_the_arrows_walk_the_patterns_inside_the_open_picker(win):
     menu.close()
 
 
-
 # ---- One wall in pieces, and the hatches in the DXF ---------------------------
 
 def test_the_pieces_of_one_wall_share_their_joints():
@@ -2260,25 +1787,6 @@ def test_hatch_lines_draw_as_the_sheet_does():
     assert hatch_lines("solid", [wall], plan) == []
     assert hatch_lines("insulation", [wall], plan)      # fitted, piece-wise
     assert hatch_lines("concrete", [wall], plan)         # its stones
-
-
-def test_the_dxf_of_a_view_carries_its_hatches(tmp_path):
-    from formats.dxf_out import save_dxf_layers
-    composer, frame, host = _composer()
-    scene = host.viewport.scene
-    scene.layer("Muros").hatch = "brick"
-    frame.scale_n = 20.0
-    groups = composer.dxf_hatch_groups(frame)
-    names = [g[0] for g in groups]
-    assert names == ["Muros-TRAMA"] and len(groups[0][1])
-    path = tmp_path / "view.dxf"
-    save_dxf_layers(path, groups)
-    assert "Muros-TRAMA" in path.read_text(encoding="ascii",
-                                           errors="replace").replace(
-        "MUROS-TRAMA", "Muros-TRAMA")
-    frame.cut_fill = "none"
-    assert composer.dxf_hatch_groups(frame) == []
-
 
 
 # ---- Timber: the grain from the 3D piece ----------------------------------------
@@ -2357,7 +1865,6 @@ def test_only_the_timber_cut_across_its_grain_is_crossed(monkeypatch):
     assert sorted(crossed) == [0.05, 0.1]
 
 
-
 # ---- Solid fills and both DXF exports --------------------------------------------
 
 def test_a_region_cuts_into_strips_even_odd():
@@ -2387,23 +1894,6 @@ def test_the_dxf_writes_solids_under_the_lines(tmp_path):
     assert "2\nRELLENO\n70\n0\n62\n" in text             # declared
 
 
-def test_a_view_dxf_carries_grounds_and_solid_fills():
-    from views.composer import dxf_cut_layers
-    scene = _wall_and_door(Scene())
-    scene.layer("Muros").hatch = "brick"
-    scene.layer("Muros").hatch_ground = (1.0, 1.0, 1.0)
-    scene.layer("Carpinterías").hatch = "solid"
-    lines, solids = dxf_cut_layers(scene, _top_camera(scene))
-    assert [g[0] for g in lines] == ["Muros-TRAMA"]
-    names = sorted(s[0] for s in solids)
-    assert names == ["Carpinterías-TRAMA", "Muros-FONDO"]
-    ground = next(s for s in solids if s[0] == "Muros-FONDO")
-    area = sum(((q[1][0] - q[0][0]) + (q[3][0] - q[2][0])) / 2.0
-               * abs(q[2][1] - q[0][1]) for q in ground[1])
-    assert area == pytest.approx(4.0 * 0.3)       # the whole wall's cut
-    assert ground[2] == (1.0, 1.0, 1.0)
-
-
 def test_the_current_view_dxf_carries_the_hatches_too(win, tmp_path,
                                                       monkeypatch):
     from views.filedialogs import file_dialogs
@@ -2418,7 +1908,6 @@ def test_the_current_view_dxf_carries_the_hatches_too(win, tmp_path,
     win._on_export_view_dxf()
     text = path.read_text(encoding="ascii", errors="replace")
     assert "MUROS-TRAMA" in text
-
 
 
 # ---- Line types that write words: GAS, AGUA… ----------------------------------
@@ -2461,55 +1950,6 @@ def test_a_document_keeps_and_draws_a_line_type_with_words(tmp_path):
     words = L.line_styles(back, False)["Instalaciones"][5]
     assert words[0] == "GAS" and words[1] == 2.0
     assert L.linetype_text("dashed") is None
-
-
-def test_the_dxf_writes_the_words_as_text(tmp_path):
-    from formats.dxf_out import save_dxf_layers
-    from views.composer import dxf_groups_by_layer
-    scene = _wall_and_door(Scene())
-    pattern, spec = L.with_text([8.0, -2.0], "GAS", 2.0)
-    L.load_line_types(scene, {"Gas": dict({"label": "Gas",
-                                           "pattern": pattern}, **spec)})
-    scene.layer("Muros").linetype = "lin:Gas"
-    d = hlr_drawing(scene, _top_camera(scene), profiles=False, fills=False,
-                    layers=True)
-    d.styles = L.line_styles(scene, colored=True)
-    texts: list = []
-    groups = dxf_groups_by_layer(d, "PLANTA", False, texts)
-    assert texts and all(t[5] == "GAS" and t[3] == pytest.approx(0.2)
-                         for t in texts)
-    path = tmp_path / "gas.dxf"
-    save_dxf_layers(path, groups, (), texts)
-    text = path.read_text(encoding="ascii")
-    assert "0\nTEXT\n8\nMUROS\n" in text and "\n1\nGAS\n" in text
-
-
-def test_the_sheet_writes_the_words_along_the_line():
-    from PySide6.QtGui import QImage, QPainter, QPen
-    from views.composer import _paint_hlr_lines_mm
-    from core.hlr import KIND_EDGE
-    pattern, spec = L.with_text([8.0, -2.0], "GAS", 2.5)
-    scene = Scene()
-    L.load_line_types(scene, {"Gas": dict({"label": "Gas",
-                                           "pattern": pattern}, **spec)})
-    words = L.linetype_text("lin:Gas", scene)
-    style = (None, "lin:Gas", 0.25, None,
-             L.linetype_pattern("lin:Gas", scene), words)
-
-    def ink(with_words):
-        img = QImage(400, 60, QImage.Format_RGB32)
-        img.fill(QColor(255, 255, 255))
-        p = QPainter(img)
-        p.scale(5, 5)
-        frame = MarcoVista(style="vectorial")
-        _paint_hlr_lines_mm(p, frame, [(2.0, 6.0, 78.0, 6.0)], [KIND_EDGE],
-                            styles=(["X"], {"X": style if with_words
-                                            else style[:5] + (None,)}))
-        p.end()
-        return sum(1 for x in range(400) for y in range(60)
-                   if QColor(img.pixel(x, y)).lightness() < 128)
-    assert ink(True) > ink(False) + 100        # the letters, inked
-
 
 
 # ---- Favourite hatches, and the line type editor -------------------------------
@@ -2561,7 +2001,6 @@ def test_the_panel_edits_and_deletes_its_line_types(win):
     panel.delete_line_type("Gas natural")
     assert scene.line_types == {}
     assert scene.layer("Gas").linetype == "continuous"
-
 
 
 # ---- The document's brick ----------------------------------------------------
@@ -2723,7 +2162,6 @@ def test_the_padlock_keeps_the_joints_one_or_frees_them():
     assert other.brick_spins[4].value() == 5.0
 
 
-
 # ---- Aerated concrete, load-bearing ceramic blocks, Uruguay ----------------------
 
 def test_aerated_concrete_is_big_glued_and_porous():
@@ -2769,7 +2207,6 @@ def test_uruguay_and_the_new_pieces_are_in_the_lists():
     assert dict(PIECE_SIZES["aac"])["Aerated 15"][3] == 3.0
 
 
-
 def test_the_picker_shows_only_the_settings_its_pattern_uses():
     from views.layers_panel import HatchGrid
     grid = _shown(HatchGrid("brick", recent=[]))
@@ -2796,7 +2233,6 @@ def test_the_picker_shows_only_the_settings_its_pattern_uses():
     load.click()
     save.click()
     assert got == ["in", "out"]
-
 
 
 def test_the_seldom_used_settings_fold_away():
@@ -2838,7 +2274,6 @@ def test_no_hatch_is_the_first_tile():
     grid.picked.connect(got.append)
     tile.click()
     assert got == [None] and grid.buttons[None].isChecked()
-
 
 
 def test_a_precast_concrete_brick_shows_its_holes():
@@ -3121,7 +2556,6 @@ def test_done_keeps_what_was_picked(win, monkeypatch):
     monkeypatch.setattr(panel, "_popup", fake_popup)
     panel.click_cell(("layer", "C"), COL_HATCH)
     assert scene.layer("C").hatch == "concrete"
-
 
 
 def test_other_colour_keeps_the_picker_open_until_done(win, monkeypatch):

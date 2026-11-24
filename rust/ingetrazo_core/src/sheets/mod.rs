@@ -8,6 +8,7 @@
 //! - `page`: the page display list the renderer paints.
 
 pub mod anchors;
+pub mod annots;
 pub mod camera;
 pub mod create;
 pub mod display;
@@ -19,6 +20,7 @@ pub mod items;
 pub mod items_b;
 pub mod items_c;
 pub mod items_d;
+pub mod looks;
 pub mod metrics;
 pub mod paint;
 pub mod pdf;

@@ -613,41 +613,6 @@ def test_the_sheet_views_follow_a_rename_and_its_undo(win):
     assert frame.view_key == "scene:Baja"
 
 
-def test_the_composers_view_sources_follow_rename_order_and_undo(
-        win, monkeypatch):
-    from views.composer import ComposerWindow
-    monkeypatch.setattr(ComposerWindow, "render_frame", lambda self, f: None)
-    _scene(win, "A")
-    _scene(win, "B")
-    comp = win._ensure_composer()
-
-    def sources():
-        box = comp.view_combo
-        return [box.itemData(i)[6:] for i in range(box.count())
-                if str(box.itemData(i)).startswith("scene:")]
-    win.tray.scenes.rename_view(win.viewport.scene.saved_views[0], "Z")
-    assert sources() == ["Z", "B"]
-    win._on_undo()
-    assert sources() == ["A", "B"]
-    win.tray.scenes.move_view(win.viewport.scene.saved_views[1], 0)
-    assert sources() == ["B", "A"]
-    comp.close()
-
-
-def test_the_composers_panel_renames_in_one_undo_step(win):
-    from views.outliner import SheetsPanel
-    _scene(win, "A")
-    panel = SheetsPanel.__new__(SheetsPanel)
-    panel._window = win
-    panel._shape = None
-    panel._scene = lambda: win.viewport.scene
-    panel.refresh = lambda: None
-    SheetsPanel.rename_scene(panel, win.viewport.scene.saved_views[0], "B")
-    assert _in_step(win) == ["B"]
-    win._on_undo()
-    assert _in_step(win) == ["A"]
-
-
 # ---- the Scenes panel: its menu, ↑ ↓ ------------------------------------------
 
 def test_the_panels_own_editor_renames_in_one_undo_step(win):

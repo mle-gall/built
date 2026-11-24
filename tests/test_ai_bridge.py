@@ -174,12 +174,6 @@ def test_a_dialog_opened_by_the_agent_is_cancelled_not_waited_for(monkeypatch, p
     bridge = _Bridge(win.viewport)
     try:
         bridge.start()
-        two = ("w = viewport.window()\n"
-               "w._show_new_sheet()\n"
-               "w._composer._on_comp_add()\n"
-               "print(len(scene.compositions))")
-        reply = _ask(bridge, "run_python", {"code": two})
-        assert reply["ok"] and reply["result"]["stdout"].strip() == "2"
         # The operation itself, not wall time (a loaded machine stretched
         # this past a 5 s limit): every dialog the call shows is rejected by
         # the bridge's guard, so exec() returns «Cancel» instead of waiting.
@@ -197,8 +191,9 @@ def test_a_dialog_opened_by_the_agent_is_cancelled_not_waited_for(monkeypatch, p
         app.installEventFilter(watch)
         try:
             reply = _ask(bridge, "run_python", {
-                "code": "viewport.window()._composer._on_comp_del()\n"
-                        "print(len(scene.compositions))"})
+                "code": "from PySide6.QtWidgets import QMessageBox\n"
+                        "answer = QMessageBox.question(viewport.window(), 'Delete', 'Delete the sheet?')\n"
+                        "print(answer == QMessageBox.StandardButton.Yes)"})
         finally:
             app.removeEventFilter(watch)
         assert reply["ok"]
@@ -207,7 +202,7 @@ def test_a_dialog_opened_by_the_agent_is_cancelled_not_waited_for(monkeypatch, p
         assert shows and len(hides) == len(shows)
         assert all(r == QDialog.Rejected for r in hides)
         result = reply["result"]
-        assert result["stdout"].strip() == "2"          # «No»: nothing deleted
+        assert result["stdout"].strip() == "False"      # «No», not waited for
         assert any("Delete" in t for t in result["dialogs_cancelled"])
         assert "cancelled" in result["stderr"]
         # The bridge answers the next call as usual.

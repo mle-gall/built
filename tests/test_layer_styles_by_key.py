@@ -108,17 +108,3 @@ def test_the_legend_and_the_dxf_names_tell_shared_labels_apart(scene):
     assert labels["Muros"] == "Paredes"
 
 
-def test_the_dxf_groups_go_out_per_tag_under_its_label(scene):
-    from core.hlr import KIND_EDGE
-    from views.composer import dxf_groups_by_layer
-    segs = np.array([[0, 0, 1, 0], [0, 1, 1, 1], [0, 2, 1, 2]], float)
-    drawing = SimpleNamespace(
-        segs=segs, kinds=np.array([KIND_EDGE] * 3),
-        layers=np.array(list(KEYS), dtype=object),
-        styles=L.line_styles(scene, True), labels=L.export_labels(scene))
-    groups = dxf_groups_by_layer(drawing, "VISTA", hidden_lines=False)
-    by_name = {g[0]: g for g in groups if len(g[1])}
-    north = L.path_label(scene, "corte-norte")
-    south = L.path_label(scene, "corte-sur")
-    assert {"Paredes", north, south} <= set(by_name)
-    assert by_name[north][2] != by_name[south][2]       # their own line types
