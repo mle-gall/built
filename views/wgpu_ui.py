@@ -16,112 +16,8 @@ from PySide6.QtGui import QImage, QKeySequence
 FONT = str(Path(__file__).resolve().parents[1] / "resources" / "fonts" / "inter")
 if not os.path.isdir(FONT):
     FONT = "/System/Library/Fonts/SFNS.ttf"
-_ICON_PX = 48
 
-
-def _icon_rgba(key: str) -> tuple[int, int, bytes]:
-    """The tool's own icon as white with its alpha, so egui can tint it."""
-    from views.icons import tool_icon
-    icon = tool_icon(key)
-    if icon.isNull():
-        return 0, 0, b""
-    image = icon.pixmap(QSize(_ICON_PX, _ICON_PX)).toImage().convertToFormat(
-        QImage.Format_RGBA8888)
-    w, h = image.width(), image.height()
-    data = bytearray(bytes(image.constBits())[: w * h * 4])
-    data[0::4] = data[1::4] = data[2::4] = b"\xff" * (w * h)
-    return w, h, bytes(data)
-
-
-def _drawn_icon(key: str) -> tuple[int, int, bytes]:
-    """Icons the app has no art for yet (view-state toggles), drawn in the
-    same 48-px grid and stroke as views/icons.py, white for tinting."""
-    from PySide6.QtCore import QPointF, QRectF
-    from PySide6.QtGui import QColor, QPainter, QPen
-    image = QImage(_ICON_PX, _ICON_PX, QImage.Format_RGBA8888)
-    image.fill(Qt.transparent)
-    p = QPainter(image)
-    p.setRenderHint(QPainter.Antialiasing, True)
-    solid = QPen(QColor(255, 255, 255), 3.0, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
-    dashed = QPen(QColor(255, 255, 255, 200), 2.2, Qt.DashLine, Qt.RoundCap, Qt.RoundJoin)
-    dashed.setDashPattern([1.6, 1.8])
-    front, back = QRectF(10, 18, 20, 20), QRectF(18, 10, 20, 20)
-    corners = [(front.topLeft(), back.topLeft()), (front.topRight(), back.topRight()),
-               (front.bottomLeft(), back.bottomLeft()), (front.bottomRight(), back.bottomRight())]
-    if key == "xray":
-        # A cube you see through: faces washed, every edge drawn.
-        p.setPen(Qt.NoPen)
-        p.setBrush(QColor(255, 255, 255, 70))
-        p.drawRect(back)
-        p.drawRect(front)
-        p.setBrush(Qt.NoBrush)
-        p.setPen(solid)
-        p.drawRect(front)
-        p.drawRect(back)
-        for a, b in corners:
-            p.drawLine(a, b)
-    elif key == "back_edges":
-        # The near edges solid, the ones behind dashed.
-        p.setPen(dashed)
-        p.drawLine(back.topLeft(), back.bottomLeft())
-        p.drawLine(back.bottomLeft(), back.bottomRight())
-        p.drawLine(front.bottomLeft(), back.bottomLeft())
-        p.setPen(solid)
-        p.drawRect(front)
-        p.drawLine(back.topLeft(), back.topRight())
-        p.drawLine(back.topRight(), back.bottomRight())
-        p.drawLine(front.topLeft(), back.topLeft())
-        p.drawLine(front.topRight(), back.topRight())
-        p.drawLine(front.bottomRight(), back.bottomRight())
-    elif key == "section_cut":
-        # A box sliced by a plane: the near half kept, its cut face hatched,
-        # the far half gone (dashed), the plane drawn through it.
-        p.setPen(dashed)
-        p.drawLine(QPointF(25, 15), QPointF(37, 15))
-        p.drawLine(QPointF(37, 15), QPointF(37, 35))
-        p.drawLine(QPointF(37, 35), QPointF(25, 35))
-        p.setPen(Qt.NoPen)
-        p.setBrush(QColor(255, 255, 255, 90))
-        p.drawRect(QRectF(11, 15, 14, 20))
-        p.setBrush(Qt.NoBrush)
-        hatch = QPen(QColor(255, 255, 255, 190), 1.6)
-        p.setPen(hatch)
-        for k in range(0, 34, 6):
-            p.drawLine(QPointF(max(11, 11 + k - 20), min(35, 15 + k)), QPointF(min(25, 11 + k), max(15, 15 + k - 14)))
-        p.setPen(solid)
-        p.drawLine(QPointF(25, 15), QPointF(11, 15))
-        p.drawLine(QPointF(11, 15), QPointF(11, 35))
-        p.drawLine(QPointF(11, 35), QPointF(25, 35))
-        plane = QPen(QColor(255, 255, 255), 3.4, Qt.SolidLine, Qt.RoundCap)
-        p.setPen(plane)
-        p.drawLine(QPointF(25, 9), QPointF(25, 41))
-    elif key == "shadows":
-        # A sun, a box, and the shadow it casts on the ground.
-        p.setPen(Qt.NoPen)
-        p.setBrush(QColor(255, 255, 255, 110))
-        from PySide6.QtGui import QPolygonF
-        p.drawPolygon(QPolygonF([QPointF(24, 38), QPointF(36, 38), QPointF(44, 31), QPointF(32, 31)]))
-        p.setBrush(Qt.NoBrush)
-        p.setPen(solid)
-        p.drawRect(QRectF(22, 22, 14, 16))
-        p.drawEllipse(QPointF(12, 12), 4.5, 4.5)
-        ray = QPen(QColor(255, 255, 255), 2.2, Qt.SolidLine, Qt.RoundCap)
-        p.setPen(ray)
-        import math
-        for a in range(0, 360, 45):
-            r = math.radians(a)
-            p.drawLine(QPointF(12 + 7.5 * math.cos(r), 12 + 7.5 * math.sin(r)),
-                       QPointF(12 + 10 * math.cos(r), 12 + 10 * math.sin(r)))
-    elif key == "hidden_geometry":
-        # A face whose soft diagonal and smoothed edges show dashed.
-        p.setPen(solid)
-        p.drawRect(QRectF(11, 11, 26, 26))
-        p.setPen(dashed)
-        p.drawLine(QPointF(11, 37), QPointF(37, 11))
-        p.drawLine(QPointF(11, 24), QPointF(24, 11))
-        p.drawLine(QPointF(24, 37), QPointF(37, 24))
-    p.end()
-    return _ICON_PX, _ICON_PX, bytes(image.constBits())[: _ICON_PX * _ICON_PX * 4]
+from ingetrazo_render import rail_icon as _icon_rgba
 
 
 def _window(view):
@@ -227,6 +123,29 @@ def _send_tools(view, win) -> None:
         view.renderer.ui_set_tools(groups, disabled)
     else:
         view.renderer.ui_set_tools(groups)
+    if "_host" not in vars(win):
+        _hide_widget_chrome(view, win)
+    icons = []
+    from views.view_commands import entries
+    for group, _, _, _, key in entries():
+        if group not in ("nav", "walkthrough", "Views", "Projection") or not key:
+            continue
+        w, h, rgba = _icon_rgba(key)
+        icons.append((key, w, h, rgba))
+    icons.append(("four_views", *_icon_rgba("four_views")))
+    for key in ("xray", "back_edges", "hidden_geometry", "section_cut", "shadows"):
+        icons.append((key, *_icon_rgba(key)))
+    view.renderer.ui_set_icons(icons)
+    view._ui_tools_sent = True
+
+
+#: Window buttons' room at the top left (mac_glass: 14 + three buttons).
+LIGHTS_ROOM = 86.0
+#: The docked top bar (ui.rs TOP_H): its empty parts move the window.
+TOP_H = 40.0
+
+
+def _hide_widget_chrome(view, win):
     # Full bleed: the palette replaces every tool bar.
     from PySide6.QtWidgets import QToolBar
     for bar in win.findChildren(QToolBar):
@@ -249,24 +168,6 @@ def _send_tools(view, win) -> None:
               getattr(win, "_vcb_value", None)):
         if w is not None:
             w.setMaximumWidth(0)
-    icons = []
-    from views.view_commands import entries
-    for group, _, _, _, key in entries():
-        if group not in ("nav", "walkthrough", "Views", "Projection") or not key:
-            continue
-        w, h, rgba = _icon_rgba(key)
-        icons.append((key, w, h, rgba))
-    icons.append(("four_views", *_icon_rgba("four_views")))
-    for key in ("xray", "back_edges", "hidden_geometry", "section_cut", "shadows"):
-        icons.append((key, *_drawn_icon(key)))
-    view.renderer.ui_set_icons(icons)
-    view._ui_tools_sent = True
-
-
-#: Window buttons' room at the top left (mac_glass: 14 + three buttons).
-LIGHTS_ROOM = 86.0
-#: The docked top bar (ui.rs TOP_H): its empty parts move the window.
-TOP_H = 40.0
 
 
 def _merge_title_row(win) -> None:

@@ -1020,10 +1020,16 @@ def set_mode(view, win, mode) -> None:
 def install(win) -> None:
     """Window › Library › Materials / Components: menu entries (so ⌘K
     finds them) and the rail's Components button."""
-    from PySide6.QtGui import QAction
     if getattr(win, "_lib_installed", False):
         return
     win._lib_installed = True
+    if "_command_store" in vars(win):
+        from app_shell.command_action import ShellAction
+        win._lib_actions = {p.id: ShellAction(win, p.label, run=lambda t=p.id: open_library(win, t), listed=False)
+                            for p in PROVIDERS if p.ready}
+        win._act_library_components = ShellAction(win, "Components", run=lambda: open_library(win, "components"), listed=False)
+        return
+    from PySide6.QtGui import QAction
     menu = None
     for a in win.menuBar().actions():
         if a.menu() is not None and a.text().replace("&", "") in ("Window", "Ventana"):

@@ -3212,6 +3212,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     document_starter::register(m)?;
     scene_navigation::register(m)?;
     window_services::register(m)?;
+    m.add_function(wrap_pyfunction!(tool_cursors::rail_icon,m)?)?;
     m.add_function(wrap_pyfunction!(tool_cursors::tool_cursor_name, m)?)?;
     m.add_function(wrap_pyfunction!(tool_cursors::tool_cursor_art, m)?)?;
     m.add_function(wrap_pyfunction!(image_assets::texture_cutout,m)?)?;
