@@ -45,6 +45,7 @@ fn unpack<'py, const N: usize>(value: &Obj<'py>) -> PyResult<[Obj<'py>; N]> {
 mod fillet_host_api;
 mod pushpull;
 mod scale;
+mod select_tool_api;
 mod texture;
 mod texture_preview;
 type Args<'py> = Bound<'py, PyTuple>;
@@ -82,6 +83,9 @@ fn registration(module: &str, name: &str) -> Option<(&'static [Method], &'static
         }
         ("tools.fillet_host", "FilletHost") => {
             (fillet_host_api::METHODS, stringify!(fillet_host_api))
+        }
+        ("tools.rust_tools", "SelectTool") => {
+            (select_tool_api::METHODS, stringify!(select_tool_api))
         }
         ("tools.pushpull", "PushPullTool") => (pushpull::METHODS, stringify!(pushpull)),
         _ => return None,
@@ -163,6 +167,7 @@ pub fn register_tool_adapter<'py>(cls: &Obj<'py>) -> Reply<'py> {
     Ok(cls.clone())
 }
 
+mod selection;
 #[pyfunction]
 pub fn register_tool_functions(namespace: &Bound<'_, PyDict>) -> PyResult<()> {
     let factory = Registrar::new(namespace.py())?;
@@ -170,7 +175,8 @@ pub fn register_tool_functions(namespace: &Bound<'_, PyDict>) -> PyResult<()> {
         .get_item("__name__")?
         .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err("__name__"))?
         .extract()?;
-    let methods: &[Method] = match module.as_str() {
+    let methods = match module.as_str() {
+        "tools.select_host" => selection::METHODS,
         _ => {
             return Err(pyo3::exceptions::PyValueError::new_err(format!(
                 "Unknown tool module {module}"

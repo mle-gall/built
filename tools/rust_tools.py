@@ -9,6 +9,7 @@ native viewport host handles picks, document queries and protocol commands.
 Python retains tool identities for extensions, UI readouts and view callbacks.
 """
 from __future__ import annotations
+from ingetrazo_core import register_tool_adapter
 
 import json
 
@@ -59,6 +60,7 @@ class LineTool(RustTool):
         return True if self._state("retype") else None
 
 
+@register_tool_adapter
 class SelectTool(RustTool):
     """Select (``rust/ingetrazo_core/src/tools/select.rs``). ``press``,
     ``drag``, ``release`` and ``double`` are the raw gesture the Metal view
@@ -66,61 +68,7 @@ class SelectTool(RustTool):
 
     kind = "select"
 
-    def _px(self, viewport, kind, x, y, modifiers, t=0.0):
-        return self._send(viewport, {"type": kind, "px": (x, y), "mods": _mods(modifiers), "t": t})
-
-    def hover_at(self, viewport, x, y, modifiers):
-        return self._px(viewport, "hover", x, y, modifiers)
-
-    def on_hover(self, ctx) -> None:
-        self._send(ctx.viewport, self._pointer("hover", ctx))
-
-    def pressed(self) -> bool:
-        """A press is held that its release will answer (not a triple)."""
-        return bool(self._state("pressed"))
-
-    def pick_at(self, viewport, x, y, lines=True):
-        """What a click at ``(x, y)`` takes (the machine's cascade)."""
-        from ingetrazo_core import select_pick
-        hit = select_pick(_Host(viewport, self._handles), float(x), float(y), bool(lines))
-        return None if hit is None else self._handles.get(hit)
-
-    def press(self, viewport, x, y, modifiers, t):
-        return self._px(viewport, "press", x, y, modifiers, t)
-
-    def drag(self, viewport, x, y, modifiers):
-        self._px(viewport, "drag", x, y, modifiers)
-        return self._machine.preview()["box"]
-
-    def release(self, viewport, x, y, modifiers):
-        return self._px(viewport, "release", x, y, modifiers)
-
-    def double(self, viewport, x, y, modifiers, t):
-        return self._px(viewport, "double_click", x, y, modifiers, t)
-
-    def on_double_click(self, ctx) -> None:
-        self._send(ctx.viewport, self._pointer("double_click", ctx))
-        ctx.viewport.update()
-
-    def on_triple_click(self, ctx) -> None:
-        self._send(ctx.viewport, self._pointer("triple_click", ctx))
-        ctx.viewport.update()
-
     _MODE_MODS = {"replace": 0, "add": 0x04000000, "toggle": 0x02000000, "remove": 0x06000000}
-
-    def on_box_select(self, viewport, rect, crossing: bool,
-                      additive: bool = False, mode: str | None = None) -> None:
-        mode = mode or ("add" if additive else "replace")
-        self._send(viewport, {"type": "box", "rect": tuple(rect), "crossing": bool(crossing),
-                              "mods": self._MODE_MODS[mode]})
-        viewport.update()
-
-    def on_key(self, viewport, key, modifiers) -> bool:
-        from core.input_types import Qt
-        name = {Qt.Key_Delete: "Delete", Qt.Key_Backspace: "Backspace"}.get(key)
-        if name is None:
-            return False
-        return self._send(viewport, {"type": "key", "key": name, "mods": _mods(modifiers)})["consumed"]
 
 
 from tools.base import AxisMagnet, PlaneLock
