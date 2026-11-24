@@ -60,6 +60,7 @@ mod north_tool_api;
 mod offset_host_api;
 mod paint_host_api;
 mod paste_host_api;
+mod place_group_host_api;
 mod planar_machine_api;
 mod position_camera_host_api;
 mod protractor_base_api;
@@ -212,6 +213,10 @@ fn registration(module: &str, name: &str) -> Option<(&'static [Method], &'static
             (geo_path_tool_api::METHODS, stringify!(geo_path_tool_api))
         }
         ("tools.image_host", "ImageTool") => (image_tool_api::METHODS, stringify!(image_tool_api)),
+        ("tools.place_group_host", "PlaceGroupHost") => (
+            place_group_host_api::METHODS,
+            stringify!(place_group_host_api),
+        ),
         ("tools.pushpull", "PushPullTool") => (pushpull::METHODS, stringify!(pushpull)),
         _ => return None,
     })
