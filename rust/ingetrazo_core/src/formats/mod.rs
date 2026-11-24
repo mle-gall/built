@@ -10,6 +10,14 @@ use crate::{
     file_textures, fuse, gltf_maps, gltf_mesh, gltf_read, gltf_write, igz, mesh_export, obj_read,
     obj_write, reader_compat, rfa_scene, skp, stl, survey_pixels, view_dxf, view_svg,
 };
+macro_rules! functions {
+    ($module:ident; $($name:ident),+ $(,)?) => { $( $module.add_function(pyo3::wrap_pyfunction!($name, $module)?)?; )+ };
+}
+type Obj<'p> = Bound<'p, PyAny>;
+fn path_obj<'p>(py: Python<'p>, p: &std::path::Path) -> PyResult<Obj<'p>> {
+    py.import("pathlib")?.call_method1("Path", (p,))
+}
+mod geotiff;
 use pyo3::prelude::*;
 
 pub(super) fn register_formats(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -134,5 +142,6 @@ pub(super) fn register_formats(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<file_groups::FileGroupWriter>()?;
     m.add_function(wrap_pyfunction!(file_geometry::igz_points, m)?)?;
     m.add_function(wrap_pyfunction!(igz::igz_read_geometry, m)?)?;
+    geotiff::register(m)?;
     Ok(())
 }

@@ -47,44 +47,52 @@ fn survey_jpeg_tile<'py>(
     {
         return Err(PyValueError::new_err("Invalid survey tile dimensions"));
     }
-    let block = py.detach(|| {
-        // Damaged or short edge tiles retain the importer's zero padding.
-        let mut out = Array3::<u8>::zeros((height, width, samples));
-        if let Some((w, h, space, pixels)) = jpeg_pixels(data, tables) {
-            let channels = space.num_components();
-            let dest = out.as_slice_mut().unwrap();
-            for y in 0..height.min(h) {
-                for x in 0..width.min(w) {
-                    let i = (y * w + x) * channels;
-                    let rgb = &pixels[i..i + channels];
-                    let mut rgba = [rgb[0], rgb[1], rgb[2], 255];
-                    if channels == 4 {
-                        rgba[3] = rgb[3];
-                        if space == ColorSpace::YCCK {
-                            let l = f64::from(rgb[0]);
-                            let cb = f64::from(rgb[1]) - 128.;
-                            let cr = f64::from(rgb[2]) - 128.;
-                            let inv = |v: f64| 255 - v.round().clamp(0., 255.) as u8;
-                            rgba[..3].copy_from_slice(&[
-                                inv(l + 1.402 * cr),
-                                inv(l - 0.344136 * cb - 0.714136 * cr),
-                                inv(l + 1.772 * cb),
-                            ]);
-                        }
+    let block = py.detach(|| jpeg_block(data, tables, width, height, samples));
+    Ok(block.into_pyarray(py))
+}
+
+pub(crate) fn jpeg_block(
+    data: &[u8],
+    tables: &[u8],
+    width: usize,
+    height: usize,
+    samples: usize,
+) -> Array3<u8> {
+    // Damaged or short edge tiles retain the importer's zero padding.
+    let mut out = Array3::<u8>::zeros((height, width, samples));
+    if let Some((w, h, space, pixels)) = jpeg_pixels(data, tables) {
+        let channels = space.num_components();
+        let dest = out.as_slice_mut().unwrap();
+        for y in 0..height.min(h) {
+            for x in 0..width.min(w) {
+                let i = (y * w + x) * channels;
+                let rgb = &pixels[i..i + channels];
+                let mut rgba = [rgb[0], rgb[1], rgb[2], 255];
+                if channels == 4 {
+                    rgba[3] = rgb[3];
+                    if space == ColorSpace::YCCK {
+                        let l = f64::from(rgb[0]);
+                        let cb = f64::from(rgb[1]) - 128.;
+                        let cr = f64::from(rgb[2]) - 128.;
+                        let inv = |v: f64| 255 - v.round().clamp(0., 255.) as u8;
+                        rgba[..3].copy_from_slice(&[
+                            inv(l + 1.402 * cr),
+                            inv(l - 0.344136 * cb - 0.714136 * cr),
+                            inv(l + 1.772 * cb),
+                        ]);
                     }
-                    let j = (y * width + x) * samples;
-                    let n = if samples == 2 && channels == 3 {
-                        1
-                    } else {
-                        samples
-                    };
-                    dest[j..j + n].copy_from_slice(&rgba[..n]);
                 }
+                let j = (y * width + x) * samples;
+                let n = if samples == 2 && channels == 3 {
+                    1
+                } else {
+                    samples
+                };
+                dest[j..j + n].copy_from_slice(&rgba[..n]);
             }
         }
-        out
-    });
-    Ok(block.into_pyarray(py))
+    }
+    out
 }
 
 #[pyfunction]
@@ -105,7 +113,7 @@ fn survey_webp<'py>(
 }
 
 #[pyfunction]
-fn survey_rectangle(x0: f64, y0: f64, x1: f64, y1: f64) -> (f64, f64, f64, f64) {
+pub(crate) fn survey_rectangle(x0: f64, y0: f64, x1: f64, y1: f64) -> (f64, f64, f64, f64) {
     let (w, h) = (x1 - x0, y1 - y0);
     let margin = 0.15 * w.max(h).max(200.);
     (
