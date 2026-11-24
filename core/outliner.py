@@ -516,31 +516,3 @@ def fit_scale(scene, view, w_mm: float, h_mm: float,
         if n >= need:
             return float(n)
     return float(STANDARD_SCALES[-1])
-
-
-# ---- Renaming several rows at once (#565, #87) --------------------------------
-
-def numbered_names(count: int, base: str, start: int = 1,
-                   digits: int = 2) -> list:
-    """``count`` names: ``base`` and a number padded to ``digits`` —
-    ``W01, W02, W03…`` from ``start``."""
-    digits = max(1, int(digits))
-    return [f"{base}{n:0{digits}d}" for n in range(int(start),
-                                                    int(start) + count)]
-
-
-def replaced_names(names, find: str, replace: str,
-                   match_case: bool = False) -> list:
-    """Each name with every ``find`` swapped for ``replace`` — any case
-    unless ``match_case``. An empty ``find`` changes nothing."""
-    import re
-    if not find:
-        return list(names)
-    flags = 0 if match_case else re.IGNORECASE
-    pattern = re.compile(re.escape(find), flags)
-    return [pattern.sub(lambda _m: replace, n) for n in names]
-
-
-def affixed_names(names, prefix: str = "", suffix: str = "") -> list:
-    """Each name with ``prefix`` before it and ``suffix`` after it."""
-    return [f"{prefix}{n}{suffix}" for n in names]

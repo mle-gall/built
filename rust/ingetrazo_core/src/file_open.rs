@@ -15,7 +15,8 @@ thread_local! {
 
 /// Large record lists may build thousands of facade objects in one extension
 /// call. Let either event loop take the interpreter between short batches.
-pub(crate) fn skp_checkpoint(py: Python<'_>) -> PyResult<()> {
+pub(crate) use checkpoint as skp_checkpoint;
+pub(crate) fn checkpoint(py: Python<'_>) -> PyResult<()> {
     STAGING.with_borrow(|state| {
         let Some(state) = state.as_ref().and_then(Weak::upgrade) else {
             return Ok(());
@@ -267,6 +268,66 @@ impl DocumentOpen {
 }
 
 impl DocumentOpen {
+    /// Stage an import, forwarding progress only on the caller's thread.
+    /// A link already on the document worker shares its cancellation state.
+    pub(crate) fn stage(
+        py: Python<'_>,
+        progress: Option<&Bound<'_, PyAny>>,
+        job: impl for<'p> FnOnce(Python<'p>, Bound<'p, PyAny>) -> OpenResult + Send + 'static,
+    ) -> OpenResult {
+        if let Some(state) = STAGING.with_borrow(|s| s.as_ref().and_then(Weak::upgrade)) {
+            let cb = Py::new(
+                py,
+                Progress {
+                    state,
+                    base: 0.,
+                    span: 1.,
+                },
+            )?;
+            return job(py, cb.into_bound(py).into_any());
+        }
+        let ready = Py::new(py, Self::parse(job)?)?;
+        let run = || -> PyResult<_> {
+            let modal = py.import("app_shell.modal")?;
+            let wait = ready.bind(py).getattr("ready")?;
+            let mut last = None;
+            while !ready.borrow(py).ready() {
+                if let Some(cb) = progress {
+                    let next = ready.borrow(py).progress();
+                    if !next.1.is_empty() && last.as_ref() != Some(&next) {
+                        cb.call1(next.clone())?;
+                        last = Some(next);
+                    }
+                }
+                let finished = modal
+                    .call_method1("run_until", (&wait, 0.016))?
+                    .is_truthy()?;
+                if !finished {
+                    if progress.is_none() && modal.call_method0("host")?.is_none() {
+                        break;
+                    }
+                    py.detach(|| std::thread::sleep(std::time::Duration::from_millis(2)));
+                }
+            }
+            let result = ready.borrow(py).wait(py)?.into_bound(py);
+            if let Some(cb) = progress {
+                let next = ready.borrow(py).progress();
+                if !next.1.is_empty() && last.as_ref() != Some(&next) {
+                    cb.call1(next)?;
+                }
+            }
+            Ok(result)
+        };
+        let result = match run() {
+            Ok(r) => r,
+            Err(e) => {
+                ready.borrow(py).cancel();
+                return Err(e);
+            }
+        };
+        Ok(result.unbind())
+    }
+
     pub(crate) fn parse(
         job: impl for<'py> FnOnce(Python<'py>, Bound<'py, PyAny>) -> OpenResult + Send + 'static,
     ) -> PyResult<Self> {

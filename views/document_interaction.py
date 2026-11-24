@@ -74,6 +74,8 @@ if not NATIVE:
 from views.paint_types import QColor, QFont, QPen, QPolygonF
 if not NATIVE:
     from PySide6.QtGui import QFontMetrics, QImage, QPainter
+import ingetrazo_core
+from ingetrazo_core import ray_aabb_span as _ray_aabb_span
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D, Vec4 as QVector4D
 
 from core.camera import OrbitCamera
@@ -430,51 +432,6 @@ def _split_chunk_spans(chunk, depth=0, force=False):
     if not force:
         chunk["_span_grid"] = ((chunk.get("rev"), n), out)
     return out
-
-
-def _ray_aabb_span(o, d, lo, hi):
-    """``(t_in, t_out)`` of the forward ray (t >= 0) through the AABB, or
-    ``None`` if it misses. Plain floats."""
-    tmin, tmax = 0.0, float("inf")
-    for i in range(3):
-        di = d[i]
-        if -1e-12 < di < 1e-12:
-            if o[i] < lo[i] - 1e-9 or o[i] > hi[i] + 1e-9:
-                return None
-            continue
-        t1 = (lo[i] - o[i]) / di
-        t2 = (hi[i] - o[i]) / di
-        if t1 > t2:
-            t1, t2 = t2, t1
-        tmin, tmax = max(tmin, t1), min(tmax, t2)
-        if tmin > tmax:
-            return None
-    return tmin, tmax
-
-
-def _ray_aabb(o, d, lo, hi, reach=float("inf")) -> bool:
-    """Slab test: does the forward ray (``0 <= t <= reach``) touch the AABB?
-    Plain floats — the pick prefilter tests ~tens of chunk boxes per ray."""
-    tmin = 0.0
-    tmax = reach
-    for i in range(3):
-        di = d[i]
-        if -1e-12 < di < 1e-12:
-            if o[i] < lo[i] - 1e-9 or o[i] > hi[i] + 1e-9:
-                return False
-            continue
-        inv = 1.0 / di
-        t1 = (lo[i] - o[i]) * inv
-        t2 = (hi[i] - o[i]) * inv
-        if t1 > t2:
-            t1, t2 = t2, t1
-        if t1 > tmin:
-            tmin = t1
-        if t2 < tmax:
-            tmax = t2
-        if tmin > tmax:
-            return False
-    return True
 
 
 #: Every chunk entry built (or loaded from disk) takes the next number.
@@ -2968,54 +2925,13 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
     @staticmethod
     def _widened_planes(planes, frac):
-        """The six planes of ``_frustum_planes`` with the four sides moved
-        out by ``frac`` of the view on each side — the clip test |x|, |y|
-        ≤ w becomes ≤ (1 + 2·frac)·w — and no near plane (what is behind
-        the eye is clipped anyway)."""
-        # Each side is r3 ± row: half the sum of a pair is r3 itself.
-        r3 = [(a + b) * 0.5 for a, b in zip(planes[0], planes[1])]
-        k = 2.0 * frac
-        out = [tuple(c + k * r for c, r in zip(pl, r3)) for pl in planes[:4]]
-        out.append(planes[5])                                       # far
-        return out
+        from ingetrazo_core import widened_planes
+        return widened_planes(planes, frac)
 
     @staticmethod
     def _instances_in_frustum(lo, hi, planes, margin=0.0):
-        """Mask of the boxes ``lo``/``hi`` not wholly outside one of the
-        frustum ``planes`` — moved ``margin`` world units outward.
-
-        A box whose bounds are not finite is always kept: ±inf is what a
-        placement with no known extent is stored as, a NaN can creep into
-        a huge model's coordinates, and neither can be proven outside —
-        the rule ``_bounding_spheres`` and ``_visible_spans`` already
-        keep for unknown extents. Running the products on them anyway
-        multiplied inf by a zero plane component (``invalid value
-        encountered in multiply``, issue #952) and let the NaN comparison
-        drop the box."""
-        import numpy as np
-        lo = np.asarray(lo)
-        hi = np.asarray(hi)
-        keep = np.ones(len(lo), dtype=bool)
-        finite = np.isfinite(lo).all(axis=1) & np.isfinite(hi).all(axis=1)
-        idx = np.flatnonzero(finite)
-        if not len(idx):
-            return keep
-        flo, fhi = lo[idx], hi[idx]
-        fkeep = np.ones(len(idx), dtype=bool)
-        # Same p-vertex test as ``_aabb_visible``, all boxes at once — a
-        # plane at a time on the box columns (the (planes, boxes, 3) array
-        # it used to build was most of a frame's gather, #158); the same
-        # products and sums, in the same order.
-        for pl in planes:
-            nx, ny, nz, d = (float(c) for c in pl)
-            if margin:
-                d += margin * (nx * nx + ny * ny + nz * nz) ** 0.5
-            px = fhi[:, 0] if nx >= 0.0 else flo[:, 0]
-            py = fhi[:, 1] if ny >= 0.0 else flo[:, 1]
-            pz = fhi[:, 2] if nz >= 0.0 else flo[:, 2]
-            fkeep &= ((px * nx + py * ny) + pz * nz) + d >= 0.0
-        keep[idx] = fkeep
-        return keep
+        from ingetrazo_core import instances_in_frustum
+        return instances_in_frustum(lo, hi, planes, margin)
 
     #: An instance whose bounding sphere spans less than this many
     #: framebuffer pixels is not drawn (the camera's frame only).
@@ -3041,31 +2957,15 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
     @staticmethod
     def _bounding_spheres(lo, hi):
-        """Centres and radii of boxes ``lo``/``hi``; a box with an unknown
-        (infinite) extent gets an infinite radius: it is never «small»."""
-        import numpy as np
-        with np.errstate(invalid="ignore"):
-            ctr = (lo + hi) * 0.5
-            rad = np.linalg.norm(hi - lo, axis=1) * 0.5
-        known = np.isfinite(ctr).all(axis=1) & np.isfinite(rad)
-        return np.where(known[:, None], ctr, 0.0), np.where(known, rad, np.inf)
+        from ingetrazo_core import bounding_spheres
+        return bounding_spheres(lo, hi)
 
     def _spheres_below_a_pixel(self, ctr, rad, floor=None):
-        """Mask of the spheres that span under ``floor`` (by default
-        ``_INST_MIN_PX``) framebuffer pixels across on this frame."""
-        import numpy as np
-        h = (self._export_size or self._fb_size())[1]
-        m = self._np_mvp()
-        # pixels per world unit at w = 1: the projection's own y scale
-        sy = abs(self.camera.projection_matrix().data()[5]) * h * 0.5
-        w = ctr @ m[3, :3] + m[3, 3]
-        if self.camera.perspective:
-            w = w - rad                         # the sphere's nearest point
-        with np.errstate(invalid="ignore", divide="ignore"):
-            px = 2.0 * rad * sy / np.where(w > 1e-9, w, np.nan)
-        if floor is None:
-            floor = self._INST_MIN_PX
-        return np.isfinite(px) & (px < floor)
+        from ingetrazo_core import small_spheres
+        height = (self._export_size or self._fb_size())[1]
+        scale = abs(self.camera.projection_matrix().data()[5]) * height
+        return small_spheres(ctr, rad, self._np_mvp()[3], scale, self.camera.perspective,
+                             self._INST_MIN_PX if floor is None else floor)
 
     def _edit_rest_fade(self, group):
         """How a reference image (``group=None``) or a face-me figure is
@@ -3199,7 +3099,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         if idx is None:
             return None
         hits = DocumentInteraction._face_hits(self, idx, origin, direction, "vis")
-        DocumentInteraction._drop_past_cut(self, hits, origin, direction)
+        ingetrazo_core.drop_past_cut(self, hits, origin, direction)
         if hits is None or not len(hits.t):
             return None
         front = DocumentInteraction._smallest_at_front(self, hits, origin, direction)
@@ -4605,27 +4505,8 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return _active_cut(self.scene)
 
     def section_plane_frame(self, sp) -> list:
-        """Four world corners of the plane's drawn frame: the model's bounds
-        projected onto the plane, with a margin (the plane object is sized
-        to the model)."""
-        u, v = plane_axes(sp.normal)
-        lo, hi = self.scene.bounds()
-        if lo is None:
-            half_u = half_v = 1.5
-            cu = cv = 0.0
-        else:
-            corners = [QVector3D(x, y, z)
-                       for x in (lo.x(), hi.x())
-                       for y in (lo.y(), hi.y())
-                       for z in (lo.z(), hi.z())]
-            us = [QVector3D.dotProduct(c - sp.point, u) for c in corners]
-            vs = [QVector3D.dotProduct(c - sp.point, v) for c in corners]
-            cu, cv = (min(us) + max(us)) * 0.5, (min(vs) + max(vs)) * 0.5
-            half_u = (max(us) - min(us)) * 0.56 + 0.2
-            half_v = (max(vs) - min(vs)) * 0.56 + 0.2
-        c = sp.point + u * cu + v * cv
-        return [c - u * half_u - v * half_v, c + u * half_u - v * half_v,
-                c + u * half_u + v * half_v, c - u * half_u + v * half_v]
+        from ingetrazo_core import section_frame
+        return section_frame(sp.point, plane_axes(sp.normal), self.scene.bounds())
 
     def _draw_section_planes(self, painter: QPainter) -> None:
         """The section plane OBJECTS (frame + corner brackets + symbol):
@@ -4742,314 +4623,60 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return best
 
     def _section_cut_segments(self):
-        """World-space cut segments: the active plane ∩ every visible model
-        triangle, vectorized over the pick index's (v0, e1, e2) arrays.
-        Cached per (scene version, plane pose)."""
-        sp = self.scene.active_section()
-        if sp is None:
-            return None
-        n, o = sp.normal, sp.point
-        key = (self.scene.version, round(n.x(), 9), round(n.y(), 9),
-               round(n.z(), 9), round(o.x(), 6), round(o.y(), 6),
-               round(o.z(), 6))
-        cached = getattr(self, "_section_cut_cache", None)
-        if cached is not None and cached[0] == key:
-            return cached[1]
-        idx = self._pick_flat(self._pick_index(near="all"))
-        from core.section import cut_chords
-        segs = tags = None
-        if idx.tri_v0 is not None and len(idx.tri_v0):
-            # Each triangle's height along the normal is kept while the
-            # model and the normal stay: a plane dragged by its arrow then
-            # only compares three arrays with its new offset (a furnished
-            # house froze ~2 s per drag measuring every triangle again).
-            reach = getattr(self, "_section_reach", None)
-            if reach is None or not reach.fits(idx.tri_v0, n, idx.tri_e1,
-                                               idx.tri_e2):
-                from core.section import PlaneReach
-                reach = self._section_reach = PlaneReach(
-                    idx.tri_v0, idx.tri_e1, idx.tri_e2, n)
-            segs, rows = cut_chords(idx.tri_v0, idx.tri_e1, idx.tri_e2, n, o,
-                                    idx.ent_vis[idx.tri_ent], rows=True,
-                                    reach=reach)
-            if segs is not None:
-                tags = self._cut_layer_tags(idx, idx.tri_ent[rows])
-        self._section_cut_cache = (key, segs, tags)
-        return segs
+        from ingetrazo_render import section_cut
+        return section_cut(self)
 
     @staticmethod
     def _cut_layer_tags(idx, ents):
-        """The layer each cut triangle's section is filled with, as a sheet
-        tags it: the face's own layer, else its object's."""
-        import numpy as np
-        from core.layers import DEFAULT_LAYER, layer_of
-        memo: dict = {}
-        out = []
-        # A lazy placement's face is built with its whole mesh when asked
-        # for: its layer is read from the document instead.
-        quick = getattr(idx.entities, "layer_at", None)
-        for e in ents.tolist():
-            tag = memo.get(e)
-            if tag is None:
-                if quick is not None:
-                    own, owner = quick(e)
-                    tag = own or DEFAULT_LAYER
-                else:
-                    face, owner = idx.entities[e]
-                    tag = layer_of(face)
-                if tag == DEFAULT_LAYER and owner is not None:
-                    tag = layer_of(owner)
-                memo[e] = tag
-            out.append(tag)
-        return np.asarray(out, dtype=object)
+        from ingetrazo_render import cut_layer_tags
+        return cut_layer_tags(idx, ents)
 
     def _section_fill_tris(self):
-        """The fill's triangles for the active cut, cached with the cut
-        segments they come from (same scene version, same plane pose)."""
-        import numpy as np
-        segs = self._section_cut_segments()
-        cached = getattr(self, "_section_fill_cache", None)
-        if cached is not None and (cached[0] is segs or (
-                segs is not None and cached[0] is not None
-                and cached[0].shape == segs.shape
-                and np.array_equal(cached[0], segs))):
-            # A selection click moves the scene version, not the cut.
-            self._section_fill_cache = (segs, cached[1])
-            return cached[1]
-        # Chaining the rings costs a fraction of a second on a model with
-        # thousands of cut solids — nothing once, too much per frame while
-        # a plane is dragged. A cut that keeps changing shows its lines
-        # live and its fill once it rests for a moment.
-        import time as _t
-        now = _t.monotonic()
-        last = getattr(self, "_section_fill_changed", 0.0)
-        self._section_fill_changed = now
-        if cached is not None and now - last < 0.15:
-            later(self, 200, self.update)
-            return None
-        from core.section import fill_triangles
-        tris = fill_triangles(segs, self.scene.active_section().normal)
-        self._section_fill_cache = (segs, tris)
-        self._section_hatch_cache = {}
-        return tris
+        from ingetrazo_render import section_fill
+        return section_fill(self)
 
     def _model_linetype_edges(self) -> list:
-        """``[(rgb or None, dashes, gaps)]``: the edges of the layers drawn
-        with their line type in the model (core.layers.model_line_styles),
-        cut into their dashes and gaps (world space, as a sheet at 1:50
-        dashes them) — rebuilt when the model or the line types change."""
-        import numpy as np
-        from core.layers import dash_segments, model_line_styles
-        scene = self.scene
-        styles = model_line_styles(scene)
-        if not styles:
-            return []
-        # The document's version, not the view's: picking something moves
-        # ``scene.version`` too, and every click on a model with dashed
-        # layers walked all its edges and cut them into dashes again (a
-        # second per click with 24 000 of them).
-        key = (id(scene), scene.content_version,
-               tuple(sorted(styles.items())))
-        memo = getattr(self, "_model_lines_cache", None)
-        if memo is not None and memo[0] == key:
-            return memo[1]
-        # From the viewport's arrays with their layers, not a walk of the
-        # model: every change of the model walked 85 000 faces of a plaza.
-        _t, hard, _s, _n, _tt, hard_tags, _st = self.hlr_geometry(tags=True)
-        by_layer: dict = {}
-        for seg, tag in zip(hard, hard_tags):
-            if tag in styles:
-                by_layer.setdefault(tag, []).append(seg)
-        from core.layers import linetype_text
-        names = {ly.key: ly.linetype for ly in scene.layers}
-        out = []
-        for tag, segs in by_layer.items():
-            rgb, pattern = styles[tag]
-            dashes, gaps = dash_segments(np.asarray(segs), pattern)
-            words = self._model_line_words(
-                np.asarray(segs), linetype_text(names.get(tag), scene))
-            out.append((rgb, dashes, gaps, words))
-        self._model_lines_cache = (key, out)
-        return out
+        from ingetrazo_render import model_layer_lines
+        return model_layer_lines(self)
 
     @staticmethod
     def _model_line_words(segs, spec):
-        """A line type's words (GAS…) on the model's edges, in the gaps the
-        pattern leaves for them, as a sheet at 1:50 places them: their
-        letters' outlines as world segments, lying in the plane of the
-        edge and the horizontal across it, reading upright from above (a
-        rising edge: from its side)."""
-        import numpy as np
-        from core.layers import MODEL_DASH_SCALE, text_marks
-        empty = np.zeros((0, 2, 3), dtype=np.float32)
-        if spec is None or not len(segs):
-            return empty
-        from ingetrazo_render import line_text_strokes
-        strokes = line_text_strokes(spec[0], spec[1])
-        if not strokes:
-            return empty
-        unit = MODEL_DASH_SCALE
-        up_z = np.array([0.0, 0.0, 1.0])
-        out: list = []
-        for a, b in np.asarray(segs, dtype=np.float64).reshape(-1, 2, 3):
-            d = b - a
-            total = float(np.linalg.norm(d))
-            if total <= 1e-9:
-                continue
-            u = d / total
-            if u[0] < -1e-9 or (abs(u[0]) <= 1e-9 and u[1] < 0):
-                u = -u                  # read left to right
-                a, b = b, a
-            side = np.cross(up_z, u)
-            if np.linalg.norm(side) < 1e-6:
-                side = np.array([0.0, 1.0, 0.0])
-            side /= np.linalg.norm(side)
-            marks = text_marks((0.0, 0.0), (total / unit, 0.0), spec)
-            if len(marks) * len(strokes) > 4000:
-                continue
-            for x, _y, _deg in marks:
-                centre = a + u * (x * unit)
-                for poly in strokes:
-                    pts = [centre + u * (px * unit) + side * (py * unit)
-                           for px, py in poly]
-                    out += [(p0, p1) for p0, p1 in zip(pts, pts[1:])]
-        if not out:
-            return empty
-        return np.asarray(out, dtype=np.float32)
+        from ingetrazo_render import model_line_words
+        return model_line_words(segs, spec)
 
 
 
     def _section_layer_fills(self, color):
-        """The cut filled layer by layer with the layers' hatches
-        (core.section.layer_fills) — once the cut rests, as its plain fill,
-        and again only when the cut or a layer's hatch changes."""
-        if self._section_fill_tris() is None:
-            return None
-        cut = getattr(self, "_section_cut_cache", None)
-        if cut is None or cut[1] is None:
-            return None
-        scene = self.scene
-        sign = (id(cut[1]), tuple(color[:3]),
-                repr([ly.to_dict() for ly in scene.layers]),
-                repr(getattr(scene, "bricks", None)))
-        memo = getattr(self, "_section_layer_cache", None)
-        if memo is not None and memo[0] == sign:
-            return memo[1]
-        from core.section import layer_fills
-        fills = layer_fills(cut[1], cut[2], scene.active_section().normal,
-                            scene, color)
-        self._section_layer_cache = (sign, fills)
-        return fills
+        from ingetrazo_render import section_layer_fills
+        return section_layer_fills(self, color)
 
 
 
     def _section_hatch(self, spacing: float, cross: bool):
-        """The hatch lines of the cut whose fill is cached, per (spacing,
-        cross) — computed once, while the cut stays the same."""
-        cached = getattr(self, "_section_fill_cache", None)
-        if cached is None:
-            return None
-        memo = getattr(self, "_section_hatch_cache", None)
-        if memo is None:
-            memo = self._section_hatch_cache = {}
-        key = (round(spacing, 9), bool(cross))
-        if key not in memo:
-            from core.section import hatch_segments
-            memo[key] = hatch_segments(
-                cached[0], self.scene.active_section().normal, spacing,
-                cross)
-        return memo[key]
+        from ingetrazo_render import section_hatch
+        return section_hatch(self, spacing, cross)
 
     #: The sheet's cut pen (mm) a layer's own cut weight is measured
     #: against in the model: a layer at 0.50 draws the usual ~2.5 px line.
     CUT_PEN_MM = 0.5
 
     def _cut_edge_weights(self, plane, keep):
-        """How much thicker or thinner each cut line is drawn than usual:
-        with «Layers' hatches» each layer's cut weight (Muros at 0.70 a
-        heavy line, an insulation at 0.18 a fine one), as on a sheet;
-        otherwise all alike."""
-        import numpy as np
-        from core.section import effective_fill
-        count = int(keep.sum())
-        pattern = effective_fill(plane, self._frame_style)[0]
-        cut = getattr(self, "_section_cut_cache", None)
-        if pattern != "layers" or cut is None or cut[2] is None                 or len(cut[2]) != len(keep):
-            return np.ones(count)
-        pens = {ly.key: float(ly.cut_weight) / self.CUT_PEN_MM
-                for ly in self.scene.layers
-                if getattr(ly, "cut_weight", None) is not None}
-        if not pens:
-            return np.ones(count)
-        out = np.array([pens.get(t, 1.0) for t in cut[2][keep].tolist()])
-        return np.clip(out, 0.4, 2.4)
+        from ingetrazo_render import cut_weights
+        return cut_weights(self, plane, keep)
 
     def _clip_segment_front(
         self, a: QVector3D, b: QVector3D
     ) -> Optional[tuple[QVector3D, QVector3D]]:
-        """Clip a world segment to the part in FRONT of the camera. The long
-        'infinite' guide segments (±10 km) routinely have an endpoint behind
-        the eye, where ``_world_to_pixel`` returns None — which used to make
-        the whole guide vanish from render, snap and pick in ordinary 3D
-        views. Returns the visible sub-segment, or ``None``."""
-        mvp = self.camera.projection_matrix() * self.camera.view_matrix()
-        wa = mvp.map(QVector4D(a.x(), a.y(), a.z(), 1.0)).w()
-        wb = mvp.map(QVector4D(b.x(), b.y(), b.z(), 1.0)).w()
-        eps = 1e-3
-        if wa <= eps and wb <= eps:
-            return None
-        if wa <= eps or wb <= eps:
-            t = (eps - wa) / (wb - wa)   # w is linear along the segment
-            cut = a + (b - a) * t
-            return (cut, QVector3D(b)) if wa <= eps else (QVector3D(a), cut)
-        return (QVector3D(a), QVector3D(b))
+        from ingetrazo_core import clip_annotation_front
+        return clip_annotation_front(self.camera.projection_matrix() * self.camera.view_matrix(), a, b)
 
     def _guide_snap_segment(
         self, g, margin: float = 1.5
     ) -> Optional[tuple[QVector3D, QVector3D]]:
-        """The span of guide line ``g`` the snap engine works on: the part
-        inside the view (widened by ``margin`` so the ends stay well off
-        screen), computed in double precision from the guide's own point
-        and direction.
-
-        The ±10 km segment of ``Guide.segment()`` is fine for drawing but not
-        for arithmetic: float32 rounds a coordinate of 10 000 m to ~1 mm, so
-        every crossing, 'on line' point and lock-line hit computed from those
-        endpoints was off by up to 2 mm — lines drawn from the X of two
-        diagonal guides visibly left the guides when zoomed in (#110).
-        Clipped to the view the endpoints are as large as what is on
-        screen, and the error scales with it (µm at a working zoom)."""
         from core.guide import GUIDE_HALF_LEN
-        mvp = self.camera.projection_matrix() * self.camera.view_matrix()
-        p, u = g.point, g.direction
-        c0 = mvp.map(QVector4D(p.x(), p.y(), p.z(), 1.0))
-        c1 = mvp.map(QVector4D(u.x(), u.y(), u.z(), 0.0))
-        c0 = (c0.x(), c0.y(), c0.w())
-        c1 = (c1.x(), c1.y(), c1.w())
-        lo, hi = -GUIDE_HALF_LEN, GUIDE_HALF_LEN
-        # Clip coordinates are affine in s along the line: keep
-        # w >= eps and |x|, |y| <= margin * w (Liang–Barsky on four planes).
-        planes = ((c0[2] - 1e-3, c1[2]),
-                  (margin * c0[2] - c0[0], margin * c1[2] - c1[0]),
-                  (margin * c0[2] + c0[0], margin * c1[2] + c1[0]),
-                  (margin * c0[2] - c0[1], margin * c1[2] - c1[1]),
-                  (margin * c0[2] + c0[1], margin * c1[2] + c1[1]))
-        for f0, f1 in planes:           # need f0 + f1 * s >= 0
-            if abs(f1) < 1e-15:
-                if f0 < 0.0:
-                    return None
-                continue
-            s = -f0 / f1
-            if f1 > 0.0:
-                lo = max(lo, s)
-            else:
-                hi = min(hi, s)
-            if lo >= hi:
-                return None
-        px, py, pz = p.x(), p.y(), p.z()
-        ux, uy, uz = u.x(), u.y(), u.z()
-        return (QVector3D(px + ux * lo, py + uy * lo, pz + uz * lo),
-                QVector3D(px + ux * hi, py + uy * hi, pz + uz * hi))
+        from ingetrazo_core import clip_snap_guide
+        return clip_snap_guide(self.camera.projection_matrix() * self.camera.view_matrix(),
+                               g.point, g.direction, GUIDE_HALF_LEN, margin)
 
     def _draw_scale_box(self, painter: QPainter) -> None:
         """The scaling box: yellow edges, green grips, the grabbed grip
@@ -5099,40 +4726,8 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         self, p0: tuple[float, float], p1: tuple[float, float],
         margin: float = 64.0,
     ) -> Optional[tuple[tuple[float, float], tuple[float, float]]]:
-        """Liang-Barsky clip of a 2D pixel segment to the widget rect (plus a
-        margin). Overlay guides are only clipped in 3D to the part in front of
-        the camera (``_clip_segment_front``), so their on-screen endpoints land
-        MILLIONS of pixels from origin. Qt's dash stroker runs in fixed point
-        and collapses a dashed pen into a solid line at that scale (measured:
-        a guide of 400 k px still dashes, 4 M px comes out solid). Trimming to
-        the visible area first keeps the dashes — and spares the rasteriser
-        hundreds of thousands of dash repeats. Returns the clipped endpoints,
-        or ``None`` when the segment misses the widget entirely."""
-        x0, y0 = p0
-        x1, y1 = p1
-        dx, dy = x1 - x0, y1 - y0
-        xmin, ymin = -margin, -margin
-        xmax, ymax = self.width() + margin, self.height() + margin
-        t0, t1 = 0.0, 1.0
-        for p, q in ((-dx, x0 - xmin), (dx, xmax - x0),
-                     (-dy, y0 - ymin), (dy, ymax - y0)):
-            if p == 0.0:
-                if q < 0.0:
-                    return None
-                continue
-            r = q / p
-            if p < 0.0:
-                if r > t1:
-                    return None
-                if r > t0:
-                    t0 = r
-            else:
-                if r < t0:
-                    return None
-                if r < t1:
-                    t1 = r
-        return ((x0 + t0 * dx, y0 + t0 * dy),
-                (x0 + t1 * dx, y0 + t1 * dy))
+        from ingetrazo_core import clip_annotation_line
+        return clip_annotation_line(p0, p1, self.width(), self.height(), margin)
 
     def _draw_guides(self, painter: QPainter) -> None:
         """The small crosses of guide POINTS, the usual scaffolding.
@@ -5603,162 +5198,14 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
     def _draw_occluded_segment(self, painter: QPainter, p3a: QVector3D,
                                p3b: QVector3D, samples: int = 16) -> None:
-        """Draw the 3D segment ``p3a``–``p3b`` in screen space, skipping the
-        parts hidden behind solid geometry (CPU occlusion sample).
-
-        The line is sampled about every ``_OCCLUSION_STEP_PX`` on screen (at
-        least ``samples`` steps), and where one sample is seen and the next
-        is not, the point where it goes behind is pinned by halving the
-        step — the line stops AT the silhouette. Drawing only the steps
-        whose both ends were seen cut it back a whole sixteenth at a time,
-        and the cut jumped from step to step as the view turned: the
-        dimensions clipped in and out behind other surfaces (issue #918).
-
-        The samples are projected and tested as one batch
-        (``_project_samples``): doing it point by point rebuilt the camera's
-        projection*view matrix for every sample — 432 rebuilds a frame for
-        eight dimensions — and ran a NumPy 3x3 reduction per sample (#439)."""
-        d = p3b - p3a
-
-        def at(ts):
-            return [p3a + d * t for t in ts]
-
+        from ingetrazo_core import annotation_strokes
         mvp = self.camera.projection_matrix() * self.camera.view_matrix()
-        ea = self._world_to_pixel(p3a, mvp)
-        eb = self._world_to_pixel(p3b, mvp)
-        n = samples
-        if ea is not None and eb is not None:
-            # With both ends in front of the eye, the projected segment
-            # stays between them. Allow for the annotation pen and AA.
-            if (max(ea[0], eb[0]) < -2 or min(ea[0], eb[0]) > self.width() + 2
-                    or max(ea[1], eb[1]) < -2 or min(ea[1], eb[1]) > self.height() + 2):
-                return
-            span = math.hypot(eb[0] - ea[0], eb[1] - ea[1])
-            n = max(samples, min(self._OCCLUSION_MAX_SAMPLES,
-                                 int(span / self._OCCLUSION_STEP_PX)))
-        ts = [i / n for i in range(n + 1)]
-        res = self._project_samples(at(ts))
-        pxs = [px for px, _v in res]
-        vis = [px is not None and v for px, v in res]
-        # The steps that change from seen to hidden (or back): each is cut
-        # in ``_OCCLUSION_SPLIT`` and narrowed to the part where it flips,
-        # every cut step in one batch per round.
-        cuts = [i for i in range(n)
-                if pxs[i] is not None and pxs[i + 1] is not None
-                and vis[i] != vis[i + 1]]
-        edge: dict = {}
-        if cuts:
-            k = self._OCCLUSION_SPLIT
-            lo = {i: ts[i] for i in cuts}          # t on sample i's side
-            hi = {i: ts[i + 1] for i in cuts}
-            edge = {i: pxs[i] if vis[i] else pxs[i + 1] for i in cuts}
-            for _ in range(self._OCCLUSION_ROUNDS):
-                probe = [(i, lo[i] + (hi[i] - lo[i]) * j / k)
-                         for i in cuts for j in range(1, k)]
-                got = self._project_samples(at([t for _i, t in probe]))
-                for c, i in enumerate(cuts):
-                    row = got[c * (k - 1):(c + 1) * (k - 1)]
-                    tt = [t for _i, t in probe[c * (k - 1):(c + 1) * (k - 1)]]
-                    new_lo, new_hi = lo[i], hi[i]
-                    for (px, v), t in zip(row, tt):
-                        if (px is not None and v) == vis[i]:
-                            new_lo = t
-                            if vis[i]:
-                                edge[i] = px      # the last seen, so far
-                        else:
-                            new_hi = t
-                            if not vis[i]:
-                                edge[i] = px      # the first seen, so far
-                            break
-                    lo[i], hi[i] = new_lo, new_hi
-        for i in range(n):
-            a, b = pxs[i], pxs[i + 1]
-            if a is None or b is None:
-                continue
-            if vis[i] and vis[i + 1]:
-                painter.drawLine(QPointF(*a), QPointF(*b))
-            elif edge.get(i) is not None:
-                start = a if vis[i] else b
-                painter.drawLine(QPointF(*start), QPointF(*edge[i]))
+        for a, b in annotation_strokes(self, p3a, p3b, mvp, samples):
+            painter.drawLine(QPointF(*a), QPointF(*b))
 
     def _project_samples(self, pts: list[QVector3D]):
-        """Project ``pts`` to screen pixels and test each one against the
-        frame's depth snapshot, as a single batch: the camera's MVP is built
-        once for the whole run, and the snapshot's 3x3 depth test runs as one
-        NumPy gather instead of a slice-and-max per point (#439).
-
-        The answers are the ones ``_world_to_pixel`` and
-        ``_occluded_on_screen`` give point by point — the live camera's
-        matrix for the pixel, the snapshot's own for the test, the same
-        tolerances — and without a snapshot (or NumPy) this defers to those
-        per-point paths. Returns a list of ``(pixel, visible)`` pairs, with
-        ``pixel`` None for a point behind the camera."""
-        mvp = self.camera.projection_matrix() * self.camera.view_matrix()
-        snap = getattr(self, "_depth_snap", None)
-        if snap is None:
-            return [(self._world_to_pixel(p, mvp),
-                     not self._occluded_on_screen(p)) for p in pts]
-        try:
-            import numpy as np
-        except Exception:  # noqa: BLE001 — never break the paint
-            return [(self._world_to_pixel(p, mvp),
-                     not self._occluded_on_screen(p)) for p in pts]
-        buf, smvp, inv, sw, sh, eye, fwd = snap
-
-        def rows(m):
-            return np.array([[m.row(r).x(), m.row(r).y(),
-                              m.row(r).z(), m.row(r).w()]
-                             for r in range(4)], dtype=np.float64)
-
-        p4 = np.array([(p.x(), p.y(), p.z(), 1.0) for p in pts],
-                      dtype=np.float64)
-        with np.errstate(all="ignore"):
-            # The pixel, with the live camera (as _world_to_pixel).
-            clip = p4 @ rows(mvp).T
-            cw = clip[:, 3]
-            ndc = clip[:, :2] / cw[:, None]
-            pxs = (ndc[:, 0] * 0.5 + 0.5) * self.width()
-            pys = (1.0 - (ndc[:, 1] * 0.5 + 0.5)) * self.height()
-            pixels = [None if c <= 0 else (float(x), float(y))
-                      for c, x, y in zip(cw, pxs, pys)]
-            # The occlusion test, with the snapshot's matrices (as
-            # _occluded_on_screen): untested points stay visible.
-            occluded = np.zeros(len(pts), dtype=bool)
-            c = p4 @ rows(smvp).T
-            w = c[:, 3]
-            nx = c[:, 0] / w
-            ny = c[:, 1] / w
-            ix = ((nx + 1.0) * 0.5 * sw).astype(np.int64)
-            iy = ((ny + 1.0) * 0.5 * sh).astype(np.int64)
-            live = (w > 1e-9) & (ix >= 0) & (ix < sw) & (iy >= 0) & (iy < sh)
-            if live.any():
-                # The FARTHEST depth of the 3x3 around each pixel: gathering
-                # with the indices clamped to the frame reads the edge
-                # pixels twice, which a max does not see — the same values
-                # the per-point clamped slice takes, without copying the
-                # frame to pad it.
-                gx, gy = ix[live], iy[live]
-                d = np.maximum.reduce(
-                    [buf[np.clip(gy + dy, 0, sh - 1),
-                         np.clip(gx + dx, 0, sw - 1)]
-                     for dy in (-1, 0, 1) for dx in (-1, 0, 1)]
-                ).astype(np.float64)
-                near = d < 1.0                       # else background
-                if near.any():
-                    idx = np.flatnonzero(live)[near]
-                    q = np.column_stack(
-                        [nx[idx], ny[idx], d[near] * 2.0 - 1.0,
-                         np.ones(len(idx))]) @ rows(inv).T
-                    qw = q[:, 3]
-                    ok = np.abs(qw) >= 1e-12
-                    surf = q[:, :3] / np.where(ok, qw, 1.0)[:, None]
-                    eye_a = np.array([eye.x(), eye.y(), eye.z()])
-                    fwd_a = np.array([fwd.x(), fwd.y(), fwd.z()])
-                    along_pt = (p4[idx, :3] - eye_a) @ fwd_a
-                    along_surf = (surf - eye_a) @ fwd_a
-                    tol = np.maximum(0.02, 0.003 * np.abs(along_pt))
-                    occluded[idx] = ok & (along_surf < along_pt - tol)
-        return [(px, not occ) for px, occ in zip(pixels, occluded)]
+        from ingetrazo_core import annotation_samples
+        return annotation_samples(self, pts, self.camera.projection_matrix() * self.camera.view_matrix())
 
     def _draw_inference_marker(self, painter: QPainter) -> None:
         """Snap cue where the active tool's distance inference is engaged."""
@@ -6462,7 +5909,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         face, then the lazy placements' only nearer than it (a tie goes to
         the index's, as the argmin over the index's then the lazy faces
         does), and of those only the nearest made into a face — the
-        first of equals in the order _lazy_face_hits keeps. Each probe of
+        first of equals in placement and prototype face order. Each probe of
         a face crossing (see _crossing_on_screen) is one of these, ~2 ms
         over the plant when every face met was made."""
         import numpy as np
@@ -8094,112 +7541,22 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
     @staticmethod
     def _frustum_planes(mvp):
-        """The six view-frustum planes of ``mvp`` as (nx, ny, nz, d) tuples
-        (Gribb–Hartmann rows); a point is inside when n·p + d ≥ 0 for all
-        six. Plain floats — the per-frame consumer tests ~tens of chunk
-        boxes, where NumPy overhead would dominate."""
-        m = mvp.data()                    # column-major
-        rows = [(m[i], m[i + 4], m[i + 8], m[i + 12]) for i in range(4)]
-        r3 = rows[3]
-        planes = []
-        for row in rows[:3]:
-            planes.append(tuple(r3[i] + row[i] for i in range(4)))
-            planes.append(tuple(r3[i] - row[i] for i in range(4)))
-        return planes
+        from ingetrazo_core import frustum_planes
+        return frustum_planes(mvp)
 
     @staticmethod
     def _aabb_visible(planes, lo, hi) -> bool:
-        """Conservative AABB-vs-frustum p-vertex test: culled only when the
-        box lies fully outside one plane (never drops visible geometry)."""
-        lx, ly, lz = lo
-        hx, hy, hz = hi
-        for nx, ny, nz, d in planes:
-            px = hx if nx >= 0.0 else lx
-            py = hy if ny >= 0.0 else ly
-            pz = hz if nz >= 0.0 else lz
-            if nx * px + ny * py + nz * pz + d < 0.0:
-                return False
-        return True
+        from ingetrazo_core import aabb_visible
+        return aabb_visible(planes, lo, hi)
 
     def _visible_spans(self, spans, planes, split=None):
-        """Filter draw spans ``[(bbox, start, count)]`` by the frustum and
-        merge adjacent survivors: returns ``([(start, count)], culled)``.
-        ``bbox None`` = always drawn (loose geometry, unknown extents).
-
-        ``split`` (a vertex offset) is a boundary merging never crosses, so
-        the caller can still tell the two sides apart — the faded context
-        before it, the group being edited from it on."""
-        if len(spans) >= _SPAN_VECTOR_MIN and planes:
-            return self._visible_spans_np(spans, planes, split)
-        out: list = []
-        culled = 0
-        for bbox, start, count in spans:
-            if not count:
-                continue
-            if bbox is not None and not self._aabb_visible(
-                    planes, bbox[0], bbox[1]):
-                culled += count
-                continue
-            if (out and out[-1][0] + out[-1][1] == start
-                    and not (split is not None
-                             and out[-1][0] < split <= start)):
-                out[-1] = (out[-1][0], out[-1][1] + count)
-            else:
-                out.append((start, count))
-        return out, culled
+        from ingetrazo_core import visible_draw_spans
+        return visible_draw_spans(self, spans, planes, split,
+                                  len(spans) >= _SPAN_VECTOR_MIN and bool(planes))
 
     def _visible_spans_np(self, spans, planes, split=None):
-        """:meth:`_visible_spans` over many spans at once: the same p-vertex
-        test, float op for float op, on arrays kept per span list (a model
-        of 21 406 placements tested ~4 800 boxes one by one per frame)."""
-        import numpy as np
-        memo = getattr(self, "_span_arrays", None)
-        if memo is None:
-            memo = self._span_arrays = {}
-        hit = memo.get(id(spans))
-        if hit is None or hit[0] is not spans:
-            if len(memo) > 16:
-                memo.clear()
-            n = len(spans)
-            has = np.zeros(n, dtype=bool)
-            lo = np.zeros((n, 3))
-            hi = np.zeros((n, 3))
-            start = np.empty(n, dtype=np.int64)
-            count = np.empty(n, dtype=np.int64)
-            for i, (bbox, s0, c0) in enumerate(spans):
-                start[i] = s0
-                count[i] = c0
-                if bbox is not None:
-                    has[i] = True
-                    lo[i], hi[i] = bbox[0], bbox[1]
-            hit = memo[id(spans)] = (spans, has, lo, hi, start, count,
-                                     *self._bounding_spheres(lo, hi))
-        _s, has, lo, hi, start, count, ctr, rad = hit
-        vis = np.ones(len(start), dtype=bool)
-        for nx, ny, nz, d in planes:
-            px = hi[:, 0] if nx >= 0.0 else lo[:, 0]
-            py = hi[:, 1] if ny >= 0.0 else lo[:, 1]
-            pz = hi[:, 2] if nz >= 0.0 else lo[:, 2]
-            vis &= ~(((nx * px + ny * py) + nz * pz) + d < 0.0)
-        # What comes out under a pixel is not drawn either, as with the
-        # instances (see _instances_below_a_pixel).
-        vis &= ~(has & self._spheres_below_a_pixel(ctr, rad))
-        live = count > 0
-        drawn = live & (vis | ~has)
-        culled = int(count[live & ~drawn].sum())
-        idx = np.flatnonzero(drawn)
-        if not len(idx):
-            return [], culled
-        st = start[idx]
-        ct = count[idx]
-        brk = np.ones(len(idx), dtype=bool)
-        brk[1:] = st[1:] != st[:-1] + ct[:-1]
-        if split is not None:
-            # A run never crosses the split (see _visible_spans).
-            brk[1:] |= (st[:-1] < split) & (split <= st[1:])
-        heads = np.flatnonzero(brk)
-        sums = np.add.reduceat(ct, heads)
-        return list(zip(st[heads].tolist(), sums.tolist())), culled
+        from ingetrazo_core import visible_draw_spans
+        return visible_draw_spans(self, spans, planes, split, True)
 
     def _tex_run_spans(self, parts, planes, fading: bool):
         """Frustum-culled draw spans of one texture run, split into
@@ -8231,1497 +7588,67 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     _PICK_NEAR_PX = 32.0
 
     def _pick_lazy_table(self):
-        """The component placements the pick index takes lazily — only when
-        a query comes near them — as ``(groups, lo, hi, nf, ids)``, or
-        ``None`` when they are too few to bother (the index then holds
-        everything, as it always did).
-
-        Baking every placement to world coordinates for the index was what
-        a model of 21 406 placements (14 million faces) could not survive:
-        the first hover with Select went past 8 GB (issue #158)."""
-        import numpy as np
-        key = self._placements_epoch()
-        memo = getattr(self, "_pick_lazy_memo", None)
-        if memo is not None and memo[0] == key:
-            return memo[1]
-        if memo is not None and self._epoch_only_matrices(memo[0], key):
-            # A Move: picking up changes no row, putting down the rows of
-            # what moved. Made again, the table framed 20 500 placements
-            # (~0.55 s) on the first pointer move after either.
-            table, xfs = memo[1], memo[2]
-            if table is not None:
-                # The nested placements' proxies take their composed
-                # matrices here: the rows are read through them.
-                self._placements()
-                groups, lo, hi = table[0], table[1], table[2]
-                moved = [i for i, g in enumerate(groups)
-                         if tuple(g.xform.data()) != xfs[i]]
-                if moved:
-                    inf = float("inf")
-                    lo, hi, xfs = lo.copy(), hi.copy(), list(xfs)
-                    for i in moved:
-                        box = self._placement_frame(groups[i])[0]
-                        lo[i], hi[i] = (box if box
-                                        else ((-inf,) * 3, (inf,) * 3))
-                        xfs[i] = tuple(groups[i].xform.data())
-                    table = (groups, lo, hi) + table[3:]
-            self._pick_lazy_memo = (key, table, xfs)
-            return table
-        groups = [g for g in self._placements()
-                  if getattr(g, "xform", None) is not None
-                  and not getattr(g, "billboard", False)]
-        # An object or two added or taken away (a Delete, a Paste): the
-        # rows of the others are the old table's.
-        kept = (self._epoch_kept_tops(memo[0], key, ctx=True)
-                if memo is not None and memo[1] is not None else None)
-        src = None
-        if kept:
-            o_groups, o_lo, o_hi, o_nf = memo[1][:4]
-            row = {id(g): i for i, g in enumerate(o_groups)}
-            top_of = self._placement_top
-            src = np.fromiter(
-                (row.get(id(g), -1) if top_of(g) in kept else -1
-                 for g in groups), np.int64, count=len(groups))
-        from core.mesh import face_count
-        if src is None:
-            nf = np.fromiter((face_count(g.mesh) for g in groups), np.int64,
-                             count=len(groups))
-        else:
-            nf = np.fromiter((face_count(g.mesh) if k < 0 else 0
-                              for g, k in zip(groups, src.tolist())),
-                             np.int64, count=len(groups))
-            at = np.flatnonzero(src >= 0)
-            nf[at] = o_nf[src[at]]
-        table = None
-        if int(nf.sum()) >= self._PICK_LAZY_MIN_FACES:
-            inf = float("inf")
-            lo = np.empty((len(groups), 3))
-            hi = np.empty((len(groups), 3))
-            if src is None:
-                todo = range(len(groups))
-            else:
-                lo[at], hi[at] = o_lo[src[at]], o_hi[src[at]]
-                todo = np.flatnonzero(src < 0).tolist()
-            for i in todo:
-                box = self._placement_frame(groups[i])[0]
-                lo[i], hi[i] = box if box else ((-inf,) * 3, (inf,) * 3)
-            table = (groups, lo, hi, nf, {id(g) for g in groups})
-        if table is None:
-            xfs = None
-        elif src is None:
-            xfs = [tuple(g.xform.data()) for g in groups]
-        else:
-            o_xfs = memo[2]
-            xfs = [tuple(g.xform.data()) if k < 0 else o_xfs[k]
-                   for g, k in zip(groups, src.tolist())]
-        self._pick_lazy_memo = (key, table, xfs)
-        return table
+        return ingetrazo_core.pick_lazy_table(self)
 
     def _pick_instance_set(self, table):
-        """core._native's InstanceSet over the lazy placements of ``table``
-        (see _pick_lazy_table), or ``None`` without the experimental
-        engine. A prototype's index (a BVH of its pick triangles, its hard
-        edges, from its local bake) is kept while its bake is."""
-        if not _INSTANCE_FILTER:
-            return None
-        from core import _native
-        mod = _native.native
-        if mod is None or not hasattr(mod, "InstanceSet"):
-            return None
-        memo = getattr(self, "_inst_set_memo", None)
-        if memo is not None and memo[0] is table:
-            return memo[1]
-        import numpy as np
-        _pick_warm_take(self)
-        groups = table[0]
-        cache = getattr(self, "_inst_proto_cache", None) or {}
-        keep: dict = {}
-        by_mesh: dict = {}
-        protos: list = []
-        proto_of = np.empty(len(groups), dtype=np.int64)
-        mats = np.empty((len(groups), 16), dtype=np.float64)
-        todo: list = []                       # (position in protos, key, bake)
-        for i, g in enumerate(groups):
-            k = by_mesh.get(id(g.mesh))
-            if k is None:
-                # Every placement of a mesh has the same triangles and hard
-                # edges, whatever its paint: one bake (the first one's).
-                base = self._proto_base_chunk(g.mesh, _paint_of(self, g))
-                ckey = (base.get("uid"), base.get("rev"))
-                ip = cache.get(ckey)
-                if ip is None:
-                    todo.append((len(protos), ckey, base))
-                keep[ckey] = ip
-                k = by_mesh[id(g.mesh)] = len(protos)
-                protos.append(ip)
-            proto_of[i] = k
-            mats[i] = g.xform.data()
-
-        def build(job):
-            pos, ckey, base = job
-            ip = _inst_proto_of(mod, base)
-            protos[pos] = ip
-            keep[ckey] = ip
-        # The engine lets go of the GIL for each tree: side by side, not the
-        # 2.4 s of a big model's first hover one after another (#1092).
-        if len(todo) > 1:
-            import os
-            from concurrent.futures import ThreadPoolExecutor
-            with ThreadPoolExecutor(
-                    max_workers=min(8, os.cpu_count() or 2)) as ex:
-                list(ex.map(build, todo))
-        else:
-            for job in todo:
-                build(job)
-        self._inst_proto_cache = keep
-        iset = mod.InstanceSet(protos, proto_of, mats,
-                               np.ascontiguousarray(table[1], np.float64),
-                               np.ascontiguousarray(table[2], np.float64))
-        self._inst_set_memo = (table, iset)
-        return iset
+        return ingetrazo_core.pick_instance_set(self, table)
 
     def start_pick_warmup(self) -> None:
-        """A big document is on screen: work out the heavy parts of the pick
-        index behind it, so the first move of the pointer does not wait for
-        them (4 s on a model of 5 M faces, #1092). Whoever moves the mouse
-        needs them, whatever the tool, and the answers cannot change: the
-        same calls with the same arrays, only sooner. Only with the engine
-        and on a model big enough for lazy placements."""
-        if not _PICK_WARM or not _INSTANCE_FILTER:
-            return
-        from core import _native
-        mod = _native.native
-        if mod is None or not hasattr(mod, "InstanceSet"):
-            return
-        table = self._pick_lazy_table()
-        if table is None:
-            return
-        memo = getattr(self, "_inst_set_memo", None)
-        if memo is not None and memo[0] is table:
-            return                       # the pointer got there first
-        seen: set = set()
-        protos: list = []
-        for g in table[0]:
-            if id(g.mesh) not in seen:
-                seen.add(id(g.mesh))
-                base = self._proto_base_chunk(g.mesh, _paint_of(self, g))
-                protos.append(((base.get("uid"), base.get("rev")), base))
-        grids: list = []
-        if not _NO_SPAN_GRID:
-            fixed = DocumentInteraction._pick_candidates(self, False, table)[1]
-            for g in fixed:
-                if not getattr(g, "billboard", False):
-                    c = self._group_chunk(g)
-                    if (c["v0"] is not None and len(c["v0"]) > _SPAN_GRID_MIN
-                            and "_span_grid" not in c):
-                        grids.append(c)
-        # What a box selection asks of each, the first time (2 s over 257).
-        bounds = [base for _k, base in protos]
-        self._pick_warm = _PickWarm(mod, protos, grids, bounds)
+        return ingetrazo_core.start_pick_warmup(self)
 
     def _static_occluders(self, idx):
-        """core._native's InstanceSet over the pick index's own triangles
-        that hide what is behind them, placed by the identity (which the
-        engine maps bit for bit): the fixed placements' as one prototype,
-        kept while those triangles and their visibility are — a stroke
-        changes only the loose part, the other prototype. Made once per
-        index."""
-        import numpy as np
-        hit = getattr(idx, "_static_occl", None)
-        if hit is not None:
-            return hit
-        mod = _occlusion_native()
-        if mod is None or not hasattr(mod, "InstanceSet"):
-            return None
-        st = getattr(self, "_pick_static_memo", None)
-        fv0 = st[1]["v0"] if st is not None else None
-        n = len(idx.tri_v0)
-        nf = len(fv0) if fv0 is not None else 0
-        if nf > n or (nf and not np.array_equal(idx.tri_v0[n - nf], fv0[0])):
-            nf = 0                       # not the index's tail: one part
-        vis = idx.ent_vis[idx.tri_ent]
-
-        def proto(lo, hi):
-            keep = np.flatnonzero(vis[lo:hi]) + lo
-            return mod.InstanceProto(
-                np.ascontiguousarray(idx.tri_v0[keep], np.float64),
-                np.ascontiguousarray(idx.tri_e1[keep], np.float64),
-                np.ascontiguousarray(idx.tri_e2[keep], np.float64),
-                np.zeros((0, 6))), keep
-        memo = getattr(self, "_static_occl_memo", None)
-        fkeep = vis[n - nf:]
-        if (nf and memo is not None and memo[0] is fv0
-                and np.array_equal(memo[1], fkeep)):
-            fixed = memo[2]
-        elif nf:
-            fixed = proto(n - nf, n)
-            self._static_occl_memo = (fv0, fkeep.copy(), fixed)
-        else:
-            fixed = None
-        parts = [proto(0, n - nf)] + ([fixed] if fixed is not None else [])
-        iset = mod.InstanceSet([p for p, _k in parts],
-                               np.arange(len(parts), dtype=np.int64),
-                               np.tile(np.eye(4).reshape(1, 16),
-                                       (len(parts), 1)))
-        # Prototype p's triangle r is index row rows[start[p] + r].
-        rows = np.concatenate([k for _p, k in parts])
-        start = np.cumsum([0] + [len(k) for _p, k in parts[:-1]])
-        idx._static_occl = (iset, np.arange(len(parts), dtype=np.int64),
-                            rows, start)
-        return idx._static_occl
+        return ingetrazo_core.static_occluders(self, idx)
 
     def _static_ray_rows(self, idx, ent_mask, o3, d3):
-        """The index rows of the triangles the ray from ``o3`` along ``d3``
-        may meet, in order, from the engine's BVH over the visible ones
-        (_static_occluders) — or None where that cannot answer for
-        ``ent_mask``: no engine, or an entity it passes that is not visible
-        (its triangles are not in there). A superset of what the exact test
-        accepts, so the hits are the same as over every span the ray's box
-        test keeps (hundreds of thousands of triangles of a big fixed part,
-        30 ms a hover over the plant of #158)."""
-        import numpy as np
-        if not (hasattr(self, "_lazy_native")
-                and self._lazy_native() is not None):
-            return None
-        memo = idx.__dict__.setdefault("_mask_in_vis", {})
-        ok = memo.get(id(ent_mask))
-        if ok is None or ok[0] is not ent_mask:
-            ok = memo[id(ent_mask)] = (
-                ent_mask, not bool((ent_mask & ~idx.ent_vis).any()))
-        if not ok[1]:
-            return None
-        stat = self._static_occluders(idx)
-        if stat is None:
-            return None
-        iset, cand, rows, start = stat
-        pl, tr, _v0, _e1, _e2 = iset.ray_cands(cand, o3, d3, float("inf"))
-        return np.sort(rows[start[pl] + tr])
+        return ingetrazo_core.static_ray_rows(self, idx, ent_mask, o3, d3)
 
     def _lazy_native(self):
-        """What the experimental engine answers for the context's lazy
-        placements without baking them (#158): ``(iset, snap, vis)`` —
-        core._native's InstanceSet over the lazy table, and the table rows
-        of the placements the pick index would take that a snap may land
-        on and that hide what is behind them, in the index's order — or
-        ``None`` (no lazy table, no engine)."""
-        if not _LAZY_NATIVE:
-            return None
-        table = self._pick_lazy_table()
-        if table is None:
-            return None
-        iset = self._pick_instance_set(table)
-        if iset is None or not hasattr(iset, "corners_near"):
-            return None
-        oculto = getattr(self, "_rest_is_hidden", None)
-        oculto = bool(oculto()) if callable(oculto) else False
-        ckey = (self._placements_epoch(), id(self.scene.edit_group), oculto,
-                id(table))
-        cmemo = getattr(self, "_pick_cands_memo", None)
-        if cmemo is None or cmemo[0] != ckey:
-            self._pick_index(near="skip")         # the candidates it takes
-            cmemo = getattr(self, "_pick_cands_memo", None)
-            if cmemo is None or cmemo[0] != ckey:
-                return None
-        memo = getattr(self, "_lazy_native_memo", None)
-        if memo is not None and memo[0] is cmemo and memo[1] is iset:
-            return memo[2]
-        import numpy as np
-        scene = self.scene
-        row = {id(g): i for i, g in enumerate(table[0])}
-        ordered = [g for _p, g in sorted(cmemo[3].values(),
-                                         key=lambda pg: pg[0])]
-        snap = np.fromiter((row[id(g)] for g in ordered
-                            if scene.group_snappable(g)), np.int64)
-        vis = np.fromiter((row[id(g)] for g in ordered
-                           if scene.entity_visible(g)), np.int64)
-        out = (iset, snap, vis)
-        self._lazy_native_memo = (cmemo, iset, out)
-        return out
+        return ingetrazo_core.pick_lazy_native(self)
 
-    def _pick_materialize(self, near) -> None:
-        """Bake into the pick index the lazy placements a query needs:
-        ``near`` = ``None`` (around the cursor), ``("px", x, y)`` (around a
-        widget pixel), ``("ray", origin, direction)`` or ``"all"``. What was
-        baked stays until the cap needs room (least recently needed first);
-        ``_pick_gen`` counts the changes, which key the index."""
-        import numpy as np
-        from collections import OrderedDict
-        table = self._pick_lazy_table()
-        live = getattr(self, "_pick_live", None)
-        if table is None:
-            if live:
-                live.clear()
-                self._pick_gen = getattr(self, "_pick_gen", 0) + 1
-            return
-        groups, lo, hi, nf, _ids = table
-        if live is None:
-            live = self._pick_live = OrderedDict()
-        if near == "skip":
-            return                              # a loose-only query
-        px_at = None
-        if isinstance(near, tuple) and near[0] == "px":
-            px_at = (float(near[1]), float(near[2]))
-            # A pick at a pixel only meets what the ray through it crosses:
-            # the 32 px footprint is for snaps (``("snap", x, y)``), and on a
-            # dense plant it took in thousands of placements per hover.
-            o, d = self._pixel_to_ray(float(near[1]), float(near[2]))
-            if o is None or d is None:
-                return
-            near = ("ray", o, d)
-        elif isinstance(near, tuple) and near[0] == "snap":
-            near = (None, near[1], near[2])
-        footprint = False
-        if near == "all":
-            need = np.arange(len(groups))
-        elif isinstance(near, tuple) and near[0] == "ray":
-            o, d = near[1], near[2]
-            reach = near[3] if len(near) > 3 else None
-            o = np.array([o.x(), o.y(), o.z()])
-            d = np.array([d.x(), d.y(), d.z()])
-            with np.errstate(divide="ignore", invalid="ignore"):
-                inv = 1.0 / np.where(np.abs(d) > 1e-12, d, 1e-12)
-                t1 = (lo - o) * inv
-                t2 = (hi - o) * inv
-            tmin = _slab_far(np.minimum(t1, t2))
-            tmax = _slab_near(np.maximum(t1, t2))
-            hit = tmax >= np.maximum(tmin, 0.0)
-            if reach is not None:
-                # A bounded query (the walkthrough's wall feelers, half a
-                # metre ahead) needs nothing past its reach: an unbounded
-                # one baked every placement down the street, and turning
-                # the head brought in new ones and rebuilt the index.
-                hit &= tmin <= reach
-            if px_at is not None and hit.sum() > 1:
-                # Whatever starts behind the surface the frame shows at this
-                # pixel can be neither picked nor seen.
-                seen = self._depth_world_at(*px_at)
-                if seen is not None and seen[0] == "hit":
-                    t_vis = float(np.linalg.norm(
-                        np.array([seen[1].x(), seen[1].y(), seen[1].z()]) - o))
-                    hit &= tmin <= t_vis * 1.02 + 0.05
-            need = np.flatnonzero(hit)
-            iset = self._pick_instance_set(table) if len(need) else None
-            if iset is not None:
-                # Of the boxes the ray crosses, the placements whose
-                # triangles it can meet (the spatial index, with margins
-                # past the exact test's): only those are baked.
-                need = np.asarray(iset.ray_filter(
-                    need.astype(np.int64), tuple(o.tolist()),
-                    tuple(d.tolist()), reach), dtype=np.int64)
-        else:
-            if near is None:
-                pos = getattr(self, "_last_mouse_pos", None)
-                if pos is None:
-                    return
-                x, y = float(pos.x()), float(pos.y())
-            else:
-                x, y = float(near[1]), float(near[2])
-            footprint = True
-            need = self._footprint_need(table, x, y)
-        if footprint and len(need):
-            # A footprint takes in the placements nearest the eye that fit
-            # in most of the cap, and those stay (see the eviction below):
-            # zoomed out over the plant of #158 it met ~3 400 placements,
-            # far more than fit, and each pointer move the first ray let go
-            # of 300 the footprint then brought in again — two rebuilds of
-            # the lazy part a move, for the same set.
-            room = self._PICK_LIVE_MAX_FACES * 0.8
-            need = np.asarray(need, dtype=np.int64)
-            if float(nf[need].sum()) > room:
-                e = self.camera.eye()
-                e = np.array([e.x(), e.y(), e.z()])
-                dist = np.linalg.norm(np.clip(e, lo[need], hi[need]) - e,
-                                      axis=1)
-                srt = need[np.argsort(dist, kind="stable")]
-                fit = np.cumsum(nf[srt]) <= room
-                fit[0] = True
-                need = srt[fit]
-            self._pick_foot_keep = {id(groups[int(i)]) for i in need}
-        new = [int(i) for i in need if id(groups[int(i)]) not in live]
-        # The footprint queries of one input event (the snap, the cursor's
-        # own) share the cap: each brought in its own 300 over the same
-        # spot, and each change rebuilt the lazy part of the index — five
-        # rebuilds a pointer move over the plant of #158.
-        serial = getattr(self, "_input_serial", None)
-        cap = self._PICK_NEW_PER_QUERY
-        budget = None
-        if footprint and serial is not None:
-            budget = getattr(self, "_pick_budget", None)
-            if budget is None or budget[0] != serial:
-                budget = self._pick_budget = [serial, cap]
-            cap = budget[1]
-        if len(new) > cap and near != "all":
-            # A first snap over a dense spot met thousands at once (2.3 s):
-            # the nearest to the eye come in now, the rest on the next moves.
-            e = self.camera.eye()
-            e = np.array([e.x(), e.y(), e.z()])
-            nn = np.array(new)
-            dist = np.linalg.norm(np.clip(e, lo[nn], hi[nn]) - e, axis=1)
-            keep_new = set(nn[np.argsort(dist)[:cap]].tolist())
-            need = [int(i) for i in need
-                    if id(groups[int(i)]) in live or int(i) in keep_new]
-        if budget is not None:
-            budget[1] = max(0, cap - min(len(new), cap))
-        changed = False
-        for i in need:
-            g = groups[int(i)]
-            k = id(g)
-            if k in live:
-                live.move_to_end(k)
-            else:
-                live[k] = (g, int(nf[int(i)]))
-                changed = True
-        faces = sum(v[1] for v in live.values())
-        # Making room once per input event: the ray picks that follow the
-        # snap over the same spot let go of what it had just brought in,
-        # and every such change rebuilt the index (up to twice the cap).
-        evict = faces > self._PICK_LIVE_MAX_FACES and near != "all"
-        if (evict and serial is not None
-                and getattr(self, "_pick_evicted_at", None) == serial
-                and faces <= 2 * self._PICK_LIVE_MAX_FACES):
-            evict = False
-        if evict:
-            self._pick_evicted_at = serial
-            keep = {id(groups[int(i)]) for i in need}
-            keep |= getattr(self, "_pick_foot_keep", None) or set()
-            inst = getattr(self, "_inst_chunks", None)
-            for k in list(live):
-                if faces <= self._PICK_LIVE_MAX_FACES:
-                    break
-                if k in keep:
-                    continue
-                gone, nf_k = live.pop(k)
-                faces -= nf_k
-                # Its world bake goes with it — unless the static buffers
-                # draw it, and then the next sync baked it all over again
-                # (13 placements, ~0.15 s of picking an object up on #158).
-                if inst is not None and self._instanced_eligible(gone):
-                    inst.pop(k, None)
-                changed = True
-        if changed:
-            self._pick_gen = getattr(self, "_pick_gen", 0) + 1
+    def _pick_materialize(self, near):
+        return ingetrazo_core.pick_materialize(self, near)
 
     def _depth_limits(self, x: float, y: float, r: float):
-        """What the last frame shows within ``r`` px of widget pixel
-        ``(x, y)``: per device pixel of that patch, the distance from the
-        eye past which a point there is hidden by something drawn — the
-        farthest surface drawn at the pixel and the 8 around it, plus what
-        the depth buffer cannot tell apart (8 steps of a 24-bit depth),
-        0.2 % and 2 cm; inf where it cannot say (sky at the pixel, the edge
-        of the frame). ``(eye, limits (gh, gw), x0, y0, dpr, device height)``
-        as core.instances.DepthLimits reads it, or None without a frame."""
-        import numpy as np
-        if getattr(self, "_depth_snap", None) is None:
-            return None
-        buf, inv, w, h = (self._depth_snap[0], self._depth_snap[2],
-                          self._depth_snap[3], self._depth_snap[4])
-        dpr = w / max(1, self.width())
-        x0 = int(np.floor((x - r) * dpr)) - 1
-        x1 = int(np.floor((x + r) * dpr)) + 1
-        yb0 = h - 1 - (int(np.floor((y + r) * dpr)) + 1)
-        yb1 = h - 1 - (int(np.floor((y - r) * dpr)) - 1)
-        ix, iy = np.meshgrid(np.arange(x0, x1 + 1), np.arange(yb0, yb1 + 1))
-        inside = (ix >= 1) & (ix < w - 1) & (iy >= 1) & (iy < h - 1)
-        cx, cy = np.clip(ix, 1, w - 2), np.clip(iy, 1, h - 2)
-        # The farthest of what is drawn among the nine (the sky among them
-        # is nothing in front): a corner on a silhouette is measured
-        # against the farther side of it.
-        d = np.zeros(ix.shape, dtype=np.float64)
-        for oy in (-1, 0, 1):
-            for ox in (-1, 0, 1):
-                b = buf[cy + oy, cx + ox]
-                d = np.maximum(d, np.where(b < 1.0, b, 0.0))
-        M = np.array(inv.data(), dtype=np.float64).reshape(4, 4, order="F")
-        e = self.camera.eye()
-        e = np.array([e.x(), e.y(), e.z()])
-
-        def dist_at(depth):
-            ndc = np.stack([(ix + 0.5) / w * 2.0 - 1.0,
-                            (iy + 0.5) / h * 2.0 - 1.0,
-                            depth * 2.0 - 1.0, np.ones(ix.shape)], axis=-1)
-            q = ndc @ M.T
-            with np.errstate(divide="ignore", invalid="ignore"):
-                r_ = np.linalg.norm(q[..., :3] / q[..., 3:4] - e, axis=-1)
-            return np.where(np.abs(q[..., 3]) >= 1e-12, r_, np.nan)
-        far = dist_at(d)
-        step = dist_at(np.minimum(d + 8.0 / (1 << 24), 1.0)) - far
-        lim = far + np.abs(step) + 0.0005 * far + 0.01
-        ok = (inside & (buf[cy, cx] < 1.0) & np.isfinite(lim)
-              & (far <= 1.01 * self.camera.far_plane()))
-        lim = np.ascontiguousarray(np.where(ok, lim, np.inf))
-        return (e.tolist(), lim, x0, yb0, float(dpr), int(h))
+        return ingetrazo_core.pick_depth_limits(self, x, y, r)
 
     @staticmethod
     def _depth_hidden(seen, pts, sx, sy):
-        """core.instances.DepthLimits.hides for arrays: per point (N,3) at
-        widget pixel ``(sx, sy)``, whether it lies past its pixel's limit."""
-        import numpy as np
-        eye, lim, x0, y0, dpr, hdev = seen
-        gh, gw = lim.shape
-        ix = np.floor(sx * dpr).astype(np.int64) - x0
-        iy = hdev - 1 - np.floor(sy * dpr).astype(np.int64) - y0
-        at = (ix >= 0) & (iy >= 0) & (ix < gw) & (iy < gh)
-        out = np.zeros(len(pts), dtype=bool)
-        k = np.flatnonzero(at)
-        if len(k):
-            dist = np.sqrt(((pts[k] - np.array(eye)) ** 2).sum(axis=1))
-            out[k] = dist > lim[iy[k], ix[k]]
-        return out
+        return ingetrazo_core.depth_hidden(seen, pts, sx, sy)
 
     def _footprint_need(self, table, x: float, y: float, reach=None):
-        """The rows of the lazy ``table`` a snap's footprint at widget pixel
-        ``(x, y)`` takes in (see _pick_materialize): the boxes near the
-        pixel, but what lies wholly behind what the frame shows there or
-        under a pixel, and of those the ones the spatial index finds
-        something near the cursor in. ``reach`` widens the boxes' margin
-        past ``_PICK_NEAR_PX`` (the edges near the cursor are looked for
-        farther out). Memoised per view and pixel."""
-        import numpy as np
-        lo, hi = table[1], table[2]
-        r = max(float(reach or 0.0), self._PICK_NEAR_PX)
-        ckey = (self._placements_epoch(), round(x), round(y),
-                tuple(self._np_mvp().ravel()), r)
-        # One per margin: a hover asks for both (the pick's, the edges').
-        slot = ("_pick_near_memo" if r == self._PICK_NEAR_PX
-                else "_edge_near_memo")
-        cmemo = getattr(self, slot, None)
-        if cmemo is not None and cmemo[0] == ckey:
-            return cmemo[1]
-        need = self._placements_under_px(lo, hi, x, y, r)
-        far = self._visible_depth_limit(x, y)
-        if len(need) and (far is not None or self._PICK_MIN_PX > 0.0):
-            dist, small = self._footprint_rows(table)
-            if far is not None:
-                # What lies wholly behind what is on screen around the
-                # cursor can be neither picked nor snapped to (hidden
-                # snaps are dropped): a dense plant stacks thousands of
-                # placements under one pixel (#158).
-                need = need[dist[need] <= far]
-            if small is not None:
-                # Nor what the frame leaves out for being under a pixel
-                # (see _instances_below_a_pixel): from the whole plant
-                # of #158 the snap's footprint met more placements
-                # than the cap, and each pointer move threw out the
-                # last move's to bring in as many again.
-                need = need[~small[need]]
-        iset = self._pick_instance_set(table) if len(need) else None
-        if iset is not None:
-            # Of the boxes near the cursor, the placements with a
-            # hard edge within the farthest reach a snap measures
-            # or a triangle within the footprint (with margins).
-            M = self._np_mvp()
-            need = np.asarray(iset.screen_filter(
-                need.astype(np.int64),
-                np.ascontiguousarray(M.T).ravel().tolist(),
-                float(self.width()), float(self.height()), x, y,
-                DocumentInteraction.GEDGE_REACH_PX + 2.0,
-                r + 2.0), dtype=np.int64)
-        setattr(self, slot, (ckey, need))
-        return need
+        return ingetrazo_core.footprint_need(self, table, x, y, reach)
 
     def _footprint_rows(self, table):
-        """For every row of the lazy ``table``, how far its box lies from
-        the eye and whether it spans under ``_PICK_MIN_PX`` (None when
-        that floor is off): what _footprint_need cuts by, the same for
-        any pixel of the view. Kept for the view: over the 16 000 rows
-        near the cursor in the plant of #158 they cost ~2 ms a search,
-        two searches a pointer move."""
-        import numpy as np
-        lo, hi = table[1], table[2]
-        e = self.camera.eye()
-        h = (self._export_size or self._fb_size())[1]
-        key = (self._placements_epoch(), tuple(self._np_mvp().ravel()),
-               (e.x(), e.y(), e.z()), h, bool(self.camera.perspective),
-               self._PICK_MIN_PX)
-        memo = getattr(self, "_footprint_rows_memo", None)
-        if (memo is not None and memo[0] == key and memo[1] is lo
-                and memo[2] is hi):
-            return memo[3]
-        eye = np.array([e.x(), e.y(), e.z()])
-        dist = np.linalg.norm(np.clip(eye, lo, hi) - eye, axis=1)
-        small = None
-        if self._PICK_MIN_PX > 0.0:
-            ctr, rad = self._bounding_spheres(lo, hi)
-            small = self._spheres_below_a_pixel(ctr, rad, self._PICK_MIN_PX)
-        self._footprint_rows_memo = (key, lo, hi, (dist, small))
-        return dist, small
+        return ingetrazo_core.footprint_rows(self, table)
 
     def _visible_depth_limit(self, x: float, y: float):
-        """The farthest distance from the eye of what the last frame shows
-        within ``_PICK_NEAR_PX`` of widget pixel ``(x, y)``, with a margin —
-        or ``None`` when the frame cannot say (no read-back, the camera
-        moved since, or sky in the window: then anything may be there)."""
-        import numpy as np
-        if getattr(self, "_depth_snap", None) is None:
-            return None
-        snap = self._depth_snap
-        buf, inv, w, h = snap[0], snap[2], snap[3], snap[4]
-        dpr = w / max(1, self.width())
-        r = int(self._PICK_NEAR_PX * dpr) + 1
-        cx, cy = int(x * dpr), int(h - 1 - y * dpr)
-        win = buf[max(cy - r, 0):cy + r + 1, max(cx - r, 0):cx + r + 1]
-        if not win.size or float(win.max()) >= 1.0:
-            return None
-        iy, ix = np.unravel_index(int(np.argmax(win)), win.shape)
-        px = max(cx - r, 0) + ix
-        py = max(cy - r, 0) + iy
-        d = float(win.max())
-        q = inv.map(QVector4D((px + 0.5) / w * 2 - 1, (py + 0.5) / h * 2 - 1,
-                              d * 2 - 1, 1.0))
-        if abs(q.w()) < 1e-12:
-            return None
-        far = (QVector3D(q.x() / q.w(), q.y() / q.w(), q.z() / q.w())
-               - self.camera.eye()).length()
-        return far * 1.02 + 0.05
+        return ingetrazo_core.visible_depth_limit(self, x, y)
 
     def _placements_under_px(self, lo, hi, x, y, r=None):
-        """Indices of the boxes ``lo``/``hi`` whose screen footprint comes
-        within ``r`` (``_PICK_NEAR_PX``) of widget pixel ``(x, y)``; a box that
-        crosses the eye plane counts (it can be anywhere on screen)."""
-        import numpy as np
-        from core import _native
-        M = self._np_mvp()
-        r = self._PICK_NEAR_PX if r is None else r
-        mod = _native.native
-        if mod is not None and hasattr(mod, "boxes_near_px"):
-            # The same test in parallel: ~9 ms of NumPy a pointer move over
-            # the 21 406 boxes of #158, twice (the pick's, the edges').
-            return mod.boxes_near_px(
-                np.ascontiguousarray(lo, np.float64),
-                np.ascontiguousarray(hi, np.float64),
-                np.ascontiguousarray(M, np.float64).ravel().tolist(),
-                float(self.width()), float(self.height()), float(x),
-                float(y), float(r))
-        corners = np.stack([np.where(np.array([(i >> k) & 1 for k in range(3)],
-                                              bool), hi, lo)
-                            for i in range(8)], axis=1)          # (P, 8, 3)
-        finite = np.isfinite(corners).all(axis=(1, 2))
-        c = np.where(np.isfinite(corners), corners, 0.0)
-        clip = c @ M[:, :3].T + M[:, 3]                          # (P, 8, 4)
-        w = clip[..., 3]
-        front = w > 1e-9
-        ww = np.where(front, w, 1.0)
-        sx = (clip[..., 0] / ww * 0.5 + 0.5) * self.width()
-        sy = (1.0 - (clip[..., 1] / ww * 0.5 + 0.5)) * self.height()
-        big = 1e12
-        x0 = np.where(front, sx, big).min(axis=1)
-        x1 = np.where(front, sx, -big).max(axis=1)
-        y0 = np.where(front, sy, big).min(axis=1)
-        y1 = np.where(front, sy, -big).max(axis=1)
-        inside = (x0 - r <= x) & (x <= x1 + r) & (y0 - r <= y) & (y <= y1 + r)
-        straddle = front.any(axis=1) & ~front.all(axis=1)
-        return np.flatnonzero((inside & front.all(axis=1)) | straddle
-                              | ~finite)
-
-    def _pick_block_part(self, candidatos, tocables, lazy_set, base):
-        """One part of the pick block (see _pick_index): the faces, owners,
-        triangles and hard edges of ``candidatos``, numbered after ``base``
-        (the part before it, or None). Lists, joined by _pick_join_parts."""
-        import numpy as np
-        scene = self.scene
-        chunks = []
-        for g in candidatos:
-            if getattr(g, "billboard", False):
-                continue          # per-frame quad; picked separately
-            gvis = scene.entity_visible(g)
-            # Locked objects remain inference references, but cannot be
-            # edited. The context further limits what a pick may touch.
-            gsnap = scene.group_snappable(g)
-            gsel = scene.entity_selectable(g) and id(g) in tocables
-            if not (gvis or gsnap):
-                continue
-            chunk = self._group_chunk(g)
-            if not (chunk["faces"] or chunk["edges"]):
-                continue          # nothing in it to pick or snap to
-            # Note the `or edges`: a group of nothing but lines and arcs
-            # has no faces, and skipping it here dropped it out of the
-            # index ENTIRELY — so inference found none of its edges and
-            # the edge fallback below, written for "a lines-only group",
-            # read an empty array and never found it either (GitHub #8).
-            # The OWNER a hit resolves to depends on the open context
-            # (inside the plaza its children are the objects): it keys
-            # the block too, or a double-click into the plaza kept
-            # answering "the plaza" for the arch inside (Marco,
-            # 2026-09-14).
-            chunks.append((g, chunk, gvis, gsel, gsnap))
-        _pick_warm_take(self)
-        # Each big chunk's grid is its own work, mostly NumPy: side by side
-        # (0.9 s of a big model's first hover one after another, #1092). Each
-        # keeps it on its chunk, where the loop below finds it.
-        big = [c for g, c, _v, _s, _n in chunks
-               if c["v0"] is not None and id(g) not in lazy_set
-               and len(c["v0"]) > _SPAN_GRID_MIN and "_span_grid" not in c]
-        if len(big) > 1 and not _NO_SPAN_GRID:
-            import os
-            from concurrent.futures import ThreadPoolExecutor
-            with ThreadPoolExecutor(
-                    max_workers=min(8, os.cpu_count() or 2)) as ex:
-                list(ex.map(_split_chunk_spans, big))
-        n_ent = base["n_ent"] if base else 0
-        n_plist = base["n_plist"] if base else 0
-        b_tri_off = base["n_tri"] if base else 0
-        n_ggroups = base["n_ggroups"] if base else 0
-        b_entities: list = []
-        # Per entity, the PLACEMENT (proxy) whose matrix puts the
-        # face in the world — the owner above is what a click
-        # selects. Run-length, one int per face: a Python object
-        # per face doubled the cold build (30 → 65 ms).
-        b_pidx: list = []
-        b_plist: list = []
-        b_v0, b_e1, b_e2, b_te = [], [], [], []
-        b_area, b_vis, b_sel, b_infer = [], [], [], []
-        b_spans: list = []    # (bbox, tri start, count) per chunk
-        # Group hard edges, flat — pick_group's fallback (cursor over
-        # empty space / lines-only group) walked every group edge in
-        # Python (~300 ms per mouse move against a 300k-edge import).
-        b_gea, b_geb, b_ggi = [], [], []
-        b_gel: list = []
-        b_gbase: list = []    # each chunk's (n, 2, 3) edge array, kept
-        b_gsel: list = []     # per edge: may pick_group land on it
-        b_ggroups: list = []
-        b_gctx: list = []     # per group: the tip's context word
-        # Per group: a placement of lines only (no faces), picked by its
-        # lines before a face under the cursor (SelectTool._linework).
-        b_gwire: list = []
-        # Lazy placements (#158) keep their triangles in their own
-        # arrays — spans the ray walks as they are — and go after
-        # the static chunks, whose concatenation is kept: joining
-        # every array on each change of the lazy set copied
-        # hundreds of MB per hover.
-        b_own: list = []
-        static_key: list = []
-        count = 0
-        for g, chunk, gvis, gsel, gsnap in chunks:
-            n = len(chunk["faces"])
-            off = n_ent + count
-            owner = self._owner_of(g)
-            # A chunk keeps its (face, owner) list: the block is
-            # rebuilt whenever the lazy placements change (#158),
-            # and re-making a tuple per face of everything already
-            # in it cost ~250 ms a hover on 14 million faces.
-            ents = chunk.get("_pick_ents")
-            if ents is None or ents[0] is not owner:
-                from views import array_bake
-                if isinstance(chunk["faces"], array_bake.DeferredFaces):
-                    # A lazy mesh (experimental engine): its faces
-                    # are built when a pick lands on one.
-                    pairs = array_bake.LazyPairs(chunk["faces"], owner)
-                else:
-                    pairs = [(f, owner) for f in chunk["faces"]]
-                ents = chunk["_pick_ents"] = (owner, pairs)
-            b_entities.append(ents[1])
-            count += n
-            b_pidx.append(np.full(n, n_plist + len(b_plist), dtype=np.int32))
-            b_plist.append(g)
-            b_area.append(chunk["areas"])
-            b_vis.append(np.full(n, gvis, dtype=bool))
-            b_sel.append(np.full(n, gsel, dtype=bool))
-            # Inferred from even when the open context makes it untouchable:
-            # the rest of the model is a reference, not an answer.
-            b_infer.append(np.full(n, gsnap, dtype=bool))
-            if chunk["v0"] is not None and id(g) in lazy_set:
-                b_own.append((chunk.get("bbox"), chunk["v0"],
-                              chunk["e1"], chunk["e2"],
-                              chunk["tri_ent"], off))
-            elif chunk["v0"] is not None:
-                static_key.append((chunk.get("uid", id(chunk)), chunk.get("rev"), off))
-                v0, e1, e2, te, cells = _split_chunk_spans(chunk)
-                b_v0.append(v0)
-                b_e1.append(e1)
-                b_e2.append(e2)
-                b_te.append(te + off)
-                if cells is None:
-                    b_spans.append((chunk.get("bbox"), b_tri_off,
-                                    len(v0)))
-                else:
-                    # One span per grid cell, each with its own box:
-                    # a ray meets the cells it crosses, not the chunk.
-                    b_spans += [(bb, b_tri_off + s0, n)
-                                for bb, s0, n in cells]
-                b_tri_off += len(v0)
-            if gsnap and chunk["edges"]:
-                ge = chunk.get("_pick_ge")
-                if ge is None or ge[0] is not chunk["edges"]:
-                    ge = chunk["_pick_ge"] = (
-                        chunk["edges"],
-                        np.frombuffer(chunk["edges"], dtype=np.float32)
-                        .reshape(-1, 2, 3).astype(np.float64))
-                ge = ge[1]
-                b_gbase.append(ge)
-                b_gea.append(ge[:, 0])
-                b_geb.append(ge[:, 1])
-                b_ggi.append(np.full(len(ge), n_ggroups + len(b_ggroups),
-                                     dtype=np.int64))
-                own = chunk.get("edge_layer")
-                gel = np.empty(len(ge), dtype=object)
-                if own is not None and len(own) == len(ge):
-                    gel[:] = own
-                b_gel.append(gel)
-                b_gsel.append(np.full(len(ge), gsel, dtype=bool))
-                b_ggroups.append(owner)
-                # "outside" while a group/component is open and this
-                # placement is not part of it (see _snap_context_of).
-                b_gctx.append(_snap_context_of(self, g))
-                b_gwire.append(n == 0)
-        part = {"entities": b_entities, "pidx": b_pidx, "plist": b_plist,
-                "area": b_area, "vis": b_vis, "sel": b_sel,
-                "infer": b_infer,
-                "own": b_own, "static_key": static_key,
-                "v0": b_v0, "e1": b_e1, "e2": b_e2, "te": b_te,
-                "spans": b_spans, "gea": b_gea, "geb": b_geb, "ggi": b_ggi,
-                "gel": b_gel,
-                "gsel": b_gsel, "ggroups": b_ggroups, "gctx": b_gctx,
-                "gwire": b_gwire, "gbase": b_gbase,
-                "n_ent": n_ent + count, "n_plist": n_plist + len(b_plist),
-                "n_tri": b_tri_off,
-                "n_ggroups": n_ggroups + len(b_ggroups)}
-        if base is None:
-            # The fixed part joins its own lists once, here: it is kept.
-            for k in ("pidx", "area", "vis", "sel", "infer", "gea", "geb",
-                      "ggi", "gel", "gsel"):
-                part[k] = [np.concatenate(part[k])] if part[k] else []
-            if all(isinstance(e, list) for e in b_entities):
-                part["entities"] = [[x for e in b_entities for x in e]]
-        return part
-
-    def _pick_join_parts(self, fixed, lazy) -> dict:
-        """The pick block of the fixed part followed by the lazy one — the
-        very arrays the single pass made, in the same order."""
-        import numpy as np
-        from views.array_bake import PickEntities
-
-        def cat(k, empty):
-            parts = fixed[k] + lazy[k]
-            return np.concatenate(parts) if parts else empty
-        ents = fixed["entities"] + lazy["entities"]
-        if not lazy["entities"] and len(ents) == 1 and \
-                isinstance(ents[0], list):
-            entities: list = ents[0]      # the fixed part's, kept
-        elif all(isinstance(e, list) for e in ents) and \
-                sum(map(len, ents)) < 200_000:
-            entities = [x for e in ents for x in e]
-        else:
-            entities = PickEntities()
-            for e in ents:
-                entities.extend(e)
-        static = fixed["static_key"] + lazy["static_key"]
-        gea = fixed["gea"] + lazy["gea"]
-        return {
-            "entities": entities,
-            "place_idx": cat("pidx", np.empty(0, np.int32)),
-            "placements": fixed["plist"] + lazy["plist"],
-            "areas": cat("area", np.empty(0)),
-            "vis": cat("vis", np.empty(0, bool)),
-            "sel": cat("sel", np.empty(0, bool)),
-            "infer": cat("infer", np.empty(0, bool)),
-            **DocumentInteraction._pick_static_tris(self, tuple(static),
-                                         fixed["v0"] + lazy["v0"],
-                                         fixed["e1"] + lazy["e1"],
-                                         fixed["e2"] + lazy["e2"],
-                                         fixed["te"] + lazy["te"]),
-            "own": fixed["own"] + lazy["own"],
-            "gedge_a": np.concatenate(gea) if gea else None,
-            "gedge_b": cat("geb", None) if gea else None,
-            "gedge_gi": cat("ggi", None) if gea else None,
-            "gedge_layer": cat("gel", None) if gea else None,
-            "gedge_sel": cat("gsel", None) if gea else None,
-            "gedge_groups": fixed["ggroups"] + lazy["ggroups"],
-            "gedge_ctx": fixed.get("gctx", []) + lazy.get("gctx", []),
-            "gedge_wire": fixed.get("gwire", []) + lazy.get("gwire", []),
-            # The fixed part's edges lead, and that part outlives many lazy
-            # rebuilds: their screen projection is kept across them.
-            "gedge_fixed": (fixed, sum(map(len, fixed["gea"])),
-                            lazy["gbase"]),
-            "spans": fixed["spans"] + lazy["spans"],
-        }
+        return ingetrazo_core.placements_under_px(self, lo, hi, x, y, r)
 
     def _outer_loose_meshes(self):
-        """The root loose mesh drawn AROUND an open group / component, as a
-        tuple of meshes (usually one, or none).
-
-        Opening a group points ``scene.mesh`` at its mesh: the loose
-        geometry of the outer context stops being the loose part of the
-        index, and it was nowhere else in it — the rest of the model could
-        be inferred on only where it was grouped («estoy dentro del
-        componente y no me snapea a lo de fuera»). It is drawn faded
-        (``scene.loose_mesh``), so it must occlude, snap and be acquirable
-        as a reference like every other faded thing.
-
-        Hidden with «Hide rest of model» it is not drawn, so it is not
-        offered either (same rule as the placements, see
-        ``_pick_candidates``). A mesh a placement already draws is left out
-        or the model would be snapped through twice (a copied group can
-        share the loose mesh)."""
-        scene = self.scene
-        if scene.edit_group is None:
-            return ()
-        rest_hidden = getattr(self, "_rest_is_hidden", None)
-        if callable(rest_hidden) and rest_hidden():
-            return ()
-        outer = getattr(scene, "loose_mesh", None)
-        if outer is None or outer is scene.mesh:
-            return ()
-        key = (_content_ver(self), id(outer), id(scene.edit_group),
-               id(scene.mesh))
-        memo = getattr(self, "_outer_loose_memo", None)
-        if memo is not None and memo[0] == key:
-            return memo[1]
-        carried = {id(g.mesh) for g in self._placements()}
-        meshes = () if id(outer) in carried else (outer,)
-        self._outer_loose_memo = (key, meshes)
-        return meshes
+        return ingetrazo_core.outer_loose_meshes(self)
 
     def _loose_mesh_wrapper(self, mesh):
-        """A stable stand-in for a mesh that is a *reference*, not an
-        object: what an outer loose face rides in the index so the snap
-        paths can tell its mesh (and its world frame: identity) from the
-        open context's. Cached, as ``_group_chunk`` keys on ``id``."""
-        wrappers = getattr(self, "_loose_wrappers", None)
-        if wrappers is None:
-            wrappers = self._loose_wrappers = {}
-        w = wrappers.get(id(mesh))
-        if w is None:
-            from types import SimpleNamespace
-            w = wrappers[id(mesh)] = SimpleNamespace(
-                mesh=mesh, xform=None, material=None, name=None,
-                billboard=False, hidden=False, locked=False, layer=None)
-        return w
+        return ingetrazo_core.loose_mesh_wrapper(self, mesh)
 
     def _pick_index(self, near=None):
-        """Flat NumPy pick index of the scene — triangles of every loose and
-        group face (with visibility/selectability masks and areas) plus the
-        loose edges — rebuilt when the scene changes.
-
-        Every mouse-move pick used to walk the mesh in Python re-running
-        earcut per face (~1–2 s per move against an imported 17k-triangle
-        building — the app read as frozen); batched over this index a pick
-        is a couple of milliseconds.
-
-        On a model whose component placements hold more than
-        ``_PICK_LAZY_MIN_FACES`` faces, those placements enter only when a
-        query comes near them (``near``, see ``_pick_materialize``): the
-        rest of the index is the same."""
-        if hasattr(self, "_pick_lazy_table"):
-            # The snap asks occlusion hundreds of times per mouse move, each
-            # through here: the same cursor query in the same tick has
-            # nothing new to bake (#158).
-            pos = getattr(self, "_last_mouse_pos", None)
-            qkey = (getattr(self, "_tick", 0), _content_ver(self),
-                    (pos.x(), pos.y()) if near is None and pos is not None
-                    else repr(near) if not isinstance(near, tuple) or
-                    near[0] != "ray" else None)
-            if qkey[2] is None or getattr(self, "_pick_last_q", None) != qkey:
-                self._pick_materialize(near)
-                self._pick_last_q = qkey
-        oculto = getattr(self, "_rest_is_hidden", None)
-        oculto = bool(oculto()) if callable(oculto) else False
-        # The open context decides what a hit RESOLVES to (inside the
-        # plaza its children are the objects, not the plaza): a stale index
-        # kept answering "the plaza" after a double-click opened it, so the
-        # arch inside never opened (Marco, 2026-09-14).
-        # The content version: a click (a view-only bump) changes nothing
-        # in it — on the plant of #158 it rebuilt it on every click.
-        key = (_content_ver(self), id(self.scene.mesh), oculto,
-               id(self.scene.edit_group), getattr(self, "_pick_gen", 0))
-        cached = getattr(self, "_pick_index_cache", None)
-        if cached is not None and cached[0] == key:
-            return cached[1]
-        if (cached is not None and len(cached) > 2
-                and cached[0][:4] == key[:4]
-                and getattr(self, "_frozen_cache_version", None) is not None
-                and cached[2] is not None
-                and cached[2] is getattr(self, "_pick_block", None)):
-            # Only the lazy set moved, under a frozen preview (a drag): the
-            # block is kept frozen as it is, the loose part is the same —
-            # the rebuild would make this very index again (it did, ~35 ms
-            # a pointer move dragging beside the plant of #158).
-            self._pick_index_cache = (key, cached[1], cached[2])
-            return cached[1]
-        _p0 = _time_mod.perf_counter() if _PERF else 0.0
-        import numpy as np
-        from types import SimpleNamespace
-        scene = self.scene
-        entities: list = []           # (face, group_or_None)
-        place_idx = None              # per entity: index into placements, -1 = loose
-        placements: list = []
-        ent_area: list = []
-        ent_sel: list = []
-        ent_vis: list = []
-        ent_loose: list = []
-        ent_infer: list = []
-        tris: list = []
-        tri_ent: list = []
-
-        # Stub viewports in tests call this unbound — fall back to the
-        # uncached face methods when the memo helpers aren't there.
-        area_of = getattr(self, "_area_of", None) or (lambda f: f.area())
-        tris_of = getattr(self, "_tris_of", None) or \
-            (lambda f: f.triangulate())
-
-        def add_face(f, grp, vis, sel, infer=None, loose=None):
-            i = len(entities)
-            entities.append((f, grp))
-            ent_area.append(area_of(f))
-            ent_vis.append(vis)
-            ent_sel.append(sel)
-            # What the snap engine may INFER FROM: selectable, except that
-            # the rest of the model outside the open context is a reference
-            # even though it cannot be picked (see _face_hits "infer").
-            ent_infer.append(sel if infer is None else infer)
-            ent_loose.append((grp is None) if loose is None else loose)
-            for t0, t1, t2 in tris_of(f):
-                tris.append((t0.x(), t0.y(), t0.z(),
-                             t1.x(), t1.y(), t1.z(),
-                             t2.x(), t2.y(), t2.z()))
-                tri_ent.append(i)
-
-        # The loose part lasts while the content and the context do: a
-        # change of the lazy set (a few times a pointer move over the plant
-        # of #158) rebuilds the index, and walked the loose faces again.
-        lmemo = getattr(self, "_pick_loose_memo", None)
-        if lmemo is not None and lmemo[0] == key[:4]:
-            loose = lmemo[1]
-        else:
-            for f in scene.faces:
-                add_face(f, None, scene.entity_visible(f),
-                         scene.entity_selectable(f))
-            # The loose mesh drawn AROUND an open group / component: the
-            # rest of the model when it was never grouped. It cannot be
-            # picked or selected from inside the context, but it is drawn
-            # (faded), so it occludes and the snap engine infers from it
-            #. Its own mesh rides with the face (the wrapper) so
-            # the plane and the centre come from the right mesh.
-            outer_of = getattr(self, "_outer_loose_meshes", None)
-            for om in (outer_of() if outer_of is not None else ()):
-                wrap = self._loose_mesh_wrapper(om)
-                for f in om.faces:
-                    add_face(f, wrap, scene.entity_visible(f),
-                             False, infer=scene.entity_selectable(f),
-                             loose=True)
-            # Loose part → arrays; groups append their cached chunk arrays.
-            if tris:
-                t = np.asarray(tris, dtype=np.float64).reshape(-1, 3, 3)
-                lt = (t[:, 0], t[:, 1] - t[:, 0], t[:, 2] - t[:, 0],
-                      np.asarray(tri_ent, dtype=np.int64))
-            else:
-                lt = None
-            loose = (list(entities), lt, len(tris),
-                     np.asarray(ent_area, dtype=np.float64),
-                     np.asarray(ent_vis, dtype=bool),
-                     np.asarray(ent_sel, dtype=bool),
-                     np.asarray(ent_infer, dtype=bool),
-                     np.asarray(ent_loose, dtype=bool))
-            self._pick_loose_memo = (key[:4], loose)
-        entities = list(loose[0])
-        lt, n_loose_tris = loose[1], loose[2]
-        if lt is not None:
-            v0s, e1s, e2s, tents = [lt[0]], [lt[1]], [lt[2]], [lt[3]]
-        else:
-            v0s, e1s, e2s, tents = [], [], [], []
-        areas, vis_parts, sel_parts, infer_parts, loose_parts = (
-            [loose[3]], [loose[4]], [loose[5]], [loose[6]], [loose[7]])
-
-        # Per-chunk triangle spans (P3): a hover/zoom ray prefilters chunks
-        # by AABB and runs Möller-Trumbore only on the spans it crosses.
-        tri_spans: list = [(None, 0, n_loose_tris)] if n_loose_tris else []
-        own_spans: list = []      # lazy placements' own arrays (#158)
-        # What the current context lets you TOUCH: the whole scene at the
-        # root, the children of the group you are inside otherwise. This
-        # used to be `if scene.edit_group is None`, which took EVERY group
-        # out of the index while you were inside one — so a group's children
-        # were drawn and could not be clicked, and «todo está combinado»
-        # (Marco, 2026-09-11).
-        lazy = (self._pick_lazy_table()
-                if hasattr(self, "_pick_lazy_table") else None)
-        epoch_of = getattr(self, "_placements_epoch", None)   # stub VPs in tests
-        # The context's placements, split into fixed and lazy, last as long
-        # as the placements and the context: walking all 21 000 of them on
-        # each change of the lazy set was ~20 ms of every such rebuild, a
-        # few times a mouse move over the plant of #158.
-        ckey = ((epoch_of(), id(scene.edit_group), oculto, id(lazy))
-                if epoch_of is not None else None)
-        cmemo = getattr(self, "_pick_cands_memo", None)
-        if ckey is None or cmemo is None or cmemo[0] != ckey:
-            cmemo = (ckey, *DocumentInteraction._pick_candidates(self, oculto, lazy))
-            if ckey is not None:
-                self._pick_cands_memo = cmemo
-        _ck, tocables, fixed_c, lazy_pos = cmemo
-        if lazy is not None:
-            live = getattr(self, "_pick_live", None) or {}
-            lazies_c = [lazy_pos[k][1] for k in sorted(
-                (k for k in live if k in lazy_pos),
-                key=lambda k: lazy_pos[k][0])]
-        else:
-            lazies_c = [g for _p, g in lazy_pos.values()]
-        candidatos = fixed_c + lazies_c
-        if candidatos:
-            # The group block is cached across versions (keyed by each
-            # chunk's identity + rev + flags): re-deriving per-face masks and
-            # re-offsetting 300k triangle rows per scene change cost ~130 ms
-            # per stroke/drag frame beside a big import.
-            # The block (every placement's faces, owners and hard edges) is
-            # keyed on the placements epoch: a loose edit — every frame of a
-            # Move drag — no longer walks 1 300 chunks to learn that none of
-            # them changed (2026-09-14).
-            sig = (epoch_of() if epoch_of is not None else _cache_ver(self),
-                   oculto, len(candidatos), getattr(self, "_pick_gen", 0))
-            blk = getattr(self, "_pick_block", None)
-            frozen = getattr(self, "_frozen_cache_version", None) is not None
-            if blk is None or (blk[0] != sig and not frozen):
-                # Two parts, fixed placements first, as the block always
-                # ran: the fixed part lasts while the placements do, and a
-                # change of the lazy set rebuilds only the lazy part on its
-                # offsets. Re-making the fixed one each time (900
-                # placements, half a million faces) was most of every hover
-                # that met new lazy placements on the plant of #158.
-                lazy_set = (lazy[4] if lazy is not None else ())
-                fixed, lazies = fixed_c, lazies_c
-                fkey = (sig[0], oculto, len(fixed), id(scene.edit_group))
-                fpart = getattr(self, "_pick_fixed_part", None)
-                if fpart is None or fpart[0] != fkey:
-                    # Called through the class: the stub viewports of the
-                    # tests run this unbound.
-                    fpart = self._pick_fixed_part = (fkey, DocumentInteraction._pick_block_part(
-                        self, fixed, tocables, lazy_set, None))
-                lpart = DocumentInteraction._pick_block_part(self, lazies, tocables,
-                                                  lazy_set, fpart[1])
-                blk = (sig, DocumentInteraction._pick_join_parts(self, fpart[1], lpart))
-                self._pick_block = blk
-            block = blk[1]
-            if block["entities"]:
-                offset = len(entities)
-                loose_count = len(entities)
-                if not isinstance(block["entities"], list):
-                    from views.array_bake import PickEntities
-                    entities = PickEntities(entities)
-                entities.extend(block["entities"])
-                place_idx = np.concatenate([
-                    np.full(loose_count, -1, dtype=np.int32),
-                    block.get("place_idx", np.full(len(block["entities"]), -1, np.int32))])
-                placements = block.get("placements", [])
-                areas.append(block["areas"])
-                vis_parts.append(block["vis"])
-                sel_parts.append(block["sel"])
-                infer_parts.append(block.get("infer", block["sel"]))
-                loose_parts.append(
-                    np.zeros(len(block["entities"]), dtype=bool))
-                if block["v0"] is not None:
-                    v0s.append(block["v0"])
-                    e1s.append(block["e1"])
-                    e2s.append(block["e2"])
-                    tents.append(_offset_kept(self, block["te"], offset))
-                    tri_spans += [(bb, n_loose_tris + s, n)
-                                  for bb, s, n in block.get("spans", ())]
-                own_spans = [(bb, a, b, c, te, o + offset)
-                             for bb, a, b, c, te, o in block.get("own", ())]
-
-        gedge_a = gedge_b = gedge_gi = gedge_sel = gedge_fixed = None
-        gedge_layer = None
-        gedge_groups: list = []
-        gedge_ctx: list = []
-        gedge_wire: list = []
-        if candidatos:
-            block = self._pick_block[1] if getattr(self, "_pick_block", None) \
-                else {}
-            gedge_a = block.get("gedge_a")
-            gedge_b = block.get("gedge_b")
-            gedge_gi = block.get("gedge_gi")
-            gedge_layer = block.get("gedge_layer")
-            gedge_sel = block.get("gedge_sel")
-            gedge_groups = block.get("gedge_groups", [])
-            gedge_ctx = block.get("gedge_ctx", [])
-            gedge_wire = block.get("gedge_wire", [])
-            gedge_fixed = block.get("gedge_fixed")
-
-        edges: list = []
-        ea: list = []
-        eb: list = []
-        esel: list = []
-        esnap: list = []
-        esoft: list = []
-        for e in scene.edges:
-            edges.append(e)
-            esoft.append(bool(getattr(e, "soft", False)))
-            ea.append([e.a.x(), e.a.y(), e.a.z()])
-            eb.append([e.b.x(), e.b.y(), e.b.z()])
-            # A hidden EDGE (Hide on raw geometry, a smoothed surface's
-            # inner edges) is selectable only while the hidden view shows
-            # it — what window selection already did; a click found it
-            # through here with the view off.
-            esel.append(scene.entity_selectable(e)
-                        and (not getattr(e, "hidden", False)
-                             or bool(getattr(scene, "show_hidden_geometry",
-                                             False))))
-            # Snapping is a different question from selecting: a locked
-            # edge is no target for a click and a fine target for a
-            # dimension, while an edge that draws nothing is neither. The
-            # same rule the snap scene applies (Scene.edge_snappable), kept
-            # here so the corner a from-point acquires cannot come from a
-            # line the user cannot see.
-            esnap.append(scene.edge_snappable(e))
-        # The rest of the model's loose edges — drawn around an open group /
-        # component, a reference to snap to and never a thing to pick. They
-        # are what a move started inside the component aligns to, and what
-        # occludes the corners behind them.
-        outer_of = getattr(self, "_outer_loose_meshes", None)
-        for om in (outer_of() if outer_of is not None else ()):
-            for e in om.edges:
-                edges.append(e)
-                esoft.append(bool(getattr(e, "soft", False)))
-                ea.append([e.a.x(), e.a.y(), e.a.z()])
-                eb.append([e.b.x(), e.b.y(), e.b.z()])
-                esel.append(False)
-                esnap.append(scene.edge_snappable(e))
-
-        idx = SimpleNamespace(
-            entities=entities,
-            ent_place_idx=(place_idx if place_idx is not None
-                           else np.full(len(entities), -1, np.int32)),
-            ent_placements=placements,
-            ent_area=np.concatenate(areas) if entities else np.empty(0),
-            ent_sel=np.concatenate(sel_parts) if entities else np.empty(0, bool),
-            ent_infer=(np.concatenate(infer_parts) if entities
-                       else np.empty(0, bool)),
-            ent_vis=np.concatenate(vis_parts) if entities else np.empty(0, bool),
-            ent_loose=(np.concatenate(loose_parts) if entities
-                       else np.empty(0, bool)),
-            tri_v0=_cat_kept(self, "v0", v0s) if v0s else None,
-            tri_e1=_cat_kept(self, "e1", e1s) if v0s else None,
-            tri_e2=_cat_kept(self, "e2", e2s) if v0s else None,
-            tri_ent=_cat_kept(self, "te", tents) if v0s else None,
-            edges=edges,
-            edge_a=np.asarray(ea, dtype=np.float64) if edges else None,
-            edge_b=np.asarray(eb, dtype=np.float64) if edges else None,
-            edge_sel=np.asarray(esel, dtype=bool) if edges else None,
-            edge_snap=np.asarray(esnap, dtype=bool) if edges else None,
-            edge_soft=np.asarray(esoft, dtype=bool) if edges else None,
-            gedge_a=gedge_a,
-            gedge_b=gedge_b,
-            gedge_gi=gedge_gi,
-            gedge_layer=gedge_layer,
-            gedge_sel=gedge_sel,
-            gedge_groups=gedge_groups,
-            gedge_ctx=gedge_ctx,
-            gedge_wire=gedge_wire,
-            gedge_fixed=gedge_fixed,
-            tri_spans=None,
-        )
-        # Spans must tile the triangle array exactly, or the prefilter would
-        # silently drop triangles (a stale cached block predating spans).
-        total_tris = len(idx.tri_v0) if idx.tri_v0 is not None else 0
-        if tri_spans and sum(n for _, _, n in tri_spans) == total_tris:
-            idx.tri_spans = tri_spans
-        idx.own_spans = own_spans
-        if _PERF:
-            _plog("pick_index", (_time_mod.perf_counter() - _p0) * 1000.0)
-        self._pick_index_cache = (key, idx, getattr(self, "_pick_block", None))
-        return idx
-
-    def _pick_static_tris(self, key, v0, e1, e2, te) -> dict:
-        """The static chunks' triangles joined, kept while the same chunks
-        sit at the same entity offsets: the lazy set changes on many
-        hovers (#158), the static part does not."""
-        import numpy as np
-        memo = getattr(self, "_pick_static_memo", None)
-        if memo is not None and memo[0] == key:
-            return memo[1]
-        out = {"v0": np.concatenate(v0) if v0 else None,
-               "e1": np.concatenate(e1) if v0 else None,
-               "e2": np.concatenate(e2) if v0 else None,
-               "te": np.concatenate(te) if v0 else None}
-        self._pick_static_memo = (key, out)
-        return out
+        return ingetrazo_core.document_pick_index(self, near)
 
     @staticmethod
     def _pick_flat(idx):
-        """``idx`` with the lazy placements' own spans joined into the flat
-        triangle arrays — for the passes that read every triangle (hidden
-        lines, section cuts); kept on the index once made."""
-        own = getattr(idx, "own_spans", None)
-        if not own:
-            return idx
-        flat = getattr(idx, "_flat", None)
-        if flat is not None:
-            return flat
-        import numpy as np
-        from types import SimpleNamespace
-        parts = ([(idx.tri_v0, idx.tri_e1, idx.tri_e2, idx.tri_ent)]
-                 if idx.tri_v0 is not None else [])
-        parts += [(a, b, c, te + o) for _bb, a, b, c, te, o in own]
-        flat = SimpleNamespace(**vars(idx))
-        flat.tri_v0 = np.concatenate([p[0] for p in parts])
-        flat.tri_e1 = np.concatenate([p[1] for p in parts])
-        flat.tri_e2 = np.concatenate([p[2] for p in parts])
-        flat.tri_ent = np.concatenate([p[3] for p in parts])
-        flat.tri_spans = None
-        flat.own_spans = []
-        idx._flat = flat
-        return flat
+        return ingetrazo_core.flat_pick_index(idx)
 
     def ray_distance(self, origin: QVector3D, direction: QVector3D,
                      reach: float | None = None):
-        """Distance along ``direction`` (unit) from ``origin`` to the nearest
-        VISIBLE face, or ``None`` when the ray meets nothing. What the
-        walkthrough tools ask — the floor under the eye, the wall ahead —
-        over the same index every pick uses (hidden objects and hidden
-        layers are not there to bump into). With ``reach``, only faces
-        within that distance count: the query bakes and tests only what
-        lies within it."""
-        nat = (self._lazy_native() if hasattr(self, "_lazy_native")
-               else None)
-        near = (("ray", origin, direction) if reach is None
-                else ("ray", origin, direction, float(reach)))
-        idx = self._pick_index(near="skip" if nat is not None else near)
-        if nat is not None:
-            # The lazy placements from the engine, none baked (#158).
-            t = self._ray_hits(idx, origin, direction, idx.ent_vis,
-                               reduce_global=True, reach=reach, own=False)
-            lz = DocumentInteraction._lazy_face_hits(self, nat, origin, direction,
-                                          "vis", reach)
-            if lz is not None:
-                tl = float(lz[0].min())
-                t = tl if t is None else min(t, tl)
-        elif idx is None or (getattr(idx, "tri_v0", None) is None
-                             and not getattr(idx, "own_spans", None)):
-            return None
-        else:
-            t = self._ray_hits(idx, origin, direction, idx.ent_vis,
-                               reduce_global=True, reach=reach)
-        if t is None or t == float("inf") or (reach is not None
-                                               and t > reach):
-            return None
-        return float(t)
+        return ingetrazo_core.index_ray_distance(self, origin, direction, reach)
 
     def _ray_hits(self, idx, origin, direction, ent_mask,
                   reduce_global: bool = False, reach: float | None = None,
                   own: bool = True):
-        """Per-entity nearest ray parameter over the index triangles whose
-        entity passes ``ent_mask``. Returns an (E,) array of t (``inf`` = no
-        hit), the single nearest t as a float when ``reduce_global``, or
-        ``None`` when the index has no triangles. Same acceptance
-        thresholds as :func:`_ray_triangle`.
-
-        P3: the Möller–Trumbore pass runs per chunk SPAN on array views,
-        after a ray-vs-AABB prefilter — a hover/zoom ray only pays for the
-        chunks it actually crosses (the full 700k-row pass cost 25–45 ms
-        per pick against the piscina scene). ``own`` False leaves out the
-        lazy placements' own spans (the engine answers for them, see
-        _face_hits)."""
-        import numpy as np
-        own = (getattr(idx, "own_spans", None) or ()) if own else ()
-        if idx.tri_v0 is None and not own:
-            return None
-        o = np.array([origin.x(), origin.y(), origin.z()])
-        d = np.array([direction.x(), direction.y(), direction.z()])
-        fast = (DocumentInteraction._static_ray_rows(
-                    self, idx, ent_mask,
-                    (float(o[0]), float(o[1]), float(o[2])),
-                    (float(d[0]), float(d[1]), float(d[2])))
-                if (reach is None and not own and idx.tri_v0 is not None
-                    and hasattr(self, "_static_occluders"))
-                else None)
-        if fast is not None:
-            # The engine's BVH in place of the span boxes below.
-            spans = ([(None, idx.tri_v0[fast], idx.tri_e1[fast],
-                       idx.tri_e2[fast], idx.tri_ent[fast], 0)]
-                     if len(fast) else [])
-        elif idx.tri_v0 is None:
-            spans = []
-        else:
-            spans = (getattr(idx, "tri_spans", None)
-                     or [(None, 0, len(idx.tri_v0))])
-        # Lazy placements' own arrays (#158) ride the same loop: a span is
-        # then (bbox, v0, e1, e2, local tri_ent, entity offset).
-        spans = list(spans) + list(own)
-        if len(spans) > 64 and fast is None:
-            # Thousands of spans on a huge model: which boxes the ray meets
-            # is one NumPy pass, not a Python test per span (900 000 of
-            # them in one snap hover, #158).
-            boxes = getattr(idx, "_span_boxes", None)
-            if boxes is None or boxes[0] != len(spans):
-                inf = float("inf")
-                blo = np.array([sp[0][0] if sp[0] is not None else (-inf,) * 3
-                                for sp in spans], dtype=np.float64)
-                bhi = np.array([sp[0][1] if sp[0] is not None else (inf,) * 3
-                                for sp in spans], dtype=np.float64)
-                boxes = idx._span_boxes = (len(spans), blo, bhi)
-            _n, blo, bhi = boxes
-            with np.errstate(divide="ignore", invalid="ignore"):
-                inv_d = 1.0 / np.where(np.abs(d) > 1e-12, d, 1e-12)
-                t1 = (blo - o) * inv_d
-                t2 = (bhi - o) * inv_d
-            tmin = _slab_far(np.minimum(t1, t2))
-            tmax = _slab_near(np.maximum(t1, t2))
-            meet = tmax >= np.maximum(tmin, 0.0)
-            if reach is not None:
-                meet &= tmin <= reach
-            spans = [(None,) + tuple(spans[i][1:])
-                     for i in np.flatnonzero(meet)]
-        o3 = (float(o[0]), float(o[1]), float(o[2]))
-        d3 = (float(d[0]), float(d[1]), float(d[2]))
-        lim = float("inf") if reach is None else float(reach)
-        best = float("inf")
-        face_t = None if reduce_global else np.full(len(idx.entities), np.inf)
-
-        # The static spans the ray meets go through Möller–Trumbore in ONE
-        # pass: with the span grid a ray meets dozens of small spans, and a
-        # NumPy call per span (~30 µs) became the ray's whole cost.
-        ranges = []
-        rest = []
-        for span in spans:
-            if len(span) == 3:
-                bb, s0, n = span
-                if n and (bb is None or _ray_aabb(o3, d3, bb[0], bb[1])):
-                    ranges.append((s0, n))
-            else:
-                rest.append(span)
-        if ranges:
-            if len(ranges) == 1:
-                s0, n = ranges[0]
-                sel = slice(s0, s0 + n)
-            else:
-                sel = np.concatenate([np.arange(s0, s0 + n)
-                                      for s0, n in ranges])
-            rest.insert(0, (None, idx.tri_v0[sel], idx.tri_e1[sel],
-                            idx.tri_e2[sel], idx.tri_ent[sel], 0))
-        spans = rest
-        for span in spans:
-            if len(span) == 3:
-                bb, s0, n = span
-                if not n:
-                    continue
-                if bb is not None and not _ray_aabb(o3, d3, bb[0], bb[1],
-                                                    lim):
-                    continue
-                v0 = idx.tri_v0[s0:s0 + n]
-                e1 = idx.tri_e1[s0:s0 + n]
-                e2 = idx.tri_e2[s0:s0 + n]
-                te = idx.tri_ent[s0:s0 + n]
-            else:
-                bb, v0, e1, e2, te_local, eoff = span
-                if not len(v0):
-                    continue
-                if bb is not None and not _ray_aabb(o3, d3, bb[0], bb[1],
-                                                    lim):
-                    continue
-                te = te_local + eoff
-            t, hit = _moller_trumbore(o, d, v0, e1, e2)
-            hit &= ent_mask[te]
-            if reduce_global:
-                # Zoom focus wants ONE nearest t, not per-entity buckets.
-                th = t[hit]
-                if len(th):
-                    tm = float(th.min())
-                    if tm < best:
-                        best = tm
-            else:
-                hit_rows = np.where(hit)[0]
-                if len(hit_rows):
-                    # minimum.at only over the triangles the ray actually
-                    # hits (a handful) — over the full array it alone cost
-                    # ~100 ms per snap hover.
-                    np.minimum.at(face_t, te[hit_rows], t[hit_rows])
-        return best if reduce_global else face_t
+        return ingetrazo_core.index_ray_hits(self, idx, origin, direction, ent_mask,
+                              reduce_global, reach, own)
 
     def _ray_near(self, x: float, y: float):
         """What a ray pick at widget pixel ``(x, y)`` asks the pick index
@@ -9733,222 +7660,19 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return "skip" if nat is not None else ("px", x, y)
 
     def _face_hits(self, idx, origin, direction, which: str = "sel"):
-        """The faces the ray from ``origin`` along ``direction`` meets, each
-        at its nearest t, of the index entities that pass ``which``
-        ("sel": selectable, "vis": visible, "infer": a face the snap
-        engine may infer from — the selectable ones PLUS the rest of the
-        model around an open group / component, which cannot be picked but
-        is drawn as a reference) — in the index's order, which the ties of
-        every pick go by: ``SimpleNamespace(t, area, loose, ent(k) →
-        (face, owner), place(k) → placement)``, or None when the index has
-        no triangles. With the experimental engine the lazy placements'
-        faces come from it, none of them baked (#158), after the index's
-        own, in the order their bakes would follow them."""
-        import numpy as np
-        from types import SimpleNamespace
-        nat = (self._lazy_native() if hasattr(self, "_lazy_native")
-               else None)
-        if which == "sel":
-            mask = idx.ent_sel
-        elif which == "infer":
-            mask = getattr(idx, "ent_infer", idx.ent_sel)
-        else:
-            mask = idx.ent_vis
-        face_t = (self._ray_hits(idx, origin, direction, mask,
-                                 own=nat is None)
-                  if len(idx.entities) else None)
-        lazy = (DocumentInteraction._lazy_face_hits(self, nat, origin, direction, which)
-                if nat is not None else None)
-        if face_t is None and lazy is None:
-            return None
-        rows = (np.flatnonzero(np.isfinite(face_t)) if face_t is not None
-                else np.empty(0, np.int64))
-        pidx = getattr(idx, "ent_place_idx", None)
-        n = len(rows)
-
-        def ent(k):
-            if k < n:
-                return idx.entities[int(rows[k])]
-            return lazy[3](k - n)
-
-        def owner(k):
-            if k < n:
-                return _entity_owner(idx.entities, int(rows[k]))
-            return lazy[5](k - n)
-
-        def place(k):
-            if k < n:
-                i = int(rows[k])
-                if pidx is not None and i < len(pidx) and pidx[i] >= 0:
-                    return idx.ent_placements[int(pidx[i])]
-                return _entity_owner(idx.entities, i)
-            return lazy[4](k - n)
-        t = face_t[rows] if n else np.empty(0)
-        area = idx.ent_area[rows] if n else np.empty(0)
-        loose = idx.ent_loose[rows] if n else np.empty(0, bool)
-        if lazy is not None:
-            t = np.concatenate([t, lazy[0]])
-            area = np.concatenate([area, lazy[1]])
-            loose = np.concatenate([loose, np.zeros(len(lazy[0]), bool)])
-        return SimpleNamespace(t=t, area=area, loose=loose, ent=ent,
-                               owner=owner, place=place)
+        return ingetrazo_core.face_hits(self, idx, origin, direction, which)
 
     def _lazy_sel_rows(self, nat):
-        """The rows of the lazy table whose faces a pick may land on (see
-        _lazy_native's ``snap``, less what the open context keeps from
-        being touched), in the index's order."""
-        import numpy as np
-        memo = getattr(self, "_lazy_sel_memo", None)
-        if memo is not None and memo[0] is nat:
-            return memo[1]
-        toc = self._pick_cands_memo[1]
-        groups = self._pick_lazy_table()[0]
-        snap = nat[1]
-        sel = np.fromiter((i for i in snap.tolist() if id(groups[i]) in toc
-                          and self.scene.entity_selectable(groups[i])),
-                          np.int64)
-        self._lazy_sel_memo = (nat, sel)
-        return sel
-
-    def _lazy_face_hits(self, nat, origin, direction, which,
-                        reach: float | None = None):
-        """The lazy placements' faces the ray meets, from the engine (see
-        _face_hits): ``(t, area, order, ent(k), place(k))`` as their bakes
-        would give them, or None. The engine hands the triangles the ray
-        may meet; which it meets, and where, is decided here by the pick
-        index's own test."""
-        import numpy as np
-        iset, snap, vis = nat
-        if which == "sel":
-            rows = DocumentInteraction._lazy_sel_rows(self, nat)
-        elif which == "infer":
-            # The lazy placements the snap may land on (visible, unlocked),
-            # touchable or not — see _face_hits.
-            rows = snap
-        else:
-            rows = vis
-        if not len(rows):
-            return None
-        o = np.array([origin.x(), origin.y(), origin.z()])
-        d = np.array([direction.x(), direction.y(), direction.z()])
-        pl, tr, v0, e1, e2 = iset.ray_cands(
-            np.ascontiguousarray(rows, np.int64), tuple(o.tolist()),
-            tuple(d.tolist()), float("inf") if reach is None else float(reach))
-        if not len(pl):
-            return None
-        t, hit = _moller_trumbore(o, d, v0, e1, e2)
-        k = np.flatnonzero(hit)
-        if not len(k):
-            return None
-        groups = self._pick_lazy_table()[0]
-        lazy_pos = self._pick_cands_memo[3]
-        bases: dict = {}
-        best: dict = {}                     # (row, entity) → nearest t
-        for i, r, tt in zip(pl[k].tolist(), tr[k].tolist(), t[k].tolist()):
-            base = bases.get(i)
-            if base is None:
-                g = groups[i]
-                base = bases[i] = self._proto_base_chunk(
-                    g.mesh, _paint_of(self, g))
-            key = (i, int(base["tri_ent"][r]))
-            if tt < best.get(key, float("inf")):
-                best[key] = tt
-        keys = sorted(best, key=lambda ij: (lazy_pos[id(groups[ij[0]])][0],
-                                            ij[1]))
-        scale: dict = {}
-        for i in bases:
-            # The placed areas as _instance_chunk makes them.
-            L = _placed_maps(groups[i].xform)[0]
-            scale[i] = abs(float(np.linalg.det(L))) ** (2.0 / 3.0)
-        tt = np.array([best[ij] for ij in keys], dtype=np.float64)
-        area = np.array([bases[i]["areas"][j] * scale[i] for i, j in keys],
-                        dtype=np.float64)
-
-        def ent(m):
-            i, j = keys[m]
-            return bases[i]["faces"][j], self._owner_of(groups[i])
-
-        def place(m):
-            return groups[keys[m][0]]
-
-        def owner(m):
-            return self._owner_of(groups[keys[m][0]])
-        return tt, area, keys, ent, place, owner
+        return ingetrazo_core.pick_lazy_selectable(self, nat)
 
     def _hover_hits(self, idx, origin, direction):
-        """:meth:`_face_hits` of the selectable faces, memoised for the
-        current cursor ray, without what lies past the active cut. One
-        SelectTool hover fires pick_group + pick_face on the same mouse
-        move, and each used to re-run the full Möller–Trumbore pass (~20 ms
-        over a 260k-triangle import); they now share one pass and post-mask
-        by loose/group."""
-        key = (self.scene.version, id(self.scene.mesh),
-               origin.x(), origin.y(), origin.z(),
-               direction.x(), direction.y(), direction.z())
-        nat = (self._lazy_native() if hasattr(self, "_lazy_native")
-               else None)
-        cached = getattr(self, "_hover_hits_cache", None)
-        # The answer is per entity OF THIS INDEX: a lazy index (#158) is
-        # rebuilt between two asks of one hover when a query brings new
-        # placements in, and the old index's per-entity times read against
-        # the new one picked the wrong face, or ran past its end.
-        if (cached is not None and cached[0] == key and cached[2] is idx
-                and cached[3] is nat):
-            return cached[1]
-        hits = DocumentInteraction._face_hits(self, idx, origin, direction, "sel")
-        DocumentInteraction._drop_past_cut(self, hits, origin, direction)
-        self._hover_hits_cache = (key, hits, idx, nat)
-        return hits
+        return ingetrazo_core.cached_face_hits(self, idx, origin, direction, False)
 
     def _infer_hits(self, idx, origin, direction):
-        """:meth:`_hover_hits` of the faces the snap engine may INFER FROM:
-        every selectable one plus the rest of the model around an open group
-        / component (drawn faded, never pickable). Geometry being moved is
-        still left out by the caller's own rules — this only widens the
-        context, not the moving set."""
-        key = (self.scene.version, id(self.scene.mesh),
-               origin.x(), origin.y(), origin.z(),
-               direction.x(), direction.y(), direction.z())
-        nat = (self._lazy_native() if hasattr(self, "_lazy_native")
-               else None)
-        cached = getattr(self, "_infer_hits_cache", None)
-        if (cached is not None and cached[0] == key and cached[2] is idx
-                and cached[3] is nat):
-            return cached[1]
-        hits = DocumentInteraction._face_hits(self, idx, origin, direction, "infer")
-        DocumentInteraction._drop_past_cut(self, hits, origin, direction)
-        self._infer_hits_cache = (key, hits, idx, nat)
-        return hits
-
-    def _drop_past_cut(self, hits, origin, direction) -> None:
-        """Hits beyond the active cut are on clipped-away geometry: their
-        ``t`` becomes ``inf``, in place."""
-        sp = _active_cut(self.scene)
-        if sp is not None and hits is not None and len(hits.t):
-            import numpy as np
-            o = np.array([origin.x(), origin.y(), origin.z()])
-            d = np.array([direction.x(), direction.y(), direction.z()])
-            n = np.array([sp.normal.x(), sp.normal.y(), sp.normal.z()])
-            c = float(n @ [sp.point.x(), sp.point.y(), sp.point.z()])
-            pts = o + d * hits.t[:, None]
-            hidden = (pts @ n - c) > 1e-6
-            hits.t = np.where(hidden, np.inf, hits.t)
+        return ingetrazo_core.cached_face_hits(self, idx, origin, direction, True)
 
     def edge_point_under_cursor(self, edge, screen_x: float, screen_y: float):
-        """The world point of ``edge`` nearest the cursor (closest point of
-        its screen-space segment, mapped back along the edge), or None when
-        the edge does not project."""
-        pa = self._world_to_pixel(edge.a)
-        pb = self._world_to_pixel(edge.b)
-        if pa is None or pb is None:
-            return None
-        dx, dy = pb[0] - pa[0], pb[1] - pa[1]
-        l2 = dx * dx + dy * dy
-        if l2 < 1e-12:
-            return QVector3D(edge.a)
-        t = ((screen_x - pa[0]) * dx + (screen_y - pa[1]) * dy) / l2
-        t = max(0.0, min(1.0, t))
-        return edge.a + (edge.b - edge.a) * t
+        return ingetrazo_core.edge_cursor_point(self, edge, screen_x, screen_y)
 
     def pick_edge(self, screen_x: float, screen_y: float):
         """Return the edge closest to ``(screen_x, screen_y)`` within threshold."""
@@ -9981,84 +7705,13 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
                                with_distance=True)
 
     def _linework_edge_rows(self, screen_x: float, screen_y: float):
-        """``(idx, rows, ax, ay, bx, by)``: the pick index's group edges of
-        placements made of lines only (no faces) that a click may land
-        on — their rows, kept on the index, and their screen endpoints —
-        or ``None`` when there are none (or the lazy engine holds the
-        placements: it keeps no such flag)."""
-        import numpy as np
-        if hasattr(self, "_lazy_native") and self._lazy_native() is not None:
-            return None
-        idx = self._pick_index(near=("px", screen_x, screen_y))
-        wire = getattr(idx, "gedge_wire", None)
-        if (idx.gedge_a is None or not wire
-                or len(wire) != len(idx.gedge_groups)):
-            return None
-        kept = getattr(idx, "_linework_rows", None)
-        if kept is None or kept[0] is not idx.gedge_gi:
-            rows = np.flatnonzero(np.asarray(wire, bool)[idx.gedge_gi])
-            sel = getattr(idx, "gedge_sel", None)
-            if sel is not None:
-                rows = rows[sel[rows]]
-            kept = idx._linework_rows = (idx.gedge_gi, rows)
-        rows = kept[1]
-        if not len(rows):
-            return None
-        proj = self._gedge_screen()
-        if proj is None:
-            return None
-        ax, ay, bx, by, ok = (p[rows] for p in proj)
-        rows, ax, ay, bx, by = rows[ok], ax[ok], ay[ok], bx[ok], by[ok]
-        return (idx, rows, ax, ay, bx, by) if len(rows) else None
+        return ingetrazo_core.linework_edge_rows(self, screen_x, screen_y)
 
     def pick_linework_groups(self, screen_x: float, screen_y: float):
-        """``[(group, pixels)]``, nearest first: the objects made of lines
-        only whose visible lines pass within the pick threshold of the
-        cursor — what a click selects there before the face under the
-        cursor, as a lone loose line would be (a hatch or a set of
-        lines grouped on a slab had no hitbox but its 1-px lines, and the
-        slab took the click). ``group`` is what a click selects in the
-        open context."""
-        import numpy as np
-        found = self._linework_edge_rows(screen_x, screen_y)
-        if found is None:
-            return []
-        idx, rows, ax, ay, bx, by = found
-        dx, dy = bx - ax, by - ay
-        l2 = dx * dx + dy * dy
-        safe = np.where(l2 > 1e-12, l2, 1.0)
-        t = np.clip(((screen_x - ax) * dx + (screen_y - ay) * dy) / safe,
-                    0.0, 1.0)
-        d = np.hypot(ax + t * dx - screen_x, ay + t * dy - screen_y)
-        near = np.flatnonzero(d < self.pick_threshold_px)
-        out, seen = [], set()
-        for k in near[np.argsort(d[near])][:64]:
-            i = int(rows[k])
-            owner = idx.gedge_groups[int(idx.gedge_gi[i])]
-            if id(owner) in seen or not self.scene.entity_selectable(owner):
-                continue
-            a = QVector3D(*idx.gedge_a[i])
-            p = a + (QVector3D(*idx.gedge_b[i]) - a) * float(t[k])
-            if self.linework_hidden(p):
-                continue
-            seen.add(id(owner))
-            out.append((owner, float(d[k])))
-        return out
+        return ingetrazo_core.linework_groups(self, screen_x, screen_y, False)
 
     def linework_groups_around(self, screen_x: float, screen_y: float):
-        """The objects made of lines only whose screen box holds the
-        cursor, smallest box first: what a click between the lines of a
-        hatch may select (SelectTool takes one when nothing else is under
-        the cursor, and offers them on a repeated click)."""
-        import numpy as np
-        found = self._linework_edge_rows(screen_x, screen_y)
-        if found is None:
-            return []
-        idx, rows, ax, ay, bx, by = found
-        return _boxes_around(idx.gedge_gi[rows], np.minimum(ax, bx),
-                             np.minimum(ay, by), np.maximum(ax, bx),
-                             np.maximum(ay, by), screen_x, screen_y,
-                             lambda g: idx.gedge_groups[g], self.scene)
+        return ingetrazo_core.linework_groups(self, screen_x, screen_y, True)
 
     def _pick_edge(self, screen_x: float, screen_y: float,
                    visible_only: bool, which: str = "sel", hidden=None,
@@ -10076,51 +7729,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return found[0] if found is not None else None
 
     def _pick_edge_d(self, screen_x, screen_y, visible_only, which, hidden):
-        import numpy as np
-        idx = self._pick_index(near="skip")
-        if idx.edge_a is None:
-            return None
-        ax, ay, oka = self._project_px(idx.edge_a)
-        bx, by, okb = self._project_px(idx.edge_b)
-        allowed = (idx.edge_sel if which == "sel"
-                   else getattr(idx, "edge_snap", idx.edge_sel))
-        ok = oka & okb & allowed
-        soft = getattr(idx, "edge_soft", None)
-        if (visible_only and soft is not None
-                and not getattr(self.scene, "show_hidden_geometry", False)):
-            ok &= ~soft
-        sp = _active_cut(self.scene)
-        if sp is not None:
-            n = np.array([sp.normal.x(), sp.normal.y(), sp.normal.z()])
-            c = float(n @ [sp.point.x(), sp.point.y(), sp.point.z()])
-            da = idx.edge_a @ n - c
-            db = idx.edge_b @ n - c
-            ok &= ~((da > 1e-6) & (db > 1e-6))
-        if not ok.any():
-            return None
-        dx, dy = bx - ax, by - ay
-        l2 = dx * dx + dy * dy
-        safe = np.where(l2 > 1e-12, l2, 1.0)
-        t = np.clip(((screen_x - ax) * dx + (screen_y - ay) * dy) / safe,
-                    0.0, 1.0)
-        d = np.hypot(ax + t * dx - screen_x, ay + t * dy - screen_y)
-        d = np.where(ok, d, np.inf)
-        if not visible_only:
-            i = int(np.argmin(d))
-            return ((idx.edges[i], float(d[i]))
-                    if d[i] < self.pick_threshold_px else None)
-        hidden = hidden or self._is_occluded
-        # Nearest first, skipping the ones hidden behind the model; a few
-        # tries are plenty (the threshold holds only a handful).
-        for i in np.argsort(d)[:8]:
-            i = int(i)
-            if not d[i] < self.pick_threshold_px:
-                return None
-            e = idx.edges[i]
-            p = self.edge_point_under_cursor(e, screen_x, screen_y)
-            if p is None or not hidden(p):
-                return e, float(d[i])
-        return None
+        return ingetrazo_core.pick_edge_distance(self, screen_x, screen_y, visible_only, which, hidden)
 
     def pick_dimension(self, screen_x: float, screen_y: float):
         """Return the dimension whose lines (extension + dimension line) are
@@ -12284,7 +9893,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         many_spans = len(spans) > 64
         blo, bhi = blo[sel], bhi[sel]
         # The box prefilter _ray_hits applies, in both its regimes: the
-        # vectorised slab past 64 spans, ``_ray_aabb`` (with its tolerance
+        # batched slab past 64 spans, a scalar slab (with its tolerance
         # for a ray parallel to an axis) below — they differ on exactly
         # those rays, the standard views'.
         with np.errstate(divide="ignore", invalid="ignore"):

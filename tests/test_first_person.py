@@ -7,18 +7,10 @@ or left) turns the head.
 """
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
 import pytest
-from PySide6.QtCore import QPoint, Qt
-from PySide6.QtGui import QAction
+from core.input_types import QPoint, Qt
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication
-
-_app = QApplication.instance() or QApplication([])
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 from tools import walkthrough as wt
 from tools.walkthrough import FirstPersonTool, WalkTool
@@ -41,23 +33,16 @@ def _room(vp):
                        QVector3D(a.x(), a.y(), 3.0)])
     vp.scene.version += 1
     vp.update()
-    _app.processEvents()
 
 
 @pytest.fixture
-def win():
-    from views.main_window import MainWindow
-    w = MainWindow()
-    w.show()
-    w.resize(1200, 800)
-    _app.processEvents()
+def win(native_host):
+    w = native_host.window
     _room(w.viewport)
     # Standing in the middle of the room, looking north (+Y).
     w.viewport.camera.perspective = True
     w.viewport.camera.look_from(QVector3D(3, 3, 1.68), QVector3D(0, 1, 0))
-    yield w
-    w._saved_version = w.viewport.scene.version
-    w.close()
+    return w
 
 
 def _tool(win) -> FirstPersonTool:
@@ -147,34 +132,17 @@ def test_walking_keeps_the_eye_height_over_the_floor(win):
 
 # ---- Keys through the viewport ----------------------------------------------------
 
-def _fired(win, key, press_only=False):
-    """Names of the QActions a keystroke on the viewport fires."""
-    names = []
-    for action in win.findChildren(QAction):
-        action.triggered.connect(
-            lambda _c=False, n=action.text(): names.append(n))
-    if press_only:
-        QTest.keyPress(win.viewport.keys_stand_in, key)
-    else:
-        QTest.keyClick(win.viewport.keys_stand_in, key)
-    _app.processEvents()
-    return names
-
-
-def _warm_up(win):
-    """The first keystroke a freshly shown offscreen window gets is dropped
-    before the shortcut map sees it (tests/test_shortcuts.py)."""
-    QTest.keyClick(win.viewport.keys_stand_in, Qt.Key_F1)
-    _app.processEvents()
+def _press(win, key, pressed=True, modifiers=0):
+    win._host.key(pressed, key, modifiers, chr(key).lower())
 
 
 def test_wasd_move_you_instead_of_switching_tools(win):
     tool = _tool(win)
-    _warm_up(win)
     for key in (Qt.Key_W, Qt.Key_A, Qt.Key_S, Qt.Key_D, Qt.Key_Q, Qt.Key_E):
-        assert _fired(win, key, press_only=True) == []
+        _press(win, key)
+        assert win.viewport.active_tool is tool
         assert key in tool.held
-        QTest.keyRelease(win.viewport.keys_stand_in, key)
+        _press(win, key, False)
         assert key not in tool.held
     assert win.viewport.active_tool is tool
     assert not tool.moving
@@ -182,18 +150,17 @@ def test_wasd_move_you_instead_of_switching_tools(win):
 
 def test_holding_a_key_runs_the_timer(win):
     tool = _tool(win)
-    _warm_up(win)
-    QTest.keyPress(win.viewport.keys_stand_in, Qt.Key_W)
+    _press(win, Qt.Key_W)
     assert tool.moving and tool._timer.isActive()
-    QTest.keyRelease(win.viewport.keys_stand_in, Qt.Key_W)
+    _press(win, Qt.Key_W, False)
     assert not tool._timer.isActive()
 
 
 def test_the_letters_still_switch_tools_from_walk(win):
     win._activate_tool("walk")
     assert isinstance(win.viewport.active_tool, WalkTool)
-    _warm_up(win)
-    assert "Follow Me" in _fired(win, Qt.Key_W)
+    _press(win, Qt.Key_W)
+    assert win.viewport.active_tool is win._tools["followme"]
 
 
 def test_ctrl_shortcuts_still_work_in_first_person(win):
@@ -201,30 +168,22 @@ def test_ctrl_shortcuts_still_work_in_first_person(win):
     bare letters are claimed. Ctrl+A — Select All — stands in for them here
     because it opens no dialog."""
     tool = _tool(win)
-    _warm_up(win)
-    names = []
-    for action in win.findChildren(QAction):
-        action.triggered.connect(
-            lambda _c=False, n=action.text(): names.append(n))
-    QTest.keyClick(win.viewport.keys_stand_in, Qt.Key_A, Qt.ControlModifier)
-    _app.processEvents()
+    _press(win, Qt.Key_A, modifiers=Qt.ControlModifier.value)
     assert Qt.Key_A not in tool.held
-    assert "Select All" in names
+    assert set(win.viewport.scene.mesh.faces).issubset(win.viewport.scene.selection)
 
 
 def test_losing_focus_stops_you(win):
     tool = _tool(win)
-    _warm_up(win)
-    QTest.keyPress(win.viewport.keys_stand_in, Qt.Key_W)
+    _press(win, Qt.Key_W)
     assert tool.moving
-    tool.on_focus_out(win.viewport)
+    win._host.focus(False)
     assert not tool.moving and not tool._timer.isActive()
 
 
 def test_leaving_the_tool_stops_you(win):
     tool = _tool(win)
-    _warm_up(win)
-    QTest.keyPress(win.viewport.keys_stand_in, Qt.Key_W)
+    _press(win, Qt.Key_W)
     win._activate_tool("select")
     assert not tool.moving and not tool._timer.isActive()
 
@@ -236,14 +195,15 @@ def test_a_drag_turns_the_head_and_keeps_the_eye(win, button):
     vp = win.viewport
     _tool(win)
     eye = vp.camera.eye()
-    c = QPoint(600, 400)
-    QTest.mousePress(vp.keys_stand_in, button, Qt.NoModifier, c)
-    QTest.mouseMove(vp.keys_stand_in, QPoint(900, 400))                # drag right…
+    btn = button.value
+    host = win._host
+    host.pointer("press", 200, 300, btn, btn)
+    host.pointer("move", 500, 300, held=btn)
     f = vp.camera.forward()
-    assert f.x() > 0.1                                   # …looks right (east)
-    QTest.mouseMove(vp.keys_stand_in, QPoint(900, 200))                # drag up…
-    assert vp.camera.forward().z() > f.z() + 0.1        # …looks up
-    QTest.mouseRelease(vp.keys_stand_in, button, Qt.NoModifier, QPoint(900, 200))
+    assert f.x() > 0.1
+    host.pointer("move", 500, 100, held=btn)
+    assert vp.camera.forward().z() > f.z() + 0.1
+    host.pointer("release", 500, 100, btn)
     assert (vp.camera.eye() - eye).length() < 1e-4
     assert vp._look_drag is None
 
@@ -292,9 +252,8 @@ def test_right_click_opens_no_menu(win):
 
 # ---- Where it lives ------------------------------------------------------------------
 
-def test_first_person_sits_beside_walk_in_the_toolbar_and_camera_menu(win):
-    keys = [a.text() for a in win.toolbars["walkthrough"].actions()]
-    assert keys == ["Position Camera", "Walk", "Look Around", "First Person"]
-    assert win._tool_actions["first_person"].shortcut().isEmpty()
-
-
+def test_first_person_is_available_with_the_other_walkthrough_commands(win):
+    for name in ("position_camera", "walk", "look_around", "first_person"):
+        win._host.menu("tool:" + name)
+        assert win.viewport.active_tool is win._tools[name]
+    assert win._tool_actions["first_person"].portable_keys() == []
