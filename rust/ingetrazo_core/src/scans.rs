@@ -666,6 +666,24 @@ impl MeshScan {
             .collect())
     }
 
+    fn drawing_plane(&mut self, py: Python<'_>, extra: Vec<[f64; 3]>, hypot: &str) -> PyResult<Option<[[f64; 3]; 2]>> {
+        use crate::store::geometry::V3;
+        self.need(py, VERTS)?;
+        let points = self.pos[..self.n_listed].iter().chain(&extra).map(|&[x, y, z]| V3(x, y, z));
+        Ok(crate::store::drawing::drawing_plane(points, crate::hypot_of(hypot)?))
+    }
+
+    fn rebuild_plane(&mut self, py: Python<'_>, points: Vec<[f64; 3]>, cap: usize, hypot: &str) -> PyResult<Option<[[f64; 3]; 2]>> {
+        use crate::store::geometry::V3;
+        self.need(py, FACES)?;
+        let planes = self.fplanes().iter().map(|p| {
+            let [x, y, z] = p.o;
+            let [nx, ny, nz] = p.n;
+            (V3(x, y, z), V3(nx, ny, nz))
+        });
+        Ok(crate::store::drawing::rebuild_plane(planes, &points, cap, crate::hypot_of(hypot)?))
+    }
+
     /// Faces whose own plane (first corner, unit Newell normal) passes
     /// within ``tol`` (+ slack) of every row of ``points`` (K, 3).
     fn faces_through(&mut self, py: Python<'_>, points: PyReadonlyArray2<'_, f64>, tol: f64) -> PyResult<Vec<u32>> {
