@@ -480,27 +480,9 @@ class LayersPanel(QWidget):
         # is the Delete key and the right-click menu, assigning is the
         # Layers toolbar's drop-down and the right-click menu.
 
-        # Back in the drawing, the rows picked here let go: a highlighted
-        # row left behind reads as a layer still being worked on.
-        QApplication.instance().focusChanged.connect(self._on_focus_changed)
         for col in (COL_WEIGHT, COL_PRINT, COL_OPACITY, COL_COUNT, COL_CUT):
             self.tree.setColumnHidden(col, True)
         self.refresh()
-
-    def _in_model(self, widget) -> bool:
-        """Whether ``widget`` is the drawing (or inside it)."""
-        vp = getattr(self._window, "viewport", None)
-        if vp is None or widget is None:
-            return False
-        display = getattr(vp, "keys_stand_in", None) or vp
-        return widget is display or display.isAncestorOf(widget)
-
-    def _on_focus_changed(self, _old, new) -> None:
-        try:
-            if self._in_model(new):
-                self.tree.clearSelection()
-        except RuntimeError:                 # the panel is being torn down
-            pass
 
     def _header_icons(self) -> None:
         """The header's pencil, eye, padlock and target, in the palette's

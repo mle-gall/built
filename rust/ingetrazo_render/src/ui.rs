@@ -1076,6 +1076,10 @@ impl Ui {
                     self.ctx_menu = None;
                     self.strip.close_menus();
                     if let Some(col) = self.column.as_mut() {
+                        if !self.captured && button == egui::PointerButton::Primary && col.lens == Lens::Drawing {
+                            col.styles.clear_focus();
+                            col.highlighted = None;
+                        }
                         col.row_menu = None;
                         col.kind_menu = None;
                         col.head_menu = None;
@@ -2094,6 +2098,15 @@ impl Ui {
                                 let on_control = |p: Pos2| (n.expandable && tri.contains(p)) ||
                                     (n.eye >= 0 && eye_r.expand(2.0).contains(p)) ||
                                     (n.lock >= 0 && lock_r.expand(2.0).contains(p));
+                                if drawing_row {
+                                    for (lock, state, slot, verb) in [(false, n.eye, eye_r, "eye"), (true, n.lock, lock_r, "lock")] {
+                                        if state < 0 { continue; }
+                                        let hit = ui.interact(slot, resp.id.with(verb), Sense::click_and_drag());
+                                        if hit.contains_pointer() && ui.input(|i| i.pointer.primary_pressed()) {
+                                            actions.push(col.styles.state_action(n, lock).unwrap_or_else(|| format!("{verb}\u{1f}{}", n.key)));
+                                        }
+                                    }
+                                }
                                 let drag_started = resp.drag_started() &&
                                     !ui.input(|i| i.pointer.press_origin().is_some_and(on_control));
                                 if drawing_row {
@@ -2115,6 +2128,8 @@ impl Ui {
                                     if col.lens==Lens::Drawing && n.cells.len()<7 && !n.key.starts_with("preview-folder:") {col.styles.clear_focus();}
                                     if n.expandable && tri.contains(p) {
                                         actions.push(format!("toggle\u{1f}{}", n.key));
+                                    } else if drawing_row && on_control(p) {
+                                        // Drawing controls own their gesture from the press onward.
                                     } else if n.eye >= 0 && eye_r.expand(2.0).contains(p) {
                                         let edit = (col.lens == Lens::Drawing).then(|| col.styles.state_action(n, false)).flatten();
                                         actions.push(edit.unwrap_or_else(|| format!("{}\u{1f}{}", if n.local_placement { "roweye" } else { "eye" }, n.key)));
@@ -3566,4 +3581,42 @@ fn drawing_lock_and_visibility_address_the_selected_tags() {
         assert_eq!(patch[field], expected);
         assert!(col.styles.state_action(&col.nodes[2], lock).is_none());
     }
+}
+
+#[test]
+fn drawing_controls_own_press_drag_and_double_click_and_release_focus_to_model() {
+    let Some(mut ui) = test_chrome() else { return };
+    ui.ctx = test_context();
+    let rows = |visible: bool| ["Walls", "Doors", "Other"].map(|name| {
+        let mut text = vec![String::new(); 22];
+        text[0] = format!("preview-tag:{name}");
+        text[1] = name.into();
+        text[10] = name.into();
+        (text, vec![0, 0, 0, 0, 6, i64::from(visible), 0])
+    }).to_vec();
+    ui.set_tree(rows(true), 0);
+    ui.set_lens(1);
+    for _ in 0..3 { tree_frame(&mut ui, vec![]); }
+    let col = ui.column.as_mut().unwrap();
+    col.styles.pick(&col.nodes[0], false);
+    col.styles.pick(&col.nodes[1], true);
+    let at = tree_frame(&mut ui, vec![]);
+    let eye = pos2(at["Name"].x - 26., at["Walls"].y);
+    let set_visible = |value| format!("tree:tagstate\x1f{}", serde_json::json!({"tags":["Doors","Walls"], "visible":value}));
+    assert_eq!(tree_drag(&mut ui, eye, at["Other"]), [set_visible(false)]);
+    for visible in [false, true] {
+        ui.set_tree(rows(visible), 0);
+        tree_frame(&mut ui, vec![]);
+        tree_click(&mut ui, eye, egui::PointerButton::Primary);
+        assert_eq!(ui.take_actions(), [set_visible(!visible)]);
+        let col = ui.column.as_ref().unwrap();
+        assert!(col.styles.selected(&col.nodes[0]) && col.styles.selected(&col.nodes[1]));
+        assert!(!col.styles.selected(&col.nodes[2]) && col.renaming.is_none());
+    }
+    ui.hit.push(Rect::from_center_size(eye, vec2(24., 24.)));
+    assert!(ui.pointer("press", eye.x, eye.y, 1, 0));
+    ui.pointer("release", eye.x, eye.y, 1, 0);
+    assert!(ui.column.as_ref().unwrap().styles.active());
+    assert!(!ui.pointer("press", 300., 400., 1, 0));
+    assert!(!ui.column.as_ref().unwrap().styles.active());
 }
