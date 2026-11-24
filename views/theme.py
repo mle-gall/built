@@ -10,7 +10,7 @@ _HIGHLIGHT = QColor(42, 93, 143)
 
 def brand_tint(dark: bool) -> QColor:
     """The IngeTrazo blue as a translucent wash over a see-through chrome
-    (views.mac_glass). On the dark theme a deep, nearly black navy of that
+    (the Liquid Glass chrome). On the dark theme a deep, nearly black navy of that
     blue: the blue itself lightened the chrome to a slate, and a lighter
     navy still read too light (Maxence, 07-11). On the light theme only a
     trace of it — the light chrome stays neutral."""
@@ -22,7 +22,7 @@ def brand_tint(dark: bool) -> QColor:
 
 
 def glass_tint(dark: bool) -> QColor:
-    """The tint of the Liquid Glass panels (views.mac_glass): on the dark
+    """The tint of the Liquid Glass panels: on the dark
     theme the chrome's navy, so the panels stay as dark as the bar under
     them; none on the light one."""
     return QColor(6, 14, 28, 150) if dark else QColor(0, 0, 0, 0)
@@ -158,10 +158,8 @@ def tokens() -> dict[str, str]:
     return {"muted": "#8a94a0",
             # The text colour as an rgb triple, for veils: rgba({ink_rgb}, 30).
             "ink_rgb": "255, 255, 255",
-            "tab_close": _glyph("close", True),
-            "combo_arrow": _glyph("updown", True),
-            "spin_up": _glyph("up", True),
-            "spin_down": _glyph("down", True),
+            # Glass chrome glyphs: none (the Liquid Glass widgets are gone).
+            "tab_close": "", "combo_arrow": "", "spin_up": "", "spin_down": "",
             # The desktop's own accent: what macOS menus highlight with.
             "system_accent_rgb": _rgb(_system_accent
                                       if _system_accent is not None
@@ -173,13 +171,6 @@ def tokens() -> dict[str, str]:
 
 def _rgb(c: QColor) -> str:
     return f"{c.red()}, {c.green()}, {c.blue()}"
-
-
-def _glyph(kind: str, dark: bool) -> str:
-    """A glyph of the glass chrome (views.mac_glass), as a path a
-    stylesheet can name; empty where that chrome is not in use."""
-    from views import mac_glass
-    return mac_glass.glyph(kind, dark) if mac_glass.enabled() else ""
 
 
 def style(widget, template: str) -> None:

@@ -105,11 +105,8 @@ def resolve_language(choice: str | None) -> str:
     :data:`SYSTEM` (or no choice yet) the operating system's."""
     if choice and str(choice) != SYSTEM:
         return str(choice)
-    from app_shell.native import _shell
-    if _shell is not None:
-        return language_for_locales(_shell.preferred_languages())
-    from PySide6.QtCore import QLocale
-    return language_for_locales(QLocale.system().uiLanguages())
+    from ingetrazo_render import preferred_languages
+    return language_for_locales(preferred_languages())
 
 
 def set_language(lang: str) -> None:

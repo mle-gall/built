@@ -23,7 +23,6 @@ mod menu;
 #[cfg(target_os = "macos")]
 mod menu_commands;
 mod native;
-mod platform_paths;
 mod python;
 mod script;
 

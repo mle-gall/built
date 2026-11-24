@@ -1,4 +1,6 @@
-//! Platform locations used by native recovery and file dialogs.
+//! Platform locations used by native recovery and file dialogs, and the
+//! user's languages: the same answers in the `built` binary (`built_shell`)
+//! and in any Python that imports `ingetrazo_render`.
 use pyo3::prelude::*;
 use std::{env, path::PathBuf};
 

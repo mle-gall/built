@@ -5,10 +5,8 @@
 //! The handlers in `views/` and `tools/` call `event.position()`,
 //! `button()`, `buttons()`, `modifiers()`, `key()`, `text()`,
 //! `angleDelta()`, `pixelDelta()`, `phase()`… These value objects answer
-//! those calls with the types of `core.input_types` (Qt's own under PySide,
-//! the native point classes and input codes in the `built` binary). No
-//! QEvent is constructed: a QMouseEvent needs a QPointingDevice, which needs
-//! a real platform.
+//! those calls with the types of `core.input_types`: the native point
+//! classes and input codes.
 use pyo3::{exceptions::PyKeyError, prelude::*};
 
 fn types(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {

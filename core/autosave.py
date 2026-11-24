@@ -19,34 +19,19 @@ from __future__ import annotations
 
 import hashlib
 import os
-import sys
 from formats import built
 from pathlib import Path
 
 
 def _app_data_base() -> Path:
-    """The per-user data folder the slots live under.
-
-    On Windows the base is built from the process's ``APPDATA`` variable
-    whenever one is set (#1180): ``QStandardPaths`` resolves the roaming
-    folder through the OS and never looks at the variable, so a caller
-    that points ``APPDATA`` somewhere else — the test suite points it at
-    a sandbox — still wrote its slots into the real profile. The
-    ``org/app`` suffix Qt appends is kept, so a normal run (whose
-    ``APPDATA`` IS the roaming folder) lands exactly where it always has.
-    The suffix is the organization and application name ``main.py``
-    registers — asked of ``QCoreApplication`` instead, a caller that
-    never set them (a test runner) would get a name derived from
-    ``argv[0]`` and a different folder again.
-    """
-    from app_shell.native import _shell
-    if _shell is not None:
-        return Path(_shell.recovery_directory(os.environ.get("BUILT_SETTINGS_DIR")) or Path.home() / ".ingetrazo")
-    if sys.platform == "win32" and os.environ.get("APPDATA"):
-        return Path(os.environ["APPDATA"]) / "IngeTrazo" / "IngeTrazo"
-    from PySide6.QtCore import QStandardPaths
-    return Path(QStandardPaths.writableLocation(
-        QStandardPaths.AppDataLocation) or str(Path.home() / ".ingetrazo"))
+    """The per-user data folder the slots live under
+    (``ingetrazo_render.recovery_directory``): the profile's ``data`` folder
+    with ``BUILT_SETTINGS_DIR``, else the platform's (on Windows the
+    process's ``APPDATA`` whenever one is set, #1180), with the
+    ``IngeTrazo/IngeTrazo`` suffix earlier versions used."""
+    from ingetrazo_render import recovery_directory
+    found = recovery_directory(os.environ.get("BUILT_SETTINGS_DIR") or None)
+    return Path(found) if found else Path.home() / ".ingetrazo"
 
 
 def autosave_dir() -> Path:

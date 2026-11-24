@@ -2026,59 +2026,18 @@ fn install(win: &Bound<'_, PyAny>) -> PyResult<()> {
         let (w, t) = (win.clone().unbind(), t.to_owned());
         func(py, move |py, _a| Ok(lib(py)?.call_method1("open_library", (w.bind(py), &t))?.unbind()))
     };
-    if win.getattr("__dict__")?.contains("_command_store")? {
-        let actions = PyDict::new(py);
-        for p in lib(py)?.getattr("PROVIDERS")?.try_iter()? {
-            let p = p?;
-            if p.getattr("ready")?.is_truthy()? {
-                let id: String = p.getattr("id")?.extract()?;
-                let a = crate::shell_commands::make(win, &p.getattr("label")?, Some(opener(&id)?), None, false, false)?;
-                actions.set_item(&id, a)?;
-            }
-        }
-        win.setattr("_lib_actions", actions)?;
-        let comp = crate::shell_commands::make(win, &s(py, "Components"), Some(opener("components")?), None, false, false)?;
-        win.setattr("_act_library_components", comp)?;
-        return Ok(());
-    }
-    // The Classic window: QActions under Window › Library.
-    let qt_gui = py.import("PySide6.QtGui")?;
-    let qaction = qt_gui.getattr("QAction")?;
-    let mut menu = None;
-    for a in win.call_method0("menuBar")?.call_method0("actions")?.try_iter()? {
-        let a = a?;
-        let m = a.call_method0("menu")?;
-        let text: String = a.call_method0("text")?.extract()?;
-        if !m.is_none() && matches!(text.replace('&', "").as_str(), "Window" | "Ventana") {
-            menu = Some(m);
-            break;
-        }
-    }
-    // The native shell's window is not a QObject: the actions then have no
-    // parent and are kept alive on the window instead.
-    let owner = if win.is_instance(&py.import("PySide6.QtCore")?.getattr("QObject")?)? { win.clone() } else { py.None().into_bound(py) };
-    let acts = PyDict::new(py);
+    let actions = PyDict::new(py);
     for p in lib(py)?.getattr("PROVIDERS")?.try_iter()? {
         let p = p?;
-        if !p.getattr("ready")?.is_truthy()? {
-            continue;
-        }
-        let id: String = p.getattr("id")?.extract()?;
-        let act = qaction.call1((p.getattr("label")?, &owner))?;
-        act.getattr("triggered")?.call_method1("connect", (opener(&id)?,))?;
-        acts.set_item(&id, act)?;
-    }
-    if let Some(menu) = menu {
-        let sub = menu.call_method1("addMenu", ("Library",))?;
-        for act in acts.values().iter() {
-            sub.call_method1("addAction", (act,))?;
+        if p.getattr("ready")?.is_truthy()? {
+            let id: String = p.getattr("id")?.extract()?;
+            let a = crate::shell_commands::make(win, &p.getattr("label")?, Some(opener(&id)?), None, false, false)?;
+            actions.set_item(&id, a)?;
         }
     }
-    let comp = qaction.call1(("Components", &owner))?;
-    comp.call_method1("setToolTip", ("Components: the Library's components, to place",))?;
-    comp.getattr("triggered")?.call_method1("connect", (opener("components")?,))?;
+    win.setattr("_lib_actions", actions)?;
+    let comp = crate::shell_commands::make(win, &s(py, "Components"), Some(opener("components")?), None, false, false)?;
     win.setattr("_act_library_components", comp)?;
-    win.setattr("_lib_actions", acts)?;
     Ok(())
 }
 

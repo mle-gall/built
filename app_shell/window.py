@@ -10,8 +10,6 @@ import ingetrazo_render as native
 import sys
 
 from core.input_types import NATIVE, QEvent, Qt
-if not NATIVE:
-    from PySide6.QtCore import QObject
 
 from ingetrazo_render import shell_action as ShellAction
 from views.view_host import MISSING
@@ -316,7 +314,7 @@ def new_shell_window(host):
 from core.host_callbacks import Signal
 
 
-class ShellWindow(WindowDocumentCommands, object if NATIVE else QObject):
+class ShellWindow(WindowDocumentCommands):
     _extension_closed = Signal()
 
     def __init__(self, host, plugins=None):

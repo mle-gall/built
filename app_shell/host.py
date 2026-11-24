@@ -20,6 +20,7 @@ import traceback
 from pathlib import Path
 
 from app_shell import qt_host
+from core import timers as core_timers
 
 #: Qt cursor shape → winit CursorIcon name (rust/built_app/src/main.rs).
 _CURSORS = {
@@ -270,6 +271,7 @@ class Host:
         ``(frame_wanted, wake_in_ms or None, cursor or None, title or None)``."""
         qt_host.pump()
         self._guard("window timers", self.timers.run_due)
+        self._guard("hostless timers", core_timers.run_due)
         self.window._extension_menus.refresh(self.window)
         pending = self.window.__dict__.get("_pending_open")
         if pending and time.monotonic() >= pending.next_poll:
@@ -306,6 +308,7 @@ class Host:
         title, self._title = self._title, None
         wanted, self._frame_wanted = self._frame_wanted, False
         sooner(self.timers.next_ms())
+        sooner(core_timers.next_ms())
         return wanted, delay, cursor, title
 
     def extras(self):
@@ -369,6 +372,7 @@ class Host:
     def modal_frame(self):
         """A frame while a question or a job holds the loop (app_shell.modal)."""
         self._guard("window timers", self.timers.run_due)
+        self._guard("hostless timers", core_timers.run_due)
         if self._frame_wanted:
             self._frame_wanted = False
             self.frame()

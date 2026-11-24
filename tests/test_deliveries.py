@@ -217,7 +217,6 @@ def test_svg_sheet_previews_the_page_it_writes(one_off, tmp_path, monkeypatch):
     win = SimpleNamespace(viewport=viewport, _doc=SimpleNamespace(stand_in=view))
     callbacks = []
     monkeypatch.setattr(QTimer, "singleShot", lambda delay, fn: callbacks.append(fn))
-    monkeypatch.setattr(sheet, "_arm_watchdog", lambda *args: None)
 
     form = dock.delivery_export_form(win, one_off=one_off)
     sid = "export" if one_off else "delivery"

@@ -50,6 +50,12 @@ from __future__ import annotations
 from formats import built
 import logging
 
+# Forms, questions and jobs for extensions (docs/plugins.md). The old
+# module names ``views.chrome_forms`` / ``views.chrome_dialogs`` still
+# resolve (views/__init__.py) but are deprecated.
+from ingetrazo_render import chrome_dialogs, chrome_forms  # noqa: F401
+from ingetrazo_render.chrome_dialogs import Job  # noqa: F401
+
 log = logging.getLogger("ingetrazo.plugins")
 
 API_VERSION = 2
