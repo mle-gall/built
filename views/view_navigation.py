@@ -56,16 +56,7 @@ class ViewNavigation:
         self.setCursor(Qt.BlankCursor)
 
     def _look_move(self, ev) -> None:
-        button, last = self._look_drag
-        p = ev.position().toPoint()
-        dx, dy = p.x() - last.x(), p.y() - last.y()
-        if dx or dy:
-            self.active_tool.on_look(self, dx, dy)
-        if (dx or dy) and self._can_warp_pointer():
-            from PySide6.QtGui import QCursor
-            QCursor.setPos(self.mapToGlobal(last))
-            p = last
-        self._look_drag = (button, p)
+        return ingetrazo_render.look_move(self, ev)
 
     def _world_under_cursor(self, x: float, y: float) -> Optional[QVector3D]:
         return ingetrazo_render.cursor_world(self, x, y)

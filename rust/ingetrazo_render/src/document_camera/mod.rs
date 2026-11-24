@@ -6,6 +6,7 @@ mod depth;
 mod navigation;
 mod planes;
 mod projection;
+mod surface;
 
 fn xy(o: &Obj) -> PyResult<(f64, f64)> {
     Ok((
@@ -26,5 +27,6 @@ pub(crate) fn register(m: &Bound<PyModule>) -> PyResult<()> {
     planes::register(m)?;
     depth::register(m)?;
     projection::register(m)?;
+    surface::register(m)?;
     navigation::register(m)
 }

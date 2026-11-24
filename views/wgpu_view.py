@@ -77,6 +77,7 @@ def _tool_frame(method):
     return handle
 
 
+import ingetrazo_render
 from views.view_navigation import ViewNavigation
 
 
@@ -1491,14 +1492,7 @@ class MetalView(ViewNavigation):
         self.last = event.position()
         mode = getattr(self.source_viewport, 'nav_mode', None)
         if self._drag_nav and mode != 'zoom_window':
-            if mode == 'zoom':
-                self.camera.zoom(-delta.y()*.035)
-            elif mode == 'pan' or event.modifiers() & Qt.ShiftModifier:
-                depth = QVector3D.dotProduct(self._pivot-self.camera.eye(), self.camera.forward())
-                self.camera.pan(delta.x(), delta.y(), self.height(), depth=depth)
-            else:
-                dy = -delta.y() if getattr(self.source_viewport, '_invert_orbit_y', False) else delta.y()
-                self.camera.orbit_about(self._pivot, delta.x(), dy, self.height())
+            ingetrazo_render.camera_drag(self, mode, delta, bool(event.modifiers() & Qt.ShiftModifier))
         elif self.tools.sync() in ('tape', 'move', 'mesh'):
             self.hover(event.position().x(), event.position().y(), event.modifiers())
             self.tools.hover(event)
@@ -1775,16 +1769,7 @@ class MetalView(ViewNavigation):
         return point if seen == 'hit' else None
 
     def _orbit_pivot_at(self, x, y):
-        from views.document_interaction import _ray_aabb_span
-        seen, point = self._depth_world_at(x, y)
-        if seen == 'hit':
-            return point
-        origin, direction = self._pixel_to_ray(self.width()/2, self.height()/2)
-        lo, hi = self.packed.world_bounds
-        span = _ray_aabb_span(origin.toTuple(), direction.toTuple(), tuple(lo), tuple(hi))
-        if span is not None:
-            return origin + direction*((span[0]+span[1])*.5)
-        return QVector3D(self.camera.target)
+        return ingetrazo_render.metal_pivot(self, x, y)
 
     @_tool_frame
     def wheelEvent(self, event):

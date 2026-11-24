@@ -697,37 +697,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
     def _render_framed_image(self, width_px, overlays, annotations_only,
                              sharp_shadows, transparent, *, raster=False):
-        render = self.render_raster if raster else self.render_image
-        lw, lh = max(self.width(), 1), max(self.height(), 1)
-        from core.camera import frame_rect
-        rect = frame_rect(lw, lh, getattr(self.camera, "frame_aspect",
-                                           None))
-        if rect is not None and (rect[2] < lw - 0.5
-                                 or rect[3] < lh - 0.5):
-            fx, fy, fw, fh = rect
-            aspect = self.camera.frame_aspect
-            out_w = max(int(width_px), 64)
-            out_h = max(int(round(out_w / aspect)), 1)
-            full = render(
-                max(int(round(out_w * lw / fw)), 64), None, overlays,
-                annotations_only, sharp_shadows, transparent, False)
-            if full is None:
-                return None
-            if raster:
-                return full.frame_region((fx / lw, fy / lh, fw / lw, fh / lh), out_w, out_h)
-            sx = full.width() / lw
-            sy = full.height() / lh
-            x = int(round(fx * sx))
-            y = int(round(fy * sy))
-            w = min(int(round(fw * sx)), full.width() - x)
-            h = min(int(round(fh * sy)), full.height() - y)
-            image = full.copy(x, y, w, h)
-            if (image.width(), image.height()) != (out_w, out_h):
-                image = image.scaled(out_w, out_h, Qt.IgnoreAspectRatio,
-                                     Qt.SmoothTransformation)
-            return image
-        return render(width_px, None, overlays, annotations_only,
-                                 sharp_shadows, transparent, False)
+        return ingetrazo_render.framed_image(self, width_px, overlays, annotations_only, sharp_shadows, transparent, raster)
 
     def _configure_surface(self):
         pass
@@ -826,30 +796,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         ingetrazo_render.init_document_interaction(self)
         if not NATIVE:
             _AltWatch.watch(self)
-        self._invert_wheel = _load_invert_wheel()
-        self._invert_orbit_y = _load_invert_orbit_y()
-        from ingetrazo_render import trackpad_nav
-        self._trackpad_slide = trackpad_nav.load_slide_mode()
-        # Camera navigation state (middle button)
-        self._last_pos = None
-        self._pan_mode = False
-        self._middle_drag_active = False
-        #: where the current orbit gesture turns (#164); None = the target
-        self._orbit_pivot = None
-        # A mouse-look drag for a tool with ``on_look`` (First Person):
-        # (button, last local point) while a button is held, else None.
-        self._look_drag = None
-        # Navigation mode for trackpad users with no middle
-        # mouse button: when set ("orbit" / "pan"), a left-drag drives the
-        # camera instead of the active tool. None means a drawing tool is in
-        # charge of the left button.
-        self.nav_mode: Optional[str] = None
-
-        # Zoom Window rubber-band (nav_mode == "zoom_window").
-        self._zoom_box_active = False
-        self._zoom_box_start: Optional[QPointF] = None
-        self._zoom_box_cur: Optional[QPointF] = None
-
+        ingetrazo_render.init_navigation(self)
 
     def _fb_size(self) -> tuple[int, int]:
         """Framebuffer pixel size (logical size × device pixel ratio)."""
@@ -863,14 +810,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         _axes.sync(getattr(self.scene, "drawing_frame", None))
 
     def _sync_projection(self) -> None:
-        """Tell the quick buttons when the projection changed. Scenes,
-        saved views, the geo path and the composer all set the camera's
-        fields directly, so the check runs on every paint: whatever set
-        it, the next frame shows it and the buttons follow."""
-        mode = self.camera.projection_mode()
-        if mode != getattr(self, "_shown_projection", None):
-            self._shown_projection = mode
-            self.projectionChanged.emit(mode)
+        return ingetrazo_render.synced_projection(self)
 
     def _sync_depth_reach(self) -> None:
         return ingetrazo_render.sync_reach(self)
@@ -2175,16 +2115,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return ingetrazo_render.apply_tool_cursor(self)
 
     def _apply_nav_cursor(self) -> None:
-        """The pointer for a camera nav mode: orbit / pan / the magnifier
-        (each navigation tool shows its own icon)."""
-        if self.nav_mode in ("orbit", "pan", "zoom", "zoom_window"):
-            cur = self._pointer_for_tool(self.nav_mode)
-            if cur is not None:
-                self.setCursor(cur)
-                return
-            self.setCursor(Qt.CrossCursor
-                           if self.nav_mode in ("zoom", "zoom_window")
-                           else Qt.OpenHandCursor)
+        return ingetrazo_render.nav_cursor(self)
 
     # ---- Copy / paste -------------------------------------------------------
     def copy_selection(self, *, publish=True) -> bool:
