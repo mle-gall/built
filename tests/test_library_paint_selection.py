@@ -116,12 +116,13 @@ def test_next_stroke_uses_the_current_revision_of_a_library_pick(win):
     from tests.test_tree_links import _View
     win.viewport = vp = _FakeViewport()
     view = _View()
+    face = _quad(vp.scene.mesh, 4)
     _model_paint(win, "Azul", (.1,.4,.9))
     library.edit_field(win, view, "opacity:Azul", "62")
     assert PaintTool.current_opacity == pytest.approx(.62)
-    face = _quad(vp.scene.mesh, 1)
     _click(vp, face)
     assert face.attrs["opacity"] == pytest.approx(.62)
     assert vp.history.undo() and vp.history.undo()
+    face = next(f for f in vp.scene.mesh.faces if f.key == face.key)
     _click(vp, face)
     assert face.attrs.get("opacity", 1.) == 1.

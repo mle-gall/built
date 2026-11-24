@@ -68,8 +68,12 @@ class _Host:
         args = json.loads(args)
         if name == "paint_material":
             # Painting a closed, lazy group needs no topology or face count.
-            answer = run(self.vp.history, name, **args,
-                         _picked_placement=getattr(self.tool, "_container", None))
+            try:
+                answer = run(self.vp.history, name, **args,
+                             _picked_placement=getattr(self.tool, "_container", None))
+            except KeyError as error:
+                # Undo can invalidate a cached viewport pick between events.
+                return False, self.revision(), 0, str(error)
             return answer["ok"], self.revision(), 0, answer.get("error")
         if name == "add_guide":
             for key in ("point", "origin"):
