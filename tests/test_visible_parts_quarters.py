@@ -10,8 +10,8 @@ without a word to the progress bar. Under more than a few hundred covers
 the engine now cuts the face into quarters, each losing only the covers
 over it, and joins the pieces at the end. Here a ground under 900 tiles,
 slabs half above and half below it, and pieces that straddle the
-quarters' seams: what is left of each face must be what the Python pass
-leaves, and the ground one piece with its holes — not cut along the
+quarters' seams: what is left of each face must be what the retired Python
+pass left, and the ground one piece with its holes — not cut along the
 seams."""
 from __future__ import annotations
 
@@ -21,6 +21,7 @@ import pytest
 from core import _native
 from core import vista_caras as VC
 from core.vista_caras import FaceFill
+from tests import vista_caras_reference as R
 
 native = _native.available()
 pytestmark = pytest.mark.skipif(
@@ -64,18 +65,25 @@ def _key(out):
                    len(f.rings)) for f in out)
 
 
+def _key_py(rows):
+    return sorted((round(f["depth"], 6), round(f["net"], 7), f["rings"])
+                  for f in rows)
+
+
 def test_a_face_under_hundreds_of_covers_comes_out_whole_as_python_has_it():
-    py = VC._visible_parts_py(_scene())
+    """What the retired Python pass left of the same scene
+    (``tests/vista_caras_reference.py``, scene ``quarters``)."""
+    py = R.python_visible("quarters")
     rust = VC._visible_parts_native(_scene(), native)
     assert len(rust) == len(py)
-    ground_py = [f for f in py if f.depth == 0.0]
+    ground_py = [f for f in py if f["depth"] == 0.0]
     ground_rust = [f for f in rust if f.depth == 0.0]
     assert len(ground_py) == len(ground_rust) == 1
     # One outer contour with its holes, as Python has it: the quarters'
     # pieces joined again, no seam left.
-    assert len(ground_rust[0].rings) == len(ground_py[0].rings)
-    a_py = sum(VC._area(r) for r in ground_py[0].rings)
+    assert len(ground_rust[0].rings) == ground_py[0]["rings"]
+    a_py = ground_py[0]["net"]
     a_rust = sum(VC._area(r) for r in ground_rust[0].rings)
     assert abs(a_py - a_rust) < 1e-6, (a_py, a_rust)
-    for (d1, a1, n1), (d2, a2, n2) in zip(_key(rust), _key(py)):
+    for (d1, a1, n1), (d2, a2, n2) in zip(_key(rust), _key_py(py)):
         assert d1 == d2 and abs(a1 - a2) < 1e-6 and n1 == n2

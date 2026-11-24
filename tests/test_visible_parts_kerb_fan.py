@@ -26,6 +26,7 @@ import pytest
 from core import _native
 from core import vista_caras as VC
 from core.vista_caras import FaceFill
+from tests import vista_caras_reference as R
 
 FIXTURE = Path(__file__).resolve().parent / "data" / "plaza_kerb_fan.json"
 
@@ -57,8 +58,8 @@ def _faces():
 def test_the_kerb_under_the_fan_of_facets_finishes_as_python_does():
     faces = _faces()
     assert len(faces) == 62
-    py = [(f.depth, sum(VC._area(r) for r in f.rings))
-          for f in VC._visible_parts_py(faces)]
+    # What the retired Python pass left (tests/vista_caras_reference.py).
+    py = [(f["depth"], f["net"]) for f in R.python_visible("kerb")]
     try:
         done = subprocess.run(
             [sys.executable, "-c", CHILD, str(FIXTURE)], capture_output=True,

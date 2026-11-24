@@ -126,6 +126,9 @@ mod document_snap;
 mod annotation_geometry;
 mod view_culling;
 mod units;
+mod units_format;
+mod linetypes;
+mod pyfloat;
 mod value_field;
 mod inference_state;
 mod snap_curve;
@@ -475,6 +478,8 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(units::py_plain_marks, m)?)?;
     m.add_function(wrap_pyfunction!(units::py_parse, m)?)?;
     m.add_function(wrap_pyfunction!(units::py_parse_value_buffer, m)?)?;
+    units_format::register(m)?;
+    linetypes::register(m)?;
     m.add_function(wrap_pyfunction!(value_field::value_key, m)?)?;
     m.add_function(wrap_pyfunction!(value_field::value_enter, m)?)?;
     m.add_function(wrap_pyfunction!(value_field::py_zoom_enter, m)?)?;

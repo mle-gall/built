@@ -40,11 +40,8 @@ fn swatch_pattern(py: Python<'_>, f: &Fields, name: &str) -> PyResult<Vec<f64>> 
         return Ok(p);
     }
     let Some(Value::Str(lt)) = get("linetype") else { return Ok(Vec::new()) };
-    let table = py.import("core.layers")?.getattr("LINETYPES")?;
-    match table.call_method1("get", (lt,))? {
-        v if v.is_none() => Ok(Vec::new()),
-        v => v.extract(),
-    }
+    let _ = py;
+    Ok(crate::linetypes::builtin(&lt).map(<[f64]>::to_vec).unwrap_or_default())
 }
 
 /// Record the chip with the same layer-look painter as a cut ring in a frame.
@@ -428,7 +425,6 @@ pub fn frame_content(d: Option<&Bound<'_, pyo3::types::PyDict>>, key: crate::doc
     // The words of the line types that write some, along their edges and profiles.
     if let (Some(segs), Some(kinds), Some(tags), Some(fields)) = (&c.segs, &c.kinds, &c.tags, fields) {
         if c.styles.iter().any(|(_, st)| st.words.is_some()) && segs.len() == kinds.len() && segs.len() == tags.len() {
-            let text_marks = d.py().import("core.layers")?.getattr("text_marks")?;
             let mut p = super::paint::Painter::default();
             for (i, s) in segs.iter().enumerate() {
                 let kind = kinds[i];
@@ -437,7 +433,7 @@ pub fn frame_content(d: Option<&Bound<'_, pyo3::types::PyDict>>, key: crate::doc
                 }
                 let Some((_, st)) = c.styles.iter().find(|(n, _)| *n == tags[i]) else { continue };
                 let Some(words) = &st.words else { continue };
-                let marks: Vec<(f64, f64, f64)> = text_marks.call1(((s[0], s[1]), (s[2], s[3]), words.clone()))?.extract()?;
+                let marks = crate::linetypes::text_marks((s[0], s[1]), (s[2], s[3]), &words.0, words.1, words.2, words.3);
                 if marks.is_empty() {
                     continue;
                 }
