@@ -137,8 +137,7 @@ def attach(view) -> None:
     win = _window(view)
     if win is None:
         return
-    view._ui_timer = QTimer(view, singleShot=True)
-    view._ui_timer.timeout.connect(view.update)
+    view._ui_timer = view._view_timer(view.update)
     renderer.ui_enable(FONT if os.path.exists(FONT) else None)
     from views import wgpu_library
     wgpu_library.install(win)
