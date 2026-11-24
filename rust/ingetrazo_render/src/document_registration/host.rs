@@ -256,10 +256,10 @@ const RENDER_STATICMETHOD: &[Entry] = &[
 ];
 
 pub(super) fn install(r: &Registrar, owner: &Obj) -> PyResult<()> {
-    r.install(owner, &r.core, Mode::Method, CORE_INSTANCE)?;
-    r.install(owner, &r.core, Mode::Static, CORE_STATICMETHOD)?;
-    r.install(owner, &r.render, Mode::Class, RENDER_CLASSMETHOD)?;
-    r.install(owner, &r.render, Mode::Method, RENDER_INSTANCE)?;
-    r.install(owner, &r.render, Mode::Static, RENDER_STATICMETHOD)?;
+    r.bindings.install(owner, &r.core, Mode::Method, CORE_INSTANCE)?;
+    r.bindings.install(owner, &r.core, Mode::Static, CORE_STATICMETHOD)?;
+    r.bindings.install(owner, &r.render, Mode::Class, RENDER_CLASSMETHOD)?;
+    r.bindings.install(owner, &r.render, Mode::Method, RENDER_INSTANCE)?;
+    r.bindings.install(owner, &r.render, Mode::Static, RENDER_STATICMETHOD)?;
     Ok(())
 }

@@ -33,7 +33,7 @@ const RENDER_INSTANCE: &[Entry] = &[
 ];
 
 pub(super) fn install(r: &Registrar, owner: &Obj) -> PyResult<()> {
-    r.install(owner, &r.core, Mode::Function, CORE_INSTANCE)?;
-    r.install(owner, &r.render, Mode::Function, RENDER_INSTANCE)?;
+    r.bindings.install(owner, &r.core, Mode::Function, CORE_INSTANCE)?;
+    r.bindings.install(owner, &r.render, Mode::Function, RENDER_INSTANCE)?;
     Ok(())
 }
