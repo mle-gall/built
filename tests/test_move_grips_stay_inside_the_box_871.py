@@ -11,7 +11,7 @@ box as projected on screen (GRIP_PX of margin around it), as in
 .skp — retention only: appearing still takes the pick."""
 from __future__ import annotations
 
-from PySide6.QtCore import QPointF, Qt
+from core.input_types import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.group import Group
@@ -71,8 +71,8 @@ class _Vp:
 
 def _ctx(vp, wx, wy, wz=1.0):
     return ToolContext(viewport=vp, world=V(wx, wy, wz),
-                       screen=QPointF(wx * 100.0, -wy * 100.0),
-                       modifiers=Qt.NoModifier, snap=None)
+                       screen=ScreenPoint(wx * 100.0, -wy * 100.0),
+                       modifiers=Input.NoModifier, snap=None)
 
 
 def _setup():

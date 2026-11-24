@@ -1,4 +1,4 @@
-"""Host behavior shared by scripted viewports, Qt and device connections."""
+"""Host behavior shared by scripted viewports and device connections."""
 from types import SimpleNamespace
 import struct
 
@@ -39,3 +39,18 @@ def test_context_pick_preserves_an_existing_selected_loose_edge():
     view.pick_group.assert_not_called()
     view.scene.select.assert_not_called()
     view.update.assert_not_called()
+
+
+def test_coalesced_hover_uses_the_native_shell_event_and_plugin_codes():
+    import pickle
+    from core.input_types import Input, Qt, ScreenPoint, Type
+    from ingetrazo_render import MouseEvent
+    from views.document_interaction import _HoverEvent
+
+    flags = Qt.ShiftModifier | Qt.ControlModifier
+    event = _HoverEvent(ScreenPoint(-4.25, 17.75), flags)
+    assert isinstance(event, MouseEvent)
+    assert event.type() is Type.MouseMove
+    assert (event.position().x(), event.position().y()) == (-4.25, 17.75)
+    assert isinstance(event.modifiers(), Input.KeyboardModifier)
+    assert pickle.loads(pickle.dumps(event.modifiers())) == flags

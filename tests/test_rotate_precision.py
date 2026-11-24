@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import math
 
-from PySide6.QtCore import QPointF, Qt
+from core.input_types import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.group import Group
@@ -64,8 +64,8 @@ class _Vp:
 
 def _ctx(vp, p, kind=None):
     snap = SnapResult(QVector3D(p), kind) if kind else None
-    return ToolContext(viewport=vp, world=QVector3D(p), screen=QPointF(0, 0),
-                       modifiers=Qt.NoModifier, snap=snap)
+    return ToolContext(viewport=vp, world=QVector3D(p), screen=ScreenPoint(0, 0),
+                       modifiers=Input.NoModifier, snap=snap)
 
 
 def _target():

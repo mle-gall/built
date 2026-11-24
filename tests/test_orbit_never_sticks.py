@@ -6,7 +6,7 @@ orbited the view, whatever tool was picked."""
 from __future__ import annotations
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from PySide6.QtCore import QPoint
+from core.input_types import PixelPoint
 
 
 def _window(native_host):
@@ -19,7 +19,7 @@ def test_picking_a_tool_ends_a_camera_drag(native_host):
     win = _window(native_host)
     vp = win.viewport
     vp.set_nav_mode("orbit")
-    vp._last_pos = QPoint(100, 100)
+    vp._last_pos = PixelPoint(100, 100)
     win._activate_tool("paint")
     assert vp.nav_mode is None and vp._last_pos is None
     # Leave no closed window holding Paint: until it is collected it sits

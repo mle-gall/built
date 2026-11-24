@@ -22,21 +22,17 @@ cycles through what lies there (line, the slab, the hatch's box…), the
 status bar naming it.
 
 The Metal cases run device-free: the ID pass is stood in for by the CPU ray
-test over the resident rows (``_front_at``). With QT_QPA_PLATFORM=cocoa on
-macOS the same cases run on the real Metal renderer too.
+test over the resident rows (``_front_at``). The GPU fixture also exercises the native ID pass.
 """
 from __future__ import annotations
 
-import importlib.util
 import math
-import os
-import sys
 
 import pytest
-from PySide6.QtCore import QPointF, Qt
+from core.input_types import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
 
+from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
 from core.group import Group
 from core.history import History
 from core.mesh import Edge, Mesh
@@ -44,12 +40,7 @@ from core.scene import Scene
 from tools.base import ToolContext
 from tools.rust_tools import SelectTool
 
-app = QApplication.instance() or QApplication([])
 V = QVector3D
-NATIVE = (importlib.util.find_spec("ingetrazo_render") is not None
-          and sys.platform == "darwin"
-          and os.environ.get("QT_QPA_PLATFORM") == "cocoa")
-
 ANGLES = {"top": (0.3, math.pi / 2 - .02), "oblique": (0.6, math.radians(45)),
           "low": (0.4, math.radians(18))}
 
@@ -91,10 +82,11 @@ def build(kind, dz=0.0, slab=True):
     return scene, pick, targets
 
 
-def _gl(scene):
+def _gl(scene, vp=None):
     from tests.controller_surface import ControllerSurface as Viewport
-    vp = Viewport()
-    vp.resize(800, 600)
+    if vp is None:
+        vp = Viewport(None)
+        vp.resize(800, 600)
     vp.scene = scene
     vp.history = History(scene)
     vp.flashed = []
@@ -124,14 +116,12 @@ class Metal:
     """The Metal view over the same document; ``native`` uses the real
     renderer's ID pass, otherwise the CPU ray test stands in for it."""
 
-    def __init__(self, scene, native=False):
-        from views.wgpu_view import WgpuView
+    def __init__(self, scene, host, native=False):
         from views.wgpu_inference import prepare
-        self.source = _gl(scene)
+        host.resize(800, 600, 1.)
+        self.source = _gl(scene, host.window.viewport)
         self.flashed = self.source.flashed
-        v = self.view = WgpuView()
-        v.setAttribute(Qt.WA_DontShowOnScreen)
-        v.resize(800, 600)
+        v = self.view = host.view
         v.source_viewport = self.source
         v.camera = self.source.camera
         self.camera = v.camera
@@ -157,14 +147,17 @@ class Metal:
         return self.view._world_to_pixel(p)
 
     def close(self):
-        self.view.renderer = None
-        self.view.close()
-        self.source.close()
+        # The host fixture owns the renderer and source viewport.
+        pass
 
 
-VIEWS = [pytest.param(GL, id="gl"), pytest.param(Metal, id="metal")]
-if NATIVE:
-    VIEWS.append(pytest.param(lambda s: Metal(s, native=True), id="metal-native"))
+@pytest.fixture(params=["document", "resident", "gpu"])
+def make(request):
+    if request.param == "document":
+        return GL
+    native = request.param == "gpu"
+    host = request.getfixturevalue("native_gpu_host" if native else "native_host")
+    return lambda scene: Metal(scene, host, native)
 
 
 def _aim(view, angle, distance=9.0):
@@ -179,9 +172,9 @@ def _aim(view, angle, distance=9.0):
         view.view._pick_frame_dirty = True
 
 
-def _click(view, tool, px, modifiers=Qt.NoModifier):
+def _click(view, tool, px, modifiers=Input.NoModifier):
     """What mouseReleaseEvent does for a click on either view."""
-    tool.on_click(ToolContext(view.picks, QVector3D(), QPointF(*px),
+    tool.on_click(ToolContext(view.picks, QVector3D(), ScreenPoint(*px),
                               modifiers, None))
     return set(view.picks.scene.selection)
 
@@ -195,7 +188,6 @@ CASES = [(kind, dz, angle)
          if not (dz < 0 and angle == "low")]
 
 
-@pytest.mark.parametrize("make", VIEWS)
 @pytest.mark.parametrize("kind,dz,angle", CASES)
 def test_a_line_on_a_grouped_face_takes_the_click(make, kind, dz, angle):
     scene, slab, targets = build(kind, dz)
@@ -214,7 +206,6 @@ def test_a_line_on_a_grouped_face_takes_the_click(make, kind, dz, angle):
         view.close()
 
 
-@pytest.mark.parametrize("make", VIEWS)
 @pytest.mark.parametrize("kind", ["loose", "hatch"])
 def test_a_line_well_under_the_face_does_not_steal_the_click(make, kind):
     scene, slab, targets = build(kind, -0.05)       # 5 cm under the slab
@@ -227,7 +218,6 @@ def test_a_line_well_under_the_face_does_not_steal_the_click(make, kind):
         view.close()
 
 
-@pytest.mark.parametrize("make", VIEWS)
 def test_between_the_lines_of_a_hatch_in_the_air_its_box_picks_it(make):
     scene, _slab_pick, (hatch,) = build("hatch", slab=False)
     view = make(scene)
@@ -242,7 +232,6 @@ def test_between_the_lines_of_a_hatch_in_the_air_its_box_picks_it(make):
         view.close()
 
 
-@pytest.mark.parametrize("make", VIEWS)
 def test_repeated_clicks_cycle_through_what_lies_under_the_cursor(make):
     scene, slab, (hatch,) = build("hatch")
     view = make(scene)
@@ -263,7 +252,6 @@ def test_repeated_clicks_cycle_through_what_lies_under_the_cursor(make):
         view.close()
 
 
-@pytest.mark.parametrize("make", VIEWS)
 def test_a_loose_line_cycles_to_the_group_and_back(make):
     scene, slab, lines = build("loose")
     view = make(scene)
@@ -279,7 +267,6 @@ def test_a_loose_line_cycles_to_the_group_and_back(make):
         view.close()
 
 
-@pytest.mark.parametrize("make", VIEWS)
 def test_without_the_repeat_a_click_picks_as_before(make):
     scene, slab, (hatch,) = build("hatch")
     view = make(scene)
@@ -296,8 +283,8 @@ def test_without_the_repeat_a_click_picks_as_before(make):
         scene.clear_selection()
         assert _click(view, tool, on) == {hatch}
         # Shift toggles the same pick, as it always did.
-        assert _click(view, tool, on, Qt.ShiftModifier) == set()
-        assert _click(view, tool, on, Qt.ShiftModifier) == {hatch}
+        assert _click(view, tool, on, Input.ShiftModifier) == set()
+        assert _click(view, tool, on, Input.ShiftModifier) == {hatch}
         # A plain click on the slab, away from the lines: the slab, and
         # only one candidate, so nothing to announce.
         before = len(view.flashed)
@@ -308,23 +295,21 @@ def test_without_the_repeat_a_click_picks_as_before(make):
         view.close()
 
 
-def test_metal_click_event_takes_the_hatch():
+def test_metal_click_event_takes_the_hatch(native_host):
     """Through the Metal view's own mouse events."""
-    from PySide6.QtCore import QPoint
-    from PySide6.QtTest import QTest
     scene, slab, (hatch,) = build("hatch")
-    view = Metal(scene)
+    view = Metal(scene, native_host)
     try:
         _aim(view, "top")
         x, y = view.pixel(V(2, 2.0, 0))
-        QTest.mouseClick(view.view, Qt.LeftButton, Qt.NoModifier,
-                         QPoint(round(x), round(y) + 3))
+        x, y = round(x), round(y) + 3
+        native_host.pointer("press", x, y, Input.LeftButton, Input.LeftButton)
+        native_host.pointer("release", x, y, Input.LeftButton)
         assert scene.selection == {hatch}
     finally:
         view.close()
 
 
-@pytest.mark.parametrize("make", VIEWS)
 def test_inside_an_open_group_its_hatch_beats_its_slab(make):
     """Editing a group holding a slab and a hatch lying on it: the hatch's
     line takes the click, the slab's face away from it takes the slab."""

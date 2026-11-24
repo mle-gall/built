@@ -13,18 +13,12 @@ from __future__ import annotations
 import math
 
 import pytest
-from PySide6.QtCore import QPointF, Qt
+from core.input_types import ScreenPoint, Input
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication
 
 
 @pytest.fixture(scope="module")
 def viewport():
-    app = QApplication.instance()
-    if app is None:
-        app = QApplication([])
-    elif not isinstance(app, QApplication):
-        pytest.skip("another Qt application flavour is already running")
     from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
     vp.resize(1000, 700)
@@ -66,7 +60,7 @@ def test_dragging_up_from_the_top_corner_goes_up(viewport):
     try:
         pa = vp._world_to_pixel(corner)
         assert pa is not None
-        vp._process_hover(QPointF(pa[0], pa[1] - 120), Qt.NoModifier)
+        vp._process_hover(ScreenPoint(pa[0], pa[1] - 120), Input.NoModifier)
         snap = vp.last_snap
         assert snap is not None
         assert snap.kind == "axis"
