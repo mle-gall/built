@@ -222,22 +222,6 @@ def mark_icon(key: str, inherited: bool = False) -> QIcon:
     return _faded(icon) if inherited else icon
 
 
-def inherited_states(groups) -> dict:
-    """``{id(group): (hidden_by, locked_by)}`` — the nearest group around
-    each one that is hidden, and that is locked (``None`` when none). What
-    a closed group does to what it holds, which the rows show faded."""
-    out: dict = {}
-
-    def walk(items, hid, lock):
-        for g in items or ():
-            out[id(g)] = (hid, lock)
-            walk(getattr(g, "children", None),
-                 g if g.hidden else hid,
-                 g if getattr(g, "locked", False) else lock)
-    walk(groups, None, None)
-    return out
-
-
 def node_icon(key: str) -> QIcon:
     """The icon for a row kind — ``group``, ``component``, ``ifc``,
     ``image``, ``text``, ``document``, ``scene``, ``sheet``, ``frame``,
@@ -856,12 +840,10 @@ class OutlinerPanel(QWidget):
         templates = {}
         template_owner = QTreeWidgetItem()
         from core.materials import material_sig
-        around = inherited_states(scene.groups)
         yield
         for i, (g, parent, _depth) in enumerate(outliner.walk(scene.groups)):
             key = id(g)
-            state = self._row_state(g, counts, opened,
-                                    around.get(key, (None, None)))
+            state = self._row_state(g, counts, opened)
             template_key = (state[1:], material_sig(g.material))
             template = templates.get(template_key)
             if template is not None:
@@ -956,7 +938,6 @@ class OutlinerPanel(QWidget):
                 if parent is not None:
                     parent.removeChild(item)   # its own rows go with it
             if came:
-                around = inherited_states(scene.groups)
                 editable = Qt.ItemIsEditable
                 place: dict = {}             # parent id → children so far
                 for g, parent, _depth in outliner.walk(scene.groups):
@@ -966,8 +947,7 @@ class OutlinerPanel(QWidget):
                     key = id(g)
                     if key not in came:
                         continue
-                    state = self._row_state(g, counts, opened,
-                                            around.get(key, (None, None)))
+                    state = self._row_state(g, counts, opened)
                     item = QTreeWidgetItem([state[0], "", "", state[1],
                                             state[2], state[7], state[8],
                                             state[9]])
@@ -984,14 +964,10 @@ class OutlinerPanel(QWidget):
             changed = {m for m in set(before) | set(counts)
                        if before.get(m) != counts.get(m)}
             if changed:
-                around = None
                 for key, g in self._groups.items():
                     if key in came or id(g.mesh) not in changed:
                         continue
-                    if around is None:
-                        around = inherited_states(scene.groups)
-                    state = self._row_state(g, counts, opened,
-                                            around.get(key, (None, None)))
+                    state = self._row_state(g, counts, opened)
                     if state != self._state[key]:
                         self._paint(self._items[key], self._state[key], state)
                         self._state[key] = state
@@ -1025,7 +1001,7 @@ class OutlinerPanel(QWidget):
         return {"group": tr("Group"), "image": tr("Image"),
                 "text": tr("3D Text")}[kind]
 
-    def _row_state(self, g, counts, opened, inherited=(None, None)) -> tuple:
+    def _row_state(self, g, counts, opened) -> tuple:
         """Everything a row shows: ``(name, type, layer, kind, hidden,
         open, locked, material, copies, IFC class, properties, hidden by,
         locked by, alone)`` — compared as one tuple, so an unchanged row
@@ -1037,16 +1013,15 @@ class OutlinerPanel(QWidget):
             if custom else ""
         copies = (str(counts.get(id(g.mesh), 1)) if g.is_component()
                   else "")
+        hidden_by, locked_by = g._closed_ancestors()
         return (g.name or tr("Unnamed group"),
                 custom["type"] if custom else self._type_text(g, counts),
                 outliner.layer_name(g), self._kind(g), bool(g.hidden),
                 id(g) in opened, bool(getattr(g, "locked", False)),
                 outliner.material_name(g), copies, outliner.ifc_class(g),
                 props,
-                (inherited[0].name or tr("Unnamed group"))
-                if inherited[0] is not None else "",
-                (inherited[1].name or tr("Unnamed group"))
-                if inherited[1] is not None else "",
+                (hidden_by or tr("Unnamed group")) if hidden_by is not None else "",
+                (locked_by or tr("Unnamed group")) if locked_by is not None else "",
                 id(g) in getattr(self, "_alone_ids", ()))
 
     def _paint(self, item, old, new) -> None:
@@ -1123,10 +1098,8 @@ class OutlinerPanel(QWidget):
             if self._root.text(COL_NAME) != name:
                 self._root.setText(COL_NAME, name)
             state_of = self._state
-            around = inherited_states(scene.groups)
             for key, g in self._groups.items():
-                state = self._row_state(g, counts, opened,
-                                        around.get(key, (None, None)))
+                state = self._row_state(g, counts, opened)
                 old = state_of[key]
                 if state != old:
                     self._paint(self._items[key], old, state)
@@ -1149,13 +1122,11 @@ class OutlinerPanel(QWidget):
         self._updating = True
         try:
             state_of = self._state
-            around = inherited_states(scene.groups)
             for key in keys:
                 g = self._groups.get(key)
                 if g is None:
                     continue
-                state = self._row_state(g, counts, opened,
-                                        around.get(key, (None, None)))
+                state = self._row_state(g, counts, opened)
                 old = state_of[key]
                 if state != old:
                     self._paint(self._items[key], old, state)

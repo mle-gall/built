@@ -776,7 +776,8 @@ def _tree(view, win, *, discover=False):
     if discover:
         flt = ""
     lens = 0 if discover else view.__dict__.get("_ui_lens", 0)
-    sel_ids = {id(e) for e in scene.selection}
+    from ingetrazo_render import browser_selection
+    sel_ids = {id(e) for e in scene.selection} if discover or lens != 0 else browser_selection(scene)
     from ingetrazo_core import ProjectSheets
     catalog = view.__dict__.get("_ui_sheet_catalog")
     if catalog is None:
@@ -1454,7 +1455,7 @@ def _tree_action(win, view, action) -> None:
                       if kind == "section" else item())
             tree_delete_rows(vp, target)
             rebuild()
-        elif verb in ("isolaterows", "pickrow", "roweye", "toggleitem", "group", "component", "explode", "unique", "instances"):
+        elif verb in ("isolaterows", "pickrow", "roweye", "rowlock", "toggleitem", "group", "component", "explode", "unique", "instances"):
             from ingetrazo_render import tree_group_action
             tree_group_action(win, copies() if kind == "d" else item(), verb)
         elif verb == "hosteye":

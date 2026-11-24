@@ -3304,6 +3304,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(tree_grouping::row_actions::tree_tag_action, m)?)?;
     m.add_function(wrap_pyfunction!(tree_grouping::row_actions::tree_delete_rows, m)?)?;
     m.add_function(wrap_pyfunction!(tree_grouping::tree_group_rows, m)?)?;
+    m.add_function(wrap_pyfunction!(tree_grouping::placement_controls::browser_selection, m)?)?;
     m.add_function(wrap_pyfunction!(tree_grouping::tree_group_action, m)?)?;
     m.add_function(wrap_pyfunction!(model_escape, m)?)?;
     m.add_function(wrap_pyfunction!(context_targets, m)?)?;
