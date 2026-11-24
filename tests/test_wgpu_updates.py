@@ -307,6 +307,36 @@ def test_inference_move_reuses_prototype_and_hits_updated_row():
     assert surface(index, 1, QVector3D(.25, .25, 1), QVector3D(0, 0, -1)) == QVector3D(.25, .25, 0)
 
 
+def test_inference_reads_committed_rows_from_the_native_index():
+    """No copy of the instance table: a row not updated since prepare
+    reads from the native placements, an updated one from the update."""
+    from views.wgpu_inference import prepare
+    scene, updates = fixture_scene()
+    index = prepare(updates.packed)
+    assert not hasattr(index, 'initial')
+    code, world = index.committed(1)
+    assert code == int(updates.packed.instances['info'][1, 0])
+    np.testing.assert_array_equal(world, updates.packed.instances['world'][1].astype(float))
+    scene.groups[1].xform.translate(5, 0, 0)
+    ids, rows = updates.diff(scene)
+    updates.apply(ids, rows)
+    index.update(ids, updates.packed)
+    assert index.committed(1)[1][3, 0] == 5
+
+
+def test_moving_geometry_leaves_the_snap_candidates_as_columns():
+    from views.wgpu_inference import ResidentEdges
+    a = np.array([[0., 0, 0], [1, 0, 0], [5, 5, 5]])
+    b = np.array([[1., 0, 0], [1, 1, 0], [6, 5, 5]])
+    context = object()
+    groups = [context, object()]
+    edges = ResidentEdges((np.array([0, 0, 1]), np.array([0, 1, 2]), a, b, np.zeros(3)), groups, context)
+    assert edges.in_group().tolist() == [False, False, True]
+    kept = edges.keep([True, False, True])
+    assert isinstance(kept, ResidentEdges) and kept.ids.tolist() == [0, 2]
+    assert kept.snap_columns()[0].shape == (2, 3)
+
+
 def test_inference_shared_mesh_change_invalidates_only_its_prototype():
     from views.wgpu_inference import prepare, surface
     scene, updates = fixture_scene()
