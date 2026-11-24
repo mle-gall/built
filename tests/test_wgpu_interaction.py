@@ -2,6 +2,7 @@
 import math
 from types import SimpleNamespace
 import numpy as np
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
 from PySide6.QtCore import Qt, QPointF
 from ingetrazo_core import Vec3 as QVector3D, Matrix4 as QMatrix4x4
@@ -187,52 +188,28 @@ def test_worker_warms_first_hover_for_the_captured_camera(view):
     assert index.screen_cache is not cache
 
 
-def test_idle_document_edits_refresh_native_view(monkeypatch):
-    from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QStackedWidget
+def test_idle_document_edits_refresh_native_view(native_host):
     from core.history import HideCommand, DeleteGroupCommand
-    from views.main_window import MainWindow
-    from views.document_controller import DocumentController
-
-    # Exercise the document timers and real packed rows without a GPU.
-    stack = QStackedWidget()
-    viewport = DocumentController.for_widget(WgpuView(stack))
-    doc = SimpleNamespace(viewport=viewport)
-    stack._doc_stack = stack
-    stack._doc = doc
-    stack._document_first_frame = lambda *_: None
-    monkeypatch.setattr(WgpuView, '_upload', lambda self: None)
+    vp, display = native_host.viewport, native_host.view
     mesh = Mesh()
     mesh.add_edge(QVector3D(), QVector3D(1, 0, 0))
     group = Group(mesh)
-    viewport.scene.groups.append(group)
-    MainWindow._install_wgpu_display(stack, doc)
-    display = doc.stand_in
-    stack.show()
-    assert not viewport.isVisible()
+    vp.scene.groups.append(group)
+    vp.scene.version += 1
 
-    def wait_for(predicate):
-        for _ in range(100):
-            if predicate():
-                return
-            QTest.qWait(10)
-        assert predicate()
+    def expect_visibility(visible):
+        vp.update()
+        assert native_host.idle()[0]
+        native_host.frame()
+        assert not native_host.errors
+        assert (display.resolve(0) is not None) == visible
 
-    def visible():
-        return display.resolve(0) is not None
-
-    try:
-        wait_for(visible)
-        for command in (HideCommand([group]), DeleteGroupCommand(group)):
-            viewport.history.execute(command)
-            viewport.update()
-            wait_for(lambda: not visible())
-            viewport.history.undo()
-            viewport.update()
-            wait_for(visible)
-    finally:
-        display.close()
-        stack.close()
+    expect_visibility(True)
+    for command in (HideCommand([group]), DeleteGroupCommand(group)):
+        vp.history.execute(command)
+        expect_visibility(False)
+        assert vp.history.undo()
+        expect_visibility(True)
 
 
 def test_orbit_pivot_is_under_cursor_without_snap_index(view):

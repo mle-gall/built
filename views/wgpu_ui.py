@@ -533,7 +533,10 @@ def _cursor_value(view, win) -> None:
         _lens_value(view, tools, revision)
         return
     if at is None:
-        view.renderer.ui_set_cursor_value("", "", False, 0.0, 0.0, None, revision)
+        from ingetrazo_render import pending_tool_value
+        value = pending_tool_value(tool, getattr(tools, "value_buffer", ""))
+        view.renderer.ui_set_cursor_value(tr(caption) if caption and value else "", value,
+                                          bool(value), None, None, None, revision)
         return
     start = getattr(tool, "start_point", None)
     start = display._world_to_pixel(start) if start is not None else None

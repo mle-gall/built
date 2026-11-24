@@ -980,9 +980,13 @@ impl Ui {
     /// The value field's facts for this frame (ui/value_field.rs): `start`
     /// is the tool's start point on screen, `revision` that of what the value
     /// acts on (the document; the lens for Zoom).
-    pub fn set_cursor_value(&mut self, caption: String, value: String, typing: bool, x: f32, y: f32,
+    pub fn set_cursor_value(&mut self, caption: String, value: String, typing: bool, x: Option<f32>, y: Option<f32>,
                             start: Option<(f32, f32)>, revision: u64) {
-        self.cursor.set(caption, value, typing, pos2(x, y), start.map(|(x, y)| pos2(x, y)), revision);
+        let at = x.zip(y).map(|(x, y)| pos2(x, y)).unwrap_or_else(|| {
+            let pointer = self.ctx.input(|i| i.pointer.hover_pos()).unwrap_or(self.screen.center());
+            self.cursor.retype_anchor(revision).unwrap_or(pointer - egui::vec2(0., 22.))
+        });
+        self.cursor.set(caption, value, typing, at, start.map(|(x, y)| at), revision);
     }
     pub fn set_selection(&mut self, summary: String, actions: Vec<(String, String, String, bool, bool)>) {
         self.selection = (!summary.is_empty()).then_some((summary, actions));
