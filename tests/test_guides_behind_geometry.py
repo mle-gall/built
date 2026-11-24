@@ -19,7 +19,7 @@ from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa
 
 import numpy as np
 import pytest
-from ingetrazo_render import SurveyRaster
+from tests.controller_surface import live_image
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.guide import Guide
@@ -126,18 +126,6 @@ def _pixels(raster):
     return np.frombuffer(raster.rgba(), np.uint8).reshape(raster.height, raster.width, 4)[..., :3].astype(int)
 
 
-def _live_pixels(controller):
-    display = controller.keys_stand_in
-    display.set_scene(controller.scene)
-    display._prepare_pick_frame()
-    display.renderer.request_capture()
-    display.draw_frame()
-    pixels = bytes(display.renderer.take_capture())
-    width = round(display.width() * display.devicePixelRatioF())
-    assert pixels and len(pixels) % (width * 4) == 0
-    return _pixels(SurveyRaster(width, len(pixels) // (width * 4), pixels))
-
-
 def _changed(before, after) -> int:
     """Pixels the guide altered. Measured as a DIFFERENCE, not by matching
     its colour: a one-pixel GL line under 4× MSAA resolves to a 50 % blend
@@ -169,13 +157,13 @@ def _scene_looking_down_minus_y(native_gpu_host):
 def test_a_wall_hides_the_guide_behind_it(native_gpu_host):
     win, vp = _scene_looking_down_minus_y(native_gpu_host)
     assert vp.camera.eye().y() > 0          # the eye really is on +Y
-    bare = _live_pixels(vp)
+    bare = _pixels(live_image(vp))
 
     vp.scene.guides[:] = [Guide(V(0, 4, 0), V(1, 0, 0))]     # in front
-    shown = _changed(bare, _live_pixels(vp))
+    shown = _changed(bare, _pixels(live_image(vp)))
 
     vp.scene.guides[:] = [Guide(V(0, -4, 0), V(1, 0, 0))]    # behind
-    hidden = _changed(bare, _live_pixels(vp))
+    hidden = _changed(bare, _pixels(live_image(vp)))
 
     assert shown > 50, "a guide in front of the wall must be drawn"
     assert hidden == 0, (
