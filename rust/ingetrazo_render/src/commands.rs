@@ -417,6 +417,19 @@ pub fn command_registry(
             menu.push((id.into(), "Window".into(), label.into(), String::new()));
         }
     }
+    // Platform actions (for example Hide Built) keep their factory bindings.
+    let platform_keys: HashSet<_> = menu.iter().filter(|row| row.0.starts_with("platform:"))
+        .map(|row| row.3.clone()).collect();
+    for entry in crate::model_menu::entries() {
+        let default = if platform_keys.contains(entry.shortcut) { "" } else { entry.shortcut };
+        if let Some(installed) = menu.iter_mut().find(|row| row.0 == entry.id) {
+            if installed.3.is_empty() {
+                installed.3 = default.into();
+            }
+        } else {
+            menu.push((entry.id.into(), entry.path.into(), entry.label.into(), default.into()));
+        }
+    }
     for (menu_id, path, name, shortcut) in menu {
         let id = if let Some(key) = menu_id.strip_prefix("view:") {
             format!("view:view_{key}")

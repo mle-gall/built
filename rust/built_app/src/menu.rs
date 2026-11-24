@@ -180,7 +180,22 @@ pub fn build() -> muda::Result<Menus> {
         &item("panel:render_blender", "Blender Render", None),
     ])?;
     let help = Submenu::with_items("Help", true, &[&item("check_updates", "Check for Updates…", None)])?;
-    bar.append_items(&[&app, &file, &edit, &view, &tools, &plugins, &window, &help])?;
+    let draw = Submenu::new("Draw", true);
+    let mut groups = std::collections::HashMap::from([
+        ("File", file.clone()), ("File ▸ Import", import.clone()), ("Edit", edit.clone()), ("Camera", view.clone()),
+        ("Draw", draw.clone()), ("Tools", tools.clone()), ("Help", help.clone()),
+    ]);
+    for entry in ingetrazo_render::model_menu::entries() {
+        if let Some((parent, label)) = entry.path.split_once(" ▸ ") {
+            if !groups.contains_key(entry.path) {
+                let sub = Submenu::new(label, true);
+                groups[parent].append(&sub)?;
+                groups.insert(entry.path, sub);
+            }
+        }
+        groups[entry.path].append(&item(entry.id, entry.label, None))?;
+    }
+    bar.append_items(&[&app, &file, &edit, &view, &draw, &tools, &plugins, &window, &help])?;
     #[cfg(target_os = "macos")]
     {
         bar.init_for_nsapp();

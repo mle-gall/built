@@ -6,6 +6,7 @@ mod window_timers;
 mod panic_log;
 mod overlay;
 mod commands;
+pub mod model_menu;
 /// The one verb source: kinds, menu rows, inspector verbs, dispatch.
 mod verbs;
 pub mod ui;
@@ -3019,6 +3020,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(commands::command_description, m)?)?;
     m.add_function(wrap_pyfunction!(commands::shortcut_conflicts, m)?)?;
     m.add_function(wrap_pyfunction!(commands::shortcut_reserved, m)?)?;
+    m.add_function(wrap_pyfunction!(model_menu::run_model_menu, m)?)?;
     m.add_function(wrap_pyfunction!(shortcut_text::shortcut_text, m)?)?;
     m.add_function(wrap_pyfunction!(shortcut_text::shortcut_alternatives, m)?)?;
     m.add_class::<SceneUpload>()?;

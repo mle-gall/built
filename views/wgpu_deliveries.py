@@ -32,7 +32,7 @@ def bind(win):
     history.delivery_runner = submit
 
 
-def export_form(win, key=None, one_off=False):
+def export_form(win, key=None, one_off=False, initial_format="ifc"):
     from core.link_structure import Tree
     from views.chrome_forms import Form, Field
     history = win.viewport.history
@@ -41,7 +41,7 @@ def export_form(win, key=None, one_off=False):
     options = record.get("options", {})
     registry = bim_registry.get(scene)
     nodes = Tree(scene, registry).nodes
-    fmt = record.get("format", "ifc")
+    fmt = record.get("format", initial_format)
 
     from ingetrazo_core import delivery_field_visible, delivery_record, delivery_scopes
 
