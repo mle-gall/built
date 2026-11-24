@@ -10,14 +10,9 @@ too, so a takeoff that found nothing still finds nothing; anything else
 — a tag, an edit outside the history — walks again."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication  # noqa: E402
-
-_app = QApplication.instance() or QApplication([])
+from views import wgpu_ui
 
 from core.group import Group  # noqa: E402
 from core.history import MoveGroupCommand  # noqa: E402
@@ -56,103 +51,64 @@ def _counting(monkeypatch):
     return calls
 
 
-def test_a_move_on_an_untagged_model_skips_the_walk(monkeypatch):
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        scene = vp.scene
-        outs = _model(scene)
-        panel = win.bim_tray.bim
-        panel.refresh()
-        assert panel.tree.topLevelItemCount() == 0
-        calls = _counting(monkeypatch)
-        vp.history.execute(MoveGroupCommand(outs[0], V(1, 0, 0)))
-        panel.refresh()
-        vp.history.undo()
-        panel.refresh()
-        assert calls == []                    # nothing could have been tagged
-        assert panel.tree.topLevelItemCount() == 0
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def measure(host, auto=False):
+    wgpu_ui._measure(host.view, host.window, auto)
+    return host.viewport.scene.__dict__.get("_inspector_takeoff")
 
 
-def test_a_tag_after_the_move_is_found(monkeypatch):
+def test_a_move_on_an_untagged_model_skips_the_walk(native_host, monkeypatch):
+    vp = native_host.viewport
+    outs = _model(vp.scene)
+    assert measure(native_host).count == 0
+    calls = _counting(monkeypatch)
+    vp.history.execute(MoveGroupCommand(outs[0], V(1, 0, 0)))
+    assert measure(native_host, auto=True).count == 0
+    assert vp.history.undo()
+    assert measure(native_host, auto=True).count == 0
+    assert not calls
+
+
+def test_a_tag_after_the_move_is_found(native_host, monkeypatch):
     from core.bim import tag_group
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        scene = vp.scene
-        outs = _model(scene)
-        panel = win.bim_tray.bim
-        panel.refresh()
-        vp.history.execute(MoveGroupCommand(outs[1], V(0, 2, 0)))
-        panel.refresh()
-        calls = _counting(monkeypatch)
-        tag_group(outs[0].children[0], "IfcColumn", "C-1")   # nested
-        scene.version += 1                    # an edit outside the history
-        panel.refresh()
-        assert calls == [1]
-        assert [o["name"] for o in panel._objects] == ["C-1"]
-        # Tagged now: a Move walks again, and measures as a fresh takeoff.
-        vp.history.execute(MoveGroupCommand(outs[0], V(1, 0, 0)))
-        panel.refresh()
-        assert calls == [1, 1]
-        assert abs(panel._objects[0]["volume"] - 1.0) < 1e-6
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    vp = native_host.viewport
+    outs = _model(vp.scene)
+    measure(native_host)
+    vp.history.execute(MoveGroupCommand(outs[1], V(0, 2, 0)))
+    measure(native_host, auto=True)
+    calls = _counting(monkeypatch)
+    child = outs[0].children[0]
+    tag_group(child, "IfcColumn", "C-1")
+    vp.scene.version += 1
+    takeoff = measure(native_host, auto=True)
+    assert calls == [1] and takeoff.count == 1
+    assert abs(takeoff.quantities(child)["m3"] - 1.) < 1e-6
+    vp.history.execute(MoveGroupCommand(outs[0], V(1, 0, 0)))
+    measure(native_host, auto=True)
+    assert calls == [1, 1] and abs(takeoff.quantities(child)["m3"] - 1.) < 1e-6
 
 
-def test_another_project_is_measured_on_its_own(monkeypatch):
-    """Project tabs (#1066): the panel is one for every tab; an untagged
-    takeoff of one project says nothing about another."""
+def test_another_project_is_measured_on_its_own(native_host):
     from core.bim import tag_group
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        first = win._doc
-        _model(win.viewport.scene)
-        panel = win.bim_tray.bim
-        panel.refresh()
-        win._new_document()
-        scene = win.viewport.scene
-        g = Group(_box(0.0), "tagged")
-        tag_group(g, "IfcBeam", "V-1")
-        scene.groups.append(g)
-        scene.version += 1
-        panel.refresh()
-        assert [o["name"] for o in panel._objects] == ["V-1"]
-        win.activate_document(first)
-        panel.refresh()
-        assert panel._objects == []
-    finally:
-        for d in list(win._documents):
-            d.saved_content = d.viewport.scene.content_version
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    win = native_host.window
+    first = win.active_document()
+    _model(win.viewport.scene)
+    empty = measure(native_host)
+    win.new_document()
+    scene = win.viewport.scene
+    g = Group(_box(0.), "tagged")
+    tag_group(g, "IfcBeam", "V-1")
+    scene.groups.append(g)
+    scene.version += 1
+    assert measure(native_host, auto=True) is None
+    assert measure(native_host).count == 1
+    win.activate_document(first)
+    assert measure(native_host, auto=True) is empty and empty.count == 0
 
 
-def test_an_empty_takeoff_maps_no_tree(monkeypatch):
-    """With nothing tagged there are no rows to hang from the groups: the
-    panel does not map the whole tree for them on each edit."""
+def test_an_empty_takeoff_maps_no_tree(native_host, monkeypatch):
     from core import outliner
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        scene = win.viewport.scene
-        _model(scene)
-        panel = win.bim_tray.bim
-        calls = []
-        real = outliner.parents
-        monkeypatch.setattr(outliner, "parents",
-                            lambda groups: calls.append(1) or real(groups))
-        scene.version += 1
-        panel.refresh()
-        assert calls == []
-        assert panel.tree.topLevelItemCount() == 0
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    _model(native_host.viewport.scene)
+    def unexpected(*_):
+        raise AssertionError("measuring an empty takeoff walked the Browser parents")
+    monkeypatch.setattr(outliner, "parents", unexpected)
+    assert measure(native_host).count == 0

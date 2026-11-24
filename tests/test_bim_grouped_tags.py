@@ -8,7 +8,7 @@ only read the loose faces and the top-level groups, so both objects
 vanished from them while the Browser still showed the class."""
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_core import Matrix4 as QMatrix4x4
 from ingetrazo_core import Vec3 as V
 
@@ -152,44 +152,32 @@ def test_a_nested_tagged_group_survives_save_and_load(tmp_path):
     assert abs(obj["volume"] - 6.0) < 1e-6
 
 
-def test_the_bim_panel_lists_and_picks_grouped_objects():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        scene = win.viewport.scene
-        h = win.viewport.history
-        col = _group(scene, h, _box(scene))
-        tag_group(col, "IfcColumn", "C-1")
-        outer = _nest(scene, h, [col])
-        faces = _box(scene, 5.0)
-        tag_faces(faces, "IfcWall", "Muro", next_object_id(scene))
-        wall = _group(scene, h, faces)
-        panel = win.bim_tray.bim
-        panel.refresh()
-        from PySide6.QtWidgets import QTreeWidgetItemIterator
-        items = []
-        it = QTreeWidgetItemIterator(panel.tree)
-        while it.value() is not None:
-            items.append(it.value())
-            it += 1
-        rows = {i.text(1): i for i in items if i.text(1)}
-        assert set(rows) == {"C-1", "Muro"}
-        # Each row sits under the group that holds it.
-        assert rows["C-1"].parent().data(0, Qt.UserRole) < 0
-        assert rows["Muro"].parent().data(0, Qt.UserRole) < 0
-        assert panel._containers[-rows["C-1"].parent().data(
-            0, Qt.UserRole) - 1] is outer
-        assert panel._containers[-rows["Muro"].parent().data(
-            0, Qt.UserRole) - 1] is wall
-        # The column sits inside «outer»: picking it opens that group.
-        panel._on_pick_object(rows["C-1"], 0)
-        assert scene.edit_group is outer
-        assert scene.selection == {col}
-        # The wall's faces are inside «wall»: picking opens it, selects them.
-        panel._on_pick_object(rows["Muro"], 0)
-        assert scene.edit_group is wall
-        assert len(scene.selection) == 6
-        assert all(f.attrs["ifc"]["name"] == "Muro" for f in scene.selection)
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_the_native_inspector_measures_and_picks_grouped_objects(native_host):
+    from tests.native_tree import inspector
+    from tests.test_tree_links import _View
+    from views import wgpu_ui
+    win, vp = native_host.window, native_host.viewport
+    scene = vp.scene
+    col = _group(scene, vp.history, _box(scene))
+    tag_group(col, "IfcColumn", "C-1")
+    outer = _nest(scene, vp.history, [col])
+    faces = _box(scene, 5.)
+    tag_faces(faces, "IfcWall", "Muro", next_object_id(scene))
+    wall = _group(scene, vp.history, faces)
+    view = _View()
+    view._ui_exp = {"n:", "i:" + outer.uid}
+    wgpu_ui._tree(view, win)
+    wgpu_ui._tree_action(win, view, wgpu_ui.SEP.join(("pickrow", "c:" + col.uid)))
+    assert scene.edit_group is outer and scene.selection == {col}
+    wgpu_ui._tree_action(win, view, "insp:measure")
+    assert inspector(native_host, [col])["Quantities"]["m³"] == "6.000"
+    vp.end_group_edit()
+    actions = inspector(native_host, [wall])["Actions"]
+    key, = [k for k, label in actions.items() if label == "Select Muro faces"]
+    scene.select([outer])
+    wgpu_ui._tree_action(win, view, "insp:" + key)
+    assert scene.edit_group is None and scene.selection == {outer}
+    scene.select([wall])
+    wgpu_ui._tree_action(win, view, "insp:" + key)
+    assert scene.edit_group is wall and len(scene.selection) == 6
+    assert all(f.attrs["ifc"]["name"] == "Muro" for f in scene.selection)

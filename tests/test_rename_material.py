@@ -118,38 +118,8 @@ def test_recents_follow_the_rename():
 
 # ---- The panel -------------------------------------------------------------
 
-@pytest.fixture
-def window():
-    from views.main_window import MainWindow
-    saved = (PaintTool.recent, PaintTool.current_material,
-             PaintTool.current_color, PaintTool.current_texture,
-             PaintTool.current_is_default)
-    PaintTool.recent = []
-    w = MainWindow()
-    try:
-        yield w
-    finally:
-        w._saved_version = w.viewport.scene.version
-        w.close()
-        (PaintTool.recent, PaintTool.current_material,
-         PaintTool.current_color, PaintTool.current_texture,
-         PaintTool.current_is_default) = saved
-
-
-def _panel(w):
-    import views.tray as T
-    return w.findChild(T.MaterialsPanel)
-
-
-def _paint_loose_face(w, panel, rgb, name):
-    """Pick a swatch in the panel and paint one loose face with it."""
-    from core.history import SetFaceMaterialTagCommand
-    panel._apply_color(rgb, name=name)
-    face = _quad(w.viewport.scene.mesh)
-    face.attrs.update(PaintTool._current_as_material())
-    mat = PaintTool.current_material
-    w.viewport.history.execute(SetFaceMaterialTagCommand([], mat.name, mat))
-    return face
+from tests.shell_isolation import native_window as window, restore_shell_patches  # noqa: F401
+from tests.test_library_paint_selection import _model_paint
 
 
 def test_naming_a_swatch_not_yet_in_the_model_names_the_next_paint(window):
@@ -176,8 +146,7 @@ def test_recolouring_a_library_colour_makes_a_new_material(window,
     entry = next(c for fam in __import__("json").loads(ral)["families"]
                  for c in fam["colors"] if c["code"] == "RAL 7035")
     name = "%s %s" % (entry["code"], entry["name"])
-    panel = _panel(window)
-    face = _paint_loose_face(window, panel, tuple(entry["rgb"]), name)
+    face = _model_paint(window, name, tuple(entry["rgb"]))
     library.edit_field(window, _View(), "color:" + name, "#33cc33")
     new = face.attrs["mat"]
     assert new != name and new.startswith(name)
@@ -187,16 +156,14 @@ def test_recolouring_a_library_colour_makes_a_new_material(window,
     assert palette.read_bytes() == ral
     assert ral_rgb(name) == pytest.approx(tuple(entry["rgb"]))
     # A colour of the user's own keeps its name when recoloured.
-    own = _paint_loose_face(window, panel, (0.5, 0.5, 0.5), "Muro")
+    own = _model_paint(window, "Muro", (0.5, 0.5, 0.5))
     library.edit_field(window, _View(), "color:Muro", "#999999")
     assert own.attrs["mat"] == "Muro"
 
 
-def test_rename_from_the_in_model_menu(window, monkeypatch):
-    import views.tray as T
-    panel = _panel(window)
-    face = _paint_loose_face(window, panel, (0.1, 0.4, 0.9), "Azul")
-    monkeypatch.setattr(T.QInputDialog, "getText",
-                        staticmethod(lambda *a, **k: ("Techo", True)))
-    panel._ask_rename("Azul")
+def test_rename_from_the_in_model_menu(window):
+    from views import wgpu_library as library
+    face = _model_paint(window, "Azul", (.1, .4, .9))
+    library.provider("materials").run(library.Ctx(window, window.view), "rename",
+                                      {"key": "m:Azul", "name": "Azul"}, "Techo")
     assert face.attrs["mat"] == "Techo"

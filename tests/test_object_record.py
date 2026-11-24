@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 from copy import deepcopy
 from types import SimpleNamespace
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
 from PySide6.QtWidgets import QApplication
 from core import record, bim_registry
@@ -218,84 +219,43 @@ def test_dialog_patch_carries_only_what_changed():
     assert fresh.patch == {'class': 'IfcWall'}
 
 
-def test_bim_tray_catches_up_only_when_shown(monkeypatch):
-    """A hidden BIM tray must not re-measure the takeoff on every change:
-    20k tagged groups froze the window for twenty minutes."""
-    from views import tray as tray_module
-    app = QApplication.instance() or QApplication([])
-    scene = Scene(); groups = [Group(Mesh(), f'G{i}') for i in range(3)]
-    scene.groups.extend(groups)
-    history = History(scene)
-    vp = SimpleNamespace(scene=scene, history=history, update=lambda: None)
-    window = SimpleNamespace(viewport=vp)
-    dock = tray_module.BimTray.__new__(tray_module.BimTray)
-    # Build the panel without a real QMainWindow: the dock's own init
-    # needs one, the behaviour under test does not.
-    from PySide6.QtWidgets import QDockWidget
-    QDockWidget.__init__(dock, 'BIM')
-    dock.bim = tray_module.BimPanel(window)
-    dock.setWidget(dock.bim)
-    dock._dirty = False
-    dock.visibilityChanged.connect(dock._on_visibility)
-    calls = []
-    monkeypatch.setattr(dock.bim, 'refresh', lambda: calls.append(1))
-    dock.hide()
-    dock.on_scene_changed()
-    assert calls == [] and dock._dirty
-    dock.show()
-    app.processEvents()
-    assert calls == [1] and not dock._dirty
-    dock.on_scene_changed()
-    assert calls == [1, 1]
-    dock.close()
+def test_first_inspection_is_lazy_and_measuring_catches_up(native_host, monkeypatch):
+    from tests.native_tree import inspector
+    from tests.test_bim_takeoff_untagged_moves import _counting, measure
+    vp = native_host.viewport
+    group = Group(name="Column")
+    vp.scene.groups.append(group)
+    calls = _counting(monkeypatch)
+    vp.history.execute(TagGroupsCommand([group], "IfcColumn"))
+    assert "measure" in inspector(native_host, [group])["Actions"]
+    assert not calls
+    assert measure(native_host).count == 1
+    assert calls == [1]
+    assert vp.history.undo()
+    from tests.test_tree_links import _View
+    from views.wgpu_ui import _sync_project_rows
+    view = _View()
+    view.renderer.ui_project_hidden = lambda: True
+    _sync_project_rows(view, native_host.window)
+    assert calls == [1]
+    view.renderer.ui_project_hidden = lambda: False
+    _sync_project_rows(view, native_host.window)
+    assert calls == [1, 1] and vp.scene._inspector_takeoff.count == 0
 
 
-def test_live_takeoff_switches_off_above_the_limit(monkeypatch):
-    from views import tray as tray_module
-    from views.tray import BimPanel
-    app = QApplication.instance() or QApplication([])
-    monkeypatch.setattr(tray_module, 'LIVE_TAKEOFF_LIMIT', 2)
-    scene = Scene(); groups = [Group(Mesh(), f'G{i}') for i in range(3)]
-    scene.groups.extend(groups)
-    history = History(scene)
-    vp = SimpleNamespace(scene=scene, history=history, update=lambda: None)
-    panel = BimPanel(SimpleNamespace(viewport=vp))
-    measured = []
-    import core.bim
-    real = core.bim.collect_objects
-    monkeypatch.setattr(core.bim, 'collect_objects',
-                        lambda s, memo=None: measured.append(1) or real(s, memo))
-    history.execute(TagGroupsCommand(groups, 'IfcColumn'))
-    panel._takeoff_key = None
-    panel.refresh()
-    assert measured == [] and not panel.too_many.isHidden() and panel._objects == []
-    assert '3' in panel.too_many.text()
-    panel._on_measure_anyway()
-    assert measured == [1] and len(panel._objects) == 3 and panel.too_many.isHidden()
-    panel.close()
-
-
-def test_live_takeoff_switches_off_above_the_face_limit(monkeypatch):
-    """Few objects over many faces must not measure either: the cost is the
-    faces, and a saved ride model froze its own opening."""
-    from views import tray as tray_module
-    from views.tray import BimPanel
-    from ingetrazo_core import Vec3 as QVector3D
-    app = QApplication.instance() or QApplication([])
-    monkeypatch.setattr(tray_module, 'LIVE_TAKEOFF_FACE_LIMIT', 5)
-    scene = Scene(); group = Group(Mesh(), 'Big')
-    for i in range(8):
-        group.mesh.add_face([QVector3D(i, 0, 0), QVector3D(i + 1, 0, 0),
-                             QVector3D(i + 1, 1, 0), QVector3D(i, 1, 0)])
-    scene.groups.append(group)
-    history = History(scene)
-    vp = SimpleNamespace(scene=scene, history=history, update=lambda: None)
-    panel = BimPanel(SimpleNamespace(viewport=vp))
-    history.execute(TagGroupsCommand([group], 'IfcSlab'))
-    panel._takeoff_key = None
-    panel.refresh()
-    assert not panel.too_many.isHidden() and panel._objects == []
-    assert '8 faces' in panel.too_many.text()
-    panel._on_measure_anyway()
-    assert len(panel._objects) == 1 and panel.too_many.isHidden()
-    panel.close()
+@pytest.mark.parametrize("objects,faces_per_object", [(3, 0), (1, 8)])
+def test_inspector_waits_for_an_explicit_takeoff_for_objects_and_faces(native_host, monkeypatch, objects, faces_per_object):
+    from ingetrazo_core import Vec3 as V
+    from tests.native_tree import inspector
+    from tests.test_bim_takeoff_untagged_moves import _counting, measure
+    vp = native_host.viewport
+    groups = [Group(name=f"G{i}") for i in range(objects)]
+    for group in groups:
+        for i in range(faces_per_object):
+            group.mesh.add_face([V(i,0,0), V(i+1,0,0), V(i+1,1,0), V(i,1,0)])
+    vp.scene.groups.extend(groups)
+    vp.history.execute(TagGroupsCommand(groups, "IfcSlab"))
+    calls = _counting(monkeypatch)
+    inspector(native_host, groups)
+    assert not calls
+    assert measure(native_host).count == objects and calls == [1]

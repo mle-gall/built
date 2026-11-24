@@ -60,6 +60,7 @@ mod hatch_bond;
 mod style_files;
 mod style_edit;
 mod browser_rename;
+mod takeoff;
 mod settings;
 mod document_watch;
 mod window_input;
@@ -135,6 +136,7 @@ mod alignment;
 
 #[pymodule]
 fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<takeoff::InspectorTakeoff>()?;
     m.add_function(wrap_pyfunction!(file_scene::igz_archive_scene_fields, m)?)?;
     m.add_function(wrap_pyfunction!(file_scene::igz_reset_scene, m)?)?;
     m.add_function(wrap_pyfunction!(file_scene::igz_restore_views, m)?)?;
