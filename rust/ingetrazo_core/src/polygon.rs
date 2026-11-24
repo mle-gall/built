@@ -39,6 +39,7 @@ pub fn polygon_is_convex(poly: Vec<[f64; 2]>) -> bool {
 #[pyfunction]
 #[pyo3(signature=(points, hole_indices=None))]
 pub fn polygon_earcut(
+    py: Python<'_>,
     points: Vec<[f64; 2]>,
     hole_indices: Option<Vec<usize>>,
 ) -> PyResult<Vec<(usize, usize, usize)>> {
@@ -48,7 +49,8 @@ pub fn polygon_earcut(
             "hole indices must start distinct rings inside points",
         ));
     }
-    Ok(crate::earcut::earcut(&points, &holes)
+    Ok(py
+        .detach(|| crate::earcut::earcut(&points, &holes))
         .into_iter()
         .map(|[a, b, c]| (a, b, c))
         .collect())
@@ -60,6 +62,7 @@ type Triangle<'py> = (Corner<'py>, Corner<'py>, Corner<'py>);
 #[pyfunction]
 #[pyo3(signature=(outer, holes=None, normal=None))]
 pub fn polygon_triangles<'py>(
+    py: Python<'py>,
     mut outer: Vec<Corner<'py>>,
     holes: Option<Vec<Vec<Corner<'py>>>>,
     normal: Option<Corner<'py>>,
@@ -96,13 +99,15 @@ pub fn polygon_triangles<'py>(
     let indices = if starts.is_empty() && crate::facegeom::is_convex(&projected) {
         (1..outer.len() - 1).map(|i| [0, i, i + 1]).collect()
     } else {
-        crate::earcut::earcut(
-            &projected
-                .into_iter()
-                .map(|(x, y)| [x, y])
-                .collect::<Vec<_>>(),
-            &starts,
-        )
+        py.detach(|| {
+            crate::earcut::earcut(
+                &projected
+                    .into_iter()
+                    .map(|(x, y)| [x, y])
+                    .collect::<Vec<_>>(),
+                &starts,
+            )
+        })
     };
     Ok(indices
         .into_iter()
