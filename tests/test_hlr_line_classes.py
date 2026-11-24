@@ -14,9 +14,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 import pytest
-from PySide6.QtGui import QColor, QImage, QPainter
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
 
 from core.camera import OrbitCamera
 from core.composition import Composicion, MarcoVista, apply_frame_camera
@@ -25,7 +23,6 @@ from core.hlr import (KIND_CUT, KIND_EDGE, KIND_PROFILE, hlr_drawing,
 from core.scene import Scene
 from core.section import SectionPlane
 
-_app = QApplication.instance() or QApplication([])
 V = QVector3D
 
 

@@ -10,10 +10,7 @@ import random
 
 import pytest
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
 
-if QApplication.instance() is None:
-    QApplication([])
 
 from core import units  # noqa: E402
 from core.scene import Scene  # noqa: E402

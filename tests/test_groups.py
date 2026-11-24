@@ -72,7 +72,8 @@ def test_group_keeps_soft_and_curve_flags_round_trip(tmp_path):
     # cylinder; make a group → every vertical seam shows.)
     import math
 
-    from PySide6.QtCore import QPointF, Qt
+    from core.input_codes import Input as Qt
+    from ingetrazo_core import ScreenPoint as QPointF
 
     from core.history import ExplodeGroupCommand, History, MakeGroupCommand
     from formats import igz

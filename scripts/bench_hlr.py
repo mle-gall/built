@@ -17,13 +17,9 @@ import sys
 import time
 from pathlib import Path
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import numpy as np  # noqa: E402
-from PySide6.QtWidgets import QApplication  # noqa: E402
-
-_app = QApplication.instance() or QApplication([])
 
 from core.camera import OrbitCamera  # noqa: E402
 from core.hlr import collect_geometry, hlr_drawing  # noqa: E402

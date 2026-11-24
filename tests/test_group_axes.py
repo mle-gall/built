@@ -350,7 +350,8 @@ def test_change_axes_on_a_component_that_kept_its_group_axes_484():
 
 
 def test_the_tool_takes_origin_red_and_green():
-    from PySide6.QtCore import QPointF, Qt
+    from core.input_codes import Input as Qt
+    from ingetrazo_core import ScreenPoint as QPointF
     from tools.base import ToolContext
     from tools.change_axes import ChangeAxesTool
 

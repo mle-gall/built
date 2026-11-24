@@ -14,11 +14,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 import pytest
-from PySide6.QtGui import QColor, QImage, QPainter, QPen
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication, QWidget
 
-_app = QApplication.instance() or QApplication([])
 
 from core import layers as L
 from core.camera import OrbitCamera
@@ -491,60 +488,58 @@ def test_every_pattern_has_its_catalogue_entry():
         assert scale > 0 and 0 <= angle < 360 and use, key
 
 
-def _ink_marks(p, box, key, families):
-    """The pattern's marks inside ``box``, 0.1 mm lines (the test's own
-    drawing: the comparison is of the marks, not of a renderer)."""
-    from PySide6.QtCore import QLineF, QPointF
-    from PySide6.QtGui import QPen, QPolygonF
+def _inked(key, families=None, size=(120, 90), scale=10.0, shift=(0.37, 0.29)):
+    """The pattern's marks inside a 12 × 9 mm box, inked one pixel wide on
+    a ``size`` grid at ``scale`` px/mm, shifted off the pixel grid (a line
+    lying exactly between two pixels lands on either for a millionth of a
+    millimetre): the test's own drawing, the comparison is of the marks."""
     from core.hatches import hatch_marks
-    p.save()
-    p.setClipPath(box)
-    br = box.boundingRect()
-    marks = hatch_marks(key, (br.left(), br.top(), br.right(), br.bottom()),
-                        1.0, 0.0, families, None)
-    pen = QPen(QColor(0, 0, 0))
-    pen.setWidthF(0.1)
-    p.setPen(pen)
-    if marks["lines"]:
-        p.drawLines([QLineF(*seg) for seg in marks["lines"]])
+    w, h = size
+    box = (0.0, 0.0, w / scale, h / scale)
+    marks = hatch_marks(key, box, 1.0, 0.0, families, None)
+    ink = np.zeros((h, w), bool)
+
+    def seg(a, b):
+        ax, ay = a[0] * scale + shift[0], a[1] * scale + shift[1]
+        bx, by = b[0] * scale + shift[0], b[1] * scale + shift[1]
+        n = int(max(abs(bx - ax), abs(by - ay)) * 2) + 2
+        t = np.linspace(0.0, 1.0, n)
+        x = np.floor(ax + (bx - ax) * t).astype(int)
+        y = np.floor(ay + (by - ay) * t).astype(int)
+        keep = (x >= 0) & (x < w) & (y >= 0) & (y < h)
+        ink[y[keep], x[keep]] = True
+
+    for x0, y0, x1, y1 in marks["lines"]:
+        seg((x0, y0), (x1, y1))
     for pts in marks["polys"]:
-        p.drawPolyline(QPolygonF([QPointF(x, y) for x, y in pts]))
+        for a, b in zip(pts, pts[1:]):
+            seg(a, b)
     for pts in marks["closed"]:
-        p.drawPolygon(QPolygonF([QPointF(x, y) for x, y in pts]))
+        for a, b in zip(pts, pts[1:] + pts[:1]):
+            seg(a, b)
+    for dot in marks.get("dots", ()):
+        seg(dot[:2], dot[:2])
     for x, y, r in marks["circles"]:
-        p.drawEllipse(QPointF(x, y), r, r)
-    p.restore()
+        ring = [(x + r * math.cos(t), y + r * math.sin(t))
+                for t in np.linspace(0.0, 2 * math.pi, 33)]
+        for a, b in zip(ring, ring[1:]):
+            seg(a, b)
+    return ink
 
 
 def test_a_line_pattern_goes_to_a_pattern_file_and_back_unchanged():
     """Out to .pat and read again, every line pattern draws the same — the
     herringbone's built-in turn included (compared as drawn: six decimals
     in the file may move a line that the clip throws away anyway)."""
-    from PySide6.QtGui import QPainterPath
     from core.hatches import HATCH_ORDER, line_families, parse_pat, to_pat
     keys = [k for k in HATCH_ORDER if line_families(k)]
     assert {"brick", "brick_flemish", "hexagon", "parquet"} <= set(keys)
     assert line_families("concrete") is None          # a stipple: no .pat
     back = parse_pat(to_pat([(k, k, line_families(k)) for k in keys]))
-
-    def drawn(key, families=None):
-        img = QImage(120, 90, QImage.Format_RGB32)
-        img.fill(QColor(255, 255, 255))
-        p = QPainter(img)
-        # Off the pixel grid: a line lying exactly between two pixels lands
-        # on either for a millionth of a millimetre.
-        p.translate(0.37, 0.29)
-        p.scale(10, 10)
-        box = QPainterPath()
-        box.addRect(0.0, 0.0, 12.0, 9.0)
-        _ink_marks(p, box, key, families)
-        p.end()
-        return img
     for key in keys:
-        a, b = drawn(key), drawn("pat:" + key, back[key]["families"])
-        differ = sum(1 for x in range(120) for y in range(90)
-                     if abs(QColor(a.pixel(x, y)).lightness()
-                            - QColor(b.pixel(x, y)).lightness()) > 60)
+        a, b = _inked(key), _inked("pat:" + key, back[key]["families"])
+        assert a.any(), key
+        differ = int((a != b).sum())
         assert differ < 120 * 90 * 0.005, (key, differ)
 
 
@@ -1342,10 +1337,6 @@ def test_the_plane_keeps_the_layers_fill():
     sp = SectionPlane(V(0, 0, 1), V(0, 0, 1))
     sp.fill = {"pattern": "layers"}
     assert SectionPlane.from_dict(sp.to_dict()).fill == {"pattern": "layers"}
-
-
-
-
 
 
 # ---- Where the pieces start ------------------------------------------------

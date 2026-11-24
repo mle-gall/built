@@ -18,15 +18,12 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from tests.controller_surface import live_image
 import pytest
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
-from PySide6.QtWidgets import QApplication
 
 from core.group import Group
 from core.history import (SetFaceBackCommand, SetFaceColorCommand,
                           SetFaceOpacityCommand, SetFaceTextureCommand,
                           SetFaceMaterialTagCommand)
 from core.mesh import Mesh
-
-_app = QApplication.instance() or QApplication([])
 
 
 def _box_mesh(x0=-1, y0=-1, z0=0, x1=1, y1=1, z1=2):
@@ -130,17 +127,14 @@ def _open(vp, layout):
     _pixel(vp)
 
 
-
 def _blue(rgb):
     return rgb[2] > 120 and rgb[0] < 90 and rgb[1] < 90
 
 
 def _red_image(tmp_path):
-    from PySide6.QtGui import QColor, QImage
-    img = QImage(8, 8, QImage.Format_RGB32)
-    img.fill(QColor(255, 0, 0))
+    from ingetrazo_render import SurveyRaster
     path = str(tmp_path / "red.png")
-    img.save(path)
+    assert SurveyRaster(8, 8, bytes((255, 0, 0, 255)) * 64).save(path)
     return {"path": path, "sw": 1.0, "sh": 1.0}
 
 
