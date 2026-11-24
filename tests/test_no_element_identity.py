@@ -59,7 +59,6 @@ _ALLOWED = {
     ("core/outliner.py", "reparent_problem"): "groups",
     ("tools/solid_tools.py", "on_hover"): "groups",
     ("tools/solid_tools.py", "on_click"): "groups",
-    ("tools/texture_position.py", "changed"): "uvw tuples or None",
     ("views/outliner.py", "toggle_isolated"): "groups",
     ("views/tray.py", "_component_steps"): "groups",
     ("views/document_interaction.py", "_cat_kept"): "cached arrays",
