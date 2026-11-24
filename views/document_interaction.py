@@ -145,18 +145,7 @@ LINEWORK_SLACK_MIN = 1e-3
 
 
 def linework_slack_point(camera, world):
-    """``world`` moved towards the eye, along its own sight line, by the
-    linework slack: whatever hides THAT point hides the line for good."""
-    if getattr(camera, "perspective", True):
-        towards = camera.eye() - world
-    else:
-        towards = -camera.forward()
-    length = towards.length()
-    if length < 1e-12:
-        return QVector3D(world)
-    depth = abs(QVector3D.dotProduct(world - camera.eye(), camera.forward()))
-    slack = max(LINEWORK_SLACK_MIN, LINEWORK_SLACK * depth)
-    return world + towards * (min(slack, 0.5 * length) / length)
+    return ingetrazo_render.linework_slack_point(camera, world)
 
 
 def _boxes_around(keys, x0, y0, x1, y1, px, py, owner_of, scene):
@@ -1445,17 +1434,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return ingetrazo_render.append_textured_face(self, by_texture, face, tex)
 
     def _faceme_dir(self, anchor: QVector3D) -> QVector3D:
-        """Direction a face-me sprite at ``anchor`` turns toward (not yet
-        flattened or normalised). Perspective: toward the eye, so figures
-        left and right of centre turn slightly. Parallel: the
-        VIEW direction for every sprite — a parallel camera has no real eye,
-        and using the fictitious one made a figure far from the orbit target
-        turn 45° away when zoomed in (Marco: "Sumari no se ve bien en vista
-        frontal", 2026-09-02)."""
-        cam = self.camera
-        if cam.perspective:
-            return cam.eye() - anchor
-        return cam.eye() - cam.target
+        return ingetrazo_render.faceme_dir(self.camera, anchor)
 
     def _figure_token(self, group):
         return ingetrazo_render.figure_token(self, group)
@@ -1938,48 +1917,9 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return min(self._CLIP_W, near()) if callable(near) else self._CLIP_W
 
     def _segment_to_pixels(self, p0: QVector3D, p1: QVector3D):
-        """A world segment → its two screen pixels, cut where it passes
-        behind the eye instead of dropped whole. A guide is kilometres
-        long: in perspective one end is nearly always behind the camera,
-        and the preview never showed (#89)."""
         mvp = self.camera.projection_matrix() * self.camera.view_matrix()
-        c0 = mvp.map(QVector4D(p0.x(), p0.y(), p0.z(), 1.0))
-        c1 = mvp.map(QVector4D(p1.x(), p1.y(), p1.z(), 1.0))
-        w0, w1, eps = c0.w(), c1.w(), self._clip_w()
-        if w0 < eps and w1 < eps:
-            return None
-        if w0 < eps:
-            c0 = c0 + (c1 - c0) * ((eps - w0) / (w1 - w0))
-            c0.setW(eps)
-        elif w1 < eps:
-            c1 = c1 + (c0 - c1) * ((eps - w1) / (w0 - w1))
-            c1.setW(eps)
-        (x0, y0), (x1, y1) = [
-            ((c.x() / c.w() * 0.5 + 0.5) * self.width(),
-             (1.0 - (c.y() / c.w() * 0.5 + 0.5)) * self.height())
-            for c in (c0, c1)]
-        # Cut to the window (a margin past it): a point a hair in front of
-        # the eye lands millions of pixels out, past what the painter's
-        # fixed-point rasteriser draws right.
-        m = 64.0
-        lo_x, hi_x = -m, self.width() + m
-        lo_y, hi_y = -m, self.height() + m
-        dx, dy = x1 - x0, y1 - y0
-        t0, t1 = 0.0, 1.0
-        for p, q in ((-dx, x0 - lo_x), (dx, hi_x - x0),
-                     (-dy, y0 - lo_y), (dy, hi_y - y0)):
-            if p == 0.0:
-                if q < 0.0:
-                    return None
-                continue
-            r = q / p
-            if p < 0.0:
-                t0 = max(t0, r)
-            else:
-                t1 = min(t1, r)
-        if t0 > t1:
-            return None
-        return [(x0 + dx * t0, y0 + dy * t0), (x0 + dx * t1, y0 + dy * t1)]
+        return ingetrazo_render.segment_to_pixels(mvp, p0, p1, self._clip_w(),
+                                                 self.width(), self.height())
 
     def _draw_extension_overlays(self, painter: QPainter) -> None:
         """Extensions' overlays (``ExtensionApp.add_overlay``): whatever the

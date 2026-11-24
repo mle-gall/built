@@ -18,7 +18,17 @@ pub(super) fn host(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
         .cast_into()?)
 }
 pub(super) fn xyz(p: &Obj) -> PyResult<DVec3> {
-    Ok(DVec3::from_array(p.call_method0("toTuple")?.extract()?))
+    match p.call_method0("toTuple") {
+        Ok(coords) => Ok(DVec3::from_array(coords.extract()?)),
+        Err(err) if err.is_instance_of::<pyo3::exceptions::PyAttributeError>(p.py()) => {
+            Ok(DVec3::new(
+                p.call_method0("x")?.extract()?,
+                p.call_method0("y")?.extract()?,
+                p.call_method0("z")?.extract()?,
+            ))
+        }
+        Err(err) => Err(err),
+    }
 }
 pub(super) fn vec3(py: Python<'_>, p: DVec3) -> PyResult<Obj<'_>> {
     py.import("ingetrazo_core")?
