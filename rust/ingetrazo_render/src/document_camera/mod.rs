@@ -5,6 +5,7 @@ use pyo3::prelude::*;
 mod depth;
 mod navigation;
 mod planes;
+mod projection;
 
 fn xy(o: &Obj) -> PyResult<(f64, f64)> {
     Ok((
@@ -24,5 +25,6 @@ fn size(v: &Obj) -> PyResult<(f64, f64)> {
 pub(crate) fn register(m: &Bound<PyModule>) -> PyResult<()> {
     planes::register(m)?;
     depth::register(m)?;
+    projection::register(m)?;
     navigation::register(m)
 }

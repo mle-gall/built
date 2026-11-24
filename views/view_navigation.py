@@ -13,15 +13,10 @@ class ViewNavigation:
     _ZOOM_OUT_STEP = 0.05
 
     def _pixel_to_ray(self, x, y):
-        camera = self.camera
-        projection = getattr(camera, "picking_projection_matrix", camera.projection_matrix)
-        matrix = projection() * camera.view_matrix()
-        return matrix.pixel_ray(x, y, self.width(), self.height())
+        return ingetrazo_render.view_ray(self, x, y)
 
     def _world_to_pixel(self, world, mvp=None):
-        if mvp is None:
-            mvp = self.camera.projection_matrix() * self.camera.view_matrix()
-        return mvp.world_pixel(world, self.width(), self.height())
+        return ingetrazo_render.view_pixel(self, world, mvp)
 
     def _zoom_to_box(self, start: QPointF, end: QPointF) -> None:
         return ingetrazo_render.zoom_box(self, start, end)

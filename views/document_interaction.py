@@ -990,22 +990,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     _INST_MIN_PX = 1.0
 
     def _instances_below_a_pixel(self, pool, scale=1.0):
-        """Mask of the pool's placements whose bounding sphere comes out
-        under ``_INST_MIN_PX`` (× ``scale``) framebuffer pixels across on
-        this frame.
-
-        From the whole plant of #158, 70 % of the instanced faces belonged
-        to placements under a pixel — bolts and fittings a hundred metres
-        off — and the GPU spent two thirds of every orbit frame on them.
-        The sphere is the box's (its half diagonal), so the test only ever
-        errs toward drawing; a box that reaches the eye plane always draws."""
-        import numpy as np
-        memo = getattr(self, "_inst_sphere_memo", None)
-        if memo is None or memo[0] is not pool:
-            memo = self._inst_sphere_memo = (
-                pool, *self._bounding_spheres(pool[2], pool[3]))
-        return self._spheres_below_a_pixel(memo[1], memo[2],
-                                           self._INST_MIN_PX * scale)
+        return ingetrazo_render.instance_pixel_mask(self, pool, scale)
 
     @staticmethod
     def _bounding_spheres(lo, hi):
@@ -1013,11 +998,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return bounding_spheres(lo, hi)
 
     def _spheres_below_a_pixel(self, ctr, rad, floor=None):
-        from ingetrazo_core import small_spheres
-        height = (self._export_size or self._fb_size())[1]
-        scale = abs(self.camera.projection_matrix().data()[5]) * height
-        return small_spheres(ctr, rad, self._np_mvp()[3], scale, self.camera.perspective,
-                             self._INST_MIN_PX if floor is None else floor)
+        return ingetrazo_render.small_pixel_spheres(self, ctr, rad, floor)
 
     def _edit_rest_fade(self, group):
         return ingetrazo_render.edit_rest_fade(self, group)
@@ -1630,15 +1611,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     _CLIP_W = 1e-3
 
     def _clip_w(self) -> float:
-        """Where a segment is cut in front of the eye: 1 mm, or the near
-        plane when the camera has come closer than that would allow — at a
-        few millimetres from a small part, 1 mm cut away the very line
-        being drawn (#653, #692)."""
-        cam = self.camera
-        if not getattr(cam, "perspective", True):
-            return self._CLIP_W
-        near = getattr(cam, "near_plane", None)
-        return min(self._CLIP_W, near()) if callable(near) else self._CLIP_W
+        return ingetrazo_render.clip_distance(self)
 
     def _segment_to_pixels(self, p0: QVector3D, p1: QVector3D):
         mvp = self.camera.projection_matrix() * self.camera.view_matrix()
@@ -1682,27 +1655,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return self._project_px(np.asarray(pts, dtype=float).reshape(-1, 3))
 
     def _pixel_projector(self):
-        """:meth:`_world_to_pixel` with the camera as it is NOW: the matrix
-        is made once and the same Qt arithmetic maps every point, so a
-        snap search asking for thousands of points per pointer move (20 000
-        on the plant of #158) gets the very pixels it got before without
-        rebuilding the view and projection for each one. Only for work the
-        camera cannot move under (one snap search)."""
-        if "_world_to_pixel" in vars(self):
-            return self._world_to_pixel     # a test's stand-in wins
-        mvp = self.camera.projection_matrix() * self.camera.view_matrix()
-        w, h = self.width(), self.height()
-        vec4 = QVector4D
-
-        def world_to_pixel(world):
-            clip = mvp.map(vec4(world.x(), world.y(), world.z(), 1.0))
-            if clip.w() <= 0:
-                return None
-            ndc_x = clip.x() / clip.w()
-            ndc_y = clip.y() / clip.w()
-            return ((ndc_x * 0.5 + 0.5) * w, (1.0 - (ndc_y * 0.5 + 0.5)) * h)
-        world_to_pixel.snap_projection = (mvp.data(), (w, h))
-        return world_to_pixel
+        return ingetrazo_render.pixel_projector(self)
 
 
     @staticmethod
@@ -1775,16 +1728,10 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return ingetrazo_render.chunk_cache_store(self, mesh, entry)
 
     def _np_mvp(self):
-        """Current MVP as a (4, 4) float64 NumPy matrix (row-major indexing).
-        ``QMatrix4x4.data()`` is column-major, hence the Fortran reshape."""
-        m = self.camera.projection_matrix() * self.camera.view_matrix()
-        return np.asarray(m.data(), dtype=np.float64).reshape(4, 4, order="F")
+        return ingetrazo_render.camera_matrix_array(self)
 
     def _camera_px(self):
-        """``(mvp, width, height)``: what the native pick kernels project
-        with (``mvp`` column-major, as ``Matrix4.data()``)."""
-        m = self.camera.projection_matrix() * self.camera.view_matrix()
-        return list(m.data()), float(self.width()), float(self.height())
+        return ingetrazo_render.camera_transform(self)
 
     def _project_px(self, pts):
         """Batch world points (N, 3) → ``(px, py, in_front)`` arrays — the
