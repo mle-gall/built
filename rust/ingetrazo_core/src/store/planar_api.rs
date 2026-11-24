@@ -56,12 +56,12 @@ fn grid_key(py: Python<'_>, x: f64, y: f64) -> PyResult<Bound<'_, PyTuple>> {
     }
 }
 #[pyfunction]
-fn signed_area(ring: Ring) -> f64 {
-    planar::area(&ring)
+fn signed_area(r#loop: Ring) -> f64 {
+    planar::area(&r#loop)
 }
 #[pyfunction]
-fn area_floor(py: Python<'_>, ring: Ring) -> PyResult<f64> {
-    Metrics::native(py.version_info().minor >= 12).floor(&ring)
+fn area_floor(py: Python<'_>, xy: Ring) -> PyResult<f64> {
+    Metrics::native(py.version_info().minor >= 12).floor(&xy)
 }
 #[pyfunction]
 fn point_in_polygon(p: Point, poly: Ring) -> bool {
@@ -211,6 +211,55 @@ fn arc_command<'py>(
         .call((scene, segments), Some(&kw))
 }
 
+type Region = (Vec<Vec3>, Vec<Vec<Vec3>>);
+type Rebuild = (Vec<(Vec3, Vec3)>, Vec<Region>);
+
+fn rebuild(
+    segments: &Obj<'_>,
+    origin: &Obj<'_>,
+    normal: &Obj<'_>,
+    edges: bool,
+) -> PyResult<Rebuild> {
+    let (u, v) = plane_basis(normal)?;
+    let py = origin.py();
+    super::arrangement::arrange_plane(
+        segments,
+        origin,
+        (
+            u.into_pyobject(py)?.into_any(),
+            v.into_pyobject(py)?.into_any(),
+        ),
+        edges,
+    )
+}
+#[pyfunction]
+fn planar_arrangement(
+    segments_3d: &Obj<'_>,
+    origin: &Obj<'_>,
+    normal: &Obj<'_>,
+) -> PyResult<Vec<Region>> {
+    Ok(rebuild(segments_3d, origin, normal, false)?.1)
+}
+#[pyfunction]
+fn planar_rebuild(segments_3d: &Obj<'_>, origin: &Obj<'_>, normal: &Obj<'_>) -> PyResult<Rebuild> {
+    rebuild(segments_3d, origin, normal, true)
+}
+#[pyfunction]
+fn _interior_point(py: Python<'_>, r#loop: Ring) -> PyResult<(f64, f64)> {
+    planar::plane_interior_point(py, r#loop)
+}
+#[pyfunction]
+#[pyo3(signature=(outer,holes=Vec::new()))]
+fn scan_interior_point(outer: Ring, holes: Vec<Ring>) -> Option<(f64, f64)> {
+    planar::plane_scan_point(outer, holes)
+}
+#[pyfunction]
+fn _build_graph(
+    py: Python<'_>,
+    segments_2d: Vec<[Point; 2]>,
+) -> PyResult<(Bound<'_, PyDict>, Bound<'_, PyDict>)> {
+    super::arrangement::plane_split_graph(py, segments_2d)
+}
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let sub = PyModule::new(m.py(), "arrangement")?;
     sub.add_function(wrap_pyfunction!(project_loop, &sub)?)?;
@@ -225,5 +274,40 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     sub.add_function(wrap_pyfunction!(busy_plane, &sub)?)?;
     sub.add_function(wrap_pyfunction!(curve_extras, &sub)?)?;
     sub.add_function(wrap_pyfunction!(arc_command, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(planar_arrangement, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(planar_rebuild, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(_interior_point, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(scan_interior_point, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(_build_graph, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(
+        super::arrangement::plane_segment_parameter,
+        &sub
+    )?)?;
+    sub.add_function(wrap_pyfunction!(
+        super::arrangement::plane_intersections,
+        &sub
+    )?)?;
+    sub.add_function(wrap_pyfunction!(object_planes::coplanar_plane, &sub)?)?;
+    for (name, native) in [
+        ("_key", "grid_key"),
+        ("_classify", "classify"),
+        ("_area_floor", "area_floor"),
+        ("_signed_area", "signed_area"),
+        ("_point_in_polygon", "point_in_polygon"),
+        ("_intersections", "plane_intersections"),
+        ("_on_seg", "plane_segment_parameter"),
+    ] {
+        sub.add(name, sub.getattr(native)?)?;
+    }
+    sub.add("_TOL", TOL)?;
+    let kw = PyDict::new(m.py());
+    kw.set_item("module", "core.arrangement")?;
+    sub.add(
+        "_Seg",
+        m.py()
+            .import("collections")?
+            .getattr("namedtuple")?
+            .call(("_Seg", "a b"), Some(&kw))?,
+    )?;
     m.add_submodule(&sub)
 }
