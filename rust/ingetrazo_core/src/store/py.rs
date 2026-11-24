@@ -1606,6 +1606,11 @@ impl PyMeshStore {
     }
 
     #[staticmethod]
+    fn handle_landing_defects(vertices: &Bound<'_, PyAny>, area_eps: f64, hypot: &str) -> PyResult<[usize;6]> {
+        super::landing::handle_counts(vertices, area_eps, crate::hypot_of(hypot)?)
+    }
+
+    #[staticmethod]
     fn object_landing_defects(
         edges: Vec<super::landing::Edge>,
         faces: Vec<super::landing::Rings>,

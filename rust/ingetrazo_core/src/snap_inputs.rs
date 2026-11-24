@@ -72,7 +72,7 @@ impl Edges {
 type Columns<'py> = (
     Bound<'py, PyArray2<f64>>,
     Bound<'py, PyArray2<f64>>,
-    Vec<u8>,
+    Bound<'py, pyo3::types::PyList>,
     Vec<bool>,
 );
 #[pyfunction]
@@ -82,7 +82,12 @@ pub(crate) fn edge_columns<'py>(edges: &Obj<'py>) -> PyResult<Columns<'py>> {
         Array2::from_shape_fn((data.lines.len(), 3), |(i, j)| data.lines[i][end][j])
             .into_pyarray(edges.py())
     };
-    Ok((points(0), points(1), data.tags, data.grouped))
+    Ok((
+        points(0),
+        points(1),
+        pyo3::types::PyList::new(edges.py(), data.tags)?,
+        data.grouped,
+    ))
 }
 
 pub(super) fn from_objects(

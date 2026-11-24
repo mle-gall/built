@@ -1030,14 +1030,7 @@ def defects_near(vertices, area_eps: float = 1e-10) -> dict:
             return dict(zip(DEFECT_KINDS, values))
         except KeyError:
             pass  # A held view can resolve through a materialised object's key map.
-    edges = {edge.key: edge for v in vertices for edge in v.edges}
-    faces = {f.key: f for e in edges.values() for f in e.faces}
-    def corner(v):
-        return v.key, v.position.toTuple()
-    values = MeshStore.object_landing_defects(
-        [(corner(e.v0), corner(e.v1), [f.key for f in e.faces]) for e in edges.values()],
-        [[[corner(v) for v in ring] for ring in (f.loop, *f.hole_loops)] for f in faces.values()],
-        area_eps, _hypot())
+    values = MeshStore.handle_landing_defects(vertices, area_eps, _hypot())
     return dict(zip(DEFECT_KINDS, values))
 
 
