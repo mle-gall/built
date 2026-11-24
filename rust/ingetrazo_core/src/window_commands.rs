@@ -8,6 +8,7 @@ use std::collections::BTreeMap;
 pub struct WindowCommands {
     next_id: u64,
     actions: BTreeMap<u64, Py<WindowCommand>>,
+    plugin_keys: BTreeMap<u32, Py<PyAny>>,
 }
 
 #[pymethods]
@@ -42,6 +43,19 @@ impl WindowCommands {
         if let Some(action) = self.actions.remove(&id) {
             action.borrow_mut(py).live = false;
         }
+    }
+    // Third-party actions are scoped to this window. Preserve tree order for
+    // duplicate bindings. Built-in commands take priority at dispatch.
+    fn replace_plugin_keys(&mut self, bindings: Vec<(u32, Py<PyAny>)>) {
+        self.plugin_keys.clear();
+        for (chord, action) in bindings {
+            self.plugin_keys.entry(chord).or_insert(action);
+        }
+    }
+    fn plugin_action(&self, py: Python<'_>, key: u32, modifiers: u32) -> Option<Py<PyAny>> {
+        self.plugin_keys
+            .get(&(key | modifiers))
+            .map(|action| action.clone_ref(py))
     }
     fn resolve(&self, py: Python<'_>, key: u32, modifiers: u32) -> Option<u64> {
         let chord = key | modifiers;

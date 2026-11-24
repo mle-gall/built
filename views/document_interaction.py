@@ -12943,6 +12943,12 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
                     best_g = self._owner_of(g)
         return best_g
 
+    def _pointer_for_tool(self, key, plus=False):
+        factory = getattr(getattr(self, "_host", None), "tool_cursor", None)
+        if factory is None:
+            from views.icons import tool_cursor as factory
+        return factory(key, plus)
+
     def _apply_tool_cursor(self) -> None:
         """The pointer becomes the active tool's icon; Select and
         unknown tools keep the standard arrow.
@@ -12951,8 +12957,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         pointer: Paint holds Alt to SAMPLE a face's material instead of
         painting it, and the cursor swaps the bucket for an eyedropper while
         it is down."""
-        from PySide6.QtWidgets import QApplication
-        from views.icons import tool_cursor
         icon = getattr(self.active_tool, "icon", None)
         if icon == "paint":
             from tools.paint import PaintTool
@@ -12967,11 +12971,15 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         # The guide-mode plus: the Tape and the Protractor say with
         # it whether this measurement will leave a guide behind (issue #29).
         plus = bool(getattr(self.active_tool, "cursor_plus", False))
-        cur = (tool_cursor(icon, plus)
+        cur = (self._pointer_for_tool(icon, plus)
                if self.active_tool is not None else None)
         if cur is None and self.active_tool is not None:
             # A tool without a drawn icon can still ask for a stock Qt
             # cursor (Position Texture shows a hand).
+            solid = getattr(self.active_tool, "solid_cursor_key", None)
+            if solid and getattr(getattr(self, "_host", None), "tool_cursor", None):
+                self.setCursor("tool:" + solid)
+                return
             shape = getattr(self.active_tool, "qt_cursor", None)
             if shape is not None:
                 from PySide6.QtGui import QCursor
@@ -12984,9 +12992,8 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     def _apply_nav_cursor(self) -> None:
         """The pointer for a camera nav mode: orbit / pan / the magnifier
         (each navigation tool shows its own icon)."""
-        from views.icons import tool_cursor
         if self.nav_mode in ("orbit", "pan", "zoom", "zoom_window"):
-            cur = tool_cursor(self.nav_mode)
+            cur = self._pointer_for_tool(self.nav_mode)
             if cur is not None:
                 self.setCursor(cur)
                 return
@@ -13360,8 +13367,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         if self._pan_mode == pan:
             return
         self._pan_mode = pan
-        from views.icons import tool_cursor
-        cur = tool_cursor("pan" if pan else "orbit")
+        cur = self._pointer_for_tool("pan" if pan else "orbit")
         if cur is not None:
             self.setCursor(cur)
 

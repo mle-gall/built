@@ -554,48 +554,22 @@ def _thumbnail(p: Path, st):
             data = archive.read(info)
     except (OSError, KeyError, zipfile.BadZipFile, ValueError):
         return None
-    image = QImage()
-    if not image.loadFromData(data, "PNG"):
+    from ingetrazo_render import archive_thumbnail
+    picture = archive_thumbnail(data, THUMB_PX)
+    if picture is None:
         return None
-    if blank_picture(image):
-        # A save that grabbed the hidden GL view (Metal on) kept a black
-        # frame: the placeholder says more than a black tile.
-        return None
-    if image.width() > THUMB_PX:
-        image = image.scaledToWidth(THUMB_PX, Qt.SmoothTransformation)
-    image = image.convertToFormat(QImage.Format_RGBA8888)
-    w, h = image.width(), image.height()
-    rgba = bytes(image.constBits())[: w * h * 4]
-    if image.bytesPerLine() != w * 4:
-        rgba = b"".join(bytes(image.constScanLine(y))[: w * 4] for y in range(h))
+    w, h, rgba = picture
     key = "thumb:" + hashlib.sha1(f"{p}|{st.st_mtime_ns}|{st.st_size}".encode()).hexdigest()[:16]
     return key, w, h, rgba
 
 
-#: A picture is blank when this share of it is one colour (a black frame
-#: with a few stray pixels of chrome or a far speck of model counts).
-BLANK_SHARE = 0.985
-
-
 def blank_picture(image) -> bool:
-    """True when ``image`` (a QImage) shows nothing: empty, or all (or
-    nearly all) one colour. Read on a 64 × 64 sample, so it costs the same
-    for any size; safe off the GUI thread."""
-    if image is None or image.isNull() or image.width() < 1 or image.height() < 1:
+    """The classic save path supplies a QImage. Rust samples its RGBA pixels."""
+    if image is None or image.isNull():
         return True
-    small = image.scaled(64, 64, Qt.IgnoreAspectRatio, Qt.FastTransformation)
-    small = small.convertToFormat(QImage.Format_RGBA8888)
-    w, h = small.width(), small.height()
-    raw = bytes(small.constBits())
-    stride = small.bytesPerLine()
-    counts: dict = {}
-    for y in range(h):
-        row = raw[y * stride: y * stride + w * 4]
-        for x in range(0, w * 4, 4):
-            # Quantised: a JPEG-ish wobble or dither is still one colour.
-            key = (row[x] >> 3, row[x + 1] >> 3, row[x + 2] >> 3)
-            counts[key] = counts.get(key, 0) + 1
-    return max(counts.values()) >= BLANK_SHARE * w * h
+    from ingetrazo_render import blank_picture as blank_rgba
+    rgba = image.convertToFormat(QImage.Format_RGBA8888)
+    return blank_rgba(rgba.width(), rgba.height(), bytes(rgba.constBits()))
 
 
 def forget_cache() -> None:

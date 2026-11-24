@@ -198,21 +198,7 @@ class ImagePlane(Record):
 
 
 def image_aspect(path) -> tuple[float, int, int]:
-    """``(aspect, pixel_width, pixel_height)`` of an image file, where aspect is
-    height/width. Reads the header only — no full decode — and lifts
-    ``QImageReader``'s 256 MB allocation cap, which otherwise rejects large
-    scans with a misleading "out of memory" (the same trap ``georef/photomesh``
-    documents). Returns ``(1.0, 0, 0)`` when the file is unreadable."""
-    from PySide6.QtGui import QImageReader
-
-    previous = QImageReader.allocationLimit()
-    QImageReader.setAllocationLimit(0)          # 0 = no limit
-    try:
-        reader = QImageReader(str(path))
-        size = reader.size()
-    finally:
-        QImageReader.setAllocationLimit(previous)
-    w, h = size.width(), size.height()
-    if w <= 0 or h <= 0:
-        return 1.0, 0, 0
-    return h / w, w, h
+    """Return (height/width, width, height) from the reference file header."""
+    from ingetrazo_render import raster_dimensions
+    w, h = raster_dimensions(path) or (0, 0)
+    return (h / w, w, h) if w and h else (1.0, 0, 0)

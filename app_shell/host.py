@@ -194,7 +194,16 @@ class Host:
         if left < 0 or left > msec:
             self._wake_timer.start(msec)
 
+    @staticmethod
+    def tool_cursor(key, plus=False):
+        from core import general_settings
+        from ingetrazo_render import tool_cursor_name
+        return tool_cursor_name(key, plus, str(general_settings.value("cursor_style", "tool")))
+
     def cursor_changed(self, cursor):
+        if isinstance(cursor, str):
+            self._cursor = cursor
+            return
         try:
             shape = cursor.shape() if hasattr(cursor, "shape") else cursor
             value = int(getattr(shape, "value", shape))
@@ -503,9 +512,14 @@ class Host:
         if slot is not None:
             win._command_actions[slot].trigger()
             return True
-        # Third-party plugins can still attach a raw Qt action to the host.
-        from views.shortcuts import trigger_plugin_shortcut
-        return trigger_plugin_shortcut(win, key, modifiers)
+        if vars(win).get("_action_tree_changed"):
+            from app_shell.legacy_actions import sync
+            sync(win)
+        action = win._command_store.plugin_action(int(key), int(modifiers))
+        if action is None:
+            return False
+        action.trigger()
+        return True
 
     def text(self, text):
         """Committed IME text: the chrome's focused field, else the tools
@@ -627,6 +641,9 @@ class Host:
         chrome_forms.close_all(self.window)
         self.window._release_check = None
         windows.unregister(self)
+        if vars(self.window).get("_action_observer") is not None:
+            from app_shell.legacy_actions import close
+            close(self.window)
         self.timers.cancel_all()
         for doc in list(self.window._documents):
             self.window._release_document_watch(doc)

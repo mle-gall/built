@@ -170,10 +170,10 @@ impl TexturedPreview {
 
     pub fn upload(
         &mut self,
+        py: Python<'_>,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         runs: Vec<Run<'_>>,
-        load: &Bound<'_, PyAny>,
     ) -> PyResult<()> {
         let mut next = Vec::new();
         let mut new_images = HashMap::new();
@@ -191,17 +191,9 @@ impl TexturedPreview {
             }
             if !self.images.contains_key(&path) && !new_images.contains_key(&path) {
                 let limit = device.limits().max_texture_dimension_2d;
-                let result = load.call1((&path, limit))?;
-                let (w, h, bytes): (u32, u32, PyReadonlyArray1<'_, u8>) = result.extract()?;
-                let bytes = bytes.as_slice()?;
-                if w == 0
-                    || h == 0
-                    || w > limit
-                    || h > limit
-                    || bytes.len() as u64 != u64::from(w) * u64::from(h) * 4
-                {
-                    return Err(PyValueError::new_err("invalid preview image dimensions"));
-                }
+                let pixels = crate::image_assets::texture(py, path.as_ref(), limit, true)?
+                    .unwrap_or_else(|| image::RgbaImage::from_pixel(1, 1, image::Rgba([245, 242, 236, 255])));
+                let (w, h) = pixels.dimensions();
                 let texture = device.create_texture_with_data(
                     queue,
                     &wgpu::TextureDescriptor {
@@ -219,7 +211,7 @@ impl TexturedPreview {
                         view_formats: &[],
                     },
                     wgpu::util::TextureDataOrder::LayerMajor,
-                    bytes,
+                    pixels.as_raw(),
                 );
                 let group = device.create_bind_group(&wgpu::BindGroupDescriptor {
                     label: None,

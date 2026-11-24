@@ -1,4 +1,6 @@
 """Material handoff tests require no window or GPU device."""
+import sys
+
 import numpy as np
 import pytest
 from views.wgpu_scene import _source_arrays, _texture_array
@@ -91,3 +93,65 @@ def test_system_codec_fallback_uses_same_orientation_and_budget(tmp_path, monkey
     w, h, count, mips = _texture_array([path])
     assert (w, h, count) == (1, 2, 2) and called == [path]
     assert mips[0][8:] == bytes((4, 5, 6, 255, 1, 2, 3, 255))
+
+
+@pytest.mark.parametrize("ext", ["tiff", "svgz", "gif"])
+def test_specialty_files_decode_once_for_materials_and_references(tmp_path, monkeypatch, ext):
+    import gzip
+    import struct
+    from ingetrazo_render import reference_texture, raster_dimensions
+    from views import wgpu_scene
+
+    path = tmp_path / f"stripes.{ext}"
+    # White over black. Generate real two-row files independently of Qt's codecs.
+    if ext == "svgz":
+        path.write_bytes(gzip.compress(b'<svg xmlns="http://www.w3.org/2000/svg" width="1" height="2">'
+                                       b'<rect width="1" height="2"/><rect width="1" height="1" fill="white"/></svg>'))
+    elif ext == "gif":
+        # GIF89a, black/white global palette. LZW codes clear, white, black, end.
+        path.write_bytes(bytes.fromhex("47494638396101000200800000000000ffffff"
+                                       "2c00000000010002000002020c0a003b"))
+    else:
+        tags = [(256, 1), (257, 2), (258, 8), (259, 1), (262, 1),
+                (273, 110), (278, 2), (279, 2)]
+        ifd = b"".join(struct.pack("<HHII", tag, 4, 1, value) for tag, value in tags)
+        path.write_bytes(b"II*\0" + struct.pack("<IH", 8, len(tags)) + ifd + bytes(4) + b"\xff\0")
+    monkeypatch.setattr(wgpu_scene, "_legacy_texture_pixels",
+                        lambda _: pytest.fail("Renderer called the Qt plugin"))
+    assert raster_dimensions(path) == (1, 2)
+    w, h, data = reference_texture(path, 16)
+    assert (w, h) == (1, 2) and data.tolist() == [255, 255, 255, 255, 0, 0, 0, 255]
+    w, h, count, mips = _texture_array([path])
+    assert (w, h, count) == (1, 2, 2)
+    assert mips[0][8:] == bytes((0, 0, 0, 255, 255, 255, 255, 255))
+
+
+def test_reference_resizing_preserves_aspect_and_translucent_edges():
+    from ingetrazo_render import fit_reference_rgba
+    row = bytes([255, 0, 0, 0, 0, 0, 255, 255]) * 2
+    width, height, rgba = fit_reference_rgba(4, 2, row * 2, 2)
+    assert (width, height) == (2, 1)
+    assert all(r == g == 0 and b == 255 and 0 < a < 255 for r, g, b, a in rgba.reshape((-1, 4)))
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="macOS ImageIO")
+def test_platform_image_keeps_top_row_and_straight_alpha(tmp_path, monkeypatch):
+    import struct
+    from ingetrazo_render import reference_texture, raster_dimensions
+    from views import wgpu_scene
+    image = QImage(16, 16, QImage.Format_RGBA8888)
+    image.fill(QColor(0, 0, 255, 255))
+    image.setPixelColor(0, 0, QColor(255, 0, 0, 128))
+    png = tmp_path / "art.png"
+    assert image.save(str(png))
+    data = png.read_bytes()
+    path = tmp_path / "art.icns"
+    path.write_bytes(b"icns" + struct.pack(">I", len(data) + 16)
+                     + b"icp4" + struct.pack(">I", len(data) + 8) + data)
+    monkeypatch.setattr(wgpu_scene, "_legacy_texture_pixels",
+                        lambda _: pytest.fail("Requested a Qt platform codec"))
+    assert raster_dimensions(path) == (16, 16)
+    w, h, pixels = reference_texture(path, 16)
+    assert (w, h) == (16, 16)
+    assert pixels[:4].tolist() == [255, 0, 0, 128]
+    assert pixels[-4:].tolist() == [0, 0, 255, 255]

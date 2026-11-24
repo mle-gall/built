@@ -29,7 +29,7 @@ def test_tools_views_and_menus_reassign_and_reset_across_windows(tmp_path, monke
         form = forms.pop()
         form.receive("keys", "F9")
         form.press("ok")
-        assert tool.shortcut() == QKeySequence("F9")
+        assert tool.portable_keys() == ["F9"]
         for action, previous in [(view, tool), (menu, view)]:
             sheet._assign(action, [QKeySequence("F9")])
             forms.pop().press("cancel")
@@ -51,7 +51,7 @@ def test_tools_views_and_menus_reassign_and_reset_across_windows(tmp_path, monke
         assert not fresh._shortcut(Qt.Key_F9, 0)
         sheet.state.kb_focus = "sc:view:orbit"
         sheet._kb_verb("kb_default")
-        assert fresh.window._registry_actions["view:orbit"].shortcut() == QKeySequence("O")
+        assert fresh.window._registry_actions["view:orbit"].portable_keys() == ["O"]
         sheet._assign(tool, [QKeySequence("F9")])
         sheet._kb_verb("kb_reset_all")
         forms.pop().press("ok")
@@ -60,3 +60,18 @@ def test_tools_views_and_menus_reassign_and_reset_across_windows(tmp_path, monke
     finally:
         for h in reversed(hosts):
             h.close()
+
+
+def test_keyboard_prompt_roundtrips_platform_text_and_reserved_keys():
+    from ingetrazo_render import shortcut_alternatives, shortcut_text
+    from views.settings_sheet import _keys_text, _parse_keys
+
+    for source in ("⌥⇧⌘É", "Ctrl+Alt+Shift+É"):
+        assert _parse_keys(source) == ["Ctrl+Alt+Shift+É"]
+        assert _parse_keys(_keys_text(_parse_keys(source))) == ["Ctrl+Alt+Shift+É"]
+    assert _parse_keys("⌘,") == ["Ctrl+,"]
+    assert _parse_keys("") == []
+    assert isinstance(_parse_keys("Ctrl+K, Ctrl+C"), str)
+    assert isinstance(_parse_keys("⇥"), str)
+    assert shortcut_text("Ctrl+⇞")[2] == Qt.Key_PageUp | Qt.ControlModifier.value
+    assert shortcut_alternatives("Alt+;; Shift+F9; Shift+F9; Down", True) == ["Alt+;", "Shift+F9"]

@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (QHBoxLayout, QHeaderView, QLabel, QLineEdit,
                                QTreeWidgetItem, QVBoxLayout, QWidget)
 
 from core.i18n import current_language, source_of, tr
+from ingetrazo_render import shortcut_alternatives, shortcut_text
 
 _GROUP = "shortcuts"
 _DEFAULTS = "ingetrazo_default_shortcuts"
@@ -93,53 +94,45 @@ def collect_actions(window) -> list:
     return sorted(seen.values(), key=lambda a: _plain(a.text()).lower())
 
 
-def trigger_plugin_shortcut(window, key, modifiers):
-    actions = window.findChildren(QAction)
-    if actions:
-        chord = QKeySequence(int(key) | int(modifiers))
-        for action in actions:
-            if action.isEnabled() and any(s.matches(chord) == QKeySequence.ExactMatch for s in action.shortcuts()):
-                action.trigger()
-                return True
-    return False
+def portable_keys(seqs):
+    """Adapt keys supplied by classic actions or older plugin callers."""
+    return [s if isinstance(s, str) else s.toString(QKeySequence.PortableText) for s in seqs]
 
 
-def _to_text(seqs) -> str:
-    return "; ".join(s.toString(QKeySequence.PortableText) for s in seqs
-                     if not s.isEmpty())
+def action_keys(action):
+    if isinstance(action, QAction):
+        return portable_keys(action.shortcuts())
+    return action.portable_keys()
 
 
-def _from_text(text: str) -> list:
-    return [QKeySequence.fromString(t.strip(), QKeySequence.PortableText)
-            for t in (text or "").split(";") if t.strip()]
+def set_action_keys(action, keys):
+    if isinstance(action, QAction):
+        keys = [QKeySequence(s) for s in keys]
+    action.setShortcuts(keys)
+
+
+def _to_text(seqs):
+    return "; ".join(filter(None, portable_keys(seqs)))
 
 
 def reserved_reason(seq: QKeySequence):
-    """Why ``seq`` cannot be a shortcut, or ``None``. The viewport reads
-    some keys itself — not through actions — and an action holding one
-    would swallow it: digits and the decimal marks type a measure in the
-    value box, Esc cancels, Enter commits, Backspace edits the box, the
-    arrows lock an axis, Tab and the bare modifiers steer the tools."""
-    if seq.isEmpty():
-        return None
-    combo = seq[0]
-    key = combo.key()
-    mods = combo.keyboardModifiers() & ~Qt.KeypadModifier
-    plain = mods in (Qt.NoModifier, Qt.ShiftModifier)
-    from ingetrazo_render import shortcut_reserved
-    reason = shortcut_reserved(key.name, plain)
-    return tr(reason) if reason else None
+    parsed = shortcut_text(seq.toString(QKeySequence.PortableText))
+    return tr(parsed[3]) if parsed and parsed[3] else None
 
 
 def remember_defaults(window) -> None:
-    """Note each action's factory keys (before the user's go on)."""
+    """Note each action's factory keys before applying stored overrides."""
     for act in collect_actions(window):
         if act.property(_DEFAULTS) is None:
-            act.setProperty(_DEFAULTS, _to_text(act.shortcuts()))
+            act.setProperty(_DEFAULTS, "; ".join(action_keys(act)))
+
+
+def default_keys(action):
+    return shortcut_alternatives(action.property(_DEFAULTS) or "", False)
 
 
 def default_shortcuts(action: QAction) -> list:
-    return _from_text(action.property(_DEFAULTS) or "")
+    return [QKeySequence(s) for s in default_keys(action)]
 
 
 def _store_key(key: str) -> str:
@@ -168,19 +161,6 @@ def _saved_shortcuts() -> dict:
     return saved
 
 
-def _unique(seqs) -> list:
-    """``seqs`` without repeats, first one kept: a key listed twice on one
-    action does not fire (#313)."""
-    seen: set = set()
-    out = []
-    for q in seqs:
-        t = q.toString(QKeySequence.PortableText)
-        if t and t not in seen:
-            seen.add(t)
-            out.append(q)
-    return out
-
-
 def apply_user_shortcuts(window) -> int:
     """Put the remembered keys on the window's actions. Returns how many."""
     saved = _saved_shortcuts()
@@ -190,9 +170,7 @@ def apply_user_shortcuts(window) -> int:
         if key not in saved:
             key = act.property("legacyShortcutKey")
         if key in saved:
-            seqs = _unique(q for q in _from_text(saved[key])
-                           if reserved_reason(q) is None)  # never reserved
-            act.setShortcuts(seqs)
+            set_action_keys(act, shortcut_alternatives(saved[key], True))
             n += 1
     return n
 
@@ -212,8 +190,8 @@ def save_shortcut(action: QAction, seqs: list) -> None:
     from app_shell.windows import hosts
     for host in hosts():
         peer = vars(host.window).get("_registry_actions", {}).get(key)
-        if peer is not None and peer is not action and peer.shortcuts() != seqs:
-            peer.setShortcuts(seqs)
+        if peer is not None and peer is not action:
+            peer.setShortcuts(portable_keys(seqs))
 
 
 #: What an exported shortcuts file says it is (issue #142).
@@ -226,7 +204,7 @@ def export_shortcuts(window) -> dict:
     «transfer shortcut configurations between computers, O.S., friends»).
     Actions with no keys are written too, so a cleared key travels."""
     return {"format": EXPORT_FORMAT, "version": 1,
-            "shortcuts": {action_key(a): _to_text(a.shortcuts())
+            "shortcuts": {action_key(a): "; ".join(action_keys(a))
                           for a in collect_actions(window)}}
 
 
@@ -255,24 +233,22 @@ def import_shortcuts(window, data) -> tuple:
         if act is None:
             continue
         seqs = []
-        for q in _unique(q for q in _from_text(text)
-                         if reserved_reason(q) is None):
-            t = q.toString(QKeySequence.PortableText)
+        for t in shortcut_alternatives(text, True):
             if t in taken:
                 clashes.append((t, taken[t], act))
                 continue
             taken[t] = act
-            seqs.append(q)
-        act.setShortcuts(seqs)
+            seqs.append(t)
+        set_action_keys(act, seqs)
         save_shortcut(act, seqs)
         applied += 1
     for act in actions:
         if action_key(act) in wanted:
             continue
-        kept = [s for s in act.shortcuts()
-                if s.toString(QKeySequence.PortableText) not in taken]
-        if len(kept) != len(act.shortcuts()):
-            act.setShortcuts(kept)
+        keys = action_keys(act)
+        kept = [s for s in keys if s not in taken]
+        if len(kept) != len(keys):
+            set_action_keys(act, kept)
             save_shortcut(act, kept)
     return applied, len(wanted) - applied, clashes
 

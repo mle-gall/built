@@ -174,3 +174,18 @@ pub fn sheet_frame_hidden(py: Python<'_>, root: &Bound<'_, PyAny>, roots: Vec<Bo
         },
     })).collect()
 }
+
+
+/// The same tag and folder visibility for non-mesh reference layers.
+#[pyfunction]
+pub fn sheet_frame_hidden_tags(py: Python<'_>, root: &Bound<'_, PyAny>,
+                              view: Option<&Bound<'_, PyAny>>) -> PyResult<HashSet<String>> {
+    py.import("core.doc_model")?.call_method0("flush")?;
+    let state = match view {
+        Some(view) => ViewState::of_view(&super::model::read_fields(doc::py::handle_key(view)?)?),
+        None => ViewState::default(),
+    };
+    let root = doc::py::handle_key(root)?;
+    let tags = Tags::read(&doc::lock(), root, &state)?;
+    Ok(tags.tags.into_iter().filter_map(|(tag, (shown, _))| (!shown).then_some(tag)).collect())
+}

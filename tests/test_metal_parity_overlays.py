@@ -140,7 +140,30 @@ def test_export_layout_matches_gl_at_output_aspect(size, dpr, only):
     blank = painted(lambda p: None, (size[0] / dpr, size[1] / dpr), dpr)
     actual = composite_annotations(blank, scene, camera, logical_size=(640, 400),
                                    annotations_only=only)
-    equal(actual, expected)
+    # Keep the byte-level check of shared projection, selection and pen layout.
+    def layout_reference(painter):
+        painter.scale(size[0] / 640 / dpr, size[0] / 640 / dpr)
+        draw_annotations(painter, scene, camera, (640, logical_height), annotations_only=only)
+    equal(painted(layout_reference, (size[0] / dpr, size[1] / dpr), dpr), expected)
+
+    # tiny-skia and the platform painter sample strokes and font outlines
+    # differently. Compare coverage and location in both directions.
+    def alpha(image):
+        return pixels(image).reshape(size[1], size[0], 4)[:, :, 3]
+    a, b = alpha(actual), alpha(expected)
+    assert 0.80 < a.sum() / b.sum() < 1.20
+    def within_stroke(mask):
+        near = mask.copy()
+        for _ in range(3 * dpr):
+            prev = near.copy()
+            near[1:] |= prev[:-1]
+            near[:-1] |= prev[1:]
+            prev = near.copy()
+            near[:, 1:] |= prev[:, :-1]
+            near[:, :-1] |= prev[:, 1:]
+        return near
+    for observed, target in ((a, b), (b, a)):
+        assert within_stroke(target > 24)[observed > 24].mean() > .95
     assert pixels(actual).sum() > 0
     assert not pixels(blank).any()
     assert camera.aspect == old_aspect
@@ -238,3 +261,26 @@ def test_clear_dimension_stroke_covers_arrows_and_label_for_this_frame():
     assert not any(layout._occluded_on_screen(p) for p in [a, b, (a + b) * .5])
     assert not reads
     assert layout._occluded_on_screen(V(0, 1, 0))
+
+
+def test_capture_marks_composite_over_straight_alpha_and_escape_label_text():
+    from ingetrazo_render import AnnotationCanvas
+    from PySide6.QtCore import QPointF
+    from PySide6.QtGui import QColor, QPen
+    target = AnnotationCanvas(96, 36, 96)
+    base = bytes([0, 0, 255, 128]) * (96 * 36)
+    assert target.composite(base) is base
+    target.fillRect(0, 0, 8, 8, QColor(255, 0, 0, 128))
+    target.setPen(QPen(QColor(0, 255, 0)))
+    target.drawText(QPointF(10, 24), "A < B & C")
+    pixels = np.frombuffer(target.composite(base), np.uint8).reshape(36, 96, 4)
+    np.testing.assert_allclose(pixels[2, 2], [170, 0, 85, 192], atol=1)
+    assert pixels[:, 10:, 1].max() > 160
+    assert pixels[35, 95].tolist() == list(base[:4])
+
+
+def test_capture_rejects_impossible_pixel_dimensions_without_allocating():
+    from ingetrazo_render import AnnotationCanvas
+
+    with pytest.raises(ValueError):
+        AnnotationCanvas(1 << 31, 1 << 31, 800).composite(b"")

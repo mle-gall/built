@@ -690,22 +690,14 @@ def save_copy(win) -> bool:
 def _picture_png(win, doc):
     """The picture a save keeps in the file (MainWindow._document_picture
     under Metal): one small offscreen frame of the resident model."""
-    from views.wgpu_start import blank_picture
+    from ingetrazo_render import archive_picture_png
     view = getattr(doc, "stand_in", None)
     if view is None or getattr(view, "renderer", None) is None or getattr(view, "packed", None) is None:
         return None
     try:
-        image = view.render_image(win.SAVE_PICTURE_PX)
+        return archive_picture_png(*view.render_pixels(win.SAVE_PICTURE_PX))
     except Exception:  # noqa: BLE001 — a missing picture only
         return None
-    if image is None or blank_picture(image):
-        return None
-    from PySide6.QtCore import QBuffer, QByteArray, QIODevice
-    data = QByteArray()
-    buffer = QBuffer(data)
-    buffer.open(QIODevice.WriteOnly)
-    image.save(buffer, "PNG")
-    return bytes(data)
 
 
 def _save_progress(job):

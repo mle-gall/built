@@ -613,9 +613,8 @@ class MeshToolAccess:
                     from views.wgpu_parity import raw
                     mesh = (mesh[0], np.concatenate((mesh[1], raw(box))))
                 if runs:
-                    from views.wgpu_references import preview_texture
                     renderer.set_preview_mesh(*mesh, [(path, shade, opacity, np.asarray(vertices))
-                        for path, shade, opacity, vertices in runs], preview_texture)
+                        for path, shade, opacity, vertices in runs])
                 else:
                     renderer.set_preview_mesh(*mesh)
                 self.view._preview_key = (key, box_key)

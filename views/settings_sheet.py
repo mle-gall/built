@@ -634,29 +634,21 @@ _BUILDERS = {"ai": _ai, "general": _general, "navigation": _navigation, "display
 
 # ---- Keyboard ---------------------------------------------------------------------
 def _parse_keys(text: str):
-    """The keys typed in the prompt: ``[]`` (none), ``[QKeySequence]``, or
-    a reason they cannot be a shortcut (str)."""
-    from PySide6.QtCore import Qt
-    from PySide6.QtGui import QKeySequence
-    from views.shortcuts import reserved_reason
-    t = (text or "").strip()
+    from ingetrazo_render import shortcut_text
+    t = (text or "").strip(" \t\r\n")
     if not t:
         return []
-    seq = QKeySequence.fromString(t, QKeySequence.NativeText)
-    if seq.isEmpty():
-        seq = QKeySequence.fromString(t, QKeySequence.PortableText)
-    if seq.isEmpty() or seq.count() != 1 or seq[0].key() in (Qt.Key_unknown, 0):
+    seq = shortcut_text(t)
+    if seq is None or seq[2] is None:
         return tr("«{keys}» is not a key combination Built knows (write it like Ctrl+Shift+K).", keys=t)
-    why = reserved_reason(seq)
-    if why is not None:
-        return tr("«{keys}» cannot be a shortcut: {why}.", keys=seq.toString(QKeySequence.NativeText),
-                  why=why)
-    return [seq]
+    if seq[3]:
+        return tr("«{keys}» cannot be a shortcut: {why}.", keys=seq[1], why=tr(seq[3]))
+    return [seq[0]]
 
 
-def _keys_text(seqs) -> str:
-    from PySide6.QtGui import QKeySequence
-    return ", ".join(s.toString(QKeySequence.NativeText) for s in seqs if not s.isEmpty())
+def _keys_text(keys):
+    from ingetrazo_render import shortcut_text
+    return ", ".join(seq[1] for text in keys if (seq := shortcut_text(text)))
 
 
 # ---- The sheet ---------------------------------------------------------------------
@@ -987,13 +979,13 @@ class SettingsSheet(chrome_sheet.Provider):
         return self._paths
 
     def _keyboard_snapshot(self):
-        from views.shortcuts import _plain, action_key, default_shortcuts
+        from views.shortcuts import _plain, action_key, action_keys, default_keys
         paths = self.paths()
         actions = []
         for act in self.actions():
             key = action_key(act)
             actions.append((key, _plain(act.text()), paths.get(key, ""),
-                            _keys_text(act.shortcuts()), _keys_text(default_shortcuts(act))))
+                            _keys_text(action_keys(act)), _keys_text(default_keys(act))))
         return json.loads(self.state.keyboard(actions, tr))
 
     def _action(self, item):
@@ -1010,21 +1002,18 @@ class SettingsSheet(chrome_sheet.Provider):
         """The panel's ``assign``: give ``act`` these keys, taking them from
         any other command that holds them (after asking) — two commands on
         one key both go dead."""
-        from PySide6.QtGui import QKeySequence
         from ingetrazo_render import shortcut_conflicts
-        from views.shortcuts import _plain, action_key, save_shortcut
+        from views.shortcuts import _plain, action_key, action_keys, portable_keys, save_shortcut, set_action_keys
         actions = {action_key(a): a for a in self.actions()}
-        def portable(seqs):
-            return [q.toString(QKeySequence.PortableText) for q in seqs]
-        clash = shortcut_conflicts(action_key(act), set(portable(seqs)),
-                                   [(k, portable(a.shortcuts())) for k, a in actions.items()])
+        seqs = portable_keys(seqs)
+        clash = shortcut_conflicts(action_key(act), set(seqs),
+                                   [(k, action_keys(a)) for k, a in actions.items()])
 
         def go():
             for key, remaining in clash:
-                kept = [QKeySequence(s) for s in remaining]
-                actions[key].setShortcuts(kept)
-                save_shortcut(actions[key], kept)
-            act.setShortcuts(seqs)
+                set_action_keys(actions[key], remaining)
+                save_shortcut(actions[key], remaining)
+            set_action_keys(act, seqs)
             save_shortcut(act, seqs)
             self.state.note = None
             chrome_sheet.refresh(self._win)
@@ -1044,7 +1033,7 @@ class SettingsSheet(chrome_sheet.Provider):
         cf.show(self._win, form)
 
     def _change_keys(self, act) -> None:
-        from views.shortcuts import _plain
+        from views.shortcuts import _plain, action_keys
 
         def check(form, _answer):
             got = _parse_keys(form.value("keys"))
@@ -1057,7 +1046,7 @@ class SettingsSheet(chrome_sheet.Provider):
             if not isinstance(got, str):
                 self._assign(act, got)
         form = cf.Form(tr("Keys for «{action}»", action=_plain(act.text())),
-                       [cf.Field("keys", "edit", tr("Keys"), _keys_text(act.shortcuts()[:1]), focus=True)],
+                       [cf.Field("keys", "edit", tr("Keys"), _keys_text(action_keys(act)[:1]), focus=True)],
                        note=tr("Write the keys, like ⌘⇧K or Ctrl+Shift+K. Empty: no keys."),
                        validate=check, on_done=done, width=420)
         cf.show(self._win, form)
@@ -1099,14 +1088,14 @@ class SettingsSheet(chrome_sheet.Provider):
                               tr("Restore defaults"), lambda: self.restore_defaults(ctx.win))
 
     def _kb_verb(self, verb) -> None:
-        from views.shortcuts import default_shortcuts
+        from views.shortcuts import default_keys, set_action_keys
         act = self._action(self.kb_focus)
         if verb == "kb_change" and act is not None:
             self._change_keys(act)
         elif verb == "kb_clear" and act is not None:
             self._assign(act, [], ask=False)
         elif verb == "kb_default" and act is not None:
-            self._assign(act, default_shortcuts(act))
+            self._assign(act, default_keys(act))
         elif verb == "kb_export":
             self._kb_export()
         elif verb == "kb_import":
@@ -1120,11 +1109,11 @@ class SettingsSheet(chrome_sheet.Provider):
                 st.remove(_GROUP)
                 st.sync()
                 for action in self.actions():
-                    action.setShortcuts(default_shortcuts(action))
+                    set_action_keys(action, default_keys(action))
                 for host in hosts():
                     if host.window is not self._win:
                         for action in host.window._registry_actions.values():
-                            action.setShortcuts(default_shortcuts(action))
+                            set_action_keys(action, default_keys(action))
                 chrome_sheet.refresh(self._win)
             self._confirm(tr("Keyboard shortcuts"), tr("Put every action back on its factory shortcut?"),
                           tr("Restore all"), reset)
@@ -1150,7 +1139,6 @@ class SettingsSheet(chrome_sheet.Provider):
 
     def _kb_import(self) -> None:
         import json
-        from PySide6.QtGui import QKeySequence
         from views.filedialogs import file_dialogs
         from views.shortcuts import _plain, import_shortcuts
         path, _ = file_dialogs.getOpenFileName(self._parent(), tr("Import shortcuts"), "",
@@ -1171,7 +1159,7 @@ class SettingsSheet(chrome_sheet.Provider):
             msg += " " + tr("The file gave the same key to more than one command; each stays with the "
                             "first:") + " " + "; ".join(
                 tr("{key}: kept for «{kept}», taken from «{dropped}»",
-                   key=QKeySequence(k).toString(QKeySequence.NativeText), kept=_plain(kept.text()),
+                   key=_keys_text([k]), kept=_plain(kept.text()),
                    dropped=_plain(dropped.text())) for k, kept, dropped in clashes)
         self.state.note = (msg, "warn" if clashes else "ok")
 
