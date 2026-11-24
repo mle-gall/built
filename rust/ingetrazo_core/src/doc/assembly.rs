@@ -29,7 +29,10 @@ pub struct Assembly {
 
 fn topology(doc: &Doc, owner: Key, reverse: &FastMap<Key, Key>) -> (Vec<Key>, Vec<Member>) {
     let slot = |k: Key| *reverse.get(&k).unwrap_or(&k);
-    let children = &doc.node(owner).unwrap().children;
+    let Some(owner_node) = doc.node(owner) else {
+        return (Vec::new(), Vec::new());
+    };
+    let children = &owner_node.children;
     let mut stack = children.clone();
     let mut members = Vec::new();
     let mut seen = FastSet::default();
@@ -37,12 +40,14 @@ fn topology(doc: &Doc, owner: Key, reverse: &FastMap<Key, Key>) -> (Vec<Key>, Ve
         if !seen.insert(key) {
             continue;
         }
-        let n = doc.node(key).expect("attached member");
-        let fields = [Field::Xform, Field::Axes, Field::Component]
-            .map(|field| (field, n.get(field).expect("placement field")));
+        let Some(n) = doc.node(key) else {
+            continue;
+        };
         let Data::Placement(p) = &n.data else {
             continue;
         };
+        let fields = [Field::Xform, Field::Axes, Field::Component]
+            .map(|field| (field, n.get(field).unwrap_or(FVal::Bool(false))));
         members.push(Member {
             geometry: p.definition.as_ref().map(|def| def.0.get().key),
             slot: slot(key),
@@ -68,17 +73,19 @@ fn map_tree(
         if !seen.insert(src) {
             continue;
         }
-        projection
-            .entry(*reverse.get(&src).unwrap_or(&src))
-            .or_insert(dst);
-        stack.extend(
-            doc.node(src)
-                .unwrap()
-                .children
-                .iter()
-                .copied()
-                .zip(doc.node(dst).unwrap().children.iter().copied()),
-        );
+        // A slot may still name a branch that is gone (released while a
+        // History step held it): the new occurrence takes its place.
+        let slot = *reverse.get(&src).unwrap_or(&src);
+        match projection.get(&slot) {
+            Some(&k) if doc.node(k).is_some() => {}
+            _ => {
+                projection.insert(slot, dst);
+            }
+        }
+        let (Some(a), Some(b)) = (doc.node(src), doc.node(dst)) else {
+            continue;
+        };
+        stack.extend(a.children.iter().copied().zip(b.children.iter().copied()));
     }
 }
 
@@ -251,12 +258,15 @@ pub fn sync(py: Python<'_>, owner: Key) -> PyResult<()> {
     for (parent, mut map) in peers {
         // Pin new branches until their parent lists own them.
         let mut created = Vec::new();
-        for member in &members {
-            if map
-                .get(&member.slot)
-                .is_some_and(|&k| lock().node(k).is_some())
-            {
-                continue;
+        // Copying runs Python, which can release a branch already checked:
+        // check every member again until each one maps to a live node.
+        let mut rounds = 0;
+        while let Some(member) = members.iter().find(|m| {
+            !map.get(&m.slot).is_some_and(|&k| lock().node(k).is_some())
+        }) {
+            rounds += 1;
+            if rounds > members.len() * 2 + 1 {
+                return Err(PyValueError::new_err("assembly members keep disappearing"));
             }
             let child = lock()
                 .handle_ref(py, member.source)
@@ -278,7 +288,9 @@ pub fn sync(py: Python<'_>, owner: Key) -> PyResult<()> {
         }
         let mut doc = lock();
         for member in &members {
-            let dst = map[&member.slot];
+            let dst = *map
+                .get(&member.slot)
+                .ok_or_else(|| PyValueError::new_err("unmapped assembly member"))?;
             let Data::Placement(p) = &doc.need(dst).map_err(PyValueError::new_err)?.data else {
                 continue;
             };
@@ -309,8 +321,8 @@ pub fn sync(py: Python<'_>, owner: Key) -> PyResult<()> {
     let mut layout = assembly.lock().unwrap();
     layout
         .occurrences
-        .get_mut(&owner)
-        .unwrap()
+        .entry(owner)
+        .or_default()
         .extend(members.iter().map(|m| (m.slot, m.source)));
     layout.occurrences.extend(bindings);
     Ok(())
@@ -324,10 +336,15 @@ fn replace_children(
     map: &FastMap<Key, Key>,
     trash: &mut Trash,
 ) -> PyResult<()> {
-    let keys: Vec<_> = slots.iter().map(|k| map[k]).collect();
+    let keys = slots
+        .iter()
+        .map(|k| map.get(k).copied())
+        .collect::<Option<Vec<_>>>()
+        .ok_or_else(|| PyValueError::new_err("unmapped assembly member"))?;
     if doc.need(parent).map_err(PyValueError::new_err)?.children != keys {
         for &k in &keys {
-            if doc.node(k).unwrap().owners.iter().any(|&p| p != parent) {
+            let foreign = doc.need(k).map_err(PyValueError::new_err)?.owners.iter().any(|&p| p != parent);
+            if foreign {
                 doc.detach(py, k, trash).map_err(PyValueError::new_err)?;
             }
         }
@@ -455,9 +472,16 @@ pub fn drain(py: Python<'_>) -> PyResult<()> {
         doc.projecting = true;
         std::mem::take(&mut doc.dirty_assemblies)
     };
-    let result = owners.into_iter().try_for_each(|k| sync(py, k));
-    lock().projecting = false;
-    result
+    // Projection ends however a sync ends, a panic included: a stuck flag
+    // would turn every later commit's projection off.
+    struct Projecting;
+    impl Drop for Projecting {
+        fn drop(&mut self) {
+            lock().projecting = false;
+        }
+    }
+    let _projecting = Projecting;
+    owners.into_iter().try_for_each(|k| sync(py, k))
 }
 
 /// A raw list or placement setter has the same all-or-nothing semantics as a
