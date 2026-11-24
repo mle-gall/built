@@ -17,6 +17,8 @@
 mod clipboard;
 mod keys;
 mod launcher;
+#[cfg(windows)]
+mod windows_instance;
 mod gestures;
 #[cfg(target_os = "linux")]
 mod linux_pointer;
@@ -1065,6 +1067,14 @@ impl ApplicationHandler<UserEvent> for App {
     }
 
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: UserEvent) {
+        #[cfg(windows)]
+        if matches!(&event, UserEvent::Open(_)) || matches!(&event, UserEvent::Menu(cmd) if cmd == "activate") {
+            if let Some(front) = self.front().and_then(|id| self.win(id)) {
+                if front.window.is_minimized() == Some(true) {
+                    front.window.set_minimized(false);
+                }
+            }
+        }
         match event {
             UserEvent::Menu(cmd) => self.command(event_loop, &cmd),
             UserEvent::Open(path) => self.open(&path),
@@ -1173,7 +1183,7 @@ fn main() {
         }
     };
     if args.gallery { std::env::set_var("BUILT_GALLERY", "1"); }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     let shared_instance = !args.temporary_profile() && args.settings.is_none()
         && std::env::var_os("BUILT_SETTINGS_DIR").is_none() && !args.new_instance;
     #[cfg(unix)]
@@ -1181,6 +1191,14 @@ fn main() {
         eprintln!("[built] handed over to the running shell");
         return;
     }
+    #[cfg(windows)]
+    let primary_pipe = if shared_instance {
+        match windows_instance::acquire(args.file.as_deref()) {
+            Ok(windows_instance::Instance::Primary(pipe)) => Some(pipe),
+            Ok(windows_instance::Instance::Forwarded) => return,
+            Err(e) => { eprintln!("[built] single instance unavailable: {e}"); None }
+        }
+    } else { None };
     let steps = match &args.script {
         Some(p) => match std::fs::read_to_string(p).map_err(|e| e.to_string()).and_then(|t| script::parse(&t)) {
             Ok(s) => s,
@@ -1268,6 +1286,8 @@ fn main() {
     if shared_instance {
         listen_for_instances(proxy);
     }
+    #[cfg(windows)]
+    if let Some(pipe) = primary_pipe { windows_instance::listen(pipe, proxy); }
     let mut app = App {
         args,
         wins: Vec::new(),
