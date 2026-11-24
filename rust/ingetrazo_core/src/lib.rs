@@ -51,6 +51,7 @@ mod window_commands;
 mod scene_animation;
 mod atomic_document;
 mod scene_video;
+mod survey_pixels;
 mod filing_rows;
 mod readiness;
 mod project_sections;
@@ -106,6 +107,7 @@ mod sheets;
 #[pymodule]
 fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     scene_animation::register(m)?;
+    survey_pixels::register(m)?;
     m.add_class::<scene_video::MkvWriter>()?;
     m.add_class::<settings::NativeSettings>()?;
     m.add_class::<document_watch::DocumentWatch>()?;

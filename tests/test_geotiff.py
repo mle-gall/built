@@ -2,27 +2,22 @@
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """GeoTIFF orthomosaics as georeferenced reference images (Marco,
 2026-09-14: «quiero importar una imagen tif de un ortomosaico»). The
-reader is pure Python + NumPy (+ Qt for JPEG tiles): the header's pixel →
+reader uses NumPy and native JPEG tiles: the header's pixel →
 UTM transform places the picture on the datum at its true size, the
 pixels decode from every scheme the exporters use, and big mosaics are
 reduced while streaming."""
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import numpy as np
 import pytest
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-from PySide6.QtGui import QGuiApplication
-
 from georef.geotiff import (GeoTiffError, read_info, read_rgba,
                             unsupported_reason)
 from tests.geotiff_fixture import write_geotiff
 
-_app = QGuiApplication.instance() or QGuiApplication([])
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 DATA = Path(__file__).parent / "data"
 
 
@@ -118,8 +113,8 @@ def test_cancel_and_unsupported_are_reported(tmp_path):
 
 
 def test_jpeg_in_tiff_tile_decodes_to_true_colours_and_alpha():
-    """A tile of a real GDAL orthophoto (JPEG-in-TIFF, 4 samples): Qt hands
-    the 4-component JPEG back as inverted CMYK; undone, the no-data fringe
+    """A tile of a real GDAL orthophoto (JPEG-in-TIFF, 4 samples): the fourth
+    JPEG component stores coverage. The no-data fringe
     reads alpha 0 and the field its true colours (verified by eye against
     the whole mosaic — brown earth, not blue)."""
     info = read_info(DATA / "orto_jpeg_tile.tif")
@@ -140,22 +135,22 @@ def test_import_places_the_orthomosaic_on_the_datum(monkeypatch, tmp_path):
     """File ▸ Import ▸ Orthomosaic: the picture lands on the datum plane at
     its true size and place, locked, on the Images layer; a scene without
     a datum gets one at the picture's centre and the base map follows."""
-    from PySide6.QtWidgets import QApplication
+    from app_shell.host import Host
     from core.image_plane import IMAGE_LAYER
     from views.filedialogs import file_dialogs
-    from views.main_window import MainWindow
 
-    if QApplication.instance() is None:
-        QApplication([])
     src = DATA / "orto_jpeg_tile.tif"
     monkeypatch.setattr(file_dialogs, "getOpenFileName",
                         lambda *a, **k: (str(src), ""))
     monkeypatch.setattr("core.texture.texture_cache_root", lambda: tmp_path)
-    win = MainWindow()
+    host = Host(0, 900, 600, 1., settings=str(tmp_path / "settings"))
+    win = host.window
+    win.new_document()
     try:
         scene = win.viewport.scene
         assert scene.georef is None
-        win._on_import_orthophoto()
+        host.menu("import:orthomosaic")
+        assert not host.errors
         assert len(scene.image_planes) == 1
         plane = scene.image_planes[0]
         info = read_info(src)
@@ -167,6 +162,7 @@ def test_import_places_the_orthomosaic_on_the_datum(monkeypatch, tmp_path):
         # The datum sits at the picture's centre → the plane is centred.
         c = plane.center()
         assert abs(c.x()) < 0.05 and abs(c.y()) < 0.05
+        assert scene.tile_layer is not None and scene.tile_layer.patches
         assert scene.georef is not None
         assert scene.georef.lat == pytest.approx(-15.4604, abs=1e-3)
         # u points east, v north (north angle 0).
@@ -178,4 +174,26 @@ def test_import_places_the_orthomosaic_on_the_datum(monkeypatch, tmp_path):
         assert scene.image_planes == []
     finally:
         win._saved_version = win.viewport.scene.version
-        win.close()
+        host.close()
+
+
+def test_failed_survey_cache_write_preserves_the_document(tmp_path, monkeypatch):
+    from app_shell.host import Host
+    from views.filedialogs import file_dialogs
+    tile = tmp_path / "survey.tif"
+    write_geotiff(tile, _picture())
+    host = Host(0, 900, 600, 1., settings=str(tmp_path / "settings"))
+    try:
+        host.window.new_document()
+        scene = host.viewport.scene
+        messages = []
+        def fail(*args):
+            raise OSError("cache full")
+        monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *args: (str(tile), ""))
+        monkeypatch.setattr("core.texture.cache_image", fail)
+        monkeypatch.setattr("views.chrome_dialogs.critical", lambda *args: messages.append(args[-1]))
+        host.menu("import:orthomosaic")
+        assert messages == ["cache full"] and not host.errors
+        assert scene.georef is None and scene.tile_layer is None and not scene.image_planes
+    finally:
+        host.close()

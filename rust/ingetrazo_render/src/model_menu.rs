@@ -40,6 +40,7 @@ fn build_entries() -> Vec<MenuEntry> {
     add("import:obj", "File ▸ Import", "Wavefront OBJ (.obj)…", "", Window("_on_import_obj"));
     add("import:stl", "File ▸ Import", "STL mesh (.stl)…", "", Window("_on_import_stl"));
     for (id, label, method) in [
+        ("import:orthomosaic", "Orthomosaic (GeoTIFF)…", "_on_import_orthophoto"),
         ("import:image", "Image (PNG / JPG)…", "_on_import_image"),
         ("clear_texture_cache", "Clear imported texture cache…", "_on_clear_texture_cache"),
     ] {

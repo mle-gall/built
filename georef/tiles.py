@@ -237,6 +237,14 @@ class TileLayer:
         layer.terrain3d = bool(raw.get("terrain3d", False))
         return layer
 
+    def capture_bounds(self, datum, minx, miny, maxx, maxy):
+        """Cover an imported survey plus its working margin, within the tile budget."""
+        from ingetrazo_core import survey_rectangle
+        width, length, cx, cy = survey_rectangle(minx, miny, maxx, maxy)
+        self.set_rectangle(width, length, cx=cx, cy=cy)
+        self.cap_detail(datum, max_tiles=500)
+        return width, length
+
     def set_rectangle(self, width_m: float, length_m: float,
                       cx: float = 0.0, cy: float = 0.0) -> None:
         """Replace the capture with one rectangle ``width_m`` (E-W) × ``length_m``

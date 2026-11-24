@@ -7,7 +7,7 @@ export) knows exactly where it lies: the TIFF carries an affine pixel →
 map transform (ModelPixelScale + ModelTiepoint, or ModelTransformation)
 and the CRS in the GeoKey directory. This module reads that header and
 decodes the pixels **without GDAL, rasterio or Pillow** — the project's
-stance is a hand-ported UTM and Qt for images — so the import places the
+stance is a hand-ported UTM and native image codecs — so the import places the
 picture on the scene's datum at its true size and orientation, and the
 model is traced over the real ground.
 
@@ -15,7 +15,7 @@ Decoding covers what orthomosaic exporters actually write: 8-bit RGB /
 RGBA (an extra unassociated alpha for the no-data fringe), tiled or
 stripped, contiguous or planar, uncompressed / Deflate / PackBits / LZW,
 and JPEG-in-TIFF (each tile a JPEG stream sharing the JPEGTables tag,
-decoded by Qt). Classic and BigTIFF headers. Anything else — 16-bit
+decoded by Rust). Classic and BigTIFF headers. Anything else — 16-bit
 elevation models, float DSMs, palette images — is reported as
 unsupported with the reason, never guessed at.
 
@@ -521,41 +521,8 @@ def _decode_block(data: bytes, info: GeoTiffInfo, samples: int) -> np.ndarray:
 
 
 def _decode_jpeg_block(data: bytes, info: GeoTiffInfo, samples: int) -> np.ndarray:
-    """A JPEG-in-TIFF tile via Qt. The tile stream omits the quantisation /
-    Huffman tables, which live once in the JPEGTables tag: splice them in
-    (tables minus their EOI, tile minus its SOI). A 4-sample tile comes
-    back from Qt as CMYK8888 with every byte INVERTED against the raw
-    samples (the Adobe convention libjpeg applies to any 4-component
-    stream) — undoing that gives RGBA exactly; verified against a GDAL
-    orthophoto whose no-data fringe reads alpha 0 only after the flip."""
-    from PySide6.QtGui import QImage
-    tables = info.jpeg_tables
-    if tables and data[:2] == b"\xff\xd8" and tables[-2:] == b"\xff\xd9":
-        data = tables[:-2] + data[2:]
-    img = QImage.fromData(data, "JPEG")
-    th, tw = info.tile_h, info.tile_w
-    out = np.zeros((th, tw, samples), dtype=np.uint8)
-    if img.isNull():
-        return out
-    h, w = min(img.height(), th), min(img.width(), tw)
-    if img.format() == QImage.Format_CMYK8888:
-        buf = np.frombuffer(img.constBits(), dtype=np.uint8)
-        px = buf.reshape(img.height(), img.bytesPerLine())[:, :img.width() * 4]
-        px = 255 - px.reshape(img.height(), img.width(), 4)
-        out[:h, :w, :min(samples, 4)] = px[:h, :w, :min(samples, 4)]
-        return out
-    if img.format() != QImage.Format_RGBA8888:
-        img = img.convertToFormat(QImage.Format_RGBA8888)
-    buf = np.frombuffer(img.constBits(), dtype=np.uint8)
-    px = buf.reshape(img.height(), img.bytesPerLine())[:, :img.width() * 4]
-    px = px.reshape(img.height(), img.width(), 4)
-    if samples >= 3:
-        out[:h, :w, :3] = px[:h, :w, :3]
-        if samples == 4:
-            out[:h, :w, 3] = 255
-    else:
-        out[:h, :w, 0] = px[:h, :w, 0]
-    return out
+    from ingetrazo_core import survey_jpeg_tile
+    return survey_jpeg_tile(data, info.jpeg_tables, info.tile_w, info.tile_h, samples)
 
 
 def _to_rgba(raw: np.ndarray, info: GeoTiffInfo) -> np.ndarray:
@@ -697,14 +664,6 @@ def _lzw_decode(data: bytes) -> bytes:
 
 
 # ---- Convenience -------------------------------------------------------------
-def rgba_to_qimage(rgba: np.ndarray):
-    """An ``(H, W, 4)`` uint8 RGBA array as a detached ``QImage``."""
-    from PySide6.QtGui import QImage
-    h, w = rgba.shape[:2]
-    buf = np.ascontiguousarray(rgba)
-    return QImage(buf.data, w, h, w * 4, QImage.Format_RGBA8888).copy()
-
-
 def describe(info: GeoTiffInfo) -> str:
     """One line for the status bar / log: size, scheme and placement."""
     comp = {1: "raw", 5: "LZW", 7: "JPEG", 8: "Deflate", 32773: "PackBits",

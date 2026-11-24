@@ -836,6 +836,18 @@ class ShellWindow(QObject):
         from app_shell import files
         files.new_window(self)
 
+    def _on_import_orthophoto(self):
+        from views.survey_import import import_orthophoto
+        import_orthophoto(self)
+
+    def _set_survey_capture(self, datum, lo, hi):
+        from georef.tiles import DEFAULT_SOURCE_ID, PRESETS, TileLayer
+        scene = self.viewport.scene
+        layer = scene.tile_layer or TileLayer(PRESETS[DEFAULT_SOURCE_ID])
+        layer.capture_bounds(datum, lo.x(), lo.y(), hi.x(), hi.y())
+        scene.tile_layer = layer
+        self.viewport.reset_tiles()
+
     def _import_progress(self, title, *, monotonic=False):
         from app_shell import files
         return files.import_progress(self, title, monotonic=monotonic)

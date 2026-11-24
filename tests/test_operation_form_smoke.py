@@ -820,3 +820,31 @@ def test_native_animation_forms_and_video_file(tmp_path):
     assert [s["form_open"] for s in states[:3]] == [True, True, False], states
     assert all(not s["errors"] and not s["blocked_widgets"] for s in states), result.stderr
     assert movie.read_bytes().startswith(b"\x1a\x45\xdf\xa3")
+
+
+@pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
+                    reason="requires a built window and BUILT_WINDOW_TESTS=1")
+def test_native_orthomosaic_import_and_undo(tmp_path):
+    from tests.geotiff_fixture import write_geotiff
+    from core.scene import Scene
+    from formats.igz import save_scene
+    import numpy as np
+
+    model, tile = tmp_path / "empty.igz", tmp_path / "site.tif"
+    save_scene(Scene(), model)
+    write_geotiff(tile, np.full((8, 16, 4), 255, dtype=np.uint8))
+    venv = fixture_venv(tmp_path,
+        "from views.filedialogs import file_dialogs\n"
+        "from georef.tile_fetcher import TileFetcher\n"
+        "TileFetcher.request = lambda *args: None\n"
+        f"file_dialogs.getOpenFileName = lambda *a, **k: ({str(tile)!r}, '')\n")
+    steps = tmp_path / "actions"
+    steps.write_text("wait 700\nmenu import:orthomosaic\nwait 400\nstate\n"
+                     "menu undo\nwait 400\nstate\nquit\n")
+    result = run([str(BIN), "--root", str(ROOT), "--venv", str(venv), "--new-instance",
+                  "--size", "900x700", "--script", str(steps), str(model)],
+                 capture_output=True, text=True, timeout=60)
+    states = [json.loads(line.removeprefix("[built] state ")) for line in result.stdout.splitlines()
+              if line.startswith("[built] state ")]
+    assert result.returncode == 0 and len(states) >= 2, result.stderr
+    assert states[0]["dirty"] and all(not st["errors"] and not st["blocked_widgets"] for st in states)
