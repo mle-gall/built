@@ -179,52 +179,17 @@ mod panic_log;
 mod sheets;
 mod stl;
 mod alignment;
+mod formats;
 
 #[pymodule]
 fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    formats::register_formats(m)?;
     m.add_class::<takeoff::InspectorTakeoff>()?;
-    m.add_function(wrap_pyfunction!(file_scene::igz_archive_scene_fields, m)?)?;
-    m.add_function(wrap_pyfunction!(file_scene::igz_reset_scene, m)?)?;
-    m.add_function(wrap_pyfunction!(file_scene::igz_restore_views, m)?)?;
-    m.add_function(wrap_pyfunction!(file_scene::igz_finish_scene, m)?)?;
-    file_mesh::register(m)?;
-    file_precision::register(m)?;
-    gltf_read::register(m)?;
-    dae_write::register(m)?;
-    dae_read::register(m)?;
-    dxf_read::register(m)?;
-    view_svg::register(m)?;
-    view_dxf::register(m)?;
-    m.add_function(wrap_pyfunction!(file_model::dae_add_fused, m)?)?;
-    file_save::register(m)?;
-    file_clip::register(m)?;
-    rfa_scene::register(m)?;
-    file_snapshot::register(m)?;
-    file_deferred::register(m)?;
-    file_pack::register(m)?;
-    file_members::register(m)?;
-    file_document::register(m)?;
-    file_blocks::register(m)?;
-    file_prepare::register(m)?;
-    reader_compat::register(m)?;
-    file_links::register(m)?;
-    file_read::register(m)?;
-    file_bounds::register(m)?;
-    fuse::register(m)?;
-    obj_read::register(m)?;
-    obj_write::register(m)?;
-    mesh_export::register(m)?;
-    gltf_maps::register(m)?;
-    gltf_mesh::register(m)?;
-    gltf_write::register(m)?;
-    stl::register(m)?;
-    alignment::register(m)?;
     m.add("TAG_PALETTE", pyo3::types::PyTuple::new(m.py(), doc::drawing::PALETTE)?)?;
     m.add_function(wrap_pyfunction!(doc::drawing::automatic_tag_color, m)?)?;
     m.add_function(wrap_pyfunction!(browser_rename::browser_rename, m)?)?;
     screen::register(m)?;
     scene_animation::register(m)?;
-    survey_pixels::register(m)?;
     m.add_class::<scene_video::MkvWriter>()?;
     m.add_class::<mp4::Mp4Writer>()?;
     m.add_function(wrap_pyfunction!(scene_video::video_writer, m)?)?;
@@ -235,54 +200,6 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<window_input::WindowInput>()?;
     m.add_class::<window_commands::WindowCommands>()?;
     m.add_class::<window_commands::WindowCommand>()?;
-    m.add_class::<file_open::DocumentOpen>()?;
-    m.add_function(wrap_pyfunction!(skp::skp_tag_folders, m)?)?;
-    skp::register_dispatch(m)?;
-    m.add_function(wrap_pyfunction!(skp::skp_apply, m)?)?;
-    m.add_function(wrap_pyfunction!(skp::skp_apply_folders, m)?)?;
-    m.add_function(wrap_pyfunction!(skp::skp_apply_geometry, m)?)?;
-    m.add_function(wrap_pyfunction!(skp::skp_apply_metadata, m)?)?;
-    m.add_function(wrap_pyfunction!(skp::skp_materials, m)?)?;
-    m.add_function(wrap_pyfunction!(skp::skp_read_pbr, m)?)?;
-    m.add_class::<skp::SkpInsertion>()?;
-    m.add_class::<skp::SkpArchiveCursor>()?;
-    m.add_function(wrap_pyfunction!(skp::skp_mfc_object, m)?)?;
-    m.add_function(wrap_pyfunction!(skp::skp_mfc_readers, m)?)?;
-    m.add_function(wrap_pyfunction!(skp::skp_face_entry, m)?)?;
-    m.add_function(wrap_pyfunction!(skp::skp_parse, m)?)?;
-    m.add_function(wrap_pyfunction!(skp::skp_adapt_inner, m)?)?;
-    m.add_function(wrap_pyfunction!(skp::skp_collect, m)?)?;
-    m.add_function(wrap_pyfunction!(skp::skp_loose_segments, m)?)?;
-    m.add_function(wrap_pyfunction!(skp::skp_soft_segments, m)?)?;
-    m.add_function(wrap_pyfunction!(skp::skp_curve_segments, m)?)?;
-    m.add_function(wrap_pyfunction!(skp::skp_instance_identity, m)?)?;
-    m.add_function(wrap_pyfunction!(skp::skp_world_points, m)?)?;
-    m.add_function(wrap_pyfunction!(skp::skp_defn_geom, m)?)?;
-    m.add_function(wrap_pyfunction!(skp::skp_merge_protos, m)?)?;
-    m.add_function(wrap_pyfunction!(skp::skp_file_layers, m)?)?;
-    m.add_function(wrap_pyfunction!(skp::skp_empty_model, m)?)?;
-    m.add_function(wrap_pyfunction!(skp::skp_texture_dir, m)?)?;
-    m.add_function(wrap_pyfunction!(skp::skp_cached_colorize, m)?)?;
-    m.add_function(wrap_pyfunction!(skp::skp_needs_tint, m)?)?;
-    m.add_function(wrap_pyfunction!(skp::skp_inverted_png, m)?)?;
-    m.add_class::<skp::FlatGeometry>()?;
-    m.add_class::<skp::PrototypeGeometry>()?;
-    m.add_function(wrap_pyfunction!(skp::image_stage_geometry, m)?)?;
-    m.add_function(wrap_pyfunction!(skp::skp_vff_model, m)?)?;
-    m.add_function(wrap_pyfunction!(skp::skp_image_faces, m)?)?;
-    m.add_function(wrap_pyfunction!(skp::skp_image_bounds, m)?)?;
-    m.add_function(wrap_pyfunction!(skp::skp_image_attached, m)?)?;
-    m.add_function(wrap_pyfunction!(skp::skp_mark_drapes, m)?)?;
-    m.add_function(wrap_pyfunction!(skp::skp_ring, m)?)?;
-    m.add_function(wrap_pyfunction!(skp::skp_positioned_uvs, m)?)?;
-    m.add_function(wrap_pyfunction!(skp::skp_instance_matrix, m)?)?;
-    m.add_function(wrap_pyfunction!(skp::skp_model_annotations, m)?)?;
-    m.add_function(wrap_pyfunction!(skp::skp_resolve_annotations, m)?)?;
-    m.add_function(wrap_pyfunction!(skp::skp_annotations, m)?)?;
-    m.add_function(wrap_pyfunction!(skp::skp_definition_spans, m)?)?;
-    m.add_function(wrap_pyfunction!(skp::skp_definition, m)?)?;
-    m.add_function(wrap_pyfunction!(skp::skp_pages, m)?)?;
-    m.add_function(wrap_pyfunction!(skp::skp_geometry_nodes, m)?)?;
     m.add_class::<command_search::SearchItem>()?;
     m.add_function(wrap_pyfunction!(command_search::damerau_levenshtein, m)?)?;
     m.add_function(wrap_pyfunction!(command_search::rank_commands, m)?)?;
@@ -549,35 +466,6 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(snap_engine::resolve_snap, m)?)?;
     m.add_function(wrap_pyfunction!(snap::lock_crossing, m)?)?;
     m.add_function(wrap_pyfunction!(snap_build::build_snap_index, m)?)?;
-    #[cfg(unix)]
-    m.add_function(wrap_pyfunction!(file_archive::igz_write_zip, m)?)?;
-    #[cfg(unix)]
-    m.add_class::<atomic_document::AtomicDocument>()?;
-    #[cfg(unix)]
-    m.add_function(wrap_pyfunction!(file_archive::igz_write_plain, m)?)?;
-    #[cfg(unix)]
-    m.add_function(wrap_pyfunction!(file_archive::igz_read_member, m)?)?;
-    #[cfg(unix)]
-    m.add_class::<file_archive::DocumentReader>()?;
-    #[cfg(unix)]
-    m.add_class::<file_archive::ArchiveProgress>()?;
-    m.add_function(wrap_pyfunction!(file_annotations::igz_load_annotations, m)?)?;
-    m.add_function(wrap_pyfunction!(file_annotations::igz_archive_annotations, m)?)?;
-    m.add_function(wrap_pyfunction!(file_annotations::highest_group_number, m)?)?;
-    m.add_function(wrap_pyfunction!(file_styles::igz_archive_layer, m)?)?;
-    m.add_function(wrap_pyfunction!(file_styles::igz_load_layer, m)?)?;
-    m.add_function(wrap_pyfunction!(file_styles::igz_archive_material, m)?)?;
-    m.add_function(wrap_pyfunction!(file_styles::igz_load_material, m)?)?;
-    m.add_function(wrap_pyfunction!(file_sheet::igz_load_sheet, m)?)?;
-    m.add_function(wrap_pyfunction!(file_sheet::igz_archive_sheet, m)?)?;
-    m.add_function(wrap_pyfunction!(file_textures::igz_texture_references, m)?)?;
-    m.add_function(wrap_pyfunction!(file_textures::igz_pack_textures, m)?)?;
-    m.add_function(wrap_pyfunction!(file_textures::igz_unpack_textures, m)?)?;
-    m.add_function(wrap_pyfunction!(file_textures::igz_texture_slots, m)?)?;
-    m.add_function(wrap_pyfunction!(file_textures::igz_texture_entries, m)?)?;
-    m.add_function(wrap_pyfunction!(file_json::igz_json_loads, m)?)?;
-    m.add_function(wrap_pyfunction!(file_json::igz_encode_json, m)?)?;
-    m.add_class::<file_json::FileMatrix>()?;
     m.add_class::<group_geometry::GroupGeometry>()?;
     presentation::register(m)?;
     object_replay::register(m)?;
@@ -699,10 +587,6 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(group_geometry::lift_placements, m)?)?;
     m.add_function(wrap_pyfunction!(group_geometry::lower_placements, m)?)?;
     m.add_function(wrap_pyfunction!(group_geometry::explode_object_geometry, m)?)?;
-    m.add_class::<file_groups::FileGroups>()?;
-    m.add_class::<file_groups::FileGroupWriter>()?;
-    m.add_function(wrap_pyfunction!(file_geometry::igz_points, m)?)?;
-    m.add_function(wrap_pyfunction!(igz::igz_read_geometry, m)?)?;
     // Unit tests link without libpython; this line made the test binary
     // keep the store's PyO3 glue (and its Python symbols) alive.
     #[cfg(not(test))]
