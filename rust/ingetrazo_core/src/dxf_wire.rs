@@ -17,7 +17,12 @@ fn binary_groups(mut input: &[u8]) -> Option<Vec<u8>> {
         _ => return None,
     };
     let mut out = Vec::new();
+    let mut groups = 0;
     while !input.is_empty() {
+        groups += 1;
+        if groups % 4096 == 0 && crate::file_open::cancelled() {
+            return None;
+        }
         let low = take::<1>(&mut input)?[0];
         let code = if wide {
             u16::from_le_bytes([low, take::<1>(&mut input)?[0]])

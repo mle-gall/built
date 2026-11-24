@@ -21,6 +21,7 @@ struct Entity {
 #[derive(Debug)]
 enum Shape {
     Ignored(String),
+    Empty,
     Line(DVec3, DVec3),
     Curve(Vec<curves::Cubic>, Vec<f64>),
     Polyline(Ring, bool),
@@ -156,9 +157,12 @@ impl<'a> Tags<'a> {
             }
             "CIRCLE" | "ARC" => {
                 let center = self.point(10)?;
-                let radius = self.number(40, f64::NAN)?;
-                if radius <= 0. {
-                    return None;
+                let radius = self.number(40, f64::NAN)?.abs();
+                if radius == 0. {
+                    return Some(Entity {
+                        layer,
+                        shape: Shape::Empty,
+                    });
                 }
                 let (start, span) = if kind == "CIRCLE" {
                     (0., -TAU)
@@ -166,13 +170,16 @@ impl<'a> Tags<'a> {
                     let a = self.number(50, 0.)?;
                     let b = self.number(51, 360.)?;
                     if a == b {
-                        return None;
+                        return Some(Entity {
+                            layer,
+                            shape: Shape::Empty,
+                        });
                     }
                     let span = (b - a).rem_euclid(360.);
-                    if span == 0. {
-                        return None;
-                    }
-                    (a.to_radians(), span.to_radians())
+                    (
+                        a.to_radians(),
+                        if span == 0. { -TAU } else { span.to_radians() },
+                    )
                 };
                 let basis = self.basis()?;
                 if basis == DMat4::IDENTITY {
@@ -208,6 +215,12 @@ impl<'a> Tags<'a> {
                     * self.number(40, 1.)?;
                 let start = self.number(41, 0.)?;
                 let end = self.number(42, TAU)?;
+                if start == end {
+                    return Some(Entity {
+                        layer,
+                        shape: Shape::Empty,
+                    });
+                }
                 let span = (end - start).rem_euclid(TAU);
                 let span = if span.abs() < 1e-12 { -TAU } else { span };
                 Shape::Curve(
@@ -374,7 +387,6 @@ pub(super) fn decode_mode(text: &str, recover: bool, inspect: bool) -> Option<Do
                         name.clone(),
                         Block {
                             base,
-
                             entities: vec![],
                         },
                     )
@@ -404,7 +416,18 @@ pub(super) fn decode_mode(text: &str, recover: bool, inspect: bool) -> Option<Do
                         ))
                     }
                     "ATTRIB" | "SEQEND" => None,
-                    _ => Some((tags.get(330), tags.integer(67, 0)?, tags.entity(k)?)),
+                    _ if section == "ENTITIES" && tags.integer(67, 0)? != 0 => None,
+                    _ => {
+                        let entity = tags.entity(k).or_else(|| {
+                            // The adapter drops an unusable curve while retaining its neighbours.
+                            (recover && matches!(k, "SPLINE" | "ELLIPSE" | "LWPOLYLINE" | "MESH"))
+                                .then(|| Entity {
+                                    layer: tags.get(8).unwrap_or("0").into(),
+                                    shape: Shape::Empty,
+                                })
+                        })?;
+                        Some((tags.get(330), tags.integer(67, 0)?, entity))
+                    }
                 };
                 if let Some((owner, paper, entity)) = record {
                     if section == "BLOCKS" {
@@ -657,6 +680,9 @@ impl Shape {
         m: DMat4,
         skipped: &mut BTreeMap<String, usize>,
     ) -> Option<bool> {
+        if matches!(self, Self::Empty) {
+            return Some(false);
+        }
         if let Self::Ignored(k) = self {
             if !matches!(
                 k.as_str(),
@@ -744,6 +770,7 @@ impl Shape {
             } => b
                 .runs
                 .push((arc(*center, *radius, *start, *span, tol)?, true)),
+            Self::Empty => return Some(false),
             Self::Insert(..) | Self::Ignored(_) => return None,
         }
         Some(true)
@@ -853,6 +880,22 @@ mod tests {
             }
         }
         assert!(bytes.is_empty());
+    }
+    #[test]
+    fn complete_and_empty_arcs_match_the_reference() {
+        let parse = |end: &str| {
+            let tags = Tags(vec![(10, "0"), (20, "0"), (40, "1"), (50, "30"), (51, end)]);
+            let mut b = Bucket::default();
+            tags.entity("ARC").unwrap().shape.add(&mut b, 0.01).unwrap();
+            b
+        };
+        assert!(parse("30").runs.is_empty());
+        for endpoint in ["390", "-330"] {
+            let b = parse(endpoint);
+            let pts = &b.runs[0].0;
+            assert_eq!(pts.len(), 33);
+            assert!(pts[1].distance(DVec3::new(0.9491982852733174, 0.3153074518339141, 0.)) < 1e-9);
+        }
     }
     #[test]
     fn missing_eof_matches_the_recovered_reference_line() {

@@ -49,17 +49,24 @@ struct Drawing {
 #[pyfunction]
 fn dxf_open_document(py: Python<'_>, path: PathBuf) -> PyResult<Py<PyAny>> {
     DocumentOpen::stage(py, None, move |py, _| {
-        if let Ok(cad) = py.import("ezdxf") {
-            if let Ok(doc) = cad.call_method1("readfile", (&path,)) {
-                return Ok(doc.unbind());
-            }
+        match py.import("ezdxf") {
+            Ok(cad) => match cad.call_method1("readfile", (&path,)) {
+                Ok(doc) => return Ok(doc.unbind()),
+                Err(e) if !e.is_instance_of::<pyo3::exceptions::PyException>(py) => return Err(e),
+                _ => (),
+            },
+            Err(e) if !e.is_instance_of::<pyo3::exceptions::PyImportError>(py) => return Err(e),
+            _ => (),
         }
         let source = py.detach(|| NativeDocument::open(&path, true))?;
         Ok(Py::new(
             py,
-            PreparedDrawing {
-                source: std::sync::Arc::new(source),
-            },
+            (
+                ScriptDrawing {},
+                PreparedDrawing {
+                    source: std::sync::Arc::new(source),
+                },
+            ),
         )?
         .into_any())
     })
@@ -264,8 +271,22 @@ fn segments(e: &Obj<'_>, kind: &str, tolerance: f64) -> PyResult<Option<(Ring, b
             } else {
                 let a = d.getattr("start_angle")?.extract::<f64>()?;
                 let b = d.getattr("end_angle")?.extract::<f64>()?;
-                (a.to_radians(), (b - a).rem_euclid(360.).to_radians())
+                if a == b {
+                    return Ok(None);
+                }
+                let sweep = (b - a).rem_euclid(360.);
+                (
+                    a.to_radians(),
+                    if sweep == 0. {
+                        -std::f64::consts::TAU
+                    } else {
+                        sweep.to_radians()
+                    },
+                )
             };
+            if d.getattr("radius")?.extract::<f64>()? == 0. {
+                return Ok(None);
+            }
             return Ok(ascii::arc(
                 v(&d.getattr("center")?)?,
                 d.getattr("radius")?.extract()?,
@@ -857,7 +878,7 @@ fn prepare<'p>(
     cb.call1((1., "Done"))?;
     Ok((groups, tags, stats).into_pyobject(py)?.into_any())
 }
-#[pyclass]
+#[pyclass(subclass)]
 struct PreparedDrawing {
     source: std::sync::Arc<NativeDocument>,
 }
@@ -884,10 +905,12 @@ impl CadLayouts {
     }
 }
 
+#[pyclass(extends=PreparedDrawing)]
+struct ScriptDrawing {}
 #[pymethods]
-impl PreparedDrawing {
-    fn modelspace(&self) -> Vec<CadEntity> {
-        match self.source.as_ref() {
+impl ScriptDrawing {
+    fn modelspace(slf: PyRef<'_, Self>) -> Vec<CadEntity> {
+        match slf.into_super().source.as_ref() {
             NativeDocument::Cad(doc) => doc
                 .kinds
                 .iter()
@@ -898,17 +921,17 @@ impl PreparedDrawing {
         }
     }
     #[getter]
-    fn layouts(&self) -> CadLayouts {
-        let names = match self.source.as_ref() {
+    fn layouts(slf: PyRef<'_, Self>) -> CadLayouts {
+        let names = match slf.into_super().source.as_ref() {
             NativeDocument::Cad(doc) if !doc.layouts.is_empty() => doc.layouts.clone(),
             _ => vec!["Model".into(), "Layout1".into()],
         };
         CadLayouts { names }
     }
     #[getter]
-    fn header<'p>(&self, py: Python<'p>) -> PyResult<Bound<'p, PyDict>> {
+    fn header<'p>(slf: PyRef<'p, Self>, py: Python<'p>) -> PyResult<Bound<'p, PyDict>> {
         let h = PyDict::new(py);
-        h.set_item("$INSUNITS", self.source.units())?;
+        h.set_item("$INSUNITS", slf.into_super().source.units())?;
         Ok(h)
     }
 }
