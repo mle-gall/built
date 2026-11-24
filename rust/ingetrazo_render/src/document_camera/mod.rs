@@ -3,6 +3,7 @@
 use crate::document_host::{call_opt, none, opt, vec3, xyz, Obj};
 use pyo3::prelude::*;
 mod navigation;
+mod planes;
 
 fn xy(o: &Obj) -> PyResult<(f64, f64)> {
     Ok((
@@ -20,5 +21,6 @@ fn size(v: &Obj) -> PyResult<(f64, f64)> {
     ))
 }
 pub(crate) fn register(m: &Bound<PyModule>) -> PyResult<()> {
+    planes::register(m)?;
     navigation::register(m)
 }

@@ -1298,25 +1298,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     _GROUND_RGB = (0.815, 0.820, 0.815)
 
     def _horizon_ndc_y(self, mvp, camera=None) -> float:
-        """Screen-space NDC y of the horizon (the ground plane at infinity),
-        from the camera orientation. Returns a value that may exceed ±1 when the
-        horizon is off-screen (looking straight down = all ground)."""
-        camera = camera or self.camera
-        eye = camera.eye()
-        fwd = camera.target - eye
-        # Horizontal component of the view direction → its vanishing point.
-        dh = QVector3D(fwd.x(), fwd.y(), 0.0)
-        if dh.length() < 1e-5:
-            # Looking straight down/up: no horizon on screen.
-            return 2.0 if fwd.z() < 0 else -2.0
-        dh = dh.normalized()
-        # A point very far along the horizontal heading, at eye height: as the
-        # distance → ∞ it converges to the horizon, so it stays put on zoom.
-        far = eye + dh * 1.0e6
-        clip = mvp.map(QVector4D(far.x(), far.y(), far.z(), 1.0))
-        if abs(clip.w()) < 1e-9:
-            return 2.0 if fwd.z() < 0 else -2.0
-        return clip.y() / clip.w()
+        return ingetrazo_render.horizon_y(self, mvp, camera)
 
     #: NDC span over which each half of the backdrop completes its ramp.
     _SKY_GRAD_SPAN = 1.4
@@ -1708,80 +1690,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     def _camera_planar_work_plane(
         self, cursor: Optional[tuple[float, float]] = None,
     ) -> Optional[tuple[QVector3D, QVector3D]]:
-        """Choose XY as floor/ceiling when preferred, otherwise XZ or YZ.
-
-        The vertical planes compete by their alignment with the local cursor
-        ray. XY remains the ground (or ceiling when viewed from below), with
-        a depth preference that avoids mapping a nearby cursor to an
-        implausibly distant point on the floor.
-        """
-        from core import axes
-        origin = axes.origin()
-        view = self.camera.target - self.camera.eye()
-        if view.lengthSquared() < 1e-18:
-            return None
-        view.normalize()
-        ray_origin = self.camera.eye()
-        ray_direction = view
-        cursor_origin: Optional[QVector3D] = None
-        cursor_direction: Optional[QVector3D] = None
-        if cursor is not None:
-            cursor_origin, cursor_direction = self._pixel_to_ray(*cursor)
-            if cursor_origin is not None and cursor_direction is not None:
-                ray_origin = cursor_origin
-                ray_direction = cursor_direction.normalized()
-
-        normals = {name: axes.axis(name) for name in ("x", "y", "z")}
-        hits: dict[str, tuple[QVector3D, float]] = {}
-        if ray_origin is not None:
-            for name, normal in normals.items():
-                hit = self._ray_plane(
-                    ray_origin, ray_direction, origin, normal,
-                    allow_grazing=True)
-                if hit is None:
-                    continue
-                depth = (
-                    (hit - self.camera.eye()).length()
-                    if self.camera.perspective
-                    else QVector3D.dotProduct(hit - self.camera.eye(), view)
-                )
-                if depth >= 0:
-                    hits[name] = hit, depth
-
-        horizontal_angle = math.degrees(math.asin(min(
-            1.0, abs(QVector3D.dotProduct(view, normals["z"])))))
-        if "z" in hits:
-            vertical_depths = [
-                hits[name][1] for name in ("x", "y") if name in hits]
-            depth_ratio = (
-                self.GROUND_DEPTH_PREFERENCE_RATIO
-                if horizontal_angle <= self.GROUND_PREFERENCE_ANGLE_DEG
-                else self.PERSPECTIVE_GROUND_DEPTH_PREFERENCE_RATIO
-            )
-            if (not vertical_depths
-                    or hits["z"][1] <= min(vertical_depths) * depth_ratio):
-                return origin, normals["z"]
-
-        alignment = {
-            name: abs(QVector3D.dotProduct(ray_direction, normals[name]))
-            for name in ("x", "y")
-        }
-        candidates = {"x", "y"}
-        if cursor_origin is not None and cursor_direction is not None:
-            candidates = {
-                name for name in candidates
-                if self._ray_plane(
-                    cursor_origin, cursor_direction, origin, normals[name],
-                    allow_grazing=True) is not None
-            }
-        if not candidates:
-            candidates = {"x", "y"}
-        normal_name = max(candidates, key=alignment.__getitem__)
-        if (candidates == {"x", "y"}
-                and abs(alignment["x"] - alignment["y"])
-                <= self.PLANE_ALIGNMENT_TIE_MARGIN):
-            normal_name = "y"
-        return origin, normals[normal_name]
+        return ingetrazo_render.planar_camera(self, cursor)
 
     # When the camera is at least this tilted off the horizon, the work plane
     # stays horizontal (XY) — that covers top, iso, and most architectural
@@ -1849,48 +1758,12 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return ingetrazo_render.ray_hit_plane(self, cursor, plane)
 
     def _start_point_plane(self, tool, start):
-        """The camera-aware plane through the active start point."""
-        forward = (self.camera.target - self.camera.eye())
-        if forward.length() < 1e-9:
-            return start, QVector3D(0.0, 0.0, 1.0)
-        forward = forward.normalized()
-        # Tools that drag geometry up and down (Move) use a camera-facing
-        # vertical plane through the grab point, so pulling the mouse up raises
-        # the geometry rigidly instead of sliding it across the ground (which
-        # shears connected faces and looks disordered). The plane contains the
-        # world Z axis; its normal is the camera's horizontal heading. Only when
-        # looking nearly straight down — where height is unreadable anyway — does
-        # it fall back to the horizontal plane.
-        if getattr(tool, "prefers_vertical_drag", False):
-            horiz = QVector3D(forward.x(), forward.y(), 0.0)
-            if horiz.length() >= math.sin(math.radians(self.HORIZON_PITCH_THRESHOLD_DEG)):
-                return start, horiz.normalized()
-            return start, QVector3D(0.0, 0.0, 1.0)
-        # |forward.z| ≈ sin(pitch). Anything tilted more than the threshold
-        # keeps the horizontal plane.
-        vertical = self._near_horizon_vertical(start)
-        if vertical is not None:
-            return vertical
-        return start, QVector3D(0.0, 0.0, 1.0)
+        return ingetrazo_render.start_plane(self, tool, start)
 
     def _near_horizon_vertical(
         self, start: QVector3D
     ) -> Optional[tuple[QVector3D, QVector3D]]:
-        """The vertical work plane through ``start`` when the camera sits near
-        the horizon — the only orientation where cursor→ground is ambiguous
-        and dragging up must move in Z. ``None`` at steeper tilts."""
-        forward = (self.camera.target - self.camera.eye())
-        if forward.length() < 1e-9:
-            return None
-        forward = forward.normalized()
-        if abs(forward.z()) >= math.sin(
-                math.radians(self.HORIZON_PITCH_THRESHOLD_DEG)):
-            return None
-        # Pick the vertical plane whose normal is more end-on to the camera
-        # so cursor motion maps cleanly to it.
-        if abs(forward.x()) >= abs(forward.y()):
-            return start, QVector3D(1.0, 0.0, 0.0)
-        return start, QVector3D(0.0, 1.0, 0.0)
+        return ingetrazo_render.horizon_vertical(self, start)
 
 
     #: Eye depth (m) a segment is cut at when it runs behind the camera.
