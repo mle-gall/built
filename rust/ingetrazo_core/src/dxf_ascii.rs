@@ -65,8 +65,7 @@ impl<'a> Tags<'a> {
     }
     fn name(&self, code: i32) -> Option<String> {
         let s = self.get(code)?;
-        // The full decoder handles escaped Unicode and legacy encodings.
-        (!s.is_empty() && !s.contains('\\')).then(|| s.to_owned())
+        (!s.is_empty()).then(|| s.to_owned())
     }
     fn numbers(&self, code: i32) -> Option<Vec<f64>> {
         self.0
@@ -228,7 +227,7 @@ pub(super) fn decode(text: &str) -> Option<Document> {
     let mut block = None;
     let mut tags_read = 0usize;
     let mut eof = false;
-    let mut modern = false;
+    let mut modern_owners = false;
     loop {
         tags_read += 1;
         if tags_read % 4096 == 0 && crate::file_open::cancelled() {
@@ -257,8 +256,7 @@ pub(super) fn decode(text: &str) -> Option<Document> {
                 if section == "HEADER" {
                     for pair in tags.0.windows(2) {
                         if pair[0] == (9, "$ACADVER") {
-                            modern = pair[1].0 == 1
-                                && matches!(pair[1].1, "AC1021" | "AC1024" | "AC1027" | "AC1032")
+                            modern_owners = pair[1].0 == 1 && pair[1].1 > "AC1009";
                         }
                         if pair[0] == (9, "$INSUNITS") {
                             if pair[1].0 != 70 {
@@ -306,14 +304,14 @@ pub(super) fn decode(text: &str) -> Option<Document> {
                 b.entities.push(tags.entity(k)?);
             }
             Some(k) if section == "ENTITIES" => {
-                let owner = tags.get(330)?;
+                let owner = tags.get(330);
                 let paper = tags.number(67, 0.)?;
                 if paper == 0. {
-                    if Some(owner) != model_owner {
+                    if modern_owners && owner != model_owner {
                         return None;
                     }
                     doc.entities.push(tags.entity(k)?);
-                } else if Some(owner) == model_owner {
+                } else if modern_owners && owner == model_owner {
                     return None;
                 }
             }
@@ -329,7 +327,7 @@ pub(super) fn decode(text: &str) -> Option<Document> {
             _ => return None,
         }
     }
-    if !eof || !modern || !seen.contains("ENTITIES") || model_owner.is_none() {
+    if !eof || !seen.contains("ENTITIES") || (modern_owners && model_owner.is_none()) {
         return None;
     }
     Some(doc)

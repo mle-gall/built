@@ -65,15 +65,83 @@ fn binary_groups(mut input: &[u8]) -> Option<Vec<u8>> {
     }
     Some(out)
 }
+fn decode_strings(bytes: &[u8]) -> Option<Cow<'_, str>> {
+    let mut lines = bytes.split(|&b| b == b'\n');
+    let mut variable = &[][..];
+    let mut encoding = encoding_rs::WINDOWS_1252;
+    while let (Some(code), Some(value)) = (lines.next(), lines.next()) {
+        let code = code.trim_ascii();
+        let value = value.trim_ascii();
+        if code == b"0" && value == b"ENDSEC" {
+            break;
+        }
+        if code == b"9" {
+            variable = value;
+            continue;
+        }
+        match variable {
+            b"$ACADVER" if value >= b"AC1021".as_slice() => {
+                return std::str::from_utf8(bytes).ok().map(Cow::Borrowed)
+            }
+            b"$DWGCODEPAGE" => {
+                let label = match value.strip_prefix(b"ANSI_").unwrap_or(value) {
+                    b"932" => b"shift_jis".as_slice(),
+                    b"936" => b"gbk",
+                    b"949" => b"euc-kr",
+                    b"950" => b"big5",
+                    b"874" => b"windows-874",
+                    other => {
+                        let label = format!("windows-{}", std::str::from_utf8(other).ok()?);
+                        encoding = encoding_rs::Encoding::for_label(label.as_bytes())
+                            .unwrap_or(encoding_rs::WINDOWS_1252);
+                        variable = &[];
+                        continue;
+                    }
+                };
+                encoding = encoding_rs::Encoding::for_label(label)?;
+            }
+            _ => (),
+        }
+        variable = &[];
+    }
+    encoding.decode_without_bom_handling_and_without_replacement(bytes)
+}
 pub(super) fn text(bytes: &[u8]) -> Option<Cow<'_, str>> {
     if let Some(input) = bytes.strip_prefix(SIGNATURE) {
-        return Some(Cow::Owned(String::from_utf8(binary_groups(input)?).ok()?));
+        let decoded = binary_groups(input)?;
+        return Some(Cow::Owned(decode_strings(&decoded)?.into_owned()));
     }
-    Some(Cow::Borrowed(std::str::from_utf8(bytes).ok()?))
+    decode_strings(bytes)
 }
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn legacy_layer_names_match_reference() {
+        for (bytes, layer) in [
+            (
+                include_bytes!("../../../tests/fixtures/dxf/binary-r12.dxf").as_slice(),
+                "Café",
+            ),
+            (
+                include_bytes!("../../../tests/fixtures/dxf/legacy-cp1251.dxf").as_slice(),
+                "Слой",
+            ),
+        ] {
+            let text = text(bytes).unwrap();
+            let drawing = super::super::ascii::decode(&text)
+                .unwrap()
+                .drawing(0.01)
+                .unwrap();
+            assert_eq!(
+                drawing.layers[layer].runs[0].0,
+                [
+                    glam::DVec3::new(1., 2., 3.),
+                    glam::DVec3::new(-1.25, 5., 6.)
+                ]
+            );
+        }
+    }
     #[test]
     fn modern_binary_matches_reference() {
         let bytes = include_bytes!("../../../tests/fixtures/dxf/binary-r2018.dxf");
