@@ -355,8 +355,8 @@ pub fn configure_window(view: usize) {
     let _ = view;
 }
 
-/// Background (test) runs: put the window behind every other app's windows,
-/// so a scripted run never covers what the user is doing.
+/// Background (test) runs: an invisible, click-through window behind every
+/// other app's windows, so a scripted run never covers what the user is doing.
 pub fn send_window_back(view: usize) {
     #[cfg(target_os = "macos")]
     {
@@ -366,6 +366,14 @@ pub fn send_window_back(view: usize) {
         }
         let v: &NSView = unsafe { &*(view as *const NSView) };
         if let Some(window) = v.window() {
+            // Fully transparent and click-through: an accessory app's window
+            // still shows on whatever Space is active, full-screen games
+            // included, so being behind is not enough. It stays on screen
+            // (ordered back) so drawing and frame pacing are unchanged.
+            window.setAlphaValue(0.0);
+            window.setIgnoresMouseEvents(true);
+            window.setExcludedFromWindowsMenu(true);
+            window.setHasShadow(false);
             window.orderBack(None);
         }
     }
