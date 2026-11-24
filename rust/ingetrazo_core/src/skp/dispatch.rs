@@ -54,7 +54,11 @@ fn skp_can_handle(py: Python<'_>, path: PathBuf) -> PyResult<bool> {
     Ok(false)
 }
 #[pyfunction(signature=(path,progress=None))]
-fn skp_dispatch_parse<'p>(py: Python<'p>, path: PathBuf, progress: Option<&Obj<'p>>) -> PyResult<Obj<'p>> {
+fn skp_dispatch_parse<'p>(
+    py: Python<'p>,
+    path: PathBuf,
+    progress: Option<&Obj<'p>>,
+) -> PyResult<Obj<'p>> {
     let module = api(py)?;
     let fmt = detect(&path);
     let path = py.import("pathlib")?.call_method1("Path", (path,))?;
@@ -117,6 +121,7 @@ fn skp_load<'p>(
     module.call_method1("apply_payload", (scene, payload))
 }
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    super::packed::register(m)?;
     m.add_function(wrap_pyfunction!(skp_detect_format, m)?)?;
     m.add_function(wrap_pyfunction!(skp_backends_status, m)?)?;
     m.add_function(wrap_pyfunction!(skp_can_handle, m)?)?;
