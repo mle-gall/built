@@ -661,6 +661,7 @@ dependencies = [
  "pyo3",
  "raw-window-handle",
  "resvg",
+ "rustybuzz",
  "serde",
  "serde_json",
  "syn 2.0.119",

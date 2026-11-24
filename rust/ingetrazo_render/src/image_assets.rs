@@ -23,7 +23,16 @@ fn svg_path(path: &Path) -> bool {
         .is_some_and(|s| s.eq_ignore_ascii_case("svg") || s.eq_ignore_ascii_case("svgz"))
 }
 
-fn svg_tree(input: &[u8], dir: Option<&Path>) -> Option<usvg::Tree> {
+pub fn fonts() -> &'static Arc<usvg::fontdb::Database> {
+    static FONTS: OnceLock<Arc<usvg::fontdb::Database>> = OnceLock::new();
+    FONTS.get_or_init(|| {
+        let mut db = usvg::fontdb::Database::new();
+        db.load_system_fonts();
+        Arc::new(db)
+    })
+}
+
+pub fn svg_tree(input: &[u8], dir: Option<&Path>) -> Option<usvg::Tree> {
     let mut inflated = Vec::new();
     let input = if input.starts_with(&[0x1f, 0x8b]) {
         flate2::read::GzDecoder::new(input)
@@ -37,21 +46,15 @@ fn svg_tree(input: &[u8], dir: Option<&Path>) -> Option<usvg::Tree> {
     if input.len() > MAX_SVG_BYTES {
         return None;
     }
-    static FONTS: OnceLock<Arc<usvg::fontdb::Database>> = OnceLock::new();
-    let fonts = FONTS.get_or_init(|| {
-        let mut db = usvg::fontdb::Database::new();
-        db.load_system_fonts();
-        Arc::new(db)
-    });
     let mut options = usvg::Options {
-        fontdb: fonts.clone(),
+        fontdb: fonts().clone(),
         resources_dir: dir.map(Path::to_owned),
         ..Default::default()
     };
     if dir.is_none() {
         options.image_href_resolver.resolve_string = Box::new(|_, _| None);
     }
-    usvg::Tree::from_data(input, &options).ok()
+    usvg::Tree::from_str(std::str::from_utf8(input).ok()?, &options).ok()
 }
 
 fn file_svg(path: &Path) -> Option<usvg::Tree> {
@@ -64,7 +67,7 @@ fn file_svg(path: &Path) -> Option<usvg::Tree> {
     svg_tree(&data, path.parent())
 }
 
-fn raster_svg(tree: &usvg::Tree, size: tiny_skia::IntSize, paper: bool) -> Option<RgbaImage> {
+pub fn raster_svg(tree: &usvg::Tree, size: tiny_skia::IntSize, paper: bool) -> Option<RgbaImage> {
     if u64::from(size.width()) * u64::from(size.height()) > MAX_PIXELS {
         return None;
     }
@@ -239,10 +242,16 @@ pub fn decode(py: Python<'_>, path: &Path) -> PyResult<Option<RgbaImage>> {
                 return Ok(Some(img));
             }
             // Some installations supply extra codecs, e.g. XPM or WBMP.
-            let data = py
-                .import("views.wgpu_scene")?
-                .getattr("_legacy_texture_pixels")?
-                .call1((path,))?;
+            let data = match py
+                .import("views.wgpu_scene")
+                .and_then(|m| m.call_method1("_legacy_texture_pixels", (path,)))
+            {
+                Ok(data) => data,
+                Err(e) if e.is_instance_of::<pyo3::exceptions::PyModuleNotFoundError>(py) => {
+                    return Ok(None)
+                }
+                Err(e) => return Err(e),
+            };
             if data.is_none() {
                 return Ok(None);
             }
@@ -356,8 +365,14 @@ pub fn raster_dimensions(py: Python<'_>, path: PathBuf) -> PyResult<Option<(u32,
             if let Some(size) = py.detach(|| image_io::header(&path)) {
                 return Ok(Some(size));
             }
-            let size = py
-                .import("PySide6.QtGui")?
+            let gui = match py.import("PySide6.QtGui") {
+                Ok(gui) => gui,
+                Err(e) if e.is_instance_of::<pyo3::exceptions::PyModuleNotFoundError>(py) => {
+                    return Ok(None)
+                }
+                Err(e) => return Err(e),
+            };
+            let size = gui
                 .getattr("QImageReader")?
                 .call1((path.to_string_lossy(),))?
                 .call_method0("size")?;
@@ -397,4 +412,32 @@ pub fn swatch_pixels<'py>(
         resize(source, side, side)
     });
     Ok(Some(PyBytes::new(py, pixels.as_raw())))
+}
+
+/// Keep the legacy 32×32 nearest-neighbour test used by material import.
+#[pyfunction]
+pub fn texture_cutout(py: Python<'_>, path: PathBuf) -> PyResult<bool> {
+    use image::ImageDecoder;
+    let header = py.detach(|| reader(&path)?.into_decoder().map(|d| d.color_type()));
+    if header.is_ok_and(|kind| !kind.has_alpha()) {
+        return Ok(false);
+    }
+    Ok(decode(py, &path)?.is_some_and(|image| {
+        let (w, h) = image.dimensions();
+        (0..32)
+            .any(|y| (0..32).any(|x| image.get_pixel(sample(x, w, 32), sample(y, h, 32))[3] < 32))
+    }))
+}
+
+pub(crate) fn sample(i: u32, extent: u32, grid: u32) -> u32 {
+    ((u64::from(2 * i + 1) * u64::from(extent)) / (2 * u64::from(grid))) as u32
+}
+
+#[pyfunction]
+pub fn readable_tga(path: PathBuf) -> bool {
+    File::open(path).is_ok_and(|f| {
+        ImageReader::with_format(BufReader::new(f), image::ImageFormat::Tga)
+            .into_dimensions()
+            .is_ok()
+    })
 }

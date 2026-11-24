@@ -244,7 +244,7 @@ def test_billboard_export_restores_world_and_schedules_overlays(view, fail, monk
     def composite(image, *args, **kwargs):
         scheduled.append(True)
         return image
-    monkeypatch.setattr("views.wgpu_annotations.composite_annotations", composite)
+    monkeypatch.setattr("views.wgpu_annotations.composite_pixels", composite)
 
     class Capture:
         def __init__(self):

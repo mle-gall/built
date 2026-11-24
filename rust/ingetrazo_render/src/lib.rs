@@ -20,6 +20,7 @@ mod sun;
 mod shadow_fit;
 mod textures;
 pub mod tool_cursors;
+mod annotation_canvas;
 mod image_assets;
 mod material_textures;
 // R-look: isolated style and background passes.
@@ -2936,6 +2937,12 @@ fn context_targets(hit: bool, selection: &Bound<'_, PyAny>) -> PyResult<Vec<Py<P
 pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(tool_cursors::tool_cursor_name, m)?)?;
     m.add_function(wrap_pyfunction!(tool_cursors::tool_cursor_art, m)?)?;
+    m.add_function(wrap_pyfunction!(image_assets::texture_cutout,m)?)?;
+    m.add_function(wrap_pyfunction!(image_assets::readable_tga,m)?)?;
+    m.add_function(wrap_pyfunction!(captured_frame::blank_picture,m)?)?;
+    m.add_function(wrap_pyfunction!(captured_frame::archive_thumbnail,m)?)?;
+    m.add_function(wrap_pyfunction!(captured_frame::archive_picture_png,m)?)?;
+    m.add_class::<annotation_canvas::AnnotationCanvas>()?;
     m.add_function(wrap_pyfunction!(image_assets::reference_texture, m)?)?;
     m.add_function(wrap_pyfunction!(image_assets::fit_reference_rgba, m)?)?;
     m.add_function(wrap_pyfunction!(image_assets::swatch_pixels, m)?)?;

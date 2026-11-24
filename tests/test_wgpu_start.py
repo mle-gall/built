@@ -633,3 +633,12 @@ def test_a_missing_row_still_offers_to_locate(win, monkeypatch, tmp_path):
     act(win, "open", row["id"])
     assert asked and win._doc.path.resolve() == found.resolve()
 
+
+
+def test_native_save_picture_roundtrips_rgba_without_a_widget():
+    from ingetrazo_render import archive_picture_png, archive_thumbnail
+    row = bytes([255, 0, 0, 128, 0, 0, 255, 255])
+    assert archive_picture_png(2, 2, bytes([4, 8, 12, 255]) * 4) is None
+    encoded = archive_picture_png(2, 2, row * 2)
+    assert archive_thumbnail(encoded, 16) == (2, 2, row * 2)
+    assert archive_thumbnail(b"broken", 16) is None

@@ -176,8 +176,9 @@ def draw_annotations(painter, scene, camera, logical_size, *, annotations_only=F
                               clear_segment=clear_segment)
     painter.save()
     try:
-        painter.setRenderHint(QPainter.Antialiasing)
-        painter.setRenderHint(QPainter.TextAntialiasing)
+        if isinstance(painter, QPainter):
+            painter.setRenderHint(QPainter.Antialiasing)
+            painter.setRenderHint(QPainter.TextAntialiasing)
         if not annotations_only:
             if guide_lines:
                 draw_guide_lines(painter, layout)
@@ -247,31 +248,32 @@ def draw_tool_feedback(painter, tools, layout):
         painter.restore()
 
 
+def composite_pixels(rgba, width, height, scene, camera, *, logical_size,
+                     annotations_only=False, occluded=None):
+    """Project shared document marks and composite them into a capture in Rust."""
+    from ingetrazo_render import AnnotationCanvas
+    if min(logical_size) <= 0:
+        raise ValueError("Annotation canvas dimensions must be positive")
+    target = AnnotationCanvas(width, height, logical_size[0])
+    draw_annotations(target, scene, camera, target.logical_size,
+                     annotations_only=annotations_only, occluded=occluded)
+    return target.composite(rgba)
+
+
 def composite_annotations(image, scene, camera, *, logical_size,
                           overlays=True, annotations_only=False, occluded=None):
-    """Return a capture copy with annotations placed for its scale and aspect.
-
-    image dimensions are physical pixels; logical_size is the live logical size.
-    DPR metadata is respected exactly once, including a 2x QImage.
-    """
-    result = image.copy()
+    """Adapter for callers holding a Qt image. Its DPR is presentation metadata."""
+    from PySide6.QtGui import QImage
     if not overlays:
-        return result
-    if result.isNull():
+        return image.copy()
+    if image.isNull():
         raise ValueError("Cannot annotate a null image")
-    width, height = map(float, logical_size)
-    if width <= 0 or height <= 0:
-        raise ValueError("Annotation canvas dimensions must be positive")
-    scale = result.width() / width
-    canvas = (width, result.height() / scale)
-    painter = QPainter(result)
-    try:
-        factor = scale / result.devicePixelRatio()
-        painter.scale(factor, factor)
-        draw_annotations(painter, scene, camera, canvas,
-                         annotations_only=annotations_only, occluded=occluded)
-    finally:
-        painter.end()
+    w, h = image.width(), image.height()
+    src = image.convertToFormat(QImage.Format_RGBA8888)
+    rgba = composite_pixels(bytes(src.constBits()), w, h, scene, camera, logical_size=logical_size,
+                            annotations_only=annotations_only, occluded=occluded)
+    result = QImage(rgba, w, h, w * 4, QImage.Format_RGBA8888).copy()
+    result.setDevicePixelRatio(image.devicePixelRatio())
     return result
 
 

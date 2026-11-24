@@ -99,29 +99,8 @@ def image_has_cutout(path, cache={}) -> bool:
     cached = cache.get(path)
     if cached is not None:
         return cached
-    from PySide6.QtCore import Qt
-    from PySide6.QtGui import QImage, QImageReader
-    # A format without alpha (every JPEG) cannot see through: read the
-    # header, not the pixels — decoding each photo texture just to ask
-    # cost the ride's first picture ~0.8 s.
-    # (Not an indexed one: its palette may hold a transparent entry.)
-    opaque = {QImage.Format_RGB32, QImage.Format_RGB888, QImage.Format_BGR888,
-              QImage.Format_RGB16, QImage.Format_RGBX8888, QImage.Format_RGBX64,
-              QImage.Format_Grayscale8, QImage.Format_Grayscale16}
-    if QImageReader(str(path)).imageFormat() in opaque:
-        cache[path] = False
-        return False
-    img = QImage(str(path))
-    ok = False
-    if not img.isNull() and img.hasAlphaChannel():
-        small = img.scaled(32, 32, Qt.IgnoreAspectRatio, Qt.FastTransformation)
-        for yy in range(small.height()):
-            for xx in range(small.width()):
-                if small.pixelColor(xx, yy).alpha() < 32:
-                    ok = True
-                    break
-            if ok:
-                break
+    from ingetrazo_render import texture_cutout
+    ok = texture_cutout(str(path))
     cache[path] = ok
     return ok
 
@@ -158,7 +137,7 @@ _IMAGE_MAGIC = (
 def is_image_bytes(data: bytes) -> bool:
     """True when ``data`` starts like an image file (PNG, JPEG, GIF, BMP,
     TIFF, WebP). TGA has no signature: it is accepted only through
-    :func:`is_image_file` by extension plus a Qt decode."""
+    :func:`is_image_file` by extension plus a TGA header check."""
     head = bytes(data[:16])
     if head.startswith(_IMAGE_MAGIC):
         return True
@@ -179,9 +158,8 @@ def is_image_file(path) -> bool:
     if is_image_bytes(head):
         return True
     if p.suffix.lower() == ".tga":
-        from PySide6.QtGui import QImageReader
-        reader = QImageReader(str(p), b"tga")
-        return reader.canRead()
+        from ingetrazo_render import readable_tga
+        return readable_tga(p)
     return False
 
 
