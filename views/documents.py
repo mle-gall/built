@@ -31,6 +31,8 @@ from core.i18n import tr
 class Document:
     """One open project: its viewport and the window's record of it."""
 
+    view_layout = "single"
+
     def __init__(self, viewport=None) -> None:
         self.viewport = viewport
         #: The .igz it was opened from or saved to (None = never saved).
@@ -59,7 +61,6 @@ class Document:
         self.scene_tabs: bool = SCENE_TABS_DEFAULT
         #: How many views it shows (views/multi_view.py LAYOUTS) and the
         #: grid holding them, made the first time it shows more than one.
-        self.view_layout: str = "single"
         self.view_grid = None
         #: What an extension put in this project's place in the viewport
         #: stack with ``setCentralWidget`` (MultiView's grid of views, which

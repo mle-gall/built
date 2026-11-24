@@ -3005,6 +3005,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(captured_frame::archive_thumbnail,m)?)?;
     m.add_function(wrap_pyfunction!(captured_frame::archive_picture_png,m)?)?;
     m.add_class::<model_views::ModelViews>()?;
+    m.add_class::<model_views::DocumentViews>()?;
     m.add_function(wrap_pyfunction!(model_views::view_layouts, m)?)?;
     m.add_class::<annotation_canvas::AnnotationCanvas>()?;
     m.add_function(wrap_pyfunction!(image_assets::reference_texture, m)?)?;

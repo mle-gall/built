@@ -529,11 +529,11 @@ class ShellWindow(QObject):
     def new_document(self, activate: bool = True):
         """A new, empty project with its own controller and view, right of
         the one in front."""
-        from views.documents import Document
+        from app_shell.model_views import ShellDocument
         from views.document_controller import DocumentController
         from app_shell.view import ShellView
         host = self._host
-        doc = Document()
+        doc = ShellDocument()
         doc.untitled_no = self._free_untitled_no() if self._documents else 1
         vp = DocumentController(host)
         try:
@@ -572,8 +572,8 @@ class ShellWindow(QObject):
         if doc is old:
             return
         self.scene_player.cancel()
-        if grid := getattr(old, "model_views", None):
-            grid.suspend()
+        if old is not None:
+            old.model_views.suspend(old)
         if old is not None and old.viewport is not None:
             from views.inspector_bridge import leave_camera
             leave_camera(old)
@@ -638,8 +638,7 @@ class ShellWindow(QObject):
         from core import autosave
         if doc not in self._documents:
             return
-        if grid := getattr(doc, "model_views", None):
-            grid.suspend()
+        doc.model_views.suspend(doc)
         self._release_document_watch(doc)
         self._documents.remove(doc)
         from app_shell import project
@@ -663,8 +662,8 @@ class ShellWindow(QObject):
 
     def bind(self, viewport, view):
         """The first document (Host.__init__ made its controller and view)."""
-        from views.documents import Document
-        doc = Document()
+        from app_shell.model_views import ShellDocument
+        doc = ShellDocument()
         doc.viewport = viewport
         doc.stand_in = view
         doc._renderer_wgpu = True
@@ -712,27 +711,15 @@ class ShellWindow(QObject):
         choose(self)
 
     def set_view_layout(self, key):
-        from app_shell.model_views import for_document
-        for_document(self._doc).choose(key)
+        self._doc.model_views.choose(self._doc, key)
 
     def _views_dict(self, doc):
-        grid = getattr(doc, "model_views", None)
-        return grid.layout.archive() if grid else None
-
-    def _fit_model_bounds(self, bounds):
-        from views.wgpu_ui import free_area
-        grid = getattr(self._doc, "model_views", None)
-        if grid and grid.visible:
-            for display in grid.displays.values():
-                display.source_viewport.camera.fit_box(*bounds)
-        else:
-            self.viewport.camera.fit_box(*bounds, free=free_area(self))
-        self._host.request_frame()
+        return doc.model_views.archive()
 
     def _on_zoom_extents(self):
         bounds = self._extents_bounds()
         if bounds is not None:
-            self._fit_model_bounds(bounds)
+            self._doc.model_views.fit_bounds(self, bounds)
 
     def _on_zoom_selection(self):
         from core.i18n import tr
@@ -740,13 +727,10 @@ class ShellWindow(QObject):
         if bounds[0] is None:
             self.statusBar().showMessage(tr("Nothing selected"), 2500)
         else:
-            self._fit_model_bounds(bounds)
+            self._doc.model_views.fit_bounds(self, bounds)
 
     def _maximize_model_view(self):
-        grid = getattr(self._doc, "model_views", None)
-        if grid is not None:
-            grid.layout.toggle_maximized()
-            self._host.request_frame()
+        self._doc.model_views.maximize(self._doc)
 
     def active_style(self):
         return self.viewport._view_style()
@@ -761,11 +745,7 @@ class ShellWindow(QObject):
         return vp.view_style
 
     def keep_other_views_style(self):
-        if grid := getattr(self._doc, "model_views", None):
-            style = self._doc.viewport.scene.display_style
-            for number, display in grid.displays.items():
-                if number != 1 and display.source_viewport.view_style is None and style is not None:
-                    display.source_viewport.view_style = style.copy()
+        self._doc.model_views.preserve_peer_styles(self._doc)
 
     def set_active_style(self, style):
         if self.viewport is self._doc.viewport:
