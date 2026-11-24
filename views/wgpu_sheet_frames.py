@@ -378,6 +378,46 @@ def circles(source, frame):
     return np.array(out, float).reshape(-1, 3)
 
 
+def annotations(source, frame, providers=None):
+    """A frame's model annotations (sheets::annots, the composer's
+    ``compute_annotations``) as overlay tuples, frame-local mm: the scene
+    read here as plain data — traced paths draped on the ground, the
+    dimensions with their texts, the leader labels, the section planes, the
+    extensions' ``providers`` (``add_sheet_annotations``) — and their
+    projection through the frame camera, what the frame's view hides, and
+    the layout in Rust. [] when its view is gone."""
+    from ingetrazo_core import Vec3
+    from core.layers import layer_of
+    from core.units import format_length
+    scene = source.scene
+    view = saved_view(scene, frame)
+    if view is False:
+        return []
+    base, bounds = camera_inputs(source.camera, scene)
+    drape = getattr(source, "drape", None)
+    lift = (lambda p: drape(p).toTuple()) if drape is not None else (lambda p: p.toTuple())  # noqa: E731
+    hidden = lambda e: scene.entity_hidden(e) or scene.similar_hidden(e)  # noqa: E731
+    data = {"root": scene._root, "groups": list(scene.groups), "loose": scene.loose_mesh,
+            "paths": [([lift(p) for p in path.points], path.closed, [p.toTuple() for p in path.profile_points()])
+                      for path in getattr(scene, "geo_paths", None) or []],
+            "drape": lambda x, y: lift(Vec3(x, y, 0.0)),
+            "planes": [(sp.point.toTuple(), sp.normal.toTuple(), sp.symbol)
+                       for sp in getattr(scene, "section_planes", None) or []]}
+    if providers:
+        data["providers"], data["scene"] = providers, frame_scene(scene, frame, view)
+    if getattr(frame, "annotations", False):
+        style = getattr(scene, "dimension_style", {}) or {}
+        fmt = lambda v: format_length(v, style.get("units", "m"), int(style.get("decimals", 2)),  # noqa: E731
+                                      bool(style.get("show_unit", True)))
+        data["ends"] = style.get("ends", "arrow")
+        data["dims"] = [(d.a.toTuple(), d.b.toTuple(), *(p.toTuple() for p in d.line_points()),
+                         d.display_text(fmt(d.value())), layer_of(d), hidden(d))
+                        for d in getattr(scene, "dimensions", []) or []]
+        data["labels"] = [(lab.anchor.toTuple(), lab.position().toTuple(), lab.text, layer_of(lab), hidden(lab))
+                          for lab in getattr(scene, "text_labels", []) or []]
+    return NATIVE.sheet_frame_annotations(frame, {"view": view, "base": base, "bounds": bounds}, data)
+
+
 def _hlr_to_mm(frame):
     """A frame's camera plane (metres) to frame paper mm."""
     from core.composition import model_height_for_frame
@@ -394,11 +434,12 @@ def _hlr_to_mm(frame):
     return to_mm
 
 
-def frame_contents(view_widget, comps, ground=None):
+def frame_contents(view_widget, comps, ground=None, providers=None):
     """Each frame's content for a file, worked out afresh: ``(contents,
-    pictures, profiles, troubled)`` as sheet_pdf / sheet_image take them;
-    ``troubled`` names the sheets where a frame would not render (it
-    prints its placeholder, the rest goes on)."""
+    pictures, profiles, troubled)`` as sheet_pdf / sheet_image take them,
+    with the model's annotations over each (``providers``: the extensions'
+    sheet items); ``troubled`` names the sheets where a frame would not
+    render (it prints its placeholder, the rest goes on)."""
     source = view_widget.source_viewport
     scene = source.scene
     contents, pictures, profiles, troubled = {}, {}, {}, []
@@ -419,6 +460,8 @@ def frame_contents(view_widget, comps, ground=None):
                     if got is not None:
                         contents[key] = {"image": got[:2]}
                         pictures[f"frame:{key}"] = got
+                if key in contents and "missing" not in contents[key]:
+                    contents[key]["annots"] = annotations(source, frame, providers)
             except Exception:  # noqa: BLE001 — one frame, not the document
                 import traceback
                 traceback.print_exc()
@@ -427,18 +470,18 @@ def frame_contents(view_widget, comps, ground=None):
     return contents, pictures, profiles or None, troubled
 
 
-def export_pdf(view_widget, comps, path, ground=None, doc_path=None) -> list:
+def export_pdf(view_widget, comps, path, ground=None, doc_path=None, providers=None) -> list:
     """Sheets ``comps`` into the PDF at ``path`` (sheets::pdf); returns the
     names of the sheets where a frame would not render."""
-    contents, pictures, profiles, troubled = frame_contents(view_widget, comps, ground)
+    contents, pictures, profiles, troubled = frame_contents(view_widget, comps, ground, providers)
     NATIVE.sheet_pdf(str(path), list(comps), contents, pictures, profiles, view_widget.source_viewport.scene,
                      None if doc_path is None else str(doc_path))
     return troubled
 
 
-def export_image(view_widget, comp, path, dpi=200.0, ground=None, doc_path=None) -> list:
+def export_image(view_widget, comp, path, dpi=200.0, ground=None, doc_path=None, providers=None) -> list:
     """Sheet ``comp`` as a PNG or JPEG at ``dpi`` (sheets::raster)."""
-    contents, pictures, profiles, troubled = frame_contents(view_widget, [comp], ground)
+    contents, pictures, profiles, troubled = frame_contents(view_widget, [comp], ground, providers)
     NATIVE.sheet_image(str(path), comp, float(dpi), contents, pictures, profiles,
                        view_widget.source_viewport.scene, None if doc_path is None else str(doc_path))
     return troubled

@@ -22,6 +22,7 @@ const ON_EDGE_TOL_M: f64 = 1e-4;
 
 /// A frame's projection: world metres → page mm (`frame_page_projector`
 /// after `_to_cam`).
+#[derive(Clone)]
 pub struct Projector {
     cam: Cam,
     x: f64,
@@ -49,6 +50,35 @@ impl Projector {
         let px = ((cx / (hh * ar) + 1.0) * self.w / 2.0).clamp(-lim_x, lim_x + self.w);
         let py = ((1.0 - cy / hh) * self.h / 2.0).clamp(-lim_y, lim_y + self.h);
         [self.x + px, self.y + py]
+    }
+    /// The projector of ``frame`` from the frame camera's inputs ``d``
+    /// (``{view, base, bounds}``, see ``sheet_frame_camera``): onto the
+    /// page, or onto the frame itself (``local``: frame-local mm).
+    pub fn of(frame: &Bound<'_, PyAny>, d: &Bound<'_, PyDict>, local: bool)
+        -> PyResult<(super::model::Fields, Projector)> {
+        let f = super::model::read_fields(doc::py::handle_key(frame)?)?;
+        let view = match d.get_item("view")?.filter(|v| !v.is_none()) {
+            Some(v) => Some(ViewCam::from_fields(&super::model::read_fields(doc::py::handle_key(&v)?)?)),
+            None => None,
+        };
+        let base = super::camera::base_cam_of(d.get_item("base")?.map(|b| b.cast_into::<PyDict>()).transpose()?.as_ref())?;
+        let bounds: Option<((f64, f64, f64), (f64, f64, f64))> = match d.get_item("bounds")? {
+            Some(b) if !b.is_none() => Some(b.extract()?),
+            _ => None,
+        };
+        let bounds = bounds.map(|(a, b)| (DVec3::new(a.0, a.1, a.2), DVec3::new(b.0, b.1, b.2)));
+        let cam = frame_camera(base, &f, view.as_ref(), bounds);
+        let (x, y) = if local { (0.0, 0.0) } else { (f.num("x_mm", 0.0), f.num("y_mm", 0.0)) };
+        let proj = Projector { perspective: cam.perspective, cam, x, y, w: f.num("w_mm", 100.0),
+                               h: f.num("h_mm", 100.0), scale_n: f.num("scale_n", 100.0) };
+        Ok((f, proj))
+    }
+    /// The direction the frame's camera looks along.
+    pub fn forward(&self) -> DVec3 {
+        self.cam.forward()
+    }
+    pub fn perspective(&self) -> bool {
+        self.perspective
     }
     fn inside(&self, p: [f64; 2]) -> bool {
         self.x - 0.5 <= p[0] && p[0] <= self.x + self.w + 0.5 && self.y - 0.5 <= p[1] && p[1] <= self.y + self.h + 0.5
@@ -195,20 +225,7 @@ pub fn sheet_follow_anchors<'py>(py: Python<'py>, comp: &Bound<'py, PyAny>, fram
         if uid.is_empty() {
             continue;
         }
-        let f = super::model::read_fields(doc::py::handle_key(&frame)?)?;
-        let view = match d.get_item("view")?.filter(|v| !v.is_none()) {
-            Some(v) => Some(ViewCam::from_fields(&super::model::read_fields(doc::py::handle_key(&v)?)?)),
-            None => None,
-        };
-        let base = super::camera::base_cam_of(d.get_item("base")?.map(|b| b.cast_into::<PyDict>()).transpose()?.as_ref())?;
-        let bounds: Option<((f64, f64, f64), (f64, f64, f64))> = match d.get_item("bounds")? {
-            Some(b) if !b.is_none() => Some(b.extract()?),
-            _ => None,
-        };
-        let bounds = bounds.map(|(a, b)| (DVec3::new(a.0, a.1, a.2), DVec3::new(b.0, b.1, b.2)));
-        let cam = frame_camera(base, &f, view.as_ref(), bounds);
-        let proj = Projector { perspective: cam.perspective, cam, x: f.num("x_mm", 0.0), y: f.num("y_mm", 0.0),
-                               w: f.num("w_mm", 100.0), h: f.num("h_mm", 100.0), scale_n: f.num("scale_n", 100.0) };
+        let (_f, proj) = Projector::of(&frame, d, false)?;
         by_uid.push((uid, proj, Snaps { get: snaps.clone(), frame: frame.clone(), got: None }));
     }
     let mut moved = 0;

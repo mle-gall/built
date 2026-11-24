@@ -66,6 +66,9 @@ _CONTENT_FIELDS = ("w_mm", "h_mm", "scale_n", "view_key", "style", "paper_bg", "
                    "sun_hour", "rot_deg", "pen_cut_mm", "pen_profile_mm", "pen_edge_mm", "profiles",
                    "hidden_lines", "layer_colours", "cut_fill", "cut_fill_color", "cut_fill_by_layer")
 
+#: The fields of a frame its model annotations follow besides its content.
+_ANNOT_FIELDS = ("annotations", "annot_text_mm", "km_marks", "km_step_m", "section_marks")
+
 #: Keys that stay the window's in the workspace (save, open, new, close,
 #: quit, preferences): everything else is the page's.
 _WINDOW_KEYS = ("Ctrl+S", "Ctrl+Shift+S", "Ctrl+O", "Ctrl+N", "Ctrl+W", "Ctrl+Q",
@@ -259,6 +262,7 @@ class Workspace:
         self._ground = None             # the samplers terrain profiles read
         self._edit_after = None         # a new text block, opened for typing once on the page
         self._snapped = {}              # frame key → what its snaps were worked out from
+        self._annotated = {}            # frame key → what its annotations were worked out from
         self._followed = None           # what bound items last followed
         self._anchor_memo = {}          # (item key, attr) → (point, seen on an edge)
         self._holds = {}                # (item key, attr) → session hold on a vertex
@@ -300,6 +304,7 @@ class Workspace:
         self._page = None
         self._content = {}
         self._snapped = {}
+        self._annotated = {}
         self._tried = {}
         self._selection = None
         renderer = getattr(view, "renderer", None)
@@ -396,6 +401,7 @@ class Workspace:
             if self._content.get(key, sig) != sig:  # the window on the model changed (undo too)
                 renderer.page_frame_forget(key)
                 self._tried.pop(key, None)
+                self._annotated.pop(key, None)
             self._content[key] = sig
             if renderer.page_has_content(key) or self._tried.get(key) == serial:
                 continue
@@ -443,6 +449,7 @@ class Workspace:
             comp.render_cache.pop(id(model), None)
             self._content.pop(model._doc_key, None)
             self._tried.pop(model._doc_key, None)
+            self._annotated.pop(model._doc_key, None)
             renderer = getattr(self.view, "renderer", None)
             if renderer is not None:
                 renderer.page_frame_forget(model._doc_key)
@@ -605,6 +612,31 @@ class Workspace:
             import traceback
             traceback.print_exc()
 
+    def _send_annots(self, renderer) -> None:
+        """Each frame's model annotations over its content, whatever its
+        style (wgpu_sheet_frames.annotations), one frame per turn, again
+        when the model or the frame changed."""
+        import ingetrazo_core as NATIVE
+        from views import wgpu_sheet_frames
+        comp = self.composer
+        version = getattr(comp._scene(), "version", None)
+        providers = getattr(comp._window, "_ext_sheet_annots", None)
+        for frame in list(comp.comp.frames):
+            key = frame._doc_key
+            sig = (version, self._content.get(key), len(providers or ()),
+                   tuple(repr(getattr(frame, f, None)) for f in _ANNOT_FIELDS))
+            if self._annotated.get(key) == sig:
+                continue
+            self._annotated[key] = sig
+            try:
+                got = wgpu_sheet_frames.annotations(self.view.source_viewport, frame, providers)
+                renderer.page_frame_annots(key, NATIVE.sheet_frame_annots(frame, got))
+            except Exception:  # noqa: BLE001 — a frame that cannot annotate keeps its content
+                import traceback
+                traceback.print_exc()
+            self._more = True
+            return
+
     def _send_snaps(self, renderer) -> None:
         """What each frame offers a snapping tool (wgpu_sheet_frames.snaps),
         one frame per turn, again when the model or the frame changed."""
@@ -714,6 +746,8 @@ class Workspace:
         self._follow_model()
         self._send_page(renderer)
         self._send_contents(renderer)
+        if not self._more:
+            self._send_annots(renderer)
         if self.composer.tool_mode in SNAP_TOOLS and not self._more:
             self._send_snaps(renderer)
             style = getattr(self.composer._scene(), "dimension_style", None) or {}
@@ -1068,14 +1102,14 @@ class Workspace:
                         self._ground = wgpu_sheet_frames.Ground(self._touch)
                     troubled = wgpu_sheet_frames.export_pdf(
                         self.view, comps, path, self._ground,
-                        getattr(comp._window, "_current_path", None))
+                        getattr(comp._window, "_current_path", None), getattr(comp._window, "_ext_sheet_annots", None))
                 elif kind == "png":
                     from views import wgpu_sheet_frames
                     if self._ground is None:
                         self._ground = wgpu_sheet_frames.Ground(self._touch)
                     troubled = wgpu_sheet_frames.export_image(
                         self.view, comp.comp, path, 200.0, self._ground,
-                        getattr(comp._window, "_current_path", None))
+                        getattr(comp._window, "_current_path", None), getattr(comp._window, "_ext_sheet_annots", None))
                 elif kind == "dxf":
                     comp.export_frame_dxf(self._frame(), path)
                 elif kind == "svg":

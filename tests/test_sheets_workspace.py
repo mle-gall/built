@@ -667,6 +667,89 @@ def test_a_plan_cut_fills_each_ring_with_its_layer_s_look(host, by_layer):
     assert sum(o["op"] == "line" for o in ops) > len(got["segs"]) + 10       # the patterns' marks
 
 
+def test_a_frame_s_model_annotations_are_the_composer_s(host):
+    """The paper overlay of a frame (wgpu_sheet_frames.annotations: the
+    scene read as data, projected and laid out in Rust through the frame
+    camera) is the composer's compute_annotations: traced paths, their
+    chainages, section marks, an extension's items, the model's dimensions
+    and leader texts — and what a hidden tag carries stays out."""
+    from ingetrazo_core import Vec3
+    from core.dimension import Dimension
+    from core.layers import Layer
+    from core.section import SectionPlane
+    from core.textlabel import TextLabel
+    from georef.geopath import GeoPath
+    from views import wgpu_sheet_frames
+    ws = _sheets(host)
+    comp = ws.composer
+    plan = comp.comp.frames[0]
+    plan.annotations = plan.km_marks = plan.section_marks = True
+    plan.annot_text_mm = 3.0
+    scene = comp._scene()
+    scene.layers.append(Layer("Notas", visible=False))
+    scene.geo_paths.append(GeoPath([Vec3(0.0, 0.0, 0.0), Vec3(8.0, 1.0, 0.0), Vec3(12.0, 6.0, 0.0)], name="eje"))
+    scene.dimensions.append(Dimension(Vec3(0.0, 0.0, 0.0), Vec3(6.0, 0.0, 0.0), Vec3(0.0, -1.0, 0.0)))
+    scene.dimensions.append(Dimension(Vec3(0.0, 0.0, 0.0), Vec3(0.0, 4.0, 0.0), Vec3(-1.0, 0.0, 0.0), axis="y"))
+    scene.dimensions.append(Dimension(Vec3(1.0, 1.0, 0.0), Vec3(3.0, 1.0, 0.0), Vec3(0.0, 1.0, 0.0), layer="Notas"))
+    scene.text_labels.append(TextLabel(Vec3(2.0, 2.0, 1.0), Vec3(1.5, 1.0, 0.0), "Muro\nde carga"))
+    scene.text_labels.append(TextLabel(Vec3(5.0, 2.0, 1.0), Vec3(-1.5, 1.0, 0.0), "oculto", layer="Notas"))
+    scene.section_planes.append(SectionPlane(Vec3(3.0, 0.0, 0.0), Vec3(1.0, 0.0, 0.0)))
+    scene.section_planes.append(SectionPlane(Vec3(0.0, 2.0, 0.0), Vec3(0.0, -1.0, 0.0), symbol="B"))
+    scene.dimension_style = dict(getattr(scene, "dimension_style", {}) or {}, ends="tick")
+    scene.version += 1
+
+    told = []
+
+    def provider(scene, sheet):
+        told.append((sheet.scale_n, sheet.text_mm))
+        return [{"line": [(0, 0, 0), (4, 4, 0)], "width_mm": 0.5, "color": (200, 30, 30)},
+                {"text": "P1", "at": (4, 4, 0), "toward": (0, 4, 0), "anchor": "start", "background": (255, 255, 0),
+                 "background_opacity": 50},
+                {"text": "k", "at": (4.1, 4, 0), "priority": 1}]
+    host.window._ext_sheet_annots = [provider]
+    comp._invalidate_geometry_caches()
+    want = comp.compute_annotations(plan)
+    got = wgpu_sheet_frames.annotations(host.view.source_viewport, plan, host.window._ext_sheet_annots)
+
+    def canon(items, metrics=True):
+        out = []
+        for a in items:
+            row = []
+            for v in (a if metrics or a[0] != "xtext" else a[:10]):
+                if isinstance(v, float):
+                    row.append(round(v, 5))
+                elif isinstance(v, list):
+                    row.append([tuple(round(c, 5) for c in q) for q in v])
+                else:
+                    row.append(v)
+            out.append(tuple(row))
+        return out
+    assert told[-1] == (plan.scale_n, 3.0), told
+    kinds = [a[0] for a in got]
+    assert {"poly", "line", "text", "secmark", "xpoly", "xtext"} <= set(kinds), kinds
+    assert "oculto" not in [a[4] for a in got if a[0] == "text"]
+    assert canon(got, False) == canon(want, False)
+    for mine, theirs in zip(got, want):
+        if mine[0] == "xtext":            # the box measured with the sheet font, the composer's with Qt's
+            assert all(abs(m - t) < 0.15 * abs(t) for m, t in zip(mine[10:], theirs[10:]) if t), (mine[10:], theirs[10:])
+    import ingetrazo_core as NATIVE
+    ops = json.loads(NATIVE.sheet_frame_annots(plan, got))
+    assert sum(o["op"] == "text" for o in ops) == 9 * kinds.count("text") + 2 * kinds.count("secmark") \
+        + kinds.count("xtext")
+    # The page draws them over the frame's content, and again when they change.
+    renderer = host.view.renderer
+    for _ in range(6):
+        host.view.draw_frame()
+    sent = [a for n, a in renderer.calls if n == "page_frame_annots" and a[0] == plan._doc_key]
+    assert sent and json.loads(sent[-1][1]) == ops
+    plan.annotations = False
+    for _ in range(6):
+        host.view.draw_frame()
+    sent = [a for n, a in renderer.calls if n == "page_frame_annots" and a[0] == plan._doc_key]
+    assert len(json.loads(sent[-1][1])) < len(ops)
+    assert host.window._ext_sheet_annots == [provider]     # told each frame's own scale, never failed
+
+
 def NATIVE_display(frame, content):
     import ingetrazo_core as NATIVE
     return NATIVE.sheet_frame_display(frame, content, True)

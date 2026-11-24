@@ -50,6 +50,8 @@ pub struct FrameContent {
     /// The words a line type writes along its lines (worked out with
     /// `core.layers.text_marks` when the content was read).
     pub word_ops: Option<Vec<super::paint::Op>>,
+    /// The model's annotations over the content (sheets::annots).
+    pub annots: Vec<super::annots::Annot>,
 }
 
 /// How a layer's lines are inked (`core.layers.line_styles`, its line type
@@ -444,6 +446,9 @@ pub fn paint_frame(p: &mut Painter, f: &Fields, x: &Extra, c: &FrameContent) {
     } else {
         p.fill_rect(r, Rgba(245, 246, 248, 255));
         placeholder(p);
+    }
+    if !c.annots.is_empty() {
+        super::annots::paint_annots(p, w, h, &c.annots);
     }
     paint_frame_overlay(p, f, x);
 }

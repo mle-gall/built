@@ -130,6 +130,9 @@ pub struct Page {
     zoom_to: Option<f32>,
     /// A vector frame's drawing as a display list (frame-local mm).
     ops: HashMap<u64, J>,
+    /// A frame's model annotations (sheets::annots), over its content
+    /// whatever its style.
+    annots: HashMap<u64, J>,
     /// Frames rendered on the GPU straight into a texture (no read-back):
     /// the texture kept alive and its id with the UI painter.
     natives: HashMap<u64, (wgpu::Texture, egui::TextureId)>,
@@ -538,8 +541,13 @@ impl Page {
         self.drop_native(key);
         self.ops.insert(key, ops);
     }
+    /// A frame's model annotations (sheets::annots `paint_annots`).
+    pub fn set_annots(&mut self, key: u64, ops: J) {
+        self.annots.insert(key, ops);
+    }
     pub fn forget_content(&mut self, key: u64) {
         self.ops.remove(&key);
+        self.annots.remove(&key);
         self.drop_native(key);
     }
     pub fn has_content(&self, key: u64) -> bool {
@@ -1114,9 +1122,11 @@ impl Page {
                 "frame" => {
                     self.paint_frame(&painter, item, rect);
                     let place = crate::sheet_display::Place { origin: rect.min, zoom: self.zoom };
-                    if let Some(ops) = self.ops.get(&item.key) {
-                        let inner = painter.with_clip_rect(rect.intersect(painter.clip_rect()));
-                        crate::sheet_display::paint(&inner, ctx, &mut self.pictures, ops, place);
+                    let inner = painter.with_clip_rect(rect.intersect(painter.clip_rect()));
+                    for layer in [&self.ops, &self.annots] {
+                        if let Some(ops) = layer.get(&item.key) {
+                            crate::sheet_display::paint(&inner, ctx, &mut self.pictures, ops, place);
+                        }
                     }
                     crate::sheet_display::paint(&painter, ctx, &mut self.pictures, &item.data["display"], place);
                 }

@@ -342,6 +342,9 @@ pub fn frame_content(d: Option<&Bound<'_, pyo3::types::PyDict>>, key: crate::doc
             c.fills.push(pts.into_iter().filter(|q| q.len() >= 2).map(|q| [q[0], q[1]]).collect());
         }
     }
+    if let Some(a) = d.get_item("annots")?.filter(|v| !v.is_none()) {
+        c.annots = super::annots::parse(&a)?;
+    }
     if let Some(t) = d.get_item("tags")?.filter(|v| !v.is_none()) {
         let tags: Vec<Bound<'_, PyAny>> = match t.call_method0("tolist") {
             Ok(l) => l.try_iter()?.collect::<PyResult<_>>()?,

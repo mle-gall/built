@@ -19,7 +19,7 @@ const PT_TO_MM: f64 = 25.4 / 72.0;
 const TEXT_BG_PAD_MM: f64 = 0.5;
 
 /// Python's float `%` (the sign of the divisor).
-fn py_mod(a: f64, b: f64) -> f64 {
+pub fn py_mod(a: f64, b: f64) -> f64 {
     let r = a % b;
     if r != 0.0 && (r < 0.0) != (b < 0.0) { r + b } else { r }
 }
@@ -30,7 +30,7 @@ pub fn readable_deg(dx: f64, dy: f64) -> f64 {
 }
 
 /// views/composer.py oblique_tick_angle.
-fn oblique_tick_angle(line_angle: f64) -> f64 {
+pub fn oblique_tick_angle(line_angle: f64) -> f64 {
     line_angle - PI / 4.0
 }
 
@@ -635,7 +635,7 @@ fn nice_ticks(lo: f64, hi: f64, target: i32) -> Vec<f64> {
 }
 
 /// `chainage_step`.
-fn chainage_step(length: f64, step_m: f64) -> f64 {
+pub fn chainage_step(length: f64, step_m: f64) -> f64 {
     if step_m > 0.0 {
         return step_m;
     }
@@ -644,7 +644,7 @@ fn chainage_step(length: f64, step_m: f64) -> f64 {
 }
 
 /// `_chainage`: «1+250».
-fn chainage(s: f64, step: f64) -> String {
+pub fn chainage(s: f64, step: f64) -> String {
     let km = (s / 1000.0).floor() as i64;
     let m = py_mod(s, 1000.0);
     if step >= 1.0 { format!("{km}+{m:03.0}") } else { format!("{km}+{m:06.2}") }
