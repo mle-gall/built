@@ -15,7 +15,7 @@ if not NATIVE:
 
 from ingetrazo_render import shell_action as ShellAction
 from views.view_host import MISSING
-from views.document_commands import WindowDocumentCommands
+from ingetrazo_render.document_commands import WindowDocumentCommands
 
 
 class _Label:

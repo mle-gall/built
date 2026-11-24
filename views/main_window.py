@@ -53,7 +53,7 @@ from formats import ifc as ifc_format
 from formats import stl as stl_format
 from formats import gltf as gltf_format
 from tools.texture_position import TexturePositionTool
-from views.document_commands import WindowDocumentCommands, _repeatable
+from ingetrazo_render.document_commands import WindowDocumentCommands
 from ingetrazo_render import build_tools
 from tools.paint import PaintTool
 from tools.flip import FlipTool

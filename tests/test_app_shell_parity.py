@@ -297,7 +297,7 @@ def test_menu_edit_commands(host, tmp_path):
 
 
 def test_selection_commands_have_a_native_owner(host):
-    from views.document_commands import WindowDocumentCommands
+    from ingetrazo_render.document_commands import WindowDocumentCommands
     for verb in ("select_all", "invert_selection", "select_none"):
         host.menu(verb)
     assert host.window._on_select_all.__func__ is WindowDocumentCommands._on_select_all
