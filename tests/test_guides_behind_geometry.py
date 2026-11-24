@@ -16,21 +16,15 @@ same recipe as the axes, world-space dashes and depth-write off.
 from __future__ import annotations
 
 from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 import pytest
-from tests.controller_surface import live_image
-from PySide6.QtGui import QImage
+from ingetrazo_render import SurveyRaster
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
 
 from core.guide import Guide
 from views.document_interaction import _guide_vertices
 
-_app = QApplication.instance() or QApplication([])
 V = QVector3D
 
 
@@ -128,11 +122,20 @@ def test_a_small_guide_circle_still_gets_enough_dashes():
 # ── The real thing: pixels ──────────────────────────────────────────────────
 
 
-def _pixels(img: QImage):
-    a = img.convertToFormat(QImage.Format_RGB32)
-    buf = np.frombuffer(a.constBits(), np.uint8).reshape(
-        a.height(), a.bytesPerLine())[:, :a.width() * 4]
-    return buf.reshape(a.height(), a.width(), 4)[..., :3].astype(int).copy()
+def _pixels(raster):
+    return np.frombuffer(raster.rgba(), np.uint8).reshape(raster.height, raster.width, 4)[..., :3].astype(int)
+
+
+def _live_pixels(controller):
+    display = controller.keys_stand_in
+    display.set_scene(controller.scene)
+    display._prepare_pick_frame()
+    display.renderer.request_capture()
+    display.draw_frame()
+    pixels = bytes(display.renderer.take_capture())
+    width = round(display.width() * display.devicePixelRatioF())
+    assert pixels and len(pixels) % (width * 4) == 0
+    return _pixels(SurveyRaster(width, len(pixels) // (width * 4), pixels))
 
 
 def _changed(before, after) -> int:
@@ -166,15 +169,13 @@ def _scene_looking_down_minus_y(native_gpu_host):
 def test_a_wall_hides_the_guide_behind_it(native_gpu_host):
     win, vp = _scene_looking_down_minus_y(native_gpu_host)
     assert vp.camera.eye().y() > 0          # the eye really is on +Y
-    bare = _pixels(live_image(vp))
+    bare = _live_pixels(vp)
 
     vp.scene.guides[:] = [Guide(V(0, 4, 0), V(1, 0, 0))]     # in front
-    shown = _changed(bare, _pixels(
-        live_image(vp)))
+    shown = _changed(bare, _live_pixels(vp))
 
     vp.scene.guides[:] = [Guide(V(0, -4, 0), V(1, 0, 0))]    # behind
-    hidden = _changed(bare, _pixels(
-        live_image(vp)))
+    hidden = _changed(bare, _live_pixels(vp))
 
     assert shown > 50, "a guide in front of the wall must be drawn"
     assert hidden == 0, (
@@ -189,9 +190,9 @@ def test_a_sheet_render_still_carries_no_guides(native_gpu_host):
     from core.style import style_by_name
     vp.style_override = style_by_name("Architectural")
     try:
-        bare = _pixels(vp.render_image(300, 300, overlays=False))
+        bare = _pixels(vp.render_raster(300, 300, overlays=False))
         vp.scene.guides[:] = [Guide(V(0, 4, 0), V(1, 0, 0))]
-        after = _pixels(vp.render_image(300, 300, overlays=False))
+        after = _pixels(vp.render_raster(300, 300, overlays=False))
     finally:
         vp.style_override = None
     assert _changed(bare, after) == 0
