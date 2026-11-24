@@ -18,15 +18,17 @@ struct Cursor<'a, 'py> {
     hidden: Option<&'a Obj<'py>>,
 }
 impl Cursor<'_, '_> {
-    fn distance(&self, p: &Obj<'_>) -> PyResult<Option<f64>> {
+    fn projected_distance(&self, p: &Obj<'_>) -> PyResult<Option<f64>> {
         let xy = self.project.call1((p,))?;
         if xy.is_none() {
             return Ok(None);
         }
         let dx = xy.get_item(0)?.extract::<f64>()? - self.position[0];
         let dy = xy.get_item(1)?.extract::<f64>()? - self.position[1];
-        let d = dx.hypot(dy);
-        Ok((d <= self.radius).then_some(d))
+        Ok(Some(dx.hypot(dy)))
+    }
+    fn distance(&self, p: &Obj<'_>) -> PyResult<Option<f64>> {
+        Ok(self.projected_distance(p)?.filter(|&d| d <= self.radius))
     }
     fn clear(&self, p: &Obj<'_>) -> PyResult<bool> {
         Ok(match self.hidden {
@@ -290,4 +292,88 @@ pub(crate) fn closest_rim<'py>(
         Some(d) => (Some(d), Some(hit)),
         None => (None, None),
     })
+}
+
+/// A projected reference may be acquired at the foot or at the visible
+/// point on the edge. Preserve projection and occlusion order at both ends.
+#[pyfunction]
+pub(crate) fn body_reference<'py>(
+    start: &Obj<'py>,
+    axis: &Obj<'py>,
+    reference: &Obj<'py>,
+    position: [f64; 2],
+    radius: f64,
+    project: &Obj<'py>,
+    hidden: Option<&Obj<'py>>,
+) -> PyResult<Option<Obj<'py>>> {
+    let (s, a, r) = (xyz(start)?, xyz(axis)?, xyz(reference)?);
+    let foot = s + a * (r - s).dot(a);
+    if foot.distance(r) < 1e-4 {
+        return Ok(None);
+    }
+    let cursor = Cursor {
+        position,
+        radius,
+        project,
+        hidden,
+    };
+    let foot = Vec3::from(foot).into_pyobject(project.py())?.into_any();
+    let Some(mut distance) = cursor.projected_distance(&foot)? else {
+        return Ok(None);
+    };
+    if let Some(d) = cursor.projected_distance(reference)? {
+        if cursor.clear(reference)? {
+            distance = distance.min(d);
+        }
+    }
+    Ok((distance <= radius && cursor.clear(&foot)?).then_some(foot))
+}
+
+#[pyfunction]
+pub(crate) fn reference_direction(
+    draw: &Obj<'_>,
+    line: Option<&Obj<'_>>,
+    axes: [P; 3],
+    degrees: f64,
+) -> PyResult<Option<Vec3>> {
+    let d = xyz(draw)?;
+    if d.length() < 1e-6 {
+        return Ok(None);
+    }
+    if let Some(line) = line {
+        let a = xyz(line)?;
+        return Ok((a.length() >= 1e-6).then(|| a.normalize_or_zero().into()));
+    }
+    let u = d.normalize_or_zero();
+    let limit = degrees.to_radians().cos();
+    Ok(axes.into_iter().map(DVec3::from).find_map(|a| {
+        let dot = u.dot(a);
+        (dot.abs() >= limit).then(|| Vec3::from(if dot > 0. { a } else { -a }))
+    }))
+}
+
+#[pyfunction]
+pub(crate) fn reference_colour(
+    foot: &Obj<'_>,
+    reference: &Obj<'_>,
+    axes: [P; 3],
+) -> PyResult<Option<usize>> {
+    let u = (xyz(foot)? - xyz(reference)?).normalize_or_zero();
+    Ok(colour_axis(u, axes).filter(|&i| u.dot(axes[i].into()).abs() > 0.999))
+}
+
+#[pyfunction]
+pub(crate) fn lock_plane(
+    start: &Obj<'_>,
+    axis: &Obj<'_>,
+    origin: &Obj<'_>,
+    normal: &Obj<'_>,
+) -> PyResult<Option<Vec3>> {
+    let (s, a, p, n) = (xyz(start)?, xyz(axis)?, xyz(origin)?, xyz(normal)?);
+    let den = n.dot(a);
+    if den.abs() <= 1e-6 {
+        return Ok(None);
+    }
+    let t = n.dot(p - s) / den;
+    Ok((t.abs() > 1e-6).then(|| Vec3::from(s + a * t)))
 }

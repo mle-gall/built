@@ -581,6 +581,10 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(object_push_edges::loop_edges, m)?)?;
     m.add_function(wrap_pyfunction!(object_push_edges::face_edges, m)?)?;
     m.add_function(wrap_pyfunction!(object_push_edges::boundary_carries, m)?)?;
+    m.add_function(wrap_pyfunction!(snap_guides::body_reference, m)?)?;
+    m.add_function(wrap_pyfunction!(snap_guides::reference_direction, m)?)?;
+    m.add_function(wrap_pyfunction!(snap_guides::reference_colour, m)?)?;
+    m.add_function(wrap_pyfunction!(snap_guides::lock_plane, m)?)?;
     m.add_class::<snap_visibility::PointVisibility>()?;
     m.add_function(wrap_pyfunction!(snap_visibility::first_visible, m)?)?;
     m.add_function(wrap_pyfunction!(snap_visibility::resolve_points, m)?)?;

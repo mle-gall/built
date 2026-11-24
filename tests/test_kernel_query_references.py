@@ -228,3 +228,37 @@ def test_unscanned_rebuild_face_limit(monkeypatch):
     commands.clear()
     edits._append_face_plane_rebuild(scene, commands, points)
     assert commands == []
+
+
+def reference_guide_rows():
+    rows = []
+    start = V(11, -8, 3)
+    for seed in range(64):
+        trace = []
+        ref = start + V(1 + seed % 3, 3, seed % 2)
+        class Query:
+            def reference_foot(self, p, axis, *args):
+                trace.append(('axis', tuple(round(x, 9) for x in axis)))
+                return None
+            def target(self, *args):
+                return ref.toTuple(), 0, "on_edge"
+        def project(p):
+            trace.append(('pixel', xyz(p)))
+            return None if seed % 9 == 0 else (p.x(), p.y())
+        def hidden(p):
+            trace.append(('hidden', xyz(p)))
+            return seed % 11 == 0
+        draw = (V(-3,.1,0), V(1,2,1), V(0,0,0), V(0,0,2))[seed % 4]
+        axis = V(1, 2, 0) if seed % 3 else None
+        h = snap._from_point_snap(None, start, draw, ref.x(), ref.y(), project, seed % 5,
+                                  hidden, hovered_refs=True, line_dir=axis, query=Query())
+        n = V(0, 0, 1) if seed % 2 else V(1, 0, 0)
+        lock = snap._lock_reference_snap(start, draw, project, None, (ref, n, ref))
+        def result(hit):
+            return None if hit is None else (xyz(hit.point), hit.kind, hit.guide_color)
+        rows.append((result(h), result(lock), trace))
+    return rows
+
+
+def test_locked_reference_guide_callbacks():
+    assert digest(reference_guide_rows()) == 'b884c8b739411d3707b1811ddac0a372b2fe4f8bc5154cfffebda56e639f6738'

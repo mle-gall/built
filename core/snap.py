@@ -502,25 +502,11 @@ def _from_point_snap(
     how the lock is used: Tape from the wall's bottom edge, ↑, hover
     the window's corner, and the guide takes the window's height (Rafael,
     04:20: «cuando pulso la flechita para subir no me hace el snap»)."""
-    if start_point is None or draw_dir.length() < 1e-6:
+    if start_point is None:
         return None
-    if line_dir is not None:
-        if line_dir.length() < 1e-6:
-            return None
-        adir = QVector3D(line_dir).normalized()
-    else:
-        u = draw_dir.normalized()
-        # The draw must be along an axis; orient that axis along the draw direction.
-        adir = None
-        cos_axis = math.cos(math.radians(axis_deg))
-        for a in _AXIS_VECTORS.values():
-            dp = QVector3D.dotProduct(u, a)
-            if abs(dp) >= cos_axis:
-                adir = a if dp > 0 else -a
-                break
-        if adir is None:
-            return None  # diagonal draw — no clean 'from point'
-
+    adir = kernel.reference_direction(draw_dir, line_dir, _axis_tuples(), axis_deg)
+    if adir is None:
+        return None
     if query is None:
         from core.snap_query import make_query
         query = make_query(scene.edges, world_to_pixel, (cx, cy))
@@ -547,17 +533,9 @@ def _from_point_snap(
     if body is None:
         return None
     ref = QVector3D(*body[0])
-    foot = start_point + adir * QVector3D.dotProduct(ref - start_point, adir)
-    if (foot - ref).length() < 1e-4:
-        return None
-    pixel = world_to_pixel(foot)
-    if pixel is None:
-        return None
-    distance = math.dist(pixel, (cx, cy))
-    ref_pixel = world_to_pixel(ref)
-    if ref_pixel is not None and (is_occluded is None or not is_occluded(ref)):
-        distance = min(distance, math.dist(ref_pixel, (cx, cy)))
-    if distance > threshold_px or (is_occluded is not None and is_occluded(foot)):
+    foot = kernel.body_reference(start_point, adir, ref, (cx, cy), threshold_px,
+                                 world_to_pixel, is_occluded)
+    if foot is None:
         return None
     return _from_point_result(foot, ref, "from_point", COLOR_ENDPOINT)
 
@@ -569,11 +547,8 @@ def _from_point_result(foot, ref, kind, color):
     # blue» (#711).
     guide_color = None
     if kind == "from_point":
-        gdn = (foot - ref).normalized()
-        gaxis = max(_AXIS_VECTORS,
-                    key=lambda k: abs(QVector3D.dotProduct(gdn, _AXIS_VECTORS[k])))
-        along = abs(QVector3D.dotProduct(gdn, _AXIS_VECTORS[gaxis]))
-        guide_color = AXIS_COLORS[gaxis] if along > 0.999 else COLOR_EXTENSION
+        axis = kernel.reference_colour(foot, ref, _axis_tuples())
+        guide_color = AXIS_COLORS['xyz'[axis]] if axis is not None else COLOR_EXTENSION
     return SnapResult(foot, kind, color, guide=(ref, foot),
                       guide_color=guide_color)
 
@@ -773,19 +748,10 @@ def _lock_reference_snap(
                                   guide=(end, hit), guide_color=COLOR_EXTENSION)
     if hover_plane is not None:
         p0, n, ref = hover_plane
-        den = QVector3D.dotProduct(n, line_dir)
-        if abs(den) > 1e-6:
-            s = QVector3D.dotProduct(n, p0 - start_point) / den
-            hit = start_point + line_dir * s
-            # A plane through the start meets the lock line AT the start:
-            # nothing to offer, the line leaves the plane there. Offering
-            # it pinned a Z lock from a box's top corner to that corner
-            # while the cursor, over the top face, went up (upstream #1085,
-            # seen on the Metal view, whose hover edge is visible-only).
-            if abs(s) > 1e-6 and world_to_pixel(hit) is not None:
-                return SnapResult(hit, "intersection_face",
-                                  COLOR_LOCK_INTERSECT, guide=(ref, hit),
-                                  guide_color=COLOR_EXTENSION)
+        hit = kernel.lock_plane(start_point, line_dir, p0, n)
+        if hit is not None and world_to_pixel(hit) is not None:
+            return SnapResult(hit, "intersection_face", COLOR_LOCK_INTERSECT,
+                              guide=(ref, hit), guide_color=COLOR_EXTENSION)
     return None
 
 
