@@ -8,6 +8,9 @@ use std::{
     f64::consts::{FRAC_PI_2, TAU},
 };
 
+#[path = "dxf_curves.rs"]
+mod curves;
+
 #[derive(Debug)]
 struct Entity {
     layer: String,
@@ -16,6 +19,7 @@ struct Entity {
 #[derive(Debug)]
 enum Shape {
     Line(DVec3, DVec3),
+    Curve(Vec<curves::Cubic>, Vec<f64>),
     Polyline(Ring, bool),
     Face(Ring),
     Arc {
@@ -62,6 +66,35 @@ impl<'a> Tags<'a> {
         let s = self.get(code)?;
         // The full decoder handles escaped Unicode and legacy encodings.
         (!s.is_empty() && !s.contains('\\')).then(|| s.to_owned())
+    }
+    fn numbers(&self, code: i32) -> Option<Vec<f64>> {
+        self.0
+            .iter()
+            .filter(|(k, _)| *k == code)
+            .map(|(_, s)| {
+                let v: f64 = s.trim().parse().ok()?;
+                v.is_finite().then_some(v)
+            })
+            .collect()
+    }
+    fn points(&self, code: i32) -> Option<Vec<DVec3>> {
+        let mut out = vec![];
+        for &(k, s) in &self.0 {
+            if k == code || k == code + 10 || k == code + 20 {
+                let n: f64 = s.trim().parse().ok()?;
+                if !n.is_finite() {
+                    return None;
+                }
+                if k == code {
+                    out.push(DVec3::new(n, 0., 0.));
+                } else if k == code + 10 {
+                    out.last_mut()?.y = n;
+                } else {
+                    out.last_mut()?.z = n;
+                }
+            }
+        }
+        Some(out)
     }
     fn entity(&self, kind: &str) -> Option<Entity> {
         if self.number(210, 0.)? != 0. || self.number(220, 0.)? != 0. || self.number(230, 1.)? != 1.
@@ -118,25 +151,45 @@ impl<'a> Tags<'a> {
                     span,
                 }
             }
+            "SPLINE" => Shape::Curve(curves::spline(self)?, vec![]),
+            "ELLIPSE" => {
+                let major = self.point(11)?;
+                let minor = DVec3::Z.cross(major).try_normalize()?
+                    * major.length()
+                    * self.number(40, 1.)?;
+                let start = self.number(41, 0.)?;
+                let end = self.number(42, TAU)?;
+                let span = (end - start).rem_euclid(TAU);
+                let span = if span.abs() < 1e-12 { -TAU } else { span };
+                Shape::Curve(
+                    curves::elliptic(self.point(10)?, major, minor, start, span),
+                    vec![],
+                )
+            }
             "LWPOLYLINE" => {
-                let mut points = vec![];
                 let z = self.number(38, 0.)?;
-                for &(c, s) in &self.0 {
-                    match c {
-                        10 => points.push(DVec3::new(s.trim().parse().ok()?, f64::NAN, z)),
-                        20 => points.last_mut()?.y = s.trim().parse().ok()?,
-                        42 if s.trim().parse::<f64>().ok()? != 0. => return None,
-                        _ => (),
-                    }
+                let mut points = self.points(10)?;
+                for p in &mut points {
+                    p.z = z;
                 }
-                if points.len() < 2
-                    || points.iter().any(|p| !p.is_finite())
-                    || self.get(90)?.trim().parse::<usize>().ok()? != points.len()
-                {
+                if points.len() < 2 || self.get(90)?.trim().parse::<usize>().ok()? != points.len() {
                     return None;
                 }
+                let mut bulges = vec![];
+                for &(k, s) in &self.0 {
+                    if k == 10 {
+                        bulges.push(0.);
+                    } else if k == 42 {
+                        *bulges.last_mut()? = s.trim().parse::<f64>().ok()?;
+                    }
+                }
                 let closed = self.get(70).unwrap_or("0").trim().parse::<i32>().ok()? & 1 != 0;
-                Shape::Polyline(points, closed)
+                if bulges.iter().all(|&b| b == 0.) {
+                    Shape::Polyline(points, closed)
+                } else {
+                    let lengths = points.windows(2).map(|p| p[0].distance(p[1])).collect();
+                    Shape::Curve(curves::polyline(&points, &bulges, closed), lengths)
+                }
             }
             "INSERT" => {
                 if self.number(70, 1.)? != 1.
@@ -358,6 +411,7 @@ impl Document {
             match &e.shape {
                 Shape::Line(a, b) => samples.push(a.distance(*b)),
                 Shape::Arc { radius, .. } => samples.push(2. * radius),
+                Shape::Curve(_, lengths) => samples.extend_from_slice(lengths),
                 Shape::Polyline(p, _) => samples.extend(p.windows(2).map(|w| w[0].distance(w[1]))),
                 _ => (),
             }
@@ -401,6 +455,12 @@ impl Shape {
     fn add(&self, b: &mut Bucket, tol: f64) -> Option<bool> {
         match self {
             Self::Line(a, z) => b.runs.push((vec![*a, *z], false)),
+            Self::Curve(curves, _) => {
+                if curves.is_empty() {
+                    return Some(false);
+                }
+                b.runs.push((curves::flatten(curves, tol)?, true));
+            }
             Self::Polyline(pts, closed) => {
                 let mut pts = pts.clone();
                 if *closed && pts.first() != pts.last() {
@@ -463,6 +523,40 @@ mod tests {
                 .len()
                 > 33
         );
+    }
+    #[test]
+    fn paths_match_all_ezdxf_vertices_at_two_tolerances() {
+        let doc = decode(include_str!(
+            "../../../tests/fixtures/dxf/curve-records.dxf"
+        ))
+        .unwrap();
+        let mut bytes =
+            include_bytes!("../../../tests/fixtures/dxf/curve-records.points").as_slice();
+        for tol in [0.01, 0.0001] {
+            let drawing = doc.drawing(tol).unwrap();
+            for name in ["bulge", "cubic", "fit", "weighted", "ellipse"] {
+                let (pts, is_curve) = &drawing.layers[name].runs[0];
+                assert!(is_curve);
+                let (count, tail) = bytes.split_at(4);
+                bytes = tail;
+                assert_eq!(
+                    pts.len(),
+                    u32::from_le_bytes(count.try_into().unwrap()) as usize
+                );
+                for p in pts {
+                    for x in p.to_array() {
+                        let (raw, tail) = bytes.split_at(8);
+                        bytes = tail;
+                        let expected = f64::from_le_bytes(raw.try_into().unwrap());
+                        assert!(
+                            (x - expected).abs() < 1e-9,
+                            "{name}: {x} vs {expected} at {tol}"
+                        );
+                    }
+                }
+            }
+        }
+        assert!(bytes.is_empty());
     }
     #[test]
     fn unsupported_curves_leave_the_complete_drawing_to_the_compatibility_reader() {
