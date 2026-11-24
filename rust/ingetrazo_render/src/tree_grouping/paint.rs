@@ -251,14 +251,13 @@ impl TreePaint {
                         (PyList::empty(py), &name, &mat),
                     )?)?;
                 }
+                let mut color = mat.getattr("color")?;
+                if color.is_none() {
+                    color = (1., 1., 1.).into_pyobject(py)?.into_any();
+                }
                 py.import("core.paint_ops")?.call_method1(
                     "paint_stamp",
-                    (
-                        mat.getattr("color")?,
-                        mat.getattr("texture")?,
-                        mat.getattr("opacity")?,
-                        mat,
-                    ),
+                    (color, mat.getattr("texture")?, mat.getattr("opacity")?, mat),
                 )?
             }
         };
