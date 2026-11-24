@@ -171,6 +171,9 @@ impl Tool for Rotate {
                 self.ctrl_pressed = false;
                 host.call("end_rotation", Json::Null);
             }
+            ToolEvent::Key { key, .. } if key == "ToggleCopy" || key == "ToggleCopyQuiet" => {
+                self.toggle_copy(host, key == "ToggleCopy");
+            }
             ToolEvent::Key { key, .. } if key == "Control" => {
                 self.toggle_copy(host, true);
                 self.ctrl_pressed = true;

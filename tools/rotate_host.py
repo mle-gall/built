@@ -61,6 +61,9 @@ class RotateHost(ProtractorBase):
             return self._send(viewport, {"type": "key", "key": "Control"})["consumed"]
         return super().on_key(viewport, key, modifiers)
 
+    def _toggle_copy(self, viewport, say=True):
+        self._send(viewport, {"type": "key", "key": "ToggleCopy" if say else "ToggleCopyQuiet"})
+
     def host_copy_changed(self, viewport, args):
         copy, say = args
         self._during["copy"] = copy
