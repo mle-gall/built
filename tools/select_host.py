@@ -34,34 +34,6 @@ from ingetrazo_core import register_tool_functions
 register_tool_functions(globals())
 
 
-def _seg_rect_mask(ax, ay, bx, by, ok, rect, crossing):
-    """The rectangle test of N screen segments: window mode = both
-    endpoints inside; crossing mode = an endpoint inside or the segment
-    through one of the four borders (``ingetrazo_core.seg_rect_mask``)."""
-    import numpy as np
-    from ingetrazo_core import seg_rect_mask
-    f = lambda a: np.ascontiguousarray(a, dtype=np.float64).reshape(-1)
-    n = len(f(ax))
-    return seg_rect_mask(f(ax), f(ay), f(bx), f(by),
-                         np.ascontiguousarray(np.broadcast_to(ok, (n,)), dtype=bool),
-                         tuple(map(float, rect)), bool(crossing))
-
-
-def describe_pick(entity) -> str:
-    """A few words for the status bar naming what a click picked."""
-    from core.i18n import tr
-    if isinstance(entity, Group):
-        kind = tr("Component") if entity.is_instance() else tr("Group")
-        name = (getattr(entity, "name", "") or "").strip()
-        return f"{kind} «{name}»" if name else kind
-    for cls, word in ((Edge, "Edge"), (Face, "Face"), (Dimension, "Dimension"),
-                      (TextLabel, "Text"), (SectionPlane, "Section Plane")):
-        if isinstance(entity, cls):
-            return tr(word)
-    return tr("Image") if type(entity).__name__ == "ImagePlane" \
-        else type(entity).__name__
-
-
 #: A repeated plain click within this many pixels takes the next candidate
 #: (the machine's ``CYCLE_PX``).
 CYCLE_PX = 4.0

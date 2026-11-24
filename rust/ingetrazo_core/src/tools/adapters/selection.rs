@@ -483,8 +483,86 @@ fn cycle_status<'py>(a: &Args<'py>) -> Reply<'py> {
     Ok(none(py))
 }
 
+fn seg_rect_mask<'py>(a: &Args<'py>) -> Reply<'py> {
+    let py = a.py();
+    let [ax, ay, bx, by, valid, rect, crossing] = unpack::<7>(a.as_any())?;
+    let np = py.import("numpy")?;
+    let dtype = np.getattr("float64")?;
+    let array = |v| {
+        np.call_method(
+            "ascontiguousarray",
+            (v,),
+            Some(&fields!(py;"dtype"=>&dtype)),
+        )?
+        .call_method1("reshape", (-1,))
+    };
+    let ax = array(ax)?;
+    let valid = np.call_method1("broadcast_to", (valid, (ax.len()?,)))?;
+    let valid = np.call_method(
+        "ascontiguousarray",
+        (valid,),
+        Some(&fields!(py;"dtype"=>py.get_type::<pyo3::types::PyBool>())),
+    )?;
+    let floats = py.get_type::<pyo3::types::PyFloat>();
+    let rect = rect
+        .try_iter()?
+        .map(|v| floats.call1((v?,)))
+        .collect::<PyResult<Vec<_>>>()?;
+    py.import("ingetrazo_core")?.call_method1(
+        "seg_rect_mask",
+        (
+            ax,
+            array(ay)?,
+            array(bx)?,
+            array(by)?,
+            valid,
+            PyTuple::new(py, rect)?,
+            crossing.is_truthy()?,
+        ),
+    )
+}
+fn describe_pick<'py>(a: &Args<'py>) -> Reply<'py> {
+    let py = a.py();
+    let entity = a.get_item(0)?;
+    let module = py.import("tools.select_host")?;
+    let tr = py.import("core.i18n")?.getattr("tr")?;
+    if entity.is_instance(&module.getattr("Group")?)? {
+        let group = tr.call1((if entity.call_method0("is_instance")?.is_truthy()? {
+            "Component"
+        } else {
+            "Group"
+        },))?;
+        let name = optional(&entity, "name")?;
+        if name.is_truthy()? {
+            let name: String = name.call_method0("strip")?.extract()?;
+            if !name.is_empty() {
+                return format!("{} «{}»", group.extract::<String>()?, name).into_bound_py_any(py);
+            }
+        }
+        return Ok(group);
+    }
+    for (ty, word) in [
+        ("Edge", "Edge"),
+        ("Face", "Face"),
+        ("Dimension", "Dimension"),
+        ("TextLabel", "Text"),
+        ("SectionPlane", "Section Plane"),
+    ] {
+        if entity.is_instance(&module.getattr(ty)?)? {
+            return tr.call1((word,));
+        }
+    }
+    let ty = entity.get_type().getattr("__name__")?;
+    if ty.eq("ImagePlane")? {
+        tr.call1(("Image",))
+    } else {
+        Ok(ty)
+    }
+}
 #[rustfmt::skip]
 pub(super) const METHODS: &[Method] = &[
+    ("_seg_rect_mask", Mode::Function, seg_rect_mask, &["ax", "ay", "bx", "by", "ok", "rect", "crossing"], "", "The rectangle test of N screen segments: window mode = both\nendpoints inside; crossing mode = an endpoint inside or the segment\nthrough one of the four borders (``ingetrazo_core.seg_rect_mask``)."),
+    ("describe_pick", Mode::Function, describe_pick, &["entity"], "str", "A few words for the status bar naming what a click picked."),
     ("_box_loose_fast", Mode::Function, box_loose_fast, &["viewport", "rect", "crossing"], "", "Vectorized box select over the loose mesh: edges via the cached\nscreen projection, faces derived from their boundary edges. Returns\n(edges, faces) or None to fall back to the per-entity walk (stub\nviewports in tests, or a viewport without the caches)."),
     ("_box_loose_arrays", Mode::Function, box_loose_arrays, &["viewport", "rect", "crossing"], "", "The loose mesh's box catch from the store's dense arrays\n(``ingetrazo_core.box_mesh_arrays``): element views made only for\nwhat the box takes. Returns (edges, faces), or None when the loose\nmesh is not store-backed or the view cannot project."),
     ("_box_group_fast", Mode::Function, box_group_fast, &["viewport", "group", "rect", "crossing"], "", ""),
