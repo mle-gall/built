@@ -42,6 +42,7 @@ fn unpack<'py, const N: usize>(value: &Obj<'py>) -> PyResult<[Obj<'py>; N]> {
     row.try_into()
         .map_err(|_| pyo3::exceptions::PyValueError::new_err("invalid row"))
 }
+mod fillet_host_api;
 mod pushpull;
 mod scale;
 mod texture;
@@ -78,6 +79,9 @@ fn registration(module: &str, name: &str) -> Option<(&'static [Method], &'static
         }
         ("tools.texture_position", "TexturePositionTool") => {
             (texture::METHODS, stringify!(texture))
+        }
+        ("tools.fillet_host", "FilletHost") => {
+            (fillet_host_api::METHODS, stringify!(fillet_host_api))
         }
         ("tools.pushpull", "PushPullTool") => (pushpull::METHODS, stringify!(pushpull)),
         _ => return None,
