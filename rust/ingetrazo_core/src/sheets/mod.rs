@@ -7,12 +7,14 @@
 //! - `model`: typed views of the sheet records in the document;
 //! - `page`: the page display list the renderer paints.
 
+pub mod anchors;
 pub mod camera;
 pub mod create;
 pub mod display;
 pub mod drawing;
 pub mod dxf;
 pub mod geometry;
+pub mod hatching;
 pub mod items;
 pub mod items_b;
 pub mod items_c;

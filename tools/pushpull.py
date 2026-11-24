@@ -68,7 +68,6 @@ from core.push_pull import (  # noqa: E402,F401  (moved; tests and extensions im
     _PushBand,
     _classify_edge,
     _component_is_closed,
-    _corner_dragged,
     _face_shape,
     _faces_window,
     _loops_overlap_2d,
@@ -77,8 +76,6 @@ from core.push_pull import (  # noqa: E402,F401  (moved; tests and extensions im
     _project_loop_2d,
     _refine_candidates,
     _seam_planes_along,
-    _segment_faces,
-    _swept_by_push,
 )
 
 
@@ -1354,29 +1351,6 @@ class PushPullTool(PushPullOperation, Tool):
             if best is None or dd < best[0]:
                 best = (dd, QVector3D(on), dist)
         return None if best is None else (best[1], best[2])
-
-    @staticmethod
-    def _surface_normal(face) -> QVector3D:
-        """``face``'s normal, turned to agree with its coplanar neighbours —
-        the surface it was cut out of. See :meth:`_outward_normal` for when
-        this is the right question to ask."""
-        n = face.normal().normalized()
-        on_loop = {v.key for v in face.loop}
-        agree = disagree = 0
-        for v in face.loop:
-            for edge in v.edges:
-                if edge.v0.key not in on_loop or edge.v1.key not in on_loop:
-                    continue                      # not a boundary edge
-                for other in edge.faces:
-                    if other == face:
-                        continue
-                    d = QVector3D.dotProduct(other.normal().normalized(), n)
-                    if abs(d) > 0.999:            # the same plane
-                        if d > 0:
-                            agree += 1
-                        else:
-                            disagree += 1
-        return -n if disagree > agree else n
 
     @staticmethod
     def _selected_faces(scene) -> list:

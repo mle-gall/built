@@ -2,7 +2,42 @@
 use super::dialog::{Field, DISABLED};
 use pyo3::{prelude::*, types::PyDict};
 
+const UNITS: &[(&str, &str)] = &[
+    ("m", "Metres"),
+    ("cm", "Centimetres"),
+    ("mm", "Millimetres"),
+    ("in", "Inches"),
+    ("ft", "Feet"),
+];
+const SIMPLIFY: &[(&str, &str)] = &[
+    ("none", "No mesh simplification"),
+    (
+        "principal",
+        "Merge coplanar triangles on XY, XZ and YZ planes",
+    ),
+    ("all", "Advanced: merge all coplanar surfaces"),
+];
+
+fn choice(id: &str, label: &str, index: usize, items: &[(&str, &str)]) -> Field {
+    (
+        id.into(),
+        "choice".into(),
+        label.into(),
+        String::new(),
+        index as f64,
+        0.,
+        items.len() as f64,
+        items.iter().map(|(_, text)| (*text).into()).collect(),
+        0,
+        String::new(),
+    )
+}
+
 enum Options {
+    MeshImport {
+        unit: usize,
+        simplify: Option<usize>,
+    },
     Section {
         name: String,
         symbol: String,
@@ -67,6 +102,22 @@ fn check(id: &str, label: &str, on: bool, flags: u32, tip: &str) -> Field {
 #[pymethods]
 impl OperationForm {
     #[staticmethod]
+    #[pyo3(signature = (unit, simplify=None))]
+    fn mesh_import(unit: &str, simplify: Option<&str>) -> Self {
+        let fallback_unit = if simplify.is_some() { 2 } else { 0 };
+        Self {
+            options: Options::MeshImport {
+                unit: UNITS
+                    .iter()
+                    .position(|x| x.0 == unit)
+                    .unwrap_or(fallback_unit),
+                simplify: simplify.map(|key| SIMPLIFY.iter().position(|x| x.0 == key).unwrap_or(1)),
+            },
+            number: String::new(),
+        }
+    }
+
+    #[staticmethod]
     fn soften(saved: &str) -> Self {
         let angle = saved
             .parse::<f64>()
@@ -110,6 +161,18 @@ impl OperationForm {
 
     fn rows(&self) -> Vec<Field> {
         match self.options {
+            Options::MeshImport { unit, simplify } => {
+                let label = if simplify.is_some() {
+                    "An STL file does not record its unit. What is this model in?"
+                } else {
+                    "An OBJ file does not record its unit. What is this model in?"
+                };
+                let mut rows = vec![choice("unit", label, unit, UNITS)];
+                if let Some(mode) = simplify {
+                    rows.push(choice("simplify", "Mesh simplification", mode, SIMPLIFY));
+                }
+                rows
+            }
             Options::Section {
                 ref name,
                 ref symbol,
@@ -214,6 +277,17 @@ impl OperationForm {
     fn receive(&mut self, id: &str, raw: &str) {
         let on = raw == "1";
         match &mut self.options {
+            Options::MeshImport { unit, simplify } => {
+                if let Ok(index) = raw.parse::<usize>() {
+                    match id {
+                        "unit" if index < UNITS.len() => *unit = index,
+                        "simplify" if simplify.is_some() && index < SIMPLIFY.len() => {
+                            *simplify = Some(index)
+                        }
+                        _ => (),
+                    }
+                }
+            }
             Options::Section { name, symbol, skip } => match id {
                 "name" => *name = raw.into(),
                 "symbol" => *symbol = raw.chars().take(3).collect(),
@@ -261,6 +335,12 @@ impl OperationForm {
     fn values(&self, py: Python<'_>) -> PyResult<Py<PyDict>> {
         let values = PyDict::new(py);
         match self.options {
+            Options::MeshImport { unit, simplify } => {
+                values.set_item("unit", UNITS[unit].0)?;
+                if let Some(index) = simplify {
+                    values.set_item("simplify", SIMPLIFY[index].0)?;
+                }
+            }
             Options::Section {
                 ref name,
                 ref symbol,

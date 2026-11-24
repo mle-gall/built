@@ -6,6 +6,7 @@ mod window_timers;
 mod panic_log;
 mod overlay;
 mod commands;
+pub mod model_menu;
 /// The one verb source: kinds, menu rows, inspector verbs, dispatch.
 mod verbs;
 pub mod ui;
@@ -2912,6 +2913,7 @@ mod about;
 mod sheet_host;
 mod start_view;
 mod library_view;
+mod resident_rows;
 mod scene_photo;
 mod shortcut_text;
 /// The Sheets workspace's page, native (docs/rust-sheets.md).
@@ -2924,6 +2926,10 @@ mod font_lengths;
 mod svg_options;
 /// Sheet items' display lists on the page.
 pub mod sheet_display;
+/// An image item's picture as the sheet shows it, shared with the writers.
+#[path = "../../ingetrazo_core/src/sheets/picture.rs"]
+#[allow(dead_code)]
+pub mod sheet_picture;
 /// The Sheets dock's inspector, from the page snapshot.
 pub mod sheet_inspector;
 
@@ -2996,6 +3002,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(scene_photo::save_thumbnail_mode,m)?)?;
     start_view::register(m)?;
     library_view::register(m)?;
+    m.add_class::<resident_rows::ResidentRows>()?;
     m.add_function(wrap_pyfunction!(sheet_host::show_delivery_form, m)?)?;
     m.add_function(wrap_pyfunction!(sheet_host::show_view_export, m)?)?;
     m.add_class::<units_start::UnitsDraft>()?;
@@ -3019,6 +3026,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(commands::command_description, m)?)?;
     m.add_function(wrap_pyfunction!(commands::shortcut_conflicts, m)?)?;
     m.add_function(wrap_pyfunction!(commands::shortcut_reserved, m)?)?;
+    m.add_function(wrap_pyfunction!(model_menu::run_model_menu, m)?)?;
     m.add_function(wrap_pyfunction!(shortcut_text::shortcut_text, m)?)?;
     m.add_function(wrap_pyfunction!(shortcut_text::shortcut_alternatives, m)?)?;
     m.add_class::<SceneUpload>()?;

@@ -6868,7 +6868,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
     def _on_open_composer(self) -> None:
         """Open (or raise) the sheet composer — see docs/composer-plan.md.
         Minimised, it comes back out of the taskbar."""
-        from views.composer import bring_to_front
+        from views.window_front import bring_to_front
         bring_to_front(self._ensure_composer())
 
     # ---- Model / sheet tabs (the strip at the bottom) -----------------------
@@ -6919,7 +6919,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         self._sheet_tab_menu(sheets[k] if 0 <= k < len(sheets) else k, pos)
 
     def _show_model(self) -> None:
-        from views.composer import bring_to_front
+        from views.window_front import bring_to_front
         comp = getattr(self, "_composer", None)
         if comp is not None and getattr(comp, "EMBEDDED", False):
             comp.hide()                     # the Sheets workspace gives the frame back
@@ -8827,8 +8827,8 @@ class MainWindow(WorksessionMixin, QMainWindow):
         from views.document_open import after_open
 
         def recovered(doc):
-            self._current_path = None
-            self._saved_version = -1
+            doc.path = None
+            doc.saved_content = -1
             self._update_title()
             self.statusBar().showMessage(tr(
                 "Recovered copy loaded — use Save As to keep it."), 6000)
@@ -9565,7 +9565,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         model's own turn: the catalogue declares all three, and
         :func:`core.library.model_matrix` reproduces them. That is the
         difference with the generic importer, which has only the file and
-        so has to ask (see ``_obj_unit``). The facet seams are softened
+        so has to ask (see ``_mesh_import_options``). The facet seams are softened
         like the bundled starters, so a low-poly piece reads as a real one.
         """
         from ingetrazo_render import ComponentCatalogue
@@ -10088,37 +10088,6 @@ class MainWindow(WorksessionMixin, QMainWindow):
         self.statusBar().showMessage(
             tr("Texture cache cleared ({count} files).", count=removed), 4000)
 
-    def _obj_unit(self, path) -> "float | None":
-        """The metres-per-unit factor for an OBJ, asked once per import.
-
-        The format records no unit at all, so the file cannot say and the
-        importer must not guess in silence: Sweet Home 3D's furniture is in
-        centimetres and comes in a hundred times too big, while our own
-        exports are metres and must round-trip untouched.
-
-        Asked, but with the answer already filled in. Where the model's own
-        size rules metres out — 200 units across is not a 200 m chair — that
-        reading is preselected; where it is genuinely ambiguous the last
-        choice is, so importing a folder of one library is one confirmation
-        and then muscle memory. Cancel means cancel the import.
-        """
-        from PySide6.QtWidgets import QInputDialog
-        from formats.obj import OBJ_UNITS, suggest_unit
-
-        keys = ["m", "cm", "mm", "in", "ft"]
-        labels = [tr("Metres"), tr("Centimetres"), tr("Millimetres"),
-                  tr("Inches"), tr("Feet")]
-        guess = suggest_unit(path)
-        idx = keys.index(guess) if guess in keys else 0
-        label, ok = QInputDialog.getItem(
-            self, tr("Import OBJ"),
-            tr("An OBJ file does not record its unit. What is this model in?"),
-            labels, idx, False)
-        if not ok:
-            return None
-        key = keys[labels.index(label)]
-        return OBJ_UNITS[key]
-
     # ---- linked documents (core/links.py) ------------------------------------
     def _link_watcher(self):
         watcher = self.__dict__.get("_links_watch")
@@ -10408,10 +10377,43 @@ class MainWindow(WorksessionMixin, QMainWindow):
             self, tr("Import OBJ"), "", tr("Wavefront OBJ (*.obj);;All files (*)"))
         if not path_str:
             return
-        path = Path(path_str)
-        scale = self._obj_unit(path)
-        if scale is None:
-            return
+        self._mesh_import_options(Path(path_str))
+
+    def _mesh_import_options(self, path, *, open_tab=None):
+        from ingetrazo_render import OperationForm
+        from views import chrome_forms
+        doc = self.active_document()
+        stl = path.suffix.lower() == ".stl"
+        if stl:
+            store = QSettings()
+            model = OperationForm.mesh_import(
+                str(store.value("import/stl_unit", "mm")),
+                str(store.value("import/stl_simplify_mode", "principal")))
+        else:
+            model = OperationForm.mesh_import(obj_format.suggest_unit(path))
+
+        def accepted(values):
+            if self.active_document() is not doc:
+                return
+            unit = values["unit"]
+            if stl:
+                mode = values["simplify"]
+                store.setValue("import/stl_unit", unit)
+                store.setValue("import/stl_simplify_mode", mode)
+                def load():
+                    return self._apply_stl_import(path, stl_format.STL_UNITS[unit], mode)
+            else:
+                def load():
+                    return self._apply_obj_import(path, obj_format.OBJ_UNITS[unit])
+            if open_tab is None:
+                load()
+            else:
+                open_tab(load)
+
+        return chrome_forms.show(self, chrome_forms.OperationForm(
+            tr("Import STL") if stl else tr("Import OBJ"), model, accepted))
+
+    def _apply_obj_import(self, path, scale):
         dlg, cb = self._import_progress(tr("Importing {name}…", name=path.name))
         moved: dict = {}
 
@@ -10422,64 +10424,24 @@ class MainWindow(WorksessionMixin, QMainWindow):
 
         cmd = self._run_import(load, dlg, tr("Import OBJ failed"))
         if cmd is None:
-            return
+            return False
         self._prepare_import_display(cmd, cb)
         dlg.close()
         self.viewport.update()
         self._import_name = path.name
         self._update_title()
         self._report_import(path.name, moved.get("offset"))
+        return True
 
     def _on_import_stl(self) -> None:
-        from PySide6.QtWidgets import (QComboBox, QDialog, QDialogButtonBox,
-                                       QFormLayout)
-
         path_str, _ = file_dialogs.getOpenFileName(
             self, tr("Import STL"), "",
             tr("STL mesh (*.stl);;All files (*)"))
         if not path_str:
             return
-        path = Path(path_str)
-        keys = ["m", "cm", "mm", "in", "ft"]
-        labels = [tr("Metres"), tr("Centimetres"), tr("Millimetres"),
-                  tr("Inches"), tr("Feet")]
-        settings = QSettings()
-        guess = str(settings.value("import/stl_unit", "mm") or "mm")
-        idx = keys.index(guess) if guess in keys else keys.index("mm")
+        self._mesh_import_options(Path(path_str))
 
-        dialog = QDialog(self)
-        dialog.setWindowTitle(tr("Import STL"))
-        form = QFormLayout(dialog)
-        units = QComboBox(dialog)
-        units.addItems(labels)
-        units.setCurrentIndex(idx)
-        form.addRow(
-            tr("An STL file does not record its unit. What is this model in?"),
-            units)
-        simplify = QComboBox(dialog)
-        simplify.addItem(tr("No mesh simplification"), "none")
-        simplify.addItem(
-            tr("Merge coplanar triangles on XY, XZ and YZ planes"),
-            "principal")
-        simplify.addItem(
-            tr("Advanced: merge all coplanar surfaces"), "all")
-        simplify_mode = str(
-            settings.value("import/stl_simplify_mode", "principal"))
-        simplify_index = simplify.findData(simplify_mode)
-        simplify.setCurrentIndex(simplify_index if simplify_index >= 0 else 1)
-        form.addRow(tr("Mesh simplification"), simplify)
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.Ok | QDialogButtonBox.Cancel, dialog)
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        form.addRow(buttons)
-        if dialog.exec() != QDialog.Accepted:
-            return
-        unit = keys[units.currentIndex()]
-        scale = stl_format.STL_UNITS[unit]
-        simplify_mode = simplify.currentData()
-        settings.setValue("import/stl_unit", unit)
-        settings.setValue("import/stl_simplify_mode", simplify_mode)
+    def _apply_stl_import(self, path, scale, simplify_mode):
         dlg, cb = self._import_progress(
             tr("Importing {name}…", name=path.name))
         moved: dict = {}
@@ -10488,18 +10450,19 @@ class MainWindow(WorksessionMixin, QMainWindow):
         if exc is not None:
             _dialogs.close_failed(dlg, exc)
             _dialogs.critical(self, tr("Import STL failed"), str(exc))
-            return
+            return False
         cmd = self._run_import(
             lambda scene: stl_format.add_stl_mesh(scene, path, target),
             dlg, tr("Import STL failed"))
         if cmd is None:
-            return
+            return False
         self._prepare_import_display(cmd, cb)
         dlg.close()
         self.viewport.update()
         self._import_name = path.name
         self._update_title()
         self._report_import(path.name, moved.get("offset"))
+        return True
 
     def _on_import_image(self) -> None:
         """Import a picture to trace over (``Import ▸ image``).
@@ -11411,7 +11374,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             # With layers, each one as a layer of its own, with its
             # colour and line type — as the composer's export.
             from core.layers import line_styles
-            from views.composer import dxf_groups_by_layer
+            from formats.dxf_views import dxf_groups_by_layer
             d = hlr_drawing(vp.scene, vp.camera, layers=True,
                             geometry=vp.hlr_geometry(tags=True) if fast
                             else None)
@@ -11507,7 +11470,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
                 # With layers, each one as a DXF layer of its own, with its
                 # colour and line type — as the composer's export.
                 from core.layers import line_styles
-                from views.composer import dxf_groups_by_layer
+                from formats.dxf_views import dxf_groups_by_layer
                 tagged = vp.hlr_geometry(tags=True)
                 d = hlr_drawing(vp.scene, vp.camera, layers=True,
                                 geometry=tagged)
@@ -11526,7 +11489,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             if not vp.camera.perspective:
                 # The cut hatches and fills too, as a sheet at 1:50 draws
                 # them — as the composer's export does at its frame's scale.
-                from views.composer import dxf_cut_layers
+                from formats.dxf_views import dxf_cut_layers
                 lines, solids = dxf_cut_layers(
                     vp.scene, vp.camera,
                     geometry=tagged if len(vp.scene.layers) > 1

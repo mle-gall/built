@@ -763,8 +763,8 @@ def test_metal_view_updates_in_place_and_draws_the_same(tmp_path, monkeypatch):
     assert updates.removed == [] and updates.added == 0
     # Only the unlinked placement's rows move, onto its own meshes, each
     # baked once; the other placement's rows are not written.
-    mine = {updates.rows[p.uid] for p, _m in iter_placements(link)
-            if p.uid in updates.rows}
+    mine = {updates.resident.row(p.uid) for p, _m in iter_placements(link)
+            if updates.resident.row(p.uid) is not None}
     assert set(ids.tolist()) <= mine
     assert {id(m) for m, _s, _c in updates.changed} <= set(_meshes(link))
     updates.apply(ids, rows)

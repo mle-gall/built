@@ -39,10 +39,8 @@ VENV = None
 
 #: ``verb:<name>`` menu commands: MainWindow verbs whose questions are
 #: chrome forms (they answer on a later turn, nothing blocks).
-_VERBS = {"make_component": "_on_make_component", "divide": "_on_divide",
-          "field_of_view": "_ask_field_of_view", "new_tag": "_assign_new_layer",
-          "image_size": "_on_image_size", "image_opacity": "_on_image_opacity",
-          "simplify_mesh": "_on_simplify_mesh"}
+_VERBS = {"divide": "_on_divide", "new_tag": "_assign_new_layer",
+          "image_size": "_on_image_size", "image_opacity": "_on_image_opacity"}
 
 
 def _log(*parts):

@@ -69,8 +69,11 @@ class _Host:
         for key in ("a", "b", "eye", "anchor", "center"):
             if key in args:
                 args[key] = self._model(args[key])
-        if "outer" in args:
-            args["outer"] = [self._model(p) for p in args["outer"]]
+        for key in ("outer", "points"):
+            if key in args:
+                args[key] = [self._model(p) for p in args[key]]
+        if args.get("trim"):
+            args["trim"] = [[self._model(a), self._model(b)] for a, b in args["trim"]]
         history = self.vp.history
         before = self.revision()
         faces = len(self.vp.scene.faces)
@@ -1193,3 +1196,489 @@ def _degrees(value) -> float:
     from core.units import bare_number_scale
     scale = bare_number_scale()
     return float(value) / scale if scale else float(value)
+
+
+# ---- Arcs ---------------------------------------------------------------------
+
+#: Magenta of the arc tangent to BOTH edges of a corner, the fillet.
+COLOR_FILLET = (0.85, 0.30, 0.80)
+
+
+class _ArcBase(*_radial_bases(), RustTool):
+    """The arcs (``rust/ingetrazo_core/src/tools/arc.rs``): the machine owns
+    the clicks, the plane lock, the segment count and the commit; this keeps
+    the viewport glue (status, colours, readouts)."""
+
+    wireframe_color = None
+
+    def __init__(self):
+        RustTool.__init__(self)
+        self._viewport = None
+
+    @property
+    def _plane_state(self):
+        state = self.__dict__.get("_plane_proxy")
+        if state is None:
+            state = self.__dict__["_plane_proxy"] = _MachinePlaneLock(self._machine)
+        return state
+
+    start_point = _point_property("start_point")
+    hover_point = _point_property("hover_point")
+
+    @property
+    def work_plane(self):
+        plane = self._state("work_plane")
+        return None if plane is None else (Vec3(*plane[0]), Vec3(*plane[1]))
+
+    @work_plane.setter
+    def work_plane(self, plane):
+        self._machine.set("work_plane", None if plane is None else (_tuple(plane[0]), _tuple(plane[1])))
+
+    @property
+    def segments(self):
+        return self._state("segments")
+
+    @segments.setter
+    def segments(self, n):
+        self._machine.set("segments", None if n is None else int(n))
+
+    def _frame(self, viewport):
+        from core import axes
+        from core.snap import POINT_SNAP_KINDS
+        kind = getattr(self, "snap_kind", None)
+        self._send(viewport, {"type": "frame", "axes": axes.frame(),
+                              "names_point": None if kind is None else kind in POINT_SNAP_KINDS})
+
+    def _send_framed(self, viewport, event):
+        self._frame(viewport)
+        return self._send(viewport, event)
+
+    def _after(self, viewport):
+        if self.start_point is None:
+            self.wireframe_color = None
+        viewport.update()
+
+    def value_is_unitless(self) -> bool:
+        """Before the first click the typed number is a COUNT (#176)."""
+        return self.start_point is None
+
+    def on_activate(self, viewport) -> None:
+        self._send_framed(viewport, {"type": "activate"})
+        self.wireframe_color = None
+
+    def on_deactivate(self, viewport) -> None:
+        self._send_framed(viewport, {"type": "deactivate"})
+        self.wireframe_color = None
+
+    def on_cancel(self, viewport) -> None:
+        self._send_framed(viewport, {"type": "cancel"})
+        self._after(viewport)
+
+    def on_click(self, ctx) -> None:
+        self.note_plane(ctx.viewport)
+        self._viewport = ctx.viewport
+        self._send_framed(ctx.viewport, self._pointer("click", ctx))
+        self._after(ctx.viewport)
+
+    def on_hover(self, ctx) -> None:
+        self.note_plane(ctx.viewport)
+        self._viewport = ctx.viewport
+        self._send_framed(ctx.viewport, self._pointer("hover", ctx))
+        self.wireframe_color = self._cue_colour()
+        ctx.viewport.update()
+
+    def _cue_colour(self):
+        return self.lock_color()
+
+    def on_value(self, viewport, value) -> bool:
+        self._viewport = viewport
+        if isinstance(value, tuple):
+            return False
+        consumed = self._send_framed(viewport, {"type": "value", "value": float(value)})["consumed"]
+        self._after(viewport)
+        return consumed
+
+    def on_segments_value(self, viewport, n) -> bool:
+        self._viewport = viewport
+        consumed = self._send_framed(viewport, {"type": "segments", "count": int(n)})["consumed"]
+        if consumed:
+            viewport.update()
+        return consumed
+
+    def on_key(self, viewport, key, modifiers) -> bool:
+        return self.plane_lock_key(viewport, key)
+
+    def _query(self, what, arg=None):
+        if self._viewport is not None:
+            self._frame(self._viewport)
+        return self._machine.query(what, arg)
+
+    def _axes(self):
+        u, v = self._query("axes")
+        return Vec3(*u), Vec3(*v)
+
+    def _reset(self):
+        self._machine.set("reset", True)
+        self.wireframe_color = None
+
+
+class _LastFillet(type(RustTool)):
+    """``ArcTool.last_fillet_d``: the distance a double-click repeats, one
+    for every arc (the machine's global)."""
+
+    @property
+    def last_fillet_d(cls):
+        from ingetrazo_core import arc_last_fillet_d
+        return arc_last_fillet_d()
+
+    @last_fillet_d.setter
+    def last_fillet_d(cls, value):
+        from ingetrazo_core import arc_last_fillet_d
+        arc_last_fillet_d(None if value is None else float(value), True)
+
+
+def _edge_json(handles, e):
+    return {"id": handles.id(e), "a": _tuple(e.a), "b": _tuple(e.b), "faces": bool(e.faces)}
+
+
+class ArcTool(_ArcBase, metaclass=_LastFillet):
+    """2-point arc. The host answers the topology the fillet reads (the
+    ``host_*`` queries) and projects points to pixels."""
+
+    kind = "arc"
+    vcb_label = "Bulge"
+
+    end_point = _point_property("end_point")
+
+    def magnet_on(self) -> bool:
+        # The chord end is a direction from the start; the bulge is not.
+        return self.end_point is None
+
+    @property
+    def _fillet(self):
+        f = self._state("fillet")
+        return None if f is None else tuple(Vec3(*p) for p in f)
+
+    @property
+    def _equidistant(self):
+        e = self._state("equidistant")
+        return None if e is None else (Vec3(*e[0]), Vec3(*e[1]), self._handles.get(e[2]))
+
+    @property
+    def _start_edge(self):
+        e = self._state("start_edge")
+        return None if e is None else (self._handles.get(e[0]), Vec3(*e[1]))
+
+    def _tangent_at_start(self, viewport):
+        """The direction an existing arc leaves the start (``host_tangent_at``)."""
+        if self.start_point is None:
+            return None
+        t = self.host_tangent_at(viewport, {"point": _tuple(self.start_point)})
+        return None if t is None else Vec3(*t)
+
+    @property
+    def _bulge_kind(self):
+        return self._state("kind")
+
+    @property
+    def _snap_bulge(self):
+        return self._state("snap_bulge")
+
+    @property
+    def _tangent_dir(self):
+        return self._point("tangent_dir")
+
+    def _cue_colour(self):
+        from core.snap import COLOR_MIDPOINT, COLOR_TANGENT
+        cue = self._state("cue")
+        colour = {"tangent": COLOR_TANGENT, "fillet": COLOR_FILLET, "half": COLOR_MIDPOINT}.get(cue)
+        return (*colour, 1.0) if colour is not None else self.lock_color()
+
+    def vcb_caption(self) -> str:
+        if self.start_point is None:
+            return "Segments"
+        return "Radius" if self._fillet is not None else "Bulge"
+
+    def on_double_click(self, ctx) -> None:
+        self.note_plane(ctx.viewport)
+        self._viewport = ctx.viewport
+        self._send_framed(ctx.viewport, self._pointer("double_click", ctx))
+        self._after(ctx.viewport)
+
+    def on_radius_value(self, viewport, radius) -> bool:
+        """«2r»: the radius instead of the bulge."""
+        self._viewport = viewport
+        consumed = self._send_framed(viewport, {"type": "radius", "value": float(radius)})["consumed"]
+        self._after(viewport)
+        return consumed
+
+    def rubber_band_lines(self):
+        return RustTool.rubber_band_lines(self)
+
+    def value_label(self):
+        label = self._state("label")
+        if label is None:
+            return None
+        from core.i18n import tr
+        from core.units import fmt_len
+        kind, value, mid = label
+        text = {"tangent_edge": lambda: tr("Tangent to edge"),
+                "half": lambda: tr("Half circle") + "  " + fmt_len(value),
+                "fillet": lambda: tr("Tangent to edge") + "  " + fmt_len(value),
+                "tangent": lambda: tr("Tangent at vertex") + "  " + fmt_len(value),
+                "bulge": lambda: "Bulge " + fmt_len(value)}[kind]()
+        return text, Vec3(*mid)
+
+    def plane_points(self):
+        if self.start_point is None:
+            return []
+        return [self.start_point, self.end_point if self.end_point is not None else self.hover_point]
+
+    def _points(self, cursor, bulge=None):
+        return [Vec3(*p) for p in self._query("points", (_tuple(cursor), bulge))]
+
+    def _bulge_for(self, cursor):
+        return self._query("bulge_for", (_tuple(cursor),))
+
+    def _tangent_bulge(self):
+        return self._query("tangent_bulge")
+
+    # ---- what the host answers: topology and pixels -------------------------
+    def _mesh(self, viewport):
+        return getattr(getattr(viewport, "scene", None), "mesh", None)
+
+    def host_edge_under(self, viewport, args):
+        """The edge whose interior holds the point: the hovered one first."""
+        mesh = self._mesh(viewport)
+        if mesh is None:
+            return None
+        from core.topology import _point_on_seg_incl
+        P = Vec3(*args["point"])
+
+        def interior(e) -> bool:
+            if not _point_on_seg_incl(P, e.a, e.b, 1e-4):
+                return False
+            return (P - e.a).length() > 1e-4 and (P - e.b).length() > 1e-4 and e.length() > 1e-6
+        hovered = getattr(viewport, "_hover_edge", None)
+        v0 = getattr(hovered, "v0", None)
+        if v0 is not None and hovered in getattr(v0, "edges", ()) and interior(hovered):
+            return _edge_json(self._handles, hovered)
+        for e in mesh.edges:
+            if interior(e):
+                return _edge_json(self._handles, e)
+        return None
+
+    def host_corner_edges(self, viewport, args):
+        """The edges leaving each end of the start edge."""
+        edge = self._handles.get(args["edge"])
+        rows = []
+        for V in (edge.v0, edge.v1):
+            for B in V.edges:
+                if B == edge:
+                    continue
+                rows.append({"v": _tuple(V.position), "b": _edge_json(self._handles, B),
+                             "far": _tuple(B.other(V).position)})
+        return rows
+
+    def host_rounded_corners(self, viewport, args):
+        """For each end of the edge a curve leaves, the straight edges at the
+        curve's other end (#1354); the machine finds where the lines meet."""
+        mesh = self._mesh(viewport)
+        edge = self._handles.get(args["edge"])
+        rows = []
+        if mesh is None or edge is None:
+            return rows
+        for V in (edge.v0, edge.v1):
+            for C in V.edges:
+                if C is edge or getattr(C, "curve", None) is None:
+                    continue
+                chain = mesh.curve_edges(C)
+                seen = {}
+                for c in chain:
+                    for vv in (c.v0, c.v1):
+                        seen[id(vv)] = (vv, seen.get(id(vv), (vv, 0))[1] + 1)
+                for V2, count in seen.values():
+                    if count != 1 or V2 is V:
+                        continue
+                    for B in V2.edges:
+                        if (B in chain or getattr(B, "curve", None) is not None
+                                or getattr(B, "soft", False)):
+                            continue
+                        rows.append({"v": _tuple(V.position), "edge_far": _tuple(edge.other(V).position),
+                                     "v2": _tuple(V2.position), "far": _tuple(B.other(V2).position),
+                                     "b": _edge_json(self._handles, B)})
+        return rows
+
+    def host_two_edge_corners(self, viewport, args):
+        """Corners where exactly two edges meet, one on a face, both at least
+        ``min_length`` long (a double-click repeats the last fillet there)."""
+        mesh = self._mesh(viewport)
+        rows = []
+        if mesh is None:
+            return rows
+        d = float(args["min_length"])
+        for V in mesh.vertices:
+            edges = list(V.edges)
+            if len(edges) != 2:
+                continue
+            A, B = edges
+            if not (A.faces or B.faces) or A.length() < d or B.length() < d:
+                continue
+            rows.append({"v": _tuple(V.position), "a": _edge_json(self._handles, A),
+                         "b": _edge_json(self._handles, B),
+                         "a_far": _tuple(A.other(V).position), "b_far": _tuple(B.other(V).position)})
+        return rows
+
+    def host_vertex_degree(self, viewport, args):
+        mesh = self._mesh(viewport)
+        vert = mesh.vertex_at(Vec3(*args["point"])) if mesh is not None else None
+        return None if vert is None else len(vert.edges)
+
+    def host_to_px(self, viewport, args):
+        project = getattr(viewport, "_world_to_pixel", None)
+        if not callable(project):
+            return None
+        out = []
+        for p in args["points"]:
+            q = project(Vec3(*p))
+            out.append(None if q is None else [float(q[0]), float(q[1])])
+        return out
+
+    def host_tangent_at(self, viewport, args):
+        """The direction an existing arc leaves its END vertex at the point:
+        the view's resident curves, else the loose mesh and every placement."""
+        mesh = self._mesh(viewport)
+        P = Vec3(*args["point"])
+        if mesh is None:
+            return None
+        resident = getattr(viewport, "reference_tangent", None)
+        if callable(resident):
+            return _tuple(resident(P))
+        spaces = [(mesh, None)]
+        placements = getattr(viewport, "_placements", None)
+        if callable(placements):
+            for g in placements():
+                gm = getattr(g, "mesh", None)
+                if gm is not None and gm.edges and not getattr(g, "billboard", False):
+                    spaces.append((gm, getattr(g, "xform", None)))
+        for gm, xf in spaces:
+            inv = None
+            if xf is not None:
+                inv, ok = xf.inverted()
+                if not ok:
+                    continue
+            t = _tangent_in_mesh(gm, inv.map(P) if inv is not None else P)
+            if t is None:
+                continue
+            if xf is not None:
+                t = xf.mapVector(t)
+                if t.length() < 1e-9:
+                    continue
+                t = t.normalized()
+            return _tuple(t)
+        return None
+
+
+def _tangent_in_mesh(mesh, P):
+    """The tangent at ``P`` of a curve in ``mesh`` that ends there: the
+    circle through the curve's points, square to its radius."""
+    from core.snap import fit_circle
+    for edge in mesh.edges:
+        if getattr(edge, "curve", None) is None:
+            continue
+        if (edge.a - P).length() > 1e-6 and (edge.b - P).length() > 1e-6:
+            continue
+        chain = mesh.curve_edges(edge)
+        incident = [e for e in chain if (e.a - P).length() <= 1e-6 or (e.b - P).length() <= 1e-6]
+        if len(incident) != 1:
+            continue                       # not the arc's end
+        e = incident[0]
+        Q = e.b if (e.a - P).length() <= 1e-6 else e.a
+        pts = {}
+        for c in chain:
+            for vv in (c.v0, c.v1):
+                pts[vv.key] = vv.position
+        fit = fit_circle(list(pts.values())) if len(pts) >= 3 else None
+        if fit is None:
+            continue
+        radial = P - fit[0]
+        if radial.length() < 1e-9:
+            continue
+        r_hat = radial.normalized()
+        leaving = P - Q
+        t = leaving - r_hat * Vec3.dotProduct(leaving, r_hat)
+        if t.length() < 1e-9:
+            continue
+        return t.normalized()
+    return None
+
+
+class ThreePointArcTool(_ArcBase):
+    """3-point arc: the circle through the three clicks."""
+
+    kind = "arc3"
+    vcb_label = "Segments"
+
+    mid_point = _point_property("mid_point")
+
+    def on_value(self, viewport, value) -> bool:
+        if isinstance(value, tuple) or self.start_point is not None:
+            return False
+        return _ArcBase.on_value(self, viewport, value)
+
+    def plane_points(self):
+        if self.start_point is None:
+            return []
+        if self.mid_point is None:
+            return [self.start_point, self.hover_point]
+        return [self.start_point, self.mid_point, self.hover_point]
+
+    def _points(self, end):
+        return [Vec3(*p) for p in self._query("points", (_tuple(end),))]
+
+
+class CenterArcTool(_ArcBase):
+    """Centre arc: centre, the 0° arm, the sweep."""
+
+    kind = "center_arc"
+    vcb_label = "Angle"
+
+    arm_point = _point_property("arm_point")
+
+    def value_is_unitless(self) -> bool:
+        """A segment count and a sweep angle are not lengths (#176)."""
+        return self.start_point is None or self.arm_point is not None
+
+    def vcb_caption(self) -> str:
+        if self.start_point is None:
+            return "Segments"
+        return "Angle" if self.arm_point is not None else "Radius"
+
+    def value_label(self):
+        label = self._state("label")
+        if label is None:
+            return None
+        kind, value, at = label
+        if kind == "radius":
+            from core.units import fmt_len
+            return "R " + fmt_len(value), Vec3(*at)
+        from core.units import fmt_angle_deg
+        return fmt_angle_deg(value, signed=True), Vec3(*at)
+
+    def plane_points(self):
+        if self.start_point is None:
+            return []
+        return [self.start_point, self.arm_point if self.arm_point is not None else self.hover_point]
+
+    def _sweep_to(self, cursor):
+        return self._query("sweep_to", (_tuple(cursor),))
+
+    def _points(self, sweep_deg):
+        return [Vec3(*p) for p in self._query("points", (float(sweep_deg),))]
+
+
+class PieTool(CenterArcTool):
+    """Pie: the centre arc whose two radii close the wedge into a face."""
+
+    kind = "pie"
+    shortcut = None

@@ -607,3 +607,284 @@ pub fn scan_mesh_is_flat(
     }
     Ok(Some(true))
 }
+
+// ---- The base's classification (`PushPullOperation`, R2.5 slice 9) ----------
+
+/// Python's `_key`: the 1e-4 grid cell, rounded half to even.
+fn cell(p: V3) -> [i64; 3] {
+    [(p.0 * 1e4).round_ties_even() as i64, (p.1 * 1e4).round_ties_even() as i64, (p.2 * 1e4).round_ties_even() as i64]
+}
+
+/// `core.topology._point_on_seg_incl` with its 1e-4 tolerance.
+fn on_seg_incl(pt: V3, p: V3, q: V3, h: Hypot) -> bool {
+    const TOL: f64 = 1e-4;
+    let pq = q.sub(p);
+    let length = facegeom::length(pq, h);
+    if length < TOL {
+        return cell(pt) == cell(p);
+    }
+    let t = pt.sub(p).dot(pq, h) / (length * length);
+    if !(-TOL..=1.0 + TOL).contains(&t) {
+        return false;
+    }
+    facegeom::length(pt.sub(p.add(pq.mul(t))), h) < TOL
+}
+
+fn unit(v: V3, h: Hypot) -> V3 { facegeom::normalized(v, h) }
+
+/// `_faces_coplanar`: both normals normalised, |cos| > 0.999.
+fn coplanar(a: V3, b: V3, h: Hypot) -> bool { unit(a, h).dot(unit(b, h), h).abs() > 0.999 }
+
+/// Whether `a`–`b` lies on a boundary edge of face `f`, holes included
+/// (`core.topology._segment_on_face_boundary`).
+fn segment_on_boundary(s: &MeshScan, g: &Geom, f: usize, a: V3, b: V3) -> bool {
+    s.rings_of(f).iter().any(|ring| {
+        let n = ring.len();
+        (0..n).any(|i| {
+            let (p, q) = (g.pos[ring[i] as usize], g.pos[ring[(i + 1) % n] as usize]);
+            on_seg_incl(a, p, q, g.h) && on_seg_incl(b, p, q, g.h)
+        })
+    })
+}
+
+/// Whether one of face `f`'s edges (holes too) joins the cells of `a`
+/// and `b` (`frozenset((_key(a), _key(b))) in _face_all_edges(g)`).
+fn has_cell_edge(s: &MeshScan, g: &Geom, f: usize, a: V3, b: V3) -> bool {
+    let (ka, kb) = (cell(a), cell(b));
+    s.rings_of(f).iter().any(|ring| {
+        let n = ring.len();
+        (0..n).any(|i| {
+            let (p, q) = (cell(g.pos[ring[i] as usize]), cell(g.pos[ring[(i + 1) % n] as usize]));
+            (p == ka && q == kb) || (p == kb && q == ka)
+        })
+    })
+}
+
+/// The faces near a rim: their rings' boxes, for those meeting the rim's
+/// box (grown), in list order. One pass over the mesh per question.
+struct Near {
+    faces: Vec<usize>,
+    boxes: Vec<[f64; 6]>,
+}
+
+impl Near {
+    fn of(s: &MeshScan, pts: impl Iterator<Item = V3>) -> Near {
+        let mut r = [f64::INFINITY, f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
+        for p in pts {
+            for (k, x) in [p.0, p.1, p.2].into_iter().enumerate() {
+                r[k] = r[k].min(x);
+                r[k + 3] = r[k + 3].max(x);
+            }
+        }
+        let m = 2e-4 + slack(big(&r));
+        let hits: Vec<(usize, [f64; 6])> = (0..s.n_faces())
+            .into_par_iter()
+            .filter_map(|f| {
+                let b = ring_box(s, f);
+                let meets = (0..3).all(|k| b[k] <= r[k + 3] + m && b[k + 3] >= r[k] - m);
+                meets.then_some((f, b))
+            })
+            .collect();
+        let (faces, boxes) = hits.into_iter().unzip();
+        Near { faces, boxes }
+    }
+
+    /// Those whose box holds both `a` and `b` (a superset of the faces that
+    /// can carry the segment), in list order.
+    fn on_segment(&self, a: V3, b: V3) -> Vec<usize> {
+        let m = slack(big(&[a.0, a.1, a.2, b.0, b.1, b.2]));
+        let inside = |bx: &[f64; 6], p: V3| {
+            p.0 >= bx[0] - m && p.1 >= bx[1] - m && p.2 >= bx[2] - m
+                && p.0 <= bx[3] + m && p.1 <= bx[4] + m && p.2 <= bx[5] + m
+        };
+        self.faces.iter().zip(&self.boxes).filter(|(_, bx)| inside(bx, a) && inside(bx, b)).map(|(f, _)| *f).collect()
+    }
+}
+
+/// `core.topology.classify_push_edge(face, a, b, faces)`: the first
+/// coplanar face carrying the edge, else the first other one, else free.
+fn classify_edge(s: &MeshScan, g: &Geom, near: &Near, face: usize, a: V3, b: V3) -> (&'static str, Option<usize>) {
+    let n = g.normal[face];
+    let cands = near.on_segment(a, b);
+    let mut other = None;
+    for &f in &cands {
+        if f == face {
+            continue;
+        }
+        if coplanar(n, g.normal[f], g.h) {
+            if has_cell_edge(s, g, f, a, b) || segment_on_boundary(s, g, f, a, b) {
+                return ("coplanar", Some(f));
+            }
+        } else if other.is_none() && segment_on_boundary(s, g, f, a, b) {
+            other = Some(f);
+        }
+    }
+    match other {
+        Some(f) => ("perp", Some(f)),
+        None => ("free", None),
+    }
+}
+
+/// `_swept_by_push`: an edge of `f`'s outer loop runs with the push.
+fn swept_by_push(s: &MeshScan, g: &Geom, f: usize, normal: V3) -> bool {
+    let n = unit(normal, g.h);
+    let Some(outer) = s.rings_of(f).first().copied() else { return false };
+    let m = outer.len();
+    (0..m).any(|i| {
+        let e = g.pos[outer[(i + 1) % m] as usize].sub(g.pos[outer[i] as usize]);
+        facegeom::length(e, g.h) > 1e-9 && unit(e, g.h).dot(n, g.h).abs() > 0.999
+    })
+}
+
+/// `_corner_dragged`: moving the `rim` cells along `normal` bends face `f`
+/// at one of its corners there.
+fn corner_dragged(s: &MeshScan, g: &Geom, f: usize, rim: &std::collections::HashSet<[i64; 3]>, normal: V3) -> bool {
+    let n = unit(normal, g.h);
+    for ring in s.rings_of(f) {
+        let m = ring.len();
+        for i in 0..m {
+            let v = g.pos[ring[i] as usize];
+            if !rim.contains(&cell(v)) {
+                continue;
+            }
+            let a = g.pos[ring[(i + m - 1) % m] as usize].sub(v);
+            let b = g.pos[ring[(i + 1) % m] as usize].sub(v);
+            if facegeom::length(a, g.h) < 1e-9 || facegeom::length(b, g.h) < 1e-9
+                || unit(a, g.h).dot(n, g.h).abs() < 0.999 || unit(b, g.h).dot(n, g.h).abs() < 0.999 {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `PushPullOperation._classify_base`: `(attached, prism_cap)` of face
+/// `base`. Attached: every rim edge (holes too) is carried by another
+/// face. Prism cap: every one backs onto a wall the push sweeps, and no
+/// other face has a corner on the rim the translate would bend.
+#[pyfunction]
+pub fn scan_classify_base(py: Python<'_>, mut scan: PyRefMut<'_, MeshScan>, base: u32, hypot: &str,
+                          compensated: bool) -> PyResult<(bool, bool)> {
+    scan.need_parts(py, RINGS | EFACES)?;
+    let g: std::sync::Arc<Geom> = geom_of(py, &mut scan, hypot, compensated)?;
+    let s: &MeshScan = &scan;
+    let b = base as usize;
+    let rings: Vec<Vec<V3>> = s.rings_of(b).iter().map(|r| r.iter().map(|&v| g.pos[v as usize]).collect()).collect();
+    let near = Near::of(s, rings.iter().flatten().copied());
+    let mut kinds = vec![];
+    for ring in &rings {
+        let n = ring.len();
+        for i in 0..n {
+            kinds.push(classify_edge(s, &g, &near, b, ring[i], ring[(i + 1) % n]));
+        }
+    }
+    let normal = g.normal[b];
+    let attached = kinds.iter().all(|(k, _)| *k != "free");
+    let mut prism = !kinds.is_empty()
+        && kinds.iter().all(|(k, nb)| *k == "perp" && nb.is_some_and(|f| swept_by_push(s, &g, f, normal)));
+    if prism {
+        let walls: std::collections::HashSet<usize> = kinds.iter().filter_map(|(_, nb)| *nb).collect();
+        let rim: std::collections::HashSet<[i64; 3]> = rings.iter().flatten().map(|p| cell(*p)).collect();
+        prism = !near.faces.iter().any(|&f| {
+            f != b && !walls.contains(&f)
+                && s.rings_of(f).iter().any(|r| r.iter().any(|&v| rim.contains(&cell(g.pos[v as usize]))))
+                && corner_dragged(s, &g, f, &rim, normal)
+        });
+    }
+    Ok((attached, prism))
+}
+
+/// `PushPullOperation._sweeps_a_free_sheet`: no face off the plane of
+/// `face` stands on an edge of the (refined) rim `loops`.
+#[pyfunction]
+pub fn scan_sweeps_free_sheet(py: Python<'_>, mut scan: PyRefMut<'_, MeshScan>, face: u32, loops: Vec<Vec<[f64; 3]>>,
+                              hypot: &str, compensated: bool) -> PyResult<bool> {
+    scan.need_parts(py, RINGS | EFACES)?;
+    let g: std::sync::Arc<Geom> = geom_of(py, &mut scan, hypot, compensated)?;
+    let s: &MeshScan = &scan;
+    let f0 = face as usize;
+    let near = Near::of(s, loops.iter().flatten().map(|p| V3(p[0], p[1], p[2])));
+    let normal = g.normal[f0];
+    for lp in &loops {
+        let m = lp.len();
+        for i in 0..m {
+            let (a, b) = (lp[i], lp[(i + 1) % m]);
+            let (a, b) = (V3(a[0], a[1], a[2]), V3(b[0], b[1], b[2]));
+            for f in near.on_segment(a, b) {
+                if f != f0 && !coplanar(normal, g.normal[f], g.h) && segment_on_boundary(s, &g, f, a, b) {
+                    return Ok(false);
+                }
+            }
+        }
+    }
+    Ok(true)
+}
+
+/// `_surface_normal`: `face`'s unit normal, turned to agree with the
+/// majority of its coplanar neighbours across its outer loop's edges.
+#[pyfunction]
+pub fn scan_surface_normal(py: Python<'_>, mut scan: PyRefMut<'_, MeshScan>, face: u32, hypot: &str,
+                           compensated: bool) -> PyResult<(f64, f64, f64)> {
+    scan.need_parts(py, RINGS | EFACES)?;
+    let g: std::sync::Arc<Geom> = geom_of(py, &mut scan, hypot, compensated)?;
+    let s: &MeshScan = &scan;
+    let f0 = face as usize;
+    let n = unit(g.normal[f0], g.h);
+    let outer: Vec<u32> = s.rings_of(f0).first().map(|r| r.to_vec()).unwrap_or_default();
+    let on_loop: std::collections::HashSet<u32> = outer.iter().copied().collect();
+    let mut by_vertex: std::collections::HashMap<u32, Vec<usize>> = std::collections::HashMap::new();
+    for e in 0..s.n_edges() {
+        let [a, b] = s.edge_ends(e);
+        if on_loop.contains(&a) && on_loop.contains(&b) {
+            by_vertex.entry(a).or_default().push(e);
+            if b != a {
+                by_vertex.entry(b).or_default().push(e);
+            }
+        }
+    }
+    let (mut agree, mut disagree) = (0, 0);
+    for v in &outer {
+        for &e in by_vertex.get(v).map(|x| x.as_slice()).unwrap_or(&[]) {
+            for &f in s.faces_of_edge(e) {
+                let f = f as usize;
+                if f == f0 || f >= s.n_faces() {
+                    continue;
+                }
+                let d = unit(g.normal[f], g.h).dot(n, g.h);
+                if d.abs() > 0.999 {
+                    if d > 0.0 { agree += 1 } else { disagree += 1 }
+                }
+            }
+        }
+    }
+    let out = if disagree > agree { n.mul(-1.0) } else { n };
+    Ok((out.0, out.1, out.2))
+}
+
+/// `_cap_passes_a_wall_vertex` on a Python mesh: shrinking the prism cap
+/// by `d` passes a vertex partway up one of the faces with a corner on the
+/// cap's rim (`push_band::passes_wall`).
+#[pyfunction]
+pub fn scan_cap_passes_wall(py: Python<'_>, mut scan: PyRefMut<'_, MeshScan>, face: u32, cap: Vec<[f64; 3]>,
+                            normal: (f64, f64, f64), d: f64, hypot: &str, compensated: bool) -> PyResult<bool> {
+    scan.need_parts(py, RINGS | EFACES)?;
+    let g: std::sync::Arc<Geom> = geom_of(py, &mut scan, hypot, compensated)?;
+    let s: &MeshScan = &scan;
+    let Some(origin) = cap.first().map(|p| V3(p[0], p[1], p[2])) else { return Ok(false) };
+    let n = V3(normal.0, normal.1, normal.2);
+    let rim: std::collections::HashSet<[i64; 3]> = cap.iter().map(|p| cell(V3(p[0], p[1], p[2]))).collect();
+    let near = Near::of(s, cap.iter().map(|p| V3(p[0], p[1], p[2])));
+    let mut walls = vec![];
+    for &f in &near.faces {
+        if f == face as usize {
+            continue;
+        }
+        let Some(outer) = s.rings_of(f).first().copied() else { continue };
+        let pts: Vec<V3> = outer.iter().map(|&v| g.pos[v as usize]).collect();
+        if !pts.iter().any(|p| rim.contains(&cell(*p))) {
+            continue;
+        }
+        walls.push(pts.iter().filter(|p| !rim.contains(&cell(**p))).map(|p| origin.sub(*p).dot(n, g.h)).collect());
+    }
+    Ok(crate::store::push_band::passes_wall(&walls, d))
+}

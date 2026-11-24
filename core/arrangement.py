@@ -222,3 +222,31 @@ def scan_interior_point(outer: list, holes=()):
     probe gets, whatever the shape — a C, an L, a ring."""
     from ingetrazo_core import plane_scan_point
     return plane_scan_point(outer, holes)
+
+
+def arc_command(scene, pts, close_to=None, trim=None):
+    """The command that draws an arc polyline (the Arc tools', Freehand's):
+    the curve tagged open, with the plane rule of ``curve_extras`` (planar
+    rebuild on a flat drawing, the scoped one on a busy plane in 3D, naive
+    otherwise). ``close_to`` (a centre) closes the wedge with two radii,
+    the Pie. ``trim``: ``(a, b)`` position pairs to erase once the arc is
+    in, the corner stubs a fillet leaves, so the rounded face survives and
+    the corner sliver goes with its edges."""
+    from collections import namedtuple
+    from core.edits import build_add_edges
+    from core.history import (DeleteEdgesCommand, RebuildPlaneFacesCommand,
+                              RebuildPlanarFacesCommand, TagCurveCommand)
+    seg = namedtuple("_Seg", "a b")
+    segments = [(pts[i], pts[i + 1]) for i in range(len(pts) - 1)]
+    if close_to is not None:
+        segments = [(close_to, pts[0])] + segments + [(pts[-1], close_to)]
+    after = [DeleteEdgesCommand([seg(QVector3D(a), QVector3D(b)) for a, b in trim])] if trim else []
+    tag = TagCurveCommand(list(pts), closed=False)
+    if flat_drawing(scene, pts):
+        return build_add_edges(scene, segments, detect_faces=False,
+                               extra=[tag, RebuildPlanarFacesCommand()] + after)
+    plane = busy_plane(scene, pts)
+    if plane is not None:
+        return build_add_edges(scene, segments, detect_faces=True,
+                               extra=[tag, RebuildPlaneFacesCommand(*plane)] + after)
+    return build_add_edges(scene, segments, detect_faces=True, extra=[tag] + after)

@@ -297,6 +297,31 @@ def add_face(history, outer=None, holes=(), anchor=None, offsets=None, curve=Fal
 
 
 
+def add_arc(history, points, center=None, trim=None):
+    """An arc polyline (open mesh coordinates): the Arc tools' and
+    Freehand's commit (``core.arrangement.arc_command``). ``center`` closes
+    the wedge (the Pie); ``trim`` is ``[[a, b], ...]``, edges to erase once
+    the arc is in (a fillet's corner stubs). One step."""
+    from core.arrangement import arc_command
+    from core.coordinate_frame import ZERO, choose_origin, mesh_frame, planned_points, point_in_frame
+    pts = [list(map(float, p)) for p in points]
+    if len(pts) < 2:
+        raise ValueError("an arc needs two points")
+    mesh = history.scene.mesh
+    st = store_of(mesh)
+    origin = choose_origin(pts[0]) if st is not None else ZERO
+    local = [point_in_frame(p, origin) for p in pts]
+    close = point_in_frame(center, origin) if center is not None else None
+    cuts = [(point_in_frame(a, origin), point_in_frame(b, origin)) for a, b in (trim or ())]
+    before = history.revision
+    with mesh_frame(mesh, origin):
+        cmd = arc_command(history.scene, local, close, cuts or None)
+        exact = ({p.toTuple(): tuple(v - o for v, o in zip(raw, origin)) for p, raw in zip(local, pts)}
+                 if st is not None else {})
+        with planned_points(mesh, exact):
+            history.execute(cmd)
+    return _answer(history, before)
+
 def add_guide_circle(history, center, normal, radius):
     """An analytic guide circle (the Circle tool with Ctrl): ``center``
     (open mesh coordinates), the unit ``normal`` of its plane, ``radius``.
@@ -1143,7 +1168,7 @@ COMMANDS = {"set_location": set_location, "set_model_units": set_model_units, "s
             "create_delivery": create_delivery, "edit_delivery": edit_delivery,
             "delete_delivery": delete_delivery, "run_delivery": run_delivery, "follow_me": follow_me, "intersect_faces": intersect_faces,
             "add_edge": add_edge, "add_edges": add_edges, "add_face": add_face,
-            "add_guide_circle": add_guide_circle,
+            "add_guide_circle": add_guide_circle, "add_arc": add_arc,
             "move_placements": move_placements, "copy_placements": copy_placements,
             "move_selection": move_selection,
             "divide_edges": divide_edges, "join_edges": join_edges,

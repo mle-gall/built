@@ -414,10 +414,6 @@ class ShellWindow(QObject):
         self._tools = build_tools()
         self._act_eyedropper = ShellAction(self, "Sample material", checkable=True,
                                            toggled=self._on_toggle_eyedropper)
-        self._act_bridge = ShellAction(self, "Bridge", run=self._on_bridge, listed=False)
-        self._act_make_faces = ShellAction(self, "Make Faces", run=self._on_make_faces, listed=False)
-        self._act_3dtext = ShellAction(self, "3D Text", run=self._on_insert_3d_text)
-
         self._tool_actions = {}
         self._style_before_xray = (None, None)
         self._status = ShellStatusBar(host)
@@ -458,6 +454,9 @@ class ShellWindow(QObject):
                               for k, a in self._tool_actions.items()]
         self._registry_actions = {}
         self.refresh_commands()
+        self._act_bridge = self._registry_actions["menu:bridge"]
+        self._act_make_faces = self._registry_actions["menu:make_faces"]
+        self._act_3dtext = self._registry_actions["menu:text3d"]
 
     def childEvent(self, event):
         # A plugin may attach an action or an entire submenu to this QObject.
@@ -849,7 +848,14 @@ class ShellWindow(QObject):
 
     def _parse_skp_threaded(self, skp, cb):
         from app_shell import files
-        return files.parse_skp_threaded(self, skp, cb)
+        from formats.skp import parse_skp
+        return files.parse_threaded(parse_skp, skp, cb)
+
+    def _parse_stl_threaded(self, path, scale, simplify_mode, cb, report=None):
+        from app_shell import files
+        from formats.stl import parse_stl
+        return files.parse_threaded(parse_stl, path, cb, scale=scale,
+                                    simplify_mode=simplify_mode, report=report)
 
     def _dxf_options(self, path, header_scale=None):
         from app_shell import files

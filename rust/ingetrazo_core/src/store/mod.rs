@@ -33,7 +33,7 @@ pub(crate) mod drawing;
 pub(crate) mod commands;
 mod fold;
 mod landing;
-mod push_band;
+pub(crate) mod push_band;
 mod soften;
 mod stitch_command;
 mod erase;

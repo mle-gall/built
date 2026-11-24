@@ -24,6 +24,7 @@ import shutil
 import subprocess
 import sys
 import threading
+from collections import deque
 from pathlib import Path
 
 from core.i18n import tr
@@ -133,7 +134,7 @@ def command(win, name, *args):
         "sheets": lambda: win._to_sheets(),
         "model": lambda: win._show_model(),
     }
-    if kind == "import":
+    if kind == "import" and arg in _IMPORT_FILTERS:
         return import_dialog(win, arg)
     if kind == "recent":
         return open_recent_index(win, arg)
@@ -169,9 +170,10 @@ def command(win, name, *args):
             win.activate_document(docs[i])
         return True
     fn = table.get(name)
-    if fn is None:
-        return None
-    return fn()
+    if fn is not None:
+        return fn()
+    from ingetrazo_render import run_model_menu
+    return run_model_menu(win, name) or None
 
 
 def open_library(win) -> bool:
@@ -228,7 +230,7 @@ def open_dialog(win) -> bool:
     path, _ = file_dialogs.getOpenFileName(
         win, tr("Open Built document"), "",
         built.DOCUMENT_FILTER + ";;Built projects (*.builtproject *.igzproj)"
-        ";;Imports (*.skp *.dae *.dxf *.dwg *.rfa *.glb *.gltf)")
+        ";;Imports (*.skp *.dae *.dxf *.dwg *.rfa *.glb *.gltf *.obj *.stl)")
     if not path:
         return False
     return open_path(win, Path(path))
@@ -282,6 +284,9 @@ def open_path(win, path: Path) -> bool:
         from views import chrome_dialogs as cd
         cd.warning(win, tr("Open"), tr("{name} is no longer there.", name=path.name))
         return False
+    if suffix in (".obj", ".stl"):
+        # Unitless meshes need an answer before an Open creates a tab.
+        return win._mesh_import_options(path, open_tab=lambda load: _open_in_tab(win, load)) == "chrome"
     if suffix not in IMPORTS and host.ns_view:
         from views.document_open import start
         from functools import partial
@@ -292,19 +297,21 @@ def open_path(win, path: Path) -> bool:
         if free_area(win) is None and not host._picture_seen:
             initial_frame = (win.viewport.camera.aspect, win.view.width(), win.view.height())
         return start(win, path, partial(_install_open, initial_frame=initial_frame))
+    loader = import_path if suffix in IMPORTS else open_document
+    return _open_in_tab(win, lambda: loader(win, path))
+
+
+def _open_in_tab(win, load):
     previous, created = win._doc, None
     if not win._doc_is_blank():
         created = win.new_document()
-    if suffix in IMPORTS:
-        ok = import_path(win, path)
-    else:
-        ok = open_document(win, path)
+    ok = load()
     if not ok and created is not None and created in win._documents and win._doc_is_blank(created):
         win.activate_document(previous, closing=True)
         win._retire_document(created)
     if ok:
         win._dismiss_home()
-    host.request_frame()
+    win._host.request_frame()
     return ok
 
 
@@ -529,37 +536,31 @@ def import_progress(win, title, *, monotonic=False):
     return bar, cb
 
 
-def parse_skp_threaded(win, skp, cb):
-    """MainWindow._parse_skp_threaded without a QEventLoop: the parse on a
-    Python thread, its progress relayed on the main thread while the modal
-    pump keeps the window drawing."""
-    from formats import skp as skp_format
+def parse_threaded(parser, path, cb, **options):
+    """Parse a mesh on a worker and deliver progress on the window thread."""
     from app_shell import modal
     result: dict = {}
-    latest: list = []
+    latest = deque(maxlen=1)
 
     def run():
         try:
-            result["payload"] = skp_format.parse_skp(
-                skp, progress=lambda f, t: latest.append((f, t)))
+            result["payload"] = parser(path, progress=lambda f, t: latest.append((f, t)), **options)
             result["exc"] = None
         except Exception as exc:  # noqa: BLE001 — reported to the caller
             result["payload"] = None
             result["exc"] = exc
 
-    worker = threading.Thread(target=run, name="skp-parse", daemon=True)
+    worker = threading.Thread(target=run, name=parser.__name__, daemon=True)
     worker.start()
 
     def done():
         if latest:
-            f, t = latest[-1]
-            latest.clear()
-            cb(f, t)
+            cb(*latest.popleft())
         return not worker.is_alive()
     if not modal.run_until(done):
         worker.join()
     while latest:
-        cb(*latest.pop(0))
+        cb(*latest.popleft())
     return result.get("payload"), result.get("exc")
 
 
