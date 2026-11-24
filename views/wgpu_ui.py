@@ -553,10 +553,18 @@ def _lens_value(view, tools, revision) -> None:
                                       float(pos.x()) + dx, float(pos.y()) + dy - 40.0, None, lens)
 
 
-def _summary(sel) -> str:
-    from core.group import Group
-    groups = sum(1 for e in sel if isinstance(e, Group))
-    rest = len(sel) - groups
+def _sel_key(sel):
+    """The selection as the providers' signatures see it: its native
+    revision (core/element_set.py), taken on every change of content and
+    for every new set. Every empty selection is one and the same."""
+    return sel.revision if len(sel) else 0
+
+
+def _summary(snapshot) -> str:
+    """"2 groups · 3 items" from ``selection.snapshot()``: placements are
+    the groups, the rest are items."""
+    count, groups = snapshot[0], snapshot[1]
+    rest = count - groups
     parts = []
     if groups:
         parts.append(f"{groups} group" + ("s" if groups != 1 else ""))
@@ -568,19 +576,19 @@ def _summary(sel) -> str:
 def _selection(view, win, active) -> None:
     """The selection bar: with Select active, something selected, no drag."""
     scene = getattr(view, "scene", None)
-    sel = list(getattr(scene, "selection", ()) or ())
+    sel = getattr(scene, "selection", None)
     dragging = getattr(view, "last", None) is not None
-    if active != "select" or not sel or dragging:
+    if active != "select" or sel is None or not len(sel) or dragging:
         if getattr(view, "_ui_sel_sig", None) is not None:
             view.renderer.ui_set_selection("", [])
             view._ui_sel_sig = None
         return
-    sig = (id(scene), len(sel), id(sel[0]), id(sel[-1]))
+    sig = (id(scene), _sel_key(sel))
     if sig == getattr(view, "_ui_sel_sig", None):
         return
     view._ui_sel_sig = sig
-    view.renderer.ui_set_selection(_summary(sel), [(k, label, key, enabled, more)
-                                                   for k, label, key, run, enabled, more in _commands(win, sel)])
+    view.renderer.ui_set_selection(_summary(sel.snapshot()), [(k, label, key, enabled, more)
+                                                              for k, label, key, run, enabled, more in _commands(win, sel)])
 
 
 def _commands(win, sel):
@@ -771,7 +779,6 @@ def _tree(view, win, *, discover=False):
         flt = ""
     lens = 0 if discover else view.__dict__.get("_ui_lens", 0)
     from ingetrazo_render import browser_selection
-    sel_ids = {id(e) for e in scene.selection} if discover or lens != 0 else browser_selection(scene)
     from ingetrazo_core import ProjectSheets
     catalog = view.__dict__.get("_ui_sheet_catalog")
     if catalog is None:
@@ -780,13 +787,14 @@ def _tree(view, win, *, discover=False):
     # Watertight checks in Export must follow mesh edits.
     geometric = lens == 2
     cv = scene.content_version if geometric else _tree_version(win, scene)
-    sig = (id(scene), id(scene.edit_group), scene.mesh.revision, cv, tuple(sorted(exp)), tuple(sorted(pages.items())), flt, scene.content_version if flt else None, len(sel_ids),
-           hash(frozenset(sel_ids)), lens, getattr(view, "_ui_layer_rev", 0), scene.show_section_planes, sheet_revision)
+    sig = (id(scene), id(scene.edit_group), scene.mesh.revision, cv, tuple(sorted(exp)), tuple(sorted(pages.items())), flt, scene.content_version if flt else None, _sel_key(scene.selection), lens, getattr(view, "_ui_layer_rev", 0), scene.show_section_planes, sheet_revision)
     if not discover and sig == getattr(view, "_ui_tree_sig", None):
         return
     first = not hasattr(view, "_ui_tree")
     if not discover:
         view._ui_tree_sig = sig
+    # The selected ids only once the signature (the selection's revision) moved.
+    sel_ids = {id(e) for e in scene.selection} if discover or lens != 0 else browser_selection(scene)
     mode = "" if discover else view.__dict__.get("_ui_mode", "")
     from core import structure
     from core import layers as L
@@ -1430,7 +1438,7 @@ def _tree_action(win, view, action) -> None:
                 vp.flash_status("This selection has no occurrence in the Project tree")
         elif verb == "item" and kind in ("sheet-page", "sheet-frame", "saved-scene", "sheet-pages", "saved-scenes"):
             _select(win, [])
-            view._ui_insp_node = (rk, (0, 0, 0))
+            view._ui_insp_node = (rk, _sel_key(scene.selection))
         elif kind == "project-file" and verb in ("item", "open", "edit", "linkrelink"):
             # A project file row: one click shows its tab (opening it);
             # Locate… on a missing one finds where it went.
@@ -1492,8 +1500,7 @@ def _tree_action(win, view, action) -> None:
             rebuild()
         elif verb == "item" and kind in ("section", "sections"):
             _select(win, [p for p in scene.section_planes if str(p.uid) == ident])
-            sel = list(scene.selection)
-            view._ui_insp_node = (rk, (len(sel), id(sel[0]) if sel else 0, id(sel[-1]) if sel else 0))
+            view._ui_insp_node = (rk, _sel_key(scene.selection))
         elif verb == "toggle":
             if rk.startswith(("r:", "c:inmodel", "c:compmodel")):
                 # Rules start open when short: remember a collapse explicitly.
@@ -1519,7 +1526,7 @@ def _tree_action(win, view, action) -> None:
             wgpu_library.set_mode(view, win, rk)
         elif verb == "item" and rk == "solid:active":
             _select(win, [])
-            view._ui_insp_node = (rk, (0, 0, 0))
+            view._ui_insp_node = (rk, _sel_key(scene.selection))
             rebuild()
         elif verb == "filter":
             view._ui_filter = rk
@@ -1659,8 +1666,7 @@ def _tree_action(win, view, action) -> None:
             # it is. Its parts come with "Select contents".
             view._ui_insp_node = None
             _select(win, placements() if tnode.get("kind") in ("link", "linked") else [])
-            sel = list(scene.selection)
-            view._ui_insp_node = (node, (len(sel), id(sel[0]) if sel else 0, id(sel[-1]) if sel else 0))
+            view._ui_insp_node = (node, _sel_key(scene.selection))
         elif verb == "contents":
             _select(win, members())
         elif verb == "linkfinder" and linked:
@@ -1694,8 +1700,7 @@ def _tree_action(win, view, action) -> None:
                 view._ui_insp_node = None   # set after the selection lands
             _select(win, members())
             if verb == "node" and node:
-                sel = list(scene.selection)
-                view._ui_insp_node = (node, (len(sel), id(sel[0]) if sel else 0, id(sel[-1]) if sel else 0))
+                view._ui_insp_node = (node, _sel_key(scene.selection))
         elif verb == "reveal":
             g = item()
             where = data.get("node_of", {}).get(id(g)) if g is not None else None
@@ -1968,9 +1973,8 @@ def _inspector(view, win) -> None:
     picked in the tree, one item, several, or loose geometry. Fields edit in
     place; IFC stays under Export details."""
     scene = win.viewport.scene
-    sel = list(scene.selection)
     focus = getattr(view, "_ui_insp_node", None)
-    sel_sig = (len(sel), id(sel[0]) if sel else 0, id(sel[-1]) if sel else 0)
+    sel_sig = _sel_key(scene.selection)
     node_focus = focus[0] if focus and focus[1] == sel_sig else None
     filename = str(getattr(win, "_current_path", "") or "")
     tool = _active_tool_id(win)
@@ -1982,11 +1986,12 @@ def _inspector(view, win) -> None:
                  tex.get("sw"), tex.get("sh"), tex.get("rot"))
     sig = (id(scene), scene.content_version, sel_sig, node_focus, getattr(view, "_ui_tree_sig", None) is not None,
            view.__dict__.get("_ui_mat_focus"), view.__dict__.get("_ui_mode"), view.__dict__.get("_ui_lens"),
-           filename, frozenset(map(id, sel)),
+           filename,
            _current_material_name(), tool, brush, scene.show_section_planes, scene.show_section_cuts,
            scene.display_style.section_fill, view.__dict__.get("_ui_sheet_revision"))
     if sig == getattr(view, "_ui_insp_sig", None):
         return
+    sel = list(scene.selection)
     _measure(view, win, auto=True)
     takeoff = scene.__dict__.get("_inspector_takeoff")
     view._ui_insp_sig = sig
