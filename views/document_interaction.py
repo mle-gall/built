@@ -71,6 +71,7 @@ if not NATIVE:
 from views.paint_types import QColor, QFont, QPen, QPolygonF
 if not NATIVE:
     from PySide6.QtGui import QFontMetrics, QImage, QPainter
+import numpy as np
 import ingetrazo_core
 import ingetrazo_render
 from ingetrazo_render import document_value_key as _value_key
@@ -7348,9 +7349,8 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     def _np_mvp(self):
         """Current MVP as a (4, 4) float64 NumPy matrix (row-major indexing).
         ``QMatrix4x4.data()`` is column-major, hence the Fortran reshape."""
-        import numpy as np
         m = self.camera.projection_matrix() * self.camera.view_matrix()
-        return np.array(m.data(), dtype=np.float64).reshape(4, 4, order="F")
+        return np.asarray(m.data(), dtype=np.float64).reshape(4, 4, order="F")
 
     def _camera_px(self):
         """``(mvp, width, height)``: what the native pick kernels project
@@ -7361,11 +7361,9 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     def _project_px(self, pts):
         """Batch world points (N, 3) → ``(px, py, in_front)`` arrays — the
         exact math of :meth:`_world_to_pixel` (``ingetrazo_core.project_px``)."""
-        import numpy as np
-        from ingetrazo_core import project_px
-        return project_px(np.ascontiguousarray(pts, dtype=np.float64).reshape(-1, 3),
-                          list(self._np_mvp().reshape(-1, order="F")),
-                          float(self.width()), float(self.height()))
+        points = np.ascontiguousarray(pts, dtype=np.float64).reshape(-1, 3)
+        matrix = self._np_mvp().ravel(order="F").tolist()
+        return ingetrazo_core.project_px(points, matrix, float(self.width()), float(self.height()))
 
     @staticmethod
     def _frustum_planes(mvp):
