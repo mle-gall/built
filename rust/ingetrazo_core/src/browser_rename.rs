@@ -199,10 +199,11 @@ impl BrowserRename {
         if !scene.is(self.scene.bind(py)) || !writable(&scene)? || self.error().is_some() {
             return Ok(false);
         }
-        let history = py.import("core.history")?;
+        let command = py.import("ingetrazo_core")?.getattr("NativeCommand")?;
         let root = scene.getattr("_root")?;
         let linked = py.import("core.links")?.getattr("linked_ancestor")?;
-        let commands = PyList::empty(py);
+        let groups = PyList::empty(py);
+        let mut names = Vec::new();
         for (t, (_, new)) in self.targets.iter().zip(self.preview()) {
             let group = t.group.bind(py);
             if root.call_method1("_occurrence_path", (group,))?.is_none()
@@ -216,10 +217,11 @@ impl BrowserRename {
                 return Ok(false);
             }
             if new != t.old {
-                commands.append(history.call_method1("RenameGroupCommand", (group, new))?)?;
+                groups.append(group)?;
+                names.push(new);
             }
         }
-        let step = history.call_method1("CompoundCommand", (commands,))?;
+        let step = command.call_method1("rename_each", (groups, names))?;
         py.import("views.tree_navigation")?
             .call_method1("execute", (vp, step))?;
         Ok(true)

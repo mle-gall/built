@@ -34,8 +34,11 @@ def win():
 def _count_calls(monkeypatch, obj, name):
     calls = []
     original = getattr(obj, name)
-    monkeypatch.setattr(obj, name, lambda *a, **k: (calls.append(1),
-                                                   original(*a, **k)))
+    def counted(*args, **kwargs):
+        calls.append(1)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(obj, name, counted)
     return calls
 
 
@@ -159,29 +162,30 @@ def test_hidden_panels_let_the_previous_document_go(win):
     assert alive == []
 
 
-def test_a_selection_notice_leaves_the_browser_rows_as_they_are(win, monkeypatch):
-    """Its rows show what the model is: after a click (a view-only bump)
-    the Browser read all 21 406 of them again on the plant of #158."""
-    from ingetrazo_core import Vec3 as V
+def browser_model():
     from core.group import Group
     from core.mesh import Mesh
-    m = Mesh()
-    m.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)])
-    g = Group(m, "row")
-    vp = win.viewport
-    vp.scene.groups.append(g)
-    vp.scene.version += 1
-    outliner = win.project_browser.outliner
-    outliner.refresh()
-    rows = _count_calls(monkeypatch, outliner, "_update_rows")
-    vp.scene.select([g])                        # a view-only change
-    outliner.refresh(rows_if_changed=True)
-    assert rows == []
-    vp.scene.version += 1                       # an edit
-    outliner.refresh(rows_if_changed=True)
-    assert len(rows) == 1
-    outliner.refresh()                          # asked directly: always
-    assert len(rows) == 2
+    from ingetrazo_core import Vec3 as V
+    from tests.test_project_drawing_filters import Project
+
+    p = Project()
+    mesh = Mesh()
+    face = mesh.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0)])
+    group = Group(mesh, "Object")
+    p.scene.groups.append(group)
+    p.action("toggle", "n:")
+    return p, group, face
+
+
+def test_a_selection_notice_leaves_the_browser_rows_as_they_are(monkeypatch):
+    from views import wgpu_ui
+    p, group, _ = browser_model()
+    scans = _count_calls(monkeypatch, wgpu_ui, "prepare_tree_model")
+    p.scene.select([group])
+    assert p.rows()["i:" + group.uid][1][9] and scans == []
+    group.name = "Renamed"
+    p.scene.version += 1
+    assert p.rows()["i:" + group.uid][0] == "Renamed" and len(scans) == 1
 
 
 def test_a_move_leaves_the_material_swatches_as_they_are(win):
@@ -214,42 +218,31 @@ def test_a_move_leaves_the_material_swatches_as_they_are(win):
     assert win.tray._mat_refresh_timer.isActive()
 
 
-def test_a_move_leaves_the_browser_rows_as_they_are(win, monkeypatch):
-    """No row shows where a thing is: on the plant of #158 each drop read
-    the 21 406 rows again. A paint does read them, and so does a Move
-    when an extension's kind adds properties (they may be sizes)."""
-    from ingetrazo_core import Vec3 as V
-    from core.group import Group
+def test_a_move_leaves_the_browser_rows_as_they_are(monkeypatch):
     from core.history import MoveGroupCommand, SetFaceColorCommand
-    from core.mesh import Mesh
-    m = Mesh()
-    f = m.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)])
-    g = Group(m, "moved")
-    vp = win.viewport
-    vp.scene.groups.append(g)
-    vp.scene.version += 1
-    outliner = win.project_browser.outliner
-    outliner.refresh()
-    rows = _count_calls(monkeypatch, outliner, "_update_rows")
-    vp.history.execute(MoveGroupCommand(g, V(2, 0, 0)))
-    outliner.refresh(rows_if_changed=True)
-    vp.history.undo()
-    outliner.refresh(rows_if_changed=True)
-    assert rows == []
-    vp.history.execute(SetFaceColorCommand([f], (1.0, 0.0, 0.0)))
-    outliner.refresh(rows_if_changed=True)
-    assert len(rows) == 1
-    vp.history.execute(MoveGroupCommand(g, V(2, 0, 0)))
-    outliner.refresh(rows_if_changed=True)
-    assert len(rows) == 1
-    vp.scene.version += 1                       # an edit outside history
-    vp.history.execute(MoveGroupCommand(g, V(2, 0, 0)))
-    outliner.refresh(rows_if_changed=True)
-    assert len(rows) == 2
-    win._outliner_kinds = [lambda grp: None]
-    vp.history.execute(MoveGroupCommand(g, V(2, 0, 0)))
-    outliner.refresh(rows_if_changed=True)
-    assert len(rows) == 3
+    from ingetrazo_core import Vec3 as V
+    from views import wgpu_ui
+    p, group, face = browser_model()
+    history = p.win.viewport.history
+    scans = _count_calls(monkeypatch, wgpu_ui, "prepare_tree_model")
+    def move():
+        history.execute(MoveGroupCommand(group, V(2, 0, 0)))
+        return p.rows()
+
+    move()
+    assert history.undo()
+    p.rows()
+    assert scans == []
+    history.execute(SetFaceColorCommand([face], (.9, 0., 0.)))
+    p.rows()
+    move()
+    assert len(scans) == 1
+    group.name = "External rename"
+    p.scene.version += 1
+    assert move()["i:" + group.uid][0] == group.name and len(scans) == 2
+    p.win._outliner_kinds = [lambda g: None]
+    move()
+    assert len(scans) == 3
 
 
 def test_sliced_refresh_cannot_publish_after_replacement_or_document_switch(monkeypatch):
@@ -281,31 +274,20 @@ def test_sliced_refresh_cannot_publish_after_replacement_or_document_switch(monk
     assert published == ["new document"]
 
 
-def test_a_geometry_edit_leaves_the_browser_rows_as_they_are(win, monkeypatch):
-    """A push/pull or a drawn edge changes one mesh, not what a row shows:
-    on the ride (85 000 rows) each one read them all again, 0.5–1.6 s."""
+def test_a_geometry_edit_leaves_the_browser_rows_as_they_are(monkeypatch):
+    from core.history import AddEdgeCommand, NativeCommand, SnapshotMutation
     from ingetrazo_core import Vec3 as V
-    from core.group import Group
-    from core.history import AddEdgeCommand, MoveGroupCommand, SnapshotMutation
-    from core.mesh import Mesh
-    m = Mesh()
-    m.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)])
-    g = Group(m, "edited")
-    vp = win.viewport
-    vp.scene.groups.append(g)
-    vp.scene.version += 1
-    outliner = win.project_browser.outliner
-    outliner.refresh()
-    rows = _count_calls(monkeypatch, outliner, "_update_rows")
-    vp.history.execute(SnapshotMutation(
-        lambda s: m.add_edge(V(0, 0, 1), V(1, 0, 1)), mesh=m))
-    outliner.refresh(rows_if_changed=True)
-    vp.history.execute(AddEdgeCommand(V(3, 0, 0), V(4, 0, 0)))
-    outliner.refresh(rows_if_changed=True)
-    vp.history.undo()
-    outliner.refresh(rows_if_changed=True)
-    assert rows == []
-    from core.history import NativeCommand
-    vp.history.execute(NativeCommand.rename(g, "renamed"))
-    outliner.refresh(rows_if_changed=True)
-    assert len(rows) == 1
+    from views import wgpu_ui
+    p, group, _ = browser_model()
+    scans = _count_calls(monkeypatch, wgpu_ui, "prepare_tree_model")
+    mesh = group.mesh
+    history = p.win.viewport.history
+    history.execute(SnapshotMutation(lambda s: mesh.add_edge(V(0,0,1), V(1,0,1)), mesh=mesh))
+    p.rows()
+    history.execute(AddEdgeCommand(V(3,0,0), V(4,0,0)))
+    p.rows()
+    assert history.undo()
+    p.rows()
+    assert not scans
+    history.execute(NativeCommand.rename(group, "New name"))
+    assert p.rows()["i:" + group.uid][0] == "New name" and len(scans) == 1
