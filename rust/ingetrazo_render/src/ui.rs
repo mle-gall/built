@@ -158,7 +158,6 @@ pub struct Ui {
     cmd_scope: String,
     cmd_anchor: Option<Pos2>,
     cmd_extra: Vec<(String, bool, bool)>,
-    cmd_canvas: bool,
     cmd_results: Vec<(String, String, String, bool)>,
     cmd_at: usize,
     cmd_focus: bool,
@@ -344,7 +343,6 @@ impl Ui {
             cmd_scope: String::new(),
             cmd_anchor: None,
             cmd_extra: Vec::new(),
-            cmd_canvas: false,
             cmd_results: Vec::new(),
             cmd_at: 0,
             cmd_focus: false,
@@ -2561,7 +2559,6 @@ impl Ui {
         raw.viewports.entry(egui::ViewportId::ROOT).or_default().native_pixels_per_point = Some(scale * zoom);
         let ctx = self.ctx.clone();
         let out = ctx.run(raw, |ctx| {
-            if self.cmd_canvas { self.command_palette(ctx, screen); return; }
             if let Some(page) = &mut self.gallery { page.show(ctx); return; }
             self.panels.popup_layers.clear();
             if !sheet_up && !self.sheets.shown {

@@ -4,7 +4,7 @@ from functools import lru_cache
 
 from core.i18n import current_language, source_of, tr
 from core.settings import settings as QSettings
-from ingetrazo_render import shortcut_alternatives
+from ingetrazo_render import shortcut_alternatives, shortcut_domains
 
 _GROUP = "shortcuts"
 _DEFAULTS = "ingetrazo_default_shortcuts"
@@ -42,6 +42,13 @@ def collect_actions(window) -> list:
             continue
         seen.setdefault(action_key(act), act)
     return sorted(seen.values(), key=lambda a: _plain(a.text()).lower())
+
+
+def keyboard_scopes(window):
+    from ingetrazo_render import sheet_command_scope
+    if "_documents" in vars(window) and "_command_store" in vars(window):
+        return (window, sheet_command_scope(window))
+    return (window,)
 
 
 def portable_keys(seqs):
@@ -131,7 +138,8 @@ def save_shortcut(action, seqs: list) -> None:
     st.sync()
     from app_shell.windows import hosts
     for host in hosts():
-        peer = vars(host.window).get("_registry_actions", {}).get(key)
+        owner = vars(host.window).get("_sheet_command_scope") if key.startswith("sheet:") else host.window
+        peer = vars(owner).get("_registry_actions", {}).get(key) if owner is not None else None
         if peer is not None and peer is not action:
             peer.setShortcuts(portable_keys(seqs))
 
@@ -147,7 +155,7 @@ def export_shortcuts(window) -> dict:
     Actions with no keys are written too, so a cleared key travels."""
     return {"format": EXPORT_FORMAT, "version": 1,
             "shortcuts": {action_key(a): "; ".join(action_keys(a))
-                          for a in collect_actions(window)}}
+                          for scope in keyboard_scopes(window) for a in collect_actions(scope)}}
 
 
 def import_shortcuts(window, data) -> tuple:
@@ -165,7 +173,7 @@ def import_shortcuts(window, data) -> tuple:
             or not isinstance(data.get("shortcuts"), dict)):
         raise ValueError(tr("This is not an IngeTrazo shortcuts file."))
     wanted = {str(k): str(v or "") for k, v in data["shortcuts"].items()}
-    actions = collect_actions(window)
+    actions = [a for scope in keyboard_scopes(window) for a in collect_actions(scope)]
     by_key = {action_key(a): a for a in actions}
     applied = 0
     taken: dict = {}                      # key text -> the action that has it
@@ -176,10 +184,12 @@ def import_shortcuts(window, data) -> tuple:
             continue
         seqs = []
         for t in shortcut_alternatives(text, True):
-            if t in taken:
-                clashes.append((t, taken[t], act))
+            holders = taken.setdefault(t, [])
+            owner = next((a for mask, a in holders if mask & shortcut_domains(key)), None)
+            if owner is not None:
+                clashes.append((t, owner, act))
                 continue
-            taken[t] = act
+            holders.append((shortcut_domains(key), act))
             seqs.append(t)
         set_action_keys(act, seqs)
         save_shortcut(act, seqs)
@@ -188,7 +198,8 @@ def import_shortcuts(window, data) -> tuple:
         if action_key(act) in wanted:
             continue
         keys = action_keys(act)
-        kept = [s for s in keys if s not in taken]
+        domains = shortcut_domains(action_key(act))
+        kept = [s for s in keys if not any(mask & domains for mask, _ in taken.get(s, ()))]
         if len(kept) != len(keys):
             set_action_keys(act, kept)
             save_shortcut(act, kept)

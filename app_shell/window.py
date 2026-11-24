@@ -368,6 +368,7 @@ class ShellWindow(WindowDocumentCommands, object if NATIVE else QObject):
             if key == "select":
                 shortcut = "Space"          # bound by MainWindow, not the tool
             action = ShellAction(self, tr(getattr(tool, "name", key)), checkable=True)
+            action.setProperty("statusTip", tr(getattr(tool, "description", "") or ""))
             alternate = getattr(tool, "shortcut_alt", None)
             action.setShortcuts([s for s in (shortcut, alternate) if s])
             self._tool_actions[key] = action

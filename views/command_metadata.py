@@ -105,29 +105,6 @@ def menu_paths(window) -> dict:
     return paths
 
 
-def menu_trail(window, menu: QMenu):
-    """``"Edit ▸ Unhide"`` for a menu of the menu bar, ``None`` for any
-    other (a right-click menu)."""
-    subs = _submenus(window)
-
-    def walk(parent: QMenu, trail: list):
-        if parent is menu:
-            return _SEP.join(trail)
-        for act in parent.actions():
-            sub = subs.get(act)
-            if sub is not None:
-                found = walk(sub, trail + [_plain(sub.title())])
-                if found is not None:
-                    return found
-        return None
-
-    for top in _top_menus(window):
-        found = walk(top, [_plain(top.title())])
-        if found is not None:
-            return found
-    return None
-
-
 def _belongs(action: QAction, window) -> bool:
     """Is ``action`` the window's own? The sheet composer is a child of
     the main window: its commands must not show in the main window's F3
@@ -182,7 +159,7 @@ class Command:
         self.tip = _description(action, name)
         if not self.tip:
             from ingetrazo_render import command_description
-            if description := command_description(english):
+            if description := command_description(english, self.key):
                 self.tip = tr(description)
 
 

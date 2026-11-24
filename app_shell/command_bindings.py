@@ -24,7 +24,7 @@ def refresh(win):
     previous = old_keys.copy()
     paths = {}
     for key, group, label, defaults, tool_id, menu_id in command_registry(win._tool_defaults, menu):
-        paths[key] = tr(group)
+        paths[key] = " ▸ ".join(tr(section) for section in group.split(" ▸ "))
         if key not in actions:
             act = win._tool_actions.get(tool_id) if tool_id else None
             if act is None:

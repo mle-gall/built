@@ -3167,6 +3167,7 @@ mod shortcut_text;
 /// The Sheets workspace's page, native (docs/rust-sheets.md).
 pub mod sheet_page;
 pub mod sheet_tools;
+mod sheet_search;
 mod camera_inspector;
 mod registry_editor;
 mod render_result;
@@ -3316,7 +3317,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<preferences::DeviceReadings>()?;
     m.add_class::<about::AboutReview>()?;
     m.add_class::<release::ReleaseReview>()?;
-    m.add_class::<ui::command_palette::CommandCanvas>()?;
+    m.add_function(wrap_pyfunction!(sheet_search::sheet_command_scope, m)?)?;
     m.add_function(wrap_pyfunction!(text_outlines::text_outlines,m)?)?;
     m.add_function(wrap_pyfunction!(text_outlines::line_text_strokes,m)?)?;
     m.add_function(wrap_pyfunction!(about::notice_text,m)?)?;
@@ -3334,6 +3335,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(commands::command_registry, m)?)?;
     m.add_function(wrap_pyfunction!(commands::command_description, m)?)?;
     m.add_function(wrap_pyfunction!(commands::shortcut_conflicts, m)?)?;
+    m.add_function(wrap_pyfunction!(commands::shortcut_domains, m)?)?;
     m.add_function(wrap_pyfunction!(commands::shortcut_reserved, m)?)?;
     m.add_function(wrap_pyfunction!(model_menu::run_model_menu, m)?)?;
     m.add_function(wrap_pyfunction!(shortcut_text::shortcut_text, m)?)?;

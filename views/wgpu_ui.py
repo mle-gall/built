@@ -2853,8 +2853,7 @@ _KEYS = {Qt.Key_PageUp: "PageUp", Qt.Key_PageDown: "PageDown", Qt.Key_Escape: "E
 
 def _opens_commands(view, event) -> bool:
     window = view.window()
-    registry = vars(window).get("_registry_actions")
-    action = registry.get("command_search") if registry is not None else getattr(window, "_act_search_commands", None)
+    action = vars(window).get("_registry_actions", {}).get("command_search")
     if action is None:
         return False
     combo = event.key() | event.modifiers().value
@@ -2889,7 +2888,8 @@ def command_action(view, win, verb, arg):
 def _command_query(view, win, query) -> None:
     from views import command_metadata, wgpu_sheets
     workspace = wgpu_sheets.workspace_of(view)
-    owner = workspace.composer if workspace is not None else win
+    from ingetrazo_render import sheet_command_scope
+    owner = sheet_command_scope(win) if workspace is not None else win
     if not query or getattr(view, "_ui_command_owner", None) is not owner:
         view._ui_command_pool = command_metadata.commands(owner, getattr(view, "_ui_command_scope", ""))
         view._ui_command_owner = owner
