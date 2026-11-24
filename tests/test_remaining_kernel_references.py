@@ -103,3 +103,41 @@ def test_materialised_mesh_reference(monkeypatch):
 def test_push_scan_reference(monkeypatch):
     monkeypatch.setenv('INGETRAZO_STORE','0')
     assert digest(scan_rows()) == '5ce69f52b7511e4d417a427afd38bcb5cf366c3fb22133fd9e551ad58e1cfc22'
+
+
+def repair_rows():
+    rows = []
+    for seed in range(24):
+        mesh = Mesh()
+        origin = 650000 if seed % 2 else 0
+        def rect(x, y, w, h, z=0):
+            return [V(origin + x + i, y + j, z) for i,j in ((0,0),(w,0),(w,h),(0,h))]
+        rim = rect(0,0,6,6)
+        mother = mesh.add_face(rim)
+        mother.attrs = {'name':'outer'}
+        if seed % 3:
+            mesh.add_hole(mother, rect(1,1,1,1))
+        small = rect(0,0,3,6,1 if seed % 4 == 0 else 0)
+        mesh.add_face(small if seed % 3 else small[::-1]).attrs = {'name':'small'}
+        mesh.add_edge(rim[0], V(origin+8,0,0)).soft = True
+        point = V(origin+2,0,0)
+        split = top.split_edge_in_faces(mesh.faces,rim[0],rim[1],point,
+                                        [V(origin+4,3,0)] if seed%3 else ())
+        same = top.face_exists(mesh.faces,rim[::-1])
+        removed = top.heal_overlapping_faces(mesh, coverage=(seed % 5)/4)
+        rows.append((same, [[p.toTuple() for p in r] for _,r in split], len(removed),
+                     [([p.toTuple() for p in f.vertices],
+                       [[p.toTuple() for p in h] for h in f.holes],dict(f.attrs))
+                      for f in mesh.faces],
+                     [(e.a.toTuple(), e.b.toTuple(), e.soft) for e in mesh.edges]))
+    return rows
+
+
+def test_repair_reference(monkeypatch):
+    monkeypatch.setenv('INGETRAZO_STORE','0')
+    assert digest(repair_rows()) == 'ee76db670b286da00c61cf8867ee4ed8ac8eeaa440265fe7424e6a1bc22773a7'
+
+
+def test_store_repair_reference(monkeypatch):
+    monkeypatch.setenv('INGETRAZO_STORE','1')
+    assert digest(repair_rows()) == 'ee76db670b286da00c61cf8867ee4ed8ac8eeaa440265fe7424e6a1bc22773a7'
