@@ -4562,27 +4562,8 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return _active_cut(self.scene)
 
     def section_plane_frame(self, sp) -> list:
-        """Four world corners of the plane's drawn frame: the model's bounds
-        projected onto the plane, with a margin (the plane object is sized
-        to the model)."""
-        u, v = plane_axes(sp.normal)
-        lo, hi = self.scene.bounds()
-        if lo is None:
-            half_u = half_v = 1.5
-            cu = cv = 0.0
-        else:
-            corners = [QVector3D(x, y, z)
-                       for x in (lo.x(), hi.x())
-                       for y in (lo.y(), hi.y())
-                       for z in (lo.z(), hi.z())]
-            us = [QVector3D.dotProduct(c - sp.point, u) for c in corners]
-            vs = [QVector3D.dotProduct(c - sp.point, v) for c in corners]
-            cu, cv = (min(us) + max(us)) * 0.5, (min(vs) + max(vs)) * 0.5
-            half_u = (max(us) - min(us)) * 0.56 + 0.2
-            half_v = (max(vs) - min(vs)) * 0.56 + 0.2
-        c = sp.point + u * cu + v * cv
-        return [c - u * half_u - v * half_v, c + u * half_u - v * half_v,
-                c + u * half_u + v * half_v, c - u * half_u + v * half_v]
+        from ingetrazo_core import section_frame
+        return section_frame(sp.point, plane_axes(sp.normal), self.scene.bounds())
 
     def _draw_section_planes(self, painter: QPainter) -> None:
         """The section plane OBJECTS (frame + corner brackets + symbol):
@@ -4944,69 +4925,16 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     def _clip_segment_front(
         self, a: QVector3D, b: QVector3D
     ) -> Optional[tuple[QVector3D, QVector3D]]:
-        """Clip a world segment to the part in FRONT of the camera. The long
-        'infinite' guide segments (±10 km) routinely have an endpoint behind
-        the eye, where ``_world_to_pixel`` returns None — which used to make
-        the whole guide vanish from render, snap and pick in ordinary 3D
-        views. Returns the visible sub-segment, or ``None``."""
-        mvp = self.camera.projection_matrix() * self.camera.view_matrix()
-        wa = mvp.map(QVector4D(a.x(), a.y(), a.z(), 1.0)).w()
-        wb = mvp.map(QVector4D(b.x(), b.y(), b.z(), 1.0)).w()
-        eps = 1e-3
-        if wa <= eps and wb <= eps:
-            return None
-        if wa <= eps or wb <= eps:
-            t = (eps - wa) / (wb - wa)   # w is linear along the segment
-            cut = a + (b - a) * t
-            return (cut, QVector3D(b)) if wa <= eps else (QVector3D(a), cut)
-        return (QVector3D(a), QVector3D(b))
+        from ingetrazo_core import clip_annotation_front
+        return clip_annotation_front(self.camera.projection_matrix() * self.camera.view_matrix(), a, b)
 
     def _guide_snap_segment(
         self, g, margin: float = 1.5
     ) -> Optional[tuple[QVector3D, QVector3D]]:
-        """The span of guide line ``g`` the snap engine works on: the part
-        inside the view (widened by ``margin`` so the ends stay well off
-        screen), computed in double precision from the guide's own point
-        and direction.
-
-        The ±10 km segment of ``Guide.segment()`` is fine for drawing but not
-        for arithmetic: float32 rounds a coordinate of 10 000 m to ~1 mm, so
-        every crossing, 'on line' point and lock-line hit computed from those
-        endpoints was off by up to 2 mm — lines drawn from the X of two
-        diagonal guides visibly left the guides when zoomed in (#110).
-        Clipped to the view the endpoints are as large as what is on
-        screen, and the error scales with it (µm at a working zoom)."""
         from core.guide import GUIDE_HALF_LEN
-        mvp = self.camera.projection_matrix() * self.camera.view_matrix()
-        p, u = g.point, g.direction
-        c0 = mvp.map(QVector4D(p.x(), p.y(), p.z(), 1.0))
-        c1 = mvp.map(QVector4D(u.x(), u.y(), u.z(), 0.0))
-        c0 = (c0.x(), c0.y(), c0.w())
-        c1 = (c1.x(), c1.y(), c1.w())
-        lo, hi = -GUIDE_HALF_LEN, GUIDE_HALF_LEN
-        # Clip coordinates are affine in s along the line: keep
-        # w >= eps and |x|, |y| <= margin * w (Liang–Barsky on four planes).
-        planes = ((c0[2] - 1e-3, c1[2]),
-                  (margin * c0[2] - c0[0], margin * c1[2] - c1[0]),
-                  (margin * c0[2] + c0[0], margin * c1[2] + c1[0]),
-                  (margin * c0[2] - c0[1], margin * c1[2] - c1[1]),
-                  (margin * c0[2] + c0[1], margin * c1[2] + c1[1]))
-        for f0, f1 in planes:           # need f0 + f1 * s >= 0
-            if abs(f1) < 1e-15:
-                if f0 < 0.0:
-                    return None
-                continue
-            s = -f0 / f1
-            if f1 > 0.0:
-                lo = max(lo, s)
-            else:
-                hi = min(hi, s)
-            if lo >= hi:
-                return None
-        px, py, pz = p.x(), p.y(), p.z()
-        ux, uy, uz = u.x(), u.y(), u.z()
-        return (QVector3D(px + ux * lo, py + uy * lo, pz + uz * lo),
-                QVector3D(px + ux * hi, py + uy * hi, pz + uz * hi))
+        from ingetrazo_core import clip_snap_guide
+        return clip_snap_guide(self.camera.projection_matrix() * self.camera.view_matrix(),
+                               g.point, g.direction, GUIDE_HALF_LEN, margin)
 
     def _draw_scale_box(self, painter: QPainter) -> None:
         """The scaling box: yellow edges, green grips, the grabbed grip
@@ -5056,40 +4984,8 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         self, p0: tuple[float, float], p1: tuple[float, float],
         margin: float = 64.0,
     ) -> Optional[tuple[tuple[float, float], tuple[float, float]]]:
-        """Liang-Barsky clip of a 2D pixel segment to the widget rect (plus a
-        margin). Overlay guides are only clipped in 3D to the part in front of
-        the camera (``_clip_segment_front``), so their on-screen endpoints land
-        MILLIONS of pixels from origin. Qt's dash stroker runs in fixed point
-        and collapses a dashed pen into a solid line at that scale (measured:
-        a guide of 400 k px still dashes, 4 M px comes out solid). Trimming to
-        the visible area first keeps the dashes — and spares the rasteriser
-        hundreds of thousands of dash repeats. Returns the clipped endpoints,
-        or ``None`` when the segment misses the widget entirely."""
-        x0, y0 = p0
-        x1, y1 = p1
-        dx, dy = x1 - x0, y1 - y0
-        xmin, ymin = -margin, -margin
-        xmax, ymax = self.width() + margin, self.height() + margin
-        t0, t1 = 0.0, 1.0
-        for p, q in ((-dx, x0 - xmin), (dx, xmax - x0),
-                     (-dy, y0 - ymin), (dy, ymax - y0)):
-            if p == 0.0:
-                if q < 0.0:
-                    return None
-                continue
-            r = q / p
-            if p < 0.0:
-                if r > t1:
-                    return None
-                if r > t0:
-                    t0 = r
-            else:
-                if r < t0:
-                    return None
-                if r < t1:
-                    t1 = r
-        return ((x0 + t0 * dx, y0 + t0 * dy),
-                (x0 + t1 * dx, y0 + t1 * dy))
+        from ingetrazo_core import clip_annotation_line
+        return clip_annotation_line(p0, p1, self.width(), self.height(), margin)
 
     def _draw_guides(self, painter: QPainter) -> None:
         """The small crosses of guide POINTS, the usual scaffolding.
@@ -5560,162 +5456,14 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
     def _draw_occluded_segment(self, painter: QPainter, p3a: QVector3D,
                                p3b: QVector3D, samples: int = 16) -> None:
-        """Draw the 3D segment ``p3a``–``p3b`` in screen space, skipping the
-        parts hidden behind solid geometry (CPU occlusion sample).
-
-        The line is sampled about every ``_OCCLUSION_STEP_PX`` on screen (at
-        least ``samples`` steps), and where one sample is seen and the next
-        is not, the point where it goes behind is pinned by halving the
-        step — the line stops AT the silhouette. Drawing only the steps
-        whose both ends were seen cut it back a whole sixteenth at a time,
-        and the cut jumped from step to step as the view turned: the
-        dimensions clipped in and out behind other surfaces (issue #918).
-
-        The samples are projected and tested as one batch
-        (``_project_samples``): doing it point by point rebuilt the camera's
-        projection*view matrix for every sample — 432 rebuilds a frame for
-        eight dimensions — and ran a NumPy 3x3 reduction per sample (#439)."""
-        d = p3b - p3a
-
-        def at(ts):
-            return [p3a + d * t for t in ts]
-
+        from ingetrazo_core import annotation_strokes
         mvp = self.camera.projection_matrix() * self.camera.view_matrix()
-        ea = self._world_to_pixel(p3a, mvp)
-        eb = self._world_to_pixel(p3b, mvp)
-        n = samples
-        if ea is not None and eb is not None:
-            # With both ends in front of the eye, the projected segment
-            # stays between them. Allow for the annotation pen and AA.
-            if (max(ea[0], eb[0]) < -2 or min(ea[0], eb[0]) > self.width() + 2
-                    or max(ea[1], eb[1]) < -2 or min(ea[1], eb[1]) > self.height() + 2):
-                return
-            span = math.hypot(eb[0] - ea[0], eb[1] - ea[1])
-            n = max(samples, min(self._OCCLUSION_MAX_SAMPLES,
-                                 int(span / self._OCCLUSION_STEP_PX)))
-        ts = [i / n for i in range(n + 1)]
-        res = self._project_samples(at(ts))
-        pxs = [px for px, _v in res]
-        vis = [px is not None and v for px, v in res]
-        # The steps that change from seen to hidden (or back): each is cut
-        # in ``_OCCLUSION_SPLIT`` and narrowed to the part where it flips,
-        # every cut step in one batch per round.
-        cuts = [i for i in range(n)
-                if pxs[i] is not None and pxs[i + 1] is not None
-                and vis[i] != vis[i + 1]]
-        edge: dict = {}
-        if cuts:
-            k = self._OCCLUSION_SPLIT
-            lo = {i: ts[i] for i in cuts}          # t on sample i's side
-            hi = {i: ts[i + 1] for i in cuts}
-            edge = {i: pxs[i] if vis[i] else pxs[i + 1] for i in cuts}
-            for _ in range(self._OCCLUSION_ROUNDS):
-                probe = [(i, lo[i] + (hi[i] - lo[i]) * j / k)
-                         for i in cuts for j in range(1, k)]
-                got = self._project_samples(at([t for _i, t in probe]))
-                for c, i in enumerate(cuts):
-                    row = got[c * (k - 1):(c + 1) * (k - 1)]
-                    tt = [t for _i, t in probe[c * (k - 1):(c + 1) * (k - 1)]]
-                    new_lo, new_hi = lo[i], hi[i]
-                    for (px, v), t in zip(row, tt):
-                        if (px is not None and v) == vis[i]:
-                            new_lo = t
-                            if vis[i]:
-                                edge[i] = px      # the last seen, so far
-                        else:
-                            new_hi = t
-                            if not vis[i]:
-                                edge[i] = px      # the first seen, so far
-                            break
-                    lo[i], hi[i] = new_lo, new_hi
-        for i in range(n):
-            a, b = pxs[i], pxs[i + 1]
-            if a is None or b is None:
-                continue
-            if vis[i] and vis[i + 1]:
-                painter.drawLine(QPointF(*a), QPointF(*b))
-            elif edge.get(i) is not None:
-                start = a if vis[i] else b
-                painter.drawLine(QPointF(*start), QPointF(*edge[i]))
+        for a, b in annotation_strokes(self, p3a, p3b, mvp, samples):
+            painter.drawLine(QPointF(*a), QPointF(*b))
 
     def _project_samples(self, pts: list[QVector3D]):
-        """Project ``pts`` to screen pixels and test each one against the
-        frame's depth snapshot, as a single batch: the camera's MVP is built
-        once for the whole run, and the snapshot's 3x3 depth test runs as one
-        NumPy gather instead of a slice-and-max per point (#439).
-
-        The answers are the ones ``_world_to_pixel`` and
-        ``_occluded_on_screen`` give point by point — the live camera's
-        matrix for the pixel, the snapshot's own for the test, the same
-        tolerances — and without a snapshot (or NumPy) this defers to those
-        per-point paths. Returns a list of ``(pixel, visible)`` pairs, with
-        ``pixel`` None for a point behind the camera."""
-        mvp = self.camera.projection_matrix() * self.camera.view_matrix()
-        snap = getattr(self, "_depth_snap", None)
-        if snap is None:
-            return [(self._world_to_pixel(p, mvp),
-                     not self._occluded_on_screen(p)) for p in pts]
-        try:
-            import numpy as np
-        except Exception:  # noqa: BLE001 — never break the paint
-            return [(self._world_to_pixel(p, mvp),
-                     not self._occluded_on_screen(p)) for p in pts]
-        buf, smvp, inv, sw, sh, eye, fwd = snap
-
-        def rows(m):
-            return np.array([[m.row(r).x(), m.row(r).y(),
-                              m.row(r).z(), m.row(r).w()]
-                             for r in range(4)], dtype=np.float64)
-
-        p4 = np.array([(p.x(), p.y(), p.z(), 1.0) for p in pts],
-                      dtype=np.float64)
-        with np.errstate(all="ignore"):
-            # The pixel, with the live camera (as _world_to_pixel).
-            clip = p4 @ rows(mvp).T
-            cw = clip[:, 3]
-            ndc = clip[:, :2] / cw[:, None]
-            pxs = (ndc[:, 0] * 0.5 + 0.5) * self.width()
-            pys = (1.0 - (ndc[:, 1] * 0.5 + 0.5)) * self.height()
-            pixels = [None if c <= 0 else (float(x), float(y))
-                      for c, x, y in zip(cw, pxs, pys)]
-            # The occlusion test, with the snapshot's matrices (as
-            # _occluded_on_screen): untested points stay visible.
-            occluded = np.zeros(len(pts), dtype=bool)
-            c = p4 @ rows(smvp).T
-            w = c[:, 3]
-            nx = c[:, 0] / w
-            ny = c[:, 1] / w
-            ix = ((nx + 1.0) * 0.5 * sw).astype(np.int64)
-            iy = ((ny + 1.0) * 0.5 * sh).astype(np.int64)
-            live = (w > 1e-9) & (ix >= 0) & (ix < sw) & (iy >= 0) & (iy < sh)
-            if live.any():
-                # The FARTHEST depth of the 3x3 around each pixel: gathering
-                # with the indices clamped to the frame reads the edge
-                # pixels twice, which a max does not see — the same values
-                # the per-point clamped slice takes, without copying the
-                # frame to pad it.
-                gx, gy = ix[live], iy[live]
-                d = np.maximum.reduce(
-                    [buf[np.clip(gy + dy, 0, sh - 1),
-                         np.clip(gx + dx, 0, sw - 1)]
-                     for dy in (-1, 0, 1) for dx in (-1, 0, 1)]
-                ).astype(np.float64)
-                near = d < 1.0                       # else background
-                if near.any():
-                    idx = np.flatnonzero(live)[near]
-                    q = np.column_stack(
-                        [nx[idx], ny[idx], d[near] * 2.0 - 1.0,
-                         np.ones(len(idx))]) @ rows(inv).T
-                    qw = q[:, 3]
-                    ok = np.abs(qw) >= 1e-12
-                    surf = q[:, :3] / np.where(ok, qw, 1.0)[:, None]
-                    eye_a = np.array([eye.x(), eye.y(), eye.z()])
-                    fwd_a = np.array([fwd.x(), fwd.y(), fwd.z()])
-                    along_pt = (p4[idx, :3] - eye_a) @ fwd_a
-                    along_surf = (surf - eye_a) @ fwd_a
-                    tol = np.maximum(0.02, 0.003 * np.abs(along_pt))
-                    occluded[idx] = ok & (along_surf < along_pt - tol)
-        return [(px, not occ) for px, occ in zip(pixels, occluded)]
+        from ingetrazo_core import annotation_samples
+        return annotation_samples(self, pts, self.camera.projection_matrix() * self.camera.view_matrix())
 
     def _draw_inference_marker(self, painter: QPainter) -> None:
         """Snap cue where the active tool's distance inference is engaged."""

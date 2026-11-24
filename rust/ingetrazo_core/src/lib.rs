@@ -94,6 +94,7 @@ mod tools;
 mod guide_vertices;
 mod pick;
 mod pick_index;
+mod annotation_geometry;
 mod units;
 mod value_field;
 mod inference_state;
@@ -384,6 +385,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pick_index::edges::linework_groups, m)?)?;
     m.add_function(wrap_pyfunction!(pick_index::edges::edge_cursor_point, m)?)?;
     m.add_function(wrap_pyfunction!(pick_index::hits::drop_past_cut, m)?)?;
+    annotation_geometry::register(m)?;
     m.add_function(wrap_pyfunction!(pick_index::document_pick_index, m)?)?;
     m.add_function(wrap_pyfunction!(pick::ray_triangles, m)?)?;
     m.add_function(wrap_pyfunction!(units::units_table, m)?)?;
