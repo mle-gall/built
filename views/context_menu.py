@@ -204,8 +204,10 @@ def _select_link(win, view, sel, arg, facts):
 
 
 def _delete_guide(win, view, sel, arg, facts):
-    from core.history import DeleteGuidesCommand
-    win.viewport.history.execute(DeleteGuidesCommand(list(sel)))
+    from core.protocol import commands
+    guides = list(win.viewport.scene.guides)
+    commands.erase_stroke(win.viewport.history,
+                          guides=[guides.index(g) for g in sel if g in guides])
     win.viewport.update()
 
 
