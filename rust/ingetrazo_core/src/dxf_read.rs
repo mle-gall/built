@@ -14,6 +14,9 @@ use std::{
     collections::{BTreeMap, HashMap},
     path::{Path, PathBuf},
 };
+#[path = "dxf_ascii.rs"]
+mod ascii;
+
 type Obj<'p> = Bound<'p, PyAny>;
 type Ring = Vec<DVec3>;
 #[derive(Default)]
@@ -117,13 +120,28 @@ fn unit(code: i64) -> Option<f64> {
 #[pyfunction]
 fn dxf_read_unit_scale(path: &Obj<'_>) -> PyResult<(Option<f64>, i64)> {
     let py = path.py();
+    if let Ok(doc) = path.cast::<PreparedDrawing>() {
+        let code = doc.borrow().source.units();
+        return Ok((unit(code), code));
+    }
     let doc = if path.hasattr("header")? {
         path.clone()
     } else {
-        match dxf_open_document(py, path.extract()?) {
-            Ok(d) => d.into_bound(py),
-            Err(_) => return Ok((None, 0)),
-        }
+        let path = path.extract::<PathBuf>()?;
+        let result = DocumentOpen::stage(py, None, move |py, _| {
+            if let Some(doc) = py.detach(|| NativeDocument::read(&path)) {
+                let code = doc.units();
+                return Ok((unit(code), code).into_pyobject(py)?.into_any().unbind());
+            }
+            Ok(dxf_read_unit_scale(&document(py, &path)?)?
+                .into_pyobject(py)?
+                .into_any()
+                .unbind())
+        });
+        return match result {
+            Ok(value) => value.extract(py),
+            Err(_) => Ok((None, 0)),
+        };
     };
     let code = doc
         .getattr("header")?
@@ -166,10 +184,13 @@ fn sample_sizes(e: &Obj<'_>, sizes: &mut Vec<f64>) -> PyResult<()> {
 #[pyfunction]
 fn dxf_suggest_unit_scale(py: Python<'_>, doc: Py<PyAny>) -> PyResult<Py<PyAny>> {
     DocumentOpen::stage(py, None, move |py, _| {
-        Ok(suggest_unit(doc.bind(py))?
-            .into_pyobject(py)?
-            .into_any()
-            .unbind())
+        let suggestion = if let Ok(d) = doc.bind(py).cast::<PreparedDrawing>() {
+            let d = d.borrow();
+            (d.source.suggestion(), d.source.units())
+        } else {
+            suggest_unit(doc.bind(py))?
+        };
+        Ok(suggestion.into_pyobject(py)?.into_any().unbind())
     })
 }
 fn suggest_unit(doc: &Obj<'_>) -> PyResult<(Option<f64>, i64)> {
@@ -573,17 +594,46 @@ fn sheet_records(text: &str) -> Option<Drawing> {
     }
     end.then_some(m)
 }
-fn sheet_file(path: &Path) -> Option<Drawing> {
-    use std::io::Read;
-    let mut file = std::fs::File::open(path).ok()?;
-    let mut prefix = [0; 19];
-    file.read_exact(&mut prefix).ok()?;
-    if &prefix != b"0\nSECTION\n2\nTABLES\n" {
-        return None;
+enum NativeDocument {
+    Sheet(std::sync::Arc<Drawing>),
+    Cad(ascii::Document),
+}
+impl NativeDocument {
+    fn read(path: &Path) -> Option<Self> {
+        use std::io::{BufRead, BufReader, Read};
+        let mut file = BufReader::new(std::fs::File::open(path).ok()?);
+        // Binary DXF goes directly to the compatibility reader.
+        if file.fill_buf().ok()?.starts_with(b"AutoCAD Binary DXF") {
+            return None;
+        }
+        let mut raw = String::new();
+        file.read_to_string(&mut raw).ok()?;
+        let text = raw.as_str();
+        if text.starts_with("0\nSECTION\n2\nTABLES\n") {
+            if let Some(sheet) = sheet_records(text) {
+                return Some(Self::Sheet(std::sync::Arc::new(sheet)));
+            }
+        }
+        ascii::decode(text).map(Self::Cad)
     }
-    let mut text = String::from_utf8(prefix.to_vec()).ok()?;
-    file.read_to_string(&mut text).ok()?;
-    sheet_records(&text)
+    fn units(&self) -> i64 {
+        match self {
+            Self::Sheet(_) => 6,
+            Self::Cad(doc) => doc.units,
+        }
+    }
+    fn suggestion(&self) -> Option<f64> {
+        match self {
+            Self::Sheet(sheet) => infer_unit(Some(1.), sheet.sample.clone()),
+            Self::Cad(doc) => doc.suggestion(),
+        }
+    }
+    fn model(&self, tolerance: f64) -> Option<std::sync::Arc<Drawing>> {
+        match self {
+            Self::Sheet(sheet) => Some(sheet.clone()),
+            Self::Cad(doc) => doc.drawing(tolerance).map(std::sync::Arc::new),
+        }
+    }
 }
 /// An isolated, strictly convex CAD facet has no welds, crossings, shared
 /// edges or straight corners for the stitching pipeline to repair. Use a
@@ -877,17 +927,25 @@ fn prepare<'p>(
     Ok((groups, tags, stats).into_pyobject(py)?.into_any())
 }
 #[pyclass]
-struct PreparedSheet(std::sync::Arc<Drawing>);
+struct PreparedDrawing {
+    source: std::sync::Arc<NativeDocument>,
+    path: PathBuf,
+}
 
 /// The options dialog and the import command share the same decoded drawing.
 /// Keep open_document's public ezdxf API for scripts that inspect arbitrary CAD records.
 #[pyfunction]
 fn dxf_prepare_import(py: Python<'_>, path: PathBuf) -> PyResult<Py<PyAny>> {
     DocumentOpen::stage(py, None, move |py, _| {
-        if let Some(mut sheet) = py.detach(|| sheet_file(&path)) {
-            // ezdxf supplies metres when it reconstructs a headerless R12 document.
-            let suggestion = infer_unit(Some(1.), std::mem::take(&mut sheet.sample));
-            let source = Py::new(py, PreparedSheet(std::sync::Arc::new(sheet)))?;
+        if let Some(decoded) = py.detach(|| NativeDocument::read(&path)) {
+            let suggestion = decoded.suggestion();
+            let source = Py::new(
+                py,
+                PreparedDrawing {
+                    source: std::sync::Arc::new(decoded),
+                    path,
+                },
+            )?;
             Ok((source, suggestion).into_pyobject(py)?.into_any().unbind())
         } else {
             let doc = document(py, &path)?;
@@ -914,24 +972,31 @@ fn dxf_load<'p>(
     let result = DocumentOpen::stage(py, progress, move |py, cb| {
         cb.call1((0.05, "Reading file…"))?;
         let source = doc.map(|d| d.into_bound(py));
-        let model = match source.as_ref().and_then(|s| s.cast::<PreparedSheet>().ok()) {
-            Some(sheet) => sheet.borrow().0.clone(),
+        let tolerance = (0.01 / scale).max(1e-6);
+        let cached = source
+            .as_ref()
+            .and_then(|s| s.cast::<PreparedDrawing>().ok())
+            .map(|s| {
+                let d = s.borrow();
+                (d.source.clone(), d.path.clone())
+            });
+        let model = if let Some((d, _)) = &cached {
+            py.detach(|| d.model(tolerance))
+        } else if source.is_none() {
+            py.detach(|| NativeDocument::read(&path)?.model(tolerance))
+        } else {
+            None
+        };
+        let model = match model {
+            Some(model) => model,
             None => {
-                let simple = if source.is_none() {
-                    py.detach(|| sheet_file(&path))
-                } else {
-                    None
+                let doc = match (cached, source) {
+                    (Some((_, original)), _) => document(py, &original)?,
+                    (_, Some(doc)) => doc,
+                    _ => document(py, &path)?,
                 };
-                std::sync::Arc::new(if let Some(model) = simple {
-                    model
-                } else {
-                    let doc = match source {
-                        Some(d) => d,
-                        None => document(py, &path)?,
-                    };
-                    cb.call1((0.2, "Collecting entities…"))?;
-                    drawing(&doc, (0.01 / scale).max(1e-6))?
-                })
+                cb.call1((0.2, "Collecting entities…"))?;
+                std::sync::Arc::new(drawing(&doc, tolerance)?)
             }
         };
         let stem = path.file_stem().unwrap_or_default().to_string_lossy();
