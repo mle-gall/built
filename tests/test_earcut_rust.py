@@ -12,13 +12,14 @@ face and the pixels of every picture test."""
 from __future__ import annotations
 
 import hashlib
+import math
+import random
 
 import numpy as np
-import random
-import math
 from ingetrazo_core import Vec3
 
 from core import triangulate as T
+
 
 def _record(digest, points, holes):
     triangles = T.earcut(points, holes)
@@ -85,16 +86,19 @@ def test_projected_vertex_identity_and_order():
     digest = hashlib.sha256()
     for k in range(500):
         size = rng.randrange(3, 65)
-        xy = [(r * math.cos(i * math.tau / size), r * math.sin(i * math.tau / size))
-              for i, r in enumerate(rng.uniform(2., 7.) for _ in range(size))]
+        radii = [rng.uniform(2., 7.) for _ in range(size)]
         tilt = rng.uniform(-2., 2.)
-        def point(x,y):
-            return Vec3(600000.+x, 6800000.+y, tilt*x+y)
-        outer = [point(x,y) for x,y in xy]
-        hole = [point(-1,-1),point(-1,1),point(1,1),point(1,-1)] if k%2 else []
-        points = outer + hole
-        indices = {id(p):i for i,p in enumerate(points)}
-        for tri in T.triangulate(outer,[hole]):
+
+        def point(x, y):
+            return Vec3(600000. + x, 6800000. + y, tilt * x + y)
+
+        outer = [point(r * math.cos(i * math.tau / size),
+                       r * math.sin(i * math.tau / size))
+                 for i, r in enumerate(radii)]
+        hole = [point(-1, -1), point(-1, 1), point(1, 1), point(1, -1)] if k % 2 else []
+        indices = {id(p): i for i, p in enumerate(outer + hole)}
+        for tri in T.triangulate(outer, [hole]):
             digest.update(bytes(indices[id(p)] for p in tri))
+        digest.update(bytes(indices[id(p)] for p in tri))
         digest.update(b'\xff')
     assert digest.hexdigest() == "d0d073e0c5bd3c2c1cde744f4416a5e93cbedcdf907776c0eb5c9759b78b6389"
