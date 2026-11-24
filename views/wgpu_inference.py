@@ -801,10 +801,14 @@ def snap(index, row, view, x, y, *, work_point=..., **options):
         from core.topology import _KEY_DECIMALS, _key
         excluded = {_key(v.position) for v in moving}
 
-        def keys(points):
-            return [tuple(round(c, _KEY_DECIMALS) for c in p) for p in points.tolist()]
-        edges = edges.keep(edges.in_group() | np.array(
-            [a not in excluded and b not in excluded for a, b in zip(keys(edges.a), keys(edges.b))], bool))
+        def free(i):
+            # Only the open context's own edges can hold what moves.
+            return all(tuple(round(c, _KEY_DECIMALS) for c in p) not in excluded
+                       for p in (edges.a[i].tolist(), edges.b[i].tolist()))
+        keep = edges.in_group()
+        for i in np.flatnonzero(~keep).tolist():
+            keep[i] = free(i)
+        edges = edges.keep(keep)
         point = view.tools.work_point(x, y) or point
         on_face = False
     exclude = getattr(tool, 'snap_excluded', lambda: None)()

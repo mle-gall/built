@@ -648,6 +648,11 @@ pub struct PlaceBvh {
 }
 
 impl PlaceBvh {
+    /// ``(placements in the tree, placements always asked)``.
+    pub fn members(&self) -> (usize, usize) {
+        (self.order.len(), self.always.len())
+    }
+
     pub fn new(places: &[Placement], may_meet: impl Fn(&Placement) -> bool) -> PlaceBvh {
         let mut ids = Vec::new();
         let mut always = Vec::new();
