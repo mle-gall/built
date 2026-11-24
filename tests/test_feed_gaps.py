@@ -140,7 +140,11 @@ def test_leaving_an_instance_names_the_definition_and_its_copies(store, guard):
             # fresh keys: every old key removed, every new one created.
             assert _got(change) == rec, phase
         else:
-            assert (change.backing, change.replaced) == ("python", True), phase
+            # The push made the Python copy store-backed first
+            # (docs/rust-tools.md §24): the definition takes a store, and
+            # undo gives it back its Python objects.
+            backing = "python" if phase == "undo" else "store"
+            assert (change.backing, change.replaced) == (backing, True), phase
 
 
 # ------------------------------------------- 2. drawing beside small plates
