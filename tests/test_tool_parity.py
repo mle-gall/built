@@ -99,3 +99,8 @@ def test_the_arcs_match_the_recorded_python_tools(name):
 @pytest.mark.parametrize("name", sorted(tp.SCALE_SCENARIOS))
 def test_scale_matches_the_recorded_python_tool(name):
     assert tp.run_scale(tp.SCALE_SCENARIOS[name]) == tp.load("scale")[name]
+
+
+@pytest.mark.parametrize("name", sorted(tp.ROTATE_SCENARIOS))
+def test_rotate_matches_the_recorded_python_tool(name):
+    assert tp.run_rotate(tp.ROTATE_SCENARIOS[name]) == tp.load("rotate")[name]

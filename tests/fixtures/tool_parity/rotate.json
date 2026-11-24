@@ -1,0 +1,28 @@
+{
+"click_then_retype": [
+  {"start":[0.0,0.0,0.0],"reference":null,"copy":false,"array":false,"vertices":[[0.0,0.0,0.0],[0.0,1.0,0.0],[1.0,0.0,0.0],[1.0,1.0,0.0]],"placements":[[5.0,0.0,0.0]],"undo":0,"result":null},
+  {"start":[0.0,0.0,0.0],"reference":[1.0,0.0,0.0],"copy":false,"array":false,"vertices":[[0.0,0.0,0.0],[0.0,1.0,0.0],[1.0,0.0,0.0],[1.0,1.0,0.0]],"placements":[[5.0,0.0,0.0]],"undo":0,"result":null},
+  {"start":[0.0,0.0,0.0],"reference":[1.0,0.0,0.0],"copy":false,"array":false,"vertices":[[-1.0,0.0,0.0],[-1.0,1.0,0.0],[0.0,0.0,0.0],[0.0,1.0,0.0]],"placements":[[5.0,0.0,0.0]],"undo":0,"result":null},
+  {"start":null,"reference":null,"copy":false,"array":false,"vertices":[[-1.0,0.0,0.0],[-1.0,1.0,0.0],[0.0,0.0,0.0],[0.0,1.0,0.0]],"placements":[[5.0,0.0,0.0]],"undo":1,"result":null},
+  {"start":null,"reference":null,"copy":false,"array":false,"vertices":[[0.0,0.0,0.0],[0.707106781,-0.707106781,0.0],[0.707106781,0.707106781,0.0],[1.414213562,0.0,0.0]],"placements":[[5.0,0.0,0.0]],"undo":1,"result":true},
+  {"start":null,"reference":null,"copy":false,"array":false,"vertices":[[0.0,0.0,0.0],[0.0,1.0,0.0],[1.0,0.0,0.0],[1.0,1.0,0.0]],"placements":[[5.0,0.0,0.0]],"undo":0,"result":null}],
+"cancel_live_preview": [
+  {"start":[0.0,0.0,0.0],"reference":null,"copy":false,"array":false,"vertices":[[0.0,0.0,0.0],[0.0,1.0,0.0],[1.0,0.0,0.0],[1.0,1.0,0.0]],"placements":[[5.0,0.0,0.0]],"undo":0,"result":null},
+  {"start":[0.0,0.0,0.0],"reference":[2.0,0.0,0.0],"copy":false,"array":false,"vertices":[[0.0,0.0,0.0],[0.0,1.0,0.0],[1.0,0.0,0.0],[1.0,1.0,0.0]],"placements":[[5.0,0.0,0.0]],"undo":0,"result":null},
+  {"start":[0.0,0.0,0.0],"reference":[2.0,0.0,0.0],"copy":false,"array":false,"vertices":[[-0.707106781,0.707106781,0.0],[0.0,0.0,0.0],[0.0,1.414213562,0.0],[0.707106781,0.707106781,0.0]],"placements":[[5.0,0.0,0.0]],"undo":0,"result":null},
+  {"start":null,"reference":null,"copy":false,"array":false,"vertices":[[0.0,0.0,0.0],[0.0,1.0,0.0],[1.0,0.0,0.0],[1.0,1.0,0.0]],"placements":[[5.0,0.0,0.0]],"undo":0,"result":null}],
+"coincident_arm_then_value": [
+  {"start":[0.0,0.0,0.0],"reference":null,"copy":false,"array":false,"vertices":[[0.0,0.0,0.0],[0.0,1.0,0.0],[1.0,0.0,0.0],[1.0,1.0,0.0]],"placements":[[5.0,0.0,0.0]],"undo":0,"result":null},
+  {"start":[0.0,0.0,0.0],"reference":null,"copy":false,"array":false,"vertices":[[0.0,0.0,0.0],[0.0,1.0,0.0],[1.0,0.0,0.0],[1.0,1.0,0.0]],"placements":[[5.0,0.0,0.0]],"undo":0,"result":null},
+  {"start":[0.0,0.0,0.0],"reference":[1.0,0.0,0.0],"copy":false,"array":false,"vertices":[[0.0,0.0,0.0],[0.0,1.0,0.0],[1.0,0.0,0.0],[1.0,1.0,0.0]],"placements":[[5.0,0.0,0.0]],"undo":0,"result":null},
+  {"start":null,"reference":null,"copy":false,"array":false,"vertices":[[-1.0,0.0,0.0],[-1.0,1.0,0.0],[0.0,0.0,0.0],[0.0,1.0,0.0]],"placements":[[5.0,0.0,0.0]],"undo":1,"result":true}],
+"copy_polar_array": [
+  {"start":null,"reference":null,"copy":false,"array":false,"vertices":[[0.0,0.0,0.0],[0.0,1.0,0.0],[1.0,0.0,0.0],[1.0,1.0,0.0]],"placements":[[5.0,0.0,0.0]],"undo":0,"result":null},
+  {"start":null,"reference":null,"copy":true,"array":false,"vertices":[[0.0,0.0,0.0],[0.0,1.0,0.0],[1.0,0.0,0.0],[1.0,1.0,0.0]],"placements":[[5.0,0.0,0.0]],"undo":0,"result":true},
+  {"start":[0.0,0.0,0.0],"reference":null,"copy":true,"array":false,"vertices":[[0.0,0.0,0.0],[0.0,1.0,0.0],[1.0,0.0,0.0],[1.0,1.0,0.0]],"placements":[[5.0,0.0,0.0]],"undo":0,"result":null},
+  {"start":[0.0,0.0,0.0],"reference":[1.0,0.0,0.0],"copy":true,"array":false,"vertices":[[0.0,0.0,0.0],[0.0,1.0,0.0],[1.0,0.0,0.0],[1.0,1.0,0.0]],"placements":[[5.0,0.0,0.0]],"undo":0,"result":null},
+  {"start":null,"reference":null,"copy":false,"array":true,"vertices":[[0.0,0.0,0.0],[0.0,1.0,0.0],[1.0,0.0,0.0],[1.0,1.0,0.0]],"placements":[[3.535533906,3.535533906,0.0],[5.0,0.0,0.0]],"undo":1,"result":true},
+  {"start":null,"reference":null,"copy":false,"array":true,"vertices":[[0.0,0.0,0.0],[0.0,1.0,0.0],[1.0,0.0,0.0],[1.0,1.0,0.0]],"placements":[[-3.535533906,3.535533906,0.0],[0.0,5.0,0.0],[3.535533906,3.535533906,0.0],[5.0,0.0,0.0]],"undo":1,"result":true},
+  {"start":null,"reference":null,"copy":false,"array":true,"vertices":[[0.0,0.0,0.0],[0.0,1.0,0.0],[1.0,0.0,0.0],[1.0,1.0,0.0]],"placements":[[3.535533906,3.535533906,0.0],[4.330127019,2.5,0.0],[4.829629131,1.294095226,0.0],[5.0,0.0,0.0]],"undo":1,"result":true},
+  {"start":null,"reference":null,"copy":false,"array":false,"vertices":[[0.0,0.0,0.0],[0.0,1.0,0.0],[1.0,0.0,0.0],[1.0,1.0,0.0]],"placements":[[5.0,0.0,0.0]],"undo":0,"result":null}]
+}

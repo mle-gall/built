@@ -951,6 +951,55 @@ def run_scale(steps):
     return out
 
 
+ROTATE_SCENARIOS = {
+    "click_then_retype": [("click", 0, 0), ("click", 1, 0), ("hover", 0, 2),
+                          ("click", 0, 2), ("value", -45.0), ("undo",)],
+    "cancel_live_preview": [("click", 0, 0), ("click", 2, 0),
+                            ("hover", 1, 1), ("cancel",)],
+    "coincident_arm_then_value": [("click", 0, 0), ("click", 0, 0),
+                                   ("click", 1, 0), ("value", 90.0)],
+    "copy_polar_array": [("group",), ("copy",), ("click", 0, 0),
+                         ("click", 1, 0), ("value", 45.0),
+                         ("array", 3, "x"), ("array", 3, "/"), ("undo",)],
+}
+
+
+def run_rotate(steps):
+    from PySide6.QtCore import QPointF, Qt
+    from ingetrazo_core import Vec3
+    from tools.base import ToolContext
+    from tools.rotate import RotateTool
+
+    view = MoveView()
+    view.scene.select(view.scene.mesh.faces)
+    tool = RotateTool()
+    tool.on_activate(view)
+    out = []
+    for kind, *args in steps:
+        result = None
+        if kind in ("click", "hover"):
+            ctx = ToolContext(view, Vec3(*args, 0.), QPointF(), Qt.NoModifier, None)
+            (tool.on_click if kind == "click" else tool.on_hover)(ctx)
+        elif kind == "copy":
+            result = tool.on_key(view, Qt.Key_Control, Qt.NoModifier)
+        elif kind == "group":
+            view.scene.select([view.group])
+        elif kind == "value":
+            result = tool.on_value(view, args[0])
+        elif kind == "array":
+            result = tool.on_array_value(view, *args)
+        elif kind == "cancel":
+            tool.on_cancel(view)
+        elif kind == "undo":
+            view.history.undo()
+        out.append({"start": _pt(tool.start_point), "reference": _pt(tool.ref_point),
+                    "copy": tool.cursor_plus, "array": tool.array_pending(view),
+                    "vertices": sorted(_pt(v.position) for v in view.scene.mesh.vertices),
+                    "placements": sorted(_pt(g.xform.map(Vec3())) for g in view.scene.groups),
+                    "undo": len(view.history.undo_stack), "result": result})
+    return out
+
+
 def _compact(fixture) -> str:
     """One scenario step per line: the protractors' segments make an
     indented file several times larger than the data."""
@@ -981,6 +1030,9 @@ def record(which=("line", "select", "rectangle", "move", "circle", "rotated_rect
     if "rotated_rectangle" in which:
         rot = {name: run_rot(steps) for name, steps in ROT_SCENARIOS.items()}
         (FIXTURES / "rotated_rectangle.json").write_text(_compact(rot))
+    if "rotate" in which:
+        rotate = {name: run_rotate(steps) for name, steps in ROTATE_SCENARIOS.items()}
+        (FIXTURES / "rotate.json").write_text(_compact(rotate))
     if "scale" in which:
         scale = {name: run_scale(steps) for name, steps in SCALE_SCENARIOS.items()}
         (FIXTURES / "scale.json").write_text(_compact(scale))
