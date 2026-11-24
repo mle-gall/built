@@ -7,17 +7,10 @@ selected it does nothing (Zoom Extents is one key away).
 """
 from __future__ import annotations
 
-import os
-import sys
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
-
-if QApplication.instance() is None:
-    QApplication(sys.argv[:1])
 
 from core.group import Group
 from core.mesh import Mesh
@@ -86,9 +79,8 @@ def test_bounds_include_nested_children():
     assert _corners(scene) == ((0, 0, 0), (21, 1, 0))
 
 
-def _window():
-    from views.main_window import MainWindow
-    win = MainWindow()
+def _window(native_host):
+    win = native_host.window
     _square(win.viewport.scene.mesh, 0)
     return win
 
@@ -97,8 +89,8 @@ def _camera_state(cam):
     return (QVector3D(cam.target), cam.distance)
 
 
-def test_zoom_selection_frames_the_selection_not_the_model():
-    win = _window()
+def test_zoom_selection_frames_the_selection_not_the_model(native_host):
+    win = _window(native_host)
     scene = win.viewport.scene
     far = _square(scene.mesh, 500, size=2.0)
     scene.select([far])
@@ -106,37 +98,30 @@ def test_zoom_selection_frames_the_selection_not_the_model():
     cam = win.viewport.camera
     assert cam.target.x() == pytest.approx(501, abs=2.0)
     assert cam.distance < 40                      # not the 500 m model
-    win._saved_version = scene.version
-    win.close()
 
 
-def test_zoom_selection_with_nothing_selected_does_nothing():
-    win = _window()
+def test_zoom_selection_with_nothing_selected_does_nothing(native_host):
+    win = _window(native_host)
     cam = win.viewport.camera
     cam.target, cam.distance = V(7, 8, 9), 123.0
     before = _camera_state(cam)
     win._on_zoom_selection()
     assert _camera_state(cam) == before
-    win._saved_version = win.viewport.scene.version
-    win.close()
 
 
-def test_the_shortcut_and_the_button_run_the_action():
+def test_the_shortcut_and_the_button_run_the_action(native_host):
     """Ctrl+Alt+Z is bound to the same action the toolbar button and the
     Camera menu carry, and it stays enabled: nothing selected is a no-op
     with a status-bar hint, not a greyed-out button that never wakes up."""
-    from PySide6.QtGui import QKeySequence
-    win = _window()
-    act = win._act_zoom_selection
+    win = _window(native_host)
+    act = win._registry_actions["view:zoom_selection"]
     assert act.isEnabled()
-    assert act.shortcut() == QKeySequence("Ctrl+Alt+Z")
+    assert act.portable_keys() == ["Ctrl+Alt+Z"]
     scene = win.viewport.scene
     far = _square(scene.mesh, 500, size=2.0)
     scene.select([far])
     act.trigger()
     assert win.viewport.camera.target.x() == pytest.approx(501, abs=2.0)
-    win._saved_version = scene.version
-    win.close()
 
 
 def test_a_guide_line_counts_by_its_point_not_its_10_km_segment():
@@ -161,13 +146,11 @@ def test_only_guides_selected_frames_their_points():
     assert _corners(scene) == ((2, 4, 0), (2, 4, 0))
 
 
-def test_select_all_with_a_guide_then_zoom_selection_stays_close():
+def test_select_all_with_a_guide_then_zoom_selection_stays_close(native_host):
     from core.guide import Guide
-    win = _window()
+    win = _window(native_host)
     scene = win.viewport.scene
     scene.guides.append(Guide(V(0, 0), V(1, 0)))
     win._on_select_all()
     win._on_zoom_selection()
     assert win.viewport.camera.distance < 40          # not 10 km
-    win._saved_version = scene.version
-    win.close()
