@@ -142,7 +142,19 @@ impl PyMeshStore {
         let paint = AttrChanges::new(owner)?;
         let mut landed = Vec::new();
         let mut folded = Vec::new();
-        let (mut dirty, moved, before) = if let Some(delta) = delta {
+        // This scan compares the actual post-rounding positions. If it succeeds,
+        // no receiver exists and the general weld scan would repeat its work.
+        let free_move = delta
+            .filter(|_| !carry)
+            .and_then(|d| work.inner.move_unjoined_slots(&source, d));
+        let may_join = delta.is_some() && free_move.is_none();
+        let (mut dirty, moved, before) = if let Some(slots) = free_move {
+            let keys = slots
+                .iter()
+                .map(|&v| work.inner.key(Kind::Vertex, v))
+                .collect();
+            (slots.len(), keys, None)
+        } else if let Some(delta) = delta {
             let Some(start) =
                 work.begin_vertex_move(py, source, landing.clone(), delta, true, hypot)?
             else {
@@ -157,25 +169,29 @@ impl PyMeshStore {
             paint.carry(&work, &moved, matrix, hypot)?;
         }
         if delta.is_some() {
-            let moving: HashSet<_> = moved
-                .iter()
-                .filter_map(|&k| work.inner.slot(Kind::Vertex, k))
-                .collect();
-            let moved_cells: HashSet<_> = moving
-                .iter()
-                .map(|&v| cell(*work.inner.state.vpos.get(v as usize)))
-                .collect();
-            let targets: HashSet<_> = work
-                .inner
-                .live_slots(Kind::Vertex)
-                .into_iter()
-                .filter(|v| !moving.contains(v))
-                .map(|v| cell(*work.inner.state.vpos.get(v as usize)))
-                .filter(|p| moved_cells.contains(p))
-                .collect();
-            let Some((joined, bumps, trims)) = work.inner.weld_landing(&moving).map_err(op_err)?
-            else {
-                return Ok(None);
+            let ((joined, bumps, trims), targets) = if may_join {
+                let moving: HashSet<_> = moved
+                    .iter()
+                    .filter_map(|&k| work.inner.slot(Kind::Vertex, k))
+                    .collect();
+                let moved_cells: HashSet<_> = moving
+                    .iter()
+                    .map(|&v| cell(*work.inner.state.vpos.get(v as usize)))
+                    .collect();
+                let targets: HashSet<_> = work
+                    .inner
+                    .live_slots(Kind::Vertex)
+                    .into_iter()
+                    .filter(|v| !moving.contains(v))
+                    .map(|v| cell(*work.inner.state.vpos.get(v as usize)))
+                    .filter(|p| moved_cells.contains(p))
+                    .collect();
+                let Some(weld) = work.inner.weld_landing(&moving).map_err(op_err)? else {
+                    return Ok(None);
+                };
+                (weld, targets)
+            } else {
+                ((false, 0, Vec::new()), HashSet::new())
             };
             let Some((fold_bumps, folds)) =
                 work.fold_nonplanar(py, landing.clone(), 0.001, hypot)?
