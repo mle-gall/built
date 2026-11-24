@@ -60,11 +60,10 @@ SCRIPT = textwrap.dedent(r"""
         opened.append(str(path))
         return real_project(self, path, *a, **k)
     mw.MainWindow.open_project = open_project
-    from PySide6.QtWidgets import QMessageBox
     def question(parent, title, text, *a, **k):
         asked.append(title)
-        return QMessageBox.Yes if recover else QMessageBox.No
-    mw._dialogs.question = question
+        return "yes" if recover else "no"
+    mw._dialogs.ask = question
     import main as M
     M._gpu_available = lambda interactive: True  # this subprocess tests document recovery offscreen
     def report():

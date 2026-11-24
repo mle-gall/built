@@ -4,9 +4,19 @@ mod captured_frame;
 use captured_frame::CapturedFrame;
 mod window_timers;
 mod window_document;
+mod close_documents;
+mod component_replacement;
+mod component_files;
+mod dwg_process;
+mod edge_commands;
 mod face_commands;
+mod file_converters;
+mod file_import;
+mod file_placement;
+mod linked_files;
 mod model_edit;
 mod profile_commands;
+mod recovery_commands;
 mod model_visibility;
 mod model_clipboard;
 mod group_edit;
@@ -2566,6 +2576,10 @@ impl Renderer {
                      fields: Vec<ui::dialog::Field>, buttons: Vec<ui::dialog::Button>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_dialog(seq, title, note, width, fields, buttons); }
     }
+    #[pyo3(signature=(seq, marks, matrix, width, height, origin=(0.0, 0.0)))]
+    fn ui_set_join_marks(&mut self, seq: &str, marks: PyRef<'_, edge_commands::JoinMarks>, matrix: [f64; 16], width: f64, height: f64, origin: (f64, f64)) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_join_marks(seq, marks.project(matrix, width, height, origin)); }
+    }
     fn ui_dialog_open(&self) -> bool { self.ui.as_ref().is_some_and(|ui| ui.dialog_open()) }
     fn ui_font_picker(&mut self, draft: &str) -> PyResult<()> {
         let choice = serde_json::from_str(draft).map_err(|e| PyValueError::new_err(e.to_string()))?;
@@ -3008,9 +3022,19 @@ fn context_targets(hit: bool, selection: &Bound<'_, PyAny>) -> PyResult<Vec<Py<P
 #[pymodule]
 pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     window_document::register(m)?;
+    close_documents::register(m)?;
+    component_replacement::register(m)?;
+    component_files::register(m)?;
+    m.add_class::<dwg_process::DwgConverter>()?;
+    edge_commands::register(m)?;
     face_commands::register(m)?;
+    file_converters::register(m)?;
+    file_import::register(m)?;
+    file_placement::register(m)?;
+    linked_files::register(m)?;
     model_edit::register(m)?;
     profile_commands::register(m)?;
+    recovery_commands::register(m)?;
     model_visibility::register(m)?;
     m.add_class::<model_clipboard::ModelClipboard>()?;
     group_edit::register(m)?;

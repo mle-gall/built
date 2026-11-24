@@ -465,8 +465,8 @@ def test_every_untitled_slot_is_offered_back(win, monkeypatch, tmp_path):
         _face(s, z)
         igz_format.save_scene(s, autosave.slot_for(None, untitled=n))
     try:
-        monkeypatch.setattr("views.chrome_dialogs.question",
-                            lambda *a, **k: QMessageBox.Yes)
+        monkeypatch.setattr("views.chrome_dialogs.ask",
+                            lambda *a, **k: "yes")
         win._offer_untitled_recovery()
         docs = win.documents()
         assert len(docs) == 2

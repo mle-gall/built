@@ -11,21 +11,16 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from pathlib import Path  # noqa: E402
 
 import pytest  # noqa: E402
-from PySide6.QtWidgets import QApplication  # noqa: E402
+from tests.shell_isolation import restore_shell_patches  # noqa: E402,F401
 
 from formats import dwg_bridge  # noqa: E402
 
-_app = QApplication.instance() or QApplication([])
-
-
 @pytest.fixture
-def window():
-    from views.main_window import MainWindow
-    w = MainWindow()
-    w.show()
-    yield w
-    w._saved_version = w.viewport.scene.version
-    w.close()
+def window(tmp_path):
+    from app_shell.host import Host
+    host = Host(0, 1280, 800, 2.0, settings=str(tmp_path / "settings"))
+    yield host.window
+    host.close()
 
 
 @pytest.fixture
@@ -71,6 +66,8 @@ def test_cancel_is_quiet_and_reported_in_the_status_bar(
 
 def test_the_import_job_offers_cancel_and_cancel_stops_the_converter(
         window, dialogs, monkeypatch):
+    from views import chrome_dialogs
+    monkeypatch.setattr(chrome_dialogs, "live", lambda _: window.view)
     seen = {}
 
     def convert(self, dwg_path):

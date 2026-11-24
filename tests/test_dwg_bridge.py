@@ -164,7 +164,7 @@ def test_check_reports_the_converter(capsys):
     assert "DWG converter" in capsys.readouterr().out
 
 
-# ---- Converter as a QProcess (#401) -------------------------------------------
+# ---- Cancellable converter (#401) -------------------------------------------
 _FAKE = r"""\
 import sys, time
 mode, out = sys.argv[1], sys.argv[2]
@@ -247,19 +247,16 @@ def test_converter_timeout_kills_the_process(fake_converter, tmp_path, monkeypat
 
 
 def test_converter_cancel_keeps_the_event_loop_alive(fake_converter, tmp_path):
-    from PySide6.QtCore import QTimer
-
     fake_converter("hang")
-    conv = dwg_bridge.DwgConverter()
     ticks = []
-    ticker = QTimer()
-    ticker.timeout.connect(lambda: ticks.append(1))
-    ticker.start(20)
-    QTimer.singleShot(400, conv.cancel)
+    def pump():
+        ticks.append(1)
+        if len(ticks) == 4:
+            conv.cancel()
+    conv = dwg_bridge.DwgConverter(pump)
     before = set(_temp_dirs_left())
     with pytest.raises(dwg_bridge.DwgBridgeError) as err:
         conv.convert(tmp_path / "a.dwg")
-    ticker.stop()
     assert err.value.kind == "cancelled"
     assert len(ticks) >= 3                # the GUI thread was not blocked
     assert set(_temp_dirs_left()) == before

@@ -30,7 +30,7 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import QEventLoop, QObject, QProcess, QTimer
+from ingetrazo_render import DwgConverter
 
 from core.paths import app_root
 
@@ -284,93 +284,6 @@ def dwg_to_dxf(dwg_path: Path) -> Path:
         raise
     _repair_dxf(out_dxf)
     return out_dxf
-
-
-class DwgConverter(QObject):
-    """``dwg2dxf`` in a :class:`QProcess` (#401).
-
-    :meth:`convert` blocks its caller in a local ``QEventLoop``, so it reads
-    like :func:`dwg_to_dxf` while the window keeps painting and a Cancel
-    button can call :meth:`cancel`. The :data:`_TIMEOUT` limit stays. On any
-    failure the temporary directory is removed before the error is raised."""
-
-    def __init__(self, parent: Optional[QObject] = None) -> None:
-        super().__init__(parent)
-        self._proc = QProcess(self)
-        self._proc.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
-        self._proc.finished.connect(self._on_finished)
-        self._proc.errorOccurred.connect(self._on_error)
-        self._timer = QTimer(self)
-        self._timer.setSingleShot(True)
-        self._timer.timeout.connect(self._on_timeout)
-        self._loop: Optional[QEventLoop] = None
-        self._out_dxf: Optional[Path] = None
-        self._error: Optional[DwgBridgeError] = None
-        self._done = True
-
-    def convert(self, dwg_path: Path) -> Path:
-        tool, out_dxf = _new_output()
-        self._out_dxf = out_dxf
-        self._error = None
-        self._done = False
-        cmd = _converter_command(tool, Path(dwg_path), out_dxf)
-        self._timer.start(int(_TIMEOUT * 1000))
-        self._proc.start(cmd[0], cmd[1:])
-        if not self._done:
-            self._loop = QEventLoop(self)
-            self._loop.exec()
-            self._loop = None
-        if self._error is None:
-            try:
-                _repair_dxf(out_dxf)
-            except OSError as exc:
-                self._error = DwgBridgeError(
-                    f"cannot read the converted DXF: {exc}")
-        if self._error is not None:
-            discard_temp_dxf(out_dxf)
-            raise self._error
-        return out_dxf
-
-    def cancel(self) -> None:
-        self._stop(DwgBridgeError("conversion cancelled", "cancelled"))
-
-    def _stop(self, error: DwgBridgeError) -> None:
-        """End the run with *error* and kill the process if it still lives."""
-        if self._done:
-            return
-        self._settle(error)
-        if self._proc.state() != QProcess.ProcessState.NotRunning:
-            self._proc.kill()
-            self._proc.waitForFinished(5000)
-
-    def _settle(self, error: Optional[DwgBridgeError]) -> None:
-        self._done = True
-        self._error = error
-        self._timer.stop()
-        if self._loop is not None:
-            self._loop.quit()
-
-    def _on_timeout(self) -> None:
-        self._stop(DwgBridgeError(
-            f"converter timed out after {_TIMEOUT:g} s", "timeout"))
-
-    def _on_error(self, err: QProcess.ProcessError) -> None:
-        if err == QProcess.ProcessError.FailedToStart:
-            self._stop(DwgBridgeError(
-                "the converter could not be started: "
-                + self._proc.errorString()))
-
-    def _on_finished(self, code: int, _status: QProcess.ExitStatus) -> None:
-        if self._done:
-            return
-        log = bytes(self._proc.readAll().data()).decode("utf-8", "replace")
-        assert self._out_dxf is not None
-        try:
-            _check_output(self._out_dxf, code, log)
-        except DwgBridgeError as exc:
-            self._settle(exc)
-        else:
-            self._settle(None)
 
 
 def discard_temp_dxf(dxf_path: Path) -> None:

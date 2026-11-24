@@ -23,6 +23,16 @@ pub type Field = (String, String, String, String, f64, f64, f64, Vec<String>, u3
 /// A dialog button: (id, label, key hint, role: 0 plain, 1 default, 2 discard, 3 cancel).
 pub type Button = (String, String, String, u8);
 
+fn reason_color(index: u8) -> Color32 {
+    match index {
+        0 => super::tokens::OK,
+        1 => super::tokens::ERROR,
+        2 => super::tokens::WARN,
+        3 => super::tokens::INK_2,
+        _ => ACCENT,
+    }
+}
+
 pub const DISABLED: u32 = 1;
 pub const FOCUS: u32 = 2;
 pub const MULTILINE: u32 = 4;
@@ -39,6 +49,7 @@ pub struct Dialog {
     title: String,
     note: String,
     width: f32,
+    join_marks: Option<Vec<(u8, f32, f32)>>,
     fields: Vec<Field>,
     buttons: Vec<Button>,
     page: usize,
@@ -56,7 +67,7 @@ pub struct Dialog {
 
 impl Dialog {
     pub(super) fn new(seq: String) -> Self {
-        Dialog { prefix: format!("dlg:{seq}"), seq, title: String::new(), note: String::new(), width: 420.0, fields: Vec::new(),
+        Dialog { prefix: format!("dlg:{seq}"), seq, title: String::new(), note: String::new(), width: 420.0, join_marks: None, fields: Vec::new(),
                  buttons: Vec::new(), page: 0, bufs: HashMap::new(), sent: HashMap::new(),
                  focus_pending: true, tab_focus: false, choice_open: None, color_open: None }
     }
@@ -144,6 +155,12 @@ impl Ui {
         if let Some(d) = self.dialog.as_mut() { d.update(title, note, width, fields, buttons); }
     }
 
+    pub fn set_join_marks(&mut self, seq: &str, points: Vec<(u8, f32, f32)>) {
+        if let Some(d) = self.dialog.as_mut().filter(|d| d.seq == seq) {
+            d.join_marks = Some(points);
+        }
+    }
+
     pub fn dialog_open(&self) -> bool { self.dialog.is_some() }
 
     /// Enter and Esc answer the form; the rest goes to its focused field.
@@ -200,8 +217,11 @@ impl Ui {
         let right = if review { screen.max.x - GUT } else { self.free_right(ctx, screen) - GUT };
         let Some(d) = self.dialog.as_mut() else { return };
         let w = d.width.min((right - left).max(300.0)).min(screen.width() - 2.0 * GUT);
-        let x = ((left + right) / 2.0 - w / 2.0).clamp(GUT, (screen.max.x - GUT - w).max(GUT));
-        let top = TOP_H + 36.0;
+        let join = d.join_marks.is_some();
+        let x = (if join { right - w } else { (left + right - w) / 2.0 }).clamp(GUT, (screen.max.x - GUT - w).max(GUT));
+        let top = if join {
+            (screen.bottom() - 184.0 - 24.0 * d.fields.len() as f32).max(TOP_H + GUT)
+        } else { TOP_H + 36.0 };
         let max_body = (screen.height() - top - 24.0 - 120.0).max(120.0);
         let mut out: Vec<String> = Vec::new();
         egui::Area::new(egui::Id::new("dialog"))
@@ -210,8 +230,15 @@ impl Ui {
             .order(egui::Order::Foreground)
             .show(ctx, |ui| {
                 let (all, _) = ui.allocate_exact_size(screen.size(), Sense::click_and_drag());
-                ui.painter().rect_filled(Rect::from_min_max(pos2(all.min.x, TOP_H), all.max), CornerRadius::ZERO,
-                                         SCRIM);
+                if let Some(marks) = &d.join_marks {
+                    let paint = ui.painter().with_clip_rect(Rect::from_min_max(pos2(left, TOP_H), pos2(right, all.max.y)));
+                    for &(reason, x, y) in marks {
+                        let radius = if reason == 0 { 4.0 } else { 6.0 };
+                        paint.circle(pos2(x, y), radius, reason_color(reason), Stroke::new(1.5_f32, INK));
+                    }
+                } else {
+                    ui.painter().rect_filled(Rect::from_min_max(pos2(all.min.x, TOP_H), all.max), CornerRadius::ZERO, SCRIM);
+                }
                 let at = Rect::from_min_size(pos2(x, top), vec2(w, screen.height() - top - GUT));
                 ui.scope_builder(egui::UiBuilder::new().max_rect(at), |ui| {
                     glass(Surface::Raised).inner_margin(Margin::same(14)).show(ui, |ui| {
@@ -290,6 +317,13 @@ pub(super) fn fields(ui: &mut egui::Ui, d: &mut Dialog, out: &mut Vec<String>) {
         let full = flags & FULL != 0;
         match kind {
             "caption" => { ui.add_space(SPACE_S); caption_at(ui, label, 4.0); }
+            "text" if id.starts_with("join_reason_") => {
+                let index = match &id["join_reason_".len()..] {
+                    "join" => 0, "kink" => 1, "branch" => 2, "flags" => 3, _ => 4,
+                };
+                ui.scope(|ui| super::kit::status_chip(ui, label, reason_color(index)))
+                    .response.on_hover_text(tip);
+            }
             "text" => {
                 egui::Frame::NONE.inner_margin(Margin { left: 4, right: 4, top: 0, bottom: 2 }).show(ui, |ui| {
                     ui.add(egui::Label::new(egui::RichText::new(if text.is_empty() { label } else { text })

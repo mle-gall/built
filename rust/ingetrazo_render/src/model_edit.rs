@@ -5,6 +5,24 @@ use pyo3::{
     types::{PyDict, PyList},
 };
 
+pub(super) fn busy<T>(
+    win: &Bound<'_, PyAny>,
+    label: &Bound<'_, PyAny>,
+    op: impl FnOnce() -> PyResult<T>,
+) -> PyResult<T> {
+    let py = win.py();
+    let chip = py
+        .import("views.chrome_dialogs")?
+        .call_method1("busy", (win, label))?;
+    chip.call_method0("__enter__")?;
+    let result = op();
+    match &result {
+        Ok(_) => chip.call_method1("__exit__", (py.None(), py.None(), py.None()))?,
+        Err(e) => chip.call_method1("__exit__", (e.get_type(py), e.value(py), e.traceback(py)))?,
+    };
+    result
+}
+
 pub(super) fn translated<'py>(
     py: Python<'py>,
     text: &str,
