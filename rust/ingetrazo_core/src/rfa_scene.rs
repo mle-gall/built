@@ -455,7 +455,76 @@ fn build_family<'p>(
         .call_method1("place_copy", (defs.get_item(0)?,))?;
     Ok((warnings, defs, placement))
 }
+#[pyfunction]
+fn rfa_history_do<'p>(command: &Obj<'p>, scene: &Obj<'p>) -> PyResult<()> {
+    let py = scene.py();
+    let history = py.import("core.history")?;
+    let copy_materials = |source: &Obj<'p>| py.get_type::<PyDict>().call1((source,));
+    let first = command.getattr("after")?.is_none();
+    if first {
+        command.setattr(
+            "materials_before",
+            copy_materials(&scene.getattr("materials")?)?,
+        )?;
+    }
+    let run = (|| -> PyResult<()> {
+        history
+            .getattr("SnapshotImport")?
+            .call_method1("do", (command, scene))?;
+        if first {
+            command.setattr(
+                "materials_after",
+                copy_materials(&scene.getattr("materials")?)?,
+            )?;
+            let registry = py
+                .import("core.bim_registry")?
+                .call_method1("get", (scene,))?;
+            let defaults = PyDict::new(py);
+            defaults.set_item("name", "OmniClass")?;
+            registry
+                .call_method1("setdefault", ("classification_systems", PyDict::new(py)))?
+                .call_method1("setdefault", ("omniclass", defaults))?;
+            command.setattr(
+                "registry_command",
+                history.call_method1("SetRegistryCommand", (registry,))?,
+            )?;
+        }
+        scene.setattr(
+            "materials",
+            copy_materials(&command.getattr("materials_after")?)?,
+        )?;
+        command
+            .getattr("registry_command")?
+            .call_method1("do", (scene,))?;
+        Ok(())
+    })();
+    if run.is_err() {
+        scene.setattr(
+            "materials",
+            copy_materials(&command.getattr("materials_before")?)?,
+        )?;
+    }
+    run
+}
+#[pyfunction]
+fn rfa_history_undo(command: &Obj<'_>, scene: &Obj<'_>) -> PyResult<()> {
+    let py = scene.py();
+    py.import("core.history")?
+        .getattr("SnapshotImport")?
+        .call_method1("undo", (command, scene))?;
+    scene.setattr(
+        "materials",
+        py.get_type::<PyDict>()
+            .call1((command.getattr("materials_before")?,))?,
+    )?;
+    if let Some(reg) = command.getattr_opt("registry_command")? {
+        reg.call_method1("undo", (scene,))?;
+    }
+    Ok(())
+}
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(rfa_history_do, m)?)?;
+    m.add_function(wrap_pyfunction!(rfa_history_undo, m)?)?;
     m.add_function(wrap_pyfunction!(rfa_read, m)?)?;
     m.add_function(wrap_pyfunction!(rfa_triangle_mesh, m)?)?;
     m.add_function(wrap_pyfunction!(rfa_apply, m)?)
