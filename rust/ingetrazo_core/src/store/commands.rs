@@ -102,6 +102,10 @@ impl Store {
     /// Move the selected position cells together. A landing needs the weld
     /// and defect checks. Detect it before writing so that path can take over.
     pub fn move_without_join(&mut self, source: &[Point], delta: Point) -> Option<usize> {
+        self.move_unjoined_slots(source, delta).map(|slots| slots.len())
+    }
+
+    pub(super) fn move_unjoined_slots(&mut self, source: &[Point], delta: Point) -> Option<Vec<u32>> {
         let source: HashSet<_> = source.iter().copied().map(cell).collect();
         let vertices = self.live_slots(Kind::Vertex);
         let mut moving = Vec::new();
@@ -131,7 +135,7 @@ impl Store {
         for &v in &moving {
             self.move_vertex(v, delta);
         }
-        Some(moving.len())
+        Some(moving)
     }
 
     pub(super) fn command_remove_face(&mut self, face: u32) {
