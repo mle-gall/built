@@ -11,7 +11,6 @@ from PySide6.QtWidgets import QApplication, QWidget
 
 from core.composition import RENDER_DPI, pen_px
 from tests.test_composer_canvas import _FakeViewport
-from views.composer import ComposerWindow
 from tests.controller_surface import ControllerSurface as Viewport
 
 _app = QApplication.instance() or QApplication([])
@@ -56,29 +55,3 @@ class _RecordingViewport(_FakeViewport):
         return None
 
 
-def test_a_raster_frame_renders_with_its_pens_and_hands_the_viewport_back():
-    host = QWidget()
-    host.viewport = _RecordingViewport()
-    composer = ComposerWindow(host)
-    frame = composer.comp.frames[0]
-    frame.style = "style:Architectural"
-    frame.pen_edge_mm = 0.25
-    frame.pen_profile_mm = 0.5
-    composer.render_frame(frame)
-    assert host.viewport.seen[-1] == (pen_px(0.25, RENDER_DPI),
-                                      pen_px(0.5, RENDER_DPI)) == (3, 6)
-    assert (host.viewport._export_edge_px,
-            host.viewport._export_profile_px) == (1, 1)   # live: hairlines
-    # The panel offers the edge / profile pens for the raster style.
-    composer._rebuild_canvas()
-    from views.composer import FrameItem
-    item = next(i for i in composer.canvas.items()
-                if isinstance(i, FrameItem) and i.model is frame)
-    item.setSelected(True)
-    assert composer.pen_edge_spin.isEnabled()
-    assert composer.pen_profile_spin.isEnabled()
-    assert not composer.pen_cut_spin.isEnabled()          # vector-only
-    # Editing the pen re-renders the raster frame with the new width.
-    composer.pen_edge_spin.setValue(0.35)
-    assert frame.pen_edge_mm == 0.35
-    assert host.viewport.seen[-1][0] == pen_px(0.35, RENDER_DPI)

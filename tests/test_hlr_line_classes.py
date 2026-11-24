@@ -163,64 +163,6 @@ def test_frame_pens_and_poche_survive_the_document_roundtrip():
     assert g.profiles is True and g.cut_fill == "solid"
 
 
-def _paint(frame, hlr, kinds, fills, px_per_mm=4):
-    from views.composer import paint_frame_mm
-    img = QImage(int(frame.w_mm * px_per_mm), int(frame.h_mm * px_per_mm),
-                 QImage.Format_RGB32)
-    img.fill(QColor(255, 0, 255))            # magenta: anything unpainted
-    p = QPainter(img)
-    p.setRenderHint(QPainter.Antialiasing, False)
-    p.scale(px_per_mm, px_per_mm)
-    paint_frame_mm(p, frame, None, hlr=hlr, kinds=kinds, fills=fills)
-    p.end()
-    return img
-
-
-def test_paint_fills_the_ring_under_the_lines_solid_and_hatched():
-    frame = MarcoVista(style="vectorial", w_mm=50.0, h_mm=50.0,
-                       cut_fill_color="#ff0000")
-    ring = np.array([[10.0, 10.0], [40.0, 10.0], [40.0, 40.0], [10.0, 40.0]])
-    hlr = np.array([[10.0, 10.0, 40.0, 10.0]])
-    kinds = np.array([KIND_CUT], dtype=np.int8)
-    img = _paint(frame, hlr, kinds, [ring])
-    assert img.pixelColor(100, 100) == QColor("#ff0000")      # inside: poché
-    assert img.pixelColor(10, 10) == QColor(255, 255, 255)     # outside: paper
-    frame.cut_fill = "none"
-    img = _paint(frame, hlr, kinds, [ring])
-    assert img.pixelColor(100, 100) == QColor(255, 255, 255)
-    frame.cut_fill = "hatch"
-    frame.cut_hatch_mm = 1.0
-    img = _paint(frame, hlr, kinds, [ring])
-    reds = sum(1 for x in range(60, 140) for y in range(60, 140)
-               if img.pixelColor(x, y).red() > 200
-               and img.pixelColor(x, y).green() < 128)
-    whites = sum(1 for x in range(60, 140) for y in range(60, 140)
-                 if img.pixelColor(x, y) == QColor(255, 255, 255))
-    assert reds > 0 and whites > 0                         # lines AND gaps
-    assert img.pixelColor(10, 10) == QColor(255, 255, 255)  # clipped to the ring
-
-
-def test_paint_inks_each_class_with_its_own_pen():
-    frame = MarcoVista(style="vectorial", w_mm=60.0, h_mm=30.0,
-                       pen_cut_mm=1.0, pen_profile_mm=0.5, pen_edge_mm=0.25)
-    hlr = np.array([[5.0, 5.0, 55.0, 5.0],
-                    [5.0, 15.0, 55.0, 15.0],
-                    [5.0, 25.0, 55.0, 25.0]])
-    kinds = np.array([KIND_CUT, KIND_PROFILE, KIND_EDGE], dtype=np.int8)
-    img = _paint(frame, hlr, kinds, None, px_per_mm=10)
-
-    def thickness(y_mm):
-        col = 300
-        ys = [y for y in range(int(y_mm * 10) - 15, int(y_mm * 10) + 15)
-              if img.pixelColor(col, y).lightness() < 128]
-        return len(ys)
-    assert thickness(5.0) > thickness(15.0) > thickness(25.0)
-    assert thickness(5.0) == pytest.approx(10, abs=2)
-    # kinds unknown (an old cache): everything with the edge pen, no crash
-    img2 = _paint(frame, hlr, None, None, px_per_mm=10)
-    assert img2.pixelColor(300, 50).lightness() < 128
-
-
 # ---- clean lines -------------------------------------------------------------
 
 def test_chords_across_a_triangle_diagonal_merge_and_end_on_verticals_vanish():
@@ -265,39 +207,3 @@ def test_dxf_export_puts_each_line_class_on_its_own_layer(tmp_path):
 
 # ---- the panel ------------------------------------------------------------------
 
-def test_pen_panel_repaints_from_the_cache_and_profiles_toggle_recomputes():
-    from PySide6.QtWidgets import QWidget
-    from tests.test_composer_canvas import _FakeViewport
-    from views.composer import ComposerWindow, FrameItem
-    host = QWidget()
-    host.viewport = _FakeViewport()
-    _box(host.viewport.scene.mesh, 0, 0, 0, 4, 3, 2)
-    composer = ComposerWindow(host)
-    frame = composer.comp.frames[0]
-    frame.view_key, frame.style = "std:iso", "vectorial"
-    composer.render_frame(frame)
-    assert id(frame) in composer.hlr_kinds
-    item = next(it for it in composer.canvas.items()
-                if getattr(it, "model", None) is frame)
-    assert isinstance(item, FrameItem)
-    item.setSelected(True)
-    composer.on_selection_changed()
-    assert composer.pen_cut_spin.isEnabled()          # vector style: live
-    assert composer.pen_cut_spin.value() == pytest.approx(0.5)
-    before = composer.hlr_cache[id(frame)]
-    composer.pen_cut_spin.setValue(0.8)               # a pen width: no recompute
-    assert frame.pen_cut_mm == pytest.approx(0.8)
-    assert composer.hlr_cache.get(id(frame)) is before
-    composer.cut_fill_combo.setCurrentIndex(
-        composer.cut_fill_combo.findData("hatch"))    # solid → hatch: no recompute
-    assert frame.cut_fill == "hatch"
-    assert composer.hlr_cache.get(id(frame)) is before
-    composer.profiles_check.setChecked(False)         # classes change: recompute
-    assert frame.profiles is False
-    assert composer.hlr_cache.get(id(frame)) is not before
-    assert set(composer.hlr_kinds[id(frame)].tolist()) == {KIND_EDGE}
-    # a raster frame greys the pens out
-    composer.style_combo.setCurrentIndex(
-        composer.style_combo.findData("sombreado"))
-    assert frame.style == "sombreado"
-    assert not composer.pen_cut_spin.isEnabled()

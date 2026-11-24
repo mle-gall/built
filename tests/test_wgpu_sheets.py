@@ -7,52 +7,8 @@ from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QImage
 from core.composition import MarcoVista
 from core.saved_views import SavedView
-from tests.test_composer_perspective import _composer
 
 _app = QApplication.instance() or QApplication([])
-
-
-def test_sheet_dispatch_and_override_restoration():
-    composer, host = _composer()
-    calls = []
-    def render(w, h, **kwargs):
-        calls.append((w, h))
-        return QImage(w, h, QImage.Format_RGB32)
-    host.viewport.render_image = render
-    host.viewport.plano_style = 'lineas'
-    frame = MarcoVista(w_mm=20, h_mm=10, style='tecnico')
-    image = composer.render_frame(frame)
-    assert (image.width(), image.height()) == calls[0] == frame.render_px(300)
-    assert host.viewport.plano_style == 'lineas'
-    composer.close()
-    host.close()
-
-
-def test_saved_frame_restores_hidden_camera_and_filter_on_error():
-    from core.group import Group
-    from core.mesh import Mesh
-    composer, host = _composer()
-    vp = host.viewport
-    group = Group(Mesh())
-    vp.scene.groups.append(group)
-    saved = SavedView.capture('sheet', vp.scene, vp.camera)
-    saved.hidden_objects = [group.uid]
-    saved.two_point = True
-    vp.scene.saved_views.append(saved)
-    vp.scene._navigator_allowed = {'live'}
-    vp.view_tint = {'live': (1., 0., 0.)}
-    def fail():
-        assert group.hidden
-        assert vp.scene._navigator_allowed is None
-        raise RuntimeError('capture failed')
-    with pytest.raises(RuntimeError):
-        composer._with_frame_camera(MarcoVista(view_key='scene:sheet'), fail)
-    assert not group.hidden
-    assert not vp.camera.two_point
-    assert vp.scene._navigator_allowed == {'live'}
-    assert vp.view_tint == {'live': (1., 0., 0.)}
-    composer.close()
-    host.close()
 
 
 def test_offscreen_size_and_live_camera_unchanged(monkeypatch):
@@ -133,54 +89,3 @@ def test_scene_recall_updates_metal_layers_camera_style_and_filter():
     assert scene._navigator_allowed is None
 
 
-def test_saved_navigator_filter_is_temporary():
-    from core import bim_registry
-    from core.group import Group
-    from core.mesh import Mesh
-    from views.composer_scene import temporary_display
-    composer, host = _composer()
-    scene = host.viewport.scene
-    a, b = Group(Mesh(), name='A'), Group(Mesh(), name='B')
-    scene.groups.extend([a, b])
-    registry = bim_registry.get(scene)
-    scene.plugin_data['bim_registry'] = registry
-    registry['views']['only-a'] = {
-        'filter': {'facet': 'name', 'in': ['A']}, 'isolate': True}
-    view = SavedView('A', navigator_view='only-a')
-    scene.selection.add(b)
-    before = scene.version
-    with temporary_display(host.viewport, view):
-        assert scene._navigator_allowed == {a.uid}
-        assert b in scene.selection
-    assert scene._navigator_allowed is None
-    assert scene.version == before
-    composer.close()
-    host.close()
-
-
-def test_sheet_text_font_is_a_step_of_the_document_history(monkeypatch):
-    from core.composition import TextoItem
-    from views import font_picker
-    from views.wgpu_sheets import Workspace
-    composer, host = _composer()
-    try:
-        from core.history import History
-        host.viewport.history = History(host.viewport.scene)
-        model = TextoItem(text="Floor plan")
-        composer.comp.texts.append(model)
-        workspace = Workspace(composer)
-        workspace.view = SimpleNamespace(window=lambda: host, update=lambda: None)
-
-        def choose(win, title, sample, family, bold, italic, size, unit, apply):
-            assert sample == model.text and unit.strip() == "pt"
-            apply(dict(font="Georgia", bold=True, italic=True, height=20.))
-            return True
-
-        monkeypatch.setattr(font_picker, "show", choose)
-        workspace._font(model)
-        assert (model.family, model.bold, model.italic, model.size_pt) == ("Georgia", True, True, 20.)
-        composer._window.viewport.history.undo()
-        assert (model.family, model.size_pt) == ("Sans Serif", 14.0)
-    finally:
-        composer.close()
-        host.close()

@@ -99,17 +99,15 @@ def test_style_by_name_returns_copies():
     assert style_by_name("No existe") is None
 
 
-def test_composer_style_combo_lists_the_presets():
-    # The composer's per-frame style list must carry the model styles
-    # (the "Architectural is missing in layout" report) and map legacy
-    # keys onto their preset equivalents.
+def test_the_sheet_inspector_style_list_lists_the_presets():
+    # A frame's style list (the Sheets inspector's) must carry the model
+    # styles (the "Architectural is missing in layout" report) and map
+    # legacy keys onto their preset equivalents.
     from views.main_window import MainWindow
     win = MainWindow()
     try:
-        win._on_open_composer()
-        composer = win._composer
-        combo = composer.style_combo
-        keys = [combo.itemData(i) for i in range(combo.count())]
+        ws = win._ensure_composer()._ws
+        keys = [key for key, _label in ws._choices()["styles"]]
         assert "sombreado" in keys             # the model's active style
         assert "style:Architectural" in keys
         assert "style:Hidden line" in keys

@@ -34,3 +34,25 @@ def test_a_title_block_starts_from_its_template(tmp_path):
     assert rows["PROYECTO"] == "Casa" and rows["CLIENTE"] == "7" and rows["ESCALA"] == "1:50" and rows["FECHA"]
     plain = NATIVE.sheet_new_item(comp, "cajetin", 0, 0, 0, 0, None, str(tmp_path), "Missing")
     assert plain.layout == "grid"
+
+
+def test_a_line_type_writes_its_words_along_its_lines():
+    """The words of a line type (GAS…) along a vector frame's lines of
+    that layer: one per place core.layers.text_marks finds, in the line's
+    colour, reading upright; none on the cut."""
+    import json
+    import numpy as np
+    from core.composition import MarcoVista
+    from core.layers import text_marks
+    frame = MarcoVista(w_mm=100, h_mm=80, style="vectorial")
+    segs = np.array([[10.0, 10.0, 90.0, 10.0], [10.0, 20.0, 10.0, 70.0], [20.0, 30.0, 80.0, 30.0]])
+    spec = ("GAS", 1.5, 4.0, 12.0)
+    content = {"segs": segs, "kinds": np.array([0, 1, 2], np.int8), "tags": ["Gas", "Gas", "Gas"],
+               "styles": {"Gas": ((0.9, 0.6, 0.1), None, None, [6.0, 3.0], spec)}}
+    ops = json.loads(NATIVE.sheet_frame_display(frame, content, True))
+    words = [o for o in ops if o["op"] == "text"]
+    want = len(text_marks((10.0, 10.0), (90.0, 10.0), spec)) + len(text_marks((10.0, 20.0), (10.0, 70.0), spec))
+    assert want > 3 and len(words) == want
+    assert all(w["text"] == "GAS" and w["bold"] for w in words)
+    lines = {o.get("pen", {}).get("color") for o in ops if o["op"] in ("line", "lines", "polyline")}
+    assert {w["color"] for w in words} <= lines, (words[0]["color"], lines)

@@ -86,19 +86,27 @@ pub(super) fn scan(outer: &[Point], holes: &[Ring]) -> Option<Point> {
 }
 
 pub(super) struct Metrics<'py> {
-    hypot: Bound<'py, PyAny>,
+    /// The interpreter's `math.hypot`, or None: its port (`sheets::pymath`).
+    hypot: Option<Bound<'py, PyAny>>,
     compensated: bool,
 }
 impl<'py> Metrics<'py> {
     pub(super) fn new(py: Python<'py>) -> PyResult<Self> {
         let v = py.version_info();
         Ok(Self {
-            hypot: py.import("math")?.getattr("hypot")?,
+            hypot: Some(py.import("math")?.getattr("hypot")?),
             compensated: (v.major, v.minor) >= (3, 12),
         })
     }
+    /// Python's `math.hypot` and `sum` without the interpreter.
+    pub(super) fn native(compensated: bool) -> Metrics<'static> {
+        Metrics { hypot: None, compensated }
+    }
     fn length(&self, x: f64, y: f64) -> PyResult<f64> {
-        self.hypot.call1((x, y))?.extract()
+        match &self.hypot {
+            Some(h) => h.call1((x, y))?.extract(),
+            None => Ok(crate::sheets::pymath::hypot(x, y)),
+        }
     }
     pub(super) fn floor(&self, r: &[Point]) -> PyResult<f64> {
         let lengths = edges(r)
@@ -134,13 +142,18 @@ pub(crate) fn plane_region_point(
     outer: Ring,
     holes: Vec<Ring>,
 ) -> PyResult<(f64, f64)> {
-    let metrics = Metrics::new(py)?;
-    let p = metrics.interior(&outer)?;
-    let valid = |p| inside(&outer, p) && !holes.iter().any(|h| inside(h, p));
+    region_point(&Metrics::new(py)?, &outer, &holes).map(Into::into)
+}
+
+/// `cap_rebuild._region_test_point`: a point inside `outer` and outside
+/// every hole, so the classifier samples the region's material.
+pub(super) fn region_point(metrics: &Metrics<'_>, outer: &[Point], holes: &[Ring]) -> PyResult<Point> {
+    let p = metrics.interior(outer)?;
+    let valid = |p| inside(outer, p) && !holes.iter().any(|h| inside(h, p));
     if valid(p) {
-        return Ok(p.into());
+        return Ok(p);
     }
-    for (a, b) in edges(&outer) {
+    for (a, b) in edges(outer) {
         let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
         let n = metrics.length(dx, dy)?;
         if n < TOL {
@@ -151,10 +164,10 @@ pub(crate) fn plane_region_point(
             (a[1] + b[1]) / 2. + dx / n * 1e-3,
         ];
         if valid(q) {
-            return Ok(q.into());
+            return Ok(q);
         }
     }
-    Ok(scan(&outer, &holes).unwrap_or(p).into())
+    Ok(scan(outer, holes).unwrap_or(p))
 }
 
 pub(super) fn nesting(
@@ -282,7 +295,7 @@ pub(crate) fn trace_plane_outline<'py>(
             .collect::<PyResult<_>>()?;
         polygons.push((outer, holes));
     }
-    let loops = super::cap_outline::trace_ordered(polygons, &creases, TOL, Some(regions.py()))?
+    let loops = super::cap_outline::trace_ordered(polygons, &creases, TOL, super::cap_outline::Ties::Python(regions.py()))?
         .ok_or_else(|| PyValueError::new_err("non-finite plane outline"))?;
     Ok(loops
         .into_iter()

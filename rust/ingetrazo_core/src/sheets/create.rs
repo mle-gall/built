@@ -156,7 +156,10 @@ pub fn sheet_new_item<'py>(py: Python<'py>, comp: &Bound<'py, PyAny>, tool: &str
             kw.set_item("h_mm", h)?;
             kw.set_item("invert", (x1 < x0) != (y1 < y0))?;
             if tool == "terreno" {
+                // A ground line reads as ground: a heavier pen, and the
+                // look of the last one.
                 kw.set_item("stroke_mm", 0.5)?;
+                super::looks::apply(py, "ground", &kw, None)?;
             }
             make("FormaItem", &kw)?
         }
@@ -170,6 +173,8 @@ pub fn sheet_new_item<'py>(py: Python<'py>, comp: &Bound<'py, PyAny>, tool: &str
             make("EtiquetaItem", &kw)?
         }
         "nivel" => {
+            // The last mark's look, in the document's units.
+            super::looks::apply(py, "nivel", &kw, None)?;
             length_style(py, scene.as_ref(), &kw)?;
             kw.set_item("x_mm", x0)?;
             kw.set_item("y_mm", y0)?;
@@ -201,6 +206,30 @@ pub fn sheet_new_item<'py>(py: Python<'py>, comp: &Bound<'py, PyAny>, tool: &str
     Ok(Some(item))
 }
 
+/// A new sheet from the template file ``path`` (the composer's
+/// `_composition_from_template`): its page, border and items, each frame
+/// with an identity of its own and the dimensions bound to no model; None
+/// for a missing or broken file.
+#[pyfunction]
+pub fn sheet_from_template<'py>(py: Python<'py>, path: std::path::PathBuf) -> PyResult<Option<Bound<'py, PyAny>>> {
+    let Ok(text) = std::fs::read_to_string(&path) else { return Ok(None) };
+    let Ok(data) = py.import("json")?.call_method1("loads", (text,)) else { return Ok(None) };
+    let Ok(comp) = py.import("core.composition")?.getattr("Composicion")?.call_method1("from_dict", (data,)) else {
+        return Ok(None);
+    };
+    let uuid = py.import("uuid")?;
+    for f in comp.getattr("frames")?.try_iter()? {
+        f?.setattr("uid", uuid.call_method0("uuid4")?.getattr("hex")?)?;
+    }
+    for ct in comp.getattr("cotas")?.try_iter()? {
+        let ct = ct?;
+        ct.setattr("anchor_uid", "")?;
+        ct.setattr("a_world", py.None())?;
+        ct.setattr("b_world", py.None())?;
+    }
+    Ok(Some(comp))
+}
+
 /// The document's length unit and precision a new annotation is born with
 /// (`_document_length_style`), and whether a cota shows its unit symbol.
 fn length_style<'py>(py: Python<'py>, scene: Option<&Bound<'py, PyAny>>, kw: &Bound<'py, PyDict>) -> PyResult<()> {
@@ -222,6 +251,9 @@ pub fn sheet_new_cota<'py>(py: Python<'py>, comp: &Bound<'py, PyAny>, a: (f64, f
                            axis: &str, scene: Option<Bound<'py, PyAny>>) -> PyResult<Bound<'py, PyAny>> {
     let c = py.import("core.composition")?;
     let kw = PyDict::new(py);
+    // The last dimension's look (text, ends, colour, gap), then the
+    // document's units, every time.
+    super::looks::apply(py, "cota", &kw, None)?;
     length_style(py, scene.as_ref(), &kw)?;
     let shows = match scene.as_ref().map(|s| s.getattr_opt("dimension_style")).transpose()?.flatten() {
         Some(style) if style.is_truthy()? => match style.call_method1("get", ("show_unit", true)) {
@@ -231,11 +263,17 @@ pub fn sheet_new_cota<'py>(py: Python<'py>, comp: &Bound<'py, PyAny>, a: (f64, f
         _ => true,
     };
     kw.set_item("show_unit", shows)?;
-    kw.set_item("offset_mm", 0.5)?;
+    if !kw.contains("offset_mm")? {
+        kw.set_item("offset_mm", 0.5)?;
+    }
+    // ISO: aligned with the line, above its middle — placed per dimension,
+    // never inherited.
     kw.set_item("text_align", "aligned")?;
     kw.set_item("text_pos", "above")?;
     kw.set_item("text_along", "middle")?;
-    kw.set_item("ends", "arrow")?;
+    if !kw.contains("ends")? {
+        kw.set_item("ends", "arrow")?;
+    }
     let frames = comp.getattr("frames")?;
     let n: f64 = if frames.len()? > 0 { frames.get_item(0)?.getattr("scale_n")?.extract()? } else { 100.0 };
     kw.set_item("x_mm", a.0)?;
@@ -317,6 +355,8 @@ pub fn sheet_new_radial<'py>(py: Python<'py>, comp: &Bound<'py, PyAny>, centre: 
         }
     };
     let kw = PyDict::new(py);
+    super::looks::apply(py, "cota", &kw, Some(&["text_mm", "stroke_mm", "color", "text_color", "ends", "text_bg",
+                                                "text_bg_opacity", "offset_mm"]))?;
     length_style(py, scene.as_ref(), &kw)?;
     let shows = match scene.as_ref().map(|s| s.getattr_opt("dimension_style")).transpose()?.flatten() {
         Some(style) if style.is_truthy()? => style.call_method1("get", ("show_unit", true)).map_or(Ok(true), |v| v.is_truthy())?,
@@ -343,6 +383,7 @@ pub fn sheet_new_angular<'py>(py: Python<'py>, comp: &Bound<'py, PyAny>, vertex:
         return Ok(None);
     }
     let kw = PyDict::new(py);
+    super::looks::apply(py, "cota", &kw, Some(&["text_mm", "stroke_mm", "color", "text_color"]))?;
     kw.set_item("x_mm", vertex.0)?;
     kw.set_item("y_mm", vertex.1)?;
     kw.set_item("ax_mm", a.0 - vertex.0)?;

@@ -97,16 +97,27 @@ fn neighbours(segments: &[Segment]) -> Vec<Vec<usize>> {
     near
 }
 
-struct Graph<'py> {
+struct Graph {
     index: HashMap<Cell, usize>,
     points: Ring,
-    keys: Vec<Bound<'py, PyTuple>>,
+    /// Each vertex's cell as the Python int pair the old tracer keyed by.
+    keys: Vec<[i128; 2]>,
+    by_key: HashMap<[i128; 2], usize>,
     // Set iteration determines persistent edge order and the first corner of
-    // each face. Use the running interpreter's tuple-of-integers hash here.
-    adjacent: Vec<Bound<'py, PySet>>,
+    // each face: CPython's set of int pairs, replayed (`crate::pyset`).
+    adjacent: Vec<PySetOf<[i128; 2]>>,
+    /// The order each vertex's neighbours were added in (to build the real
+    /// sets `plane_split_graph` hands to Python).
+    added: Vec<Vec<usize>>,
 }
-impl<'py> Graph<'py> {
-    fn vertex(&mut self, py: Python<'py>, p: Point) -> PyResult<usize> {
+type PySetOf<K> = crate::pyset::PySet<K>;
+
+pub(super) fn cell_key(k: Cell) -> [i128; 2] {
+    k.point().map(|x| x as i128)
+}
+
+impl Graph {
+    fn vertex(&mut self, p: Point) -> PyResult<usize> {
         let k =
             Cell::at(p, TOL).ok_or_else(|| PyValueError::new_err("non-finite plane coordinate"))?;
         if let Some(&i) = self.index.get(&k) {
@@ -115,16 +126,20 @@ impl<'py> Graph<'py> {
         let i = self.points.len();
         self.index.insert(k, i);
         self.points.push(p);
-        self.keys.push(k.tuple(py)?);
-        self.adjacent.push(PySet::empty(py)?);
+        self.keys.push(cell_key(k));
+        self.by_key.insert(cell_key(k), i);
+        self.adjacent.push(PySetOf::new());
+        self.added.push(Vec::new());
         Ok(i)
     }
-    fn build(py: Python<'py>, segments: &[Segment]) -> PyResult<Self> {
+    fn build(segments: &[Segment]) -> PyResult<Self> {
         let mut g = Self {
             index: HashMap::new(),
             points: Vec::new(),
             keys: Vec::new(),
+            by_key: HashMap::new(),
             adjacent: Vec::new(),
+            added: Vec::new(),
         };
         for (i, near) in neighbours(segments).into_iter().enumerate() {
             let [a, b] = segments[i];
@@ -146,38 +161,35 @@ impl<'py> Graph<'py> {
             sorted.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
             let mut prev: Option<usize> = None;
             for (_, p) in sorted {
-                let k = g.vertex(py, p)?;
+                let k = g.vertex(p)?;
                 if let Some(j) = prev.filter(|&j| j != k) {
-                    g.adjacent[k].add(&g.keys[j])?;
-                    g.adjacent[j].add(&g.keys[k])?;
+                    let (kk, kj) = (g.keys[k], g.keys[j]);
+                    g.adjacent[k].add(kj);
+                    g.adjacent[j].add(kk);
+                    g.added[k].push(j);
+                    g.added[j].push(k);
                 }
                 prev = Some(k);
             }
         }
         Ok(g)
     }
-    fn ids(&self, set: &Bound<'py, PySet>) -> PyResult<Vec<usize>> {
-        set.iter()
-            .map(|v| Ok(self.index[&Cell::at(v.extract()?, 1.).unwrap()]))
-            .collect()
+    fn ids(&self, set: &PySetOf<[i128; 2]>) -> Vec<usize> {
+        set.iter().map(|k| self.by_key[&k]).collect()
     }
-    fn full_edges(&self) -> PyResult<Vec<(usize, usize)>> {
+    fn full_edges(&self) -> Vec<(usize, usize)> {
         let mut edges = Vec::new();
         for (i, set) in self.adjacent.iter().enumerate() {
-            for j in self.ids(set)? {
+            for j in self.ids(set) {
                 if j > i {
                     edges.push((i, j));
                 }
             }
         }
-        Ok(edges)
+        edges
     }
     fn cycles(&self) -> PyResult<Vec<Ring>> {
-        let mut links = self
-            .adjacent
-            .iter()
-            .map(|s| self.ids(s.call_method0("copy")?.cast::<PySet>()?))
-            .collect::<PyResult<Vec<_>>>()?;
+        let mut links: Vec<Vec<usize>> = self.adjacent.iter().map(|s| self.ids(&s.copy())).collect();
         let mut live: Vec<_> = links.iter().map(Vec::len).collect();
         let mut q: VecDeque<_> = (0..links.len()).filter(|&i| live[i] == 1).collect();
         while let Some(i) = q.pop_front() {
@@ -243,14 +255,44 @@ pub(crate) fn plane_split_graph<'py>(
     py: Python<'py>,
     segments: Vec<Segment>,
 ) -> PyResult<(Bound<'py, PyDict>, Bound<'py, PyDict>)> {
-    let g = Graph::build(py, &segments)?;
+    let g = Graph::build(&segments)?;
     let coords = PyDict::new(py);
     let adjacent = PyDict::new(py);
-    for (i, k) in g.keys.iter().enumerate() {
-        coords.set_item(k, (g.points[i][0], g.points[i][1]))?;
-        adjacent.set_item(k, &g.adjacent[i])?;
+    let tuple = |k: [i128; 2]| PyTuple::new(py, k);
+    for (i, &k) in g.keys.iter().enumerate() {
+        coords.set_item(tuple(k)?, (g.points[i][0], g.points[i][1]))?;
+        // A real set, built by the same adds in the same order.
+        let set = PySet::empty(py)?;
+        for &j in &g.added[i] {
+            set.add(tuple(g.keys[j])?)?;
+        }
+        adjacent.set_item(tuple(k)?, set)?;
     }
     Ok((coords, adjacent))
+}
+
+/// The planar arrangement of `lines` (plane coordinates, already free of
+/// zero-length segments): every split edge when `include_edges`, and the
+/// minimal faces with their holes (`core.arrangement.planar_rebuild`).
+#[allow(clippy::type_complexity)]
+pub(super) fn arrange(
+    lines: &[Segment],
+    include_edges: bool,
+    metrics: &Metrics<'_>,
+) -> PyResult<(Vec<(Point, Point)>, Vec<(Ring, Vec<Ring>)>)> {
+    let g = Graph::build(lines)?;
+    let mut edges = Vec::new();
+    if include_edges {
+        for (a, b) in g.full_edges() {
+            edges.push((g.points[a], g.points[b]));
+        }
+    }
+    let cycles = g.cycles()?;
+    let faces = nesting(metrics, &cycles, true)?
+        .into_iter()
+        .map(|(i, hs)| (cycles[i].clone(), hs.into_iter().map(|h| cycles[h].clone()).collect()))
+        .collect();
+    Ok((edges, faces))
 }
 
 #[pyfunction]
@@ -276,18 +318,12 @@ pub(crate) fn arrange_plane(
             lines.push([a, b]);
         }
     }
-    let g = Graph::build(py, &lines)?;
-    let mut edges = Vec::new();
-    if include_edges {
-        for (a, b) in g.full_edges()? {
-            edges.push((lift(g.points[a]), lift(g.points[b])));
-        }
-    }
-    let cycles = g.cycles()?;
-    let lift_ring = |k: usize| cycles[k].iter().copied().map(lift).collect();
-    let faces = nesting(&Metrics::new(py)?, &cycles, true)?
-        .into_iter()
-        .map(|(i, hs)| (lift_ring(i), hs.into_iter().map(lift_ring).collect()))
-        .collect();
-    Ok((edges, faces))
+    let (edges, faces) = arrange(&lines, include_edges, &Metrics::new(py)?)?;
+    Ok((
+        edges.into_iter().map(|(a, b)| (lift(a), lift(b))).collect(),
+        faces
+            .into_iter()
+            .map(|(r, hs)| (r.into_iter().map(lift).collect(), hs.into_iter().map(|h| h.into_iter().map(lift).collect()).collect()))
+            .collect(),
+    ))
 }
