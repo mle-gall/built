@@ -350,8 +350,11 @@ fn igz_write_prepared_inner<'p>(
 }
 #[path = "file_publish.rs"]
 mod publish;
+#[path = "file_stream.rs"]
+mod stream;
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     publish::register(m)?;
+    stream::register(m)?;
     m.add_function(wrap_pyfunction!(igz_save_scene_inner, m)?)?;
     m.add_function(wrap_pyfunction!(igz_prepare_and_write, m)?)?;
     m.add_function(wrap_pyfunction!(igz_spool_json, m)?)?;
