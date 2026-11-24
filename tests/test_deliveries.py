@@ -236,7 +236,6 @@ def test_svg_sheet_previews_the_page_it_writes(one_off, tmp_path, monkeypatch, n
     monkeypatch.setattr(view, "_ui_attached", True, raising=False)
     win = DeliveryWindow(_host=next_turn, viewport=viewport, _doc=SimpleNamespace(stand_in=view))
     timers = next_turn.timers
-    monkeypatch.setattr(sheet, "_arm_watchdog", lambda *args: None)
 
     form = dock.delivery_export_form(win, one_off=one_off)
     sid = "export" if one_off else "delivery"
