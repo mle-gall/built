@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Built projects: the `.builtproject` manifest and the per-user session
 //! (docs/builtproject-format.md). JSON crosses to Python as text.
+mod format;
 pub mod manifest;
 pub mod session;
 
@@ -275,6 +276,7 @@ impl ProjectSession {
 }
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    format::register(m)?;
     m.add_class::<ProjectSession>()?;
     m.add_function(wrap_pyfunction!(project_manifest_load, m)?)?;
     m.add_function(wrap_pyfunction!(project_manifest_peek, m)?)?;
