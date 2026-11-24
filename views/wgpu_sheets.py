@@ -252,7 +252,7 @@ class SheetHost:
 
 def composer_for(win):
     """Keep the workspace bound to the document it was created for across tab switches."""
-    from views.documents import DocumentHost
+    from core.document_host import DocumentHost
     win = getattr(win, "_host_window", win)
     if win._composer is None:
         win._composer = SheetHost(DocumentHost(win, win._doc))

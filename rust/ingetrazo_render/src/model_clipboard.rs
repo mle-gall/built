@@ -124,6 +124,29 @@ impl ModelClipboard {
         }
         Ok(())
     }
+    /// Publish an existing document snapshot from either a native command or a script.
+    fn publish(&self, win: &Bound<'_, PyAny>, clip: &Bound<'_, PyAny>) -> PyResult<()> {
+        let py = win.py();
+        let native = py.import("app_shell.native")?;
+        let encode = py.import("formats.clip_payload")?.getattr("encode")?;
+        let data = win
+            .getattr("_host")?
+            .call_method1("_guard", ("clipboard encode", encode, clip))?;
+        if data.is_none() {
+            return Ok(());
+        }
+        if native
+            .call_method1("pasteboard_write", (vec![(MIME, data)],))?
+            .is_truthy()?
+        {
+            let count = native
+                .call_method0("pasteboard_types")?
+                .get_item(1)?
+                .extract()?;
+            self.source.replace(Some((count, clip.clone().unbind())));
+        }
+        Ok(())
+    }
     fn run(&self, win: &Bound<'_, PyAny>, verb: &str) -> PyResult<()> {
         let py = win.py();
         let doc = win.getattr("_doc")?;
@@ -174,23 +197,7 @@ impl ModelClipboard {
                 if !clip.is_truthy()? {
                     return Ok(());
                 }
-                let encode = py.import("formats.clip_payload")?.getattr("encode")?;
-                let data = win
-                    .getattr("_host")?
-                    .call_method1("_guard", ("clipboard encode", encode, &clip))?;
-                if data.is_none() {
-                    return Ok(());
-                }
-                if native
-                    .call_method1("pasteboard_write", (vec![(MIME, data)],))?
-                    .is_truthy()?
-                {
-                    let count = native
-                        .call_method0("pasteboard_types")?
-                        .get_item(1)?
-                        .extract()?;
-                    self.source.replace(Some((count, clip.unbind())));
-                }
+                self.publish(win, &clip)?;
             }
             "paste" | "paste_in_place" => {
                 super::model_edit::paste_model(win, verb == "paste_in_place")?;

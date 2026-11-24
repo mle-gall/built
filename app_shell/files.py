@@ -18,6 +18,7 @@ from ingetrazo_render import ModelClipboard, cold_start_document as cold_start, 
 from core.i18n import tr
 
 _clipboard = ModelClipboard()
+publish_clipboard = _clipboard.publish
 
 #: What open_path reads as a document; the rest are imports.
 IMPORTS = (".skp", ".dae", ".dxf", ".dwg", ".rfa", ".glb", ".gltf")

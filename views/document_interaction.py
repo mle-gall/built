@@ -5155,7 +5155,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         empty = np.zeros((0, 2, 3), dtype=np.float32)
         if spec is None or not len(segs):
             return empty
-        from views.hatch_paint import line_text_strokes
+        from ingetrazo_render import line_text_strokes
         strokes = line_text_strokes(spec[0], spec[1])
         if not strokes:
             return empty
@@ -13093,7 +13093,10 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
                           "groups": group_data, "ref": ref}
         # Also on the system clipboard, so another IngeTrazo window can
         # paste it (issue #76); encoded only if that window asks.
-        if publish:
+        if publish and NATIVE:
+            from app_shell.files import publish_clipboard
+            publish_clipboard(self.window(), self.clipboard)
+        elif publish:
             from formats import clip as clip_transfer
             clip_transfer.publish(self.clipboard)
         return True

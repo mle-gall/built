@@ -3315,6 +3315,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<release::ReleaseReview>()?;
     m.add_class::<ui::command_palette::CommandCanvas>()?;
     m.add_function(wrap_pyfunction!(text_outlines::text_outlines,m)?)?;
+    m.add_function(wrap_pyfunction!(text_outlines::line_text_strokes,m)?)?;
     m.add_function(wrap_pyfunction!(about::notice_text,m)?)?;
     m.add_class::<svg_texture::SvgTexture>()?;
     m.add_class::<svg_texture::UvProjection>()?;

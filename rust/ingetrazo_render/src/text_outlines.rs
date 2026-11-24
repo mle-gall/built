@@ -165,3 +165,46 @@ pub fn text_outlines(
 ) -> BTreeMap<usize, Rings> {
     py.detach(|| shape(text, family, bold, italic))
 }
+
+/// Closed outlines in paper millimetres, centred on the line and scaled to
+/// the requested capital height. Model edges and their annotation share the
+/// same shaped glyphs, including font fallback for missing characters.
+#[pyfunction]
+pub fn line_text_strokes(py: Python<'_>, text: &str, size: f64) -> Rings {
+    py.detach(|| {
+        let family = "Segoe UI";
+        let Some(primary) = AnnotationFont::outline_face(family, true, false) else {
+            return Vec::new();
+        };
+        let cap = fonts()
+            .with_face_data(primary, |data, index| {
+                let face = Face::parse(data, index).ok()?;
+                let height = face.capital_height().or_else(|| {
+                    face.glyph_bounding_box(face.glyph_index('H')?)
+                        .map(|bbox| bbox.y_max)
+                })?;
+                Some(100. * f64::from(height) / f64::from(face.units_per_em()))
+            })
+            .flatten()
+            .filter(|height| *height > 0.)
+            .unwrap_or(70.);
+        let mut rings: Rings = shape(text, family, true, false)
+            .into_values()
+            .flatten()
+            .collect();
+        let (left, right) = rings.iter().flatten().fold(
+            (f64::INFINITY, f64::NEG_INFINITY),
+            |(left, right), (x, _)| (left.min(*x), right.max(*x)),
+        );
+        let centre = (left + right) * 0.5;
+        let scale = size / cap;
+        for ring in &mut rings {
+            for (x, y) in ring.iter_mut() {
+                *x = (*x - centre) * scale;
+                *y = (*y - cap * 0.5) * scale;
+            }
+            ring.push(ring[0]);
+        }
+        rings
+    })
+}
