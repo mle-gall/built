@@ -3104,7 +3104,6 @@ class OutlinerPanel(QWidget):
         self._window.viewport.end_group_edit()
         self._window.viewport.history.execute(
             CreatePlanCommand(plane, view, page, add_plane=add_plane))
-        self._window.tray.scenes.refresh()
         self._window._refresh_sheet_tabs()
         self._window.viewport.update()
         self.refresh()

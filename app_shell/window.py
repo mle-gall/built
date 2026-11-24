@@ -156,8 +156,7 @@ class ShellProjectTabs:
 
 
 class ShellScenes:
-    """The Scenes panel's verbs the bottom bar's scene chips call
-    (views/tray.py ScenesPanel), over core's own scene commands."""
+    """Bind the scene chooser to the current camera and document commands."""
 
     def __init__(self, win):
         self._win = win
@@ -167,7 +166,6 @@ class ShellScenes:
 
     def _touch(self):
         vp = self._vp()
-        vp.scene.version += 1
         vp.notify_scene_changed()
         vp.update()
         view = self._win._doc.stand_in
@@ -190,6 +188,7 @@ class ShellScenes:
     def finish_view(self, view, camera=True):
         if view is None:
             return
+        from ingetrazo_core import presentation
         from core.saved_views import shown_state
         vp = self._vp()
         scene = vp.scene
@@ -198,8 +197,10 @@ class ShellScenes:
             view.apply(scene, vp.camera, self._win.set_active_style)
         else:
             view.apply_state(scene, self._win.set_active_style)
+        presentation.recall_scene_display(vp, view)
         self._win._scene_tabs.mark_view(view)
         if shown_state(scene) != before:
+            scene.version += 1
             self._touch()
         else:
             vp.update()

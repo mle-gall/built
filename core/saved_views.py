@@ -18,7 +18,7 @@ from ingetrazo_core import presentation as _presentation
 
 from core.doc_model import Record, record_fields
 
-from core.history import Command, CommandRejected
+from core.history import SavedSceneCommand, CommandRejected
 
 
 @record_fields("name", "navigator_view", "folder", "target", "distance", "yaw",
@@ -27,6 +27,8 @@ from core.history import Command, CommandRejected
                "hidden_objects", "hidden_shown", "lens")
 class SavedView(Record):
     """A named camera + layer-visibility snapshot."""
+
+    _photo_tick = 0
 
     def __init__(self, name: str, target=(0.0, 0.0, 0.0), distance: float = 20.0,
                  yaw: float = -0.7853981633974483, pitch: float = 0.5235987755982988,
@@ -394,7 +396,7 @@ def from_lookat(name: str, eye, target, up, fov_deg: float = 45.0,
                      hidden_layers=hidden_layers)
 
 
-class RenameSceneCommand(Command):
+class RenameSceneCommand(SavedSceneCommand):
     """A scene's new name, and the sheet views that show it along with it
     (``core.outliner.rename_scene``). A name refused there is no step."""
 
@@ -413,14 +415,14 @@ class RenameSceneCommand(Command):
         if renamed is None:
             raise CommandRejected(self.name)
         self._prev, self._frames = renamed
-        scene.version += 1
+        self.doc_after(scene, None)
 
     def undo(self, scene) -> None:
         _presentation.restore_view_name(self.view, self._prev, self._frames)
-        scene.version += 1
+        self.doc_after(scene, None)
 
 
-class MoveSceneCommand(Command):
+class MoveSceneCommand(SavedSceneCommand):
     """A scene to another place in the list: the order of the list is the
     order of the scene tabs and the panel, and what the document saves."""
 
@@ -437,8 +439,8 @@ class MoveSceneCommand(Command):
         self._from = _presentation.move_item(scene.saved_views, self.view, self.index, False, True)
         if self._from is None:
             raise CommandRejected(self.view.name)
-        scene.version += 1
+        self.doc_after(scene, None)
 
     def undo(self, scene) -> None:
         _presentation.move_item(scene.saved_views, self.view, self._from, False, False)
-        scene.version += 1
+        self.doc_after(scene, None)

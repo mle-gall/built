@@ -4,7 +4,7 @@ os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 from types import SimpleNamespace
 import pytest
 from PySide6.QtWidgets import QApplication
-from PySide6.QtGui import QImage
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from core.composition import MarcoVista
 from core.saved_views import SavedView
 
@@ -48,44 +48,28 @@ def test_offscreen_size_and_live_camera_unchanged(monkeypatch):
     view.close()
 
 
-def test_scene_recall_updates_metal_layers_camera_style_and_filter():
+def test_scene_recall_updates_metal_layers_camera_style_and_filter(native_host):
     from core.layers import Layer
-    from core.scene import Scene
-    from core.camera import OrbitCamera
     from core.style import Style
-    from views.tray import ScenesPanel
-    scene, camera = Scene(), OrbitCamera()
-    layer = Layer(name='Detail')
+    from tests.scene_controls import choose
+    win = native_host.window
+    vp = win.viewport
+    scene = vp.scene
+    layer = Layer(name="Detail")
     scene.layers.append(layer)
     layer.visible = False
-    scene.display_style = Style(face_mode='wireframe')
-    camera.distance = 42.
-    view = SavedView.capture('Plan', scene, camera)
+    win.set_active_style(Style(face_mode="wireframe"))
+    vp.camera.distance = 42.0
+    saved = SavedView.capture("Plan", scene, vp.camera, win.active_style())
+    scene.saved_views.append(saved)
     layer.visible = True
-    camera.distance = 1.
-    scene.display_style = Style()
-    scene._navigator_allowed = {'old'}
-    calls = []
-    viewport = SimpleNamespace(scene=scene, camera=camera, update=lambda: None,
-                               view_tint=None, active_view_key='old',
-                               setFocus=lambda *a: None)
-    display = SimpleNamespace(set_scene=lambda s: calls.append(s), update=lambda: None)
-    window = SimpleNamespace(viewport=viewport,
-                             _doc=SimpleNamespace(_renderer_wgpu=True, stand_in=display),
-                             statusBar=lambda: SimpleNamespace(showMessage=lambda *a: None))
-    panel = SimpleNamespace(_window=window, _scene=lambda: scene, _touch=lambda: None,
-                            _begin_own=lambda: None, refresh=lambda: None,
-                            row_for=lambda v: v, shown=None)
-    # The panel's own path from a double-click to the recall (no glide:
-    # the stand-in window has no scene player).
-    for name in ("show_view", "finish_view", "activate_view", "_show"):
-        setattr(panel, name, getattr(ScenesPanel, name).__get__(panel))
-    ScenesPanel._on_activate(panel, SimpleNamespace(
-        data=lambda _column, _role: ("scene", view)))
-    assert calls == [scene]
-    assert camera.distance == 42.
-    assert not layer.visible
-    assert scene.display_style.face_mode == 'wireframe'
-    assert scene._navigator_allowed is None
-
-
+    vp.camera.distance = 1.0
+    win.set_active_style(Style())
+    scene._navigator_allowed = {"earlier-result"}
+    vp.active_view_key = "old"
+    scene.version += 1
+    choose(win, 0)
+    assert win._scene_tabs.marked_view() is saved
+    assert vp.camera.distance == 42 and not layer.visible
+    assert win.active_style().face_mode == "wireframe"
+    assert scene._navigator_allowed is None and vp.active_view_key is None

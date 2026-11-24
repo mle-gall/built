@@ -565,22 +565,15 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         # The Browser ordering by layer lists them as the Layers tab does.
         self.layers_dock.panel.orderChanged.connect(
             self.project_browser.outliner.on_layer_order_changed)
-        # Scenes: a tab of its own beside Layers (#1158), no longer a
-        # section of Properties.
-        from views.tray import ScenesDock
-        self.scenes_dock = ScenesDock(self)
-        self.tray.scenes = self.scenes_dock.panel
         self._lay_out_trays()
         # The tabs show only an icon each (the name is their tooltip): the
         # name heads the panel instead, in place of the dock's own title
-        # bar — _style_dock_tabs puts the header there. Scenes (#1158) has
-        # no panel icon of its own yet: its thumbnails view's.
+        # bar — _style_dock_tabs puts the header there.
         for dock, key in ((self.tray, "panel_properties"),
                           (self.bim_tray, "panel_bim"),
                           (self.georef_tray, "panel_terrain"),
                           (self.project_browser, "panel_browser"),
-                          (self.layers_dock, "layers_panel"),
-                          (self.scenes_dock, "scenes_thumbs")):
+                          (self.layers_dock, "layers_panel")):
             self.set_dock_icon(dock, key)
             dock.setTitleBarWidget(QWidget(dock))
         self.tray.raise_()
@@ -1251,38 +1244,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         camera_menu.addAction(self._act_zoom_extents)   # la MISMA del botón
         camera_menu.addAction(self._act_zoom_selection)
 
-        # Scenes as window actions, so they can take keys of one's own in
-        # Preferences ▸ Shortcuts (#695, discussions #639 and #640): the
-        # Scenes panel's buttons were the only way in. No factory keys —
-        # the known interface stays as it was. Each runs what its button
-        # runs; the others act on the scene selected in the panel. Show,
-        # Rename and Duplicate are here too, so the panel, the scene tabs
-        # and the Browser can all run the same actions (#1158, point 7).
-        scenes_menu = camera_menu.addMenu(tr("Scenes"))
-        self._scene_actions = {}
-        for key, text, tip, slot in (
-                ("scene_show", "Show Scene",
-                 "Show the selected scene", self._on_scene_show),
-                ("scene_add", "Add Scene",
-                 "Save the current view and layer visibility",
-                 self._on_scene_add),
-                ("scene_update", "Update Scene",
-                 "Update the selected scene from the current view",
-                 self._on_scene_update),
-                ("scene_rename", "Rename Scene…",
-                 "Rename the selected scene", self._on_scene_rename),
-                ("scene_duplicate", "Duplicate Scene",
-                 "Make a copy of the selected scene",
-                 self._on_scene_duplicate),
-                ("scene_delete", "Delete Scene",
-                 "Delete the selected scenes", self._on_scene_delete)):
-            act = QAction(tr(text), self)
-            act.setObjectName(key)            # the same key in every language
-            act.setStatusTip(tr(tip))
-            act.triggered.connect(slot)
-            scenes_menu.addAction(act)
-            self._scene_actions[key] = act
-
         camera_menu.addSeparator()
 
         action_proj = QAction(tr("Toggle Perspective / Parallel"), self)
@@ -1785,7 +1746,7 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
     #: Properties first, the model's tree next, then the workspaces.
     def _default_tray_order(self) -> list:
         return [self.tray, self.project_browser, self.layers_dock,
-                self.scenes_dock, self.bim_tray, self.georef_tray]
+                self.bim_tray, self.georef_tray]
 
     def _lay_out_trays(self) -> None:
         """The trays in their factory place: every one on the right, tabbed
@@ -1940,7 +1901,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
                             getattr(self, "georef_tray", None),
                             getattr(self, "project_browser", None),
                             getattr(self, "layers_dock", None),
-                            getattr(self, "scenes_dock", None),
                             *getattr(self, "_extension_docks", ()))
                 if d is not None]
 
@@ -4366,58 +4326,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         self._ensure_composer().sheet_tab_menu(index, global_pos, self)
         self._refresh_sheet_tabs()
 
-    # ---- Scenes (Camera ▸ Scenes, #695) -------------------------------------
-    def _on_scene_add(self) -> None:
-        """«+ Scene», from a menu or a key. The new scene becomes the
-        panel's current one, so Update Scene right after updates it."""
-        view = self.tray.scenes._on_add()
-        self.statusBar().showMessage(
-            tr("Scene '{name}' added", name=view.name), 2000)
-
-    def _selected_scene(self):
-        """The scene of the panel's current row, or None after saying why."""
-        view = self.tray.scenes.current_view()
-        if view is None:
-            self._no_scene_selected()
-        return view
-
-    def _on_scene_show(self) -> None:
-        view = self._selected_scene()
-        if view is not None:
-            self.tray.scenes.show_view(view)
-
-    def _on_scene_update(self) -> None:
-        view = self._selected_scene()
-        if view is not None:
-            self.tray.scenes.update_view(view)
-
-    def _on_scene_rename(self) -> None:
-        """In its row when the Scenes tab is in sight, else in the name
-        prompt — the panel's ``ask_rename``, as from a scene tab. The
-        Browser's rule: the sheet views that show the scene follow the new
-        name, and a name another scene has is refused."""
-        view = self._selected_scene()
-        if view is not None:
-            self.tray.scenes.ask_rename(view)
-
-    def _on_scene_duplicate(self) -> None:
-        """A copy right after the scene, made current, so Update or Rename
-        right after acts on the copy."""
-        view = self._selected_scene()
-        if view is None:
-            return
-        copy = self.tray.scenes.duplicate_view(view)
-        if copy is not None:
-            self.statusBar().showMessage(
-                tr("Scene '{name}' added", name=copy.name), 2000)
-
-    def _on_scene_delete(self) -> None:
-        panel = self.tray.scenes
-        if not panel.selected_views() and panel.current_view() is None:
-            self._no_scene_selected()
-            return
-        panel._on_delete()
-
     # ---- Model / sheet tabs (the strip at the bottom) -----------------------
     def _refresh_sheet_tabs(self) -> None:
         """This window shows the model, so its strip always marks «Model».
@@ -4850,7 +4758,7 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         vp.projectionChanged.connect(live(self._sync_projection_buttons))
         vp.smartZoomRequested.connect(live(self._on_smart_zoom))
         for name in ("tray", "bim_tray", "georef_tray", "project_browser",
-                     "layers_dock", "scenes_dock"):
+                     "layers_dock"):
             panel = getattr(self, name, None)
             if panel is not None:
                 vp.sceneVersionChanged.connect(

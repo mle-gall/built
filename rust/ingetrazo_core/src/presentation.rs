@@ -5,6 +5,63 @@ use pyo3::{prelude::*, types::PyDict};
 type Obj<'py> = Bound<'py, PyAny>;
 type Indexed<'py> = (usize, Obj<'py>);
 
+/// Restore the occurrence filter and tint saved with a camera, or clear an
+/// active navigator display when recalling an ordinary scene.
+#[pyfunction]
+fn recall_scene_display(vp: &Obj<'_>, view: &Obj<'_>) -> PyResult<()> {
+    let py = vp.py();
+    let scene = vp.getattr("scene")?;
+    let key = view.getattr("navigator_view")?;
+    let options = PyDict::new(py);
+    options.set_item("remember", false)?;
+    if !key.is_none() {
+        let registry = py
+            .import("core.bim_registry")?
+            .call_method1("get", (&scene,))?;
+        let saved = registry
+            .call_method1("get", ("views", PyDict::new(py)))?
+            .call_method1("get", (&key,))?;
+        if !saved.is_none() {
+            options.set_item("key", key)?;
+            options.set_item("exact", saved.call_method1("get", ("exact", false))?)?;
+            options.set_item("isolate", saved.call_method1("get", ("isolate", false))?)?;
+            let expr = saved.get_item("filter")?;
+            let color = saved.call_method1("get", ("color_by",))?;
+            py.import("core.agent_facets")?.call_method(
+                "set_display",
+                (vp, expr, color),
+                Some(&options),
+            )?;
+            return Ok(());
+        }
+    }
+    let active = |obj: &Obj<'_>, field| -> PyResult<bool> {
+        Ok(obj.hasattr(field)? && !obj.getattr(field)?.is_none())
+    };
+    if active(&scene, "_navigator_allowed")?
+        || active(vp, "active_view_key")?
+        || active(vp, "view_tint")?
+    {
+        py.import("core.agent_facets")?
+            .call_method("set_display", (vp,), Some(&options))?;
+    }
+    Ok(())
+}
+
+/// Saved views and their folders are persistent edits. They advance the
+/// document version without invalidating every other saved camera's picture.
+#[pyfunction(signature = (scene, changed_view=None))]
+fn bump_scene_catalog(scene: &Obj<'_>, changed_view: Option<&Obj<'_>>) -> PyResult<()> {
+    let version: i64 = scene.getattr("version")?.extract()?;
+    let catalog: i64 = scene.getattr("_scene_catalog_ticks")?.extract()?;
+    scene.setattr("version", version + 1)?;
+    scene.setattr("_scene_catalog_ticks", catalog + 1)?;
+    if let Some(view) = changed_view {
+        view.setattr("_photo_tick", catalog + 1)?;
+    }
+    Ok(())
+}
+
 #[pyfunction]
 fn add_item(list: &Obj<'_>, item: &Obj<'_>) -> PyResult<()> {
     list.call_method1("append", (item,))?;
@@ -483,6 +540,8 @@ fn capture_sheet_fields<'py>(
 
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let sub = PyModule::new(m.py(), "presentation")?;
+    sub.add_function(wrap_pyfunction!(recall_scene_display, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(bump_scene_catalog, &sub)?)?;
     sub.add_function(wrap_pyfunction!(sheet_container, &sub)?)?;
     sub.add_function(wrap_pyfunction!(append_sheet_item, &sub)?)?;
     sub.add_function(wrap_pyfunction!(remove_sheet_item, &sub)?)?;

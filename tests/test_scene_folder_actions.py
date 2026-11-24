@@ -131,3 +131,63 @@ def test_scene_picture_mode_is_saved_by_the_chooser(win):
     for action, stored in [("0", False), ("1", True)]:
         _run(win, ["scenephotomode:" + action])
         assert settings().value("scenes/thumbnails", type=bool) is stored
+
+
+def test_model_and_camera_changes_invalidate_only_their_own_pictures(win):
+    from ingetrazo_core import Vec3
+
+    a, b = [add(win, name) for name in ("A", "B")]
+
+    def revisions():
+        return {row[1]: row[2] for row in rows(win)}
+
+    before = revisions()
+    win.viewport.camera.distance += 7
+    win.tray.scenes.update_view(b)
+    changed = revisions()
+    assert changed["B"] != before["B"] and changed["A"] == before["A"]
+    win._on_undo()
+    assert revisions()["A"] == before["A"] and b.distance != win.viewport.camera.distance
+    win._on_redo()
+    assert b.distance == win.viewport.camera.distance
+    updated = revisions()
+    edit(win, "add", label="Plans")
+    edit(win, "file", label=a.name, dest="Plans")
+    assert revisions() == updated
+    c = win.tray.scenes.add_scene()
+    assert win.tray.scenes.rename_view(c, "Third")
+    assert all(revisions()[name] == updated[name] for name in ("A", "B"))
+    scene = win.viewport.scene
+    scene.mesh.add_edge(Vec3(0, 0, 0), Vec3(1, 0, 0))
+    scene.version += 1
+    assert all(revisions()[name] != updated[name] for name in ("A", "B"))
+
+
+def test_bulk_selection_files_and_deletes_as_one_step_and_rejects_stale_targets(win):
+    from tests.scene_controls import chrome
+    from views import wgpu_ui
+
+    a, b, c = [add(win, name) for name in "ABC"]
+    vp = win.viewport
+    owner = str(id(vp.scene))
+    keys = [a._doc_key, c._doc_key]
+    edit(win, "add", label="Plans")
+    before = len(vp.history.undo_stack)
+    edit(win, "file_selected", dest="Plans", label=json.dumps(keys))
+    assert (a.folder, b.folder, c.folder) == ("Plans", None, "Plans")
+    assert len(vp.history.undo_stack) == before + 1
+    delete = "tab:scenedelete:" + json.dumps([owner, keys])
+    with chrome(win) as renderer:
+        _run(win, [delete])
+        assert "2" in renderer.ui_set_prompt.call_args.args[0]
+        wgpu_ui._tree_action(win, win.view, wgpu_ui.SEP.join(("prompt", "no", "")))
+        assert len(vp.history.undo_stack) == before + 1
+        _run(win, [delete])
+        wgpu_ui._tree_action(win, win.view, wgpu_ui.SEP.join(("prompt", "yes", "")))
+    assert labels(win) == ["B"] and len(vp.history.undo_stack) == before + 2
+    win._on_undo()
+    assert labels(win) == ["A", "C", "B"] and (a.folder, c.folder) == ("Plans", "Plans")
+    win.tray.scenes.delete_views([a])
+    before = vp.history.revision
+    edit(win, "file_selected", label=json.dumps(keys))
+    assert c.folder == "Plans" and vp.history.revision == before

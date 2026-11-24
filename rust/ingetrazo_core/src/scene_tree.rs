@@ -497,6 +497,9 @@ fn menu_rows(
     marked: Option<&Obj<'_>>,
 ) -> PyResult<(Vec<MenuItem>, Vec<MenuItem>)> {
     let tree = Tree::read(scene)?;
+    let content: i64 = scene.getattr("content_version")?.extract()?;
+    let catalog: i64 = scene.getattr("_scene_catalog_ticks")?.extract()?;
+    let model = content - catalog;
     let scenes = views(scene)?
         .into_iter()
         .enumerate()
@@ -504,7 +507,11 @@ fn menu_rows(
             Ok((
                 format!("scene:{i}"),
                 v.getattr("name")?.extract()?,
-                String::new(),
+                format!(
+                    "{}:{model}:{}",
+                    v.getattr("_doc_key")?.extract::<u64>()?,
+                    v.getattr("_photo_tick")?.extract::<i64>()?
+                ),
                 tree.view_folder(&v)?.unwrap_or_default(),
                 i8::from(marked.is_some_and(|m| v.is(m))),
                 true,
@@ -568,6 +575,35 @@ fn move_among_siblings(history: &Obj<'_>, view: &Obj<'_>, earlier: bool) -> PyRe
     Ok(true)
 }
 
+fn selected_views<'py>(scene: &Obj<'py>, keys: &[u64]) -> PyResult<Vec<Obj<'py>>> {
+    let selected: HashSet<_> = keys.iter().copied().collect();
+    let mut found = Vec::new();
+    for view in views(scene)? {
+        if selected.contains(&view.getattr("_doc_key")?.extract::<u64>()?) {
+            found.push(view);
+        }
+    }
+    if found.is_empty() || found.len() != selected.len() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "The scene selection has changed",
+        ));
+    }
+    Ok(found)
+}
+
+#[pyfunction]
+fn menu_selection<'py>(scene: &Obj<'py>, request: &str) -> PyResult<Vec<Obj<'py>>> {
+    use pyo3::exceptions::PyValueError;
+    let (owner, keys): (String, Vec<u64>) =
+        serde_json::from_str(request).map_err(|err| PyValueError::new_err(err.to_string()))?;
+    if owner != (scene.as_ptr() as usize).to_string() {
+        return Err(PyValueError::new_err(
+            "This scene menu belongs to another document",
+        ));
+    }
+    selected_views(scene, &keys)
+}
+
 #[pyfunction]
 #[pyo3(signature = (history, request, add_scene=None))]
 fn edit_menu_folder(
@@ -617,6 +653,15 @@ fn edit_menu_folder(
         {
             FolderEdit::move_rows(vec![], vec![folder.clone()], parent, None)
         }
+        "file_selected" => {
+            let keys: Vec<u64> =
+                serde_json::from_str(&label).map_err(|e| PyValueError::new_err(e.to_string()))?;
+            let views = selected_views(&scene, &keys)?
+                .into_iter()
+                .map(Obj::unbind)
+                .collect();
+            FolderEdit::move_rows(views, vec![], parent, None)
+        }
         "file" => {
             let saved = views(&scene)?
                 .into_iter()
@@ -661,6 +706,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     sub.add_function(wrap_pyfunction!(state, &sub)?)?;
     sub.add_function(wrap_pyfunction!(signature, &sub)?)?;
     sub.add_function(wrap_pyfunction!(restore, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(menu_selection, &sub)?)?;
     sub.add_function(wrap_pyfunction!(menu_rows, &sub)?)?;
     sub.add_function(wrap_pyfunction!(edit_menu_folder, &sub)?)?;
     sub.add_class::<FolderEdit>()?;
