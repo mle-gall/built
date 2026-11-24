@@ -1,6 +1,7 @@
 //! Document facts and commands for an occurrence's context menu.
 pub mod paint;
 pub mod row_actions;
+pub mod tag_controls;
 use super::model_edit::translated;
 use pyo3::{
     prelude::*,

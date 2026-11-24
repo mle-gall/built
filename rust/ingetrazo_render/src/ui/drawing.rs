@@ -244,9 +244,16 @@ impl StyleEditor {
             .insert(key.clone(), (n.name.clone(), n.cells.clone()));
     }
 
+    pub fn creation_row(&self) -> String {
+        if self.selected.len() + self.selected_folders.len() != 1 { return String::new(); }
+        if let Some(key) = self.selected_folders.first() { return format!("preview-folder:{key}"); }
+        self.selected.keys().next().map(|key| format!("preview-tag:{key}")).unwrap_or_default()
+    }
+
     pub fn refresh(&mut self, nodes: &[Node]) {
         for n in nodes {
             if let Some(entry) = n.cells.get(5).and_then(|key| self.selected.get_mut(key)) {
+                entry.0.clone_from(&n.name);
                 entry.1.clone_from(&n.cells);
             }
         }

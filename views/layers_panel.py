@@ -22,7 +22,7 @@ from PySide6.QtGui import QAction, QBrush
 from PySide6.QtWidgets import (QAbstractItemView, QApplication,
                                QFrame,
                                QDockWidget,
-                               QHBoxLayout, QHeaderView, QLineEdit, QMenu,
+                               QHBoxLayout, QHeaderView, QMenu,
                                QMessageBox, QPushButton, QSizePolicy,
                                QStyledItemDelegate,
                                QToolButton, QTreeWidget, QTreeWidgetItem,
@@ -99,13 +99,6 @@ def _pencil_icon(on: bool) -> QIcon:
     pencil_glyph(p)
     p.end()
     return QIcon(pm)
-
-
-def add_icon(kind: str) -> QIcon:
-    """The icon of the add buttons beside the filter: the layer sheets or a
-    folder, each with a «+», drawn like every other icon of the bar."""
-    from views.icons import tool_icon
-    return tool_icon("folder_add" if kind == KIND_FOLDER else "layer_add")
 
 
 def printer_icon(on: bool) -> QIcon:
@@ -731,30 +724,8 @@ class LayersPanel(QWidget):
         lay.setContentsMargins(6, 6, 6, 6)
         lay.setSpacing(4)
 
-        # The add buttons, then the filter — the Browser's bar: flat tool
-        # buttons that raise on hover.
         bar = QHBoxLayout()
-        self.add_layer_btn = self._tool_button(
-            add_icon(KIND_LAYER), tr("Add layer"), lambda: self.add_layer())
-        self.add_folder_btn = self._tool_button(
-            add_icon(KIND_FOLDER), tr("Add folder"), lambda: self.add_folder())
-        bar.addWidget(self.add_layer_btn)
-        bar.addWidget(self.add_folder_btn)
-        self.search = QLineEdit()
-        self.search.setPlaceholderText(tr("Filter layers… (* and ? work)"))
-        self.search.setClearButtonEnabled(True)
-        self.search.textChanged.connect(lambda _t: self._apply_filter())
-        bar.addWidget(self.search, 1)
-        # Quick filters by state, one click each — nothing to build or name
-        # (a fixed group of layers is what folders are for).
-        self.state_filter = "all"
-        self.invert_filter = False
-        self.filter_btn = QToolButton()
-        self.filter_btn.setAutoRaise(True)
-        self.filter_menu = QMenu(self.filter_btn)
-        self.filter_btn.clicked.connect(self._open_filter_menu)
-        bar.addWidget(self.filter_btn)
-        self._show_filter_state()
+        bar.addStretch(1)
         # Expand / collapse every folder, as the Browser's. Isolating is per
         # row (the target beside the padlock), as in the Layers drop-down.
         #: What Isolate hid, to show back exactly that on the way out.
@@ -880,10 +851,6 @@ class LayersPanel(QWidget):
         self.tree.setItemDelegateForColumn(COL_NAME, names)
         self.tree.setItemDelegateForColumn(COL_LINETYPE,
                                            _LineDelegate(self.tree))
-        #: The row just made, ``(kind, name)``, until its name is typed.
-        self._just_made = None
-        names.closeEditor.connect(
-            lambda *_a: QTimer.singleShot(0, self._select_just_made))
         self.tree.itemExpanded.connect(self._on_expanded)
         self.tree.itemCollapsed.connect(self._on_collapsed)
         self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -948,11 +915,8 @@ class LayersPanel(QWidget):
     def retheme(self) -> None:
         from views.icons import tool_icon
         self._header_icons()
-        self.add_layer_btn.setIcon(add_icon(KIND_LAYER))
-        self.add_folder_btn.setIcon(add_icon(KIND_FOLDER))
         self.color_by_layer.setIcon(tool_icon("layers_colour"))
         self.more_btn.setIcon(tool_icon("layers_templates"))
-        self._show_filter_state()
         self._update_expand_button()
         self.refresh()
 
@@ -1026,7 +990,6 @@ class LayersPanel(QWidget):
                 self.tree.setCurrentItem(it, 0, QItemSelectionModel.NoUpdate)
         col, order = getattr(self, "_sort", (COL_NAME, Qt.AscendingOrder))
         self.tree.sortItems(col, order)
-        self._apply_filter()
         self._update_expand_button()
         style = getattr(scene, "display_style", None)
         self.color_by_layer.blockSignals(True)
@@ -1264,7 +1227,6 @@ class LayersPanel(QWidget):
         self.color_by_layer.setChecked(bool(getattr(scene.display_style, "color_by_layer", False)))
         self.color_by_layer.blockSignals(False)
         self._mark_selection()
-        self._apply_filter()
 
     def _new_layer_row(self, ly, order, active):
         item = _Row([ly.name])
@@ -1410,145 +1372,6 @@ class LayersPanel(QWidget):
     def item_for(self, name: str, kind: str = KIND_LAYER):
         return next((it for it in self._all_items()
                      if self._key(it) == (kind, name)), None)
-
-    #: The quick filters of the funnel, in menu order: (key, label, tip).
-    STATE_FILTERS = (
-        ("all", "All layers", ""),
-        ("visible", "Visible layers", ""),
-        ("hidden", "Hidden layers", ""),
-        ("locked", "Locked layers", ""),
-        ("unprinted", "Layers not printed",
-         "Seen in the model, left out of the sheets."),
-        ("used", "Layers in use", "Layers something in the model carries."),
-        ("unused", "Unused layers", "What Purge would delete."),
-        ("selection", "Layers of the selection",
-         "The layers of what is selected in the model."),
-    )
-
-    def _fill_filter_menu(self) -> None:
-        from PySide6.QtGui import QActionGroup
-        menu = self.filter_menu
-        menu.clear()
-        group = QActionGroup(menu)
-        group.setExclusive(True)
-        for key, label, tip in self.STATE_FILTERS:
-            act = menu.addAction(tr(label))
-            act.setCheckable(True)
-            act.setChecked(self.state_filter == key)
-            if tip:
-                act.setStatusTip(tr(tip))
-                act.setToolTip(tr(tip))
-            group.addAction(act)
-            act.triggered.connect(lambda _c=False, k=key:
-                                  self.set_state_filter(k))
-        menu.addSeparator()
-        inv = menu.addAction(tr("Invert filter"))
-        inv.setCheckable(True)
-        inv.setChecked(self.invert_filter)
-        inv.setStatusTip(tr("Show the layers the filter leaves out."))
-        inv.toggled.connect(self.set_invert_filter)
-
-    def set_state_filter(self, key: str) -> None:
-        self.state_filter = key if key in dict(
-            (k, k) for k, _l, _t in self.STATE_FILTERS) else "all"
-        self._show_filter_state()
-        self._apply_filter()
-
-    def set_invert_filter(self, on: bool) -> None:
-        self.invert_filter = bool(on)
-        self._show_filter_state()
-        self._apply_filter()
-
-    def _show_filter_state(self) -> None:
-        """The funnel fills when a filter is narrowing the list, and its
-        tooltip says which."""
-        from views.icons import tool_icon
-        on = self.state_filter != "all" or self.invert_filter
-        self.filter_btn.setIcon(tool_icon("layers_filter_on" if on
-                                          else "layers_filter"))
-        label = dict((k, l) for k, l, _t in self.STATE_FILTERS)[
-            self.state_filter]
-        tip = tr("Filter: {name}", name=tr(label))
-        if self.invert_filter:
-            tip += " · " + tr("inverted")
-        self.filter_btn.setToolTip(tip)
-
-    @staticmethod
-    def _name_matches(name: str, text: str) -> bool:
-        """The search: a plain text is looked for anywhere in the name; with
-        ``*`` or ``?`` it is a pattern for the whole name (``A-*``,
-        ``*MUR*``) — the names an imported drawing brings by the hundred."""
-        if not text:
-            return True
-        name = name.casefold()
-        if "*" in text or "?" in text:
-            import fnmatch
-            return fnmatch.fnmatchcase(name, text)
-        return text in name
-
-    def _state_test(self):
-        """``name -> bool`` for the funnel's filter (``None``: no filter)."""
-        scene = self._scene()
-        key = self.state_filter
-        if key == "all":
-            return None
-        if key in ("visible", "hidden", "locked", "unprinted"):
-            def test(name):
-                ly = scene.layer(name)
-                if ly is None:
-                    return False
-                return (L.effective_visible(scene, ly) if key == "visible" else
-                        not L.effective_visible(scene, ly) if key == "hidden" else
-                        not getattr(ly, "printable", True)
-                        if key == "unprinted" else ly.locked)
-            return test
-        if key == "selection":
-            names = L.selection_layers(scene)
-        elif key == "used":
-            from core.purge import used_layers
-            names = used_layers(scene)
-        else:
-            from core.purge import unused_layers
-            names = {ly.key for ly in unused_layers(scene)}
-        return lambda name: name in names
-
-    def _apply_filter(self) -> None:
-        """Layer rows that pass the search text and the funnel's filter stay
-        — or, inverted, the ones that do not — with the folders on the way
-        to them. A folder whose name matches the search shows all it holds
-        (with no state filter and not inverted: then it is the folder you
-        were looking for)."""
-        text = self.search.text().strip().casefold()
-        state = self._state_test()
-        invert = self.invert_filter
-
-        def layer_ok(name: str) -> bool:
-            ok = self._name_matches(name, text) and (state is None
-                                                      or state(name))
-            return ok != invert
-
-        whole = bool(text) and state is None and not invert
-        # No filter at all: every row shows — an empty folder too, which
-        # has no layer to be shown through (a new folder was invisible).
-        nothing = not text and state is None and not invert
-        if nothing and getattr(self, "_unfiltered", False):
-            return
-        self._unfiltered = nothing
-
-        def show(item, inherited: bool) -> bool:
-            kind, name = self._key(item)
-            if kind == KIND_LAYER:
-                visible = nothing or inherited or layer_ok(name)
-            else:
-                opens = whole and self._name_matches(name, text)
-                kids = [show(c, inherited or opens)
-                        for c in self._children(item)]
-                visible = nothing or inherited or opens or any(kids)
-            item.setHidden(not visible)
-            return visible
-
-        for i in range(self.tree.topLevelItemCount()):
-            show(self.tree.topLevelItem(i), False)
 
     # ---- Selection helpers ---------------------------------------------------
     def _layers_under(self, items) -> list[str]:
@@ -1930,10 +1753,6 @@ class LayersPanel(QWidget):
         panel."""
         self._popup(menu, place_menu(menu, anchor, global_rect(self)))
 
-    def _open_filter_menu(self) -> None:
-        self._fill_filter_menu()
-        self._drop(self.filter_menu, global_rect(self.filter_btn))
-
     def _open_more_menu(self) -> None:
         self._fill_more_menu()
         self._drop(self.more_menu, global_rect(self.more_btn))
@@ -2124,95 +1943,6 @@ class LayersPanel(QWidget):
                 L.rename_layer(scene, old, new)
         QTimer.singleShot(0, self._touch)       # not while the editor closes
 
-    #: QSettings key of «New layers start hidden in the existing scenes».
-    NEW_HIDDEN_KEY = "layers/new_hidden_in_scenes"
-
-    @classmethod
-    def new_layers_hidden_in_scenes(cls) -> bool:
-        from core.settings import settings as QSettings
-        return str(QSettings().value(cls.NEW_HIDDEN_KEY, "false")).lower() \
-            in ("true", "1")
-
-    @classmethod
-    def set_new_layers_hidden_in_scenes(cls, on: bool) -> None:
-        from core.settings import settings as QSettings
-        QSettings().setValue(cls.NEW_HIDDEN_KEY, bool(on))
-
-    def _selected_folder(self) -> str | None:
-        """The folder new things go into: the highlighted row when it is a
-        selected folder, the folder of a selected layer, else none (the
-        top) — working in «Arquitectura», a new layer lands there too."""
-        item = self.tree.currentItem()
-        if item is None or not item.isSelected():
-            return None
-        kind, name = self._key(item)
-        if kind == KIND_FOLDER:
-            return name
-        ly = self._scene().layer(name)
-        return ly.folder if ly is not None and ly.folder else None
-
-    def add_layer(self, folder: str | None = None, edit: bool = True) -> str:
-        """A new layer — inside the selected folder, or ``folder`` — with
-        its name open for typing. Returns its name."""
-        scene = self._scene()
-        folder = folder or self._selected_folder()
-        # Unique among labels AND keys: a new tag's key is its first label.
-        name = L.unique_name([ly.name for ly in scene.layers]
-                             + [ly.key for ly in scene.layers], tr("Layer"))
-        scene.layers.append(L.Layer(name, folder=folder or None))
-        # A layer made after the plans were set up stays out of them.
-        if self.new_layers_hidden_in_scenes():
-            L.hide_in_scenes(scene, [name], True)
-        self._touch()
-        self._edit_new(KIND_LAYER, name, edit)
-        return name
-
-    def add_folder(self, parent: str | None = None, edit: bool = True) -> str:
-        """A new folder — inside the selected folder, or ``parent`` — with
-        its name open for typing. Returns its name."""
-        scene = self._scene()
-        parent = parent or self._selected_folder()
-        name = L.add_folder(scene, tr("Folder"), parent)
-        self._touch()
-        self._edit_new(KIND_FOLDER, name, edit)
-        return name
-
-    def _edit_new(self, kind: str, name: str, edit: bool) -> None:
-        item = self.item_for(name, kind)
-        if item is None:
-            return
-        parent = item.parent()
-        while parent is not None:                   # in view, unfolded
-            parent.setExpanded(True)
-            parent = parent.parent()
-        # Current but NOT selected: with the name being typed, a selected
-        # row showed the highlight broken around the editor — half the
-        # row lit, the cells under the editor not.
-        self.tree.clearSelection()
-        self.tree.setCurrentItem(item, COL_NAME, QItemSelectionModel.NoUpdate)
-        self.tree.scrollToItem(item)
-        if edit:
-            self._just_made = (kind, name)
-            self.tree.editItem(item, COL_NAME)
-
-    def _select_just_made(self) -> None:
-        """Its name typed, the new row is selected — whole, the editor gone
-        — so a layer added next goes into a folder just made."""
-        made, self._just_made = self._just_made, None
-        if made is None or self._in_model(QApplication.focusWidget()):
-            return             # the name was left by clicking the model
-        item = self.item_for(made[1], made[0])
-        if item is not None:
-            self.tree.setCurrentItem(item)
-            self.tree.scrollToItem(item)     # resorted by its name: still seen
-
-    # The names the old buttons and menus call.
-    def _on_add(self, folder: str | None = None) -> None:
-        self.add_layer(folder or None)
-
-    def _on_add_folder(self) -> None:
-        self.add_folder()
-
     def move_to_folder(self, names, folder: str | None) -> None:
         L.move_to_folder(self._scene(), names, folder)
         self._touch()
@@ -2246,13 +1976,6 @@ class LayersPanel(QWidget):
             group.addAction(act)
             act.triggered.connect(lambda _c=False, k=key: self.set_sort_by(k))
         menu.addSeparator()
-        act = menu.addAction(tr("New layers start hidden in existing scenes"))
-        act.setCheckable(True)
-        act.setChecked(self.new_layers_hidden_in_scenes())
-        act.setStatusTip(tr(
-            "A layer made after the scenes were saved does not turn up in "
-            "them."))
-        act.toggled.connect(self.set_new_layers_hidden_in_scenes)
         style = getattr(self._scene(), "display_style", None)
         act = menu.addAction(tr("Line types in the model"))
         act.setCheckable(True)
@@ -2439,8 +2162,6 @@ class LayersPanel(QWidget):
         """The right-click menu of ``item`` (``None``: the empty list)."""
         scene = self._scene()
         if item is None:
-            menu.addAction(tr("Add layer"), lambda: self.add_layer())
-            menu.addAction(tr("Add folder"), lambda: self.add_folder())
             menu.addAction(tr("Show all layers"), self.show_all)
             menu.addSeparator()
             return
@@ -2489,10 +2210,6 @@ class LayersPanel(QWidget):
                                         lambda o=other.key:
                                         self.merge(name, o))
         else:
-            menu.addAction(tr("New layer in this folder"),
-                           lambda: self.add_layer(name))
-            menu.addAction(tr("New folder in this folder"),
-                           lambda: self.add_folder(name))
             inside = set(L.subfolders(scene, name, deep=True)) | {name}
             sub = _submenu(menu, tr("Move to folder"))
             for folder in L.folders_of(scene):
@@ -2853,7 +2570,6 @@ class LayersPanel(QWidget):
         previous = getattr(self, "_drawn_signature", None)
         if signature == previous and self.tree.topLevelItemCount():
             self._mark_selection()
-            self._apply_filter()
             return
         if previous is not None and self._append_root_layers(previous, signature):
             return
@@ -2883,7 +2599,6 @@ class LayersPanel(QWidget):
         finally:
             self._updating = False
         self._mark_selection()
-        self._apply_filter()
         self._drawn_signature = signature
         self._drawn_structure = self._structure()
         return True

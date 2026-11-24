@@ -22,16 +22,10 @@ from __future__ import annotations
 
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 import json
-import os
 from types import SimpleNamespace
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
-
-_app = QApplication.instance() or QApplication([])
 
 from core import layers as L
 from core.guide import Guide
@@ -44,7 +38,6 @@ from core.image_plane import ImagePlane
 from core.layers import DEFAULT_LAYER, Layer, layer_of
 from core.purge import layer_carriers, used_layers
 from core.scene import Scene
-from core.select_ops import on_layers
 
 
 def V(x, y, z=0.0):
@@ -217,67 +210,35 @@ def test_deleting_and_renaming_a_layer_take_its_guides_along():
     assert layer_of(g) == DEFAULT_LAYER
 
 
-def test_select_content_of_a_layer_takes_its_guides_and_images():
-    scene = _scene_with("Guías")
-    g = Guide(V(0, 0, 0), V(1, 0, 0), layer="Guías")
-    im = ImagePlane("plano.png", V(0, 0, 0), V(1, 0, 0), V(0, 1, 0),
-                    layer="Guías")
-    other = Guide(V(9, 9, 0))
-    scene.guides += [g, other]
-    scene.image_planes.append(im)
-    assert set(map(id, on_layers(scene, ["Guías"]))) == {id(g), id(im)}
+def test_select_content_of_a_layer_takes_its_guides_and_images(native_host):
+    from tests.native_tree import action
+    scene = native_host.viewport.scene
+    scene.layers.append(Layer("Guías"))
+    guide = Guide(V(0, 0), V(1, 0), layer="Guías")
+    image = ImagePlane("plano.png", V(0, 0), V(1, 0), V(0, 1), layer="Guías")
+    scene.guides.extend([guide, Guide(V(9, 9))])
+    scene.image_planes.append(image)
+    action(native_host, "tagselect", "preview-tag:Guías")
+    assert {id(e) for e in scene.selection} == {id(guide), id(image)}
     scene.layer("Guías").locked = True
-    assert on_layers(scene, ["Guías"]) == []
+    action(native_host, "tagselect", "preview-tag:Guías")
+    assert not scene.selection
 
 
-def test_entity_info_offers_the_layer_of_a_selected_guide():
-    """The Layer field of Entity Info shows for a guide (and an image) and
-    moves it, as for any dimension."""
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        scene = win.viewport.scene
-        scene.layers.append(Layer("Guías"))
-        g = Guide(V(0, 0, 0), V(1, 0, 0))
-        scene.guides.append(g)
-        scene.selection = {g}
-        win._assign_layer("Guías")
-        assert g.layer == "Guías"
-        win.viewport.history.undo()
-        assert layer_of(g) == DEFAULT_LAYER
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
-
-
-def test_entity_info_offers_the_layer_of_a_selected_guide_circle():
-    """A guide circle is taggable too: Entity Info shows its Layer field
-    and moves it, exactly like a guide line."""
+@pytest.mark.parametrize("circle", [False, True])
+def test_inspector_moves_a_guide_to_a_tag_and_undoes_it(native_host, circle):
     from core.guide import GuideCircle
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        scene = win.viewport.scene
-        scene.layers.append(Layer("Guías"))
-        c = GuideCircle(V(0, 0, 0), V(0, 0, 1), 2.0)
-        scene.guides.append(c)
-        scene.selection = {c}
-        panel = win.tray.entity_info
-        panel.refresh()
-        assert panel._layer_box.isVisibleTo(panel)
-        assert panel._layer_box.currentData() == DEFAULT_LAYER
+    from tests.native_tree import action, tag_picker
+    scene = native_host.viewport.scene
+    scene.layers.append(Layer("Guías"))
+    guide = GuideCircle(V(0, 0), V(0, 0, 1), 2.0) if circle else Guide(V(0, 0), V(1, 0))
+    scene.guides.append(guide)
+    key, options = tag_picker(native_host, [guide])
+    assert key == DEFAULT_LAYER and options["Guías"] == "Guías"
+    action(native_host, "tagpick", json.dumps("Guías"))
+    assert guide.layer == "Guías" and native_host.viewport.history.undo()
+    assert layer_of(guide) == DEFAULT_LAYER
 
-        idx = panel._layer_box.findData("Guías")
-        panel._layer_box.setCurrentIndex(idx)          # the user picks Guías
-        assert layer_of(c) == "Guías"
-        win.viewport.history.undo()
-        assert layer_of(c) == DEFAULT_LAYER
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
-
-
-# ---- Automatic layers: «Guides» and «Dimensions» ----------------------------
 
 def _dimension(x=0.0):
     return Dimension(V(x, 0, 0), V(x + 2, 0, 0), V(0, -1, 0))

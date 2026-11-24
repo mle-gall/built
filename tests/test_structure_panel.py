@@ -1,6 +1,5 @@
 """Filing, recipe editing, and bootstrap through the Project tree and protocol."""
 import pytest
-from PySide6.QtWidgets import QMainWindow
 
 from core import bim_registry, facets, structure
 from core.agent_facets import set_display
@@ -100,25 +99,16 @@ def test_bootstrap_proposal_is_undoable(panel):
     assert bim_registry.get(p.scene) == registry and not structure.node_of(loose)
 
 
-def test_entity_info_refiles_and_intercepts_tag(panel, monkeypatch):
-    from views.tray import EntityInfoPanel
+def test_filed_placements_refile_through_the_tree_and_reject_direct_tag_edits(panel):
+    from ingetrazo_render import inspector_tag_row, tree_edit_tag
     p, filed, _ = panel
-    window = QMainWindow()
-    window.viewport = p.win.viewport
-    try:
-        p.scene.select([filed])
-        info = EntityInfoPanel(window)
-        info.refresh()
-        assert info._structure_path.text() == "Ride › Track › Sections"
-        monkeypatch.setattr("views.chrome_forms.ask_choice", lambda *a, done: done("Ride › Reference"))
-        info._refile_button.click()
-        assert info._structure_path.text() == "Ride › Reference"
-        monkeypatch.setattr("views.chrome_forms.ask_choice", lambda *a, done: done(None))
-        info._layer_box.setCurrentIndex(info._layer_box.findData("Track Sections"))
-        assert filed.layer == "Reference" and info._layer_box.currentData() == "Reference"
-        assert len(p.win.viewport.history.undo_stack) == 1
-    finally:
-        window.close()
+    p.scene.select([filed])
+    assert structure.path(bim_registry.get(p.scene), "sections") == ["Ride", "Track", "Sections"]
+    p.action("fileitem", f"i:{filed.uid}" + wgpu_ui.SEP + "ref")
+    assert structure.path(bim_registry.get(p.scene), structure.node_of(filed)) == ["Ride", "Reference"]
+    assert not inspector_tag_row(p.scene)
+    tree_edit_tag(p.win, "tagassign", "preview-tag:Track Sections", "", set())
+    assert filed.layer == "Reference" and len(p.win.viewport.history.undo_stack) == 1
 
 
 def test_hidden_changes_coalesce_in_one_membership_pass(panel, monkeypatch):

@@ -12,17 +12,11 @@ that hide the layer.
 """
 from __future__ import annotations
 
-import os
 import random
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from PySide6.QtCore import Qt
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication, QMessageBox
-
-_app = QApplication.instance() or QApplication([])
 
 from core.group import Group
 from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
@@ -241,44 +235,19 @@ def test_random_renames_keep_every_label_on_a_real_layer(seed):
 
 # ---- Panel ------------------------------------------------------------------
 
-def _window():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    win.show()
-    _app.processEvents()
-    return win
-
-
-def _item(tree, name):
-    return tree.parent().item_for(name)
-
-
-def test_panel_add_and_rename_stay_off_the_undo_stack():
-    """Draw, then make and rename a layer: Ctrl+Z takes back the drawing,
-    not the layer — the case that made the panel's undo a problem."""
+def test_drawing_add_and_rename_stay_off_the_modelling_history(native_host):
     from core.history import AddFaceCommand
-    win = _window()
-    try:
-        scene = win.viewport.scene
-        history = win.viewport.history
-        panel = win.layers_dock.panel
-        history.execute(AddFaceCommand([QVector3D(0, 0, 0), QVector3D(1, 0, 0),
-                                        QVector3D(1, 1, 0), QVector3D(0, 1, 0)]))
-        assert scene.mesh.faces
-        depth = len(history.undo_stack)
-
-        panel._on_add()
-        added = scene.layers[-1].name
-        _item(panel.tree, added).setText(0, "Muros")   # rename by editing
-        assert scene.layer("Muros") is not None
-        assert len(history.undo_stack) == depth
-
-        win._on_undo()
-        assert not scene.mesh.faces                     # the drawing went
-        assert scene.layer("Muros") is not None         # the layer stayed
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    from tests.native_tree import action
+    vp = native_host.viewport
+    scene = vp.scene
+    vp.history.execute(AddFaceCommand([QVector3D(0, 0, 0), QVector3D(1, 0, 0),
+                                      QVector3D(1, 1, 0), QVector3D(0, 1, 0)]))
+    assert scene.mesh.faces
+    action(native_host, "newtag", "")
+    key = scene.layers[-1].key
+    action(native_host, "rename", "preview-tag:" + key, "Muros")
+    assert scene.layer_by_key(key).name == "Muros" and len(vp.history.undo_stack) == 1
+    assert vp.history.undo() and not scene.mesh.faces and scene.layer_by_key(key).name == "Muros"
 
 
 def test_panel_delete_asks_when_the_layer_has_content(native_question_host):

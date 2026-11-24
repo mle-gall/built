@@ -103,6 +103,9 @@ pub(super) fn preview(
     expanded: HashSet<String>,
     filter: &str,
     has_links: bool,
+    used: &HashSet<String>,
+    held: &HashSet<String>,
+    selected: &HashSet<String>,
 ) -> Result<Vec<(Vec<String>, Vec<i64>)>, String> {
     let root = doc.need(owner)?;
     let names = labels(root, "layer_folder_names")?;
@@ -174,6 +177,9 @@ pub(super) fn preview(
         children.entry(parent).or_default().push(folder);
     }
     let query = filter.trim().to_lowercase();
+    let (inverted, query) = query.strip_prefix('!').filter(|rest| rest.is_empty() || rest.starts_with(char::is_whitespace))
+        .map_or((false, query.as_str()), |rest| (true, rest.trim_start()));
+    let filtering = inverted || !query.is_empty();
     let print_attr = attr_id("printable")?;
     let mut result = vec![];
     // Each folder's closing event drops its row if neither it nor any descendant matched.
@@ -194,8 +200,8 @@ pub(super) fn preview(
                 let id = format!("preview-folder:{f}");
                 let name = names.get(f).copied().unwrap_or(f);
                 let matches = inherited
-                    || (!query.contains(':') && text_matches(&name.to_lowercase(), &query));
-                let open = !query.is_empty() || expanded.contains(&id);
+                    || (!inverted && !query.contains(':') && text_matches(&name.to_lowercase(), query));
+                let open = filtering || expanded.contains(&id);
                 if !matches {
                     stack.push(Visit::End(result.len()));
                 }
@@ -238,6 +244,9 @@ pub(super) fn preview(
                             "is:visible" => visible,
                             "is:unprinted" => matches!(node.attr(print_attr), Some(Value::Bool(false))),
                             "is:locked" => tag.locked,
+                            "is:selected" => selected.contains(key),
+                            "is:used" => used.contains(key),
+                            "is:unused" => !used.contains(key) && !held.contains(key),
                             _ if token.contains(':') => false,
                             _ => {
                                 inherited
@@ -247,7 +256,7 @@ pub(super) fn preview(
                         };
                         hit != neg
                     });
-                    if matches {
+                    if matches != inverted {
                         let mut text = vec![
                             format!("preview-tag:{key}"),
                             name.into(),

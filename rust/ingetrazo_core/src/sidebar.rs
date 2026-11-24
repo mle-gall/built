@@ -97,12 +97,6 @@ pub(crate) fn project_sidebar(
     let tags_only = tree.getattr("_host_roots")?.extract::<i64>()? < 0;
     if tags_only {
         let root = scene.getattr("_root")?;
-        let mut tags: Vec<Row> = root
-            .call_method1(
-                "_drawing_preview",
-                (expanded.clone(), query, tree.getattr("links")?.is_truthy()?),
-            )?
-            .extract()?;
         let mut counts = HashMap::<String, i64>::new();
         for g in tree.getattr("unfiled")?.try_iter()? {
             let tag = g?
@@ -116,6 +110,23 @@ pub(crate) fn project_sidebar(
         } else {
             HashSet::new()
         };
+        let wants = |predicate: &str| query.split_whitespace()
+            .any(|word| word.trim_start_matches('-').eq_ignore_ascii_case(predicate));
+        let mut used: HashSet<String> = HashSet::new();
+        let mut kept: HashSet<String> = HashSet::new();
+        if wants("is:used") || wants("is:unused") {
+            let purge = scene.py().import("core.purge")?;
+            used = purge.call_method1("used_layers", (scene,))?.extract()?;
+            if wants("is:unused") {
+                kept = purge.call_method1("layers_held_by_scenes", (scene,))?.extract()?;
+            }
+        }
+        let mut tags: Vec<Row> = root
+            .call_method1(
+                "_drawing_preview",
+                (expanded.clone(), query, tree.getattr("links")?.is_truthy()?, used, kept, selected.clone()),
+            )?
+            .extract()?;
         let mut folder_selected = HashMap::<String, i64>::new();
         let parents = scene.getattr("folder_parents")?;
         let mut folder_counts = HashMap::<String, i64>::new();

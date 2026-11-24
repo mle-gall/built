@@ -16,6 +16,12 @@ pub fn tree_tag_action(win: &Bound<'_, PyAny>, tag: &str, isolate: bool) -> PyRe
         win.py()
             .import("views.tree_navigation")?
             .call_method1("open_to", (&vp, PyList::empty(win.py())))?;
+        let entities = win
+            .py()
+            .import("core.select_ops")?
+            .call_method1("on_layers", (&scene, [tag]))?;
+        ui.call_method1("_select", (win, entities))?;
+        return Ok(());
     }
     let matches = PyList::empty(win.py());
     for group in scene.getattr("groups")?.try_iter()? {
@@ -25,7 +31,7 @@ pub fn tree_tag_action(win: &Bound<'_, PyAny>, tag: &str, isolate: bool) -> PyRe
             matches.append(group)?;
         }
     }
-    ui.call_method1(if isolate { "_isolate" } else { "_select" }, (win, matches))?;
+    ui.call_method1("_isolate", (win, matches))?;
     Ok(())
 }
 
@@ -265,7 +271,7 @@ pub fn tree_header_state(vp: &Bound<'_, PyAny>, scope: &str, lock: bool) -> PyRe
     Ok(())
 }
 
-fn writable(scene: &Bound<'_, PyAny>) -> PyResult<bool> {
+pub(super) fn writable(scene: &Bound<'_, PyAny>) -> PyResult<bool> {
     Ok(!(scene.hasattr("worksession_read_only")?
         && scene.getattr("worksession_read_only")?.is_truthy()?))
 }

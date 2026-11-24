@@ -277,7 +277,7 @@ fn unlock_group(vp: &Bound<'_, PyAny>, group: &Bound<'_, PyAny>) -> PyResult<()>
 }
 
 #[pyfunction]
-fn assign_tag(win: &Bound<'_, PyAny>, name: &str) -> PyResult<()> {
+pub(crate) fn assign_tag(win: &Bound<'_, PyAny>, name: &str) -> PyResult<()> {
     let vp = win.getattr("viewport")?;
     let py = win.py();
     let layers = py.import("core.layers")?;
@@ -306,7 +306,7 @@ fn assign_tag(win: &Bound<'_, PyAny>, name: &str) -> PyResult<()> {
 }
 
 #[pyfunction]
-fn next_tag(scene: &Bound<'_, PyAny>) -> PyResult<String> {
+pub(crate) fn next_tag(scene: &Bound<'_, PyAny>) -> PyResult<String> {
     let base = translated(scene.py(), "Layer", None)?.extract::<String>()?;
     for n in 1.. {
         let name = format!("{base} {n}");
