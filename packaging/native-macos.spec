@@ -6,6 +6,10 @@ SPECPATH = str(Path(SPECPATH).parent)
 classic_analysis = Analysis
 
 def Analysis(scripts, **options):
+    optional = {"PySide6", "shiboken6"}
+    options["excludes"] = [*options.get("excludes", ()), *sorted(optional)]
+    options["hiddenimports"] = [name for name in options.get("hiddenimports", ())
+                               if name.partition(".")[0] not in optional]
     if scripts == ['main.py']:
         # CPython's regular filesystem loader and the classic bootloader
         # can both import this tree. No unpack or subprocess at startup.
