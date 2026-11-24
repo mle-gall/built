@@ -1001,6 +1001,50 @@ def run_rotate(steps):
     return out
 
 
+PASTE_SCENARIOS = {
+    "face_and_edge": [("hover", 3, 4), ("click", 3, 4), ("undo",), ("redo",)],
+    "in_place": [("in_place",), ("undo",)],
+    "group": [("group",), ("hover", 2, 1), ("click", 2, 1), ("undo",)],
+    "cancel": [("hover", -3, 0), ("value", 2), ("cancel",), ("click", 1, 1)],
+}
+
+
+def run_paste(steps):
+    from PySide6.QtCore import QPointF, Qt
+    from core.history import History
+    from core.scene import Scene
+    from tests.test_paste import _PreviewVP, _make_group, V
+    from tools.base import ToolContext
+    from tools.paste import PasteTool
+    scene = Scene()
+    clip = {"ref": V(1, 2), "edges": [(V(1, 2), V(1, 3), False, None)],
+            "faces": [([V(1, 2), V(2, 2), V(2, 3)], [], {"layer": "Layer0"})]}
+    vp, tool = _PreviewVP(scene, History(scene), clip), PasteTool()
+    tool.on_activate(vp)
+    out = []
+    for kind, *args in steps:
+        result = None
+        if kind in ("hover", "click"):
+            getattr(tool, "on_" + kind)(ToolContext(vp, V(*args), QPointF(), Qt.NoModifier, None))
+        elif kind == "group":
+            clip["groups"] = [_make_group(scene)]
+            tool.on_activate(vp)
+        elif kind == "in_place":
+            result = tool.in_place(vp)
+        elif kind == "value":
+            result = tool.on_value(vp, args[0])
+        elif kind == "cancel":
+            tool.on_cancel(vp)
+        elif kind in ("undo", "redo"):
+            getattr(vp.history, kind)()
+        out.append({"ref": _pt(tool.start_point), "offset": _pt(tool._offset), "ended": vp.ended,
+                    "preview": [[_pt(a), _pt(b)] for a, b in tool.rubber_band_lines()],
+                    "vertices": sorted(_pt(v.position) for v in scene.mesh.vertices),
+                    "faces": len(scene.mesh.faces), "groups": len(scene.groups),
+                    "selected": len(scene.selection), "undo": len(vp.history.undo_stack), "result": result})
+    return out
+
+
 TAPE_SCENARIOS = {
     "axis_offset": [("axis", "x"), ("click", 2, .02, None), ("hover", 3, 1, None),
                     ("value", -.75), ("undo",)],
@@ -1351,6 +1395,9 @@ def record(which=("line", "select", "rectangle", "move", "circle", "rotated_rect
     if "rotated_rectangle" in which:
         rot = {name: run_rot(steps) for name, steps in ROT_SCENARIOS.items()}
         (FIXTURES / "rotated_rectangle.json").write_text(_compact(rot))
+    if "paste" in which:
+        cases = {name: run_paste(steps) for name, steps in PASTE_SCENARIOS.items()}
+        (FIXTURES / "paste.json").write_text(_compact(cases))
     if "tape" in which:
         cases = {name: run_tape(steps) for name, steps in TAPE_SCENARIOS.items()}
         (FIXTURES / "tape.json").write_text(_compact(cases))
