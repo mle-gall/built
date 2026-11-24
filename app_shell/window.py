@@ -302,14 +302,6 @@ def discover_window_plugins():
 
 def new_shell_window(host):
     plugins = discover_window_plugins()
-    if NATIVE and "PySide6.QtGui" in sys.modules:
-        from app_shell.qt_host import enable_plugin_widgets
-        enable_plugin_widgets()
-        from PySide6.QtCore import QObject
-
-        class PluginWindow(ShellWindow, QObject):
-            """Parent for raw widget actions contributed by a loaded Qt plugin."""
-        return PluginWindow(host, plugins)
     return ShellWindow(host, plugins)
 
 
