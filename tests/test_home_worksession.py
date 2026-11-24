@@ -1,8 +1,10 @@
 """Home and project sessions exercise real tabs with isolated test settings."""
 from pathlib import Path
+import json
 import threading
+from tests.shell_isolation import native_host, restore_shell_patches  # noqa: F401
 import pytest
-from PySide6.QtCore import QSettings, Qt
+from PySide6.QtCore import Qt
 from ingetrazo_core import Vec3 as QVector3D
 from core import project, recent
 from core.scene import Scene
@@ -12,13 +14,8 @@ from formats import project as storage
 
 
 @pytest.fixture
-def win():
-    from views.main_window import MainWindow
-    w = MainWindow(defer_extensions=True)
-    yield w
-    for d in w.documents():
-        d.saved_content = d.viewport.scene.content_version
-    w.close()
+def win(native_host):
+    return native_host.window
 
 
 def make_project(tmp_path):
@@ -46,7 +43,8 @@ def test_portable_roundtrip(tmp_path):
 
 
 def test_recent_bounded_pin_and_relocation(tmp_path):
-    st = QSettings(str(tmp_path / 'recent.ini'), QSettings.IniFormat)
+    from ingetrazo_core import NativeSettings
+    st = NativeSettings(str(tmp_path))
     first = tmp_path / 'first.igz'
     recent.remember(first, pinned=True, settings=st)
     for n in range(30):
@@ -66,7 +64,7 @@ def test_home_lists_opens_and_locates(win, tmp_path, monkeypatch):
     old = tmp_path / 'old.igz'
     recent.remember(old)
     recent.remember(make_project(tmp_path))
-    win.show_home()
+    wgpu_start.show(win)
     rows = wgpu_start.page(win).sheet.items(False)
     assert any(row[2] == str(old) for key in ("cont", "recent") for row in rows[key])
     assert any(row[2] == str(tmp_path / "job.builtproject") for row in rows["projects"])
@@ -91,14 +89,17 @@ def test_active_file_tabs_and_reopen(win, tmp_path):
     source = win._doc
     source.viewport.history.execute(AddEdgeCommand(QVector3D(), QVector3D(1, 0, 0)))
     assert source.viewport.history.undo_stack
-    win._do_save(source.path)
+    from app_shell import files
+    assert files.do_save(win, source.path)
     assert next(e for e in storage.load(path)['files'] if e['path'] == 'source.igz')['role'] == 'linked'
-    win._project_tabs.tabs.moveTab(win._project_tabs.index_of(source), 0)
+    win._documents.remove(source)
+    win._documents.insert(0, source)
     win.persist_worksession()
-    assert project.worksession(path)['files'][0]['path'] == str(source.path.resolve())
+    session_file = Path(win.query_worksession()['session_file'])
+    assert json.loads(session_file.read_text())['tabs'][0]['path'] == 'source.igz'
     win.open_project(path)
     assert win.documents()[0] is source
-    assert win._active_file == str(source.path)
+    assert win.query_worksession()["active_file"] == str(source.path)
 
 
 def test_agent_tools_and_read_only_rejection(win, tmp_path):
@@ -138,12 +139,13 @@ def test_thumbnail_is_additive_and_survives_resave(tmp_path):
         assert archive.read('thumbnail.png') == bytes(data)
 
 
-def test_missing_project_member_keeps_current_session(win, tmp_path):
+def test_missing_project_member_keeps_the_available_member_open(win, tmp_path):
     path = make_project(tmp_path)
     (tmp_path / 'a.igz').unlink()
-    with pytest.raises(FileNotFoundError):
-        win.open_project(path)
-    assert win._session_path is None
+    assert win.open_project(path)
+    members = {Path(f['path']).name: f['state'] for f in win.query_worksession()['files']}
+    assert members['a.igz'] == 'missing'
+    assert win._doc.path.name == 'b.igz'
 
 
 def test_new_document_can_be_saved_into_session(win, tmp_path):
@@ -153,7 +155,9 @@ def test_new_document_can_be_saved_into_session(win, tmp_path):
     assert not win._doc.read_only
     assert all(d.read_only for d in win.documents() if d is not win._doc)
     new_path = tmp_path / 'new.igz'
-    win._do_save(new_path)
-    assert win._active_file == str(new_path)
+    from app_shell import files
+    assert files.do_save(win, new_path)
+    assert win.query_worksession()["active_file"] == str(new_path)
     assert new_path.is_file()
-    assert project.worksession(path)['active_file'] == str(new_path.resolve())
+    session_file = Path(win.query_worksession()['session_file'])
+    assert json.loads(session_file.read_text())['editable'] == new_path.name

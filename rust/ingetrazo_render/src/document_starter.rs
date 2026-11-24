@@ -119,9 +119,9 @@ fn start_blank_document(win: &Bound<'_, PyAny>) -> PyResult<()> {
     for command in ["_sync_style_menu", "_sync_section_menu", "_update_title"] {
         win.call_method0(command)?;
     }
-    if win.getattr("_session_path")?.is_truthy()? {
-        win.setattr("_active_file", win.py().None())?;
-        win.setattr("_session_unsaved_doc", win.getattr("_doc")?)?;
+    let session = win.getattr("__dict__")?.call_method1("get", ("_project",))?;
+    if !session.is_none() {
+        session.call_method1("set_editable", (win.py().None(),))?;
         win.call_method0("_refresh_worksession")?;
     }
     Ok(())

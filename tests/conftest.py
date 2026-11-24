@@ -97,6 +97,7 @@ _session_settings_paths()
 
 
 import pytest  # noqa: E402
+from tests.shell_isolation import native_host  # noqa: E402,F401
 
 
 @pytest.fixture(autouse=True, scope="module")
@@ -362,7 +363,7 @@ def pytest_collection_modifyitems(config, items):
     global _WINDOW_RE
     if _WINDOW_RE is None:
         _WINDOW_RE = re.compile(r"\b(MainWindow|ComposerWindow|ShellWindow|Host)\(|"
-                                r"\bpreferences_chrome\b|isolated_launch|release/built\b|\bmain\.py\b")
+                                r"\b(native_host|native_window|preferences_chrome)\b|isolated_launch|release/built\b|\bmain\.py\b")
     seen = {}
     for item in items:
         path = getattr(item, "path", None)

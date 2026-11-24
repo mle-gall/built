@@ -1,41 +1,17 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""Every project closed (views/empty_area.py): the work area goes empty and
-hatched with only «+» above — no tabs, no views button, no scene row, no
-panels or their handles, no sheets strip, no tools. «+», File ▸ New, an
-opened or a dropped file bring a project back and everything with it; the
-panels come back as the user had them, and quitting from the empty area
-keeps them."""
+"""Start, new, open, drop and edit after closing the last native document."""
 from __future__ import annotations
 
-import sys
-
 import pytest
-from PySide6.QtCore import QMimeData, QPointF, Qt, QUrl
-from PySide6.QtGui import QDragEnterEvent, QDropEvent
-from PySide6.QtWidgets import QApplication, QDockWidget
 
-if QApplication.instance() is None:
-    QApplication(sys.argv[:1])
+from tests.shell_isolation import native_host, restore_shell_patches  # noqa: F401
+from views import wgpu_start, wgpu_tabs
 
 
 @pytest.fixture
-def win():
-    from views.main_window import MainWindow
-    w = MainWindow()
-    w.resize(1300, 800)
-    w.show()
-    QApplication.processEvents()
-    yield w
-    for doc in list(w._documents):
-        doc.saved_content = doc.viewport.scene.content_version
-    w._saved_version = w.viewport.scene.version
-    w.close()
-
-
-def _open_panels(win):
-    return [d for d in win.findChildren(QDockWidget)
-            if d.parent() is win and d.toggleViewAction().isChecked()]
+def win(native_host):
+    return native_host.window
 
 
 def _doc_file(tmp_path, name="abierto.igz"):
@@ -46,152 +22,105 @@ def _doc_file(tmp_path, name="abierto.igz"):
     return path
 
 
-def test_closing_the_last_project_leaves_the_empty_area(win):
-    panels = _open_panels(win)
-    assert panels
+def test_closing_the_last_project_shows_start(win):
     assert win.close_document()
-    QApplication.processEvents()
-    bar = win._project_tabs
-    assert win.is_empty()
-    assert win._empty_area.isVisible() and not win._doc_stack.isVisible()
-    assert not bar.tabs.isVisible()             # no tabs…
-    assert not bar.views_button.isVisible()     # …no views button…
-    assert bar.plus.isVisible()                 # …only «+»
-    assert win._scene_tabs.isHidden()
-    assert not any(d.isVisible() for d in panels)
-    assert not win._sidebar_handle.isVisible()
-    assert win.windowTitle() == "Built"
+    assert wgpu_start.shown(win)
+    assert not wgpu_start.can_return(win)
 
 
-def test_plus_brings_a_project_and_everything_back(win):
-    panels = _open_panels(win)
+def test_plus_brings_a_project_and_its_scene_commands_back(win):
+    from core import units
+    units.set_ask_at_start(False)
     win.close_document()
-    win._project_tabs.plus.click()
-    QApplication.processEvents()
-    assert not win.is_empty()
-    assert len(win._documents) == 1
-    assert win._doc_stack.isVisible() and not win._empty_area.isVisible()
-    assert win._doc_stack.currentWidget() is win._doc.slot_widget()
-    assert win._project_tabs.tabs.isVisible()
-    assert win._project_tabs.views_button.isVisible()
-    assert all(d.toggleViewAction().isChecked() for d in panels)
-    assert win._sidebar_handle.isVisible()
-    assert win._scene_tabs.isHidden()           # a blank project: no scenes
-    win.tray.scenes.add_scene()
-    assert not win._scene_tabs.isHidden()       # the row is back with one
+    wgpu_tabs.action(win, None, "new")
+    assert not wgpu_start.shown(win)
+    assert len(win.documents()) == 1
+    assert not win.viewport.scene.saved_views
+    win._host.menu("scene_add")
+    assert len(win.viewport.scene.saved_views) == 1
 
 
-def test_file_new_leaves_it_too(win):
+def test_start_claims_modelling_shortcuts_until_a_document_opens(win):
+    from PySide6.QtCore import QEvent, Qt
+    from PySide6.QtGui import QKeyEvent
+    from views import chrome_sheet
+
     win.close_document()
-    win._on_new()
-    assert not win.is_empty() and len(win._documents) == 1
+    key = QKeyEvent(QEvent.KeyPress, Qt.Key_L, Qt.NoModifier, "l")
+    assert chrome_sheet.claims_key(win._host.view, key)
+    wgpu_start.new_model(win, ask_units=False)
+    assert not chrome_sheet.claims_key(win._host.view, key)
 
 
-def test_opening_a_file_leaves_it(win, tmp_path):
+def test_file_new_leaves_start(win):
+    win.close_document()
+    win._host.menu("new")
+    assert not wgpu_start.shown(win)
+    assert len(win.documents()) == 1
+
+
+def test_opening_a_file_leaves_start(win, tmp_path):
     path = _doc_file(tmp_path)
     win.close_document()
     assert win.open_path(path)
-    assert not win.is_empty()
-    assert len(win._documents) == 1 and win._doc.path == path
+    assert not wgpu_start.shown(win)
+    assert len(win.documents()) == 1 and win._doc.path == path
 
 
-def test_a_file_it_cannot_read_leaves_it_empty(win, tmp_path, monkeypatch):
-    from PySide6.QtWidgets import QMessageBox
-    bad = tmp_path / "roto.igz"
-    bad.write_text("no es un documento")
-    monkeypatch.setattr(QMessageBox, "critical", lambda *a, **k: None)
+def test_an_unreadable_document_leaves_start_open(win, tmp_path):
+    bad = tmp_path / "broken.igz"
+    bad.write_text("not a document")
     win.close_document()
     assert not win.open_path(bad)
-    assert win.is_empty()
+    assert wgpu_start.shown(win)
 
 
-def _drop(widget, path):
-    mime = QMimeData()
-    mime.setUrls([QUrl.fromLocalFile(str(path))])
-    centre = widget.rect().center()
-    enter = QDragEnterEvent(centre, Qt.CopyAction, mime, Qt.LeftButton,
-                            Qt.NoModifier)
-    QApplication.sendEvent(widget, enter)
-    if not enter.isAccepted():
-        return False
-    QApplication.sendEvent(widget, QDropEvent(QPointF(centre), Qt.CopyAction,
-                                              mime, Qt.LeftButton,
-                                              Qt.NoModifier))
-    return True
-
-
-def test_a_file_dropped_on_it_opens(win, tmp_path):
-    path = _doc_file(tmp_path, "soltado.igz")
+def test_a_file_dropped_on_start_opens(win, tmp_path):
+    path = _doc_file(tmp_path, "dropped.igz")
     win.close_document()
-    assert _drop(win._empty_area, path)
-    assert not win.is_empty() and win._doc.path == path
+    # winit's DroppedFile and Finder's Open With both call Host.open_path.
+    assert win._host.open_path(path)
+    assert not wgpu_start.shown(win) and win._doc.path == path
 
 
-def test_a_file_it_cannot_open_is_refused(win, tmp_path):
-    other = tmp_path / "notas.txt"
+def test_an_unsupported_drop_leaves_start_open(win, tmp_path):
+    other = tmp_path / "notes.txt"
     other.write_text("x")
     win.close_document()
-    assert not _drop(win._empty_area, other)
-    assert win.is_empty()
+    assert not win._host.open_path(other)
+    assert wgpu_start.shown(win)
 
 
-def test_no_tool_while_empty(win):
+def test_closing_all_from_the_tab_menu_shows_start(win):
+    win.new_document()
+    wgpu_tabs.action(win, None, "menu:close_all:1")
+    assert wgpu_start.shown(win)
+    assert not wgpu_start.can_return(win)
+
+
+def test_plus_from_start_inserts_the_scale_figure(win):
     win.close_document()
-    assert all(not a.isEnabled() for a in win._tool_actions.values())
-    win._project_tabs.plus.click()
-    assert any(a.isEnabled() for a in win._tool_actions.values())
-
-
-def test_quitting_from_it_keeps_the_panels(win):
-    panels = _open_panels(win)
-    win.close_document()
-    win._saved_version = win.viewport.scene.version
-    win.close()
-    assert not any(d.isHidden() for d in panels)   # what saveState records
-
-
-def test_closing_all_from_the_tab_menu_leaves_it_empty(win):
-    from core.i18n import tr
-    win._new_document()
-    menu = win._build_project_tab_menu(win._doc)
-    next(a for a in menu.actions()
-         if a.text() == tr("Close All Projects")).trigger()
-    assert win.is_empty()
-
-
-def test_plus_from_the_empty_area_starts_a_new_document(win):
-    """The blank project behind the area was made without what a new
-    document starts with: «+» gave one without its scale figure."""
-    win.close_document()
-    assert not win.viewport.scene.groups
-    win._project_tabs.plus.click()
-    assert not win.is_empty()
-    assert win.viewport.scene.groups
+    wgpu_tabs.action(win, None, "new")
+    assert not wgpu_start.shown(win)
+    assert any(g.billboard for g in win.viewport.scene.groups)
     assert not win._is_dirty()
 
 
-def _blank_edit(win):
-    from ingetrazo_core import Vec3 as V
+def test_an_external_edit_reveals_the_drawing(win):
+    from ingetrazo_core import Vec3
     from core.history import AddEdgeCommand
-    win.viewport.history.execute(AddEdgeCommand(V(0, 0, 0), V(1, 0, 0)))
-    win.viewport.notify_scene_changed()
-
-
-def test_what_comes_into_the_blank_project_leaves_the_empty_area(win):
-    """An import, a paste, an extension or the AI bridge work on the project
-    behind the area: left there, the model and its unsaved changes were out
-    of sight, with nothing to say so."""
     win.close_document()
-    assert win.is_empty()
-    win.viewport.notify_scene_changed()         # nothing came in
-    assert win.is_empty()
-    _blank_edit(win)
-    assert not win.is_empty()
-    assert win._doc_stack.isVisibleTo(win)
-    assert "*" in win.windowTitle()
+    win.viewport.notify_scene_changed()
+    wgpu_start.before_frame(win._host.view, win)
+    assert wgpu_start.shown(win)
+    win.viewport.history.execute(AddEdgeCommand(Vec3(), Vec3(1, 0, 0)))
+    win.viewport.notify_scene_changed()
+    wgpu_start.before_frame(win._host.view, win)
+    assert not wgpu_start.shown(win)
+    assert win._is_dirty()
 
 
-def test_a_workspace_entered_from_the_empty_area_is_on_show(win):
+def test_a_workspace_entered_from_start_is_visible(win):
     from core.history import History
     from core.scene import Scene
 
@@ -212,7 +141,8 @@ def test_a_workspace_entered_from_the_empty_area_is_on_show(win):
             return True
 
     win.close_document()
-    assert win.enter_workspace(Workspace())
-    assert not win.is_empty()
-    assert win._doc_stack.isVisibleTo(win)
+    workspace = Workspace()
+    assert win.enter_workspace(workspace)
+    assert not wgpu_start.shown(win)
+    assert win.viewport.scene is workspace.scene
     assert win.leave_workspace()

@@ -367,17 +367,16 @@ class _OpenAborted(Exception):
     at its next milestone instead of finishing behind the close."""
 
 
-def project_path_missing(scene):
-    from core.project import path_for
-    return path_for(scene) is None
-
-
-from views.worksession import WorksessionMixin
-
-
-
-class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
+class MainWindow(WindowDocumentCommands, QMainWindow):
     """Top-level IngeTrazo window."""
+
+    def show_home(self):
+        from views import wgpu_start
+        wgpu_start.show(self)
+
+    def _dismiss_home(self):
+        from views import wgpu_start
+        wgpu_start.hide(self)
 
     def __init__(self, defer_extensions: bool = False) -> None:
         super().__init__()
@@ -390,11 +389,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         # (see load_extensions). Set first — the menu bar is built below.
         self._defer_extensions = bool(defer_extensions)
         self.resize(1280, 800)
-        # Every toolbar — ours, a later one, a plugin's — floats as a
-        # small window with its name and a × to close it.
-        from views.floating_toolbar import watch_toolbars
-        watch_toolbars(self)
-
         self._tools = build_tools()
         self._tool_actions: dict[str, QAction] = {}
 
@@ -469,16 +463,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         self.scene_player = ScenePlayer(self)
         self.scene_player.activeChanged.connect(self._on_player_active)
         box.addWidget(scenes)
-        # Every project closed: an empty, hatched area with only «+» above
-        # (views/empty_area.py), in the stack's place — beside it, not in
-        # it: the stack holds one widget per project. A blank project
-        # waits behind it.
-        from views.empty_area import EmptyArea
-        empty = self._empty_area = EmptyArea(self._openable_suffixes, area)
-        empty.filesDropped.connect(
-            lambda files: [self.open_path(f) for f in files])
-        empty.setVisible(False)
-        box.insertWidget(box.indexOf(self._doc_stack) + 1, empty, 1)
         self._empty_on = False
         bar.menuRequested.connect(self._project_tab_menu)
         # The views button: the layouts of the project in front.
@@ -2778,10 +2762,7 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         kept by the window."""
         style = getattr(self, "_icon_tab_style", None)
         if style is None:
-            # The application's style is a proxy since the themes' own
-            # (views.theme.ChromeStyle) and a proxy has no name: Fusion
-            # then, as views/floating_toolbar.py asks for it, not the
-            # desktop's own style.
+            # The application's proxy style may have no name.
             style = self._icon_tab_style = _IconTabStyle(
                 QApplication.style().name() or "Fusion")
             style.setParent(self)
@@ -5991,20 +5972,14 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         if doc.composer is not None and doc.composer_shown:
             doc.composer.show()
         self.documentChanged.emit()
-        self._refresh_worksession()
         self._refresh_scene_tabs()
         self._light_views_button()
         vp.setFocus()
 
-    # ---- every project closed: the empty area (views/empty_area.py) --------
+    # ---- every project closed: the empty area --------
     #: What a file dropped on the empty area may be, besides an extension's
     #: own types (``open_path``).
     OPENABLE = (*built.DOCUMENT_SUFFIXES, ".dae", ".skp", ".rfa", ".dxf", ".dwg")
-
-    def _openable_suffixes(self) -> tuple:
-        extra = tuple(s for s in getattr(self, "file_openers", {})
-                      if s not in self.OPENABLE)
-        return self.OPENABLE + extra
 
     def is_empty(self) -> bool:
         """No project open: the empty area is shown."""
@@ -6045,7 +6020,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         if strip is not None:
             strip.setVisible(False)
         self._doc_stack.setVisible(False)
-        self._empty_area.setVisible(True)
         self.set_tool_filter(set())
         self._refresh_scene_tabs()
         self._place_sidebar_handle()
@@ -6063,7 +6037,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         bar.views_button.setVisible(True)
         self._sync_project_tabs_bar()
         self.set_tool_filter(None)
-        self._empty_area.setVisible(False)
         self._doc_stack.setVisible(True)
         self._show_panels_again()
         strip = getattr(self, "_sheet_tabs", None)
@@ -6545,8 +6518,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
             nxt = docs[i + 1] if i + 1 < len(docs) else docs[i - 1]
             self.activate_document(nxt, closing=True)
         self._retire_document(doc)
-        self.persist_worksession()
-        self._refresh_worksession()
         if last:
             self._show_empty_area()
         return True
@@ -6878,12 +6849,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         (``ExtensionApp.add_file_opener``); anything else needs the model,
         so a workspace in front of it is left first."""
         path = Path(path)
-        if path.suffix.lower() in ('.builtproject', '.igzproj'):
-            try:
-                return self.open_project(path)
-            except (OSError, ValueError) as exc:
-                _dialogs.warning(self, 'Open project', str(exc))
-                return False
         if getattr(self, "_closed", False):
             # The window's close was already accepted while this open was
             # still queued (the deferred command-line open, #1269):
@@ -6933,14 +6898,10 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
             self._retire_document(created)
         if ok:
             self._dismiss_home()
-        if ok and self._session_path and not self._opening_session:
-            self._refresh_worksession()
         return ok
 
     def _install_open(self, path, bar, result):
         ok = self._open_path_here(path, path.suffix.lower(), result, bar)
-        if ok and self._session_path and not self._opening_session:
-            self._refresh_worksession()
         return ok
 
     def _open_path_here(self, path: Path, suffix: str, prepared=None, bar=None) -> bool:
@@ -7221,9 +7182,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
                 and not (self._doc_is_dirty(doc) and doc.same_file(path))):
             self.statusBar().showMessage('Choose this file in Worksession to edit or save it.', 5000)
             return
-        if self._session_path and project_path_missing(vp.scene):
-            from core import project
-            project.attach(vp.scene, self._session_path, path)
         try:
             vp.scene.camera_home = self._camera_dict(vp)
             vp.scene.views_home = self._views_dict(doc)
@@ -7266,14 +7224,8 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
             self.statusBar().showMessage(
                 tr("Saved — {n} texture(s) packed into the document.",
                    n=embedded), 4000)
-        was_active = self._session_path and doc.same_file(self._active_file)
         doc.path = path
-        if self._session_unsaved_doc is doc or was_active:
-            self._active_file = str(path.resolve())
-            self._session_unsaved_doc = None
         self._remember_recent(path)
-        self.persist_worksession()
-        self._refresh_worksession()
         self._saved_version = vp.scene.version
         self._update_title()
 
@@ -7926,7 +7878,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         chrome_sheet.close(self)
         _forms.close_all(self)
         self._release_check = None
-        self.persist_worksession()
         # A clean goodbye: whatever the user decided (save or discard), this
         # session's recovery slots no longer speak for anyone.
         from core import autosave

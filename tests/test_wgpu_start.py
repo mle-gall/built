@@ -5,18 +5,17 @@ from __future__ import annotations
 import json
 from types import SimpleNamespace
 
+from tests.shell_isolation import native_host, restore_shell_patches  # noqa: F401
 import pytest
-from PySide6.QtCore import QByteArray, QBuffer, QEvent, QIODevice, QSettings, Qt
+from PySide6.QtCore import QByteArray, QBuffer, QEvent, QIODevice, Qt
 from PySide6.QtGui import QImage, QKeyEvent
-from PySide6.QtWidgets import QApplication
 
+from core.settings import settings
 from core import recent
 from core.scene import Scene
 from formats import igz
 from views import chrome_sheet as cs
 from views import wgpu_start as ws
-
-_app = QApplication.instance() or QApplication([])
 
 
 class FakeRenderer:
@@ -56,26 +55,21 @@ class FakeView:
 
 
 @pytest.fixture
-def win(monkeypatch, tmp_path):
-    from views.main_window import MainWindow
-    st = QSettings()
+def win(monkeypatch, native_host):
+    st = settings()
     for k in ("home/recent_files", "home/recent_projects", "home/last_file", "home/meta", "recent_files"):
         st.remove(k)
     ws.forget_cache()
-    w = MainWindow(defer_extensions=True)
+    w = native_host.window
     view = FakeView(w)
     monkeypatch.setattr(ws, "_view", lambda _w: view)
     monkeypatch.setattr(cs, "_view", lambda _w: view)
     monkeypatch.setattr("views.wgpu_ui._window", lambda v: w)
     w._fake_view = view
     yield w
-    for d in w.documents():
-        d.saved_content = d.viewport.scene.content_version
-    w._saved_version = w.viewport.scene.version
     p = w.__dict__.get("_start_page")
     if p is not None and p.dog is not None:
         p.dog.stop()
-    w.close()
 
 
 def thumb_png(w=40, h=24):
@@ -135,7 +129,7 @@ def act(win, verb, *args):
 
 # ---- Shown or not ------------------------------------------------------------
 def test_offscreen_opens_start_sheet(win):
-    win.show_home()
+    ws.show(win)
     assert frame(win).sheet()["id"] == "start"
 
 
@@ -152,7 +146,7 @@ def test_show_home_puts_the_page_on_the_sheet(win, monkeypatch, tmp_path):
     recent.remember(b)
     recent.note(a, {"project": "Ride", "links": 2, "imported": "skp", "unfiled": 5,
                     "problems": 13, "workspace": "Model"})
-    win.show_home()
+    ws.show(win)
     assert ws.shown(win) and cs.current(win) is ws.page(win).sheet
     assert getattr(win, "_home", None) is None          # no Qt dialog
     sh = sheet(win)
@@ -313,7 +307,7 @@ def test_enter_on_a_row_opens_it_through_the_window(win, monkeypatch, tmp_path):
     assert win._doc.path.resolve() == a.resolve()
     frame(win)
     assert not ws.shown(win)
-    assert QSettings().value("home/last_file") == str(a.resolve())
+    assert settings().value("home/last_file") == str(a.resolve())
 
 
 def test_a_moved_file_is_located(win, monkeypatch, tmp_path):
@@ -344,7 +338,7 @@ def test_pin_toggles_and_pinned_come_first(win, monkeypatch, tmp_path):
     act(win, "menu", "file:" + str(a.resolve()), "pin")
     assert section(sheet(win), "pinned") == []
     # Pinning is not opening: Continue stays on the last document opened.
-    assert QSettings().value("home/last_file") == str(c.resolve())
+    assert settings().value("home/last_file") == str(c.resolve())
 
 
 def test_new_model_and_templates(win, monkeypatch):
@@ -387,7 +381,7 @@ def test_a_document_coming_in_closes_the_page(win, monkeypatch, tmp_path):
     ws.show(win)
     frame(win)
     a = doc(tmp_path, "dropped.built")
-    win._open_path_here(a, a.suffix)         # not through the page or open_path
+    assert win._host.open_path(a)  # An OS open reaches the host directly.
     frame(win)
     assert not ws.shown(win)
 
@@ -417,7 +411,7 @@ def test_note_remembers_what_the_window_knows(win, tmp_path):
     assert win.open_path(a)
     m = recent.meta(a)
     assert m["workspace"] == "Model" and m["links"] == 0
-    raw = json.loads(QSettings().value("home/meta"))
+    raw = json.loads(settings().value("home/meta"))
     assert str(a.resolve()) in raw
 
 
@@ -480,33 +474,6 @@ def test_a_black_thumbnail_shows_the_placeholder(win, monkeypatch, tmp_path):
 
 
 # ---- The picture a save keeps (Metal view) ------------------------------------
-class FakeMetalView:
-    """The Metal view at its boundary: ``render_image`` is the renderer's
-    offscreen frame (resident geometry, no egui chrome)."""
-
-    def __init__(self, image):
-        self.renderer = object()
-        self.packed = object()
-        self.image = image
-        self.asked = []
-
-    def width(self):
-        return 800
-
-    def height(self):
-        return 500
-
-    def isVisible(self):
-        return True
-
-    def render_image(self, width_px, height_px=None, overlays=False, sharp_shadows=False):
-        self.asked.append((width_px, height_px, overlays))
-        return self.image if self.image is None else self.image.scaled(width_px, round(width_px * 500 / 800))
-
-    def grab(self):  # the old path: the chrome over nothing
-        raise AssertionError("a save must not grab the Metal widget")
-
-
 def saved_picture(path):
     import zipfile
     with zipfile.ZipFile(path) as archive:
@@ -517,51 +484,44 @@ def saved_picture(path):
         return image
 
 
-def save_with(win, monkeypatch, tmp_path, name, view, gl=None):
-    doc = win._doc
-    monkeypatch.setattr(doc, "stand_in", view)
-    # The hidden GL viewport under Metal: a black framebuffer.
-    black = QImage(280, 175, QImage.Format_RGB32)
-    black.fill(Qt.black)
-    monkeypatch.setattr(win, "_tab_thumbnail", lambda vp: gl if gl is not None else black)
-    path = tmp_path / name
-    try:
-        win._do_save(path)
-    finally:
-        monkeypatch.setattr(doc, "stand_in", None)
-    return path
+def save_with(win, monkeypatch, path, image):
+    from app_shell import files
+
+    view = win._doc.stand_in
+    asked = []
+    def render_pixels(width):
+        asked.append(width)
+        if image is None:
+            return 0, 0, b""
+        scaled = image.scaledToWidth(width).convertToFormat(QImage.Format_RGBA8888)
+        return scaled.width(), scaled.height(), bytes(scaled.constBits())
+
+    with monkeypatch.context() as patch:
+        patch.setattr(view, "renderer", object())
+        patch.setattr(view, "packed", object())
+        patch.setattr(view, "render_pixels", render_pixels)
+        assert files.do_save(win, path)
+    assert asked == [win.SAVE_PICTURE_PX]
+    return saved_picture(path)
 
 
 def test_save_under_metal_keeps_the_renderers_picture(win, monkeypatch, tmp_path):
-    view = FakeMetalView(gradient(800, 500))
-    path = save_with(win, monkeypatch, tmp_path, "metal.built", view)
-    # One offscreen frame at thumbnail size, never the window's size, no overlays.
-    assert view.asked == [(win.SAVE_PICTURE_PX, None, False)]
-    picture = saved_picture(path)
-    assert picture is not None and picture.width() == win.SAVE_PICTURE_PX
-    assert not ws.blank_picture(picture)
+    picture = save_with(win, monkeypatch, tmp_path / "metal.built", gradient(800, 500))
+    assert picture is not None and not ws.blank_picture(picture)
 
 
 def test_a_blank_metal_frame_is_not_saved(win, monkeypatch, tmp_path):
-    black = QImage(800, 500, QImage.Format_RGB32)
+    black = QImage(280, 175, QImage.Format_RGB32)
     black.fill(Qt.black)
-    path = save_with(win, monkeypatch, tmp_path, "black.built", FakeMetalView(black))
-    assert saved_picture(path) is None
-    # Nothing to draw with yet (no renderer frame): nothing saved either,
-    # and the black GL framebuffer is not taken instead.
-    view = FakeMetalView(None)
-    path = save_with(win, monkeypatch, tmp_path, "none.built", view)
-    assert saved_picture(path) is None
+    assert save_with(win, monkeypatch, tmp_path / "black.built", black) is None
+    assert save_with(win, monkeypatch, tmp_path / "none.built", None) is None
 
 
-def test_the_gl_view_still_gives_its_frame(win, monkeypatch, tmp_path):
-    path = save_with(win, monkeypatch, tmp_path, "gl.built", None, gl=gradient())
-    picture = saved_picture(path)
-    assert picture is not None and not ws.blank_picture(picture)
-    # A black frame (nothing drawn yet): the document keeps the picture it had.
-    path = save_with(win, monkeypatch, tmp_path, "gl-black.built", None)
-    again = saved_picture(path)
-    assert again is not None and again == picture
+def test_an_unavailable_frame_preserves_the_previous_picture(win, monkeypatch, tmp_path):
+    picture = save_with(win, monkeypatch, tmp_path / "first.built", gradient())
+    assert picture is not None
+    again = save_with(win, monkeypatch, tmp_path / "again.built", None)
+    assert again == picture
 
 
 # ---- Removing recents ----------------------------------------------------------
@@ -574,7 +534,7 @@ def test_remove_from_recents_leaves_the_file(win, monkeypatch, tmp_path):
     act(win, "menu", "cont", "forget")
     assert [r["path"] for r in recent.entries()] == [str(a.resolve())]
     assert b.is_file()
-    assert QSettings().value("home/last_file", "") == ""
+    assert settings().value("home/last_file", "") == ""
     wait_loader(win)
     sh = sheet(win)
     assert section(sh, "recent") == []
@@ -596,7 +556,7 @@ def test_a_moved_file_hides_its_dead_duplicate(win, monkeypatch, tmp_path):
     stale = tmp_path / "older" / "other.igz"
     rows = recent.entries()
     rows.insert(0, {"path": str(stale), "pinned": False})
-    QSettings().setValue("home/recent_files", json.dumps(rows))
+    settings().setValue("home/recent_files", json.dumps(rows))
     ws.show(win)
     wait_loader(win)
     sh = sheet(win)
@@ -632,7 +592,6 @@ def test_a_missing_row_still_offers_to_locate(win, monkeypatch, tmp_path):
     assert any(b["kind"] == "buttons" and b["buttons"][-1]["id"] == "locate" for b in blocks)
     act(win, "open", row["id"])
     assert asked and win._doc.path.resolve() == found.resolve()
-
 
 
 def test_native_save_picture_roundtrips_rgba_without_a_widget():
