@@ -1336,6 +1336,17 @@ impl PyMeshStore {
         ))
     }
 
+    fn curved_edges(&self) -> Vec<(i64, u128)> {
+        self.inner
+            .live_slots(Kind::Edge)
+            .into_iter()
+            .filter_map(|e| {
+                let cid = *self.inner.state.ecurve.get(e as usize);
+                (cid >= 0).then(|| (cid, self.inner.key(Kind::Edge, e)))
+            })
+            .collect()
+    }
+
     fn resplit_curves(&mut self, mut next_id: i64) -> i64 {
         self.inner.resplit_curves(&mut next_id, super::geometry::Hypot::LibStdCxx);
         next_id
