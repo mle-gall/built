@@ -69,9 +69,7 @@ def test_a_web_page_too(frozen_appimage):
 @pytest.mark.parametrize("box", ["FLATPAK_ID", "SNAP"])
 def test_flatpak_and_snap_keep_their_portal(frozen_appimage, monkeypatch, box):
     monkeypatch.setitem(D.os.environ, box, "x")
-    opened = []
-    from PySide6.QtGui import QDesktopServices
-    monkeypatch.setattr(QDesktopServices, "openUrl",
-                        staticmethod(lambda url: opened.append(url) or True))
-    D.open_url(Path("/tmp/x"))
-    assert not frozen_appimage and len(opened) == 1
+    assert D.open_url(Path("/tmp/x"))
+    (cmd, options), = frozen_appimage
+    assert cmd == ["/usr/bin/xdg-open", "/tmp/x"]
+    assert options["env"] is None  # inherit the sandbox's portal environment

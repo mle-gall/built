@@ -145,17 +145,3 @@ def choose_platform(preference: str, env: dict | None = None,
     if len(connected) >= 2:
         return None                      # two screens: crisp on both wins
     return XCB if fractional_scale_configured(home, connected or None) else None
-
-
-def apply_platform_preference() -> str | None:
-    """Called BEFORE the QApplication exists: reads the preference and sets
-    ``QT_QPA_PLATFORM`` when the choice says so. Returns what was set."""
-    chosen = choose_platform(AUTO)
-    if (chosen is None and os.environ.get("DISPLAY")
-            and os.environ.get("WAYLAND_DISPLAY") and not os.environ.get("QT_QPA_PLATFORM")):
-        from PySide6.QtGui import QWindow
-        if not hasattr(QWindow, "nativeInterface"):
-            chosen = XCB
-    if chosen:
-        os.environ["QT_QPA_PLATFORM"] = chosen
-    return chosen
