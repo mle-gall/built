@@ -881,3 +881,20 @@ def test_video_picker_and_sheet_agree_on_encoder_format(win, monkeypatch, tmp_pa
     ve.run_export(win)
     assert picker[0][2].endswith(suffix) and picker[0][3] == label
     assert label in forms[0].wire()[2]
+
+
+def test_normalizing_the_movie_suffix_preserves_an_unconfirmed_file(win, monkeypatch, tmp_path):
+    import views.video_export as ve
+    from views import chrome_dialogs, chrome_forms
+    from views.filedialogs import file_dialogs
+    _scenes(win, ("A", "iso", set()))
+    existing = tmp_path / "site.mp4"
+    existing.write_bytes(b"original movie")
+    monkeypatch.setattr(ve, "video_format", lambda: (".mp4", "H.264 / MP4 (*.mp4)"))
+    monkeypatch.setattr(file_dialogs, "getSaveFileName", lambda *args: (str(tmp_path / "site"), ""))
+    prompts = []
+    monkeypatch.setattr(chrome_dialogs, "ask", lambda *args, **kwargs: prompts.append(args) or "cancel")
+    monkeypatch.setattr(chrome_forms, "show", lambda *args: pytest.fail("Export advanced after cancellation"))
+    ve.run_export(win)
+    assert prompts and existing.name in prompts[0][2]
+    assert existing.read_bytes() == b"original movie"

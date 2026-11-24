@@ -2,7 +2,7 @@
 """Draw a saved-scene tour into the selected native video writer."""
 from pathlib import Path
 
-from ingetrazo_core import VideoTimeline, video_format, video_writer
+from ingetrazo_core import MkvWriter, VideoTimeline, video_format, video_writer  # MkvWriter is also a scripting import.
 from core.i18n import tr
 
 
@@ -97,6 +97,12 @@ def run_export(window):
     path = Path(chosen)
     if path.suffix.lower() != suffix:
         path = path.with_suffix(suffix)
+        # The picker confirmed the typed name. Its confirmation covers only that path.
+        if path.exists() and chrome_dialogs.ask(window, tr("Export Video"),
+                tr("Replace {name}?", name=path.name),
+                [("cancel", tr("Cancel")), ("replace", tr("Replace"))],
+                default="cancel", cancel="cancel") != "replace":
+            return
     count = len(scene.saved_views)
     seconds = video_seconds(count, scene.animation.transition, scene.animation.pause)
     model = OperationForm.video(vp.width(), vp.height(), count, seconds,
