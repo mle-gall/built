@@ -203,7 +203,7 @@ fn lock_line<'py>(
 // rounding, including ties, when the camera has moved by less than one unit.
 fn pose<'py>(cam: &Obj<'py>) -> PyResult<Bound<'py, PyTuple>> {
     let t = xyz(&cam.getattr("target")?)?;
-    let coords = [
+    let mut coords = [
         number(cam, "yaw")?,
         number(cam, "pitch")?,
         number(cam, "distance")?,
@@ -211,14 +211,21 @@ fn pose<'py>(cam: &Obj<'py>) -> PyResult<Bound<'py, PyTuple>> {
         t.y,
         t.z,
     ];
-    let rounded = coords
-        .into_iter()
-        .enumerate()
-        .map(|(i, x)| {
-            PyFloat::new(cam.py(), x).call_method1("__round__", (if i < 2 { 9 } else { 6 },))
-        })
-        .collect::<PyResult<Vec<_>>>()?;
-    PyTuple::new(cam.py(), rounded)
+    for (i, x) in coords.iter_mut().enumerate() {
+        let (scale, places) = if i < 2 { (1e9, 9) } else { (1e6, 6) };
+        let scaled = *x * scale;
+        // Below 2^52, multiplication can change the rounding decision only
+        // if it lands exactly on a half. For those ties and large coordinates,
+        // let Python round the original value, as in the published cache key.
+        *x = if scaled.abs() < (1u64 << 52) as f64 && scaled.fract().abs() != 0.5 {
+            scaled.round_ties_even() / scale
+        } else {
+            PyFloat::new(cam.py(), *x)
+                .call_method1("__round__", (places,))?
+                .extract()?
+        };
+    }
+    PyTuple::new(cam.py(), coords)
 }
 
 #[pyfunction]
