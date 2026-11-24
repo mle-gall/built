@@ -1001,6 +1001,58 @@ def run_rotate(steps):
     return out
 
 
+FILLET_SCENARIOS = {
+    "cursor_round": [("hover", 1, 0, 1), ("click", 1, 0, 1), ("hover", 1, .2, 1),
+                     ("click", 1, .2, 1), ("undo",)],
+    "selected_edge": [("select",), ("segments", 4), ("profile", .4), ("value", .15), ("undo",)],
+    "corner": [("affect", "vertices"), ("hover", .1, 0, 1), ("click", .1, 0, 1),
+               ("hover", .2, .1, 1), ("value", .15), ("undo",)],
+    "refused_size": [("hover", 1, 0, 1), ("click", 1, 0, 1), ("value", -1),
+                     ("value", 5), ("cancel",)],
+}
+
+
+def run_fillet(steps):
+    from contextlib import ExitStack
+    from unittest.mock import patch
+    from tests.test_fillet_tool import _box_scene, _ctx, edge_at
+    from tools.fillet import FilletTool
+    view = RectView()
+    mesh = _box_scene(view)
+    edge = edge_at(mesh, (0, 0, 1), (2, 0, 1))
+    out = []
+    with ExitStack() as changes:
+        for key, val in dict(radius=.1, segments=8, profile=.5, measure="radius",
+                             corners="round", shape=None, affect="edges").items():
+            changes.enter_context(patch.object(FilletTool, key, val))
+        tool = FilletTool()
+        tool.on_activate(view)
+        view._hover_edge = edge
+        for kind, *args in steps:
+            result = None
+            if kind in ("hover", "click"):
+                getattr(tool, "on_" + kind)(_ctx(view, args))
+            elif kind == "select":
+                view.scene.select([edge])
+                tool.on_activate(view)
+            elif kind == "affect":
+                tool.set_affect(view, args[0])
+            elif kind in ("value", "profile", "segments"):
+                method = "on_value" if kind == "value" else f"on_{kind}_value"
+                result = getattr(tool, method)(view, args[0])
+            elif kind == "cancel":
+                tool.on_cancel(view)
+            elif kind == "undo":
+                view.history.undo()
+            label = tool.value_label()
+            out.append({"sizing": tool.sizing, "targets": len(tool.edges),
+                        "radius": round(FilletTool.radius, 6), "label": label[0] if label else None,
+                        "preview": len(tool.preview_faces()), "lines": len(tool.rubber_band_lines()),
+                        "faces": len(mesh.faces), "vertices": sorted(_pt(v.position) for v in mesh.vertices),
+                        "undo": len(view.history.undo_stack), "result": result})
+    return out
+
+
 PROTRACTOR_SCENARIOS = {
     "click_and_reaim": [("click", 2, 1, 0), ("click", 5, 1, 0), ("hover", 2, 4, 0),
                         ("click", 2, 4, 0), ("value", 30), ("value", -60), ("undo",)],
@@ -1248,6 +1300,9 @@ def record(which=("line", "select", "rectangle", "move", "circle", "rotated_rect
     if "rotated_rectangle" in which:
         rot = {name: run_rot(steps) for name, steps in ROT_SCENARIOS.items()}
         (FIXTURES / "rotated_rectangle.json").write_text(_compact(rot))
+    if "fillet" in which:
+        cases = {name: run_fillet(steps) for name, steps in FILLET_SCENARIOS.items()}
+        (FIXTURES / "fillet.json").write_text(_compact(cases))
     if "protractor" in which:
         cases = {name: run_protractor(steps) for name, steps in PROTRACTOR_SCENARIOS.items()}
         (FIXTURES / "protractor.json").write_text(_compact(cases))
