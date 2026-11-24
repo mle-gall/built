@@ -4680,247 +4680,46 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return best
 
     def _section_cut_segments(self):
-        """World-space cut segments: the active plane ∩ every visible model
-        triangle, vectorized over the pick index's (v0, e1, e2) arrays.
-        Cached per (scene version, plane pose)."""
-        sp = self.scene.active_section()
-        if sp is None:
-            return None
-        n, o = sp.normal, sp.point
-        key = (self.scene.version, round(n.x(), 9), round(n.y(), 9),
-               round(n.z(), 9), round(o.x(), 6), round(o.y(), 6),
-               round(o.z(), 6))
-        cached = getattr(self, "_section_cut_cache", None)
-        if cached is not None and cached[0] == key:
-            return cached[1]
-        idx = self._pick_flat(self._pick_index(near="all"))
-        from core.section import cut_chords
-        segs = tags = None
-        if idx.tri_v0 is not None and len(idx.tri_v0):
-            # Each triangle's height along the normal is kept while the
-            # model and the normal stay: a plane dragged by its arrow then
-            # only compares three arrays with its new offset (a furnished
-            # house froze ~2 s per drag measuring every triangle again).
-            reach = getattr(self, "_section_reach", None)
-            if reach is None or not reach.fits(idx.tri_v0, n, idx.tri_e1,
-                                               idx.tri_e2):
-                from core.section import PlaneReach
-                reach = self._section_reach = PlaneReach(
-                    idx.tri_v0, idx.tri_e1, idx.tri_e2, n)
-            segs, rows = cut_chords(idx.tri_v0, idx.tri_e1, idx.tri_e2, n, o,
-                                    idx.ent_vis[idx.tri_ent], rows=True,
-                                    reach=reach)
-            if segs is not None:
-                tags = self._cut_layer_tags(idx, idx.tri_ent[rows])
-        self._section_cut_cache = (key, segs, tags)
-        return segs
+        from ingetrazo_render import section_cut
+        return section_cut(self)
 
     @staticmethod
     def _cut_layer_tags(idx, ents):
-        """The layer each cut triangle's section is filled with, as a sheet
-        tags it: the face's own layer, else its object's."""
-        import numpy as np
-        from core.layers import DEFAULT_LAYER, layer_of
-        memo: dict = {}
-        out = []
-        # A lazy placement's face is built with its whole mesh when asked
-        # for: its layer is read from the document instead.
-        quick = getattr(idx.entities, "layer_at", None)
-        for e in ents.tolist():
-            tag = memo.get(e)
-            if tag is None:
-                if quick is not None:
-                    own, owner = quick(e)
-                    tag = own or DEFAULT_LAYER
-                else:
-                    face, owner = idx.entities[e]
-                    tag = layer_of(face)
-                if tag == DEFAULT_LAYER and owner is not None:
-                    tag = layer_of(owner)
-                memo[e] = tag
-            out.append(tag)
-        return np.asarray(out, dtype=object)
+        from ingetrazo_render import cut_layer_tags
+        return cut_layer_tags(idx, ents)
 
     def _section_fill_tris(self):
-        """The fill's triangles for the active cut, cached with the cut
-        segments they come from (same scene version, same plane pose)."""
-        import numpy as np
-        segs = self._section_cut_segments()
-        cached = getattr(self, "_section_fill_cache", None)
-        if cached is not None and (cached[0] is segs or (
-                segs is not None and cached[0] is not None
-                and cached[0].shape == segs.shape
-                and np.array_equal(cached[0], segs))):
-            # A selection click moves the scene version, not the cut.
-            self._section_fill_cache = (segs, cached[1])
-            return cached[1]
-        # Chaining the rings costs a fraction of a second on a model with
-        # thousands of cut solids — nothing once, too much per frame while
-        # a plane is dragged. A cut that keeps changing shows its lines
-        # live and its fill once it rests for a moment.
-        import time as _t
-        now = _t.monotonic()
-        last = getattr(self, "_section_fill_changed", 0.0)
-        self._section_fill_changed = now
-        if cached is not None and now - last < 0.15:
-            later(self, 200, self.update)
-            return None
-        from core.section import fill_triangles
-        tris = fill_triangles(segs, self.scene.active_section().normal)
-        self._section_fill_cache = (segs, tris)
-        self._section_hatch_cache = {}
-        return tris
+        from ingetrazo_render import section_fill
+        return section_fill(self)
 
     def _model_linetype_edges(self) -> list:
-        """``[(rgb or None, dashes, gaps)]``: the edges of the layers drawn
-        with their line type in the model (core.layers.model_line_styles),
-        cut into their dashes and gaps (world space, as a sheet at 1:50
-        dashes them) — rebuilt when the model or the line types change."""
-        import numpy as np
-        from core.layers import dash_segments, model_line_styles
-        scene = self.scene
-        styles = model_line_styles(scene)
-        if not styles:
-            return []
-        # The document's version, not the view's: picking something moves
-        # ``scene.version`` too, and every click on a model with dashed
-        # layers walked all its edges and cut them into dashes again (a
-        # second per click with 24 000 of them).
-        key = (id(scene), scene.content_version,
-               tuple(sorted(styles.items())))
-        memo = getattr(self, "_model_lines_cache", None)
-        if memo is not None and memo[0] == key:
-            return memo[1]
-        # From the viewport's arrays with their layers, not a walk of the
-        # model: every change of the model walked 85 000 faces of a plaza.
-        _t, hard, _s, _n, _tt, hard_tags, _st = self.hlr_geometry(tags=True)
-        by_layer: dict = {}
-        for seg, tag in zip(hard, hard_tags):
-            if tag in styles:
-                by_layer.setdefault(tag, []).append(seg)
-        from core.layers import linetype_text
-        names = {ly.key: ly.linetype for ly in scene.layers}
-        out = []
-        for tag, segs in by_layer.items():
-            rgb, pattern = styles[tag]
-            dashes, gaps = dash_segments(np.asarray(segs), pattern)
-            words = self._model_line_words(
-                np.asarray(segs), linetype_text(names.get(tag), scene))
-            out.append((rgb, dashes, gaps, words))
-        self._model_lines_cache = (key, out)
-        return out
+        from ingetrazo_render import model_layer_lines
+        return model_layer_lines(self)
 
     @staticmethod
     def _model_line_words(segs, spec):
-        """A line type's words (GAS…) on the model's edges, in the gaps the
-        pattern leaves for them, as a sheet at 1:50 places them: their
-        letters' outlines as world segments, lying in the plane of the
-        edge and the horizontal across it, reading upright from above (a
-        rising edge: from its side)."""
-        import numpy as np
-        from core.layers import MODEL_DASH_SCALE, text_marks
-        empty = np.zeros((0, 2, 3), dtype=np.float32)
-        if spec is None or not len(segs):
-            return empty
-        from ingetrazo_render import line_text_strokes
-        strokes = line_text_strokes(spec[0], spec[1])
-        if not strokes:
-            return empty
-        unit = MODEL_DASH_SCALE
-        up_z = np.array([0.0, 0.0, 1.0])
-        out: list = []
-        for a, b in np.asarray(segs, dtype=np.float64).reshape(-1, 2, 3):
-            d = b - a
-            total = float(np.linalg.norm(d))
-            if total <= 1e-9:
-                continue
-            u = d / total
-            if u[0] < -1e-9 or (abs(u[0]) <= 1e-9 and u[1] < 0):
-                u = -u                  # read left to right
-                a, b = b, a
-            side = np.cross(up_z, u)
-            if np.linalg.norm(side) < 1e-6:
-                side = np.array([0.0, 1.0, 0.0])
-            side /= np.linalg.norm(side)
-            marks = text_marks((0.0, 0.0), (total / unit, 0.0), spec)
-            if len(marks) * len(strokes) > 4000:
-                continue
-            for x, _y, _deg in marks:
-                centre = a + u * (x * unit)
-                for poly in strokes:
-                    pts = [centre + u * (px * unit) + side * (py * unit)
-                           for px, py in poly]
-                    out += [(p0, p1) for p0, p1 in zip(pts, pts[1:])]
-        if not out:
-            return empty
-        return np.asarray(out, dtype=np.float32)
+        from ingetrazo_render import model_line_words
+        return model_line_words(segs, spec)
 
 
 
     def _section_layer_fills(self, color):
-        """The cut filled layer by layer with the layers' hatches
-        (core.section.layer_fills) — once the cut rests, as its plain fill,
-        and again only when the cut or a layer's hatch changes."""
-        if self._section_fill_tris() is None:
-            return None
-        cut = getattr(self, "_section_cut_cache", None)
-        if cut is None or cut[1] is None:
-            return None
-        scene = self.scene
-        sign = (id(cut[1]), tuple(color[:3]),
-                repr([ly.to_dict() for ly in scene.layers]),
-                repr(getattr(scene, "bricks", None)))
-        memo = getattr(self, "_section_layer_cache", None)
-        if memo is not None and memo[0] == sign:
-            return memo[1]
-        from core.section import layer_fills
-        fills = layer_fills(cut[1], cut[2], scene.active_section().normal,
-                            scene, color)
-        self._section_layer_cache = (sign, fills)
-        return fills
+        from ingetrazo_render import section_layer_fills
+        return section_layer_fills(self, color)
 
 
 
     def _section_hatch(self, spacing: float, cross: bool):
-        """The hatch lines of the cut whose fill is cached, per (spacing,
-        cross) — computed once, while the cut stays the same."""
-        cached = getattr(self, "_section_fill_cache", None)
-        if cached is None:
-            return None
-        memo = getattr(self, "_section_hatch_cache", None)
-        if memo is None:
-            memo = self._section_hatch_cache = {}
-        key = (round(spacing, 9), bool(cross))
-        if key not in memo:
-            from core.section import hatch_segments
-            memo[key] = hatch_segments(
-                cached[0], self.scene.active_section().normal, spacing,
-                cross)
-        return memo[key]
+        from ingetrazo_render import section_hatch
+        return section_hatch(self, spacing, cross)
 
     #: The sheet's cut pen (mm) a layer's own cut weight is measured
     #: against in the model: a layer at 0.50 draws the usual ~2.5 px line.
     CUT_PEN_MM = 0.5
 
     def _cut_edge_weights(self, plane, keep):
-        """How much thicker or thinner each cut line is drawn than usual:
-        with «Layers' hatches» each layer's cut weight (Muros at 0.70 a
-        heavy line, an insulation at 0.18 a fine one), as on a sheet;
-        otherwise all alike."""
-        import numpy as np
-        from core.section import effective_fill
-        count = int(keep.sum())
-        pattern = effective_fill(plane, self._frame_style)[0]
-        cut = getattr(self, "_section_cut_cache", None)
-        if pattern != "layers" or cut is None or cut[2] is None                 or len(cut[2]) != len(keep):
-            return np.ones(count)
-        pens = {ly.key: float(ly.cut_weight) / self.CUT_PEN_MM
-                for ly in self.scene.layers
-                if getattr(ly, "cut_weight", None) is not None}
-        if not pens:
-            return np.ones(count)
-        out = np.array([pens.get(t, 1.0) for t in cut[2][keep].tolist()])
-        return np.clip(out, 0.4, 2.4)
+        from ingetrazo_render import cut_weights
+        return cut_weights(self, plane, keep)
 
     def _clip_segment_front(
         self, a: QVector3D, b: QVector3D
