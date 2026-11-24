@@ -25,6 +25,7 @@ mod paths;
 mod photo;
 mod services;
 mod tiles;
+mod window;
 use pyo3::prelude::*;
 
 pub(super) fn register_formats(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -157,5 +158,6 @@ pub(super) fn register_formats(m: &Bound<'_, PyModule>) -> PyResult<()> {
     ground::register(m)?;
     services::register(m)?;
     delivery::register(m)?;
+    window::register(m)?;
     Ok(())
 }

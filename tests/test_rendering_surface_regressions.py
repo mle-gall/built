@@ -1,21 +1,15 @@
 """Tube triangulation, transformed smooth instances and thin back materials."""
 from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
 import math
-import os
-os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 
 import numpy as np
 import pytest
-from PySide6.QtGui import QImage
 from ingetrazo_core import Vec3 as V, Matrix4 as QMatrix4x4
-from PySide6.QtWidgets import QApplication
 from core.mesh import Mesh
 from core.group import Group, transformed_mesh
 from formats.meshexport import SmoothNormals
 from tests.test_viewport_smooth_shading import _cylinder, _stub
 from core.scene import Scene
-
-_app = QApplication.instance() or QApplication([])
 
 
 def test_splitting_one_tube_panel_does_not_move_its_corner_normals():
@@ -54,16 +48,13 @@ def test_rotating_smooth_cpu_chunk_matches_baking_world_geometry():
 
 
 def pixels(image):
-    image = image.convertToFormat(QImage.Format_RGBA8888)
-    return np.frombuffer(image.constBits(), np.uint8).reshape(
-        image.height(), image.bytesPerLine())[:, :image.width()*4].copy().reshape(
-            image.height(), image.width(), 4)[..., :3].astype(int)
+    width, height, rgba = image
+    return np.frombuffer(rgba, np.uint8).reshape(height, width, 4)[..., :3].astype(int)
 
 
 @pytest.fixture
 def viewport(native_gpu_host):
     win = native_gpu_host.window
-    _app.processEvents()
     vp = win.viewport
     yield vp
 
@@ -79,10 +70,10 @@ def test_thin_plate_reverse_material_does_not_show_through(viewport):
     cam.target, cam.distance = V(0, 0, 0), 20.
     cam.yaw, cam.pitch = math.radians(20), math.radians(5)
     vp.scene.version += 1
-    red = pixels(vp.render_image(400, 300, overlays=False))
+    red = pixels(vp.keys_stand_in.render_pixels(400, 300, overlays=False))
     back.attrs['back']['color'] = (0., 1., 0.)
     vp.scene.version += 1
-    green = pixels(vp.render_image(400, 300, overlays=False))
+    green = pixels(vp.keys_stand_in.render_pixels(400, 300, overlays=False))
     # A hidden reverse material must not affect the middle of the front.
     assert np.max(np.abs(red[130:170, 160:240] - green[130:170, 160:240])) <= 2
 
@@ -97,8 +88,32 @@ def test_smooth_gpu_cylinder_is_invariant_under_one_panel_rotation(viewport):
     vp.camera.yaw, vp.camera.pitch = math.radians(25), math.radians(10)
     vp.scene.version += 1
     assert vp._instanced_eligible(group)
-    a = pixels(vp.render_image(400, 300, overlays=False))
+    a = pixels(vp.keys_stand_in.render_pixels(400, 300, overlays=False))
     group.xform.rotate(30, 0, 0, 1)
     vp.scene.version += 1
-    b = pixels(vp.render_image(400, 300, overlays=False))
+    b = pixels(vp.keys_stand_in.render_pixels(400, 300, overlays=False))
     assert np.percentile(np.abs(a-b), 99) <= 2
+
+
+def test_document_capture_owns_rgba_and_preserves_display_scale():
+    import sys
+    from types import SimpleNamespace
+    from tests.controller_surface import live_image
+
+    rgba = bytes((1, 2, 3, 4, 5, 6, 7, 8))
+    events = []
+    renderer = SimpleNamespace(request_capture=lambda: events.append("request"),
+                               take_capture=lambda: rgba)
+    display = SimpleNamespace(renderer=renderer, set_scene=events.append,
+                              _prepare_pick_frame=lambda: events.append("prepare"),
+                              draw_frame=lambda: events.append("draw"),
+                              width=lambda: 1, devicePixelRatioF=lambda: 2)
+    frame = live_image(SimpleNamespace(keys_stand_in=display, scene="scene"))
+    assert events == ["scene", "prepare", "request", "draw"]
+    assert (frame.width(), frame.height(), frame.devicePixelRatio()) == (2, 1, 2)
+    assert frame.pixelColor(1, 0).getRgb() == (5, 6, 7, 8)
+    assert frame.constBits() == rgba
+    for layout, expected in [(frame.Format_ARGB32, 0x04010203),
+                             (frame.Format_RGB32, 0xff010203)]:
+        packed = frame.convertToFormat(layout).constBits()
+        assert int.from_bytes(packed[:4], sys.byteorder) == expected
