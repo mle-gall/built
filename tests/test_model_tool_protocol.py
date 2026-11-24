@@ -46,3 +46,34 @@ def test_registered_model_tools_commit_and_undo_through_the_bridge():
     assert vp.scene.geo_paths[0].points[1] == V(*x)
     assert vp.history.undo() and vp.scene.geo_paths[0].points[1] == V(*y)
     assert vp.history.undo() and not vp.scene.geo_paths
+
+
+def test_scale_form_keeps_other_axes_and_allows_undo_past_the_placement(monkeypatch):
+    from types import SimpleNamespace
+    from core.group_scale import group_scale
+    from core.history import InsertGroupCommand
+    from views import chrome_dialogs, chrome_forms
+    from views.scale_dialog import ask_scale
+
+    vp = _Vp(Scene())
+    group, _ = _pair()
+    vp.history.execute(InsertGroupCommand(group))
+    form_stack = []
+    monkeypatch.setattr(chrome_dialogs, "in_shell", lambda: True)
+    monkeypatch.setattr(chrome_forms, "show", lambda window, form: form_stack.append(form))
+    ask_scale(SimpleNamespace(viewport=vp), group)
+    form, = form_stack
+    assert form.field("x").commit_on_blur
+    assert form.cancel == form.buttons[0][0]
+    form.receive("y", "1.23456789")
+    form.receive("x", "12.5")
+    assert abs(group_scale(group)[1] - 1.23456789) < 1e-7
+    form.press("undo")
+    assert group_scale(group)[0] == 1.0
+    form.press("redo")
+    assert group_scale(group)[0] == 12.5
+    for _ in range(3):
+        form.press("undo")
+    assert group not in vp.scene.groups
+    form.receive("z", "2")
+    assert not vp.history.undo_stack

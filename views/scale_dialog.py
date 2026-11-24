@@ -27,6 +27,16 @@ class _Field(QLineEdit):
         return super().event(e)
 
 
+def _set_scale(viewport, group, factors):
+    from core.protocol.commands import run
+    try:
+        run(viewport.history, "set_group_scale", placement=group.uid, factors=factors)
+    except KeyError:
+        # Undo can remove this placement while its editor stays open.
+        return
+    viewport.update()
+
+
 class ScaleDialog(QDialog):
     def __init__(self, window, group) -> None:
         super().__init__(window)
@@ -77,11 +87,8 @@ class ScaleDialog(QDialog):
             return None
 
     def _set(self, target) -> None:
-        from core.protocol.commands import run
         if target:
-            vp = self._window.viewport
-            run(vp.history, "set_group_scale", placement=self._group.uid, factors=target)
-            vp.update()
+            _set_scale(self._window.viewport, self._group, target)
         self._refresh()      # invalid or unchanged input snaps back
 
     def _apply(self) -> None:
@@ -104,17 +111,14 @@ def ask_scale(window, group, done=None) -> None:
         if done:
             done()
         return
-    from core.protocol.commands import run
     from views.chrome_forms import Field, Form, show
     def refresh(form):
         for axis, value in zip("xyz", group_scale(group)):
             form.set(axis, _fmt(value))
 
     def apply(form, factors):
-        vp = window.viewport
-        run(vp.history, "set_group_scale", placement=group.uid, factors=factors)
+        _set_scale(window.viewport, group, factors)
         refresh(form)
-        vp.update()
 
     def change(form, field, value):
         values = list(group_scale(group))
@@ -141,5 +145,5 @@ def ask_scale(window, group, done=None) -> None:
               for key, value in zip("xyz", group_scale(group))]
     fields.append(Field("reset", "button", tr("Reset scale")))
     fields.extend([Field("undo", "button", tr("Undo")), Field("redo", "button", tr("Redo"))])
-    show(window, Form(tr("Scale"), fields, buttons=[("ok", tr("Close"))],
+    show(window, Form(tr("Scale"), fields, buttons=[("ok", tr("Close"))], default=None, cancel="ok",
                       on_change=change, on_button=action, on_done=lambda *_: done() if done else None))

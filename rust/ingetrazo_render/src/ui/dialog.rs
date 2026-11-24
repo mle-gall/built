@@ -92,6 +92,11 @@ impl Dialog {
             return true;
         }
         let Some(focus) = ctx.memory(|m| m.focused()) else { return false };
+        // Deferred numeric edits close on Escape without committing a partial value.
+        if self.fields.iter().any(|f| f.8 & COMMIT_ON_BLUR != 0 &&
+                focus == egui::Id::new(("dlg_edit", &self.seq, &f.0))) {
+            return false;
+        }
         for (id, buf) in &mut self.bufs {
             if focus == egui::Id::new(("dlg_edit", &self.seq, id)) {
                 if buf.is_empty() {
@@ -151,7 +156,7 @@ impl Ui {
             return true;
         }
         if pressed && mods & (2 | 8) != 0 && d.fields.iter().any(|f| f.8 & COMMIT_ON_BLUR != 0) {
-            let action = match (name, mods & 1 != 0) {
+            let action = match (name, super::mods_from(mods).shift) {
                 ("Z" | "z", false) => Some("undo"),
                 ("Z" | "z", true) | ("Y" | "y", _) => Some("redo"),
                 _ => None,
