@@ -47,6 +47,11 @@ pub struct FrameContent {
     /// model's hatch engine when the content was read): drawn instead of
     /// the frame's own fill.
     pub fill_ops: Option<Vec<super::paint::Op>>,
+    /// The words a line type writes along its lines (worked out with
+    /// `core.layers.text_marks` when the content was read).
+    pub word_ops: Option<Vec<super::paint::Op>>,
+    /// The model's annotations over the content (sheets::annots).
+    pub annots: Vec<super::annots::Annot>,
 }
 
 /// How a layer's lines are inked (`core.layers.line_styles`, its line type
@@ -57,6 +62,8 @@ pub struct LayerStyle {
     pub weight: Option<f64>,
     pub cut_weight: Option<f64>,
     pub pattern: Vec<f64>,
+    /// The words it writes along its lines: (text, capitals mm, offset, period).
+    pub words: Option<(String, f64, f64, f64)>,
 }
 
 /// `_layer_pen`: the class pen with a layer's own line on it — a shade
@@ -360,6 +367,31 @@ pub fn paint_vector_content(p: &mut Painter, f: &Fields, c: &FrameContent) {
         p.clip_rect(r);
         paint_cut_fills(p, f, &c.fills, c.fill_ops.as_deref());
         paint_lines(p, f, c, segs);
+        if let Some(ops) = &c.word_ops {
+            p.ops.extend_from_slice(ops);
+        }
+        p.restore();
+    }
+}
+
+/// `paint_line_text`: the words of a line type at each of `marks` (centre
+/// and turn, paper mm), their capitals `size` mm high, reading upright, in
+/// the line's colour; the sheet font (bold) centred on its capitals.
+pub fn line_words(p: &mut Painter, text: &str, size: f64, marks: &[(f64, f64, f64)], colour: Rgba) {
+    let face = super::metrics::face_for(true);
+    if face.cap_height <= 0.0 || text.is_empty() {
+        return;
+    }
+    let em = size / (face.cap_height / 100.0);          // the type size whose capitals are `size`
+    let k = em / 100.0;
+    let (asc, desc) = (face.ascent * k, face.descent * k);
+    let w = face.advance(text) * k + 2.0;
+    for &(x, y, angle) in marks {
+        p.save();
+        p.translate(x, y);
+        p.rotate(angle);
+        // The baseline half a capital below the centre: the capitals centred on the line.
+        p.text_mm([-w / 2.0, size / 2.0 - asc, w, asc + desc], text, em / 0.75, true, align::HCENTER | align::TOP, colour);
         p.restore();
     }
 }
@@ -392,6 +424,9 @@ pub fn paint_frame(p: &mut Painter, f: &Fields, x: &Extra, c: &FrameContent) {
                 p.clip_rect(r);
                 paint_cut_fills(p, f, &c.fills, c.fill_ops.as_deref());
                 paint_lines(p, f, c, segs);
+                if let Some(ops) = &c.word_ops {
+                    p.ops.extend_from_slice(ops);
+                }
                 p.restore();
             }
             _ => placeholder(p),
@@ -411,6 +446,9 @@ pub fn paint_frame(p: &mut Painter, f: &Fields, x: &Extra, c: &FrameContent) {
     } else {
         p.fill_rect(r, Rgba(245, 246, 248, 255));
         placeholder(p);
+    }
+    if !c.annots.is_empty() {
+        super::annots::paint_annots(p, w, h, &c.annots);
     }
     paint_frame_overlay(p, f, x);
 }

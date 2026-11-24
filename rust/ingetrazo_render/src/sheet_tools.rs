@@ -100,6 +100,54 @@ pub fn sep_of(a: [f64; 2], b: [f64; 2], axis: &str, at: [f64; 2]) -> f64 {
     }
 }
 
+/// A linear dimension's line on the page, from its fields (`CotaItem.line_points`
+/// carried to its place): None for one with no length.
+pub fn cota_line(fields: &serde_json::Value) -> Option<([f64; 2], [f64; 2])> {
+    let n = |k: &str| fields.get(k).and_then(serde_json::Value::as_f64).unwrap_or(0.0);
+    let (x, y, dx, dy, s) = (n("x_mm"), n("y_mm"), n("dx_mm"), n("dy_mm"), n("sep_mm"));
+    let axis = fields.get("axis").and_then(serde_json::Value::as_str).unwrap_or("");
+    let (p0, p1) = match axis {
+        "h" => ([0.0, s], [dx, s]),
+        "v" => ([s, 0.0], [s, dy]),
+        _ => {
+            let l = dx.hypot(dy);
+            let (nx, ny) = if l < 1e-9 { (0.0, -1.0) } else { (-dy / l, dx / l) };
+            ([nx * s, ny * s], [dx + nx * s, dy + ny * s])
+        }
+    };
+    let (p0, p1) = ([p0[0] + x, p0[1] + y], [p1[0] + x, p1[1] + y]);
+    ((p1[0] - p0[0]).hypot(p1[1] - p0[1]) >= 1e-9).then_some((p0, p1))
+}
+
+/// `snap_sep_to_cotas`: the offset the cursor at `pos` gives the dimension
+/// line of a→b — pulled onto the line of a PARALLEL dimension of `lines`
+/// when it passes within `thr`, so dimensions line up in a row without
+/// counting millimetres — and the end of the line it took (None when free).
+pub fn snap_sep(a: [f64; 2], b: [f64; 2], axis: &str, pos: [f64; 2], lines: &[([f64; 2], [f64; 2])], thr: f64)
+    -> (f64, Option<[f64; 2]>) {
+    let Some([ux, uy, nx, ny]) = sep_frame(a, b, axis) else { return (0.0, None) };
+    let sep = (pos[0] - a[0]) * nx + (pos[1] - a[1]) * ny;
+    let mut best: Option<(f64, f64, [f64; 2])> = None;
+    for (p0, p1) in lines {
+        let ln = (p1[0] - p0[0]).hypot(p1[1] - p0[1]);
+        if ln < 1e-9 || ((p1[0] - p0[0]) / ln * uy - (p1[1] - p0[1]) / ln * ux).abs() > 0.01 {
+            continue;                                           // not parallel
+        }
+        let cand = (p0[0] - a[0]) * nx + (p0[1] - a[1]) * ny;
+        let d = (cand - sep).abs();
+        if best.is_none_or(|b| d < b.0) {
+            // The end of that line nearer the cursor carries the dot.
+            let dist = |q: &[f64; 2]| (q[0] - pos[0]).hypot(q[1] - pos[1]);
+            let near = if dist(p1) < dist(p0) { *p1 } else { *p0 };
+            best = Some((d, cand, near));
+        }
+    }
+    match best {
+        Some((d, cand, near)) if d <= thr => (cand, Some(near)),
+        _ => (sep, None),
+    }
+}
+
 /// The dimension line's ends (`_line_ends`): a and b carried along the
 /// normal by `sep`, flattened onto a row or a column when forced.
 pub fn line_ends(a: [f64; 2], b: [f64; 2], sep: f64, axis: &str) -> ([f64; 2], [f64; 2]) {
@@ -209,6 +257,20 @@ pub fn chain_sep_for(p1: [f64; 2], p2: [f64; 2], sep: f64, axis: &str, a: [f64; 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_offset_near_a_parallel_dimension_takes_its_line() {
+        // A dimension along y = 10 (from y = 20, 10 mm up); a new one from y = 30.
+        let fields = serde_json::json!({"x_mm": 0.0, "y_mm": 20.0, "dx_mm": 40.0, "dy_mm": 0.0, "sep_mm": -10.0});
+        let line = cota_line(&fields).unwrap();
+        assert_eq!(line, ([0.0, 10.0], [40.0, 10.0]));
+        let (sep, dot) = snap_sep([50.0, 30.0], [90.0, 30.0], "", [60.0, 11.5], &[line], 2.0);
+        assert!((sep - -20.0).abs() < 1e-12, "{sep}");
+        assert_eq!(dot, Some([40.0, 10.0]));
+        // Too far, or not parallel: free.
+        assert_eq!(snap_sep([50.0, 30.0], [90.0, 30.0], "", [60.0, 14.0], &[line], 2.0), (-16.0, None));
+        assert_eq!(snap_sep([50.0, 30.0], [50.0, 70.0], "", [40.0, 40.0], &[line], 50.0).1, None);
+    }
 
     #[test]
     fn a_corner_wins_over_an_edge_and_an_edge_point_is_taken_along_it() {

@@ -77,38 +77,6 @@ def test_the_arrays_match_the_walk_with_the_layers_switched_now():
         win.close()
 
 
-def test_a_frame_with_other_layers_does_not_walk_the_faces(monkeypatch):
-    import core.hlr
-    from core.saved_views import SavedView
-    from views.composer import ComposerWindow
-    from views.main_window import MainWindow
-    win = MainWindow()
-    comp = None
-    try:
-        scene = win.viewport.scene
-        scene.layers.append(Layer("OG", visible=False))
-        _box(scene, "OG", 0.0)
-        scene.saved_views.append(SavedView(
-            "Plan OG", target=(3.0, 1.0, 1.5), distance=20.0, yaw=0.0,
-            pitch=0.0, perspective=False, hidden_layers=[]))
-        comp = ComposerWindow(win)
-        comp._auto_render = False
-        frame = comp.comp.frames[0]
-        frame.view_key = "scene:Plan OG"
-        comp._invalidate_geometry_caches()
-
-        def walk(*a, **k):
-            raise AssertionError("the per-face walk ran")
-        monkeypatch.setattr(core.hlr, "collect_geometry", walk)
-        pts, _world = comp.frame_snap_points(frame)
-        assert len(pts) > 0
-    finally:
-        if comp is not None:
-            comp.close()
-        win._saved_version = win.viewport.scene.version
-        win.close()
-
-
 def _canon(arrays):
     tris, hard, soft, normals = arrays
     def rows(a, k):

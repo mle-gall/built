@@ -232,13 +232,11 @@ def picture(view_widget, frame):
     return w, h, opaque_frame(w, h, rgba)
 
 
-def _hlr(source, frame, tags: bool = False, **kw):
-    """The frame's hidden-line pass (Rust camera and geometry, with each
-    triangle's and line's tag when ``tags``) and the map from its camera
-    plane to frame paper mm; None when its view is gone."""
+def _frame_pass(source, frame, tags: bool = False):
+    """What the frame's hidden-line pass runs on: the scene as its view
+    shows it, its camera and its geometry (Rust), with each triangle's and
+    line's tag when ``tags``; None when its view is gone."""
     from core._native import qt_hypot
-    from core.composition import model_height_for_frame
-    from core.hlr import hlr_drawing
     scene = source.scene
     view = saved_view(scene, frame)
     if view is False:
@@ -249,6 +247,19 @@ def _hlr(source, frame, tags: bool = False, **kw):
                                                    view or None, qt_hypot() or "libc++-fma", tags)
     if tags:
         geometry = (*geometry, *(np.array(t, dtype=object) for t in tagged))
+    return facade, camera, geometry
+
+
+def _hlr(source, frame, tags: bool = False, **kw):
+    """The frame's hidden-line pass (Rust camera and geometry, with each
+    triangle's and line's tag when ``tags``) and the map from its camera
+    plane to frame paper mm; None when its view is gone."""
+    from core.composition import model_height_for_frame
+    from core.hlr import hlr_drawing
+    got = _frame_pass(source, frame, tags)
+    if got is None:
+        return None
+    facade, camera, geometry = got
     d = hlr_drawing(facade, camera, geometry=geometry, layers=tags, **kw)
     model_h = model_height_for_frame(frame.h_mm, frame.scale_n)
     k = frame.h_mm / model_h                       # paper mm per metre
@@ -299,7 +310,8 @@ def drawing(source, frame):
         style = getattr(facade, "display_style", None)
         looks = line_styles(facade, coloured or bool(getattr(style, "color_by_layer", False)))
         out["tags"] = [str(t) for t in d.layers]
-        out["styles"] = {tag: (st[0], st[2], st[3], list(st[4] if st[4] is not None else LINETYPES.get(st[1], ())))
+        out["styles"] = {tag: (st[0], st[2], st[3], list(st[4] if st[4] is not None else LINETYPES.get(st[1], ())),
+                               st[5] if len(st) > 5 else None)
                          for tag, st in looks.items()}
     if (fill_by_layer or hatches) and d.loop_layers is not None:
         table = cut_fill_colours(facade) if fill_by_layer else {}
@@ -375,6 +387,46 @@ def circles(source, frame):
     return np.array(out, float).reshape(-1, 3)
 
 
+def annotations(source, frame, providers=None):
+    """A frame's model annotations (sheets::annots, the composer's
+    ``compute_annotations``) as overlay tuples, frame-local mm: the scene
+    read here as plain data — traced paths draped on the ground, the
+    dimensions with their texts, the leader labels, the section planes, the
+    extensions' ``providers`` (``add_sheet_annotations``) — and their
+    projection through the frame camera, what the frame's view hides, and
+    the layout in Rust. [] when its view is gone."""
+    from ingetrazo_core import Vec3
+    from core.layers import layer_of
+    from core.units import format_length
+    scene = source.scene
+    view = saved_view(scene, frame)
+    if view is False:
+        return []
+    base, bounds = camera_inputs(source.camera, scene)
+    drape = getattr(source, "drape", None)
+    lift = (lambda p: drape(p).toTuple()) if drape is not None else (lambda p: p.toTuple())  # noqa: E731
+    hidden = lambda e: scene.entity_hidden(e) or scene.similar_hidden(e)  # noqa: E731
+    data = {"root": scene._root, "groups": list(scene.groups), "loose": scene.loose_mesh,
+            "paths": [([lift(p) for p in path.points], path.closed, [p.toTuple() for p in path.profile_points()])
+                      for path in getattr(scene, "geo_paths", None) or []],
+            "drape": lambda x, y: lift(Vec3(x, y, 0.0)),
+            "planes": [(sp.point.toTuple(), sp.normal.toTuple(), sp.symbol)
+                       for sp in getattr(scene, "section_planes", None) or []]}
+    if providers:
+        data["providers"], data["scene"] = providers, frame_scene(scene, frame, view)
+    if getattr(frame, "annotations", False):
+        style = getattr(scene, "dimension_style", {}) or {}
+        fmt = lambda v: format_length(v, style.get("units", "m"), int(style.get("decimals", 2)),  # noqa: E731
+                                      bool(style.get("show_unit", True)))
+        data["ends"] = style.get("ends", "arrow")
+        data["dims"] = [(d.a.toTuple(), d.b.toTuple(), *(p.toTuple() for p in d.line_points()),
+                         d.display_text(fmt(d.value())), layer_of(d), hidden(d))
+                        for d in getattr(scene, "dimensions", []) or []]
+        data["labels"] = [(lab.anchor.toTuple(), lab.position().toTuple(), lab.text, layer_of(lab), hidden(lab))
+                          for lab in getattr(scene, "text_labels", []) or []]
+    return NATIVE.sheet_frame_annotations(frame, {"view": view, "base": base, "bounds": bounds}, data)
+
+
 def _hlr_to_mm(frame):
     """A frame's camera plane (metres) to frame paper mm."""
     from core.composition import model_height_for_frame
@@ -391,11 +443,12 @@ def _hlr_to_mm(frame):
     return to_mm
 
 
-def frame_contents(view_widget, comps, ground=None):
+def frame_contents(view_widget, comps, ground=None, providers=None):
     """Each frame's content for a file, worked out afresh: ``(contents,
-    pictures, profiles, troubled)`` as sheet_pdf / sheet_image take them;
-    ``troubled`` names the sheets where a frame would not render (it
-    prints its placeholder, the rest goes on)."""
+    pictures, profiles, troubled)`` as sheet_pdf / sheet_image take them,
+    with the model's annotations over each (``providers``: the extensions'
+    sheet items); ``troubled`` names the sheets where a frame would not
+    render (it prints its placeholder, the rest goes on)."""
     source = view_widget.source_viewport
     scene = source.scene
     contents, pictures, profiles, troubled = {}, {}, {}, []
@@ -416,6 +469,8 @@ def frame_contents(view_widget, comps, ground=None):
                     if got is not None:
                         contents[key] = {"image": got[:2]}
                         pictures[f"frame:{key}"] = got
+                if key in contents and "missing" not in contents[key]:
+                    contents[key]["annots"] = annotations(source, frame, providers)
             except Exception:  # noqa: BLE001 — one frame, not the document
                 import traceback
                 traceback.print_exc()
@@ -424,18 +479,86 @@ def frame_contents(view_widget, comps, ground=None):
     return contents, pictures, profiles or None, troubled
 
 
-def export_pdf(view_widget, comps, path, ground=None, doc_path=None) -> list:
+def _line_groups(source, frame):
+    """A frame's hidden-line view as the line groups the DXF and SVG
+    exports write (formats.dxf_out.save_dxf_layers), in model units — each
+    model layer as a layer of its own with its colour and line type when the
+    model has layers, else one per line class (formats.dxf_views) — with
+    the words layer line types write, and what the pass ran on; None when
+    its view is gone."""
+    from core.composition import frame_view_name
+    from core.hlr import hlr_drawing
+    from core.layers import export_labels, layer_lines_wanted, line_styles
+    from formats.dxf_views import dxf_groups_by_class, dxf_groups_by_layer
+    got = _frame_pass(source, frame, True)
+    if got is None:
+        return None
+    facade, camera, geometry = got
+    hidden = bool(getattr(frame, "hidden_lines", False))
+    by_layer = layer_lines_wanted(facade) or len(getattr(facade, "layers", ())) > 1
+    d = hlr_drawing(facade, camera, geometry=geometry if by_layer else geometry[:4], layers=by_layer,
+                    profiles=bool(getattr(frame, "profiles", True)), fills=False, hidden=hidden)
+    layer = frame_view_name(frame).split(" — ")[0]
+    texts = []
+    if d.layers is not None:
+        d.styles, d.labels = line_styles(facade, True), export_labels(facade)
+        groups = dxf_groups_by_layer(d, layer, hidden, texts)
+    else:
+        groups = dxf_groups_by_class(d, layer, hidden)
+    return groups, texts, (facade, camera, geometry)
+
+
+def export_dxf(source, frame, path) -> int:
+    """``frame``'s hidden-line view as DXF at its scale, in model units (the
+    composer's ``export_frame_dxf``): its line groups and the cut's hatches
+    and fills as the frame draws them (formats.dxf_views). Returns the lines
+    written, None when its view is gone."""
+    from core.composition import model_height_for_frame
+    from formats.dxf_out import save_dxf_layers
+    from formats.dxf_views import dxf_cut_layers
+    got = _line_groups(source, frame)
+    if got is None:
+        return None
+    groups, texts, (facade, camera, geometry) = got
+    lines, solids = [], []
+    if (getattr(frame, "cut_fill", "solid") or "solid") != "none":
+        scale_n = float(frame.scale_n or 100.0)
+        lines, solids = dxf_cut_layers(facade, camera, scale_n,
+                                       frame.h_mm / model_height_for_frame(frame.h_mm, scale_n),
+                                       max(0.2, float(getattr(frame, "cut_hatch_mm", 1.5) or 1.5) / 1.5),
+                                       geometry=geometry)
+    return save_dxf_layers(path, groups + lines, solids, texts)
+
+
+def export_svg(source, frame, path) -> int:
+    """``frame``'s hidden-line view as SVG at 1:``scale_n`` with the frame's
+    cut / profile / edge pens (the composer's ``export_frame_svg`` of the
+    lines alone). Returns the segments, None when its view is gone."""
+    from pathlib import Path
+    from formats.svg_out import svg_text
+    got = _line_groups(source, frame)
+    if got is None:
+        return None
+    edge = max(0.05, float(getattr(frame, "pen_edge_mm", 0.18) or 0.18))
+    pens = {"cut": max(0.05, float(getattr(frame, "pen_cut_mm", 0.5) or 0.5)),
+            "profile": max(0.05, float(getattr(frame, "pen_profile_mm", 0.35) or 0.35)), "edge": edge}
+    text, n = svg_text(got[0], float(getattr(frame, "scale_n", 100.0) or 100.0), pens, None, True, None, None)
+    Path(path).write_text(text, encoding="utf-8")
+    return n
+
+
+def export_pdf(view_widget, comps, path, ground=None, doc_path=None, providers=None) -> list:
     """Sheets ``comps`` into the PDF at ``path`` (sheets::pdf); returns the
     names of the sheets where a frame would not render."""
-    contents, pictures, profiles, troubled = frame_contents(view_widget, comps, ground)
+    contents, pictures, profiles, troubled = frame_contents(view_widget, comps, ground, providers)
     NATIVE.sheet_pdf(str(path), list(comps), contents, pictures, profiles, view_widget.source_viewport.scene,
                      None if doc_path is None else str(doc_path))
     return troubled
 
 
-def export_image(view_widget, comp, path, dpi=200.0, ground=None, doc_path=None) -> list:
+def export_image(view_widget, comp, path, dpi=200.0, ground=None, doc_path=None, providers=None) -> list:
     """Sheet ``comp`` as a PNG or JPEG at ``dpi`` (sheets::raster)."""
-    contents, pictures, profiles, troubled = frame_contents(view_widget, [comp], ground)
+    contents, pictures, profiles, troubled = frame_contents(view_widget, [comp], ground, providers)
     NATIVE.sheet_image(str(path), comp, float(dpi), contents, pictures, profiles,
                        view_widget.source_viewport.scene, None if doc_path is None else str(doc_path))
     return troubled

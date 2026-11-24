@@ -129,9 +129,6 @@ class Recorder:
 def host(tmp_path, monkeypatch):
     from app_shell.host import Host
     from views import wgpu_sheets
-    from views.composer import ComposerWindow
-    # Model views would render through the Metal view, absent headless.
-    monkeypatch.setattr(ComposerWindow, "render_frame", lambda self, f: None)
     monkeypatch.setattr(wgpu_sheets, "FORCE", True)
     import sys
     sys.path.insert(0, str(ROOT / "scripts"))
@@ -196,7 +193,8 @@ def test_the_workspace_switch_swaps_the_frame_not_the_window(host):
     tabs = rec.last("ui_set_tabs")[0]
     assert [t[1] for t in tabs[0]] == ["Model", "Sheets"] and tabs[0][1][4] == 1
     assert tabs[1] == []                                            # no scene stepper on sheets
-    assert not ws.composer.testAttribute(Qt.WA_WState_Visible)      # never shown
+    from PySide6.QtWidgets import QWidget
+    assert not isinstance(ws.composer, QWidget)                      # no window of its own
     _run_actions(host, "tab:model")
     assert _ws(host) is None
     assert ("ui_show_sheets", (False,)) in rec.calls and "page_clear" in rec.names()
@@ -240,12 +238,6 @@ def test_the_page_follows_the_document_and_only_then(host):
 def test_frames_show_the_vector_pass_and_the_renders(host, monkeypatch):
     import numpy as np
     from views import wgpu_sheet_frames
-    from views.composer import ComposerWindow
-
-    def render(self, frame):
-        raise AssertionError("the composer draws no frame for the page")
-    monkeypatch.setattr(ComposerWindow, "render_frame", render)
-
     def drawing(source, frame):
         assert frame.style == "vectorial"
         return {"segs": np.array([[0, 0, 10, 0], [0, 0, 0, 5]], float), "kinds": np.array([0, 1], np.int8),
@@ -281,6 +273,20 @@ def test_frames_show_the_vector_pass_and_the_renders(host, monkeypatch):
     iso.x_mm += 5.0                          # moved only: the picture stays
     host.view.draw_frame()
     assert shaded == [iso, iso, iso]
+    # The model changed: with Auto-render on, the shaded view renders again
+    # and the drawn vector view waits for Update; a sheet edit is no model change.
+    ws.composer._on_model_version(10_000)
+    for _ in range(3):
+        host.view.draw_frame()
+    assert shaded == [iso] * 4 and rec.last("page_frame_forget") == (iso._doc_key,)
+    _set(host, plan, title_text="Planta")
+    ws.composer._on_model_version(ws.composer._scene().version)
+    host.view.draw_frame()
+    assert shaded == [iso] * 4
+    ws.set_auto_render(False)
+    ws.composer._on_model_version(10_001)
+    host.view.draw_frame()
+    assert shaded == [iso] * 4
 
 
 
@@ -382,6 +388,47 @@ def test_inspector_edits_are_steps_of_the_document_history(host):
     assert host.errors == []
 
 
+def test_the_next_dimension_level_and_ground_line_take_the_last_look(host):
+    """Remembered looks (sheets::looks, the composer's _last_cota_style and
+    kin): an edited look dresses the next item of its kind — never its
+    units, never where its text sits along it — and the dimension's lasts
+    into the next session, the others not."""
+    import ingetrazo_core as NATIVE
+    from core.composition import AddItemCommand
+    from views import wgpu_sheets
+    ws = _sheets(host)
+    comp = ws.composer.comp
+    scene = ws.composer._scene()
+
+    def add(item):
+        ws._run(AddItemCommand(comp, item))
+        return item
+    first = add(NATIVE.sheet_new_cota(comp, (20.0, 20.0), (60.0, 20.0), 5.0, "", scene))
+    assert first.ends == "arrow"
+    _set(host, first, ends="tick", color="#c03020", text_mm=3.5, text_along="end", units="cm")
+    _set(host, first, x_mm=25.0)                      # a move teaches nothing
+    nxt = NATIVE.sheet_new_cota(comp, (20.0, 40.0), (60.0, 40.0), 5.0, "", scene)
+    assert (nxt.ends, nxt.color, nxt.text_mm, nxt.text_along) == ("tick", "#c03020", 3.5, "middle")
+    assert nxt.units != "cm"                          # the document's
+    radial = NATIVE.sheet_new_radial(comp, (80.0, 80.0), (90.0, 80.0), "radius", scene)
+    angular = NATIVE.sheet_new_angular(comp, (80.0, 80.0), (90.0, 80.0), (80.0, 70.0), 6.0)
+    assert (radial.ends, radial.color, angular.color) == ("tick", "#c03020", "#c03020")
+    level = add(NATIVE.sheet_new_item(comp, "nivel", 30.0, 30.0, 30.0, 30.0, scene))
+    _set(host, level, size_mm=4.0, mirror=True, text="NPT")
+    level2 = NATIVE.sheet_new_item(comp, "nivel", 50.0, 30.0, 50.0, 30.0, scene)
+    assert (level2.size_mm, level2.mirror, level2.text) == (4.0, True, "NPT")
+    ground = add(NATIVE.sheet_new_item(comp, "terreno", 10.0, 90.0, 80.0, 90.0, scene))
+    assert ground.stroke_mm == 0.5
+    _set(host, ground, ground="band", band_mm=4.0)
+    ground2 = NATIVE.sheet_new_item(comp, "terreno", 10.0, 100.0, 80.0, 100.0, scene)
+    assert (ground2.ground, ground2.band_mm, ground2.stroke_mm) == ("band", 4.0, 0.5)
+    wgpu_sheets.Workspace(ws.composer)                # a new session
+    again = NATIVE.sheet_new_cota(comp, (20.0, 60.0), (60.0, 60.0), 5.0, "", scene)
+    assert (again.ends, again.color) == ("tick", "#c03020")
+    assert NATIVE.sheet_new_item(comp, "nivel", 50.0, 50.0, 50.0, 50.0, scene).size_mm != 4.0
+    assert host.errors == []
+
+
 def test_the_sheet_and_several_items_through_the_inspector(host):
     import json
     ws = _sheets(host)
@@ -422,13 +469,13 @@ def test_delete_duplicate_and_lock_on_the_selection(host):
 
 # ---- keys, pointer, pan and zoom --------------------------------------------------------
 def _texts(host, ws):
+    """A new text on the sheet, on the page."""
     from core.composition import TextoItem
-    from views.composer import TextItem
-    ws.composer.comp.texts.append(TextoItem(x_mm=40, y_mm=40, w_mm=60, text="Pozo de registro"))
-    ws.composer._rebuild_canvas()
+    text = TextoItem(x_mm=40, y_mm=40, w_mm=60, text="Pozo de registro")
+    ws.composer.comp.texts.append(text)
+    ws.sheet_changed()
     host.view.draw_frame()
-    return next(it for it in ws.composer.canvas.items() if isinstance(it, TextItem)
-                and it.model.text == "Pozo de registro")
+    return text
 
 
 def test_keys_go_to_the_page_and_window_keys_stay_the_window_s(host):
@@ -436,7 +483,7 @@ def test_keys_go_to_the_page_and_window_keys_stay_the_window_s(host):
     comp = ws.composer
     item = _texts(host, ws)
     before = len(comp.comp.texts)
-    host.view.renderer.page_select([item.model._doc_key])
+    host.view.renderer.page_select([item._doc_key])
     host.key(True, Qt.Key_Backspace.value, 0)
     host.key(False, Qt.Key_Backspace.value, 0)
     assert len(comp.comp.texts) == before - 1
@@ -541,23 +588,6 @@ def test_a_new_text_opens_for_typing_and_the_words_are_one_edit(host):
     assert text.text == "Text"
 
 
-def test_the_snaps_are_the_composer_s(host):
-    """What a frame offers the drawing tools (wgpu_sheet_frames.snaps: Rust
-    camera and geometry) is what the composer's frame_snap_points offered:
-    the same page points with the same model points behind them."""
-    import numpy as np
-    from views import wgpu_sheet_frames
-    ws = _sheets(host)
-    plan = ws.composer.comp.frames[0]
-    pts, wpts, edges, ew, _circles = wgpu_sheet_frames.snaps(host.view.source_viewport, plan)
-    want_pts, want_w = ws.composer.frame_snap_points(plan)
-    assert len(pts) > 10
-    canon = lambda p, w: sorted(tuple(np.round(np.r_[a, b], 6)) for a, b in zip(p, w))  # noqa: E731
-    assert canon(pts, wpts) == canon(want_pts, want_w)
-    want_e = ws.composer.frame_snap_edges(plan)
-    assert len(edges) == len(want_e[0])
-
-
 def test_a_dimension_measured_on_the_page_is_bound_to_the_model(host):
     """The page's ``sheets:cota``: the record in the document's units,
     measuring the two points; both on one frame's drawing, it is bound to
@@ -622,49 +652,92 @@ def test_a_bound_dimension_follows_its_frame_and_the_model(host):
     assert ct.a_world == pytest.approx([before[0] + 0.6, before[1], before[2]])
 
 
-@pytest.mark.parametrize("by_layer", [False, True])
-def test_a_plan_cut_fills_each_ring_with_its_layer_s_look(host, by_layer):
-    """End to end, with a section plane: the cut rings of a vector frame and
-    each ring's look (colour, pattern, ground, ink, form) as the workspace
-    hands them to the painter (wgpu_sheet_frames.drawing) are the ones the
-    composer's compute_hlr worked out, and the frame's display list fills
-    them with the patterns (sheets::hatching)."""
-    import numpy as np
-    from ingetrazo_core import Vec3
-    from core.layers import Layer
-    from core.section import SectionPlane
+GOLDENS = json.loads((ROOT / "tests" / "fixtures" / "sheet_frames" / "goldens.json").read_text())
+
+
+@pytest.mark.parametrize("case", sorted(GOLDENS))
+def test_a_frame_offers_and_draws_what_the_composer_did(host, tmp_path, case):
+    """What a frame offers the drawing tools (snap points with their model
+    points, edges, circles), its plan cut ring by ring with each ring's
+    look, its model annotations and its DXF — worked out with the Rust
+    camera and geometry (views/wgpu_sheet_frames.py) — are what the
+    composer answered (goldens: scripts/sheet_frame_goldens.py, the scenes
+    in tests/sheet_frame_cases.py)."""
+    from tests.sheet_frame_cases import canon, native, set_up
+    ws = _sheets(host)
+    plan = ws.composer.comp.frames[0]
+    set_up(case, ws.composer._scene(), plan, host.window)
+    got = canon(native(case, host.view.source_viewport, plan, tmp_path, host.window))
+    want = GOLDENS[case]
+    if case != "annotations":
+        assert got == want
+        return
+    # The extensions' text boxes are measured with the sheet font, the
+    # composer's with Qt's: within 15 %, the rest exactly.
+    mine, theirs = got["items"], want["items"]
+    assert [a if a[0] != "xtext" else a[:10] for a in mine] == [a if a[0] != "xtext" else a[:10] for a in theirs]
+    for m, t in zip(mine, theirs):
+        if m[0] == "xtext":
+            assert all(abs(a - b) < 0.15 * abs(b) for a, b in zip(m[10:], t[10:]) if b), (m[10:], t[10:])
+
+
+def test_a_plan_cut_is_filled_with_its_layers_patterns(host):
+    """End to end, with a section plane: the cut rings of a vector frame
+    filled with their layers' patterns (sheets::hatching), brick and
+    concrete, in the frame's display list."""
+    from tests.sheet_frame_cases import plan_cut
     from views import wgpu_sheet_frames
     ws = _sheets(host)
-    comp = ws.composer
-    plan = comp.comp.frames[0]
-    plan.cut_fill_by_layer = by_layer
-    scene = comp._scene()
-    scene.layers.append(Layer("Muros", hatch="brick", color=(0.8, 0.4, 0.3)))
-    scene.layers.append(Layer("Losa", hatch="concrete", color=(0.5, 0.5, 0.55)))
-    for f in scene.mesh.faces:                       # the box east of x = 6 is concrete, the rest walls
-        xs = [v.x() for v in f.vertices]
-        f.attrs["layer"] = "Losa" if min(xs) >= 5.99 else "Muros"
-    sp = SectionPlane(Vec3(0.0, 0.0, 1.0), Vec3(0.0, 0.0, 1.0))     # a plan cut through the boxes
-    scene.section_planes.append(sp)
-    scene.set_active_section(sp)
-    scene.version += 1
+    plan = ws.composer.comp.frames[0]
+    plan_cut(ws.composer._scene(), plan, True)
     got = wgpu_sheet_frames.drawing(host.view.source_viewport, plan)
-    comp._invalidate_geometry_caches()
-    comp.compute_hlr(plan)
-    want_rings = comp.hlr_fills[id(plan)]
-    want_looks = comp.hlr_fill_styles[id(plan)]
-    assert len(got["fills"]) == len(want_rings) >= 3
-    canon = lambda r: tuple(sorted(map(tuple, np.round(np.asarray(r, float), 4))))  # noqa: E731
-    assert sorted(map(canon, got["fills"])) == sorted(map(canon, want_rings))
-    rgb = lambda q: None if q is None else [round(v, 4) for v in q.getRgbF()[:3]]  # noqa: E731
-    mine = {canon(r): (None if c is None else [round(v, 4) for v in c], h, f and f.get("cut"))
-            for r, (c, h, _g, _i, f) in zip(got["fills"], got["fill_looks"])}
-    theirs = {canon(r): (rgb(look[0]), look[1], look[4] and look[4].get("cut"))
-              for r, look in zip(want_rings, want_looks)}
-    assert mine == theirs
     assert {h for _c, h, _g, _i, _f in got["fill_looks"]} == {"brick", "concrete"}
     ops = json.loads(NATIVE_display(plan, got))
     assert sum(o["op"] == "line" for o in ops) > len(got["segs"]) + 10       # the patterns' marks
+
+
+def test_the_page_draws_a_frame_s_annotations_and_follows_them(host):
+    """The page draws a frame's model annotations over its content
+    (page_frame_annots), with an extension's items, and again when the
+    frame stops showing the model's dimensions."""
+    import ingetrazo_core as NATIVE
+    from tests.sheet_frame_cases import annotated
+    from views import wgpu_sheet_frames
+    ws = _sheets(host)
+    plan = ws.composer.comp.frames[0]
+    annotated(ws.composer._scene(), plan, host.window)
+    told = []
+    provider = host.window._ext_sheet_annots[0]
+    host.window._ext_sheet_annots[0] = lambda scene, sheet: told.append((sheet.scale_n, sheet.text_mm)) or provider(
+        scene, sheet)
+    got = wgpu_sheet_frames.annotations(host.view.source_viewport, plan, host.window._ext_sheet_annots)
+    assert told[-1] == (plan.scale_n, 3.0)
+    kinds = [a[0] for a in got]
+    assert {"poly", "line", "text", "secmark", "xpoly", "xtext"} <= set(kinds), kinds
+    ops = json.loads(NATIVE.sheet_frame_annots(plan, got))
+    assert sum(o["op"] == "text" for o in ops) == 9 * kinds.count("text") + 2 * kinds.count("secmark") \
+        + kinds.count("xtext")
+    renderer = host.view.renderer
+    for _ in range(6):
+        host.view.draw_frame()
+    sent = [a for n, a in renderer.calls if n == "page_frame_annots" and a[0] == plan._doc_key]
+    assert sent and json.loads(sent[-1][1]) == ops
+    plan.annotations = False
+    for _ in range(6):
+        host.view.draw_frame()
+    sent = [a for n, a in renderer.calls if n == "page_frame_annots" and a[0] == plan._doc_key]
+    assert len(json.loads(sent[-1][1])) < len(ops)
+    assert len(host.window._ext_sheet_annots) == 1                 # told each frame's own scale, never failed
+
+
+def test_a_layered_dxf_has_each_layer_and_its_hatch(host, tmp_path):
+    from tests.sheet_frame_cases import dxf_layers
+    from views import wgpu_sheet_frames
+    ws = _sheets(host)
+    plan = ws.composer.comp.frames[0]
+    dxf_layers(ws.composer._scene())
+    assert wgpu_sheet_frames.export_dxf(host.view.source_viewport, plan, tmp_path / "v.dxf") > 10
+    assert "MUROS-TRAMA" in (tmp_path / "v.dxf").read_text()
 
 
 def NATIVE_display(frame, content):
@@ -703,25 +776,16 @@ def test_radius_and_angle_dimensions_from_the_page(host):
     assert comp.tool_mode == "cota_ang"
 
 
-def test_the_frame_s_circles_are_the_composer_s(host):
-    from views import wgpu_sheet_frames
-    ws = _sheets(host)
-    plan = ws.composer.comp.frames[0]
-    got = wgpu_sheet_frames.circles(host.view.source_viewport, plan)
-    want = ws.composer.frame_circles(plan)
-    assert sorted(map(tuple, got.round(6).tolist())) == sorted(tuple(round(v, 6) for v in c) for c in want)
-
-
 def test_every_tool_of_the_rail_runs_on_the_page(host, monkeypatch):
     from views import wgpu_sheets
     ws = _sheets(host)
-    opened = []
-    monkeypatch.setattr(type(ws), "open_classic", lambda self, tool="": opened.append(tool))
     rail = {t for group in wgpu_sheets.RAIL for t in group}
     assert rail <= wgpu_sheets.NATIVE_TOOLS
     for tool in sorted(rail - {"imagen"}):
         _run_actions(host, f"sheets:tool\x1f{tool}")
-    assert opened == []
+        assert ws.composer.tool_mode == tool
+        host.view.draw_frame()
+        assert host.view.renderer.last("ui_set_sheet_active") == (tool,)
     groups = host.view.renderer.last("ui_set_sheet_tools")[0]
     assert not any("classic" in t[1] for g in groups for t in g)
 

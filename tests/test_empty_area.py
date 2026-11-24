@@ -60,7 +60,6 @@ def test_closing_the_last_project_leaves_the_empty_area(win):
     assert win._scene_tabs.isHidden()
     assert not any(d.isVisible() for d in panels)
     assert not win._sidebar_handle.isVisible()
-    assert not win._sheet_tabs.isVisible()
     assert win.windowTitle() == "Built"
 
 
@@ -77,7 +76,6 @@ def test_plus_brings_a_project_and_everything_back(win):
     assert win._project_tabs.views_button.isVisible()
     assert all(d.toggleViewAction().isChecked() for d in panels)
     assert win._sidebar_handle.isVisible()
-    assert win._sheet_tabs.isVisible()
     assert win._scene_tabs.isHidden()           # a blank project: no scenes
     win.tray.scenes.add_scene()
     assert not win._scene_tabs.isHidden()       # the row is back with one

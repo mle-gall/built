@@ -142,6 +142,20 @@ def _restore_settings_paths():
 
 
 @pytest.fixture(autouse=True)
+def _sheet_looks():
+    """The sheets' remembered looks (sheets::looks) are the process's: a
+    dimension styled in one test must not dress the next one's."""
+    yield
+    try:
+        import ingetrazo_core
+        forget = getattr(ingetrazo_core, "sheet_forget_looks", None)
+    except Exception:  # noqa: BLE001 — no native module, nothing remembered
+        forget = None
+    if forget is not None:
+        forget()
+
+
+@pytest.fixture(autouse=True)
 def _process_environment():
     """Each test leaves ``os.environ`` as it found it. The app writes it on
     purpose (``core._native.start_guard`` sets INGETRAZO_RUST=0 for

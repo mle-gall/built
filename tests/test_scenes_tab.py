@@ -391,14 +391,6 @@ def _sheet_list_scenes(panel):
     return out
 
 
-def test_views_and_sheets_lists_the_scenes_in_the_new_order(win):
-    from views.outliner import SheetsPanel
-    panel = _scenes(win, "A", "B", "C")
-    panel.drop_rows(("before", _view(win, "A")),
-                    [panel.row_for(_view(win, "C"))])
-    assert _sheet_list_scenes(SheetsPanel(win)) == ["C", "A", "B"]
-
-
 # ---- 5. Undo for everything -------------------------------------------------
 
 def test_rename_edits_the_row_when_the_tab_is_in_sight(win, monkeypatch):
@@ -447,16 +439,6 @@ def test_the_name_prompt_is_the_programs_wide_one(win, monkeypatch):
     assert used and used[0]["text"] == "A"
 
 
-def test_rename_from_views_and_sheets_is_undoable_too(win):
-    from views.outliner import SheetsPanel
-    _scenes(win, "A")
-    view = _view(win, "A")
-    assert SheetsPanel(win).rename_scene(view, "Section")
-    assert view.name == "Section"
-    win.viewport.history.undo()
-    assert view.name == "A"
-
-
 # ---- 6. A mark on the scene shown -------------------------------------------
 
 def _bold(panel):
@@ -479,15 +461,6 @@ def test_the_mark_goes_with_its_scene_when_it_is_deleted(win):
     panel._on_delete()
     assert panel.shown is None
     assert not any(_bold(panel))
-
-
-def test_a_scene_shown_from_views_and_sheets_is_marked_here(win):
-    from views.outliner import SheetsPanel
-    panel = _scenes(win, "A", "B")
-    view = _view(win, "B")
-    SheetsPanel(win)._show_scene(view)
-    assert panel.shown is view
-    assert panel.row_for(view).font(0).bold()
 
 
 # ---- The list or the thumbnails ---------------------------------------------

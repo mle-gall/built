@@ -457,37 +457,6 @@ def test_line_styles_and_wanted():
     assert not L.layer_lines_wanted(plain)
 
 
-def test_dxf_writes_each_layer_with_its_linetype_and_colour(tmp_path):
-    from core.hlr import hlr_drawing
-    from formats.dxf_out import save_dxf_layers
-    from views.composer import dxf_groups_by_layer
-    scene = _two_boxes_scene()
-    scene.layer("B").color = (1.0, 0.0, 0.0)
-    d = hlr_drawing(scene, _top_camera(), profiles=False, layers=True)
-    d.styles = L.line_styles(scene, colored=True)
-    groups = dxf_groups_by_layer(d, "PLANTA", hidden_lines=False)
-    path = tmp_path / "v.dxf"
-    n = save_dxf_layers(path, groups)
-    assert n == len(d.segs)
-    text = path.read_text(encoding="ascii")
-    assert "2\nDASHED\n" in text
-    import re
-    assert re.search(r"0\nLAYER\n2\nA\n70\n0\n62\n\d+\n6\nDASHED\n", text)
-    assert "0\nLAYER\n2\nB\n70\n0\n62\n1\n6\nCONTINUOUS\n" in text   # red
-
-
-def test_pens_take_the_layer_line():
-    from PySide6.QtGui import QPen
-    from core.hlr import KIND_CUT, KIND_EDGE
-    from views.composer import _layer_pen
-    base = QPen()
-    base.setWidthF(0.18)
-    pen = _layer_pen(base, ((1.0, 0.0, 0.0), "dashed", 0.5), KIND_EDGE)
-    assert pen.widthF() == 0.5 and pen.dashPattern()
-    assert pen.color().redF() > 0.7
-    assert _layer_pen(base, ((1, 0, 0), "dashed", 0.5), KIND_CUT) is base
-
-
 def test_legend_snapshots_colour_and_line():
     scene = _two_boxes_scene()
     scene.layer("B").visible = False
@@ -589,78 +558,6 @@ def test_a_layer_not_printed_survives_save_and_open(tmp_path):
     assert back.layer("Ref").printable is False
 
 
-def test_a_sheet_view_leaves_out_the_layers_not_printed(monkeypatch):
-    from core.hlr import hlr_drawing
-    from views.composer import ComposerWindow
-    from views.main_window import MainWindow
-    from core.composition import MarcoVista
-    monkeypatch.setattr(ComposerWindow, "render_frame", lambda self, f: None)
-    win = MainWindow()
-    comp = ComposerWindow(win)
-    try:
-        scene = win.viewport.scene
-        src = _two_boxes_scene()
-        scene.layers[:] = src.layers
-        scene.groups[:] = _moved(src)
-        win.viewport.notify_scene_changed()
-        frame = MarcoVista(view_key="std:top", scale_n=100.0, w_mm=100.0,
-                           h_mm=100.0)
-        both = comp.model_view_drawing(frame)
-        tags = list(hlr_drawing(scene, _top_camera(scene), profiles=False,
-                                layers=True).layers)
-        assert "A" in tags and "B" in tags
-        scene.layer("B").printable = False
-        only_a = comp.model_view_drawing(frame)
-        assert 0 < len(only_a.segs) < len(both.segs)
-        assert scene.layer("B").visible              # the model: untouched
-    finally:
-        comp.close()
-        win._saved_version = win.viewport.scene.version
-        win.close()
-
-
-def test_the_sheet_dxf_colours_every_layer_without_colour_by_layer(
-        tmp_path, monkeypatch):
-    """A CAD file arrives with each layer coloured, Colour by layer or not;
-    the sheet itself still prints black."""
-    import re
-    from core.composition import MarcoVista
-    from views.composer import ComposerWindow
-    from views.main_window import MainWindow
-    monkeypatch.setattr(ComposerWindow, "render_frame", lambda self, f: None)
-    win = MainWindow()
-    comp = ComposerWindow(win)
-    try:
-        scene = win.viewport.scene
-        src = _two_boxes_scene()
-        scene.layers[:] = [Layer(DEFAULT_LAYER), Layer("A"), Layer("B")]
-        scene.groups[:] = _moved(src)
-        scene.layer("B").color = (1.0, 0.0, 0.0)
-        win.viewport.notify_scene_changed()
-        assert not getattr(scene.display_style, "color_by_layer", False)
-        frame = MarcoVista(view_key="std:top", scale_n=100.0, w_mm=100.0,
-                           h_mm=100.0)
-        d = comp.model_view_drawing(frame, for_dxf=True)
-        assert d.layers is not None
-        assert d.styles["B"][0] == (1.0, 0.0, 0.0)
-        assert d.styles[DEFAULT_LAYER][0] is None    # the CAD's own colour
-        plain = comp.model_view_drawing(frame)        # the sheet: black
-        assert plain.layers is None or all(
-            st[0] is None for st in (plain.styles or {}).values())
-        # Written out, B's layer carries red (ACI 1).
-        from formats.dxf_out import save_dxf_layers
-        from views.composer import dxf_groups_by_layer
-        path = tmp_path / "hoja.dxf"
-        save_dxf_layers(path, dxf_groups_by_layer(d, "PLANTA", False))
-        text = path.read_text(encoding="ascii")
-        # Seen from the top the squares are outlines: on «B-PERFIL», red.
-        assert re.search(r"0\nLAYER\n2\nB(-PERFIL)?\n70\n0\n62\n1\n", text)
-    finally:
-        comp.close()
-        win._saved_version = win.viewport.scene.version
-        win.close()
-
-
 def test_the_view_dxf_writes_each_layer_with_its_colour(tmp_path,
                                                         monkeypatch):
     import re
@@ -713,44 +610,6 @@ def test_every_line_type_has_a_name_a_dxf_twin_and_a_pattern(tmp_path):
     for key in L.LINETYPES:
         if key != "continuous":
             assert f"0\nLTYPE\n2\n{L.DXF_LINETYPES[key]}\n" in text
-
-
-def test_a_frame_can_ink_its_lines_in_their_layer_colours(monkeypatch):
-    """Without Colour by layer: the frame's own switch colours the lines,
-    the scene's style (the faces) stays as it is; off, the plan is black."""
-    from core.composition import Composicion, MarcoVista
-    from views.composer import ComposerWindow
-    from views.main_window import MainWindow
-    monkeypatch.setattr(ComposerWindow, "render_frame", lambda self, f: None)
-    win = MainWindow()
-    comp = ComposerWindow(win)
-    try:
-        scene = win.viewport.scene
-        src = _two_boxes_scene()
-        scene.layers[:] = [Layer(DEFAULT_LAYER), Layer("A"), Layer("B")]
-        scene.groups[:] = _moved(src)
-        scene.layer("B").color = (1.0, 0.0, 0.0)
-        win.viewport.notify_scene_changed()
-        frame = MarcoVista(view_key="std:top", scale_n=100.0, w_mm=100.0,
-                           h_mm=100.0, style="vectorial")
-        comp.compute_hlr(frame)
-        st = comp.hlr_styles.get(id(frame))
-        assert st is None or all(v[0] is None for v in st[1].values())
-        frame.layer_colours = True
-        comp.compute_hlr(frame)
-        tags, styles = comp.hlr_styles[id(frame)]
-        assert styles["B"][0] == (1.0, 0.0, 0.0)
-        assert styles[DEFAULT_LAYER][0] is None       # white: kept black
-        assert not getattr(scene.display_style, "color_by_layer", False)
-        # Saved with the sheet, and copied by «match properties».
-        back = Composicion.from_dict(
-            {**Composicion().to_dict(),
-             "frames": [__import__("dataclasses").asdict(frame)]})
-        assert back.frames[0].layer_colours is True
-    finally:
-        comp.close()
-        win._saved_version = win.viewport.scene.version
-        win.close()
 
 
 def test_recount_after_host_drawing_preserves_other_mesh_counts(monkeypatch):

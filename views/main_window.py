@@ -4266,13 +4266,13 @@ class MainWindow(WorksessionMixin, QMainWindow):
         # The status bar carries the Model | Sheet 1 | … strip at its left,
         # on the same row as the measurements box (AutoCAD's Model / Layout
         # tabs): one click from the model to any sheet.
-        from views.sheet_tabs import SheetStatusBar
-        bar = SheetStatusBar(self, on_model=self._show_model,
-                             on_sheet=self._show_strip_sheet,
-                             on_new=self._show_new_sheet,
-                             on_menu=self._strip_sheet_menu)
+        # The sheets are the Sheets workspace's (views/wgpu_sheets.py): the
+        # strip of sheet tabs went with the composer; the bar keeps its
+        # standing hint (views/status_bar.py).
+        from views.status_bar import HintStatusBar
+        bar = HintStatusBar(self)
         self.setStatusBar(bar)
-        self._sheet_tabs = bar.tabs
+        self._sheet_tabs = None
         # Ctrl+Tab: to the sheets and back (#91, @pacaeiro) — the last sheet
         # shown, as the strip's own tab; Ctrl+Shift+Tab too, with only two
         # places to go. A document without sheets gets its first one.
@@ -6786,13 +6786,11 @@ class MainWindow(WorksessionMixin, QMainWindow):
         """The composer window, created but not shown — the sheet strip's
         menu manages sheets through it without opening it."""
         if getattr(self, "_composer", None) is None:
-            from views.composer import ComposerWindow
             from views.documents import DocumentHost
             from views import wgpu_sheets
-            # With the Built chrome on Metal, sheets are a workspace of this
-            # window: the composer is never shown (views/wgpu_sheets.py).
-            cls = wgpu_sheets.composer_class() if wgpu_sheets.embeds(self) else ComposerWindow
-            comp = cls(self)
+            # Sheets are a workspace of this window (views/wgpu_sheets.py):
+            # the document's sheets, never a window of their own.
+            comp = wgpu_sheets.composer_class()(self)
             # One per project: it keeps reading ITS project's model while
             # another tab is in front (#1066).
             host = DocumentHost(self, self._doc)

@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """Synthetic sheet items for the painter parity goldens
-(tests/test_sheet_paint_parity.py). ``python_ops(item)`` paints one with
-the Python painter of views/composer.py through the recording painter."""
+(tests/test_sheet_paint_parity.py), recorded from the Python painters of
+views/composer.py through a recording QPainter before both went
+(docs/rust-sheets.md)."""
 from __future__ import annotations
 
 import math
@@ -117,6 +118,21 @@ FRAME_CONTENT = {}
 FRAME_STYLES = {}
 #: The looks of a case's cut rings: ``[(colour, hatch, ground, ink, form)]``.
 FRAME_FILLS = {}
+#: A case's model annotations: the composer's overlay tuples.
+FRAME_ANNOTS = {}
+
+#: Every kind of overlay item, in frame mm.
+_ANNOTS = [
+    ("poly", [(5.0, 60.0), (30.0, 52.0), (55.0, 58.0), (80.0, 40.0)]),
+    ("line", 10.0, 20.0, 40.0, 20.0), ("line", 10.0, 18.0, 10.0, 22.0),
+    ("arrow", 10.0, 20.0, 1.0, 0.0), ("arrow", 40.0, 20.0, -1.0, 0.0),
+    ("text", 25.0, 20.0, 0.0, "3.00 m", 2.8), ("text", 60.0, 30.0, -90.0, "1+020", 2.2),
+    ("secmark", 5.0, 35.0, 85.0, 35.0, 0.0, -1.0, "A", 2.8),
+    ("secmark", 45.0, 5.0, 50.0, 65.0, 0.9965, -0.0830, "B", 3.5),
+    ("xpoly", [(20.0, 5.0), (70.0, 12.0)], 0.5, (200, 30, 30)),
+    ("xtext", 70.0, 12.0, -8.0, "P1", 2.8, True, (20, 40, 160), (255, 255, 0), 0.5, 0.0, 9.0, 4.0),
+    ("xtext", 30.0, 45.0, 0.0, "nota libre", 2.0, False, (45, 55, 75), None, 1.0, -8.0, 16.0, 3.0),
+]
 
 
 def cases_d():
@@ -199,6 +215,12 @@ def cases_d():
         "wood-cross": [((0.6, 0.4, 0.2), "wood", None, None, {"cut": "plan", "cross": True, "scale_n": 20.0,
                                                               "scale": 1.0})] * 4,
     }
+    # The model's paper overlay, over a drawing, a picture and nothing yet.
+    for name, content, kw in (("vector", (None, _frame_drawing(50), None), {}),
+                              ("image", (None, None, (1063, 827)), {"style": "sombreado"}),
+                              ("placeholder", (None, None, None), {"style": "sombreado", "grid_m": 2.0})):
+        add(f"frame-annots-{name}", content, **kw)
+        FRAME_ANNOTS[f"frame-annots-{name}"] = _ANNOTS
     for name, look in looks.items():
         segs, kinds, _f = _frame_drawing(40)
         add(f"frame-fills-{name}", (None, (segs[:6], kinds[:6], walls), None), cut_fill="solid", cut_hatch_mm=1.5,
@@ -219,6 +241,8 @@ def frame_content(name: str):
         out["fill_looks"] = [(None if c is None else list(c), h, None if g is None else list(g),
                               None if i is None else list(i), None if f is None else dict(f))
                              for c, h, g, i, f in FRAME_FILLS[name]]
+    if name in FRAME_ANNOTS:
+        out["annots"] = FRAME_ANNOTS[name]
     if name in FRAME_STYLES:
         tags, styles = FRAME_STYLES[name]
         out["tags"] = tags
@@ -315,60 +339,3 @@ def profile_of(name: str, native: bool = False):
         prof = {"samples": [(s.station, 0.0, 0.0, s.elevation) for s in prof.samples],
                 "length": prof.length, "complete": all(s.elevation is not None for s in prof.samples)}
     return prof, f"Canal {seed}", ("DEM partly loaded" if seed == 2 else None)
-
-
-def python_ops(item, name: str = ""):
-    """The Python painter's primitives for ``item`` (item-local mm)."""
-    from tests.sheet_paint_recorder import RecordingPainter
-    from views import composer as c
-    p = RecordingPainter()
-    kind = type(item).__name__
-    if kind == "BarraEscala":
-        c.paint_scalebar_mm(p, item)
-    elif kind == "FlechaNorte":
-        c.paint_norte_mm(p, item)
-    elif kind == "Leyenda":
-        c.paint_leyenda_mm(p, item)
-    elif kind == "FormaItem":
-        c.paint_forma_mm(p, item)
-    elif kind == "LlamadaItem":
-        c.paint_llamada_mm(p, item)
-    elif kind == "NivelItem":
-        c.paint_nivel_mm(p, item)
-    elif kind == "ImagenItem":
-        c.paint_image_mm(p, item, None)
-    elif kind == "CotaItem":
-        c.paint_cota_mm(p, item)
-    elif kind == "CotaAngularItem":
-        c.paint_cota_angular_mm(p, item)
-    elif kind == "CotaRadialItem":
-        c.paint_cota_radial_mm(p, item)
-    elif kind == "EtiquetaItem":
-        c.paint_etiqueta_mm(p, item)
-    elif kind == "TextoItem":
-        c.paint_text_mm(p, item)
-    elif kind == "Cajetin":
-        c.paint_cajetin_mm(p, item)
-    elif kind == "Composicion":
-        c.paint_sheet_border_mm(p, item)
-    elif kind == "MarcoVista":
-        from PySide6.QtGui import QImage
-        missing, drawing, image = FRAME_CONTENT[name]
-        segs = kinds = fills = None
-        if drawing is not None:
-            segs, kinds, fills = drawing
-        img = QImage(image[0], image[1], QImage.Format_RGB32) if image is not None else None
-        fill_styles = None
-        if name in FRAME_FILLS:
-            from PySide6.QtGui import QColor
-            qc = lambda c: None if c is None else QColor.fromRgbF(*c)  # noqa: E731
-            fill_styles = [(qc(col), h, qc(g), qc(i), None if f is None else dict(f))
-                           for col, h, g, i, f in FRAME_FILLS[name]]
-        c.paint_frame_mm(p, item, img, hlr=segs, kinds=kinds, fills=fills, missing=missing,
-                         styles=FRAME_STYLES.get(name), fill_styles=fill_styles)
-    elif kind == "PerfilTerreno":
-        profile, path_name, message = profile_of(name)
-        c.paint_perfil_mm(p, item, profile, path_name, message)
-    else:
-        raise ValueError(kind)
-    return p.ops

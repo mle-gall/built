@@ -117,25 +117,6 @@ if phase != 'before':
     assert metal.renderer.gpu_memory == memory_before
     result['interactive_pixels_restored'] = True
     result['resident_bytes_unchanged'] = True
-    if 'ride' in model.stem:
-        from types import SimpleNamespace
-        from PySide6.QtWidgets import QWidget
-        from core.saved_views import SavedView
-        from core.composition import MarcoVista
-        from core.outliner import fit_scale
-        from views.composer import ComposerWindow
-        saved = SavedView.capture('R3b', scene, gl.camera)
-        scene.saved_views.append(saved)
-        host = QWidget()
-        host.viewport = gl
-        host._doc = SimpleNamespace(_renderer_wgpu=True, stand_in=metal)
-        composer = ComposerWindow(host)
-        frame = MarcoVista(w_mm=420., h_mm=297., view_key='scene:R3b', style='tecnico', paper_bg=True)
-        frame.scale_n = fit_scale(scene, saved, 420., 297., fill=.90)
-        start = time.perf_counter()
-        image = composer.render_frame(frame)
-        result['composer'] = dict(seconds=time.perf_counter()-start, size=[image.width(), image.height()], scale=frame.scale_n, style=frame.style, dpi=300)
-        image.save(str(out/f'{model.stem}-composer-metal.png'))
 (out/f'{model.stem}-{phase}-bis.json').write_text(json.dumps(result,indent=2))
 print({k:v for k,v in result.items() if k not in ('samples', 'passes')}, flush=True)
 metal.close()
