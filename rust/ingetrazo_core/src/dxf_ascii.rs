@@ -10,6 +10,8 @@ use std::{
 
 #[path = "dxf_curves.rs"]
 mod curves;
+#[path = "dxf_polyface.rs"]
+mod polyface;
 
 #[derive(Debug)]
 struct Entity {
@@ -23,6 +25,7 @@ enum Shape {
     Curve(Vec<curves::Cubic>, Vec<f64>),
     Polyline(Ring, bool),
     Face(Ring),
+    Part(Vec<Ring>),
     Arc {
         center: DVec3,
         radius: f64,
@@ -96,11 +99,36 @@ impl<'a> Tags<'a> {
         }
         Some(out)
     }
-    fn entity(&self, kind: &str) -> Option<Entity> {
-        if self.number(210, 0.)? != 0. || self.number(220, 0.)? != 0. || self.number(230, 1.)? != 1.
-        {
-            return None;
+    fn integer(&self, code: i32, default: i32) -> Option<i32> {
+        match self.get(code) {
+            Some(v) => v.trim().parse().ok(),
+            None => Some(default),
         }
+    }
+    fn basis(&self) -> Option<DMat4> {
+        let z = DVec3::new(
+            self.number(210, 0.)?,
+            self.number(220, 0.)?,
+            self.number(230, 1.)?,
+        )
+        .try_normalize()?;
+        if z == DVec3::Z {
+            return Some(DMat4::IDENTITY);
+        }
+        let reference = if z.x.abs() < 1. / 64. && z.y.abs() < 1. / 64. {
+            DVec3::Y
+        } else {
+            DVec3::Z
+        };
+        let x = reference.cross(z).normalize();
+        Some(DMat4::from_cols(
+            x.extend(0.),
+            z.cross(x).extend(0.),
+            z.extend(0.),
+            glam::DVec4::W,
+        ))
+    }
+    fn entity(&self, kind: &str) -> Option<Entity> {
         let layer = if self.get(8).is_some() {
             self.name(8)?
         } else {
@@ -144,17 +172,36 @@ impl<'a> Tags<'a> {
                     }
                     (a.to_radians(), span.to_radians())
                 };
-                Shape::Arc {
-                    center,
-                    radius,
-                    start,
-                    span,
+                let basis = self.basis()?;
+                if basis == DMat4::IDENTITY {
+                    Shape::Arc {
+                        center,
+                        radius,
+                        start,
+                        span,
+                    }
+                } else {
+                    Shape::Curve(
+                        curves::elliptic(
+                            basis.transform_point3(center),
+                            basis.x_axis.truncate() * radius,
+                            basis.y_axis.truncate() * radius,
+                            start,
+                            span,
+                        ),
+                        vec![radius * 2.],
+                    )
                 }
             }
             "SPLINE" => Shape::Curve(curves::spline(self)?, vec![]),
             "ELLIPSE" => {
                 let major = self.point(11)?;
-                let minor = DVec3::Z.cross(major).try_normalize()?
+                let minor = self
+                    .basis()?
+                    .z_axis
+                    .truncate()
+                    .cross(major)
+                    .try_normalize()?
                     * major.length()
                     * self.number(40, 1.)?;
                 let start = self.number(41, 0.)?;
@@ -184,12 +231,7 @@ impl<'a> Tags<'a> {
                     }
                 }
                 let closed = self.get(70).unwrap_or("0").trim().parse::<i32>().ok()? & 1 != 0;
-                if bulges.iter().all(|&b| b == 0.) {
-                    Shape::Polyline(points, closed)
-                } else {
-                    let lengths = points.windows(2).map(|p| p[0].distance(p[1])).collect();
-                    Shape::Curve(curves::polyline(&points, &bulges, closed), lengths)
-                }
+                polyface::path(points, &bulges, closed, self.basis()?)
             }
             "INSERT" => {
                 let scale = DVec3::new(
@@ -202,14 +244,15 @@ impl<'a> Tags<'a> {
                 }
                 Shape::Insert(
                     self.name(2)?,
-                    DMat4::from_scale_rotation_translation(
-                        scale,
-                        DQuat::from_rotation_z(self.number(50, 0.)?.to_radians()),
-                        self.point(10)?,
-                    ),
+                    self.basis()?
+                        * DMat4::from_scale_rotation_translation(
+                            scale,
+                            DQuat::from_rotation_z(self.number(50, 0.)?.to_radians()),
+                            self.point(10)?,
+                        ),
                 )
             }
-            "POLYLINE" | "VERTEX" | "MESH" | "SEQEND" => return None,
+            "MESH" => polyface::mesh(self)?,
             _ => Shape::Ignored(kind.to_owned()),
         };
         Some(Entity { layer, shape })
@@ -227,6 +270,7 @@ pub(super) fn decode(text: &str) -> Option<Document> {
     let mut block = None;
     let mut tags_read = 0usize;
     let mut eof = false;
+    let mut poly: Option<(Tags, Vec<Tags>)> = None;
     let mut modern_owners = false;
     loop {
         tags_read += 1;
@@ -299,20 +343,36 @@ pub(super) fn decode(text: &str) -> Option<Document> {
                 block = Some(name)
             }
             Some("ENDBLK") if section == "BLOCKS" && block.take().is_some() => (),
-            Some(k) if section == "BLOCKS" => {
-                let b = doc.blocks.get_mut(block.as_ref()?)?;
-                b.entities.push(tags.entity(k)?);
-            }
-            Some(k) if section == "ENTITIES" => {
-                let owner = tags.get(330);
-                let paper = tags.number(67, 0.)?;
-                if paper == 0. {
-                    if modern_owners && owner != model_owner {
-                        return None;
+            Some(k) if matches!(section, "ENTITIES" | "BLOCKS") => {
+                let record = match k {
+                    "POLYLINE" => {
+                        poly = Some((Tags(std::mem::take(&mut tags.0)), vec![]));
+                        None
                     }
-                    doc.entities.push(tags.entity(k)?);
-                } else if modern_owners && owner == model_owner {
-                    return None;
+                    "VERTEX" if poly.is_some() => {
+                        poly.as_mut()?.1.push(Tags(std::mem::take(&mut tags.0)));
+                        None
+                    }
+                    "SEQEND" if poly.is_some() => {
+                        let (head, vertices) = poly.take()?;
+                        Some((
+                            head.get(330),
+                            head.integer(67, 0)?,
+                            polyface::classic(&head, &vertices)?,
+                        ))
+                    }
+                    "ATTRIB" | "SEQEND" => None,
+                    _ => Some((tags.get(330), tags.integer(67, 0)?, tags.entity(k)?)),
+                };
+                if let Some((owner, paper, entity)) = record {
+                    if section == "BLOCKS" {
+                        doc.blocks.get_mut(block.as_ref()?)?.entities.push(entity);
+                    } else if paper == 0 {
+                        if modern_owners && owner != model_owner {
+                            return None;
+                        }
+                        doc.entities.push(entity);
+                    }
                 }
             }
             Some(_) if section.is_empty() || matches!(kind, Some("SECTION" | "EOF" | "ENDSEC")) => {
@@ -580,6 +640,13 @@ impl Shape {
             )
             .add(b, tol),
             Self::Curve(cs, _) => Self::Curve(transform_curves(cs), vec![]).add(b, tol),
+            Self::Part(faces) => Self::Part(
+                faces
+                    .iter()
+                    .map(|r| r.iter().copied().map(map).collect())
+                    .collect(),
+            )
+            .add(b, tol),
             Self::Face(p) => Self::Face(p.iter().copied().map(map).collect()).add(b, tol),
             Self::Line(a, z) => Self::Line(map(*a), map(*z)).add(b, tol),
             Self::Polyline(p, closed) => {
@@ -599,10 +666,19 @@ impl Shape {
             }
             Self::Polyline(pts, closed) => {
                 let mut pts = pts.clone();
+                if pts.len() < 2 {
+                    return Some(false);
+                }
                 if *closed && pts.first() != pts.last() {
                     pts.push(pts[0])
                 }
                 b.runs.push((pts, false));
+            }
+            Self::Part(faces) => {
+                if faces.is_empty() {
+                    return Some(false);
+                }
+                b.parts.push(faces.clone());
             }
             Self::Face(p) => {
                 if p.len() < 3 {
