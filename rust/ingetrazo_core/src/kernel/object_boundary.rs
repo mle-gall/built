@@ -25,7 +25,7 @@ fn face_exists(faces: &Obj<'_>, cycle: &Obj<'_>) -> PyResult<bool> {
 }
 
 #[pyfunction]
-fn same_cycle(a: &Obj<'_>, b: &Obj<'_>) -> PyResult<bool> {
+pub(super) fn same_cycle(a: &Obj<'_>, b: &Obj<'_>) -> PyResult<bool> {
     Ok(outline_key(a)? == outline_key(b)?)
 }
 
@@ -79,7 +79,7 @@ impl<'py> Boundary<'py> {
 }
 
 #[pyfunction]
-fn loop_with_point<'py>(
+pub(super) fn loop_with_point<'py>(
     ring: &Obj<'py>,
     ka: [f64; 3],
     kb: [f64; 3],
@@ -89,7 +89,7 @@ fn loop_with_point<'py>(
 }
 
 #[pyfunction]
-fn split_boundaries<'py>(
+pub(super) fn split_boundaries<'py>(
     faces: &Obj<'py>,
     a: &Obj<'py>,
     b: &Obj<'py>,
@@ -121,7 +121,7 @@ fn split_boundaries<'py>(
 }
 
 #[pyfunction]
-fn segment_contains(p: [f64; 2], a: [f64; 2], b: [f64; 2], tol: f64) -> bool {
+pub(super) fn segment_contains(p: [f64; 2], a: [f64; 2], b: [f64; 2], tol: f64) -> bool {
     let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
     let (x, y) = (p[0] - a[0], p[1] - a[1]);
     let proj = x * dx + y * dy;

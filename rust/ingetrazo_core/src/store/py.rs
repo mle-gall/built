@@ -1321,7 +1321,7 @@ impl PyMeshStore {
             .heal_plan(coverage, partial, pad, crate::hypot_of(hypot)?, compensated))
     }
 
-    fn containing_face(
+    pub(crate) fn containing_face(
         &self,
         points: Vec<[f64; 3]>,
         candidates: Option<Vec<u128>>,
@@ -1352,7 +1352,7 @@ impl PyMeshStore {
         next_id
     }
 
-    fn refine_ring(
+    pub(crate) fn refine_ring(
         &self,
         ring: Vec<[f64; 3]>,
         points: Vec<[f64; 3]>,
@@ -1367,12 +1367,12 @@ impl PyMeshStore {
         ))
     }
 
-    fn carve_face(&self, face: u128, ring: Vec<[f64; 3]>, hypot: &str) -> PyResult<Option<Vec<Vec<[f64; 3]>>>> {
+    pub(crate) fn carve_face(&self, face: u128, ring: Vec<[f64; 3]>, hypot: &str) -> PyResult<Option<Vec<Vec<[f64; 3]>>>> {
         let f = live_of(&self.inner, Kind::Face, face)?;
         Ok(self.inner.outline(f, crate::hypot_of(hypot)?).carve(&ring))
     }
 
-    fn merged_hole(
+    pub(crate) fn merged_hole(
         &self,
         py: Python<'_>,
         key: u128,
@@ -1404,7 +1404,7 @@ impl PyMeshStore {
         Ok(self.inner.outline(f, crate::hypot_of(hypot)?).shared_hole(&ring))
     }
 
-    fn classify_segment(
+    pub(crate) fn classify_segment(
         &self,
         face: u128,
         a: [f64; 3],
@@ -1422,7 +1422,7 @@ impl PyMeshStore {
         ))
     }
 
-    fn orphaned_edges_at(
+    pub(crate) fn orphaned_edges_at(
         &self,
         points: Vec<[f64; 3]>,
         edges: Option<Vec<u128>>,
@@ -1444,7 +1444,7 @@ impl PyMeshStore {
         Ok(removed)
     }
 
-    fn loop_inside_face(
+    pub(crate) fn loop_inside_face(
         &self,
         face: u128,
         ring: Vec<[f64; 3]>,
@@ -1457,7 +1457,7 @@ impl PyMeshStore {
             .outline(f, crate::hypot_of(hypot)?)
             .contains(&ring, exclude_holes))
     }
-    fn split_face_loops(
+    pub(crate) fn split_face_loops(
         &self,
         face: u128,
         chain: Vec<[f64; 3]>,
@@ -1467,7 +1467,7 @@ impl PyMeshStore {
         let f = live_of(&self.inner, Kind::Face, face)?;
         Ok(self.inner.outline(f, crate::hypot_of(hypot)?).pieces(&chain, chord))
     }
-    fn subdividing_chain(&self, face: u128, ring: Vec<[f64; 3]>, hypot: &str) -> PyResult<Option<Vec<[f64; 3]>>> {
+    pub(crate) fn subdividing_chain(&self, face: u128, ring: Vec<[f64; 3]>, hypot: &str) -> PyResult<Option<Vec<[f64; 3]>>> {
         let f = live_of(&self.inner, Kind::Face, face)?;
         Ok(self.inner.outline(f, crate::hypot_of(hypot)?).chain(&ring))
     }
@@ -1575,7 +1575,7 @@ impl PyMeshStore {
         Ok(result)
     }
 
-    fn landing_defects(
+    pub(crate) fn landing_defects(
         &self,
         py: Python<'_>,
         vertices: Vec<u128>,

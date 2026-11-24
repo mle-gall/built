@@ -576,7 +576,6 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<file_json::FileMatrix>()?;
     m.add_class::<group_geometry::GroupGeometry>()?;
     presentation::register(m)?;
-    kernel::register_kernel(m)?;
     m.add_function(wrap_pyfunction!(object_outline::object_hole_mask, m)?)?;
     m.add_function(wrap_pyfunction!(object_outline::flat_faces, m)?)?;
     m.add_class::<object_outline::HoleBounds>()?;
@@ -704,6 +703,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     store::py::register(m)?;
     doc::py::register(m)?;
     m.add_class::<scans::MeshScan>()?;
+    kernel::register_kernel(m)?;
     Ok(())
 }
 

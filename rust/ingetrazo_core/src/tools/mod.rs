@@ -32,7 +32,7 @@ mod tape;
 mod fillet_tool;
 mod protractor;
 mod paint;
-mod offset_tool;
+pub(crate) mod offset_tool;
 mod walkthrough;
 mod scale_grip;
 mod scale_tool;

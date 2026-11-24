@@ -81,7 +81,7 @@ fn dedupe_holes(mesh: &Obj<'_>, faces: &Obj<'_>) -> PyResult<()> {
 
 #[pyfunction]
 #[pyo3(signature=(mesh, coverage, partial, pad, store, face_view, hypot))]
-fn heal_faces<'py>(
+pub(crate) fn heal_faces<'py>(
     mesh: &Obj<'py>,
     coverage: f64,
     partial: bool,
@@ -142,7 +142,7 @@ fn heal_faces<'py>(
 }
 
 #[pyfunction]
-fn flip_faces(mesh: &Obj<'_>, faces: &Obj<'_>) -> PyResult<()> {
+pub(crate) fn flip_faces(mesh: &Obj<'_>, faces: &Obj<'_>) -> PyResult<()> {
     for f in faces.try_iter()? {
         let f = f?;
         let outer = snapshot(&f.getattr("vertices")?)?;
@@ -161,7 +161,7 @@ fn flip_faces(mesh: &Obj<'_>, faces: &Obj<'_>) -> PyResult<()> {
 }
 
 #[pyfunction]
-fn sweep_junctions(
+pub(crate) fn sweep_junctions(
     mesh: &Obj<'_>,
     seeds: &Obj<'_>,
     tol: f64,
@@ -190,7 +190,7 @@ fn sweep_junctions(
 }
 
 #[pyfunction]
-fn prune_orphans<'py>(
+pub(crate) fn prune_orphans<'py>(
     mesh: &Obj<'py>,
     scan: &Obj<'py>,
     read_flags: &Obj<'py>,

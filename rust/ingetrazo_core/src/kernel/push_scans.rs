@@ -97,7 +97,7 @@ fn is_closed(mesh: &Obj<'_>) -> PyResult<Option<bool>> {
     )?))
 }
 #[pyfunction]
-fn mesh_is_flat(mesh: &Obj<'_>, tol: f64) -> PyResult<Option<bool>> {
+pub(crate) fn mesh_is_flat(mesh: &Obj<'_>, tol: f64) -> PyResult<Option<bool>> {
     if !store_enabled(mesh)? {
         return Ok(None);
     }

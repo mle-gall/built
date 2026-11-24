@@ -13,7 +13,7 @@ type XY = [f64; 2];
 pub(super) type Corner = (i128, Point);
 pub(super) type Rings = Vec<Vec<Corner>>;
 pub(super) type Edge = (Corner, Corner, Vec<i128>);
-pub(super) const DEFECTS: [&str; 6] = [
+pub(crate) const DEFECTS: [&str; 6] = [
     "duplicate_face",
     "overlapping_face",
     "pinched_face",
@@ -22,7 +22,7 @@ pub(super) const DEFECTS: [&str; 6] = [
     "zero_edge",
 ];
 
-pub(super) fn increased<T: PartialOrd>(
+pub(crate) fn increased<T: PartialOrd>(
     before: [T; 6],
     after: [T; 6],
 ) -> impl Iterator<Item = &'static str> {
@@ -203,7 +203,7 @@ impl Store {
 
 /// Collect live plugin handles in insertion order; a repeated key takes its
 /// latest handle without moving its row, as in the materialised registry.
-pub(super) fn handle_counts(
+pub(crate) fn handle_counts(
     vs: &pyo3::Bound<'_, pyo3::PyAny>,
     eps: f64,
     h: Hypot,
