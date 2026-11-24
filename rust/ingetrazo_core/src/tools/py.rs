@@ -175,6 +175,8 @@ fn event(d: &Bound<'_, PyDict>) -> PyResult<ToolEvent> {
             d.get_item("value")?.ok_or_else(|| PyValueError::new_err("radius without value"))?.extract()?),
         "segments" => ToolEvent::Segments(
             d.get_item("count")?.ok_or_else(|| PyValueError::new_err("segments without count"))?.extract()?),
+        "scale_factors" => ToolEvent::ScaleFactors(d.get_item("value")?.ok_or_else(|| PyValueError::new_err("missing factors"))?.extract()?),
+        "absolute_value" => ToolEvent::AbsoluteValue(value(&d.get_item("value")?.ok_or_else(|| PyValueError::new_err("missing size"))?)?),
         "value" => ToolEvent::Value(value(&d.get_item("value")?.ok_or_else(|| PyValueError::new_err("value without value"))?)?),
         "work_plane" => ToolEvent::WorkPlane(match opt(d, "plane")? {
             None => None,
@@ -582,4 +584,38 @@ pub fn select_pick(host: &Bound<'_, PyAny>, x: f64, y: f64, lines: bool) -> PyRe
         return Err(e);
     }
     Ok(hit.map(|p| p.id))
+}
+
+/// The grip specification is also saved with the last edit for hot retype.
+#[pyclass(module = "ingetrazo_core", skip_from_py_object)]
+pub struct ScaleGripSpec(super::scale_grip::Grip);
+
+#[pymethods]
+impl ScaleGripSpec {
+    #[new]
+    fn new(extents: P3, axes: Vec<usize>, uniform: bool) -> PyResult<Self> {
+        let mut mask = [false; 3];
+        for i in axes {
+            *mask.get_mut(i).ok_or_else(|| PyValueError::new_err("invalid scale axis"))? = true;
+        }
+        Ok(Self(super::scale_grip::Grip { extents, mask, uniform }))
+    }
+
+    fn typed(&self, values: Vec<f64>, absolute: bool) -> Option<(f64, f64, f64)> {
+        self.0.typed(&values, absolute).map(Into::into)
+    }
+
+    fn point(&self, grip: P3, point: P3) -> Option<(f64, f64, f64)> {
+        self.0.point(grip.into(), point.into()).map(Into::into)
+    }
+
+    fn ray(&self, grip: P3, origin: P3, direction: P3) -> Option<(f64, f64, f64)> {
+        self.0.ray(grip.into(), origin.into(), direction.into()).map(Into::into)
+    }
+}
+
+#[pyfunction]
+pub fn scale_box_geometry(extents: P3) -> (Vec<(P3, Vec<usize>)>, Vec<(P3, P3)>) {
+    let geometry = super::scale_grip::BoxGeometry::new(extents);
+    (geometry.grips, geometry.edges)
 }
