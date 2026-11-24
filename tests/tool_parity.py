@@ -1000,6 +1000,70 @@ def run_rotate(steps):
     return out
 
 
+WALKTHROUGH_SCENARIOS = {
+    "place_drag_offset": ("PositionCameraTool", [("click", (3, 2, 0), (100, 100)),
+        ("hover", (4, 6, 0), (106, 100)), ("hover", (4, 6, 0), (107, 100)),
+        ("release",), ("value", 2.5), ("value", -1.0)]),
+    "place_cancel": ("PositionCameraTool", [("click", (1, 2, 3), (100, 100)),
+        ("hover", (3, 4, 5), (130, 150)), ("cancel",), ("release",)]),
+    "turn_and_height": ("LookAroundTool", [("click", (0, 0, 0), (100, 100)),
+        ("hover", (0, 0, 0), (350, 100)), ("hover", (0, 0, 0), (350, 30)),
+        ("release",), ("hover", (0, 0, 0), (200, 100)), ("value", 1.25)]),
+    "walk": ("WalkTool", [("walk", 1, 2, "none"), ("walk", 0, 150, "none"),
+        ("walk", 75, 150, "run"), ("walk", 100, 50, "vertical"),
+        ("walk", -100, -150, "through"), ("value", 2.0)]),
+    "first_person": ("FirstPersonTool", [("keys", "WD", "none"), ("keys", "WS", "none"),
+        ("keys", "AE", "run"), ("look", 250, -125), ("keys", "W", "through"),
+        ("value", 1.9)]),
+}
+
+
+def run_walkthrough(tool_name, steps):
+    from unittest.mock import patch
+    from PySide6.QtCore import QPointF, Qt
+    from ingetrazo_core import Vec3
+    from core.camera import OrbitCamera
+    from tools.base import ToolContext
+    from tools import walkthrough
+
+    view = LineView()
+    view.camera = OrbitCamera()
+    view.camera.look_from(Vec3(1, 2, 1.68), Vec3(0, 1, 0))
+    view.width = lambda: 1000
+    view.height = lambda: 700
+    tool = getattr(walkthrough, tool_name)()
+    tool.on_activate(view)
+    out = []
+    with (patch.object(walkthrough, "eye_height", return_value=1.68),
+          patch.object(walkthrough, "set_eye_height"),
+          patch.object(walkthrough, "look_sensitivity", return_value=25)):
+        for kind, *args in steps:
+            result = None
+            if kind in ("click", "hover"):
+                ctx = ToolContext(view, Vec3(*args[0]), QPointF(*args[1]), Qt.NoModifier, None)
+                (tool.on_click if kind == "click" else tool.on_hover)(ctx)
+            elif kind == "value":
+                result = tool.on_value(view, args[0])
+            elif kind == "release":
+                tool.on_release(view)
+            elif kind == "cancel":
+                tool.on_cancel(view)
+            elif kind == "look":
+                tool.on_look(view, *args)
+            elif kind in ("walk", "keys"):
+                mods = {"none": Qt.NoModifier, "through": Qt.AltModifier,
+                        "vertical": Qt.ShiftModifier, "run": Qt.ControlModifier
+                        if kind == "walk" else Qt.ShiftModifier}[args[-1]]
+                if kind == "walk":
+                    tool.step(view, args[0], args[1], 0.1, mods)
+                else:
+                    tool.step(view, {getattr(Qt, "Key_" + k) for k in args[0]}, 0.1, mods)
+            out.append({"eye": _pt(view.camera.eye()), "direction": _pt(view.camera.forward()),
+                        "lines": [[_pt(a), _pt(b)] for a, b in tool.rubber_band_lines()],
+                        "undo": len(view.history.undo_stack), "result": result})
+    return out
+
+
 def _compact(fixture) -> str:
     """One scenario step per line: the protractors' segments make an
     indented file several times larger than the data."""
@@ -1030,6 +1094,9 @@ def record(which=("line", "select", "rectangle", "move", "circle", "rotated_rect
     if "rotated_rectangle" in which:
         rot = {name: run_rot(steps) for name, steps in ROT_SCENARIOS.items()}
         (FIXTURES / "rotated_rectangle.json").write_text(_compact(rot))
+    if "walkthrough" in which:
+        cases = {name: run_walkthrough(*case) for name, case in WALKTHROUGH_SCENARIOS.items()}
+        (FIXTURES / "walkthrough.json").write_text(_compact(cases))
     if "rotate" in which:
         rotate = {name: run_rotate(steps) for name, steps in ROTATE_SCENARIOS.items()}
         (FIXTURES / "rotate.json").write_text(_compact(rotate))

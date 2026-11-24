@@ -104,3 +104,8 @@ def test_scale_matches_the_recorded_python_tool(name):
 @pytest.mark.parametrize("name", sorted(tp.ROTATE_SCENARIOS))
 def test_rotate_matches_the_recorded_python_tool(name):
     assert tp.run_rotate(tp.ROTATE_SCENARIOS[name]) == tp.load("rotate")[name]
+
+
+@pytest.mark.parametrize("name", sorted(tp.WALKTHROUGH_SCENARIOS))
+def test_walkthrough_matches_the_recorded_python_tool(name):
+    assert tp.run_walkthrough(*tp.WALKTHROUGH_SCENARIOS[name]) == tp.load("walkthrough")[name]
