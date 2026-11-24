@@ -31,25 +31,14 @@ pub struct Projector {
     h: f64,
     scale_n: f64,
     perspective: bool,
+    projection: super::projection::PageProjection,
 }
 
 impl Projector {
     pub fn page(&self, p: [f64; 3]) -> [f64; 2] {
         let v = self.cam.view_matrix().transform_point3(DVec3::from_array(p));
-        let (cx, cy, cz) = (v.x, v.y, -v.z);
-        let ar = if self.h != 0.0 { self.w / self.h } else { 1.0 };
-        if !self.perspective {
-            let half_h = self.h * self.scale_n / 1000.0 / 2.0;
-            let half_w = half_h * ar;
-            let k = if half_h != 0.0 { self.h / (2.0 * half_h) } else { 0.0 };
-            return [self.x + (cx + half_w) * k, self.y + (half_h - cy) * k];
-        }
-        let t = (self.cam.fov_deg.to_radians() / 2.0).tan();
-        let (lim_x, lim_y) = (10.0 * self.w, 10.0 * self.h);
-        let hh = t * cz.max(1e-4);
-        let px = ((cx / (hh * ar) + 1.0) * self.w / 2.0).clamp(-lim_x, lim_x + self.w);
-        let py = ((1.0 - cy / hh) * self.h / 2.0).clamp(-lim_y, lim_y + self.h);
-        [self.x + px, self.y + py]
+        let [x,y] = self.projection.local(v.x, v.y, -v.z);
+        [self.x+x, self.y+y]
     }
     /// The projector of ``frame`` from the frame camera's inputs ``d``
     /// (``{view, base, bounds}``, see ``sheet_frame_camera``): onto the
@@ -69,7 +58,10 @@ impl Projector {
         let bounds = bounds.map(|(a, b)| (DVec3::new(a.0, a.1, a.2), DVec3::new(b.0, b.1, b.2)));
         let cam = frame_camera(base, &f, view.as_ref(), bounds);
         let (x, y) = if local { (0.0, 0.0) } else { (f.num("x_mm", 0.0), f.num("y_mm", 0.0)) };
-        let proj = Projector { perspective: cam.perspective, cam, x, y, w: f.num("w_mm", 100.0),
+        let projection = super::projection::PageProjection::for_frame(
+            f.num("w_mm",100.), f.num("h_mm",100.), f.num("scale_n",100.),
+            cam.perspective.then_some(cam.fov_deg));
+        let proj = Projector { projection, perspective: cam.perspective, cam, x, y, w: f.num("w_mm", 100.0),
                                h: f.num("h_mm", 100.0), scale_n: f.num("scale_n", 100.0) };
         Ok((f, proj))
     }

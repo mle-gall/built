@@ -438,6 +438,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     object_replay::register(m)?;
     object_drawing::register(m)?;
     m.add_class::<object_outline::FaceOutline>()?;
+    m.add_class::<sheets::projection::PageProjection>()?;
     m.add_function(wrap_pyfunction!(object_outline::segment_hit, m)?)?;
     m.add_function(wrap_pyfunction!(object_outline::refined_ring, m)?)?;
     m.add_function(wrap_pyfunction!(object_outline::locate_boundary, m)?)?;
