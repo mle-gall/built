@@ -50,17 +50,17 @@ fn raw_box(points: &Obj<'_>, pad: f64) -> PyResult<Bounds> {
 }
 #[pyfunction]
 #[pyo3(signature=(points,pad=0.0))]
-fn box_of(points: &Obj<'_>, pad: f64) -> PyResult<Option<Bounds>> {
+pub(super) fn box_of(points: &Obj<'_>, pad: f64) -> PyResult<Option<Bounds>> {
     Ok(Extent::read(points)?.map(|b| b.bounds(pad, true)))
 }
 #[pyfunction]
-fn grown_box(pts: &Obj<'_>) -> PyResult<Bounds> {
+pub(super) fn grown_box(pts: &Obj<'_>) -> PyResult<Bounds> {
     Ok(Extent::read(pts)?
         .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("max() arg is an empty sequence"))?
         .bounds(2e-4, true))
 }
 #[pyfunction]
-fn key_boxes(points: &Obj<'_>) -> PyResult<Vec<[f64; 6]>> {
+pub(super) fn key_boxes(points: &Obj<'_>) -> PyResult<Vec<[f64; 6]>> {
     points
         .try_iter()?
         .map(|p| {
@@ -71,7 +71,7 @@ fn key_boxes(points: &Obj<'_>) -> PyResult<Vec<[f64; 6]>> {
         .collect()
 }
 #[pyfunction]
-fn bounds_xy(points: Vec<[f64; 2]>) -> PyResult<((f64, f64), (f64, f64))> {
+pub(super) fn bounds_xy(points: Vec<[f64; 2]>) -> PyResult<((f64, f64), (f64, f64))> {
     let mut it = points.into_iter();
     let [x, y] = it
         .next()
@@ -81,7 +81,7 @@ fn bounds_xy(points: Vec<[f64; 2]>) -> PyResult<((f64, f64), (f64, f64))> {
     }))
 }
 #[pyfunction]
-fn positions(points: &Obj<'_>) -> PyResult<Vec<P>> {
+pub(super) fn positions(points: &Obj<'_>) -> PyResult<Vec<P>> {
     points.try_iter()?.map(|p| Ok(tuple(xyz(&p?)?))).collect()
 }
 #[pyfunction]
@@ -89,11 +89,11 @@ fn ring_positions(rings: &Obj<'_>) -> PyResult<Vec<Vec<P>>> {
     rings.try_iter()?.map(|r| positions(&r?)).collect()
 }
 #[pyfunction]
-fn views<'py>(mesh: &Obj<'py>, cls: &Obj<'py>, keys: &Obj<'py>) -> PyResult<Vec<Obj<'py>>> {
+pub(super) fn views<'py>(mesh: &Obj<'py>, cls: &Obj<'py>, keys: &Obj<'py>) -> PyResult<Vec<Obj<'py>>> {
     keys.try_iter()?.map(|k| cls.call1((mesh, k?))).collect()
 }
 #[pyfunction]
-fn set_minus<'py>(
+pub(super) fn set_minus<'py>(
     mesh: &Obj<'py>,
     types: &Bound<'py, PyDict>,
     kind: &str,

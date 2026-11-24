@@ -13,7 +13,7 @@ use pyo3::{
 };
 type Obj<'py> = Bound<'py, PyAny>;
 #[pyfunction]
-fn plane_basis(normal: &Obj<'_>) -> PyResult<(Vec3, Vec3)> {
+pub(crate) fn plane_basis(normal: &Obj<'_>) -> PyResult<(Vec3, Vec3)> {
     let p = xyz(normal)?;
     let (u, v) = basis(V3(p.x, p.y, p.z), Hypot::LibStdCxx);
     Ok((

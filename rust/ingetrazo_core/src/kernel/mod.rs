@@ -4,6 +4,7 @@ pub(crate) mod object_boundary;
 pub(crate) mod object_incidence;
 pub(crate) mod object_repair;
 pub(crate) mod push_queries;
+mod push_scans;
 use crate::{object_drawing, object_replay, snap, snap_engine, store};
 use pyo3::prelude::*;
 
@@ -12,6 +13,7 @@ pub(crate) fn register_kernel(m: &Bound<'_,PyModule>) -> PyResult<()> {
     object_replay::register(m)?;
     snap::inputs::register(m)?;
     push_queries::register(m)?;
+    push_scans::register(m)?;
     store::planar_api::register(m)?;
     m.add_function(wrap_pyfunction!(snap::inputs::edge_tag,m)?)?;
     m.add_function(wrap_pyfunction!(snap::inputs::edge_columns,m)?)?;
