@@ -27,7 +27,7 @@ from dataclasses import dataclass
 
 import numpy as np
 from PySide6.QtCore import QObject, Signal
-from PySide6.QtGui import QImage
+from georef.raster import as_raster
 from ingetrazo_core import Vec3 as QVector3D
 
 from georef.tiles import TileCache, deg2num
@@ -71,21 +71,13 @@ AWS_TERRAIN = DEMSource(
 )
 
 
-def decode_elevation(image: QImage, encoding: str = "terrarium") -> np.ndarray:
+def decode_elevation(image, encoding: str = "terrarium") -> np.ndarray:
     """Decode an RGB-encoded DEM tile to a ``(H, W)`` float32 metre heightfield.
 
     - ``terrarium``: ``h = R*256 + G + B/256 - 32768``
     - ``mapbox``:    ``h = -10000 + (R*65536 + G*256 + B) * 0.1``
     """
-    img = image.convertToFormat(QImage.Format.Format_RGBA8888)
-    w, h, bpl = img.width(), img.height(), img.bytesPerLine()
-    buf = np.frombuffer(img.constBits(), dtype=np.uint8).reshape(h, bpl)
-    a = buf[:, : w * 4].reshape(h, w, 4).astype(np.float32)
-    r, g, b = a[:, :, 0], a[:, :, 1], a[:, :, 2]
-    if encoding == "mapbox":
-        return -10000.0 + (r * 65536.0 + g * 256.0 + b) * 0.1
-    # terrarium (default)
-    return (r * 256.0 + g + b / 256.0) - 32768.0
+    return as_raster(image).elevation(encoding)
 
 
 def bilinear(field: np.ndarray, px: float, py: float) -> float:

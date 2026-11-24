@@ -10994,16 +10994,15 @@ class MainWindow(WorksessionMixin, QMainWindow):
                     self.progressed.emit(0.05, "Reading mesh…")
                     mesh = load_odm_obj(path, datum, ground_ref=ground)
 
-                    from PySide6.QtGui import QImageReader
+                    from ingetrazo_render import raster_dimensions
                     sizes, index_of = [], []
                     for i, material in enumerate(mesh.materials):
                         if material.texture is None or not material.texture.is_file():
                             continue
-                        reader = QImageReader(str(material.texture))
-                        size = reader.size()
-                        if not size.isValid():
+                        size = raster_dimensions(material.texture)
+                        if size is None:
                             continue
-                        sizes.append((size.width(), size.height()))
+                        sizes.append(size)
                         index_of.append(i)
 
                     targets = plan_texture_sizes(sizes, gl_max)
@@ -11013,7 +11012,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
                             0.15 + 0.85 * n / max(1, len(index_of)),
                             "Loading textures…")
                         image = load_atlas(mesh.materials[i].texture, target)
-                        if not image.isNull():
+                        if image is not None:
                             images[i] = image
                     self.finished.emit(mesh, images, None)
                 except Exception as exc:  # noqa: BLE001 — reported to caller

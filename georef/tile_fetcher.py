@@ -8,14 +8,14 @@ in the background, emitting :attr:`TileFetcher.tileReady` when an image lands.
 The pure slippy/source/cache logic lives in :mod:`georef.tiles`; this module is
 the only tile piece that needs Qt-net + a running event loop.
 
-Deps: only Qt (``QtNetwork`` + ``QtGui.QImage``) — no new pip (invariant #4).
+QtNetwork transports tiles. The native raster decoder supplies their pixels.
 """
 from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QByteArray, QObject, Signal, Qt, QUrl
-from PySide6.QtGui import QImage
+from PySide6.QtCore import QObject, Signal, QUrl
+from ingetrazo_render import SurveyRaster
 from PySide6.QtNetwork import (
     QNetworkAccessManager,
     QNetworkReply,
@@ -41,7 +41,7 @@ class TileFetcher(QObject):
     """
 
     #: ``(source_id, x, y, z, image)`` — a decoded tile is available.
-    tileReady = Signal(str, int, int, int, QImage)
+    tileReady = Signal(str, int, int, int, object)
     #: ``(source_id, x, y, z, reason)`` — the tile could not be fetched.
     tileFailed = Signal(str, int, int, int, str)
 
@@ -65,10 +65,10 @@ class TileFetcher(QObject):
     def cache(self) -> TileCache:
         return self._cache
 
-    def request(self, source: TileSource, x: int, y: int, z: int) -> QImage | None:
+    def request(self, source: TileSource, x: int, y: int, z: int) -> SurveyRaster | None:
         """Ask for tile ``(x, y, z)`` of ``source``.
 
-        Returns the :class:`QImage` synchronously on a cache hit (and does not
+        Returns the :class:`SurveyRaster` synchronously on a cache hit (and does not
         emit); otherwise returns ``None`` and emits :attr:`tileReady` once the
         download finishes. Out-of-range zooms are refused.
         """
@@ -77,8 +77,8 @@ class TileFetcher(QObject):
         key = (source.id, x, y, z)
         cached = self._cache.get(source.id, x, y, z)
         if cached is not None:
-            img = QImage()
-            if img.loadFromData(QByteArray(cached)):
+            img = SurveyRaster.decode(cached)
+            if img is not None:
                 return img
             # Corrupt cache entry — fall through and re-download.
         if key in self._inflight or key in self._queued:
@@ -121,8 +121,8 @@ class TileFetcher(QObject):
                 self.tileFailed.emit(source_id, x, y, z, reply.errorString())
                 return
             data = bytes(reply.readAll())
-            img = QImage()
-            if not data or not img.loadFromData(QByteArray(data)):
+            img = SurveyRaster.decode(data)
+            if img is None:
                 self.tileFailed.emit(source_id, x, y, z, "undecodable tile data")
                 return
             self._cache.put(source_id, x, y, z, data)

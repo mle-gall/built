@@ -187,7 +187,7 @@ class TileLayer:
         #: file saved with the terrain on reopened flat after a restart, and
         #: what stood on the terrain floated over the map.
         self.terrain3d = False
-        # (x, y, z) -> QImage, populated asynchronously by the fetcher.
+        # (x, y, z) -> SurveyRaster, populated asynchronously by the fetcher.
         self.images: dict[tuple[int, int, int], object] = {}
         # Capture patches: local-metre rectangles ``(cx, cy, hw, hh)`` that the
         # base map covers. A single site is one square; a road is a long strip;
