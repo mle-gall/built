@@ -165,3 +165,128 @@ def test_rename_component_is_one_native_step():
     assert sorted(answer["step"].placements["modified"]) == ["a", "b"]
     h.undo()
     assert a.name == b.name == "Door"
+
+
+# ---- record steps (annotations, sections, guides, images, scenes, sheets)
+
+def _guide_scene():
+    from ingetrazo_core import Vec3
+    from core.guide import Guide
+    scene = Scene()
+    guide = Guide(Vec3(0, 0, 0), Vec3(1, 0, 0))
+    return scene, History(scene), guide, Vec3
+
+
+def test_record_steps_are_native_history_commands():
+    import ingetrazo_core
+    from core import history as H
+    for name in ("AddGuideCommand", "DeleteDimensionsCommand", "CreatePlanCommand",
+                 "UpdateSceneCommand", "MoveGeoPathNodeCommand"):
+        cls = getattr(H, name)
+        assert cls is getattr(ingetrazo_core, name)
+        assert issubclass(cls, ingetrazo_core.RecordStep) and issubclass(cls, Command)
+
+
+def test_a_record_step_undoes_by_its_transaction_in_history():
+    scene, h, guide, _ = _guide_scene()
+    from core.history import AddGuideCommand
+    step = AddGuideCommand(guide)
+    assert step.guide is guide and step.keeps_rows and step.keeps_paint
+    h.execute(step)
+    assert list(scene.guides) == [guide] and step._doc_txn is not None
+    assert h.feed.last.command == "AddGuideCommand"
+    scene.selection.add(guide)
+    h.undo()
+    assert list(scene.guides) == [] and guide not in scene.selection
+    h.redo()
+    assert list(scene.guides) == [guide]
+
+
+def test_a_direct_record_step_replays_the_transaction_it_opened():
+    scene, _, guide, Vec3 = _guide_scene()
+    from core.history import AddGuideCommand, MoveGuidesCommand
+    AddGuideCommand(guide).do(scene)
+    move = MoveGuidesCommand([guide], Vec3(0, 2, 0))
+    move.do(scene)
+    assert guide.point.y() == 2
+    move.undo(scene)
+    assert guide.point.y() == 0 and list(scene.guides) == [guide]
+
+
+def test_a_record_step_inside_a_compound_with_its_own_inverse_undoes():
+    scene, h, guide, Vec3 = _guide_scene()
+    from core.history import AddGuideCommand, CompoundCommand
+
+    class OwnInverse(CompoundCommand):
+        doc_undo = False   # as the Move tool's copies
+
+    h.execute(OwnInverse([AddGuideCommand(guide)]))
+    assert list(scene.guides) == [guide]
+    h.undo()
+    assert list(scene.guides) == []
+    h.redo()
+    assert list(scene.guides) == [guide]
+
+
+def test_a_rejected_record_step_leaves_nothing_behind():
+    from core.history import SceneTreeCommand
+    scene = Scene()
+    h = History(scene)
+    before = h.revision
+    h.execute(SceneTreeCommand(lambda scene: False))
+    assert h.revision == before and h.last_rejected and not h.undo_stack
+
+
+def test_the_tool_preview_helpers_stay_on_the_classes():
+    from core.history import MoveGuidesCommand, RotateGuidesCommand
+    scene, _, guide, Vec3 = _guide_scene()
+    MoveGuidesCommand.shift(guide, Vec3(1, 0, 0))
+    assert guide.point.x() == 1
+    state = RotateGuidesCommand.state(guide)
+    RotateGuidesCommand.place(state, None)
+    assert guide.point.x() == 1
+
+
+# ---- group and component steps
+
+def test_insert_and_delete_publish_where_the_placement_went():
+    from core.history import DeleteGroupCommand, InsertGroupCommand
+    import ingetrazo_core
+    scene = Scene()
+    h = History(scene)
+    g = Group(Mesh(), name="part", uid="p")
+    step = InsertGroupCommand(g)
+    assert isinstance(step, ingetrazo_core.RecordStep) and step.keeps_groups
+    assert step._owner is None and step.group is g
+    h.execute(step)
+    assert step._owner is scene.groups and g in scene.selection
+    gone = DeleteGroupCommand(g)
+    h.execute(gone)
+    assert g not in scene.groups and gone.index == 0
+    h.undo()
+    assert list(scene.groups) == [g]
+    h.undo()
+    assert list(scene.groups) == [] and g not in scene.selection
+    h.redo()
+    h.redo()
+    assert list(scene.groups) == []
+
+
+def test_merge_puts_back_the_same_merged_group_on_redo():
+    from core.history import MergeGroupsCommand
+    from ingetrazo_core import Vec3
+    scene = Scene()
+    h = History(scene)
+    parts = []
+    for x in (0, 2):
+        m = Mesh()
+        m.add_face([Vec3(x, 0, 0), Vec3(x + 1, 0, 0), Vec3(x + 1, 1, 0)])
+        parts.append(Group(m, name=f"g{x}"))
+    scene.groups.extend(parts)
+    h.execute(MergeGroupsCommand(parts))
+    merged = scene.groups[0]
+    assert len(scene.groups) == 1 and merged not in parts
+    h.undo()
+    assert list(scene.groups) == parts
+    h.redo()
+    assert list(scene.groups) == [merged]
