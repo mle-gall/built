@@ -1,19 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""Language direction, Arabic translations and the legacy launcher language hook."""
+"""Language direction, Arabic translations and startup locale resolution."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
 import pytest
-from PySide6.QtCore import QSettings, Qt
-from PySide6.QtWidgets import QApplication
 
 from core import i18n
-
-_app = QApplication.instance() or QApplication([])
 
 
 def test_rtl_languages():
@@ -35,23 +27,22 @@ def test_arabic_is_offered_and_complete():
         i18n.set_language(before)
 
 
-@pytest.mark.parametrize("lang, direction", [
-    ("ar", Qt.RightToLeft), ("es", Qt.LeftToRight), ("en", Qt.LeftToRight),
-    ("de", Qt.LeftToRight)])
-def test_startup_direction_follows_the_language(lang, direction, tmp_path,
-                                                monkeypatch):
-    from plugins._widget_language import apply_widget_language
+@pytest.mark.parametrize("lang, rtl", [("ar", True), ("es", False), ("en", False), ("de", False)])
+def test_startup_direction_follows_the_language(lang, rtl, tmp_path, monkeypatch):
+    from app_shell import qt_host
+    from core import settings
+    from ingetrazo_core import NativeSettings
+
+    monkeypatch.setattr(qt_host, "enable_plugin_widgets", lambda: None)
+    monkeypatch.setattr(qt_host, "_SETTINGS_DIR", None)
+    monkeypatch.setattr(settings, "_store", None)
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+    NativeSettings(str(tmp_path)).setValue("language", lang)
     before = i18n.current_language()
     try:
-        apply_widget_language(_app, lang)
-        assert _app.layoutDirection() == direction
-        # Left to right nothing is installed: the app is as it always was.
-        assert (getattr(_app, "_rtl_numbers", None) is not None) == (
-            direction == Qt.RightToLeft)
+        qt_host.start(str(tmp_path))
+        assert i18n.current_language() == lang
+        assert i18n.is_rtl(i18n.current_language()) is rtl
     finally:
         i18n.set_language(before)
-        _app.setLayoutDirection(Qt.LeftToRight)
-        f = getattr(_app, "_rtl_numbers", None)
-        if f is not None:
-            _app.removeEventFilter(f)
-            _app._rtl_numbers = None
