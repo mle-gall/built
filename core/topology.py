@@ -15,7 +15,6 @@ from __future__ import annotations
 import ingetrazo_core as kernel
 
 import math
-from collections import deque
 from typing import Iterable, Optional
 
 from ingetrazo_core import Vec3 as QVector3D, polygon_is_planar as is_planar
@@ -183,11 +182,7 @@ class CycleGraph:
         if self._scan is not None:
             self._scan.append(edge)
             return
-        ea, eb = self._key(edge.a), self._key(edge.b)
-        if ea == eb:
-            return
-        self.adj.setdefault(ea, []).append((eb, edge.b))
-        self.adj.setdefault(eb, []).append((ea, edge.a))
+        kernel.object_drawing.graph_insert(self.adj, self._key, edge)
 
     def remove(self, edge) -> bool:
         """Take ``edge`` out. False if it was not found as it was added —
@@ -198,64 +193,10 @@ class CycleGraph:
                     self._scan.remove(candidate)
                     return True
             return False
-        ea, eb = self._key(edge.a), self._key(edge.b)
-        if ea == eb:
-            return True
-        for u, v, pos in ((ea, eb, edge.b), (eb, ea, edge.a)):
-            row = self.adj.get(u, ())
-            for i, (v_key, v_pos) in enumerate(row):
-                if v_pos is pos and v_key == v:
-                    del row[i]
-                    break
-            else:
-                return False
-        return True
+        return kernel.object_drawing.graph_remove(self.adj, self._key, edge)
 
 
-def _smallest_cycle(adj, a, b, ka, kb, max_len: int = 32,
-                    skip=frozenset(), direct: bool = False):
-    """Breadth-first search from ``b`` to ``a`` over ``adj``, never entering a
-    node of ``skip`` — the same search ``adj`` built without the edges that
-    touch those nodes would make (adjacency lists keep the edge order).
-
-    ``direct``: ``adj`` still holds segment ``a``–``b`` itself (a
-    :class:`CycleGraph`), and the search must not take it — the step from
-    ``b`` straight to ``a`` is the only place it could."""
-    if ka not in adj or kb not in adj:
-        return None
-    if skip and not (any(v not in skip for v, _p in adj[ka])
-                     and any(v not in skip for v, _p in adj[kb])):
-        return None             # an end with no edge left once ``skip`` goes
-
-    parent: dict = {kb: None}
-    parent_pos: dict = {kb: b}
-    q = deque([kb])
-    found = False
-    while q:
-        u = q.popleft()
-        if u == ka:
-            found = True
-            break
-        for v_key, v_pos in adj.get(u, ()):
-            if direct and u == kb and v_key == ka:
-                continue
-            if v_key not in parent and v_key not in skip:
-                parent[v_key] = u
-                parent_pos[v_key] = v_pos
-                q.append(v_key)
-
-    if not found:
-        return None
-
-    path: list[QVector3D] = []
-    cur = ka
-    while cur is not None:
-        path.append(parent_pos[cur])
-        cur = parent[cur]
-    # path is [a, ..., b]. Cycle = path + implicit closing a–b.
-    if len(path) < 3 or len(path) > max_len:
-        return None
-    return path
+_smallest_cycle = kernel.object_drawing.smallest_cycle
 
 
 def segment_intersection(

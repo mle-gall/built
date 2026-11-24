@@ -79,3 +79,53 @@ def test_divide_join_preserve_materialised_handles_and_undo():
         mesh.restore_state(snapshot)
         assert all(mesh.registers(v) for v in ends)
         assert len(face.loop) == n + 3 and all(e in mesh.edges for e in pieces)
+
+
+def test_drawn_segments_preserve_the_ordered_command_plan(monkeypatch):
+    from core.edits import plan_edge_commands
+    from core.mesh import Mesh
+    from core.scene import Scene
+
+    class Materialised(Mesh):
+        pass
+
+    rng = random.Random(36071)
+    digest = hashlib.sha256()
+
+    def coords(v):
+        return [round(c, 8) for c in v.toTuple()]
+
+    def signature(command):
+        result = [type(command).__name__]
+        for field in ("a", "b", "vertices", "holes", "attrs", "auto", "soft", "layer", "curve"):
+            value = getattr(command, field, None)
+            if hasattr(value, "toTuple"):
+                value = coords(value)
+            elif field == "vertices" and value is not None:
+                value = [coords(p) for p in value]
+            elif field == "holes" and value is not None:
+                value = [[coords(p) for p in h] for h in value]
+            result.append(value)
+        return result
+
+    for _ in range(48):
+        scene = Scene()
+        scene.mesh = Materialised()
+        x, y = rng.randint(-80, 80), rng.randint(-80, 80)
+
+        def p(u, v):
+            return Vec3(x + u, y + v, 0.)
+
+        corners = [p(0, 0), p(10, 0), p(10, 10), p(0, 10)]
+        hole = [p(4, 4), p(6, 4), p(6, 6), p(4, 6)]
+        face = scene.mesh.add_face(corners, [hole] if rng.randrange(2) else [])
+        face.attrs["material"] = "plaster"
+        k = rng.randint(1, 9)
+        segments = [(p(0, k), p(10, k)), (p(k, 0), p(k, 10)),
+                    (p(10, k), p(k, 10)), (p(0, 0), p(10, 10))]
+        for setting in ("0", "1"):
+            monkeypatch.setenv("INGETRAZO_SCANS", setting)
+            plan = plan_edge_commands(scene, segments, True, p(1, 2))
+            digest.update(json.dumps([signature(c) for c in plan]).encode())
+        assert scene.mesh.faces == [face]
+    assert digest.hexdigest() == "ca1c333fcefaf20580525ddb3ce31b35b28c5ec0d73915f398dfa74e7d0c31dd"

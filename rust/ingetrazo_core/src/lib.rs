@@ -69,6 +69,7 @@ mod link_subset;
 mod presentation;
 mod object_replay;
 mod object_drawing;
+mod draw_plan;
 mod object_outline;
 mod object_edge_edits;
 mod planar_edits;
