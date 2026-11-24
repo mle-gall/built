@@ -11,7 +11,7 @@ from ingetrazo_render import rail_layout
 from core.make_faces import MakeFacesError, make_faces, plan, selected_edges
 from core.mesh import Mesh
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from views import context_menu
+from ingetrazo_render import context_menu_build
 
 UP = QVector3D(0, 0, 50)
 
@@ -248,5 +248,5 @@ def test_inside_a_group_the_faces_stay_in_the_group(win):
 def test_right_click_offers_make_faces_for_edges(win):
     scene = win.viewport.scene
     edges = _rect(scene.mesh, 0, 0, 1, 1)
-    assert "makefaces" in context_menu.build(win, win.view, edges).ids()
-    assert "makefaces" not in context_menu.build(win, win.view, edges[:2]).ids()
+    assert "makefaces" in context_menu_build(win, win.view, edges).ids()
+    assert "makefaces" not in context_menu_build(win, win.view, edges[:2]).ids()

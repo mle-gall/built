@@ -59,7 +59,7 @@ def test_utm_mode_hides_the_geo_rows(win):
 
 def test_choice_is_remembered_everywhere(win):
     from core.settings import settings
-    from views import chrome_sheet
+    from ingetrazo_render import chrome_sheet
     open_location(win)
     act(win, "v", "site_mode", "1")
     assert settings().value("georef/coord_mode") == "utm"
@@ -82,7 +82,7 @@ def test_center_fills_both_coordinate_rows(win):
 
 
 def test_typed_utm_moves_the_pin(win):
-    from views.chrome_sheet import current
+    from ingetrazo_render.chrome_sheet import current
     edit_location(win, center=(LAT, LON))
     frame(win)
     act(win, "v", "site_mode", "1")

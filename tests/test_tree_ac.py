@@ -162,8 +162,8 @@ def test_nested_links_are_roots_marked_via_their_parent(ui):
     counts = view._ui_tree["counts"]
     assert counts["link:Ride/link:Ride stairs"] == 60 and counts["link:Ride"] == SMALL
     # File verbs on a nested row: open and show, never reload or unlink there.
-    from views import verbs
-    assert verbs.file_verbs(True) == ("linkopen", "linkfinder")
+    from ingetrazo_render import file_verb_ids
+    assert file_verb_ids(True) == ["linkopen", "linkfinder"]
     act("linkunlink", "n:link:Ride/link:Ride stairs")
     assert any("comes inside Ride" in s for s in win.viewport.status)
 
@@ -294,7 +294,7 @@ class _Action:
 
 
 def _verbs(win, sel):
-    """The inspector's verb labels, from the verb source (views/verbs.py),
+    """The inspector's verb labels, from the verb source (verbs.rs),
     for a window whose every Edit verb is available."""
     for name in ("_hideable", "_makes_faces", "_bridgeable", "_replacement_choices"):
         setattr(win, name, lambda sel: True)
@@ -307,13 +307,13 @@ def test_inspector_verbs_follow_the_selection_kind(ui):
     from core.group import Group
     from core.mesh import Mesh
     from ingetrazo_core import Vec3 as QVector3D
-    from views import verbs
+    from ingetrazo_render import selection_kind
     scene, win, view, rows, act = ui
     tree = view._ui_tree["tree"]
     part = tree.direct[_key(view, "Rails")][0]
     link = tree.links["link:Ride"][0]
     own = tree.direct[_key(view, "Paths")][0]
-    assert verbs.kind_of(scene, [part]) == "linked_part" and verbs.kind_of(scene, [link]) == "link"
+    assert selection_kind(scene, [part]) == "linked_part" and selection_kind(scene, [link]) == "link"
     editing = {"Edit", "Explode", "Component", "File to…", "Group"}
     # A part inside a linked file, and the link placement: nothing that edits.
     for sel in ([part], [link]):
@@ -326,7 +326,7 @@ def test_inspector_verbs_follow_the_selection_kind(ui):
     m = Mesh()
     m.add_face([QVector3D(0, 0, 0), QVector3D(1, 0, 0), QVector3D(1, 1, 0), QVector3D(0, 1, 0)])
     faces = list(m.faces)
-    assert verbs.kind_of(scene, faces) == "faces"
+    assert selection_kind(scene, faces) == "faces"
     got = _verbs(win, faces)
     assert "Group" in got and "Component" not in got and "File to…" not in got
     assert isinstance(own, Group) and links.linked_ancestor(own) is None

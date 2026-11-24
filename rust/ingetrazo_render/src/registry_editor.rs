@@ -239,7 +239,7 @@ impl RegistryEditor {
         if !error.is_empty() {
             content.call_method1("text", (error, "error"))?;
         }
-        let verb = py.import("views.chrome_sheet")?.getattr("verb")?;
+        let verb = py.import("ingetrazo_render.chrome_sheet")?.getattr("verb")?;
         let buttons = [
             ("registry_add", "Add namespace"),
             ("registry_csv", "Import codes CSV…"),

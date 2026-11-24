@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 from PySide6.QtCore import Qt
 
-from app_shell.events import KeyEvent, ShortcutOverride
+from ingetrazo_render import KeyEvent, ShortcutOverride
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 
 

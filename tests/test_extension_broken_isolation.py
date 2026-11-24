@@ -260,12 +260,13 @@ def window():
 
 
 def test_a_manager_that_fails_to_open_says_so(window, monkeypatch):
-    from views import chrome_dialogs, report_sheets
+    import ingetrazo_render
+    from views import chrome_dialogs
 
     def explode():
         raise PermissionError(13, "denied")
 
-    monkeypatch.setattr(report_sheets, "Extensions", explode)
+    monkeypatch.setattr(ingetrazo_render, "ExtensionsSheet", explode)
     window._on_manage_extensions()
     notice = chrome_dialogs.history(window)[0]
     assert notice.tone == "warning" and "denied" in notice.detail

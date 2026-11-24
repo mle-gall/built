@@ -494,7 +494,7 @@ def test_keys_go_to_the_page_and_window_keys_stay_the_window_s(host):
     host.key(True, Qt.Key_L.value, 0, "l")
     assert type(host.viewport.active_tool).__name__ == tool
     from views import wgpu_sheets
-    from app_shell.events import ShortcutOverride
+    from ingetrazo_render import ShortcutOverride
     assert not wgpu_sheets.claims_key(host.view, ShortcutOverride(Qt.Key_S.value, Qt.ControlModifier.value, "s"))
     # ⌃Tab: back to the model.
     host.key(True, Qt.Key_Tab.value, Qt.MetaModifier.value)

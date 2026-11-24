@@ -14,7 +14,7 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_core import Vec3 as V
 
 from core.materials import Material
-from views import chrome_sheet as cs
+from ingetrazo_render import chrome_sheet as cs
 from views import wgpu_library as L
 
 

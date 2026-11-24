@@ -8,7 +8,8 @@ import pytest
 from core import bim_registry
 from core.history import History
 from core.scene import Scene
-from views import chrome_sheet, wgpu_library
+from ingetrazo_render import chrome_sheet
+from views import wgpu_library
 
 
 @pytest.fixture

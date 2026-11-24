@@ -43,8 +43,8 @@ This menu is drawn by the chrome in both apps: the native `built` shell
      (`_on_reverse_faces`, `_on_intersect_faces(mode)`, `_on_explode_group`…).
      These are the same slots the classic QMenu, the menu bar and the
      selection bar call.
-   - `views/context_menu.py` builds the rows. `rust/ingetrazo_render/src/ui/context_menu.rs`
-     draws them and reports `ctx:<id>`.
+   - `rust/ingetrazo_render/src/viewport_menu.rs` reads the selection and builds the
+     rows. `rust/ingetrazo_render/src/ui/context_menu.rs` draws them and reports `ctx:<id>`.
 6. **Read-only kinds offer no editing verbs.** A linked file's placement, and
    a part inside one, never get Explode, Open for editing, Rename, File to,
    Make unique, Intersect, Soften or Flip. Repeat on them is greyed.
