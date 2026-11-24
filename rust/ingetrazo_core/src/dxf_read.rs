@@ -16,6 +16,8 @@ use std::{
 };
 #[path = "dxf_ascii.rs"]
 mod ascii;
+#[path = "dwg_bridge.rs"]
+mod dwg;
 #[path = "dxf_wire.rs"]
 mod wire;
 
@@ -1051,6 +1053,7 @@ fn dxf_save_lines(path: PathBuf, segments: &Obj<'_>, layer: &str) -> PyResult<us
     crate::sheets::dxf::sheet_dxf(path, vec![g], None, None)
 }
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    dwg::register(m)?;
     m.add_function(wrap_pyfunction!(dxf_prepare_import, m)?)?;
     m.add_function(wrap_pyfunction!(dxf_open_document, m)?)?;
     m.add_function(wrap_pyfunction!(dxf_load, m)?)?;
