@@ -17,6 +17,7 @@ from ingetrazo_core import ToolMachine, Vec3
 from tools.rust_tool_base import RustTool, _Host, _mods, _point_property, _tuple, selection_mode
 
 
+@register_tool_adapter
 class LineTool(RustTool):
     """Line (``rust/ingetrazo_core/src/tools/line.rs``)."""
 
@@ -24,40 +25,6 @@ class LineTool(RustTool):
 
     start_point = _point_property("start_point")
     hover_point = _point_property("hover_point")
-
-    @property
-    def chain_first_point(self):
-        # One vertex placed: the first point IS the start (the snap frame
-        # offers no ``close`` onto the segment's own start).
-        if len(self._state("chain_vertices") or ()) <= 1:
-            return self.start_point
-        return self._point("chain_first_point")
-
-    @chain_first_point.setter
-    def chain_first_point(self, value):
-        self._machine.set("chain_first_point", _tuple(value))
-
-    @property
-    def chain_vertices(self):
-        return [Vec3(*p) for p in self._state("chain_vertices")]
-
-    @chain_vertices.setter
-    def chain_vertices(self, points):
-        self._machine.set("chain_vertices", [_tuple(p) for p in points])
-
-    @property
-    def work_plane(self):
-        plane = self._state("work_plane")
-        return None if plane is None else (Vec3(*plane[0]), Vec3(*plane[1]))
-
-    @work_plane.setter
-    def work_plane(self, plane):
-        self._machine.set("work_plane", None if plane is None else (_tuple(plane[0]), _tuple(plane[1])))
-
-    @property
-    def _last(self):
-        """Truthy while a typed value would retype the segment just drawn."""
-        return True if self._state("retype") else None
 
 
 @register_tool_adapter

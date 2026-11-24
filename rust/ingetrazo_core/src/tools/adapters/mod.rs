@@ -55,6 +55,7 @@ mod flip_host_api;
 mod follow_me_host_api;
 mod geo_path_tool_api;
 mod image_tool_api;
+mod line_tool_api;
 mod move_host_api;
 mod north_tool_api;
 mod offset_host_api;
@@ -222,6 +223,7 @@ fn registration(module: &str, name: &str) -> Option<(&'static [Method], &'static
             scale_manager_tool_api::METHODS,
             stringify!(scale_manager_tool_api),
         ),
+        ("tools.rust_tools", "LineTool") => (line_tool_api::METHODS, stringify!(line_tool_api)),
         ("tools.pushpull", "PushPullTool") => (pushpull::METHODS, stringify!(pushpull)),
         _ => return None,
     })
