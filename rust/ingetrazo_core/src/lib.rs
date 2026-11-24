@@ -169,6 +169,7 @@ mod store;
 mod scans;
 mod orient;
 mod pushscan;
+mod push_queries;
 mod push_command;
 pub mod pyset;
 mod push_guard;
@@ -296,6 +297,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(store::arrangement::plane_segment_parameter, m)?)?;
     m.add_function(wrap_pyfunction!(store::arrangement::plane_intersections, m)?)?;
     m.add_function(wrap_pyfunction!(store::planar::plane_region_point, m)?)?;
+    push_queries::register(m)?;
     store::planar_api::register(m)?;
     m.add_function(wrap_pyfunction!(store::planar::plane_nesting, m)?)?;
     m.add_function(wrap_pyfunction!(store::planar::plane_interior_point, m)?)?;

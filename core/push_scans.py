@@ -27,6 +27,7 @@ from __future__ import annotations
 import sys
 
 import ingetrazo_core as kernel
+from ingetrazo_core import push_queries as _queries
 from ingetrazo_core import Vec3 as QVector3D
 
 
@@ -110,10 +111,8 @@ def parallel_overlapping(mesh, n: QVector3D, base_xy, dot_min: float = 0.999):
     if s is None or not base_xy:
         return None
     u, v = plane_basis(n)
-    xs = [p[0] for p in base_xy]
-    ys = [p[1] for p in base_xy]
-    idx = fn(s.native, _xyz(n), _xyz(u), _xyz(v), (min(xs), min(ys)),
-             (max(xs), max(ys)), dot_min, *args)
+    lo, hi = _queries.bounds_xy(base_xy)
+    idx = fn(s.native, _xyz(n), _xyz(u), _xyz(v), lo, hi, dot_min, *args)
     return s.faces(idx)
 
 
@@ -133,7 +132,7 @@ def lateral_exit(mesh, base_face, samples, direction: QVector3D,
     got = s.face_indices([base_face])
     if got and got[0] is not None:
         skip = got[0]
-    t = fn(s.native, [_xyz(q) for q in samples], _xyz(direction), _xyz(n),
+    t = fn(s.native, _queries.positions(samples), _xyz(direction), _xyz(n),
            skip, *args)
     return True, t
 
@@ -162,21 +161,14 @@ def vertices_in_boxes(mesh, boxes):
     s = _scan(mesh) if fn is not None else None
     if s is None:
         return None
-    return s.vertices(fn(s.native, [list(b) for b in boxes]))
+    return s.vertices(fn(s.native, list(boxes)))
 
 
 def vertices_at_keys(mesh, points):
     """Candidates for the vertices whose ``_key`` is one of ``points``'
     keys: those within a key cell (doubled) of one of them."""
-    pad = 2e-4
-    boxes = []
-    for p in points:
-        m = pad + 1e-6 * max(abs(p.x()), abs(p.y()), abs(p.z()))
-        boxes.append((p.x() - m, p.y() - m, p.z() - m,
-                      p.x() + m, p.y() + m, p.z() + m))
-    if not boxes:
-        return []
-    return vertices_in_boxes(mesh, boxes)
+    boxes = _queries.key_boxes(points)
+    return vertices_in_boxes(mesh, boxes) if boxes else []
 
 
 def faces_meeting(mesh, lo, hi):
@@ -217,30 +209,15 @@ def edges_near_points(mesh, points):
     return s.edges(s.edges_meeting(_grown_box(pts)))
 
 
-def _grown_box(pts):
-    xs = [p[0] for p in pts]
-    ys = [p[1] for p in pts]
-    zs = [p[2] for p in pts]
-    m = 2e-4 + 1e-6 * max(max(map(abs, xs)), max(map(abs, ys)),
-                          max(map(abs, zs)))
-    return ((min(xs) - m, min(ys) - m, min(zs) - m),
-            (max(xs) + m, max(ys) + m, max(zs) + m))
+_grown_box = _queries.grown_box
 
 
 def faces_near_points(mesh, points):
     """Candidates for the faces with an outer corner whose ``_key`` is one
     of ``points``' keys: faces whose outer box meets the points' box grown
     by a key cell (doubled)."""
-    pts = list(points)
-    if not pts:
-        return []
-    xs = [p[0] for p in pts]
-    ys = [p[1] for p in pts]
-    zs = [p[2] for p in pts]
-    m = 2e-4 + 1e-6 * max(max(map(abs, xs)), max(map(abs, ys)),
-                          max(map(abs, zs)))
-    return faces_meeting(mesh, (min(xs) - m, min(ys) - m, min(zs) - m),
-                         (max(xs) + m, max(ys) + m, max(zs) + m))
+    box = _queries.box_of(points, 2e-4)
+    return [] if box is None else faces_meeting(mesh, *box)
 
 
 def cracked_edges(mesh, near=None):
@@ -272,11 +249,13 @@ def live_keys(mesh, kind: str):
     return st.keys(kind)
 
 
+def _view_types():
+    from core.store_mesh import FaceView, EdgeView, VertexView
+    return {"face": FaceView, "edge": EdgeView, "vertex": VertexView}
+
+
 def views(mesh, kind: str, keys) -> list:
-    from core import store_mesh
-    cls = {"face": store_mesh.FaceView, "edge": store_mesh.EdgeView,
-           "vertex": store_mesh.VertexView}[kind]
-    return [cls(mesh, k) for k in keys]
+    return _queries.views(mesh, _view_types()[kind], keys)
 
 
 def mark(mesh):
@@ -309,17 +288,7 @@ def set_minus(mesh, kind: str, after_keys, before: set):
     table, and the difference walks it in slot order adding what ``before``
     lacks. ``None`` when CPython would take its other path (copy the left
     side, discard the right: a left side four times the right's size)."""
-    so = set(after_keys)
-    if (len(so) >> 2) > len(before):
-        return None
-    from core import store_mesh
-    cls = {"face": store_mesh.FaceView, "edge": store_mesh.EdgeView,
-           "vertex": store_mesh.VertexView}[kind]
-    out = set()
-    for k in so:
-        if k not in before:
-            out.add(cls(mesh, k))
-    return out
+    return _queries.set_minus(mesh, _view_types(), kind, after_keys, before)
 
 
 def _native_face(mesh, face):
@@ -348,7 +317,7 @@ def sweeps_free_sheet(mesh, face, loops) -> bool:
     if s is None:
         return True
     return kernel.scan_sweeps_free_sheet(
-        s.native, i, [[_xyz(p) for p in lp] for lp in loops], *_geom_args())
+        s.native, i, _queries.ring_positions(loops), *_geom_args())
 
 
 def surface_normal(mesh, face) -> QVector3D:
@@ -366,5 +335,5 @@ def cap_passes_wall(mesh, face, cap, normal: QVector3D, d: float) -> bool:
     s, i = _native_face(mesh, face)
     if s is None:
         return False
-    return kernel.scan_cap_passes_wall(s.native, i, [_xyz(p) for p in cap], _xyz(normal),
+    return kernel.scan_cap_passes_wall(s.native, i, _queries.positions(cap), _xyz(normal),
                                         float(d), *_geom_args())
