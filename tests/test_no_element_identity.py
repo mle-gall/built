@@ -56,7 +56,6 @@ _ALLOWED = {
     ("core/outliner.py", "reparent_problem"): "groups",
     ("views/outliner.py", "toggle_isolated"): "groups",
     ("views/tray.py", "_component_steps"): "groups",
-    ("views/document_interaction.py", "_cat_kept"): "cached arrays",
 }
 
 

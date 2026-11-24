@@ -279,89 +279,8 @@ def _inst_proto_of(mod, base):
         np.ascontiguousarray(base["e2"]) if v0 is not None else z, edges)
 
 
-class _PickWarm:
-    """The pick index's heavy pure parts, worked out behind the document just
-    opened (DocumentInteraction.start_pick_warmup): threads that touch nothing but their
-    own copies of the arrays' references. What they made reaches the viewport
-    in _pick_warm_take, on the GUI thread, and only if it still applies."""
-
-    def __init__(self, mod, protos, grids, bounds=()):
-        import queue
-        import threading
-        from tools.select_host import _local_bounds as local_bounds
-        self.protos: dict = {}
-        self.grids: list = []
-        self.bounds: list = []
-        jobs: queue.SimpleQueue = queue.SimpleQueue()
-        for ckey, base in protos:
-            jobs.put(("proto", ckey, base))
-        for chunk in grids:
-            jobs.put(("grid", chunk, {
-                "v0": chunk["v0"], "e1": chunk["e1"], "e2": chunk["e2"],
-                "tri_ent": chunk["tri_ent"], "rev": chunk.get("rev")}))
-        for chunk in bounds:
-            jobs.put(("bounds", chunk, {
-                "v0": chunk["v0"], "e1": chunk["e1"], "e2": chunk["e2"],
-                "edges": chunk["edges"]}))
-
-        def work():
-            while True:
-                try:
-                    kind, a, b = jobs.get_nowait()
-                except queue.Empty:
-                    with lock:
-                        left[0] -= 1
-                        last = left[0] == 0
-                    if last:
-                        # The sorting and copying leave ~1.6 GB of freed heap
-                        # on a 5 M face model, which glibc keeps (#1092).
-                        from core import malloc_arenas
-                        malloc_arenas.trim()
-                    return
-                try:
-                    if kind == "proto":
-                        self.protos[a] = _inst_proto_of(mod, b)
-                    elif kind == "grid":
-                        _split_chunk_spans(b)
-                        self.grids.append((a, b))
-                    else:
-                        local_bounds(b)
-                        self.bounds.append((a, b))
-                except Exception:      # noqa: BLE001 — the hover will retry
-                    pass
-        # Daemons: closing the window does not wait for them.
-        self.threads = [threading.Thread(target=work, daemon=True)
-                        for _ in range(min(8, os.cpu_count() or 2))]
-        lock = threading.Lock()
-        left = [len(self.threads)]
-        for t in self.threads:
-            t.start()
-
-    def join(self):
-        for t in self.threads:
-            t.join()
-
-
-def _pick_warm_take(vp) -> None:
-    """Wait for what the warm-up has left and take it: its prototypes for the
-    next InstanceSet, its grids for the chunks that have not moved since."""
-    warm = getattr(vp, "_pick_warm", None)
-    if warm is None:
-        return
-    vp._pick_warm = None
-    warm.join()
-    cache = getattr(vp, "_inst_proto_cache", None)
-    if cache is None:
-        cache = vp._inst_proto_cache = {}
-    cache.update(warm.protos)
-    for chunk, snap in warm.grids:
-        if ("_span_grid" not in chunk and chunk.get("rev") == snap["rev"]
-                and chunk["v0"] is snap["v0"]):
-            chunk["_span_grid"] = snap["_span_grid"]
-    # (Keyed on the very arrays: a chunk that has moved on just misses it.)
-    for chunk, snap in warm.bounds:
-        if "_box_bounds" not in chunk:
-            chunk["_box_bounds"] = snap["_box_bounds"]
+_PickWarm = ingetrazo_render.PickWarm
+_pick_warm_take = ingetrazo_render.pick_warm_take
 
 
 def _entity_owner(entities, i):
@@ -372,66 +291,7 @@ def _entity_owner(entities, i):
 
 
 def _split_chunk_spans(chunk, depth=0, force=False):
-    """``(v0, e1, e2, tri_ent, cells)`` of a chunk for the pick index. For a
-    chunk of more than ``_SPAN_GRID_MIN`` triangles: the triangles reordered
-    by the cell of their centroid in a grid over the chunk (cells per axis
-    in proportion to its extent there, ~``_SPAN_CELL_TRIS`` a cell), and
-    ``cells = [(bbox, start, count)]``, one per non-empty cell, each box
-    tight around its triangles; a cell that still holds over twice the
-    target (triangles cluster) is binned again on its own, up to three
-    levels. Otherwise ``cells = None`` and the arrays as they are. Cached on
-    the chunk by its revision.
-
-    One span per chunk made every ray that met the box of a big group run
-    Möller–Trumbore over all of it: a 107 k-triangle sofa, 2.6 ms a ray,
-    ~100 rays a hover with Line (snap occlusion), 300 ms a Move step on a
-    306 k-face room. The order of the triangles inside the index is free
-    (each carries its entity), so the answer does not change."""
-    v0, e1, e2, te = chunk["v0"], chunk["e1"], chunk["e2"], chunk["tri_ent"]
-    n = len(v0)
-    if _NO_SPAN_GRID or (n <= _SPAN_GRID_MIN and not force):
-        return v0, e1, e2, te, None
-    memo = chunk.get("_span_grid") if not force else None
-    if memo is not None and memo[0] == (chunk.get("rev"), n):
-        return memo[1]
-    import numpy as np
-    cen = v0 + (e1 + e2) / 3.0                                  # centroids
-    lo = cen.min(axis=0)
-    span = np.maximum(cen.max(axis=0) - lo, 1e-9)
-    # Cells per axis in proportion to the extent on it; the weights multiply
-    # to 1, so their product stays near the target count.
-    w = span / np.exp(np.log(span).mean())
-    per_axis = np.maximum(
-        1, np.round((n / _SPAN_CELL_TRIS) ** (1.0 / 3.0) * w)).astype(np.int64)
-    cell = np.minimum(((cen - lo) * (per_axis / span)).astype(np.int64),
-                      per_axis - 1)
-    key = (cell[:, 0] * per_axis[1] + cell[:, 1]) * per_axis[2] + cell[:, 2]
-    order = np.argsort(key, kind="stable")
-    key = key[order]
-    v0p = np.ascontiguousarray(v0[order])
-    e1p = np.ascontiguousarray(e1[order])
-    e2p = np.ascontiguousarray(e2[order])
-    tep = np.ascontiguousarray(te[order])
-    starts = np.flatnonzero(np.r_[True, key[1:] != key[:-1]])
-    ends = np.r_[starts[1:], len(key)]
-    cells = []
-    for s0, s1 in zip(starts.tolist(), ends.tolist()):
-        if s1 - s0 > 2 * _SPAN_CELL_TRIS and depth < 3:
-            sv0, se1, se2, ste, sub = _split_chunk_spans(
-                {"v0": v0p[s0:s1], "e1": e1p[s0:s1], "e2": e2p[s0:s1],
-                 "tri_ent": tep[s0:s1]}, depth + 1, force=True)
-            # The sub-grid is a permutation of this range: write it back.
-            v0p[s0:s1], e1p[s0:s1], e2p[s0:s1], tep[s0:s1] = sv0, se1, se2, ste
-            cells += [(bb, s0 + a, c) for bb, a, c in sub]
-            continue
-        pts = np.concatenate([v0p[s0:s1], v0p[s0:s1] + e1p[s0:s1],
-                              v0p[s0:s1] + e2p[s0:s1]])
-        cells.append(((tuple(pts.min(axis=0).tolist()),
-                       tuple(pts.max(axis=0).tolist())), s0, s1 - s0))
-    out = (v0p, e1p, e2p, tep, cells)
-    if not force:
-        chunk["_span_grid"] = ((chunk.get("rev"), n), out)
-    return out
+    return ingetrazo_render.split_chunk_spans(chunk, depth, force)
 
 
 #: Every chunk entry built (or loaded from disk) takes the next number.
@@ -1038,42 +898,11 @@ def _batch_instances(base, xfs, tri_parts, hard_parts, soft_parts,
 
 
 def _cat_kept(vp, slot, parts):
-    """``np.concatenate(parts)``, the same array again while the parts are
-    the same objects: the pick index is rebuilt on each change of its lazy
-    set (#158), and joined its static triangles anew — 1.4 million rows,
-    ~100 MB, a few times a pointer move over the plant of #158. Nothing
-    writes into these arrays."""
-    import numpy as np
-    memo = getattr(vp, "_pick_cat_memo", None)
-    if memo is None:
-        memo = {}
-        try:
-            vp._pick_cat_memo = memo
-        except AttributeError:
-            pass
-    m = memo.get(slot)
-    if m is not None and len(m[0]) == len(parts) and all(
-            a is b for a, b in zip(m[0], parts)):
-        return m[1]
-    out = parts[0] if len(parts) == 1 else np.concatenate(parts)
-    memo[slot] = (list(parts), out)
-    return out
+    return ingetrazo_render.cat_kept(vp, slot, parts)
 
 
 def _offset_kept(vp, te, offset):
-    """``te + offset``, the same array again for the same ``te`` and
-    offset (see :func:`_cat_kept`)."""
-    if not offset:
-        return te
-    m = getattr(vp, "_pick_te_memo", None)
-    if m is not None and m[0] is te and m[1] == offset:
-        return m[2]
-    out = te + offset
-    try:
-        vp._pick_te_memo = (te, offset, out)
-    except AttributeError:
-        pass
-    return out
+    return ingetrazo_render.offset_kept(vp, te, offset)
 
 
 def _moller_trumbore(o, d, v0, e1, e2):
