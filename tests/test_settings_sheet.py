@@ -307,14 +307,18 @@ def test_the_3d_mouse_section_holds_the_axis_table(win):
 def test_keyboard_lists_commands_and_changes_their_keys(win, monkeypatch):
     shown = []
     monkeypatch.setattr(ss.cf, "show", lambda parent, form: shown.append(form) or "chrome")
-    from views.shortcuts import action_key, collect_actions
+    from core.shortcuts import action_key, collect_actions
+    from ingetrazo_render import sheet_command_scope
     acts = collect_actions(win)
     target = next(a for a in acts if a.text() and not a.shortcuts())
     win.open_preferences(shortcut_of=target)
     sheet = frame(win)
     assert [r["id"] for r in sheet["side"] if r.get("on")] == ["keyboard"]
     rows = next(b for b in sheet["content"]["blocks"] if b["kind"] == "rows")
-    assert len(rows["items"]) == len(acts)
+    expected = {action_key(a) for a in acts + collect_actions(sheet_command_scope(win))}
+    assert "sheet:group" in expected
+    assert {r["id"] for r in rows["items"]} == {"sc:" + k for k in expected}
+    assert len(rows["items"]) == len(expected)
     item = "sc:" + action_key(target)
     assert sheet["focus"] == item and sheet["force_focus"]
     assert sheet["detail"] is not None and "Change keys…" in json.dumps(sheet["detail"], ensure_ascii=False)

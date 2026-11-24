@@ -533,6 +533,41 @@ fn menu_rows(
     Ok((scenes, folders))
 }
 
+/// Move one position among the scenes filed in this folder. The adjacent
+/// folder starts at the next global index when the scene is the last sibling.
+#[pyfunction]
+fn move_among_siblings(history: &Obj<'_>, view: &Obj<'_>, earlier: bool) -> PyResult<bool> {
+    let scene = history.getattr("scene")?;
+    let folder = folder_of(&scene, view)?;
+    let peers = scenes_in(&scene, folder.as_deref())?;
+    let Some(at) = peers.iter().position(|peer| peer.is(view)) else {
+        return Ok(false);
+    };
+    let before = if earlier {
+        let Some(previous) = at.checked_sub(1) else {
+            return Ok(false);
+        };
+        peers.get(previous)
+    } else {
+        if at + 1 >= peers.len() {
+            return Ok(false);
+        }
+        peers.get(at + 2)
+    };
+    let change = FolderEdit::move_rows(
+        vec![view.clone().unbind()],
+        vec![],
+        folder,
+        before.cloned().map(Obj::unbind),
+    );
+    let py = scene.py();
+    let command = py
+        .import("core.history")?
+        .call_method1("SceneTreeCommand", (Py::new(py, change)?,))?;
+    history.call_method1("execute", (command,))?;
+    Ok(true)
+}
+
 #[pyfunction]
 fn edit_menu_folder(history: &Obj<'_>, request: &str) -> PyResult<String> {
     use pyo3::exceptions::PyValueError;
@@ -602,6 +637,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     sub.add_function(wrap_pyfunction!(folders_of, &sub)?)?;
     sub.add_function(wrap_pyfunction!(folder_parent, &sub)?)?;
     sub.add_function(wrap_pyfunction!(folder_of, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(move_among_siblings, &sub)?)?;
     sub.add_function(wrap_pyfunction!(subfolders, &sub)?)?;
     sub.add_function(wrap_pyfunction!(scenes_in, &sub)?)?;
     sub.add_function(wrap_pyfunction!(tree_order, &sub)?)?;

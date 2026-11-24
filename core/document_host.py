@@ -32,9 +32,8 @@ class Document:
         #: The composer was on screen when the user left this tab.
         self.composer_shown = False
         self.last_sheet: int = 0
-        #: Its scenes shown as tabs under the viewport (views/scene_tabs.py);
-        #: its tab's right-click menu turns them off and on.
-        self.scene_tabs: bool = True
+        from ingetrazo_render import SceneMark
+        self.scene_mark = SceneMark()
         #: How many views it shows (views/multi_view.py LAYOUTS) and the
         #: grid holding them, made the first time it shows more than one.
         self.view_grid = None

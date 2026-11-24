@@ -4,62 +4,19 @@
 runs the one picked — Blender's F3, Rhino's prompt."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+from unittest.mock import Mock
 
 import pytest
-from PySide6.QtCore import QPoint, QSettings, Qt
-from PySide6.QtGui import QAction, QKeySequence
-from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication
 
-if QApplication.instance() is None:
-    QApplication([])
-
-import core.extensions as extensions                              # noqa: E402
-from core import string_search as ss                             # noqa: E402
-from views import command_metadata as cs, command_palette as palette                           # noqa: E402
+from app_shell.command_action import ShellAction
+from core import string_search as ss
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
+from views import command_metadata as cs, wgpu_ui
 
 
 @pytest.fixture
-def ventana(tmp_path, monkeypatch):
-    monkeypatch.setattr(extensions, "plugin_dirs", lambda: [tmp_path])
-    QSettings().remove("command_search")
-    from views.main_window import MainWindow
-    win = MainWindow()
-    win.show()
-    yield win
-    QSettings().remove("command_search")
-    win._saved_version = win.viewport.scene.version   # no "save?" modal
-    win.close()
-
-
-@pytest.fixture
-def classic_canvas(monkeypatch):
-    """Exercise the child canvas even on machines with a live Metal viewport."""
-    from views.wgpu_view import WgpuView
-    monkeypatch.setattr(WgpuView, "_can_create_surface", lambda self: False)
-
-
-def _names(win, query):
-    return [c.name for c in cs.search(win, query)]
-
-
-def _box(win, text="", scope=""):
-    box = palette.open_search(win, text, scope)
-    QApplication.processEvents()
-    return box
-
-
-def _shown(box):
-    return [r[0] for r in box.renderer.rows()]
-
-
-def _type(box, text):
-    QTest.keyClicks(box, text)
-    box.draw()
-    QApplication.processEvents()
+def win(native_host):
+    return native_host.window
 
 
 # ---- the matching (Blender's), without a window ------------------------------
@@ -135,476 +92,237 @@ def test_damerau_levenshtein():
     assert ss.damerau_levenshtein("kitten", "sitting") == 3
 
 
-# ---- the window's commands ------------------------------------------------------
-def test_the_menus_tools_and_trays_are_all_there(ventana):
-    names = _names(ventana, "")
-    for expected in ("Orient Faces", "Line", "Push / Pull", "Preferences…",
-                     "Properties", "Show all panels"):     # Window ▸ Panels
-        assert expected in names
-    assert "Search commands…" not in names     # not itself
+def query(win, text="", scope=""):
+    view = win.view
+    renderer = Mock()
+    from unittest.mock import patch
+    with patch.object(view, "renderer", renderer):
+        wgpu_ui.command_action(view, win, "cmdscope", scope)
+        wgpu_ui.command_action(view, win, "cmdq", text)
+    return renderer.ui_set_command_results.call_args.args[0], renderer.ui_set_command_details.call_args.args[0]
 
 
-def test_a_command_knows_its_menu_path(ventana):
-    cmd = next(c for c in cs.search(ventana, "unhide all"))
-    assert cmd.path == "Edit ▸ Unhide"
-    assert cmd.name == "All"
+def test_model_search_lists_menu_commands_and_tools_and_prioritizes_recent_actions(win):
+    rows, _ = query(win)
+    names = [row[0] for row in rows]
+    assert {"Orient Faces", "Line", "Push / Pull", "Settings…"} <= set(names)
+    assert "Search commands…" not in names and "Chain dimension" not in names
+    rows, _ = query(win, "unhide all")
+    assert rows[0][:2] == ("All", "Edit ▸ Unhide")
+    scoped, _ = query(win, "a", "Edit ▸ Unhide")
+    assert scoped and all(r[1] == "Edit ▸ Unhide" for r in scoped)
+    assert query(win, "xqzwv")[0] == []
+    action = ShellAction(win, "Frobnicate the walls", run=Mock())
+    rows, _ = query(win, "frobnic")
+    assert rows == [("Frobnicate the walls", "", "", True)]
+    wgpu_ui.command_action(win.view, win, "cmdrun", "0")
+    action.run.assert_called_once()
+    assert query(win)[0][0][0] == "Frobnicate the walls"
+    action.remove()
+    assert query(win, "frobnic")[0] == []
 
 
-def test_found_in_english_while_the_menus_speak_spanish(ventana):
-    from core.i18n import set_language
-    from views.main_window import MainWindow
-    set_language("es")
+def test_a_plugin_can_hide_its_action_after_the_native_search_opens(win):
+    from PySide6.QtGui import QAction
+    action = QAction("Frobnicate the active sheet", win)
+    ran = Mock()
+    action.triggered.connect(ran)
     try:
-        win = MainWindow()
-        try:
-            assert _names(win, "orient faces")[0] == "Orientar caras"
-            assert _names(win, "orientar")[0] == "Orientar caras"
-            assert _names(win, "preferences")[0] == "Preferencias…"
-            # The menu path, too, in either language, accents or not.
-            assert "Todo" in _names(win, "edit all")
-            assert "Todo" in _names(win, "edicion mostrar todo")
-        finally:
-            win._saved_version = win.viewport.scene.version
-            win.close()
+        assert query(win, "frobnic")[0][0][0] == action.text()
+        action.setVisible(False)
+        wgpu_ui.command_action(win.view, win, "cmdrun", "0")
+        ran.assert_not_called()
+        assert not query(win, "frobnic")[0]
+        action.setVisible(True)
+        assert query(win, "frobnic")[0]
     finally:
-        set_language("en")
+        action.setParent(None)
 
 
-def test_a_plugin_action_is_found_without_registering_anything(ventana):
-    act = QAction("Frobnicate the walls", ventana)
-    ventana.addAction(act)
-    assert _names(ventana, "frobnic") == ["Frobnicate the walls"]
-
-
-def test_a_hidden_action_is_not_offered(ventana):
-    act = QAction("Secret squirrel", ventana)
-    act.setVisible(False)
-    ventana.addAction(act)
-    assert _names(ventana, "squirrel") == []
-
-
-# ---- the box ----------------------------------------------------------------------
-@pytest.mark.usefixtures("classic_canvas")
-def test_f3_opens_the_box(ventana):
-    QTest.keyClick(ventana.viewport.keys_stand_in, Qt.Key_F1)      # the warm-up keystroke
-    QApplication.processEvents()
-    QTest.keyClick(ventana.viewport.keys_stand_in, Qt.Key_F3)
-    QApplication.processEvents()
-    box = getattr(ventana, "_command_canvas", None)
-    assert box is not None and box.isVisible()
-    box.close()
-
-
-@pytest.mark.usefixtures("classic_canvas")
-def test_enter_runs_the_first_match_and_remembers_it(ventana):
-    fired = []
-    act = QAction("Frobnicate the walls", ventana)
-    act.triggered.connect(lambda: fired.append(1))
-    ventana.addAction(act)
-    box = _box(ventana)
-    _type(box, "frobnicate")
-    QTest.keyClick(box, Qt.Key_Return)
-    QApplication.processEvents()                     # the deferred trigger
-    assert fired == [1]
-    assert not box.isVisible()
-    assert _names(ventana, "")[0] == "Frobnicate the walls"   # recent first
-
-
-@pytest.mark.usefixtures("classic_canvas")
-def test_arrows_move_and_skip_disabled_commands(ventana):
-    fired = []
-    for text, enabled in (("Zyx alpha", True), ("Zyx beta", False),
-                          ("Zyx gamma", True)):
-        act = QAction(text, ventana)
-        act.setEnabled(enabled)
-        act.triggered.connect(lambda _c=False, t=text: fired.append(t))
-        ventana.addAction(act)
-    box = _box(ventana)
-    _type(box, "zyx")
-    QTest.keyClick(box, Qt.Key_Down)
-    QTest.keyClick(box, Qt.Key_Return)
-    QApplication.processEvents()
-    assert fired == ["Zyx gamma"]
-
-
-@pytest.mark.usefixtures("classic_canvas")
-def test_esc_closes_without_running_anything(ventana):
-    fired = []
-    act = QAction("Frobnicate the walls", ventana)
-    act.triggered.connect(lambda: fired.append(1))
-    ventana.addAction(act)
-    box = _box(ventana)
-    _type(box, "frob")
-    QTest.keyClick(box, Qt.Key_Escape)
-    QApplication.processEvents()
-    assert fired == [] and not box.isVisible()
-
-
-@pytest.mark.usefixtures("classic_canvas")
-def test_no_results_says_so(ventana):
-    box = _box(ventana)
-    _type(box, "xqzwv")
-    assert not _shown(box) and box.renderer.state()[:2] == (True, "xqzwv")
-    box.close()
-
-
-@pytest.mark.usefixtures("classic_canvas")
-def test_one_line_per_command_path_first(ventana):
-    """Blender's layout: faded path, then the name; ten rows at a time."""
-    box = _box(ventana)
-    _type(box, "orient faces")
-    title, path, _, enabled = box.renderer.rows()[0]
-    assert (title, path, enabled) == ("Orient Faces", "Edit", True)
-    assert box.height() >= 10 * 24
-    box.close()
-
-
-@pytest.mark.usefixtures("classic_canvas")
-def test_a_menu_scope_searches_only_that_menu(ventana):
-    box = _box(ventana, "a", "Edit ▸ Unhide")
-    assert set(_shown(box)) <= {"All", "Selected", "Last"}
-    assert "All" in _shown(box)
-    assert box.renderer.state()[1:3] == ("a", "Edit ▸ Unhide")
-    # Backspace in the empty box widens the search to everything.
-    QTest.keyClick(box, Qt.Key_Backspace)
-    QTest.keyClick(box, Qt.Key_Backspace)
-    assert box.renderer.state()[1:3] == ("", "")
-    assert "Orient Faces" in _shown(box)
-    box.close()
-
-
-@pytest.mark.usefixtures("classic_canvas")
-def test_a_letter_typed_in_an_open_menu_searches_it(ventana):
-    edit = next(a.menu() for a in ventana.menuBar().actions()
-                if a.menu() is not None and a.menu().title() == "Edit")
-    edit.popup(ventana.mapToGlobal(ventana.rect().center()))
-    QApplication.processEvents()
-    QTest.keyClick(edit, Qt.Key_O)
-    QApplication.processEvents()
-    box = ventana._command_canvas
-    assert box.isVisible() and not edit.isVisible()
-    assert box.renderer.state()[1:3] == ("o", "Edit")
-    assert _shown(box)[0] == "Orient Faces"
-    box.close()
-
-
-@pytest.mark.usefixtures("classic_canvas")
-def test_change_shortcut_opens_preferences_on_that_command(ventana,
-                                                           monkeypatch):
-    opened = []
-    monkeypatch.setattr(ventana, "open_preferences",
-                        lambda shortcut_of=None: opened.append(shortcut_of))
-    box = _box(ventana)
-    _type(box, "orient faces")
-    act = box._ui_cmd_hits[0]
-    QTest.mouseClick(box, Qt.RightButton, pos=QPoint(120, 54))
-    box.draw()
-    QTest.mouseClick(box, Qt.LeftButton, pos=QPoint(155, 70))
-    box.draw()
-    QApplication.processEvents()
-    assert opened == [act] and not box.isVisible()
-
-
-def test_preferences_open_on_the_picked_shortcut(ventana):
-    from views.shortcuts import collect_actions
-    act = next(a for a in collect_actions(ventana)
-               if a.text() == "Orient Faces")
-    from views import settings_sheet, chrome_sheet
-    from views.shortcuts import action_key
-    settings_sheet.show(ventana, shortcut_of=act)
-    sheet = chrome_sheet.current(ventana)
-    assert sheet.section == "keyboard"
-    assert sheet.kb_focus == "sc:" + action_key(act)
-    assert sheet._action(sheet.kb_focus) is act
-    chrome_sheet.close(ventana)
-
-
-# ---- where the box opens ------------------------------------------------------------
-from PySide6.QtCore import QPoint, QRect, QSize                  # noqa: E402
-
-_SCREEN = QRect(0, 0, 1920, 1040)
-_WORK = QRect(300, 100, 1300, 800)        # between the toolbars and trays
-_BOX = QSize(560, 330)
-
-
-def _fit(x, y, work=_WORK, screen=_SCREEN, size=_BOX):
-    return palette.fit_box(QPoint(x, y), size, 30, work, screen)
-
-
-def _inside(inner, outer):
-    return outer.contains(inner)
-
-
-def test_the_box_opens_under_the_mouse():
-    r = _fit(900, 400)
-    assert abs(r.center().x() - 900) <= 1
-    assert r.top() == 400 - 15                  # its text field at the mouse
-    assert _inside(r, _WORK)
-
-
-def test_near_a_tray_it_moves_in_instead_of_covering_it():
-    for x, y in ((1590, 400), (310, 400), (900, 890), (900, 105),
-                 (1900, 1000), (5, 5)):         # also clicked on a tray
-        r = _fit(x, y)
-        assert _inside(r, _WORK), (x, y, r)
-        assert r.size() == _BOX
-
-
-def test_a_small_modelling_area_is_overflowed_keeping_the_size():
-    small = QRect(300, 100, 400, 250)
-    r = _fit(500, 200, work=small)
-    assert r.size() == _BOX                     # not shrunk
-    assert _inside(r, _SCREEN)
-    # Only the axis that does not fit overflows: here both do not.
-    wide = QRect(300, 100, 1300, 250)
-    r = _fit(900, 200, work=wide)
-    assert r.left() >= wide.left() and r.right() <= wide.right()
-    assert r.size() == _BOX
-
-
-def test_smaller_only_when_the_screen_cannot_hold_it():
-    tiny_screen = QRect(0, 0, 500, 300)
-    r = _fit(250, 150, work=QRect(0, 0, 500, 300), screen=tiny_screen)
-    assert r.size() == QSize(500, 300)
-    assert _inside(r, tiny_screen)
-
-
-@pytest.mark.usefixtures("classic_canvas")
-def test_the_real_box_is_fitted_to_the_modelling_area(ventana,
-                                                      monkeypatch):
-    """The area handed to fit_box is the viewport's, not the window's."""
-    seen = []
-
-    def spy(cursor, size, edit_h, work, screen):
-        seen.append(work)
-        return QRect(work.topLeft(), size)
-    monkeypatch.setattr(palette, "fit_box", spy)
-    QApplication.processEvents()                 # the layout settled first
-    # The viewport in front, under the project tabs (#1066).
-    central = ventana.viewport
-    box = palette.open_search(ventana)
-    assert seen == [QRect(central.mapToGlobal(QPoint(0, 0)),
-                          central.size())]
-    assert box.mapToGlobal(QPoint()) == seen[0].topLeft()
-    box.close()
-
-
-# ---- the sheet composer ----------------------------------------------------------
-def _composer(win, detached=False):
-    vp = win.viewport
-    if not vp.keys_stand_in._can_create_surface():
-        pytest.skip("the composer requires a native GPU surface")
-    comp = win._ensure_composer()
-    comp.show()
-    if detached and getattr(type(comp), "EMBEDDED", False):
-        comp._ws.open_classic()
-        comp = comp._classic
-    if detached:
-        comp.activateWindow()
-        assert QTest.qWaitForWindowActive(comp, 2500)
-    QApplication.processEvents()
-    return comp
-
-
-def test_f3_works_in_the_composer_with_its_own_commands(ventana):
-    comp = _composer(ventana, detached=True)
-    QTest.keyClick(comp, Qt.Key_F1)                  # the warm-up keystroke
-    QTest.keyClick(comp, Qt.Key_F3)
-    QApplication.processEvents()
-    box = getattr(comp, "_command_canvas", None)
-    assert box is not None and box.isVisible()
-    names = [c.name for c in box._ui_command_pool]
-    assert "Chain dimension" in names and "Orient Faces" not in names
-    box.close()
-    comp.close()
-
-
-def test_the_main_window_does_not_list_the_composers_commands(ventana):
-    _composer(ventana).close()
-    names = _names(ventana, "")
-    assert "Chain dimension" not in names and "Ungroup" not in names
-    assert "Orient Faces" in names
-
-
-def test_native_command_results_follow_the_workspace_and_live_actions(ventana):
-    from PySide6.QtWidgets import QMainWindow
-    from types import SimpleNamespace
-    from shiboken6 import delete
-    from views.wgpu_ui import _command_query
-
-    rows = []
-    view = SimpleNamespace(renderer=SimpleNamespace(ui_set_command_results=rows.append))
-    plugin = QAction("Frobnicate the walls", ventana)
-    ventana.addAction(plugin)
-    _command_query(view, ventana, "frobnic")
-    assert view._ui_cmd_hits == [plugin]
-    delete(plugin)
-    _command_query(view, ventana, "frobnic")
-    assert rows[-1] == []
-
-    composer = QMainWindow(ventana)
-    composer.addAction(QAction("Chain dimension", composer))
+def test_search_finds_translated_names_and_paths_by_either_language(tmp_path):
+    from app_shell.host import Host
+    from core import i18n
+    from ingetrazo_core import NativeSettings
+    profile = str(tmp_path / "profile")
+    NativeSettings(profile).setValue("language", "es")
+    original = i18n.current_language()
+    host = Host(0, 900, 600, 1., settings=profile)
     try:
-        view._sheets_ws = SimpleNamespace(shown=True, view=view, composer=composer)
-        _command_query(view, ventana, "chain dim")
-        assert rows[-1][0][0] == "Chain dimension"
-        view._sheets_ws.shown = False
-        _command_query(view, ventana, "chain dim")
-        assert all(r[0] != "Chain dimension" for r in rows[-1])
+        win = host.window
+        for term in ("orient faces", "orientar"):
+            assert query(win, term)[0][0][0] == "Orientar caras"
+        for term in ("edit all", "edicion mostrar todo"):
+            assert "Todo" in [r[0] for r in query(win, term)[0]]
     finally:
-        composer.close()
+        host.close()
+        i18n.set_language(original)
 
 
-def test_a_composer_tool_has_a_short_name_and_its_sentence_as_tip(ventana):
-    comp = _composer(ventana)
-    act = comp._tool_actions["cota_cadena"]
-    assert act.text() == "Chain dimension"
-    assert act.toolTip().startswith("Chain dimensions the way AutoCAD")
-    cmd = next(c for c in cs.commands(comp) if c.action is act)
-    assert cmd.path == "Draw"                       # its toolbar
-    comp.close()
+def test_action_cache_tracks_live_name_shortcut_and_removal(win):
+    action = ShellAction(win, "Frobnicate the walls")
+    original = {c.action: c for c in cs.commands(win)}
+    assert all(original[c.action] is c for c in cs.commands(win))
+    action.setText("Frobnicate the floors")
+    updated, = cs.search(win, "frobnicate")
+    assert updated is not original[action] and updated.name == "Frobnicate the floors"
+    action.setShortcuts(["Ctrl+Alt+F"])
+    keyed, = cs.search(win, "frobnicate")
+    assert keyed is not updated and keyed.keys
+    action.remove()
+    assert not cs.search(win, "frobnicate") and action not in win._command_cache
 
 
-def test_keys_written_in_the_name_go_to_their_column(ventana):
-    comp = _composer(ventana)
-    cmd = next(c for c in cs.commands(comp) if c.name == "Ungroup")
-    assert QKeySequence.fromString(cmd.keys, QKeySequence.NativeText) == QKeySequence("Ctrl+Shift+G")
-    # Brackets that are not keys stay in the name.
-    for text in ("AI Bridge (MCP)", "Português (Brasil)", "IFC (BIM)…",
-                 "Rebuild Faces (Planar)"):
-        assert cs._keys_in(text) is None, text
-    comp.close()
+def test_unavailable_action_cannot_run_from_a_previous_search(win):
+    run = Mock()
+    action = ShellAction(win, "Frobnicate", run=run)
+    assert query(win, "frobnicate")[0][0][3]
+    action.setEnabled(False)
+    wgpu_ui.command_action(win.view, win, "cmdrun", "0")
+    assert not query(win, "frobnicate")[0][0][3]
+    action.remove()
+    wgpu_ui.command_action(win.view, win, "cmdrun", "0")
+    run.assert_not_called()
 
 
-def test_the_composer_box_opens_over_the_sheet_not_the_panel(ventana,
-                                                             monkeypatch):
-    comp = _composer(ventana)
-    seen = []
-    monkeypatch.setattr(palette, "fit_box",
-                        lambda c, size, e, work, screen: seen.append(work)
-                        or QRect(work.topLeft(), size))
-    QApplication.processEvents()
-    area = comp.command_search_area()
-    palette.open_search(comp).close()
-    assert seen == [QRect(area.mapToGlobal(QPoint(0, 0)), area.size())]
-    comp.close()
+def test_shortcut_editor_opens_on_the_searched_command(win):
+    from tests.scene_controls import chrome
+    from views import chrome_sheet
+    with chrome(win):
+        rows, detail = query(win, "orient faces")
+        assert rows[0][:2] == ("Orient Faces", "Edit") and detail[0][2]
+        action = win.view._ui_cmd_hits[0]
+        wgpu_ui.command_action(win.view, win, "cmdshortcut", "0")
+        sheet = chrome_sheet.current(win)
+        assert sheet.section == "keyboard" and sheet._action(sheet.kb_focus) is action
+        chrome_sheet.close(win)
 
 
-# ---- the explanation on hover (Blender's tooltip) --------------------------------
-def test_the_description_drops_the_name_and_keys_a_tooltip_repeats():
-    act = QAction("Orbit")
-    act.setToolTip("Orbit  (O) — left-drag to rotate the view")
-    assert cs.Command(act, "").tip == "Left-drag to rotate the view"
-    act.setToolTip("Line  (L)")
-    act.setText("Line")
-    assert cs.Command(act, "").tip == ""
-    act.setText("Pan")
-    act.setToolTip("Pan the sheet (or drag with the middle button)")
-    assert cs.Command(act, "").tip.startswith("Pan the sheet")
+def test_sheet_search_lists_and_runs_only_the_current_workspaces_commands(win, monkeypatch):
+    from views import wgpu_sheets
+    from tests.scene_controls import chrome
+    host = wgpu_sheets.composer_for(win)
+    ws = host._ws
+    ws.shown, ws.view = True, win.view
+    monkeypatch.setattr(win.view, "_sheets_ws", ws, raising=False)
+    with chrome(win) as renderer:
+        rows, tips = query(win, "chain dimension")
+        assert rows[0][:2] == ("Chain dimension", "Dimensions")
+        assert tips[0][0] and tips[0][2]
+        wgpu_ui.command_action(win.view, win, "cmdrun", "0")
+        assert host.tool_mode == "cota_cadena"
+        rows, _ = query(win, "ungroup")
+        from ingetrazo_render import shortcut_text
+        assert rows[0][:3] == ("Ungroup", "Sheet", shortcut_text("Ctrl+Shift+G")[1])
+        wgpu_ui.command_action(win.view, win, "cmdrun", "0")
+        renderer.page_command.assert_called_once_with("ungroup")
+        assert not query(win, "orient faces")[0]
+    ws.shown = False
+    assert not query(win, "chain dimension")[0] and query(win, "orient faces")[0]
 
 
-def test_the_tooltip_is_name_description_and_keys_wrapped(ventana):
-    comp = _composer(ventana)
-    cmd = next(c for c in cs.commands(comp) if c.name == "Chain dimension")
-    box = palette.open_search(comp, "chain dimension")
-    assert box.renderer.rows()[0][0] == cmd.name
-    assert "every click adds the next cota" in box.renderer.details()[0][0]
-    box.close()
-    comp.close()
+def test_search_and_the_tool_share_descriptions_and_model_commands_can_repeat(win):
+    rows, detail = query(win, "line")
+    assert rows[0][:2] == ("Line", "Tools") and rows[0][2] == "L"
+    assert detail[0][0] == win._tools["line"].description
+    wgpu_ui.command_action(win.view, win, "cmdrun", "0")
+    assert win.viewport.active_tool is win._tools["line"]
+    win._activate_tool("select")
+    assert win.repeat_last_command() and win.viewport.active_tool is win._tools["line"]
+    assert not [c.key for c in cs.commands(win) if c.action.isEnabled() and not c.tip]
 
 
-@pytest.mark.usefixtures("classic_canvas")
-def test_a_command_run_from_f3_is_the_one_shift_r_repeats(ventana):
-    """F3 and Repeat last command (#145) work together: what F3 ran is
-    what Shift+R runs again."""
-    box = _box(ventana)
-    _type(box, "line")
-    QTest.keyClick(box, Qt.Key_Return)
-    QApplication.processEvents()                     # the deferred trigger
-    assert ventana.viewport.active_tool is ventana._tools["line"]
-    ventana._activate_tool("select")
-    assert ventana.repeat_last_command()
-    assert ventana.viewport.active_tool is ventana._tools["line"]
+def test_description_drops_repeated_shortcuts_and_respects_non_key_brackets(win):
+    action = ShellAction(win, "Orbit")
+    action.setProperty("statusTip", "Orbit  (O) — left-drag to rotate the view")
+    assert cs.Command(action, "").tip == "Left-drag to rotate the view"
+    action.setText("Line")
+    action.setProperty("statusTip", "Line  (L)")
+    assert cs.Command(action, "").tip == ""
+    action.setText("Pan")
+    action.setProperty("statusTip", "Pan the sheet (or drag with the middle button)")
+    assert cs.Command(action, "").tip.startswith("Pan the sheet")
+    for label in ("AI Bridge (MCP)", "Português (Brasil)", "IFC (BIM)…", "Rebuild Faces (Planar)"):
+        assert cs._keys_in(label) is None
 
 
-# ---- opening fast (0.5.6: the shadow showed first, the list ~100 ms after) --
-def test_an_unchanged_command_is_not_worked_out_again(ventana):
-    first = {c.action: c for c in cs.commands(ventana)}
-    again = {c.action: c for c in cs.commands(ventana)}
-    assert first and all(again[a] is first[a] for a in first)
+def test_f3_runs_a_sheet_tool_and_returns_to_modelling_in_a_release_window(tmp_path):
+    import json
+    from pathlib import Path
+
+    from scripts.isolated_launch import run
+
+    root = Path(__file__).resolve().parents[1]
+    binary = root / "rust/built_app/target/release/built"
+    if not binary.is_file():
+        pytest.skip("requires the release shell")
+    profile = tmp_path / "profile"
+    probe = profile / "data/ingetrazo/plugins/sheet_search_probe.py"
+    probe.parent.mkdir(parents=True)
+    probe.write_text("""import json
+from pathlib import Path
+
+def setup(app):
+    from views import wgpu_sheets
+    def record():
+        win = app.window
+        ws = wgpu_sheets.workspace_of(win.view)
+        with Path(__file__).with_suffix(".jsonl").open("a") as out:
+            print(json.dumps([ws.composer.tool_mode if ws else "model",
+                              win.view.renderer.ui_claims_key("F5", 0)]), file=out)
+    app.add_menu_action("Open Sheets", lambda: wgpu_sheets.to_sheets(app.window))
+    app.add_menu_action("Read current workspace", record)
+""")
+    actions = ["menu extension:sheet_search_probe:0", "key f3", "type chain dimension",
+               "menu extension:sheet_search_probe:1", "key enter", "menu extension:sheet_search_probe:1",
+               "key f3", "type back to the model", "key enter", "menu extension:sheet_search_probe:1",
+               "state", "quit"]
+    steps = tmp_path / "steps"
+    steps.write_text("wait 550\n" + "\nwait 220\n".join(actions) + "\n")
+    result = run([binary, "--root", root, "--venv", root / ".venv", "--new-instance",
+                  "--script", steps, root / "tests/fixtures/shell/slab-and-cube.igz"],
+                 settings=profile, capture_output=True, text=True, timeout=60, check=True)
+    states = [json.loads(line) for line in probe.with_suffix(".jsonl").read_text().splitlines()]
+    assert len(states) == 3
+    assert states == [["select", True], ["cota_cadena", False], ["model", False]]
+    state = next(json.loads(s.removeprefix("[built] state ")) for s in result.stdout.splitlines()
+                 if s.startswith("[built] state "))
+    assert state["errors"] == 0 and state["qt_modules"] == []
 
 
-def test_a_command_that_changed_is_worked_out_again(ventana):
-    act = QAction("Frobnicate the walls", ventana)
-    ventana.addAction(act)
-    before = next(c for c in cs.commands(ventana) if c.action is act)
-    act.setText("Frobnicate the floors")
-    after = next(c for c in cs.commands(ventana) if c.action is act)
-    assert after is not before and after.name == "Frobnicate the floors"
-    act.setShortcut("Ctrl+Alt+F")
-    keyed = next(c for c in cs.commands(ventana) if c.action is act)
-    assert keyed is not after and keyed.keys
+def test_sheet_binding_shares_the_keyboard_table_and_follows_the_active_document(win, monkeypatch):
+    from core.input_types import Qt
+    from core.shortcuts import export_shortcuts, import_shortcuts
+    from app_shell.events import KeyEvent
+    from tests.scene_controls import chrome
+    from views import wgpu_sheets
+    from views.settings_sheet import SettingsSheet
 
-
-def test_a_removed_action_leaves_the_cache(ventana):
-    act = QAction("Frobnicate the walls", ventana)
-    ventana.addAction(act)
-    cs.commands(ventana)
-    assert act in ventana._command_cache
-    act.setParent(None)
-    cs.commands(ventana)
-    assert act not in ventana._command_cache
-
-
-def test_warm_up_works_out_the_commands_before_f3(ventana):
-    ventana._command_canvas = None
-    ventana._command_cache = None
-    palette.warm_up(ventana, 0)
-    QTest.qWait(50)
-    assert ventana._command_cache
-    # the box itself waits for F3, as up to 0.5.6.1
-    assert ventana._command_canvas is None
-
-
-@pytest.mark.parametrize("platform", ["wayland", "wayland-egl", "xcb",
-                                      "windows", "cocoa"])
-def test_warm_up_makes_no_native_popup_ahead_of_f3(ventana, monkeypatch,
-                                                   platform):
-    """Made ahead of F3, the popup's native window left the main window
-    flickering under GNOME's Wayland (a black band, the toolbar half over
-    the menu bar; Marco, 30-09, bisected to the warm-up). Off everywhere
-    until tried on each platform: the commands are still worked out, the
-    native window waits for the first F3."""
-    from PySide6.QtGui import QGuiApplication
-    monkeypatch.setattr(QGuiApplication, "platformName",
-                        staticmethod(lambda: platform))
-    made = []
-    monkeypatch.setattr(palette._Canvas, "winId",
-                        lambda self: made.append(self) or 0)
-    ventana._command_canvas = None
-    ventana._command_cache = None
-    palette.warm_up(ventana, 0)
-    QTest.qWait(50)
-    assert ventana._command_cache
-    assert made == [] and ventana._command_canvas is None
-
-
-def test_every_command_says_what_it_does(ventana):
-    """Blender explains every command on hover; so do both windows."""
-    comp = _composer(ventana)
-    for win in (ventana, comp):
-        bare = [c.name for c in cs.commands(win)
-                if not c.tip and c.action.isEnabled()]
-        assert bare == [], bare
-    comp.close()
-
-
-def test_a_toolbar_button_shows_its_description_under_name_and_keys(
-        ventana):
-    act = ventana._tool_actions["line"]
-    name_keys, desc = act.toolTip().split("\n")
-    assert name_keys == "Line  (L)"
-    assert desc == act.statusTip() == \
-        "Draw edges point by point; closing a loop makes a face."
-    cmd = next(c for c in cs.commands(ventana) if c.action is act)
-    assert cmd.tip == desc                         # F3 shows the same
+    sheet = SettingsSheet("keyboard")
+    sheet._win = win
+    edit = sheet._action("sc:sheet:cota_cadena")
+    assert edit is not None and win._composer is None
+    model = sheet._action("sc:tool:line")
+    assert model.portable_keys() == ["L"]
+    sheet._assign(edit, ["L"])
+    assert model.portable_keys() == ["L"]
+    data = export_shortcuts(win)
+    assert data["shortcuts"]["tool:line"] == data["shortcuts"]["sheet:cota_cadena"] == "L"
+    assert import_shortcuts(win, {"format": data["format"], "shortcuts": {
+        "sheet:cota_cadena": "F8", "tool:line": "L"}})[:2] == (2, 0)
+    for _ in range(2):
+        ws = wgpu_sheets.composer_for(win)._ws
+        ws.shown, ws.view = True, win.view
+        monkeypatch.setattr(win.view, "_sheets_ws", ws, raising=False)
+        with chrome(win):
+            ws.key(KeyEvent(True, Qt.Key_F8, 0, "", False), True)
+            assert ws.composer.tool_mode == "cota_cadena"
+            query(win, "chain dimension")
+            wgpu_ui.command_action(win.view, win, "cmdshortcut", "0")
+            from views import chrome_sheet
+            assert chrome_sheet.current(win).kb_focus == "sc:sheet:cota_cadena"
+            chrome_sheet.close(win)
+        ws.shown = False
+        win.new_document()
+    sheet.state.kb_focus = "sc:sheet:cota_cadena"
+    sheet._kb_verb("kb_default")
+    assert not edit.portable_keys()

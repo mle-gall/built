@@ -231,10 +231,21 @@ pub fn run_model_menu(win: &Bound<'_, PyAny>, id: &str) -> PyResult<bool> {
                     .contains(&marked)?
             {
                 win.call_method0("_no_scene_selected")?
-            } else if action == "show" {
-                win.getattr("tray")?
-                    .getattr("scenes")?
-                    .call_method1("show_view", (marked,))?
+            } else if matches!(action, "show" | "add" | "duplicate") {
+                let scenes = win.getattr("tray")?.getattr("scenes")?;
+                let view = match action {
+                    "add" => scenes.call_method0("add_scene")?,
+                    "duplicate" => scenes.call_method1("duplicate_view", (marked,))?,
+                    _ => { scenes.call_method1("show_view", (&marked,))?; marked }
+                };
+                if !view.is_none() {
+                    let values = pyo3::types::PyDict::new(win.py());
+                    values.set_item("name", view.getattr("name")?)?;
+                    let caption = if action == "show" { "Scene '{name}'" } else { "Scene '{name}' added" };
+                    let text = crate::model_edit::translated(win.py(), caption, Some(&values))?;
+                    win.call_method0("statusBar")?.call_method1("showMessage", (text, 2000))?;
+                }
+                win.py().None().into_bound(win.py())
             } else {
                 win.py()
                     .import("views.wgpu_ui")?

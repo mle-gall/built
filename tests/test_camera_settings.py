@@ -5,13 +5,14 @@ typed in, the lens as a focal length, roll, frame shift, clipping and the
 picture's frame — kept by scenes and by the document."""
 from __future__ import annotations
 
-from tests.controller_surface import ControllerSurface
+from views.inspector_bridge import open_camera
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest  # noqa: E402
-from PySide6.QtCore import Qt  # noqa: E402
+from core.input_types import Qt  # noqa: E402
 from ingetrazo_core import Vec3 as QVector3D, Vec4 as QVector4D
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
@@ -206,22 +207,17 @@ def test_a_scene_keeps_the_lens_and_an_old_scene_takes_it_off():
     assert other.lens_dict() == {}
 
 
-def test_the_document_keeps_the_lens(tmp_path):
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        cam = win.viewport.camera
-        cam.apply_lens({"shift_y": 0.15, "frame_aspect": 4 / 3})
-        home = win._camera_dict()
-        assert home["lens"] == {"shift_y": 0.15, "frame_aspect": 4 / 3}
-        cam.reset_lens()
-        win._apply_camera_dict(home)
-        assert cam.shift_y == 0.15 and cam.frame_aspect == pytest.approx(4 / 3)
-        win._reset_camera_home()                   # File ▸ New
-        assert cam.lens_dict() == {}
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_the_document_keeps_the_lens(tmp_path, native_host):
+    win = native_host.window
+    cam = win.viewport.camera
+    cam.apply_lens({"shift_y": 0.15, "frame_aspect": 4 / 3})
+    home = win._camera_dict()
+    assert home["lens"] == {"shift_y": 0.15, "frame_aspect": 4 / 3}
+    cam.reset_lens()
+    win._apply_camera_dict(home)
+    assert cam.shift_y == 0.15 and cam.frame_aspect == pytest.approx(4 / 3)
+    win._reset_camera_home()                   # File ▸ New
+    assert cam.lens_dict() == {}
 
 
 # ---- The window -------------------------------------------------------------------
@@ -234,35 +230,28 @@ def _edit(win, key, value=None):
     action(win, view, json.dumps(["camera." + key, value]))
 
 
-def test_the_inspector_shows_and_sets_the_camera():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        assert win._act_camera_settings.text()
-        assert not win._act_camera_settings.icon().isNull()
-        win._show_camera_settings()
-        cam = win.viewport.camera
-        _edit(win, "projection", "perspective")
-        for prefix, xyz in (("eye", (2., -12., 1.7)), ("target", (0., 0., 1.5))):
-            for index, coordinate in enumerate(xyz):
-                _edit(win, f"{prefix}{index}", coordinate)
-        assert (cam.eye() - QVector3D(2, -12, 1.7)).length() < 1e-3
-        assert (cam.target - QVector3D(0, 0, 1.5)).length() < 1e-3
-        _edit(win, "focal", 50.)
-        assert cam.fov_deg == pytest.approx(27, abs=.06)
-        for key, value in (("shift_y", .2), ("roll_deg", 10.), ("clip_near", 3.), ("frame_aspect", 16/9)):
-            _edit(win, key, value)
-            assert getattr(cam, key) == pytest.approx(value)
-        cam.place(QVector3D(5, 5, 5), QVector3D(0, 0, 0))
-        _edit(win, "reset")
-        assert cam.lens_dict() == {} and cam.focal_mm == pytest.approx(50)
-        assert (cam.eye() - QVector3D(5, 5, 5)).length() < 1e-3
-        _edit(win, "projection", "parallel")
-        assert not cam.perspective
-        _edit(win, "close")
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_the_inspector_shows_and_sets_the_camera(native_host):
+    win = native_host.window
+    open_camera(win)
+    cam = win.viewport.camera
+    _edit(win, "projection", "perspective")
+    for prefix, xyz in (("eye", (2., -12., 1.7)), ("target", (0., 0., 1.5))):
+        for index, coordinate in enumerate(xyz):
+            _edit(win, f"{prefix}{index}", coordinate)
+    assert (cam.eye() - QVector3D(2, -12, 1.7)).length() < 1e-3
+    assert (cam.target - QVector3D(0, 0, 1.5)).length() < 1e-3
+    _edit(win, "focal", 50.)
+    assert cam.fov_deg == pytest.approx(27, abs=.06)
+    for key, value in (("shift_y", .2), ("roll_deg", 10.), ("clip_near", 3.), ("frame_aspect", 16/9)):
+        _edit(win, key, value)
+        assert getattr(cam, key) == pytest.approx(value)
+    cam.place(QVector3D(5, 5, 5), QVector3D(0, 0, 0))
+    _edit(win, "reset")
+    assert cam.lens_dict() == {} and cam.focal_mm == pytest.approx(50)
+    assert (cam.eye() - QVector3D(5, 5, 5)).length() < 1e-3
+    _edit(win, "projection", "parallel")
+    assert not cam.perspective
+    _edit(win, "close")
 
 def test_every_language_names_the_window():
     import json
@@ -338,53 +327,40 @@ def test_export_image_tall_frame(monkeypatch):
     assert img.pixelColor(960, 1077).red() == 255
 
 
-def test_export_image_menu_crops_to_the_frame(monkeypatch, tmp_path):
+def test_export_image_menu_crops_to_the_frame(monkeypatch, tmp_path, native_host):
     from unittest.mock import Mock
     from PySide6.QtGui import QImage
     from views import chrome_forms
     from views.filedialogs import file_dialogs
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        win.show()
-        QApplication.processEvents()
-        image = QImage(16, 9, QImage.Format_RGB32)
-        image.fill(0)
-        render = Mock(return_value=image)
-        monkeypatch.setattr(win._active_view(), "render_image", render)
-        monkeypatch.setattr(file_dialogs, "getSaveFileName",
-                            lambda *args: (str(tmp_path / "frame.png"), ""))
-        win._on_export_image()
-        chrome_forms.current(win).press("ok")
-        render.assert_called_once_with(3840, sharp_shadows=True, transparent=False,
-                                       crop_to_frame=True)
-    finally:
-        win.close()
+    win = native_host.window
+    image = QImage(16, 9, QImage.Format_RGB32)
+    image.fill(0)
+    render = Mock(return_value=image)
+    monkeypatch.setattr(win._active_view(), "render_image", render)
+    monkeypatch.setattr(file_dialogs, "getSaveFileName",
+                        lambda *args: (str(tmp_path / "frame.png"), ""))
+    win._on_export_image()
+    chrome_forms.current(win).press("ok")
+    render.assert_called_once_with(3840, sharp_shadows=True, transparent=False,
+                                   crop_to_frame=True)
 
 
 # ---- Basic and advanced ----------------------------------------------------------
 
-def test_basic_settings_first_advanced_on_request():
-    from PySide6.QtCore import QSettings
-    from views.main_window import MainWindow
-    QSettings().remove("camera_settings/advanced")
-    win = MainWindow()
-    try:
-        inspector = win._show_camera_settings()
-        assert not inspector.advanced
-        _edit(win, "advanced", True)
-        assert inspector.advanced
-        _edit(win, "close")
-        assert win._show_camera_settings().advanced
-        _edit(win, "advanced", False)
-        assert not win._show_camera_settings().advanced
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_basic_settings_first_advanced_on_request(native_host):
+    from core.settings import settings
+    win = native_host.window
+    settings().remove("camera_settings/advanced")
+    inspector = open_camera(win)
+    assert not inspector.advanced
+    _edit(win, "advanced", True)
+    assert inspector.advanced
+    _edit(win, "close")
+    assert open_camera(win).advanced
+    _edit(win, "advanced", False)
+    assert not open_camera(win).advanced
 
-def _window_with_scenes():
-    from views.main_window import MainWindow
-    win = MainWindow()
+def _window_with_scenes(win):
     scene = win.viewport.scene
     cam = win.viewport.camera
     cam.place(QVector3D(0, -10, 1.6), QVector3D(0, 0, 1.6))
@@ -392,68 +368,57 @@ def _window_with_scenes():
     cam.place(QVector3D(10, 10, 8), QVector3D(0, 0, 0))
     b = SavedView.capture("Aérea", scene, cam)
     scene.saved_views += [a, b]
-    win.tray.scenes.refresh()
+    scene.version += 1
     return win, a, b
 
 
-def test_right_click_a_scene_edits_its_camera():
-    win, a, b = _window_with_scenes()
-    try:
-        scene, cam = win.viewport.scene, win.viewport.camera
-        hidden = list(a.hidden_layers)
-        version = scene.version
-        inspector = win.edit_scene_camera(a)
-        assert inspector.observe(cam, scene, a)
-        # The scene is what the view shows.
-        assert (cam.eye() - QVector3D(0, -10, 1.6)).length() < 1e-4
-        # A change made here goes into the scene, and only the camera.
-        _edit(win, "shift_y", .25)
-        _edit(win, "focal", 24.)
-        assert a.lens.get("shift_y") == pytest.approx(0.25)
-        assert focal_from_fov(a.fov_deg) == pytest.approx(24.0, abs=0.01)
-        assert a.hidden_layers == hidden
-        assert scene.version > version            # the document changed
-        assert b.lens == {}                       # the other scene: untouched
-        # Moving the view by other means ends it: the scene keeps what it had.
-        cam.orbit(80.0, 0.0, 900)
-        _edit(win, "frame_aspect", 1.)
-        assert not inspector.observe(cam, scene, a)
-        assert "frame_aspect" not in a.lens
-        # The Camera menu opens it on the live view, not on a scene.
-        inspector = win.edit_scene_camera(b)
-        assert inspector.observe(cam, scene, b)
-        win._show_camera_settings()
-        assert not inspector.observe(cam, scene, b)
-        _edit(win, "close")
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_right_click_a_scene_edits_its_camera(native_host):
+    win, a, b = _window_with_scenes(native_host.window)
+    scene, cam = win.viewport.scene, win.viewport.camera
+    hidden = list(a.hidden_layers)
+    version = scene.version
+    inspector = win.edit_scene_camera(a)
+    assert inspector.observe(cam, scene, a)
+    # The scene is what the view shows.
+    assert (cam.eye() - QVector3D(0, -10, 1.6)).length() < 1e-4
+    # A change made here goes into the scene, and only the camera.
+    _edit(win, "shift_y", .25)
+    _edit(win, "focal", 24.)
+    assert a.lens.get("shift_y") == pytest.approx(0.25)
+    assert focal_from_fov(a.fov_deg) == pytest.approx(24.0, abs=0.01)
+    assert a.hidden_layers == hidden
+    assert scene.version > version            # the document changed
+    assert b.lens == {}                       # the other scene: untouched
+    # Moving the view by other means ends it: the scene keeps what it had.
+    cam.orbit(80.0, 0.0, 900)
+    _edit(win, "frame_aspect", 1.)
+    assert not inspector.observe(cam, scene, a)
+    assert "frame_aspect" not in a.lens
+    # The Camera menu opens it on the live view, not on a scene.
+    inspector = win.edit_scene_camera(b)
+    assert inspector.observe(cam, scene, b)
+    open_camera(win)
+    assert not inspector.observe(cam, scene, b)
+    _edit(win, "close")
 
 
-def test_scene_menus_offer_camera_settings():
-    win, a, b = _window_with_scenes()
-    try:
-        # The scene tabs under the view.
-        tabs = win._scene_tabs.tabs
-        i = tabs.views.index(b)
-        menu = win._build_scene_tab_menu(i)
-        act = [x for x in menu.actions() if x.text() == "Camera Settings…"]
-        assert act and act[0].isEnabled()
-        act[0].trigger()
-        _edit(win, "shift_x", .125)
-        assert b.lens["shift_x"] == .125 and not a.lens
-        # The Scenes panel's tree.
-        panel = win.tray.scenes
-        menu = panel.context_menu(panel.row_for(a))
-        act = [x for x in menu.actions() if x.text() == "Camera Settings…"]
-        assert act
-        act[0].trigger()
-        _edit(win, "shift_y", .25)
-        assert a.lens["shift_y"] == .25 and "shift_y" not in b.lens
-        _edit(win, "close")
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_scene_menus_offer_camera_settings(native_host):
+    from tests.scene_controls import choose
+    from views.wgpu_ui import _run
+    win = native_host.window
+    for direction in ("front", "right"):
+        win.viewport.camera.set_view(direction)
+        win.run_command("scene_add")
+    a, b = win.viewport.scene.saved_views
+    choose(win, 1)
+    _run(win, ["tab:scene:editcamera"])
+    _edit(win, "shift_x", .125)
+    assert b.lens["shift_x"] == .125 and not a.lens
+    choose(win, 0)
+    _run(win, ["tab:scene:editcamera"])
+    _edit(win, "shift_y", .25)
+    assert a.lens["shift_y"] == .25 and "shift_y" not in b.lens
+    _edit(win, "close")
 
 
 def test_take_camera_keeps_only_the_camera():
@@ -472,17 +437,13 @@ def test_take_camera_keeps_only_the_camera():
 
 # ---- Whole on the screen, centred, still when the options open --------------------------
 
-def test_replaced_scene_with_same_name_ends_writeback():
-    win, a, b = _window_with_scenes()
-    try:
-        win.edit_scene_camera(a)
-        scene, cam = win.viewport.scene, win.viewport.camera
-        scene.saved_views[scene.saved_views.index(a)] = SavedView.capture(a.name, scene, cam)
-        _edit(win, "shift_y", .2)
-        assert not a.lens and not any(v.lens for v in scene.saved_views)
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_replaced_scene_with_same_name_ends_writeback(native_host):
+    win, a, b = _window_with_scenes(native_host.window)
+    win.edit_scene_camera(a)
+    scene, cam = win.viewport.scene, win.viewport.camera
+    scene.saved_views[scene.saved_views.index(a)] = SavedView.capture(a.name, scene, cam)
+    _edit(win, "shift_y", .2)
+    assert not a.lens and not any(v.lens for v in scene.saved_views)
 
 def test_a_picture_uses_the_largest_part_of_the_sensor_of_its_shape():
     from core.camera import FULL_FRAME, sensor_picture_height
@@ -541,82 +502,72 @@ def test_the_sensor_is_kept_with_the_lens():
     assert cam.roll_deg == 0.0 and cam.sensor_size() == (17.3, 13.0)
 
 
-def test_the_inspector_picks_the_sensor():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        model = win._show_camera_settings()
-        cam = win.viewport.camera
-        cam.fov_deg = 40.
-        original = cam.focal_mm
-        _edit(win, "sensor", [23.6, 15.6])
-        assert cam.sensor_size() == (23.6, 15.6)
-        assert cam.fov_deg == 40. and cam.focal_mm < original
-        _edit(win, "focal", 50.)
-        assert cam.focal_mm == pytest.approx(50.)
-        _edit(win, "sensor", None)
-        for size in ((36., 24.), (30., 20.)):
-            _edit(win, "sensor0", size[0])
-            _edit(win, "sensor1", size[1])
-            assert cam.sensor_size() == size and model.custom_sensor
-        _edit(win, "close")
-        assert not win._show_camera_settings().custom_sensor and cam.sensor_size() == (30., 20.)
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_the_inspector_picks_the_sensor(native_host):
+    win = native_host.window
+    model = open_camera(win)
+    cam = win.viewport.camera
+    cam.fov_deg = 40.
+    original = cam.focal_mm
+    _edit(win, "sensor", [23.6, 15.6])
+    assert cam.sensor_size() == (23.6, 15.6)
+    assert cam.fov_deg == 40. and cam.focal_mm < original
+    _edit(win, "focal", 50.)
+    assert cam.focal_mm == pytest.approx(50.)
+    _edit(win, "sensor", None)
+    for size in ((36., 24.), (30., 20.)):
+        _edit(win, "sensor0", size[0])
+        _edit(win, "sensor1", size[1])
+        assert cam.sensor_size() == size and model.custom_sensor
+    _edit(win, "close")
+    assert not open_camera(win).custom_sensor and cam.sensor_size() == (30., 20.)
 
-def _type(vp, text):
-    from PySide6.QtTest import QTest
-    QTest.keyClicks(vp.keys_stand_in, text)
-    QTest.keyClick(vp.keys_stand_in, Qt.Key_Return)
+def _type(host, text, commit=True):
+    for ch in text:
+        host.key(True, ord(ch.upper()), text=ch)
+    if commit:
+        host.key(True, Qt.Key_Return, text="\r")
 
 
-def test_typing_the_lens_with_zoom_on():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        cam = vp.camera
-        cam.set_projection("perspective")
-        vp.set_nav_mode("zoom")
-        _type(vp, "35mm")
-        assert cam.focal_mm == pytest.approx(35.0, abs=0.01)
-        _type(vp, "60deg")
-        assert cam.fov_deg == pytest.approx(60.0)
-        _type(vp, "45")                               # bare: degrees
-        assert cam.fov_deg == pytest.approx(45.0)
-        _type(vp, "72,5°")
-        assert cam.fov_deg == pytest.approx(72.5)
-        # The sensor counts: 35mm on APS-C is a narrower view.
-        from core.camera import SENSORS
-        cam.set_sensor(SENSORS["aps_c"])
-        _type(vp, "35mm")
-        assert cam.focal_mm == pytest.approx(35.0, abs=0.01)
-        assert cam.fov_deg < OrbitCamera().fov_for_focal(35.0)
-        # Out of range: held to 10°–120°; nonsense changes nothing.
-        _type(vp, "500deg")
-        assert cam.fov_deg == 120.0
-        before = cam.fov_deg
-        assert not vp.apply_zoom_value("abc")
-        assert cam.fov_deg == before
-        # Letters before a digit are not taken (they stay shortcuts).
-        assert vp._value_buffer == ""
-        # A parallel view has no lens: nothing changes.
-        cam.set_projection("parallel")
-        _type(vp, "50mm")
-        assert cam.fov_deg == before
-        # Without Zoom, the value box is the tools' as before.
-        cam.set_projection("perspective")
-        vp.set_nav_mode(None)
-        assert vp.active_tool is None
-        from PySide6.QtGui import QKeyEvent
-        from PySide6.QtCore import QEvent
-        five = QKeyEvent(QEvent.KeyPress, Qt.Key_5, Qt.NoModifier, "5")
-        assert not vp._handle_value_key(five)
-        assert vp._value_buffer == ""
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_typing_the_lens_with_zoom_on(native_host):
+    win = native_host.window
+    vp = win.viewport
+    cam = vp.camera
+    cam.set_projection("perspective")
+    vp.set_nav_mode("zoom")
+    _type(native_host, "35mm")
+    assert cam.focal_mm == pytest.approx(35.0, abs=0.01)
+    _type(native_host, "60deg")
+    assert cam.fov_deg == pytest.approx(60.0)
+    _type(native_host, "45")                               # bare: degrees
+    assert cam.fov_deg == pytest.approx(45.0)
+    _type(native_host, "72,5°")
+    assert cam.fov_deg == pytest.approx(72.5)
+    # The sensor counts: 35mm on APS-C is a narrower view.
+    from core.camera import SENSORS
+    cam.set_sensor(SENSORS["aps_c"])
+    _type(native_host, "35mm")
+    assert cam.focal_mm == pytest.approx(35.0, abs=0.01)
+    assert cam.fov_deg < OrbitCamera().fov_for_focal(35.0)
+    # Out of range: held to 10°–120°; nonsense changes nothing.
+    _type(native_host, "500deg")
+    assert cam.fov_deg == 120.0
+    before = cam.fov_deg
+    assert not vp.apply_zoom_value("abc")
+    assert cam.fov_deg == before
+    # Letters before a digit are not taken (they stay shortcuts).
+    assert vp._value_buffer == ""
+    # A parallel view has no lens: nothing changes.
+    cam.set_projection("parallel")
+    _type(native_host, "50mm")
+    assert cam.fov_deg == before
+    # Without Zoom, the value box is the tools' as before.
+    cam.set_projection("perspective")
+    vp.set_nav_mode(None)
+
+    from app_shell.events import KeyEvent
+    five = KeyEvent(True, Qt.Key_5, 0, "5", False)
+    assert not vp._handle_value_key(five)
+    assert vp._value_buffer == ""
 
 
 def test_the_zoom_hint_says_what_to_type():
@@ -624,111 +575,62 @@ def test_the_zoom_hint_says_what_to_type():
     assert "35mm" in NAV_HINTS["zoom"] and "60deg" in NAV_HINTS["zoom"]
 
 
-def test_the_value_box_shows_with_zoom():
-    """With Zoom on, the value box shows what is typed, and the focal
-    length the view has when nothing is."""
-    from PySide6.QtTest import QTest
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        win.show()
-        QApplication.processEvents()
-        cam = win.viewport.camera
-        cam.set_projection("perspective")
-        win._activate_nav("zoom")
-        assert win._vcb_value.isVisibleTo(win)
-        QTest.keyClicks(win.viewport.keys_stand_in, "35mm")
-        assert win._vcb_value.text() == "35mm"
-        QTest.keyClick(win.viewport.keys_stand_in, Qt.Key_Return)
-        assert win._vcb_value.text() == "35 mm"       # the new focal
+def test_the_value_box_shows_with_zoom(native_host):
+    from tests.scene_controls import chrome
+    from views.wgpu_ui import _cursor_value
+    win = native_host.window
+    native_host.pointer("move", 250, 180)
+    win._activate_nav("zoom")
+    def value():
+        with chrome(win) as renderer:
+            _cursor_value(win.view, win)
+            return renderer.ui_set_cursor_value.call_args.args[1:3]
+    _type(native_host, "35mm", commit=False)
+    assert value() == ("35mm", True)
+    native_host.key(True, Qt.Key_Return)
+    assert value() == ("35 mm", False)
+    win._activate_nav("orbit")
+    assert value() == ("", False)
+
+
+def test_open_and_close_camera_keep_the_model_interactive(native_host):
+    win, a, _ = _window_with_scenes(native_host.window)
+    inspector = win.edit_scene_camera(a)
+    assert not native_host._modal()
+    _edit(win, "close")
+    _edit(win, "fov", 99.)
+    assert not inspector.observe(win.viewport.camera, win.viewport.scene, a)
+    assert win.viewport.camera.fov_deg != 99. and a.fov_deg != 99.
+
+def test_from_24_to_35_typing_with_a_space_and_capitals(native_host):
+    win = native_host.window
+    vp = win.viewport
+    cam = vp.camera
+    cam.set_projection("perspective")
+    cam.fov_deg = cam.fov_for_focal(24.0)
+    assert win.run_command("zoom")
+    _type(native_host, "35 MM", commit=False)
+    assert vp.nav_mode == "zoom" and win.view.tools.value_buffer.lower() == "35 mm"
+    native_host.key(True, Qt.Key_Return)
+    assert cam.focal_mm == pytest.approx(35., abs=.01)
+    _type(native_host, "533mm")
+    assert cam.focal_mm == pytest.approx(533., abs=.1)
+    assert cam.fov_deg == pytest.approx(2.58, abs=.01)
+    _type(native_host, "60deg")
+    assert cam.fov_deg == pytest.approx(60.) and vp.nav_mode == "zoom"
+
+
+def test_after_picking_a_scene_z_then_35mm_works(native_host):
+    from tests.scene_controls import choose
+    win, a, _ = _window_with_scenes(native_host.window)
+    choose(win, 0)
+    assert win._scene_tabs.marked_view() is a
+    for inspect, mm in ((False, 35.), (True, 50.)):
+        if inspect:
+            open_camera(win)
+        native_host.key(True, Qt.Key_Z, text="z")
+        assert win.viewport.nav_mode == "zoom"
+        _type(native_host, f"{int(mm)}mm")
+        assert win.viewport.camera.focal_mm == pytest.approx(mm, abs=.01)
         win._activate_nav("orbit")
-        assert not win._vcb_value.isVisibleTo(win)    # other nav: no box
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
-
-
-def test_open_and_close_camera_keep_the_model_interactive():
-    win, a, _ = _window_with_scenes()
-    try:
-        inspector = win.edit_scene_camera(a)
-        assert QApplication.activeModalWidget() is None
-        _edit(win, "close")
-        _edit(win, "fov", 99.)
-        assert not inspector.observe(win.viewport.camera, win.viewport.scene, a)
-        assert win.viewport.camera.fov_deg != 99. and a.fov_deg != 99.
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
-
-def test_from_24_to_35_typing_with_a_space_and_capitals():
-    """«35 MM» with Zoom on: the space is Select's shortcut and the
-    letters are tools' — while a lens is being typed they belong to the
-    box. And long lenses: 533 mm (2.6° on full frame) is not held to 10°."""
-    from PySide6.QtTest import QTest
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        win.show()
-        win.activateWindow()
-        QApplication.processEvents()
-        vp = win.viewport
-        cam = vp.camera
-        cam.set_projection("perspective")
-        cam.apply_lens({})
-        cam.fov_deg = cam.fov_for_focal(24.0)
-        win._nav_actions["zoom"].trigger()          # the toolbar button
-        vp.setFocus()
-        QTest.keyClicks(vp.keys_stand_in, "35 MM")
-        assert vp.nav_mode == "zoom"                # the space did not leave
-        assert vp._value_buffer.lower() == "35 mm"
-        QTest.keyClick(vp.keys_stand_in, Qt.Key_Return)
-        assert cam.focal_mm == pytest.approx(35.0, abs=0.01)
-        QTest.keyClicks(vp.keys_stand_in, "533mm")
-        QTest.keyClick(vp.keys_stand_in, Qt.Key_Return)
-        assert cam.focal_mm == pytest.approx(533.0, abs=0.1)
-        assert cam.fov_deg == pytest.approx(2.58, abs=0.01)
-        QTest.keyClicks(vp.keys_stand_in, "60deg")
-        QTest.keyClick(vp.keys_stand_in, Qt.Key_Return)
-        assert cam.fov_deg == pytest.approx(60.0)
-        assert vp.nav_mode == "zoom"
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
-
-
-def test_after_picking_a_scene_z_then_35mm_works():
-    """Picking a scene in the Scenes list left the keyboard in the list,
-    which kept the letters for its own search: Z did not reach Zoom and
-    «35mm» was lost. Showing a scene, choosing Zoom and opening Camera
-    Settings all leave the keyboard with the model."""
-    from PySide6.QtTest import QTest
-    from views.main_window import MainWindow
-    win, a, b = _window_with_scenes()
-    try:
-        win.show()
-        win.activateWindow()
-        QApplication.processEvents()
-        vp, cam = win.viewport, win.viewport.camera
-        panel = win.tray.scenes
-        item = panel.row_for(a)                      # the Scenes tree (#1297)
-        panel.tree.setFocus()
-        panel._on_activate(item)                     # a double-click
-        assert QApplication.focusWidget() is vp.keys_stand_in
-        cam.fov_deg = cam.fov_for_focal(24.0)
-        QTest.keyClick(vp.keys_stand_in, Qt.Key_Z)
-        QTest.keyClicks(vp.keys_stand_in, "35mm")
-        QTest.keyClick(vp.keys_stand_in, Qt.Key_Return)
-        assert vp.nav_mode == "zoom"
-        assert cam.focal_mm == pytest.approx(35.0, abs=0.01)
-        # Zoom from its button, the keyboard elsewhere: it comes back.
-        panel.tree.setFocus()
-        win._activate_nav("zoom")
-        assert QApplication.focusWidget() is vp.keys_stand_in
-        # Camera Settings opens without taking the keyboard.
-        win._show_camera_settings()
-        assert QApplication.focusWidget() is vp.keys_stand_in
-        _edit(win, "close")
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    _edit(win, "close")

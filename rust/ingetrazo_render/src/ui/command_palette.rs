@@ -1,4 +1,4 @@
-//! Command search shared by the model viewport and the detached sheet canvas.
+//! The command palette for the active modelling or Sheets workspace.
 use super::*;
 
 pub fn fit_box(cursor: Pos2, size: Vec2, field_height: f32, work: Rect, screen: Rect) -> Rect {
@@ -56,9 +56,7 @@ impl Ui {
         let mut run: Option<usize> = None;
         let mut changed = false;
         let mut change_shortcut = None;
-        let bounds = if self.cmd_canvas {
-            screen
-        } else {
+        let bounds = {
             let work = Rect::from_min_max(
                 pos2(GUT + 2. * CONTROL_H, TOP_H),
                 pos2(self.free_right(ctx, screen), screen.bottom() - BOT_H),
@@ -190,208 +188,54 @@ impl Ui {
     }
 }
 
-use pyo3::{exceptions::PyRuntimeError, prelude::*, types::PyBytes};
-use std::sync::OnceLock;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-type BoxTuple = (f32, f32, f32, f32);
-type CommandRow = (String, String, String, bool);
-
-/// The detached Composer has a Qt document canvas. Render the same egui
-/// control into a small image that the document canvas can composite.
-#[pyclass(unsendable)]
-pub struct CommandCanvas {
-    ui: Ui,
-    width: u32,
-    height: u32,
-    scale: f32,
-    frame: wgpu::Texture,
-    staging: wgpu::Buffer,
-    stride: u32,
-    gpu: &'static (wgpu::Device, wgpu::Queue),
-}
-
-#[pymethods]
-impl CommandCanvas {
-    #[new]
-    fn new(width: u32, height: u32, scale: f32, fonts: &str) -> PyResult<Self> {
-        static GPU: OnceLock<(wgpu::Device, wgpu::Queue)> = OnceLock::new();
-        if GPU.get().is_none() {
-            let adapter =
-                pollster::block_on(crate::backend::instance().request_adapter(&Default::default()))
-                    .ok_or_else(|| {
-                        PyRuntimeError::new_err(
-                            "Command search could not acquire a graphics device",
-                        )
-                    })?;
-            let gpu = pollster::block_on(adapter.request_device(&Default::default(), None))
-                .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
-            let _ = GPU.set(gpu);
+    #[test]
+    fn field_tracks_pointer_and_stays_between_the_docks_if_it_fits() {
+        let work = Rect::from_min_size(pos2(300., 100.), vec2(1300., 800.));
+        let screen = Rect::from_min_size(Pos2::ZERO, vec2(1920., 1040.));
+        let size = vec2(560., 330.);
+        let r = fit_box(pos2(900., 400.), size, 30., work, screen);
+        assert_eq!((r.center().x, r.top()), (900., 385.));
+        for at in [work.min, work.max, screen.min, screen.max] {
+            let r = fit_box(at, size, 30., work, screen);
+            assert!(work.contains_rect(r));
+            assert_eq!(r.size(), size);
         }
-        let gpu = GPU.get().unwrap();
-        let width = (width as f32 * scale).round().max(1.) as u32;
-        let height = (height as f32 * scale).round().max(1.) as u32;
-        let format = wgpu::TextureFormat::Rgba8UnormSrgb;
-        let frame = crate::texture(&gpu.0, width, height, format);
-        let stride = (width * 4).next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
-        let staging = gpu.0.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Command search canvas"),
-            size: u64::from(stride) * u64::from(height),
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-            mapped_at_creation: false,
-        });
-        let mut ui = Ui::new(&gpu.0, format);
-        let dir = std::path::Path::new(fonts);
-        let read = |name| std::fs::read(dir.join(name)).ok();
-        if let Some(regular) = read("Inter-Regular.ttf") {
-            ui.set_fonts(
-                regular,
-                read("Inter-Medium.ttf"),
-                read("Inter-SemiBold.ttf"),
-            );
-        }
-        ui.cmd_canvas = true;
-        Ok(Self {
-            ui,
-            width,
-            height,
-            scale,
-            frame,
-            staging,
-            stride,
-            gpu,
-        })
-    }
-
-    #[staticmethod]
-    fn geometry(
-        cursor: (f32, f32),
-        size: (f32, f32),
-        edit_height: f32,
-        work: BoxTuple,
-        screen: BoxTuple,
-    ) -> (i32, i32, i32, i32) {
-        let rect = |v: BoxTuple| Rect::from_min_size(pos2(v.0, v.1), vec2(v.2, v.3));
-        let r = fit_box(
-            pos2(cursor.0, cursor.1),
-            vec2(size.0, size.1),
-            edit_height,
-            rect(work),
-            rect(screen),
-        );
-        (
-            r.left() as i32,
-            r.top() as i32,
-            r.width() as i32,
-            r.height() as i32,
-        )
-    }
-
-    fn open(&mut self, text: String, scope: String) {
-        self.ui.start_commands(text, scope);
-    }
-    fn ui_set_command_results(&mut self, rows: Vec<CommandRow>) {
-        self.ui.set_command_results(rows);
-    }
-    fn ui_set_command_details(&mut self, rows: Vec<(String, bool, bool)>) {
-        self.ui.command_details(rows);
-    }
-    fn actions(&mut self) -> Vec<String> {
-        self.ui.take_actions()
-    }
-    fn rows(&self) -> Vec<CommandRow> {
-        self.ui.cmd_results.clone()
-    }
-    fn details(&self) -> Vec<(String, bool, bool)> {
-        self.ui.cmd_extra.clone()
-    }
-    fn state(&self) -> (bool, String, String, usize) {
-        (
-            self.ui.cmd_open,
-            self.ui.cmd_query.clone(),
-            self.ui.cmd_scope.clone(),
-            self.ui.cmd_at,
-        )
-    }
-    fn key(&mut self, name: &str, pressed: bool, mods: u8, text: &str) {
-        self.ui.key(name, pressed, mods);
-        if pressed && !text.is_empty() {
-            self.ui.text(text.to_owned());
-        }
-    }
-    fn pointer(&mut self, kind: &str, x: f32, y: f32, button: u8, mods: u8) {
-        self.ui.pointer(kind, x, y, button, mods);
-    }
-    fn wheel(&mut self, x: f32, y: f32, dx: f32, dy: f32) {
-        self.ui.wheel(x, y, dx, dy);
-    }
-
-    fn frame<'py>(&mut self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
-        let (device, queue) = self.gpu;
-        let mut encoder = device.create_command_encoder(&Default::default());
-        let target = self.frame.create_view(&Default::default());
-        let background = SHEET;
-        let channel = |n: u8| (f64::from(n) / 255.).powf(2.2);
-        let _ = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("Command canvas backdrop"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &target,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color {
-                        r: channel(background.r()),
-                        g: channel(background.g()),
-                        b: channel(background.b()),
-                        a: 1.,
-                    }),
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            ..Default::default()
-        });
-        self.ui.paint(
-            device,
-            queue,
-            &mut encoder,
-            &self.frame,
-            &target,
-            [self.width, self.height],
-            self.scale,
-        );
-        encoder.copy_texture_to_buffer(
-            self.frame.as_image_copy(),
-            wgpu::TexelCopyBufferInfo {
-                buffer: &self.staging,
-                layout: wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(self.stride),
-                    rows_per_image: None,
-                },
-            },
-            self.frame.size(),
-        );
-        queue.submit([encoder.finish()]);
-        let (send, recv) = std::sync::mpsc::channel();
-        let slice = self.staging.slice(..);
-        slice.map_async(wgpu::MapMode::Read, move |res| {
-            let _ = send.send(res);
-        });
-        device.poll(wgpu::Maintain::Wait);
-        recv.recv()
-            .map_err(|e| PyRuntimeError::new_err(e.to_string()))?
-            .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
-        let data = slice.get_mapped_range();
-        let pixels = PyBytes::new_with(py, (4 * self.width * self.height) as usize, |out| {
-            let w = self.width as usize * 4;
-            for (dest, src) in out
-                .chunks_exact_mut(w)
-                .zip(data.chunks_exact(self.stride as usize))
-            {
-                dest.copy_from_slice(&src[..w]);
+        for work_size in [vec2(400., 250.), vec2(1300., 250.)] {
+            let small = Rect::from_min_size(work.min, work_size);
+            let r = fit_box(small.center(), size, 30., small, screen);
+            assert!(screen.contains_rect(r));
+            assert_eq!(r.size(), size);
+            if work_size.x >= size.x {
+                assert!(r.left() >= small.left() && r.right() <= small.right());
             }
-            Ok(())
-        });
-        drop(data);
-        self.staging.unmap();
-        pixels
+        }
+        let tiny = Rect::from_min_size(Pos2::ZERO, vec2(500., 300.));
+        assert_eq!(fit_box(tiny.center(), size, 30., tiny, tiny), tiny);
+    }
+
+    #[test]
+    fn keyboard_skips_disabled_rows_clears_scope_and_cancels_without_running() {
+        let Some(mut chrome) = super::super::test_chrome() else { return };
+        chrome.start_commands(String::new(), "Edit".into());
+        chrome.key("Backspace", true, 0);
+        assert!(chrome.cmd_scope.is_empty());
+        chrome.set_command_results(vec![
+            ("First".into(), "Edit".into(), "".into(), true),
+            ("Disabled".into(), "Edit".into(), "".into(), false),
+            ("Third".into(), "Edit".into(), "".into(), true),
+        ]);
+        chrome.actions.clear();
+        chrome.key("ArrowDown", true, 0);
+        chrome.key("Enter", true, 0);
+        assert_eq!(chrome.actions, ["cmdrun:2"]);
+        assert!(!chrome.cmd_open);
+        chrome.open_commands();
+        chrome.actions.clear();
+        chrome.key("Escape", true, 0);
+        assert!(!chrome.cmd_open && chrome.actions.is_empty());
     }
 }

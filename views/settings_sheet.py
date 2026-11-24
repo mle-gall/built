@@ -957,12 +957,12 @@ class SettingsSheet(chrome_sheet.Provider):
     # -- keyboard -------------------------------------------------------------------
     def actions(self) -> list:
         if self._actions is None:
-            from core.shortcuts import collect_actions, remember_defaults
+            from core.shortcuts import collect_actions, keyboard_scopes, remember_defaults
             try:
                 if sync := getattr(type(self._win), "refresh_commands", None):
                     sync(self._win)
                 remember_defaults(self._win)
-                self._actions = collect_actions(self._win)
+                self._actions = [a for scope in keyboard_scopes(self._win) for a in collect_actions(scope)]
             except Exception:  # noqa: BLE001 — a window with no actions (the shell)
                 self._actions = []
         return self._actions
@@ -971,7 +971,9 @@ class SettingsSheet(chrome_sheet.Provider):
         if self._paths is None:
             try:
                 from views.command_metadata import menu_paths
-                self._paths = menu_paths(self._win)
+                from core.shortcuts import keyboard_scopes
+                self._paths = {key: path for scope in keyboard_scopes(self._win)
+                               for key, path in menu_paths(scope).items()}
             except Exception:  # noqa: BLE001
                 self._paths = {}
         return self._paths
@@ -1110,8 +1112,10 @@ class SettingsSheet(chrome_sheet.Provider):
                     set_action_keys(action, default_keys(action))
                 for host in hosts():
                     if host.window is not self._win:
-                        for action in host.window._registry_actions.values():
-                            set_action_keys(action, default_keys(action))
+                        from core.shortcuts import keyboard_scopes
+                        for scope in keyboard_scopes(host.window):
+                            for action in scope._registry_actions.values():
+                                set_action_keys(action, default_keys(action))
                 chrome_sheet.refresh(self._win)
             self._confirm(tr("Keyboard shortcuts"), tr("Put every action back on its factory shortcut?"),
                           tr("Restore all"), reset)

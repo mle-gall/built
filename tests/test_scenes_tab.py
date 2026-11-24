@@ -15,6 +15,7 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
 from PySide6.QtCore import QSettings, Qt
 from PySide6.QtWidgets import QApplication
@@ -632,42 +633,60 @@ def test_one_command_of_each_kind_for_scenes():
     assert hasattr(S, "RenameSceneCommand") and hasattr(S, "MoveSceneCommand")
 
 
-def test_alt_arrows_move_a_scene_within_its_folder(win):
-    panel = _scenes(win, "A", "B", "C")
-    _folder(panel, "F")
-    panel.drop_rows(("folder", "F"), [panel.row_for(_view(win, "B")),
-                                      panel.row_for(_view(win, "C"))])
-    panel.select_view(_view(win, "C"))
-    moves = {a.shortcut().toString(): a for a in panel.tree.actions()}
-    assert _names(win) == ["B", "C", "A"]      # the folder first
-    moves["Alt+Up"].trigger()
-    assert _names(win) == ["C", "B", "A"]
+def test_move_earlier_and_later_stay_within_the_marked_scene_folder(native_host):
+    from tests.scene_controls import choose, rows
+    from views.wgpu_ui import _run
+    win = native_host.window
+    scene = win.viewport.scene
+    a, b, c = [win.tray.scenes.add_scene() for _ in range(3)]
+    SF.add_folder(scene, "Plans", None)
+    SF.move_rows(scene, [b, c], [], "Plans")
+    scene.version += 1
+    assert list(scene.saved_views) == [b, c, a]
+    choose(win, 1)
+    _run(win, ["tab:scene:up"])
+    assert list(scene.saved_views) == [c, b, a]
     steps = len(win.viewport.history.undo_stack)
-    moves["Alt+Up"].trigger()                  # first of its folder: stays
-    assert _names(win) == ["C", "B", "A"]
+    _run(win, ["tab:scene:up"])
     assert len(win.viewport.history.undo_stack) == steps
-    assert SF.folder_of(win.viewport.scene, _view(win, "C")) == "F"
+    _run(win, ["tab:scene:down", "tab:scene:down"])
+    assert list(scene.saved_views) == [b, c, a]
+    assert len(win.viewport.history.undo_stack) == steps + 1
+    assert [r[1] for r in rows(win) if r[4] == 1] == [c.name]
+    assert SF.folder_of(scene, c) == "Plans"
 
 
-def test_update_from_a_scene_tab_is_one_undo_step(win):
-    from core.i18n import tr
-    panel = _scenes(win, "A")
-    view = _view(win, "A")
+def test_update_from_the_scene_chooser_is_one_undo_step(native_host):
+    win = native_host.window
+    win.run_command("scene_add")
+    view, = win.viewport.scene.saved_views
     before = view.distance
     win.viewport.camera.distance = before + 25.0
-    menu = win._build_scene_tab_menu(0)
-    next(a for a in menu.actions() if a.text() == tr("Update")).trigger()
+    win.run_command("scene_update")
     assert view.distance == pytest.approx(before + 25.0)
     win.viewport.history.undo()
     assert view.distance == pytest.approx(before)
 
 
-def test_a_scene_shown_from_a_tab_is_marked_in_the_panel(win):
-    panel = _scenes(win, "A", "B")
-    win._on_scene_tab(1)
-    assert panel.shown is _view(win, "B")
-    font = panel.row_for(_view(win, "B")).font(0)
-    assert font.bold()
+def test_a_scene_shown_from_the_menu_is_marked_in_the_chooser(native_host):
+    from tests.scene_controls import rows
+    win = native_host.window
+    win.run_command("scene_add")
+    win.run_command("scene_add")
+    win.run_command("scene_previous")
+    win.run_command("scene_show")
+    assert [r[4] for r in rows(win)] == [1, 0]
+
+
+def test_a_refresh_keeps_what_the_panel_has_picked(win):
+    panel = _scenes(win, "A", "B", "C")
+    first, _, last = panel.scene_rows()
+    panel.tree.setCurrentItem(first)
+    first.setSelected(True)
+    last.setSelected(True)
+    panel._shape = None
+    panel.refresh()
+    assert sorted(v.name for v in panel.selected_views()) == ["A", "C"]
 
 
 # ---- The panel's icons follow the theme; a picture is asked for again -------
@@ -688,50 +707,6 @@ def test_scene_controls_display_the_icon_for_their_action(win):
         img = obj.icon().pixmap(16, 16).toImage()
         assert any(img.pixelColor(x, y).alpha() > 0
                    for x in range(img.width()) for y in range(img.height()))
-
-
-def test_a_picture_that_could_not_be_drawn_is_asked_for_again(
-        win, monkeypatch):
-    """At start-up the view may not be ready: the first try gave nothing
-    and the scene kept the camera until it changed."""
-    from PySide6.QtGui import QColor, QIcon, QPixmap
-    from PySide6.QtTest import QTest
-    from views.tray import ScenesPanel
-    tries = []
-
-    def fake(self, view):
-        tries.append(view.name)
-        if len(tries) < 2:
-            return None                      # not ready the first time
-        pm = QPixmap(96, 64)
-        pm.fill(QColor("red"))
-        return QIcon(pm)
-    monkeypatch.setattr(ScenesPanel, "_render_thumbnail", fake)
-    monkeypatch.setattr(ScenesPanel, "RETRY_AFTER_MS", 30)
-    panel = win.scenes_dock.panel
-    panel._retry_timer.setInterval(30)
-    panel = _scenes(win, "A")
-    _wait()
-    QTest.qWait(200)
-    _wait()
-    assert tries == ["A", "A"]
-    row = panel.row_for(_view(win, "A"))
-    assert row.icon(0).pixmap(96, 64).toImage().pixelColor(48, 32) == \
-        QColor("red")
-
-
-def test_a_scene_with_no_picture_to_be_had_is_not_asked_for_ever(
-        win, monkeypatch):
-    from PySide6.QtTest import QTest
-    from views.tray import ScenesPanel
-    tries = []
-    monkeypatch.setattr(ScenesPanel, "_render_thumbnail",
-                        lambda self, view: tries.append(view.name))
-    win.scenes_dock.panel._retry_timer.setInterval(20)
-    _scenes(win, "A")
-    _wait()
-    QTest.qWait(400)
-    assert len(tries) == ScenesPanel.RETRIES + 1
 
 
 def test_insert_scene_clamps_large_integer_positions():

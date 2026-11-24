@@ -369,7 +369,6 @@ class Workspace:
         self._prompt = None             # (title, body, field, buttons) to send
         self._actions = []
         self._shell = is_shell(composer._window)
-        self._keys = self._shortcuts()
 
     # ---- In and out ------------------------------------------------------------
     def _front_view(self):
@@ -1297,11 +1296,8 @@ class Workspace:
         self.view.renderer.page_pointer("context", float(pos.x()), float(pos.y()), 2, 0)
         self._touch()
 
-    def _shortcuts(self):
+    def _command_callbacks(self):
         comp = self.composer
-
-        def seqs(*keys):
-            return {parsed[2] for k in keys if (parsed := shortcut_text(k))}
 
         def model():
             to_model(comp._window)
@@ -1313,18 +1309,16 @@ class Workspace:
                 view.renderer.ui_rename_sheet(comps.index(comp.comp))
         # The document's history: what the page and the dock change, undone
         # in the order it was done, with the model's edits.
-        return [(seqs("Ctrl+Z"), self._undo),
-                (seqs("Ctrl+Shift+Z", "Ctrl+Y"), lambda: self._undo(redo=True)),
-                (seqs("Backspace", "Del"), self._delete),
-                (seqs("Ctrl+D"), self._duplicate), (seqs("Ctrl+L"), self._lock_items),
-                (seqs("Ctrl+G"), lambda: self.view.renderer.page_command("group")),
-                (seqs("Ctrl+Shift+G"), lambda: self.view.renderer.page_command("ungroup")),
-                (seqs("Ctrl+Shift+C"), lambda: self.view.renderer.page_command("copy_style")),
-                (seqs("Ctrl+Shift+V"), lambda: self.view.renderer.page_command("paste_style")),
-                (seqs("Ctrl+PgUp"), lambda: comp.step_sheet(-1)),
-                (seqs("Ctrl+PgDown"), lambda: comp.step_sheet(1)),
-                (seqs("Ctrl+Tab", "Meta+Tab", "Ctrl+Shift+Tab"), model),
-                (seqs("F2"), rename)]
+        return {
+            "undo": self._undo, "redo": lambda: self._undo(redo=True),
+            "delete": self._delete, "duplicate": self._duplicate, "lock": self._lock_items,
+            "group": lambda: self.view.renderer.page_command("group"),
+            "ungroup": lambda: self.view.renderer.page_command("ungroup"),
+            "copy_style": lambda: self.view.renderer.page_command("copy_style"),
+            "paste_style": lambda: self.view.renderer.page_command("paste_style"),
+            "previous": lambda: comp.step_sheet(-1), "next": lambda: comp.step_sheet(1),
+            "model": model, "rename": rename,
+        }
 
     @staticmethod
     def _combo(event):
@@ -1333,8 +1327,22 @@ class Workspace:
         except Exception:  # noqa: BLE001
             return None
 
-    @staticmethod
-    def window_key(event) -> bool:
+    def window_key(self, event) -> bool:
+        from ingetrazo_render import shortcut_domains
+        window = self.composer._window
+        win = getattr(window, "_host_window", window)
+        if "_registry_actions" in vars(win):
+            slot = win._command_store.resolve(_int(event.key()), _int(event.modifiers()))
+            if slot is not None:
+                return shortcut_domains(win._command_actions[slot].objectName()) == 3
+            if win._menu_items:
+                return False
+            # Hosts without an installed system menu still pass default file
+            # gestures to the window, unless the user bound one to the page.
+            from ingetrazo_render import sheet_command_scope
+            scope = sheet_command_scope(win)
+            if scope._command_store.resolve(_int(event.key()), _int(event.modifiers())) is not None:
+                return False
         combo = Workspace._combo(event)
         return any(shortcut_text(k)[2] == combo for k in _WINDOW_KEYS)
 
@@ -1347,12 +1355,14 @@ class Workspace:
         if not pressed:
             return
         if not repeat:
-            combo = self._combo(event)
-            for keys, run in self._keys:
-                if combo in keys:
-                    run()
-                    self._touch()
-                    return
+            from ingetrazo_render import sheet_command_scope
+            win = self.composer._window
+            scope = sheet_command_scope(getattr(win, "_host_window", win))
+            slot = scope._command_store.resolve(_int(event.key()), _int(event.modifiers()))
+            if slot is not None:
+                scope._command_actions[slot].trigger()
+                self._touch()
+                return
         name = wgpu_ui._KEYS.get(event.key(), "")
         if name and self.view.renderer.page_key(name, wgpu_ui._mods(event)):
             self._touch()
@@ -1434,12 +1444,13 @@ def context_menu(view, event) -> bool:
 def claims_key(view, event) -> bool:
     """ShortcutOverride in the workspace: the page takes every key but the
     window's own few (save, open, new, close, quit, preferences)."""
-    return shown(view) and not Workspace.window_key(event)
+    ws = workspace_of(view)
+    return ws is not None and not ws.window_key(event)
 
 
 def key(view, event, pressed: bool) -> bool:
     ws = workspace_of(view)
-    if ws is None or Workspace.window_key(event):
+    if ws is None or ws.window_key(event):
         return False
     ws.key(event, pressed)
     return True

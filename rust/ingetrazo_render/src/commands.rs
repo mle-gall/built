@@ -513,6 +513,15 @@ pub fn shortcut_reserved(key: &str, plain: bool) -> Option<&'static str> {
 }
 
 /// Plan the other edits in an assignment, retaining non-conflicting alternatives.
+/// Bit 0 is the model, bit 1 the sheet. Window-level and OS gestures
+/// can be received from either workspace.
+#[pyfunction]
+pub fn shortcut_domains(id: &str) -> u8 {
+    if id.starts_with("sheet:") { return 2; }
+    if id.starts_with("menu:platform:") || matches!(id, "command_search" | "menu:new" | "menu:open"
+        | "menu:close_tab" | "menu:save" | "menu:save_as" | "menu:quit" | "menu:prefs") { 3 } else { 1 }
+}
+
 #[pyfunction]
 pub fn shortcut_conflicts(
     target: &str,
@@ -522,6 +531,7 @@ pub fn shortcut_conflicts(
     current
         .into_iter()
         .filter_map(|(id, mut keys)| {
+            if shortcut_domains(&id) & shortcut_domains(target) == 0 { return None; }
             let before = keys.len();
             keys.retain(|k| !wanted.contains(k));
             (id != target && keys.len() != before).then_some((id, keys))
@@ -531,8 +541,8 @@ pub fn shortcut_conflicts(
 
 
 /// Descriptions for shared menu commands whose host action has no status tip.
-#[pyfunction]
-pub fn command_description(label: &str) -> Option<&'static str> {
+#[pyfunction(signature=(label, key=""))]
+pub fn command_description(label: &str, key: &str) -> Option<&'static str> {
     Some(match label {
         "Components" => "Browse component definitions and place a copy in the model.",
         "Materials" => "Browse the materials available to apply to faces.",
@@ -545,6 +555,126 @@ pub fn command_description(label: &str) -> Option<&'static str> {
         "Thumbnails" => "Show saved scenes with preview images.",
         "Save a Copy as IngeTrazo (.igz)" => "Write a copy of this project in the IngeTrazo file format.",
         "Terrain profile" => "Inspect ground elevations along a path through the model.",
-        _ => return None,
+        _ => match key {
+            "menu:about" => "The version, the authors and the licence of Built.",
+            "menu:animation_settings" => "Set the travel and pause times for saved scenes.",
+            "menu:animation_video" => "Export a movie of the saved scenes.",
+            "menu:bridge" => "Join two faces, a face and a line, or two lines with the faces between them.",
+            "menu:clear_texture_cache" => "Delete the images extracted from imported .skp files.",
+            "menu:convert_path" => "Turn the selected paths into edges of the model; a closed path becomes a face, ready to push up.",
+            "menu:delete_guides" => "Remove every guide line and guide point from the model.",
+            "menu:documentation" => "Open the IngeTrazo documentation in the web browser.",
+            "menu:explode_group" => "Break the selected groups apart, back into the geometry around them.",
+            "menu:export:dae" => "Bring in a COLLADA model with its materials and textures.",
+            "menu:export:dxf" => "Save the view on screen as a 2D line drawing for CAD, with the hidden lines removed.",
+            "menu:export:glb" => "Export the model as glTF or binary GLB.",
+            "menu:export:ifc" => "Save the model as IFC for BIM software, with what the BIM panel tagged.",
+            "menu:export:obj" => "Bring in a Wavefront OBJ model with its materials.",
+            "menu:export:stl" => "Save the model as an STL mesh for 3D printing.",
+            "menu:export:video" => "Save the scenes as a video: the camera glides from one to the next, with the times of Camera ▸ Animation.",
+            "menu:extensions" => "Install, enable and update extensions.",
+            "menu:get_models" => "Free websites with models and textures that open in Built.",
+            "menu:heal_overlaps" => "Remove the faces left lying over their own subdivisions after drawing or erasing.",
+            "menu:hide" => "Stop showing the selected objects, faces and edges; they stay in the document until unhidden.",
+            "menu:import:alignment" => "Bring in a KML, KMZ or GeoJSON alignment as paths in their true place, ready to profile or measure.",
+            "menu:import:image" => "Place a picture in the model to trace over.",
+            "menu:import:obj" => "Bring in a Wavefront OBJ model with its materials.",
+            "menu:import:orthomosaic" => "Lay a GeoTIFF orthomosaic under the model at its true place and size, to trace over.",
+            "menu:import:photomesh" => "Bring in a WebODM drone survey in its true place, as a mesh to trace over.",
+            "menu:import:stl" => "Import triangles from an STL mesh.",
+            "menu:import:survey_points" => "Bring in surveyed points from a CSV file with UTM coordinates.",
+            "menu:intersect_context" => "Add edges where the selected faces cross the rest of the group being edited, or of the model.",
+            "menu:intersect_model" => "Add edges wherever the selected faces cross the rest of the model, groups included.",
+            "menu:intersect_selection" => "Add edges where the selected faces cross one another.",
+            "menu:invert_selection" => "Select what is not selected, and drop what is.",
+            "menu:join_segments" => "Join collinear segments into single lines: the selected ones, or all of them when nothing is selected.",
+            "menu:layout:four" => "Arrange four views of this model.",
+            "menu:layout:single" => "Show a single view of this model.",
+            "menu:layout:three" => "Arrange one large and two smaller model views.",
+            "menu:layout:three_mirror" => "Place the large model view at the right of two smaller views.",
+            "menu:layout:two" => "Place two model views side by side.",
+            "menu:layout:two_stacked" => "Stack two model views vertically.",
+            "menu:layout:two_wide" => "Show two model views with a wider primary view.",
+            "menu:make_faces" => "Make the faces that the selected edges close, on those same edges.",
+            "menu:make_group" => "Wrap the selection in a group that moves as one and keeps apart from the geometry around it.",
+            "menu:maximize_model_view" => "Expand the active view or restore the previous layout.",
+            "menu:orient_faces" => "Turn every face connected to the selected one so its front side matches.",
+            "menu:prefs" => "Edit application and model settings.",
+            "menu:rebuild_planar" => "Work the faces out again from the edges: on the plane of the selected faces, or over the whole drawing when it is flat.",
+            "menu:recover_discarded" => "Auto-saved copies retired when a session was closed without saving — the last ones are kept here for a second chance.",
+            "menu:redo" => "Bring back the change that was just undone.",
+            "menu:repeat_last_command" => "Run the last command again, on what is selected now.",
+            "menu:rest_fade" => "While a group is edited, the rest of the model shows pale, so the group stands out.",
+            "menu:rest_hide" => "While a group is edited, the rest of the model is not drawn — the quickest on a heavy model.",
+            "menu:rest_intensity" => "Set how faint the rest of the model appears while editing a component.",
+            "menu:rest_normal" => "While a group is edited, the rest of the model shows as usual.",
+            "menu:reverse_faces" => "Swap the front and back sides of the selected faces.",
+            "menu:review" => "Open the model for review.",
+            "menu:scene_add" => "Save the current view and layer visibility",
+            "menu:scene_delete" => "Delete the selected scenes",
+            "menu:scene_duplicate" => "Make a copy of the selected scene",
+            "menu:scene_next" => "Recall the next saved scene.",
+            "menu:scene_play" => "Start or stop playback through the saved scenes.",
+            "menu:scene_previous" => "Recall the previous saved scene.",
+            "menu:scene_rename" => "Rename the selected scene",
+            "menu:scene_show" => "Show the selected scene",
+            "menu:scene_transitions" => "Toggle camera glides between saved scenes.",
+            "menu:scene_update" => "Update the selected scene from the current view",
+            "menu:select_all" => "Select everything: edges, faces, groups and dimensions.",
+            "menu:select_none" => "Deselect everything: edges, faces, groups and dimensions.",
+            "menu:split_pieces" => "Regroup the selected group by the pieces that do not touch; explode it afterwards for each piece on its own.",
+            "menu:terrain_profile" => "Draw the terrain profile along the selected path in the profile panel.",
+            "menu:text3d" => "Create extruded lettering in the model.",
+            "menu:toggle_projection" => "Switch between perspective and a parallel projection, where sizes do not shrink with distance.",
+            "menu:undo" => "Take back the last change to the model.",
+            "menu:unhide_all" => "Show again everything that is hidden.",
+            "menu:unhide_last" => "Show again what the last hiding put away.",
+            "menu:unhide_selected" => "Show again the hidden things that are selected — Hidden Objects or Hidden Geometry lets you select them.",
+            "menu:units" => "Choose the units lengths, areas, volumes and angles are shown and typed in.",
+            "menu:verb:field_of_view" => "Change the camera's angle of view, like a lens: wider takes more in, narrower keeps the lines calm.",
+            "menu:verb:make_component" => "Turn the selection into a component: every copy shares it, so changing one changes them all.",
+            "menu:verb:simplify_mesh" => "Merge coplanar and near-coplanar faces",
+            "text:Sample material" => "Click a face to pick up its paint or texture (or hold Alt with the Paint tool).",
+            "tool:change_axes" => "Set a new origin and direction for the modelling axes.",
+            "tool:scale_manager" => "Manage drawing scales for this model.",
+            "tool:texture_position" => "Place and size the texture on a face.",
+            "view:back_edges" => "Draw the edges hidden behind faces as dashed lines.",
+            "view:camera" => "Edit the projection, lens and position of the camera.",
+            "view:form-shadows" => "Set the sun position and shadow appearance.",
+            "view:form-style" => "Edit the current model display style.",
+            "view:hidden_geometry" => "Show or hide geometry marked as hidden.",
+            "view:look_around" => "Drag to turn your head; the eye stays where it is.",
+            "view:orbit" => "Left-drag to rotate the view.",
+            "view:pan" => "Left-drag to slide the view.",
+            "view:position_camera" => "Click where to stand and the eye goes there at a person's height; drag to also say where to look.",
+            "view:projection_parallel" => "No vanishing points: measured elevations, plans and isometrics.",
+            "view:projection_perspective" => "The view as the eye sees it.",
+            "view:projection_two_point" => "Vertical lines stay vertical, the usual view for architectural presentations.",
+            "view:section_cuts" => "Show or hide cuts made by active section planes.",
+            "view:section_fill" => "Fill the cut faces of a section with a solid colour.",
+            "view:section_planes" => "Show the section planes themselves; the cut they make stays either way.",
+            "view:shadows" => "Cast the sun's shadows; the Shadows panel sets the date, the time and how dark they are.",
+            "view:style_architectural" => "Faces with their materials on a plain white background, without the sky.",
+            "view:style_default" => "Faces with their materials and textures, under the sky.",
+            "view:style_hidden_line" => "White faces that hide what lies behind them — a clean line drawing.",
+            "view:style_monochrome" => "Every face in the front or back colour, without materials.",
+            "view:style_shaded" => "Faces in their colours, without textures.",
+            "view:style_wireframe" => "Only the edges: the faces are not drawn.",
+            "view:style_xray" => "See-through faces, so the edges behind them show.",
+            "view:view_back" => "Look at the model from the back.",
+            "view:view_bottom" => "Look straight up at the model from below.",
+            "view:view_front" => "Look at the model from the front.",
+            "view:view_iso" => "Look at the model from a corner above, at the same angle to the three axes.",
+            "view:view_left" => "Look at the model from the left.",
+            "view:view_right" => "Look at the model from the right.",
+            "view:view_top" => "Look straight down on the model, in plan.",
+            "view:walk" => "Drag to walk through the model at eye height: up and down go forward and back, left and right turn.",
+            "view:xray" => "See-through faces, so the edges behind them show.",
+            "view:zoom" => "Drag up or down to zoom in or out.",
+            "view:zoom_extents" => "Frame the whole model in the view.",
+            "view:zoom_selection" => "Frame the selection in the view.",
+            "view:zoom_window" => "Drag a box to zoom to that region.",
+            _ => return None,
+        },
     })
 }
