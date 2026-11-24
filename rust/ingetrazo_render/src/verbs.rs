@@ -520,7 +520,7 @@ pub fn menu_rows(f: &Facts, kind: &str) -> Vec<Row> {
     if f.taggable && !read_only {
         // The same footprint as Zoom to for large selection menus.
         let tag = e("selectiontag", "Tag…");
-        if let Some((_, row)) = r.0.iter_mut().find(|(_, row)| row.len() == 1 && row[0].0 == "zoom") {
+        if let Some((_, row)) = r.0.iter_mut().find(|(_, row)| row.iter().any(|verb| verb.0 == "zoom")) {
             row.push(tag);
         } else { r.one(vec![tag]); }
     }
@@ -817,7 +817,9 @@ mod tests {
     #[test]
     fn every_kind_is_recognised_and_its_menu_fits() {
         for k in KINDS {
-            let f = facts_for(k);
+            let mut f = facts_for(k);
+            f.taggable = !matches!(k, "empty" | "link" | "linked_part" | "path");
+            f.reveal_key = Some("⇧⌘J".into());
             assert_eq!(kind(&f), k);
             let rows = menu_rows(&f, k);
             assert!(rows.len() <= MAX_ROWS, "{k}: {} rows", rows.len());
