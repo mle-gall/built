@@ -69,23 +69,24 @@ def test_make_unique_keeps_a_component_with_subgroups_a_component():
     assert comp.is_component() and comp.mesh is sibling.mesh
 
 
-def test_the_panel_says_group_for_a_group_of_groups(monkeypatch):
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        scene = win.viewport.scene
-        a, b = _box_group(0, "A"), _box_group(3, "B")
-        scene.groups.extend([a, b])
-        win.viewport.history.execute(
-            MakeNestedGroupCommand([], [], [a, b], name="Banca"))
-        box = [g for g in scene.groups if g.children][0]
-        text = win.tray.entity_info._describe([box])
-        assert "Component" not in text and "Group" in text
-        win.viewport.history.execute(GroupToComponentCommand(box, "Banca"))
-        assert "Component" in win.tray.entity_info._describe([box])
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_the_panel_says_group_for_a_group_of_groups(native_host):
+    from ingetrazo_core import selection_identity
+    from views.wgpu_ui import KINDS
+    scene = native_host.viewport.scene
+    history = native_host.viewport.history
+    a, b = _box_group(0, "A"), _box_group(3, "B")
+    scene.groups.extend([a, b])
+    history.execute(MakeNestedGroupCommand([], [], [a, b], name="Banca"))
+    box = next(g for g in scene.groups if g.children)
+
+    def kind():
+        scene.select([box])
+        return next(value for label, value, _, _ in selection_identity(scene, {}, "", KINDS)
+                    if label == "Kind")
+
+    assert kind() == "Group"
+    history.execute(GroupToComponentCommand(box, "Banca"))
+    assert kind() == "Component"
 
 
 def test_the_flag_survives_the_igz_and_old_files_read_as_groups(tmp_path):

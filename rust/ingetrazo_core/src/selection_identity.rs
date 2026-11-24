@@ -159,6 +159,7 @@ pub(crate) fn selection_identity(
                 .get_item(&c)?
                 .and_then(|v| v.extract().ok())
                 .unwrap_or_else(|| c.trim_start_matches("Ifc").into()),
+            None if obj.hasattr("is_component")? && obj.call_method0("is_component")?.is_truthy()? => "Component".into(),
             None => obj.get_type().name()?.to_string(),
         };
         let mut parent = obj
