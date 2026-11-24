@@ -82,16 +82,16 @@ def test_material_pixels_use_native_codecs_and_preserve_alpha(tmp_path, monkeypa
 
 
 def test_system_codec_fallback_uses_same_orientation_and_budget(tmp_path, monkeypatch):
-    from views import wgpu_scene
+    # XPM under an unrecognised suffix exercises content detection at both entry points.
+    from ingetrazo_render import raster_dimensions
+    import sys
     path = tmp_path / "texture.custom"
-    path.write_bytes(b"synthetic system codec")
-    called = []
-    def decode(p):
-        called.append(p)
-        return 1, 2, bytes((1, 2, 3, 255, 4, 5, 6, 255))
-    monkeypatch.setattr(wgpu_scene, "_legacy_texture_pixels", decode)
+    path.write_text('/* XPM */\nstatic char *p[] = {"1 2 2 2", "aa c #010203", '
+                    '" b c #040506", "aa", " b"};')
+    monkeypatch.setitem(sys.modules, "PySide6.QtGui", None)
+    assert raster_dimensions(path) == (1, 2)
     w, h, count, mips = _texture_array([path])
-    assert (w, h, count) == (1, 2, 2) and called == [path]
+    assert (w, h, count) == (1, 2, 2)
     assert mips[0][8:] == bytes((4, 5, 6, 255, 1, 2, 3, 255))
 
 
@@ -155,3 +155,57 @@ def test_platform_image_keeps_top_row_and_straight_alpha(tmp_path, monkeypatch):
     assert (w, h) == (16, 16)
     assert pixels[:4].tolist() == [255, 0, 0, 128]
     assert pixels[-4:].tolist() == [0, 0, 255, 255]
+
+
+@pytest.mark.parametrize(("suffix", "contents", "top", "bottom"), [
+    ("xbm", b"#define test_width 1\n#define test_height 2\n"
+            b"static unsigned char test_bits[] = {0x01, 0x00};", (0, 0, 0, 255), (255, 255, 255, 255)),
+    ("wbmp", bytes((0, 0, 1, 2, 0, 128)), (0, 0, 0, 255), (255, 255, 255, 255)),
+    ("xpm", b'/* XPM */\nstatic char *p[] = {"1 2 2 1", "  c None", '
+            b'"z g black c Light Sky Blue3", " ", "z"};', (0, 0, 0, 0), (141, 182, 205, 255)),
+])
+def test_native_bitmap_header_and_reference(tmp_path, suffix, contents, top, bottom, monkeypatch):
+    from ingetrazo_render import raster_dimensions, reference_texture
+    import sys
+    path = tmp_path / f"pixels.{suffix}"
+    path.write_bytes(contents)
+    monkeypatch.setitem(sys.modules, "PySide6.QtGui", None)
+    assert raster_dimensions(path) == (1, 2)
+    w, h, pixels = reference_texture(path, 32)
+    assert (w, h, bytes(pixels)) == (1, 2, bytes((*top, *bottom)))
+
+
+def test_cursor_resource_hotspot_and_pixels(tmp_path):
+    from ingetrazo_render import raster_dimensions, reference_texture
+    import struct
+    png = tmp_path / "frame.png"
+    im = QImage(16, 16, QImage.Format_RGBA8888)
+    im.fill(QColor(4, 19, 112, 172))
+    assert im.save(str(png))
+    data = png.read_bytes()
+    path = tmp_path / "cursor.cur"
+    path.write_bytes(struct.pack("<HHHBBBBHHII", 0, 2, 1, 16, 16, 0, 0, 4, 9, len(data), 22) + data)
+    assert raster_dimensions(path) == (16, 16)
+    assert bytes(reference_texture(path, 32)[2]) == bytes(im.constBits())
+
+
+@pytest.mark.skipif(__import__("sys").platform != "darwin", reason="Core Graphics PDF reader")
+def test_pdf_first_page_size_orientation_and_transparency(tmp_path, monkeypatch):
+    from ingetrazo_render import raster_dimensions, reference_texture
+    from PySide6.QtCore import QSizeF, QMarginsF
+    from PySide6.QtGui import QPdfWriter, QPainter, QPageSize
+    import sys
+    path = tmp_path / "drawing.pdf"
+    pdf = QPdfWriter(str(path))
+    pdf.setResolution(72)
+    pdf.setPageSize(QPageSize(QSizeF(24, 32), QPageSize.Unit.Point))
+    pdf.setPageMargins(QMarginsF(0, 0, 0, 0))
+    painter = QPainter(pdf)
+    painter.fillRect(0, 0, 12, 16, QColor("red"))
+    painter.end()
+    del pdf
+    monkeypatch.setitem(sys.modules, "PySide6.QtGui", None)
+    assert raster_dimensions(path) == (24, 32)
+    _, _, rgba = reference_texture(path, 32)
+    assert rgba[:4].tolist() == [255, 0, 0, 255]
+    assert rgba[-4:].tolist() == [0, 0, 0, 0]

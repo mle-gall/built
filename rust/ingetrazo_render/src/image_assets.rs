@@ -10,6 +10,12 @@ use std::{
     sync::{Arc, OnceLock},
 };
 
+#[path = "bitmap_files.rs"]
+mod bitmap_files;
+#[cfg(target_os = "macos")]
+#[path = "pdf_image.rs"]
+mod pdf_image;
+
 const MAX_PIXELS: u64 = 64 * 1024 * 1024;
 const MAX_SVG_BYTES: usize = 64 * 1024 * 1024;
 
@@ -237,26 +243,34 @@ pub fn decode(py: Python<'_>, path: &Path) -> PyResult<Option<RgbaImage>> {
     match result {
         Ok(img) => Ok(img),
         Err(ImageError::Unsupported(_)) => {
-            #[cfg(target_os = "macos")]
-            if let Some(img) = py.detach(|| image_io::read(path)) {
+            if let Some(img) = py.detach(|| bitmap_files::read(path)) {
                 return Ok(Some(img));
             }
-            // Some installations supply extra codecs, e.g. XPM or WBMP.
-            let data = match py
-                .import("views.wgpu_scene")
-                .and_then(|m| m.call_method1("_legacy_texture_pixels", (path,)))
+            #[cfg(target_os = "macos")]
+            return Ok(py.detach(|| {
+                pdf_image::Page::open(path)
+                    .and_then(|p| p.read())
+                    .or_else(|| image_io::read(path))
+            }));
+            #[cfg(not(target_os = "macos"))]
             {
-                Ok(data) => data,
-                Err(e) if e.is_instance_of::<pyo3::exceptions::PyModuleNotFoundError>(py) => {
-                    return Ok(None)
+                // Additional codecs installed by a non-macOS Qt distribution.
+                let data = match py
+                    .import("views.wgpu_scene")
+                    .and_then(|m| m.call_method1("_legacy_texture_pixels", (path,)))
+                {
+                    Ok(data) => data,
+                    Err(e) if e.is_instance_of::<pyo3::exceptions::PyModuleNotFoundError>(py) => {
+                        return Ok(None)
+                    }
+                    Err(e) => return Err(e),
+                };
+                if data.is_none() {
+                    return Ok(None);
                 }
-                Err(e) => return Err(e),
-            };
-            if data.is_none() {
-                return Ok(None);
+                let (w, h, bytes) = data.extract::<(u32, u32, Vec<u8>)>()?;
+                Ok(RgbaImage::from_raw(w, h, bytes))
             }
-            let (w, h, bytes) = data.extract::<(u32, u32, Vec<u8>)>()?;
-            Ok(RgbaImage::from_raw(w, h, bytes))
         }
         Err(_) => Ok(None),
     }
@@ -361,28 +375,36 @@ pub fn raster_dimensions(py: Python<'_>, path: PathBuf) -> PyResult<Option<(u32,
     match py.detach(|| reader(&path)?.into_dimensions()) {
         Ok(size) => Ok(Some(size)),
         Err(ImageError::Unsupported(_)) => {
-            #[cfg(target_os = "macos")]
-            if let Some(size) = py.detach(|| image_io::header(&path)) {
+            if let Some(size) = py.detach(|| bitmap_files::read(&path).map(|p| p.dimensions())) {
                 return Ok(Some(size));
             }
-            let gui = match py.import("PySide6.QtGui") {
-                Ok(gui) => gui,
-                Err(e) if e.is_instance_of::<pyo3::exceptions::PyModuleNotFoundError>(py) => {
-                    return Ok(None)
+            #[cfg(target_os = "macos")]
+            return Ok(py.detach(|| {
+                pdf_image::Page::open(&path)
+                    .map(|p| p.size)
+                    .or_else(|| image_io::header(&path))
+            }));
+            #[cfg(not(target_os = "macos"))]
+            {
+                let gui = match py.import("PySide6.QtGui") {
+                    Ok(gui) => gui,
+                    Err(e) if e.is_instance_of::<pyo3::exceptions::PyModuleNotFoundError>(py) => {
+                        return Ok(None)
+                    }
+                    Err(e) => return Err(e),
+                };
+                let size = gui
+                    .getattr("QImageReader")?
+                    .call1((path.to_string_lossy(),))?
+                    .call_method0("size")?;
+                if !size.call_method0("isValid")?.is_truthy()? {
+                    return Ok(None);
                 }
-                Err(e) => return Err(e),
-            };
-            let size = gui
-                .getattr("QImageReader")?
-                .call1((path.to_string_lossy(),))?
-                .call_method0("size")?;
-            if !size.call_method0("isValid")?.is_truthy()? {
-                return Ok(None);
+                Ok(Some((
+                    size.call_method0("width")?.extract()?,
+                    size.call_method0("height")?.extract()?,
+                )))
             }
-            Ok(Some((
-                size.call_method0("width")?.extract()?,
-                size.call_method0("height")?.extract()?,
-            )))
         }
         Err(_) => Ok(None),
     }
