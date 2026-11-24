@@ -18,6 +18,7 @@ struct Entity {
 }
 #[derive(Debug)]
 enum Shape {
+    Ignored(String),
     Line(DVec3, DVec3),
     Curve(Vec<curves::Cubic>, Vec<f64>),
     Polyline(Ring, bool),
@@ -33,7 +34,7 @@ enum Shape {
 #[derive(Debug)]
 struct Block {
     base: DVec3,
-    supported: bool,
+
     entities: Vec<Entity>,
 }
 #[derive(Debug, Default)]
@@ -192,12 +193,6 @@ impl<'a> Tags<'a> {
                 }
             }
             "INSERT" => {
-                if self.number(70, 1.)? != 1.
-                    || self.number(71, 1.)? != 1.
-                    || self.number(66, 0.)? != 0.
-                {
-                    return None;
-                }
                 let scale = DVec3::new(
                     self.number(41, 1.)?,
                     self.number(42, 1.)?,
@@ -215,7 +210,8 @@ impl<'a> Tags<'a> {
                     ),
                 )
             }
-            _ => return None,
+            "POLYLINE" | "VERTEX" | "MESH" | "SEQEND" => return None,
+            _ => Shape::Ignored(kind.to_owned()),
         };
         Some(Entity { layer, shape })
     }
@@ -294,7 +290,7 @@ pub(super) fn decode(text: &str) -> Option<Document> {
                         name.clone(),
                         Block {
                             base,
-                            supported: true,
+
                             entities: vec![],
                         },
                     )
@@ -307,17 +303,7 @@ pub(super) fn decode(text: &str) -> Option<Document> {
             Some("ENDBLK") if section == "BLOCKS" && block.take().is_some() => (),
             Some(k) if section == "BLOCKS" => {
                 let b = doc.blocks.get_mut(block.as_ref()?)?;
-                if b.supported {
-                    match tags.entity(k) {
-                        Some(entity) if !matches!(entity.shape, Shape::Insert(..)) => {
-                            b.entities.push(entity)
-                        }
-                        _ => {
-                            b.supported = false;
-                            b.entities.clear();
-                        }
-                    }
-                }
+                b.entities.push(tags.entity(k)?);
             }
             Some(k) if section == "ENTITIES" => {
                 let owner = tags.get(330)?;
@@ -345,13 +331,6 @@ pub(super) fn decode(text: &str) -> Option<Document> {
     }
     if !eof || !modern || !seen.contains("ENTITIES") || model_owner.is_none() {
         return None;
-    }
-    for e in &doc.entities {
-        if let Shape::Insert(name, _) = &e.shape {
-            if !doc.blocks.get(name).is_some_and(|b| b.supported) {
-                return None;
-            }
-        }
     }
     Some(doc)
 }
@@ -401,6 +380,24 @@ fn arc(center: DVec3, r: f64, start: f64, span: f64, tol: f64) -> Option<Ring> {
     Some(out)
 }
 
+// Nested virtual INSERTs preserve their orthogonal axes and per-axis scale.
+fn virtual_insert(parent: DMat4, child: DMat4) -> DMat4 {
+    let (scale, rotation, origin) = child.to_scale_rotation_translation();
+    let z = parent.transform_vector3(rotation * DVec3::Z).normalize();
+    let x = parent.transform_vector3(rotation * DVec3::X).normalize();
+    let axes = DMat4::from_cols(
+        x.extend(0.),
+        z.cross(x).extend(0.),
+        z.extend(0.),
+        parent.transform_point3(origin).extend(1.),
+    );
+    let lengths = DVec3::new(
+        parent.x_axis.truncate().length(),
+        parent.y_axis.truncate().length() * parent.determinant().signum(),
+        parent.z_axis.truncate().length(),
+    );
+    axes * DMat4::from_scale(scale * lengths)
+}
 impl Document {
     pub(super) fn suggestion(&self) -> Option<f64> {
         let mut samples = vec![];
@@ -420,38 +417,179 @@ impl Document {
     }
     pub(super) fn drawing(&self, sagitta: f64) -> Option<Drawing> {
         let mut drawing = Drawing::default();
-        let mut placed = HashSet::new();
         for (index, e) in self.entities.iter().enumerate() {
             if index % 256 == 0 && crate::file_open::cancelled() {
                 return None;
             }
-            match &e.shape {
-                Shape::Insert(name, m) => {
-                    let b = self.blocks.get(name)?;
-                    drawing.placements.push(Placement {
-                        name: name.clone(),
-                        layer: e.layer.clone(),
-                        m: *m * DMat4::from_translation(-b.base),
-                    });
-                    if placed.insert(name) {
-                        let mut bucket = Bucket::default();
-                        for item in &b.entities {
-                            item.shape.add(&mut bucket, sagitta)?;
-                        }
-                        drawing.blocks.push((name.clone(), bucket));
-                    }
-                    drawing.entities += 1;
-                }
-                s => {
-                    drawing.entities +=
-                        s.add(drawing.layers.entry(e.layer.clone()).or_default(), sagitta)? as usize
+            if let Shape::Insert(name, m) = &e.shape {
+                self.expand(name, &e.layer, *m, 0, &mut drawing.placements)?;
+                drawing.entities += 1;
+            } else {
+                drawing.entities += e.shape.install(
+                    drawing.layers.entry(e.layer.clone()).or_default(),
+                    sagitta,
+                    DMat4::IDENTITY,
+                    &mut drawing.skipped,
+                )? as usize;
+            }
+        }
+        let mut seen = HashSet::new();
+        for p in &drawing.placements {
+            if seen.insert(&p.name) {
+                let mut bucket = Bucket::default();
+                if let Some(b) = self.block(&p.name) {
+                    self.prototype(
+                        b,
+                        DMat4::IDENTITY,
+                        0,
+                        sagitta,
+                        &mut bucket,
+                        &mut drawing.skipped,
+                    )?;
+                    drawing.blocks.push((p.name.clone(), bucket));
                 }
             }
         }
         Some(drawing)
     }
+    fn block(&self, name: &str) -> Option<&Block> {
+        self.blocks.get(name).or_else(|| {
+            self.blocks
+                .iter()
+                .find(|(k, _)| k.eq_ignore_ascii_case(name))
+                .map(|(_, b)| b)
+        })
+    }
+    fn expand(
+        &self,
+        name: &str,
+        layer: &str,
+        m: DMat4,
+        depth: usize,
+        out: &mut Vec<Placement>,
+    ) -> Option<()> {
+        if crate::file_open::cancelled() {
+            return None;
+        }
+        let Some(block) = self.block(name) else {
+            return Some(());
+        };
+        let matrix = m * DMat4::from_translation(-block.base);
+        let mut children = block
+            .entities
+            .iter()
+            .filter(|e| !matches!(&e.shape,Shape::Ignored(k) if k=="ATTDEF"))
+            .peekable();
+        if depth < 8
+            && children.peek().is_some()
+            && children
+                .clone()
+                .all(|c| matches!(c.shape, Shape::Insert(..)))
+        {
+            for c in children {
+                if let Shape::Insert(id, local) = &c.shape {
+                    self.expand(
+                        id,
+                        if c.layer == "0" { layer } else { &c.layer },
+                        matrix * *local,
+                        depth + 1,
+                        out,
+                    )?;
+                }
+            }
+        } else {
+            out.push(Placement {
+                name: name.to_owned(),
+                layer: layer.to_owned(),
+                m: matrix,
+            });
+        }
+        Some(())
+    }
+    fn prototype(
+        &self,
+        block: &Block,
+        matrix: DMat4,
+        depth: usize,
+        tol: f64,
+        bucket: &mut Bucket,
+        skipped: &mut BTreeMap<String, usize>,
+    ) -> Option<()> {
+        for (i, item) in block.entities.iter().enumerate() {
+            if i % 256 == 0 && crate::file_open::cancelled() {
+                return None;
+            }
+            if let Shape::Insert(name, m) = &item.shape {
+                if depth < 8 {
+                    if let Some(child) = self.block(name) {
+                        self.prototype(
+                            child,
+                            virtual_insert(matrix, *m) * DMat4::from_translation(-child.base),
+                            depth + 1,
+                            tol,
+                            bucket,
+                            skipped,
+                        )?;
+                    }
+                } else {
+                    *skipped.entry("INSERT".into()).or_default() += 1;
+                }
+            } else {
+                item.shape.install(bucket, tol, matrix, skipped)?;
+            }
+        }
+        Some(())
+    }
 }
 impl Shape {
+    fn install(
+        &self,
+        b: &mut Bucket,
+        tol: f64,
+        m: DMat4,
+        skipped: &mut BTreeMap<String, usize>,
+    ) -> Option<bool> {
+        if let Self::Ignored(k) = self {
+            if !matches!(
+                k.as_str(),
+                "ATTDEF" | "VIEWPORT" | "XLINE" | "RAY" | "ATTRIB"
+            ) {
+                *skipped.entry(k.clone()).or_default() += 1;
+            }
+            return Some(false);
+        }
+        if m == DMat4::IDENTITY {
+            return self.add(b, tol);
+        }
+        let map = |p: DVec3| m.transform_point3(p);
+        let transform_curves =
+            |cs: &[curves::Cubic]| cs.iter().map(|c| c.map(map)).collect::<Vec<_>>();
+        match self {
+            Self::Arc {
+                center,
+                radius,
+                start,
+                span,
+            } => Self::Curve(
+                transform_curves(&curves::elliptic(
+                    *center,
+                    *radius * DVec3::X,
+                    *radius * DVec3::Y,
+                    *start,
+                    *span,
+                )),
+                vec![],
+            )
+            .add(b, tol),
+            Self::Curve(cs, _) => Self::Curve(transform_curves(cs), vec![]).add(b, tol),
+            Self::Face(p) => Self::Face(p.iter().copied().map(map).collect()).add(b, tol),
+            Self::Line(a, z) => Self::Line(map(*a), map(*z)).add(b, tol),
+            Self::Polyline(p, closed) => {
+                Self::Polyline(p.iter().copied().map(map).collect(), *closed).add(b, tol)
+            }
+            _ => None,
+        }
+    }
     fn add(&self, b: &mut Bucket, tol: f64) -> Option<bool> {
         match self {
             Self::Line(a, z) => b.runs.push((vec![*a, *z], false)),
@@ -482,7 +620,7 @@ impl Shape {
             } => b
                 .runs
                 .push((arc(*center, *radius, *start, *span, tol)?, true)),
-            Self::Insert(..) => return None,
+            Self::Insert(..) | Self::Ignored(_) => return None,
         }
         Some(true)
     }
@@ -523,6 +661,40 @@ mod tests {
                 .len()
                 > 33
         );
+    }
+    #[test]
+    fn assembly_matches_reference_edges_in_world_space() {
+        let model = decode(include_str!(
+            "../../../tests/fixtures/dxf/mixed-assembly.dxf"
+        ))
+        .unwrap()
+        .drawing(0.01)
+        .unwrap();
+        let expected = [
+            ("Leaf", "Span", vec![[0., 10., -1., 10.]]),
+            ("Leaf", "Bolts", vec![[2., 7., 2., 8.]]),
+            (
+                "Frame",
+                "0",
+                vec![[0., 0., 0., 1.], [8., 4., 8., 6.], [2., 2., 4., 2.]],
+            ),
+            (
+                "Frame",
+                "0",
+                vec![[15., 0., 15., 1.], [23., 4., 23., 6.], [17., 2., 19., 2.]],
+            ),
+        ];
+        assert_eq!(model.placements.len(), expected.len());
+        assert_eq!(model.blocks.len(), 2);
+        for (p, (name, layer, edges)) in model.placements.iter().zip(expected) {
+            assert_eq!((&*p.name, &*p.layer), (name, layer));
+            let (_, b) = model.blocks.iter().find(|(id, _)| id == name).unwrap();
+            assert_eq!(b.runs.len(), edges.len());
+            for ((pts, _), [x, y, u, v]) in b.runs.iter().zip(edges) {
+                assert!(p.m.transform_point3(pts[0]).distance(DVec3::new(x, y, 0.)) < 1e-9);
+                assert!(p.m.transform_point3(pts[1]).distance(DVec3::new(u, v, 0.)) < 1e-9);
+            }
+        }
     }
     #[test]
     fn paths_match_all_ezdxf_vertices_at_two_tolerances() {
