@@ -2377,6 +2377,7 @@ impl PyTransaction {
         for op in &self.ops {
             let t = match op {
                 Op::Set { k, f, .. } => ("set", *k, f.name().to_string()).into_pyobject(py)?.into_any(),
+                Op::Patch { k, a, .. } => ("patch", *k, super::attr_name(*a).to_string()).into_pyobject(py)?.into_any(),
                 Op::SetMany { keys, f, .. } => ("set_many", keys.len(), f.name().to_string()).into_pyobject(py)?.into_any(),
                 Op::Ins { owner, at, k, .. } => ("insert", *owner, *at, *k).into_pyobject(py)?.into_any(),
                 Op::Rem { owner, at, k, .. } => ("remove", *owner, *at, *k).into_pyobject(py)?.into_any(),
@@ -2531,6 +2532,35 @@ fn doc_attr_changed(py: Python<'_>, key: Key, attr: u16, view: &Bound<'_, PyAny>
     drop(trash);
     drain_pending();
     r.map_err(err)
+}
+
+/// Keyed edits of a tracked container: each ``(path, value, delete)``
+/// puts ``value`` (or takes the entry out) at ``path`` (dict keys and list
+/// indices from the attribute's top) of attribute ``attr`` of ``key``, if
+/// ``view`` is still its view. Returns whether it was; Err when a path
+/// does not lead into the stored value (the caller writes it whole).
+#[pyfunction]
+fn doc_attr_patch(py: Python<'_>, key: Key, attr: u16, view: &Bound<'_, PyAny>,
+                  ops: Vec<(Vec<Bound<'_, PyAny>>, Bound<'_, PyAny>, bool)>) -> PyResult<bool> {
+    let bound = |d: &super::Doc| d.node(key).and_then(|n| n.attr_view(attr)).map(|v| v.as_ptr()) == Some(view.as_ptr());
+    if !bound(&lock()) {
+        return Ok(false);
+    }
+    let mut edits = Vec::with_capacity(ops.len());
+    for (path, value, delete) in &ops {
+        let path = path.iter().map(Value::from_py).collect::<PyResult<Vec<_>>>()?;
+        edits.push((path, if *delete { None } else { Some(Value::from_py(value)?) }));
+    }
+    let r = {
+        let mut d = lock();
+        if bound(&d) {
+            edits.iter().try_for_each(|(path, new)| d.patch(py, key, attr, path, new.clone())).map(|_| true)
+        } else {
+            Ok(false)
+        }
+    };
+    drain_pending();
+    r.map_err(PyValueError::new_err)
 }
 
 /// A bound matrix view was edited in place: store its values if it is
@@ -2850,6 +2880,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(doc_set_track_hook, m)?)?;
     m.add_function(wrap_pyfunction!(doc_set_refill_hook, m)?)?;
     m.add_function(wrap_pyfunction!(doc_attr_changed, m)?)?;
+    m.add_function(wrap_pyfunction!(doc_attr_patch, m)?)?;
     m.add_class::<super::anchor::ElementAnchor>()?;
     m.add_class::<super::history::DocumentHistory>()?;
     m.add_class::<super::feed::FeedReaders>()?;

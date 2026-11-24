@@ -593,6 +593,10 @@ pub enum Op {
     /// A materials registry replaced (`scene.materials`): names and
     /// handles before and after. Writes in one transaction coalesce.
     Reg { owner: Key, old: Vec<(String, Key)>, new: Vec<(String, Key)> },
+    /// One entry of attribute ``a`` of ``k`` (``path`` into its value)
+    /// written: before and after (None: absent). A tracked container's
+    /// keyed edit, journalled without copying the whole value.
+    Patch { k: Key, a: u16, path: Vec<Value>, old: Option<Value>, new: Option<Value> },
 }
 
 /// The open transaction (one at a time; nested `begin`s are savepoints).
@@ -994,6 +998,7 @@ impl Doc {
             .filter_map(|op| match op {
                 Op::Set { ref old, ref new, .. } if old == new => None,
                 Op::Reg { ref old, ref new, .. } if old == new => None,
+                Op::Patch { ref old, ref new, .. } if old == new => None,
                 Op::SetMany { f, keys, old, new } => {
                     let (keys, old): (Vec<Key>, Vec<FVal>) =
                         keys.into_iter().zip(old).filter(|(_, o)| *o != new).unzip();
@@ -1059,6 +1064,9 @@ impl Doc {
                         _ => to.clone(),
                     };
                     d.write(py, *k, *f, value, trash).map(|_| ())
+                }
+                (Op::Patch { k, a, path, old, new }, undo) => {
+                    d.patch(py, *k, *a, path, if undo { old.clone() } else { new.clone() })
                 }
                 (Op::SetMany { f, keys, old, .. }, true) => {
                     for (k, o) in keys.iter().zip(old.iter()).rev() {
@@ -1235,6 +1243,41 @@ impl Doc {
             n.views[slot] = view;
         }
         r.map(|_| ())
+    }
+
+    /// Put ``new`` at ``path`` in attribute ``a`` of ``k`` (None: take the
+    /// entry out), journalled as an ``Op::Patch``. The Python view, which
+    /// made the edit, is kept; replaying (undo, redo, rollback) refills it.
+    pub fn patch(&mut self, py: Python<'_>, k: Key, a: u16, path: &[Value], new: Option<Value>) -> Result<(), String> {
+        let journal = self.journal_open() && !self.open.as_ref().is_some_and(|o| o.born.contains(&k));
+        let replaying = self.replaying;
+        let (old, refill) = {
+            let n = self.node_mut(k).ok_or_else(|| format!("no document node {k:#x}"))?;
+            let i = n.attrs.iter().position(|(x, _)| *x == a)
+                .ok_or_else(|| format!("attribute {} is not set", attr_name(a)))?;
+            let old = value::put_at(&mut n.attrs[i].1, path, new.clone())?;
+            if old == new {
+                return Ok(());
+            }
+            let refill = if replaying {
+                n.attr_view(a).map(|view| (a, view.clone_ref(py), n.attrs[i].1.clone()))
+            } else { None };
+            (old, refill)
+        };
+        if let Some((a, view, val)) = refill {
+            self.refills.push((k, a, view, val));
+        }
+        self.serial += 1;
+        self.note_reader_write(k);
+        if journal {
+            self.pin(py, k);
+            let o = self.open.as_mut().expect("open");
+            // A later whole write must not coalesce into one made before
+            // this patch: replayed forwards it would come first.
+            o.index.remove(&(k, Field::Attr(a)));
+            o.ops.push(Op::Patch { k, a, path: path.to_vec(), old, new });
+        }
+        Ok(())
     }
 
     /// Write one value into `f` of every node of `keys`: journalled as one
@@ -1559,6 +1602,7 @@ impl Doc {
         for op in ops {
             match op {
                 Op::Set { k, f, old, new } if old != new && want(f) => add(*k, &mut out),
+                Op::Patch { k, a, old, new, .. } if old != new && want(&Field::Attr(*a)) => add(*k, &mut out),
                 Op::SetMany { f, keys, old, new } if want(f) => {
                     for (k, o) in keys.iter().zip(old) {
                         if o != new {
@@ -1677,6 +1721,9 @@ impl Doc {
             match op {
                 Op::Set { k, f, old, new } if old != new => field_written(*k, *f, &mut modified, &mut tags_mod, &mut mats_mod),
                 Op::Set { .. } => {}
+                Op::Patch { k, a, old, new, .. } if old != new =>
+                    field_written(*k, Field::Attr(*a), &mut modified, &mut tags_mod, &mut mats_mod),
+                Op::Patch { .. } => {}
                 Op::SetMany { f, keys, old, new } => {
                     for (k, o) in keys.iter().zip(old) {
                         if o != new {
