@@ -105,11 +105,11 @@ def test_clear_retires_the_slot_instead_of_deleting_it(slot_dir, monkeypatch):
 
 def test_progress_event_during_open_does_not_autosave_partial_document():
     from types import SimpleNamespace
-    from views.main_window import MainWindow
-    # The open operation pumps Qt events before document state is finalized.
+    from ingetrazo_render import request_recovery
+    # The open operation pumps events before document state is finalized.
     # A timer callback at that point must not inspect or serialize the scene.
     opening = SimpleNamespace(_opening_document=True)
-    MainWindow._on_autosave_tick(opening)
+    request_recovery(opening)
 
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="macOS Foundation data paths")

@@ -470,9 +470,7 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         self._doc.viewport = self._make_viewport()
         self._doc_stack.addWidget(self._doc.viewport.keys_stand_in or self._doc.viewport)
         bar.add(self._doc)
-        # Qt's own call: this class's setCentralWidget is the one extensions
-        # see (one project's place in the stack), see centralWidget below.
-        QMainWindow.setCentralWidget(self, area)
+        self.setCentralWidget(area)
         # The window's child that tray drags restack is now this area,
         # not the viewport (eventFilter: ZOrderChange).
         area.installEventFilter(self)
@@ -5032,27 +5030,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
     _last_sheet = _doc_attr("last_sheet")
     del _doc_attr
 
-    # What the code and the extensions call the viewport is the view in front
-    # of the active project, which an extension may have assigned (a split
-    # pane, perhaps on a scene of its own). ``Document.viewport`` never moves:
-    # saving, the unsaved-changes state and closing go by that one (#1106).
-    @property
-    def viewport(self):
-        doc = self.__dict__.get("_doc")
-        if doc is None:
-            return None
-        return doc.front_view if doc.front_view is not None else doc.viewport
-
-    @viewport.setter
-    def viewport(self, view) -> None:
-        # A project's own viewport ends the replacement in ITS project,
-        # whichever tab is in front: it never becomes another project's.
-        for doc in self._documents:
-            if doc.viewport is view:
-                doc.front_view = None
-                return
-        self._doc.front_view = view
-
     #: The active project changed (another tab, or the one in front was
     #: closed); panels that keep something of the document refresh.
     documentChanged = Signal()
@@ -5306,22 +5283,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         """Where the command search box fits (views/command_palette.py):
         the viewport in front, not the project tabs above it."""
         return self.viewport
-
-    def _on_new_tab(self) -> None:
-        """The «+» of the project tabs, double-clicking their empty strip,
-        New in a tab's menu: always a tab of its own — clicking «+» on an
-        untouched Untitled made nothing appear (File ▸ New starts that one
-        over instead)."""
-        if self._workspace is not None and hasattr(self._workspace, "new"):
-            self._workspace.new()
-            return
-        self.viewport.end_group_edit()
-        if self._empty_on:                  # the blank one behind: it
-            self._leave_empty_area()
-            self._start_blank_document()
-            return
-        self._new_document()
-        self._start_blank_document()
 
     def activate_document(self, doc, closing: bool = False) -> None:
         """Bring ``doc``'s tab to the front. The tool in hand is dropped and
@@ -6004,19 +5965,9 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         doc = doc or self._doc
         if doc not in self._documents:
             return True
-        if self._workspace is not None and doc is self._doc \
-                and not self.leave_workspace():
+        from ingetrazo_render import confirm_close_tab
+        if not confirm_close_tab(self, doc, ask):
             return False
-        if ask and self._doc_is_dirty(doc):
-            if doc is not self._doc:
-                self.activate_document(doc)     # show what is being asked about
-                if doc is not self._doc:
-                    return False    # a workspace holds the window: the
-                                    # question would be about its document
-            self.viewport.end_group_edit()
-            if not self._confirm_discard(tr(
-                    "Close “{name}”?", name=doc.display_name())):
-                return False
         last = len(self._documents) == 1
         if last:
             # The last one: an empty project takes its place first (shown
@@ -6099,83 +6050,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
             display.close()
             display.deleteLater()
         self._update_title()
-
-    # ---- The central widget as extensions see it (#1066) ---------------------
-    # Extensions written before the project tabs take it for granted that
-    # the window's central widget IS the viewport: MultiView checks
-    # ``centralWidget() is app.viewport``, takes it with
-    # ``takeCentralWidget()`` and puts its grid of views, holding that
-    # viewport, in its place with ``setCentralWidget()`` — then the reverse.
-    # With the tab bar over a stack of viewports the real central widget is
-    # that area, and handing it over would drop the tabs and every other
-    # project. So, for Python callers (Qt itself never goes through these),
-    # the three calls work on ONE project's place in the stack: the project
-    # an extension has replaced, else the one in front. The tabs keep
-    # working meanwhile; each project shows whatever stands in its place.
-    def _central_document(self):
-        for doc in self._documents:
-            # An extension's widget; not the project's own grid of views.
-            if (doc.stand_in is not None and doc.stand_in is not doc.view_grid
-                    and doc.stand_in is not doc.viewport.keys_stand_in):
-                return doc
-        return self._doc
-
-    def _tabs_in_place(self) -> bool:
-        area = self.__dict__.get("_doc_area")
-        return area is not None and QMainWindow.centralWidget(self) is area
-
-    def centralWidget(self):  # noqa: N802 — Qt API
-        if not self._tabs_in_place():
-            return super().centralWidget()
-        return self._central_document().slot_widget()
-
-    def takeCentralWidget(self):  # noqa: N802 — Qt API
-        """Hand the project's widget over, like Qt does (no parent, not
-        deleted); a blank placeholder keeps its place in the stack until
-        :meth:`setCentralWidget` fills it."""
-        if not self._tabs_in_place():
-            return super().takeCentralWidget()
-        doc = self._central_document()
-        old = doc.slot_widget()
-        if old is None or getattr(old, "_central_placeholder", False):
-            return None
-        hold = QWidget()
-        hold._central_placeholder = True
-        self._put_in_slot(doc, old, hold)
-        old.setParent(None)
-        return old
-
-    def setCentralWidget(self, widget):  # noqa: N802 — Qt API
-        if not self._tabs_in_place():
-            return super().setCentralWidget(widget)
-        # A project's own viewport goes back to ITS place, whichever tab is
-        # in front; anything else fills the place that was taken.
-        doc = next((d for d in self._documents if d.viewport is widget or d.viewport.keys_stand_in is widget),
-                   None) or self._central_document()
-        if widget is doc.viewport:
-            widget = getattr(widget, "keys_stand_in", None) or widget
-        old = doc.slot_widget()
-        if widget is old:
-            return
-        self._put_in_slot(doc, old, widget)
-        # Qt deletes a central widget that was not taken first; never a
-        # viewport, though: that one lives as long as its project.
-        if old is not None and not any(d.viewport is old or getattr(d.viewport, "keys_stand_in", None) is old
-                                       for d in self._documents):
-            old.hide()
-            old.deleteLater()
-
-    def _put_in_slot(self, doc, old, new) -> None:
-        stack = self._doc_stack
-        index = stack.indexOf(old) if old is not None else -1
-        if index < 0:
-            index = stack.count()
-        stack.insertWidget(index, new)
-        if old is not None and stack.indexOf(old) >= 0:
-            stack.removeWidget(old)
-        doc.stand_in = None if new is doc.viewport else new
-        if doc is self._doc:
-            stack.setCurrentWidget(new)
 
     #: How long after a closed project's viewport is deleted its memory is
     #: reclaimed: the panels showing it let go on their own deferred

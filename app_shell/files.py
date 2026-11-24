@@ -13,7 +13,7 @@ import threading
 from collections import deque
 from pathlib import Path
 
-from ingetrazo_render import ModelClipboard
+from ingetrazo_render import ModelClipboard, cold_start_document as cold_start
 
 from core.i18n import tr
 
@@ -823,7 +823,7 @@ def export_igz(win, path=None) -> bool:
 
 
 # ---- close and quit ---------------------------------------------------------------
-def close_document(win, doc=None) -> bool:
+def close_document(win, doc=None, ask=True) -> bool:
     """Close a project (⌘W, document ▾), asking about ITS unsaved changes.
     The last one closed leaves an empty project behind the start page."""
     doc = doc or win._doc
@@ -832,14 +832,9 @@ def close_document(win, doc=None) -> bool:
     from views import chrome_dialogs as cd
     if cd.current_sheet(win) is not None or cd.modal(win):
         return False
-    if win._workspace is not None and not win.leave_workspace():
+    from ingetrazo_render import confirm_close_tab
+    if not confirm_close_tab(win, doc, ask):
         return False
-    if win._doc_is_dirty(doc):
-        if doc is not win._doc:
-            win.activate_document(doc)
-        win.viewport.end_group_edit()
-        if not win._confirm_discard(tr("Close “{name}”?", name=doc.display_name())):
-            return False
     last = len(win._documents) == 1
     if last:
         win.new_document(activate=False)
@@ -871,6 +866,8 @@ def request_close(win) -> bool:
     if win._open_in_progress:
         win._open_aborted = True        # the load unwinds at its next step
         return False
+    if cd.modal(win):
+        return False
     if win._workspace is not None and not win.leave_workspace():
         return False
     if not win._confirm_quit():
@@ -890,18 +887,5 @@ def request_close(win) -> bool:
 
 
 # ---- the start of a session ---------------------------------------------------------
-def cold_start(win) -> None:
-    """No file given: the untitled drawings an earlier session left in its
-    auto-save slots are offered back, then the start page (unless one of
-    them came back)."""
-    try:
-        win._offer_untitled_recovery()
-    except Exception:  # noqa: BLE001
-        win._host._error("untitled recovery")
-    if win._doc_is_blank():
-        win._start_blank_document()
-        show_start(win)
-
-
 def sync_foreign_clipboard(win):
     _clipboard.adopt(win)

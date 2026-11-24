@@ -61,6 +61,30 @@ fn confirm_discard(win: &Bound<'_, PyAny>, prompt: &Bound<'_, PyAny>) -> PyResul
     answer.eq("discard")
 }
 #[pyfunction]
+fn confirm_close_tab(win: &Bound<'_, PyAny>, doc: &Bound<'_, PyAny>, ask: bool) -> PyResult<bool> {
+    if !win.getattr("_workspace")?.is_none()
+        && win.getattr("_doc")?.is(doc)
+        && !win.call_method0("leave_workspace")?.is_truthy()?
+    {
+        return Ok(false);
+    }
+    if !ask || !win.call_method1("_doc_is_dirty", (doc,))?.is_truthy()? {
+        return Ok(true);
+    }
+    if !win.getattr("_doc")?.is(doc) {
+        win.call_method1("activate_document", (doc,))?;
+        if !win.getattr("_doc")?.is(doc) {
+            return Ok(false);
+        }
+    }
+    win.call_method0("_end_group_edits")?;
+    let vars = PyDict::new(win.py());
+    vars.set_item("name", doc.call_method0("display_name")?)?;
+    let prompt = translated(win.py(), "Close “{name}”?", Some(&vars))?;
+    win.call_method1("_confirm_discard", (prompt,))?.is_truthy()
+}
+
+#[pyfunction]
 fn save_selected(
     win: &Bound<'_, PyAny>,
     docs: &Bound<'_, PyAny>,
@@ -129,6 +153,7 @@ fn confirm_quit(win: &Bound<'_, PyAny>) -> PyResult<bool> {
         .is_truthy()
 }
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(confirm_close_tab, m)?)?;
     m.add_function(wrap_pyfunction!(confirm_quit, m)?)?;
     m.add_function(wrap_pyfunction!(confirm_discard, m)?)?;
     m.add_function(wrap_pyfunction!(save_selected, m)?)?;

@@ -405,10 +405,7 @@ class Host:
         """Close the window / quit: True once nothing unsaved stands in the
         way (the sheet asked, through the modal pump)."""
         from app_shell import files
-        from views import chrome_dialogs as cd
         self._front()
-        if cd.modal(self.window):
-            return False
         ok = self._guard("close", files.request_close, self.window)
         return bool(ok)
 

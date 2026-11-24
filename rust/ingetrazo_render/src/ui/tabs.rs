@@ -320,7 +320,7 @@ mod tests {
     }
 
     /// Lay the strip out once in a headless egui frame, `max_w` wide.
-    fn lay_out(strip: &mut Strip, max_w: f32) -> Vec<String> {
+    fn lay_out(strip: &mut Strip, max_w: f32) -> egui::FullOutput {
         let ctx = egui::Context::default();
         // The app's Inter for every family the chrome names (this crate
         // builds egui without its bundled fonts).
@@ -333,16 +333,69 @@ mod tests {
             fonts.families.insert(family, vec!["inter".into()]);
         }
         ctx.set_fonts(fonts);
-        let mut out = Vec::new();
-        // Twice: the fonts are in place from the second pass on, as in the app.
-        for _ in 0..2 {
-            let _ = ctx.run(egui::RawInput::default(), |ctx| {
-                egui::CentralPanel::default().show(ctx, |ui| {
-                    ui.horizontal(|ui| out = strip.show(ui, max_w));
-                });
+        let mut frame = || ctx.run(egui::RawInput::default(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                ui.horizontal(|ui| strip.show(ui, max_w));
             });
+        });
+        frame();
+        frame()
+    }
+
+    #[test]
+    fn active_underline_and_new_button_follow_the_tabs() {
+        let mut strip = Strip {
+            tabs: vec![tab("Drawing", true), tab("Elevation", false)], ..Default::default()
+        };
+        for front in [0, 1] {
+            strip.tabs[0].2 = front == 0;
+            strip.tabs[1].2 = front == 1;
+            let frame = lay_out(&mut strip, 700.0);
+            let active = strip.rects[front].unwrap();
+            let last = strip.rects[1].unwrap();
+            assert_eq!(active.height(), CONTROL_H);
+            let mut accents = Vec::new();
+            let mut plus = None;
+            for s in frame.shapes {
+                match s.shape {
+                    egui::Shape::LineSegment { points, stroke } if stroke.color == ACCENT => {
+                        accents.push(points);
+                    }
+                    egui::Shape::Text(t) if t.galley.text() == "+" => {
+                        plus = Some(t.pos + t.galley.size() / 2.0);
+                    }
+                    _ => {}
+                }
+            }
+            assert_eq!(accents.len(), 1);
+            let [left, right] = accents[0];
+            assert!(left.x >= active.left() && right.x <= active.right());
+            assert_eq!(left.y, TOP_H - 1.0);
+            let plus = plus.expect("new tab button");
+            assert!((plus.x - (last.right() + 1.0 + PLUS_W / 2.0)).abs() <= 1.0);
+            assert!((plus.y - last.center().y).abs() <= 1.0);
         }
-        out
+    }
+
+    #[test]
+    fn full_names_leave_room_for_close_on_either_tab() {
+        let mut strip = Strip {
+            tabs: vec![tab("casa-pestanas.igz", true), tab("مخطط", false)], ..Default::default()
+        };
+        for front in [0, 1] {
+            strip.tabs[0].2 = front == 0;
+            strip.tabs[1].2 = front == 1;
+            let frame = lay_out(&mut strip, 700.0);
+            for (index, tab) in strip.tabs.iter().enumerate() {
+                let rect = strip.rects[index].unwrap();
+                let text = frame.shapes.iter().find_map(|s| match &s.shape {
+                    egui::Shape::Text(t) if t.galley.text() == tab.1 => Some(t),
+                    _ => None,
+                }).unwrap();
+                assert!(!text.galley.elided);
+                assert!(text.pos.x + text.galley.size().x <= rect.right() - 22.0);
+            }
+        }
     }
 
     #[test]

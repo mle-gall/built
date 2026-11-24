@@ -33,6 +33,16 @@ class WindowDocumentCommands:
     _RECENT_MAX = 10
     _CAMERA_FIELDS = native.DOCUMENT_CAMERA_FIELDS
 
+    @property
+    def viewport(self):
+        doc = self.__dict__.get("_doc")
+        if doc is None:
+            return None
+        return doc.front_view if doc.front_view is not None else doc.viewport
+
+    @viewport.setter
+    def viewport(self, view):
+        native.set_front_view(self, view)
 
     @_repeatable("Make Unique")
     def _on_make_unique(self):
@@ -393,6 +403,9 @@ class WindowDocumentCommands:
 
     def _on_new(self):
         native.new_document_command(self)
+
+    def _on_new_tab(self):
+        native.new_document_command(self, True)
 
     def settle_heap(self):
         native.settle_document_heap(self.GC_THRESHOLD0)
