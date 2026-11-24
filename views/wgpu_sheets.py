@@ -4,25 +4,21 @@
   sheet records out of the document (``sheet_page_json``) and the renderer
   paints them under the chrome (``ingetrazo_render`` ui/page.rs), with
   zoom, pan, picking, moving and resizing items and placing a view. Frames
-  show the vector pass (the Rust HLR drawing, ``hlr_cache``) as line
-  sets; the other styles are rendered by the renderer straight into a page
+  show the vector pass (the Rust HLR drawing) as a display list; the
+  other styles are rendered by the renderer straight into a page
   texture (views/wgpu_sheet_frames.py: the camera and visibility from
   Rust, the live scene untouched). No QPainter, no read-back.
 * **Edits** come back as actions (``sheets:rects``, ``sheets:place``,
-  ``sheets:select``), one per gesture, and run through the sheet's history
-  (``EditItemCommand``, ``place_tool``), so undo, auto-render and the dock
-  stay the composer's.
+  ``sheets:select``), one per gesture, and run as steps of the document's
+  history (``SheetCommand``): the model's undo undoes them in order.
 * **The chrome** is the sheet's while the workspace is on (ui/sheets.rs):
   the sheet tools on the rail, the sheets and the selected item's fields in
-  the dock, paper, scale, tool hint and zoom in the bottom bar. The fields
-  mirror the composer's own panel widgets, so every edit goes through the
-  slot the Qt panel uses (undo, re-render, cache invalidation).
-
-The composer (views/composer.py) is still constructed, never shown, for the
-dock, the frame renders, the history and the exports. What the native page
-does not do yet (inline text, dimension and drawing tools, images, context
-menus, guides) opens in the classic sheet editor: the Qt window in the Qt
-app, the classic app from the shell. docs/python-glue.md lists this adapter.
+  the dock, paper, scale, tool hint and zoom in the bottom bar.
+* **State** — the open sheet, the armed tool, auto-render — is a
+  :class:`SheetHost`'s, what ``MainWindow._ensure_composer`` makes for a
+  document; the exports are views/wgpu_sheet_frames.py's (sheets::pdf,
+  sheets::raster, the DXF and SVG of a view). docs/python-glue.md lists
+  this adapter.
 """
 from __future__ import annotations
 
@@ -44,8 +40,7 @@ RAIL = [["select", "pan", "zoom", "zoom_ventana", "estilo"],
          "escala", "norte", "leyenda", "perfil"],
         ["linea", "flecha", "terreno", "rect", "elipse", "poligono"],
         ["cota", "cota_cadena", "cota_base", "cota_ang", "cota_radio"]]
-#: The tools the native page runs (ui/page.rs); the others open the
-#: classic sheet editor with that tool.
+#: The tools the native page runs (ui/page.rs): all of the rail's.
 NATIVE_TOOLS = {"select", "pan", "zoom", "zoom_ventana", "vista", "texto", "llamada", "cajetin", "escala",
                 "norte", "leyenda", "perfil", "linea", "flecha", "terreno", "rect", "elipse", "cota",
                 "cota_cadena", "cota_base", "cota_ang", "cota_radio", "poligono", "etiqueta", "nivel",

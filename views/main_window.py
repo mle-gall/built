@@ -4266,13 +4266,12 @@ class MainWindow(WorksessionMixin, QMainWindow):
         # The status bar carries the Model | Sheet 1 | … strip at its left,
         # on the same row as the measurements box (AutoCAD's Model / Layout
         # tabs): one click from the model to any sheet.
-        from views.sheet_tabs import SheetStatusBar
-        bar = SheetStatusBar(self, on_model=self._show_model,
-                             on_sheet=self._show_strip_sheet,
-                             on_new=self._show_new_sheet,
-                             on_menu=self._strip_sheet_menu)
+        # The sheets are the Sheets workspace's (views/wgpu_sheets.py): the
+        # strip of sheet tabs went with the composer.
+        from PySide6.QtWidgets import QStatusBar
+        bar = QStatusBar(self)
         self.setStatusBar(bar)
-        self._sheet_tabs = bar.tabs
+        self._sheet_tabs = None
         # Ctrl+Tab: to the sheets and back (#91, @pacaeiro) — the last sheet
         # shown, as the strip's own tab; Ctrl+Shift+Tab too, with only two
         # places to go. A document without sheets gets its first one.

@@ -60,21 +60,3 @@ def test_a_fully_visible_model_has_no_hidden_lines_from_above():
     assert np.all(d.kinds[d.kinds == KIND_HIDDEN] == KIND_HIDDEN)
 
 
-def test_the_sheet_inks_them_dashed_and_the_dxf_puts_them_apart(tmp_path):
-    from core.composition import MarcoVista
-    from core.hlr import KIND_EDGE
-    from formats.dxf_out import save_dxf_layers
-    from views.composer import vector_pens
-    f = MarcoVista(view_key="std:front", scale_n=100.0, w_mm=100.0,
-                   h_mm=100.0)
-    assert f.hidden_lines is False                     # opt-in
-    pens = vector_pens(f)
-    assert pens[KIND_HIDDEN].dashPattern()             # dashed …
-    assert not pens[KIND_EDGE].dashPattern()           # … and only them
-    path = tmp_path / "v.dxf"
-    save_dxf_layers(path, [("V", [(0, 0, 1, 0)]),
-                           ("V-OCULTAS", [(0, 1, 1, 1)], "DASHED")])
-    text = path.read_text()
-    assert "LTYPE" in text and "\nDASHED\n" in text
-    assert "V-OCULTAS\n70\n0\n62\n7\n6\nDASHED" in text
-    assert "\nV\n70\n0\n62\n7\n6\nCONTINUOUS" in text

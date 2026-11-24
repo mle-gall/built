@@ -21,7 +21,7 @@ here is drawn from those conventions, not taken from any program's file.
 Everything is locked to the paper, not to the ring it fills, so a pattern
 runs on unbroken across two pieces of the same wall and stays put when the
 frame moves. Nothing here draws: :func:`hatch_marks` returns the marks
-inside a box and ``views.composer`` clips and inks them.
+inside a box and sheets::hatching (Rust) clips and inks them.
 """
 from __future__ import annotations
 

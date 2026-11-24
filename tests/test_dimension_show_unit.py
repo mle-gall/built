@@ -149,11 +149,3 @@ def test_dimension_style_panel_switches_it():
     assert scene.dimension_style["show_unit"] is True
 
 
-def test_new_sheet_cotas_follow_the_document():
-    from core.scene import Scene
-    from views.composer import ComposerWindow
-    scene = Scene()
-    stub = SimpleNamespace(_scene=lambda: scene)
-    assert ComposerWindow._document_shows_unit(stub) is True
-    scene.dimension_style["show_unit"] = False
-    assert ComposerWindow._document_shows_unit(stub) is False

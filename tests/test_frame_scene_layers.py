@@ -26,7 +26,6 @@ from core.layers import Layer
 from core.mesh import Mesh
 from core.scene import Scene
 from core.saved_views import SavedView, visibility_sig
-from views.composer import ComposerWindow
 from tests.controller_surface import ControllerSurface as Viewport
 
 
@@ -67,17 +66,6 @@ def _build_scene(only=None):
     return scene, s1, s2
 
 
-def _make_composer(scene):
-    vp = Viewport(None)
-    vp.scene = scene
-    from core.camera import OrbitCamera
-    vp.camera = OrbitCamera()
-    host = QWidget()
-    host.viewport = vp
-    composer = ComposerWindow(host)
-    return composer, host
-
-
 def _prep_frame(frame, view_key):
     frame.view_key = view_key
     frame.style = "vectorial"
@@ -99,82 +87,6 @@ def _same(a, b):
     return bool(np.allclose(np.sort(a.ravel()), np.sort(b.ravel())))
 
 
-def _control_segs(only, view_key):
-    scene, s1, s2 = _build_scene(only=only)
-    (s1 if view_key == "scene:S1" else s2).apply_state(scene)
-    composer, host = _make_composer(scene)
-    frame = composer.comp.frames[0]
-    _prep_frame(frame, view_key)
-    return _segs(composer, frame)
-
-
-def test_copied_frame_keeps_its_scene_layers_on_export():
-    segs_a = _control_segs("A", "scene:S1")
-    segs_b = _control_segs("B", "scene:S2")
-    assert not _same(segs_a, segs_b)
-
-    scene, s1, s2 = _build_scene()
-    s1.apply_state(scene)  # live = S1: A on, B off
-    composer, host = _make_composer(scene)
-    f1 = composer.comp.frames[0]
-    _prep_frame(f1, "scene:S1")
-    assert _same(_segs(composer, f1), segs_a)
-
-    # Copy/paste the portal, then change the copy's assigned scene.
-    f2 = copy.deepcopy(f1)
-    f2.uid = uuid.uuid4().hex
-    f2.view_key = "scene:S2"
-    composer.comp.frames.append(f2)
-    composer._forget_frame(f2)
-    assert _same(_segs(composer, f2), segs_b)  # right after the change
-
-    # Export re-renders every frame, original first, live still S1.
-    composer.render_frame(f1)
-    composer.render_frame(f2)
-    got = np.asarray(composer.hlr_cache.get(id(f2)), dtype=float)
-    assert _same(got, segs_b)
-
-    # The live model is recalled to the copy's scene — without a version
-    # bump reaching the composer yet (the signal is queued after paint) —
-    # and the export re-renders again: the copy must still show ITS scene.
-    s2.apply_state(scene)
-    composer.render_frame(f1)
-    composer.render_frame(f2)
-    got = np.asarray(composer.hlr_cache.get(id(f2)), dtype=float)
-    assert _same(got, segs_b)
-    got1 = np.asarray(composer.hlr_cache.get(id(f1)), dtype=float)
-    assert _same(got1, segs_a)
-
-
-def test_scene_geometry_rebuilds_when_live_layers_move():
-    scene, s1, s2 = _build_scene()
-    s1.apply_state(scene)
-    composer, host = _make_composer(scene)
-    tris, _, _, _ = composer._scene_geometry()
-    assert len(tris) and float(tris[:, :, 0].max()) == pytest.approx(2.0)
-    # Live recalled to S2 with no version bump: the shared collection
-    # must follow the layers, not serve the S1 build.
-    s2.apply_state(scene)
-    tris, _, _, _ = composer._scene_geometry()
-    assert len(tris) and float(tris[:, :, 0].min()) == pytest.approx(10.0)
-
-
-def test_frame_scene_does_not_leak_hidden_objects():
-    scene, s1, s2 = _build_scene()
-    gb = next(g for g in scene.groups if g.name == "BoxB")
-    s2.hidden_objects = [gb.uid]
-    s1.apply_state(scene)
-    assert not gb.hidden
-    composer, host = _make_composer(scene)
-    f2 = composer.comp.frames[0]
-    _prep_frame(f2, "scene:S2")
-    composer.compute_hlr(f2)
-    # The frame rendered with BoxB hidden; the live model must not keep it.
-    assert not gb.hidden
-    assert scene.folder_visibility["Building"]
-    assert [ly.visible for ly in scene.layers] == [True, True, False]
-
-
 def test_visibility_sig_moves_with_layers_and_hidden_objects():
     scene, s1, s2 = _build_scene()
     base = visibility_sig(scene)
@@ -189,38 +101,3 @@ def test_visibility_sig_moves_with_layers_and_hidden_objects():
     assert visibility_sig(scene) == base
 
 
-def test_folder_only_recall_and_restore_after_render_error():
-    scene, _, s2 = _build_scene()
-    before = visibility_sig(scene)
-    switches = dict(scene.folder_visibility)
-    composer, host = _make_composer(scene)
-    frame = composer.comp.frames[0]
-    _prep_frame(frame, "scene:S2")
-
-    def render():
-        assert all(ly.visible for ly in scene.layers)
-        assert visibility_sig(scene) != before
-        raise RuntimeError("render interrupted")
-
-    with pytest.raises(RuntimeError, match="render interrupted"):
-        composer._with_frame_camera(frame, render)
-    assert scene.folder_visibility == switches
-    assert visibility_sig(scene) == before
-
-
-def test_copied_frame_hides_children_of_folder_hidden_parent():
-    scene, _, s2 = _build_scene()
-    parent, child = scene.groups
-    scene.groups.remove(child)
-    parent.children = [child]
-    composer, host = _make_composer(scene)
-    # Warm the live proxies before the frame temporarily hides the parent.
-    host.viewport._placements()
-    s2.hidden_layers = []
-    frame = composer.comp.frames[0]
-    _prep_frame(frame, "scene:S2")
-    live = visibility_sig(scene)
-    tris, _, _, _ = composer._with_frame_camera(
-        frame, lambda: composer._frame_geometry(live))
-    assert not len(tris)
-    assert host.viewport._placements()[1].layer == "B"

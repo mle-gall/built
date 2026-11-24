@@ -661,7 +661,7 @@ class PerfilTerreno(Record):
     under a traced path (``Scene.geo_paths``) against chainage, the way a
     road or canal plan shows it — a horizontal scale, a vertical
     exaggeration, a grid and chainage labels. The elevations are sampled at
-    paint time from the survey or the DEM (``ComposerWindow.profile_for``);
+    paint time from the survey or the DEM (views/wgpu_sheet_frames.py ``Ground``);
     the sheet stores only what to plot and how."""
 
     x_mm: float = 20.0
@@ -1979,8 +1979,8 @@ def apply_frame_camera(camera, frame: MarcoVista,
                        saved_view=None, scene=None) -> None:
     """Point ``camera`` (an OrbitCamera) at the frame's view, parallel, at
     exact scale. Mutates the camera (and layer visibility when a saved view
-    is given) — callers snapshot/restore around this; see
-    ``views/composer.py``."""
+    is given) — callers snapshot/restore around this. The Sheets workspace
+    never moves the live camera: sheets::camera ``sheet_frame_camera``."""
     if saved_view is not None and scene is not None:
         saved_view.apply(scene, camera)
     elif frame.view_key.startswith("std:"):

@@ -46,35 +46,3 @@ def test_the_flatpak_keeps_the_printing_module():
     assert "WebEngine" in trimmed                 # the loop still trims
 
 
-def test_the_program_can_say_whether_it_has_printing():
-    from views.composer import ComposerWindow
-    assert ComposerWindow.print_support() is not None   # here it does
-
-
-def test_without_the_module_the_button_explains_itself(monkeypatch):
-    """What it must never do again is nothing at all."""
-    from PySide6.QtWidgets import QMessageBox
-    from views.composer import ComposerWindow
-    from views.main_window import MainWindow
-    monkeypatch.setattr(ComposerWindow, "render_frame", lambda self, f: None)
-    win = MainWindow()
-    comp = None
-    try:
-        comp = ComposerWindow(win)
-        said = []
-        monkeypatch.setattr(QMessageBox, "information",
-                            staticmethod(lambda *a, **k: said.append(a[2])))
-        opened = []
-        monkeypatch.setattr(ComposerWindow, "_printer_for_sheet",
-                            lambda self: opened.append(1))
-
-        monkeypatch.setattr(ComposerWindow, "print_support",
-                            staticmethod(lambda: None))
-        comp._on_print_preview()
-        assert said and "Export PDF" in said[0]     # and where to go instead
-        assert not opened                           # no half-open dialog
-    finally:
-        if comp is not None:
-            comp.close()
-        win._saved_version = win.viewport.scene.version
-        win.close()

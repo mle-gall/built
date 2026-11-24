@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """Synthetic sheet items for the painter parity goldens
-(tests/test_sheet_paint_parity.py). ``python_ops(item)`` paints one with
-the Python painter of views/composer.py through the recording painter."""
+(tests/test_sheet_paint_parity.py), recorded from the Python painters of
+views/composer.py through a recording QPainter before both went
+(docs/rust-sheets.md)."""
 from __future__ import annotations
 
 import math
@@ -338,60 +339,3 @@ def profile_of(name: str, native: bool = False):
         prof = {"samples": [(s.station, 0.0, 0.0, s.elevation) for s in prof.samples],
                 "length": prof.length, "complete": all(s.elevation is not None for s in prof.samples)}
     return prof, f"Canal {seed}", ("DEM partly loaded" if seed == 2 else None)
-
-
-def python_ops(item, name: str = ""):
-    """The Python painter's primitives for ``item`` (item-local mm)."""
-    from tests.sheet_paint_recorder import RecordingPainter
-    from views import composer as c
-    p = RecordingPainter()
-    kind = type(item).__name__
-    if kind == "BarraEscala":
-        c.paint_scalebar_mm(p, item)
-    elif kind == "FlechaNorte":
-        c.paint_norte_mm(p, item)
-    elif kind == "Leyenda":
-        c.paint_leyenda_mm(p, item)
-    elif kind == "FormaItem":
-        c.paint_forma_mm(p, item)
-    elif kind == "LlamadaItem":
-        c.paint_llamada_mm(p, item)
-    elif kind == "NivelItem":
-        c.paint_nivel_mm(p, item)
-    elif kind == "ImagenItem":
-        c.paint_image_mm(p, item, None)
-    elif kind == "CotaItem":
-        c.paint_cota_mm(p, item)
-    elif kind == "CotaAngularItem":
-        c.paint_cota_angular_mm(p, item)
-    elif kind == "CotaRadialItem":
-        c.paint_cota_radial_mm(p, item)
-    elif kind == "EtiquetaItem":
-        c.paint_etiqueta_mm(p, item)
-    elif kind == "TextoItem":
-        c.paint_text_mm(p, item)
-    elif kind == "Cajetin":
-        c.paint_cajetin_mm(p, item)
-    elif kind == "Composicion":
-        c.paint_sheet_border_mm(p, item)
-    elif kind == "MarcoVista":
-        from PySide6.QtGui import QImage
-        missing, drawing, image = FRAME_CONTENT[name]
-        segs = kinds = fills = None
-        if drawing is not None:
-            segs, kinds, fills = drawing
-        img = QImage(image[0], image[1], QImage.Format_RGB32) if image is not None else None
-        fill_styles = None
-        if name in FRAME_FILLS:
-            from PySide6.QtGui import QColor
-            qc = lambda c: None if c is None else QColor.fromRgbF(*c)  # noqa: E731
-            fill_styles = [(qc(col), h, qc(g), qc(i), None if f is None else dict(f))
-                           for col, h, g, i, f in FRAME_FILLS[name]]
-        c.paint_frame_mm(p, item, img, hlr=segs, kinds=kinds, fills=fills, missing=missing,
-                         styles=FRAME_STYLES.get(name), fill_styles=fill_styles, annots=FRAME_ANNOTS.get(name))
-    elif kind == "PerfilTerreno":
-        profile, path_name, message = profile_of(name)
-        c.paint_perfil_mm(p, item, profile, path_name, message)
-    else:
-        raise ValueError(kind)
-    return p.ops
