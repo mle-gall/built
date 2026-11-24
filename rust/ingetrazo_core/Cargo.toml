@@ -12,6 +12,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 built_python_bindings = { path = "../python_bindings" }
+encoding_rs = "0.8"
 glam = "0.29.3"
 numpy = "0.29"
 # No `extension-module` here: maturin builds the wheel as an extension

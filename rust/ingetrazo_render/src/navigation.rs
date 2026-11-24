@@ -45,13 +45,24 @@ fn is_finger_device(ev: &Obj) -> PyResult<bool> {
     ))
 }
 
+/// Zoom per pixel of trackpad or touchscreen slide, against a wheel notch's
+/// 120 angle units: 20 px of travel per 10% step.
+pub(super) const TRACKPAD_ZOOM_GAIN: f64 = 3.0;
+
 /// Cocoa's natural-scroll flag reverses a finger device's zoom direction.
 #[pyfunction]
 #[pyo3(signature = (event, invert=false))]
 pub(super) fn zoom_steps(event: &Obj, invert: bool) -> PyResult<f64> {
     let mut steps = event.call_method0("angleDelta")?.call_method0("y")?.extract::<f64>()? / 120.;
+    let finger = is_finger_device(event)?;
+    if finger {
+        // A slide hands over 2 angle units per pixel: 60 px per 10% step
+        // made a whole trackpad slide barely zoom (owner, 2026-11-24, ride
+        // file). Mouse wheel notches keep their 120 units per step.
+        steps *= TRACKPAD_ZOOM_GAIN;
+    }
     if event.py().import("sys")?.getattr("platform")?.eq("darwin")?
-        && is_finger_device(event)? && event.call_method0("inverted")?.is_truthy()? {
+        && finger && event.call_method0("inverted")?.is_truthy()? {
         steps = -steps;
     }
     Ok(if invert { -steps } else { steps })
@@ -323,5 +334,6 @@ pub fn register(parent: &Bound<'_, PyModule>) -> PyResult<()> {
         pinch_steps,
         zoom_steps
     );
+    m.add("TRACKPAD_ZOOM_GAIN", TRACKPAD_ZOOM_GAIN)?;
     parent.add_submodule(&m)
 }

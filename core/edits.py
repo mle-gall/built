@@ -136,7 +136,7 @@ def _scene_has_curves(scene) -> bool:
     sc = scan_index.scan(scene.mesh)
     if sc is not None:
         return sc.native.any_curve()
-    return any(getattr(e, "curve", None) is not None for e in scene.edges)
+    return object_drawing.has_plane_edge(scene.edges)
 
 
 def _append_flat_curve_rebuild(scene, commands, points, *, close_cycles=True) -> None:
@@ -187,9 +187,6 @@ def _append_flat_curve_rebuild(scene, commands, points, *, close_cycles=True) ->
     origin, normal = plane
     tol = 1e-4
 
-    def on_plane(p):
-        return abs(QVector3D.dotProduct(p - origin, normal)) < tol
-
     from core import scan_index
     sc = scan_index.scan(scene.mesh)
     if sc is None:
@@ -198,8 +195,7 @@ def _append_flat_curve_rebuild(scene, commands, points, *, close_cycles=True) ->
         edges = sc.edges(sc.native.edges_on_plane(
             (origin.x(), origin.y(), origin.z()),
             (normal.x(), normal.y(), normal.z()), tol, True))
-    if any(e.curve is not None and on_plane(e.a) and on_plane(e.b)
-           for e in edges):
+    if object_drawing.has_plane_edge(edges, plane):
         commands.append(RebuildPlaneFacesCommand(origin, normal))
 
 
@@ -211,12 +207,10 @@ def _whole_drawing_plane(scene, points):
     rest are judged in one array pass — a point clearly off the plane, by
     more than the float32 error of the test, decides; the doubtful ones go
     through the test itself. Without a scan, the call on the full list."""
-    from core.arrangement import coplanar_plane
     from core import scan_index
     sc = scan_index.scan(scene.mesh)
     if sc is None:
-        verts = [v.position for v in scene.mesh.vertices] + list(points)
-        return coplanar_plane(verts)
+        return object_drawing.coplanar_plane(points, vertices=scene.mesh.vertices)
     from core._native import qt_hypot
     source = scene.mesh._store if sc.store_backed else sc.native
     plane = source.drawing_plane([p.toTuple() for p in points], qt_hypot())
@@ -239,42 +233,18 @@ def _append_face_plane_rebuild(scene, commands, points) -> None:
     if any(isinstance(c, (RebuildPlanarFacesCommand, RebuildPlaneFacesCommand))
            for c in commands):
         return
-    tol = 1e-4
     from core import scan_index
-    sc = scan_index.scan(scene.mesh)
     from core._native import qt_hypot
-    if sc is not None:
+    sc = scan_index.scan(scene.mesh)
+    if sc is None:
+        plane = object_drawing.face_rebuild_plane(scene.mesh.faces, points, 400)
+    else:
         source = scene.mesh._store if sc.store_backed else sc.native
         plane = source.rebuild_plane([p.toTuple() for p in points], 400, qt_hypot())
         if plane is not None:
-            commands.append(RebuildPlaneFacesCommand(*(QVector3D(*p) for p in plane)))
-        return
-    faces = scene.mesh.faces
-    for f in faces:
-        origin = f.vertices[0]
-        normal = f.normal()
-        # A degenerate normal is a WILDCARD here: dot(anything, zero) is 0,
-        # so such a face would claim every line drawn anywhere in the mesh
-        # and hand its "plane" to the rebuild below. Face.normal() no longer
-        # produces one, but nothing downstream should depend on that.
-        if normal.lengthSquared() < 0.5:
-            continue
-        if all(abs(QVector3D.dotProduct(p - origin, normal)) < tol
-               for p in points):
-            # Reference-scale guard: rebuilding a plane that carries hundreds
-            # of faces (a triangulated import living loose in the mesh) runs
-            # the arrangement over all of them — minutes, reads as a hang.
-            # Hand-drawn planes stay far below this; past it, keep the naive
-            # path (imports should live in a Group anyway).
-            others = scene.mesh.faces
-            on_plane = sum(
-                1 for g in others
-                if abs(QVector3D.dotProduct(g.vertices[0] - origin,
-                                            normal)) < tol
-                and abs(QVector3D.dotProduct(g.normal(), normal)) > 0.999)
-            if on_plane <= 400:
-                commands.append(RebuildPlaneFacesCommand(origin, normal))
-            return
+            plane = tuple(QVector3D(*p) for p in plane)
+    if plane is not None:
+        commands.append(RebuildPlaneFacesCommand(*plane))
 
 
 def _append_active_tag(scene, commands) -> None:

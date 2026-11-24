@@ -6,7 +6,7 @@ from pathlib import Path
 
 def check():
     root = Path(sys._MEIPASS)
-    for name in ('numpy', 'openskp', 'ezdxf',
+    for name in ('numpy', 'openskp',
                  'manifold3d', 'ingetrazo_core', 'ingetrazo_render', 'ingetrazo_rfa',
                  'ifcopenshell'):
         module = importlib.import_module(name)

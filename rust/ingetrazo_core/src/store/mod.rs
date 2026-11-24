@@ -68,6 +68,7 @@ mod restore_tail;
 mod revolution;
 pub mod stitch;
 pub mod sweep;
+pub mod tally;
 pub mod topo;
 mod hole;
 mod solid;
