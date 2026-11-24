@@ -114,7 +114,7 @@ const SHEET: &[Row] = &[("name", "Name", F::Text), ("paper", "Paper", F::Pick(PA
     ("landscape", "Landscape", F::Check), ("margin_mm", "Margin", F::Num("mm")),
     ("border", "Sheet border", F::Check), ("border_mm", "Border pen", F::Num("mm"))];
 
-fn title_of(kind: &str) -> &'static str {
+pub(crate) fn title_of(kind: &str) -> &'static str {
     match kind {
         "frame" => "Model view",
         "text" => "Text",

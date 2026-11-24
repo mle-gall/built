@@ -727,7 +727,7 @@ impl Ui {
     /// fields has focus, or Escape while one of its popups is open.
     pub fn claims_key(&self, name: &str) -> bool {
         if self.gallery.is_some() || self.font_picker.is_some() { return true; }
-        if name == "Escape" && (self.strip.menus_open() || self.egui_popup_open() || self.panels.data["terrain"].is_object()) { return true; }
+        if name == "Escape" && (self.ctx_menu.is_some() || self.strip.menus_open() || self.egui_popup_open() || self.panels.data["terrain"].is_object()) { return true; }
         // The large sheet owns every key while it is up (Python keeps the
         // window's ⌘ shortcuts, views/chrome_sheet.py).
         if self.lsheet.open { return true; }
@@ -2546,7 +2546,7 @@ impl Ui {
             self.form_popup(ctx);
             let acts = self.strip.popups(ctx, &self.icons);
             self.actions.extend(acts);
-            if !self.sheets.shown && !sheet_up { self.context_menu(ctx, screen); }
+            if !sheet_up { self.context_menu(ctx, screen); }
             self.large_sheet(ctx, screen);
             self.command_palette(ctx, screen);
             self.dialog_popup(ctx, screen);
@@ -2579,7 +2579,7 @@ impl Ui {
                      ("dialog", self.dialog.is_some()),
                      ("tab_menu", self.strip.menu_open()),
                      ("tab_overflow", self.strip.overflow_open()),
-                     ("ctx_menu", model && self.ctx_menu.is_some()),
+                     ("ctx_menu", self.ctx_menu.is_some()),
                      ("sheet", self.sheet.is_some()),
                      ("dock_grip", work && model && self.column.is_some()),
                      ("insp_color", work && model && self.column.as_ref().is_some_and(|c| c.edits.contains_key("\u{1d}pick")))];

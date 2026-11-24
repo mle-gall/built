@@ -230,6 +230,72 @@ fn lock(f: &Facts) -> Vec<Entry> {
     vec![e("lock", if f.all_locked { "Unlock" } else { "Lock" })]
 }
 
+/// Sheet menu entries carry the same inspector edits and page commands as the dock and keys.
+pub fn sheet_menu(doc: &crate::sheet_page::Snapshot, keys: &[u64], clip: Option<&str>) -> (String, Vec<Row>) {
+    use crate::sheet_inspector::{edit, style_fields, title_of};
+    let items: Vec<_> = keys.iter().filter_map(|k| doc.items.iter().find(|i| i.key == *k)).collect();
+    let mut rows = Rows(Vec::new());
+    let mut one = |id: &str, label: &str| rows.one(vec![e(id, label)]);
+    if items.is_empty() {
+        one("sheets:fit", "Fit page");
+        one("sheets:tool\x1fvista", "Place view");
+        one("sheets:tool\x1ftexto", "Place text");
+        one("sheets:add", "Add sheet");
+        return ("Sheet".into(), rows.0);
+    }
+    let title = if let [item] = items.as_slice() {
+        let kind = item.kind.as_str();
+        if !item.locked {
+            if kind == "text" { one("page:edit_text", "Edit text"); }
+            // None as the value means toggle the inspector's checkbox.
+            let field = match kind {
+                "frame" => Some(("refresh", Some(""), "Update view")),
+                "text" => Some(("font", Some(""), "Font…")),
+                "dimension" => Some(("show_unit", None, "Show unit")),
+                "angular" if item.data["fields"]["ends"] == "arrow" => Some(("ends", Some("0"), "Tick ends")),
+                "angular" => Some(("ends", Some("1"), "Arrow ends")),
+                "radial" => Some(("centre_mark", None, "Centre mark")),
+                "label" => Some(("arrow", None, "Leader arrow")),
+                "level" => Some(("mirror", None, "Text to the left")),
+                "image" => Some(("border", None, "Image border")),
+                "shape" if matches!(item.data["fields"]["kind"].as_str(), Some("rect" | "elipse" | "poligono")) =>
+                    Some(("fill", None, "Fill shape")),
+                "titleblock" if item.data["fields"]["columns"] == 2 => Some(("columns", Some("1"), "One column")),
+                "titleblock" => Some(("columns", Some("2"), "Two columns")),
+                _ => None,
+            };
+            if let Some((field, value, label)) = field {
+                let check = value.is_none();
+                let on = item.data["fields"][field].as_bool().unwrap_or(false);
+                let value = value.unwrap_or(if on { "0" } else { "1" });
+                if let Some(action) = edit(doc, &format!("{}:{field}", item.key), value) {
+                    let mut entry = e(&format!("sheets:{action}"), label);
+                    if check { entry = checked(entry, on); }
+                    rows.one(vec![entry]);
+                }
+            }
+        }
+        title_of(kind).into()
+    } else {
+        plural(items.len(), "item")
+    };
+    let first = items[0];
+    let movable = items.iter().any(|i| i.kind != "titleblock");
+    let mut one = |id: &str, label: &str| rows.one(vec![e(id, label)]);
+    if !style_fields(&first.kind).is_empty() && items.len() == 1 { one("page:copy_style", "Copy style"); }
+    if items.iter().any(|i| !i.locked && Some(i.kind.as_str()) == clip) { one("page:paste_style", "Paste style"); }
+    if items.iter().any(|i| i.data["fields"]["group_id"].as_str().is_some_and(|g| !g.is_empty())) {
+        one("page:ungroup", "Ungroup");
+    } else if items.len() >= 2 && items.iter().all(|i| i.kind != "titleblock" && !i.locked) {
+        one("page:group", "Group");
+    }
+    let all_locked = items.iter().all(|i| i.locked);
+    one("page:lock", if all_locked { "Unlock" } else { "Lock" });
+    if movable { one("sheets:duplicate_items", "Duplicate"); }
+    if items.iter().any(|i| !i.locked && i.kind != "titleblock") { one("sheets:delete_items", "Delete"); }
+    (title, rows.0)
+}
+
 /// The right-click menu's rows for a selection of `kind`.
 pub fn menu_rows(f: &Facts, kind: &str) -> Vec<Row> {
     let read_only = READ_ONLY.contains(&kind);
