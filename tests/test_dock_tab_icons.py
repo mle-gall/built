@@ -84,10 +84,9 @@ def test_every_panel_icon_is_drawn_and_its_own():
 
 def test_every_built_in_tray_has_its_icon(win):
     keys = {d.property("icon_key") for d in
-            (win.tray, win.bim_tray, win.georef_tray, win.project_browser,
-             win.layers_dock)}
+            (win.tray, win.bim_tray, win.georef_tray, win.project_browser)}
     assert keys == {"panel_properties", "panel_bim", "panel_terrain",
-                    "panel_browser", "layers_panel"}
+                    "panel_browser"}
     for dock in win._sidebar_docks():
         assert dock.testAttribute(Qt.WA_SetWindowIcon), dock.windowTitle()
         assert not dock.windowIcon().isNull()
@@ -677,7 +676,7 @@ def _own_dock(win, title, name):
 def test_a_tab_stands_for_its_own_panel_not_for_one_of_the_same_name(win):
     """An extension dock with the same title as a built-in dock: found by title,
     the tab of one answered for the other — its menu, its icon."""
-    mine = win.layers_dock
+    mine = win.project_browser
     other = _own_dock(win, mine.windowTitle(), "own_scenes")
     docks = [mine, other]
     seen = []

@@ -658,6 +658,17 @@ pub mod molecules {
     pub fn number<'a>(value: &'a mut f64, units: &str) -> egui::DragValue<'a> {
         egui::DragValue::new(value).suffix(units)
     }
+    /// The default uncoloured tag has a slash. Other tags show their model colour.
+    pub fn tag_swatch(ui: &egui::Ui, rect: Rect, colour: Option<Color32>) {
+        let painter = ui.painter();
+        let corners = CornerRadius::same(R_INSET);
+        if let Some(colour) = colour {
+            painter.rect_filled(rect, corners, colour);
+        } else {
+            painter.line_segment([rect.left_top(), rect.right_bottom()], Stroke::new(1.5, ERROR));
+        }
+        painter.rect_stroke(rect, corners, Stroke::new(1., EDGE), egui::StrokeKind::Inside);
+    }
     pub fn swatch(ui: &mut egui::Ui, value: &mut Color32) -> egui::Response {
         ui.color_edit_button_srgba(value)
     }
@@ -1936,6 +1947,25 @@ pub fn scene_preview_row(ui:&mut egui::Ui,name:&str,current:bool,image:Option<&e
     hit.on_hover_text(name)
 }
 
+/// Paired names in a scrollable preview. Unchanged values use the secondary ink.
+pub fn rename_preview(ui: &mut egui::Ui, before: &str, after: &str, pairs: &[String]) {
+    let row = |ui: &mut egui::Ui, left: &str, right: &str, header: bool| {
+        ui.columns(2, |cells| {
+            for (i, value) in [left, right].into_iter().enumerate() {
+                let changed = !header && i == 1 && left != right;
+                let font = if changed { strong(TYPE_BODY) } else { meta() };
+                let color = if changed { INK } else { DIM };
+                cells[i].add(egui::Label::new(egui::RichText::new(value).font(font).color(color)).truncate()).on_hover_text(value);
+            }
+        });
+    };
+    row(ui, before, after, true);
+    egui::ScrollArea::vertical().id_salt("rename preview").max_height(ROW_H * 8.)
+        .show_rows(ui, ROW_H, pairs.len() / 2, |ui, indices| {
+            for i in indices { row(ui, &pairs[2*i], &pairs[2*i + 1], false); }
+        });
+}
+
 pub fn line_sample(ui: &egui::Ui, rect: Rect, mm: &str, pattern: &str, color: Color32) {
     let width = (mm.parse::<f32>().unwrap_or(0.18)*3.8).clamp(0.7, 5.);
     let dash: &[f32] = match pattern {
@@ -2007,4 +2037,27 @@ pub fn tag_inspector(ui:&mut egui::Ui, key:&str, name:&str, count:u32, cells:&[S
         prop_row(ui,"Colour",if cells[0].is_empty(){"By material"}else{&cells[0]});
     }
     menu
+}
+
+#[cfg(test)]
+mod tag_swatch_tests {
+    use super::*;
+
+    #[test]
+    fn only_an_uncoloured_tag_has_a_downward_slash() {
+        let ctx = egui::Context::default();
+        for colour in [None, Some(ACCENT)] {
+            let mut rect = Rect::NOTHING;
+            let frame = ctx.run(Default::default(), |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    rect = ui.allocate_exact_size(vec2(16.,16.), Sense::hover()).0;
+                    tag_swatch(ui, rect, colour);
+                });
+            });
+            let slash = frame.shapes.iter().any(|s| matches!(&s.shape,
+                egui::Shape::LineSegment { points, stroke }
+                if *points == [rect.left_top(), rect.right_bottom()] && stroke.color == ERROR));
+            assert_eq!(slash, colour.is_none());
+        }
+    }
 }

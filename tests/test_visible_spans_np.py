@@ -54,3 +54,13 @@ def test_vector_culling_is_the_walk(native_window, monkeypatch):
         got = vp._visible_spans(spans, planes, split)
         again = vp._visible_spans(spans, planes, split)  # cached arrays
         assert got == want and again == want
+
+
+def test_span_culling_keeps_unknown_extents_and_edit_split(native_window):
+    vp = native_window.viewport
+    outside = ((-4, 0, 0), (-1, 2, 2))
+    touching = ((-3, 0, 0), (0, 2, 2))
+    spans = [(None, 0, 3), (outside, 3, 6), (touching, 9, 6),
+             (None, 15, 3), (None, 18, 0)]
+    assert vp._visible_spans_np(spans, [(1., 0., 0., 0.)], 15) == (
+        [(0, 3), (9, 6), (15, 3)], 6)

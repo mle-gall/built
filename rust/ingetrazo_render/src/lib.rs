@@ -12,6 +12,7 @@ mod component_replacement;
 mod component_rows;
 mod context_pick;
 mod context_placements;
+mod section_display;
 mod inspection_edits;
 mod context_edits;
 mod native_view_actions;
@@ -2574,14 +2575,18 @@ impl Renderer {
         if let Some(ui) = self.ui.as_mut() { ui.panels.set(key, value); }
         Ok(())
     }
+    fn ui_project_hidden(&self) -> bool {
+        self.ui.as_ref().is_some_and(|ui| ui.project_hidden())
+    }
     fn ui_toggle_review(&mut self) {
         if let Some(ui) = self.ui.as_mut() { ui.toggle_review(); }
     }
     fn ui_show_inspector(&mut self) {
         if let Some(ui) = self.ui.as_mut() { ui.show_inspector(); }
     }
-    fn ui_set_catalog_info(&mut self, filename: String, tree: &Bound<'_,PyAny>, counts: &Bound<'_,PyAny>) -> PyResult<()> {
-        if let Some(ui)=self.ui.as_mut() { ui.set_catalog_info(filename,tree,counts)?; }
+    #[pyo3(signature=(filename, tree, counts, picked=0))]
+    fn ui_set_catalog_info(&mut self, filename: String, tree: &Bound<'_,PyAny>, counts: &Bound<'_,PyAny>, picked: usize) -> PyResult<()> {
+        if let Some(ui)=self.ui.as_mut() { ui.set_catalog_info(filename,tree,counts)?; ui.set_browser_picks(picked); }
         Ok(())
     }
     #[pyo3(signature = (owner, lines, patterns=None, scene=None))]
@@ -2712,6 +2717,9 @@ impl Renderer {
     }
     fn ui_set_activity(&mut self, history: Vec<ui::ActivityRow>, banner: String) {
         if let Some(ui) = self.ui.as_mut() { ui.set_activity(history, banner); }
+    }
+    fn ui_rename_browser_row(&mut self, id: &str) -> bool {
+        self.ui.as_mut().is_some_and(|ui| ui.rename_browser_row(id))
     }
     fn ui_reveal_row(&mut self, key: String) {
         if let Some(ui) = self.ui.as_mut() { ui.reveal_row(key); }
@@ -3228,6 +3236,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     close_documents::register(m)?;
     m.add_class::<component_rows::ComponentRows>()?;
     m.add_function(wrap_pyfunction!(context_placements::pick_candidates, m)?)?;
+    section_display::register(m)?;
     m.add_function(wrap_pyfunction!(context_placements::context_placements, m)?)?;
     m.add_function(wrap_pyfunction!(context_pick::context_pick, m)?)?;
     m.add_function(wrap_pyfunction!(component_rows::select_component_instances, m)?)?;

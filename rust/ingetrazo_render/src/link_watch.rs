@@ -165,15 +165,6 @@ impl LinkWatch {
             win.call_method0("statusBar")?
                 .call_method1("showMessage", (messages.join("  ·  "), 5000))?;
         }
-        if let Some(panel) = win
-            .getattr("layers_dock")
-            .ok()
-            .and_then(|d| d.getattr("panel").ok())
-        {
-            if panel.hasattr("on_scene_changed")? {
-                panel.call_method0("on_scene_changed")?;
-            }
-        }
         Ok(())
     }
 }
