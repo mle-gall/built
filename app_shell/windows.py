@@ -77,13 +77,13 @@ def take(token):
 def can_move(win) -> bool:
     """Whether the tab menu offers Move to new window: the native app, with
     a window able to ask for another."""
-    return host_of(win) is not None and len(win._documents) > 1
+    return host_of(win) is not None and win._workspace is None and len(win._documents) > 1
 
 
 def move_to_new_window(win, doc) -> str | None:
     """Ask for a window that takes ``doc`` from ``win`` (the tab menu)."""
     host = host_of(win)
-    if host is None or win._workspace is not None or doc not in win._documents or len(win._documents) < 2:
+    if not can_move(win) or doc not in win._documents:
         return None
     from views import chrome_dialogs as cd
     if cd.modal(win):

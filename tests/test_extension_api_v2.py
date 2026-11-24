@@ -287,6 +287,23 @@ def test_the_model_is_parked_and_comes_back(native_window):
     assert ws.gone and app.workspace() is None
 
 
+def test_workspace_cannot_take_over_an_open_or_write_over_the_parked_model(native_window, tmp_path):
+    from app_shell import files, windows
+    win = native_window
+    doc = win.active_document()
+    ws = FakeWorkspace()
+    win._open_in_progress = True
+    assert not win.enter_workspace(ws)
+    win._open_in_progress = False
+    assert win.enter_workspace(ws)
+    assert not windows.can_move(win)
+    target = tmp_path / "parked.built"
+    target.write_bytes(b"parked model")
+    assert not files.do_save(win, target)
+    assert target.read_bytes() == b"parked model"
+    assert win.leave_workspace() and win.active_document() is doc
+
+
 def test_each_swap_resets_the_document_caches(native_window, monkeypatch):
     win = native_window
     calls = []

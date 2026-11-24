@@ -12,7 +12,10 @@ fn workspace_tools(win: &Bound<'_, PyAny>, allowed: &Bound<'_, PyAny>) -> PyResu
 
 #[pyfunction]
 fn enter_workspace(win: &Bound<'_, PyAny>, ws: &Bound<'_, PyAny>) -> PyResult<bool> {
-    if !win.getattr("_workspace")?.is_none() {
+    if !win.getattr("_workspace")?.is_none()
+        || win.getattr("_open_in_progress")?.is_truthy()?
+        || win.getattr("_opening_document")?.is_truthy()?
+    {
         return Ok(false);
     }
     let py = win.py();
