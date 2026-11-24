@@ -3012,7 +3012,6 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<ui::operation_form::OperationForm>()?;
     m.add_function(wrap_pyfunction!(scene_photo::render_scene_photo,m)?)?;
     m.add_function(wrap_pyfunction!(scene_photo::opaque_frame,m)?)?;
-    m.add_function(wrap_pyfunction!(scene_photo::scene_thumbnail_icon,m)?)?;
     m.add_function(wrap_pyfunction!(scene_photo::save_thumbnail_mode,m)?)?;
     start_view::register(m)?;
     library_view::register(m)?;
