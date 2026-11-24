@@ -6,6 +6,9 @@ use crate::store::drawing::intersection;
 use numpy::{PyReadonlyArray2, PyUntypedArrayMethods};
 use pyo3::prelude::*;
 
+#[path = "snap_inputs.rs"]
+pub(crate) mod inputs;
+
 pub(crate) type P = [f64; 3];
 type Line = (P, P);
 pub(crate) fn sub(a: P, b: P) -> P {
@@ -56,6 +59,20 @@ pub struct SnapQuery {
 enum Projection {
     Matrix([f64; 16], [f64; 2]),
     Callback(Py<PyAny>),
+}
+
+impl Projection {
+    fn from_parts(matrix: Option<[f64;16]>, size: Option<[f64;2]>, projector: Option<Py<PyAny>>) -> PyResult<Self> {
+        Ok(match (matrix, size, projector) {
+            (Some(matrix), Some(size), None) => Projection::Matrix(matrix, size),
+            (None, None, Some(callback)) => Projection::Callback(callback),
+            _ => {
+                return Err(pyo3::exceptions::PyValueError::new_err(
+                    "provide matrix and viewport size, or a projector",
+                ))
+            }
+        })
+    }
 }
 
 type Choice = (f64, P, i64, &'static str, bool);
@@ -146,15 +163,7 @@ impl SnapQuery {
                 "snap edge array shape",
             ));
         }
-        let projection = match (matrix, size, projector) {
-            (Some(matrix), Some(size), None) => Projection::Matrix(matrix, size),
-            (None, None, Some(callback)) => Projection::Callback(callback),
-            _ => {
-                return Err(pyo3::exceptions::PyValueError::new_err(
-                    "provide matrix and viewport size, or a projector",
-                ))
-            }
-        };
+        let projection = Projection::from_parts(matrix,size,projector)?;
         let edges = a
             .as_slice()?
             .chunks_exact(3)
@@ -168,6 +177,12 @@ impl SnapQuery {
             projection,
             cursor,
         })
+    }
+
+    #[staticmethod]
+    #[pyo3(signature=(edges,matrix,size,cursor,projector=None))]
+    fn from_objects(edges:&Bound<'_,PyAny>,matrix:Option<[f64;16]>,size:Option<[f64;2]>,cursor:[f64;2],projector:Option<Py<PyAny>>) -> PyResult<Self> {
+        inputs::from_objects(edges, Projection::from_parts(matrix,size,projector)?, cursor)
     }
 
     // Return the nearest and preferred tied point. The nearest must be visible

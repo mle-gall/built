@@ -1,45 +1,21 @@
 """Adapters between tool edge references, renderer visibility and the f64 query."""
 from ingetrazo_core import Vec3 as QVector3D
-import numpy as np
-
-from ingetrazo_core import SnapQuery, PointVisibility
-
-
-def edge_tag(edge):
-    attributes = 8 if getattr(edge, 'figure', False) else 0
-    if getattr(edge, 'soft', False) or getattr(edge, 'hidden', False) or getattr(edge, 'curve', None) is not None:
-        attributes |= 16
-    for tag, name in ((2, 'center'), (3, 'component_origin'), (4, 'arc_midpoint'), (1, 'guide')):
-        if getattr(edge, name, False):
-            return attributes | tag
-    return attributes
-
-
-def edge_columns(edges):
-    starts, ends, tags, grouped = [], [], [], []
-    for edge in edges:
-        starts.append(edge.a.toTuple())
-        ends.append(edge.b.toTuple())
-        tags.append(edge_tag(edge))
-        grouped.append(getattr(edge, 'context', None) is not None)
-    return (np.asarray(starts, dtype=float).reshape(-1, 3),
-            np.asarray(ends, dtype=float).reshape(-1, 3), tags, grouped)
+from ingetrazo_core import SnapQuery, PointVisibility, edge_tag, edge_columns, point_inputs
 
 
 def make_query(edges, projector, cursor):
     projection = getattr(projector, 'snap_projection', None)
-    columns = edges.snap_columns() if hasattr(edges, 'snap_columns') else edge_columns(edges)
-    if projection is None:
-        return SnapQuery(*columns, None, None, cursor, projector)
-    return SnapQuery(*columns, *projection, cursor)
+    args = (None, None, cursor, projector) if projection is None else (*projection, cursor)
+    if hasattr(edges, 'snap_columns'):
+        return SnapQuery(*edges.snap_columns(), *args)
+    return SnapQuery.from_objects(edges, *args)
 
 
 def point_result(query, edges, radius, hidden, *, midpoints=False, quadrants=(),
                  centers=(), line=None, hidden_many=None):
     from core.snap import (SnapResult, COLOR_ENDPOINT, COLOR_MIDPOINT, COLOR_ORIGIN,
                            COLOR_ON_FACE)
-    extras = [(p.toTuple(), context is not None) for p, context in centers]
-    quads = [p.toTuple() for p in quadrants]
+    quads, extras = point_inputs(quadrants, centers)
     occluded = PointVisibility(hidden, hidden_many or None) if hidden else None
     choice = query.points(radius, midpoints, quads, extras, occluded, line)
     if choice is not None:
