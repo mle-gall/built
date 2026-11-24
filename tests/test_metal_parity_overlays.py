@@ -55,9 +55,24 @@ KINDS = ("endpoint origin component_origin on_edge on_axis intersection_edge "
          "center axis axis_inference none").split()
 
 
+def canvas_rgba(draw, size=(360, 100), dpr=1):
+    from ingetrazo_render import AnnotationCanvas
+    w, h = int(size[0] * dpr), int(size[1] * dpr)
+    canvas = AnnotationCanvas(w, h, float(size[0]))
+    draw(canvas)
+    return canvas.composite(bytes(w * h * 4))
+
+
 @pytest.mark.parametrize("kind", KINDS)
 @pytest.mark.parametrize("dpr", [1, 2])
-def test_snap_matches_gl(kind, dpr):
+def test_snap_marker_is_pinned(kind, dpr):
+    """The marker moved from Python painting to AnnotationCanvas.draw_snap.
+    The digests are of the Python marker on the same canvas with the
+    native paint types, before the port (docs/render-glue-port.md); the
+    Python marker in its turn matched GL's within one per channel."""
+    import hashlib
+    import json
+    from pathlib import Path
     snap = SnapResult(kind=kind, point=V(48, 40, 0), color=(.16, .62, .36),
                       guide=(V(80, 40, 0), V(325, 40, 0)),
                       guide_color=(.86, .22, .27))
@@ -66,15 +81,10 @@ def test_snap_matches_gl(kind, dpr):
     snap.context = "component"
     project = lambda p: (p.x(), p.y())
     clip = lambda a, b: (a, b)
-    reference = SimpleNamespace(_world_to_pixel=project, _clip_pixel_line=clip,
-                                _SNAP_LABELS=Viewport._SNAP_LABELS)
-    reference._snap_context_suffix = (
-        lambda c: Viewport._snap_context_suffix(reference, c))
-    expected = painted(lambda p: Viewport._draw_snap_indicator(reference, p, snap), dpr=dpr)
-    actual = painted(lambda p: draw_snap_indicator(p, snap, project, clip), dpr=dpr)
-    equal(actual, expected)
-    if kind in ("axis", "axis_inference"):
-        assert not pixels(actual).any()
+    rgba = canvas_rgba(lambda c: draw_snap_indicator(c, snap, project, clip), dpr=dpr)
+    pins = json.loads((Path(__file__).parent / "data" / "snap_marker_digests.json").read_text())
+    assert hashlib.sha256(rgba).hexdigest()[:24] == pins[f"{dpr}|{kind}"]
+    assert any(rgba) == (kind not in ("axis", "axis_inference"))
 
 
 @pytest.mark.parametrize("style", ["window", "crossing", "zoom"])

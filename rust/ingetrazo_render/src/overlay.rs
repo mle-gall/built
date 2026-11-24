@@ -4,7 +4,17 @@ pub struct Overlay {
     cue: wgpu::Buffer,
     cue_data: [f32; 4],
     has_ink: bool,
+    /// The part of the image that may hold ink, `[x0, y0, x1, y1)`: what a
+    /// region upload must cover besides the new drawing, to clear it.
+    inked: Option<[u32; 4]>,
     image: Option<(wgpu::Texture, wgpu::BindGroup, u32, u32)>,
+}
+
+fn union(a: Option<[u32; 4]>, b: Option<[u32; 4]>) -> Option<[u32; 4]> {
+    match (a, b) {
+        (Some(a), Some(b)) => Some([a[0].min(b[0]), a[1].min(b[1]), a[2].max(b[2]), a[3].max(b[3])]),
+        (a, b) => a.or(b),
+    }
 }
 impl Overlay {
     pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
@@ -42,6 +52,7 @@ impl Overlay {
             cue: crate::buffer(device, &[0; 16], wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST),
             cue_data: [0.; 4],
             has_ink: false,
+            inked: None,
             image: None,
         }
     }
@@ -73,16 +84,27 @@ impl Overlay {
 
     pub fn upload(&mut self, d: &wgpu::Device, q: &wgpu::Queue, w: u32, h: u32, rgba: &[u8]) {
         self.ensure(d, w, h);
-        self.upload_region(q, 0, 0, w, h, rgba);
-    }
-    pub fn clear_layer(&mut self, device: &wgpu::Device, w: u32, h: u32) {
-        if self.has_ink {
-            self.image = None;
-            self.has_ink = false;
+        if self.upload_region(q, 0, 0, w, h, rgba) {
+            self.inked = Some([0, 0, w, h]);
         }
-        self.ensure(device, w, h);
     }
 
+    /// Replace only what changed: this frame's drawn `region` and the ink the
+    /// last one left, read by `pixels(x0, y0, x1, y1)` as straight RGBA
+    /// (zero outside the drawing). A tool's few marks then move a few
+    /// thousand pixels, not the whole window's (docs/render-glue-port.md).
+    pub fn upload_changed(&mut self, d: &wgpu::Device, q: &wgpu::Queue, w: u32, h: u32,
+                          region: Option<[u32; 4]>, pixels: impl FnOnce([u32; 4]) -> Vec<u8>) {
+        self.ensure(d, w, h);
+        let clamp = |r: [u32; 4]| Some([r[0].min(w), r[1].min(h), r[2].min(w), r[3].min(h)])
+            .filter(|r| r[0] < r[2] && r[1] < r[3]);
+        let region = region.and_then(clamp);
+        let Some(changed) = union(self.inked, region).and_then(clamp) else { return };
+        let rgba = pixels(changed);
+        if self.upload_region(q, changed[0], changed[1], changed[2] - changed[0], changed[3] - changed[1], &rgba) {
+            self.inked = region;
+        }
+    }
     /// Give the layer a ``w`` × ``h`` image (kept when it already is that size).
     pub fn ensure(&mut self, d: &wgpu::Device, w: u32, h: u32) {
         if self.image.as_ref().map(|v| (v.2, v.3)) != Some((w, h)) {
@@ -112,6 +134,7 @@ impl Overlay {
                 }],
             });
             self.image = Some((texture, group, w, h));
+            self.inked = None;
         }
     }
     /// Replace the ``w`` × ``h`` rectangle at ``x``, ``y`` of the image.
