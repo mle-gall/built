@@ -35,24 +35,35 @@ def _rpc(sock, tool, args=None):
 def _ask(bridge, tool, args=None):
     """Send a request from a worker thread while THIS (main/Qt) thread pumps
     events — the bridge executes on the Qt main thread via a queued signal."""
-    app = QApplication.instance()
-    out: dict = {}
+    from concurrent.futures import Future
+    from PySide6.QtCore import QEventLoop, QObject, Qt, Signal
+    from plugins.ai_bridge import UI_CALL_TIMEOUT
+
+    class Client(QObject):
+        finished = Signal()
+
+    client = Client()
+    loop = QEventLoop()
+    client.finished.connect(loop.quit, Qt.QueuedConnection)
+    result = Future()
 
     def worker():
-        s = socket.socket()
-        s.settimeout(10.0)
-        s.connect(("127.0.0.1", bridge.port))
         try:
-            out["reply"] = _rpc(s, tool, args)
+            with socket.create_connection(("127.0.0.1", bridge.port), timeout=10) as sock:
+                # The server can still be servicing a modal UI call after the
+                # connect deadline. Let it send its own bounded timeout reply.
+                sock.settimeout(UI_CALL_TIMEOUT + 10)
+                result.set_result(_rpc(sock, tool, args))
+        except BaseException as exc:
+            result.set_exception(exc)
         finally:
-            s.close()
+            client.finished.emit()
 
-    t = threading.Thread(target=worker)
-    t.start()
-    while t.is_alive():
-        app.processEvents()
-        t.join(timeout=0.01)
-    return out["reply"]
+    thread = threading.Thread(target=worker)
+    thread.start()
+    loop.exec()
+    thread.join()
+    return result.result()
 
 
 def test_bridge_runs_python_transactionally(monkeypatch):
