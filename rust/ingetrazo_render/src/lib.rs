@@ -49,6 +49,7 @@ mod sections;
 mod preview;
 mod preview_texture;
 mod geometry_preview;
+mod tool_feedback;
 mod tool_instances;
 mod lines;
 mod references;
@@ -177,8 +178,11 @@ struct Target {
     /// its pick IDs stale.
     seen_epoch: u64,
 }
+static NEXT_RENDERER_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
 #[pyclass(unsendable)]
 struct Renderer {
+    id: u64,
     instance: wgpu::Instance,
     /// Inactive views of the same scene, addressed by a never-recycled id.
     targets: std::collections::HashMap<usize, Target>,
@@ -724,6 +728,7 @@ impl Renderer {
         let mut transparency = xray::Xray::new(&device, format, w, h);
         transparency.bind_textures(&device, &textures);
         Ok(Self {
+            id: NEXT_RENDERER_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             instance, targets: Default::default(), active: 0, next_target: 1, scene_epoch: 0,
             textures, texture_groups, textures_enabled: true, material_transparency: true,
             ao: ao::AmbientOcclusion::new(samples.clone(), &device, format),
@@ -3181,6 +3186,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(context_targets, m)?)?;
     m.add_function(wrap_pyfunction!(parallel_annotation_ray, m)?)?;
     m.add_function(wrap_pyfunction!(preview_texture::preview_materials, m)?)?;
+    m.add_function(wrap_pyfunction!(tool_feedback::sync_tool_preview, m)?)?;
     m.add_class::<extensions::ExtensionBrowser>()?;
     m.add_class::<component_catalogue::ComponentCatalogue>()?;
     m.add_function(wrap_pyfunction!(surfaces::surface_spec, m)?)?;

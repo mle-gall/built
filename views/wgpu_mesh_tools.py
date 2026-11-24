@@ -532,45 +532,9 @@ class MeshToolAccess:
         self.view.update()
 
     def mesh_feedback(self):
-        """Push the tool's depth-tested preview to the renderer and report
-        its measurement. Everything that floats over the model (rubber
-        band, guide preview, grips, labels, snap) is painted each frame by
-        draw_annotations with GL's own painters, so this adds no overlay
-        primitives. The upload is skipped when the preview is unchanged:
-        the frame loop calls this whenever no primitive is pending."""
-        faces = list(getattr(self.tool, 'preview_faces', lambda: [])())
-        self.view.preview_faces = faces
-        renderer = getattr(self.view, 'renderer', None)
-        if renderer is not None and hasattr(renderer, 'set_preview_mesh'):
-            from views.wgpu_parity import preview_mesh
-            from views.wgpu_annotations import rubber_band
-            band = rubber_band(self) if getattr(self.tool, 'wireframe_depth_tested', False) else None
-            # GL draws a depth-tested band (Push/Pull's forming box) in
-            # the scene pass so the faces hide its back edges; the preview
-            # faces themselves carry no outline of their own.
-            edges = ([(a, b, band[1]) for a, b in band[0]]
-                     if band is not None and band[3] else [])
-            from ingetrazo_render import preview_materials
-            plain, runs = preview_materials(faces, getattr(self.view, 'source_viewport', None),
-                                            getattr(self.tool, 'preview_opacity', 1.0))
-            mesh = preview_mesh(plain, edges)
-            key = tuple(bytes(part) for part in mesh)
-            key += tuple((path, shade, opacity, bytes(vertices)) for path, shade, opacity, vertices in runs)
-            # The selected groups' boxes, depth-tested like GL's: the
-            # preview is this tool's while it is active. Cached vertices,
-            # compared by their key, not their bytes.
-            boxes = getattr(self.view, '_selection_box_vertices', None)
-            box_key, box = boxes() if boxes is not None else (None, None)
-            if (key, box_key) != getattr(self.view, '_preview_key', None):
-                if box is not None and len(box):
-                    from views.wgpu_parity import raw
-                    mesh = (mesh[0], np.concatenate((mesh[1], raw(box))))
-                if runs:
-                    renderer.set_preview_mesh(*mesh, [(path, shade, opacity, np.asarray(vertices))
-                        for path, shade, opacity, vertices in runs])
-                else:
-                    renderer.set_preview_mesh(*mesh)
-                self.view._preview_key = (key, box_key)
+        """Publish the machine's transient mesh and its formatted measurement."""
+        from ingetrazo_render import sync_tool_preview
+        sync_tool_preview(self)
         label = self.tool.value_label() if hasattr(self.tool, 'value_label') else None
         if label is not None:
             self.measurementChanged.emit(label[0])
@@ -663,7 +627,10 @@ class MeshToolAccess:
         from views.document_interaction import DocumentInteraction
         return DocumentInteraction.pick_extension_item(self, x, y)
 
-    _group_obb = _unsupported_pick
+    def _group_obb(self, group):
+        bounds = getattr(self.view, "_group_obb", None)
+        return bounds(group) if bounds is not None else None
+
     def begin_loose_preview(self, groups, vertices):
         view, mesh = self.view, self.scene.mesh
         renderer = getattr(view, 'renderer', None)
