@@ -732,13 +732,23 @@ impl Renderer {
         );
         let profile_top = pipeline(wgpu::PrimitiveTopology::TriangleList, "profile_fs",
             wgpu::CompareFunction::Always, false, bias, 1);
+        // GPU timings are optional. A device that advertises timestamps can
+        // still fail to allocate the counter sample buffer (Metal, late in a
+        // long test run): without a scope wgpu's default handler panics on
+        // that. Then the renderer measures nothing instead.
         let queries = features.contains(wgpu::Features::TIMESTAMP_QUERY).then(|| {
-            device.create_query_set(&wgpu::QuerySetDescriptor {
+            for filter in [wgpu::ErrorFilter::Internal, wgpu::ErrorFilter::OutOfMemory, wgpu::ErrorFilter::Validation] {
+                device.push_error_scope(filter);
+            }
+            let set = device.create_query_set(&wgpu::QuerySetDescriptor {
                 label: None,
                 ty: wgpu::QueryType::Timestamp,
                 count: timing::COUNT,
-            })
-        });
+            });
+            let failed = (0..3).map(|_| pollster::block_on(device.pop_error_scope())).fold(false, |f, e| f | e.is_some());
+            (!failed).then_some(set)
+        }).flatten();
+        let timestamps = queries.is_some();
         let resolve = buffer(
             &device,
             &[0; timing::BYTES],
@@ -828,7 +838,7 @@ impl Renderer {
             last_pick_gpu: None,
             pass_gpu: Default::default(),
             last_counters: Default::default(),
-            detailed_timestamps: features.contains(wgpu::Features::TIMESTAMP_QUERY),
+            detailed_timestamps: timestamps,
             last_cpu: 0.,
             last_acquire: 0.,
             frame_stages: [0.; 5],
