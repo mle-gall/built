@@ -49,9 +49,13 @@ pub struct SnapQuery {
     edges: Vec<[P; 2]>,
     tags: Vec<u8>,
     grouped: Vec<bool>,
-    matrix: [f64; 16],
-    size: [f64; 2],
+    projection: Projection,
     pub(crate) cursor: [f64; 2],
+}
+
+enum Projection {
+    Matrix([f64; 16], [f64; 2]),
+    Callback(Py<PyAny>),
 }
 
 type Choice = (f64, P, i64, &'static str, bool);
@@ -93,33 +97,64 @@ impl SnapQuery {
             .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("snap edge ordinal"))
     }
 
-    pub(crate) fn pixel(&self, p: P) -> Option<(f64, f64)> {
-        project(&self.matrix, p, self.size[0], self.size[1])
+    fn scan<T: pyo3::marker::Ungil>(
+        &self,
+        py: Python<'_>,
+        f: impl FnOnce() -> T + pyo3::marker::Ungil,
+    ) -> T {
+        match self.projection {
+            Projection::Matrix(..) => py.detach(f),
+            Projection::Callback(_) => f(),
+        }
     }
-    pub(crate) fn distance(&self, p: P) -> f64 {
-        self.pixel(p).map_or(f64::INFINITY, |(x, y)| {
+
+    pub(crate) fn pixel(&self, p: P) -> PyResult<Option<(f64, f64)>> {
+        match &self.projection {
+            Projection::Matrix(matrix, size) => Ok(project(matrix, p, size[0], size[1])),
+            Projection::Callback(projector) => Python::attach(|py| {
+                let point = crate::math::Vec3::from(glam::DVec3::from_array(p));
+                Ok(projector
+                    .call1(py, (point,))?
+                    .extract::<Option<[f64; 2]>>(py)?
+                    .map(|[x, y]| (x, y)))
+            }),
+        }
+    }
+    pub(crate) fn distance(&self, p: P) -> PyResult<f64> {
+        Ok(self.pixel(p)?.map_or(f64::INFINITY, |(x, y)| {
             (x - self.cursor[0]).hypot(y - self.cursor[1])
-        })
+        }))
     }
 }
 
 #[pymethods]
 impl SnapQuery {
     #[new]
+    #[pyo3(signature=(a,b,tags,grouped,matrix,size,cursor,projector=None))]
     fn new(
         a: PyReadonlyArray2<'_, f64>,
         b: PyReadonlyArray2<'_, f64>,
         tags: Vec<u8>,
         grouped: Vec<bool>,
-        matrix: [f64; 16],
-        size: [f64; 2],
+        matrix: Option<[f64; 16]>,
+        size: Option<[f64; 2]>,
         cursor: [f64; 2],
+        projector: Option<Py<PyAny>>,
     ) -> PyResult<Self> {
         if a.shape() != [tags.len(), 3] || a.shape() != b.shape() || grouped.len() != tags.len() {
             return Err(pyo3::exceptions::PyValueError::new_err(
                 "snap edge array shape",
             ));
         }
+        let projection = match (matrix, size, projector) {
+            (Some(matrix), Some(size), None) => Projection::Matrix(matrix, size),
+            (None, None, Some(callback)) => Projection::Callback(callback),
+            _ => {
+                return Err(pyo3::exceptions::PyValueError::new_err(
+                    "provide matrix and viewport size, or a projector",
+                ))
+            }
+        };
         let edges = a
             .as_slice()?
             .chunks_exact(3)
@@ -130,8 +165,7 @@ impl SnapQuery {
             edges,
             tags,
             grouped,
-            matrix,
-            size,
+            projection,
             cursor,
         })
     }
@@ -149,19 +183,20 @@ impl SnapQuery {
         hidden: Option<&Bound<'_, PyAny>>,
         line: Option<Line>,
     ) -> PyResult<Option<(P, i64, &'static str)>> {
-        let found = py.detach(|| {
+        let found = self.scan(py, || {
             let mut found: Vec<Choice> = Vec::new();
-            let mut offer = |p: P, id: i64, kind, grouped| {
+            let mut offer = |p: P, id: i64, kind, grouped| -> PyResult<()> {
                 if let Some((s, u)) = line {
                     let d = sub(p, s);
                     if norm(sub(d, u.map(|v| v * dot(d, u)))) >= 1e-4 {
-                        return;
+                        return Ok(());
                     }
                 }
-                let d = self.distance(p);
+                let d = self.distance(p)?;
                 if d <= radius {
                     found.push((d, p, id, kind, grouped));
                 }
+                Ok(())
             };
             if !midpoints {
                 for (i, &tag) in self.tags.iter().enumerate() {
@@ -171,12 +206,12 @@ impl SnapQuery {
                         4 => "arc_midpoint",
                         _ => continue,
                     };
-                    offer(self.edges[i][0], i as i64, kind, self.grouped[i]);
+                    offer(self.edges[i][0], i as i64, kind, self.grouped[i])?;
                 }
                 for q in quadrants {
-                    offer(q, -1, "quadrant", false);
+                    offer(q, -1, "quadrant", false)?;
                 }
-                offer([0.; 3], -1, "origin", false);
+                offer([0.; 3], -1, "origin", false)?;
             }
             for (i, &[a, b]) in self.edges.iter().enumerate() {
                 if self.tags[i] & 7 == 1 {
@@ -189,22 +224,22 @@ impl SnapQuery {
                             i as i64,
                             "midpoint",
                             self.grouped[i],
-                        );
+                        )?;
                     }
                 } else if self.tags[i] & 7 == 0 {
                     for p in [a, b] {
-                        offer(p, i as i64, "endpoint", self.grouped[i]);
+                        offer(p, i as i64, "endpoint", self.grouped[i])?;
                     }
                 }
             }
             if midpoints && line.is_none() {
-                offer([0.; 3], -1, "origin", false);
+                offer([0.; 3], -1, "origin", false)?;
             }
             for (i, (p, g)) in centers.into_iter().enumerate() {
-                offer(p, -2 - i as i64, "face_center", g);
+                offer(p, -2 - i as i64, "face_center", g)?;
             }
-            found
-        });
+            Ok::<_, PyErr>(found)
+        })?;
         if found.is_empty() {
             return Ok(None);
         }
@@ -225,7 +260,7 @@ impl SnapQuery {
 
     /// Return only directions from edges actually containing the segment start.
     fn starting_edges(&self, py: Python<'_>, p: P) -> Vec<usize> {
-        py.detach(|| {
+        self.scan(py, || {
             self.edges
                 .iter()
                 .enumerate()
@@ -234,8 +269,8 @@ impl SnapQuery {
         })
     }
 
-    fn plane_crossings(&self, py: Python<'_>, radius: f64, origin: P, n: P) -> Vec<P> {
-        py.detach(|| {
+    fn plane_crossings(&self, py: Python<'_>, radius: f64, origin: P, n: P) -> PyResult<Vec<P>> {
+        self.scan(py, || {
             let mut hits = Vec::new();
             for &[a, b] in &self.edges {
                 let ab = sub(b, a);
@@ -250,13 +285,13 @@ impl SnapQuery {
                     continue;
                 }
                 let p = along(a, ab, t);
-                let d = self.distance(p);
+                let d = self.distance(p)?;
                 if d <= radius {
                     hits.push((d, p));
                 }
             }
             hits.sort_by(|a, b| a.0.total_cmp(&b.0));
-            hits.into_iter().map(|h| h.1).collect()
+            Ok(hits.into_iter().map(|h| h.1).collect())
         })
     }
 
@@ -273,23 +308,23 @@ impl SnapQuery {
         extra: Option<P>,
         hidden: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<Option<(P, P, &'static str)>> {
-        let hits = py.detach(|| {
+        let hits = self.scan(py, || {
             let mut hits = Vec::new();
-            let mut offer = |p, kind| {
+            let mut offer = |p, kind| -> PyResult<()> {
                 let t = dot(sub(p, start), dir);
                 if !hovered && t <= 1e-6 {
-                    return;
+                    return Ok(());
                 }
                 let foot = along(start, dir, t);
                 if norm(sub(foot, p)) < 1e-4 {
-                    return;
+                    return Ok(());
                 }
-                let d = self.distance(foot);
+                let d = self.distance(foot)?;
                 if !d.is_finite() {
-                    return;
+                    return Ok(());
                 }
                 let dr = if hovered {
-                    self.distance(p)
+                    self.distance(p)?
                 } else {
                     f64::INFINITY
                 };
@@ -299,22 +334,23 @@ impl SnapQuery {
                 if d <= radius {
                     hits.push((d, foot, p, kind, false));
                 }
+                Ok(())
             };
             if let Some(p) = extra {
-                offer(p, "from_point");
+                offer(p, "from_point")?;
             }
             for (i, &[a, b]) in self.edges.iter().enumerate() {
                 if self.tags[i] & 8 != 0 {
                     continue;
                 }
-                offer(a, "from_point");
-                offer(b, "from_point");
-                offer(along(a, sub(b, a), 0.5), "midpoint");
+                offer(a, "from_point")?;
+                offer(b, "from_point")?;
+                offer(along(a, sub(b, a), 0.5), "midpoint")?;
             }
-            offer([0.; 3], "origin");
+            offer([0.; 3], "origin")?;
             hits.sort_by(|a, b| a.0.total_cmp(&b.0));
-            hits
-        });
+            Ok::<_, PyErr>(hits)
+        })?;
         for (_, foot, p, kind, source_visible) in hits {
             if let Some(test) = hidden {
                 if source_visible && test.call1((p,))?.is_truthy()? {
@@ -348,23 +384,23 @@ impl SnapQuery {
         let draw = unit(draw);
         let n = normal.filter(|&n| norm(n) > 1e-9).map(unit);
         let screen = self
-            .pixel(s)
+            .pixel(s)?
             .map(|(x, y)| (self.cursor[0] - x, self.cursor[1] - y));
         let mut hits = Vec::new();
         let mut requests = Vec::new();
-        let offer = |a, b, u, t: f64| {
+        let offer = |a, b, u, t: f64| -> PyResult<_> {
             let t = n
                 .filter(|&n| dot(n, u).abs() > 1e-6)
                 .map_or(t, |n| dot(n, sub(world, a)) / dot(n, u));
             if (-1e-6..=norm(sub(b, a)) + 1e-6).contains(&t) {
-                return None;
+                return Ok(None);
             }
             let p = along(a, u, t);
-            let d = self.distance(p);
-            (d <= radius).then_some((d, p, if t < 0. { a } else { b }, u))
+            let d = self.distance(p)?;
+            Ok((d <= radius).then_some((d, p, if t < 0. { a } else { b }, u)))
         };
         let can_project = projector.is_some();
-        py.detach(|| {
+        self.scan(py, || {
             for (i, &[a, b]) in self.edges.iter().enumerate() {
                 if self.tags[i] & 16 != 0 {
                     continue;
@@ -375,7 +411,7 @@ impl SnapQuery {
                 }
                 let u = unit(ab);
                 if dot(draw, u).abs() >= 0.966 {
-                    if let Some(hit) = offer(a, b, u, dot(sub(world, a), u)) {
+                    if let Some(hit) = offer(a, b, u, dot(sub(world, a), u))? {
                         hits.push((i, hit));
                     }
                 } else if can_project {
@@ -386,7 +422,7 @@ impl SnapQuery {
                     if dx.hypot(dy) < 4. || norm(sub(off, u.map(|v| v * dot(off, u)))) > 1e-3 {
                         continue;
                     }
-                    if let (Some(pa), Some(pb)) = (self.pixel(a), self.pixel(b)) {
+                    if let (Some(pa), Some(pb)) = (self.pixel(a)?, self.pixel(b)?) {
                         let (ex, ey) = (pb.0 - pa.0, pb.1 - pa.1);
                         if ex.hypot(ey) >= 20.
                             && (dx * ex + dy * ey).abs() >= 0.966 * dx.hypot(dy) * ex.hypot(ey)
@@ -396,11 +432,12 @@ impl SnapQuery {
                     }
                 }
             }
-        });
+            Ok::<_, PyErr>(())
+        })?;
         if let Some(project) = projector {
             for (i, a, b, u) in requests {
                 let p: P = project.call1((a, u))?.extract()?;
-                if let Some(hit) = offer(a, b, u, dot(sub(p, a), u)) {
+                if let Some(hit) = offer(a, b, u, dot(sub(p, a), u))? {
                     hits.push((i, hit));
                 }
             }
@@ -419,8 +456,8 @@ impl SnapQuery {
         line: Option<Line>,
         forward: Option<P>,
         circles: Option<Vec<crate::snap_curve::Circle>>,
-    ) -> Vec<(P, bool)> {
-        py.detach(|| {
+    ) -> PyResult<Vec<(P, bool)>> {
+        self.scan(py, || {
             let mut found = Vec::new();
             let mut near = Vec::new();
             for &[a, b] in &self.edges {
@@ -429,12 +466,12 @@ impl SnapQuery {
                         continue;
                     }
                     if let Some(hit) = lock_crossing(p, u, a, b, 1e-3) {
-                        let d = self.distance(hit);
+                        let d = self.distance(hit)?;
                         if d <= radius && forward.is_none_or(|dir| dot(sub(hit, p), dir) > 0.) {
                             found.push((d, hit, false));
                         }
                     }
-                } else if let (Some(pa), Some(pb)) = (self.pixel(a), self.pixel(b)) {
+                } else if let (Some(pa), Some(pb)) = (self.pixel(a)?, self.pixel(b)?) {
                     if segment_pixel(self.cursor, pa, pb).0 <= radius {
                         near.push([a, b]);
                     }
@@ -459,7 +496,7 @@ impl SnapQuery {
                         continue;
                     }
                     if let Some(hit) = intersection(ab, cd, Hypot::LibStdCxx, true) {
-                        let d = self.distance(hit);
+                        let d = self.distance(hit)?;
                         if d <= radius {
                             let corner = ab.iter().chain(&cd).any(|&p| norm(sub(p, hit)) < 1e-6);
                             found.push((d, hit, corner));
@@ -471,7 +508,7 @@ impl SnapQuery {
                 for &c in &circles {
                     for &e in &near {
                         for hit in crate::snap_curve::segment_circle(e, c) {
-                            let d = self.distance(hit);
+                            let d = self.distance(hit)?;
                             if d <= radius {
                                 found.push((d, hit, e.iter().any(|&p| norm(sub(hit, p)) < 1e-6)));
                             }
@@ -482,7 +519,7 @@ impl SnapQuery {
                 for (i, &c) in circles.iter().enumerate() {
                     for &other in &circles[i + 1..] {
                         for hit in crate::snap_curve::circle_circle(c, other) {
-                            let d = self.distance(hit);
+                            let d = self.distance(hit)?;
                             if d <= radius {
                                 found.push((d, hit, false));
                             }
@@ -492,11 +529,11 @@ impl SnapQuery {
             }
             found.sort_by(|a, b| a.0.total_cmp(&b.0));
             let mut seen = std::collections::HashSet::new();
-            found
+            Ok(found
                 .into_iter()
                 .filter(|v| seen.insert(v.1.map(|c| (c as f32).to_bits())))
                 .map(|(_, p, corner)| (p, corner))
-                .collect()
+                .collect())
         })
     }
 
@@ -506,18 +543,18 @@ impl SnapQuery {
         p: P,
         basis: P,
         radius: f64,
-    ) -> Option<(f64, P)> {
+    ) -> PyResult<Option<(f64, P)>> {
         if circle.1 <= 0. {
-            return None;
+            return Ok(None);
         }
         let hit = crate::snap_curve::rim(circle, p, basis);
-        let d = self.distance(hit);
-        (d <= radius).then_some((d, hit))
+        let d = self.distance(hit)?;
+        Ok((d <= radius).then_some((d, hit)))
     }
 
     /// Keep projected segment candidates in this frame. Only the nearest
     /// visible segment's ordinal crosses back to the Python topology facade.
-    #[pyo3(signature=(radius,rims,projector,visibility,include_ends,skip_clipped,exclude=None))]
+    #[pyo3(signature=(radius,rims,projector,visibility,include_ends,skip_clipped,exclude=None,batch_visibility=true))]
     fn target(
         &self,
         py: Python<'_>,
@@ -528,15 +565,16 @@ impl SnapQuery {
         include_ends: bool,
         skip_clipped: bool,
         exclude: Option<P>,
+        batch_visibility: bool,
     ) -> PyResult<Option<(P, Option<usize>, &'static str)>> {
         let mut targets = Vec::new();
         let mut clipped = Vec::new();
-        py.detach(|| {
+        self.scan(py, || {
             for (i, &[a, b]) in self.edges.iter().enumerate() {
                 if exclude.is_some_and(|p| contains([a, b], p) || norm(sub(b, a)) < 1e-9) {
                     continue;
                 }
-                match (self.pixel(a), self.pixel(b)) {
+                match (self.pixel(a)?, self.pixel(b)?) {
                     (Some(pa), Some(pb)) => {
                         let (d, t) = segment_pixel(self.cursor, pa, pb);
                         if d <= radius && (include_ends || (t > 0. && t < 1.)) {
@@ -548,7 +586,8 @@ impl SnapQuery {
                     _ => {}
                 }
             }
-        });
+            Ok::<_, PyErr>(())
+        })?;
         let parameter = |i: usize| -> PyResult<Option<f64>> {
             let Some(project) = projector else {
                 return Ok(None);
@@ -565,7 +604,7 @@ impl SnapQuery {
             if let Some(t) = parameter(i)? {
                 let [a, b] = self.edges[i];
                 let p = along(a, sub(b, a), t);
-                let d = self.distance(p);
+                let d = self.distance(p)?;
                 if d <= radius && (include_ends || (t > 0. && t < 1.)) {
                     targets.push((d, i, t, Some(p)));
                 }
@@ -613,7 +652,9 @@ impl SnapQuery {
                 return Ok(Some((points[k], (i < count).then_some(i), kind)));
             }
             offset += size;
-            size = (size * 2).max(8);
+            if batch_visibility {
+                size = (size * 2).max(8);
+            }
         }
         Ok(None)
     }

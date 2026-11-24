@@ -428,10 +428,9 @@ def before_frame(view) -> None:
     _form(view, win)
     from views import wgpu_deliveries
     wgpu_deliveries.bind(win)
-    _sync_project_rows(view, win)
     from views import wgpu_library
     wgpu_library.before_frame(view, win)
-    _inspector(view, win)
+    _sync_project_rows(view, win)
     from views import inspector_bridge
     inspector_bridge.sync(view, win)
     _tabs(view, win)
@@ -769,6 +768,7 @@ def _sync_project_rows(view, win):
     _tree(view, win)
     if view.__dict__.get("_ui_lens") == 1 and view.renderer.ui_tick_tag_counts(win.viewport.history):
         view.update()
+    _inspector(view, win)
 
 
 def _tree(view, win, *, discover=False):
@@ -791,7 +791,7 @@ def _tree(view, win, *, discover=False):
     sheet_revision = view._ui_sheet_revision = catalog.refresh(scene)
     # Watertight checks in Export must follow mesh edits.
     geometric = lens == 2
-    cv = scene.content_version if geometric else _tree_version(view, win, scene)
+    cv = scene.content_version if geometric else _tree_version(win, scene)
     sig = (id(scene), id(scene.edit_group), scene.mesh.revision, cv, tuple(sorted(exp)), tuple(sorted(pages.items())), flt, scene.content_version if flt else None, len(sel_ids),
            hash(frozenset(sel_ids)), lens, getattr(view, "_ui_layer_rev", 0), scene.show_section_planes, sheet_revision)
     if not discover and sig == getattr(view, "_ui_tree_sig", None):
@@ -876,42 +876,11 @@ FILE_STATES = {"resolved": "Up to date", "modified": "Changed on disk — reload
                "missing": "Not found — relink it", "packed": "Packed in this file"}
 
 
-#: Steps that change only geometry inside meshes (the feed's own
-#: geometry-only set, and paint): the tree has nothing to show for them.
-GEOMETRY_STEPS = {"SnapshotMutation", "SnapshotCompound", "MoveVerticesCommand", "AddEdgeCommand",
-                  "AddFaceCommand", "EraseSelectionCommand", "DeleteEdgesCommand", "DeleteFaceCommand"}
-
-
-def _geometry_step(step) -> bool:
-    return step.complete and (step.command in GEOMETRY_STEPS or step.command.startswith("SetFace")) \
-        and not any(step.placements.values()) and not any(step.tags.values()) \
-        and not any(step.materials.values())
-
-
-def _tree_version(view, win, scene) -> int:
-    """The content version the tree follows: it moves on with the model,
-    except across History steps the change feed shows to be geometry only
-    (a line drawn, a face pushed), which leave every row as it was — on the
-    Ride file a rebuild costs 80–190 ms per edit."""
+def _tree_version(win, scene) -> int:
     feed = getattr(getattr(win.viewport, "history", None), "feed", None)
-    cv = scene.content_version
-    last = view.__dict__.get("_ui_tree_cv")
-    if feed is None or last is None or last[0] != id(scene):
-        view._ui_tree_cv = (id(scene), cv, getattr(feed, "revision", 0), cv)
-        return cv
-    _sid, seen_cv, seen_rev, shown = last
-    if cv == seen_cv:
-        return shown
-    rev = feed.revision
-    if rev > seen_rev:
-        got = feed.since(seen_rev)
-        if got["complete"] and got["steps"] and all(_geometry_step(st) for st in got["steps"]) \
-                and len(got["steps"]) == rev - seen_rev:
-            # Only geometry since the rows were built: keep them.
-            view._ui_tree_cv = (id(scene), cv, rev, shown)
-            return shown
-    view._ui_tree_cv = (id(scene), cv, rev, cv)
-    return cv
+    if feed is None or getattr(win, "_outliner_kinds", ()):
+        return scene.content_version
+    return feed.readers.browser_version(scene.content_version)
 
 
 def _problem_rules(scene, registry, nodes, recipes, unfiled, profile=None):
@@ -1125,63 +1094,22 @@ def _wait_cursor(viewport):
 
 
 def _measure(view, win, auto=False) -> None:
-    """Quantity takeoff (the BIM panel's metrado), per item. The first
-    measure walks every tagged object (7.5 s on the 99k-object Ride file),
-    so it runs when asked; after it the memo keeps it current for the
-    cost of what changed (0.2 s there)."""
     import time
-    from core import bim
-    scene = win.viewport.scene
-    q = view.__dict__.get("_ui_qty")
-    if q is None or q["scene"] != id(scene):
+    vp = win.viewport
+    takeoff = vp.scene.__dict__.get("_inspector_takeoff")
+    if takeoff is None:
         if auto:
             return
-        q = view._ui_qty = {"scene": id(scene), "memo": {}, "sig": None, "by_group": {}}
-    if q["sig"] == scene.content_version:
+        from ingetrazo_core import InspectorTakeoff
+        takeoff = vp.scene._inspector_takeoff = InspectorTakeoff()
+    if auto:
+        takeoff.refresh(vp.history)
         return
-    t0 = time.perf_counter()
-    with _wait_cursor(win.viewport):
-        objs = bim.collect_objects(scene, q["memo"])
-        by_group = {}
-        for obj in objs:
-            owner = obj.get("group") or obj.get("owner")
-            if owner is None:
-                continue
-            if "_q" not in obj:
-                try:
-                    obj["_q"] = bim.object_quantities(obj)[2]
-                except Exception:
-                    obj["_q"] = (None, "")
-            value, unit = obj["_q"]
-            if unit == "und":
-                value = 1.0
-            if value is None or not unit:
-                continue
-            per = by_group.setdefault(id(owner), {})
-            per[unit] = per.get(unit, 0.0) + value
-        q["by_group"] = by_group
-        q["sig"] = scene.content_version
-        q["count"] = len(objs)
-    if not auto:
-        win.viewport.flash_status(f"Measured {len(objs)} items in {time.perf_counter() - t0:.1f} s")
-    view._ui_tree_sig = None
+    started = time.perf_counter()
+    with _wait_cursor(vp):
+        takeoff.refresh(vp.history)
+    vp.flash_status(f"Measured {takeoff.count} items in {time.perf_counter() - started:.1f} s")
     view._ui_insp_sig = None
-
-
-def _group_qty(view, g) -> dict:
-    q = view.__dict__.get("_ui_qty")
-    return q["by_group"].get(id(g), {}) if q else {}
-
-
-def _qty_text(per_unit) -> str:
-    """The main measure of a row: its largest unit's total, «+» if mixed."""
-    if not per_unit:
-        return ""
-    order = ["m3", "m2", "m", "kg", "und"]
-    unit = min(per_unit, key=lambda u: order.index(u) if u in order else 9)
-    v = per_unit[unit]
-    text = (f"{v:.0f}" if unit == "und" or v >= 100 else f"{v:.2f}") + " " + UNIT_TEXT.get(unit, unit)
-    return text + (" +" if len(per_unit) > 1 else "")
 
 
 def _qty_rows(per_unit) -> list:
@@ -1287,6 +1215,9 @@ def _tree_action(win, view, action) -> None:
             wgpu_library.action(win, view, key[4:])
         elif verb == "insp" and key.startswith("form:"):
             _open_form(view, key[5:])
+        elif verb == "insp" and key.startswith("takeoff_faces:"):
+            from ingetrazo_core import InspectorTakeoff
+            InspectorTakeoff.select_faces(vp, key.partition(":")[2])
         elif verb == "insp" and key == "measure":
             _measure(view, win)
             view._ui_tree_sig = None
@@ -2052,13 +1983,22 @@ def _inspector(view, win) -> None:
     sel_sig = (len(sel), id(sel[0]) if sel else 0, id(sel[-1]) if sel else 0)
     node_focus = focus[0] if focus and focus[1] == sel_sig else None
     filename = str(getattr(win, "_current_path", "") or "")
+    tool = _active_tool_id(win)
+    brush = None
+    if tool == "paint":
+        from tools.paint import PaintTool
+        tex = PaintTool.current_texture or {}
+        brush = (PaintTool.current_is_default, PaintTool.current_color, tex.get("path"),
+                 tex.get("sw"), tex.get("sh"), tex.get("rot"))
     sig = (id(scene), scene.content_version, sel_sig, node_focus, getattr(view, "_ui_tree_sig", None) is not None,
            view.__dict__.get("_ui_mat_focus"), view.__dict__.get("_ui_mode"), view.__dict__.get("_ui_lens"),
            filename, frozenset(map(id, sel)),
-           _current_material_name(), _active_tool_id(win), scene.show_section_planes, scene.show_section_cuts,
+           _current_material_name(), tool, brush, scene.show_section_planes, scene.show_section_cuts,
            scene.display_style.section_fill, view.__dict__.get("_ui_sheet_revision"))
     if sig == getattr(view, "_ui_insp_sig", None):
         return
+    _measure(view, win, auto=True)
+    takeoff = scene.__dict__.get("_inspector_takeoff")
     view._ui_insp_sig = sig
     from collections import Counter
     from core import bim_registry, links, structure
@@ -2124,10 +2064,10 @@ def _inspector(view, win) -> None:
             export.append((c.get("system", "Classification"), f"{c.get('code', '')} {c.get('name', '')}".strip()))
         if recipe.get("systems"):
             export.append(("Systems", ", ".join(recipe["systems"])))
-        if view.__dict__.get("_ui_qty"):
+        if takeoff is not None:
             total = {}
             for g in members:
-                for u, v in _group_qty(view, g).items():
+                for u, v in takeoff.quantities(g).items():
                     total[u] = total.get(u, 0.0) + v
             sections.append(("Quantities", _qty_rows(total) or [("Measured", "nothing to measure")]))
         else:
@@ -2201,8 +2141,13 @@ def _inspector(view, win) -> None:
                                          ("linknested", "Source only" if nested else "Include nested links")]))
             if links.linked_ancestor(g.owner) is None:
                 sections.append(("Actions", [("linksubset", "Edit linked subset…")]))
-        if _group_qty(view, g):
-            sections.append(("Quantities", _qty_rows(_group_qty(view, g))))
+        if takeoff:
+            if quantities := takeoff.quantities(g):
+                sections.append(("Quantities", _qty_rows(quantities)))
+            if actions := takeoff.face_actions(g):
+                sections.append(("Actions", actions))
+        elif g.ifc:
+            sections.append(("Actions", [("measure", "Measure quantities")]))
         export = [("IFC class", str(rec.get("class") or recipe.get("class") or "generic object")),
                   ("Predefined type", str(rec.get("predefined_type") or recipe.get("predefined_type") or "—")),
                   ("Tag", str(getattr(g, "layer", None) or "—"))]

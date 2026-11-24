@@ -133,14 +133,7 @@ impl Store {
 // f64 coordinates times 10,000 are exact in f64. Key by rounded integer
 // bits so large coordinates cannot saturate an integer cell index.
 pub(super) fn key(p: Point) -> Node {
-    p.map(|x| {
-        let q = (x * 10000.).round_ties_even();
-        if q == 0. {
-            0
-        } else {
-            q.to_bits()
-        }
-    })
+    super::commands::cell(p)
 }
 
 #[derive(Default)]
@@ -229,11 +222,17 @@ pub(crate) fn intersection(
     h: Hypot,
     compensated: bool,
 ) -> Option<Point> {
+    intersection_at([a,b],[c,d],h,compensated,1e-4)
+}
+
+pub(crate) fn intersection_at(
+    [a,b]: [Point;2], [c,d]: [Point;2], h: Hypot, compensated: bool, tolerance: f64,
+) -> Option<Point> {
     use crate::store::geometry::py_sum;
     let delta = |a, b| vector(b).sub(vector(a));
     let (ab, cd) = (delta(a, b), delta(c, d));
     let (l, m) = (length(ab, h), length(cd, h));
-    if l < 1e-4 || m < 1e-4 {
+    if l < tolerance || m < tolerance {
         return None;
     }
     let (u, v) = (point(ab).map(|x| x / l), point(cd).map(|x| x / m));
@@ -245,15 +244,15 @@ pub(crate) fn intersection(
         return None;
     }
     let (s, t) = ((bb * ee - cc * dd) / denom, (aa * ee - bb * dd) / denom);
-    if !(-1e-4 / l..=1. + 1e-4 / l).contains(&(s / l))
-        || !(-1e-4 / m..=1. + 1e-4 / m).contains(&(t / m))
+    if !(-tolerance / l..=1. + tolerance / l).contains(&(s / l))
+        || !(-tolerance / m..=1. + tolerance / m).contains(&(t / m))
     {
         return None;
     }
     let p: Point = std::array::from_fn(|i| a[i] + s * u[i]);
     let q: Point = std::array::from_fn(|i| c[i] + t * v[i]);
     let gap = std::array::from_fn(|i| p[i] - q[i]);
-    if dot(gap, gap).sqrt() > 1e-4_f64.max(1e-7 * l.max(m)) {
+    if dot(gap, gap).sqrt() > tolerance.max(1e-7 * l.max(m)) {
         return None;
     }
     Some(point(vector(std::array::from_fn(|i| (p[i] + q[i]) * 0.5))))

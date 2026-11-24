@@ -18,6 +18,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np  # noqa: E402
 import pytest  # noqa: E402
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
@@ -49,12 +50,10 @@ def _placed(mesh, name, x, y):
 
 
 @pytest.fixture
-def vp():
+def vp(native_host):
     from core.group import Group
-    from views.main_window import MainWindow
-    win = MainWindow()
-    v = win.viewport
-    v.resize(1000, 700)
+    native_host.resize(1000, 700, 1.)
+    v = native_host.viewport
     sc = v.scene
     sc.guides.clear()
     post = _box(curved=True)
@@ -71,11 +70,7 @@ def vp():
     v.camera.set_view("iso")
     v.camera.fit_to(V(-7, -7, 0), V(17, 11, 2))
     v._PICK_LAZY_MIN_FACES = 1
-    try:
-        yield v
-    finally:
-        win._saved_version = sc.version
-        win.close()
+    return v
 
 
 def _tables(vp):
