@@ -23,25 +23,3 @@ class FollowMeHost:
     def __init__(self):
         super().__init__()
         self._entities = {}
-
-    def host_sweep_chain(self, vp, args):
-        edge = vp.pick_edge(*args["px"])
-        if edge is None:
-            return
-        face = self._entities[args["profile"]]
-        c, n = face.centroid(), face.normal().normalized()
-
-        def in_plane(e):
-            return abs(Vec3.dotProduct(e.a - c, n)) < 1e-6 and abs(Vec3.dotProduct(e.b - c, n)) < 1e-6
-
-        chain = [self._entities[k] for k in args["chain"]]
-        crossing = None
-        if not chain:
-            if in_plane(edge):
-                return
-            toward = Vec3(*args["world"]) if args["world"] is not None else None
-            crossing, chain = manual_path_start(face, edge, toward)
-        elif not manual_path_extend(chain, edge, skip=in_plane):
-            return
-        return (crossing.toTuple() if crossing is not None else None,
-                [(self._keep(v), v.position.toTuple()) for v in chain])
