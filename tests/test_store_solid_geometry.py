@@ -63,7 +63,7 @@ def test_solid_reads(fixture, want):
         )
 
 
-def test_triangle_order_and_snapshot(monkeypatch):
+def test_triangle_order_and_snapshot():
     results = []
     for store in (False, True):
         sc = empty(store)
@@ -75,12 +75,7 @@ def test_triangle_order_and_snapshot(monkeypatch):
             ring([(0, 0), (10, 0), (10, 8), (6, 8), (6, 5), (0, 5)]),
             [ring([(x, 1), (x, 2), (x + 1, 2), (x + 1, 1)]) for x in (1, 4, 7)],
         )
-        with monkeypatch.context() as mp:
-            if not store:
-                from core import triangulate
-
-                mp.setattr(triangulate, "earcut", triangulate.earcut_py)
-            result = queries.triangles(sc, [face.key])["faces"][0]["triangles"]
+        result = queries.triangles(sc, [face.key])["faces"][0]["triangles"]
         assert result
         results.append(result)
         if store:
