@@ -128,6 +128,11 @@ fn event(d: &Bound<'_, PyDict>) -> PyResult<ToolEvent> {
             key: d.get_item("key")?.ok_or_else(|| PyValueError::new_err("key without key"))?.extract()?,
             mods: mods()?,
         },
+        "array" => ToolEvent::Array {
+            count: d.get_item("count")?.ok_or_else(|| PyValueError::new_err("array without count"))?.extract()?,
+            mode: opt(d, "mode")?.map(|v| v.extract()).transpose()?.unwrap_or_else(|| "x".to_string()),
+            step: opt(d, "step")?.map(|v| v.extract()).transpose()?,
+        },
         "key_release" => ToolEvent::KeyRelease {
             key: d.get_item("key")?.ok_or_else(|| PyValueError::new_err("key_release without key"))?.extract()?,
             tapped: opt(d, "tapped")?.map(|v| v.extract()).transpose()?.unwrap_or(true),
@@ -309,6 +314,24 @@ impl ToolHost for PyHost<'_, '_> {
         self.call("open_placement", args);
     }
     fn close_placement(&mut self) { self.call("close_placement", vec![]); }
+    fn call(&mut self, verb: &str, args: serde_json::Value) -> serde_json::Value {
+        let a = match json_to_py(self.py(), &args) {
+            Ok(a) => a,
+            Err(e) => {
+                self.err.get_or_insert(e);
+                return serde_json::Value::Null;
+            }
+        };
+        let v = self.call("call", vec![self.s(verb), a]);
+        match v.map(|v| py_to_json(&v)) {
+            Some(Ok(j)) => j,
+            Some(Err(e)) => {
+                self.err.get_or_insert(e);
+                serde_json::Value::Null
+            }
+            None => serde_json::Value::Null,
+        }
+    }
     fn message(&mut self, template: &str, args: &[(&str, String)]) {
         let d = PyDict::new(self.py());
         for (k, v) in args {

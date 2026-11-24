@@ -79,6 +79,23 @@ def _tool_frame(method):
 from views.view_navigation import ViewNavigation
 
 
+def _note_ctrl_tap(view, event):
+    """Whether a Ctrl comes and goes ALONE (``ctrl_tapped``, #183): the
+    controller's own key handler recorded it, which this view bypasses, so
+    every Ctrl tap read as a chord and the tools took it back."""
+    source = getattr(view, "source_viewport", None)
+    repeat = getattr(event, "isAutoRepeat", None)
+    if source is None or (callable(repeat) and repeat()):
+        return
+    from views.document_interaction import DocumentInteraction
+    kind = getattr(event, "type", None)
+    if event.key() == Qt.Key_Control:
+        if not callable(kind) or kind() == QEvent.KeyPress:
+            source._ctrl_alone = True
+    elif event.key() not in DocumentInteraction._MODIFIER_KEYS:
+        source._ctrl_alone = False
+
+
 class MetalView(ViewNavigation):
     frameReady = Signal(float, object, float)
     _ZOOM_OUT_STEP = 0.05
@@ -1590,6 +1607,7 @@ class MetalView(ViewNavigation):
             if trackpad_nav.native_gesture(self, event):
                 return True
         if event.type() == QEvent.ShortcutOverride:
+            _note_ctrl_tap(self, event)
             from views import wgpu_ui
             if wgpu_ui.claims_key(self, event):
                 event.accept()
@@ -1611,6 +1629,7 @@ class MetalView(ViewNavigation):
 
     @_tool_frame
     def keyPressEvent(self, event):
+        _note_ctrl_tap(self, event)
         mode = self.tools.sync()
         if event.key() == Qt.Key_Escape:
             from ingetrazo_render import model_escape

@@ -41,3 +41,16 @@ def test_rectangle_matches_the_recorded_python_tool(name):
     for i, (g, w) in enumerate(zip(got, want)):
         g = json.loads(json.dumps(g))
         assert g == w, f"step {i}: {tp.RECT_SCENARIOS[name][i]}"
+
+
+MOVE = tp.load("move")
+
+
+@pytest.mark.parametrize("name", sorted(tp.MOVE_SCENARIOS))
+def test_move_matches_the_recorded_python_tool(name):
+    got = tp.run_move(tp.MOVE_SCENARIOS[name])
+    want = MOVE[name]
+    assert len(got) == len(want)
+    for i, (g, w) in enumerate(zip(got, want)):
+        g = json.loads(json.dumps(g))
+        assert g == w, f"step {i}: {tp.MOVE_SCENARIOS[name][i]}"

@@ -2921,8 +2921,8 @@ Native denotes routed, not exhaustive parity acceptance.
 <!-- R3c-1 coverage -->
 | Registry key | Class | Metal status | GL hooks / preview dependencies |
 | --- | --- | --- | --- |
-| select | SelectTool | native | Rust state machine (tools/rust_tools.py) |
-| line | LineTool | native | Rust state machine (tools/rust_tools.py) |
+| select | SelectTool | native | Rust state machine, rubber_band_lines |
+| line | LineTool | native | Rust state machine, rubber_band_lines |
 | freehand | FreehandTool | native | rubber_band_lines |
 | rectangle | RectangleTool | native | rubber_band_lines |
 | rotated_rect | RotatedRectangleTool | native | rubber_band_lines |
@@ -2934,7 +2934,7 @@ Native denotes routed, not exhaustive parity acceptance.
 | pie | PieTool | native | rubber_band_lines |
 | pushpull | PushPullTool | native | _pixel_to_ray, _world_to_pixel, pick_face_any, rubber_band_lines |
 | offset | OffsetTool | native | _pixel_to_ray, _world_to_pixel, pick_face, rubber_band_lines |
-| move | MoveTool | native | _world_to_pixel, pick_edge, pick_face, pick_group, rubber_band_lines, set_groups_preview_offset |
+| move | MoveTool | native | Rust state machine, _world_to_pixel, pick_edge, pick_face, pick_group, rubber_band_lines, set_groups_preview_offset |
 | rotate | RotateTool | native | pick_edge, pick_face, rubber_band_lines, set_groups_preview_matrix |
 | scale | ScaleTool | native | _pixel_to_ray, _world_to_pixel, pick_edge, pick_face, scale_box_state (screen handles) |
 | flip | FlipTool | native | _world_to_pixel |
