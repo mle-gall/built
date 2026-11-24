@@ -1174,6 +1174,14 @@ impl InstanceSet {
         self.places.len()
     }
 
+    /// Placement ``row`` as built: its prototype and its 16 matrix values
+    /// in the order given (the snap index reads committed rows here, not
+    /// from a copy of the instance table).
+    fn placement(&self, row: usize) -> PyResult<(usize, [f64; 16])> {
+        self.places.get(row).map(|p| (p.proto, p.m))
+            .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("placement index"))
+    }
+
     /// Of placements ``cand``, those whose triangles the world ray ``o`` +
     /// t·``d`` may meet for t in [0, ``reach``] (None: unbounded) — a
     /// placement whose matrix cannot be inverted is always kept.
