@@ -433,7 +433,7 @@ fn cap_passes_wall(
 }
 
 pub(super) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    let sub = PyModule::new(m.py(), "push_scans")?;
+    let sub = PyModule::new(m.py(), "core.push_scans")?;
     sub.add_function(wrap_pyfunction!(is_closed, &sub)?)?;
     sub.add_function(wrap_pyfunction!(mesh_is_flat, &sub)?)?;
     sub.add_function(wrap_pyfunction!(faces_on_segment, &sub)?)?;

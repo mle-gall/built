@@ -57,9 +57,7 @@ impl SnapFrame {
     fn new<'py>(options: &Bound<'py, PyDict>, query: &Obj<'py>) -> PyResult<Py<Self>> {
         let py = options.py();
         let f = Bound::new(py, Self)?;
-        for (k, val) in options {
-            f.setattr(k.cast::<pyo3::types::PyString>()?, val)?;
-        }
+        f.getattr("__dict__")?.call_method1("update", (options,))?;
         let api = py.import("core.snap")?;
         f.setattr("_api", &api)?;
         f.setattr("query", query)?;
@@ -451,7 +449,7 @@ impl SnapFrame {
     }
 }
 pub(super) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    let sub = PyModule::new(m.py(), "snap_frame")?;
+    let sub = PyModule::new(m.py(), "core.snap_frame")?;
     sub.add_class::<SnapFrame>()?;
     m.add_submodule(&sub)
 }

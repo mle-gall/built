@@ -261,7 +261,7 @@ fn _build_graph(
     super::arrangement::plane_split_graph(py, segments_2d)
 }
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    let sub = PyModule::new(m.py(), "arrangement")?;
+    let sub = PyModule::new(m.py(), "core.arrangement")?;
     sub.add_function(wrap_pyfunction!(project_loop, &sub)?)?;
     sub.add_function(wrap_pyfunction!(loops_overlap, &sub)?)?;
     sub.add_function(wrap_pyfunction!(grid_key, &sub)?)?;

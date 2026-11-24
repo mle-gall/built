@@ -230,7 +230,7 @@ fn point_result<'py>(
     )?))
 }
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    let sub = PyModule::new(m.py(), "snap_query")?;
+    let sub = PyModule::new(m.py(), "core.snap_query")?;
     sub.add_function(wrap_pyfunction!(edge_tag, &sub)?)?;
     sub.add_function(wrap_pyfunction!(edge_columns, &sub)?)?;
     sub.add_function(wrap_pyfunction!(make_query, &sub)?)?;
