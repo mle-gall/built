@@ -361,6 +361,7 @@ pub fn frame_content(d: Option<&Bound<'_, pyo3::types::PyDict>>, key: crate::doc
                 weight: get(1)?.map(|x| x.extract()).transpose()?,
                 cut_weight: get(2)?.map(|x| x.extract()).transpose()?,
                 pattern: get(3)?.map(|x| x.extract()).transpose()?.unwrap_or_default(),
+                words: get(4)?.map(|x| x.extract()).transpose()?,
             };
             c.styles.push((tag.str()?.to_string(), style));
         }
@@ -388,6 +389,28 @@ pub fn frame_content(d: Option<&Bound<'_, pyo3::types::PyDict>>, key: crate::doc
             let mut p = super::paint::Painter::default();
             super::hatching::paint_fills(d.py(), &mut p, fields.unwrap(), &c.fills, &out)?;
             c.fill_ops = Some(p.ops);
+        }
+    }
+    // The words of the line types that write some, along their edges and profiles.
+    if let (Some(segs), Some(kinds), Some(tags), Some(fields)) = (&c.segs, &c.kinds, &c.tags, fields) {
+        if c.styles.iter().any(|(_, st)| st.words.is_some()) && segs.len() == kinds.len() && segs.len() == tags.len() {
+            let text_marks = d.py().import("core.layers")?.getattr("text_marks")?;
+            let mut p = super::paint::Painter::default();
+            for (i, s) in segs.iter().enumerate() {
+                let kind = kinds[i];
+                if kind != super::items_d::KIND_EDGE && kind != super::items_d::KIND_PROFILE {
+                    continue;
+                }
+                let Some((_, st)) = c.styles.iter().find(|(n, _)| *n == tags[i]) else { continue };
+                let Some(words) = &st.words else { continue };
+                let marks: Vec<(f64, f64, f64)> = text_marks.call1(((s[0], s[1]), (s[2], s[3]), words.clone()))?.extract()?;
+                if marks.is_empty() {
+                    continue;
+                }
+                let pen = super::items_d::layer_pen(&super::items_d::vector_pen(fields, kind), Some(st), kind);
+                super::items_d::line_words(&mut p, &words.0, words.1, &marks, pen.color);
+            }
+            c.word_ops = Some(p.ops);
         }
     }
     if let Some(im) = d.get_item("image")?.filter(|v| !v.is_none()) {

@@ -301,7 +301,8 @@ def drawing(source, frame):
         style = getattr(facade, "display_style", None)
         looks = line_styles(facade, coloured or bool(getattr(style, "color_by_layer", False)))
         out["tags"] = [str(t) for t in d.layers]
-        out["styles"] = {tag: (st[0], st[2], st[3], list(st[4] if st[4] is not None else LINETYPES.get(st[1], ())))
+        out["styles"] = {tag: (st[0], st[2], st[3], list(st[4] if st[4] is not None else LINETYPES.get(st[1], ())),
+                               st[5] if len(st) > 5 else None)
                          for tag, st in looks.items()}
     if (fill_by_layer or hatches) and d.loop_layers is not None:
         table = cut_fill_colours(facade) if fill_by_layer else {}
