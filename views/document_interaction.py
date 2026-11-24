@@ -6344,7 +6344,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
             from core.snap import face_plane_world
             fpoint, fnormal = face_plane_world(face, getattr(group, "xform", None))
             if fnormal is not None:
-                return self._ray_plane(origin, direction, fpoint, fnormal)
+                return self._ray_plane(origin, direction, fpoint, fnormal, allow_grazing=True)
         return None
 
     #: A ray meeting the work plane below this angle gives a point nobody

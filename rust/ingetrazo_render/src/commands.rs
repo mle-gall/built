@@ -407,7 +407,7 @@ pub fn command_registry(
             ),
         );
     }
-    // These sheets also open from the registry on hosts without a system menu bar.
+    // Keep standard commands available to hosts without a system menu bar.
     if menu.iter().all(|r| r.0.starts_with("extension:")) {
         for (id, label, key) in [
             ("about", "About Built", ""),
@@ -417,6 +417,14 @@ pub fn command_registry(
             ("units", "Units…", "Ctrl+U"),
         ] {
             menu.push((id.into(), "Window".into(), label.into(), key.into()));
+        }
+        for (id, label, key) in [
+            ("undo", "Undo", "Ctrl+Z"),
+            ("redo", "Redo", "Ctrl+Shift+Z"),
+            ("select_all", "Select All", "Ctrl+A"),
+            ("select_none", "Select None", "Ctrl+T"),
+        ] {
+            menu.push((id.into(), "Edit".into(), label.into(), key.into()));
         }
     }
     // Platform actions (for example Hide Built) keep their factory bindings.
@@ -464,6 +472,13 @@ pub fn command_registry(
         row.5 = menu_id;
         if !shortcut.is_empty() && !row.3.contains(&shortcut) {
             row.3.insert(0, shortcut);
+        }
+        if row.5 == "redo" {
+            for alternative in ["Ctrl+Y", "Ctrl+Shift+Z"] {
+                if !row.3.iter().any(|key| key == alternative) {
+                    row.3.push(alternative.into());
+                }
+            }
         }
     }
     rows.into_values().collect()

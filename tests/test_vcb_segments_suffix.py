@@ -5,51 +5,28 @@ sides of a circle / the segments of an arc, and the parser understood it,
 but the keyboard never let the «s» into the value box."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-import pytest  # noqa: E402
-from PySide6.QtCore import QEvent, Qt  # noqa: E402
-from PySide6.QtGui import QKeyEvent  # noqa: E402
-from PySide6.QtWidgets import QApplication  # noqa: E402
-
-_app = QApplication.instance() or QApplication([])
-
-
-@pytest.fixture
-def win():
-    from views.main_window import MainWindow
-    w = MainWindow()
-    yield w
-    w._saved_version = w.viewport.scene.version   # no "save?" modal
-    w.close()
-
-
-def _type(vp, text):
-    for ch in text:
-        key = Qt.Key_S if ch == "s" else Qt.Key(Qt.Key_0 + int(ch))
-        if vp._value_buffer:   # mid-value, no window shortcut steals it
-            ov = QKeyEvent(QEvent.ShortcutOverride, key, Qt.NoModifier, ch)
-            vp.event(ov)
-            assert ov.isAccepted(), ch
-        vp.keyPressEvent(QKeyEvent(QEvent.KeyPress, key, Qt.NoModifier, ch))
-    vp.keyPressEvent(QKeyEvent(QEvent.KeyPress, Qt.Key_Return,
-                               Qt.NoModifier, "\r"))
+import pytest
+from PySide6.QtCore import Qt
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 
 @pytest.mark.parametrize("tool,attr", [("circle", "sides"),
                                        ("arc", "segments")])
-def test_typing_16s_sets_the_count(win, tool, attr):
+def test_typing_16s_sets_the_count(native_host, tool, attr):
+    win = native_host.window
     win._activate_tool(tool)
     vp = win.viewport
-    _type(vp, "16s")
+    for ch in "16s":
+        native_host.key(True, ord(ch.upper()), text=ch)
+    native_host.key(True, Qt.Key_Return, text="\r")
     assert getattr(vp.active_tool, attr) == 16
     assert vp._value_buffer == ""
 
 
-def test_a_bare_s_is_still_a_shortcut(win):
+def test_a_bare_s_is_still_a_shortcut(native_host):
+    win = native_host.window
     win._activate_tool("circle")
     vp = win.viewport
-    vp.keyPressEvent(QKeyEvent(QEvent.KeyPress, Qt.Key_S, Qt.NoModifier, "s"))
+    native_host.key(True, Qt.Key_S, text="s")
+    assert vp.active_tool is win._tools["scale"]
     assert vp._value_buffer == ""

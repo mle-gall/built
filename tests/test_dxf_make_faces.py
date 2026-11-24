@@ -4,27 +4,16 @@
 off by default, and how many were made said at the end."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
 import ezdxf
 import pytest
-from PySide6.QtCore import QSettings
+from core.settings import settings
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication, QCheckBox, QComboBox, QDialog
 
 from core.make_faces import faces_from_linework
 from core.mesh import Mesh
 from core.scene import Scene
 from formats.dxf_in import load_dxf
-
-_inst = QApplication.instance()
-if _inst is None:
-    _app = QApplication([])
-elif not isinstance(_inst, QApplication):
-    pytest.skip("a non-widget QGuiApplication is already active",
-                allow_module_level=True)
 
 SQUARE = [(0, 0), (2, 0), (2, 2), (0, 2)]
 
@@ -177,29 +166,23 @@ def test_nothing_to_do_on_an_empty_mesh():
 # ---- The window ----------------------------------------------------------------
 
 @pytest.fixture
-def win():
-    from views.main_window import MainWindow
-    QSettings().remove("import/dxf_make_faces")
-    w = MainWindow()
-    yield w
-    w._saved_version = w.viewport.scene.version
-    w.close()
-    QSettings().remove("import/dxf_make_faces")
+def win(native_host):
+    return native_host.window
 
 
 def _answer(monkeypatch, tick=None, accept=True):
-    """Answer the import dialog; returns the checkbox states it opened with."""
     seen = []
 
-    def run(dlg):
-        box = dlg.findChild(QCheckBox)
-        assert dlg.findChild(QComboBox) is not None
-        seen.append(box.isChecked())
+    def answer(parent, title, question, buttons, *, default, cancel, checklist):
+        assert {key for key, _ in buttons} == {"cancel", "mm", "cm", "m", "in", "ft"}
+        (label, checked), = checklist
+        assert label == "Create faces from closed planar outlines"
+        seen.append(checked)
         if tick is not None:
-            box.setChecked(tick)
-        return QDialog.Accepted if accept else QDialog.Rejected
+            checklist[0] = (label, tick)
+        return default if accept else cancel
 
-    monkeypatch.setattr(QDialog, "exec", run)
+    monkeypatch.setattr("views.chrome_dialogs.ask", answer)
     return seen
 
 
@@ -242,5 +225,5 @@ def test_cancelling_imports_nothing_and_remembers_nothing(
     _answer(monkeypatch, tick=True, accept=False)
     assert win._import_dxf_path(_save(_plan(), tmp_path)) is False
     assert len(win.viewport.scene.groups) == before
-    assert QSettings().value("import/dxf_make_faces", False,
+    assert settings().value("import/dxf_make_faces", False,
                              type=bool) is False

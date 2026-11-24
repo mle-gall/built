@@ -6,48 +6,26 @@ the result, and a calculation that does not add up stays in the box with
 the reason, to be fixed instead of typed again."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-import pytest  # noqa: E402
-from PySide6.QtCore import QEvent, Qt  # noqa: E402
-from PySide6.QtGui import QKeyEvent
+import pytest
+from PySide6.QtCore import Qt
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
-from core import units  # noqa: E402
+from app_shell.events import KeyEvent, ShortcutOverride
 from tests.controller_surface import ControllerSurface as Viewport
-
-_app = QApplication.instance() or QApplication([])
-
-
-@pytest.fixture
-def win(monkeypatch, tmp_path):
-    from core import autosave
-    monkeypatch.setattr(autosave, "autosave_dir", lambda: tmp_path)
-    monkeypatch.setattr(autosave, "pending", lambda *a, **k: None)
-    from views.main_window import MainWindow
-    w = MainWindow()
-    units.bind_scene(w.viewport.scene)
-    yield w
-    w._saved_version = w.viewport.scene.version   # no "save?" modal
-    w.close()
-    units.bind_scene(None)
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 
 
 def _type(vp, text):
     for ch in text:
-        vp.keyPressEvent(QKeyEvent(QEvent.KeyPress, 0, Qt.NoModifier, ch))
+        vp.keyPressEvent(KeyEvent(True, ord(ch.upper()), 0, ch))
 
 
 def _enter(vp):
-    vp.keyPressEvent(QKeyEvent(QEvent.KeyPress, Qt.Key_Return,
-                               Qt.NoModifier, "\r"))
+    vp.keyPressEvent(KeyEvent(True, Qt.Key_Return, 0, "\r"))
 
 
 def _override(vp, text):
-    ev = QKeyEvent(QEvent.ShortcutOverride, 0, Qt.NoModifier, text)
+    ev = ShortcutOverride(ord(text.upper()), 0, text)
     vp.event(ev)
     return ev.isAccepted()
 
@@ -66,7 +44,8 @@ def test_the_buffer_reads_calculations():
     assert parse("=1;2;3;4") is None
 
 
-def test_equals_opens_a_calculation_and_every_key_types_into_it(win):
+def test_equals_opens_a_calculation_and_every_key_types_into_it(native_window):
+    win = native_window
     vp = win.viewport
     win._activate_tool("line")
     assert _override(vp, "=") is True            # not a shortcut
@@ -78,14 +57,16 @@ def test_equals_opens_a_calculation_and_every_key_types_into_it(win):
     assert vp._value_buffer == "=(1.2m + 35cm)*2"
 
 
-def test_letters_outside_a_calculation_stay_shortcuts(win):
+def test_letters_outside_a_calculation_stay_shortcuts(native_window):
+    win = native_window
     vp = win.viewport
     win._activate_tool("line")
     assert _override(vp, "m") is False
     assert _override(vp, "(") is False
 
 
-def test_a_calculation_that_does_not_add_up_stays_in_the_box(win):
+def test_a_calculation_that_does_not_add_up_stays_in_the_box(native_window):
+    win = native_window
     vp = win.viewport
     win._activate_tool("line")
     flashed = []
@@ -94,12 +75,12 @@ def test_a_calculation_that_does_not_add_up_stays_in_the_box(win):
     _enter(vp)
     assert vp._value_buffer == "=2m*3m"          # kept, to fix it
     assert flashed and "multipl" in flashed[0].lower()
-    vp.keyPressEvent(QKeyEvent(QEvent.KeyPress, Qt.Key_Backspace,
-                               Qt.NoModifier, ""))
+    vp.keyPressEvent(KeyEvent(True, Qt.Key_Backspace, 0, ""))
     assert vp._value_buffer == "=2m*3"
 
 
-def test_a_rectangle_drawn_from_a_calculation(win):
+def test_a_rectangle_drawn_from_a_calculation(native_window):
+    win = native_window
     vp = win.viewport
     win._activate_tool("rectangle")
     tool = vp.active_tool

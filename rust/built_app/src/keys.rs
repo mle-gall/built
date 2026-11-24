@@ -4,7 +4,7 @@
 //! `ControlModifier` for ⌘ shortcuts (Cmd+click, Cmd+Z), so ⌘ maps to
 //! `CONTROL` here and the Control key to `META`.
 
-use winit::keyboard::{Key, ModifiersState, NamedKey};
+use winit::keyboard::{Key, KeyCode, ModifiersState, NamedKey, PhysicalKey};
 
 pub const SHIFT: u32 = 0x0200_0000;
 pub const CONTROL: u32 = 0x0400_0000;
@@ -122,6 +122,29 @@ pub fn qt_key(key: &Key, text: Option<&str>, mods: u32) -> (u32, String) {
     }
 }
 
+/// Shift changes the glyph on the digit row, but the binding is still Shift+digit.
+pub fn window_key(physical: PhysicalKey, logical: &Key, text: Option<&str>, mods: u32) -> (u32, String) {
+    let (code, typed) = qt_key(logical, text, mods);
+    if mods & SHIFT == 0 || !matches!(logical, Key::Character(_)) {
+        return (code, typed);
+    }
+    use KeyCode::*;
+    let digit = match physical {
+        PhysicalKey::Code(Digit0) => '0',
+        PhysicalKey::Code(Digit1) => '1',
+        PhysicalKey::Code(Digit2) => '2',
+        PhysicalKey::Code(Digit3) => '3',
+        PhysicalKey::Code(Digit4) => '4',
+        PhysicalKey::Code(Digit5) => '5',
+        PhysicalKey::Code(Digit6) => '6',
+        PhysicalKey::Code(Digit7) => '7',
+        PhysicalKey::Code(Digit8) => '8',
+        PhysicalKey::Code(Digit9) => '9',
+        _ => return (code, typed),
+    };
+    (digit as u32, typed)
+}
+
 /// A key by name for scripted runs: "escape", "enter", "shift", "up", a
 /// single character, or "f3".
 pub fn qt_key_by_name(name: &str) -> Option<(u32, String)> {
@@ -201,6 +224,29 @@ mod tests {
         assert_eq!(qt_key(&Key::Named(NamedKey::Enter), None, 0), (0x0100_0004, "\r".into()));
         assert_eq!(qt_key(&Key::Named(NamedKey::ArrowUp), None, 0).0, 0x0100_0013);
         assert_eq!(qt_key(&Key::Named(NamedKey::Super), None, 0).0, if cfg!(target_os = "macos") { 0x0100_0021 } else { 0x0100_0022 });
+    }
+
+    fn press(key: KeyCode, glyph: &str, mods: u32) -> (u32, String) {
+        window_key(key.into(), &Key::Character(glyph.into()), Some(glyph), mods)
+    }
+
+    #[test]
+    fn shifted_digit_shortcuts_keep_the_digit_and_type_the_glyph() {
+        for (key, glyph, digit) in [(KeyCode::Digit5, "%", '5'), (KeyCode::Digit1, "!", '1'), (KeyCode::Digit0, ")", '0')] {
+            assert_eq!(press(key, glyph, SHIFT), (digit as u32, glyph.into()));
+        }
+    }
+
+    #[test]
+    fn control_shift_digit_keeps_its_shortcut_without_inserting_text() {
+        assert_eq!(press(KeyCode::Digit5, "%", CONTROL | SHIFT), ('5' as u32, String::new()));
+    }
+
+    #[test]
+    fn other_shifted_keys_and_unshifted_digits_keep_the_layout_key() {
+        assert_eq!(press(KeyCode::Slash, "?", SHIFT).0, '?' as u32);
+        assert_eq!(press(KeyCode::KeyA, "A", SHIFT).0, 'A' as u32);
+        assert_eq!(press(KeyCode::Digit5, "5", 0).0, '5' as u32);
     }
 
     #[test]

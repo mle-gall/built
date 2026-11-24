@@ -16,7 +16,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
 from PySide6.QtCore import QRect, QSettings, Qt
-from PySide6.QtWidgets import (QApplication, QDoubleSpinBox, QToolBar,
+from PySide6.QtWidgets import (QApplication, QDoubleSpinBox,
                                QToolButton, QWidget)
 
 from core import i18n
@@ -151,34 +151,6 @@ def test_the_views_are_not_mirrored(rtl_app):
         assert win.isRightToLeft()
         assert win.viewport.keys_stand_in.layoutDirection() == Qt.LeftToRight
         assert win._vcb_value.layoutDirection() == Qt.LeftToRight
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
-        win.deleteLater()
-
-
-def test_toolbars_keep_their_order_right_to_left(rtl_app):
-    """The first bar of the top row (the one with Select) is its rightmost
-    one, and nothing in that row is cut to its overflow arrow that was not
-    cut left to right — the bars came back reversed and the first ones
-    were lost in the overflow."""
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        win.resize(1500, 950)
-        win.show()
-        rtl_app.processEvents()
-        win._pack_toolbars()
-        rtl_app.processEvents()
-        top = [tb for tb in win.findChildren(QToolBar)
-               if tb.isVisible() and not tb.isFloating()
-               and win.toolBarArea(tb) == Qt.TopToolBarArea]
-        first_row = min(tb.geometry().y() for tb in top)
-        row = [tb for tb in top if tb.geometry().y() == first_row]
-        rightmost = max(row, key=lambda tb: tb.geometry().right())
-        assert rightmost.objectName() == "main"
-        order = sorted(row, key=win._toolbar_seat_key(False))
-        assert order[0] is rightmost
     finally:
         win._saved_version = win.viewport.scene.version
         win.close()

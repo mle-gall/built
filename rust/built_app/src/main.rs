@@ -1345,7 +1345,7 @@ impl App {
                     return;
                 }
                 let m = self.mods();
-                let (code, text) = keys::qt_key(&event.logical_key, event.text.as_deref(), m);
+                let (code, text) = keys::window_key(event.physical_key, &event.logical_key, event.text.as_deref(), m);
                 let pressed = event.state == ElementState::Pressed;
                 if pressed {
                     if let Some(w) = self.win_mut(id) {

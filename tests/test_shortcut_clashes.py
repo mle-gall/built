@@ -9,22 +9,28 @@ shortcuts file written from another program's keys gave Z to Zoom
 Selection while the Zoom tool kept it, and neither responded."""
 from __future__ import annotations
 
-import os
+from collections import defaultdict
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-from collections import defaultdict  # noqa: E402
-
-from PySide6.QtCore import QSettings  # noqa: E402
-from PySide6.QtGui import QKeySequence  # noqa: E402
-
-from core.i18n import tr  # noqa: E402
-from tests.test_shortcuts_transfer import _keys, ventana  # noqa: E402,F401
-from views import shortcuts as sc  # noqa: E402
+from core.i18n import tr
+from core.settings import settings
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
+from tests.test_shortcuts_transfer import _keys, ventana  # noqa: F401
+from views import shortcuts as sc
 
 
 def test_redo_answers_both_keys(ventana):  # noqa: F811
-    assert _keys(ventana._redo_action) == ["Ctrl+Y", "Ctrl+Shift+Z"]
+    from core.history import AddEdgeCommand
+    from ingetrazo_core import Vec3
+    from PySide6.QtCore import Qt
+    action = ventana._registry_actions["menu:redo"]
+    assert set(_keys(action)) == {"Ctrl+Y", "Ctrl+Shift+Z"}
+    vp = ventana.viewport
+    vp.history.execute(AddEdgeCommand(Vec3(0, 0, 0), Vec3(1, 0, 0)))
+    for key, modifiers in [(Qt.Key_Y, Qt.ControlModifier),
+                           (Qt.Key_Z, Qt.ControlModifier | Qt.ShiftModifier)]:
+        assert vp.history.undo() and not vp.scene.mesh.edges
+        ventana._host.key(True, key, modifiers.value)
+        assert len(vp.scene.mesh.edges) == 1
 
 
 def test_no_factory_key_is_held_twice(ventana):  # noqa: F811
@@ -45,7 +51,7 @@ def _zoom_selection(win):
 
 def test_a_file_giving_one_key_to_two_commands_leaves_it_working(
         ventana):  # noqa: F811
-    zoom = ventana._nav_actions["zoom"]
+    zoom = ventana._registry_actions["view:zoom"]
     zsel = _zoom_selection(ventana)
     data = {"format": sc.EXPORT_FORMAT, "shortcuts": {
         sc.action_key(zoom): "Z",               # what the file kept
@@ -60,8 +66,8 @@ def test_a_file_giving_one_key_to_two_commands_leaves_it_working(
 
 def test_a_key_saved_twice_on_one_command_is_loaded_once(
         ventana):  # noqa: F811
-    redo = ventana._redo_action
-    QSettings().setValue(f"shortcuts/{sc._store_key(sc.action_key(redo))}",
+    redo = ventana._registry_actions["menu:redo"]
+    settings().setValue(f"shortcuts/{sc._store_key(sc.action_key(redo))}",
                          "Ctrl+Shift+Z; Ctrl+Shift+Z")
     sc.apply_user_shortcuts(ventana)
     assert _keys(redo) == ["Ctrl+Shift+Z"]

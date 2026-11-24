@@ -452,7 +452,7 @@ def test_redo_mid_drag_ends_the_drag_then_redoes_on_the_clean_model():
     # Redone under the staged preview, the redo landed on the staged push
     # and left it in the model with no undo entry.
     from types import SimpleNamespace
-    from views.main_window import MainWindow
+    from ingetrazo_render import history_step
 
     scene, half = _split_top()
     vp = _StubViewport(scene)
@@ -470,7 +470,7 @@ def test_redo_mid_drag_ends_the_drag_then_redoes_on_the_clean_model():
     # The main window's Redo, as Ctrl+Y / Ctrl+Shift+Z / menu / toolbar run it.
     vp.active_tool = tool
     vp.notify_scene_changed = lambda: None
-    MainWindow._on_redo(SimpleNamespace(viewport=vp))
+    history_step(SimpleNamespace(viewport=vp), True)
 
     assert not tool.dragging and tool._preview_snapshot is None
     assert _canon(scene) == redone             # the redo, and no push

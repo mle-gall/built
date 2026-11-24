@@ -5,24 +5,13 @@ in place, and the command in the window."""
 from __future__ import annotations
 
 import math
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
 import pytest
-from PySide6.QtCore import QPoint
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication, QMenu
-
+from ingetrazo_render import rail_layout
 from core.make_faces import MakeFacesError, make_faces, plan, selected_edges
 from core.mesh import Mesh
-
-_inst = QApplication.instance()
-if _inst is None:
-    _app = QApplication([])
-elif not isinstance(_inst, QApplication):
-    pytest.skip("a non-widget QGuiApplication is already active",
-                allow_module_level=True)
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
+from views import context_menu
 
 UP = QVector3D(0, 0, 50)
 
@@ -203,44 +192,16 @@ def test_selected_edges_ignores_what_is_not_an_edge_of_the_mesh():
 # ---- The window ----------------------------------------------------------------
 
 @pytest.fixture
-def win():
-    from views.main_window import MainWindow
-    w = MainWindow()
-    yield w
-    w._saved_version = w.viewport.scene.version
-    w.close()
-
-
-class _NoExecMenu(QMenu):
-    opened: list = []
-
-    def exec(self, *args, **kwargs):        # noqa: A003 - Qt's name
-        _NoExecMenu.opened.append(self)
-        return None
-
-
-def _context_entries(win, monkeypatch, selection):
-    import views.main_window as mw
-    _NoExecMenu.opened.clear()
-    monkeypatch.setattr(mw, "QMenu", _NoExecMenu)
-    win.viewport.scene.select(list(selection))
-    win.show_viewport_context_menu(QPoint(0, 0))
-    assert _NoExecMenu.opened
-    return [a.text() for a in _NoExecMenu.opened[0].actions()]
-
-
-def _tools_menu(win):
-    bar = win.menuBar()
-    return next(a.menu() for a in bar.actions() if a.text() == "Tools")
+def win(native_host):
+    return native_host.window
 
 
 def test_the_button_and_the_menu_entry_sit_after_bridge(win):
-    act = win._act_make_faces
-    actions = win.toolbars["modify"].actions()
-    assert actions.index(act) == actions.index(win._act_bridge) + 1
-    menu = _tools_menu(win).actions()
-    assert menu.index(act) == menu.index(win._act_bridge) + 1
-    assert not act.icon().isNull() and act.shortcuts() == []
+    tools = next(family for family in rail_layout() if ("bridge", "_act_bridge") in family)
+    assert tools[tools.index(("bridge", "_act_bridge")) + 1] == ("make_faces", "_act_make_faces")
+    assert win._command_paths["menu:make_faces"] == "Tools"
+    assert win._act_make_faces is win._registry_actions["menu:make_faces"]
+    assert win._act_make_faces.portable_keys() == []
 
 
 def test_the_button_faces_the_selection_in_one_undo_step(win):
@@ -284,8 +245,8 @@ def test_inside_a_group_the_faces_stay_in_the_group(win):
     assert len(group.mesh.faces) == 1
 
 
-def test_right_click_offers_make_faces_for_edges(win, monkeypatch):
+def test_right_click_offers_make_faces_for_edges(win):
     scene = win.viewport.scene
     edges = _rect(scene.mesh, 0, 0, 1, 1)
-    assert "Make Faces" in _context_entries(win, monkeypatch, edges)
-    assert "Make Faces" not in _context_entries(win, monkeypatch, edges[:2])
+    assert "makefaces" in context_menu.build(win, win.view, edges).ids()
+    assert "makefaces" not in context_menu.build(win, win.view, edges[:2]).ids()
