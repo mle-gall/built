@@ -11,8 +11,6 @@ that happened in the same breath as a move rode along invisibly.
 """
 from __future__ import annotations
 
-import inspect
-import types
 from pathlib import Path
 
 import pytest
@@ -23,14 +21,14 @@ from core.group import Group
 from core.history import History, MoveGroupCommand, SetFaceTextureCommand
 from core.mesh import Mesh
 from core.scene import Scene
-from tests.controller_surface import ControllerSurface as Viewport
+from views.document_interaction import DocumentInteraction
 
 
 def V(x, y, z=0.0):
     return QVector3D(x, y, z)
 
 
-class _VP:
+class _VP(DocumentInteraction):
     def __init__(self, scene):
         self.scene = scene
 
@@ -42,18 +40,8 @@ class _VP:
 
 
 def _stub(scene):
-    """A Viewport with no GL: every plain method bound, no chunk disk cache."""
+    """A document surface with no window or disk cache."""
     vp = _VP(scene)
-    for name in dir(Viewport):
-        if name.startswith("__") or hasattr(vp, name):
-            continue
-        attr = inspect.getattr_static(Viewport, name)
-        if isinstance(attr, types.FunctionType):
-            setattr(vp, name, attr.__get__(vp))
-        elif isinstance(attr, staticmethod):
-            setattr(vp, name, attr.__func__)
-        elif not callable(attr) and attr is not None:
-            setattr(vp, name, attr)
     vp.active_tool = None
     vp._chunk_cache_load = None
     vp._chunk_cache_store = None
