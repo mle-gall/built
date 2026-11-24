@@ -2925,54 +2925,13 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
     @staticmethod
     def _widened_planes(planes, frac):
-        """The six planes of ``_frustum_planes`` with the four sides moved
-        out by ``frac`` of the view on each side — the clip test |x|, |y|
-        ≤ w becomes ≤ (1 + 2·frac)·w — and no near plane (what is behind
-        the eye is clipped anyway)."""
-        # Each side is r3 ± row: half the sum of a pair is r3 itself.
-        r3 = [(a + b) * 0.5 for a, b in zip(planes[0], planes[1])]
-        k = 2.0 * frac
-        out = [tuple(c + k * r for c, r in zip(pl, r3)) for pl in planes[:4]]
-        out.append(planes[5])                                       # far
-        return out
+        from ingetrazo_core import widened_planes
+        return widened_planes(planes, frac)
 
     @staticmethod
     def _instances_in_frustum(lo, hi, planes, margin=0.0):
-        """Mask of the boxes ``lo``/``hi`` not wholly outside one of the
-        frustum ``planes`` — moved ``margin`` world units outward.
-
-        A box whose bounds are not finite is always kept: ±inf is what a
-        placement with no known extent is stored as, a NaN can creep into
-        a huge model's coordinates, and neither can be proven outside —
-        the rule ``_bounding_spheres`` and ``_visible_spans`` already
-        keep for unknown extents. Running the products on them anyway
-        multiplied inf by a zero plane component (``invalid value
-        encountered in multiply``, issue #952) and let the NaN comparison
-        drop the box."""
-        import numpy as np
-        lo = np.asarray(lo)
-        hi = np.asarray(hi)
-        keep = np.ones(len(lo), dtype=bool)
-        finite = np.isfinite(lo).all(axis=1) & np.isfinite(hi).all(axis=1)
-        idx = np.flatnonzero(finite)
-        if not len(idx):
-            return keep
-        flo, fhi = lo[idx], hi[idx]
-        fkeep = np.ones(len(idx), dtype=bool)
-        # Same p-vertex test as ``_aabb_visible``, all boxes at once — a
-        # plane at a time on the box columns (the (planes, boxes, 3) array
-        # it used to build was most of a frame's gather, #158); the same
-        # products and sums, in the same order.
-        for pl in planes:
-            nx, ny, nz, d = (float(c) for c in pl)
-            if margin:
-                d += margin * (nx * nx + ny * ny + nz * nz) ** 0.5
-            px = fhi[:, 0] if nx >= 0.0 else flo[:, 0]
-            py = fhi[:, 1] if ny >= 0.0 else flo[:, 1]
-            pz = fhi[:, 2] if nz >= 0.0 else flo[:, 2]
-            fkeep &= ((px * nx + py * ny) + pz * nz) + d >= 0.0
-        keep[idx] = fkeep
-        return keep
+        from ingetrazo_core import instances_in_frustum
+        return instances_in_frustum(lo, hi, planes, margin)
 
     #: An instance whose bounding sphere spans less than this many
     #: framebuffer pixels is not drawn (the camera's frame only).
@@ -2998,31 +2957,15 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
     @staticmethod
     def _bounding_spheres(lo, hi):
-        """Centres and radii of boxes ``lo``/``hi``; a box with an unknown
-        (infinite) extent gets an infinite radius: it is never «small»."""
-        import numpy as np
-        with np.errstate(invalid="ignore"):
-            ctr = (lo + hi) * 0.5
-            rad = np.linalg.norm(hi - lo, axis=1) * 0.5
-        known = np.isfinite(ctr).all(axis=1) & np.isfinite(rad)
-        return np.where(known[:, None], ctr, 0.0), np.where(known, rad, np.inf)
+        from ingetrazo_core import bounding_spheres
+        return bounding_spheres(lo, hi)
 
     def _spheres_below_a_pixel(self, ctr, rad, floor=None):
-        """Mask of the spheres that span under ``floor`` (by default
-        ``_INST_MIN_PX``) framebuffer pixels across on this frame."""
-        import numpy as np
-        h = (self._export_size or self._fb_size())[1]
-        m = self._np_mvp()
-        # pixels per world unit at w = 1: the projection's own y scale
-        sy = abs(self.camera.projection_matrix().data()[5]) * h * 0.5
-        w = ctr @ m[3, :3] + m[3, 3]
-        if self.camera.perspective:
-            w = w - rad                         # the sphere's nearest point
-        with np.errstate(invalid="ignore", divide="ignore"):
-            px = 2.0 * rad * sy / np.where(w > 1e-9, w, np.nan)
-        if floor is None:
-            floor = self._INST_MIN_PX
-        return np.isfinite(px) & (px < floor)
+        from ingetrazo_core import small_spheres
+        height = (self._export_size or self._fb_size())[1]
+        scale = abs(self.camera.projection_matrix().data()[5]) * height
+        return small_spheres(ctr, rad, self._np_mvp()[3], scale, self.camera.perspective,
+                             self._INST_MIN_PX if floor is None else floor)
 
     def _edit_rest_fade(self, group):
         """How a reference image (``group=None``) or a face-me figure is
@@ -7598,112 +7541,22 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
     @staticmethod
     def _frustum_planes(mvp):
-        """The six view-frustum planes of ``mvp`` as (nx, ny, nz, d) tuples
-        (Gribb–Hartmann rows); a point is inside when n·p + d ≥ 0 for all
-        six. Plain floats — the per-frame consumer tests ~tens of chunk
-        boxes, where NumPy overhead would dominate."""
-        m = mvp.data()                    # column-major
-        rows = [(m[i], m[i + 4], m[i + 8], m[i + 12]) for i in range(4)]
-        r3 = rows[3]
-        planes = []
-        for row in rows[:3]:
-            planes.append(tuple(r3[i] + row[i] for i in range(4)))
-            planes.append(tuple(r3[i] - row[i] for i in range(4)))
-        return planes
+        from ingetrazo_core import frustum_planes
+        return frustum_planes(mvp)
 
     @staticmethod
     def _aabb_visible(planes, lo, hi) -> bool:
-        """Conservative AABB-vs-frustum p-vertex test: culled only when the
-        box lies fully outside one plane (never drops visible geometry)."""
-        lx, ly, lz = lo
-        hx, hy, hz = hi
-        for nx, ny, nz, d in planes:
-            px = hx if nx >= 0.0 else lx
-            py = hy if ny >= 0.0 else ly
-            pz = hz if nz >= 0.0 else lz
-            if nx * px + ny * py + nz * pz + d < 0.0:
-                return False
-        return True
+        from ingetrazo_core import aabb_visible
+        return aabb_visible(planes, lo, hi)
 
     def _visible_spans(self, spans, planes, split=None):
-        """Filter draw spans ``[(bbox, start, count)]`` by the frustum and
-        merge adjacent survivors: returns ``([(start, count)], culled)``.
-        ``bbox None`` = always drawn (loose geometry, unknown extents).
-
-        ``split`` (a vertex offset) is a boundary merging never crosses, so
-        the caller can still tell the two sides apart — the faded context
-        before it, the group being edited from it on."""
-        if len(spans) >= _SPAN_VECTOR_MIN and planes:
-            return self._visible_spans_np(spans, planes, split)
-        out: list = []
-        culled = 0
-        for bbox, start, count in spans:
-            if not count:
-                continue
-            if bbox is not None and not self._aabb_visible(
-                    planes, bbox[0], bbox[1]):
-                culled += count
-                continue
-            if (out and out[-1][0] + out[-1][1] == start
-                    and not (split is not None
-                             and out[-1][0] < split <= start)):
-                out[-1] = (out[-1][0], out[-1][1] + count)
-            else:
-                out.append((start, count))
-        return out, culled
+        from ingetrazo_core import visible_draw_spans
+        return visible_draw_spans(self, spans, planes, split,
+                                  len(spans) >= _SPAN_VECTOR_MIN and bool(planes))
 
     def _visible_spans_np(self, spans, planes, split=None):
-        """:meth:`_visible_spans` over many spans at once: the same p-vertex
-        test, float op for float op, on arrays kept per span list (a model
-        of 21 406 placements tested ~4 800 boxes one by one per frame)."""
-        import numpy as np
-        memo = getattr(self, "_span_arrays", None)
-        if memo is None:
-            memo = self._span_arrays = {}
-        hit = memo.get(id(spans))
-        if hit is None or hit[0] is not spans:
-            if len(memo) > 16:
-                memo.clear()
-            n = len(spans)
-            has = np.zeros(n, dtype=bool)
-            lo = np.zeros((n, 3))
-            hi = np.zeros((n, 3))
-            start = np.empty(n, dtype=np.int64)
-            count = np.empty(n, dtype=np.int64)
-            for i, (bbox, s0, c0) in enumerate(spans):
-                start[i] = s0
-                count[i] = c0
-                if bbox is not None:
-                    has[i] = True
-                    lo[i], hi[i] = bbox[0], bbox[1]
-            hit = memo[id(spans)] = (spans, has, lo, hi, start, count,
-                                     *self._bounding_spheres(lo, hi))
-        _s, has, lo, hi, start, count, ctr, rad = hit
-        vis = np.ones(len(start), dtype=bool)
-        for nx, ny, nz, d in planes:
-            px = hi[:, 0] if nx >= 0.0 else lo[:, 0]
-            py = hi[:, 1] if ny >= 0.0 else lo[:, 1]
-            pz = hi[:, 2] if nz >= 0.0 else lo[:, 2]
-            vis &= ~(((nx * px + ny * py) + nz * pz) + d < 0.0)
-        # What comes out under a pixel is not drawn either, as with the
-        # instances (see _instances_below_a_pixel).
-        vis &= ~(has & self._spheres_below_a_pixel(ctr, rad))
-        live = count > 0
-        drawn = live & (vis | ~has)
-        culled = int(count[live & ~drawn].sum())
-        idx = np.flatnonzero(drawn)
-        if not len(idx):
-            return [], culled
-        st = start[idx]
-        ct = count[idx]
-        brk = np.ones(len(idx), dtype=bool)
-        brk[1:] = st[1:] != st[:-1] + ct[:-1]
-        if split is not None:
-            # A run never crosses the split (see _visible_spans).
-            brk[1:] |= (st[:-1] < split) & (split <= st[1:])
-        heads = np.flatnonzero(brk)
-        sums = np.add.reduceat(ct, heads)
-        return list(zip(st[heads].tolist(), sums.tolist())), culled
+        from ingetrazo_core import visible_draw_spans
+        return visible_draw_spans(self, spans, planes, split, True)
 
     def _tex_run_spans(self, parts, planes, fading: bool):
         """Frustum-culled draw spans of one texture run, split into
