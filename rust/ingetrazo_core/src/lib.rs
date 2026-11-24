@@ -50,6 +50,7 @@ mod hatch_file;
 mod hatch_region;
 mod style_files;
 mod style_edit;
+mod browser_rename;
 mod settings;
 mod document_watch;
 mod window_input;
@@ -120,6 +121,9 @@ mod alignment;
 fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     stl::register(m)?;
     alignment::register(m)?;
+    m.add("TAG_PALETTE", pyo3::types::PyTuple::new(m.py(), doc::drawing::PALETTE)?)?;
+    m.add_function(wrap_pyfunction!(doc::drawing::automatic_tag_color, m)?)?;
+    m.add_function(wrap_pyfunction!(browser_rename::browser_rename, m)?)?;
     screen::register(m)?;
     scene_animation::register(m)?;
     survey_pixels::register(m)?;

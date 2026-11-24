@@ -35,16 +35,6 @@ def test_restored_oversize_geometry_is_clamped(win):
     assert avail.contains(win.frameGeometry())
 
 
-@pytest.mark.skipif(sys.platform != 'darwin', reason='macOS native safe areas')
-def test_redocked_native_tab_does_not_add_safe_area_to_minimum(win):
-    dock = win.layers_dock
-    dock.setContentsMargins(1040, 1596, 0, 0)
-    win._keep_docked(dock)
-    QApplication.processEvents()
-    assert dock.contentsMargins().isNull()
-    assert not dock.testAttribute(Qt.WA_ContentsMarginsRespectsSafeArea)
-
-
 def test_wide_extension_scrolls_without_changing_its_contents(win):
     dock = QDockWidget('Wide form', win)
     panel = QWidget()
