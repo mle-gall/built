@@ -26,10 +26,7 @@ from core.vista_caras import FaceFill                   # noqa: E402
 from tests.test_view_faces_cost import _scene           # noqa: E402
 from views import chrome_dialogs, wgpu_deliveries
 from tests.test_export_view_svg import _export_sheet
-
-
-def _app():
-    return QApplication.instance() or QApplication([])
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 
 def _faces(n=300):
@@ -179,12 +176,11 @@ def test_cancel_on_the_bar_raises_and_puts_everything_back(monkeypatch):
     assert P._report is None and QApplication.overrideCursor() is None
 
 
-def _window_with_faces():
+def _window_with_faces(host):
     from tests.test_export_view_svg import _two_layer_scene
-    from views.main_window import MainWindow
-    win = MainWindow()
+    win = host.window
     vp = win.viewport
-    vp.resize(800, 600)
+    host.resize(800, 600, 1.)
     vp.camera.set_aspect(800, 600)
     _two_layer_scene(vp.scene)
     vp.notify_scene_changed()
@@ -194,45 +190,34 @@ def _window_with_faces():
     return win
 
 
-def test_cancel_stops_the_export_and_writes_nothing(tmp_path, monkeypatch):
-    _app()
-    win = _window_with_faces()
-    try:
-        made = _bars(monkeypatch, cancel_after=0)
-        monkeypatch.setattr(P, "REPORT_EVERY", 0.0)
-        monkeypatch.setattr(wgpu_deliveries, "PREVIEW_JOB_DELAY", 0.0)
+def test_cancel_stops_the_export_and_writes_nothing(native_host, tmp_path, monkeypatch):
+    win = _window_with_faces(native_host)
+    monkeypatch.setattr(chrome_dialogs, "in_shell", lambda: True)
+    with monkeypatch.context() as observe:
+        made = _bars(observe, cancel_after=0)
+        observe.setattr(P, "REPORT_EVERY", 0.0)
+        observe.setattr(wgpu_deliveries, "PREVIEW_JOB_DELAY", 0.0)
         _export_sheet(win, tmp_path / "vista.svg")
         assert not (tmp_path / "vista.svg").exists()
         assert len(made) == 1 and made[0].cancelled and not win._chrome_jobs
         assert win.statusBar().currentMessage() == "SVG export cancelled"
-        assert win.viewport.updatesEnabled()
-        assert QApplication.overrideCursor() is None
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    # The same document can export immediately after cancellation.
+    _export_sheet(win, tmp_path / "retry.svg")
+    assert (tmp_path / "retry.svg").is_file()
 
 
-def test_the_bar_left_alone_writes_the_svg_as_before(tmp_path, monkeypatch):
-    _app()
-    win = _window_with_faces()
-    try:
-        _export_sheet(win, tmp_path / "antes.svg")
-        made = _bars(monkeypatch)
-        monkeypatch.setattr(P, "REPORT_EVERY", 0.0)
-        monkeypatch.setattr(wgpu_deliveries, "PREVIEW_JOB_DELAY", 0.0)
-        win2 = _window_with_faces()
-        try:
-            _export_sheet(win2, tmp_path / "con-barra.svg")
-        finally:
-            win2._saved_version = win2.viewport.scene.version
-            win2.close()
-        assert len(made) == 1 and made[0].values
-        before = (tmp_path / "antes.svg").read_text(encoding="utf-8")
-        after = (tmp_path / "con-barra.svg").read_text(encoding="utf-8")
-        assert "<path" in before and before == after
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_the_bar_left_alone_writes_the_svg_as_before(native_host, tmp_path, monkeypatch):
+    win = _window_with_faces(native_host)
+    _export_sheet(win, tmp_path / "antes.svg")
+    made = _bars(monkeypatch)
+    monkeypatch.setattr(P, "REPORT_EVERY", 0.0)
+    monkeypatch.setattr(wgpu_deliveries, "PREVIEW_JOB_DELAY", 0.0)
+    monkeypatch.setattr(chrome_dialogs, "in_shell", lambda: True)
+    _export_sheet(win, tmp_path / "con-barra.svg")
+    assert len(made) == 1 and made[0].values
+    before = (tmp_path / "antes.svg").read_text(encoding="utf-8")
+    after = (tmp_path / "con-barra.svg").read_text(encoding="utf-8")
+    assert "<path" in before and before == after
 
 
 def test_cancel_on_a_slow_preview_turns_the_preview_off(monkeypatch):

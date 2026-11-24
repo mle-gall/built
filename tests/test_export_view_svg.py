@@ -9,6 +9,7 @@ import xml.etree.ElementTree as ET
 import numpy as np
 import pytest
 from ingetrazo_core import Vec3 as QVector3D
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 SVG = "{http://www.w3.org/2000/svg}"
 INK = "{http://www.inkscape.org/namespaces/inkscape}"
@@ -155,43 +156,34 @@ def _two_layer_scene(scene):
     scene.version += 1
 
 
-def test_the_export_menu_writes_the_view_as_svg(tmp_path, monkeypatch):
-    from PySide6.QtGui import QAction
-    from views.main_window import MainWindow
-
-    win = MainWindow()
-    try:
-        labels = [a.text() for a in win.findChildren(QAction)]
-        assert any("SVG" in t for t in labels)
-        vp = win.viewport
-        vp.resize(800, 600)
-        vp.camera.set_aspect(800, 600)
-        _two_layer_scene(vp.scene)
-        vp.notify_scene_changed()
-        lo, hi = vp.scene.bounds()
-        vp.camera.fit_to(lo, hi, 1.2)
-        for mode in ("parallel", "perspective"):
-            vp.camera.perspective = mode == "perspective"
-            vp.camera.two_point = False
-            asked = tmp_path / mode                  # no extension typed
-            _export_sheet(win, asked)
-            root, layers = _layers(tmp_path / f"{mode}.svg")
-            assert root.findall(f".//{SVG}path"), mode
-            # The faces go under the lines, on their own layers.
-            names = list(layers)
-            faces = [i for i, n in enumerate(names) if n.endswith("-CARAS")]
-            lines = [i for i, n in enumerate(names) if "-CARAS" not in n]
-            assert faces and lines and max(faces) < min(lines), names
-        _root, layers = _layers(tmp_path / "parallel.svg")
-        names = " ".join(layers)
-        assert "Muros" in names and "Mobiliario" in names
-        blue = [g for name, g in layers.items()
-                if name.startswith("Mobil") and "-CARAS" not in name]
-        assert blue
-        assert all(g.get("stroke") == "#0000ff" for g in blue)
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_the_export_menu_writes_the_view_as_svg(native_host, tmp_path):
+    win = native_host.window
+    vp = win.viewport
+    native_host.resize(800, 600, 1.)
+    vp.camera.set_aspect(800, 600)
+    _two_layer_scene(vp.scene)
+    vp.notify_scene_changed()
+    lo, hi = vp.scene.bounds()
+    vp.camera.fit_to(lo, hi, 1.2)
+    for mode in ("parallel", "perspective"):
+        vp.camera.perspective = mode == "perspective"
+        vp.camera.two_point = False
+        asked = tmp_path / mode                  # no extension typed
+        _export_sheet(win, asked, opener=lambda: native_host.menu("export_view_svg"))
+        root, layers = _layers(tmp_path / f"{mode}.svg")
+        assert root.findall(f".//{SVG}path"), mode
+        # The faces go under the lines, on their own layers.
+        names = list(layers)
+        faces = [i for i, n in enumerate(names) if n.endswith("-CARAS")]
+        lines = [i for i, n in enumerate(names) if "-CARAS" not in n]
+        assert faces and lines and max(faces) < min(lines), names
+    _root, layers = _layers(tmp_path / "parallel.svg")
+    names = " ".join(layers)
+    assert "Muros" in names and "Mobiliario" in names
+    blue = [g for name, g in layers.items()
+            if name.startswith("Mobil") and "-CARAS" not in name]
+    assert blue
+    assert all(g.get("stroke") == "#0000ff" for g in blue)
 
 
 # ---- The faces --------------------------------------------------------------
@@ -458,10 +450,10 @@ def _saved(model):
 def _export_sheet(win, path, fill="2", *, opener=None, scene=None):
     from views import chrome_sheet
 
-    form = (opener or win._on_export_view_svg)()
+    (opener or win._on_export_view_svg)()
     provider = chrome_sheet.current(win)
     ctx = chrome_sheet.Ctx(win, None)
-    model = provider.build(ctx).forms()[1]
+    form, model = provider.build(ctx).forms()
     model.receive("advanced", "1")
     model.receive("svg_preview", "0")
     model.receive("fill", fill)
@@ -638,30 +630,24 @@ def _tmp_png_dir():
     return Path(tempfile.mkdtemp())
 
 
-def test_default_colour_only_also_inks_every_line_black(tmp_path,
-                                                         monkeypatch):
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        vp.resize(800, 600)
-        vp.camera.set_aspect(800, 600)
-        _two_layer_scene(vp.scene)
-        vp.notify_scene_changed()
-        lo, hi = vp.scene.bounds()
-        vp.camera.fit_to(lo, hi, 1.2)
-        vp.camera.perspective = False
-        strokes = {}
-        for name, fill in (("color", "2"), ("defecto", "4")):
-            _export_sheet(win, tmp_path / name, fill)
-            _root, layers = _layers(tmp_path / f"{name}.svg")
-            strokes[name] = {g.get("stroke") for n, g in layers.items()
-                             if "-CARAS" not in n}
-        assert "#0000ff" in strokes["color"]           # Mobiliario, blue
-        assert strokes["defecto"] == {"#000000"}
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_default_colour_only_also_inks_every_line_black(tmp_path, native_host):
+    win = native_host.window
+    vp = win.viewport
+    native_host.resize(800, 600, 1.)
+    vp.camera.set_aspect(800, 600)
+    _two_layer_scene(vp.scene)
+    vp.notify_scene_changed()
+    lo, hi = vp.scene.bounds()
+    vp.camera.fit_to(lo, hi, 1.2)
+    vp.camera.perspective = False
+    strokes = {}
+    for name, fill in (("color", "2"), ("defecto", "4")):
+        _export_sheet(win, tmp_path / name, fill)
+        _root, layers = _layers(tmp_path / f"{name}.svg")
+        strokes[name] = {g.get("stroke") for n, g in layers.items()
+                         if "-CARAS" not in n}
+    assert "#0000ff" in strokes["color"]           # Mobiliario, blue
+    assert strokes["defecto"] == {"#000000"}
 
 
 # ---- Sun shadows, picture of the view, paper, preview ----------------------
@@ -871,23 +857,19 @@ def test_the_picture_of_the_view_can_leave_the_axes_out(tmp_path):
 
 
 def test_the_view_picture_without_axes_leaves_the_view_as_it_was(
-        monkeypatch):
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        seen = []
-        monkeypatch.setattr(vp, "render_image", lambda *a, **k: seen.append(
-            vp.scene.show_axes))
-        vp.scene.show_axes = True
-        builder = win.view_svg_builder()
-        builder.image(True, axes=False)
-        builder.image(True, axes=True)
-        assert seen == [False, True]
-        assert vp.scene.show_axes is True
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+        native_host, monkeypatch):
+    win = native_host.window
+    vp = win.viewport
+    seen = []
+    monkeypatch.setattr("core.input_types.NATIVE", True)
+    monkeypatch.setattr(vp.keys_stand_in, "render_pixels", lambda *a, **k: seen.append(
+        vp.scene.show_axes))
+    vp.scene.show_axes = True
+    builder = win.view_svg_builder()
+    builder.image(True, axes=False)
+    builder.image(True, axes=True)
+    assert seen == [False, True]
+    assert vp.scene.show_axes is True
 
 
 def test_svg_preview_can_be_turned_off_and_remembers_it():
@@ -1255,134 +1237,119 @@ def test_svg_scene_selection_is_shared_by_both_modes_and_resets_framing():
     assert calls == [1, 0, None]
 
 
-def test_a_scene_is_exported_and_the_view_comes_back(tmp_path, monkeypatch):
+def test_a_scene_is_exported_and_the_view_comes_back(native_host, tmp_path):
     from core.saved_views import SavedView
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        vp.resize(800, 600)
-        vp.camera.set_aspect(800, 600)
-        _two_layer_scene(vp.scene)
-        vp.notify_scene_changed()
-        lo, hi = vp.scene.bounds()
-        vp.camera.fit_to(lo, hi, 1.2)
-        vp.camera.perspective = False
-        # A scene without the furniture, looking from elsewhere.
-        mob = next(ly for ly in vp.scene.layers if ly.name == "Mobiliario")
-        mob.visible = False
-        yaw = vp.camera.yaw
-        vp.camera.yaw = yaw + 1.0
-        vp.scene.saved_views.append(
-            SavedView.capture("Sin muebles", vp.scene, vp.camera))
-        mob.visible = True
-        vp.camera.yaw = yaw
-        win._saved_version = vp.scene.version          # nothing to save
+    win = native_host.window
+    vp = win.viewport
+    native_host.resize(800, 600, 1.)
+    vp.camera.set_aspect(800, 600)
+    _two_layer_scene(vp.scene)
+    vp.notify_scene_changed()
+    lo, hi = vp.scene.bounds()
+    vp.camera.fit_to(lo, hi, 1.2)
+    vp.camera.perspective = False
+    # A scene without the furniture, looking from elsewhere.
+    mob = next(ly for ly in vp.scene.layers if ly.name == "Mobiliario")
+    mob.visible = False
+    yaw = vp.camera.yaw
+    vp.camera.yaw = yaw + 1.0
+    vp.scene.saved_views.append(
+        SavedView.capture("Sin muebles", vp.scene, vp.camera))
+    mob.visible = True
+    vp.camera.yaw = yaw
+    saved_version = vp.scene.content_version          # nothing to save
 
-        def choose(model):
-            assert _rows(model)["svg_scene"][7][-1] == "Sin muebles"
-            model.receive("svg_scene", "1")
-            assert not mob.visible
+    def choose(model):
+        assert _rows(model)["svg_scene"][7][-1] == "Sin muebles"
+        model.receive("svg_scene", "1")
+        assert not mob.visible
 
-        from views import chrome_sheet
-        from PySide6.QtCore import QSettings
+    from views import chrome_sheet
+    from core.settings import settings as current_settings
 
-        settings = QSettings()
-        original_mode = settings.value("export_svg/v5/advanced")
-        form = win._on_export_view_svg()
-        ctx = chrome_sheet.Ctx(win, None)
-        model = chrome_sheet.current(win).build(ctx).forms()[1]
-        model.receive("advanced", "1")
-        choose(model)
-        form.set("destination", str(tmp_path / "cancelled.svg"))
-        chrome_sheet.close(win)
-        assert mob.visible and vp.camera.yaw == yaw
-        assert not (tmp_path / "cancelled.svg").exists()
-        assert settings.value("export_svg/v5/advanced") == original_mode
+    settings = current_settings()
+    original_mode = settings.value("export_svg/v5/advanced")
+    form = win._on_export_view_svg()
+    ctx = chrome_sheet.Ctx(win, None)
+    model = chrome_sheet.current(win).build(ctx).forms()[1]
+    model.receive("advanced", "1")
+    choose(model)
+    form.set("destination", str(tmp_path / "cancelled.svg"))
+    chrome_sheet.close(win)
+    assert mob.visible and vp.camera.yaw == yaw
+    assert not (tmp_path / "cancelled.svg").exists()
+    assert settings.value("export_svg/v5/advanced") == original_mode
 
-        _export_sheet(win, tmp_path / "escena", scene=choose)
-        _root, layers = _layers(tmp_path / "escena.svg")
-        names = " ".join(layers)
-        assert "Muros" in names and "Mobiliario" not in names
-        # The view as it was, and the document still unchanged.
-        assert mob.visible and vp.camera.yaw == yaw
-        assert vp.scene.content_version == win._saved_version
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    _export_sheet(win, tmp_path / "escena", scene=choose)
+    _root, layers = _layers(tmp_path / "escena.svg")
+    names = " ".join(layers)
+    assert "Muros" in names and "Mobiliario" not in names
+    # The view as it was, and the document still unchanged.
+    assert mob.visible and vp.camera.yaw == yaw
+    assert vp.scene.content_version == saved_version
 
 
-def test_the_whole_model_is_all_of_it_not_what_the_screen_shows():
+def test_the_whole_model_is_all_of_it_not_what_the_screen_shows(native_host):
     """Zoomed in on a corner, «Whole model» still exports every part of
     the model — framed afresh, as Zoom Extents frames it — and leaves the
     camera as it was."""
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        vp.resize(800, 600)
-        vp.camera.set_aspect(800, 600)
-        _two_layer_scene(vp.scene)
-        vp.notify_scene_changed()
-        lo, hi = vp.scene.bounds()
-        whole = {"area": "model", "size": None}
-        for perspective in (False, True):
-            vp.camera.perspective = perspective
-            vp.camera.two_point = False
-            vp.camera.fit_box(lo, hi)
-            _t, everything = win.view_svg_builder().build(None, whole)
-            # Close in on one corner: the screen shows a part of it.
-            vp.camera.target = lo
-            vp.camera.distance = vp.camera.distance / 4.0
-            keep = (vp.camera.target, vp.camera.distance)
-            builder = win.view_svg_builder()
-            _t, on_screen = builder.build(None, {"area": "view",
-                                                 "size": "screen"})
-            text, n = builder.build({"textures": True, "as_view": True},
-                                    whole)
-            if perspective:              # only what the window shows
-                assert on_screen < everything
-            assert n == everything, perspective
-            assert "Mobiliario-CARAS" in text and "Muros-CARAS" in text
-            assert (vp.camera.target, vp.camera.distance) == keep
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    win = native_host.window
+    vp = win.viewport
+    native_host.resize(800, 600, 1.)
+    vp.camera.set_aspect(800, 600)
+    _two_layer_scene(vp.scene)
+    vp.notify_scene_changed()
+    lo, hi = vp.scene.bounds()
+    whole = {"area": "model", "size": None}
+    for perspective in (False, True):
+        vp.camera.perspective = perspective
+        vp.camera.two_point = False
+        vp.camera.fit_box(lo, hi)
+        _t, everything = win.view_svg_builder().build(None, whole)
+        # Close in on one corner: the screen shows a part of it.
+        vp.camera.target = lo
+        vp.camera.distance = vp.camera.distance / 4.0
+        keep = (vp.camera.target, vp.camera.distance)
+        builder = win.view_svg_builder()
+        _t, on_screen = builder.build(None, {"area": "view",
+                                             "size": "screen"})
+        text, n = builder.build({"textures": True, "as_view": True},
+                                whole)
+        if perspective:              # only what the window shows
+            assert on_screen < everything
+        assert n == everything, perspective
+        assert "Mobiliario-CARAS" in text and "Muros-CARAS" in text
+        assert (vp.camera.target, vp.camera.distance) == keep
 
 
-def test_the_picture_of_the_selection_shows_the_selection_alone():
+def test_the_picture_of_the_selection_shows_the_selection_alone(native_host, monkeypatch):
     """«Picture of the view» with «Selection»: the rest of the model is
     hidden for the picture, framed on the selection, and every flag — and
     the document's «nothing to save» — is back afterwards."""
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        vp.resize(400, 300)
-        vp.camera.set_aspect(400, 300)
-        _two_layer_scene(vp.scene)
-        vp.notify_scene_changed()
-        lo, hi = vp.scene.bounds()
-        vp.camera.fit_box(lo, hi)
-        a, b = vp.scene.groups
-        vp.scene.selection.clear()
-        vp.scene.selection.add(b)
-        win._saved_version = vp.scene.version
-        seen = []
-        def render(*args, **kw):
-            from PySide6.QtGui import QImage
-            seen.append((a.hidden, b.hidden))
-            return QImage(40, 30, QImage.Format_RGB32)
+    win = native_host.window
+    vp = win.viewport
+    native_host.resize(400, 300, 1.)
+    vp.camera.set_aspect(400, 300)
+    _two_layer_scene(vp.scene)
+    vp.notify_scene_changed()
+    lo, hi = vp.scene.bounds()
+    vp.camera.fit_box(lo, hi)
+    a, b = vp.scene.groups
+    vp.scene.selection.clear()
+    vp.scene.selection.add(b)
+    saved_version = vp.scene.content_version
+    seen = []
+    def render(*args, **kw):
+        seen.append((a.hidden, b.hidden))
+        return 40, 30, bytes([120, 100, 80, 255]) * 1200
 
-        vp.render_image = render
-        text, _n = win.view_svg_builder().build(
-            {"image": True}, {"area": "selection", "size": None})
-        assert seen == [(True, False)]               # the other one hidden
-        assert not a.hidden and not b.hidden
-        assert vp.scene.content_version == win._saved_version
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    monkeypatch.setattr("core.input_types.NATIVE", True)
+    monkeypatch.setattr(vp.keys_stand_in, "render_pixels", render)
+    text, _n = win.view_svg_builder().build(
+        {"image": True}, {"area": "selection", "size": None})
+    assert seen == [(True, False)]               # the other one hidden
+    assert not a.hidden and not b.hidden
+    assert vp.scene.content_version == saved_version
 
 
 def test_a_documents_own_line_type_is_dashed_and_keeps_its_pen(tmp_path):

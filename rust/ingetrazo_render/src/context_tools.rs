@@ -100,15 +100,21 @@ fn selected_text<'py>(scene: &Bound<'py, PyAny>) -> PyResult<Option<Bound<'py, P
     if gs.len() != 1 {
         return Ok(None);
     }
-    let g = gs.get_item(0)?;
+    text_target(scene, &gs.get_item(0)?)
+}
+
+fn text_target<'py>(
+    scene: &Bound<'py, PyAny>,
+    g: &Bound<'py, PyAny>,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
     if g.getattr("text3d")?.is_truthy()? {
-        return Ok(Some(g));
+        return Ok(Some(g.clone()));
     }
     let ctx = scene.getattr("edit_group")?;
     if !ctx.is_none() && ctx.getattr("text3d")?.is_truthy()? {
         let kids = ctx.getattr("children")?;
         if !kids.is_none()
-            && (kids.contains(&g)?
+            && (kids.contains(g)?
                 || g.getattr("owner")
                     .ok()
                     .map(|owner| kids.contains(owner))
@@ -121,6 +127,24 @@ fn selected_text<'py>(scene: &Bound<'py, PyAny>) -> PyResult<Option<Bound<'py, P
     Ok(None)
 }
 
+/// The menu and the editor resolve the same text, including a letter in an open group.
+#[pyfunction]
+fn text_editable(scene: &Bound<'_, PyAny>, group: &Bound<'_, PyAny>) -> PyResult<Option<bool>> {
+    let Some(text) = text_target(scene, group)? else {
+        return Ok(None);
+    };
+    if group.getattr("locked")?.is_truthy()? || text.getattr("locked")?.is_truthy()? {
+        return Ok(None);
+    }
+    Ok(Some(
+        scene
+            .py()
+            .import("core.text3d")?
+            .call_method1("text_is_pristine", (text,))?
+            .is_truthy()?,
+    ))
+}
+
 #[pyfunction]
 #[pyo3(signature=(win,group=None))]
 fn edit_text(win: &Bound<'_, PyAny>, group: Option<Bound<'_, PyAny>>) -> PyResult<()> {
@@ -128,7 +152,7 @@ fn edit_text(win: &Bound<'_, PyAny>, group: Option<Bound<'_, PyAny>>) -> PyResul
     let vp = win.getattr("viewport")?;
     let scene = vp.getattr("scene")?;
     let Some(group) = (match group {
-        Some(g) => Some(g),
+        Some(g) => text_target(&scene, &g)?,
         None => selected_text(&scene)?,
     }) else {
         return Ok(());
@@ -205,6 +229,7 @@ fn apply_text(
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(textured_face, m)?)?;
     m.add_function(wrap_pyfunction!(edit_texture, m)?)?;
+    m.add_function(wrap_pyfunction!(text_editable, m)?)?;
     m.add_function(wrap_pyfunction!(selected_text, m)?)?;
     m.add_function(wrap_pyfunction!(edit_text, m)?)?;
     m.add_function(wrap_pyfunction!(apply_text, m)?)?;

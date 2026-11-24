@@ -49,6 +49,7 @@ pub struct Facts {
     pub locked_group: Option<String>,
     pub locked_image: Option<String>,
     pub text3d: bool,
+    pub edited_letters: bool,
     pub hideable: bool,
     pub makes_faces: bool,
     pub textured_face: bool,
@@ -318,7 +319,8 @@ pub fn menu_rows(f: &Facts, kind: &str) -> Vec<Row> {
         r.family("Image", vec![e("unlockimage", &format!("Unlock “{name}”")), e("deleteimage", "Delete")]);
     }
     if matches!(kind, "group" | "component") && f.text3d {
-        r.one(vec![e("edittext3d", "Edit 3D Text…")]);
+        let label = if f.edited_letters { "Edit 3D Text… (letters edited by hand)" } else { "Edit 3D Text…" };
+        r.one(vec![("edittext3d".into(), label.into(), String::new(), !f.edited_letters, -1)]);
     }
     match kind {
         "faces" | "edges" | "geometry" => {
