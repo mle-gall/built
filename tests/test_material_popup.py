@@ -6,7 +6,7 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from core.group import Group
 from core.materials import Material
 from tests.native_tree import action, group_rows
-from views import chrome_sheet as sheets
+from ingetrazo_render import chrome_sheet as sheets
 from views import wgpu_library as library
 
 

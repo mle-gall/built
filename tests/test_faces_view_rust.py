@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""The engine's geometry of a view's faces is the Python walk's.
+"""The engine's geometry of a view's faces is the retired Python walk's.
 
 Before a face of the plaza reached the visible-parts pass, the walk took
 its rings to the world through its placement, found its normal, cut it to
@@ -9,7 +9,8 @@ the section, drew it and fitted its nearness plane — 12 s of Python over
 the same order, face by face in parallel; this holds it to the walk: the
 same faces kept and skipped, the same casters, the same world and drawn
 rings, normals, sides, nearness planes and depths — in parallel and in
-perspective, mirrored placements, a section cut, holes."""
+perspective, mirrored placements, a section cut, holes. The walk's answers
+on these scenes are pinned in ``tests/vista_caras_reference.py``."""
 from __future__ import annotations
 
 import numpy as np
@@ -89,10 +90,26 @@ def _same_rings(a, b, tol):
         assert np.allclose(ra, rb, atol=tol, rtol=0), (ra, rb)
 
 
-def _compare(scene, cam, sp=None):
-    proj = (VC._Perspective(cam) if cam.perspective else VC._Parallel(cam))
-    items = list(VC._faces_of(scene))
-    py = VC._face_geometry_py(items, cam, proj, sp)
+def _python(name):
+    """The retired walk's geometry of case ``name``, as the engine's."""
+    from tests import vista_caras_reference as R
+    out = []
+    for g in R.python_geometry(name):
+        if g is None:
+            out.append(None)
+            continue
+        out.append(([np.array(r) for r in g["world"]],
+                    [np.array(r) for r in g["rings"]],
+                    [np.array(r) for r in g["depths"]],
+                    np.array(g["normal"]), g["back"],
+                    None if g["near"] is None else tuple(g["near"])))
+    return out
+
+
+def _compare(name):
+    from tests import vista_caras_reference as R
+    items, cam, proj, sp = R.geometry_cases()[name]
+    py = _python(name)
     rust = VC._face_geometry_native(items, cam, proj, sp, native)
     assert len(py) == len(rust) == len(items)
     kept = 0
@@ -119,8 +136,8 @@ def _compare(scene, cam, sp=None):
         # the fit amplifies the placement's single-precision map — while
         # what it says at every corner stays within rounding.
         xy = np.concatenate([np.asarray(r, float) for r in rp])
-        qp = xy @ nearp[:2] + nearp[2]
-        qr = xy @ nearr[:2] + nearr[2]
+        qp = xy @ np.asarray(nearp[:2]) + nearp[2]
+        qr = xy @ np.asarray(nearr[:2]) + nearr[2]
         assert np.allclose(qp, qr, atol=1e-6 * max(1.0, np.abs(qp).max()),
                            rtol=0), (nearp, nearr)
         kept += 1
@@ -129,50 +146,30 @@ def _compare(scene, cam, sp=None):
 
 @pytest.mark.parametrize("perspective", [False, True])
 def test_the_same_geometry_face_by_face(perspective):
-    scene = _scene()
-    kept = _compare(scene, _camera(scene, perspective))
+    kept = _compare("persp" if perspective else "parallel")
     assert kept >= 15                       # most of the box faces
 
 
 @pytest.mark.parametrize("perspective", [False, True])
 def test_with_a_section_cut(perspective):
-    from core.section import SectionPlane
-    scene = _scene()
-    sp = SectionPlane(V(3, 3, 0.7), V(0, 0, 1))
-    kept = _compare(scene, _camera(scene, perspective), sp)
+    kept = _compare("persp_cut" if perspective else "parallel_cut")
     assert kept >= 10
 
 
 def test_a_face_the_camera_cannot_draw_still_casts():
     """In perspective, a face wholly behind the eye draws nothing and the
     walk skipped it after listing it as a caster: the engine says so."""
-    front = Scene()
-    front.loose_mesh.add_face([V(0, 0, 0), V(2, 0, 0), V(2, 2, 0),
-                               V(0, 2, 0)])
-    front.version += 1
-    cam = OrbitCamera()
-    cam.set_aspect(800, 600)
-    cam.perspective = True
-    cam.set_view("iso")
-    lo, hi = front.bounds()
-    cam.fit_to(lo, hi, 1.2)
-    # The same face, moved to five times its distance behind the eye.
-    eye, fwd = cam.eye(), (cam.target - cam.eye()).normalized()
-    at = eye - fwd * 5.0 * (cam.target - cam.eye()).length()
-    scene = Scene()
-    scene.loose_mesh.add_face([at + V(0, 0, 0), at + V(2, 0, 0),
-                               at + V(2, 2, 0), at + V(0, 2, 0)])
-    scene.version += 1
-    proj = VC._Perspective(cam)
-    items = list(VC._faces_of(scene))
-    py = VC._face_geometry_py(items, cam, proj, None)
+    from tests import vista_caras_reference as R
+    items, cam, proj, _sp = R.geometry_cases()["behind_eye"]
+    py = _python("behind_eye")
     rust = VC._face_geometry_native(items, cam, proj, None, native)
     assert py[0] is not None and py[0][5] is None
     assert rust[0] is not None and rust[0][5] is None
     _same_rings(py[0][0], rust[0][0], 1e-9)
 
 
-def test_view_faces_goes_through_the_engine_when_it_is_on(monkeypatch):
+def test_view_faces_goes_through_the_engine(monkeypatch):
+    from tests import vista_caras_reference as R
     scene = _scene()
     cam = _camera(scene, False)
     called = []
@@ -183,25 +180,22 @@ def test_view_faces_goes_through_the_engine_when_it_is_on(monkeypatch):
         return real(items, *a)
 
     monkeypatch.setattr(VC, "_face_geometry_native", spy)
-    # The visible-parts pass pinned to one engine: only the geometry
-    # changes between the two runs.
-    monkeypatch.setattr(VC, "_visible_parts", VC._visible_parts_py)
-    monkeypatch.setattr(_native, "native", native)
     on = VC.view_faces(scene, cam)
     assert called and called[0] == 20
+    # The engine is the only walk, whatever the kernel switch says.
     monkeypatch.setattr(_native, "native", None)
-    off = VC.view_faces(scene, cam)
-    assert len(called) == 1
-    # The placement's map is Qt's, in single precision: between two faces
-    # of a turned box that share an edge it leaves hairline slivers the
-    # engine's double precision closes exactly. Below a square micrometre
-    # of the drawing, those are no face.
+    VC.view_faces(scene, cam)
+    assert len(called) == 2
+    # The retired walk and pass, both Python: the placement's map was Qt's,
+    # in single precision, and between two faces of a turned box that share
+    # an edge it left hairline slivers the engine's double precision closes
+    # exactly. Below a square micrometre of the drawing, those are no face.
     net = lambda f: abs(sum(VC._area(r) for r in f.rings))     # noqa: E731
     on_ = [f for f in on if net(f) > 1e-6]
-    off_ = [f for f in off if net(f) > 1e-6]
-    assert [f.depth for f in on_] == pytest.approx([f.depth for f in off_],
+    off_ = R.python_view_faces()
+    assert [f.depth for f in on_] == pytest.approx([d for d, _l, _a in off_],
                                                    abs=1e-6)
-    assert [f.layer for f in on_] == [f.layer for f in off_]
-    assert [net(f) for f in on_] == pytest.approx([net(f) for f in off_],
+    assert [f.layer for f in on_] == [layer for _d, layer, _a in off_]
+    assert [net(f) for f in on_] == pytest.approx([a for _d, _l, a in off_],
                                                   abs=1e-6)
     assert len(on_) >= 10

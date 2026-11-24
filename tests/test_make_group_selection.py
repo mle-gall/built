@@ -13,7 +13,7 @@ from __future__ import annotations
 import pytest
 from ingetrazo_core import Vec3 as QVector3D
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from views import context_menu
+from ingetrazo_render import context_menu_build
 
 from core.group import Group
 from core.mesh import Mesh
@@ -154,7 +154,7 @@ def test_el_menu_del_boton_derecho_ofrece_crear_grupo_con_solo_grupos(win):
         scene.groups.append(g)
     scene.select(list(scene.groups))
 
-    verbs = context_menu.build(win).ids()
+    verbs = context_menu_build(win).ids()
     assert "makegroup" in verbs
     assert "merge" in verbs
 
@@ -189,7 +189,7 @@ def test_el_menu_no_ofrece_agrupar_a_un_grupo_solo(win):
 
     def entradas(sel):
         scene.select(sel)
-        return context_menu.build(win).ids()
+        return context_menu_build(win).ids()
     assert "makegroup" not in entradas([g1])
     assert "makegroup" in entradas([g1, g2])
     f = _quad(scene.mesh)

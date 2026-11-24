@@ -265,7 +265,7 @@ fn joined(parts: &[&str]) -> String {
     parts.iter().filter(|p| !p.is_empty()).copied().collect::<Vec<_>>().join(" · ")
 }
 
-// ---- The spec's pieces (views/chrome_sheet.py ``item``, ``verb``, Pane blocks) --------------
+// ---- The spec's pieces (sheet_runtime.rs ``item``, ``verb``, Pane blocks) --------------
 fn prune(v: Value) -> Value {
     match v {
         Value::Object(m) => Value::Object(m.into_iter().filter(|(k, v)| {

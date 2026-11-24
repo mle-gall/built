@@ -80,7 +80,7 @@ def test_undo_from_the_menu(host):
 
 
 def test_events_answer_the_qt_calls_the_handlers_make():
-    from app_shell.events import KeyEvent, MouseEvent, NativeGestureEvent, WheelEvent
+    from ingetrazo_render import KeyEvent, MouseEvent, NativeGestureEvent, WheelEvent
     m = MouseEvent("press", 10.5, 20, Qt.LeftButton.value, Qt.LeftButton.value,
                    (Qt.ShiftModifier | Qt.ControlModifier).value)
     assert m.position().x() == 10.5 and m.button() == Qt.LeftButton
@@ -203,7 +203,7 @@ def test_annotation_font_options(host, tool):
 
 def test_registered_shortcuts_use_rust_and_plugin_actions_still_trigger(host, monkeypatch):
     from PySide6.QtGui import QAction, QKeySequence
-    from app_shell.command_action import ShellAction
+    from ingetrazo_render import ShellAction
 
     win = host.window
     assert all(isinstance(a, ShellAction) for a in win._registry_actions.values())
@@ -349,7 +349,7 @@ def test_open_unitless_mesh_preserves_original_tab_on_cancel_or_failure(host, tm
 
 
 def test_scene_menu_acts_on_marked_scene_and_export_uses_chosen_format(host, monkeypatch):
-    from views import wgpu_deliveries
+    import ingetrazo_render as wgpu_deliveries
     assert host.open(FIXTURE)
     win = host.window
     scene = host.viewport.scene
@@ -362,7 +362,7 @@ def test_scene_menu_acts_on_marked_scene_and_export_uses_chosen_format(host, mon
     host.menu("scene_show")
     assert win._scene_tabs.marked_view() is copy
     formats = []
-    monkeypatch.setattr(wgpu_deliveries, "export_form",
+    monkeypatch.setattr(wgpu_deliveries, "delivery_export_form",
                         lambda _w, key, one_off, fmt: formats.append((key, one_off, fmt)))
     for fmt in ("ifc", "glb", "dae", "stl", "obj", "dxf"):
         win._registry_actions["menu:export:" + fmt].trigger()

@@ -9,7 +9,7 @@ from ingetrazo_core import Vec3 as QVector3D
 from ingetrazo_render import rail_layout
 from core.orient import is_closed
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from views import context_menu
+from ingetrazo_render import context_menu_build
 
 
 def V(x, y, z=0.0):
@@ -23,7 +23,7 @@ def win(native_host):
 
 def _context_entries(win, selection):
     win.viewport.scene.select(selection)
-    return context_menu.build(win, win.view).ids()
+    return context_menu_build(win, win.view).ids()
 
 
 def _two_squares(scene):

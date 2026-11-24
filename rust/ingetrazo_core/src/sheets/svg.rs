@@ -5,8 +5,7 @@
 //! Byte for byte what `formats/svg_out.py`'s `svg_text` wrote for the
 //! lines: one Inkscape layer per non-empty group, its segments chained into
 //! paths, the layer's colour, line type and pen, the drawing at 1:N or
-//! fitted on a sheet, cut to a window. Face and picture layers are still
-//! drawn in Python and come in as `under` (they go below the lines).
+//! fitted on a sheet, cut to a window. The view writer supplies face and picture layers below the lines.
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -144,7 +143,7 @@ fn line_class(name: &str) -> usize {
     }
 }
 
-fn hex(rgb: Option<[f64; 3]>) -> String {
+pub(crate) fn hex(rgb: Option<[f64; 3]>) -> String {
     match rgb {
         None => "#000000".into(),
         Some(c) => {

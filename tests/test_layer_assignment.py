@@ -70,11 +70,12 @@ def test_inspector_tag_field_single_mixed_and_empty_selection(native_host):
 
 
 def tag_form(host):
-    from views import chrome_forms, context_menu
+    from views import chrome_forms
+    from ingetrazo_render import context_menu_build, context_menu_run
     win = host.window
-    menu = context_menu.build(win, host.view)
+    menu = context_menu_build(win, host.view)
     assert menu.find("selectiontag").enabled
-    assert context_menu.run(win, host.view, menu.kind, "selectiontag", menu.sel)
+    assert context_menu_run(win, host.view, menu.kind, "selectiontag", menu.sel)
     return chrome_forms.current(win)
 
 

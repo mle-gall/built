@@ -706,6 +706,11 @@ impl PyMeshStore {
         dense_dict(py, d)
     }
 
+    /// Rehydrate keyed scripting handles in place, including undo tombstones.
+    fn materialise(&self, mesh: &Bound<'_, PyAny>) -> PyResult<()> {
+        super::materialise::materialise(&self.inner, mesh)
+    }
+
     fn tool_face_picker(&self, py: Python<'_>, hypot: &str) -> PyResult<crate::pick::FacePicker> {
         let hypot = crate::hypot_of(hypot)?;
         Ok(py.detach(|| crate::pick::FacePicker::from_store(&self.inner, hypot)))
