@@ -365,7 +365,7 @@ def test_uid_keeps_row_when_document_replaces_group_object():
 def test_history_insert_undo_redo_keeps_one_row(monkeypatch):
     from core.history import History, InsertGroupCommand
     from core.doc_model import NATIVE
-    doc_tree = NATIVE.doc_tree
+    doc_tree, render_rows = NATIVE.doc_tree, NATIVE.doc_render_rows
     scene, updates = fixture_scene()
     history = History(scene)
     updates.observe(history)
@@ -375,7 +375,12 @@ def test_history_insert_undo_redo_keeps_one_row(monkeypatch):
     def walk(roots):
         visited.extend(roots)
         return doc_tree(roots)
+
+    def rows(roots, *rest):
+        visited.extend(roots)
+        return render_rows(roots, *rest)
     monkeypatch.setattr(NATIVE, "doc_tree", walk)
+    monkeypatch.setattr(NATIVE, "doc_render_rows", rows)
     history.execute(InsertGroupCommand(added))
     ids, rows = updates.diff(scene)
     assert visited == [added]

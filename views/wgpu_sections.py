@@ -10,7 +10,7 @@ def capture_rows(packed, scene, tint):
     from views.wgpu_scene import _placement_records, _placement_state
     state = _placement_state(scene)
     vp = SimpleNamespace(scene=scene)
-    visible = {id(group): not (flags & 1) for group, _, _, flags in
+    visible = {id(group): not (flags & 1) for group, _, _, flags, _c in
                _placement_records(scene, scene.groups, vp, state)}
     rows = packed.instances.copy()
     for i, (uid, group) in enumerate(zip(packed.uids, packed.groups)):

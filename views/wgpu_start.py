@@ -519,12 +519,11 @@ def _load_one(path: str) -> dict:
         return {"exists": False}
     entry = {"exists": True, "mtime": st.st_mtime, "key": (st.st_mtime_ns, st.st_size)}
     suffix = p.suffix.lower()
-    if suffix == ".igzproj":
+    if suffix in (".builtproject", ".igzproj"):
         try:
-            from formats import project as storage
-            value = storage.load(p)
-            entry["files"] = [(str((p.parent / r["path"]).resolve()), r.get("role", "host"))
-                              for r in value.get("files", []) if isinstance(r, dict) and r.get("path")]
+            # Read-only: listing a project never converts it.
+            from ingetrazo_core import project_members
+            entry["files"] = [tuple(row) for row in project_members(p)]
         except Exception:  # noqa: BLE001 — unreadable: say so on its card
             entry["files"] = None
         return entry
@@ -656,12 +655,12 @@ def new_model(win, ask_units: bool = True) -> None:
 
 def new_project(win) -> None:
     from views.filedialogs import file_dialogs
-    name, _ = file_dialogs.getSaveFileName(win, "New project", "", "Project (*.igzproj)")
+    name, _ = file_dialogs.getSaveFileName(win, "New project", "", "Built project (*.builtproject)")
     if not name:
         return
     from core.scene import Scene
     from core import project
-    path = Path(name).with_suffix(".igzproj")
+    path = Path(name).with_suffix(".builtproject")
     try:
         project.create(Scene(), path)
         win.open_project(path)
@@ -676,7 +675,7 @@ def open_dialog(win) -> None:
     from formats import built
     from views.filedialogs import file_dialogs
     name, _ = file_dialogs.getOpenFileName(
-        win, "Open", "", f"Documents (*{built.BUILT_SUFFIX} *.igz *.igzproj)")
+        win, "Open", "", f"Documents (*{built.BUILT_SUFFIX} *.igz *.builtproject *.igzproj)")
     if name:
         open_recent(win, name)
 
@@ -688,8 +687,10 @@ def open_recent(win, path) -> bool:
     from views.filedialogs import file_dialogs
     original = str(path)
     path = Path(path)
+    if not path.is_file() and path.suffix.lower() == ".igzproj" and path.with_suffix(".builtproject").is_file():
+        path = path.with_suffix(".builtproject")     # converted since it was listed
     if not path.is_file():
-        kind = "Project" if path.suffix.lower() == ".igzproj" else (
+        kind = "Project" if path.suffix.lower() in (".builtproject", ".igzproj") else (
             "Built" if built.is_built(path) else "IngeTrazo")
         located, _ = file_dialogs.getOpenFileName(win, "Locate " + path.name, "", f"{kind} (*{path.suffix})")
         if not located:
@@ -697,6 +698,13 @@ def open_recent(win, path) -> bool:
         path = Path(located)
     if not win.open_path(path):
         return False
+    from formats import project as storage
+    if storage.is_project(path):
+        # open_project remembered it (under its new name if converted).
+        if original != str(path):
+            recent.forget(original)
+        hide(win)
+        return True
     if win.__dict__.get("_pending_open"):
         from views.document_open import after_open
         after_open(win, path, lambda doc: recent.remember(path, replace=original))

@@ -358,7 +358,7 @@ _OWN = {"viewport", "documents", "active_document", "activate_document",
 #: What a borrowed method may reach for that the shell has nothing for:
 #: answered with a no-op, as a window with that panel closed would.
 _QUIET = ("_sync_style_menu", "_sync_section_menu", "_refresh_layer_views",
-          "_refresh_sheet_tabs", "_refresh_worksession", "persist_worksession",
+          "_refresh_sheet_tabs",
           "_light_views_button", "_sync_projection_buttons", "_show_renderer_note",
           "_sync_component_edit_menu", "_refresh_vcb", "_forget_panel_caches", "_show_panels_again",
           "on_active_view_changed", "keep_other_views_style", "settle_heap_later")
@@ -605,6 +605,8 @@ class ShellWindow(QObject):
         doc.viewport.prune_stale_selection()
         doc.viewport.update()
         doc.viewport._document_watch.observe(force=True)
+        from app_shell import project
+        project.persist(self)
         self._host.request_frame()
 
     def _watch_document(self, doc):
@@ -637,6 +639,9 @@ class ShellWindow(QObject):
             return
         self._release_document_watch(doc)
         self._documents.remove(doc)
+        from app_shell import project
+        project.closed(self, doc)
+        project.persist(self)
         for fn in tuple(self.__dict__.get("_doc_close_hooks", ())):
             self._host._guard("extension document closed", fn, doc.viewport.scene)
         try:
@@ -750,6 +755,27 @@ class ShellWindow(QObject):
             view._ctx_menu = menu
             context_menu.send(view, menu)
         return menu
+
+    # ---- a Built project (app_shell/project.py) ------------------------
+    def open_project(self, path):
+        from app_shell import project
+        return project.open_project(self, path)
+
+    def set_active_file(self, path):
+        from app_shell import project
+        return project.set_active_file(self, path)
+
+    def query_worksession(self):
+        from app_shell import project
+        return project.query(self)
+
+    def persist_worksession(self):
+        from app_shell import project
+        project.persist(self)
+
+    def _refresh_worksession(self):
+        from app_shell import project
+        project.refresh(self)
 
     def close_document(self, doc=None, ask: bool = True) -> bool:
         from app_shell import files

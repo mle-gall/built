@@ -65,7 +65,8 @@ class WorksessionMixin:
         return doc is not None
 
     def open_project(self, path):
-        path = Path(path).resolve()
+        # An .igzproj is converted in place (docs/builtproject-format.md §5).
+        path = storage.open_path(Path(path).resolve()).resolve()
         state = project.worksession(path)
         # Validate all sources before changing the currently open session.
         for row in state['files']:

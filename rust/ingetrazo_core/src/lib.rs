@@ -15,6 +15,7 @@ use pyo3::types::PyBytes;
 mod math;
 mod navigation;
 mod recents;
+mod builtproject;
 mod delivery_form;
 mod command_search;
 mod location;
@@ -81,6 +82,7 @@ mod occlusion;
 mod parity;
 mod visible;
 mod weld;
+mod skp;
 mod snap_build;
 mod snap;
 mod snap_engine;
@@ -109,12 +111,16 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     scene_animation::register(m)?;
     survey_pixels::register(m)?;
     m.add_class::<scene_video::MkvWriter>()?;
+    builtproject::register(m)?;
     m.add_class::<settings::NativeSettings>()?;
     m.add_class::<document_watch::DocumentWatch>()?;
     m.add_class::<window_input::WindowInput>()?;
     m.add_class::<window_commands::WindowCommands>()?;
     m.add_class::<window_commands::WindowCommand>()?;
     m.add_class::<file_open::DocumentOpen>()?;
+    m.add_function(wrap_pyfunction!(skp::skp_tag_folders, m)?)?;
+    m.add_function(wrap_pyfunction!(skp::skp_pages, m)?)?;
+    m.add_function(wrap_pyfunction!(skp::skp_geometry_nodes, m)?)?;
     m.add_class::<command_search::SearchItem>()?;
     m.add_function(wrap_pyfunction!(command_search::damerau_levenshtein, m)?)?;
     m.add_function(wrap_pyfunction!(command_search::rank_commands, m)?)?;
@@ -275,6 +281,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<file_archive::ArchiveProgress>()?;
     m.add_function(wrap_pyfunction!(file_annotations::igz_load_annotations, m)?)?;
     m.add_function(wrap_pyfunction!(file_annotations::igz_archive_annotations, m)?)?;
+    m.add_function(wrap_pyfunction!(file_annotations::highest_group_number, m)?)?;
     m.add_function(wrap_pyfunction!(file_styles::igz_archive_layer, m)?)?;
     m.add_function(wrap_pyfunction!(file_styles::igz_load_layer, m)?)?;
     m.add_function(wrap_pyfunction!(file_styles::igz_archive_material, m)?)?;
@@ -1184,6 +1191,13 @@ impl InstanceSet {
 
     fn __len__(&self) -> usize {
         self.places.len()
+    }
+
+    /// What a ray can be asked about: ``(placements in the rays' BVH,
+    /// placements always asked)``. Placements of no triangles are in
+    /// neither (tests count them instead of timing rays).
+    fn ray_members(&self) -> (usize, usize) {
+        self.bvh.members()
     }
 
     /// Placement ``row`` as built: its prototype and its 16 matrix values

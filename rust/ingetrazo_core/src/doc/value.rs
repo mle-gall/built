@@ -205,3 +205,75 @@ pub fn replay_table(current: &Value, from: &Value, to: &Value) -> Value {
         _ => to.clone(),
     }
 }
+
+/// The value at ``path`` in ``root`` (dict keys, list indices), mutable.
+fn slot_mut<'a>(root: &'a mut Value, path: &[Value]) -> Option<&'a mut Value> {
+    let mut at = root;
+    for step in path {
+        at = match at {
+            Value::Dict(items) => items.iter_mut().find(|(k, _)| k == step).map(|(_, v)| v)?,
+            Value::List(items) | Value::Tuple(items) => match step {
+                Value::Int(i) if *i >= 0 => items.get_mut(*i as usize)?,
+                _ => return None,
+            },
+            _ => return None,
+        };
+    }
+    Some(at)
+}
+
+/// Put ``new`` at ``path`` in ``root`` (None: take the entry out): a dict
+/// key keeps its place or goes last, a list index one past the end
+/// appends. The empty path is the whole value. Returns what was there
+/// (None: nothing), or Err when the path does not lead into a container.
+pub fn put_at(root: &mut Value, path: &[Value], new: Option<Value>) -> Result<Option<Value>, String> {
+    let Some((last, up)) = path.split_last() else {
+        return match new {
+            Some(v) => Ok(Some(std::mem::replace(root, v))),
+            None => Err("the whole value cannot be taken out".into()),
+        };
+    };
+    let parent = slot_mut(root, up).ok_or("no container at that path")?;
+    match parent {
+        Value::Dict(items) => {
+            let i = items.iter().position(|(k, _)| k == last);
+            Ok(match (i, new) {
+                (Some(i), Some(v)) => Some(std::mem::replace(&mut items[i].1, v)),
+                (Some(i), None) => Some(items.remove(i).1),
+                (None, Some(v)) => { items.push((last.clone(), v)); None }
+                (None, None) => None,
+            })
+        }
+        Value::List(items) => {
+            let Value::Int(i) = last else { return Err("a list index is an int".into()) };
+            let i = usize::try_from(*i).map_err(|_| "a negative list index")?;
+            Ok(match new {
+                Some(v) if i < items.len() => Some(std::mem::replace(&mut items[i], v)),
+                Some(v) if i == items.len() => { items.push(v); None }
+                None if i < items.len() => Some(items.remove(i)),
+                _ => return Err("list index out of range".into()),
+            })
+        }
+        _ => Err("no container at that path".into()),
+    }
+}
+
+#[cfg(test)]
+mod patch_tests {
+    use super::*;
+
+    fn s(x: &str) -> Value { Value::Str(x.into()) }
+
+    #[test]
+    fn put_at_sets_removes_and_appends() {
+        let mut v = Value::Dict(vec![(s("a"), Value::Dict(vec![(s("n"), Value::Int(1))])), (s("l"), Value::List(vec![]))]);
+        assert_eq!(put_at(&mut v, &[s("a"), s("n")], Some(Value::Int(2))).unwrap(), Some(Value::Int(1)));
+        assert_eq!(put_at(&mut v, &[s("a"), s("m")], Some(Value::Int(3))).unwrap(), None);
+        assert_eq!(put_at(&mut v, &[s("l"), Value::Int(0)], Some(Value::Int(9))).unwrap(), None);
+        assert!(put_at(&mut v, &[s("l"), Value::Int(5)], Some(Value::Int(9))).is_err());
+        assert_eq!(put_at(&mut v, &[s("a"), s("n")], None).unwrap(), Some(Value::Int(2)));
+        assert_eq!(v, Value::Dict(vec![(s("a"), Value::Dict(vec![(s("m"), Value::Int(3))])),
+                                       (s("l"), Value::List(vec![Value::Int(9)]))]));
+        assert!(put_at(&mut v, &[s("x"), s("y")], Some(Value::None)).is_err());
+    }
+}

@@ -259,7 +259,7 @@ def test_project_header_moves_the_registry_next_to_the_host(win, tmp_path, monke
     from tests.test_tree_links import _View
     from views import filedialogs, wgpu_ui
 
-    path = tmp_path / "Design.igzproj"
+    path = tmp_path / "Design.builtproject"
     monkeypatch.setattr(filedialogs.file_dialogs, "getSaveFileName", lambda *args: (str(path), ""))
     wgpu_ui._tree_action(win, _View(), "linkregistry" + wgpu_ui.SEP)
     assert path.is_file() and Path(project.path_for(win.viewport.scene)) == path

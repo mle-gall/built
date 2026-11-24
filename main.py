@@ -198,7 +198,7 @@ def _open_document_in(window, doc: "Path") -> None:
     if hasattr(window, "load_extensions"):
         window.load_extensions()
     ext = doc.suffix.lower()
-    if ext == ".igzproj":
+    if ext in (".builtproject", ".igzproj"):
         window.open_path(doc)
         return
     if hasattr(window, "documents") and (

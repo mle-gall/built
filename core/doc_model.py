@@ -213,14 +213,21 @@ parent_mode(os.environ.get("INGETRAZO_DOC_PARENT", "raise")
 # is. Once the attribute is assigned another value (or an undo puts back an
 # old one) the container is a plain one: editing it no longer writes.
 #
-# Inside a transaction each tracked edit writes through to its keyed native
-# attribute. Outside a transaction we batch writes until the next boundary. A plain dict or list stored INTO one
-# (``reg = data["links"] = {}``) is kept as that very object, as Python
-# would, and its root re-read at every boundary from then on (``suspect``):
-# edits made through the plain reference are written back too.
+# An edit goes to the document as a keyed patch (architecture review 11):
+# the path from the attribute's top to the entry, and the entry's new value
+# (``doc_attr_patch``), journalled as that entry's before and after. Inside
+# a transaction it is written at once; outside, it waits for the next
+# boundary (:func:`flush`). Each container knows its parent (weakly) and its
+# key there, so its path is found without a scan of the value.
+#
+# A plain dict or list stored INTO one (``reg = data["links"] = {}``) is
+# kept as that very object, as Python would. Edits made through the plain
+# reference are written back too: at every boundary that one subtree is
+# read again (``suspect``), not the whole attribute.
 
-_DIRTY: dict = {}       # id(anchor) -> anchor: edited since the last flush
-_SUSPECT: dict = {}     # id(anchor) -> anchor: holds containers it does not track
+_PENDING: dict = {}     # id(anchor) -> (anchor, [(node, path from node, value, delete)])
+_SUSPECT: dict = {}     # id(plain container) -> (anchor, weakref(parent), key, container)
+_MISSING = object()
 
 
 class _Anchor:
@@ -237,7 +244,9 @@ class _Anchor:
         self.root = None
 
 
-def _wrap(value, anchor):
+def _wrap(value, anchor, up=None, key=None):
+    """``value`` as tracked containers of ``anchor``; ``up`` (a weak
+    reference) and ``key``: where it sits in its parent."""
     t = type(value)
     if t is dict or t is TrackedDict:
         out = TrackedDict.__new__(TrackedDict)
@@ -249,10 +258,13 @@ def _wrap(value, anchor):
         anchor = _Anchor()
         anchor.root = weakref.ref(out)
     out._doc_root = anchor
+    out._doc_up = up
+    out._doc_key = key
+    me = weakref.ref(out)
     if t is dict or t is TrackedDict:
-        dict.__init__(out, ((k, _wrap(v, anchor)) for k, v in dict.items(value)))
+        dict.__init__(out, ((k, _wrap(v, anchor, me, k)) for k, v in dict.items(value)))
     else:
-        list.__init__(out, [_wrap(v, anchor) for v in list.__iter__(value)])
+        list.__init__(out, [_wrap(v, anchor, me) for v in list.__iter__(value)])
     return out
 
 
@@ -265,84 +277,153 @@ def _plain(value):
     return value
 
 
-def _edited(node) -> None:
+def _index(parent, node, key=None):
+    """``node``'s place in ``parent`` (a key or an index), or _MISSING;
+    ``key``: where it was put (a dict's key), looked at first."""
+    if isinstance(parent, dict):
+        if key is None and hasattr(node, "_doc_root"):
+            key = node._doc_key
+        if key is not None and dict.get(parent, key, _MISSING) is node:
+            return key
+        return next((k for k, v in dict.items(parent) if v is node), _MISSING)
+    return next((i for i, v in enumerate(list.__iter__(parent)) if v is node), _MISSING)
+
+
+def _path(node):
+    """The keys from the attribute's top to ``node``, or None when it is
+    no longer in the value (taken out, or its attribute replaced)."""
+    path = []
+    while True:
+        up = node._doc_up
+        if up is None:
+            root = node._doc_root.root
+            return path[::-1] if root is not None and root() is node else None
+        parent = up()
+        if parent is None:
+            return None
+        key = _index(parent, node)
+        if key is _MISSING:
+            return None
+        path.append(key)
+        node = parent
+
+
+def _send(anchor, edits) -> None:
+    """``edits`` ([(path, value, delete)]) into the document now; the whole
+    value when a path does not lead into it any more."""
+    root = anchor.root() if anchor.root is not None else None
+    if root is None or anchor.bind is None:
+        anchor.bind = None
+        return
+    try:
+        bound = NATIVE.doc_attr_patch(*anchor.bind, root, edits)
+    except (ValueError, TypeError):
+        bound = NATIVE.doc_attr_changed(*anchor.bind, root)
+    if not bound:
+        anchor.bind = None               # replaced: a plain container now
+
+
+def _edited(node, rel, value=None, delete=False) -> None:
+    """``node`` edited: ``rel`` is the path below it (``[key]`` for one
+    entry, ``[]`` for the node itself, as it is now)."""
     anchor = node._doc_root
-    if anchor.bind is not None:
-        if NATIVE.doc_depth():
-            NATIVE.doc_attr_changed(*anchor.bind, anchor.root())
-        else:
-            _DIRTY[id(anchor)] = anchor
+    if anchor.bind is None:
+        return
+    if NATIVE.doc_depth():
+        path = _path(node)
+        if path is not None:
+            _send(anchor, [(path + rel, node if not rel and not delete else value, delete)])
+    else:
+        _PENDING.setdefault(id(anchor), (anchor, []))[1].append((node, rel, value, delete))
 
 
-def _stored(node, value):
-    """``value`` going into ``node``: a container this root does not track
-    makes the root suspect (see above)."""
-    if isinstance(value, (dict, list)) and getattr(value, "_doc_root", None) is not node._doc_root:
-        anchor = node._doc_root
-        if anchor.bind is not None:
-            _SUSPECT[id(anchor)] = anchor
+def _stored(node, key, value):
+    """``value`` going into ``node`` at ``key`` (None: a list's): a
+    container this root does not track there is re-read at boundaries."""
+    if isinstance(value, (dict, list)):
+        tracked = getattr(value, "_doc_root", None) is node._doc_root
+        here = tracked and value._doc_up is not None and value._doc_up() is node and value._doc_key == key
+        if not here and node._doc_root.bind is not None:
+            _SUSPECT[id(value)] = (node._doc_root, weakref.ref(node), key, value)
     return value
 
 
 def flush() -> None:
-    """Write back every tracked container edited in place since the last
-    call (and every suspect one); a container whose attribute was replaced
-    meanwhile becomes a plain one."""
-    if not (_DIRTY or _SUSPECT):
+    """Write back every in-place edit since the last call (the waiting
+    patches, then the suspect subtrees as they are now); a container whose
+    attribute was replaced meanwhile becomes a plain one."""
+    if not (_PENDING or _SUSPECT):
         return
-    anchors = dict(_SUSPECT)
-    anchors.update(_DIRTY)
-    _DIRTY.clear()
-    for anchor in anchors.values():
-        root = anchor.root() if anchor.root is not None else None
-        bind = anchor.bind
-        if root is None or bind is None or not NATIVE.doc_attr_changed(bind[0], bind[1], root):
-            anchor.bind = None           # replaced: a plain container now
-            _SUSPECT.pop(id(anchor), None)
+    pending = list(_PENDING.values())
+    _PENDING.clear()
+    for anchor, edits in pending:
+        out = []
+        for node, rel, value, delete in edits:
+            path = _path(node)
+            if path is not None:
+                out.append((path + rel, node if not rel and not delete else value, delete))
+        if out and anchor.bind is not None:
+            _send(anchor, out)
+    by_anchor = {}
+    for sid, (anchor, parent_ref, key, value) in list(_SUSPECT.items()):
+        parent = parent_ref()
+        place = _MISSING if parent is None else _index(parent, value, key)
+        path = None if place is _MISSING or anchor.bind is None else _path(parent)
+        if path is None:
+            del _SUSPECT[sid]
+            continue
+        by_anchor.setdefault(id(anchor), (anchor, []))[1].append((path + [place], value, False))
+    for anchor, edits in by_anchor.values():
+        _send(anchor, edits)
+        if anchor.bind is None:
+            for sid in [sid for sid, entry in _SUSPECT.items() if entry[0] is anchor]:
+                del _SUSPECT[sid]
 
 
 class TrackedDict(dict):
     """A document attribute's dict (see above)."""
 
-    __slots__ = ("_doc_root", "__weakref__")
+    __slots__ = ("_doc_root", "_doc_up", "_doc_key", "__weakref__")
 
     @property
     def _doc_bind(self):
         return self._doc_root.bind
 
     def __setitem__(self, k, v):
-        dict.__setitem__(self, k, _stored(self, v))
-        _edited(self)
+        dict.__setitem__(self, k, _stored(self, k, v))
+        _edited(self, [k], v)
 
     def __delitem__(self, k):
         dict.__delitem__(self, k)
-        _edited(self)
+        _edited(self, [k], delete=True)
 
     def clear(self):
         dict.clear(self)
-        _edited(self)
+        _edited(self, [])
 
-    def pop(self, *a):
-        out = dict.pop(self, *a)
-        _edited(self)
+    def pop(self, k, *a):
+        had = k in self
+        out = dict.pop(self, k, *a)
+        if had:
+            _edited(self, [k], delete=True)
         return out
 
     def popitem(self):
-        out = dict.popitem(self)
-        _edited(self)
-        return out
+        k, v = dict.popitem(self)
+        _edited(self, [k], delete=True)
+        return k, v
 
     def setdefault(self, k, default=None):
         if k in self:
             return dict.__getitem__(self, k)
-        dict.__setitem__(self, k, _stored(self, default))
-        _edited(self)
+        dict.__setitem__(self, k, _stored(self, k, default))
+        _edited(self, [k], default)
         return default
 
     def update(self, *a, **kw):
         for k, v in dict(*a, **kw).items():
-            dict.__setitem__(self, k, _stored(self, v))
-        _edited(self)
+            dict.__setitem__(self, k, _stored(self, k, v))
+            _edited(self, [k], v)
 
     def __ior__(self, other):
         self.update(other)
@@ -363,58 +444,59 @@ class TrackedDict(dict):
 
 
 class TrackedList(list):
-    """A document attribute's list (see above)."""
+    """A document attribute's list (see above). Setting an index or
+    appending is one entry; any other edit writes the list again."""
 
-    __slots__ = ("_doc_root", "__weakref__")
+    __slots__ = ("_doc_root", "_doc_up", "_doc_key", "__weakref__")
 
     @property
     def _doc_bind(self):
         return self._doc_root.bind
 
     def append(self, v):
-        list.append(self, _stored(self, v))
-        _edited(self)
+        list.append(self, _stored(self, None, v))
+        _edited(self, [len(self) - 1], v)
 
     def extend(self, items):
-        list.extend(self, [_stored(self, v) for v in items])
-        _edited(self)
+        list.extend(self, [_stored(self, None, v) for v in items])
+        _edited(self, [])
 
     def insert(self, i, v):
-        list.insert(self, i, _stored(self, v))
-        _edited(self)
+        list.insert(self, i, _stored(self, None, v))
+        _edited(self, [])
 
     def remove(self, v):
         list.remove(self, v)
-        _edited(self)
+        _edited(self, [])
 
     def pop(self, *a):
         out = list.pop(self, *a)
-        _edited(self)
+        _edited(self, [])
         return out
 
     def clear(self):
         list.clear(self)
-        _edited(self)
+        _edited(self, [])
 
     def sort(self, *a, **kw):
         list.sort(self, *a, **kw)
-        _edited(self)
+        _edited(self, [])
 
     def reverse(self):
         list.reverse(self)
-        _edited(self)
+        _edited(self, [])
 
     def __setitem__(self, i, v):
         if isinstance(i, slice):
-            v = [_stored(self, x) for x in v]
-        else:
-            v = _stored(self, v)
-        list.__setitem__(self, i, v)
-        _edited(self)
+            list.__setitem__(self, i, [_stored(self, None, x) for x in v])
+            _edited(self, [])
+            return
+        list.__setitem__(self, i, _stored(self, None, v))
+        _edited(self, [i % len(self) if i < 0 else i], v)
 
     def __delitem__(self, i):
         list.__delitem__(self, i)
-        _edited(self)
+        _edited(self, [])
 
     def __iadd__(self, items):
         self.extend(items)
@@ -422,7 +504,7 @@ class TrackedList(list):
 
     def __imul__(self, n):
         list.__imul__(self, n)
-        _edited(self)
+        _edited(self, [])
         return self
 
     def copy(self):
@@ -453,6 +535,12 @@ def _track(key, attr, value):
     return out
 
 
+def _up(container):
+    """A weak reference to ``container`` when it is tracked (a plain one
+    held inside a tracked value is re-read whole: its children need none)."""
+    return weakref.ref(container) if hasattr(container, "_doc_root") else None
+
+
 def _patch(old, new, root):
     """``old`` (a container in a tracked attribute, tracked or plain) made
     equal to ``new`` (plain) in place, keeping the containers it holds
@@ -467,7 +555,7 @@ def _patch(old, new, root):
                 _patch(cur, v, root)
                 items.append((k, cur))
             else:
-                items.append((k, _wrap(v, root)))
+                items.append((k, _wrap(v, root, _up(old), k)))
         dict.clear(old)
         for k, v in items:
             dict.__setitem__(old, k, v)
@@ -480,7 +568,7 @@ def _patch(old, new, root):
             _patch(cur, v, root)
             out.append(cur)
         else:
-            out.append(_wrap(v, root))
+            out.append(_wrap(v, root, _up(old)))
     list.__setitem__(old, slice(None), out)
 
 
@@ -492,7 +580,7 @@ def _refill(view, value) -> bool:
     if isinstance(view, TrackedDict) and type(value) is dict or (
             isinstance(view, TrackedList) and type(value) is list):
         _patch(view, value, view._doc_root)
-        _DIRTY.pop(id(view._doc_root), None)
+        _PENDING.pop(id(view._doc_root), None)
         return True
     return False
 

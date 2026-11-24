@@ -51,7 +51,7 @@ def menu(settings=None, limit=MENU):
 def remember(path, pinned=None, settings=None, replace=None):
     st = settings or QSettings()
     path = str(Path(path).resolve())
-    kind = 'projects' if Path(path).suffix.lower() == '.igzproj' else 'files'
+    kind = 'projects' if Path(path).suffix.lower() in ('.builtproject', '.igzproj') else 'files'
     _store(kind, st, recent_remember(_rows_json(kind, st), path, None if pinned is None else bool(pinned),
                                      None if replace is None else str(replace)))
     if kind == 'files' and pinned is None:
