@@ -31,6 +31,7 @@ struct Subscription {
     source: Source,
     consumed: Vec<(String, f64, f64, u32)>,
     last_progress: Option<Instant>,
+    captured_buttons: u32,
 }
 enum Source {
     Wayland(wayland::Seat),
@@ -63,6 +64,7 @@ impl Pointer {
             source,
             consumed: Vec::new(),
             last_progress: None,
+            captured_buttons: 0,
         }));
         WINDOWS.with_borrow_mut(|map| map.insert(handle, Rc::downgrade(&source)));
         Some(Self { handle, source })
@@ -81,10 +83,24 @@ impl Pointer {
             k == kind && *b == button && (pos.0 - x).abs() < 1. && (pos.1 - y).abs() < 1.
         }) {
             state.consumed.remove(i);
+            if kind == "press" {
+                state.captured_buttons |= button;
+            } else {
+                state.captured_buttons &= !button;
+            }
+            true
+        } else if kind == "release" && state.captured_buttons & button != 0 {
+            // The job ended before the physical button was released.
+            state.captured_buttons &= !button;
             true
         } else {
             false
         }
+    }
+    pub fn before_command(&self) {
+        // The button/key which starts a synchronous operation belongs to the
+        // outer event loop; only later pointer events belong to progress.
+        self.source.borrow_mut().source.poll(1., 0);
     }
     pub fn has_private_wayland_queue(&self) -> bool {
         matches!(self.source.borrow().source, Source::Wayland(_))

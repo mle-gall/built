@@ -1388,6 +1388,13 @@ impl App {
         if self.win(id).is_none() {
             return;
         }
+        #[cfg(target_os = "linux")]
+        if matches!(event, WindowEvent::MouseInput { .. } | WindowEvent::KeyboardInput { .. }
+            | WindowEvent::CloseRequested | WindowEvent::DroppedFile(_)) {
+            if let Some(pointer) = self.win(id).and_then(|w| w.pointer_input.as_ref()) {
+                pointer.before_command();
+            }
+        }
         match event {
             WindowEvent::CloseRequested => self.close_window(event_loop, id),
             WindowEvent::Resized(size) => {
