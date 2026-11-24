@@ -149,10 +149,6 @@ def test_inside_a_component_the_tip_says_so():
 # ---- In the viewport ----------------------------------------------------------
 
 def _offscreen_vp():
-    import os
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtWidgets import QApplication
-    QApplication.instance() or QApplication([])
     from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
     vp.resize(1000, 600)
@@ -163,9 +159,9 @@ def _offscreen_vp():
 
 
 def _hover(vp, world):
-    from PySide6.QtCore import QPointF, Qt
+    from core.input_types import ScreenPoint, Input
     px = vp._world_to_pixel(world)
-    vp._process_hover(QPointF(*px), Qt.NoModifier)
+    vp._process_hover(ScreenPoint(*px), Input.NoModifier)
     return vp.last_snap
 
 
@@ -260,20 +256,16 @@ def test_a_selected_rings_centre_is_reached_from_its_hole():
 
 
 def test_selected_faces_show_their_centres_as_dots():
-    from PySide6.QtGui import QImage, QPainter
+    from ingetrazo_render import AnnotationCanvas
     vp, ring = _ring_vp()
     other = vp.scene.mesh.add_face([V(5, 0), V(7, 0), V(7, 2), V(5, 2)])
     vp.scene.version += 1
-    img = QImage(1000, 600, QImage.Format_ARGB32)
-    painter = QPainter(img)
-    try:
-        vp._draw_selected_face_centers(painter)          # nothing selected
-        assert getattr(vp, "_sel_face_center_dots", None) is None
-        vp.scene.selection.add(ring)
-        vp.scene.selection.add(other)
-        vp._draw_selected_face_centers(painter)
-    finally:
-        painter.end()
+    painter = AnnotationCanvas(1000, 600, 1000)
+    vp._draw_selected_face_centers(painter)          # nothing selected
+    assert getattr(vp, "_sel_face_center_dots", None) is None
+    vp.scene.selection.add(ring)
+    vp.scene.selection.add(other)
+    vp._draw_selected_face_centers(painter)
     dots = vp._sel_face_center_dots[1]
     want = [vp._world_to_pixel(V(2, 2, 0)), vp._world_to_pixel(V(6, 1, 0))]
     assert len(dots) == 2
@@ -312,23 +304,18 @@ def test_too_many_selected_faces_offer_no_dots():
 def _marker_box(vp, kind):
     """Width and height in pixels of the marker drawn for a snap of
     ``kind`` (its tip left out)."""
-    from PySide6.QtCore import Qt
-    from PySide6.QtGui import QImage, QPainter
+    from core.input_types import Input
+    from ingetrazo_render import AnnotationCanvas
     from core.snap import SnapResult
     vp._SNAP_LABELS = {}                               # no tip text
-    img = QImage(200, 200, QImage.Format_ARGB32)
-    img.fill(Qt.transparent)
+    painter = AnnotationCanvas(200, 200, 200)
     vp._world_to_pixel = lambda _p: (100.0, 100.0)
-    painter = QPainter(img)
-    painter.setRenderHint(QPainter.Antialiasing)
-    try:
-        vp._draw_snap_indicator(painter, SnapResult(V(0, 0, 0), kind, COLOR_ON_FACE))
-    finally:
-        painter.end()
+    vp._draw_snap_indicator(painter, SnapResult(V(0, 0, 0), kind, COLOR_ON_FACE))
+    rgba = painter.composite(bytes(200 * 200 * 4))
     xs, ys = [], []
     for y in range(200):
         for x in range(200):
-            if img.pixelColor(x, y).alpha() > 40:
+            if rgba[(y * 200 + x) * 4 + 3] > 40:
                 xs.append(x)
                 ys.append(y)
     return max(xs) - min(xs), max(ys) - min(ys)
@@ -342,24 +329,19 @@ def test_the_marker_is_the_size_of_the_endpoints():
 
 
 def test_a_selected_faces_dot_is_as_big_as_a_snap_marker():
-    from PySide6.QtCore import Qt
-    from PySide6.QtGui import QImage, QPainter
+    from core.input_types import Input
+    from ingetrazo_render import AnnotationCanvas
     vp = _offscreen_vp()
     vp.camera.target = V(1, 1, 0)
     vp.camera.distance = 12
     f = vp.scene.mesh.add_face([V(0, 0), V(2, 0), V(2, 2), V(0, 2)])
     vp.scene.version += 1
     vp.scene.selection.add(f)
-    img = QImage(1000, 600, QImage.Format_ARGB32)
-    img.fill(Qt.transparent)
-    painter = QPainter(img)
-    painter.setRenderHint(QPainter.Antialiasing)
-    try:
-        vp._draw_selected_face_centers(painter)
-    finally:
-        painter.end()
+    painter = AnnotationCanvas(1000, 600, 1000)
+    vp._draw_selected_face_centers(painter)
     cx, cy = (int(round(c)) for c in vp._world_to_pixel(V(1, 1, 0)))
-    xs = [x for x in range(cx - 30, cx + 31) if img.pixelColor(x, cy).alpha() > 40]
+    rgba = painter.composite(bytes(1000 * 600 * 4))
+    xs = [x for x in range(cx - 30, cx + 31) if rgba[(cy * 1000 + x) * 4 + 3] > 40]
     width = max(xs) - min(xs)
     end = _marker_box(_offscreen_vp(), "endpoint")[0]
     assert width >= end - 3, (width, end)

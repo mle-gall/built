@@ -44,7 +44,7 @@ from __future__ import annotations
 from ingetrazo_core import register_tool_adapter
 
 from tools.overlay_painter import draw_overlay
-from core.input_types import Qt
+from core.input_types import Input, Qt
 from ingetrazo_core import TextureMap, TexturePlacement, Vec3 as QVector3D
 
 from core.i18n import tr
@@ -63,9 +63,9 @@ class TexturePositionTool(Tool):
     name = "Position Texture"
     icon = "texture_position"
     uses_snap = False
-    #: The viewport shows this Qt cursor while the tool is active (a
+    #: The viewport shows this Input cursor while the tool is active (a
     #: hand) — the tool has no drawn icon cursor.
-    qt_cursor = Qt.OpenHandCursor
+    qt_cursor = Input.OpenHandCursor
     #: Opacity of the live preview (the texture shows translucent
     #: with the dotted tile grid over it).
     preview_opacity = 0.75
@@ -101,25 +101,14 @@ class TexturePositionTool(Tool):
         """The tool's own right-click menu (replaces the viewport's)."""
         if not self.active:
             return False
-        from core.input_types import NATIVE
         rows = self._placement.menu_rows()
-        if NATIVE:
-            from ingetrazo_render import ViewportMenu, context_menu_send
-            view = viewport.view
-            pos = view.mapFromGlobal(global_pos)
-            context_menu_send(view, ViewportMenu.for_tool(
-                self, tr("Position Texture"),
-                [(tr(group) if group else "", [(key, tr(label), on) for key, label, on in items]) for group, items in rows],
-                (pos.x(), pos.y())))
-        else:
-            from PySide6.QtWidgets import QMenu
-            menu = QMenu(getattr(viewport, "keys_stand_in", None) or viewport)
-            for group, items in rows:
-                section = menu.addMenu(tr(group)) if group else menu
-                for key, label, on in items:
-                    action = section.addAction(tr(label), lambda checked=False, key=key: self.menu_action(viewport, key))
-                    action.setEnabled(on)
-            menu.exec(global_pos)
+        from ingetrazo_render import ViewportMenu, context_menu_send
+        view = viewport.view
+        pos = view.mapFromGlobal(global_pos)
+        context_menu_send(view, ViewportMenu.for_tool(
+            self, tr("Position Texture"),
+            [(tr(group) if group else "", [(key, tr(label), on) for key, label, on in items]) for group, items in rows],
+            (pos.x(), pos.y())))
         return True
 
     overlay_kind = "texture_position"

@@ -3,7 +3,7 @@
 use crate::document_host::*;
 use pyo3::exceptions::{PyOSError, PyRuntimeError, PyTypeError};
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyDict, PyList, PyTuple};
+use pyo3::types::{PyDict, PyList, PyTuple};
 
 #[pyfunction]
 fn bake_store_of<'py>(scene: &Obj<'py>) -> PyResult<Obj<'py>> {
@@ -93,30 +93,21 @@ fn decoded_texture<'py>(py: Python<'py>, path: &Obj<'py>) -> PyResult<Obj<'py>> 
             return old.get_item(1);
         }
     }
-    let cls = h.getattr("QImage")?;
-    let img = cls.call1((path,))?;
     cache.call_method1("pop", (path, py.None()))?;
-    if img.call_method0("isNull")?.is_truthy()? {
+    let file = path.extract::<std::path::PathBuf>()?;
+    let Some(mut image) = crate::image_assets::decode(py, &file)? else {
         return Ok(none(py));
-    }
-    let mut cutout = false;
-    if img.call_method0("hasAlphaChannel")?.is_truthy()? {
-        let a = img
-            .call_method1("scaled", (64, 64))?
-            .call_method1("convertToFormat", (cls.getattr("Format_Alpha8")?,))?;
-        let bytes = py
-            .import("builtins")?
-            .call_method1("bytes", (a.call_method0("constBits")?,))?
-            .cast_into::<PyBytes>()?;
-        let n = a.call_method0("height")?.extract::<usize>()?
-            * a.call_method0("bytesPerLine")?.extract::<usize>()?;
-        let a = bytes
-            .as_bytes()
-            .get(..n)
-            .ok_or_else(|| PyRuntimeError::new_err("short alpha image"))?;
-        cutout = !a.is_empty() && a.iter().filter(|&&x| x > 128).count() * 5 < 3 * n;
-    }
-    let out = (img.call_method0("mirrored")?, cutout).into_pyobject(py)?;
+    };
+    let decoded = py.detach(move || {
+        let sample = image::imageops::resize(&image, 64, 64, image::imageops::FilterType::Nearest);
+        let opaque = sample.pixels().filter(|p| p[3] > 128).count();
+        image::imageops::flip_vertical_in_place(&mut image);
+        (
+            crate::survey_raster::SurveyRaster { pixels: image },
+            opaque * 5 < 3 * 64 * 64,
+        )
+    });
+    let out = decoded.into_pyobject(py)?;
     if !h.call_method0("_several_views_shown")?.is_truthy()? {
         cache.clear();
         return Ok(out.into_any());
@@ -128,8 +119,10 @@ fn decoded_texture<'py>(py: Python<'py>, path: &Obj<'py>) -> PyResult<Obj<'py>> 
         let size = v
             .get_item(1)?
             .get_item(0)?
-            .call_method0("sizeInBytes")?
-            .extract::<usize>()?;
+            .extract::<PyRef<crate::survey_raster::SurveyRaster>>()?
+            .pixels
+            .as_raw()
+            .len();
         total += size;
         sizes.push((k, size));
     }
