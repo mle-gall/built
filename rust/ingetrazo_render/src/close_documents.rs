@@ -201,7 +201,44 @@ fn request_close(win: &Bound<'_, PyAny>) -> PyResult<bool> {
     Ok(true)
 }
 
+/// The target can be refused by a workspace. Resolve that before any command
+/// that writes to or closes the foreground document.
+#[pyfunction]
+fn project_tab_menu(win: &Bound<'_, PyAny>, verb: &str, index: usize) -> PyResult<()> {
+    let docs: Vec<Bound<'_, PyAny>> = win.getattr("_project_tabs")?.call_method0("documents")?.extract()?;
+    let Some(doc) = docs.get(index) else { return Ok(()); };
+    if !win.getattr("_doc")?.is(doc) {
+        win.call_method1("activate_document", (doc,))?;
+        if !win.getattr("_doc")?.is(doc) { return Ok(()); }
+    }
+    match verb {
+        "new" => { win.getattr("_project_tabs")?.getattr("newRequested")?.call_method0("emit")?; }
+        "open" => { win.call_method0("_on_open")?; }
+        "save" => { win.call_method0("_on_save")?; }
+        "save_as" => { win.call_method0("_on_save_as")?; }
+        "close" => { win.call_method1("close_document", (doc,))?; }
+        "close_left" | "close_right" | "close_all" => {
+            let targets = match verb {
+                "close_left" => PyList::new(win.py(), &docs[..index])?,
+                "close_right" => PyList::new(win.py(), docs[index + 1..].iter().rev())?,
+                _ => PyList::new(win.py(), &docs)?,
+            };
+            win.call_method1("close_documents", (targets,))?;
+        }
+        "move" => { win.py().import("app_shell.windows")?.call_method1("move_to_new_window", (win, doc))?; }
+        "pictures" => {
+            let key = "tabs/hover_picture";
+            let previous = super::navigation::setting(win.py(), key, "1")?;
+            let settings = win.py().import("core.settings")?.call_method0("settings")?;
+            settings.call_method1("setValue", (key, if previous == "0" { "1" } else { "0" }))?;
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(project_tab_menu, m)?)?;
     m.add_function(wrap_pyfunction!(request_close, m)?)?;
     m.add_function(wrap_pyfunction!(confirm_window_close, m)?)?;
     m.add_function(wrap_pyfunction!(finish_window_close, m)?)?;

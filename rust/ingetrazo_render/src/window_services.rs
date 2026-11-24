@@ -184,7 +184,31 @@ fn toggle_eyedropper(win: &Bound<'_, PyAny>, armed: bool) -> PyResult<()> {
         .call_method0("_apply_tool_cursor")?;
     Ok(())
 }
+/// Registration is per window; a transferred tab must use the destination's callbacks.
+#[pyfunction]
+fn attach_viewport_extensions(win: &Bound<'_, PyAny>, vp: &Bound<'_, PyAny>) -> PyResult<()> {
+    let attrs = attrs(win)?;
+    let shared = match attrs.get_item("_ext_shared")? {
+        Some(shared) => shared.cast_into::<PyDict>()?,
+        None => {
+            let shared = PyDict::new(win.py());
+            for name in ["_ext_overlays", "_ext_snap_providers", "_ext_pickables"] {
+                let rows = vp.getattr(name).or_else(|e| {
+                    if e.is_instance_of::<pyo3::exceptions::PyAttributeError>(win.py()) {
+                        Ok(pyo3::types::PyList::empty(win.py()).into_any())
+                    } else { Err(e) }
+                })?;
+                shared.set_item(name, rows)?;
+            }
+            attrs.set_item("_ext_shared", &shared)?;
+            shared
+        }
+    };
+    for (key, value) in shared.iter() { vp.setattr(key.cast::<pyo3::types::PyString>()?, value)?; }
+    Ok(())
+}
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(attach_viewport_extensions, m)?)?;
     m.add_function(wrap_pyfunction!(configure_recovery, m)?)?;
     m.add_function(wrap_pyfunction!(request_recovery, m)?)?;
     m.add_function(wrap_pyfunction!(remember_document, m)?)?;

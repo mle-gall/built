@@ -12,6 +12,8 @@ A copy used to keep the link record on its root only: its parts were not
 owned by it, so the read-only check missed them, and an edit inside one
 reached the other copies in memory while the source never saw it."""
 from __future__ import annotations
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
+
 
 import math
 import os
@@ -225,18 +227,13 @@ def test_rotate_copy_and_a_polar_array(tmp_path):
 
 
 @pytest.fixture
-def win(monkeypatch):
-    from views.main_window import MainWindow
-    w = MainWindow()
+def win(native_host, monkeypatch):
+    w = native_host.window
     asked = []
     monkeypatch.setattr("views.chrome_dialogs.ask",
                         lambda parent, title, *a, **kw: asked.append(title) or "cancel")
     w._asked = asked
-    yield w
-    for d in w.documents():
-        d.saved_content = d.viewport.scene.content_version
-    w._saved_version = w.viewport.scene.version
-    w.close()
+    return w
 
 
 def _place(win, tmp_path):

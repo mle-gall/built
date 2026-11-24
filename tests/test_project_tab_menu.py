@@ -1,191 +1,88 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """A project tab's right-click menu: New, Open…, Save, Save As…, Close,
-Close the ones to the right / to the left, Close all — and the project's
-scenes as tabs. The project right-clicked comes to the front first, so
+Close the ones to the right / to the left, Close all. The project right-clicked comes to the front first, so
 Save and Save As act on it; each one closed asks only about itself."""
 from __future__ import annotations
 
-import sys
-
-import pytest
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication, QMessageBox
 
-if QApplication.instance() is None:
-    QApplication(sys.argv[:1])
-
-
-@pytest.fixture
-def win():
-    from views.main_window import MainWindow
-    w = MainWindow()
-    yield w
-    for doc in list(w._documents):
-        doc.saved_content = doc.viewport.scene.content_version
-    w._saved_version = w.viewport.scene.version
-    w.close()
+from core.settings import settings
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
+from views import wgpu_tabs
 
 
 def _three(win):
-    """Three projects, A B C, with B in front."""
-    a = win._doc
-    b = win._new_document()
-    c = win._new_document()
+    a = win.active_document()
+    b = win.new_document()
+    c = win.new_document()
     win.activate_document(b)
     return a, b, c
 
 
-def _actions(menu):
-    return {a.text(): a for a in menu.actions() if a.text()}
+def _menu(host, verb, index=1):
+    wgpu_tabs.action(host.window, host.view, f"menu:{verb}:{index}")
 
 
-def test_the_menu_offers_files_closing_and_scenes(win):
-    from core.i18n import tr
-    a, b, c = _three(win)
-    menu = win._build_project_tab_menu(b)
-    acts = _actions(menu)
-    for text in ("New", "Open…", "Save", "Save As…", "Close Project",
-                 "Close Projects to the Right", "Close Projects to the Left",
-                 "Close All Projects", "Show scenes as tabs"):
-        assert tr(text) in acts, text
-    assert acts[tr("Save")].shortcut().toString()      # shortcuts shown
-    menu.close()
+def test_the_menu_turns_the_picture_on_hover_off_and_on(native_host):
+    assert wgpu_tabs.pictures_on()
+    for enabled in (False, True):
+        _menu(native_host, "pictures", 0)
+        assert wgpu_tabs.pictures_on() is enabled
+        assert settings().value("tabs/hover_picture") == str(int(enabled))
 
 
-def test_the_menu_turns_the_picture_on_hover_off_and_on(win):
-    """The same setting as the box in Preferences."""
-    from PySide6.QtCore import QSettings
-    from core.i18n import tr
-    text = tr("Show a picture of the project on hover over its tab")
-    try:
-        menu = win._build_project_tab_menu(win._doc)
-        act = _actions(menu)[text]
-        assert act.isCheckable() and act.isChecked()
-        act.setChecked(False)
-        assert QSettings().value("tabs/hover_picture") == "0"
-        menu.close()
-        menu = win._build_project_tab_menu(win._doc)
-        act = _actions(menu)[text]
-        assert not act.isChecked()
-        act.setChecked(True)
-        assert QSettings().value("tabs/hover_picture") == "1"
-        menu.close()
-    finally:
-        QSettings().remove("tabs/hover_picture")
+def test_close_to_the_right(native_host):
+    a, b, c = _three(native_host.window)
+    _menu(native_host, "close_right")
+    assert native_host.window.documents() == [a, b]
 
 
-def test_alt_t_hides_the_project_tabs_and_the_projects_stay_open(win):
-    from PySide6.QtCore import QSettings
-    from PySide6.QtGui import QKeySequence
-    a, b, c = _three(win)
-    bar = win._project_tabs
-    act = win._act_project_tabs
-    assert act.shortcut() == QKeySequence("Alt+T") and act.isChecked()
-    assert not bar.isHidden()
-    try:
-        act.trigger()
-        assert bar.isHidden() and not act.isChecked()
-        assert QSettings().value("tabs/show_project_tabs") == "0"
-        assert win._documents == [a, b, c]
-        front = win._doc
-        win._step_document(1)                       # Ctrl+PgDown still goes
-        assert win._doc is not front
-        act.trigger()
-        assert not bar.isHidden() and act.isChecked()
-    finally:
-        QSettings().remove("tabs/show_project_tabs")
+def test_close_to_the_left(native_host):
+    a, b, c = _three(native_host.window)
+    _menu(native_host, "close_left")
+    assert native_host.window.documents() == [b, c]
 
 
-def test_alt_t_is_nobody_elses_key(win):
-    from PySide6.QtGui import QAction, QKeySequence
-    alt_t = QKeySequence("Alt+T")
-    holders = [a for a in win.findChildren(QAction) if alt_t in a.shortcuts()]
-    assert holders == [win._act_project_tabs]
+def test_close_all_leaves_one_empty_project(native_host):
+    old = _three(native_host.window)
+    _menu(native_host, "close_all")
+    blank, = native_host.window.documents()
+    assert blank not in old and not native_host.window._is_dirty()
 
 
-def test_hidden_project_tabs_come_back_for_the_empty_areas_plus(win):
-    from PySide6.QtCore import QSettings
-    bar = win._project_tabs
-    try:
-        win._act_project_tabs.trigger()
-        assert bar.isHidden()
-        win.close_document(ask=False)
-        assert win.is_empty() and not bar.isHidden() and not bar.plus.isHidden()
-        assert bar.tabs.isHidden()
-        bar.plus.click()
-        assert not win.is_empty() and bar.isHidden(), "hidden as it was asked"
-    finally:
-        QSettings().remove("tabs/show_project_tabs")
-
-
-def test_left_and_right_are_offered_only_when_there_are(win):
-    from core.i18n import tr
-    a, b, c = _three(win)
-    first = _actions(win._build_project_tab_menu(a))
-    last = _actions(win._build_project_tab_menu(c))
-    assert not first[tr("Close Projects to the Left")].isEnabled()
-    assert first[tr("Close Projects to the Right")].isEnabled()
-    assert not last[tr("Close Projects to the Right")].isEnabled()
-    assert last[tr("Close Projects to the Left")].isEnabled()
-
-
-def test_close_to_the_right(win):
-    from core.i18n import tr
-    a, b, c = _three(win)
-    _actions(win._build_project_tab_menu(b))[
-        tr("Close Projects to the Right")].trigger()
-    assert win._documents == [a, b]
-
-
-def test_close_to_the_left(win):
-    from core.i18n import tr
-    a, b, c = _three(win)
-    _actions(win._build_project_tab_menu(b))[
-        tr("Close Projects to the Left")].trigger()
-    assert win._documents == [b, c]
-
-
-def test_close_all_leaves_one_empty_project(win):
-    from core.i18n import tr
-    a, b, c = _three(win)
-    _actions(win._build_project_tab_menu(b))[
-        tr("Close All Projects")].trigger()
-    assert len(win._documents) == 1
-    assert win._documents[0] not in (a, b, c)
-    assert not win._is_dirty()
-
-
-def test_a_cancel_stops_closing_the_rest(win, monkeypatch):
+def test_a_cancel_stops_closing_the_rest(native_host, monkeypatch):
+    win = native_host.window
     a, b, c = _three(win)
     win.activate_document(a)
-    win.viewport.scene.mesh.add_face(
-        [V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)])
-    win.viewport.scene.version += 1               # A: unsaved
-    monkeypatch.setattr(QMessageBox, "exec", lambda box: QMessageBox.Cancel)
-    assert not win.close_documents([a, b, c])
-    assert win._documents == [a, b, c]            # stopped at A
+    win.viewport.scene.mesh.add_face([V(0, 0, 0), V(1, 0, 0), V(0, 1, 0)])
+    win.viewport.scene.version += 1
+    monkeypatch.setattr("views.chrome_dialogs.ask", lambda *args, **kw: "cancel")
+    _menu(native_host, "close_all", 2)
+    assert win.documents() == [a, b, c]
+    assert win.active_document() is a
 
 
-def test_the_project_right_clicked_comes_to_the_front(win, monkeypatch):
+def test_save_from_the_menu_saves_that_project(native_host, tmp_path, monkeypatch):
+    from views.filedialogs import file_dialogs
+    win = native_host.window
     a, b, c = _three(win)
-    shown = []
-
-    class _Menu:                                   # not a real (modal) one
-        def exec(self, pos):
-            shown.append(win._doc)
-    monkeypatch.setattr(win, "_build_project_tab_menu", lambda doc: _Menu())
-    win._project_tab_menu(c, win.mapToGlobal(win.rect().center()))
-    assert win._doc is c and shown == [c]
+    target = tmp_path / "from-the-menu.built"
+    monkeypatch.setattr(file_dialogs, "getSaveFileName", lambda *args, **kw: (str(target), ""))
+    _menu(native_host, "save", 2)
+    assert target.is_file() and c.path == target
+    assert win.active_document() is c and b.path is None
 
 
-def test_save_from_the_menu_saves_that_project(win, tmp_path, monkeypatch):
-    from core.i18n import tr
-    from views import main_window
-    a, b, c = _three(win)
-    target = tmp_path / "desde-el-menu.built"
-    monkeypatch.setattr(main_window.file_dialogs, "getSaveFileName",
-                        lambda *a_, **k: (str(target), ""))
-    _actions(win._build_project_tab_menu(b))[tr("Save")].trigger()
-    assert target.is_file()
-    assert b.path == target
+def test_a_workspace_prevents_a_menu_save_on_behalf_of_another_tab(native_host, tmp_path):
+    win = native_host.window
+    _, b, c = _three(win)
+    b.path = tmp_path / "b.built"
+    c.path = tmp_path / "c.built"
+    win._workspace = object()
+    try:
+        _menu(native_host, "save", 2)
+    finally:
+        win._workspace = None
+    assert win.active_document() is b
+    assert not b.path.exists() and not c.path.exists()

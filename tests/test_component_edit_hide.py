@@ -9,17 +9,8 @@ the component being edited out of the frame — and out of the pick.
 """
 from __future__ import annotations
 
-import os
-import sys
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-from PySide6.QtGui import QKeySequence
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
-
-if QApplication.instance() is None:
-    QApplication(sys.argv[:1])
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 from core.group import Group
 from core.mesh import Mesh
@@ -83,70 +74,41 @@ def test_a_classic_group_has_no_similar():
     scene.end_group_edit()
 
 
-def _window():
-    from views.main_window import MainWindow
-    return MainWindow()
+def test_the_shortcuts_are_alt_q_and_alt_w(native_host):
+    from tests.test_shortcut_editor import keyboard
+    sheet = keyboard(native_host.window)
+    assert sheet._action("sc:menu:hide_rest").portable_keys() == ["Alt+Q"]
+    assert sheet._action("sc:menu:hide_similar").portable_keys() == ["Alt+W"]
 
 
-def test_the_shortcuts_are_alt_q_and_alt_w():
-    win = _window()
-    assert win._act_hide_rest.shortcut() == QKeySequence("Alt+Q")
-    assert win._act_hide_similar.shortcut() == QKeySequence("Alt+W")
-    win._saved_version = win.viewport.scene.version
-    win.close()
+def test_hide_rest_toggles_back_to_the_previous_mode(native_host):
+    vp = native_host.viewport
+    vp.set_edit_rest_mode("normal")
+    assert native_host.menu("hide_rest")
+    assert vp.edit_rest_mode == "hide"
+    assert native_host.menu("hide_rest")
+    assert vp.edit_rest_mode == "normal"
 
 
-def test_hide_rest_toggles_back_to_the_previous_mode():
-    win = _window()
-    vp = win.viewport
-    before = vp.edit_rest_mode
-    try:
-        vp.set_edit_rest_mode("normal")
-        win._act_hide_rest.trigger()
-        assert vp.edit_rest_mode == "hide"
-        assert win._act_hide_rest.isChecked()
-        win._act_hide_rest.trigger()
-        assert vp.edit_rest_mode == "normal"
-        assert not win._act_hide_rest.isChecked()
-    finally:
-        vp.set_edit_rest_mode(before)
-        win._saved_version = vp.scene.version
-        win.close()
+def test_fade_slider_applies_immediately_and_follows_the_viewport(native_host):
+    from views.settings_sheet import Env, SettingsSheet
+    win = native_host.window
+    env = Env(win)
+    def slider():
+        return next(row for _, _, group in SettingsSheet().groups(env, "display")
+                    for row in group if row.id == "rest_fade")
+    assert callable(win.viewport._edit_rest_fade)
+    assert native_host.menu("rest_fade")
+    assert slider().on("enabled", env)
+    slider().put(env, 38)
+    assert abs(win.viewport.edit_rest_fade - .38) < 1e-9
+    assert slider().fmt(slider().value(env)) == "38 %"
+    assert native_host.menu("rest_hide")
+    assert not slider().on("enabled", env)
 
 
-def test_fade_slider_applies_immediately_and_follows_the_viewport():
-    win = _window()
-    vp = win.viewport
-    assert callable(vp._edit_rest_fade), (
-        "the configurable strength must not shadow the per-entity fade method")
-    before_mode = vp.edit_rest_mode
-    before = vp.edit_rest_fade
-    try:
-        vp.set_edit_rest_mode("fade")
-        win._sync_component_edit_menu()
-        assert win._rest_fade_slider.isEnabled()
-        win._rest_fade_slider.setValue(38)
-        assert abs(vp.edit_rest_fade - 0.38) < 1e-9
-        assert win._rest_fade_value.text() == "38 %"
-        vp.set_edit_rest_mode("hide")
-        win._sync_component_edit_menu()
-        assert not win._rest_fade_slider.isEnabled()
-    finally:
-        vp.set_edit_rest_mode(before_mode)
-        vp.set_edit_rest_fade(before)
-        win._saved_version = vp.scene.version
-        win.close()
-
-
-def test_hide_similar_action_flips_the_scene_flag():
-    win = _window()
-    vp = win.viewport
-    before = vp.scene.hide_similar_components
-    try:
-        win._act_hide_similar.trigger()
-        assert vp.scene.hide_similar_components is (not before)
-        assert win._act_hide_similar.isChecked() is (not before)
-    finally:
-        vp.set_hide_similar_components(before)
-        win._saved_version = vp.scene.version
-        win.close()
+def test_hide_similar_action_flips_the_scene_flag(native_host):
+    scene = native_host.viewport.scene
+    before = scene.hide_similar_components
+    assert native_host.menu("hide_similar")
+    assert scene.hide_similar_components is (not before)

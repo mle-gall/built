@@ -1270,25 +1270,11 @@ class ComponentsPanel(QWidget):
         the list (#599, @chakkreetiya). ``template`` is the definition
         kept in the file (``None`` when it is not kept); a kept one with no
         copy placed is a row too, with an empty list."""
-        from core.purge import iter_groups
-        scene = self._window.viewport.scene
-        by_proto: dict = {}
-        for i, g in enumerate(iter_groups(scene.groups)):
-            if i % 256 == 0:
-                yield
-            if not g.is_component() or getattr(g, "billboard", False):
-                continue
-            by_proto.setdefault(id(g.mesh), []).append(g)
-        from core.mesh import face_count
-        kept = {id(t.mesh): t for t in reversed(scene.kept_components)}
-        rows = [(gs[0].name, face_count(gs[0].mesh), gs,
-                 kept.get(id(gs[0].mesh)))
-                for gs in by_proto.values()]
-        rows += [(t.name, face_count(t.mesh), [], t)
-                 for t in getattr(scene, "kept_components", None) or ()
-                 if id(t.mesh) not in by_proto]
-        rows.sort(key=lambda r: (-len(r[2]), (r[0] or "").lower()))
-        return rows
+        from ingetrazo_render import ComponentRows
+        rows = ComponentRows(self._window.viewport.scene)
+        while rows.advance(256):
+            yield
+        return rows.finish()
 
     def on_scene_changed(self) -> None:
         """The tray's per-change call. The «In model» list reads every
@@ -1566,40 +1552,8 @@ class ComponentsPanel(QWidget):
         menu.exec(self._in_model.viewport().mapToGlobal(pos))
 
     def _select_groups(self, groups) -> None:
-        """Select the copies. The view selects inside ONE open group, so
-        when they sit in several, the group holding most of them opens (the
-        one already open wins a tie, then the first in the model) and those
-        are selected; the status bar says how many are left elsewhere."""
-        from core import outliner
-        from views.tree_navigation import open_to
-        vp = self._window.viewport
-        scene = vp.scene
-        by_path: dict = {}
-        for g in groups:
-            path = outliner.path_to(scene.groups, g)
-            if path is not None:
-                by_path.setdefault(tuple(id(p) for p in path),
-                                   (path, []))[1].append(g)
-        if not by_path:
-            return
-        here = tuple(id(p) for p in outliner.open_path(scene))
-        path, picks = max(by_path.values(), key=lambda pg: (
-            len(pg[1]), tuple(id(p) for p in pg[0]) == here))
-        if not open_to(vp, path):
-            vp.flash_status(tr(
-                "A group around it is hidden or locked: show or unlock "
-                "it to select inside"), 3500)
-            return
-        others = len(groups) - len(picks)
-        picks = [g for g in picks if scene.entity_selectable(g)]
-        scene.selection.clear()
-        scene.selection.update(picks)
-        scene.bump_view()
-        vp.update()
-        self._window.statusBar().showMessage(
-            tr("{n} entities selected", n=len(picks)) if not others
-            else tr("{n} copies selected; {m} more are inside other groups",
-                    n=len(picks), m=others), 4000)
+        from ingetrazo_render import select_component_instances
+        select_component_instances(self._window, groups)
 
 
 class MaterialsPanel(QWidget):
@@ -3808,10 +3762,6 @@ def _scrolled(sections) -> QScrollArea:
 
 
 
-#: Kill-switch: set INGETRAZO_SCENE_ALWAYS_BUMP=1 to bump ``scene.version``
-#: on every scene recall, as before — also one that only moves the camera.
-_SCENE_ALWAYS_BUMP = os.environ.get("INGETRAZO_SCENE_ALWAYS_BUMP", "") == "1"
-
 
 #: The picture of a scene in the Scenes tab's thumbnails view — the size
 #: the sheets' «Views and sheets» list draws them at.
@@ -4534,7 +4484,7 @@ class ScenesPanel(QWidget):
         # keyed on ``scene.version`` hold: bumping it re-synced every edge
         # and profile of the model (120 ms on a 1 M-face building) and
         # marked the document modified for a look around.
-        changed = _SCENE_ALWAYS_BUMP or shown_state(scene) != before
+        changed = shown_state(scene) != before
         # The view may carry a style snapshot and a projection — keep the
         # menu and the projection buttons in step.
         sync = (getattr(self._window, "on_active_view_changed", None)

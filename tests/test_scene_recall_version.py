@@ -4,13 +4,7 @@
 alone: no edge/profile re-sync of the whole model, and the document is not
 marked modified for a look around. A scene that changes what is shown
 (layers, hidden objects…) still bumps it, so the caches refresh."""
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from PySide6.QtWidgets import QApplication
-
-_app = QApplication.instance() or QApplication([])
 
 
 def _activate(win, name):
@@ -57,23 +51,3 @@ def test_recall_that_changes_layers_still_bumps_version(native_host):
     _activate(win, "Plan")
     assert not furniture.visible
     assert scene.version > v
-
-
-def test_kill_switch_bumps_on_every_recall(monkeypatch):
-    from core.saved_views import SavedView
-    from tests.qt_window_lifetime import close_window
-    from views.main_window import MainWindow
-    from views import tray
-
-    monkeypatch.setattr(tray, "_SCENE_ALWAYS_BUMP", True)
-    win = MainWindow()
-    try:
-        scene = win.viewport.scene
-        saved = SavedView.capture("A", scene, win.viewport.camera)
-        scene.saved_views.append(saved)
-        version = scene.version
-        win.tray.scenes.show_view(saved, animate=False)
-        assert scene.version > version
-    finally:
-        win._saved_version = win.viewport.scene.version
-        close_window(win)

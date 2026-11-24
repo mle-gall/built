@@ -10,15 +10,12 @@ from __future__ import annotations
 import json
 
 import pytest
-from PySide6.QtCore import QSettings
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication
 
 from core.materials import Material
 from views import chrome_sheet as cs
 from views import wgpu_library as L
-
-_app = QApplication.instance() or QApplication([])
 
 
 class Renderer:
@@ -39,53 +36,24 @@ class Renderer:
         return [c[1] for c in self.calls if c[0] == name][-1]
 
 
-class View:
-    def __init__(self, win):
-        self.renderer = Renderer()
-        self._ui_attached = True
-        self._win = win
-
-    def window(self):
-        return self._win
-
-    def update(self):
-        pass
-
-    def setFocus(self, *_):
-        pass
-
-
-@pytest.fixture(autouse=True)
-def _throwaway_settings(private_settings, monkeypatch):
-    QSettings().clear()
-    monkeypatch.setenv("INGETRAZO_STORE", "0")
-
-
 @pytest.fixture
-def win(monkeypatch):
-    from views.main_window import MainWindow
-    w = MainWindow(defer_extensions=True)
-    view = View(w)
-    w._doc.stand_in = view
-    monkeypatch.setattr(cs, "_view", lambda _w: view)
-    monkeypatch.setattr("views.wgpu_ui._window", lambda v: w)
+def win(native_host, monkeypatch):
+    w = native_host.window
+    view = native_host.view
+    monkeypatch.setattr(view, "renderer", Renderer())
+    monkeypatch.setattr(view, "_ui_attached", True, raising=False)
     sc = w.viewport.scene
     sc.materials["Beech"] = Material("Beech", color=(0.75, 0.55, 0.35))
     sc.materials["Concrete"] = Material("Concrete", color=(0.6, 0.6, 0.6))
     f = sc.mesh.add_face([V(0, 0, 0), V(2, 0, 0), V(2, 2, 0), V(0, 2, 0)])
     f.attrs.update(sc.materials["Beech"].face_attrs())
     sc.version += 1
-    w._view_ = view
-    yield w
-    for d in w.documents():
-        d.saved_content = d.viewport.scene.content_version
-    w._saved_version = w.viewport.scene.version
-    w.close()
+    return w
 
 
 def frame(win):
-    cs.before_frame(win._view_, win)
-    return win._view_.renderer.sheet()
+    cs.before_frame(win.view, win)
+    return win.view.renderer.sheet()
 
 
 def act(win, verb, *args):
@@ -146,7 +114,7 @@ def test_scopes_categories_search_and_sort(win):
     assert tiles(frame(win)) == []                                    # no image bases in this model
     act(win, "headmenu", "sort", "facet:all")
     act(win, "headmenu", "sort", "used")
-    assert L._state(win._view_)["sort"] == "used"
+    assert L._state(win.view)["sort"] == "used"
     assert frame(win)["menus"][0]["label"] == "Sort: Most used"
 
 
@@ -154,7 +122,7 @@ def test_the_editor_applies_edits_and_sliders_when_they_settle(win, monkeypatch)
     L.open_library(win)
     assert not any(b["kind"] == "fields" for b in detail(frame(win)))
     act(win, "verb", "edit")
-    view = win._view_
+    view = win.view
     assert not cs.shown(win) and L.inspector_key(view, win) == "m:Beech"
     sc = win.viewport.scene
     title, sections = L.inspector(view, win)
@@ -189,7 +157,7 @@ def test_paint_with_it_closes_the_sheet_and_remembers_it(win, monkeypatch):
     act(win, "open", key)                                             # double-click or ↩
     assert painted == [key]
     assert not cs.shown(win)
-    assert L._state(win._view_)["recent"][0] == key
+    assert L._state(win.view)["recent"][0] == key
     # Recently used lists it, and the strip offers it next to the model's.
     L.open_library(win)
     frame(win)
@@ -270,7 +238,7 @@ def _paint_on(win, monkeypatch, name="Beech"):
 
 def test_the_strip_paints_from_the_model_and_recent_and_browses_all(win, monkeypatch):
     _paint_on(win, monkeypatch)
-    view = win._view_
+    view = win.view
     L._remember(view, "ral:RAL 7016")
     L.before_frame(view, win)
     items = view.renderer.last("ui_set_palette")[0]
@@ -294,7 +262,7 @@ def test_the_strip_paints_from_the_model_and_recent_and_browses_all(win, monkeyp
 
 
 def test_the_inspector_edits_the_material_paint_holds(win, monkeypatch):
-    view = win._view_
+    view = win.view
     assert L.inspector_key(view, win) is None
     _paint_on(win, monkeypatch, "Concrete")
     assert L.inspector_key(view, win) == "m:Concrete"
@@ -332,9 +300,9 @@ def test_online_catalogue_search_preview_download_and_document_credit(win, tmp_p
     monkeypatch.setenv("INGETRAZO_LIBRARY", str(src))
     monkeypatch.setenv("INGETRAZO_TEXTURE_CACHE", str(tmp_path / "cache/tex"))
 
-    win._on_open_library()
+    assert L.open_library(win, "components", scope="s:online")
     assert frame(win)["content"]["title"] == "Component library"
-    session = L._sheet_provider(win._view_).catalogue
+    session = L._sheet_provider(win.view).catalogue
 
     def finish():
         session.job.result(timeout=5)
@@ -358,7 +326,7 @@ def test_online_catalogue_search_preview_download_and_document_credit(win, tmp_p
         time.sleep(.01)
     session.poll()
     frame(win)
-    icons = win._view_.renderer.last("ui_set_icons")[0]
+    icons = win.view.renderer.last("ui_set_icons")[0]
     assert any(key == "online:stool" and w == h > 0 for key, w, h, _ in icons)
     assert not library.cached_thumbnail("chair")
     assert not (library.library_cache() / "modelos").exists()
@@ -392,9 +360,9 @@ def test_failed_or_abandoned_catalogue_download_never_places(win, monkeypatch):
     monkeypatch.setattr(library, "model_file", lambda row: None)
     placed = []
     monkeypatch.setattr(win, "insert_library_component", lambda *args: placed.append(args))
-    win._on_open_library()
+    assert L.open_library(win, "components", scope="s:online")
     frame(win)
-    session = L._sheet_provider(win._view_).catalogue
+    session = L._sheet_provider(win.view).catalogue
     session.job.result(timeout=3)
     session.poll()
     frame(win)
@@ -407,5 +375,5 @@ def test_failed_or_abandoned_catalogue_download_never_places(win, monkeypatch):
     act(win, "open", "online:chair")
     act(win, "side", "s:model")
     gate.set()
-    QApplication.processEvents()
+    win._host.idle()
     assert not placed

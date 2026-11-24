@@ -28,6 +28,7 @@ pub struct Look {
 }
 
 struct Level {
+    texture: wgpu::Texture,
     view: wgpu::TextureView,
     size: [u32; 2],
 }
@@ -64,10 +65,10 @@ fn blur_target(device: &wgpu::Device, format: wgpu::TextureFormat, size: [u32; 2
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
         format,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC,
         view_formats: &[],
     });
-    Level { view: tex.create_view(&Default::default()), size }
+    Level { view: tex.create_view(&Default::default()), texture: tex, size }
 }
 
 fn layout(device: &wgpu::Device, dynamic: bool) -> wgpu::BindGroupLayout {
@@ -255,6 +256,25 @@ impl Glass {
                 wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&self.sampler) },
             ],
         }));
+    }
+
+    /// Reuse the model-only downsample already computed for the window chrome.
+    /// A tab switch copies at most one small texture without drawing or reading pixels back.
+    pub fn tab_picture(&self, device: &wgpu::Device, queue: &wgpu::Queue) -> Option<wgpu::Texture> {
+        let level = self.levels.iter().find(|level| level.size[0].max(level.size[1]) <= 528)?;
+        let source = &level.texture;
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("background document tab"),
+            size: source.size(),
+            mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D2,
+            format: self.format,
+            usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[self.format.remove_srgb_suffix()],
+        });
+        let mut encoder = device.create_command_encoder(&Default::default());
+        encoder.copy_texture_to_texture(source.as_image_copy(), texture.as_image_copy(), source.size());
+        queue.submit([encoder.finish()]);
+        Some(texture)
     }
 
     pub fn showing_preview(&self) -> bool { self.preview.is_some() }

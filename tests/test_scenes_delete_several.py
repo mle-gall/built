@@ -9,30 +9,24 @@ from __future__ import annotations
 from core.saved_views import SavedView
 
 
-def test_three_of_four_scenes_go_and_come_back():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        scene = win.viewport.scene
-        cam = win.viewport.camera
-        views = [SavedView.capture(f"S{i}", scene, cam) for i in range(4)]
-        scene.saved_views[:] = list(views)
-        panel = win.tray.scenes
-        panel.refresh()
-        rows = panel.scene_rows()
-        for i in (0, 2, 3):
-            rows[i].setSelected(True)
-        panel._on_delete()
-        assert [v.name for v in scene.saved_views] == ["S1"]
-        assert len(panel.scene_rows()) == 1
-        win._on_undo()                       # Ctrl+Z, as the user does
-        from PySide6.QtWidgets import QApplication
-        QApplication.processEvents()
-        assert [v.name for v in scene.saved_views] == ["S0", "S1", "S2", "S3"]
-        panel.refresh()
-        assert len(panel.scene_rows()) == 4  # the list follows the undo
-        win.viewport.history.redo()
-        assert [v.name for v in scene.saved_views] == ["S1"]
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
+from tests.test_tree_links import _View
+from views import wgpu_ui
+
+
+def test_three_of_four_scenes_go_and_come_back(native_host):
+    win = native_host.window
+    scene = win.viewport.scene
+    views = [SavedView.capture(f"S{i}", scene, win.viewport.camera) for i in range(4)]
+    scene.saved_views[:] = views
+    display = _View()
+    def names():
+        wgpu_ui._tabs(display, win)
+        return [row[1] for row in display._ui_tabs[1]]
+    assert names() == ["S0", "S1", "S2", "S3"]
+    win.tray.scenes.delete_views([views[i] for i in (0, 2, 3)])
+    assert names() == ["S1"]
+    win._on_undo()
+    assert names() == ["S0", "S1", "S2", "S3"]
+    win._on_redo()
+    assert names() == ["S1"]

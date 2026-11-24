@@ -34,6 +34,8 @@ class Document:
     view_layout = "single"
 
     def __init__(self, viewport=None) -> None:
+        from core.group import new_uid
+        self.tab_id = new_uid()
         self.viewport = viewport
         #: The .igz it was opened from or saved to (None = never saved).
         self.path: Optional[Path] = None
@@ -51,10 +53,6 @@ class Document:
         #: The composer was on screen when the user left this tab.
         self.composer_shown = False
         self.last_sheet: int = 0
-        #: Its viewport's frame, small, shown on hover over its tab; drawn
-        #: then, if it is due (MainWindow._tab_picture).
-        self.thumbnail = None
-        self.picture_due = False
         #: Its scenes shown as tabs under the viewport (views/scene_tabs.py);
         #: its tab's right-click menu turns them off and on.
         self.scene_tabs: bool = True
@@ -572,66 +570,7 @@ class ProjectTabBar(QWidget):
                   and self.tabs.tabAt(event.position().toPoint()) < 0):
                 self.newRequested.emit()       # the empty strip: a new tab
                 return True
-            elif t == QEvent.ToolTip:
-                if self._show_preview(event.pos(), event.globalPos()):
-                    return True
-            elif t in (QEvent.Leave, QEvent.MouseButtonPress, QEvent.Hide):
-                self._hide_preview()
-            elif t == QEvent.MouseMove and self._preview is not None \
-                    and self._preview.isVisible():
-                i = self.tabs.tabAt(event.position().toPoint())
-                if i < 0 or self.tabs.tabData(i) is not self._preview_doc:
-                    self._hide_preview()
         return super().eventFilter(obj, event)
-
-    # ---- preview on hover -------------------------------------------------
-    _preview = None
-    _preview_doc = None
-    #: The picture of a document in the back (the window draws it if due).
-    picture_of = staticmethod(lambda doc: doc.thumbnail)
-
-    def _show_preview(self, pos, global_pos) -> bool:
-        """Over a tab in the back: the picture its viewport showed when it
-        was left, with the file's name under it. False when there is no
-        picture (the tab in front, or one never left): the plain tooltip
-        then shows."""
-        i = self.tabs.tabAt(pos)
-        doc = self.tabs.tabData(i) if i >= 0 else None
-        img = None
-        if doc is not None and i != self.tabs.currentIndex():
-            img = self.picture_of(doc)
-        if img is None or img.isNull():
-            self._hide_preview()
-            return False
-        from PySide6.QtGui import QPixmap
-        from PySide6.QtWidgets import QLabel, QVBoxLayout
-        if self._preview is None:
-            box = self._preview = QWidget(self, Qt.ToolTip)
-            box.setObjectName("project_tab_preview")
-            lay = QVBoxLayout(box)
-            lay.setContentsMargins(4, 4, 4, 4)
-            lay.setSpacing(2)
-            box._pic = QLabel(box)
-            box._name = QLabel(box)
-            lay.addWidget(box._pic)
-            lay.addWidget(box._name)
-            box.setStyleSheet("#project_tab_preview { background: palette(base);"
-                              " border: 1px solid palette(mid); }")
-        box = self._preview
-        box._pic.setPixmap(QPixmap.fromImage(img))
-        box._name.setText(doc.display_name())
-        box.adjustSize()
-        r = self.tabs.tabRect(i)
-        at = self.tabs.mapToGlobal(r.bottomLeft()) + QPoint(0, 4)
-        box.move(at)
-        box.show()
-        self._preview_doc = doc
-        return True
-
-    def _hide_preview(self) -> None:
-        if self._preview is not None:
-            self._preview.hide()
-        self._preview_doc = None
 
     def tab_rect_global(self, doc):
         i = self.index_of(doc)

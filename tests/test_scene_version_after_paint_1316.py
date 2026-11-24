@@ -8,39 +8,19 @@ its own frame — the flush after it crashed. What a frame finds is now
 announced once the frame is out, so no listener runs inside a paint."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
-_app = QApplication.instance() or QApplication([])
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
+from views.extension_api import ExtensionApp
 
 
-
-def _window():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    win.resize(800, 600)
-    vp = win.viewport
+def test_notify_scene_changed_still_says_it_at_once(native_host):
+    vp = native_host.viewport
+    seen = []
+    ExtensionApp(native_host.window, "probe").on_document_changed(lambda: seen.append(vp.scene.version))
     vp.scene.mesh.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0)])
     vp.scene.version += 1
-    return win
-
-
-def _close(win):
-    win._saved_version = win.viewport.scene.version
-    win.close()
-
-
-def test_notify_scene_changed_still_says_it_at_once():
-    win = _window()
-    try:
-        vp = win.viewport
-        seen: list = []
-        vp.sceneVersionChanged.connect(seen.append)
-        vp.notify_scene_changed()
-        assert seen == [vp.scene.version]
-    finally:
-        _close(win)
+    vp.notify_scene_changed()
+    assert seen == [vp.scene.version]
+    native_host.idle()
+    assert seen == [vp.scene.version]

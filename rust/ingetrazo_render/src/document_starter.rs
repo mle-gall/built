@@ -213,7 +213,19 @@ fn settle_document_heap(py: Python<'_>, threshold: usize) -> PyResult<()> {
     Ok(())
 }
 
+/// The retired document and its callbacks have left the close stack. Multiple
+/// closes in one turn share a collection and one allocator trim.
+#[pyfunction]
+fn reclaim_closed_documents(py: Python<'_>) -> PyResult<()> {
+    let gc = py.import("gc")?;
+    gc.call_method0("unfreeze")?;
+    gc.call_method0("collect")?;
+    py.import("core.malloc_arenas")?.call_method0("trim")?;
+    Ok(())
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(reclaim_closed_documents, m)?)?;
     m.add_function(wrap_pyfunction!(new_document_command, m)?)?;
     m.add_function(wrap_pyfunction!(settle_document_heap, m)?)?;
     m.add_function(wrap_pyfunction!(cold_start_document, m)?)?;
