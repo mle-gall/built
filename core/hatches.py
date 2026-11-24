@@ -29,7 +29,7 @@ import math
 import re
 
 from ingetrazo_core import (fit_band, fitted_marks, generate_hatch, hatch_clip_segments,
-                            hatch_fill_quads, hatch_random as _rand)
+                            hatch_fill_quads, masonry_course, masonry_marks)
 
 #: The picker's groups: ``(title, patterns)``, in the order shown. ``None``
 #: is not in them: it means «the frame's fill» (solid or 45°, as the frame
@@ -636,33 +636,6 @@ def vertical_band(ring) -> tuple | None:
     return (min(xs), max(ys)), (0.0, -1.0), (1.0, 0.0), h, w
 
 
-def _english(k: int, n: int) -> list:
-    """The wythes across a wall ``n`` half bricks thick in course ``k`` of
-    English bond (``"S"`` a stretcher, ``"H"`` a header), from the near
-    face: a course of headers (and a stretcher on one face, when the wall
-    has an odd half), then the other way round — one and a half bricks is
-    a stretcher on one face and a header on the other, swapped course by
-    course."""
-    if n <= 1:
-        return ["S"]
-    heads, odd = n // 2, n % 2
-    if k % 2 == 0:
-        return (["S"] if odd else []) + ["H"] * heads
-    if odd:
-        return ["H"] * heads + ["S"]
-    return ["S"] + ["H"] * ((n - 2) // 2) + ["S"]
-
-
-def _row(rects, b0, b1, length, offset, lo, hi, kind="brick") -> None:
-    i0 = math.floor((lo - offset) / length) - 1
-    i1 = math.ceil((hi - offset) / length) + 1
-    if i1 - i0 > 4000:
-        return
-    for i in range(i0, i1 + 1):
-        a0 = offset + i * length
-        rects.append((a0, a0 + length, b0, b1, kind))
-
-
 def bond_course(key, k: int, thick: float, brick=None, lo: float = 0.0,
                 hi: float = 0.0) -> tuple:
     """Course ``k`` of masonry pattern ``key`` in a wall ``thick`` mm thick,
@@ -670,81 +643,7 @@ def bond_course(key, k: int, thick: float, brick=None, lo: float = 0.0,
     wall (its pieces fill it), its height, and its pieces between ``lo`` and
     ``hi`` along the wall: ``(a0, a1, b0, b1, kind)`` in mm, ``kind`` one
     of ``"brick"``, ``"hollow"``, ``"block"``, ``"gap"`` (an open one)."""
-    length, width, height, bed, head = brick_dims(brick, piece_kind(key))
-    # Along the course and across the wall, a brick and a head joint; up
-    # the wall, a brick and a bed joint.
-    ls, ws, hs = length + head, width + head, height + bed
-    rects: list = []
-    if key in ("block", "aac_block"):  # one through the wall, half bond
-        _row(rects, 0.0, thick, ls, (k % 2) * ls / 2.0, lo, hi,
-             "block" if key == "block" else "aac")
-        return thick, hs, rects
-    if key in _UNITS:
-        unit, course = _UNITS[key]
-        _row(rects, 0.0, thick, unit, (k % 2) * unit / 2.0, lo, hi)
-        return thick, course, rects
-    n = max(1, round((thick + head) / ws))
-    if key == "brick_auto":
-        key = ("brick_on_edge" if thick < (width + height) / 2.0
-               else "brick" if n == 1 else "brick_bond")
-    if key == "brick_on_edge":
-        _row(rects, 0.0, height + head, ls, (k % 2) * ls / 2.0, lo, hi)
-        return height + head, width + bed, rects
-    if key == "brick_rowlock":
-        _row(rects, 0.0, ls, height + head, 0.0, lo, hi)
-        return ls, width + bed, rects
-    if key == "brick_honeycomb":
-        gap = ls / 2.0
-        p = ls + gap
-        off = (k % 2) * p / 2.0
-        _row(rects, 0.0, ws, p, off, lo, hi, "gap")
-        _row(rects, 0.0, ws, p, off + gap, lo, hi)
-        # Each piece as long as itself: a gap, then a brick.
-        rects = [(a0, a0 + (gap if kind == "gap" else ls), b0, b1, kind)
-                 for a0, a1, b0, b1, kind in rects]
-        return ws, hs, rects
-    if key == "brick_header":
-        m = max(1, round((thick + head) / ls))
-        for w in range(m):
-            _row(rects, w * ls, (w + 1) * ls, ws, (k % 2) * ws / 2.0, lo, hi)
-        return m * ls, hs, rects
-    if key in ("brick", "hollow_brick", "perforated_block",
-               "concrete_brick"):
-        kind = {"hollow_brick": "hollow", "perforated_block": "perforated",
-                "concrete_brick": "cored"}.get(key, "brick")
-        for w in range(n):
-            _row(rects, w * ws, (w + 1) * ws, ls, ((k + w) % 2) * ls / 2.0,
-                 lo, hi, kind)
-        return n * ws, hs, rects
-    if key == "brick_flemish" or (key == "brick_dutch" and k % 2 == 0):
-        # A pair of stretchers, a header through the wall, in turn.
-        p = ls + ws
-        off = ((k if key == "brick_flemish" else k // 2) % 2) * p / 2.0
-        i0 = math.floor((lo - off) / p) - 1
-        i1 = math.ceil((hi - off) / p) + 1
-        for i in range(i0, min(i1, i0 + 4000) + 1):
-            a = off + i * p
-            rects += [(a, a + ls, 0.0, ws, "brick"),
-                      (a, a + ls, ws, 2 * ws, "brick"),
-                      (a + ls, a + p, 0.0, 2 * ws, "brick")]
-        return 2 * ws, hs, rects
-    if key == "brick_dutch":           # its header courses
-        _row(rects, 0.0, ls, ws, ws / 2.0, lo, hi)
-        return ls, hs, rects
-    # English and its kin: headers over the stretchers' joints.
-    if key == "brick_one_half":
-        n = 3
-    n = max(2, min(8, n))
-    shift = (((k // 2) % 2) * ls / 2.0 if key == "brick_cross" else 0.0)
-    b = 0.0
-    for w in _english(k, n):
-        if w == "S":
-            _row(rects, b, b + ws, ls, shift, lo, hi)
-            b += ws
-        else:
-            _row(rects, b, b + ls, ws, ws / 2.0, lo, hi)
-            b += ls
-    return b, hs, rects
+    return masonry_course(key, k, thick, brick_dims(brick, piece_kind(key)), lo, hi)
 
 
 #: How masonry joints are drawn: as one line, as two (the joint's real
@@ -767,20 +666,6 @@ def joints_mode(joints, scale_n: float = 100.0) -> str:
     if n >= JOINTS_AUTO[1]:
         return "hatch"
     return "double" if n <= JOINTS_AUTO[0] else "single"
-
-
-def _face_thick(key, brick) -> float:
-    """The wall a bond's face is taken from, in mm: the thickness the bond
-    is laid in."""
-    length, width, height, _bed, head = brick_dims(brick, piece_kind(key))
-    if key in ("brick", "hollow_brick", "brick_honeycomb", "block",
-               "aac_block", "perforated_block", "concrete_brick"):
-        return width
-    if key == "brick_on_edge":
-        return height
-    if key == "brick_one_half":
-        return length + width + head
-    return length
 
 
 def bond_marks(key, band, cut: str, scale: float = 1.0,
@@ -808,218 +693,9 @@ def bond_marks(key, band, cut: str, scale: float = 1.0,
     (``y``, a section); a paved area or a wall's face moves both ways."""
     if key not in COURSED or band is None or cut not in _BOND_THICKEST:
         return None
-    origin, along, across, length, thick = band
-    if thick <= 1e-6 or length <= 1e-6:
-        return None
-    unit, metres = real_unit(key, brick)
-    per_mm = max(1e-6, float(scale)) * unit / (metres * 1000.0)
-    real = thick * max(1e-6, float(scale_n or 100.0))
-    out: dict = {"lines": [], "polys": [], "bricks": []}
-    ox, oy = (float(offset[0]), float(offset[1])) if offset else (0.0, 0.0)
-    # One way round for every piece — along a plan's wall rightwards (or
-    # down the paper), up a section — across it to its left — so the
-    # pieces of one wall agree.
-    if cut == "vertical":
-        flip = along[1] > 1e-9 or (abs(along[1]) <= 1e-9 and along[0] < 0)
-    else:
-        flip = along[0] < -1e-9 or (abs(along[0]) <= 1e-9 and along[1] < 0)
-    if flip:
-        origin = (origin[0] + along[0] * length, origin[1] + along[1] * length)
-        along = (-along[0], -along[1])
-    left = (-along[1], along[0])
-    if across[0] * left[0] + across[1] * left[1] < 0:
-        origin = (origin[0] + across[0] * thick, origin[1] + across[1] * thick)
-    across = left
-    # Where along the bond the piece begins, in real mm: at its own end,
-    # as a wall is laid — a whole brick at a corner or a jamb, the first
-    # course at the foot — then where the layer moves it.
-    start = -(oy if cut == "vertical" else ox)
-    length_, width, height, bed, head = brick_dims(brick, piece_kind(key))
-    if key in _UNITS:
-        bed = head = 10.0
-    double = joints == "double"
-    # Half a joint each side of a brick: the head joint along the course
-    # and across the wall, the bed joint up it.
-    half_b, half_h = bed / 2.0, head / 2.0
-
-    def piece(at, a0, a1, b0, b1, depth, kind, cells=None,
-              ha=None) -> None:
-        """One brick: its outline inset by half a joint (double; not on the
-        wall's faces) — ``ha`` along ``a`` (the head joint's by default),
-        the head joint's across — or the joint before it and under it
-        (single)."""
-        ha = half_h if ha is None else ha
-        if kind == "gap":              # an open gap: crossed, and closed
-            out["lines"].append(at(a0, b0) + at(a1, b1))
-            out["lines"].append(at(a0, b1) + at(a1, b0))
-            # Both its sides: a brick draws only the joint before it, so the
-            # side of a gap that follows a brick was left open.
-            out["lines"].append(at(a0, b0) + at(a0, b1))
-            out["lines"].append(at(a1, b0) + at(a1, b1))
-            return
-        if double:
-            c0 = b0 + (half_h if b0 > 1e-6 else 0.0)
-            c1 = b1 - (half_h if b1 < depth - 1e-6 else 0.0)
-            if a1 - a0 > 2.0 * ha and c1 > c0:
-                out["bricks"].append([at(a0 + ha, c0), at(a1 - ha, c0),
-                                      at(a1 - ha, c1), at(a0 + ha, c1),
-                                      at(a0 + ha, c0)])
-        else:
-            out["lines"].append(at(a0, b0) + at(a0, b1))
-            if b0 > 1e-6:
-                out["lines"].append(at(a0, b0) + at(a1, b0))
-        if cells is not None:
-            cells()
-
-    span = length / per_mm             # the piece's length, in real mm
-    if real > _BOND_THICKEST[cut]:
-        # No wall: the face of the bond, its courses up the paper (a wall
-        # cut along) or across the piece (a paved area).
-        if cut == "vertical":
-            # Upright whatever the piece: along the paper, courses up it.
-            u_ax, v_ax = (1.0, 0.0), (0.0, -1.0)
-            xs = (origin[0], origin[0] + across[0] * thick
-                  + along[0] * length)
-            ys = (origin[1], origin[1] + across[1] * thick
-                  + along[1] * length)
-            u_len, v_len = abs(xs[1] - xs[0]), abs(ys[1] - ys[0])
-            corner = (min(xs), max(ys))
-        else:
-            u_ax, v_ax, u_len, v_len = along, across, length, thick
-            corner = origin
-        # Locked to the paper (a paved area runs on under a wall), then
-        # moved as the layer says.
-        u0 = (corner[0] * u_ax[0] + corner[1] * u_ax[1]) / per_mm - ox
-        v0 = (corner[0] * v_ax[0] + corner[1] * v_ax[1]) / per_mm - oy
-
-        def at(u, v):
-            # (u, v) on the paper's own grid, in real mm.
-            return (corner[0] + (u_ax[0] * (u - u0) + v_ax[0] * (v - v0))
-                    * per_mm,
-                    corner[1] + (u_ax[1] * (u - u0) + v_ax[1] * (v - v0))
-                    * per_mm)
-        _d, course, _r = bond_course(key, 0, 0.0, brick, 0.0, 0.0)
-        u_real, v_real = u_len / per_mm, v_len / per_mm
-        k0 = math.floor(v0 / course)
-        courses = int(math.ceil((v0 + v_real) / course)) - k0 + 1
-        if courses * max(1.0, u_real / max(1.0, width)) > 20000:
-            return None
-        face = _face_thick(key, brick)
-        for k in range(k0, k0 + courses):
-            c0, c1 = k * course, (k + 1) * course
-            _d, _h, rects = bond_course(key, k, face, brick, u0, u0 + u_real)
-            if not double:
-                out["lines"].append(at(u0, c0) + at(u0 + u_real, c0))
-            for a0, a1, b0, _b1, kind in rects:
-                if b0 > 1e-6:          # only the wythe on the face
-                    continue
-                if kind == "gap":
-                    piece(lambda u, v: at(u, v), a0, a1, c0, c1, 1e9, kind)
-                elif double:
-                    out["bricks"].append([at(a0 + half_h, c0 + half_b),
-                                          at(a1 - half_h, c0 + half_b),
-                                          at(a1 - half_h, c1 - half_b),
-                                          at(a0 + half_h, c1 - half_b),
-                                          at(a0 + half_h, c0 + half_b)])
-                else:
-                    out["lines"].append(at(a0, c0) + at(a0, c1))
-        return out
-
-    def fitted(depth):
-        def at(a, b):
-            aa, bb = (a - start) * per_mm, b * thick / depth
-            return (origin[0] + along[0] * aa + across[0] * bb,
-                    origin[1] + along[1] * aa + across[1] * bb)
-        return at
-
-    if cut == "plan":
-        depth, _h, rects = bond_course(key, 0, real, brick, start,
-                                       start + span)
-        if len(rects) > 4000:
-            return None
-        at = fitted(depth)
-        for a0, a1, b0, b1, kind in rects:
-            cells = None
-            if kind == "block":
-                cells = (lambda a0=a0, a1=a1, b0=b0, b1=b1:
-                         _block_cells(out, lambda a, b, _d: at(a, b), a0, a1,
-                                      b0, b1, depth))
-            elif kind == "perforated":
-                cells = (lambda a0=a0, a1=a1, b0=b0, b1=b1:
-                         _upright_holes(out, at, a0 + half_h, a1 - half_h,
-                                        b0, b1))
-            elif kind == "aac":
-                cells = (lambda a0=a0, a1=a1, b0=b0, b1=b1:
-                         _pores(out, at, a0, a1, b0, b1))
-            elif kind == "cored":
-                cells = (lambda a0=a0, a1=a1, b0=b0, b1=b1:
-                         _cores(out, at, a0 + half_h, a1 - half_h, b0, b1))
-            piece(at, a0, a1, b0, b1, depth, kind, cells)
-        return out
-    # A vertical section across the wall.
-    _d, course, _r = bond_course(key, 0, real, brick, 0.0, 0.0)
-    k0 = math.floor(start / course)
-    courses = int(math.ceil((start + span) / course)) - k0 + 1
-    if courses > 2000:
-        return None
-    probe = 0.6 * (width + head)       # where the section cuts each course
-    for k in range(k0, k0 + courses):
-        a0, a1 = k * course, (k + 1) * course
-        depth, _h, rects = bond_course(key, k, real, brick, probe, probe)
-        at = fitted(depth)
-        if not double:
-            out["lines"].append(at(a0, 0.0) + at(a0, depth))  # bed joint
-        for r0, r1, b0, b1, kind in rects:
-            if not r0 < probe < r1:
-                continue
-            cells = None
-            if kind == "hollow":
-                cells = (lambda a0=a0, a1=a1, b0=b0, b1=b1, at=at, d=depth:
-                         _hollow_cells(out, lambda a, b, _d: at(a, b),
-                                       a0 + (half_b if double else 0),
-                                       a0 + (a1 - a0) * height
-                                       / (height + bed), b0, b1, d, width))
-            elif kind == "perforated":
-                def cells(a0=a0, a1=a1, b0=b0, b1=b1, at=at):
-                    # Cut through its upright holes: the webs between
-                    # them, the height of the piece.
-                    top = a0 + (a1 - a0) * height / (height + bed)
-                    cols = max(2, round((b1 - b0) / 30.0))
-                    for i in range(1, cols):
-                        b = b0 + (b1 - b0) * i / cols
-                        out["lines"].append(at(a0, b) + at(top, b))
-            elif kind == "aac":
-                def cells(a0=a0, a1=a1, b0=b0, b1=b1, at=at):
-                    _pores(out, at, a0, a1, b0, b1)
-            elif kind == "cored":
-                def cells(a0=a0, a1=a1, b0=b0, b1=b1, at=at):
-                    # Cut through one of its holes: its two sides, the
-                    # height of the piece.
-                    top = a0 + (a1 - a0) * height / (height + bed)
-                    for f in (0.25, 0.75):
-                        b = b0 + (b1 - b0) * f
-                        out["lines"].append(at(a0, b) + at(top, b))
-            elif kind == "block":
-                def cells(a0=a0, a1=a1, b0=b0, b1=b1, at=at):
-                    shell = min(32.0, 0.25 * (b1 - b0))
-                    out["lines"].append(at(a0, b0 + shell)
-                                        + at(a1, b0 + shell))
-                    out["lines"].append(at(a0, b1 - shell)
-                                        + at(a1, b1 - shell))
-            if double:
-                # Up the section, a course: the bed joint above and below.
-                piece(at, a0, a1, b0, b1, depth, kind, cells, ha=half_b)
-            else:
-                # The bed joint is drawn whole above: only where two
-                # bricks of the course meet.
-                if kind == "gap":
-                    piece(at, a0, a1, b0, b1, depth, kind)
-                    continue
-                if b0 > 1e-6:
-                    out["lines"].append(at(a0, b0) + at(a1, b0))
-                if cells is not None:
-                    cells()
-    return out
+    return masonry_marks(key, band, cut, scale, float(scale_n or 100.0),
+                         brick_dims(brick, piece_kind(key)), real_unit(key, brick),
+                         joints, offset)
 
 
 def paper_offset(form) -> tuple | None:
@@ -1140,86 +816,6 @@ def hatch_lines(key, rings, form=None, frame_scale: float = 1.0,
                         or key in BRICKS else None,
                         paper_offset(form) if key in PLACED else None)
     return out + clip_segments(_segments(marks), rings)
-
-
-def _upright_holes(out, at, a0, a1, b0, b1) -> None:
-    """A load-bearing ceramic block (a rejillón) seen from above: the grid
-    of its upright holes, about 3 cm each way."""
-    if a1 <= a0 or b1 <= b0:
-        return
-    cols = max(3, round((a1 - a0) / 32.0))
-    rows = max(2, round((b1 - b0) / 32.0))
-    if cols * rows > 400:
-        return
-    cw, ch = (a1 - a0) / cols, (b1 - b0) / rows
-    for i in range(cols):
-        for j in range(rows):
-            x0, x1 = a0 + i * cw + 0.22 * cw, a0 + (i + 1) * cw - 0.22 * cw
-            y0, y1 = b0 + j * ch + 0.22 * ch, b0 + (j + 1) * ch - 0.22 * ch
-            out["polys"].append([at(x0, y0), at(x1, y0), at(x1, y1),
-                                 at(x0, y1), at(x0, y0)])
-
-
-def _cores(out, at, a0, a1, b0, b1) -> None:
-    """A precast concrete brick seen from above: its few large holes in a
-    row along it, half its width wide."""
-    if a1 <= a0 or b1 <= b0:
-        return
-    n = max(2, min(4, round((a1 - a0) / 80.0)))
-    cell = (a1 - a0) / n
-    for i in range(n):
-        x0, x1 = a0 + i * cell + 0.2 * cell, a0 + (i + 1) * cell - 0.2 * cell
-        y0, y1 = b0 + 0.25 * (b1 - b0), b1 - 0.25 * (b1 - b0)
-        out["polys"].append([at(x0, y0), at(x1, y0), at(x1, y1), at(x0, y1),
-                             at(x0, y0)])
-
-
-def _pores(out, at, a0, a1, b0, b1) -> None:
-    """The pores of aerated concrete in a piece: small rounds scattered a
-    few centimetres apart, the same wherever the piece is drawn (hashed by
-    their place along and across)."""
-    step = 28.0
-    i0, i1 = math.floor(a0 / step), math.ceil(a1 / step)
-    j0, j1 = math.floor(b0 / step), math.ceil(b1 / step)
-    if (i1 - i0) * (j1 - j0) > 3000:
-        return
-    for i in range(i0, i1):
-        for j in range(j0, j1):
-            x = (i + 0.15 + 0.7 * _rand(i, j, 7)) * step
-            y = (j + 0.15 + 0.7 * _rand(i, j, 11)) * step
-            r = 2.0 + 3.0 * _rand(i, j, 13)
-            if not (a0 + r < x < a1 - r and b0 + r < y < b1 - r):
-                continue
-            out["polys"].append([at(x + r * math.cos(t * math.pi / 4),
-                                    y + r * math.sin(t * math.pi / 4))
-                                 for t in range(9)])
-
-
-def _block_cells(out, at, a0, a1, b0, b1, depth) -> None:
-    """A hollow block's two cells, seen from above."""
-    shell = min(32.0, 0.25 * (b1 - b0))
-    mid = (a0 + a1) / 2.0
-    for c0, c1 in ((a0 + shell, mid - shell / 2.0),
-                   (mid + shell / 2.0, a1 - shell)):
-        if c1 > c0:
-            out["polys"].append([at(c0, b0 + shell, depth),
-                                 at(c1, b0 + shell, depth),
-                                 at(c1, b1 - shell, depth),
-                                 at(c0, b1 - shell, depth),
-                                 at(c0, b0 + shell, depth)])
-
-
-def _hollow_cells(out, at, a0, a1, b0, b1, depth, width) -> None:
-    """The holes of a hollow brick cut across: two rows of cells."""
-    cols = max(2, round((b1 - b0) / (width / 3.0)))
-    cw, ch = (b1 - b0) / cols, (a1 - a0) / 2.0
-    for r in range(2):
-        for c in range(cols):
-            x0, x1 = b0 + c * cw + 0.2 * cw, b0 + (c + 1) * cw - 0.2 * cw
-            y0, y1 = a0 + r * ch + 0.22 * ch, a0 + (r + 1) * ch - 0.22 * ch
-            out["polys"].append([at(y0, x0, depth), at(y0, x1, depth),
-                                 at(y1, x1, depth), at(y1, x0, depth),
-                                 at(y0, x0, depth)])
 
 
 def known(key) -> bool:

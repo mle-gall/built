@@ -49,6 +49,7 @@ mod sidebar;
 mod hatch_file;
 mod hatch_region;
 mod hatch_pattern;
+mod hatch_bond;
 mod style_files;
 mod style_edit;
 mod settings;
@@ -294,7 +295,8 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(polygon::polygon_earcut, m)?)?;
     m.add_function(wrap_pyfunction!(polygon::polygon_triangles, m)?)?;
     m.add_function(wrap_pyfunction!(hatch_pattern::generate_hatch, m)?)?;
-    m.add_function(wrap_pyfunction!(hatch_pattern::hatch_random, m)?)?;
+    m.add_function(wrap_pyfunction!(hatch_bond::masonry_course, m)?)?;
+    m.add_function(wrap_pyfunction!(hatch_bond::masonry_marks, m)?)?;
     m.add_function(wrap_pyfunction!(hatch_pattern::fitted_marks, m)?)?;
     m.add_function(wrap_pyfunction!(hatch_pattern::fit_band, m)?)?;
     m.add_function(wrap_pyfunction!(hatch_region::hatch_clip_segments, m)?)?;

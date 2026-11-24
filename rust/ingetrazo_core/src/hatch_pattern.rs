@@ -32,7 +32,6 @@ fn cells(b: Box2, w: f64, h: f64) -> impl Iterator<Item = (i64, i64)> {
     let rows = grid(b[1], b[3], h);
     grid(b[0], b[2], w).flat_map(move |x| rows.clone().map(move |y| (x, y)))
 }
-#[pyfunction]
 pub(crate) fn hatch_random(ix: i64, iy: i64, n: i64) -> f64 {
     let h = ix.wrapping_mul(73856093) ^ iy.wrapping_mul(19349663) ^ n.wrapping_mul(83492791);
     let h = ((h ^ (h >> 13)) as u32).wrapping_mul(1274126177);
