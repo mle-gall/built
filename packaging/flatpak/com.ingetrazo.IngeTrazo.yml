@@ -139,9 +139,6 @@ modules:
       #    on 2026-09-16 (30:20) while PDF export, which goes through
       #    QPdfWriter in QtGui, worked perfectly for him. QtPdf IS still
       #    trimmed: that is the PDF *viewer*, which we do not use.
-      #
-      #    QtMultimedia and its ffmpeg stay too: Export ▸ Scenes as Video
-      #    (.mkv) writes the file through them (views/video_export.py).
       - |
         set -e
         PYVER=$(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])')

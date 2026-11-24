@@ -118,9 +118,6 @@ for _plat, _names in _DWG_FILES.items():
 hiddenimports = [
     # Qt submodules sometimes missed by static analysis.
     'PySide6.QtNetwork',        # tile/DEM fetch (georef)
-    # Export ▸ Scenes as Video (.mkv): Qt Multimedia writes the file with
-    # its own ffmpeg plugin; imported inside functions (views/video_export).
-    'PySide6.QtMultimedia',
     # Lazily imported project modules (inside functions) — listed for safety.
     'core.text3d',
     'core.textlabel',

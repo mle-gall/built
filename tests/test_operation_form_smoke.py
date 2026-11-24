@@ -798,7 +798,9 @@ def test_native_animation_forms_and_video_file(tmp_path):
     from core.scene_animation import SceneAnimation
     from formats.igz import save_scene
 
-    path, movie = tmp_path / "tour.built", tmp_path / "tour.mkv"
+    from ingetrazo_core import video_format
+    suffix, _ = video_format()
+    path, movie = tmp_path / "tour.built", tmp_path / ("tour" + suffix)
     scene, camera = Scene(), OrbitCamera()
     for name in ("top", "front"):
         camera.set_view(name)
@@ -819,7 +821,11 @@ def test_native_animation_forms_and_video_file(tmp_path):
     assert result.returncode == 0 and len(states) >= 3, result.stderr
     assert [s["form_open"] for s in states[:3]] == [True, True, False], states
     assert all(not s["errors"] and not s["blocked_widgets"] for s in states), result.stderr
-    assert movie.read_bytes().startswith(b"\x1a\x45\xdf\xa3")
+    movie_bytes = movie.read_bytes()
+    if suffix == ".mp4":
+        assert movie_bytes[4:8] == b"ftyp" and b"avc1" in movie_bytes
+    else:
+        assert movie_bytes.startswith(b"\x1a\x45\xdf\xa3")
 
 
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),

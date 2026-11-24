@@ -52,6 +52,7 @@ mod window_commands;
 mod scene_animation;
 mod atomic_document;
 mod scene_video;
+mod mp4;
 mod survey_pixels;
 mod filing_rows;
 mod readiness;
@@ -111,6 +112,9 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     scene_animation::register(m)?;
     survey_pixels::register(m)?;
     m.add_class::<scene_video::MkvWriter>()?;
+    m.add_class::<mp4::Mp4Writer>()?;
+    m.add_function(wrap_pyfunction!(scene_video::video_writer, m)?)?;
+    m.add_function(wrap_pyfunction!(mp4::video_format, m)?)?;
     builtproject::register(m)?;
     m.add_class::<settings::NativeSettings>()?;
     m.add_class::<document_watch::DocumentWatch>()?;
