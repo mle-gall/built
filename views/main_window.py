@@ -6868,7 +6868,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
     def _on_open_composer(self) -> None:
         """Open (or raise) the sheet composer — see docs/composer-plan.md.
         Minimised, it comes back out of the taskbar."""
-        from views.composer import bring_to_front
+        from views.window_front import bring_to_front
         bring_to_front(self._ensure_composer())
 
     # ---- Model / sheet tabs (the strip at the bottom) -----------------------
@@ -6919,7 +6919,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
         self._sheet_tab_menu(sheets[k] if 0 <= k < len(sheets) else k, pos)
 
     def _show_model(self) -> None:
-        from views.composer import bring_to_front
+        from views.window_front import bring_to_front
         comp = getattr(self, "_composer", None)
         if comp is not None and getattr(comp, "EMBEDDED", False):
             comp.hide()                     # the Sheets workspace gives the frame back
@@ -11411,7 +11411,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             # With layers, each one as a layer of its own, with its
             # colour and line type — as the composer's export.
             from core.layers import line_styles
-            from views.composer import dxf_groups_by_layer
+            from formats.dxf_views import dxf_groups_by_layer
             d = hlr_drawing(vp.scene, vp.camera, layers=True,
                             geometry=vp.hlr_geometry(tags=True) if fast
                             else None)
@@ -11507,7 +11507,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
                 # With layers, each one as a DXF layer of its own, with its
                 # colour and line type — as the composer's export.
                 from core.layers import line_styles
-                from views.composer import dxf_groups_by_layer
+                from formats.dxf_views import dxf_groups_by_layer
                 tagged = vp.hlr_geometry(tags=True)
                 d = hlr_drawing(vp.scene, vp.camera, layers=True,
                                 geometry=tagged)
@@ -11526,7 +11526,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
             if not vp.camera.perspective:
                 # The cut hatches and fills too, as a sheet at 1:50 draws
                 # them — as the composer's export does at its frame's scale.
-                from views.composer import dxf_cut_layers
+                from formats.dxf_views import dxf_cut_layers
                 lines, solids = dxf_cut_layers(
                     vp.scene, vp.camera,
                     geometry=tagged if len(vp.scene.layers) > 1

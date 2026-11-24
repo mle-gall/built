@@ -994,7 +994,8 @@ class Workspace:
             from app_shell import files
             files.open_in_classic(real, why="The classic sheet editor")
             return
-        from views.composer import ComposerWindow, bring_to_front
+        from views.composer import ComposerWindow
+        from views.window_front import bring_to_front
         from views.documents import DocumentHost
         classic = comp.__dict__.get("_classic")
         if classic is None or not _alive(classic):
