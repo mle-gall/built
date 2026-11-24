@@ -348,18 +348,18 @@ def test_the_menus_carry_the_expected_verbs(host, kinds):
     def rows(kind):
         scene.select(kinds[kind])
         return cm.build(host.window, host.view).labels()[1:]
-    assert rows("faces")[:6] == ["Hide", "Zoom to | Reveal selection", "Make group | Make component…",
+    assert rows("faces")[:6] == ["Hide", "Zoom to | Reveal selection | Tag…", "Make group | Make component…",
                                  "Reverse faces | Orient faces", "Intersect: Model | Selection | Context",
                                  "Soften / Smooth edges…"]
     assert "Divide…" in rows("edges") and "Reverse faces | Orient faces" not in rows("edges")
-    assert rows("group")[:7] == ["Open for editing", "Rename…", "Hide", "Isolate", "Lock", "Zoom to | Reveal selection", "File to…"]
+    assert rows("group")[:7] == ["Open for editing", "Rename…", "Hide", "Isolate", "Lock", "Zoom to | Reveal selection | Tag…", "File to…"]
     assert "Explode | Make component…" in rows("group") and "Split into pieces" in rows("group")
     assert "Select instances | Make unique" in rows("component")
     assert "Merge groups | Explode" in rows("groups")
     assert rows("link")[:2] == ["Select contents", "Hide"] and "Edit source" in rows("link")
     assert rows("linked_part")[0] == "Select its linked file"
-    assert rows("annotation") == ["Edit text…", "Zoom to | Reveal selection"]
-    assert rows("guide") == ["Delete guide", "Delete all guides", "Zoom to | Reveal selection"]
+    assert rows("annotation") == ["Edit text…", "Zoom to | Reveal selection | Tag…"]
+    assert rows("guide") == ["Delete guide", "Delete all guides", "Zoom to | Reveal selection | Tag…"]
     assert rows("empty")[:3] == ["Select all", "Unhide all", "Zoom extents"]
 
 

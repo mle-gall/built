@@ -1682,14 +1682,16 @@ class MetalView(ViewNavigation):
             from ingetrazo_render import model_escape
             from views.document_interaction import DocumentInteraction
             source = self.source_viewport
-            busy = bool(getattr(self, "_look_drag", None) or self.tools.value_buffer
+            scene = self.tools.scene
+            busy = bool(getattr(self, "_look_drag", None)
                         or self.tools.start_point is not None or DocumentInteraction._tool_busy_for_delete(self.tools.tool))
             from views.resident_peer import raw_renderer
             chrome = getattr(self, "_shared", self)
             renderer = raw_renderer(chrome.renderer) if getattr(chrome, "_ui_attached", False) else None
-            owner = model_escape(busy, bool(self.scene.selection),
-                                 source is not None and self.scene.edit_group is not None, renderer,
-                                 self.tools._array_pending())
+            owner = model_escape(busy, bool(scene is not None and scene.selection),
+                                 source is not None and scene.edit_group is not None, renderer,
+                                 self.tools._array_pending(), bool(self.tools.value_buffer),
+                                 getattr(source, "axis_lock", None) is not None or getattr(source, "reference_mode", None) is not None)
             self._look_drag = None
             from ingetrazo_render import leave_navigation
             win = self.window() if hasattr(self, "window") else None
@@ -1697,14 +1699,18 @@ class MetalView(ViewNavigation):
                     and leave_navigation(win)):
                 return
             self.tools._apply_tool_cursor()
-            if owner == "tool":
+            if owner == "value":
+                self.tools._set_value_buffer("")
+            elif owner == "constraint":
+                source.release_constraints()
+            elif owner == "tool":
                 self.tools.cancel()
             elif owner == "array":
                 self.tools.tool.close_array_window()
             elif owner == "edit":
                 source.end_one_group_edit()
             elif owner == "selection":
-                self.scene.clear_selection()
+                scene.clear_selection()
                 if source is not None:
                     source.notify_scene_changed()
             if owner in ("edit", "selection"):

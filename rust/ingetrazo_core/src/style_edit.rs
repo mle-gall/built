@@ -94,6 +94,29 @@ struct LineDraft {
     tags: Vec<String>,
 }
 
+/// Change only the selected tags in each saved view. Preserve all other
+/// visibility entries and restore their exact order on undo.
+#[pyfunction]
+pub fn tags_in_saved_views(history: &Bound<'_, PyAny>, keys: Vec<String>, hidden: bool) -> PyResult<()> {
+    let scene = history.getattr("scene")?;
+    if scene.getattr("worksession_read_only").is_ok_and(|v| v.is_truthy().unwrap_or(false)) { return Ok(()); }
+    for key in &keys {
+        if scene.call_method1("layer_by_key", (key,))?.is_none() { return Ok(()); }
+    }
+    let mut edit = StyleEdit::new("Change tag visibility in saved scenes");
+    for view in scene.getattr("saved_views")?.try_iter()? {
+        let view = view?;
+        let mut after = view.getattr("hidden_layers")?.extract::<Option<Vec<String>>>()?.unwrap_or_default();
+        if hidden {
+            for key in &keys {
+                if !after.contains(key) { after.push(key.clone()); }
+            }
+        } else { after.retain(|key| !keys.contains(key)); }
+        edit.stage(&view, "hidden_layers", after.into_pyobject(history.py())?.as_any())?;
+    }
+    edit.submit(history)
+}
+
 #[pyfunction]
 pub fn edit_line_type(history: &Bound<'_, PyAny>, verb: &str, draft: &str) -> PyResult<String> {
     let d: LineDraft =

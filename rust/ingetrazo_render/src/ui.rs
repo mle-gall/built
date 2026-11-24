@@ -234,6 +234,7 @@ pub struct Node {
     selected: u32,
     dim: bool,
     local_placement: bool,
+    control_tips: [String; 2],
     /// The selection, marked once (tree A): 1 this row holds it (lit), 2 a
     /// row above the one holding it (a quiet dot), 0 neither.
     mark: u8,
@@ -451,7 +452,7 @@ impl Ui {
         let g = |v: &Vec<i64>, i: usize| v.get(i).copied().unwrap_or(0);
         let s = |v: &Vec<String>, i: usize| v.get(i).cloned().unwrap_or_default();
         let mut linked_ancestors: Vec<bool> = Vec::new();
-        col.nodes = rows.into_iter().map(|(t, n)| {
+        col.nodes = rows.into_iter().map(|(mut t, n)| {
             let raw = s(&t, 2);
             let (kind, tip) = match raw.split_once('\u{1e}') {
                 Some((k, tip)) => (k.to_string(), tip.to_string()),
@@ -462,7 +463,11 @@ impl Ui {
             let linked = linked_ancestors.last().copied().unwrap_or(false) || key.starts_with("n:link:") || s(&t, 4) == "link";
             linked_ancestors.push(linked);
             Node {
-            dim: g(&n, 11) != 0,
+            control_tips: if (g(&n, 5) == 2 || g(&n, 6) == 2) && t.len() >= 7 {
+                let lock = t.pop().unwrap();
+                [t.pop().unwrap(), lock]
+            } else { Default::default() },
+            dim: g(&n, 11) != 0 || g(&n, 5) == 2,
             local_placement: !linked && matches!(g(&n, 4), 1 | 2) && (key.starts_with("i:") || key.starts_with("c:")),
             key, name: s(&t, 1), kind, tip, badge: s(&t, 3), icon: s(&t, 4),
             depth: g(&n, 0) as usize, count: g(&n, 1) as u32, problems: g(&n, 2) as u32, active: g(&n, 3) != 0,
@@ -1936,11 +1941,18 @@ impl Ui {
                                     let g = ui.painter().layout_no_wrap(n.count.to_string(), meta(), DIM);
                                     ui.painter().galley(pos2(count_col - g.size().x, cy - g.size().y / 2.0), g, DIM);
                                 }
-                                let show_ctl = resp.hovered() || n.eye == 0 || n.lock == 1;
+                                let show_ctl = resp.hovered() || n.eye == 0 || n.lock >= 1;
                                 let control_edge = cols.flags.map_or(count_col, |(_, b)| b + 36.0);
                                 let (_, lock_r) = tree_slots(ui, control_edge, cy, -1, n.lock, show_ctl || col.lens == Lens::Drawing);
                                 let eye_r = Rect::from_center_size(pos2(rect.min.x + 10., cy), vec2(16., ROW_H));
-                                if n.eye >= 0 { kit::paint_eye(ui, eye_r, n.eye != 0); }
+                                if n.eye >= 0 { kit::paint_row_eye(ui, eye_r, n.eye); }
+                                if resp.hovered() {
+                                    for (slot, tip) in [(eye_r, &n.control_tips[0]), (lock_r, &n.control_tips[1])] {
+                                        if !tip.is_empty() && ui.rect_contains_pointer(slot) {
+                                            resp.clone().on_hover_text(tip);
+                                        }
+                                    }
+                                }
                                 // A row with no eye or lock (problems, library) keeps its width for the name.
                                 let bare = n.eye < 0 && n.lock < 0 && n.problems == 0;
                                 let right = if col.lens == Lens::Drawing { cols.name_right } else if col.lens == Lens::Export { cells_left.min(cols.name_right) - 8.0 }
@@ -2108,7 +2120,7 @@ impl Ui {
                                         actions.push(edit.unwrap_or_else(|| format!("{}\u{1f}{}", if n.local_placement { "roweye" } else { "eye" }, n.key)));
                                     } else if n.lock >= 0 && lock_r.expand(2.0).contains(p) {
                                         let edit = (col.lens == Lens::Drawing).then(|| col.styles.state_action(n, true)).flatten();
-                                        actions.push(edit.unwrap_or_else(|| format!("lock\u{1f}{}", n.key)));
+                                        actions.push(edit.unwrap_or_else(|| format!("{}\u{1f}{}", if n.local_placement { "rowlock" } else { "lock" }, n.key)));
                                     } else if col.lens == Lens::Drawing && n.cells.len() >= 7 && !linked && col.filing.is_none() {
                                         col.focused_row = Some(n.key.clone());
                                         resp.surrender_focus();
@@ -2295,8 +2307,8 @@ impl Ui {
                 ("-", ""), ("linkopen", "Edit source"), ("linkfinder", "Show in Finder"),
                 ("linkreload", "Reload"), ("linkrelink", "Locate…"), ("linkunlink", "Unlink")];
             let section_menu: &[(&str, &str)] = &[("sectioncut", "Toggle cut"), ("eye", "Show / hide"), ("deleterows", "Delete")];
-            let tag_menu: &[(&str, &str)] = &[("newtag", "New tag"), ("rename", "Rename"), ("tagactive", "Make active"), ("tagassign", "Move selection here"), ("tagselect", "Select items"), ("tagisolate", "Isolate"), ("deletetag", "Delete"), ("purgetags", "Purge unused tags…")];
-            let menu = if key.starts_with("preview-tag:") { tag_menu } else if key.starts_with("preview-folder:") { &[("newtag", "New tag in folder")] } else if key.starts_with("section:") { section_menu } else if row == 0 && key.starts_with("n:link") { link_menu } else if row == 0 { node_menu }
+            let tag_menu: &[(&str, &str)] = &[("newtag", "New tag"), ("rename", "Rename"), ("tagactive", "Make active"), ("tagassign", "Move selection here"), ("tagselect", "Select items"), ("tagisolate", "Toggle tag isolation"), ("mergetag", "Merge into…"), ("scenetaghide", "Hide in all saved scenes"), ("scenetagshow", "Show in all saved scenes"), ("deletetag", "Delete"), ("purgetags", "Purge unused tags…")];
+            let menu = if key.starts_with("preview-tag:") { tag_menu } else if key.starts_with("preview-folder:") { &[("newtag", "New tag in folder"), ("tagisolate", "Toggle tag isolation")] } else if key.starts_with("section:") { section_menu } else if row == 0 && key.starts_with("n:link") { link_menu } else if row == 0 { node_menu }
                 else if row == 5 { comp_menu } else { item_menu };
             let resp = egui::Area::new(egui::Id::new("row_menu"))
                 .fixed_pos(at + vec2(4.0, 4.0))
@@ -2308,7 +2320,7 @@ impl Ui {
                         let row = col.nodes.iter().find(|n| n.key == key);
                         let editable_file = row.is_some_and(|n| n.icon.starts_with("file:") && !n.badge.starts_with("via "));
                         for (id, label) in menu {
-                            if matches!(*id, "rename" | "deletetag") && key == "preview-tag:Layer 0" { continue; }
+                            if matches!(*id, "rename" | "deletetag" | "mergetag" | "tagisolate") && key == "preview-tag:Layer 0" { continue; }
                             if row.is_some_and(|n| n.icon == "file:missing") &&
                                 matches!(*id, "contents" | "isolate" | "zoom" | "linkopen" | "linkfinder" | "linkreload") { continue; }
                             if matches!(*id, "linkreload" | "linkrelink" | "linkunlink") &&
@@ -2341,6 +2353,8 @@ impl Ui {
                                         col.renaming = Some((key.clone(), name));
                                         col.focus_rename = true;
                                     }
+                                    "tagisolate" if row.is_some() => actions.push(col.styles.isolate_action(row.unwrap())),
+                                    "lockitem" if row.is_some_and(|n| n.local_placement) => actions.push(format!("rowlock\u{1f}{key}")),
                                     "kind" => { col.kind_menu = Some((key.clone(), pos2(rect.max.x + 4.0, rect.min.y))); }
                                     _ => actions.push(format!("{id}\u{1f}{key}")),
                                 }
@@ -2413,6 +2427,10 @@ impl Ui {
                                             close = true;
                                         }
                                     }
+                                }
+                                if col.styles.catalog.tag_isolation && menu_row(ui, &("endtagisolate".into(), "End tag isolation".into(), String::new(), String::new(), -1, true)) {
+                                    actions.push("isolatetags\u{1f}[]".into());
+                                    close = true;
                                 }
                                 if col.lens == Lens::Drawing && menu_row(ui, &("purgetags".into(), "Purge unused tags…".into(), String::new(), String::new(), -1, true)) {
                                     actions.push("purgetags\u{1f}".into());
@@ -3463,8 +3481,11 @@ fn an_eye_gesture_never_opens_or_drags_its_occurrence() {
     let Some(mut ui) = test_chrome() else { return };
     ui.ctx = test_context();
     ui.set_tree(["House", "Shed"].into_iter().map(|name|
-        (vec![format!("i:{name}"), name.into()], vec![0, 0, 0, 0, 1, 1, 0])
+        (vec![format!("i:{name}"), name.into(), "".into(), "".into(), "group".into(), "Hidden by Building".into(), "Locked by Building".into()], vec![0, 0, 0, 0, 1, 2, 2])
     ).collect(), 0);
+    let house = &ui.column.as_ref().unwrap().nodes[0];
+    assert!(house.dim && house.cells.is_empty());
+    assert_eq!(house.control_tips, ["Hidden by Building", "Locked by Building"]);
     for _ in 0..3 { tree_frame(&mut ui, vec![]); }
     let at = tree_frame(&mut ui, vec![]);
     let eye = pos2(at["Name"].x - 26., at["House"].y);
