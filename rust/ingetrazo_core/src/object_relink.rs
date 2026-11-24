@@ -242,3 +242,84 @@ pub(crate) fn relink_hole(mesh: &Obj<'_>, face: &Obj<'_>, ring: &Obj<'_>) -> PyR
         .append(ring)?;
     edit_ring(mesh, face, ring, RadialEdit::Restore)
 }
+
+#[pyfunction]
+pub(crate) fn find_edge<'py>(v0: &Obj<'py>, v1: &Obj<'py>) -> PyResult<Option<Obj<'py>>> {
+    let py = v0.py();
+    let a = v0.getattr(pyo3::intern!(py, "edges"))?;
+    let b = v1.getattr(pyo3::intern!(py, "edges"))?;
+    let (incident, small, target) = if a.len()? <= b.len()? {
+        (a, v0, v1)
+    } else {
+        (b, v1, v0)
+    };
+    for e in incident.try_iter()? {
+        let e = e?;
+        if e.call_method1(pyo3::intern!(py, "other"), (small,))?
+            .is(target)
+        {
+            return Ok(Some(e));
+        }
+    }
+    Ok(None)
+}
+
+fn mark_edges(mesh: &Obj<'_>) -> PyResult<()> {
+    let py = mesh.py();
+    mesh.setattr(pyo3::intern!(py, "_chunk_dirty"), true)?;
+    let serial = pyo3::intern!(py, "_mut_serial");
+    mesh.setattr(serial, mesh.getattr(serial)?.add(1)?)
+}
+#[pyfunction]
+pub(crate) fn link_edge<'py>(mesh: &Obj<'py>, v0: &Obj<'py>, v1: &Obj<'py>) -> PyResult<Obj<'py>> {
+    let py = mesh.py();
+    mark_edges(mesh)?;
+    let e = mesh.call_method1(pyo3::intern!(py, "find_edge"), (v0, v1))?;
+    if !e.is_none() {
+        return Ok(e);
+    }
+    let key = mesh
+        .getattr(pyo3::intern!(py, "_keys"))?
+        .call_method0(pyo3::intern!(py, "__next__"))?;
+    let kw = PyDict::new(py);
+    kw.set_item(pyo3::intern!(py, "key"), key)?;
+    let e = py
+        .import(pyo3::intern!(py, "core.mesh"))?
+        .getattr(pyo3::intern!(py, "Edge"))?
+        .call((v0, v1), Some(&kw))?;
+    for v in [v0, v1] {
+        v.getattr(pyo3::intern!(py, "edges"))?
+            .call_method1(pyo3::intern!(py, "add"), (&e,))?;
+    }
+    mesh.getattr(pyo3::intern!(py, "edges"))?
+        .call_method1(pyo3::intern!(py, "append"), (&e,))?;
+    Ok(e)
+}
+#[pyfunction]
+pub(crate) fn add_edge<'py>(mesh: &Obj<'py>, a: &Obj<'py>, b: &Obj<'py>) -> PyResult<Obj<'py>> {
+    let py = mesh.py();
+    let vertex = mesh.getattr(pyo3::intern!(py, "vertex"))?;
+    let v0 = vertex.call1((a,))?;
+    let v1 = vertex.call1((b,))?;
+    if v0.is(&v1) {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "degenerate edge: endpoints weld to one vertex",
+        ));
+    }
+    mesh.call_method1(pyo3::intern!(py, "_link_edge"), (v0, v1))
+}
+#[pyfunction]
+pub(crate) fn remove_edge(mesh: &Obj<'_>, edge: &Obj<'_>) -> PyResult<()> {
+    let py = mesh.py();
+    mark_edges(mesh)?;
+    for end in [pyo3::intern!(py, "v0"), pyo3::intern!(py, "v1")] {
+        edge.getattr(end)?
+            .getattr(pyo3::intern!(py, "edges"))?
+            .call_method1(pyo3::intern!(py, "discard"), (edge,))?;
+    }
+    let edges = mesh.getattr(pyo3::intern!(py, "edges"))?;
+    if edges.contains(edge)? {
+        edges.call_method1(pyo3::intern!(py, "remove"), (edge,))?;
+    }
+    Ok(())
+}
