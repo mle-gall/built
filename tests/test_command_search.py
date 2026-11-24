@@ -290,9 +290,8 @@ def setup(app):
 
 
 def test_sheet_binding_shares_the_keyboard_table_and_follows_the_active_document(win, monkeypatch):
-    from core.input_types import Qt
     from core.shortcuts import export_shortcuts, import_shortcuts
-    from ingetrazo_render import KeyEvent
+    from ingetrazo_render import KeyEvent, shortcut_text
     from tests.scene_controls import chrome
     from views import wgpu_sheets
     from ingetrazo_render.settings_sheet import SettingsSheet
@@ -309,12 +308,13 @@ def test_sheet_binding_shares_the_keyboard_table_and_follows_the_active_document
     assert data["shortcuts"]["tool:line"] == data["shortcuts"]["sheet:cota_cadena"] == "L"
     assert import_shortcuts(win, {"format": data["format"], "shortcuts": {
         "sheet:cota_cadena": "F8", "tool:line": "L"}})[:2] == (2, 0)
+    _, _, f8, _ = shortcut_text("F8")
     for _ in range(2):
         ws = wgpu_sheets.composer_for(win)._ws
         ws.shown, ws.view = True, win.view
         monkeypatch.setattr(win.view, "_sheets_ws", ws, raising=False)
         with chrome(win):
-            ws.key(KeyEvent(True, Qt.Key_F8, 0, "", False), True)
+            ws.key(KeyEvent(True, f8, 0, "", False), True)
             assert ws.composer.tool_mode == "cota_cadena"
             query(win, "chain dimension")
             wgpu_ui.command_action(win.view, win, "cmdshortcut", "0")
