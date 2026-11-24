@@ -116,14 +116,7 @@ class _HoverEvent:
 
 
 def _active_cut(scene):
-    """The section plane actually CUTTING (cuts shown + one active), or
-    None. A module function so stub viewports in tests degrade gracefully;
-    picks and snaps filter by it — what the cut hides is not clickable nor
-    snappable."""
-    if not getattr(scene, "show_section_cuts", True):
-        return None
-    active = getattr(scene, "active_section", None)
-    return active() if callable(active) else None
+    return ingetrazo_core.active_cut(scene)
 
 
 class _SnapEdge:
@@ -161,42 +154,11 @@ def _copy_snap_edge(e: _SnapEdge) -> _SnapEdge:
 
 
 def _snap_context_of(vp, place):
-    """What the ScreenTip says the snapped geometry belongs to.
-
-    ``None`` for the open context's own loose geometry (and at the root);
-    ``"outside"`` for everything drawn around an open group / component —
-    its loose mesh, another component, the rest of the model — so the tip
-    can say the point is not in the thing being edited; otherwise
-    ``"group"`` / ``"component"`` for the placement it was reached through.
-    """
-    if place is None:
-        return None
-    scene = getattr(vp, "scene", None)
-    ctx = getattr(scene, "edit_group", None)
-    if ctx is not None and place is not ctx \
-            and getattr(place, "context", None) is not ctx:
-        return "outside"
-    owner = getattr(place, "owner", None) or place
-    is_comp = getattr(owner, "is_instance", None)
-    return "component" if (is_comp is not None and is_comp()) else "group"
+    return ingetrazo_core.snap_context_of(vp, place)
 
 
 def _group_pseudo_edge(idx, i: int) -> _SnapEdge:
-    """The i-th group hard edge of the pick index as a world pseudo-edge
-    that knows its owner and whether that is a group or a component — or
-    the rest of the model around an open context ("outside")."""
-    gi = getattr(idx, "gedge_gi", None)
-    groups = getattr(idx, "gedge_groups", None)
-    g = int(gi[i]) if gi is not None and groups else 0
-    owner = groups[g] if gi is not None and groups else None
-    ctxs = getattr(idx, "gedge_ctx", None)
-    if ctxs is not None and g < len(ctxs):
-        context = ctxs[g]
-    else:
-        is_comp = getattr(owner, "is_instance", None)
-        context = "component" if (is_comp is not None and is_comp()) else "group"
-    return _SnapEdge(QVector3D(*idx.gedge_a[i]), QVector3D(*idx.gedge_b[i]),
-                     in_group=True, context=context, group=owner)
+    return ingetrazo_core.group_pseudo_edge(idx, i)
 
 
 #: The depth slack of a line the Select tool may take: a fraction of the
@@ -225,33 +187,7 @@ def linework_slack_point(camera, world):
 
 
 def _boxes_around(keys, x0, y0, x1, y1, px, py, owner_of, scene):
-    """The owners (``owner_of(key)``) of the screen boxes holding
-    ``(px, py)``, smallest box first, each once: ``keys`` and the four
-    bound arrays per segment, a box being the bounds of a key's segments."""
-    import numpy as np
-    if not len(keys):
-        return []
-    uniq, inv = np.unique(keys, return_inverse=True)
-    lo_x = np.full(len(uniq), np.inf)
-    lo_y = np.full(len(uniq), np.inf)
-    hi_x = np.full(len(uniq), -np.inf)
-    hi_y = np.full(len(uniq), -np.inf)
-    np.minimum.at(lo_x, inv, x0)
-    np.minimum.at(lo_y, inv, y0)
-    np.maximum.at(hi_x, inv, x1)
-    np.maximum.at(hi_y, inv, y1)
-    inside = np.flatnonzero((lo_x <= px) & (px <= hi_x)
-                            & (lo_y <= py) & (py <= hi_y))
-    area = (hi_x - lo_x) * (hi_y - lo_y)
-    out, seen = [], set()
-    for k in inside[np.argsort(area[inside])]:
-        owner = owner_of(int(uniq[k]))
-        if owner is None or id(owner) in seen \
-                or not scene.entity_selectable(owner):
-            continue
-        seen.add(id(owner))
-        out.append(owner)
-    return out
+    return ingetrazo_core.boxes_around(keys, x0, y0, x1, y1, px, py, owner_of, scene)
 
 
 
@@ -534,140 +470,23 @@ def _content_ver(vp):
 
 
 def _plan_curved_edges(plan):
-    """The indices of a lazy plan's curve edges, in edge order (memoised
-    on the plan, which cannot change while the mesh stays lazy)."""
-    curved = plan.extra.get("curved_edges")
-    if curved is None:
-        import numpy as np
-        ids = plan.curve
-        # Most meshes have no curve at all: ``count`` tells in C.
-        curved = plan.extra["curved_edges"] = (
-            np.empty(0, dtype=np.int64) if ids.count(None) == len(ids)
-            else np.array([i for i, c in enumerate(ids) if c is not None],
-                          dtype=np.int64))
-    return curved
+    return ingetrazo_core.plan_curved_edges(plan)
 
 
 def _lazy_edge_may_be_curve(mesh, a, b, tol=1e-3) -> bool:
-    """Whether the edge of ``mesh`` from ``a`` to ``b`` (its own space) may
-    be a curve's, asked of a still-lazy mesh's plan without building it.
-    False only when no edge with both ends within ``tol`` of the two points
-    — far wider than the weld lookups that find the real edge — carries a
-    curve; a built (or never lazy) mesh always answers True."""
-    from core.lazy_mesh import plan_of
-    plan = plan_of(mesh)
-    if plan is None:
-        return True
-    if not len(plan.edges):
-        return False
-    curved = _plan_curved_edges(plan)
-    if not len(curved):
-        return False
-    import numpy as np
-    ends = plan.edges[curved]
-    p0, p1 = plan.pos[ends[:, 0]], plan.pos[ends[:, 1]]
-    pa = np.array((a.x(), a.y(), a.z()))
-    pb = np.array((b.x(), b.y(), b.z()))
-
-    def near(p, q):
-        return (np.abs(p - q) <= tol).all(axis=1)
-    return bool(((near(p0, pa) & near(p1, pb))
-                 | (near(p0, pb) & near(p1, pa))).any())
+    return ingetrazo_core.lazy_edge_may_be_curve(mesh, a, b, tol)
 
 
 def _snap_dropped_loose(vp):
-    """Ids of the loose edges the inference must not land on, cached per scene
-    version. An EMPTY set means ``DocumentInteraction._snap_scene`` may hand the raw
-    scene over, with no list to build on a hover.
-
-    The engine walked the loose mesh as it is, so an edge hidden on its own —
-    Hide with the eraser, the seam of a smoothed surface, an edge on a hidden
-    layer — still offered its endpoints and its line. The cursor lit up on
-    geometry that draws nothing, and a line drawn to that spot cut the face
-    underneath at a point the user could not see: the "phantom corner" that
-    segmented a fresh face out of nowhere. Render, pick and ``bounds()``
-    already skip those edges; this asks the same rule
-    (:meth:`Scene.edge_snappable`) once per change instead of once per edge
-    per hover.
-
-    Module-level, like :func:`_cache_ver`, so the stub viewports in tests hit
-    it too."""
-    scene = vp.scene
-    key = (_cache_ver(vp), id(scene.mesh), len(scene.mesh.edges),
-           bool(getattr(scene, "show_hidden_geometry", False)))
-    memo = getattr(vp, "_loose_snap_drops_cache", None)
-    if memo is not None and memo[0] == key:
-        return memo[1]
-    drops = {element_identity(e) for e in scene.edges if not scene.edge_snappable(e)}
-    vp._loose_snap_drops_cache = (key, drops)
-    return drops
+    return ingetrazo_core.snap_dropped_loose(vp)
 
 
 def _px_near(x, y, ok, px, py, thr, pts=None, seen=None):
-    """The projected points ``(x, y)`` in front (``ok``) within ``thr`` px of
-    ``(px, py)``: their indices in order and distances, as one ``np.hypot``
-    pass over all of them gives them. The native engine finds the
-    candidates (the 650 000 corners of the plant of #158 took 12 ms a
-    pointer move in NumPy) a hair wider than ``thr``, and those are measured
-    here the same way. With the points ``pts`` and the frame's limits
-    ``seen`` (see DocumentInteraction._depth_limits), those the frame hides are left
-    out as well, as DocumentInteraction._depth_hidden leaves them out."""
-    import numpy as np
-    from core import _native
-    mod = _native.native
-    if mod is not None and hasattr(mod, "points_near_px") and len(x) > 4096:
-        args = (np.ascontiguousarray(x, dtype=np.float64),
-                np.ascontiguousarray(y, dtype=np.float64),
-                np.ascontiguousarray(ok, dtype=bool),
-                float(px), float(py), float(thr) * (1.0 + 1e-6) + 1e-6)
-        hidden = None
-        if seen is not None and _NEAR_SEEN_NATIVE:
-            try:
-                k = mod.points_near_px(
-                    *args, np.ascontiguousarray(pts, dtype=np.float64), seen)
-            except TypeError:               # an older module
-                k = mod.points_near_px(*args)
-                hidden = True
-        else:
-            k = mod.points_near_px(*args)
-            hidden = seen is not None or None
-        d = np.hypot(x[k] - px, y[k] - py)
-        near = d < thr
-        k, d = k[near], d[near]
-    else:
-        d = np.where(ok, np.hypot(x - px, y - py), np.inf)
-        k = np.flatnonzero(d < thr)
-        d = d[k]
-        hidden = seen is not None or None
-    if hidden and len(k):
-        keep = ~DocumentInteraction._depth_hidden(seen, pts[k], x[k], y[k])
-        k, d = k[keep], d[keep]
-    return k, d
+    return ingetrazo_core.px_near(x, y, ok, px, py, thr, pts, seen)
 
 
 def _nearest_within(d, radius, cap):
-    """The indices of ``d`` under ``radius``: all of them in order, or past
-    ``cap`` the nearest ``cap`` by distance and then index. The native
-    engine picks those in one pass (475 000 fixed group edges lay within
-    the radius over the plant of #158: ~4 ms of NumPy, twice a move); the
-    same ones, by distance and index, whose order a stable sort by
-    distance keeps."""
-    import numpy as np
-    from core import _native
-    mod = _native.native
-    if (_NEAREST_NATIVE and cap > 0 and len(d) > 4096 and mod is not None
-            and hasattr(mod, "nearest_within")):
-        return np.asarray(mod.nearest_within(
-            np.ascontiguousarray(d, dtype=np.float64), float(radius),
-            int(cap)), dtype=np.int64)
-    cand = np.flatnonzero(d < radius)
-    if len(cand) > cap:
-        dc = d[cand]
-        if len(cand) > 4 * cap:
-            part = np.argpartition(dc, cap - 1)[:cap]
-            cand, dc = cand[part], dc[part]
-        cand = cand[np.lexsort((cand, dc))[:cap]]
-    return cand
+    return ingetrazo_core.document_nearest_within(d, radius, cap)
 
 
 #: The cursor's edge and the snap's read off one search in an event
@@ -696,32 +515,7 @@ _QV_HYPOT3 = qt_hypot()
 
 
 def _hypot3_f32(a, kind="libstdc++"):
-    """The three-argument ``std::hypot`` in float of the C++ library
-    ``kind``, row by row of ``a`` (N, 3) float32, as Qt's
-    ``QVector3D::length`` computes it: libstdc++ scales the largest
-    magnitude out; MSVC's STL (Qt on Windows) swaps it to the front, keeps
-    it when the other two are below its epsilon and adds the other two
-    ratios' squares to 1 in the order the swaps left them."""
-    import numpy as np
-    a = np.abs(a)
-    if kind == "msvc":
-        x, y, z = a[:, 0], a[:, 1], a[:, 2]
-        s = y > x
-        x, y = np.where(s, y, x), np.where(s, x, y)
-        s = z > x
-        x, z = np.where(s, z, x), np.where(s, x, z)
-        e = x * np.float32(np.finfo(np.float32).eps)
-        with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
-            p, q = y / x, z / x
-            r = x * np.sqrt((np.float32(1) + p * p) + q * q)
-        r = np.where((e >= y) & (e >= z), x, r)
-        return np.where(np.isinf(a).any(axis=1), np.float32(np.inf),
-                        r).astype(np.float32)
-    m = a.max(axis=1)
-    with np.errstate(divide="ignore", invalid="ignore"):
-        q = a / m[:, None]
-        s = (q[:, 0] * q[:, 0] + q[:, 1] * q[:, 1]) + q[:, 2] * q[:, 2]
-        return np.where(m > 0, m * np.sqrt(s), np.float32(0)).astype(np.float32)
+    return ingetrazo_core.hypot3_f32(a, kind)
 
 
 def _qv_hypot3():
