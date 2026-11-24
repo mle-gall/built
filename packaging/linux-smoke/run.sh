@@ -9,9 +9,9 @@ smoke() {
     local name=$1
     local dest; dest=$(mktemp -d)
     vulkaninfo --summary > "$dest/vulkan.log"
-    /target/debug/built --check "$fixture" > "$dest/check.log"
+    built --check "$fixture" > "$dest/check.log"
     printf '%s\n' wait-open 'wait 300' 'move 400 300' 'capture frame' state quit > "$dest/steps"
-    timeout 90 /target/debug/built --script "$dest/steps" --shots "$dest" "$fixture" > "$dest/session.log"
+    timeout 90 built --script "$dest/steps" --shots "$dest" "$fixture" > "$dest/session.log"
     /work/.venv/bin/python - "$dest" <<'PY'
 import json, sys
 from pathlib import Path
@@ -19,18 +19,22 @@ from PIL import Image
 root = Path(sys.argv[1])
 for filename, prefix in [('check.log', '[built] check ok '), ('session.log', '[built] state ')]:
     state = json.loads(next(line[len(prefix):] for line in (root / filename).read_text().splitlines() if line.startswith(prefix)))
+    assert Path(state['path']).name == 'slab-and-cube.igz' and not state['opening'], state
+    assert (state['faces'], state['edges']) == (6, 16), state
     assert state['instances'] == 1 and state['errors'] == 0 and not state['qt_modules'], state
 with Image.open(root / 'frame.png') as frame:
-    assert frame.size == (1280, 800) and len(set(frame.convert('RGB').resize((64, 40)).getdata())) > 16
+    assert frame.size == (1280, 800) and len(frame.convert('RGB').resize((64, 40)).getcolors(2560)) > 16
 PY
     mkdir -p "/result/$name"
     cp "$dest"/{frame.png,check.log,session.log,vulkan.log} "/result/$name/"
 }
-export -f smoke
-export fixture
+if [[ $1 == x11-session ]]; then
+    smoke x11
+    exit
+fi
 if [[ $1 != wayland ]]; then
     unset WAYLAND_DISPLAY
-    xvfb-run -a -s '-screen 0 1440x1000x24' bash -ec 'smoke x11'
+    xvfb-run -a -s '-screen 0 1440x1000x24' bash "$0" x11-session
 fi
 if [[ $1 != x11 ]]; then
     unset DISPLAY

@@ -6,8 +6,12 @@ RUN sed -i 's,http://deb.debian.org,https://deb.debian.org,g' /etc/apt/sources.l
     xvfb xauth weston mesa-vulkan-drivers vulkan-tools libxkbcommon-x11-0 libxcb-cursor0 && rm -rf /var/lib/apt/lists/*
 WORKDIR /work
 RUN python3 -m venv .venv && .venv/bin/pip install numpy manifold3d mapbox-earcut maturin pillow
-COPY . .
+COPY rust rust
+COPY resources resources
+COPY AUTHORS .
 RUN cargo build --locked --manifest-path rust/built_app/Cargo.toml && \
     .venv/bin/maturin build --locked -m rust/ingetrazo_core/Cargo.toml -o /tmp/wheels && \
-    .venv/bin/pip install /tmp/wheels/*.whl
+    .venv/bin/pip install /tmp/wheels/*.whl && \
+    install /target/debug/built /usr/local/bin/built && rm -rf /target /tmp/wheels "$CARGO_HOME/registry"
+COPY . .
 ENTRYPOINT ["bash", "/work/packaging/linux-smoke/run.sh"]
