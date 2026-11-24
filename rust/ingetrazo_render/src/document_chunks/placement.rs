@@ -513,7 +513,47 @@ fn instance_chunk<'py>(v: &Obj<'py>, group: &Obj<'py>) -> PyResult<Obj<'py>> {
     Ok(entry)
 }
 
+#[pyclass(frozen)]
+struct PlacementMap {
+    xf: Transform,
+    points: bool,
+}
+#[pymethods]
+impl PlacementMap {
+    fn __call__<'py>(&self, rows: &Obj<'py>) -> PyResult<Obj<'py>> {
+        let a = rows
+            .py()
+            .import("numpy")?
+            .call_method1("asarray", (rows, "float64"))?;
+        self.xf
+            .array(&a, if self.points { "point" } else { "vector" })
+    }
+}
+#[pyfunction]
+fn placed_maps<'py>(xf: &Obj<'py>) -> PyResult<Obj<'py>> {
+    let py = xf.py();
+    let m = xf.call_method0("data")?.extract::<[f64; 16]>()?;
+    let linear = [m[0], m[4], m[8], m[1], m[5], m[9], m[2], m[6], m[10]]
+        .to_vec()
+        .into_pyarray(py)
+        .reshape([3, 3])?;
+    let mapper = |points| {
+        Py::new(
+            py,
+            PlacementMap {
+                xf: Transform::new(m, DVec3::ZERO),
+                points,
+            },
+        )
+    };
+    Ok((linear, mapper(false)?, mapper(true)?)
+        .into_pyobject(py)?
+        .into_any())
+}
+
 pub(super) fn register(m: &Bound<PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(placed_maps, m)?)?;
+
     m.add_function(wrap_pyfunction!(shift_obb, m)?)?;
     m.add_function(wrap_pyfunction!(shift_chunk, m)?)?;
     m.add_function(wrap_pyfunction!(shift_instance_entry, m)?)?;

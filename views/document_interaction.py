@@ -119,38 +119,11 @@ def _active_cut(scene):
     return ingetrazo_core.active_cut(scene)
 
 
-class _SnapEdge:
-    """Lightweight edge stand-in fed to the snap engine for group geometry —
-    ``compute_snap`` only reads ``.a``/``.b`` (world endpoints). ``center``
-    marks the degenerate one that carries a circle's centre."""
-
-    __slots__ = ("a", "b", "center", "component_origin", "arc_midpoint",
-                 "guide", "in_group", "context", "group", "figure")
-
-    def __init__(self, a, b, center: bool = False, component_origin: bool = False,
-                 arc_midpoint: bool = False, guide: bool = False,
-                 in_group: bool = False, context=None, group=None,
-                 figure: bool = False) -> None:
-        self.a = a
-        self.b = b
-        self.figure = figure                       # a face-me figure's feet
-        self.center = center
-        self.component_origin = component_origin   # a group's insertion point
-        self.arc_midpoint = arc_midpoint           # the middle of an arc's sweep
-        self.guide = guide                         # a construction guide: 'on line'
-        self.in_group = in_group                   # magenta point inferences
-        self.context = context                     # "group" / "component" for the tip
-        self.group = group                         # the top-level owner, when known
+_SnapEdge = ingetrazo_render.SnapEdge
 
 
 def _copy_snap_edge(e: _SnapEdge) -> _SnapEdge:
-    """A fresh ``_SnapEdge`` like ``e``: one search's edges handed to two
-    callers (see DocumentInteraction._nearby_edges_unbaked) are not shared."""
-    c = _SnapEdge.__new__(_SnapEdge)
-    for k in _SnapEdge.__slots__:
-        v = getattr(e, k)
-        setattr(c, k, QVector3D(v) if isinstance(v, QVector3D) else v)
-    return c
+    return ingetrazo_render.copy_snap_edge(e)
 
 
 def _snap_context_of(vp, place):
@@ -202,17 +175,7 @@ _LOOSE_SNAP_CAP = 3000
 
 
 def _inst_proto_of(mod, base):
-    """core._native's InstanceProto of a prototype's local bake."""
-    import numpy as np
-    z = np.zeros((0, 3))
-    v0 = base.get("v0")
-    edges = (np.frombuffer(base["edges"], dtype=np.float32)
-             .reshape(-1, 6).astype(np.float64)
-             if base.get("edges") else np.zeros((0, 6)))
-    return mod.InstanceProto(
-        np.ascontiguousarray(v0) if v0 is not None else z,
-        np.ascontiguousarray(base["e1"]) if v0 is not None else z,
-        np.ascontiguousarray(base["e2"]) if v0 is not None else z, edges)
+    return ingetrazo_render.inst_proto_of(mod, base)
 
 
 _PickWarm = ingetrazo_render.PickWarm
@@ -254,12 +217,7 @@ class _LazyChunk(dict):
         self._later = later              # field -> callable making it
 
     def __missing__(self, key):
-        make = self._later.pop(key, None)
-        if make is None:
-            raise KeyError(key)
-        value = make()
-        dict.__setitem__(self, key, value)
-        return value
+        return ingetrazo_render.lazy_chunk_value(self, key)
 
     def __setitem__(self, key, value):
         self._later.pop(key, None)
@@ -272,9 +230,7 @@ class _LazyChunk(dict):
         return self[key] if key in self else default
 
     def _made(self):
-        for key in list(self._later):
-            self[key]                    # noqa: B018 — makes it
-        return self
+        return ingetrazo_render.lazy_chunk_fill(self)
 
     def keys(self):
         return dict.keys(self._made())
@@ -301,12 +257,7 @@ _OCCL_NATIVE = True
 
 
 def _occlusion_native():
-    """core._native when it can take ``_occluded_many``'s rays, else None."""
-    if not _OCCL_NATIVE:
-        return None
-    from core import _native
-    mod = _native.native
-    return mod if mod is not None and hasattr(mod, "occlusion_span") else None
+    return ingetrazo_render.occlusion_native()
 
 
 #: Lazy placements are filtered by core._native's spatial index before
@@ -393,10 +344,7 @@ def _proto_wrapper(vp, mesh, paint=None):
 
 
 def _fp_winding(fp) -> int:
-    """The flip count a chunk fingerprint was taken at, 0 when it has no such
-    term (see ``_mesh_fingerprint``). Module-level for the same reason as
-    :func:`_proto_wrapper`."""
-    return fp[7][1] if len(fp) > 7 and fp[7][0] == "winding" else 0
+    return ingetrazo_render.fp_winding(fp)
 
 
 def _flags_read(mesh, entry: dict) -> None:
@@ -507,23 +455,7 @@ def _occlusion_block(o, d, v0, e1, e2):
 
 
 def _placed_maps(xf):
-    """``(L, tv, tp)`` of a placement matrix (QMatrix4x4): its linear part
-    and the maps a component bake puts local directions and positions
-    through. Term by term, not ``a @ L.T``: a BLAS product sums in an order
-    of its own (fused, blocked), and the native engine must find the very
-    same world triangles and corners without baking them (#158) —
-    ((x·L0 + y·L1) + z·L2) + t, as core/instances.rs writes it."""
-    import numpy as np
-    m = np.array(xf.data(), dtype=np.float64).reshape(4, 4, order="F")
-    L, t = m[:3, :3], m[:3, 3]
-
-    def tv(a):                           # direction vectors (no translation)
-        return (a[:, 0:1] * L[:, 0] + a[:, 1:2] * L[:, 1]
-                + a[:, 2:3] * L[:, 2])
-
-    def tp(a):                           # positions
-        return tv(a) + t
-    return L, tv, tp
+    return ingetrazo_render.placed_maps(xf)
 
 
 def _batch_instances(base, xfs, tri_parts, hard_parts, soft_parts,
@@ -749,31 +681,7 @@ class _AltWatch(object if NATIVE else QObject):
             pass
 
     def eventFilter(self, obj, ev) -> bool:
-        t = ev.type()
-        if t == QEvent.MouseButtonPress:
-            # Alt+click is a sample of its own, not a tap.
-            self._clean = False
-            return False
-        if t != QEvent.KeyPress and t != QEvent.KeyRelease:
-            return False
-        if ev.isAutoRepeat():
-            return False
-        if ev.key() != Qt.Key_Alt:
-            if t == QEvent.KeyPress:
-                self._clean = False           # Alt+Tab, Alt+F… is no tap
-            return False
-        down = t == QEvent.KeyPress
-        tap = not down and self._clean
-        self._clean = down
-        for vp in list(self._viewports):
-            try:
-                if down != vp._alt_down:
-                    vp._apply_alt_cursor(down)
-                if tap and vp._alt_tapped():
-                    tap = False       # the eyedropper state is shared: once
-            except RuntimeError:          # the C++ side already went
-                pass
-        return False
+        return ingetrazo_render.alt_filter(self, ev)
 
 
 def _face_geometry(f, memo, triangulate):
@@ -781,10 +689,7 @@ def _face_geometry(f, memo, triangulate):
 
 
 def _finite_point(p) -> bool:
-    """Whether ``p`` (a QVector3D or None) is a real point."""
-    import math
-    return p is not None and all(
-        math.isfinite(c) for c in (p.x(), p.y(), p.z()))
+    return ingetrazo_render.finite_point(p)
 
 
 def _curved_faces(mesh) -> set:
