@@ -7,6 +7,8 @@ mod panic_log;
 mod overlay;
 mod commands;
 pub mod model_menu;
+pub mod extension_menu;
+mod extension_setup;
 mod model_views;
 mod pane_dividers;
 /// The one verb source: kinds, menu rows, inspector verbs, dispatch.
@@ -2494,6 +2496,9 @@ impl Renderer {
     fn ui_set_sheet(&mut self, title: String, body: String, tone: String, buttons: Vec<(String, String, String, u8)>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_sheet(title, body, tone, buttons); }
     }
+    fn ui_extension_menu(&mut self, rows: Vec<extension_menu::Row>) {
+        if let Some(ui) = self.ui.as_mut() { ui.extension_menu(rows); }
+    }
     fn ui_plugin_panel(&mut self, raw: &str) -> PyResult<()> {
         if let Some(ui) = self.ui.as_mut() {
             ui.plugin_panel(raw).map_err(pyo3::exceptions::PyValueError::new_err)?;
@@ -3006,6 +3011,8 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(captured_frame::archive_picture_png,m)?)?;
     m.add_class::<model_views::ModelViews>()?;
     m.add_class::<model_views::DocumentViews>()?;
+    m.add_class::<extension_menu::ExtensionMenus>()?;
+    m.add_function(wrap_pyfunction!(extension_setup::setup_extension_menus,m)?)?;
     m.add_function(wrap_pyfunction!(model_views::view_layouts, m)?)?;
     m.add_class::<annotation_canvas::AnnotationCanvas>()?;
     m.add_function(wrap_pyfunction!(image_assets::reference_texture, m)?)?;

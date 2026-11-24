@@ -15,7 +15,7 @@
 //! the process without asking.
 
 use muda::{
-    accelerator::Accelerator, Menu, MenuItem, PredefinedMenuItem, Submenu,
+    accelerator::Accelerator, CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu,
 };
 
 pub const EMPTY_RECENT: &str = "(no recent documents)";
@@ -24,6 +24,9 @@ pub struct Menus {
     // Kept alive for the life of the app: dropping a muda menu removes it.
     _bar: Menu,
     recent: Submenu,
+    plugins: Submenu,
+    fixed_plugin_items: usize,
+    model_checks: Vec<CheckMenuItem>,
 }
 
 type InstalledIds = std::collections::HashMap<(String, String), String>;
@@ -46,6 +49,11 @@ fn index_commands(rows: Vec<muda::MenuItemKind>, trail: &mut Vec<String>, ids: &
                 let id = &item.id().0;
                 if !id.starts_with("recent:") || id == "recent:clear" {
                     ids.insert((trail.join(" ▸ "), item.text()), id.clone());
+                }
+            }
+            muda::MenuItemKind::Check(item) => {
+                if !item.id().0.starts_with("extension:") {
+                    ids.insert((trail.join(" ▸ "), item.text()), item.id().0.clone());
                 }
             }
             _ => {}
@@ -185,6 +193,7 @@ pub fn build() -> muda::Result<Menus> {
         ("File", file.clone()), ("File ▸ Import", import.clone()), ("Edit", edit.clone()), ("Camera", view.clone()),
         ("Window", window.clone()), ("Draw", draw.clone()), ("Tools", tools.clone()), ("Help", help.clone()),
     ]);
+    let mut model_checks = Vec::new();
     for entry in ingetrazo_render::model_menu::entries() {
         if let Some((parent, label)) = entry.path.split_once(" ▸ ") {
             if !groups.contains_key(entry.path) {
@@ -193,7 +202,13 @@ pub fn build() -> muda::Result<Menus> {
                 groups.insert(entry.path, sub);
             }
         }
-        groups[entry.path].append(&item(entry.id, entry.label, None))?;
+        if matches!(entry.id,"scene_transitions"|"hide_rest"|"hide_similar"|"rest_normal"|"rest_fade"|"rest_hide") {
+            let check=CheckMenuItem::with_id(entry.id,entry.label,true,false,None);
+            groups[entry.path].append(&check)?;
+            model_checks.push(check);
+        } else {
+            groups[entry.path].append(&item(entry.id, entry.label, None))?;
+        }
     }
     bar.append_items(&[&app, &file, &edit, &view, &draw, &tools, &plugins, &window, &help])?;
     #[cfg(target_os = "macos")]
@@ -202,10 +217,53 @@ pub fn build() -> muda::Result<Menus> {
         window.set_as_windows_menu_for_nsapp();
     }
     index_bar(&bar);
-    Ok(Menus { _bar: bar, recent })
+    Ok(Menus { _bar: bar, recent, model_checks, fixed_plugin_items: plugins.items().len(), plugins })
 }
 
 impl Menus {
+    pub fn reflect_model_checks(&self, rest: &str, transitions: bool, similar: bool) {
+        for item in &self.model_checks {
+            let on=match item.id().0.as_str(){
+                "scene_transitions"=>transitions,
+                "hide_similar"=>similar,
+                "hide_rest"=>rest=="hide",
+                id=>id.strip_prefix("rest_")==Some(rest),
+            };
+            if on!=item.is_checked(){ item.set_checked(on); }
+        }
+    }
+
+    /// Rebuild only the contributions below the two built-in utilities.
+    pub fn set_extensions(&self, rows: &[ingetrazo_render::extension_menu::Row]) -> muda::Result<()> {
+        while self.plugins.items().len() > self.fixed_plugin_items {
+            self.plugins.remove_at(self.fixed_plugin_items);
+        }
+        let mut groups = std::collections::HashMap::new();
+        for (id, path, label, key, mark, enabled) in rows {
+            let mut parent = self.plugins.clone();
+            for depth in 1..=path.len() {
+                let prefix=&path[..depth];
+                if let Some(sub) = groups.get(prefix) {
+                    parent = Submenu::clone(sub);
+                } else {
+                    let sub = Submenu::new(&path[depth-1], true);
+                    parent.append(&sub)?;
+                    groups.insert(prefix.to_vec(), sub.clone());
+                    parent = sub;
+                }
+            }
+            let accelerator = extension_accelerator(key);
+            if label.is_empty() {
+                parent.append(&PredefinedMenuItem::separator())?;
+            } else if *mark >= 0 {
+                parent.append(&CheckMenuItem::with_id(id.as_str(), label, *enabled, *mark == 1, accelerator))?;
+            } else {
+                parent.append(&MenuItem::with_id(id.as_str(), label, *enabled, accelerator))?;
+            }
+        }
+        Ok(())
+    }
+
     /// File ▸ Open Recent from the host's list (paths, newest first):
     /// `recent:<index>` items, then Clear.
     pub fn set_recent(&self, paths: &[String]) {
@@ -225,4 +283,16 @@ impl Menus {
         let _ = self.recent.append(&item("recent:clear", "Clear Menu", None));
         index_bar(&self._bar);
     }
+}
+
+/// Bare keys belong to the focused text field or the active modelling tool.
+fn extension_accelerator(portable: &str) -> Option<Accelerator> {
+    let mut parts: Vec<_> = portable.split('+').collect();
+    let key = parts.pop()?;
+    if !parts.iter().any(|m| matches!(*m, "Ctrl" | "Meta" | "Alt")) { return None; }
+    for modifier in &mut parts {
+        *modifier = match *modifier { "Ctrl" => "Super", "Meta" => "Control", s => s };
+    }
+    parts.push(key);
+    parts.join("+").parse().ok()
 }

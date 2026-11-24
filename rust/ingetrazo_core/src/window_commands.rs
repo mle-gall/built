@@ -88,6 +88,7 @@ impl WindowCommand {
     fn text(&self) -> &str {
         &self.label
     }
+    fn setText(&mut self, label: String) { self.label = label; }
     fn objectName(&self) -> &str {
         &self.name
     }

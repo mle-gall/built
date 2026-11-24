@@ -418,9 +418,12 @@ class ShellWindow(QObject):
         from core.plugin_panels import install
         from core.extension_manager import extension_startup_state
         self._extension_startup_state = extension_startup_state()
-        plugins, errors = discover_plugins(panels_only=True)
+        plugins, errors = discover_plugins()
+        from ingetrazo_render import ExtensionMenus
+        self._extension_menus = ExtensionMenus()
+        self._pending_extensions = plugins
         install(self, plugins)
-        self._running_extensions = {p.stem for p in plugins}
+        self._running_extensions = {p.stem for p in plugins if p.panel}
         self._extension_load_errors = {e.stem: {"error": e.error, "path": str(e.path)} for e in errors}
         from ingetrazo_core import WindowCommands
         self._command_store = WindowCommands()

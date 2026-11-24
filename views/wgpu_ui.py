@@ -498,6 +498,8 @@ def before_frame(view) -> None:
         return
     from core import plugin_panels
     plugin_panels.sync(view, win)
+    if menus := vars(win).get("_extension_menus"):
+        menus.present(view)
     _sheet_and_jobs(view, win)
     _chrome_form(view, win)
     from views import wgpu_start
@@ -2523,6 +2525,9 @@ def _run(win, actions, source_view=None) -> None:
     from views import chrome_dialogs
     for action in actions:
         kind, _, arg = action.partition(":")
+        if kind == "extension":
+            win.run_command(action)
+            continue
         if kind == "scenephoto":
             from ingetrazo_render import render_scene_photo
             view = chrome_dialogs.view_of(win)

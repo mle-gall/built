@@ -250,6 +250,27 @@ impl Host {
         })
     }
 
+    #[cfg(target_os = "macos")]
+    pub fn model_menu_state(&self) -> Option<(String,bool,bool)> {
+        Python::attach(|py| -> PyResult<_> {
+            let viewport=self.obj.bind(py).getattr("viewport")?;
+            let scene=viewport.getattr("scene")?;
+            let transitions=scene.getattr("animation")?.getattr("enabled")?.is_truthy()?;
+            let similar=scene.getattr("hide_similar_components")?.is_truthy()?;
+            Ok((viewport.getattr("edit_rest_mode")?.extract()?,transitions,similar))
+        }).ok()
+    }
+
+    #[cfg(target_os = "macos")]
+    pub fn extension_updates(&self, previous: Option<(u64,u64)>) -> Option<((u64,u64), Vec<ingetrazo_render::extension_menu::Row>)> {
+        Python::attach(|py| -> PyResult<_> {
+            let menus=self.obj.bind(py).getattr("window")?.getattr("_extension_menus")?;
+            let stamp=menus.call_method0("stamp")?.extract()?;
+            if previous==Some(stamp) { return Ok(None); }
+            Ok(Some((stamp,menus.call_method0("rows")?.extract()?)))
+        }).unwrap_or_else(|e| {Python::attach(|py|report(py,e,"extension menus"));None})
+    }
+
     /// What else the window should do this turn (`Host.extras()`): end the
     /// app, where the IME's candidate window goes, the recent files for
     /// File ▸ Open Recent.

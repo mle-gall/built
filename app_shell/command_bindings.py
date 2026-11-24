@@ -10,9 +10,14 @@ from views import shortcuts
 def refresh(win):
     from app_shell import native
     get_menu = getattr(native._shell, "menu_commands", None)
-    native_items = {b.id: b for b in get_menu()} if get_menu else {}
+    native_items = {b.id: b for b in get_menu() if not b.id.startswith("extension:")} if get_menu else {}
     win._menu_items = native_items
     menu = [(b.id, b.path, b.name, b.keys) for b in native_items.values()]
+    menus = vars(win).get("_extension_menus")
+    enabled = {}
+    if menus is not None:
+        menu.extend(menus.commands())
+        enabled = {row[0]: row[-1] for row in menus.rows()}
     actions = win._registry_actions
     old_keys = set(actions)
     previous = old_keys.copy()
@@ -39,7 +44,10 @@ def refresh(win):
             if old is None or current == old:
                 act.setShortcuts(sequences)
         act.setProperty("nativeMenuId", menu_id)
-        if menu_id in native_items:
+        if menu_id in enabled:
+            act.setText(label)
+            act.setEnabled(enabled[menu_id])
+        elif menu_id in native_items:
             act.setEnabled(native_items[menu_id].isEnabled())
         previous.discard(key)
     for key in previous:
@@ -78,7 +86,10 @@ def _reflect(win, key):
     act = win._registry_actions[key]
     keys = act.portable_keys()
     portable = keys[0] if keys else ""
-    item = win._menu_items.get(act.property("nativeMenuId"))
+    menu_id = act.property("nativeMenuId")
+    if menu_id and menu_id.startswith("extension:"):
+        win._extension_menus.bind_shortcut(menu_id, portable)
+    item = win._menu_items.get(menu_id)
     if item is not None:
         factory = shortcut_text(item.keys)
         item.set_shortcut(portable, portable == (factory[0] if factory else ""))

@@ -104,6 +104,9 @@ class Host:
         viewport.set_active_tool(None)
         modal.install(self)
         files.install(self.window)
+        from ingetrazo_render import setup_extension_menus
+        setup_extension_menus(self.window, self.window.__dict__.pop("_pending_extensions"))
+        self.window._extension_menus.refresh(self.window)
         from app_shell import windows
         windows.register(self)
         guard = qt_host.widget_guard()
@@ -265,6 +268,7 @@ class Host:
         ``(frame_wanted, wake_in_ms or None, cursor or None, title or None)``."""
         qt_host.pump()
         self._guard("window timers", self.timers.run_due)
+        self.window._extension_menus.refresh(self.window)
         pending = self.window.__dict__.get("_pending_open")
         if pending and time.monotonic() >= pending.next_poll:
             pending.next_poll = time.monotonic() + 0.032
@@ -672,6 +676,7 @@ class Host:
             from app_shell.legacy_actions import close
             close(self.window)
         self.window.scene_player.cancel()
+        self.window._extension_menus.clear()
         self.timers.cancel_all()
         for doc in list(self.window._documents):
             doc.model_views.suspend(doc)

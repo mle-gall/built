@@ -329,6 +329,8 @@ class ExtensionApp:
         ``shortcut`` already taken by the app is left off, and ``tip`` —
         what it does, in a sentence — shows in the status bar and in F3.
         Returns the QAction (``None`` outside a window with that menu)."""
+        if menus := vars(self._window).get("_extension_menus"):
+            return menus.root(self.key).add_command(text, fn, shortcut, tip)
         from PySide6.QtGui import QAction, QKeySequence
         win = self._window
         menu = getattr(win, "_ext_menu", None)
@@ -361,6 +363,8 @@ class ExtensionApp:
         """A submenu of its own in the Extensions menu («Windowizer ▸»),
         for an extension with several commands; returns the QMenu to fill
         (``None`` outside a window with that menu)."""
+        if menus := vars(self._window).get("_extension_menus"):
+            return menus.root(self.key).addMenu(title)
         menu = getattr(self._window, "_ext_menu", None)
         if menu is None:
             return None

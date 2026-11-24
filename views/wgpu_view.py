@@ -1661,7 +1661,7 @@ class MetalView(ViewNavigation):
             busy = bool(getattr(self, "_look_drag", None) or self.tools.value_buffer
                         or self.tools.start_point is not None or DocumentInteraction._tool_busy_for_delete(self.tools.tool))
             from views.resident_peer import raw_renderer
-            chrome = self._shared
+            chrome = getattr(self, "_shared", self)
             renderer = raw_renderer(chrome.renderer) if getattr(chrome, "_ui_attached", False) else None
             owner = model_escape(busy, bool(self.scene.selection),
                                  source is not None and self.scene.edit_group is not None, renderer)

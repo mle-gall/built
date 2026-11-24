@@ -98,6 +98,8 @@ def command(win, name, *args):
         from views.wgpu_deliveries import export_form
         return export_form(win, one_off=True)
     kind, _, arg = name.partition(":")
+    if kind == "extension":
+        return win._extension_menus.trigger(name)
     table = {
         "new": lambda: new_model(win),
         "new_window": lambda: new_window(win),
