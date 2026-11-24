@@ -701,16 +701,22 @@ TIPS = {
 }
 
 
-def _tree_model(view, scene, cv):
+def _tree_model(view, scene, cv, readers):
     """The tree's nodes and memberships (core/link_structure.py), kept
     until the model changes: a click that only changes the selection
     rebuilds the rows from it without walking every placement again."""
     cached = view.__dict__.get("_ui_tree_model")
     key = (id(scene), cv)
-    if cached is not None and cached[0] == key:
+    if cached is not None and cached[0][:2] == key:
         return cached[1]
-    model = prepare_tree_model(scene)
-    view._ui_tree_model = (key, model)
+    from ingetrazo_core import refresh_unfiled
+    epoch = readers.filing_epoch(scene.content_version) if readers is not None else None
+    if (epoch is not None and cached is not None and cached[0][0] == id(scene)
+            and cached[0][2] == epoch and refresh_unfiled(scene, cached[1]["tree"])):
+        model = cached[1]
+    else:
+        model = prepare_tree_model(scene)
+    view._ui_tree_model = ((*key, epoch), model)
     return model
 
 
@@ -803,7 +809,9 @@ def _tree(view, win, *, discover=False):
     from core import structure
     from core import layers as L
     from ingetrazo_core import filing_rows, mark_filing_selection, project_sidebar
-    model = _tree_model(view, scene, cv)
+    hist = getattr(win.viewport, "history", None)
+    readers = getattr(getattr(hist, "feed", None), "readers", None)
+    model = _tree_model(view, scene, cv, None if getattr(win, "_outliner_kinds", ()) else readers)
     tree, registry, recipes = model["tree"], model["registry"], model["recipes"]
     counts, to_fix = model["counts"], model["to_fix"]
     node_layers, order = model["node_layers"], model["order"]
