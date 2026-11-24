@@ -17,6 +17,7 @@ mod document_chunks;
 mod document_records;
 mod document_state;
 mod document_environment;
+mod document_terrain;
 mod document_cache;
 mod document_grid;
 mod document_edits;
@@ -2541,8 +2542,9 @@ impl Renderer {
     fn ui_set_active(&mut self, id: String) {
         if let Some(ui) = self.ui.as_mut() { ui.set_active(id); }
     }
-    fn ui_set_status(&mut self, status: String, hint: String) {
-        if let Some(ui) = self.ui.as_mut() { ui.set_status(status, hint); }
+    #[pyo3(signature=(status, hint, coordinate="", tooltip=""))]
+    fn ui_set_status(&mut self, status: String, hint: String, coordinate: &str, tooltip: &str) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_status(status, hint, coordinate, tooltip); }
     }
     /// ``kind``: move, press, release, leave; logical points. True when
     /// the chrome takes the event.
@@ -3277,6 +3279,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     document_records::register(m)?;
     document_state::register(m)?;
     document_environment::register(m)?;
+    document_terrain::register(m)?;
     document_cache::register(m)?;
     document_grid::register(m)?;
     document_edits::register(m)?;
@@ -3442,6 +3445,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<camera_inspector::CameraInspector>()?;
     m.add_class::<tree_grouping::paint::TreePaint>()?;
     m.add_class::<registry_editor::RegistryEditor>()?;
+    m.add_function(wrap_pyfunction!(render_result::blender_availability, m)?)?;
     m.add_class::<render_result::RenderResult>()?;
     m.add_function(wrap_pyfunction!(font_lengths::font_length, m)?)?;
     m.add_class::<svg_options::SvgOptions>()?;

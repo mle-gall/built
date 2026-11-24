@@ -213,8 +213,7 @@ def test_the_example_extensions_ship_but_install_only_on_request(tmp_path,
     managed extensions: disable and uninstall work on them like on any."""
     from core import extension_manager as manager
     from core import extensions
-    from views.main_window import MainWindow
-    examples = MainWindow.example_extensions()
+    examples = manager.example_extension_files()
     assert any(p.name == "niveles.py" and title == "Niveles"
                for p, title, _blurb in examples)
     user = tmp_path / "plugins"

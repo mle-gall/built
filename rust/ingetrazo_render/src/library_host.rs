@@ -1018,11 +1018,17 @@ impl ComponentsProvider {
                 n += 1;
             }
         }
-        PyList::new(py, [("purge", if n != 0 { format!("Stop keeping unplaced components ({n})") } else { "Stop keeping unplaced components (none)".into() })])
+        let actions = PyList::empty(py);
+        actions.append(("import", crate::model_edit::translated(py, "Components from File…", None)?))?;
+        actions.append(("purge", if n != 0 { format!("Stop keeping unplaced components ({n})") } else { "Stop keeping unplaced components (none)".into() }))?;
+        Ok(actions)
     }
 
     fn type_action(slf: &Bound<'_, Self>, ctx: &Bound<'_, PyAny>, action: &str) -> PyResult<()> {
         let py = slf.py();
+        if action == "import" {
+            return crate::component_files::choose_kept_components(&ctx.getattr("win")?);
+        }
         if action != "purge" {
             return Ok(());
         }

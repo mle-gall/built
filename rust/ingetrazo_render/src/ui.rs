@@ -115,6 +115,8 @@ pub struct Ui {
     /// The window as last painted (points).
     screen: Rect,
     active: String,
+    coordinate: String,
+    coordinate_tooltip: String,
     status: String,
     hint: String,
     /// The value field on the geometry and its readback (ui/value_field.rs).
@@ -318,6 +320,8 @@ impl Ui {
             rail_w: rail::width(2),
             screen: Rect::NOTHING,
             active: String::new(),
+            coordinate: String::new(),
+            coordinate_tooltip: String::new(),
             status: String::new(),
             hint: String::new(),
             cursor: Default::default(),
@@ -973,7 +977,9 @@ impl Ui {
         if id != self.active { self.cursor.end_readback(); }
         self.active = id;
     }
-    pub fn set_status(&mut self, status: String, hint: String) {
+    pub fn set_status(&mut self, status: String, hint: String, coordinate: &str, tooltip: &str) {
+        coordinate.clone_into(&mut self.coordinate);
+        tooltip.clone_into(&mut self.coordinate_tooltip);
         self.status = status;
         self.hint = hint;
     }
@@ -1311,6 +1317,9 @@ impl Ui {
                         ui.add_space(SPACE_S);
                         let dock_w = if self.review { 0.0 } else { self.dock_w };
                         let room = (ui.available_width() - dock_w - 8.0).max(40.0);
+                        let coordinate = ui.painter().layout_no_wrap(self.coordinate.clone(), meta(), DIM);
+                        let show_coordinate = !self.coordinate.is_empty() && room >= coordinate.size().x + SPACE_S;
+                        let room = if show_coordinate { room - coordinate.size().x - SPACE_S } else { room };
                         let mut job = egui::text::LayoutJob::single_section(self.hint.clone(), egui::TextFormat {
                             font_id: body(), color: DIM, ..Default::default() });
                         job.wrap.max_width = room;
@@ -1319,6 +1328,11 @@ impl Ui {
                         let g = ui.painter().layout_job(job);
                         let (r, _) = ui.allocate_exact_size(vec2(room, 28.0), Sense::hover());
                         ui.painter().galley(pos2(r.min.x, r.center().y - g.size().y / 2.0), g, DIM);
+                        if show_coordinate {
+                            let (rect, response) = ui.allocate_exact_size(vec2(coordinate.size().x, 28.0), Sense::hover());
+                            ui.painter().galley(pos2(rect.left(), rect.center().y - coordinate.size().y / 2.0), coordinate, DIM);
+                            response.on_hover_text(&self.coordinate_tooltip);
+                        }
                         if !self.review {
                             if let Some((active, _, _)) = &self.delivery {
                                 if !active.is_empty() {
