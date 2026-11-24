@@ -195,3 +195,18 @@ def test_a_sheet_render_still_carries_no_guides(native_gpu_host):
     finally:
         vp.style_override = None
     assert _changed(bare, after) == 0
+
+
+def test_mixed_guide_spans_preserve_segment_end_and_circle_phase():
+    from core.guide import GuideCircle
+    line = Guide(V(2, 0, 0), V(1, 0, 0))
+    segment = Guide(V(1.25, 0, 0), origin=V(0, 0, 0))
+    circle = GuideCircle(V(0, 0, 0), V(0, 0, 1), 1.0)
+    coords, spans = _guide_vertices([line, Guide(V()), segment, circle], 1.0,
+                                    reach=1.0, selection=[circle])
+    assert spans == [(0, 4, False), (4, 4, False), (8, 48, True)]
+    pts = np.frombuffer(coords, np.float32).reshape(-1, 3)
+    assert pts[:8, 0].tolist() == [-1, -.5, 0, .5, 0, .5, 1, 1.25]
+    from core.axes import plane_axes
+    u, _ = plane_axes(circle.normal)
+    assert np.allclose(pts[8], u.toTuple())

@@ -132,3 +132,16 @@ def test_the_edit_box_is_world_edges_on_its_twelve_edges():
         x, y, z = pts[i:i + 3]
         on_faces = sum(1 for c in (x, y, z) if abs(c) < 1e-6 or abs(c - 1) < 1e-6)
         assert on_faces >= 2          # every endpoint lies on a box edge
+
+
+@pytest.mark.parametrize("points, cursor, inside", [
+    ([(float("inf"), 0)], (0, 0), False),
+    ([(2, 1), (2, 1)], (3.5, 1), True),
+    ([(0, 0), (1, 0), (2, 0)], (3.5, 0), True),
+    ([(0, 0), (1, 0), (2, 0)], (3.51, 0), False),
+    ([(0, 0), (4, 0), (0, 4)], (4, 4), False),
+    ([(0, 0), (.5, 0), (0, .5)], (.25, -3), True),
+])
+def test_edit_boundary_at_degenerate_and_short_edges(points, cursor, inside):
+    from views.document_interaction import _point_in_screen_hull
+    assert _point_in_screen_hull(*cursor, iter(points)) is inside
