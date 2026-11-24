@@ -319,8 +319,7 @@ mod tests {
         (String::new(), name.to_owned(), front, false, false, String::new(), String::new())
     }
 
-    /// Lay the strip out once in a headless egui frame, `max_w` wide.
-    fn lay_out(strip: &mut Strip, max_w: f32) -> Vec<String> {
+    fn context() -> egui::Context {
         let ctx = egui::Context::default();
         // The app's Inter for every family the chrome names (this crate
         // builds egui without its bundled fonts).
@@ -333,16 +332,111 @@ mod tests {
             fonts.families.insert(family, vec!["inter".into()]);
         }
         ctx.set_fonts(fonts);
-        let mut out = Vec::new();
-        // Twice: the fonts are in place from the second pass on, as in the app.
-        for _ in 0..2 {
-            let _ = ctx.run(egui::RawInput::default(), |ctx| {
-                egui::CentralPanel::default().show(ctx, |ui| {
-                    ui.horizontal(|ui| out = strip.show(ui, max_w));
-                });
+        ctx
+    }
+
+    fn frame(ctx: &egui::Context, strip: &mut Strip, width: f32, events: Vec<egui::Event>)
+        -> (egui::FullOutput, Vec<String>)
+    {
+        let mut commands = Vec::new();
+        let input = egui::RawInput { events, ..Default::default() };
+        let output = ctx.run(input, |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                ui.horizontal(|ui| commands = strip.show(ui, width));
             });
+        });
+        (output, commands)
+    }
+
+    fn lay_out(strip: &mut Strip, width: f32) -> egui::FullOutput {
+        let ctx = context();
+        frame(&ctx, strip, width, Vec::new());
+        frame(&ctx, strip, width, Vec::new()).0
+    }
+
+    #[test]
+    fn right_edge_closes_the_pointed_tab_and_middle_click_closes_its_body() {
+        use egui::{Event, PointerButton};
+        let ctx = context();
+        let mut strip = Strip {
+            tabs: vec![tab("Drawing", true), tab("مخطط", false)], ..Default::default()
+        };
+        frame(&ctx, &mut strip, 700.0, Vec::new());
+        for front in [0, 1] {
+            strip.tabs[0].2 = front == 0;
+            strip.tabs[1].2 = front == 1;
+            frame(&ctx, &mut strip, 700.0, Vec::new());
+            for index in [0, 1] {
+                let rect = strip.rects[index].unwrap();
+                let at_edge = pos2(rect.right() - 7.0, rect.center().y);
+                for (pos, button, verb) in [
+                    (at_edge, PointerButton::Primary, "close"),
+                    (rect.center(), PointerButton::Primary, "activate"),
+                    (rect.center(), PointerButton::Middle, "close"),
+                ] {
+                    let event = |pressed| Event::PointerButton { pos, button, pressed, modifiers: Default::default() };
+                    frame(&ctx, &mut strip, 700.0, vec![Event::PointerMoved(pos), event(true)]);
+                    let (_, actions) = frame(&ctx, &mut strip, 700.0, vec![event(false)]);
+                    assert!(actions.contains(&format!("ptab:{verb}:{index}")), "{actions:?}");
+                }
+            }
         }
-        out
+    }
+
+    #[test]
+    fn active_underline_and_new_button_follow_the_tabs() {
+        let mut strip = Strip {
+            tabs: vec![tab("Drawing", true), tab("Elevation", false)], ..Default::default()
+        };
+        for front in [0, 1] {
+            strip.tabs[0].2 = front == 0;
+            strip.tabs[1].2 = front == 1;
+            let frame = lay_out(&mut strip, 700.0);
+            let active = strip.rects[front].unwrap();
+            let last = strip.rects[1].unwrap();
+            assert_eq!(active.height(), CONTROL_H);
+            let mut accents = Vec::new();
+            let mut plus = None;
+            for s in frame.shapes {
+                match s.shape {
+                    egui::Shape::LineSegment { points, stroke } if stroke.color == ACCENT => {
+                        accents.push(points);
+                    }
+                    egui::Shape::Text(t) if t.galley.text() == "+" => {
+                        plus = Some(t.pos + t.galley.size() / 2.0);
+                    }
+                    _ => {}
+                }
+            }
+            assert_eq!(accents.len(), 1);
+            let [left, right] = accents[0];
+            assert!(left.x >= active.left() && right.x <= active.right());
+            assert_eq!(left.y, TOP_H - 1.0);
+            let plus = plus.expect("new tab button");
+            assert!((plus.x - (last.right() + 1.0 + PLUS_W / 2.0)).abs() <= 1.0);
+            assert!((plus.y - last.center().y).abs() <= 1.0);
+        }
+    }
+
+    #[test]
+    fn full_names_leave_room_for_close_on_either_tab() {
+        let mut strip = Strip {
+            tabs: vec![tab("casa-pestanas.igz", true), tab("مخطط", false)], ..Default::default()
+        };
+        for front in [0, 1] {
+            strip.tabs[0].2 = front == 0;
+            strip.tabs[1].2 = front == 1;
+            let frame = lay_out(&mut strip, 700.0);
+            for (index, tab) in strip.tabs.iter().enumerate() {
+                let rect = strip.rects[index].unwrap();
+                let text = frame.shapes.iter().find_map(|s| match &s.shape {
+                    egui::Shape::Text(t) if t.galley.text() == tab.1 => Some(t),
+                    _ => None,
+                }).unwrap();
+                assert!(!text.galley.elided);
+                assert!(text.pos.x + text.galley.size().x <= rect.right() - 22.0);
+            }
+        }
     }
 
     #[test]

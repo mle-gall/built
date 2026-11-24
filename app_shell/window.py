@@ -125,7 +125,7 @@ class ShellProjectTabs:
         self._win = win
         self.tabs = _Tabs(self)
         self.activated = _Relay(lambda doc: win.activate_document(doc))
-        self.newRequested = _Relay(lambda: win.run_command("new"))
+        self.newRequested = _Relay(win._on_new_tab)
         self.closeRequested = _Relay(lambda doc: win.run_command("close_tab", doc))
         self.viewsRequested = _Relay(win._pick_view_layout)
 
@@ -439,13 +439,6 @@ class ShellWindow(WindowDocumentCommands, object if NATIVE else QObject):
     _last_sheet = _doc_attr("last_sheet")
 
     @property
-    def viewport(self):
-        doc = self.__dict__.get("_doc")
-        if doc is None:
-            return None
-        return doc.front_view if doc.front_view is not None else doc.viewport
-
-    @property
     def view(self):
         doc = self.__dict__.get("_doc")
         return doc.stand_in if doc is not None else None
@@ -591,6 +584,7 @@ class ShellWindow(WindowDocumentCommands, object if NATIVE else QObject):
             except Exception:  # noqa: BLE001
                 pass
         self._host.timers.cancel_context(doc.viewport)
+        doc.front_view = None
         doc.viewport = None
         doc.stand_in = None
 
@@ -767,7 +761,7 @@ class ShellWindow(WindowDocumentCommands, object if NATIVE else QObject):
 
     def close_document(self, doc=None, ask: bool = True) -> bool:
         from app_shell import files
-        return files.close_document(self, doc)
+        return files.close_document(self, doc, ask)
 
     def close_documents(self, docs) -> bool:
         """Close these projects one by one, each asking about its own

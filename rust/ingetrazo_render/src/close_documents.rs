@@ -61,6 +61,30 @@ fn confirm_discard(win: &Bound<'_, PyAny>, prompt: &Bound<'_, PyAny>) -> PyResul
     answer.eq("discard")
 }
 #[pyfunction]
+fn confirm_close_tab(win: &Bound<'_, PyAny>, doc: &Bound<'_, PyAny>, ask: bool) -> PyResult<bool> {
+    if !win.getattr("_workspace")?.is_none()
+        && win.getattr("_doc")?.is(doc)
+        && !win.call_method0("leave_workspace")?.is_truthy()?
+    {
+        return Ok(false);
+    }
+    if !ask || !win.call_method1("_doc_is_dirty", (doc,))?.is_truthy()? {
+        return Ok(true);
+    }
+    if !win.getattr("_doc")?.is(doc) {
+        win.call_method1("activate_document", (doc,))?;
+        if !win.getattr("_doc")?.is(doc) {
+            return Ok(false);
+        }
+    }
+    win.call_method0("_end_group_edits")?;
+    let vars = PyDict::new(win.py());
+    vars.set_item("name", doc.call_method0("display_name")?)?;
+    let prompt = translated(win.py(), "Close “{name}”?", Some(&vars))?;
+    win.call_method1("_confirm_discard", (prompt,))?.is_truthy()
+}
+
+#[pyfunction]
 fn save_selected(
     win: &Bound<'_, PyAny>,
     docs: &Bound<'_, PyAny>,
@@ -128,7 +152,60 @@ fn confirm_quit(win: &Bound<'_, PyAny>) -> PyResult<bool> {
     win.call_method1("_save_all_or_stay", (selected, answer))?
         .is_truthy()
 }
+/// Confirm each window before Quit retires any recovery slots. A later
+/// window can cancel, leaving every earlier document open and recoverable.
+#[pyfunction]
+fn confirm_window_close(win: &Bound<'_, PyAny>) -> PyResult<bool> {
+    let dialogs = win.py().import("views.chrome_dialogs")?;
+    if !dialogs.call_method1("current_sheet", (win,))?.is_none() {
+        return Ok(false);
+    }
+    if win.getattr("_open_in_progress")?.is_truthy()? {
+        win.setattr("_open_aborted", true)?;
+        return Ok(false);
+    }
+    if dialogs.call_method1("modal", (win,))?.is_truthy()?
+        || (!win.getattr("_workspace")?.is_none() && !win.call_method0("leave_workspace")?.is_truthy()?)
+        || !win.call_method0("_confirm_quit")?.is_truthy()?
+    {
+        return Ok(false);
+    }
+    win.py().import("app_shell.project")?.call_method1("persist", (win,))?;
+    Ok(true)
+}
+
+#[pyfunction]
+fn finish_window_close(win: &Bound<'_, PyAny>) -> PyResult<()> {
+    let py = win.py();
+    let auto = win.getattr("__dict__")?.call_method1("get", ("_background_autosave",))?;
+    if !auto.is_none() {
+        auto.call_method0("cancel")?;
+    }
+    let clear = py.import("core.autosave")?.getattr("clear")?;
+    for doc in win.getattr("_documents")?.try_iter()? {
+        let doc = doc?;
+        let args = PyDict::new(py);
+        args.set_item("untitled", doc.getattr("untitled_no")?)?;
+        // A stale recovery slot is preferable to blocking an accepted close.
+        let _ = clear.call((doc.getattr("path")?,), Some(&args));
+    }
+    win.setattr("_closed", true)
+}
+
+#[pyfunction]
+fn request_close(win: &Bound<'_, PyAny>) -> PyResult<bool> {
+    if !confirm_window_close(win)? {
+        return Ok(false);
+    }
+    finish_window_close(win)?;
+    Ok(true)
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(request_close, m)?)?;
+    m.add_function(wrap_pyfunction!(confirm_window_close, m)?)?;
+    m.add_function(wrap_pyfunction!(finish_window_close, m)?)?;
+    m.add_function(wrap_pyfunction!(confirm_close_tab, m)?)?;
     m.add_function(wrap_pyfunction!(confirm_quit, m)?)?;
     m.add_function(wrap_pyfunction!(confirm_discard, m)?)?;
     m.add_function(wrap_pyfunction!(save_selected, m)?)?;

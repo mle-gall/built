@@ -52,8 +52,7 @@ elif sys.stderr is not None:
 # (core/black_box.py) — a force-quit hang left nothing (2026-11-18).
 from core import black_box
 
-from PySide6.QtCore import (QEvent, QLibraryInfo, QSettings, Qt,
-                            QTranslator)
+from PySide6.QtCore import QLibraryInfo, QSettings, Qt, QTranslator
 from PySide6.QtWidgets import QApplication
 
 from core import i18n
@@ -189,110 +188,14 @@ def _gpu_available(interactive):
 
 
 def _open_document_in(window, doc: "Path") -> None:
-    """Open *doc* in *window*: .igz as the document, .skp imported through
-    the native backend after the first paint (big models parse for seconds —
-    the window must be visible, not frozen pre-show). Shared by the initial
-    launch and the single-instance second-launch handler."""
-    # The extensions first, if the window deferred them (#440): one of them
-    # may own this file type. A no-op once they are loaded.
-    if hasattr(window, "load_extensions"):
-        window.load_extensions()
-    ext = doc.suffix.lower()
-    if ext in (".builtproject", ".igzproj"):
-        window.open_path(doc)
-        return
-    if hasattr(window, "documents") and (
-            ext in (*built.DOCUMENT_SUFFIXES, ".skp", ".dae", ".dxf", ".dwg")
-            or ext in getattr(window, "file_openers", {})):
-        # Projects in tabs (#1066): the document comes in a tab of its own
-        # (or its tab comes to the front), so nothing is discarded and
-        # nothing needs asking. An .skp after the first paint, as below (a
-        # big one parses for seconds); the rest at once — a cold start
-        # queues the units question right after this call, and it must not
-        # come up in the middle of the load.
-        if ext == ".skp":
-            from PySide6.QtCore import QTimer
-            QTimer.singleShot(0, lambda: window.open_path(doc))
-        else:
-            window.open_path(doc)
-        return
-    if ext in built.DOCUMENT_SUFFIXES or ext in getattr(window, "file_openers", {}):
-        # A document REPLACES the drawing this window holds. File ▸ Open
-        # and Open Recent ask about unsaved changes before they call
-        # open_path; a path arriving from outside — a double-click handed
-        # over by the single instance, a macOS FileOpen event — had nobody
-        # asking, so the running drawing went away silently (issue #956).
-        # Ask here, at the seam every outside route shares. A cold launch
-        # holds nothing to lose, so the question is a no-op there, and an
-        # import (the .skp branch below) only ADDS to the drawing and is
-        # not asked, like File ▸ Import.
-        from core.i18n import tr
-        confirm = getattr(window, "_confirm_discard", None)
-        if confirm is not None and not confirm(
-                tr("Discard current drawing and open another?")):
-            return
-        window.open_path(doc)       # an extension's own type goes to its opener
-    elif ext == ".skp":
-        from PySide6.QtCore import QTimer
-
-        def _open_skp():
-            if window.import_skp_path(doc) and hasattr(window, "_on_zoom_extents"):
-                window._on_zoom_extents()
-
-        QTimer.singleShot(0, _open_skp)
+    """Open a command-line drawing in the remaining Classic harnesses."""
+    window.load_extensions()
+    window.open_path(doc)
 
 
 class _App(QApplication):
-    """QApplication subclass so macOS's file-open Apple Event reaches the
-    same code path as the argv-based association used on Linux/Windows.
+    """QApplication subclass used by the standalone Classic capture harness."""
 
-    Double-clicking an associated file on Linux/Windows hands the path as
-    plain ``argv[1]`` (see the single-instance block in ``main()``); macOS
-    never does that — Launch Services always starts the app with a bare
-    argv and delivers the path afterwards as a ``QFileOpenEvent``
-    (``QEvent.FileOpen``, Qt's wrapper for the OS's ``kAEOpenDocuments``
-    Apple Event). Without this override a macOS double-click on a ``.igz``
-    silently opened a blank "Untitled" window — the document never arrived.
-    """
-
-    def __init__(self, argv: list[str]) -> None:
-        super().__init__(argv)
-        self.open_window = None            # set once MainWindow exists
-        self.pending_open_path: Path | None = None
-        # Qt's Cocoa plugin ALSO turns every existing path on the command
-        # line into a FileOpen event, so ``ingetrazo model.igz`` opened the
-        # document twice — the second open re-entered the first one's
-        # progress loop and crashed (new-Mac harness, 2026-11-09). Each
-        # argv path is ignored once when it comes back as an event; a
-        # double-click's document never was in argv and still opens.
-        self.argv_paths = set()
-        for a in list(argv[1:]) + list(getattr(sys, "orig_argv", [])[1:]):
-            if a and not a.startswith("-"):
-                try:
-                    self.argv_paths.add(Path(a).resolve())
-                except OSError:
-                    pass
-
-    def event(self, e) -> bool:
-        if e.type() == QEvent.Type.FileOpen:
-            path = Path(e.file())
-            argv_paths = getattr(self, "argv_paths", None)
-            if argv_paths:
-                try:
-                    resolved = path.resolve()
-                except OSError:
-                    resolved = path
-                if resolved in argv_paths:
-                    argv_paths.discard(resolved)   # argv already opens it
-                    return True
-            if self.open_window is not None:
-                _open_document_in(self.open_window, path)
-            else:
-                # Arrived before MainWindow exists — a cold macOS launch can
-                # deliver it this early. main() flushes this once it does.
-                self.pending_open_path = path
-            return True
-        return super().event(e)
 
 
 def _self_check() -> int:
@@ -705,13 +608,6 @@ def main() -> int:
     engine_fell_back = _native.start_guard(sys.argv[1:])
     # The extensions' setup waits until the window is on screen (#440).
     window = MainWindow(defer_extensions=True)
-    # From here on, a FileOpen Apple Event (macOS double-click / Open With,
-    # or a second one while this instance is already the running app — see
-    # _App.event) opens straight into this window, no process handoff
-    # needed: unlike Linux/Windows, macOS delivers it to the ALREADY-RUNNING
-    # process instead of spawning a new one.
-    app.open_window = window
-
     # Single instance: if IngeTrazo is already running, hand the document to
     # that window and quit — so a second double-click opens the file in the
     # existing window instead of spawning a rival instance that the desktop
@@ -726,11 +622,6 @@ def main() -> int:
     args = [a for a in sys.argv[1:]
             if a not in ("--new-window", _native.FLAG)]
     arg = args[0] if args else ""
-    if not arg and app.pending_open_path is not None:
-        # A cold macOS launch by double-click: no argv, the path arrived as
-        # the FileOpen event queued before `open_window` was set above.
-        arg = str(app.pending_open_path)
-        app.pending_open_path = None
     probe = QLocalSocket()
     if not new_window:
         probe.connectToServer(_SOCKET)

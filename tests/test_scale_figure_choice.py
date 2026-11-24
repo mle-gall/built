@@ -10,7 +10,9 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
-from PySide6.QtCore import QSettings  # noqa: E402
+from ingetrazo_core import NativeSettings
+from core.settings import settings as preferences
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from PySide6.QtGui import QColor, QImage
 from ingetrazo_core import Vec3 as V
 
@@ -21,7 +23,7 @@ from core.mesh import Mesh  # noqa: E402
 
 @pytest.fixture
 def settings(tmp_path, monkeypatch):
-    st = QSettings(str(tmp_path / "s.ini"), QSettings.IniFormat)
+    st = NativeSettings(str(tmp_path))
     monkeypatch.setattr(sf, "figures_dir", lambda: tmp_path / "figures")
     return st
 
@@ -88,36 +90,22 @@ def test_the_height_is_kept_within_sense(settings, tmp_path):
     assert sf.chosen(settings).height == pytest.approx(sf.MAX_HEIGHT)
 
 
-def test_a_new_document_stands_my_picture_and_marks_it(settings, tmp_path, monkeypatch):
-    from views.main_window import MainWindow
+def test_a_new_document_stands_my_picture_and_marks_it(native_host, settings, tmp_path):
     stored = sf.store_picture(_png(tmp_path / "yo.png"))
-    st = QSettings()
-    keep = {k: st.value(k) for k in (sf.KEY_PICK, sf.KEY_IMAGE,
-                                     sf.KEY_HEIGHT, sf.KEY_NAME)}
-    try:
-        st.setValue(sf.KEY_PICK, sf.CUSTOM)
-        st.setValue(sf.KEY_IMAGE, str(stored))
-        st.setValue(sf.KEY_HEIGHT, 1.62)
-        st.setValue(sf.KEY_NAME, "Marco")
-        win = MainWindow()
-        try:
-            figs = [g for g in win.viewport.scene.groups if sf.is_marked(g)]
-            assert len(figs) == 1 and figs[0].name == "Marco"
-            fig = figs[0]
-            zs = [v.position.z() for v in fig.mesh.vertices]
-            assert max(zs) - min(zs) == pytest.approx(1.62, abs=1e-4)
-            tex = fig.mesh.faces[0].attrs["texture"]["path"]
-            assert tex == str(stored)
-            assert win._saved_version == win.viewport.scene.version
-        finally:
-            win._saved_version = win.viewport.scene.version
-            win.close()
-    finally:
-        for k, v in keep.items():
-            if v is None:
-                st.remove(k)
-            else:
-                st.setValue(k, v)
+    st = preferences()
+    st.setValue(sf.KEY_PICK, sf.CUSTOM)
+    st.setValue(sf.KEY_IMAGE, str(stored))
+    st.setValue(sf.KEY_HEIGHT, 1.62)
+    st.setValue(sf.KEY_NAME, "Marco")
+    native_host.cold_start()
+    win = native_host.window
+    figs = [g for g in win.viewport.scene.groups if sf.is_marked(g)]
+    assert len(figs) == 1 and figs[0].name == "Marco"
+    fig = figs[0]
+    zs = [v.position.z() for v in fig.mesh.vertices]
+    assert max(zs) - min(zs) == pytest.approx(1.62, abs=1e-4)
+    assert fig.mesh.faces[0].attrs["texture"]["path"] == str(stored)
+    assert not win._is_dirty()
 
 
 def test_the_mark_travels_in_the_igz(tmp_path):
@@ -151,56 +139,38 @@ def test_inserting_a_document_leaves_out_whatever_figure_the_app_placed(tmp_path
     assert not is_scale_figure(toro)
 
 
-def test_preferences_choose_my_picture_and_ok_stores_it(tmp_path, monkeypatch):
+def test_preferences_choose_my_picture_and_ok_stores_it(native_host, tmp_path, monkeypatch):
     """The whole gesture: «My own picture…» asks for the file at once, OK
     copies it into the data folder and the next new document stands it."""
     from views import filedialogs
-    from views.main_window import MainWindow
     from tests.preferences_chrome import Controls
     monkeypatch.setattr(sf, "figures_dir", lambda: tmp_path / "figures")
     src = _png(tmp_path / "Marco_Sumari.png")
     monkeypatch.setattr(filedialogs.file_dialogs, "getOpenFileName",
                         staticmethod(lambda *a, **k: (str(src), "")))
-    st = QSettings()
-    keys = (sf.KEY_PICK, sf.KEY_IMAGE, sf.KEY_HEIGHT, sf.KEY_NAME)
-    keep = {k: st.value(k) for k in keys}
-    win = MainWindow()
-    try:
-        ui = Controls(win, "general")
-        assert not ui.visible("figure_image")
-        ui.set("figure", sf.CUSTOM)
-        assert ui.visible("figure_image")
-        assert ui.value("figure_name") == "Marco Sumari"
-        ui.set("figure_height", 1.68)
-        fig = sf.chosen()
-        assert fig.image.parent == tmp_path / "figures"
-        assert (fig.height, fig.name) == (pytest.approx(1.68), "Marco Sumari")
-        win._saved_version = win.viewport.scene.version
-        win._on_new()
-        assert [g.name for g in win.viewport.scene.groups
-                if sf.is_marked(g)] == ["Marco Sumari"]
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
-        for k, v in keep.items():
-            if v is None:
-                st.remove(k)
-            else:
-                st.setValue(k, v)
+    win = native_host.window
+    ui = Controls(win, "general")
+    assert not ui.visible("figure_image")
+    ui.set("figure", sf.CUSTOM)
+    assert ui.visible("figure_image")
+    assert ui.value("figure_name") == "Marco Sumari"
+    ui.set("figure_height", 1.68)
+    fig = sf.chosen()
+    assert fig.image.parent == tmp_path / "figures"
+    assert (fig.height, fig.name) == (pytest.approx(1.68), "Marco Sumari")
+    win._saved_version = win.viewport.scene.version
+    win._on_new()
+    assert [g.name for g in win.viewport.scene.groups
+            if sf.is_marked(g)] == ["Marco Sumari"]
 
 
-def test_cancelling_the_file_dialog_goes_back_to_the_person_before(monkeypatch):
+def test_cancelling_the_file_dialog_goes_back_to_the_person_before(native_host, monkeypatch):
     from views import filedialogs
-    from views.main_window import MainWindow
     from tests.preferences_chrome import Controls
     monkeypatch.setattr(filedialogs.file_dialogs, "getOpenFileName",
                         staticmethod(lambda *a, **k: ("", "")))
-    win = MainWindow()
-    try:
-        ui = Controls(win, "general")
-        before = ui.value("figure")
-        ui.set("figure", sf.CUSTOM)
-        assert ui.value("figure") == before
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    win = native_host.window
+    ui = Controls(win, "general")
+    before = ui.value("figure")
+    ui.set("figure", sf.CUSTOM)
+    assert ui.value("figure") == before

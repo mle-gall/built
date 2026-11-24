@@ -150,13 +150,6 @@ def test_closing_a_project_takes_its_views_along(win):
     assert ref() is None or not ref().isVisible()
 
 
-def test_an_extension_still_sees_the_viewport_of_the_project_in_front(win):
-    _dirty(win)
-    win.set_view_layout("four")               # the first project: a grid
-    win._new_document()
-    assert win.centralWidget() is win.viewport.keys_stand_in  # the one in front
-
-
 def test_an_extra_view_picks_up_the_windows_tool(win):
     win.show()
     win.set_view_layout("four")
