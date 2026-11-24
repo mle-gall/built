@@ -8,6 +8,7 @@ a ray may meet (the eye, the model, a group opened, X-ray) asks again.
 Skipped without the engine."""
 from __future__ import annotations
 
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -18,18 +19,15 @@ from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 import views.document_interaction as viewport_mod  # noqa: E402
 from tests.test_lazy_native_snap import (  # noqa: E402
-    VIEWS, _close, _key, _set_view, _window, pytestmark)
+    VIEWS, _key, _set_view, _window, pytestmark)
 
 pytestmark = pytestmark
 
 
 @pytest.fixture
-def win():
-    w, vp = _window(lazy=True)
-    try:
-        yield vp
-    finally:
-        _close(w)
+def win(native_host):
+    w, vp = _window(native_host, lazy=True)
+    yield vp
 
 
 def _fresh(vp, pts, monkeypatch):

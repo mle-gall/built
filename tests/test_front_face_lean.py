@@ -9,20 +9,21 @@ fixed group sharing a copy's spot (the index's face wins the tie).
 Skipped without the engine."""
 from __future__ import annotations
 
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import numpy as np
 import pytest
 from ingetrazo_core import Matrix4 as QMatrix4x4
 
 import views.document_interaction as viewport_mod
 from tests.test_lazy_native_snap import (  # noqa: F401
-    VIEWS, _close, _face_key, _set_view, _window, pytestmark)
+    VIEWS, _face_key, _set_view, _window, pytestmark)
 
 pytestmark = pytestmark
 
 
-def _twinned():
+def _twinned(native_host):
     from core.group import Group
-    w, vp = _window(lazy=True)
+    w, vp = _window(native_host, lazy=True)
     sc = vp.scene
     copies = [g for g in sc.groups if g.name.startswith("C")]
     for k, g in enumerate(copies[::3]):
@@ -50,12 +51,9 @@ def _twinned():
 
 
 @pytest.fixture
-def win():
-    w, vp = _twinned()
-    try:
-        yield vp
-    finally:
-        _close(w)
+def win(native_host):
+    w, vp = _twinned(native_host)
+    yield vp
 
 
 def _key(h):

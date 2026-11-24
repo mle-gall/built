@@ -8,21 +8,19 @@ must be the ones cut afresh from the boxes near the cursor, row for row
 eye or a placement that changes must not reuse the old cuts."""
 from __future__ import annotations
 
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import numpy as np
 import pytest
 from ingetrazo_core import Matrix4 as QMatrix4x4
 
 from tests.test_lazy_native_snap import (  # noqa: F401
-    VIEWS, _close, _set_view, _window)
+    VIEWS, _set_view, _window)
 
 
 @pytest.fixture
-def win():
-    w, vp = _window(lazy=True)
-    try:
-        yield vp
-    finally:
-        _close(w)
+def win(native_host):
+    w, vp = _window(native_host, lazy=True)
+    yield vp
 
 
 def _fresh(vp, table, x, y, r, far):

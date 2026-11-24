@@ -2013,8 +2013,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         if btn is None:
             return
         from PySide6.QtCore import QPoint
-        # The stack of projects, not the viewport: with several views the
-        # viewport is one cell of them (views/multi_view.py).
         area = self.__dict__.get("_doc_stack") or self._shown_viewport()
         # Nothing open (the empty area): no panels, no handles.
         empty = bool(self.__dict__.get("_empty_on"))

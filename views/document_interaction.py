@@ -2351,7 +2351,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         # (a frame is a document, not the workspace). Never persists.
         self.style_override = None
         # This view's own Style when the window shows several views and the
-        # style was changed in this one (views/multi_view.py); None: the
+        # style was changed in this one (ingetrazo_render.DocumentViews); None: the
         # scene's, which the window's own view always draws with.
         self.view_style = None
         self._fbo_size = (0, 0)
@@ -2499,7 +2499,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     #: This picture's background is alpha 0 (``render_image``'s ``transparent``).
     _export_transparent = False
 
-    #: Off in a view of several (views/multi_view.py) other than the one being
+    #: Off in a view of several (ingetrazo_render.DocumentViews) other than the one being
     #: worked in: the model shows there, without the tool in hand's preview.
     tool_preview = True
 

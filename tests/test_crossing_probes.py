@@ -8,6 +8,7 @@ sides asked gave — over a sunk box, its copies and a field of copies,
 pixel by pixel — with fewer rays."""
 from __future__ import annotations
 
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -40,9 +41,9 @@ def _both_sides(self, f, g, found):
     return x, context
 
 
-def _field_window():
+def _field_window(native_host):
     from tests.test_lazy_native_snap import _window
-    return _window(lazy=True)
+    return _window(native_host, lazy=True)
 
 
 def _key(c):
@@ -51,43 +52,39 @@ def _key(c):
 
 @pytest.mark.parametrize("make", [_sunk_box_window, _sunk_copies_window,
                                   _field_window])
-def test_the_crossings_are_the_ones_both_sides_gave(make, monkeypatch):
-    win, vp = make()
-    try:
-        rays = [0]
-        real = type(vp)._front_face_at
-        monkeypatch.setattr(type(vp), "_front_face_at",
-                            lambda self, x, y, *a: (rays.__setitem__(
-                                0, rays[0] + 1), real(self, x, y))[1])
-        w, h = vp.width(), vp.height()
-        found = 0
-        asked = [0, 0]
-        views = [None]
-        if make is _field_window:
-            from tests.test_lazy_native_snap import VIEWS
-            views = VIEWS
-        cells = [(v, float(x), float(y)) for v in views
-                 for x in np.linspace(3.3, w - 3, 41)
-                 for y in np.linspace(2.9, h - 3, 29)]
-        for view, x, y in cells:
-            if view is not None and view != getattr(vp, "_view_now", None):
-                from tests.test_lazy_native_snap import _set_view
-                _set_view(vp, view)
-                vp._view_now = view
-            if True:
-                x, y = float(x), float(y)
-                rays[0] = 0
-                got = vp._face_crossing_point(x, y)
-                asked[0] += rays[0]
-                rays[0] = 0
-                with monkeypatch.context() as m:
-                    m.setattr(type(vp), "_crossing_on_screen", _both_sides)
-                    want = vp._face_crossing_point(x, y)
-                asked[1] += rays[0]
-                assert _key(got) == _key(want), (x, y)
-                found += want is not None
-        assert found > (0 if make is _field_window else 3)
-        assert asked[0] < asked[1]
-    finally:
-        win._saved_version = vp.scene.version
-        win.close()
+def test_the_crossings_are_the_ones_both_sides_gave(native_host, make, monkeypatch):
+    win, vp = make(native_host)
+    rays = [0]
+    real = type(vp)._front_face_at
+    monkeypatch.setattr(type(vp), "_front_face_at",
+                        lambda self, x, y, *a: (rays.__setitem__(
+                            0, rays[0] + 1), real(self, x, y))[1])
+    w, h = vp.width(), vp.height()
+    found = 0
+    asked = [0, 0]
+    views = [None]
+    if make is _field_window:
+        from tests.test_lazy_native_snap import VIEWS
+        views = VIEWS
+    cells = [(v, float(x), float(y)) for v in views
+             for x in np.linspace(3.3, w - 3, 41)
+             for y in np.linspace(2.9, h - 3, 29)]
+    for view, x, y in cells:
+        if view is not None and view != getattr(vp, "_view_now", None):
+            from tests.test_lazy_native_snap import _set_view
+            _set_view(vp, view)
+            vp._view_now = view
+        if True:
+            x, y = float(x), float(y)
+            rays[0] = 0
+            got = vp._face_crossing_point(x, y)
+            asked[0] += rays[0]
+            rays[0] = 0
+            with monkeypatch.context() as m:
+                m.setattr(type(vp), "_crossing_on_screen", _both_sides)
+                want = vp._face_crossing_point(x, y)
+            asked[1] += rays[0]
+            assert _key(got) == _key(want), (x, y)
+            found += want is not None
+    assert found > (0 if make is _field_window else 3)
+    assert asked[0] < asked[1]

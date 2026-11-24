@@ -163,7 +163,7 @@ class MetalView(ViewNavigation):
     def paintEngine(self):
         return None
 
-    # ---- more views of the same resident scene (views/wgpu_peer.py) -------
+    # ---- more views of the same resident scene (views/resident_peer.py) -------
     @property
     def _shared(self):
         """The view holding the resident scene: this one; a peer's first."""

@@ -190,3 +190,25 @@ def test_a_drawing_tool_owns_a_crossing_while_a_divider_still_drags(grid):
             event = MouseEvent(kind, *point, 1, held, 0)
             target = doc.model_views.route(doc, kind, method, event, held)
             assert (target is None) == expect_divider
+
+
+@pytest.mark.parametrize(("tolerance", "snaps"), [(16, False), (45, True)])
+def test_native_divider_uses_the_saved_snap_distance(grid, tolerance, snaps):
+    from app_shell.events import MouseEvent
+    from core.settings import settings
+
+    settings().setValue("views/divider_snap_px", tolerance)
+    grid.choose("single")
+    grid.choose("four")
+    doc = grid.win._doc
+    x, middle = grid.host.width // 4, grid.host.height // 2
+    for kind, method, y, held in [
+        ("press", "mousePressEvent", middle, 1),
+        ("move", "mouseMoveEvent", middle + 35, 1),
+        ("release", "mouseReleaseEvent", middle + 35, 0),
+    ]:
+        button = 0 if kind == "move" else 1
+        event = MouseEvent(kind, x, y, button, held, 0)
+        assert doc.model_views.route(doc, kind, method, event, held) is None
+    expected = middle if snaps else middle + 35
+    assert doc.model_views.archive()["rows"][0] == pytest.approx(expected / grid.host.height)

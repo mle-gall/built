@@ -190,7 +190,7 @@ class Scene:
     #: Camera stays in the position where it was before».
     camera_home: dict | None = None
     #: How many views it opens in and where the lines between them are
-    #: (views/multi_view.py); None: one view. Travels in the .igz like the
+    #: (ingetrazo_render.DocumentViews); None: one view. Travels in the .igz like the
     #: camera, and like the camera changing it is not an edit.
     views_home: dict | None = None
     #: The model's units (issue #33): the unit a bare number is typed in and
