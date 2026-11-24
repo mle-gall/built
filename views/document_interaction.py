@@ -434,25 +434,11 @@ def _ghost_edge_points(scene) -> array:
 
 
 def _cache_ver(vp):
-    """The scene version the per-version caches key on — frozen during a
-    groups-only transform preview (see DocumentInteraction.begin_groups_preview).
-    Module-level so the stub viewports in tests hit it too."""
-    frozen = getattr(vp, "_frozen_cache_version", None)
-    return frozen if frozen is not None else vp.scene.version
+    return ingetrazo_render.cache_ver(vp)
 
 
 def _content_ver(vp):
-    """``_cache_ver`` without the view-only bumps (a selection, a group
-    opened: ``Scene.bump_view``) — for caches of what the model IS, which a
-    click must not throw away: on the plant of #158 every click re-walked
-    21 406 placements and rebuilt every edge and outline (~1 s)."""
-    frozen = getattr(vp, "_frozen_cache_version", None)
-    if frozen is not None:
-        return ("frozen", frozen)
-    sc = vp.scene
-    # Nor the section planes' own bumps: a plane moved changes no face.
-    return getattr(sc, "geometry_version",
-                   getattr(sc, "content_version", sc.version))
+    return ingetrazo_render.content_ver(vp)
 
 
 def _plan_curved_edges(plan):
@@ -604,26 +590,15 @@ def _box_edges(frame, lo, hi) -> bytes:
 
 
 def _load_edit_rest_mode() -> str:
-    from core.settings import settings as QSettings
-    mode = str(QSettings().value("display/edit_rest_mode", "fade"))
-    return mode if mode in EDIT_REST_MODES else "fade"
+    return ingetrazo_render.load_edit_rest_mode()
 
 
 def _load_edit_rest_fade() -> float:
-    """Saved strength of the grey edit context, safely clamped to 0..1."""
-    from core.settings import settings as QSettings
-    try:
-        value = float(QSettings().value("display/edit_rest_fade",
-                                        EDIT_REST_FADE))
-    except (TypeError, ValueError):
-        value = EDIT_REST_FADE
-    return max(0.0, min(1.0, value))
+    return ingetrazo_render.load_edit_rest_fade()
 
 
 def _load_hide_similar() -> bool:
-    from core.settings import settings as QSettings
-    return str(QSettings().value("display/hide_similar_components",
-                                 "0")) == "1"
+    return ingetrazo_render.load_hide_similar()
 
 
 def _load_invert_wheel() -> bool:
@@ -651,14 +626,7 @@ SOFT_SHADOW_SPREAD = {1: 0.012, 2: 0.03, 3: 0.06}
 
 
 def _load_soft_shadows() -> int:
-    """The soft shadows level (Preferences ▸ General): 0 = off, the
-    default, since it costs the graphics card more while the sun is on."""
-    from core.settings import settings as QSettings
-    try:
-        n = int(QSettings().value("display/soft_shadows", 0))
-    except (TypeError, ValueError):
-        n = 0
-    return n if n in SOFT_SHADOW_SPREAD else 0
+    return ingetrazo_render.load_soft_shadows()
 
 
 _AXIS_DIRS = {"x": (1.0, 0.0, 0.0), "y": (0.0, 1.0, 0.0), "z": (0.0, 0.0, 1.0)}
@@ -702,33 +670,7 @@ def _ray_triangle(
     v1: QVector3D,
     v2: QVector3D,
 ) -> Optional[float]:
-    """Möller–Trumbore ray / triangle intersection. Returns distance ``t``
-    along the ray, or ``None`` for a miss / behind-camera hit. The triangle
-    is intersected from both sides — front/back orientation does not matter
-    because IngeTrazo doesn't (yet) cull back faces."""
-    eps = 1e-6
-    e1 = v1 - v0
-    e2 = v2 - v0
-    h = QVector3D.crossProduct(direction, e2)
-    a = QVector3D.dotProduct(e1, h)
-    # The same reading as _moller_trumbore: a small det of a small triangle
-    # is measured against its own size, not against 1e-6 (#1294).
-    if abs(a) < eps and (a == 0.0 or abs(a) <= eps * QVector3D.crossProduct(
-            e1, e2).length() * direction.length()):
-        return None
-    f = 1.0 / a
-    s = origin - v0
-    u = f * QVector3D.dotProduct(s, h)
-    if u < -_BARY_EPS or u > 1.0 + _BARY_EPS:
-        return None
-    q = QVector3D.crossProduct(s, e1)
-    v = f * QVector3D.dotProduct(direction, q)
-    if v < -_BARY_EPS or u + v > 1.0 + _BARY_EPS:
-        return None
-    t = f * QVector3D.dotProduct(e2, q)
-    if t < eps:
-        return None
-    return t
+    return ingetrazo_render.scalar_ray_triangle(origin, direction, v0, v1, v2)
 
 
 def _point_to_segment_distance_2d(p, a, b) -> float:
@@ -996,81 +938,13 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
         self._init_document()
 
-        # Linear-inference toggle (Alt): "all" | "off" | "parallel_perp".
-        self.linear_inference_mode = "all"
-        #: A bare Alt is down and nothing else has happened since — the tap
-        #: that cycles the mode on release (issue #26).
-        self._alt_tap = False
-        self._alt_down = False
+        ingetrazo_render.init_document_interaction(self)
         if not NATIVE:
             _AltWatch.watch(self)
-        self._last_mouse_pos: Optional[QPointF] = None
-
-        # Pixel radius for point snaps (endpoint, origin, close). 12 px felt
-        # mushy when the cursor was running along an existing edge: as long
-        # as the cursor was within 12 px of either end of a short edge,
-        # endpoint snap kept firing. It must be tighter — the green dot
-        # only lights up right at the vertex.
-        self.snap_threshold_px = 9.0
-        # On-edge snap gets a bigger radius than point snaps: an edge is a large
-        # linear target, so resting a corner on it (e.g. a door on the floor
-        # line) should be forgiving and not slip just outside the face.
-        self.edge_snap_threshold_px = 14.0
-        self.pick_threshold_px = 8.0
-        self.inference_angle_deg = 3.0
-
-        # How the rest of the model reads while you are INSIDE a group
-        # (Model Info ▸ Components). "fade" keeps the context
-        # visible but out of the way, "hide" drops it from the frame
-        # entirely — on a heavy import that is also the fastest, since a
-        # hidden group never reaches the VBOs. See `edit_rest_mode`.
-        self._edit_rest_mode = _load_edit_rest_mode()
-        # Keep the user setting distinct from ``_edit_rest_fade(group)``,
-        # which computes the effective fade for image and billboard passes.
-        self._edit_rest_fade_strength = _load_edit_rest_fade()
-        self.scene.hide_similar_components = _load_hide_similar()
         self._invert_wheel = _load_invert_wheel()
         self._invert_orbit_y = _load_invert_orbit_y()
         from ingetrazo_render import trackpad_nav
         self._trackpad_slide = trackpad_nav.load_slide_mode()
-        self._msaa = 4
-        self._soft_shadows = _load_soft_shadows()
-
-        # Hover highlight (Select tool). Not version-tracked — it changes with
-        # the cursor, not with scene mutations — so it's uploaded per paint.
-        self._hover_entity = None  # None | Edge | Face under the cursor
-        #: The placement a hovered face is reached THROUGH (a part inside a
-        #: component): its matrix puts the face's own coordinates in the
-        #: world. ``None`` for a loose face, which is already there.
-        self._hover_placement = None
-        self._last_double = None   # (timestamp, pos) of the last double-click
-        # Faces hidden from the normal pass while a tool previews — Push/Pull
-        # hides the flat inner face it's pushing in (a window/door) so the recess
-        # forming behind it is visible instead of covered. Keyed by identity.
-        self._suppressed_faces: ElementSet = ElementSet()
-
-        # When set, paintGL renders at this framebuffer size into the scene
-        # FBO and stops there (no blit, no widget overlay) — the hi-res image
-        # export path (render_image) reads the FBO back instead.
-        self._export_size: Optional[tuple[int, int]] = None
-        #: Pen widths in PIXELS for the next export render (edges and
-        #: profiles); 1 = the plain GL hairline. See ``_line_jitter``.
-        self._export_edge_px = 1
-        self._export_profile_px = 1
-        # Sheet-composer technical style: None (shaded), "tecnico" (white
-        # faces + dark edges on white, no axes/sky) or "lineas" (edges only).
-        # Set around a composer render; never persists across frames.
-        self.plano_style: Optional[str] = None
-        # Full Style override for a composer frame ("style:<name>"): wins
-        # over the scene's display style for that render; axes are skipped
-        # (a frame is a document, not the workspace). Never persists.
-        self.style_override = None
-        # This view's own Style when the window shows several views and the
-        # style was changed in this one (ingetrazo_render.DocumentViews); None: the
-        # scene's, which the window's own view always draws with.
-        self.view_style = None
-        self._fbo_size = (0, 0)
-
         # Camera navigation state (middle button)
         self._last_pos = None
         self._pan_mode = False
@@ -1086,40 +960,11 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         # charge of the left button.
         self.nav_mode: Optional[str] = None
 
-        # Preview line for the "always on top" tools, stashed during GL render
-        # and drawn in the QPainter overlay (thick, reliable pen).
-        self._overlay_rubber: Optional[tuple] = None
-
-        # Rubber-band box selection (left-drag with a box_select tool).
-        self._box_active = False
-        self._box_start: Optional[QPointF] = None
-        self._box_cur: Optional[QPointF] = None
-
         # Zoom Window rubber-band (nav_mode == "zoom_window").
         self._zoom_box_active = False
         self._zoom_box_start: Optional[QPointF] = None
         self._zoom_box_cur: Optional[QPointF] = None
 
-        # Numeric value buffer (VCB-style typed length).
-        self._value_buffer = ""
-
-        # Base-map tiles (Track G, G1). The fetcher is created lazily (needs a
-        # running app); GL textures are cached per tile, keyed by (source, x,y,z).
-        self._tile_fetcher = None
-        # A paint must only draw.  In particular, creating Qt's native HTTPS
-        # backend while an OpenGL context is current crashed in ntdll on an
-        # AMD Windows driver (#327).  Missing tiles schedule one event-loop
-        # callback; that callback starts the network work after paintGL has
-        # returned and the context is no longer inside a driver callback.
-        self._tile_requests_scheduled = False
-        self._last_coordinate = ""      # so the label only repaints on change
-        # Georef path node being hovered ``(path, index)`` — for the drag handle
-        # highlight (Track G, GeoPath node editing).
-        self._hover_geo_node = None
-        # World point on the profiled route to mark (profile→plan link), or None.
-        self._route_marker = None
-
-        # 3D draped terrain (Track G, G2 full).
 
     def _fb_size(self) -> tuple[int, int]:
         """Framebuffer pixel size (logical size × device pixel ratio)."""
@@ -1430,17 +1275,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
                              self._INST_MIN_PX if floor is None else floor)
 
     def _edit_rest_fade(self, group):
-        """How a reference image (``group=None``) or a face-me figure is
-        drawn while a group is open: the fade to apply, or ``None`` to skip
-        it. These passes bypass the buffers that carry the edit split, so
-        the people and images kept their colours on a grey model."""
-        if self.scene.edit_group is None:
-            return 0.0
-        if group is not None and not self._draws_in_edit_context(group):
-            return 0.0
-        if self._edit_rest_mode == "hide":
-            return None
-        return self.edit_rest_fade if self._edit_rest_mode == "fade" else 0.0
+        return ingetrazo_render.edit_rest_fade(self, group)
 
     def image_plane_at(self, screen_x: float, screen_y: float,
                        selectable_only: bool = False):
@@ -1733,16 +1568,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return ingetrazo_render.faceme_base(self, g)
 
     def set_hover(self, entity, placement=None) -> None:
-        """Set the entity (edge/face) highlighted under the cursor and repaint
-        if it changed. ``None`` clears the highlight. ``placement`` is the
-        component placement a face inside a component was picked through
-        (see :meth:`pick_face_placement`): it is what puts the marking on the
-        part."""
-        if entity == self._hover_entity and placement is self._hover_placement:
-            return
-        self._hover_entity = entity
-        self._hover_placement = placement
-        self.update()
+        return ingetrazo_render.set_hover(self, entity, placement)
 
     def flash_status(self, text: str, msec: int = 2500) -> None:
         """Briefly show ``text`` in the main window's status bar (e.g. Push/Pull
@@ -1754,15 +1580,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
             bar.showMessage(text, msec)
 
     def set_suppressed_faces(self, faces) -> None:
-        """Hide a set of scene faces from the normal pass (e.g. the flat inner
-        face a Push/Pull is recessing). Identity-keyed; empty set restores.
-        No-op when unchanged so the drag doesn't rebuild every frame."""
-        faces = ElementSet(faces)
-        if faces == self._suppressed_faces:
-            return
-        self._suppressed_faces = faces
-        self._edges_version = -1  # the faces VBO is rebuilt by _sync_edges
-        self.update()
+        return ingetrazo_render.set_suppressed_faces(self, faces)
 
     def _rubber_band_style(self):
         return ingetrazo_render.rubber_band_style(self)
@@ -1976,21 +1794,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
     def _coplanar_eps(self, origin: QVector3D, direction: QVector3D,
                       best_t: float) -> float:
-        """How much deeper than the nearest hit a face may sit and still
-        count as "the same depth" (coplanar faces, a hole's rim on its
-        slab): a ten-thousandth of the distance from the EYE, never less
-        than 0.1 mm. It used to be a ten-thousandth of the ray parameter —
-        fine in perspective, where the ray starts at the eye, but the
-        parallel camera's ray starts a far plane behind it, 10 km back, so
-        the tolerance came out a full metre and a smaller face 30 cm
-        BEHIND the one under the cursor won the coplanar tiebreak
-        (@pacaeiro, issue #37: «face detection is identifying the face
-        that is behind the one in front… in CAMERA orthogonal mode»)."""
-        cam = getattr(self, "camera", None)
-        if cam is None:                     # a bare stand-in (tests)
-            return max(1e-4, best_t * 1e-4)
-        t_eye = QVector3D.dotProduct(cam.eye() - origin, direction)
-        return max(1e-4, abs(best_t - t_eye) * 1e-4)
+        return ingetrazo_render.coplanar_eps(self, origin, direction, best_t)
 
     def _world_from_pixel(self, x: int, y: int) -> Optional[QVector3D]:
         return ingetrazo_render.world_from_pixel(self, x, y)
@@ -2613,36 +2417,11 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
     @classmethod
     def _tool_busy_for_delete(cls, tool) -> bool:
-        """``_tool_busy`` plus the per-tool state that means "an operation
-        holds geometry": Offset's / Push-Pull's base face, Follow Me's
-        profile, Fillet's picked edges or live sizing. Delete waits then."""
-        if cls._tool_busy(tool):
-            return True
-        return any(getattr(tool, attr, None)
-                   for attr in ("base_face", "_profile", "sizing", "edges"))
+        return ingetrazo_render.tool_busy_for_delete(cls, tool)
 
     @staticmethod
     def _tool_busy(tool) -> bool:
-        """Whether the active tool has an operation in progress that Esc should
-        cancel before falling through to clearing the selection: an unfinished
-        chain (start_point / nodes), a drag (dragging / grab / node edit), or
-        an eraser stroke.
-
-        The POINTS are tested against None, not for truth: ``QVector3D(0, 0,
-        0)`` is falsy in PySide6 (the house gotcha), so a line or a move
-        started exactly ON THE ORIGIN read as "nothing in progress" — Esc
-        would skip straight to clearing the selection instead of cancelling
-        it. Found on 2026-09-17 writing the Alt gate, which asks this same
-        question."""
-        for attr in ("start_point", "grab"):
-            if getattr(tool, attr, None) is not None:
-                return True
-        for attr in ("dragging", "_drag", "_stroke"):
-            if getattr(tool, attr, None):
-                return True
-        if getattr(tool, "nodes", None):
-            return True
-        return False
+        return ingetrazo_render.tool_busy(tool)
 
     def _gedge_screen(self):
         return ingetrazo_core.gedge_screen(self)
@@ -2753,44 +2532,10 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return ingetrazo_core.selection_box_points(self, skip)
 
     def pick_axis(self, screen_x: float, screen_y: float):
-        """The model axis line under the cursor — ``"x"`` / ``"y"`` /
-        ``"z"`` — or ``None``. The Tape reads an axis as a guide source
-        (Rafael, Revisión 3: «pinchas el eje y sacas una guía
-        paralela a 20 m del origen» before anything is drawn)."""
-        from core.guide import GUIDE_HALF_LEN
-        from core import axes as _axes
-        best, best_d = None, self.pick_threshold_px
-        o = _axes.origin()
-        for name in ("x", "y", "z"):
-            d = _axes.axis(name) * GUIDE_HALF_LEN
-            seg = self._clip_segment_front(o - d, o + d)
-            if seg is None:
-                continue
-            pa = self._world_to_pixel(seg[0])
-            pb = self._world_to_pixel(seg[1])
-            if pa is None or pb is None:
-                continue
-            dist = _point_to_segment_distance_2d((screen_x, screen_y), pa, pb)
-            if dist < best_d:
-                best_d = dist
-                best = name
-        return best
+        return ingetrazo_render.pick_axis(self, screen_x, screen_y)
 
     def _axis_source_visible(self, name: str, point: QVector3D) -> bool:
-        """Whether an axis has a visible screen direction at ``point``.
-
-        An axis viewed end-on has no usable screen direction; near its
-        vanishing point a small world step must still move visibly on screen.
-        """
-        from core import axes as _axes
-        axis = _axes.axis(name)
-        half_step = 0.25
-        before = self._world_to_pixel(point - axis * half_step)
-        after = self._world_to_pixel(point + axis * half_step)
-        if before is None or after is None:
-            return False
-        return math.hypot(after[0] - before[0],
-                          after[1] - before[1]) >= 0.5
+        return ingetrazo_render.axis_source_visible(self, name, point)
 
     def _shown_guides(self) -> list:
         return shown_guides(self.scene)
@@ -2814,21 +2559,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return ingetrazo_render.hlr_geometry_now(self)
 
     def _effective_style(self):
-        """The display style this frame draws with (Styles): the
-        composer's ``plano_style`` override maps onto the same face modes,
-        then a ``style_override``, else the scene's active style. Shared by
-        the paint pass and the snap engine so what the eye sees and what
-        the cursor may grab never disagree."""
-        from core.style import Style
-        if self.plano_style == "tecnico":
-            return Style(name="tecnico", face_mode="hidden_line", sky=False,
-                         background=(1.0, 1.0, 1.0))
-        if self.plano_style == "lineas":
-            return Style(name="lineas", face_mode="wireframe", sky=False,
-                         background=(1.0, 1.0, 1.0))
-        if self.style_override is not None:
-            return self.style_override
-        return self._view_style() or Style()
+        return ingetrazo_render.effective_style(self)
 
     def _view_style(self):
         """The style this view shows outside the composer: its own when it
@@ -2925,47 +2656,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return factory(key, plus)
 
     def _apply_tool_cursor(self) -> None:
-        """The pointer becomes the active tool's icon; Select and
-        unknown tools keep the standard arrow.
-
-        A tool that does something else under a modifier says so with the
-        pointer: Paint holds Alt to SAMPLE a face's material instead of
-        painting it, and the cursor swaps the bucket for an eyedropper while
-        it is down."""
-        icon = getattr(self.active_tool, "icon", None)
-        if icon == "paint":
-            from tools.paint import PaintTool
-            # ``keyboardModifiers()`` is the state as of the LAST event
-            # delivered: on the Alt press it did not include Alt yet and on
-            # the release it still did, so the pointer flipped once per
-            # tap instead of following the key (issue #47, @pacaeiro: «the
-            # cursor is acting as a toggle button»). The key handlers say
-            # explicitly whether Alt is down.
-            if PaintTool.sample_armed or getattr(self, "_alt_down", False):
-                icon = "eyedropper"
-        # The guide-mode plus: the Tape and the Protractor say with
-        # it whether this measurement will leave a guide behind (issue #29).
-        plus = bool(getattr(self.active_tool, "cursor_plus", False))
-        cur = (self._pointer_for_tool(icon, plus)
-               if self.active_tool is not None else None)
-        if cur is None and self.active_tool is not None:
-            # A tool without a drawn icon can still ask for a stock Qt
-            # cursor (Position Texture shows a hand).
-            solid = getattr(self.active_tool, "solid_cursor_key", None)
-            if solid and getattr(getattr(self, "_host", None), "tool_cursor", None):
-                self.setCursor("tool:" + solid)
-                return
-            shape = getattr(self.active_tool, "qt_cursor", None)
-            if shape is not None:
-                if NATIVE:
-                    cur = shape
-                else:
-                    from PySide6.QtGui import QCursor
-                    cur = QCursor(shape)
-        if cur is not None:
-            self.setCursor(cur)
-        else:
-            self.unsetCursor()
+        return ingetrazo_render.apply_tool_cursor(self)
 
     def _apply_nav_cursor(self) -> None:
         """The pointer for a camera nav mode: orbit / pan / the magnifier
@@ -3063,14 +2754,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return getattr(group, "owner", None) or group
 
     def _draws_in_edit_context(self, group) -> bool:
-        """Whether ``group`` is part of the surroundings of the group being
-        edited (so it fades or hides), rather than the subject itself."""
-        ctx = self.scene.edit_group
-        if ctx is None:
-            return False
-        if group is ctx or getattr(group, "context", None) is ctx:
-            return False          # the container and what lives inside it
-        return self._owner_of(group) is not ctx
+        return ingetrazo_render.draws_in_edit_context(self, group)
 
 
     def _model_point_at(self, x: float, y: float):
