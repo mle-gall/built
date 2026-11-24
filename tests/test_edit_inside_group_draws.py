@@ -6,15 +6,13 @@ leaves the open mesh's serial out on purpose; the open group's own edges
 were cached with it and never refreshed until you left the group."""
 from __future__ import annotations
 
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 import pytest
 from PySide6.QtCore import QPointF, Qt
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication
 
 from core.group import Group
 from core.mesh import Mesh
-
-_app = QApplication.instance() or QApplication([])
 
 
 def _box_group():
@@ -33,10 +31,9 @@ def _uploaded_edges(vp):
 
 
 @pytest.mark.parametrize("component", [False, True])
-def test_an_edge_drawn_inside_an_open_group_is_drawn_at_once(component):
+def test_an_edge_drawn_inside_an_open_group_is_drawn_at_once(native_window, component):
     from ingetrazo_core import Matrix4 as QMatrix4x4
-    from views.main_window import MainWindow
-    win = MainWindow()
+    win = native_window
     vp, sc = win.viewport, win.viewport.scene
     g = _box_group()
     if component:
@@ -56,12 +53,10 @@ def test_an_edge_drawn_inside_an_open_group_is_drawn_at_once(component):
     sc.mesh.add_edge(V(0.2, 0, 0.2), V(0.8, 0, 0.8))    # drawn inside
     sc.version += 1
     assert _uploaded_edges(vp) == before + 1
-    win._saved_version = sc.version
-    win.close()
 
 
 @pytest.mark.parametrize("component", [False, True])
-def test_empty_click_leaves_only_beyond_the_dotted_box(monkeypatch, component):
+def test_empty_click_leaves_only_beyond_the_dotted_box(native_window, monkeypatch, component):
     """The edit context is the visible box, not only the occupied faces.
 
     A cube now has a deliberate empty gutter inside its dotted frame, and an
@@ -71,9 +66,8 @@ def test_empty_click_leaves_only_beyond_the_dotted_box(monkeypatch, component):
     from ingetrazo_core import Matrix4 as QMatrix4x4
     from tools.base import ToolContext
     from tools.rust_tools import SelectTool
-    from views.main_window import MainWindow
 
-    win = MainWindow()
+    win = native_window
     vp, scene = win.viewport, win.viewport.scene
     group = _box_group()
     if component:
@@ -121,8 +115,6 @@ def test_empty_click_leaves_only_beyond_the_dotted_box(monkeypatch, component):
     tool.on_click(ToolContext(vp, V(0, 0, 0), outside,
                               Qt.NoModifier, None))
     assert scene.edit_group is None
-    win._saved_version = scene.version
-    win.close()
 
 
 def test_the_edit_box_is_world_edges_on_its_twelve_edges():

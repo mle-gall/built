@@ -8,22 +8,16 @@ inferences do not pull the grip; what is being scaled is left out of the
 snap, so it never lands on itself."""
 from __future__ import annotations
 
-import os
-import sys
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 from types import SimpleNamespace
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
 from PySide6.QtCore import QEvent, QPointF, Qt
 from PySide6.QtGui import QMouseEvent
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
 
 from tests.test_scale_grips import V, _tool_with_box
-
-if QApplication.instance() is None:
-    QApplication(sys.argv[:1])
 
 
 def _grip(tool, want):
@@ -84,46 +78,41 @@ def _box(scene, x0, y0, z0, x1, y1, z1):
     return out
 
 
-def test_in_the_viewport_the_grip_lands_on_another_boxs_corner():
+def test_in_the_viewport_the_grip_lands_on_another_boxs_corner(native_window):
     """Front view: a 1 m cube and, beside it, a 2.5 m tall post. Grab the
     cube's top-face grip, hover the post's top corner: the cube becomes
     exactly 2.5 m tall. Hovering the cube's OWN corner does not snap."""
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        vp.resize(1000, 700)
-        sc = vp.scene
-        sc.guides.clear()
-        cube = _box(sc, 0, 0, 0, 1, 1, 1)
-        _box(sc, 3, 0, 0, 3.5, 1, 2.5)                     # the post
-        sc.version += 1
-        vp.camera.set_view("front")
-        vp.camera.perspective = False
-        vp.camera.fit_to(QVector3D(-1, 0, -0.5), QVector3D(4.5, 1, 3))
-        sc.selection.clear()
-        sc.selection.update(cube)
-        win._activate_tool("scale")
-        tool = vp.active_tool
-        tool._refresh_box(vp)
-        grip = _grip(tool, (0.5, 0.5, 1.0))               # top face grip
-        tool._grab(vp, grip, (0, 0))
+    win = native_window
+    vp = win.viewport
+    win._host.resize(1000, 700, 1.0)
+    sc = vp.scene
+    sc.guides.clear()
+    cube = _box(sc, 0, 0, 0, 1, 1, 1)
+    _box(sc, 3, 0, 0, 3.5, 1, 2.5)                     # the post
+    sc.version += 1
+    vp.camera.set_view("front")
+    vp.camera.perspective = False
+    vp.camera.fit_to(QVector3D(-1, 0, -0.5), QVector3D(4.5, 1, 3))
+    sc.selection.clear()
+    sc.selection.update(cube)
+    win._activate_tool("scale")
+    tool = vp.active_tool
+    tool._refresh_box(vp)
+    grip = _grip(tool, (0.5, 0.5, 1.0))               # top face grip
+    tool._grab(vp, grip, (0, 0))
 
-        def hover(p):
-            px = vp._world_to_pixel(p)
-            ev = QMouseEvent(QEvent.MouseMove, QPointF(*px), QPointF(*px),
-                             Qt.NoButton, Qt.NoButton, Qt.NoModifier)
-            ctx = vp._build_ctx(ev)
-            tool.on_hover(ctx)
-            return ctx.snap
+    def hover(p):
+        px = vp._world_to_pixel(p)
+        ev = QMouseEvent(QEvent.MouseMove, QPointF(*px), QPointF(*px),
+                         Qt.NoButton, Qt.NoButton, Qt.NoModifier)
+        ctx = vp._build_ctx(ev)
+        tool.on_hover(ctx)
+        return ctx.snap
 
-        s = hover(QVector3D(3.0, 0.0, 2.5))                # the post's corner
-        assert s.kind == "endpoint"
-        assert tool._factors[2] == pytest.approx(2.5, abs=1e-5)
-        own = hover(QVector3D(1.0, 0.0, 1.0 * tool._factors[2]))
-        assert not (own.kind == "endpoint"
-                    and abs(own.point.x() - 1.0) < 1e-6), own
-        tool.on_cancel(vp)
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    s = hover(QVector3D(3.0, 0.0, 2.5))                # the post's corner
+    assert s.kind == "endpoint"
+    assert tool._factors[2] == pytest.approx(2.5, abs=1e-5)
+    own = hover(QVector3D(1.0, 0.0, 1.0 * tool._factors[2]))
+    assert not (own.kind == "endpoint"
+                and abs(own.point.x() - 1.0) < 1e-6), own
+    tool.on_cancel(vp)

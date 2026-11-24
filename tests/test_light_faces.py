@@ -8,6 +8,7 @@ read-only pass, a pick still gets the mesh's own face. Skipped without the
 engine."""
 from __future__ import annotations
 
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 import os
 import random
 
@@ -30,7 +31,6 @@ _app = QApplication.instance() or QApplication([])
 pytestmark = pytest.mark.skipif(
     _native.native is None or _native.qt_hypot() is None,
     reason="engine off or not built")
-
 
 
 def _built(mesh) -> bool:
@@ -196,12 +196,11 @@ def test_hovering_with_select_builds_no_mesh(big_enough, tmp_path):
         win.close()
 
 
-def test_a_centre_found_on_a_light_face_survives_an_edit(big_enough, tmp_path):
+def test_a_centre_found_on_a_light_face_survives_an_edit(native_window, big_enough, tmp_path):
     """_valid_center_ref re-checks its source against the mesh's own faces:
     a light face is not one of them, and the centre would go at any edit."""
     from core.mesh import Mesh
     from core.group import Group
-    from views.main_window import MainWindow
     import math
     scene = Scene()
     m = Mesh()
@@ -212,24 +211,20 @@ def test_a_centre_found_on_a_light_face_survives_an_edit(big_enough, tmp_path):
     scene.groups.append(Group(m, name="discs"))
     path = tmp_path / "discs.igz"
     igz.save_scene(scene, path)
-    win = MainWindow()
-    try:
-        assert win.open_path(path) is not False
-        vp = win.viewport
-        mesh = vp.scene.groups[0].mesh
-        assert type(mesh) is M.DeferredMesh
-        light = array_bake.light_face(mesh, 0)
-        found = vp._center_of_face(light, vp.scene.groups[0], mesh, 0.0, 0.0)
-        assert found is not None
-        assert type(mesh) is M.DeferredMesh
-        vp._center_ref = found
-        vp.scene.version += 1
-        fresh = vp._valid_center_ref()
-        assert fresh is not None, "the centre went with the edit"
-        assert (fresh[0].x(), fresh[0].y()) == (found[0].x(), found[0].y())
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    win = native_window
+    assert win.open_path(path) is not False
+    vp = win.viewport
+    mesh = vp.scene.groups[0].mesh
+    assert type(mesh) is M.DeferredMesh
+    light = array_bake.light_face(mesh, 0)
+    found = vp._center_of_face(light, vp.scene.groups[0], mesh, 0.0, 0.0)
+    assert found is not None
+    assert type(mesh) is M.DeferredMesh
+    vp._center_ref = found
+    vp.scene.version += 1
+    fresh = vp._valid_center_ref()
+    assert fresh is not None, "the centre went with the edit"
+    assert (fresh[0].x(), fresh[0].y()) == (found[0].x(), found[0].y())
 
 
 def _click(vp, x, y):

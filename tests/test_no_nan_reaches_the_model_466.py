@@ -9,6 +9,7 @@ gates are: a snap point that is not finite counts as no point, and a
 segment with a non-finite end is not planned into the mesh."""
 from __future__ import annotations
 
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 import math
 
 from ingetrazo_core import Vec3 as V
@@ -36,15 +37,10 @@ def test_a_segment_with_a_nan_end_is_skipped_not_the_whole_stroke():
                for c in (v.position.x(), v.position.y(), v.position.z()))
 
 
-def test_a_nan_snap_is_no_point_for_the_tools():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        vp.inference.snap = lambda *a, **k: SnapResult(V(NAN, 0, 0), "on_edge")
-        assert vp._snap_at(10, 10, None) is None
-        vp.inference.snap = lambda *a, **k: SnapResult(V(1, 2, 3), "on_edge")
-        assert vp._snap_at(10, 10, None).point == V(1, 2, 3)
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_a_nan_snap_is_no_point_for_the_tools(native_window):
+    win = native_window
+    vp = win.viewport
+    vp.inference.snap = lambda *a, **k: SnapResult(V(NAN, 0, 0), "on_edge")
+    assert vp._snap_at(10, 10, None) is None
+    vp.inference.snap = lambda *a, **k: SnapResult(V(1, 2, 3), "on_edge")
+    assert vp._snap_at(10, 10, None).point == V(1, 2, 3)

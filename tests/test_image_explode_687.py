@@ -10,16 +10,13 @@ textured with the picture where the image was, and the eyedropper over an
 image takes its picture as the current paint, mapped where it sits."""
 from __future__ import annotations
 
-import os
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
 from PySide6.QtCore import QPointF, Qt  # noqa: E402
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
-_app = QApplication.instance() or QApplication([])
 
 from core.group import Group  # noqa: E402
 from core.history import AddImagePlaneCommand, History  # noqa: E402
@@ -67,33 +64,28 @@ def test_a_flat_image_explodes_to_nothing():
     assert flat.as_group() is None
 
 
-def test_explode_image_is_one_undo_step():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        scene = vp.scene
-        image = _facade()
-        vp.history.execute(AddImagePlaneCommand(image))
-        assert scene.selection == {image}
-        before = len(scene.groups)
-        win._on_explode_image()
-        assert image not in scene.image_planes
-        [group] = scene.groups[before:]
-        assert scene.selection == {group}
-        assert group.mesh.faces[0].attrs["texture"]["path"] == image.path
-        assert vp.history.undo()
-        assert image in scene.image_planes
-        assert group not in scene.groups
-        # Explode on a selected image (the Explode key) explodes it too.
-        scene.selection.clear()
-        scene.selection.add(image)
-        win._on_explode_group()
-        assert image not in scene.image_planes
-        assert len(scene.groups) == before + 1
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_explode_image_is_one_undo_step(native_window):
+    win = native_window
+    vp = win.viewport
+    scene = vp.scene
+    image = _facade()
+    vp.history.execute(AddImagePlaneCommand(image))
+    assert scene.selection == {image}
+    before = len(scene.groups)
+    win._on_explode_image()
+    assert image not in scene.image_planes
+    [group] = scene.groups[before:]
+    assert scene.selection == {group}
+    assert group.mesh.faces[0].attrs["texture"]["path"] == image.path
+    assert vp.history.undo()
+    assert image in scene.image_planes
+    assert group not in scene.groups
+    # Explode on a selected image (the Explode key) explodes it too.
+    scene.selection.clear()
+    scene.selection.add(image)
+    win._on_explode_group()
+    assert image not in scene.image_planes
+    assert len(scene.groups) == before + 1
 
 
 class _Viewport:

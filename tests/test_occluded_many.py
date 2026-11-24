@@ -18,6 +18,7 @@ Rays ask the pick index (NumPy), so this runs headless, GL or not.
 """
 from __future__ import annotations
 
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 import os
 import random
 
@@ -207,7 +208,7 @@ def test_compute_snap_picks_the_same_candidate_with_the_batch(hidden_below):
         assert batches                       # the rest went in one call
 
 
-def test_the_kill_switch_keeps_the_rays_one_by_one(monkeypatch):
+def test_the_kill_switch_keeps_the_rays_one_by_one(native_window, monkeypatch):
     # INGETRAZO_NO_SNAP_FAST=1: compute_snap gets no batch to ask.
     import views.document_interaction as vv
     monkeypatch.setattr(vv, "_NO_SNAP_FAST", True)
@@ -225,19 +226,14 @@ def test_the_kill_switch_keeps_the_rays_one_by_one(monkeypatch):
     import core.inference as ci
     if getattr(ci, "compute_snap", None) is real:
         monkeypatch.setattr(ci, "compute_snap", spy)
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        vp.scene.mesh.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)])
-        vp.scene.version += 1
-        win._activate_tool("line")
-        from PySide6.QtCore import QPointF, Qt
-        vp._process_hover(QPointF(vp.width() / 2, vp.height() / 2), Qt.NoModifier)
-        assert "are_occluded" in seen and seen["are_occluded"] is None
-    finally:
-        win._saved_version = vp.scene.version
-        win.close()
+    win = native_window
+    vp = win.viewport
+    vp.scene.mesh.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)])
+    vp.scene.version += 1
+    win._activate_tool("line")
+    from PySide6.QtCore import QPointF, Qt
+    vp._process_hover(QPointF(vp.width() / 2, vp.height() / 2), Qt.NoModifier)
+    assert "are_occluded" in seen and seen["are_occluded"] is None
 
 
 @pytest.mark.parametrize("view", ["iso", "front", "back", "top"])

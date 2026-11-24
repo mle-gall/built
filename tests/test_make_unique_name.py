@@ -6,6 +6,7 @@
 names, so it skipped numbers and could repeat one."""
 from __future__ import annotations
 
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core.group import Group, copy_group
@@ -120,43 +121,33 @@ def test_without_rename_the_name_stays():
 
 # --- the window's commands ----------------------------------------------------
 
-def test_the_menu_make_unique_renames(monkeypatch):
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        scene = win.viewport.scene
-        silla = _component("Silla")
-        otra = copy_group(silla, V(5, 0, 0))
-        scene.groups.extend([silla, otra])
-        scene.selection.clear()
-        scene.selection.add(otra)
-        win._on_make_unique()
-        assert otra.name == "Silla #2"
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_the_menu_make_unique_renames(native_window, monkeypatch):
+    win = native_window
+    scene = win.viewport.scene
+    silla = _component("Silla")
+    otra = copy_group(silla, V(5, 0, 0))
+    scene.groups.extend([silla, otra])
+    scene.selection.clear()
+    scene.selection.add(otra)
+    win._on_make_unique()
+    assert otra.name == "Silla #2"
 
 
-def test_the_offered_component_name_is_the_first_free_number(monkeypatch):
+def test_the_offered_component_name_is_the_first_free_number(native_window, monkeypatch):
     from core.i18n import tr
     from views import chrome_forms
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        scene = win.viewport.scene
-        uno = _component(tr("Component #{n}", n=1))
-        # three copies of #1 used to offer «#4»; #2 is free
-        scene.groups.extend([uno, copy_group(uno, V(3, 0, 0)),
-                             copy_group(uno, V(6, 0, 0)),
-                             _component(tr("Component #{n}", n=3))])
-        scene.mesh.add_face([V(20, 0, 0), V(21, 0, 0), V(21, 1, 0),
-                             V(20, 1, 0)])
-        scene.selection.clear()
-        scene.selection.update(scene.mesh.faces)
-        win._on_make_component()
-        form = chrome_forms.current(win)
-        assert form.value("text") == tr("Component #{n}", n=2)
-        form.press("cancel")
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    win = native_window
+    scene = win.viewport.scene
+    uno = _component(tr("Component #{n}", n=1))
+    # three copies of #1 used to offer «#4»; #2 is free
+    scene.groups.extend([uno, copy_group(uno, V(3, 0, 0)),
+                         copy_group(uno, V(6, 0, 0)),
+                         _component(tr("Component #{n}", n=3))])
+    scene.mesh.add_face([V(20, 0, 0), V(21, 0, 0), V(21, 1, 0),
+                         V(20, 1, 0)])
+    scene.selection.clear()
+    scene.selection.update(scene.mesh.faces)
+    win._on_make_component()
+    form = chrome_forms.current(win)
+    assert form.value("text") == tr("Component #{n}", n=2)
+    form.press("cancel")

@@ -14,6 +14,7 @@ front colour, not the back tint.
 Needs a GL context that renders; skipped where the platform has none."""
 from __future__ import annotations
 
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -93,30 +94,25 @@ def _prisma(n=12, r=1.0, h=2.0):
     return m
 
 
-def test_the_placements_signature_survives_an_orbit_and_follows_an_edit():
+def test_the_placements_signature_survives_an_orbit_and_follows_an_edit(native_window):
     """Orbiting a big model walked every placement on every frame to sign
     them (#158). The signature is kept while the scene version stands and
     re-signed when a command moves a placement (and bumps the version)."""
     from core.group import Group
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        g = Group(_prisma(), name="P")
-        g.xform = QMatrix4x4()
-        vp.scene.groups.append(g)
-        vp.scene.version += 1
-        e0 = vp._placements_epoch()
-        vp._tick = getattr(vp, "_tick", 0) + 1         # next frame
-        vp.camera.orbit(6.0, 2.0, 600)
-        assert vp._placements_epoch() == e0
-        assert vp._placements() is vp._placements()
-        m = QMatrix4x4()
-        m.translate(1.0, 0.0, 0.0)
-        g.xform = m * g.xform
-        vp.scene.version += 1                           # what every tool does
-        vp._tick += 1
-        assert vp._placements_epoch() != e0
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    win = native_window
+    vp = win.viewport
+    g = Group(_prisma(), name="P")
+    g.xform = QMatrix4x4()
+    vp.scene.groups.append(g)
+    vp.scene.version += 1
+    e0 = vp._placements_epoch()
+    vp._tick = getattr(vp, "_tick", 0) + 1         # next frame
+    vp.camera.orbit(6.0, 2.0, 600)
+    assert vp._placements_epoch() == e0
+    assert vp._placements() is vp._placements()
+    m = QMatrix4x4()
+    m.translate(1.0, 0.0, 0.0)
+    g.xform = m * g.xform
+    vp.scene.version += 1                           # what every tool does
+    vp._tick += 1
+    assert vp._placements_epoch() != e0

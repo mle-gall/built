@@ -14,6 +14,7 @@ import json
 import threading
 
 import numpy as np
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 import pytest
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 
@@ -407,18 +408,15 @@ def test_renderer_undo_after_leaving_the_group_rebakes_it(store):
 
 
 @pytest.fixture
-def bridge(monkeypatch):
+def bridge(monkeypatch, native_window):
     from plugins.ai_bridge import _Bridge
-    from views.main_window import MainWindow
     monkeypatch.setenv("INGETRAZO_AI_PORT", "0")
-    win = MainWindow()
+    win = native_window
     scene = win.viewport.scene
     scene.mesh.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)])
     b = _Bridge(win.viewport)
     yield win, b
     b.stop()
-    win._saved_version = scene.version
-    win.close()
 
 
 def _call(b, tool, **args):

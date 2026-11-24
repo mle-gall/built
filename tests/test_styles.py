@@ -3,15 +3,11 @@
 """Display styles: presets, persistence, scene binding."""
 from __future__ import annotations
 
-import sys
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 
-from PySide6.QtWidgets import QApplication
 
 from core.scene import Scene
 from core.style import BUILTIN_STYLES, FACE_MODES, Style
-
-if QApplication.instance() is None:
-    QApplication(sys.argv[:1])
 
 
 def test_style_roundtrip_and_defaults():
@@ -99,23 +95,18 @@ def test_style_by_name_returns_copies():
     assert style_by_name("No existe") is None
 
 
-def test_the_sheet_inspector_style_list_lists_the_presets():
+def test_the_sheet_inspector_style_list_lists_the_presets(native_window):
     # A frame's style list (the Sheets inspector's) must carry the model
     # styles (the "Architectural is missing in layout" report) and map
     # legacy keys onto their preset equivalents.
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        ws = win._ensure_composer()._ws
-        keys = [key for key, _label in ws._choices()["styles"]]
-        assert "sombreado" in keys             # the model's active style
-        assert "style:Architectural" in keys
-        assert "style:Hidden line" in keys
-        assert "vectorial" in keys
-        assert "tecnico" not in keys           # legacy keys leave the UI
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    win = native_window
+    ws = win._ensure_composer()._ws
+    keys = [key for key, _label in ws._choices()["styles"]]
+    assert "sombreado" in keys             # the model's active style
+    assert "style:Architectural" in keys
+    assert "style:Hidden line" in keys
+    assert "vectorial" in keys
+    assert "tecnico" not in keys           # legacy keys leave the UI
 
 
 def _v(x, y, z=0.0):

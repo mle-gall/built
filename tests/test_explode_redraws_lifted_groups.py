@@ -10,14 +10,10 @@ the same way has the same mutation serial and counts — the chunk cache took
 the new mesh for the old one."""
 from __future__ import annotations
 
-import sys
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 
 import numpy as np
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
-from PySide6.QtWidgets import QApplication
-
-if QApplication.instance() is None:
-    QApplication(sys.argv[:1])
 
 
 def _box(scene, hist):
@@ -41,38 +37,33 @@ def _mesh_bbox(group):
     return pts.min(0), pts.max(0)
 
 
-def test_exploded_copies_are_drawn_where_they_are():
+def test_exploded_copies_are_drawn_where_they_are(native_window):
     from core.group import copy_group
     from core.history import (ExplodeGroupCommand, InsertGroupCommand,
                               MakeNestedGroupCommand)
-    from views.main_window import MainWindow
-    win = MainWindow()
+    win = native_window
     vp = win.viewport
-    try:
-        scene, hist = vp.scene, vp.history
-        scene.groups[:] = []                       # no scale figure
-        box = _box(scene, hist)
-        for dx in (2.0, 4.0):                      # Move + Ctrl copies
-            hist.execute(InsertGroupCommand(copy_group(box, V(dx, 0, 0))))
-        boxes = list(scene.groups)
-        for g in boxes:
-            vp._group_chunk(g)                     # drawn once, top level
-        hist.execute(MakeNestedGroupCommand([], [], boxes, name="Fila"))
-        row = scene.groups[-1]
-        m = QMatrix4x4()
-        m.translate(0, 3, 1)
-        row.xform = m * row.xform                  # the container moved
-        scene.version += 1
-        vp._placements()                           # drawn nested
-        hist.execute(ExplodeGroupCommand(row))
-        for g in boxes:
-            entry = vp._group_chunk(g) if g.xform is None else None
-            if entry is None:
-                continue
-            lo, hi = _drawn_bbox(entry)
-            mlo, mhi = _mesh_bbox(g)
-            assert np.allclose(lo, mlo, atol=1e-5), (g.name, lo, mlo)
-            assert np.allclose(hi, mhi, atol=1e-5), (g.name, hi, mhi)
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    scene, hist = vp.scene, vp.history
+    scene.groups[:] = []                       # no scale figure
+    box = _box(scene, hist)
+    for dx in (2.0, 4.0):                      # Move + Ctrl copies
+        hist.execute(InsertGroupCommand(copy_group(box, V(dx, 0, 0))))
+    boxes = list(scene.groups)
+    for g in boxes:
+        vp._group_chunk(g)                     # drawn once, top level
+    hist.execute(MakeNestedGroupCommand([], [], boxes, name="Fila"))
+    row = scene.groups[-1]
+    m = QMatrix4x4()
+    m.translate(0, 3, 1)
+    row.xform = m * row.xform                  # the container moved
+    scene.version += 1
+    vp._placements()                           # drawn nested
+    hist.execute(ExplodeGroupCommand(row))
+    for g in boxes:
+        entry = vp._group_chunk(g) if g.xform is None else None
+        if entry is None:
+            continue
+        lo, hi = _drawn_bbox(entry)
+        mlo, mhi = _mesh_bbox(g)
+        assert np.allclose(lo, mlo, atol=1e-5), (g.name, lo, mlo)
+        assert np.allclose(hi, mhi, atol=1e-5), (g.name, hi, mhi)

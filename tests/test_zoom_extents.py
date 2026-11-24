@@ -7,6 +7,7 @@ the screen seen from above (Marco: «a veces no hace efecto, en determinadas
 posiciones»), and a tall window cut the model at the sides."""
 from __future__ import annotations
 
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 import math
 
 import pytest
@@ -102,22 +103,20 @@ def test_a_point_and_a_huge_model_stay_in_range():
     assert cam.distance <= MAX_DISTANCE
 
 
-def test_zoom_extents_frames_the_scale_figure_in_a_new_document():
+def test_zoom_extents_frames_the_scale_figure_in_a_new_document(native_window):
     """A new document holds only the scale figure; Zoom Extents used to do
     nothing there (the figure is left out of the scene bounds), where
     the classic Zoom Extents frames the figure (Marco, 23-09)."""
     from PySide6.QtWidgets import QApplication
     QApplication.instance() or QApplication([])
-    from views.main_window import MainWindow
-    win = MainWindow()
+    win = native_window
+    win._start_blank_document()
     cam = win.viewport.camera
     cam.target = V(500, 500, 0)
     cam.distance = 4000                   # far away from everything
     win._on_zoom_extents()
     assert cam.distance < 20              # framed the 1.7 m figure
     assert abs(cam.target.x() + 0.65) < 1.0 and abs(cam.target.y() + 0.6) < 1.0
-    win._saved_version = win.viewport.scene.version
-    win.close()
 
 
 def _image_window():

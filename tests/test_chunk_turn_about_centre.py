@@ -9,9 +9,8 @@ viewport kept drawing the cube where it was while its box (computed from
 the live vertices) showed where it is: a ghost, every time."""
 from __future__ import annotations
 
-import os
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
 from ingetrazo_core import Vec3 as V
@@ -33,28 +32,23 @@ def _cube(scene):
 
 
 @pytest.mark.parametrize("deg", [30.0, 90.0])
-def test_turning_a_group_about_its_centre_rebuilds_its_chunk(deg):
+def test_turning_a_group_about_its_centre_rebuilds_its_chunk(native_window, deg):
     from core.history import RotateGroupCommand
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        g = _cube(vp.scene)
-        before = vp._group_chunk(g)
-        assert before["fp"] == vp._group_fp(g)
-        vp.history.execute(RotateGroupCommand(g, V(1, 1, 1), V(0, 0, 1), deg))
-        after = vp._group_chunk(g)
-        # the samples the chunk was built from are where the vertices ARE
-        for i, p in after["samples"]:
-            q = g.mesh.vertices[i].position
-            assert (q - V(*p)).length() < 1e-5
-        # and the drawn triangles moved with them
-        import numpy as np
-        pts = np.frombuffer(after["vcol"], dtype=np.float32).reshape(-1, 6)[:, :2]
-        live = {(round(v.position.x(), 3), round(v.position.y(), 3))
-                for v in g.mesh.vertices}
-        drawn = {(round(float(x), 3), round(float(y), 3)) for x, y in pts}
-        assert drawn <= live
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    win = native_window
+    vp = win.viewport
+    g = _cube(vp.scene)
+    before = vp._group_chunk(g)
+    assert before["fp"] == vp._group_fp(g)
+    vp.history.execute(RotateGroupCommand(g, V(1, 1, 1), V(0, 0, 1), deg))
+    after = vp._group_chunk(g)
+    # the samples the chunk was built from are where the vertices ARE
+    for i, p in after["samples"]:
+        q = g.mesh.vertices[i].position
+        assert (q - V(*p)).length() < 1e-5
+    # and the drawn triangles moved with them
+    import numpy as np
+    pts = np.frombuffer(after["vcol"], dtype=np.float32).reshape(-1, 6)[:, :2]
+    live = {(round(v.position.x(), 3), round(v.position.y(), 3))
+            for v in g.mesh.vertices}
+    drawn = {(round(float(x), 3), round(float(y), 3)) for x, y in pts}
+    assert drawn <= live
