@@ -90,11 +90,9 @@ class FakeRenderer:
 
 
 @pytest.fixture
-def win(monkeypatch, tmp_path):
+def win(monkeypatch, tmp_path, private_settings):
     from core import autosave
     monkeypatch.setattr(autosave, "autosave_dir", lambda: tmp_path)
-    from PySide6.QtCore import QSettings
-    QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, str(tmp_path))
     import ingetrazo_render  # noqa: F401 — the real module, its class swapped
     monkeypatch.setattr(ingetrazo_render, "Renderer", FakeRenderer)
     FakeRenderer.instances.clear()

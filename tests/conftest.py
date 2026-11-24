@@ -117,6 +117,22 @@ def _settings_per_module():
     _session_settings_paths()
 
 
+@pytest.fixture
+def private_settings(tmp_path):
+    """A settings store of this test's own (user and system scope, INI), put
+    back to the file's store afterwards. Use it instead of calling
+    ``QSettings.setPath`` in a test: the leak guard fails a test that leaves
+    the settings location changed."""
+    folder = tmp_path / "settings"
+    folder.mkdir(exist_ok=True)
+    QSettings.setDefaultFormat(QSettings.IniFormat)
+    for scope in (QSettings.UserScope, QSettings.SystemScope):
+        QSettings.setPath(QSettings.IniFormat, scope, str(folder))
+    yield folder
+    QSettings.setDefaultFormat(QSettings.IniFormat)
+    _session_settings_paths()
+
+
 @pytest.fixture(autouse=True)
 def _restore_settings_paths():
     # setPath changes process-wide defaults. A private user profile must
@@ -237,12 +253,123 @@ def _native_per_test(_session_native):
     native_mod.__dict__["native"] = _session_native
 
 
+#: Environment variables a test may leave changed: pytest's own, and those
+#: the app or a library sets once on first import (read-only afterwards).
+_ENV_OWNED_ELSEWHERE = {"PYTEST_CURRENT_TEST"}
+
+
+def _process_state():
+    from PySide6.QtCore import QCoreApplication, QSettings
+    return {
+        "environment": dict(os.environ),
+        "application names": (QCoreApplication.organizationName(),
+                              QCoreApplication.organizationDomain(),
+                              QCoreApplication.applicationName()),
+        "settings file": (QSettings().fileName(), int(QSettings.defaultFormat().value)
+                          if hasattr(QSettings.defaultFormat(), "value") else str(QSettings.defaultFormat())),
+    }
+
+
+def _leaked(before, after, owned=frozenset()):
+    out = []
+    env_a, env_b = before["environment"], after["environment"]
+    for key in sorted(set(env_a) | set(env_b)):
+        if key in _ENV_OWNED_ELSEWHERE or key in owned or env_a.get(key) == env_b.get(key):
+            continue
+        out.append(f"environment {key}: {env_a.get(key)!r} -> {env_b.get(key)!r}")
+    for name in ("application names", "settings file"):
+        if name not in owned and before[name] != after[name]:
+            out.append(f"{name}: {before[name]!r} -> {after[name]!r}")
+    return out
+
+
+def _owned_by_module(request):
+    """What a module-scoped fixture of the test's module sets up for all its
+    tests and puts back at its end: the native shell's tests start one Qt
+    host per process (tests/shell_isolation.py), whose profile, names and
+    data folder stay for the module."""
+    if "restore_shell_patches" not in request.fixturenames:
+        return frozenset()
+    from tests.shell_isolation import _ENV
+    return frozenset(_ENV) | {"application names", "settings file"}
+
+
+@pytest.fixture(autouse=True)
+def _leak_guard(request, _process_environment, _process_qt_and_units, _restore_settings_paths):
+    """Fail a test that leaves the process environment, the Qt application
+    names or the settings file location changed (docs/testing.md). The
+    fixtures above put them back anyway; this one says which test changed
+    them, so a new leak is fixed where it starts instead of showing up as
+    another file's failure under pytest-xdist. It asks for those fixtures,
+    so it is torn down after the test's own monkeypatch has undone its
+    changes and before they restore anything (autouse fixtures of one scope
+    otherwise run in name order). ``BUILT_LEAK_GUARD=0`` turns it off."""
+    if os.environ.get("BUILT_LEAK_GUARD") == "0":
+        yield
+        return
+    before = _process_state()
+    main_imported = "main" in sys.modules
+    yield
+    owned = _owned_by_module(request)
+    if not main_imported and "main" in sys.modules:
+        # main.py sets the process up when first imported (the settings
+        # profile and data folder named by BUILT_SETTINGS_DIR, as the app
+        # starts): once per process, and put back by the fixtures above.
+        owned |= {"XDG_DATA_HOME", "settings file"}
+    leaks = _leaked(before, _process_state(), owned)
+    if leaks:
+        pytest.fail("This test left process-wide state changed:\n  " + "\n  ".join(leaks)
+                    + "\nUndo it in the test (monkeypatch, or a finally).", pytrace=False)
+
+
+def _draw_fuzz_seed():
+    """``BUILT_FUZZ_SEED=random``: one seed for the run, drawn here (on the
+    controller, before pytest-xdist starts its workers, which inherit it)
+    so every worker samples the same fuzz cases (tests/fuzz.py)."""
+    from tests import fuzz
+    if os.environ.get(fuzz.ENV) == "random" and not os.environ.get("PYTEST_XDIST_WORKER"):
+        import secrets
+        os.environ[fuzz.ENV] = str(secrets.randbelow(1_000_000))
+
+
+def pytest_report_header(config):
+    from tests import fuzz
+    return f"fuzz seed: {fuzz.run_seed()} (set {fuzz.ENV} to repeat it, or to 'random')"
+
+
+#: A test module that builds an application window, in process or by
+#: launching the app, is marked ``window`` (docs/testing.md): the delegate
+#: subset leaves those to the fast suite.
+_WINDOW_RE = None
+
+
+def pytest_collection_modifyitems(config, items):
+    import re
+    global _WINDOW_RE
+    if _WINDOW_RE is None:
+        _WINDOW_RE = re.compile(r"\b(MainWindow|ComposerWindow|ShellWindow|Host)\(|"
+                                r"\bpreferences_chrome\b|isolated_launch|release/built\b|\bmain\.py\b")
+    seen = {}
+    for item in items:
+        path = getattr(item, "path", None)
+        if path is None:
+            continue
+        if path not in seen:
+            try:
+                seen[path] = bool(_WINDOW_RE.search(path.read_text(errors="ignore")))
+            except OSError:
+                seen[path] = False
+        if seen[path]:
+            item.add_marker(pytest.mark.window)
+
+
 def pytest_configure(config):
     """With pytest-xdist (``-n 8``): file-level scheduling, so a file's
     module fixtures are built once and its tests share a worker, and a
     crashed worker is replaced, unless ``--dist`` / ``--max-worker-restart``
     are given. Here rather than in pytest.ini so a venv without xdist still
     runs, and ``pytest tests/x.py::test`` stays serial (docs/testing.md)."""
+    _draw_fuzz_seed()
     if not config.pluginmanager.hasplugin("xdist"):
         return
     given = " ".join(map(str, config.invocation_params.args))

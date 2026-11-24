@@ -30,15 +30,9 @@ PANEL_KEYS = ("panel_properties", "panel_bim", "panel_terrain",
 
 
 @pytest.fixture
-def win(tmp_path, monkeypatch):
+def win(tmp_path, monkeypatch, private_settings):
     # A settings store and a plugin folder of this test's own (as in
     # test_extension_api_v2.py), every tray opened so they share a bar.
-    import sys
-    store = tmp_path / "settings"
-    store.mkdir()
-    QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, str(store))
-    shared = next(m._settings_dir for n, m in list(sys.modules.items())
-                  if n.endswith("conftest") and hasattr(m, "_settings_dir"))
     import core.extensions as extensions
     monkeypatch.setattr(extensions, "user_plugins_dir",
                         lambda: tmp_path / "plugins")
@@ -54,7 +48,6 @@ def win(tmp_path, monkeypatch):
     yield w
     w._saved_version = w.viewport.scene.version
     w.close()
-    QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, shared)
 
 
 def _bar_of(win, dock):

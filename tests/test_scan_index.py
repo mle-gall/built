@@ -25,6 +25,7 @@ import random
 
 import numpy as np
 import pytest
+from tests import fuzz
 from ingetrazo_core import Vec3 as QVector3D
 from ingetrazo_core import Vec3 as V
 
@@ -305,20 +306,20 @@ def _run_differential(seed: int, store: bool, n_ops: int, n: int,
 
 
 @pytest.mark.parametrize("store", [False, True])
-@pytest.mark.parametrize("seed", range(6))
+@pytest.mark.parametrize("seed", fuzz.sample(range(46), 3, "scan_commands"))
 def test_commands_decide_as_the_full_scans(seed, store):
     assert run_differential(seed, store, n_ops=24) == 24
 
 
 @pytest.mark.parametrize("store", [False, True])
-@pytest.mark.parametrize("seed", range(4))
+@pytest.mark.parametrize("seed", fuzz.sample(range(46), 2, "scan_flat"))
 def test_commands_decide_as_the_full_scans_on_a_flat_drawing(seed, store):
     assert run_differential(seed, store, n_ops=20, flat=True) == 20
 
 
 @pytest.mark.slow
 @pytest.mark.parametrize("store", [False, True])
-@pytest.mark.parametrize("seed", range(6, 46))
+@pytest.mark.parametrize("seed", range(46))
 def test_commands_decide_as_the_full_scans_random(seed, store):
     run_differential(seed, store, n_ops=60, n=8, flat=seed % 4 == 0)
 

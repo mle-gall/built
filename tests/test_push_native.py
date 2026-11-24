@@ -33,6 +33,7 @@ import sys
 
 import numpy as np
 import pytest
+from tests import fuzz
 from ingetrazo_core import Vec3 as QVector3D
 
 import core._native as _native
@@ -238,7 +239,7 @@ def _orient_both(oracle, store, seed, scope):
 
 @pytest.mark.parametrize("store", [False, True])
 @pytest.mark.parametrize("scope", ["all", "one", "some"])
-@pytest.mark.parametrize("seed", range(10))
+@pytest.mark.parametrize("seed", fuzz.sample(range(160), 4, "orient_outward"))
 def test_orient_outward_native_matches_python(oracle, store, scope, seed):
     py, nat = _orient_both(oracle, store, seed, scope)
     assert nat == py
@@ -246,7 +247,7 @@ def test_orient_outward_native_matches_python(oracle, store, scope, seed):
 
 @pytest.mark.slow
 @pytest.mark.parametrize("store", [False, True])
-@pytest.mark.parametrize("seed", range(10, 160))
+@pytest.mark.parametrize("seed", range(160))
 def test_orient_outward_native_matches_python_fuzz(oracle, store, seed):
     for scope in ("all", "one", "some"):
         py, nat = _orient_both(oracle, store, seed, scope)

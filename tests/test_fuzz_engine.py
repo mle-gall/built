@@ -435,8 +435,10 @@ def run_sequence(scenario: str, seed: int, n_ops: int = 8) -> None:
 
 # ---- The sweeps -------------------------------------------------------------------
 
-QUICK_SEEDS = range(0, 50)     # 50 × 4 scenarios = 200 sequences, every run
-FULL_SEEDS = range(50, 250)    # +800 sequences = 1000 total, the certification
+from tests import fuzz  # noqa: E402
+ALL_SEEDS = range(0, 250)      # × 4 scenarios = 1000 sequences, the certification (slow)
+QUICK_SEEDS = fuzz.sample(ALL_SEEDS, 12, "fuzz_engine")   # 48 sequences, every run
+FULL_SEEDS = ALL_SEEDS
 
 # Sequences the engine does not survive yet — every entry is a reproducible
 # open bug. They xfail so the passing sequences guard against regressions while
