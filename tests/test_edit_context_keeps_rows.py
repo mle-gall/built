@@ -12,17 +12,10 @@ inside a group, inside a component (every copy of it is the loose mesh
 then) and back out."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-import numpy as np  # noqa: E402
-import pytest  # noqa: E402
+import numpy as np
+import pytest
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
-from PySide6.QtWidgets import QApplication  # noqa: E402
-
-_app = QApplication.instance() or QApplication([])
 
 
 def _box(x0=0.0, y0=0.0, s=1.0, curved=False):
@@ -156,86 +149,71 @@ def test_hide_similar_components_makes_everything_again(vp):
     _same(kept, _fresh(vp))
 
 
-def test_the_materials_panel_keeps_its_scan_across_a_group_opened_and_closed():
-    # Opening or closing a group changes what the model wears not at all:
-    # the meshes that changed (a container's matrix pushed down, an
-    # instance's world copy, a copy shared back) are read again, the
-    # rest are not — on the plant of #158, 2 722 meshes each way (~0.35 s).
+def test_the_library_keeps_its_material_scan_when_entering_and_leaving_a_group(native_host, monkeypatch):
+    from core import geometry_arrays
     from core.group import Group
     from core.history import SetFaceColorCommand
-    from views.main_window import MainWindow
-    import core.mesh as cm
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        sc = vp.scene
-        post = _box(curved=True)
-        for f in post.faces:
-            f.attrs["color"] = [0.2, 0.4, 0.8]
-        lamp = _box(s=0.5)
-        for k in range(3):
-            sc.groups.append(_placed(post, f"P{k}", 2.0 * k, 0.0))
-            sc.groups.append(_placed(lamp, f"L{k}", 2.0 * k, 5.0))
-        room = Group(_box(-6.0, -6.0, 2.0), name="room")
-        room.children = [_placed(post, "inner", -5.0, -5.0)]
-        xf = QMatrix4x4()
-        xf.translate(0.0, 0.0, 1.0)
-        room.xform = xf
-        sc.groups.append(room)
-        sc.version += 1
-        panel = win.tray.materials
+    from views import wgpu_library as lib
 
-        def colours():
-            panel.refresh_in_model()
-            return sorted(tuple(round(c, 3) for c in color)
-                          for _key, color, _name in panel._swatch_sig[0])
-        read = []
-        real = cm.face_attrs
+    win = native_host.window
+    vp = win.viewport
+    sc = vp.scene
+    post = _box(curved=True)
+    for f in post.faces:
+        f.attrs["color"] = [0.2, 0.4, 0.8]
+    lamp = _box(s=0.5)
+    for k in range(3):
+        sc.groups.append(_placed(post, f"P{k}", 2.0 * k, 0.0))
+        sc.groups.append(_placed(lamp, f"L{k}", 2.0 * k, 5.0))
+    room = Group(_box(-6.0, -6.0, 2.0), name="room")
+    room.children = [_placed(post, "inner", -5.0, -5.0)]
+    xf = QMatrix4x4()
+    xf.translate(0.0, 0.0, 1.0)
+    room.xform = xf
+    sc.groups.append(room)
+    sc.version += 1
 
-        def spy(mesh):
-            read.append(id(mesh))
-            return real(mesh)
-        cm.face_attrs = spy
-        try:
-            start = colours()
-            assert (0.2, 0.4, 0.8) in start
-            # The BIM takeoff looks for face tags in every group mesh once,
-            # then remembers the untagged ones: its first look is not ours.
-            win.bim_tray.on_scene_changed()
-            read.clear()
-            vp.begin_group_edit(room)
-            assert colours() == start
-            assert id(post) not in read                 # the copies: kept
-            vp.end_group_edit()
-            assert colours() == start
-            assert id(post) not in read
-            # Inside a component, a paint: a command, so all is read again;
-            # leaving shares it back to every copy, and it shows.
-            vp.begin_group_edit(next(g for g in sc.groups if g.name == "L1"))
-            vp.history.execute(SetFaceColorCommand(list(sc.mesh.faces),
-                                                   (0.9, 0.1, 0.1)))
-            assert (0.9, 0.1, 0.1) in colours()
-            vp.end_group_edit()
-            got = colours()
-            assert (0.9, 0.1, 0.1) in got and (0.2, 0.4, 0.8) in got
-            # Undone (outside): the paint goes, and the panel says so.
-            while vp.history.undo_stack:
-                vp.history.undo()
-            assert colours() == start
-            # A paint the panel has not read yet, then a group opened: the
-            # paint still shows — the open does not vouch for what came
-            # before it.
-            vp.history.execute(SetFaceColorCommand(list(post.faces)[2:3],
-                                                   (0.1, 0.8, 0.1)))
-            vp.begin_group_edit(room)
-            assert (0.1, 0.8, 0.1) in colours()
-            vp.end_group_edit()
-            assert (0.1, 0.8, 0.1) in colours()
-        finally:
-            cm.face_attrs = real
-    finally:
-        win._saved_version = vp.scene.version
-        win.close()
+    ctx = lib.Ctx(win, win.view)
+    provider = lib.MaterialsProvider()
+    def colours():
+        return {row["name"] for row in provider._model_items(ctx)}
+    read = []
+    original = geometry_arrays.face_attributes
+    def spy(mesh):
+        read.append(id(mesh))
+        return original(mesh)
+    monkeypatch.setattr(geometry_arrays, "face_attributes", spy)
+    start = colours()
+    assert "#3366CC" in start
+    read.clear()
+    vp.begin_group_edit(room)
+    assert colours() == start
+    assert id(post) not in read                 # the copies: kept
+    vp.end_group_edit()
+    assert colours() == start
+    assert id(post) not in read
+    # Inside a component, a paint: a command, so all is read again;
+    # leaving shares it back to every copy, and it shows.
+    vp.begin_group_edit(next(g for g in sc.groups if g.name == "L1"))
+    vp.history.execute(SetFaceColorCommand(list(sc.mesh.faces),
+                                           (0.9, 0.1, 0.1)))
+    assert "#E61A1A" in colours()
+    vp.end_group_edit()
+    got = colours()
+    assert "#E61A1A" in got and "#3366CC" in got
+    # Undone (outside): the paint goes, and the panel says so.
+    while vp.history.undo_stack:
+        vp.history.undo()
+    assert colours() == start
+    # A paint the panel has not read yet, then a group opened: the
+    # paint still shows — the open does not vouch for what came
+    # before it.
+    vp.history.execute(SetFaceColorCommand(list(post.faces)[2:3],
+                                           (0.1, 0.8, 0.1)))
+    vp.begin_group_edit(room)
+    assert "#1ACC1A" in colours()
+    vp.end_group_edit()
+    assert "#1ACC1A" in colours()
 
 
 def test_the_static_list_across_a_group_opened_and_closed_reads_as_made_afresh(

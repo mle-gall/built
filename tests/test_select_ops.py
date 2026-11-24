@@ -6,6 +6,7 @@ from the current editing context."""
 from __future__ import annotations
 
 from ingetrazo_core import Vec3 as QVector3D
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 from core.layers import assign_layer
 from core.mesh import Edge, Face
@@ -72,7 +73,7 @@ def test_same_layer_takes_faces_edges_and_groups_on_it():
 
 
 def test_the_triple_click_still_selects_the_whole_piece(monkeypatch):
-    from PySide6.QtCore import QPointF, Qt
+    from core.input_types import QPointF, Qt
     from tools.base import ToolContext
     from tools.rust_tools import SelectTool
     scene = Scene()
@@ -97,24 +98,27 @@ def test_the_triple_click_still_selects_the_whole_piece(monkeypatch):
     assert c not in scene.selection
 
 
-def test_the_right_click_menu_offers_select_and_it_grows_the_selection():
-    import os
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtWidgets import QMenu
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        scene = win.viewport.scene
-        a, b, c = _two_squares_and_one_apart(scene)
-        scene.select([a])
-        menu = QMenu()
-        win._add_select_submenu(menu, list(scene.selection))
-        sub = menu.actions()[0].menu()
-        acts = {act.text(): act for act in sub.actions()}
-        assert len(acts) == 4
-        sub.actions()[0].trigger()                      # All Connected
-        assert a in scene.selection and b in scene.selection
-        assert c not in scene.selection
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_the_right_click_menu_offers_select_and_it_grows_the_selection(native_host):
+    from ingetrazo_render import context_menu_build, context_menu_run
+
+    win = native_host.window
+    scene = win.viewport.scene
+    a, b, c = _two_squares_and_one_apart(scene)
+    assign_layer(a, "Walls")
+    assign_layer(c, "Walls")
+    a.attrs["mat"] = c.attrs["mat"] = "Brick"
+
+    for vid, picked, expected in [
+        ("selconnected", [a], set(all_connected([a]))),
+        ("selboundary", [a, b], set(bounding_edges([a, b]))),
+        ("selmaterial", [a], {a, c}),
+        ("sellayer", [a], {a, c}),
+    ]:
+        scene.select(picked)
+        menu = context_menu_build(win, win.view)
+        row = next(row for row in menu.rows if row.label == "Select")
+        assert [verb.id for verb in row.verbs] == [
+            "selconnected", "selboundary", "selmaterial", "sellayer"]
+        assert context_menu_run(win, win.view, menu.kind, vid, picked)
+        assert set(scene.selection) == expected
+    assert not win.viewport.history.undo_stack

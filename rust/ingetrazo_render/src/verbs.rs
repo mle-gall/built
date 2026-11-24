@@ -35,6 +35,7 @@ pub struct Facts {
     pub faces: usize,
     pub edges: usize,
     pub components: usize,
+    pub painted_group: bool,
     pub linked_part: bool,
     pub all_links: bool,
     pub all_annotations: bool,
@@ -373,8 +374,9 @@ pub fn menu_rows(f: &Facts, kind: &str) -> Vec<Row> {
         "group" | "component" => {
             r.one(vec![ek("open", "Open for editing", "double-click")]);
             r.one(vec![e("rename", "Rename…")]);
-            r.one(vec![e("hide", "Hide")]);
-            r.one(isolate_if(f));
+            let mut visibility = vec![e("hide", "Hide")];
+            visibility.extend(isolate_if(f));
+            r.one(visibility);
             r.one(lock(f));
             r.one(zoom());
             r.one(file_to());
@@ -407,7 +409,10 @@ pub fn menu_rows(f: &Facts, kind: &str) -> Vec<Row> {
             r.one(make());
             r.one(vec![e("merge", "Merge groups"), e("explode", "Explode")]);
             if f.components > 0 {
-                r.one(vec![e("unique", "Make unique")]);
+                let mut definitions = vec![e("unique", "Make unique")];
+                if f.replaceable { definitions.push(e("replace", "Replace component…")); }
+                definitions.push(checked(e("keep", "Keep in file"), f.kept));
+                r.one(definitions);
             }
             r.family("Intersect", intersect());
             if f.solids >= 2 && f.solids == f.groups {
@@ -510,6 +515,15 @@ pub fn menu_rows(f: &Facts, kind: &str) -> Vec<Row> {
             r.one(vec![e("closepath", "Open / close path")]);
         }
         _ => {}
+    }
+    if !read_only && f.faces + f.edges + f.groups > 0 {
+        let mut grow = Vec::new();
+        if f.faces + f.edges > 0 { grow.push(e("selconnected", "Connected")); }
+        if f.faces > 0 { grow.push(e("selboundary", "Boundary")); }
+        if f.faces > 0 || f.painted_group { grow.push(e("selmaterial", "Same material")); }
+        grow.push(e("sellayer", "Same tag"));
+        if f.components > 0 && kind != "component" { grow.push(e("selinstances", "Instances")); }
+        r.family("Select", grow);
     }
     if f.total > 0 {
         if let Some(key) = &f.reveal_key {
@@ -657,6 +671,11 @@ pub fn dispatch(kind: &str, id: &str) -> (&'static str, String, String) {
         "unlockimage" => slot("_unlock_image", "locked_image"),
         "deleteimage" => slot("_delete_image", "locked_image"),
         "edittext3d" => slot("_on_edit_3d_text", "sel0"),
+        "selconnected" => glue("grow", "all_connected"),
+        "selboundary" => glue("grow", "bounding_edges"),
+        "selmaterial" => glue("grow", "same_material"),
+        "sellayer" => glue("grow", "same_layer"),
+        "instances" | "selinstances" => glue("grow", "same_definition"),
         "selectiontag" => glue("selectiontag", ""),
         "hide" if one => tree("hideitem"),
         "hide" if kind == "link" => ("core", "hide".into(), String::new()),
@@ -687,7 +706,6 @@ pub fn dispatch(kind: &str, id: &str) -> (&'static str, String, String) {
         "explode" => slot("_on_explode_group", ""),
         "split" => slot("_on_split_into_pieces", ""),
         "axes" => slot("_on_change_axes", "sel0"),
-        "instances" => tree("instances"),
         "unique" if kind == "component" => tree("unique"),
         "unique" => slot("_on_make_unique", ""),
         "replace" => slot("_on_replace_component", ""),

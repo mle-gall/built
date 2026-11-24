@@ -386,6 +386,7 @@ impl FormChanged {
 /// The form's validation: the SVG options, then the delivery record.
 #[pyclass(module = "ingetrazo_render")]
 struct FormCheck {
+    export_scene: Option<Py<PyAny>>,
     svg: Py<PyAny>,
 }
 
@@ -400,7 +401,19 @@ impl FormCheck {
                     return Ok(Some(error.extract()?));
                 }
             }
-            deliveries(py)?.call_method1("validate", (unpack(py, svg, &form.call_method0("values")?)?,))?;
+            let record = unpack(py, svg, &form.call_method0("values")?)?;
+            let backend = deliveries(py)?;
+            backend.call_method1("validate", (&record,))?;
+            if let Some(scene) = &self.export_scene {
+                if record.get_item("format")?.eq("ifc")? {
+                    let scoped = backend.call_method1("scoped", (scene.bind(py), &record))?;
+                    let objects = py.import("core.bim")?.call_method1("collect_objects", (scoped,))?;
+                    if !objects.is_truthy()? {
+                        let text = "Nothing to export: tag geometry in the BIM panel first (only tagged objects go to IFC).";
+                        return Ok(Some(py.import("core.i18n")?.call_method1("tr", (text,))?.extract()?));
+                    }
+                }
+            }
             Ok(None)
         };
         match check() {
@@ -598,7 +611,7 @@ pub fn export_form<'py>(win: &Bound<'py, PyAny>, key: Option<String>, one_off: b
     kwargs.set_item("default", buttons.last().expect("buttons").0)?;
     kwargs.set_item("on_done", Py::new(py, FormDone { win: win.clone().unbind(), history: history.clone().unbind(), key: key.clone(), one_off, svg: svg.clone().unbind() })?)?;
     kwargs.set_item("on_change", Py::new(py, FormChanged { has_nodes })?)?;
-    kwargs.set_item("validate", Py::new(py, FormCheck { svg: svg.clone().unbind() })?)?;
+    kwargs.set_item("validate", Py::new(py, FormCheck { export_scene: one_off.then(|| scene.clone().unbind()), svg: svg.clone().unbind() })?)?;
     let form = forms.getattr("Form")?.call((if one_off { "Export" } else { "Delivery" }, fields), Some(&kwargs))?;
     let preview = Bound::new(py, FormPreview { win: win.clone().unbind(), history: history.clone().unbind(), svg: svg.clone().unbind(), form: None })?;
     preview.borrow_mut().form = Some(form.clone().unbind());

@@ -38,8 +38,7 @@ from PySide6.QtWidgets import (
 )
 
 from core import general_settings as _gs
-from core.i18n import (LANGUAGE_NAMES, SYSTEM, available_languages,
-                       current_language, resolve_language, set_language, tr)
+from core.i18n import current_language, tr
 from views.theme import style as theme_style
 from core.units import fmt_pair
 from views.filedialogs import file_dialogs
@@ -214,7 +213,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
             self.restoreState(state)
         self._show_default_trays(st)
         self._place_new_toolbars(st)
-        self._fit_docks_on_show = True
         geo = st.value("ui/window_geometry")
         if geo:
             self.restoreGeometry(geo)
@@ -249,10 +247,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
             view = self._shown_viewport()
             if view is not None:
                 view.setFocus(Qt.OtherFocusReason)
-        if getattr(self, "_fit_docks_on_show", False):
-            from PySide6.QtCore import QTimer
-            self._fit_docks_on_show = False
-            QTimer.singleShot(0, self, self._fit_docks_to_screen)
         if not getattr(self, "_ndof_connected", False):
             self._connect_ndof()
 
@@ -1298,7 +1292,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         prefs_action.triggered.connect(self._on_preferences)
         window_menu.addAction(prefs_action)
         self._act_preferences = prefs_action
-        self._build_language_menu(window_menu)
 
         # Extensions — third-party plugin tools (core.extensions engine).
         self._build_extensions_menu(menubar)
@@ -1345,31 +1338,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         about_action.triggered.connect(self._on_about)
         help_menu.addAction(about_action)
 
-    # ---- Language -----------------------------------------------------------
-    _LANGUAGE_NAMES = LANGUAGE_NAMES
-
-    def _build_language_menu(self, parent_menu) -> None:
-        lang_menu = parent_menu.addMenu(tr("Language"))
-        group = QActionGroup(self)
-        group.setExclusive(True)
-        chosen = str(QSettings().value("language") or SYSTEM)
-        for code in [SYSTEM] + available_languages():
-            if code == SYSTEM:
-                action = QAction(tr("Same as the system"), self)
-            else:
-                action = QAction(self._LANGUAGE_NAMES.get(code, code), self)
-            action.setStatusTip(tr(
-                "Show the menus and messages in this language, from the "
-                "next start."))
-            action.setCheckable(True)
-            action.setChecked(code == chosen)
-            action.triggered.connect(lambda _checked, c=code: self._on_set_language(c))
-            group.addAction(action)
-            lang_menu.addAction(action)
-            if code == SYSTEM:
-                lang_menu.addSeparator()
-
-    # ---- Sidebar strip (LibreOffice-style) ---------------------------------
     #: Trays that start closed until the user opens them (Window ▸
     #: Panels): the specialised workspaces. Properties, the Browser and
     #: the bundled AI and Render tabs open. An extension may
@@ -1550,25 +1518,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         """Window ▸ Preferences: the scattered QSettings in one dialog."""
         self.open_preferences()
 
-    def _on_set_language(self, code: str) -> None:
-        """Persist the chosen UI language (applied on next start).
-
-        ``code`` may be :data:`SYSTEM`; switching between it and the
-        language it resolves to is saved without a restart note."""
-        st = QSettings()
-        if code == str(st.value("language") or SYSTEM):
-            return
-        st.setValue("language", code)
-        lang = resolve_language(code)
-        if lang == current_language():
-            return
-        set_language(lang)
-        _dialogs.information(
-            self,
-            tr("Language changed"),
-            tr("Restart Built to apply the new language."),
-        )
-
     def _build_extensions_menu(self, menubar) -> None:
         """The Extensions menu: one entry per plugin tool discovered by
         :mod:`core.extensions`. The engine guarantees a broken plugin cannot
@@ -1702,10 +1651,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
                 log.exception("plugin %r: bad menu entry", plug.stem)
                 from core.extensions import note_failure
                 note_failure(f"plugin {plug.stem!r}: bad menu entry")
-        try:
-            self._group_extension_menu()
-        except Exception:  # noqa: BLE001 — a flat menu still works
-            log.exception("could not group the Extensions menu")
 
         for err in errors:
             action = QAction(tr("\u26a0 {name} (load error)", name=err.stem), self)
@@ -1729,8 +1674,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
 
         if self._defer_extensions and set(self.findChildren(QToolBar)) - bars_before:
             self.restore_late_toolbars()
-        from PySide6.QtCore import QTimer
-        QTimer.singleShot(0, self, self._fit_docks_to_screen)
 
     def _add_plugin_tool_entry(self, plug, tool, taken, reserved) -> None:
         """One tool's entry in the Extensions menu. Apart so that a tool
@@ -1768,37 +1711,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         self._show_default_trays(st)
         self._place_new_toolbars(st)
         return restored
-
-    def _fit_docks_to_screen(self) -> None:
-        """Scroll oversized panels instead of imposing their size on the window.
-
-        Include inactive tabs: Qt uses the largest minimum in a tab group.
-        Wide extension forms remain accessible through horizontal scrolling.
-        """
-        from PySide6.QtWidgets import QDockWidget, QFrame, QScrollArea
-        screen = self.screen()
-        if screen is None:
-            return
-        frame_h = self.frameGeometry().height() - self.height()
-        limit = screen.availableGeometry().height() - max(frame_h, 0)
-        docks = [d for d in self.findChildren(QDockWidget)
-                 if not d.isFloating() and d.widget() is not None
-                 and not isinstance(d.widget(), QScrollArea)
-                 and self.dockWidgetArea(d) in (Qt.LeftDockWidgetArea,
-                                                Qt.RightDockWidgetArea)]
-        docks.sort(key=lambda d: -d.widget().minimumSizeHint().expandedTo(
-            d.widget().minimumSize()).height())
-        for dock in docks:
-            inner = dock.widget()
-            need = inner.minimumSizeHint().expandedTo(inner.minimumSize())
-            if self.minimumSizeHint().height() <= limit and need.width() <= 300:
-                continue
-            scroll = QScrollArea(dock)
-            scroll.setWidgetResizable(True)
-            scroll.setFrameShape(QFrame.NoFrame)
-            scroll.setWidget(inner)
-            dock.setWidget(scroll)
-            self.layout().activate()
 
     def _clamp_to_screen(self) -> None:
         """Fit restored geometry to the current display, including its frame.
@@ -1876,9 +1788,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         if st.contains("ui/hidden_trays"):
             st.setValue("ui/hidden_trays", sorted(hidden))
         self._mark_trays_known(st, [dock.objectName()])
-        if self.isVisible():                # one added later, from its tool
-            from PySide6.QtCore import QTimer
-            QTimer.singleShot(0, self, self._fit_docks_to_screen)
 
     def extension_panels(self) -> dict:
         """``objectName`` → dock for every panel an extension added."""
@@ -2552,474 +2461,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
             act.setChecked(False)
             act.blockSignals(False)
         self.viewport._apply_tool_cursor()
-
-    #: More extension entries than this at the top of the right-click menu
-    #: and they all go under «Extensions ▸» (Preferences ▸ General ▸
-    #: Extension menus: «Group them when there are many»).
-    EXT_CONTEXT_INLINE = 8
-
-    #: More extensions than this at the top of the Extensions menu and
-    #: each goes into the submenu of its catalog category.
-    EXT_MENU_INLINE = 15
-
-    def _group_extension_menu(self) -> None:
-        """Tidy the Extensions menu (Marco, 18-10: with the whole catalog it
-        had 62 lines and did not fit on the screen):
-
-        - one extension's several loose entries go into a submenu with its
-          name, where its first entry was; a submenu an extension made
-          itself is left untouched (it may rebuild it);
-        - with more than :attr:`EXT_MENU_INLINE` extensions (or always, if
-          the user asked for it), each one goes into the submenu of its
-          catalog category — Architecture ▸, Drawing ▸… The tools built
-          into IngeTrazo, and any extension the catalog does not know,
-          stay at the top."""
-        menu = getattr(self, "_ext_menu", None)
-        owners = self.__dict__.get("_ext_action_owner", {})
-        if menu is None or not owners:
-            return
-        loose: dict = {}
-        for a in menu.actions():
-            key = owners.get(a)
-            if key is not None and a.menu() is None:
-                loose.setdefault(key, []).append(a)
-        for key, acts in loose.items():
-            if len(acts) < 2:
-                continue
-            sub = QMenu(self._extension_name(key), menu)
-            menu.insertMenu(acts[0], sub)
-            for a in acts:
-                menu.removeAction(a)
-                sub.addAction(a)
-            owners[sub.menuAction()] = key
-
-        catalog = self._extension_catalog()
-        mine = [a for a in menu.actions() if owners.get(a) in catalog
-                and catalog[owners[a]][1]]
-        if not mine or len({owners[a] for a in mine}) <= self.EXT_MENU_INLINE:
-            return
-        from ingetrazo_render import ExtensionBrowser
-        labels = dict(ExtensionBrowser.tags())
-        order = list(labels)
-        by_tag: dict = {}
-        for a in mine:
-            tag = catalog[owners[a]][1][0]
-            by_tag.setdefault(tag, []).append(a)
-        # Every category goes in where the first extension was, BEFORE any
-        # entry moves: an anchor taken out of the menu sends the next
-        # insertion to the bottom, under the menu's own entries.
-        subs = []
-        for tag in sorted(by_tag, key=lambda t: (order.index(t)
-                                                 if t in order else len(order), t)):
-            sub = QMenu(tr(labels.get(tag, tag.replace("-", " ").title())), menu)
-            menu.insertMenu(mine[0], sub)
-            subs.append((sub, by_tag[tag]))
-        for sub, acts in subs:
-            for a in acts:
-                menu.removeAction(a)
-                sub.addAction(a)
-
-    def _add_extension_context_entries(self, menu, sel) -> None:
-        """The extensions' right-click entries, grouped: one extension's
-        several entries in a submenu with its name, a single entry as it
-        is; and when that is still more than :attr:`EXT_CONTEXT_INLINE`
-        lines (or always, if the user asked for it), all of them under
-        «Extensions ▸». With the whole catalog installed the menu was
-        taller than the screen and Qt split it in two columns (Marco,
-        18-10). An extension that raises, or takes longer than
-        :attr:`EXT_CONTEXT_BUDGET_S` to add its entries, is logged, left out
-        of the right-click menu for the rest of the session and named once
-        in the status bar: an extension broken by an update froze every
-        right-click for five seconds and nothing said which (#588)."""
-        bad = self.__dict__.setdefault("_ext_context_off", set())
-        fns = [fn for fn in getattr(self, "_ext_context_menus", ())
-               if fn not in bad]
-        owners = self.__dict__.get("_ext_context_owner", {})
-        items = []                          # (holder, [its entries])
-        for fn in fns:
-            holder = QMenu(self._extension_name(owners.get(fn, "")), menu)
-            self._run_extension_context_entry(fn, holder, sel, owners)
-            acts = list(holder.actions())
-            while acts and acts[0].isSeparator():
-                acts.pop(0)
-            while acts and acts[-1].isSeparator():
-                acts.pop()
-            if acts:
-                items.append((holder, acts))
-        if not items:
-            return
-        target = menu
-        if len(items) > self.EXT_CONTEXT_INLINE:
-            target = QMenu(tr("Extensions"), menu)
-            menu.addMenu(target)
-        for holder, acts in items:
-            if len(acts) == 1:
-                # The holder stays alive as the menu's child: the entry
-                # (and a submenu it opens) belongs to it.
-                target.addAction(acts[0])
-            else:
-                for a in holder.actions():
-                    if a not in acts:
-                        holder.removeAction(a)
-                target.addMenu(holder)
-        menu.addSeparator()
-
-    def _extension_catalog(self) -> dict:
-        """``{id: (name in the app's language, tags)}`` of the catalog the
-        extension manager last saw, and of the extensions that ship with
-        IngeTrazo (read once)."""
-        cat = self.__dict__.get("_ext_catalog_info")
-        if cat is None:
-            cat = {}
-            try:
-                from core.extension_manager import (bundled_extensions,
-                                                    display_name,
-                                                    load_cached_catalog)
-                lang = current_language()
-                snap = load_cached_catalog()
-                for ext in (list(snap.extensions) if snap else []) \
-                        + bundled_extensions():
-                    cat.setdefault(ext.id, (display_name(ext, lang),
-                                            tuple(ext.tags)))
-            except Exception:  # noqa: BLE001 — a name is not worth a failure
-                pass
-            self._ext_catalog_info = cat
-        return cat
-
-    #: How long one extension may take to add its right-click entries.
-    EXT_CONTEXT_BUDGET_S = 1.0
-
-    def _run_extension_context_entry(self, fn, menu, sel, owners) -> None:
-        """Let one extension add its entries to ``menu``; a failure or a
-        slow one is switched off for the session (see
-        :meth:`_add_extension_context_entries`)."""
-        import logging
-        import time
-        t0 = time.monotonic()
-        failed = False
-        try:
-            fn(menu, sel)
-        except Exception:  # noqa: BLE001 — an extension's bug
-            logging.getLogger(__name__).exception(
-                "extension context menu failed")
-            failed = True
-        slow = time.monotonic() - t0 > self.EXT_CONTEXT_BUDGET_S
-        if not (failed or slow):
-            return
-        self.__dict__.setdefault("_ext_context_off", set()).add(fn)
-        name = self._extension_name(owners.get(fn, ""))
-        logging.getLogger(__name__).warning(
-            "extension %s %s its right-click entries; left out until "
-            "restart", name, "failed adding" if failed else "was slow adding")
-        self.statusBar().showMessage(tr(
-            "The extension «{name}» failed in the right-click menu and is "
-            "left out of it until Built restarts. Update it or turn it "
-            "off in the Extension manager.", name=name), 15000)
-
-    def _extension_name(self, key: str) -> str:
-        """An extension's name for a submenu of its entries: the catalog's,
-        in the app's language; else the title of its own Extensions
-        submenu; else its id, readable."""
-        name = self._extension_catalog().get(key, ("", ()))[0]
-        if name:
-            return name
-        title = self.__dict__.get("_ext_menu_titles", {}).get(key)
-        if title:
-            return title
-        return key.replace("_", " ").strip().capitalize() or tr("Extension")
-
-    def show_viewport_context_menu(self, global_pos, locked_image=None,
-                                   locked_group=None) -> None:
-        """Right-click menu, tailored to what's selected.
-        ``locked_image``: a locked reference image under the cursor that the
-        click did not select (geometry sat on top of it) — it gets its own
-        Unlock / Delete entries, or it could never be reached again.
-        ``locked_group``: a locked group or component under the cursor,
-        which no click can select — its Unlock entry (#782)."""
-        from core.mesh import Edge, Face
-        from core.dimension import Dimension
-        from georef.geopath import GeoPath
-
-        sel = self.viewport.scene.selection
-        from core.section import SectionPlane
-        has_geopath = any(isinstance(e, GeoPath) for e in sel)
-        has_group = any(isinstance(e, Group) for e in sel)
-        has_mesh = any(isinstance(e, (Edge, Face)) for e in sel)
-        # a single group alone has nothing to be grouped WITH (issue #35)
-        lone_group = (len(sel) == 1 and has_group)
-        sec_planes = [e for e in sel if isinstance(e, SectionPlane)]
-        menu = QMenu(self)
-
-        # AutoCAD's first right-click entry: where a mouse-only hand looks.
-        last = getattr(self, "_last_command", None)
-        if last is not None:
-            menu.addAction(tr("Repeat {name}", name=tr(last[0])),
-                           self.repeat_last_command)
-            menu.addSeparator()
-
-        if locked_image is not None and locked_image not in sel:
-            name = getattr(locked_image, "name", "") or tr("image")
-            menu.addAction(tr("Unlock image “{name}”", name=name),
-                           lambda im=locked_image: self._unlock_image(im))
-            menu.addAction(tr("Delete image “{name}”", name=name),
-                           lambda im=locked_image: self._delete_image(im))
-            menu.addSeparator()
-
-        if locked_group is not None and locked_group not in sel:
-            name = (getattr(locked_group, "name", "")
-                    or tr("Component" if locked_group.is_component()
-                          else "Group"))
-            menu.addAction(tr("Unlock “{name}”", name=name),
-                           lambda g=locked_group: self._unlock_group(g))
-            menu.addSeparator()
-
-        if sec_planes:
-            # The section-plane context menu.
-            menu.addAction(tr("Reverse"), self._on_reverse_section)
-            act_active = menu.addAction(tr("Active Cut"),
-                                        self._on_toggle_active_section)
-            act_active.setCheckable(True)
-            act_active.setChecked(sec_planes[0].active)
-            menu.addAction(tr("Align View"), self._on_align_view_to_section)
-            # Rafael, 50:45: «no sé cómo cambiarle el 1 por AA o BB». The
-            # prompt only ever appeared the moment a plane was placed.
-            menu.addAction(tr("Name and symbol…"),
-                           lambda p=sec_planes[0]: self.prompt_section_name(p, automatic=False))
-            menu.addSeparator()
-
-        from core.image_plane import ImagePlane
-        images = [e for e in sel if isinstance(e, ImagePlane)]
-        if images:
-            menu.addAction(tr("Image size…"), self._on_image_size)
-            menu.addAction(tr("Image opacity…"), self._on_image_opacity)
-            # #687: «no encontré la opción para explotarla y así poderla usar»
-            menu.addAction(tr("Explode Image"), self._on_explode_image)
-            act_lock = menu.addAction(tr("Lock"), self._on_toggle_image_lock)
-            act_lock.setCheckable(True)
-            act_lock.setChecked(bool(images[0].locked))
-            menu.addSeparator()
-
-        if has_geopath:
-            menu.addAction(tr("Terrain profile"), self._on_terrain_profile)
-            closed_paths = [e for e in sel
-                            if isinstance(e, GeoPath) and len(e.points) >= 3]
-            if closed_paths:
-                surf = menu.addMenu(tr("Terrain surface"))
-                surf.addAction(tr("Flat (single slope)"),
-                               lambda: self._on_set_surface("flat"))
-                surf.addAction(tr("Draped (follow relief)"),
-                               lambda: self._on_set_surface("draped"))
-                surf.addAction(tr("None (line only)"),
-                               lambda: self._on_set_surface(None))
-            menu.addAction(tr("Convert Path to Geometry"), self._on_convert_geopath)
-            menu.addAction(tr("Open / Close path"), self._on_toggle_path_closed)
-            menu.addSeparator()
-        if (has_mesh or has_group) and not lone_group:
-            # Groups too, since 2026-09-11: a group can hold groups, so the
-            # entry has to be there when the selection is nothing but groups
-            # — which is exactly when you want it («seleccioné cuatro grupos
-            # y solo me sale crear componente y unir grupos», Marco). Not
-            # for ONE group on its own (issue #35).
-            menu.addAction(tr("Make Group"), self._on_make_group)
-        if has_mesh:
-            menu.addAction(tr("Make Component…"), self._on_make_component)
-        faces = [e for e in sel if isinstance(e, Face)]
-        if faces:
-            if len(faces) == 1:
-                menu.addAction(tr("Align View"),
-                               lambda: self._on_align_view_to_face(faces[0]))
-            # Reverse Faces goes in the face's own right-click menu,
-            # which is where anyone looks for it. It lived only in the Edit
-            # menu and Marco could not find it (2026-09-10).
-            menu.addAction(tr("Reverse Faces"), self._on_reverse_faces)
-            menu.addAction(tr("Orient Faces"), self._on_orient_faces)
-            face = self._single_textured_face()
-            if face is not None:
-                # The Texture submenu, on a face with an image.
-                texm = menu.addMenu(tr("Texture"))
-                texm.addAction(tr("Position"), self._on_texture_position)
-                texm.addAction(tr("Reset Position"), self._on_texture_reset)
-        if self._bridgeable(sel):
-            menu.addAction(tr("Bridge"), self._on_bridge)
-        if self._makes_faces(sel):
-            menu.addAction(tr("Make Faces"), self._on_make_faces)
-        if has_mesh or has_group:
-            menu.addAction(tr("Soften / Smooth Edges…"),
-                           self._on_soften_edges)
-            # Flip Along ▸ Red / Green / Blue: a mirror in place about the
-            # selection's centre in one click, the way modelling tutorials
-            # do it (issue #178, Esteban Penzo). The same mirror as the
-            # Flip tool's.
-            flip = menu.addMenu(tr("Flip Along"))
-            for label, axis in ((tr("Red axis"), "x"),
-                                (tr("Green axis"), "y"),
-                                (tr("Blue axis"), "z")):
-                flip.addAction(label, lambda a=axis: self._on_flip_along(a))
-        loose_edges = [e for e in sel if isinstance(e, Edge)]
-        if loose_edges and all(e in self.viewport.scene.mesh.edges
-                               for e in loose_edges):
-            # Divide: a line or an arc into N equal pieces
-            # (issue #63, @pacaeiro: «It's a needed command»).
-            menu.addAction(tr("Divide…"), self._on_divide)
-            if any(getattr(e, "curve", None) is not None
-                   for e in loose_edges):
-                # Explode Curve: a circle or an arc back to plain
-                # segments, each picked on its own.
-                menu.addAction(tr("Explode Curve"), self._on_explode_curve)
-            if len(loose_edges) > 1:
-                # Join Segments, its inverse: a line drawn in pieces
-                # back to one line.
-                menu.addAction(tr("Join Segments"), self._on_join_segments)
-        if self._hideable(sel):
-            menu.addAction(tr("Hide"), self._on_hide)
-        if any(self.viewport.scene.entity_hidden(e)
-               or (isinstance(e, Edge) and getattr(e, "hidden", False))
-               for e in sel):
-            menu.addAction(tr("Unhide"), self._on_unhide_selected)
-        self._add_select_submenu(menu, sel)
-        if has_group:
-            groups = [e for e in sel if isinstance(e, Group)]
-            if len(groups) == 1:
-                # Edit Group / Edit Component: the double-click
-                # by another road. (No parameters on the slot:
-                # ``triggered`` would hand its bool to one.)
-                one = groups[0]
-                menu.addAction(tr("Edit Group"),
-                               lambda: self.viewport.begin_group_edit(one))
-            if not has_mesh and (
-                    any(isinstance(e, Group) and not e.is_component()
-                        and not getattr(e, "billboard", False) for e in sel)
-                    or sum(1 for e in sel if isinstance(e, Group)) >= 2):
-                # (With loose geometry selected too, the entry is already
-                # up with Make Group — it came out twice, 18-10.)
-                # Convert a classic group into a component IN PLACE (free —
-                # no explode detour): the door the piscina hedge needed.
-                menu.addAction(tr("Make Component…"), self._on_make_component)
-            menu.addAction(tr("Explode Group"), self._on_explode_group)
-            if sum(1 for e in sel if isinstance(e, Group)
-                   and not getattr(e, "billboard", False)) == 1:
-                menu.addAction(tr("Split into Pieces"),
-                               self._on_split_into_pieces)
-            if sum(1 for e in sel if isinstance(e, Group)) >= 2:
-                # The fix-my-grouping path: fuse the selected groups into
-                # one WITHOUT routing their geometry through the loose mesh
-                # (explode + regroup chokes on leafy imports).
-                menu.addAction(tr("Merge Groups"), self._on_merge_groups)
-            if any(isinstance(e, Group) and e.is_component() for e in sel):
-                menu.addAction(tr("Make Unique"), self._on_make_unique)
-                if self._replacement_choices(sel):
-                    menu.addAction(tr("Replace Component…"),
-                                   self._on_replace_component)
-                from core.kept_components import kept_template
-                comps = [e for e in sel
-                         if isinstance(e, Group) and e.is_component()]
-                kept = all(kept_template(self.viewport.scene, g.mesh)
-                           is not None for g in comps)
-                act = menu.addAction(tr("Keep in File"))
-                act.setCheckable(True)
-                act.setChecked(kept)
-                act.triggered.connect(
-                    lambda on: self.keep_selected_components(bool(on)))
-            scale_one = groups[0] if len(groups) == 1 and len(sel) == 1 else None
-            scale_act = menu.addAction(
-                tr("Scale…"), lambda: self._on_scale_dialog(scale_one))
-            scale_act.setEnabled(scale_one is not None)
-            if len(groups) == 1 and len(sel) == 1:
-                menu.addAction(tr("Change Axes"),
-                               lambda g=groups[0]: self._on_change_axes(g))
-            # Lock, the Browser's padlock from the model (#782): the
-            # selected groups in one undoable step.
-            from ingetrazo_render import context_lock
-            menu.addAction(tr("Lock"),
-                           lambda gs=groups: context_lock(self.viewport, gs, True))
-            # The Solid Tools are offered on a selection of solids.
-            from core.solids import is_solid
-            solid = [e for e in sel if isinstance(e, Group) and is_solid(e)]
-            if len(solid) >= 2 and len(solid) == len(groups):
-                menu.addAction(tool_icon("outer_shell"), tr("Outer Shell"),
-                               lambda: self._activate_tool("outer_shell"))
-                sm = menu.addMenu(tr("Solid Tools"))
-                keys = ["solid_intersect", "solid_union"]
-                if len(solid) == 2:
-                    keys.append("solid_split")
-                for key in keys:
-                    sm.addAction(tool_icon(key), tr(self._tools[key].name),
-                                 lambda k=key: self._activate_tool(k))
-        if any(isinstance(e, Face) for e in sel) or has_group:
-            self._fill_intersect_menu(menu.addMenu(tr("Intersect Faces")))
-        if has_mesh or has_group:
-            menu.addAction(tr("Cut"), lambda: self.viewport.cut_selection())
-            menu.addAction(tr("Copy"), lambda: self.viewport.copy_selection())
-        if sel:
-            menu.addAction(tr("Zoom Selection"), self._on_zoom_selection)
-            menu.addAction(tr("Delete"), self._on_delete_selection)
-            act_clear = menu.addAction(tr("Clear selection"),
-                                       self.viewport.scene.clear_selection)
-            act_clear.triggered.connect(self.viewport.update)
-            menu.addSeparator()
-
-        # Extensions' own entries (app.add_context_menu): after the
-        # selection's, before Paste and Undo. One that raises is logged and
-        # skipped — the menu always opens.
-        self._add_extension_context_entries(menu, list(sel))
-
-        from formats import clip as clip_transfer
-        if getattr(self.viewport, "clipboard", None) or clip_transfer.available():
-            menu.addAction(tr("Paste"), self._on_paste)
-            menu.addAction(tr("Paste in Place"), self._on_paste_in_place)
-        menu.addAction(tr("Zoom Extents"), self._on_zoom_extents)
-        menu.addSeparator()
-        undo = menu.addAction(tr("Undo"), self._on_undo)
-        undo.setEnabled(bool(self.viewport.history.undo_stack))
-        redo = menu.addAction(tr("Redo"), self._on_redo)
-        redo.setEnabled(bool(self.viewport.history.redo_stack))
-
-        menu.exec(global_pos)
-
-    def _add_select_submenu(self, menu, sel) -> None:
-        """Right-click ▸ Select: grow the selection by what it
-        touches or what it shares (issue #106, @pacaeiro). Each entry acts
-        in the current editing context only, like Select All."""
-        from core.select_ops import (all_connected, bounding_edges,
-                                     same_definition, same_layer,
-                                     same_material)
-        has_mesh = any(isinstance(e, (Edge, Face)) for e in sel)
-        has_face = any(isinstance(e, Face) for e in sel)
-        has_group = any(isinstance(e, Group) for e in sel)
-        if not (has_mesh or has_group):
-            return
-        scene = self.viewport.scene
-        from PySide6.QtWidgets import QMenu
-        sub = QMenu(tr("Select"), menu)
-        menu.addMenu(sub)
-
-        def grow(fn):
-            def run(_checked=False):
-                found = fn(list(scene.selection))
-                scene.select(found)
-                self.viewport.notify_scene_changed()
-                self.viewport.update()
-                self.statusBar().showMessage(
-                    tr("{n} entities selected", n=len(scene.selection)), 2500)
-            return run
-
-        if has_mesh:
-            sub.addAction(tr("All Connected")).triggered.connect(
-                grow(all_connected))
-        if has_face:
-            sub.addAction(tr("Bounding Edges")).triggered.connect(
-                grow(bounding_edges))
-        if has_face or any(getattr(e, "material", None) for e in sel
-                           if isinstance(e, Group)):
-            sub.addAction(tr("All with Same Material")).triggered.connect(
-                grow(lambda s: same_material(scene, s)))
-        sub.addAction(tr("All on Same Layer")).triggered.connect(
-            grow(lambda s: same_layer(scene, s)))
-        if any(isinstance(e, Group) and e.is_component() for e in sel):
-            # Every copy of the selected components — the first half of
-            # swapping them all for another (Replace Component…).
-            sub.addAction(tr("All Instances")).triggered.connect(
-                grow(lambda s: same_definition(scene, s)))
 
     def _on_toggle_shadows(self, on: bool) -> None:
         """Camera ▸ Shadows: flip the scene's sun on/off (the tray panel

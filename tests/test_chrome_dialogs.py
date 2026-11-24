@@ -10,53 +10,40 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
-from PySide6.QtCore import QEvent, Qt, QTimer
-from PySide6.QtGui import QKeyEvent
+from core.input_types import Qt
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication, QMessageBox
-
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from views import chrome_dialogs as cd
-
-_app = QApplication.instance() or QApplication([])
-
-
-class FakeView:
-    """What the chrome needs of the Metal view: frames and repaints."""
-
-    def __init__(self):
-        self._ui_frames = 0
-        self.updates = 0
-
-    def update(self):
-        self.updates += 1
+from views.chrome_dialogs import QMessageBox
 
 
 @pytest.fixture
-def win(monkeypatch):
-    from views.main_window import MainWindow
-    w = MainWindow(defer_extensions=True)
-    view = FakeView()
-    monkeypatch.setattr(cd, "live", lambda parent: view if cd.window_of(parent) is w else None)
-    w._fake_view = view
-    yield w
-    w._saved_version = w.viewport.scene.version
-    w.close()
+def win(native_host, monkeypatch):
+    from app_shell import modal
+    w = native_host.window
+    monkeypatch.setattr(cd, "live", lambda parent: w.view if parent is w else None)
+
+    def turn(done):
+        callback = vars(w).pop("_test_sheet_frame", None)
+        if callback is not None:
+            cd.current_sheet(w).shown = True
+            callback()
+        else:
+            native_host.timers.run_due()
+        assert done()
+        return True
+
+    monkeypatch.setattr(modal, "run_until", turn)
+    return w
 
 
-def chrome(win, then, *, drawn=True, ms=30):
-    """Play the chrome: after ``ms`` the sheet is drawn, then ``then()``."""
-    def go():
-        sheet = cd.current_sheet(win)
-        if sheet is not None and drawn:
-            sheet.shown = True
-        then()
-    QTimer.singleShot(ms, go)
+def chrome(win, then):
+    win._test_sheet_frame = then
 
 
 def press(key, mods=Qt.NoModifier, target=None):
-    target = target or QApplication.instance()
-    for kind in (QEvent.ShortcutOverride, QEvent.KeyPress, QEvent.KeyRelease):
-        QApplication.sendEvent(target, QKeyEvent(kind, key, mods))
+    from app_shell import modal
+    modal.dispatch(target._host, ("key", 0, 0, 0, mods.value, key.value, ""))
 
 
 def dirty(win):
@@ -64,17 +51,12 @@ def dirty(win):
     assert win._is_dirty()
 
 
-def test_blocking_questions_require_a_visible_view(monkeypatch):
-    from views.main_window import MainWindow
-    from views import wgpu_ui
-    w = MainWindow(defer_extensions=True)
-    try:
-        assert cd.live(w) is None            # offscreen: Qt asks
-        monkeypatch.setattr(cd.QGuiApplication, "platformName", staticmethod(lambda: "cocoa"))
-        assert cd.live(w) is None            # window has never been shown
-        assert cd.live(None) is None
-    finally:
-        w.close()
+def test_blocking_questions_require_a_visible_view(native_host, monkeypatch):
+    win = native_host.window
+    assert cd.live(win) is None
+    monkeypatch.setattr(native_host.view, "_ui_attached", True, raising=False)
+    assert cd.live(win) is None
+    assert cd.live(None) is None
 
 
 @pytest.mark.parametrize("key,mods,expect", [
@@ -83,7 +65,7 @@ def test_blocking_questions_require_a_visible_view(monkeypatch):
 ])
 def test_unsaved_question_answers_from_the_keys(win, key, mods, expect):
     dirty(win)
-    chrome(win, lambda: press(key, mods, win))
+    chrome(win, lambda: press(key, mods, target=win))
     assert win._confirm_discard("Close “plan”?") is expect
     assert cd.current_sheet(win) is None
     assert not cd.modal(win)
@@ -121,7 +103,7 @@ def test_a_click_on_the_sheet_answers_through_the_chrome_actions(win):
 
 
 def test_no_frame_drawn_cancels_close_and_reports_failure(win, monkeypatch):
-    monkeypatch.setattr(cd, "WATCHDOG_MS", 50)
+    monkeypatch.setattr(cd, "WATCHDOG_MS", 0)
     flashed = []
     monkeypatch.setattr(win.viewport, "flash_status", flashed.append)
     dirty(win)
@@ -131,32 +113,30 @@ def test_no_frame_drawn_cancels_close_and_reports_failure(win, monkeypatch):
 
 
 def test_the_window_is_modal_while_the_sheet_waits(win):
-    """Menus greyed, shortcuts and closes refused; all back after."""
+    from app_shell import files
     dirty(win)
-    menus = [a for a in win.menuBar().actions() if a.isEnabled()]
-    seen = {}
+    calls = []
+    from unittest.mock import patch
 
     def probe():
-        seen["menus"] = [a.isEnabled() for a in menus]
-        ev = QKeyEvent(QEvent.ShortcutOverride, Qt.Key_S, Qt.ControlModifier)
-        ev.ignore()
-        QApplication.sendEvent(win, ev)
-        seen["shortcut_taken"] = ev.isAccepted()
-        win.close()
-        seen["visible_after_close"] = not win._closed if hasattr(win, "_closed") else True
+        assert cd.modal(win)
+        press(Qt.Key_S, Qt.ControlModifier, win)
+        assert not win.close_document()
+        assert not win._host.confirm_window_close()
         press(Qt.Key_Escape, target=win)
-    chrome(win, probe)
-    assert win._confirm_discard("Close “plan”?") is False
-    assert seen["menus"] and not any(seen["menus"])
-    assert seen["shortcut_taken"]
-    assert not getattr(win, "_closed", False)
-    assert all(a.isEnabled() for a in menus)
+
+    with patch.object(files, "save", lambda w: calls.append(w)):
+        chrome(win, probe)
+        assert not win._confirm_discard("Close “plan”?") and not calls
+        assert not cd.modal(win)
+        win._host.key(True, Qt.Key_S, Qt.ControlModifier.value)
+        assert calls == [win]
 
 
 def test_quit_with_several_projects_asks_once(win, monkeypatch):
     first = win._doc
     dirty(win)
-    second = win._new_document()
+    second = win.new_document()
     win.viewport.scene.version += 1
     texts = []
 
@@ -184,41 +164,37 @@ def test_message_boxes_map_standard_buttons(win):
     assert cd.critical(win, "Open failed", "No such file") == QMessageBox.Ok
 
 
-def test_offscreen_warning_is_kept_in_the_chrome_history(win, monkeypatch):
-    monkeypatch.setattr(cd, "live", lambda parent: None)
+def test_warning_before_the_first_frame_is_kept_in_the_chrome_history(native_host, monkeypatch):
+    win = native_host.window
+    monkeypatch.setattr(cd, "in_shell", lambda: True)
+    assert cd.live(win) is None
     assert cd.warning(win, "Linked files", "Missing") == QMessageBox.Ok
     row = cd.history(win)[0]
     assert (row.title, row.detail, row.tone) == ("Linked files", "Missing", "warning")
 
 
 @pytest.mark.parametrize("method,title", [
-    ("_on_set_language", "Language changed"),
     ("_on_recover_discarded", "Recover a discarded auto-save…"),
     ("_on_insert_faceme_image", "Face-me image"),
     ("_on_get_models", "Get more models and textures"),
     ("_import_rfa_path", "Revit family import report"),
     ("_on_clear_texture_cache", "Texture cache"),
-    ("_on_export_ifc", "Export IFC"),
 ])
 def test_information_call_sites_post_toasts(win, tmp_path, monkeypatch, method, title):
-    from PySide6.QtGui import QImage
     from core import autosave, texture
     from formats import rfa
-    from views import main_window as mw
+    from views.filedialogs import file_dialogs
     args = ()
-    if method == "_on_set_language":
-        monkeypatch.setattr(mw, "set_language", lambda lang: None)
-        monkeypatch.setattr(mw, "current_language", lambda: "en")
-        args = ("fr",)
-    elif method == "_on_recover_discarded":
+    if method == "_on_recover_discarded":
         monkeypatch.setattr(autosave, "discarded_dir", lambda: tmp_path)
     elif method == "_on_insert_faceme_image":
         picture = tmp_path / "opaque.png"
-        img = QImage(2, 2, QImage.Format_RGB32)
-        img.fill(Qt.white)
-        assert img.save(str(picture))
-        monkeypatch.setattr(mw.file_dialogs, "getOpenFileName", lambda *a: (str(picture), ""))
-        monkeypatch.setattr(mw._forms, "ask_number", lambda *a, **kw: None)
+        from PySide6.QtGui import QImage
+        image = QImage(2, 2, QImage.Format.Format_RGB32)
+        image.fill(0xFFFFFFFF)
+        assert image.save(str(picture))
+        monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *a: (str(picture), ""))
+
     elif method == "_import_rfa_path":
         monkeypatch.setattr(rfa, "read_rfa", lambda path: {})
         monkeypatch.setattr(rfa, "apply_payload", lambda scene, payload: ["Imported one family"])
@@ -227,7 +203,28 @@ def test_information_call_sites_post_toasts(win, tmp_path, monkeypatch, method, 
         monkeypatch.setattr(texture, "texture_cache_stats", lambda: (0, 0))
     getattr(win, method)(*args)
     assert cd.history(win)[0].title == title
+    if method == "_on_insert_faceme_image":
+        # The opacity notice leaves the height question available.
+        from views import chrome_forms
+        form = chrome_forms.current(win)
+        assert form.title == title
+        form.press("cancel")
     assert not cd.current_sheet(win) and not cd.modal(win)
+
+
+def test_empty_ifc_export_explains_how_to_include_geometry(win, tmp_path):
+    from ingetrazo_render import delivery_export_form
+
+    path = tmp_path / "model.ifc"
+    path.write_bytes(b"previous delivery")
+    form = delivery_export_form(win, one_off=True, initial_format="ifc")
+    form.set("destination", str(path))
+    form.press("export")
+    assert form.error == ("Nothing to export: tag geometry in the BIM panel first "
+                          "(only tagged objects go to IFC).")
+    assert not form.closed and path.read_bytes() == b"previous delivery"
+    assert not cd.jobs(win)
+    form.press("cancel")
 
 
 def test_notices_stack_expire_and_keep_actions(win, monkeypatch):
@@ -262,7 +259,7 @@ def test_save_failed_offers_recovery(win):
 def test_quit_saves_only_checked_projects(win, monkeypatch):
     first = win._doc
     dirty(win)
-    second = win._new_document()
+    second = win.new_document()
     dirty(win)
     received = []
     monkeypatch.setattr(win, "_save_all_or_stay", lambda docs, answer: received.append((docs, answer)))
@@ -329,9 +326,9 @@ def test_the_background_autosave_shows_as_a_quiet_job(win):
 def plan(tmp_path):
     from core.group import Group
     from core.mesh import Mesh
-    from views.main_window import MainWindow
-    w0 = MainWindow(defer_extensions=True)
-    scene = w0.viewport.scene
+    from core.scene import Scene
+    from formats.igz import save_scene
+    scene = Scene()
     for i in range(4):
         m = Mesh()
         x = i * 3.0
@@ -340,14 +337,12 @@ def plan(tmp_path):
         scene.groups.append(Group(m, name=f"B{i}"))
     scene.version += 1
     path = tmp_path / "plan.igz"
-    w0._do_save(path)
-    w0._saved_version = scene.version
-    w0.close()
+    save_scene(scene, path)
     return path
 
 
 def test_cancel_while_opening_stops_the_load_and_keeps_the_window(win, plan, monkeypatch):
-    import views.main_window as mw
+    from formats import igz
     milestones = []
 
     def fake_load(scene, path, progress=None, **_k):
@@ -356,10 +351,9 @@ def test_cancel_while_opening_stops_the_load_and_keeps_the_window(win, plan, mon
             milestones.append(i)
             progress(i / 10, "Reading geometry…")
             if i == 2:
-                bar = win._progress_dlg
-                assert isinstance(bar, cd.ChromeBar) and bar.job.cancellable
+                assert cd.jobs(win)[0].cancellable
                 cd.jobs(win)[0].cancel()            # × in the top bar
-    monkeypatch.setattr(mw.igz_format, "load_into", fake_load)
+    monkeypatch.setattr(igz, "load_into", fake_load)
     assert win.open_path(plan) is False
     assert milestones == [0, 1, 2, 3]               # unwound at the next one
     assert not getattr(win, "_closed", False)
@@ -392,7 +386,6 @@ def test_open_with_missing_sources_has_one_banner_and_problem_rows(win, tmp_path
     affected = next(groups for _, key, _, groups in rules if key == "links")
     assert len(affected) == 3
     monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *args: (str(moved), ""))
-    monkeypatch.setattr(cd, "view_of", lambda _: win._fake_view)
     wgpu_ui._run(win, ["linkbanner:locate"])
     assert win._doc._missing_link_banner == "1 linked file missing"
     assert len(links.linked_groups(scene, moved)) == 2
