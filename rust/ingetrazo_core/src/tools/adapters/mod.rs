@@ -294,6 +294,7 @@ pub fn register_tool_adapter<'py>(cls: &Obj<'py>) -> Reply<'py> {
     let factory =
         Registrar::new(py)?.with_plugin_method(py.import("tools")?.getattr("_plugin_method")?);
     let module: String = cls.getattr("__module__")?.extract()?;
+    let factory = factory.with_module_annotations(&py.import(&module)?.dict())?;
     let name: String = cls.getattr("__name__")?.extract()?;
     if module == "tools.walkthrough_host" && matches!(name.as_str(), "WalkHost" | "FirstPersonHost")
     {
@@ -334,7 +335,7 @@ mod tool_functions;
 mod walk_functions;
 #[pyfunction]
 pub fn register_tool_functions(namespace: &Bound<'_, PyDict>) -> PyResult<()> {
-    let factory = Registrar::new(namespace.py())?;
+    let factory = Registrar::new(namespace.py())?.with_module_annotations(namespace)?;
     let module: String = namespace
         .get_item("__name__")?
         .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err("__name__"))?

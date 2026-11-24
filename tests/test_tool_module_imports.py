@@ -67,3 +67,17 @@ def test_native_host_modules_preserve_public_class_and_subclass_binding():
         assert pickle.loads(pickle.dumps(cls)) is cls
     view = object()
     assert TexturePreview(view=view).view is view
+
+
+def test_native_tool_signatures_keep_evaluated_and_postponed_annotations():
+    import inspect
+    from core.mesh import Edge
+    from tools.offset_host import _run_from_edge
+    from tools.paint_host import recent_key
+    from tools.walkthrough import look_deg_per_px
+    from tools.scale_host import _Grip
+
+    assert inspect.signature(_run_from_edge).parameters["edge"].annotation is Edge
+    assert inspect.signature(recent_key).return_annotation is tuple
+    assert inspect.signature(look_deg_per_px).parameters["sensitivity"].annotation == int | None
+    assert inspect.signature(_Grip.kind).return_annotation == "str"

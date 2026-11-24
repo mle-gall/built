@@ -134,6 +134,12 @@ impl ToolModules {
         let py = module.py();
         let full: String = module.name()?.extract()?;
         let spec = definition(&full).ok_or_else(|| PyImportError::new_err(full.clone()))?;
+        if matches!(spec.name, "flip_host" | "paste_host") {
+            module.add(
+                "annotations",
+                py.import("__future__")?.getattr("annotations")?,
+            )?;
+        }
         if !spec.doc.is_empty() {
             module.add("__doc__", spec.doc)?;
         }

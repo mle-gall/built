@@ -52,7 +52,6 @@ pub enum Mode {
 
 struct Parameter {
     name: &'static str,
-    annotation: &'static str,
     default: Option<Py<PyAny>>,
 }
 
@@ -63,7 +62,6 @@ struct NativeBinding {
     name: &'static str,
     params: Vec<Parameter>,
     positional: usize,
-    result: &'static str,
 }
 
 #[pymethods]
@@ -141,29 +139,32 @@ impl NativeBinding {
     }
 
     #[getter]
-    fn __signature__<'py>(&self, py: Python<'py>) -> PyResult<Obj<'py>> {
+    fn __signature__<'py>(slf: &Bound<'py, Self>) -> PyResult<Obj<'py>> {
         // Introspection is needed by plugins and tooling, never by dispatch.
+        let py = slf.py();
+        let binding = slf.get();
+        let annotations = slf.getattr("__annotations__")?.cast_into::<PyDict>()?;
         let inspect = py.import("inspect")?;
         let param = inspect.getattr("Parameter")?;
         let pos = param.getattr("POSITIONAL_OR_KEYWORD")?;
         let kw = param.getattr("KEYWORD_ONLY")?;
-        let mut params = Vec::with_capacity(self.params.len());
-        for (i, p) in self.params.iter().enumerate() {
+        let mut params = Vec::with_capacity(binding.params.len());
+        for (i, p) in binding.params.iter().enumerate() {
             let opts = PyDict::new(py);
             if let Some(value) = &p.default {
                 opts.set_item("default", value)?;
             }
-            if !p.annotation.is_empty() {
-                opts.set_item("annotation", p.annotation)?;
+            if let Some(annotation) = annotations.get_item(p.name)? {
+                opts.set_item("annotation", annotation)?;
             }
             params.push(param.call(
-                (p.name, if i < self.positional { &pos } else { &kw }),
+                (p.name, if i < binding.positional { &pos } else { &kw }),
                 Some(&opts),
             )?);
         }
         let opts = PyDict::new(py);
-        if !self.result.is_empty() {
-            opts.set_item("return_annotation", self.result)?;
+        if let Some(result) = annotations.get_item("return")? {
+            opts.set_item("return_annotation", result)?;
         }
         inspect.getattr("Signature")?.call((params,), Some(&opts))
     }
@@ -172,6 +173,7 @@ impl NativeBinding {
 pub struct Registrar<'py> {
     method: Obj<'py>,
     plugin_method: Option<Obj<'py>>,
+    annotation_globals: Option<Bound<'py, PyDict>>,
     builtins: Bound<'py, PyModule>,
     defaults: Bound<'py, PyDict>,
 }
@@ -180,6 +182,7 @@ impl<'py> Registrar<'py> {
     pub fn new(py: Python<'py>) -> PyResult<Self> {
         Ok(Self {
             plugin_method: None,
+            annotation_globals: None,
             method: py.import("types")?.getattr("MethodType")?,
             builtins: py.import("builtins")?,
             defaults: PyDict::new(py),
@@ -191,6 +194,42 @@ impl<'py> Registrar<'py> {
     pub fn with_plugin_method(mut self, wrap: Obj<'py>) -> Self {
         self.plugin_method = Some(wrap);
         self
+    }
+
+    pub fn with_module_annotations(mut self, namespace: &Bound<'py, PyDict>) -> PyResult<Self> {
+        let future = namespace
+            .py()
+            .import("__future__")?
+            .getattr("annotations")?;
+        if !namespace
+            .get_item("annotations")?
+            .is_some_and(|flag| flag.is(&future))
+        {
+            self.annotation_globals = Some(namespace.clone());
+        }
+        Ok(self)
+    }
+
+    fn annotation(&self, declaration: &str) -> PyResult<Obj<'py>> {
+        let py = self.builtins.py();
+        let Some(globals) = &self.annotation_globals else {
+            return Ok(PyString::new(py, declaration).into_any());
+        };
+        let resolve = |name: &str| -> PyResult<Obj<'py>> {
+            if name == "None" {
+                return Ok(py.None().into_bound(py));
+            }
+            match globals.get_item(name)? {
+                Some(value) => Ok(value),
+                None => self.builtins.getattr(name),
+            }
+        };
+        let mut names = declaration.split(" | ");
+        let mut value = resolve(names.next().unwrap_or(declaration))?;
+        for name in names {
+            value = value.bitor(resolve(name)?)?;
+        }
+        Ok(value)
     }
 
     pub fn bind_default(&self, name: &str, value: &Obj<'py>) -> PyResult<()> {
@@ -250,16 +289,12 @@ impl<'py> Registrar<'py> {
             };
             let (name, annotation) = arg.split_once(':').unwrap_or((arg, ""));
             if !annotation.is_empty() {
-                annotations.set_item(name, annotation)?;
+                annotations.set_item(name, self.annotation(annotation)?)?;
             }
-            params.push(Parameter {
-                name,
-                annotation,
-                default,
-            });
+            params.push(Parameter { name, default });
         }
         if !result.is_empty() {
-            annotations.set_item("return", result)?;
+            annotations.set_item("return", self.annotation(result)?)?;
         }
         let binding = Bound::new(
             py,
@@ -269,7 +304,6 @@ impl<'py> Registrar<'py> {
                 name,
                 positional: limit.unwrap_or(params.len()),
                 params,
-                result,
             },
         )?;
         binding.setattr("__name__", name)?;
