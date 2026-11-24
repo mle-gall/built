@@ -282,6 +282,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<file_archive::ArchiveProgress>()?;
     m.add_function(wrap_pyfunction!(file_annotations::igz_load_annotations, m)?)?;
     m.add_function(wrap_pyfunction!(file_annotations::igz_archive_annotations, m)?)?;
+    m.add_function(wrap_pyfunction!(file_annotations::highest_group_number, m)?)?;
     m.add_function(wrap_pyfunction!(file_styles::igz_archive_layer, m)?)?;
     m.add_function(wrap_pyfunction!(file_styles::igz_load_layer, m)?)?;
     m.add_function(wrap_pyfunction!(file_styles::igz_archive_material, m)?)?;
