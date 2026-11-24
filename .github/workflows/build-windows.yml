@@ -46,7 +46,7 @@ jobs:
         shell: bash
         run: |
           python -m pip install --upgrade pip
-          pip install PySide6==6.11.2 numpy "manifold3d>=3.5.3" "truststore>=0.10.5"
+          pip install numpy "manifold3d>=3.5.3" "truststore>=0.10.5"
           # PyInstaller con el bootloader COMPILADO AQUÍ (MSVC del runner),
           # no el precompilado del wheel: ese binario lo comparten miles de
           # programas (y malware), y los antivirus lo tienen fichado — la
@@ -88,6 +88,8 @@ jobs:
           pip install maturin
           maturin build --release -m rust/ingetrazo_core/Cargo.toml -o "$RUNNER_TEMP/wheels"
           pip install "$RUNNER_TEMP"/wheels/ingetrazo_core-*.whl
+          CARGO_PROFILE_RELEASE_STRIP=none maturin build --release --features extension-module -m rust/ingetrazo_render/Cargo.toml -o "$RUNNER_TEMP/wheels"
+          pip install "$RUNNER_TEMP"/wheels/ingetrazo_render-*.whl
           INGETRAZO_RUST=1 python -c "import core._native as n; assert n.native is not None; print('motor:', n.engine())"
 
       # DWG en Windows (#101): el dwg2dxf.exe OFICIAL de LibreDWG (su
@@ -136,18 +138,14 @@ jobs:
           done
           # …y sin la segunda copia de las DLL en la raíz (31 MB de sobra).
           test ! -e dist/ingetrazo/_internal/libredwg-0.dll
-          # Qt va por schannel: sin su backend OpenSSL ni las DLL -x64, una
-          # libssl ajena en System32 ya no rompe el gestor (#564). La
-          # OpenSSL de Python (libssl-3.dll, sin -x64) sí se queda.
-          test ! -e dist/ingetrazo/_internal/PySide6/plugins/tls/qopensslbackend.dll
-          test -f dist/ingetrazo/_internal/PySide6/plugins/tls/qschannelbackend.dll
-          test ! -e dist/ingetrazo/_internal/libssl-3-x64.dll
-          test ! -e dist/ingetrazo/_internal/libcrypto-3-x64.dll
+          # La aplicación usa TLS de Python y las bibliotecas del sistema.
+          test ! -d dist/ingetrazo/_internal/PySide6
+          test ! -d dist/ingetrazo/_internal/shiboken6
           test -f dist/ingetrazo/_internal/libssl-3.dll
           # Y el mismo --check que ya corren el tar, el AppImage y el snap
           # (release.yml), que Windows no tenía: cubre estos archivos y los
           # que se añadan después, sin que haya que acordarse de listarlos
-          # aquí. Va antes que Qt, así que no abre ventana; devuelve 1 si
+          # aquí. Se ejecuta sin abrir ventana; devuelve 1 si
           # falta algo.
           python scripts/isolated_launch.py ./dist/ingetrazo/built.exe --check
           echo "bundle OK"
