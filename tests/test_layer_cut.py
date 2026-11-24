@@ -359,19 +359,6 @@ def test_every_pattern_marks_inside_its_box_and_tells_apart():
         seen[sig] = key
 
 
-def test_the_ground_chips_tell_white_from_light_grey_and_the_paper():
-    from views.hatch_paint import colour_chip
-    def middle(px):
-        img = px.toImage()
-        return QColor(img.pixel(img.width() // 2, img.height() // 2))
-    white = middle(colour_chip(48, 26, QColor(255, 255, 255)))
-    grey = middle(colour_chip(48, 26, QColor.fromRgbF(0.88, 0.88, 0.88)))
-    assert white.lightness() - grey.lightness() > 20
-    paper = colour_chip(48, 26, None, paper=True).toImage()
-    shades = {QColor(paper.pixel(x, 12)).name() for x in range(2, 46)}
-    assert len(shades) >= 2                           # a checkerboard
-
-
 # ---- Angle, scale, size on paper or with the drawing, imported patterns -----
 
 _PAT = """;%UNITS=MM
@@ -504,13 +491,37 @@ def test_every_pattern_has_its_catalogue_entry():
         assert scale > 0 and 0 <= angle < 360 and use, key
 
 
+def _ink_marks(p, box, key, families):
+    """The pattern's marks inside ``box``, 0.1 mm lines (the test's own
+    drawing: the comparison is of the marks, not of a renderer)."""
+    from PySide6.QtCore import QLineF, QPointF
+    from PySide6.QtGui import QPen, QPolygonF
+    from core.hatches import hatch_marks
+    p.save()
+    p.setClipPath(box)
+    br = box.boundingRect()
+    marks = hatch_marks(key, (br.left(), br.top(), br.right(), br.bottom()),
+                        1.0, 0.0, families, None)
+    pen = QPen(QColor(0, 0, 0))
+    pen.setWidthF(0.1)
+    p.setPen(pen)
+    if marks["lines"]:
+        p.drawLines([QLineF(*seg) for seg in marks["lines"]])
+    for pts in marks["polys"]:
+        p.drawPolyline(QPolygonF([QPointF(x, y) for x, y in pts]))
+    for pts in marks["closed"]:
+        p.drawPolygon(QPolygonF([QPointF(x, y) for x, y in pts]))
+    for x, y, r in marks["circles"]:
+        p.drawEllipse(QPointF(x, y), r, r)
+    p.restore()
+
+
 def test_a_line_pattern_goes_to_a_pattern_file_and_back_unchanged():
     """Out to .pat and read again, every line pattern draws the same — the
     herringbone's built-in turn included (compared as drawn: six decimals
     in the file may move a line that the clip throws away anyway)."""
     from PySide6.QtGui import QPainterPath
     from core.hatches import HATCH_ORDER, line_families, parse_pat, to_pat
-    from views.hatch_paint import paint_hatch
     keys = [k for k in HATCH_ORDER if line_families(k)]
     assert {"brick", "brick_flemish", "hexagon", "parquet"} <= set(keys)
     assert line_families("concrete") is None          # a stipple: no .pat
@@ -526,8 +537,7 @@ def test_a_line_pattern_goes_to_a_pattern_file_and_back_unchanged():
         p.scale(10, 10)
         box = QPainterPath()
         box.addRect(0.0, 0.0, 12.0, 9.0)
-        paint_hatch(p, box, key, QColor(0, 0, 0), 0.1, 1.0, None, 0.0,
-                    families)
+        _ink_marks(p, box, key, families)
         p.end()
         return img
     for key in keys:

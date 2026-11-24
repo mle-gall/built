@@ -40,7 +40,7 @@ fn icons() -> &'static Atlas {
 }
 
 /// The 18 px marks of the Classic tree rows (formerly views/tree_icons.py):
-/// ink is the palette's text, accent a swatch's fill, base the palette's base.
+/// ink is the palette's text, base the palette's base.
 fn rows() -> &'static Atlas {
     static ATLAS: OnceLock<Atlas> = OnceLock::new();
     ATLAS.get_or_init(|| Atlas {
@@ -141,8 +141,7 @@ pub fn icon_art<'py>(py: Python<'py>, key: &str, ink: Rgb, accent: Rgb, base: Rg
 }
 
 /// `(18, 18, premultiplied RGBA)` for a Classic tree row mark: `scene`,
-/// `lock`, `lock_open`, `eye`, `eye_off`, `isolate_on`, `isolate_off`,
-/// `swatch` (filled with ``fill``) or `none_swatch`.
+/// `lock`, `lock_open`, `eye`, `eye_off`, `isolate_on` or `isolate_off`.
 #[pyfunction]
 pub fn row_icon_art<'py>(py: Python<'py>, key: &str, text: Rgb, fill: Rgb, base: Rgb) -> Option<(u32, u32, Bound<'py, PyBytes>)> {
     let side = rows().side;

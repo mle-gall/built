@@ -5,5 +5,3 @@ eye
 eye_off
 isolate_on
 isolate_off
-swatch
-none_swatch
