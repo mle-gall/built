@@ -1620,8 +1620,26 @@ impl Renderer {
         }
         Ok(())
     }
-    /// Kept for the R2a measurement script: anti-aliasing now lives in the
-    /// antialias module, so this is the same switch as ``set_antialias``.
+    /// Update a face's transient material rows. Restore from the current canonical stream.
+    fn set_tool_material_range(&mut self, code: usize, first: usize, records: PyReadonlyArray1<'_, u8>, restore: bool) -> PyResult<()> {
+        let Some(scene) = &self.scene else { return Ok(()); };
+        if code >= scene.p as usize { return Ok(()); }
+        let rows = records.as_slice()?;
+        let header: [u32; 4] = bytemuck::pod_read_unaligned(&scene.material_data[code*16..code*16+16]);
+        if rows.len() % 32 != 0 || first.checked_add(rows.len()/32).is_none_or(|end| end > header[2] as usize) {
+            return Err(PyValueError::new_err("invalid texture preview range"));
+        }
+        let offset = header[1] as usize * 16 + first * 32;
+        let canonical = scene.material_data.get(offset..offset+rows.len()).ok_or_else(|| PyValueError::new_err("invalid texture preview header"))?;
+        if !rows.is_empty() {
+            self.queue.write_buffer(&self.textures.materials, offset as u64, if restore { canonical } else { rows });
+            self.pick_read = PickRead::DIRTY;
+            self.scene_epoch += 1;
+            self.stable_frames = 0;
+            self.sun.invalidate();
+        }
+        Ok(())
+    }
     fn update_prototype_materials(&mut self, id: usize, data: PyReadonlyArray1<'_, u8>) -> PyResult<()> {
         self.sun.invalidate();
         let data = data.as_slice()?;

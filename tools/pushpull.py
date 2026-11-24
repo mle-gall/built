@@ -629,111 +629,21 @@ class PushPullTool(PushPullOperation, RustTool):
         return True
 
     def _resolve_stage(self, mesh) -> bool:
-        """After a stage: the moving vertices (new, on the cap plane), the
-        open interval ``(lo, hi)`` the slide is exact in, and the new
-        faces/edges. False when a face holding a moving vertex would bend.
-
-        The interval is bounded by the nearest event levels: the base plane
-        (a reversal), the parallel faces over/under the base (a through
-        punch, a flush landing, an overhang), the inward limit, and every
-        non-moving vertex of a face the cap drags (a wall's bottom, a
-        neighbour's top, a ledge). A stage sitting ON a level is exact only
-        at its own distance."""
-        snap = self._preview_snapshot
-        n, anchor, d = self._normal, self._anchor, self.extrusion
-        made = _made_since(mesh, snap, "vertex")
-        movers = [v for v in (mesh.vertices if made is None else made)
-                  if v.key not in snap["vpos"]
-                  and abs(QVector3D.dotProduct(v.position - anchor, n) - d)
-                  < _STITCH_TOL]
-        moving = set(movers)
-        levels = [0.0, *self._plane_levels]
+        from ingetrazo_core import PushSlide
+        levels = [0., *self._plane_levels]
         if self._limit_in is not None:
             levels.append(-self._limit_in)
-        # The faces each mover drags that keep a fixed vertex (the cap and
-        # anything else wholly on the cap plane just translate with it).
-        anchored: dict = {v: [] for v in movers}
-        for f in {f for v in movers for f in v.faces()}:
-            rest = [w for lp in (f.loop, *f.hole_loops) for w in lp
-                    if w not in moving]
-            if not rest:
-                continue
-            levels.extend(QVector3D.dotProduct(w.position - anchor, n)
-                          for w in rest)
-            for lp in (f.loop, *f.hole_loops):
-                for w in lp:
-                    if w in moving:
-                        anchored[w].append(f)
-        if any(abs(lv - d) <= _STITCH_TOL for lv in levels):
-            # On a level: valid at exactly this distance, nothing to slide.
-            self._stage_lo = self._stage_hi = d
-        else:
-            # No movers is right for a through punch (no cap, the same result
-            # at any depth). But a base out of true by more than the tolerance
-            # has a cap whose corners all miss the plane: nothing would slide,
-            # and every distance would commit this frame's, the value typed
-            # silently ignored. New vertices within the base's own spread of
-            # the plane tell that cap from a punch.
-            if not movers:
-                spread = max((abs(QVector3D.dotProduct(p - anchor, n))
-                              for p in self._cap_positions), default=0.0)
-                if any(abs(QVector3D.dotProduct(v.position - anchor, n) - d)
-                       <= spread + _STITCH_TOL
-                       for v in mesh.vertices if v not in snap["vpos"]):
-                    return False
-            rates = [self._slide_rate(anchored[v], n) for v in movers]
-            if any(r is None for r in rates):
-                return False              # a face it drags would bend
-            self._stage_lo = max((lv for lv in levels if lv < d),
-                                 default=-math.inf)
-            self._stage_hi = min((lv for lv in levels if lv > d),
-                                 default=math.inf)
-            self._stage_verts = movers
-            self._stage_pos = [(v.position_tuple() if "_store" in mesh.__dict__ else QVector3D(v.position), r)
-                               for v, r in zip(movers, rates)]
-        made_f = _made_since(mesh, snap, "face")
-        made_e = _made_since(mesh, snap, "edge")
-        if made_f is not None and made_e is not None:
-            # Read by membership only: the same elements, found by key.
-            self._stage_new = ElementSet(made_f) | set(made_e)
-        else:
-            self._stage_new = (
-                (ElementSet(mesh.faces) - ElementSet(snap["faces"]))
-                | (set(mesh.edges) - set(snap["edges"])))
+        slide = PushSlide.resolve(mesh._store, self._preview_snapshot.snap, self._anchor,
+                                  self._normal, self.extrusion, levels, self._cap_positions,
+                                  _STITCH_TOL)
+        if slide is None:
+            return False
+        self._stage_slide = slide
+        self._stage_lo, self._stage_hi = slide.interval
+        self._stage_verts = push_scans.views(mesh, "vertex", slide.vertices)
+        self._stage_new = ElementSet(push_scans.views(mesh, "face", slide.faces))
+        self._stage_new.update(push_scans.views(mesh, "edge", slide.edges))
         return True
-
-    @staticmethod
-    def _slide_rate(faces, n: QVector3D):
-        """How a moving vertex travels per unit of push, keeping every face
-        in ``faces`` (the ones it drags that keep a fixed vertex) flat: the
-        push normal when they all contain it (a wall), otherwise the line
-        the slanted face shares with the others, scaled to keep pace with
-        the cap — the crossing of a cap rim with a slope runs down the
-        slope's edge (#434 follow-up). None when no such line exists."""
-        normals: list = []
-        for f in faces:
-            m = f.normal().normalized()
-            if all(QVector3D.crossProduct(m, o).length() > 1e-3
-                   for o in normals):
-                normals.append(m)
-        nn = n.normalized()
-        slanted = [m for m in normals
-                   if abs(QVector3D.dotProduct(m, nn)) >= 1e-3]
-        if not slanted:
-            return QVector3D(n)           # walls only: straight along n
-        if len(normals) == 1:
-            m = normals[0]
-            line = nn - m * QVector3D.dotProduct(nn, m)
-        else:
-            line = QVector3D.crossProduct(normals[0], normals[1])
-        along = QVector3D.dotProduct(line, nn)
-        if line.length() < 1e-9 or abs(along) < 1e-3 * line.length():
-            return None                   # the line runs in the cap plane
-        rate = line * (QVector3D.dotProduct(n, nn) / along)
-        if any(abs(QVector3D.dotProduct(m, rate)) > 1e-6 * rate.length()
-               for m in normals):
-            return None                   # 3+ faces with no common line
-        return rate
 
     def _park_stage(self, viewport) -> None:
         """Keep the current stage for a return trip: its fields plus a
@@ -745,7 +655,7 @@ class PushPullTool(PushPullOperation, RustTool):
             return
         self._stage_rec = {
             "d": self._stage_d, "lo": self._stage_lo, "hi": self._stage_hi,
-            "verts": self._stage_verts, "pos": self._stage_pos,
+            "verts": self._stage_verts, "slide": self._stage_slide,
             "new": self._stage_new, "applied": self._stage_applied,
             "state": self._target_mesh(viewport.scene).capture_state(),
             "sel": set(viewport.scene.selection),
@@ -763,8 +673,8 @@ class PushPullTool(PushPullOperation, RustTool):
         scene.selection.update(rec["sel"])
         self._stage_d, self._stage_lo, self._stage_hi = (
             rec["d"], rec["lo"], rec["hi"])
-        self._stage_verts, self._stage_pos, self._stage_new = (
-            rec["verts"], rec["pos"], rec["new"])
+        self._stage_verts, self._stage_slide, self._stage_new = (
+            rec["verts"], rec["slide"], rec["new"])
         self._stage_applied = rec["applied"]
         self._stage_rec = rec
         self._stage_serial = (id(mesh), mesh._mut_serial)

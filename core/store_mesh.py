@@ -1259,7 +1259,12 @@ class StoreMesh(Mesh):
         if result is None:
             return None
         edges, faces = result
-        return [EdgeView(self, key) for key in edges] + [FaceView(self, key) for key in faces]
+        # Natural growth retains its seed face (or a single, uncurved edge).
+        # A connected walk returns the elements reached through incidence.
+        seed = entity.key if grow != "connected" and (
+            isinstance(entity, Face) or entity.curve is None) else None
+        return ([entity if key == seed else EdgeView(self, key) for key in edges]
+                + [entity if key == seed else FaceView(self, key) for key in faces])
 
     def surface_of(self, face):
         result = self.grow_pick(face, "natural")

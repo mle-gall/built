@@ -171,6 +171,14 @@ impl InstanceMethod {
 type OrderCache = (u64, Arc<Vec<u32>>, Arc<Vec<u32>>);
 
 impl PyMeshStore {
+    pub(crate) fn place_tool_batch(store: &Bound<'_, PyAny>, positions: Vec<(u128, [f64; 3])>) -> PyResult<()> {
+        if store.is_exact_instance_of::<Self>() {
+            return store.cast::<Self>()?.try_borrow_mut()?.place_tool_vertices(positions);
+        }
+        store.call_method1("place_tool_vertices", (positions,))?;
+        Ok(())
+    }
+
     /// Native queries must observe the latest definition when reading an occurrence.
     pub(crate) fn read<'py>(store: &Bound<'py, PyAny>) -> PyResult<PyRef<'py, Self>> {
         if let Ok(view) = store.cast::<InstanceStore>() {
@@ -979,6 +987,16 @@ impl PyMeshStore {
     fn place_vertex(&mut self, key: u128, position: (f64, f64, f64)) -> PyResult<PyChange> {
         let v = self.inner.slot(Kind::Vertex, key).ok_or_else(|| PyKeyError::new_err(key))?;
         Ok(PyChange { inner: self.inner.place_vertex(v, [position.0, position.1, position.2]) })
+    }
+
+    /// Resolve every key before writing an absolute tool pose. Occurrence
+    /// stores publish the completed batch through their normal method wrapper.
+    fn place_tool_vertices(&mut self, positions: Vec<(u128, [f64; 3])>) -> PyResult<()> {
+        let targets = positions.into_iter().map(|(key, p)| {
+            self.inner.slot(Kind::Vertex, key).map(|v| (v, p)).ok_or_else(|| PyKeyError::new_err(key))
+        }).collect::<PyResult<Vec<_>>>()?;
+        for (v, p) in targets { self.inner.place_vertex(v, p); }
+        Ok(())
     }
 
     /// Batch move of many vertices by one delta (a Move drag frame),

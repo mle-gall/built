@@ -186,8 +186,8 @@ class ScaleHost:
         ids)`` as Move gives it."""
         if self._grip is None:
             return None
-        edges = {e.key for v in self._verts for e in getattr(v, "edges", ())}
-        return edges, {id(g) for g in self._groups}
+        from ingetrazo_core import snap_exclusions
+        return snap_exclusions(self, True)
 
     def _snapped_point(self, ctx):
         snap = getattr(ctx, "snap", None) if ctx is not None else None

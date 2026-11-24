@@ -3,7 +3,7 @@
 //! A preview frame always starts at this pose, including after copy toggles.
 use crate::{
     math::{mat, xyz, Matrix4, Vec3},
-    store::{keys::Kind, py::PyMeshStore},
+    store::py::PyMeshStore,
 };
 use glam::{DMat4, DVec3};
 use pyo3::{prelude::*, types::PyDict};
@@ -205,24 +205,19 @@ impl TransformPose {
                 .cast::<PyDict>()?
                 .get_item("_store")?
                 .filter(|s| !s.is_none());
-            if let Some(s) = store.filter(|s| s.is_exact_instance_of::<PyMeshStore>()) {
-                let mut st = s.extract::<PyRefMut<PyMeshStore>>()?;
+            if let Some(s) = store.filter(|s| s.is_instance_of::<PyMeshStore>()) {
                 let targets = batch
                     .vertices
                     .iter()
                     .map(|(v, p)| {
-                        let key = v.bind(py).getattr("key")?.extract::<u128>()?;
-                        let slot = st
-                            .inner
-                            .slot(Kind::Vertex, key)
-                            .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err(key))?;
-                        Ok((slot, point(*p).to_array()))
+                        Ok((
+                            v.bind(py).getattr("key")?.extract::<u128>()?,
+                            point(*p).to_array(),
+                        ))
                     })
                     .collect::<PyResult<Vec<_>>>()?;
+                PyMeshStore::place_tool_batch(&s, targets)?;
                 mesh.call_method0("_bump")?;
-                for (slot, p) in targets {
-                    st.inner.place_vertex(slot, p);
-                }
             } else {
                 for (v, p) in &batch.vertices {
                     let v = v.bind(py);

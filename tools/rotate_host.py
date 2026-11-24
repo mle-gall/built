@@ -175,14 +175,8 @@ class RotateHost(CopyPreview, ProtractorBase):
         MoveTool.snap_excluded; in copy mode the original stays put."""
         if self.ref_point is None or self._copy:
             return None
-        edges: set[int] = set()
-        for v in self._verts:
-            for e in getattr(v, "edges", ()):
-                edges.add(e.key)
-        groups = {id(g) for g in self._groups}
-        if not edges and not groups:
-            return None
-        return edges, groups
+        from ingetrazo_core import snap_exclusions
+        return snap_exclusions(self, False)
 
     def moving_guide_ids(self) -> set:
         """The guides swinging live, kept out of the snap (#627)."""

@@ -277,7 +277,7 @@ class PushPullOperation:
         self._stage_d: float | None = None
         self._stage_applied: float = 0.0
         self._stage_verts: list = []
-        self._stage_pos: list = []
+        self._stage_slide = None
         self._stage_lo: float = 0.0
         self._stage_hi: float = 0.0
         # The faces/edges the stage created: the distance inference skips
@@ -398,10 +398,14 @@ class PushPullOperation:
         objects is what makes it safe.
         """
         mesh = self._target_mesh(viewport.scene)
-        step = (tuple(n * delta for n in self._normal.toTuple()) if "_store" in mesh.__dict__
-                else self._normal * delta)
-        for v in self._prism_verts:
-            mesh.move_vertex(v, step)
+        step = self._normal * delta
+        store = mesh.__dict__.get("_store")
+        if store is not None:
+            store.move_vertices([v.key for v in self._prism_verts], step.toTuple())
+            mesh._bump()
+        else:
+            for vertex in self._prism_verts:
+                mesh.move_vertex(vertex, step)
         # Booked as the TARGET, not as a running sum: adding deltas frame by
         # frame drifts, and the revert has to undo exactly what it applied.
         self._prism_applied = applied
@@ -419,11 +423,7 @@ class PushPullOperation:
         if not self._stage_verts or abs(d - self._stage_applied) <= 1e-12:
             return
         mesh = self._target_mesh(viewport.scene)
-        off = d - self._stage_d
-        for v, (p, rate) in zip(self._stage_verts, self._stage_pos):
-            position = (tuple(a + b * off for a, b in zip(p, rate.toTuple()))
-                        if isinstance(p, tuple) else p + rate * off)
-            mesh.place_vertex(v, position)
+        self._stage_slide.apply(mesh, d - self._stage_d)
         self._stage_applied = d
         self._stage_serial = (id(mesh), mesh._mut_serial)
         viewport.scene.version += 1
@@ -461,7 +461,7 @@ class PushPullOperation:
         self._stage_d = None
         self._stage_applied = 0.0
         self._stage_verts = []
-        self._stage_pos = []
+        self._stage_slide = None
         self._stage_new = set()
         self._stage_rec = None
 

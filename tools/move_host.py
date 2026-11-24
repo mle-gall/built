@@ -17,7 +17,8 @@ from core.units import fmt_len
 
 
 
-from ingetrazo_core import CopyWire, TransformPose, transform_records, transform_targets as gather_targets
+from ingetrazo_core import (CopyWire, TransformPose, moving_faces, rotation_handles as rotation_grips,
+                            snap_exclusions, track_move_grips, transform_records, transform_targets as gather_targets)
 
 
 def gather_images(ctx):
@@ -45,15 +46,6 @@ class CopyPreview:
 
 #: How near (px) the cursor must come to a rotation grip to take it.
 GRIP_PX = 9.0
-#: Where the four grips of a face sit: this fraction of the face's size
-#: from its centre, along each of its two directions.
-def rotation_grips(obb, eye):
-    from ingetrazo_core import move_rotation_grips
-    if obb is None:
-        return []
-    frame, lo, hi = obb
-    grips = move_rotation_grips([_tuple(v) for v in frame], _tuple(lo), _tuple(hi), eye.toTuple())
-    return [tuple(QVector3D(*v) for v in grip) for grip in grips]
 
 
 class MoveHost(CopyPreview, RustTool):
@@ -358,14 +350,7 @@ class MoveHost(CopyPreview, RustTool):
             return self._grip_rot.snap_excluded()
         if self.grab is None or self._copy:
             return None
-        edges: set[int] = set()
-        for v in self._verts:
-            for e in getattr(v, "edges", ()):
-                edges.add(e.key)
-        groups = {id(g) for g in self._groups}
-        if not edges and not groups:
-            return None
-        return edges, groups
+        return snap_exclusions(self, False)
 
     def moving_face_ids(self) -> set:
         """The loose faces the drag bends — any face with a corner on a
@@ -373,8 +358,7 @@ class MoveHost(CopyPreview, RustTool):
         them (it chased its own face and shook)."""
         if self.grab is None or self._copy:
             return set()
-        return {f.key for v in self._verts
-                for e in getattr(v, "edges", ()) for f in e.faces}
+        return moving_faces(self)
 
     def moving_guide_ids(self) -> set:
         """The guides the drag carries (#627). They pass through the
@@ -409,58 +393,8 @@ class MoveHost(CopyPreview, RustTool):
         self._grips = []
         self._hot_grip = None
 
-    def _grip_candidate(self, viewport, x: float, y: float):
-        """The group that should show grips: the one under the cursor, when
-        nothing else is selected (Move would act on the selection)."""
-        pick = getattr(viewport, "pick_group", None)
-        g = pick(x, y) if pick is not None else None
-        if g is None or getattr(g, "billboard", False):
-            return None
-        sel = viewport.scene.selection
-        if sel and set(sel) != {g}:
-            return None
-        return g
-
-    def _grips_stay(self, viewport, obb_of, x: float, y: float) -> bool:
-        from ingetrazo_core import move_box_contains
-        group = self._grip_group
-        sel = viewport.scene.selection
-        if group is None or not self._grips or (sel and set(sel) != {group}):
-            return False
-        frame, lo, hi = obb_of(group)
-        return move_box_contains(viewport, [_tuple(v) for v in frame], _tuple(lo), _tuple(hi), (x, y), GRIP_PX)
-
-    def _track_grips(self, ctx: ToolContext) -> None:
-        viewport = ctx.viewport
-        obb_of = getattr(viewport, "_group_obb", None)
-        w2p = getattr(viewport, "_world_to_pixel", None)
-        cam = getattr(viewport, "camera", None)
-        if obb_of is None or w2p is None or cam is None:
-            return
-        x, y = ctx.screen.x(), ctx.screen.y()
-        g = self._grip_candidate(viewport, x, y)
-        # A grip can sit off the geometry (the box of an L is bigger than
-        # the L): while the cursor is on one, the grips stay.
-        hot = self._grip_under(viewport, x, y)
-        if g is None and hot is not None:
-            self._hot_grip = hot
-            return
-        if g is None and self._grips_stay(viewport, obb_of, x, y):
-            # Off the mesh but still inside the shown group's box: the
-            # grips stay (issue #871). The camera may have moved: re-face
-            # them, exactly as when the group is picked again.
-            self._grips = rotation_grips(obb_of(self._grip_group),
-                                         cam.eye())
-            self._hot_grip = self._grip_under(viewport, x, y)
-            return
-        if g is not self._grip_group:
-            self._grip_group = g
-            self._grips = (rotation_grips(obb_of(g), cam.eye())
-                           if g is not None else [])
-        elif g is not None:
-            # The camera may have moved: re-face the grips.
-            self._grips = rotation_grips(obb_of(g), cam.eye())
-        self._hot_grip = self._grip_under(viewport, x, y)
+    def _track_grips(self, ctx):
+        track_move_grips(self, ctx, GRIP_PX)
 
     def _grip_under(self, viewport, x, y):
         from ingetrazo_core import move_grip_hit

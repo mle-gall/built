@@ -306,9 +306,17 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(tools::transform_queries::transform_grab, m)?)?;
     m.add_function(wrap_pyfunction!(tools::packed_selection::box_from_pack, m)?)?;
     m.add_class::<tools::transform_pose::TransformPose>()?;
+    m.add_class::<tools::texture_rows::TextureToolRows>()?;
+    m.add_class::<tools::push_stage::PushSlide>()?;
     m.add_function(wrap_pyfunction!(tools::bevel_queries::bevel_nearest_end, m)?)?;
     m.add_function(wrap_pyfunction!(tools::bevel_queries::bevel_selection, m)?)?;
     m.add_function(wrap_pyfunction!(tools::bevel_queries::bevel_targets, m)?)?;
+    m.add_function(wrap_pyfunction!(tools::move_hover::track_move_grips, m)?)?;
+    m.add_function(wrap_pyfunction!(tools::move_hover::rotation_handles, m)?)?;
+    m.add_function(wrap_pyfunction!(tools::move_hover::snap_exclusions, m)?)?;
+    m.add_function(wrap_pyfunction!(tools::move_hover::moving_faces, m)?)?;
+    m.add_function(wrap_pyfunction!(tools::plane_input::plane_input, m)?)?;
+    m.add_function(wrap_pyfunction!(tools::plane_input::cursor_plane_color, m)?)?;
     m.add_function(wrap_pyfunction!(tools::push_preview::push_sweep_preview, m)?)?;
     m.add_function(wrap_pyfunction!(tools::push_preview::push_guide_reference, m)?)?;
     m.add_function(wrap_pyfunction!(tools::preview_pack::pack_tool_preview, m)?)?;

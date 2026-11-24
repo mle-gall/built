@@ -190,6 +190,44 @@ def test_loose_transform_preview_restores_resident_faces(native):
     np.testing.assert_array_equal(original, capture(native))
 
 
+def test_texture_tool_updates_only_one_faces_uv_rows(native, tmp_path):
+    from types import SimpleNamespace
+    from PySide6.QtGui import QColor, QImage
+    from ingetrazo_core import Vec3
+    from tools.texture_position import TexturePositionTool
+    from tools.texture_position_metal import TexturePreview
+    from views.wgpu_scene import pack_scene
+
+    path = tmp_path / "tile.png"
+    image = QImage(16, 16, QImage.Format_RGBA8888)
+    for y in range(16):
+        for x in range(16):
+            image.setPixelColor(x, y, QColor("red") if x < 8 else QColor("blue"))
+    assert image.save(str(path))
+    scene = Scene()
+    for x in (-.85, .1):
+        face = scene.mesh.add_face([Vec3(x+u, v, 0) for u, v in
+                                    ((0, -.7), (.7, -.7), (.7, .7), (0, .7))])
+        face.attrs["texture"] = {"path": str(path), "sw": 1., "sh": 1.}
+    pack = pack_scene(scene)
+    pack.upload(native)
+    native.set_style(dict(sky=False, edges=False))
+    view = SimpleNamespace(scene=scene, packed=pack, renderer=native, _instance_updates=True)
+    tool = TexturePositionTool()
+    assert tool.begin(view, face, face.centroid())
+    preview = TexturePreview(view)
+    before = capture(native)
+    memory = native.gpu_memory
+    tool.map.R += Vec3(.5, 0, 0)
+    preview.update(tool)
+    shifted = capture(native)
+    np.testing.assert_array_equal(before[:, :31], shifted[:, :31])
+    assert np.count_nonzero(np.any(before[:, 34:] != shifted[:, 34:], axis=2)) > 80
+    assert native.gpu_memory == memory
+    preview.restore()
+    np.testing.assert_array_equal(before, capture(native))
+
+
 def test_tool_pick_same_pixel_tracks_instance_changes(native):
     _, _, _, _, rows = upload(native, 255)
     assert native.pick(32, 32) == 0
