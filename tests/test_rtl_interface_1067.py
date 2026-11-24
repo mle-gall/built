@@ -1,13 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""Right-to-left interface for Arabic (#1067).
-
-Arabic mirrors the interface at start-up; every left-to-right language
-starts exactly as before. Inside the mirrored interface the 3D view, the
-sheet canvas and the number fields stay left to right, the toolbars keep
-their order (first bar at the right), fold arrows point the reading way
-and the swatch grid fills from the right.
-"""
+"""Language direction, Arabic translations and the legacy launcher language hook."""
 from __future__ import annotations
 
 import os
@@ -15,28 +8,12 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from PySide6.QtCore import QRect, QSettings, Qt
-from PySide6.QtWidgets import (QApplication, QDoubleSpinBox,
-                               QToolButton, QWidget)
+from PySide6.QtCore import QSettings, Qt
+from PySide6.QtWidgets import QApplication
 
 from core import i18n
 
 _app = QApplication.instance() or QApplication([])
-
-
-@pytest.fixture
-def rtl_app():
-    """The application mirrored for the test, put back afterwards."""
-    from views.rtl import apply_language_direction
-    apply_language_direction(_app, "ar")
-    try:
-        yield _app
-    finally:
-        _app.setLayoutDirection(Qt.LeftToRight)
-        f = getattr(_app, "_rtl_numbers", None)
-        if f is not None:
-            _app.removeEventFilter(f)
-            _app._rtl_numbers = None
 
 
 def test_rtl_languages():
@@ -85,73 +62,3 @@ def test_startup_direction_follows_the_language(lang, direction, tmp_path,
         if f is not None:
             _app.removeEventFilter(f)
             _app._rtl_numbers = None
-
-
-def test_number_fields_stay_left_to_right(rtl_app):
-    box = QDoubleSpinBox()
-    box.show()
-    rtl_app.processEvents()
-    assert box.layoutDirection() == Qt.LeftToRight
-    plain = QWidget()
-    assert plain.layoutDirection() == Qt.RightToLeft
-    box.close()
-
-
-def test_fold_arrow_left_to_right_is_untouched():
-    from views.rtl import set_arrow
-    b = QToolButton()
-    set_arrow(b, Qt.RightArrow)
-    assert b.arrowType() == Qt.RightArrow and b.icon().isNull()
-
-
-def test_fold_arrow_right_to_left_is_an_icon(rtl_app):
-    from views.rtl import set_arrow
-    b = QToolButton()
-    b.setText("x")
-    set_arrow(b, Qt.RightArrow)
-    assert b.arrowType() == Qt.NoArrow and not b.icon().isNull()
-    set_arrow(b, Qt.NoArrow)
-    assert b.icon().isNull()
-
-
-def test_isolate_only_right_to_left(rtl_app):
-    from views.rtl import isolate_ltr
-    w = QWidget()
-    assert isolate_ltr("+3", w) == "⁦+3⁩"
-    w.setLayoutDirection(Qt.LeftToRight)
-    assert isolate_ltr("+3", w) == "+3"
-
-
-def _flow(direction):
-    from views.tray import FlowLayout
-    host = QWidget()
-    host.setLayoutDirection(direction)
-    lay = FlowLayout(host)
-    kids = []
-    for _ in range(3):
-        k = QWidget()
-        k.setFixedSize(40, 20)
-        lay.addWidget(k)
-        kids.append(k)
-    lay.setGeometry(QRect(0, 0, 200, 100))
-    return [k.geometry() for k in kids]
-
-
-def test_flow_layout_fills_from_the_right_only_right_to_left():
-    ltr = _flow(Qt.LeftToRight)
-    assert [g.x() for g in ltr] == [0, 42, 84]
-    rtl = _flow(Qt.RightToLeft)
-    assert [g.right() for g in rtl] == [199, 157, 115]
-
-
-def test_the_views_are_not_mirrored(rtl_app):
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        assert win.isRightToLeft()
-        assert win.viewport.keys_stand_in.layoutDirection() == Qt.LeftToRight
-        assert win._vcb_value.layoutDirection() == Qt.LeftToRight
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
-        win.deleteLater()

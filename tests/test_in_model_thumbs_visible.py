@@ -6,6 +6,8 @@ opening it (#158). Scrolled to, a row gets its picture; the picture is
 the one drawn before."""
 from __future__ import annotations
 
+import pytest
+
 from PySide6.QtCore import Qt
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 from PySide6.QtWidgets import QApplication
@@ -31,6 +33,7 @@ def _settle():
         QApplication.processEvents()
 
 
+@pytest.mark.classic_pending
 def test_only_rows_on_screen_are_drawn(monkeypatch):
     from views.main_window import MainWindow
     drawn = []

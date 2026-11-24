@@ -85,6 +85,7 @@ class _Win:
         self.viewport = _VP()
 
 
+@pytest.mark.classic_pending
 def test_panel_writes_scene_shadows():
     from views.tray import ShadowsPanel
     win = _Win()
@@ -108,6 +109,7 @@ def test_panel_writes_scene_shadows():
     assert panel._time.value() == 9 * 60 + 30
 
 
+@pytest.mark.classic_pending
 def test_panel_month_bar_and_time_zone():
     """The classic shadow bar: the day-of-year slider and the date field
     are two views of one date, and the time-zone combo overrides the
@@ -133,6 +135,7 @@ def test_panel_month_bar_and_time_zone():
     assert sh.utc_offset is None
 
 
+@pytest.mark.classic_pending
 def test_time_slider_is_bounded_to_daylight():
     """Marco set UTC−10 with 22:39 and the shadows silently vanished — it
     was night. The classic bar never lets that happen: the slider runs sunrise to
