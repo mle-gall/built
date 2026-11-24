@@ -55,8 +55,8 @@ class Recorder:
         return 100.0
 
     # What the page holds per frame: lines, a picture or a GPU render.
-    def page_frame_lines(self, key, *a):
-        self.calls.append(("page_frame_lines", (key, *a)))
+    def page_frame_ops(self, key, *a):
+        self.calls.append(("page_frame_ops", (key, *a)))
         self.__dict__.setdefault("held", set()).add(key)
 
     def page_frame_image(self, key, *a):
@@ -248,7 +248,8 @@ def test_frames_show_the_vector_pass_and_the_renders(host, monkeypatch):
 
     def drawing(source, frame):
         assert frame.style == "vectorial"
-        return np.array([[0, 0, 10, 0], [0, 0, 0, 5]], float), np.array([0, 1], np.int8), []
+        return {"segs": np.array([[0, 0, 10, 0], [0, 0, 0, 5]], float), "kinds": np.array([0, 1], np.int8),
+                "fills": []}
     monkeypatch.setattr(wgpu_sheet_frames, "drawing", drawing)
     shaded = []
 
@@ -262,14 +263,15 @@ def test_frames_show_the_vector_pass_and_the_renders(host, monkeypatch):
     for _ in range(3):
         host.view.draw_frame()                                       # one frame rendered per turn
     plan, iso = ws.composer.comp.frames
-    lines = rec.last("page_frame_lines")
-    assert lines[0] == plan._doc_key
-    assert lines[1].tolist() == [[0, 0, 10, 0], [0, 0, 0, 5]] and lines[2].tolist() == [0, 1]
+    key, ops = rec.last("page_frame_ops")
+    assert key == plan._doc_key
+    lines = [o["pts"] for o in json.loads(ops) if o["op"] == "line"]
+    assert lines == [[0, 0, 10, 0], [0, 0, 0, 5]]                     # edge, then profile
     assert shaded == [iso] and rec.last("page_frame_render")[0] == iso._doc_key
     assert "page_frame_image" not in rec.names()                    # no read-back, no upload
     rec.calls.clear()
     host.view.draw_frame()
-    assert "page_frame_lines" not in rec.names() and "page_frame_render" not in rec.names()
+    assert "page_frame_ops" not in rec.names() and "page_frame_render" not in rec.names()
     _run_actions(host, f"sheets:refresh\x1f{iso._doc_key}")         # Update view: rendered again
     host.view.draw_frame()
     assert rec.last("page_frame_forget") == (iso._doc_key,) and shaded == [iso, iso]

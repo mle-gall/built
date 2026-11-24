@@ -644,6 +644,20 @@ pub fn pages_of(py: Python<'_>, comps: &[Bound<'_, PyAny>], contents: Option<&Bo
                 doc_path: Option<&Bound<'_, PyAny>>) -> PyResult<Vec<Page>> {
     py.import("core.doc_model")?.call_method0("flush")?;
     let composition = py.import("core.composition")?;
+    // The field context is set per sheet and put back after: it is the
+    // caller's (the page's sheet), never left on the last sheet written.
+    let ctx = composition.getattr("_FIELD_CTX")?;
+    let before = ctx.call_method0("copy")?;
+    let pages = pages_in(py, &composition, comps, contents, profiles, scene, doc_path);
+    ctx.call_method0("clear")?;
+    ctx.call_method1("update", (before,))?;
+    pages
+}
+
+#[allow(clippy::too_many_arguments)]
+fn pages_in(py: Python<'_>, composition: &Bound<'_, PyModule>, comps: &[Bound<'_, PyAny>],
+            contents: Option<&Bound<'_, PyDict>>, profiles: Option<&Bound<'_, PyAny>>,
+            scene: Option<&Bound<'_, PyAny>>, doc_path: Option<&Bound<'_, PyAny>>) -> PyResult<Vec<Page>> {
     let mut pages = Vec::new();
     let total = comps.len();
     for (index, comp) in comps.iter().enumerate() {

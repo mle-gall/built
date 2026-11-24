@@ -370,7 +370,7 @@ class Workspace:
         frame rendered straight into its page texture, a vector frame's
         hidden-line drawing as line sets (paper mm in the frame). A frame
         the page holds nothing for is done, one per turn."""
-        import numpy as np
+        import ingetrazo_core as NATIVE
         from views import wgpu_sheet_frames
         comp = self.composer
         serial = self._page                # tried again once the sheet changed
@@ -394,9 +394,8 @@ class Workspace:
                 if frame.style == "vectorial" and not comp.frame_is_perspective(frame):
                     got = wgpu_sheet_frames.drawing(self.view.source_viewport, frame)
                     if got is not None:
-                        segs, kinds, _fills = got
-                        renderer.page_frame_lines(key, np.ascontiguousarray(segs, np.float32),
-                                                  np.ascontiguousarray(kinds, np.uint8))
+                        # Its drawing as the sheet inks it (sheets::items_d).
+                        renderer.page_frame_ops(key, NATIVE.sheet_frame_display(frame, got, True))
                 else:
                     wgpu_sheet_frames.render(self.view, frame, key)
             except Exception:  # noqa: BLE001 — a view that cannot draw stays empty

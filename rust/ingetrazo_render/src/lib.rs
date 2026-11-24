@@ -2111,6 +2111,12 @@ impl Renderer {
         if let Some(ui) = self.ui.as_mut() { ui.page.set_lines(key, segs, kinds); }
         Ok(())
     }
+    /// A vector frame's drawing as a display list (JSON, frame-local mm).
+    fn page_frame_ops(&mut self, key: u64, ops: &str) -> PyResult<()> {
+        let v: serde_json::Value = serde_json::from_str(ops).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        if let Some(ui) = self.ui.as_mut() { ui.page.set_ops(key, v); }
+        Ok(())
+    }
     /// Open the page's text editor on text item ``key``.
     fn page_edit_text(&mut self, key: u64) {
         if let Some(ui) = self.ui.as_mut() { ui.page_edit_text(key); }

@@ -137,6 +137,8 @@ pub struct Page {
     fit: Option<bool>,
     zoom_to: Option<f32>,
     lines: HashMap<u64, Lines>,
+    /// A vector frame's drawing as a display list (frame-local mm).
+    ops: HashMap<u64, J>,
     /// Frames rendered on the GPU straight into a texture (no read-back):
     /// the texture kept alive and its id with the UI painter.
     natives: HashMap<u64, (wgpu::Texture, egui::TextureId)>,
@@ -206,6 +208,7 @@ impl Page {
         let keys: Vec<u64> = doc.items.iter().map(|i| i.key).collect();
         self.selection.retain(|k| keys.contains(k));
         self.lines.retain(|k, _| keys.contains(k));
+        self.ops.retain(|k, _| keys.contains(k));
         self.snaps.retain(|k, _| keys.contains(k));
         let gone: Vec<u64> = self.natives.keys().filter(|k| !keys.contains(k)).copied().collect();
         for k in gone {
@@ -533,20 +536,29 @@ impl Page {
     /// painter (``id``); the one it replaces is freed after the next frame.
     pub fn set_native(&mut self, key: u64, texture: wgpu::Texture, id: egui::TextureId) {
         self.lines.remove(&key);
+        self.ops.remove(&key);
         if let Some((_, old)) = self.natives.insert(key, (texture, id)) {
             self.freed.push(old);
         }
     }
+    /// A vector frame's drawing (sheets::items_d `paint_vector_content`).
+    pub fn set_ops(&mut self, key: u64, ops: J) {
+        self.lines.remove(&key);
+        self.drop_native(key);
+        self.ops.insert(key, ops);
+    }
     pub fn set_lines(&mut self, key: u64, segs: Vec<[f32; 4]>, kinds: Vec<u8>) {
+        self.ops.remove(&key);
         self.drop_native(key);
         self.lines.insert(key, Lines { segs, kinds });
     }
     pub fn forget_content(&mut self, key: u64) {
         self.lines.remove(&key);
+        self.ops.remove(&key);
         self.drop_native(key);
     }
     pub fn has_content(&self, key: u64) -> bool {
-        self.lines.contains_key(&key) || self.natives.contains_key(&key)
+        self.lines.contains_key(&key) || self.ops.contains_key(&key) || self.natives.contains_key(&key)
     }
     pub fn set_selection(&mut self, keys: Vec<u64>) {
         self.selection = keys;
@@ -1117,6 +1129,10 @@ impl Page {
                 "frame" => {
                     self.paint_frame(&painter, item, rect);
                     let place = crate::sheet_display::Place { origin: rect.min, zoom: self.zoom };
+                    if let Some(ops) = self.ops.get(&item.key) {
+                        let inner = painter.with_clip_rect(rect.intersect(painter.clip_rect()));
+                        crate::sheet_display::paint(&inner, ctx, &mut self.pictures, ops, place);
+                    }
                     crate::sheet_display::paint(&painter, ctx, &mut self.pictures, &item.data["display"], place);
                 }
                 _ => {

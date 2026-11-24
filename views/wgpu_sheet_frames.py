@@ -227,9 +227,10 @@ def picture(view_widget, frame):
     return w, h, px.tobytes()
 
 
-def _hlr(source, frame, **kw):
-    """The frame's hidden-line pass (Rust camera and geometry) and the map
-    from its camera plane to frame paper mm; None when its view is gone."""
+def _hlr(source, frame, tags: bool = False, **kw):
+    """The frame's hidden-line pass (Rust camera and geometry, with each
+    triangle's and line's tag when ``tags``) and the map from its camera
+    plane to frame paper mm; None when its view is gone."""
     from core._native import qt_hypot
     from core.composition import model_height_for_frame
     from core.hlr import hlr_drawing
@@ -239,9 +240,11 @@ def _hlr(source, frame, **kw):
         return None
     facade = frame_scene(scene, frame, view)
     camera = frame_camera(source.camera, frame, view, scene)
-    geometry, _tags = NATIVE.sheet_frame_geometry(scene._root, list(scene.groups), scene.loose_mesh,
-                                                  view or None, qt_hypot() or "libc++-fma")
-    d = hlr_drawing(facade, camera, geometry=geometry, **kw)
+    geometry, tagged = NATIVE.sheet_frame_geometry(scene._root, list(scene.groups), scene.loose_mesh,
+                                                   view or None, qt_hypot() or "libc++-fma", tags)
+    if tags:
+        geometry = (*geometry, *(np.array(t, dtype=object) for t in tagged))
+    d = hlr_drawing(facade, camera, geometry=geometry, layers=tags, **kw)
     model_h = model_height_for_frame(frame.h_mm, frame.scale_n)
     k = frame.h_mm / model_h                       # paper mm per metre
     half_h = model_h / 2.0
@@ -256,17 +259,36 @@ def _hlr(source, frame, **kw):
 
 
 def drawing(source, frame):
-    """A vector frame's lines in paper mm, frame-local, and their kinds
-    (``core.hlr`` KIND_*), and its cut rings; None when its view is gone."""
-    got = _hlr(source, frame, profiles=bool(getattr(frame, "profiles", True)),
+    """A vector frame's content for the painter (sheets::items_d): its
+    lines in paper mm, frame-local, their kinds (``core.hlr`` KIND_*), its
+    cut rings, and — when the frame inks layer by layer (a layer with a
+    line type, weight or cut weight of its own, colours by layer) — each
+    line's tag and each tag's look (``core.layers.line_styles``, the line
+    type resolved to its dash). None when its view is gone."""
+    from core.layers import LINETYPES, layer_lines_wanted, line_styles
+    scene = source.scene
+    view = saved_view(scene, frame)
+    if view is False:
+        return None
+    facade = frame_scene(scene, frame, view)
+    coloured = bool(getattr(frame, "layer_colours", False))
+    by_layer = layer_lines_wanted(facade) or coloured
+    got = _hlr(source, frame, tags=by_layer, profiles=bool(getattr(frame, "profiles", True)),
                fills=(getattr(frame, "cut_fill", "solid") or "solid") != "none",
                hidden=bool(getattr(frame, "hidden_lines", False)))
     if got is None:
         return None
     d, to_mm = got
-    segs = to_mm(np.asarray(d.segs, float).reshape(-1, 2, 2)).reshape(-1, 4)
-    fills = [to_mm(np.asarray(ring, float).reshape(-1, 2)) for ring in d.loops]
-    return segs, np.asarray(d.kinds, np.int8), fills
+    out = {"segs": to_mm(np.asarray(d.segs, float).reshape(-1, 2, 2)).reshape(-1, 4),
+           "kinds": np.asarray(d.kinds, np.int8),
+           "fills": [to_mm(np.asarray(ring, float).reshape(-1, 2)) for ring in d.loops]}
+    if d.layers is not None:
+        style = getattr(facade, "display_style", None)
+        looks = line_styles(facade, coloured or bool(getattr(style, "color_by_layer", False)))
+        out["tags"] = [str(t) for t in d.layers]
+        out["styles"] = {tag: (st[0], st[2], st[3], list(st[4] if st[4] is not None else LINETYPES.get(st[1], ())))
+                         for tag, st in looks.items()}
+    return out
 
 
 def snaps(source, frame):
@@ -360,8 +382,7 @@ def frame_contents(view_widget, comps, ground=None):
                 elif frame.style == "vectorial" and not getattr(frame, "perspective", False):
                     got = drawing(source, frame)
                     if got is not None:
-                        segs, kinds, fills = got
-                        contents[key] = {"segs": segs, "kinds": kinds, "fills": fills}
+                        contents[key] = got
                 else:
                     got = picture(view_widget, frame)
                     if got is not None:
