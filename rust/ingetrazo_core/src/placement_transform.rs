@@ -307,7 +307,7 @@ pub(crate) fn explode_offsets(centres: Vec<Obj<'_>>, factor: f64, mode: &str) ->
         .collect())
 }
 #[pyfunction]
-fn apply_explode(container: &Obj<'_>, factor: f64, mode: &str, centres: &Obj<'_>) -> PyResult<()> {
+pub(crate) fn apply_explode(container: &Obj<'_>, factor: f64, mode: &str, centres: &Obj<'_>) -> PyResult<()> {
     let py = container.py();
     let children = container.getattr("children")?;
     if !children.is_truthy()? {

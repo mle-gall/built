@@ -80,6 +80,7 @@ Built (`core.protocol.commands.run(history, name, **args)`):
 | `hide` / `unhide` | `placements: [uid]` (nested included) | `HideCommand` |
 | `lock` | `placements: [uid]`, `locked: bool = true` | Native step `LockCommand` (`NativeCommand.lock`, docs/commands-port.md); locking drops them from the selection |
 | `rename_placement` | `placement: uid`, `name: string` | Native step `RenameGroupCommand` (`NativeCommand.rename`) |
+| `make_unique` | `placement: uid`, `rename: bool = false` | `MakeUniqueCommand`: the copy gets its own definition (and, with `rename`, a name of its own) |
 | `rename_placements` | `placements: [uid]`, `names: [string]` (one per distinct placement) | Native step `RenameGroupCommand` (`NativeCommand.rename_each`), one step; placements already named so are left out |
 | `paint_placements` | `placements: [uid]`, `paint` (a paint dict, or null to unpaint), optional `material` (in process: a `Material` the paint names) | Native step `SetGroupMaterialCommand` (`NativeCommand.paint`): the placements are painted whole, faces painted themselves keep theirs. A material not in the registry joins it in the same step |
 | `set_tag` | `placements: [uid]`, `tag: tag key` | `AssignLayerCommand` |

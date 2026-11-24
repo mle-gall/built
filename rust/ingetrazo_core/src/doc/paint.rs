@@ -4,7 +4,7 @@
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 
-type PaintRows = Vec<Vec<Py<PyAny>>>;
+pub(super) type PaintRows = Vec<Vec<Py<PyAny>>>;
 
 fn write(attrs: &Bound<'_, PyAny>, field: &str, value: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = attrs.py();
