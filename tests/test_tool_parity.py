@@ -114,3 +114,8 @@ def test_walkthrough_matches_the_recorded_python_tool(name):
 @pytest.mark.parametrize("name", sorted(tp.OFFSET_SCENARIOS))
 def test_offset_matches_the_recorded_python_tool(name):
     assert tp.run_offset(tp.OFFSET_SCENARIOS[name]) == tp.load("offset")[name]
+
+
+@pytest.mark.parametrize("name", sorted(tp.PAINT_SCENARIOS))
+def test_paint_matches_the_recorded_python_tool(name):
+    assert tp.run_paint(tp.PAINT_SCENARIOS[name]) == tp.load("paint")[name]

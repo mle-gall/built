@@ -1001,6 +1001,70 @@ def run_rotate(steps):
     return out
 
 
+PAINT_SCENARIOS = {
+    "front_selection_and_undo": ["front", "select", "blue", "front", "undo", "undo"],
+    "back_sample_and_repaint": ["back", "blue", "sample_back", "other", "default", "back", "undo"],
+    "sample_default_and_miss": ["front", "sample_empty", "front", "miss", "undo"],
+    "closed_container": ["container", "front", "blue", "sample_group", "undo"],
+}
+
+
+def run_paint(steps):
+    from contextlib import ExitStack
+    from unittest.mock import patch
+    from PySide6.QtCore import Qt, QPointF
+    from ingetrazo_core import Vec3
+    from core.group import Group
+    from core.mesh import Mesh
+    from tests.test_paint_recent import _FakeViewport, _quad, _use
+    from tools.base import ToolContext
+    from tools.paint import PaintTool
+    view = _FakeViewport()
+    a, b = _quad(view.scene.mesh), _quad(view.scene.mesh, 1.)
+    group = Group(Mesh(), name="Room")
+    painted = _quad(group.mesh)
+    view.scene.groups.append(group)
+    container = False
+    hit = (a, None)
+    side = -1.
+    view.pick_face_any = lambda x, y: hit
+    view.pick_group = lambda x, y: group if container else None
+    view._pixel_to_ray = lambda x, y: (Vec3(0, 0, 5), Vec3(0, 0, side))
+    with ExitStack() as saved:
+        for key in ("recent", "sample_armed", "current_texture_plane", "current_color",
+                    "current_texture", "current_opacity", "current_is_default", "current_material"):
+            saved.enter_context(patch.object(PaintTool, key, getattr(PaintTool, key)))
+        PaintTool.recent, PaintTool.sample_armed, PaintTool.current_texture_plane = [], False, None
+        _use(color=(.8, .3, .2), name="Brick", opacity=.65)
+        tool, rows = PaintTool(), []
+        for step in steps:
+            if step == "container":
+                container = True
+            elif step == "select":
+                view.scene.selection = {a, b}
+            elif step == "undo":
+                view.history.undo()
+            elif step == "default":
+                PaintTool.current_is_default = True
+            elif step == "blue":
+                _use(color=(.1, .3, .8), name="Blue")
+            else:
+                sample = step.startswith("sample")
+                PaintTool.sample_armed = sample
+                side = 1. if step in ("back", "sample_back") else -1.
+                hit = ((None, None) if step == "miss" else (painted, group) if container
+                       else (b if step in ("other", "sample_empty") else a, None))
+                ctx = ToolContext(view, Vec3(), QPointF(), Qt.NoModifier, None)
+                tool.on_hover(ctx)
+                tool.on_click(ctx)
+            rows.append(json.loads(json.dumps({
+                "faces": [dict(f.attrs) for f in (a, b, painted)], "group": group.material,
+                "materials": sorted(view.scene.materials), "armed": PaintTool.sample_armed,
+                "default": PaintTool.current_is_default, "active": PaintTool._current_as_material(),
+                "recent": PaintTool.recent, "undo": len(view.history.undo_stack)})))
+    return rows
+
+
 OFFSET_SCENARIOS = {
     "inward_retype_refuse_and_undo": [("hover", 2, .1), ("click", 2, .1), ("hover", 3, .5),
                                       ("value", 1.), ("value", 3.), ("value", .25), ("undo",)],
@@ -1137,6 +1201,9 @@ def record(which=("line", "select", "rectangle", "move", "circle", "rotated_rect
     if "rotated_rectangle" in which:
         rot = {name: run_rot(steps) for name, steps in ROT_SCENARIOS.items()}
         (FIXTURES / "rotated_rectangle.json").write_text(_compact(rot))
+    if "paint" in which:
+        cases = {name: run_paint(steps) for name, steps in PAINT_SCENARIOS.items()}
+        (FIXTURES / "paint.json").write_text(_compact(cases))
     if "offset" in which:
         cases = {name: run_offset(steps) for name, steps in OFFSET_SCENARIOS.items()}
         (FIXTURES / "offset.json").write_text(_compact(cases))
