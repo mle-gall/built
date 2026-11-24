@@ -2950,10 +2950,10 @@ Native denotes routed, not exhaustive parity acceptance.
 | text | TextTool | native | pick_edge, pick_face_any, rubber_band_lines |
 | geopath | GeoPathTool | native | _world_to_pixel, rubber_band_lines |
 | section | SectionPlaneTool | native — after the crate work | rubber_band_lines |
-| position_camera | PositionCameraTool | native | rubber_band_lines |
-| walk | WalkTool | native | rubber_band_lines |
-| look_around | LookAroundTool | native | rubber_band_lines |
-| first_person | FirstPersonTool | native | rubber_band_lines |
+| position_camera | PositionCameraTool | native | Rust state machine |
+| walk | WalkTool | native | Rust state machine |
+| look_around | LookAroundTool | native | Rust state machine |
+| first_person | FirstPersonTool | native | Rust state machine |
 | change_axes | ChangeAxesTool | native | rubber_band_lines |
 | scale_manager | ScaleManagerTool | native | shared viewport / tool base |
 | paste | PasteTool | native | rubber_band_lines, set_groups_preview_offset |

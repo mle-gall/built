@@ -152,7 +152,11 @@ for _name, _description, _props, _required in [
     ("query_camera", "Read the current camera pose and projection.", {}, []),
     ("set_camera", "Set camera pose or a standard view; no document edit.",
      {"preset": {"enum": ["top", "bottom", "front", "back", "right", "left", "iso"]},
-      "eye": _VECTOR, "target": _VECTOR, "up": _VECTOR, "ortho": {"type": "boolean"}}, []),
+      "eye": _VECTOR, "target": _VECTOR, "up": _VECTOR, "ortho": {"type": "boolean"},
+      "direction": dict(_VECTOR, description="Look direction, preserving orbit distance."),
+      "translation": dict(_VECTOR, description="Move eye and target together."),
+      "turn": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2,
+               "description": "Turn right and up in degrees, keeping the eye fixed."}}, []),
     ("zoom_to", "Frame specified groups, selection, or the whole model.", {"uids": _STRINGS}, []),
 ]:
     BUILTIN_TOOLS.append(dict(name=_name, description=_description,

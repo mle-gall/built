@@ -1723,3 +1723,27 @@ class RotateTool(RotateHost, RustTool):
     _copy = property(lambda self: bool(self._state("copy")),
                      lambda self, on: self._machine.set("copy", bool(on)))
     _last = property(lambda self: True if self._state("retype") else None)
+
+
+from tools.walkthrough_host import (EyeHost, PositionCameraHost, WalkHost, FirstPersonHost,
+                                    DEFAULT_EYE_HEIGHT, DEFAULT_LOOK_SENSITIVITY, eye_height,
+                                    set_eye_height, look_sensitivity, look_deg_per_px,
+                                    _NO_WALK_REACH, _blocked)
+
+
+class PositionCameraTool(PositionCameraHost, RustTool):
+    kind = "position_camera"
+
+
+class LookAroundTool(EyeHost, RustTool):
+    kind = "look_around"
+    TURN_DEG_PER_WIDTH = 180.
+    PITCH_DEG_PER_HEIGHT = 90.
+
+
+class WalkTool(WalkHost, RustTool):
+    kind = "walk"
+
+
+class FirstPersonTool(FirstPersonHost, RustTool):
+    kind = "first_person"

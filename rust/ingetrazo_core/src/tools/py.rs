@@ -114,7 +114,14 @@ fn event(d: &Bound<'_, PyDict>) -> PyResult<ToolEvent> {
     let mods = || -> PyResult<Mods> {
         Ok(Mods::from_qt(opt(d, "mods")?.map(|v| v.extract()).transpose()?.unwrap_or(0)))
     };
+    use super::walkthrough::Navigation;
+    let field = |key: &str| d.get_item(key)?.ok_or_else(|| PyValueError::new_err(format!("missing {key}")));
     Ok(match kind.as_str() {
+        "place_camera" => ToolEvent::Navigate(Navigation::Place { base: p3(&field("base")?)?, look: opt(d,"look")?.map(|v| p3(&v)).transpose()? }),
+        "look_delta" => ToolEvent::Navigate(Navigation::Look(field("delta")?.extract()?)),
+        "camera_tick" => ToolEvent::Navigate(Navigation::Tick { dt: field("dt")?.extract()?, mods: mods()? }),
+        "walk_step" => ToolEvent::Navigate(Navigation::Walk { delta: field("delta")?.extract()?, dt: field("dt")?.extract()?, mods: mods()? }),
+        "first_person_step" => ToolEvent::Navigate(Navigation::Keys { keys: field("keys")?.extract()?, dt: field("dt")?.extract()?, mods: mods()? }),
         "activate" => ToolEvent::Activate,
         "deactivate" => ToolEvent::Deactivate,
         "cancel" => ToolEvent::Cancel,
@@ -407,6 +414,13 @@ impl ToolMachine {
         new_tool(kind)
             .map(|tool| ToolMachine { tool, serial: 0 })
             .ok_or_else(|| PyValueError::new_err(format!("no Rust tool {kind:?}")))
+    }
+
+    #[staticmethod]
+    fn walk_blocked(host: &Bound<'_, PyAny>, eye: P3, delta: P3, height: f64, clearance: f64, knee: f64) -> PyResult<bool> {
+        let mut bridge = PyHost { obj: host, err: None };
+        let blocked = super::walkthrough::blocked(&mut bridge, eye, delta, height, clearance, knee);
+        bridge.err.map_or(Ok(blocked), Err)
     }
 
     /// The tool's class attributes, as the inference and the host read them.

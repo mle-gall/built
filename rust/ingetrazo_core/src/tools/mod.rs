@@ -6,6 +6,7 @@
 //! `py.rs` is the only PyO3 face, and `tests.rs` drives the machines
 //! against a fake host.
 
+mod walkthrough;
 mod scale_grip;
 mod scale_tool;
 mod rotate;
@@ -116,6 +117,7 @@ pub enum ToolEvent {
     Value(Value),
     AbsoluteValue(Value),
     ScaleFactors(P3),
+    Navigate(walkthrough::Navigation),
     /// A segment or side count typed as `Ns` (Circle, Polygon, Arc).
     Segments(i64),
     /// A radius typed as `2r` (the 2-point Arc).
@@ -334,6 +336,7 @@ pub(crate) fn json_p3(v: &serde_json::Value) -> Option<P3> {
 
 pub fn new_tool(kind: &str) -> Option<Box<dyn Tool>> {
     match kind {
+        "position_camera" | "look_around" | "walk" | "first_person" => Some(Box::new(walkthrough::Walkthrough::new(kind))),
         "select" => Some(Box::new(select::SelectTool::default())),
         "line" => Some(Box::new(line::LineTool::default())),
         "rectangle" => Some(Box::new(rectangle::RectangleTool::default())),
