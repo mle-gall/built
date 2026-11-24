@@ -269,8 +269,8 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     sub.add_function(wrap_pyfunction!(crate::object_registry::registers, &sub)?)?;
     sub.add_function(wrap_pyfunction!(crate::object_registry::purge_debris, &sub)?)?;
     sub.add_function(wrap_pyfunction!(crate::kernel::object_incidence::vertex_faces, &sub)?)?;
-    sub.add_function(wrap_pyfunction!(crate::kernel::object_incidence::ring_positions, &sub)?)?;
-    sub.add_function(wrap_pyfunction!(crate::kernel::object_incidence::hole_positions, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::kernel::object_incidence::face_vertices, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::kernel::object_incidence::face_holes, &sub)?)?;
     sub.add_function(wrap_pyfunction!(crate::kernel::object_incidence::reverse_rings, &sub)?)?;
     sub.add_function(wrap_pyfunction!(crate::kernel::object_incidence::insert_between, &sub)?)?;
     sub.add_function(wrap_pyfunction!(crate::kernel::object_incidence::collapse_collinear, &sub)?)?;

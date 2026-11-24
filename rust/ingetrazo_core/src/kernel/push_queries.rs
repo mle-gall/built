@@ -4,7 +4,7 @@ use crate::math::xyz;
 use glam::DVec3;
 use pyo3::{
     prelude::*,
-    types::{PyDict, PySet},
+    types::{PyDict, PySet, PyTuple},
 };
 type Obj<'py> = Bound<'py, PyAny>;
 type P = (f64, f64, f64);
@@ -12,6 +12,16 @@ type Bounds = (P, P);
 fn tuple(v: DVec3) -> P {
     (v.x, v.y, v.z)
 }
+// Scan bounds usually receive tuples from the store. Skip Python attribute
+// lookup on these coordinates, retaining support for public vector types.
+fn bound_point(p: &Obj<'_>) -> PyResult<DVec3> {
+    if let Ok(row) = p.cast_exact::<PyTuple>() {
+        let (x, y, z) = row.extract::<P>()?;
+        return Ok(DVec3::new(x, y, z));
+    }
+    xyz(p)
+}
+
 struct Extent {
     lo: DVec3,
     hi: DVec3,
@@ -20,10 +30,10 @@ impl Extent {
     fn read(points: &Obj<'_>) -> PyResult<Option<Self>> {
         let mut it = points.try_iter()?;
         let Some(p) = it.next() else { return Ok(None) };
-        let p = xyz(&p?)?;
+        let p = bound_point(&p?)?;
         let mut bounds = Self { lo: p, hi: p };
         for v in it {
-            let v = xyz(&v?)?;
+            let v = bound_point(&v?)?;
             bounds.lo = bounds.lo.min(v);
             bounds.hi = bounds.hi.max(v);
         }
@@ -89,7 +99,11 @@ fn ring_positions(rings: &Obj<'_>) -> PyResult<Vec<Vec<P>>> {
     rings.try_iter()?.map(|r| positions(&r?)).collect()
 }
 #[pyfunction]
-pub(super) fn views<'py>(mesh: &Obj<'py>, cls: &Obj<'py>, keys: &Obj<'py>) -> PyResult<Vec<Obj<'py>>> {
+pub(super) fn views<'py>(
+    mesh: &Obj<'py>,
+    cls: &Obj<'py>,
+    keys: &Obj<'py>,
+) -> PyResult<Vec<Obj<'py>>> {
     keys.try_iter()?.map(|k| cls.call1((mesh, k?))).collect()
 }
 #[pyfunction]

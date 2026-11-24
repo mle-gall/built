@@ -8,17 +8,30 @@ use pyo3::{
 };
 type Obj<'py> = Bound<'py, PyAny>;
 
-#[pyfunction]
-pub(crate) fn ring_positions<'py>(ring: &Obj<'py>) -> PyResult<Vec<Obj<'py>>> {
+fn ring_positions<'py>(ring: &Obj<'py>) -> PyResult<Bound<'py, PyList>> {
     let pos = pyo3::intern!(ring.py(), "position");
+    let out = PyList::empty(ring.py());
     if let Ok(l) = ring.cast_exact::<PyList>() {
-        return l.iter().map(|v| v.getattr(pos)).collect();
+        for v in l.iter() {
+            out.append(v.getattr(pos)?)?;
+        }
+    } else {
+        for v in ring.try_iter()? {
+            out.append(v?.getattr(pos)?)?;
+        }
     }
-    ring.try_iter()?.map(|v| v?.getattr(pos)).collect()
+    Ok(out)
 }
 #[pyfunction]
-pub(crate) fn hole_positions<'py>(holes: &Obj<'py>) -> PyResult<Vec<Vec<Obj<'py>>>> {
-    holes.try_iter()?.map(|r| ring_positions(&r?)).collect()
+pub(crate) fn face_vertices<'py>(face: &Obj<'py>) -> PyResult<Bound<'py, PyList>> {
+    ring_positions(&face.getattr(pyo3::intern!(face.py(), "loop"))?)
+}
+#[pyfunction]
+pub(crate) fn face_holes<'py>(face: &Obj<'py>) -> PyResult<Vec<Bound<'py, PyList>>> {
+    face.getattr(pyo3::intern!(face.py(), "hole_loops"))?
+        .try_iter()?
+        .map(|r| ring_positions(&r?))
+        .collect()
 }
 #[pyfunction]
 pub(crate) fn vertex_faces<'py>(edges: &Obj<'py>) -> PyResult<Bound<'py, PySet>> {
