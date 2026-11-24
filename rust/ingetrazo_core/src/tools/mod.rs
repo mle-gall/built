@@ -8,6 +8,7 @@
 
 mod change_axes;
 mod freehand;
+mod followme;
 mod paste;
 mod flip;
 mod tape;
@@ -350,6 +351,7 @@ pub(crate) fn json_p3(v: &serde_json::Value) -> Option<P3> {
 pub fn new_tool(kind: &str) -> Option<Box<dyn Tool>> {
     match kind {
         "freehand" => Some(Box::new(freehand::Freehand::default())),
+        "followme" => Some(Box::new(followme::FollowMe::default())),
         "change_axes" => Some(Box::new(change_axes::ChangeAxes::default())),
         "paste" => Some(Box::new(paste::Paste::default())),
         "flip" => Some(Box::new(flip::Flip::default())),

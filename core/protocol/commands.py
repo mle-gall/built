@@ -350,7 +350,9 @@ def follow_me(history, face, path, closed=False):
     from core.sweep import build_sweep_face
     points = (list(path) if store_of(history.scene.mesh) is not None else
               [QVector3D(*p) for p in path])
-    cmd = build_sweep_face(history.scene.mesh, from_json_key(face), points, closed)
+    from core.i18n import tr
+    failed = tr("Follow Me: could not sweep along that path (reversal or degenerate segment)")
+    cmd = build_sweep_face(history.scene.mesh, from_json_key(face), points, closed, failed)
     before = history.revision
     history.execute(cmd)
     return _answer(history, before)

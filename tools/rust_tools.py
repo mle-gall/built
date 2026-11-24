@@ -1934,3 +1934,10 @@ class ChangeAxesTool(RustTool):
         from core.i18n import tr
         if self.start_point is not None and self.hover_point is not None:
             return (tr("Red axis") if self.red_point is None else tr("Green axis")), self.hover_point
+
+
+from tools.followme_host import FollowMeHost
+
+
+class FollowMeTool(FollowMeHost, RustTool):
+    kind = "followme"

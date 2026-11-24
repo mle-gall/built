@@ -95,16 +95,13 @@ def _assert_untouched(vp, profile, path, other):
 
 def test_a_sweep_that_raises_keeps_the_previous_step_and_redo(
         tmp_path, monkeypatch):
-    import tools.followme as followme
     vp, profile, path, other = _model(tmp_path)
 
     def broken(mesh, face, pts, closed):
         mesh.remove_face(face)                      # half-way through…
         mesh.add_edge(V(5, 5, 5), V(5, 5, 5))       # …and the engine raises
 
-    monkeypatch.setattr(followme, "sweep_profile", broken)
-    # A store-backed mesh sweeps through the keyed command instead: break
-    # that one the same way.
+    # Both backends enter the same keyed command.
     import core.sweep
     from core.history import SnapshotMutation
     monkeypatch.setattr(
