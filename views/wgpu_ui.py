@@ -1094,63 +1094,22 @@ def _wait_cursor(viewport):
 
 
 def _measure(view, win, auto=False) -> None:
-    """Quantity takeoff (the BIM panel's metrado), per item. The first
-    measure walks every tagged object (7.5 s on the 99k-object Ride file),
-    so it runs when asked; after it the memo keeps it current for the
-    cost of what changed (0.2 s there)."""
     import time
-    from core import bim
-    scene = win.viewport.scene
-    q = view.__dict__.get("_ui_qty")
-    if q is None or q["scene"] != id(scene):
+    vp = win.viewport
+    takeoff = vp.scene.__dict__.get("_inspector_takeoff")
+    if takeoff is None:
         if auto:
             return
-        q = view._ui_qty = {"scene": id(scene), "memo": {}, "sig": None, "by_group": {}}
-    if q["sig"] == scene.content_version:
+        from ingetrazo_core import InspectorTakeoff
+        takeoff = vp.scene._inspector_takeoff = InspectorTakeoff()
+    if auto:
+        takeoff.refresh(vp.history)
         return
-    t0 = time.perf_counter()
-    with _wait_cursor(win.viewport):
-        objs = bim.collect_objects(scene, q["memo"])
-        by_group = {}
-        for obj in objs:
-            owner = obj.get("group") or obj.get("owner")
-            if owner is None:
-                continue
-            if "_q" not in obj:
-                try:
-                    obj["_q"] = bim.object_quantities(obj)[2]
-                except Exception:
-                    obj["_q"] = (None, "")
-            value, unit = obj["_q"]
-            if unit == "und":
-                value = 1.0
-            if value is None or not unit:
-                continue
-            per = by_group.setdefault(id(owner), {})
-            per[unit] = per.get(unit, 0.0) + value
-        q["by_group"] = by_group
-        q["sig"] = scene.content_version
-        q["count"] = len(objs)
-    if not auto:
-        win.viewport.flash_status(f"Measured {len(objs)} items in {time.perf_counter() - t0:.1f} s")
-    view._ui_tree_sig = None
+    started = time.perf_counter()
+    with _wait_cursor(vp):
+        takeoff.refresh(vp.history)
+    vp.flash_status(f"Measured {takeoff.count} items in {time.perf_counter() - started:.1f} s")
     view._ui_insp_sig = None
-
-
-def _group_qty(view, g) -> dict:
-    q = view.__dict__.get("_ui_qty")
-    return q["by_group"].get(id(g), {}) if q else {}
-
-
-def _qty_text(per_unit) -> str:
-    """The main measure of a row: its largest unit's total, «+» if mixed."""
-    if not per_unit:
-        return ""
-    order = ["m3", "m2", "m", "kg", "und"]
-    unit = min(per_unit, key=lambda u: order.index(u) if u in order else 9)
-    v = per_unit[unit]
-    text = (f"{v:.0f}" if unit == "und" or v >= 100 else f"{v:.2f}") + " " + UNIT_TEXT.get(unit, unit)
-    return text + (" +" if len(per_unit) > 1 else "")
 
 
 def _qty_rows(per_unit) -> list:
@@ -1256,6 +1215,9 @@ def _tree_action(win, view, action) -> None:
             wgpu_library.action(win, view, key[4:])
         elif verb == "insp" and key.startswith("form:"):
             _open_form(view, key[5:])
+        elif verb == "insp" and key.startswith("takeoff_faces:"):
+            from ingetrazo_core import InspectorTakeoff
+            InspectorTakeoff.select_faces(vp, key.partition(":")[2])
         elif verb == "insp" and key == "measure":
             _measure(view, win)
             view._ui_tree_sig = None
@@ -2035,6 +1997,8 @@ def _inspector(view, win) -> None:
            scene.display_style.section_fill, view.__dict__.get("_ui_sheet_revision"))
     if sig == getattr(view, "_ui_insp_sig", None):
         return
+    _measure(view, win, auto=True)
+    takeoff = scene.__dict__.get("_inspector_takeoff")
     view._ui_insp_sig = sig
     from collections import Counter
     from core import bim_registry, links, structure
@@ -2100,10 +2064,10 @@ def _inspector(view, win) -> None:
             export.append((c.get("system", "Classification"), f"{c.get('code', '')} {c.get('name', '')}".strip()))
         if recipe.get("systems"):
             export.append(("Systems", ", ".join(recipe["systems"])))
-        if view.__dict__.get("_ui_qty"):
+        if takeoff is not None:
             total = {}
             for g in members:
-                for u, v in _group_qty(view, g).items():
+                for u, v in takeoff.quantities(g).items():
                     total[u] = total.get(u, 0.0) + v
             sections.append(("Quantities", _qty_rows(total) or [("Measured", "nothing to measure")]))
         else:
@@ -2177,8 +2141,13 @@ def _inspector(view, win) -> None:
                                          ("linknested", "Source only" if nested else "Include nested links")]))
             if links.linked_ancestor(g.owner) is None:
                 sections.append(("Actions", [("linksubset", "Edit linked subset…")]))
-        if _group_qty(view, g):
-            sections.append(("Quantities", _qty_rows(_group_qty(view, g))))
+        if takeoff:
+            if quantities := takeoff.quantities(g):
+                sections.append(("Quantities", _qty_rows(quantities)))
+            if actions := takeoff.face_actions(g):
+                sections.append(("Actions", actions))
+        elif g.ifc:
+            sections.append(("Actions", [("measure", "Measure quantities")]))
         export = [("IFC class", str(rec.get("class") or recipe.get("class") or "generic object")),
                   ("Predefined type", str(rec.get("predefined_type") or recipe.get("predefined_type") or "—")),
                   ("Tag", str(getattr(g, "layer", None) or "—"))]

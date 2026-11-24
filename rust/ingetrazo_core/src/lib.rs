@@ -51,6 +51,7 @@ mod hatch_region;
 mod style_files;
 mod style_edit;
 mod browser_rename;
+mod takeoff;
 mod settings;
 mod document_watch;
 mod window_input;
@@ -119,6 +120,7 @@ mod alignment;
 
 #[pymodule]
 fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<takeoff::InspectorTakeoff>()?;
     stl::register(m)?;
     alignment::register(m)?;
     m.add("TAG_PALETTE", pyo3::types::PyTuple::new(m.py(), doc::drawing::PALETTE)?)?;

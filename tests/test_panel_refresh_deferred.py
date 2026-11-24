@@ -291,3 +291,26 @@ def test_a_geometry_edit_leaves_the_browser_rows_as_they_are(monkeypatch):
     assert not scans
     history.execute(NativeCommand.rename(group, "New name"))
     assert p.rows()["i:" + group.uid][0] == "New name" and len(scans) == 1
+
+
+def test_two_browser_panes_each_receive_a_change_seen_by_the_other():
+    from core.history import MoveGroupCommand, NativeCommand
+    from ingetrazo_core import Vec3 as V
+    from tests.test_tree_links import _View
+    from views import wgpu_ui
+
+    p, group, _ = browser_model()
+    second = _View()
+    second._ui_exp = {"n:"}
+
+    def name():
+        wgpu_ui._tree(second, p.win)
+        return next(t[1] for t, _ in second.renderer.calls["ui_set_tree"][0] if t[0] == "i:" + group.uid)
+
+    assert name() == "Object"
+    h = p.win.viewport.history
+    h.execute(NativeCommand.rename(group, "Door"))
+    assert p.rows()["i:" + group.uid][0] == "Door"
+    h.execute(MoveGroupCommand(group, V(1, 0, 0)))
+    p.rows()
+    assert name() == "Door"
