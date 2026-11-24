@@ -76,3 +76,14 @@ def test_downloads_are_capped_and_queued(tmp_path):
     assert len(fetcher._queue) == 30 - fetcher._MAX_INFLIGHT
     fetcher.cancel_all()
     assert fetcher._inflight == {} and fetcher._queue == []
+
+
+def test_survey_pixels_preserve_unpremultiplied_channels_and_bounds():
+    image = SurveyRaster(2, 1, bytes((10, 20, 30, 0, 40, 50, 60, 128)))
+    assert image.pixelColor(0, 0).getRgb() == (10, 20, 30, 0)
+    sample = image.pixelColor(1, 0)
+    assert (sample.red(), sample.green(), sample.blue(), sample.alpha()) == (40, 50, 60, 128)
+    assert sample.name() == "#28323c" and sample.lightness() == 50
+    for x, y in [(-1, 0), (2, 0), (0, 1)]:
+        with pytest.raises(ValueError):
+            image.pixelColor(x, y)

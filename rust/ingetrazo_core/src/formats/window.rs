@@ -92,44 +92,6 @@ fn x11_connection() -> Result<usize, String> {
 }
 
 #[pyclass(frozen)]
-struct CaptureColor([u8; 4]);
-#[pymethods]
-#[allow(non_snake_case)]
-impl CaptureColor {
-    fn red(&self) -> u8 {
-        self.0[0]
-    }
-    fn green(&self) -> u8 {
-        self.0[1]
-    }
-    fn blue(&self) -> u8 {
-        self.0[2]
-    }
-    fn alpha(&self) -> u8 {
-        self.0[3]
-    }
-    fn redF(&self) -> f64 {
-        self.red() as f64 / 255.
-    }
-    fn greenF(&self) -> f64 {
-        self.green() as f64 / 255.
-    }
-    fn blueF(&self) -> f64 {
-        self.blue() as f64 / 255.
-    }
-    fn lightnessF(&self) -> f64 {
-        let c = &self.0[..3];
-        (f64::from(*c.iter().max().unwrap()) + f64::from(*c.iter().min().unwrap())) / 510.
-    }
-    fn name(&self) -> String {
-        format!("#{:02x}{:02x}{:02x}", self.red(), self.green(), self.blue())
-    }
-    fn getRgb(&self) -> (u8, u8, u8, u8) {
-        self.0.into()
-    }
-}
-
-#[pyclass(frozen)]
 struct CapturedFrame {
     pixels: Arc<[u8]>,
     width: usize,
@@ -184,12 +146,13 @@ impl CapturedFrame {
     fn devicePixelRatio(&self) -> f64 {
         self.scale
     }
-    fn pixelColor(&self, x: usize, y: usize) -> PyResult<CaptureColor> {
+    fn pixelColor<'p>(&self, py: Python<'p>, x: usize, y: usize) -> PyResult<Obj<'p>> {
         if x >= self.width || y >= self.height {
             return Err(PyValueError::new_err("pixel outside frame"));
         }
         let i = (y * self.width + x) * 4;
-        Ok(CaptureColor(self.pixels[i..i + 4].try_into().unwrap()))
+        let p = &self.pixels[i..i + 4];
+        py.import("ingetrazo_render")?.call_method1("PaintColor", (p[0], p[1], p[2], p[3]))
     }
     fn rgba<'p>(&self, py: Python<'p>) -> Bound<'p, PyBytes> {
         PyBytes::new(py, &self.pixels)
