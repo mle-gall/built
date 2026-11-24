@@ -4,6 +4,7 @@ pub struct Preview {
     samples: crate::antialias::SampleModes,
     pipelines: Vec<wgpu::RenderPipeline>,
     group: wgpu::BindGroup,
+    mark_pose: wgpu::Buffer,
     triangles: Option<wgpu::Buffer>,
     edges: Option<wgpu::Buffer>,
     counts: [u32; 2],
@@ -25,7 +26,7 @@ impl Preview {
         });
         let bindings = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: None,
-            entries: &[0, 1].map(|binding| wgpu::BindGroupLayoutEntry {
+            entries: &[0, 1, 2].map(|binding| wgpu::BindGroupLayoutEntry {
                 binding,
                 visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                 ty: wgpu::BindingType::Buffer {
@@ -55,10 +56,15 @@ impl Preview {
                     bias: crate::depth::bias(wgpu::DepthBiasState { constant: if marks || edge {-2} else {0}, slope_scale: if marks || edge {-1.} else {0.}, clamp: 0. }) }),
                 multisample: wgpu::MultisampleState { count: samples, ..Default::default() }, multiview: None, cache: None })
         })).collect();
-        let group = crate::bind(d, &bindings, &[camera, style]);
+        let mark_pose = d.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("selection mark pose"), contents: &[0u8; 80],
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+        let group = crate::bind(d, &bindings, &[camera, style, &mark_pose]);
         Self { samples,
             pipelines,
             group,
+            mark_pose,
             triangles: None,
             edges: None,
             counts: [0; 2],
@@ -92,18 +98,27 @@ impl Preview {
     }
 
     pub fn upload_validated(&mut self, d: &wgpu::Device, triangles: &[u8], edges: &[u8]) {
-        let upload = |data: &[u8]| {
-            (!data.is_empty()).then(|| {
-                d.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("transient mesh"),
-                    contents: data,
-                    usage: wgpu::BufferUsages::VERTEX,
-                })
-            })
-        };
-        self.triangles = upload(triangles);
-        self.edges = upload(edges);
-        self.counts = [(triangles.len() / 28) as u32, (edges.len() / 28) as u32];
+        self.set_mark_faces(d, triangles);
+        self.set_mark_edges(d, edges);
+    }
+    fn buffer(d: &wgpu::Device, data: &[u8]) -> Option<wgpu::Buffer> {
+        (!data.is_empty()).then(|| d.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("transient mesh"), contents: data, usage: wgpu::BufferUsages::VERTEX,
+        }))
+    }
+    pub fn set_mark_faces(&mut self, d: &wgpu::Device, data: &[u8]) {
+        self.triangles = Self::buffer(d, data);
+        self.counts[0] = (data.len() / 28) as u32;
+    }
+    pub fn set_mark_edges(&mut self, d: &wgpu::Device, data: &[u8]) {
+        self.edges = Self::buffer(d, data);
+        self.counts[1] = (data.len() / 28) as u32;
+    }
+    pub fn pose_marks(&self, queue: &wgpu::Queue, matrix: [f32; 16], selected: u32) {
+        let mut data = [0u8; 80];
+        data[..64].copy_from_slice(bytemuck::bytes_of(&matrix));
+        data[64..68].copy_from_slice(&selected.to_le_bytes());
+        queue.write_buffer(&self.mark_pose, 0, &data);
     }
     pub fn layout(&self) -> wgpu::BindGroupLayout { self.pipelines[0].get_bind_group_layout(0) }
     pub fn active(&self) -> bool {

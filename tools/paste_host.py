@@ -49,8 +49,8 @@ class PasteHost(Tool):
     def _clip(self, clip):
         self._clipboard = clip
         self._machine.set("clipboard", None if not clip else {
-            "ref": clip.get("ref", (0., 0., 0.)), "faces": [(loop, *holes) for loop, holes, *_ in clip["faces"]],
-            "edges": [(a, b) for a, b, *_ in clip["edges"]]})
+            "ref": clip.get("ref", (0., 0., 0.)), "faces": [(loop, *holes) for loop, holes, *_ in clip.get("faces", ())],
+            "edges": [(a, b) for a, b, *_ in clip.get("edges", ())]})
 
     def on_activate(self, vp):
         self._clip = getattr(vp, "clipboard", None)
@@ -117,7 +117,7 @@ class PasteHost(Tool):
         if self._clip is None:
             return []
         faces = super().preview_faces()
-        for face, (_, _, *attrs) in zip(faces, self._clip["faces"]):
+        for face, (_, _, *attrs) in zip(faces, self._clip.get("faces", ())):
             if attrs:
                 face.attrs = _preview_attrs(attrs[0], self._offset, face)
         return faces

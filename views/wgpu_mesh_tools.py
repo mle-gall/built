@@ -545,7 +545,7 @@ class MeshToolAccess:
         from views.wgpu_overlay import draw_snap_indicator
         self._hover_entity = getattr(self, '_mesh_hover', None)
         marks = getattr(self.view, '_draw_selection_marks', None)
-        if marks is not None:
+        if marks is not None and getattr(self, "_moving_marks", None) is None:
             marks(painter)
         layout = draw_annotations(painter, self.scene, self.camera,
             (painter.device().width()/painter.device().devicePixelRatioF(),
@@ -641,6 +641,7 @@ class MeshToolAccess:
             return False
         keys = {v.key for v in vertices}
         if len(keys) == len(mesh.vertices):
+            self._begin_marks(renderer, keys)
             self._begin_rows(groups, include_loose=True)
             return True
         store = mesh.__dict__.get('_store')
@@ -651,7 +652,9 @@ class MeshToolAccess:
         if (getattr(self.scene, 'show_hidden_geometry', False)
                 or np.count_nonzero(packed.instances['info'][:, 0] == code) != 1):
             return False
-        origin = np.subtract(packed.prototype_origins[code], store.frame_origin)
+        origins = packed.prototype_origins
+        anchor = origins[code] if code < len(origins) else (0., 0., 0.)
+        origin = np.subtract(anchor, store.frame_origin)
         points = store.preview_points(list(keys), origin)
         if points is None:
             return False
@@ -661,9 +664,15 @@ class MeshToolAccess:
         corners = packed.vertices[indices].view(np.uint8).reshape(-1)
         if not renderer.begin_tool_geometry(code, corners, points, origin):
             return False
+        self._begin_marks(renderer, keys)
         self._begin_rows(groups, include_loose=False)
         self._loose_deform = renderer
         return True
+
+    def _begin_marks(self, renderer, keys):
+        if hasattr(renderer, 'begin_tool_marks'):
+            renderer.begin_tool_marks(self.scene.selection, getattr(self, '_mesh_hover', None), keys)
+            self._moving_marks = renderer
 
     def begin_groups_preview(self, groups):
         self._begin_rows(groups, include_loose=False)
@@ -692,6 +701,9 @@ class MeshToolAccess:
         if self.original is None:
             return
         transform = matrix.data()
+        marks = getattr(self, '_moving_marks', None)
+        if marks is not None:
+            marks.pose_tool_marks(transform, getattr(self.view, '_selected_mark_count', 0))
         if len(self.original):
             rows = self._instance_preview.transformed(transform).view(self.original.dtype)
             self.write_rows(rows)
@@ -700,6 +712,10 @@ class MeshToolAccess:
             renderer.pose_tool_geometry(transform)
 
     def end_groups_preview(self):
+        marks = getattr(self, '_moving_marks', None)
+        if marks is not None:
+            marks.end_tool_marks()
+            self._moving_marks = None
         renderer = getattr(self, '_loose_deform', None)
         if renderer is not None:
             renderer.end_tool_geometry()

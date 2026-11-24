@@ -77,7 +77,11 @@ def face_ranges(view, faces):
 
 
 def face_marks(view, faces):
+    from ingetrazo_render import prepare_face_marks
     parts = []
+    zero = (0., 0., 0.)
+    origins = (getattr(view.packed, 'prototype_origins', ())
+               if faces and view.scene.mesh is getattr(view.scene, 'loose_mesh', None) else ())
     for face in faces:
         for code, first, count in face_ranges(view, [face]):
             cmd = view.packed.commands[code]
@@ -89,9 +93,14 @@ def face_marks(view, faces):
                 from ingetrazo_core import Vec3 as QVector3D
                 front, back = choose(face)
                 color = front if QVector3D.dotProduct(face.normal(), view.camera.eye()-face.vertices[0]) > 0 else back
-            vertices['color'] = [*np.asarray(np.clip(np.array(color)*255, 0, 255), np.uint8), 255]
+            # Incremental prototypes already use the active coordinate frame.
+            anchored = code < len(origins)
+            prepare_face_marks(raw(vertices), color[:3], origins[code] if anchored else zero,
+                               view.packed.origin if anchored else zero)
             parts.append(vertices)
-    return raw(np.concatenate(parts) if parts else np.empty(0, VERTEX))
+    marks = np.concatenate(parts) if parts else np.empty(0, VERTEX)
+    view._selected_mark_count = len(marks)
+    return raw(marks)
 
 
 def hover_face_marks(view, face, placement=None):

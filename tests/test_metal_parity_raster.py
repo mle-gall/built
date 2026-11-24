@@ -755,3 +755,32 @@ def test_model_behind_reference_only_hidden_by_opaque_imagery(native, antialias)
     # Flat tiles and faded images leave geometry visible behind their plane.
     np.testing.assert_array_equal(frame(1., False), original[32, 32])
     np.testing.assert_array_equal(frame(.5, False), original[32, 32])
+
+
+def test_selection_marks_follow_the_grab_and_leave_hover_marks_in_place(native):
+    from ingetrazo_core import Vec3
+    vertices, *_ = upload(native, 255)
+    native.set_style(dict(sky=False, edges=False))
+    marks = np.tile(vertices[:6], 2)
+    marks['pos'][:, :2] *= .3
+    marks['pos'][:6, 0] -= .45
+    marks['pos'][6:, 1] += .6
+    marks['pos'][:, 2] = .1
+    marks['color'][:] = [0, 255, 0, 255]
+    native.set_face_marks(marks.view(np.uint8).ravel())
+    before = capture(native)
+    assert np.count_nonzero(before[24:40, 7:26, 1] > 150) > 4
+
+    scene = Scene()
+    edge = scene.mesh.add_edge(Vec3(-.65, -.5, .1), Vec3(-.25, -.5, .1))
+    native.begin_tool_marks({edge}, None, {edge.v0.key, edge.v1.key})
+    matrix = np.eye(4)
+    matrix[3, 0] = .9
+    native.pose_tool_marks(matrix.ravel(), 6)
+    moved = capture(native)
+    assert not np.any(moved[24:40, 7:26, 1] > 150)
+    assert np.count_nonzero(moved[24:40, 38:58, 1] > 150) > 4
+    assert np.count_nonzero(moved[46:50, 38:58, 1] > 50) > 4
+    np.testing.assert_array_equal(before[:20], moved[:20])
+    native.end_tool_marks()
+    np.testing.assert_array_equal(before, capture(native))

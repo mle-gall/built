@@ -50,6 +50,7 @@ mod preview;
 mod preview_texture;
 mod geometry_preview;
 mod tool_feedback;
+mod transform_marks;
 mod tool_instances;
 mod lines;
 mod references;
@@ -1041,10 +1042,12 @@ impl Renderer {
             p: count as u32,
         });
         self.preview.upload(&self.device,&[],&[]).map_err(PyValueError::new_err)?;
+        self.end_tool_marks();
         self.face_marks.upload(&self.device,&[],&[]).map_err(PyValueError::new_err)?;
         self.ghost_geometry.upload(&self.device,&[],&[]).map_err(PyValueError::new_err)?;
         for t in self.targets.values_mut() {
             t.preview.upload(&self.device,&[],&[]).map_err(PyValueError::new_err)?;
+            t.face_marks.pose_marks(&self.queue,glam::Mat4::IDENTITY.to_cols_array(),0);
             t.face_marks.upload(&self.device,&[],&[]).map_err(PyValueError::new_err)?;
             t.pick_read = PickRead::DIRTY;
         }
@@ -1467,7 +1470,25 @@ impl Renderer {
     fn line_counts(&self) -> Vec<(String, u32)> { self.lines.counts() }
     /// Loose-face marks only; groups use group_selection_edges.
     fn set_face_marks(&mut self, triangles: PyReadonlyArray1<'_, u8>) -> PyResult<()> {
-        self.face_marks.upload(&self.device, triangles.as_slice()?, &[]).map_err(PyValueError::new_err)
+        let data = triangles.as_slice()?;
+        preview::Preview::validate(data, &[]).map_err(PyValueError::new_err)?;
+        self.face_marks.set_mark_faces(&self.device, data);
+        Ok(())
+    }
+    #[pyo3(signature=(selection, hover, keys))]
+    fn begin_tool_marks(&mut self, selection:&Bound<'_,PyAny>, hover:Option<&Bound<'_,PyAny>>, keys:std::collections::HashSet<u128>) -> PyResult<()> {
+        let data=transform_marks::edge_vertices(selection,hover,keys)?;
+        preview::Preview::validate(&[],&data).map_err(PyValueError::new_err)?;
+        self.face_marks.set_mark_edges(&self.device,&data);
+        self.face_marks.pose_marks(&self.queue,glam::Mat4::IDENTITY.to_cols_array(),0);
+        Ok(())
+    }
+    fn pose_tool_marks(&self, matrix:[f32;16], selected:u32) {
+        self.face_marks.pose_marks(&self.queue,matrix,selected);
+    }
+    fn end_tool_marks(&mut self) {
+        self.face_marks.set_mark_edges(&self.device,&[]);
+        self.face_marks.pose_marks(&self.queue,glam::Mat4::IDENTITY.to_cols_array(),0);
     }
     /// Editable face IDs resolve to (prototype, local triangle index, count).
     /// Shared prototypes affect every placement: duplicate before a local edit.
@@ -3187,6 +3208,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(parallel_annotation_ray, m)?)?;
     m.add_function(wrap_pyfunction!(preview_texture::preview_materials, m)?)?;
     m.add_function(wrap_pyfunction!(tool_feedback::sync_tool_preview, m)?)?;
+    m.add_function(wrap_pyfunction!(transform_marks::prepare_face_marks, m)?)?;
     m.add_class::<extensions::ExtensionBrowser>()?;
     m.add_class::<component_catalogue::ComponentCatalogue>()?;
     m.add_function(wrap_pyfunction!(surfaces::surface_spec, m)?)?;
