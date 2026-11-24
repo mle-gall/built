@@ -127,6 +127,7 @@ fn gltf_build_mesh<'py>(
 ) -> PyResult<Obj<'py>> {
     let mesh = py.import("core.mesh")?.call_method0("Mesh")?;
     let mut flat = Vec::new();
+    let mut textured = false;
     let attrs = PyList::empty(py);
     let total = batches
         .try_iter()?
@@ -179,6 +180,7 @@ fn gltf_build_mesh<'py>(
             }
             flat.extend(tris.iter().copied());
         } else {
+            textured |= path.is_truthy()?;
             let uv = three(py, &uv)?;
             let uv = uv.as_array();
             if uv.shape() != [count, 3, 2] {
@@ -243,7 +245,9 @@ fn gltf_build_mesh<'py>(
         py.import("formats.fuse")?
             .call_method1("soften_smooth_edges", (&mesh,))?;
     }
-    hide_cards(&mesh)?;
+    if textured {
+        hide_cards(&mesh)?;
+    }
     Ok(mesh)
 }
 fn bounds(batches: &Obj<'_>) -> PyResult<(DVec3, DVec3)> {
