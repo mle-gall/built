@@ -65,14 +65,12 @@ def test_array_flips_v_and_supplies_mips(tmp_path):
 
 
 def test_material_pixels_use_native_codecs_and_preserve_alpha(tmp_path, monkeypatch):
-    from views import wgpu_scene
     path = tmp_path / "transparent.png"
     image = QImage(2, 1, QImage.Format_RGBA8888)
     image.setPixelColor(0, 0, QColor(255, 20, 0, 0))
     image.setPixelColor(1, 0, QColor(0, 20, 255, 255))
     assert image.save(str(path))
-    monkeypatch.setattr(wgpu_scene, "_legacy_texture_pixels",
-                        lambda p: pytest.fail(f"Unexpected legacy decode of {p}"))
+    monkeypatch.setitem(sys.modules, "PySide6.QtGui", None)
     w, h, count, mips = _texture_array([path, tmp_path / "missing.png"])
     assert (w, h, count) == (2, 1, 3)
     assert mips[0][8:16] == bytes(image.constBits())
@@ -116,8 +114,7 @@ def test_specialty_files_decode_once_for_materials_and_references(tmp_path, monk
                 (273, 110), (278, 2), (279, 2)]
         ifd = b"".join(struct.pack("<HHII", tag, 4, 1, value) for tag, value in tags)
         path.write_bytes(b"II*\0" + struct.pack("<IH", 8, len(tags)) + ifd + bytes(4) + b"\xff\0")
-    monkeypatch.setattr(wgpu_scene, "_legacy_texture_pixels",
-                        lambda _: pytest.fail("Renderer called the Qt plugin"))
+    monkeypatch.setitem(sys.modules, "PySide6.QtGui", None)
     assert raster_dimensions(path) == (1, 2)
     w, h, data = reference_texture(path, 16)
     assert (w, h) == (1, 2) and data.tolist() == [255, 255, 255, 255, 0, 0, 0, 255]
@@ -138,7 +135,6 @@ def test_reference_resizing_preserves_aspect_and_translucent_edges():
 def test_platform_image_keeps_top_row_and_straight_alpha(tmp_path, monkeypatch):
     import struct
     from ingetrazo_render import reference_texture, raster_dimensions
-    from views import wgpu_scene
     image = QImage(16, 16, QImage.Format_RGBA8888)
     image.fill(QColor(0, 0, 255, 255))
     image.setPixelColor(0, 0, QColor(255, 0, 0, 128))
@@ -148,8 +144,7 @@ def test_platform_image_keeps_top_row_and_straight_alpha(tmp_path, monkeypatch):
     path = tmp_path / "art.icns"
     path.write_bytes(b"icns" + struct.pack(">I", len(data) + 16)
                      + b"icp4" + struct.pack(">I", len(data) + 8) + data)
-    monkeypatch.setattr(wgpu_scene, "_legacy_texture_pixels",
-                        lambda _: pytest.fail("Requested a Qt platform codec"))
+    monkeypatch.setitem(sys.modules, "PySide6.QtGui", None)
     assert raster_dimensions(path) == (16, 16)
     w, h, pixels = reference_texture(path, 16)
     assert (w, h) == (16, 16)

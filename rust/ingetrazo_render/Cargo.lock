@@ -653,6 +653,7 @@ dependencies = [
  "foreign-types",
  "glam",
  "image",
+ "libloading",
  "numpy",
  "png 0.18.1",
  "pollster",
@@ -666,6 +667,7 @@ dependencies = [
  "serde_json",
  "syn 2.0.119",
  "wgpu",
+ "windows",
 ]
 
 [[package]]

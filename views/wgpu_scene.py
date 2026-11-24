@@ -762,13 +762,3 @@ def _texture_array(paths, *, device_limit=8192, memory_budget=256*1024*1024):
     """
     from ingetrazo_render import material_texture_array
     return material_texture_array(paths, device_limit, memory_budget)
-
-
-def _legacy_texture_pixels(path):
-    """System codecs for formats outside the renderer's built-in decoders."""
-    from PySide6.QtGui import QImage
-    image = QImage(str(path))
-    if image.isNull():
-        return None
-    image = image.convertToFormat(QImage.Format_RGBA8888)
-    return image.width(), image.height(), bytes(image.constBits())
