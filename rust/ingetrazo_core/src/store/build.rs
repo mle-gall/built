@@ -64,8 +64,15 @@ pub struct Block<'a> {
     pub sequential: bool,
 }
 
-fn check(b: &Block) -> Result<(), String> {
-    let np = b.pos.len() as i64;
+impl Default for Block<'_> {
+    fn default() -> Self {
+        Self { pos: Points::Double(&[]), edges: &[], flags: None, curves: None, layers: None,
+            layer_names: vec![], rings: &[], sizes: &[], counts: &[], face_attr: None, sequential: false }
+    }
+}
+
+fn check(b: &Block, points: usize) -> Result<(), String> {
+    let np = points as i64;
     let ne = b.edges.len();
     for (name, len) in [
         ("flags", b.flags.map(|a| a.len())),
@@ -105,7 +112,7 @@ fn check(b: &Block) -> Result<(), String> {
             return Err("face_attr: one entry per face".into());
         }
     }
-    if b.pos.len() >= super::keys::MAX_SLOTS as usize {
+    if points >= super::keys::MAX_SLOTS as usize {
         return Err("more points than a store has vertex slots".into());
     }
     Ok(())
@@ -140,7 +147,11 @@ impl Edges {
 
 impl Store {
     pub fn from_block(ns: u64, b: &Block, weld_c: Weld) -> Result<Store, String> {
-        check(b)?;
+        Self::from_block_indices(ns, b, weld_c).map(|(store, _)| store)
+    }
+
+    pub(super) fn from_block_indices(ns: u64, b: &Block, weld_c: Weld) -> Result<(Store, Vec<i64>), String> {
+        check(b, b.pos.len())?;
         let (mut vpos, mut ids, origin) = b.pos.weld(weld_c);
         if b.sequential && !vpos.is_empty() {
             // `lazy_mesh.weld(sequential=True)`: vertices in the order of
@@ -156,13 +167,27 @@ impl Store {
                 *id = rank[*id as usize];
             }
         }
+        let store = Self::assemble(ns, b, weld_c, CowVec::from_vec(vpos), None, |i| ids[i as usize] as u32)?;
+        Ok((store, ids))
+    }
+
+    /// A staged import already knows the vertex slots. Snapshots share the
+    /// position chunks and registry while the next topology columns are built.
+    pub(super) fn staged_block(&self, b: &Block) -> Result<Store, String> {
+        check(b, self.state.vpos.len())?;
+        Self::assemble(self.state.ns, b, self.weld, self.state.vpos.clone(),
+                       Some(self.state.registry.clone()), |i| i as u32)
+    }
+
+    fn assemble(ns: u64, b: &Block, weld_c: Weld, vpos: CowVec<[f64;3]>,
+                registry: Option<CellMap>, slot: impl Fn(i64) -> u32) -> Result<Store, String> {
         let nv = vpos.len();
         let mut emap: FxHashMap<u64, u32> =
             FxHashMap::with_capacity_and_hasher(b.edges.len() + b.rings.len() / 2, FxBuild::default());
         let mut ed = Edges::default();
         for (i, e) in b.edges.iter().enumerate() {
-            let a = ids[e[0] as usize] as u32;
-            let c = ids[e[1] as usize] as u32;
+            let a = slot(e[0]);
+            let c = slot(e[1]);
             if a == c {
                 continue; // welded shut: add_edge's ValueError case
             }
@@ -182,7 +207,7 @@ impl Store {
             }
         }
         // Faces: corners welded, then every ring segment in global order.
-        let corners: Vec<u32> = b.rings.iter().map(|&c| ids[c as usize] as u32).collect();
+        let corners: Vec<u32> = b.rings.iter().map(|&c| slot(c)).collect();
         let nf = b.counts.len();
         let mut frings = Vec::with_capacity(nf);
         let mut fattr = Vec::with_capacity(nf);
@@ -240,11 +265,14 @@ impl Store {
         let mut store = Store::empty(ns, weld_c);
         // One vertex per cell, at the cell of its own position: bulk_weld
         // registers exactly that (a probe-welded point never claims a cell).
-        let mut registry = CellMap::with_expected(nv);
-        for (v, p) in vpos.iter().enumerate() {
-            let prev = registry.insert(store.cell(p), v as u32);
-            debug_assert!(prev.is_none(), "two vertices in one weld cell");
-        }
+        let registry = registry.unwrap_or_else(|| {
+            let mut registry = CellMap::with_expected(nv);
+            for (v, p) in vpos.iter().enumerate() {
+                let prev = registry.insert(store.cell(p), v as u32);
+                debug_assert!(prev.is_none(), "two vertices in one weld cell");
+            }
+            registry
+        });
         let (sv, hv) = Slots::fresh(nv);
         let (se, he) = Slots::fresh(ne);
         let (sf, hf) = Slots::fresh(nf);
@@ -254,7 +282,7 @@ impl Store {
             ns,
             slots: [sv, se, sf],
             order: [Order::identity(), Order::identity(), Order::identity()],
-            vpos: CowVec::from_vec(vpos),
+            vpos,
             vedge: CowVec::from_vec(vedge),
             ends: CowVec::from_vec(ed.ends),
             enext: CowVec::from_vec(enext),
