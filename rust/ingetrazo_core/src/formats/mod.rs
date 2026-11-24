@@ -19,6 +19,7 @@ fn path_obj<'p>(py: Python<'p>, p: &std::path::Path) -> PyResult<Obj<'p>> {
 }
 mod datum;
 mod geotiff;
+mod ground;
 mod paths;
 mod photo;
 mod tiles;
@@ -151,5 +152,6 @@ pub(super) fn register_formats(m: &Bound<'_, PyModule>) -> PyResult<()> {
     datum::register(m)?;
     tiles::register(m)?;
     paths::register(m)?;
+    ground::register(m)?;
     Ok(())
 }
