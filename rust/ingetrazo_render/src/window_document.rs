@@ -145,7 +145,7 @@ pub fn untitled_slot(docs: &Bound<'_, PyAny>) -> PyResult<u64> {
             continue;
         }
         kw.set_item("untitled", slot)?;
-        if slot == 1 || !pending.call((py.None(),), Some(&kw))?.is_truthy()? {
+        if !pending.call((py.None(),), Some(&kw))?.is_truthy()? {
             return Ok(slot);
         }
     }

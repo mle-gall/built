@@ -413,6 +413,24 @@ pub fn swatch_pixels<'py>(
     Ok(Some(PyBytes::new(py, pixels.as_raw())))
 }
 
+pub(crate) fn billboard_image(py: Python<'_>, path: &Path) -> PyResult<Option<(u32, u32, bool)>> {
+    match py.detach(|| reader(path)?.decode()) {
+        Ok(image) => Ok(Some((
+            image.width(),
+            image.height(),
+            image.color().has_alpha(),
+        ))),
+        Err(ImageError::Unsupported(_)) => Ok(decode(py, path)?.map(|image| {
+            (
+                image.width(),
+                image.height(),
+                image.pixels().any(|p| p[3] < 255),
+            )
+        })),
+        Err(_) => Ok(None),
+    }
+}
+
 /// Keep the legacy 32×32 nearest-neighbour test used by material import.
 #[pyfunction]
 pub fn texture_cutout(py: Python<'_>, path: PathBuf) -> PyResult<bool> {
