@@ -177,7 +177,7 @@ def test_linked_recipe_on_nested_group_with_name_collision(tmp_path):
 
 
 def test_edit_pbr_in_the_inspector_and_undo_each_change(native_host, tmp_path, monkeypatch):
-    from views import wgpu_library as library
+    from ingetrazo_render import wgpu_library as library
     win = native_host.window
     scene = win.viewport.scene
     mat = Material("Editor alloy", (.5, .5, .5))

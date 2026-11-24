@@ -203,7 +203,7 @@ def test_the_library_reads_only_new_or_repainted_meshes(native_host, monkeypatch
     from core import geometry_arrays
     from core.group import copy_group
     from core.history import DeleteGroupCommand, InsertGroupCommand, SetFaceColorCommand
-    from views import wgpu_library as lib
+    from ingetrazo_render import wgpu_library as lib
 
     win = native_host.window
     vp, _, _, plain, _ = _scene(win)
@@ -242,7 +242,7 @@ def test_the_library_reads_only_new_or_repainted_meshes(native_host, monkeypatch
 
 def test_unchanged_swatches_and_component_rows_keep_their_keys(native_host):
     from core.history import DeleteGroupCommand
-    from views import wgpu_library as lib
+    from ingetrazo_render import wgpu_library as lib
 
     win = native_host.window
     vp, gs, _, _, _ = _scene(win)

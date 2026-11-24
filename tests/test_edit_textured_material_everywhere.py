@@ -21,7 +21,7 @@ from core.group import Group
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.test_paint_hover_container import _ctx
 from tools.paint import PaintTool
-from views import wgpu_library as library
+from ingetrazo_render import wgpu_library as library
 
 
 @pytest.fixture

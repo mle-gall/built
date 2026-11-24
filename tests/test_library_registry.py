@@ -9,7 +9,7 @@ from core import bim_registry
 from core.history import History
 from core.scene import Scene
 from ingetrazo_render import chrome_sheet
-from views import wgpu_library
+from ingetrazo_render import wgpu_library
 
 
 @pytest.fixture

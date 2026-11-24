@@ -12,7 +12,7 @@ def test_a_painted_group_puts_its_material_in_the_model_list(native_host):
     from core.group import Group
     from core.mesh import Mesh
     from tools.paint import PaintTool
-    from views import wgpu_library as library
+    from ingetrazo_render import wgpu_library as library
 
     win = native_host.window
     ctx = library.Ctx(win, win.view)

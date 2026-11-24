@@ -113,7 +113,7 @@ fn remember_document(
             .call_method1("remember", (path,))?;
         let kw = PyDict::new(py);
         kw.set_item("doc", doc)?;
-        py.import("views.wgpu_start")?
+        py.import("ingetrazo_render.wgpu_start")?
             .call_method("note", (win, path), Some(&kw))?;
     }
     Ok(())
