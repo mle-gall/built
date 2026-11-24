@@ -81,7 +81,7 @@ def _menu_import(win, path, monkeypatch):
     answered."""
     monkeypatch.setattr(file_dialogs, "getOpenFileName",
                         lambda *_a, **_k: (str(path), ""))
-    monkeypatch.setattr("views.chrome_forms.show", lambda _, form: form.press("ok"))
+    monkeypatch.setattr("ingetrazo_render.chrome_forms.show", lambda _, form: form.press("ok"))
     kind = "glb" if path.suffix == ".gltf" else path.suffix[1:]
     win.run_command("import:" + kind)
 
@@ -94,7 +94,7 @@ def win(native_host):
 @pytest.fixture
 def errors(monkeypatch):
     shown = []
-    monkeypatch.setattr("views.chrome_dialogs.critical",
+    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.critical",
                         lambda _parent, title, text: shown.append((title, text)))
     return shown
 

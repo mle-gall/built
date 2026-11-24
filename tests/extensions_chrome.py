@@ -39,7 +39,7 @@ class Browser:
         return self.read()
 
     def confirm(self, monkeypatch, answer="ok"):
-        from views import chrome_dialogs
+        from ingetrazo_render import chrome_dialogs
         questions = []
 
         def ask(win, title, text, buttons, *, cancel, default):

@@ -57,7 +57,7 @@ def test_a_cancel_stops_closing_the_rest(native_host, monkeypatch):
     win.activate_document(a)
     win.viewport.scene.mesh.add_face([V(0, 0, 0), V(1, 0, 0), V(0, 1, 0)])
     win.viewport.scene.version += 1
-    monkeypatch.setattr("views.chrome_dialogs.ask", lambda *args, **kw: "cancel")
+    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.ask", lambda *args, **kw: "cancel")
     _menu(native_host, "close_all", 2)
     assert win.documents() == [a, b, c]
     assert win.active_document() is a

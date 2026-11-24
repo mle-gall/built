@@ -13,7 +13,7 @@ from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QKeyEvent
 from PySide6.QtWidgets import QApplication
 
-from views import chrome_forms
+from ingetrazo_render import chrome_forms
 from ingetrazo_render import chrome_sheet as cs
 
 _app = QApplication.instance() or QApplication([])

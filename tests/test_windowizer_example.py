@@ -13,7 +13,8 @@ from core import extensions
 from core.history import AddFaceCommand
 from examples.extensions import windowizer
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
-from views import chrome_dialogs, chrome_forms
+from ingetrazo_render import chrome_dialogs
+from ingetrazo_render import chrome_forms
 
 
 @pytest.fixture

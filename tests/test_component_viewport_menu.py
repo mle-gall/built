@@ -8,7 +8,7 @@ from tests.test_replace_component import _component, _model, _quad
 
 
 def test_the_menu_offers_both_and_replace_swaps_the_selection(native_host, monkeypatch):
-    from views import chrome_forms
+    from ingetrazo_render import chrome_forms
     win = native_host.window
     scene = win.viewport.scene
     _, _, chairs, tables, group, holder = _model(moved=True)

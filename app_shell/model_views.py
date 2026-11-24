@@ -97,7 +97,7 @@ def make_pane(doc, reuse_main, initial_view, saved):
 
 def choose(win):
     from core.i18n import tr
-    from views.chrome_forms import ask_choice
+    from ingetrazo_render.chrome_forms import ask_choice
     doc = win._doc
     options = {tr(label): key for key, label, _, _ in view_layouts()}
     ask_choice(win, tr("Model Views"), tr("Layout"), options,

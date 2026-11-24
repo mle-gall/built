@@ -1,7 +1,7 @@
 """Questions that wait for their answer, and work that reports progress,
 without Qt's event loop.
 
-``views/chrome_dialogs.ask`` shows the egui sheet and then runs a local
+``ingetrazo_render.chrome_dialogs.ask`` shows the egui sheet and then runs a local
 ``QEventLoop`` until the chrome reports the click, as ``QDialog.exec()``
 does. In the shell Qt's loop sees no input and draws nothing (winit owns
 the window), so :func:`install` gives chrome_dialogs two shell pieces:
@@ -40,7 +40,7 @@ def install(host) -> None:
     """Point chrome_dialogs at this host (one per process)."""
     global _HOST
     _HOST = host
-    from views import chrome_dialogs as cd
+    from ingetrazo_render import chrome_dialogs as cd
     if getattr(cd, "_shell_installed", False):
         return
     original_live = cd.live
@@ -134,7 +134,8 @@ def _turn(h, timeout_ms):
 def dispatch(h, ev) -> None:
     """One input event during a wait: the chrome only."""
     from core.input_types import Qt
-    from views import chrome_dialogs, wgpu_ui
+    from views import wgpu_ui
+    from ingetrazo_render import chrome_dialogs
     from ingetrazo_render import KeyEvent, MouseEvent
     kind, x, y, button, mods, key, text = ev
     view = h.view
@@ -180,7 +181,7 @@ def _answer_when_drawn(loop, answer):
     """Once the sheet has been on screen for two frames: a picture of it
     (``BUILT_SHOTS``), then the answer, as a key posted to this app's own
     queue (it comes back through the pump) or a button id."""
-    from views import chrome_dialogs as cd
+    from ingetrazo_render import chrome_dialogs as cd
     h = _HOST
     win = h.window
     sheet = cd.current_sheet(win)

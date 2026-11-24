@@ -386,7 +386,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         """«“Site.igz” is linked: open it to edit it?» — and open it in a
         tab of its own (or bring that tab forward) on yes."""
         from core import links
-        from views import chrome_dialogs
+        from ingetrazo_render import chrome_dialogs
         path = Path(links.link_of(group)["path"])
         if not path.is_file():
             chrome_dialogs.warning(

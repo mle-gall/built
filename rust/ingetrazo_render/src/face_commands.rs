@@ -124,7 +124,7 @@ fn intersect_faces(win: &Bound<'_, PyAny>, mode: &str) -> PyResult<()> {
     history.call_method1("execute", (command,))?;
     let error = history.getattr("last_error")?;
     if error.is_truthy()? {
-        py.import("views.chrome_dialogs")?.call_method1(
+        py.import("ingetrazo_render.chrome_dialogs")?.call_method1(
             "warning",
             (win, translated(py, "Intersect Faces failed", None)?, error),
         )?;
@@ -285,7 +285,7 @@ fn ask_simplify_mesh(win: &Bound<'_, PyAny>) -> PyResult<()> {
     )?;
     kw.set_item("done", done)?;
     kw.set_item("suffix", "°")?;
-    py.import("views.chrome_forms")?.getattr("ask_number")?.call((win,
+    py.import("ingetrazo_render.chrome_forms")?.getattr("ask_number")?.call((win,
         translated(py, "Simplify Mesh", None)?,
         translated(py, "Maximum facet angle in degrees (0 = coplanar only; higher values may change rounded geometry):", None)?,
         1.0, 0.0, 5.0, 2), Some(&kw))?;
@@ -312,7 +312,7 @@ fn simplify_mesh(
     history.call_method1("execute", (&cmd,))?;
     let error = history.getattr("last_error")?;
     if error.is_truthy()? {
-        py.import("views.chrome_dialogs")?.call_method1(
+        py.import("ingetrazo_render.chrome_dialogs")?.call_method1(
             "warning",
             (win, translated(py, "Simplify Mesh failed", None)?, error),
         )?;

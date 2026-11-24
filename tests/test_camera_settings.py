@@ -330,7 +330,7 @@ def test_export_image_tall_frame(monkeypatch):
 def test_export_image_menu_crops_to_the_frame(monkeypatch, tmp_path, native_host):
     from unittest.mock import Mock
     from PySide6.QtGui import QImage
-    from views import chrome_forms
+    from ingetrazo_render import chrome_forms
     from views.filedialogs import file_dialogs
     win = native_host.window
     image = QImage(16, 9, QImage.Format_RGB32)

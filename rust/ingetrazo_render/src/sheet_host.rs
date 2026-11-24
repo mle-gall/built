@@ -34,7 +34,7 @@ impl PreviewTask {
             Ok(image) => {
                 if svg.borrow_mut().finish_preview(self.ticket, String::new()) {
                     let view = py
-                        .import("views.chrome_dialogs")?
+                        .import("ingetrazo_render.chrome_dialogs")?
                         .call_method1("view_of", (win,))?;
                     if !view.is_none() {
                         let (w, h, rgba): (usize, usize, Bound<'_, pyo3::types::PyBytes>) =
@@ -101,7 +101,7 @@ pub fn show_view_export<'py>(
     write: Py<PyAny>,
     preview: Py<PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let forms = py.import("views.chrome_forms")?;
+    let forms = py.import("ingetrazo_render.chrome_forms")?;
     let field = PyDict::new(py);
     field.set_item("pick", "save")?;
     field.set_item("filters", "SVG (*.svg)")?;

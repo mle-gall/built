@@ -81,6 +81,10 @@ mod settings_rows;
 mod settings_host;
 mod library_host;
 mod start_host;
+mod forms_host;
+mod dialogs_host;
+mod window_commands;
+mod shell;
 pub mod ui;
 mod host_context;
 mod inspector;
@@ -2797,7 +2801,7 @@ impl Renderer {
     fn ui_set_palette(&mut self, items: Vec<(String, String, String, String, bool)>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_palette(items); }
     }
-    /// A modal form (views/chrome_forms.py); an empty `seq` closes it.
+    /// A modal form (rust/ingetrazo_render/src/forms_host.rs); an empty `seq` closes it.
     #[pyo3(signature = (seq, title="".to_string(), note="".to_string(), width=420.0, fields=Vec::new(), buttons=Vec::new()))]
     fn ui_set_dialog(&mut self, seq: String, title: String, note: String, width: f32,
                      fields: Vec<ui::dialog::Field>, buttons: Vec<ui::dialog::Button>) {
@@ -3289,13 +3293,6 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     component_replacement::register(m)?;
     inspection_edits::register(m)?;
     context_edits::register(m)?;
-    viewport_menu::register(m)?;
-    shell_commands::register(m)?;
-    report_sheets::register(m)?;
-    inspector_host::register(m)?;
-    shell_events::register(m)?;
-    deliveries_host::register(m)?;
-    sheet_runtime::register(m)?;
     native_view_actions::register(m)?;
     plugin_workspace::register(m)?;
     m.add_class::<link_watch::LinkWatch>()?;
@@ -3414,8 +3411,6 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<units_start::UnitsDraft>()?;
     m.add_class::<preferences::PreferencesView>()?;
     m.add_class::<preferences::RestartPreferences>()?;
-    // Settings needs the preference classes above.
-    settings_host::register(m)?;
     m.add_class::<preferences::PreferencePage>()?;
     m.add_function(wrap_pyfunction!(preferences::edit_ai_connection, m)?)?;
     m.add_class::<preferences::DevicePreferences>()?;
@@ -3450,9 +3445,8 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(shortcut_text::shortcut_alternatives, m)?)?;
     m.add_class::<SceneUpload>()?;
     m.add_class::<Renderer>()?;
-    // The Library needs library_view's functions and the sheet host above.
-    library_host::register(m)?;
-    start_host::register(m)
+    // The shell's glue, last: it reads the classes and functions above.
+    shell::register_shell(m)
 }
 #[cfg(test)]
 mod tests {

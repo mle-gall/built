@@ -42,7 +42,7 @@ CYCLE_PX = 4.0
 def _edit_text(viewport, entity) -> None:
     # As usual, double-clicking a leader text edits its text.
     from core.i18n import tr
-    from views import chrome_forms
+    from ingetrazo_render import chrome_forms
 
     def edit(text):
         if text is not None and text.strip() and text.strip() != entity.text:
@@ -64,7 +64,7 @@ def _edit_dimension(viewport, entity) -> None:
     measured = (fmt(entity.value(), style) if fmt is not None
                 else entity.label())
     current = entity.text if entity.text else measured
-    from views import chrome_forms
+    from ingetrazo_render import chrome_forms
 
     def retext(text):
         if text is not None:

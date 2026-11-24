@@ -105,7 +105,7 @@ fn source_input(v: &Obj<'_>) -> PyResult<Source> {
 }
 fn add(env: &Obj<'_>) -> PyResult<()> {
     let py = env.py();
-    let forms = py.import("views.chrome_forms")?;
+    let forms = py.import("ingetrazo_render.chrome_forms")?;
     let field = forms.getattr("Field")?;
     let fields = PyList::new(
         py,

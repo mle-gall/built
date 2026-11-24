@@ -246,7 +246,7 @@ def test_a_card_that_cannot_be_built_costs_only_itself(plugins, monkeypatch):
 
 def test_a_manager_that_fails_to_open_says_so(native_question_host, monkeypatch, tmp_path):
     import ingetrazo_render
-    from views import chrome_dialogs
+    from ingetrazo_render import chrome_dialogs
 
     def explode():
         raise PermissionError(13, "denied")

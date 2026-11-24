@@ -10,7 +10,7 @@ import pytest
 
 from core import units
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from views import chrome_forms, units_question
+from ingetrazo_render import chrome_forms, units_question
 
 
 @pytest.fixture

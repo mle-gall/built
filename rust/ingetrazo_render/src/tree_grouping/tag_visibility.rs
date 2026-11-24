@@ -169,7 +169,7 @@ pub fn choose_merge_tag(win: &Bound<'_, PyAny>, key: &str) -> PyResult<()> {
             &choices,
         ),
     )?;
-    py.import("views.chrome_forms")?.call_method1(
+    py.import("ingetrazo_render.chrome_forms")?.call_method1(
         "ask_choice",
         (
             win,
@@ -285,7 +285,7 @@ pub fn viewport_tag_menu(win: &Bound<'_, PyAny>, selection: &Bound<'_, PyAny>) -
             &options,
         ),
     )?;
-    py.import("views.chrome_forms")?.call_method1(
+    py.import("ingetrazo_render.chrome_forms")?.call_method1(
         "ask_choice",
         (win, "Selection tags", "Tag", options.keys(), start, done),
     )?;
@@ -329,7 +329,7 @@ fn viewport_tag_answer(
                     revision,
                 ),
             )?;
-            py.import("views.chrome_forms")?.call_method1(
+            py.import("ingetrazo_render.chrome_forms")?.call_method1(
                 "ask_text",
                 (
                     win,

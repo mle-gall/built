@@ -43,7 +43,7 @@ fn recovery_answer<'py>(
     let kw = PyDict::new(py);
     kw.set_item("default", "yes")?;
     kw.set_item("cancel", "later")?;
-    py.import("views.chrome_dialogs")?.getattr("ask")?.call(
+    py.import("ingetrazo_render.chrome_dialogs")?.getattr("ask")?.call(
         (
             win,
             translated(py, "Recover the auto-saved drawing?", None)?,
@@ -72,7 +72,7 @@ fn named_recovery(win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> PyResult<O
 #[pyfunction]
 fn recover_untitled(win: &Bound<'_, PyAny>, n: usize, slot: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = win.py();
-    let dialog = py.import("views.chrome_dialogs")?;
+    let dialog = py.import("ingetrazo_render.chrome_dialogs")?;
     let text = translated(py,"The last session ended without saving an untitled drawing (auto-saved copy found). Recover it?", None)?;
     let answer = recovery_answer(win, &text)?;
     if answer.eq("no")? {
@@ -152,7 +152,7 @@ fn recover_discarded(win: &Bound<'_, PyAny>) -> PyResult<()> {
     }
     let title = translated(py, "Recover a discarded auto-save…", None)?;
     if !found {
-        py.import("views.chrome_dialogs")?.call_method1(
+        py.import("ingetrazo_render.chrome_dialogs")?.call_method1(
             "information",
             (
                 win,

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Forms on the Built chrome (views/chrome_forms.py): prompts as fields on
+"""Forms on the Built chrome (rust/ingetrazo_render/src/forms_host.rs): prompts as fields on
 the egui sheet, answered by continuation, never by a nested loop, so the
 same calls work in the ``built`` shell, which has no Qt event loop.
 
@@ -15,8 +15,8 @@ import pytest
 from core.input_types import Qt
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
-from views import chrome_dialogs as cd
-from views import chrome_forms as cf
+from ingetrazo_render import chrome_dialogs as cd
+from ingetrazo_render import chrome_forms as cf
 
 class FakeRenderer:
     def __init__(self):

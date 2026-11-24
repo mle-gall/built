@@ -219,7 +219,7 @@ pub(crate) fn append<'p>(
                     }
                     Ok(none(py))
                 })?;
-                py.import("views.chrome_forms")?.call_method1(
+                py.import("ingetrazo_render.chrome_forms")?.call_method1(
                     "ask_text",
                     (
                         env.getattr("win")?,

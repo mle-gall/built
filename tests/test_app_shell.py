@@ -301,7 +301,7 @@ def test_mesh_import_menu_waits_for_answer_then_imports_once(host, tmp_path, mon
     path.write_bytes(_CUBE_OBJ if suffix == "obj" else _GOOD_STL)
     monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *a: (str(path), ""))
     forms = []
-    monkeypatch.setattr("views.chrome_forms.show", lambda _, form: forms.append(form))
+    monkeypatch.setattr("ingetrazo_render.chrome_forms.show", lambda _, form: forms.append(form))
     win = host.window
     store = settings()
     store.setValue("import/stl_simplify_mode", "all")
@@ -339,8 +339,8 @@ def test_open_unitless_mesh_preserves_original_tab_on_cancel_or_failure(host, tm
     path = tmp_path / "broken.stl"
     path.write_bytes(b"invalid STL fixture")
     forms, failures = [], []
-    monkeypatch.setattr("views.chrome_forms.show", lambda _, f: forms.append(f) or "chrome")
-    monkeypatch.setattr("views.chrome_dialogs.critical", lambda _, title, text: failures.append(title))
+    monkeypatch.setattr("ingetrazo_render.chrome_forms.show", lambda _, f: forms.append(f) or "chrome")
+    monkeypatch.setattr("ingetrazo_render.chrome_dialogs.critical", lambda _, title, text: failures.append(title))
     assert host.open(path)
     assert win.documents() == [original]
     forms.pop().press(choice)
