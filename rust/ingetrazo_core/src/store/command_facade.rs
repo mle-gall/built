@@ -2,6 +2,8 @@
 //! History command entry points. The caller enlists the facade in the document
 //! transaction. Going through its store also publishes edits to an open definition.
 mod erase;
+mod vertices;
+pub(crate) use vertices::{command_move_vertices, command_transform_vertices, MovedVertices, VertexResult};
 pub(crate) use erase::{command_erase_cleanup, command_erase_selection, ErasedCleanup, ErasedSelection};
 use crate::math::Vec3;
 use pyo3::{prelude::*, types::PyDict};
