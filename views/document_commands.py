@@ -337,9 +337,6 @@ class WindowDocumentCommands:
         New the bar kept the previous model's easting/northing (#759)."""
         self.viewport._last_coordinate = ""
         self.viewport._last_coordinate_full = ""
-        self._status_pending.pop("coordinate", None)
-        self._coord_label.setText("")
-        self._coord_label.setToolTip("")
 
     def _configure_recovery(self, timer):
         native.configure_recovery(self, timer)

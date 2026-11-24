@@ -2539,8 +2539,9 @@ impl Renderer {
     fn ui_set_active(&mut self, id: String) {
         if let Some(ui) = self.ui.as_mut() { ui.set_active(id); }
     }
-    fn ui_set_status(&mut self, status: String, hint: String) {
-        if let Some(ui) = self.ui.as_mut() { ui.set_status(status, hint); }
+    #[pyo3(signature=(status, hint, coordinate="", tooltip=""))]
+    fn ui_set_status(&mut self, status: String, hint: String, coordinate: &str, tooltip: &str) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_status(status, hint, coordinate, tooltip); }
     }
     /// ``kind``: move, press, release, leave; logical points. True when
     /// the chrome takes the event.

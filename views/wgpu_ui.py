@@ -403,7 +403,8 @@ def before_frame(view) -> None:
     timer = getattr(bar, "_timer", None)
     if timer is not None and timer.isActive():
         hint = getattr(bar, "_msg", None).text() if getattr(bar, "_msg", None) is not None else hint
-    view.renderer.ui_set_status(name, hint)
+    from ingetrazo_render import sync_status_readout
+    sync_status_readout(view, name, hint)
     _sync_units(view, win.viewport.history)
     _cursor_value(view, win)
     _selection(view, win, active)
