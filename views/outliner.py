@@ -1643,7 +1643,7 @@ class OutlinerPanel(QWidget):
     def toggle_locked(self, groups=None) -> None:
         """Unlock the rows when any of them is locked, lock them otherwise —
         one undoable step."""
-        from core.history import LockCommand
+        from core.protocol import commands
         if groups is None:
             groups = self._selected_groups()
             current = self._group_of(self.tree.currentItem())
@@ -1657,7 +1657,7 @@ class OutlinerPanel(QWidget):
                         or g in outliner.open_path(self._scene())
                         for g in groups):
             self._window.viewport.end_group_edit()
-        self._window.viewport.history.execute(LockCommand(groups, lock))
+        commands.lock(self._window.viewport.history, groups, lock)
         self._keep_picked(groups)
         self._adopt_tree_only()
         self._window.viewport.update()
@@ -2180,14 +2180,13 @@ class OutlinerPanel(QWidget):
     def _on_item_changed(self, item, column) -> None:
         if self._updating or column != COL_NAME:
             return
-        from core.history import RenameGroupCommand
+        from core.protocol import commands
         group = self._group_of(item)
         if group is None:
             return
         name = item.text(COL_NAME).strip()
         if name and name != group.name:
-            self._window.viewport.history.execute(
-                RenameGroupCommand(group, name))
+            commands.rename_placement(self._window.viewport.history, group, name)
             self._window.viewport.update()
         self.refresh()
 

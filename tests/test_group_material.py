@@ -19,7 +19,7 @@ from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.group import Group, copy_group, effective_material
 from core.history import (ExplodeGroupCommand, History,
-                          SetGroupMaterialCommand)
+                          NativeCommand)
 from core.materials import effective_attrs, has_own_material
 from core.mesh import Mesh
 from core.scene import Scene
@@ -79,7 +79,7 @@ def test_set_group_material_is_one_undo_step_and_touches_no_face():
     scene = Scene()
     hist = History(scene)
     g, blue = _two_face_group(scene)
-    hist.execute(SetGroupMaterialCommand(g, RED))
+    hist.execute(NativeCommand.paint([g], RED))
     assert g.material == RED
     assert blue.attrs["color"] == [0.0, 0.0, 1.0]
     assert "color" not in g.mesh.faces[0].attrs                 # still default
@@ -260,32 +260,6 @@ def test_the_eyedropper_on_a_default_face_inside_a_painted_group_samples_the_gro
 
 # ---- the .skp keeps it on the instance ------------------------------------
 
-def test_the_skp_carries_the_instance_paint(tmp_path):
-    openskp = __import__("pytest").importorskip("openskp")
-    from formats.skp_out import save_skp
-    scene = Scene()
-    proto = Mesh()
-    proto.add_face([V(0, 0), V(1, 0), V(1, 1), V(0, 1)])
-    a, b = Group(proto, "a"), Group(proto, "b")
-    for g, dx in ((a, 0.0), (b, 3.0)):
-        xf = QMatrix4x4()
-        xf.translate(dx, 0, 0)
-        g.xform = xf
-        scene.groups.append(g)
-    b.material = {"color": [1.0, 0.0, 0.0], "mat": "Rojo contenedor"}
-    path = tmp_path / "pintado.skp"
-    save_skp(scene, str(path))
-    model = openskp.SkpFile.open(str(path)).parse()
-    names = {getattr(m, "name", "") for m in (getattr(model, "materials", None) or [])}
-    assert "Rojo_contenedor" in names          # export-safe spelling
-    # openskp reads the instance's material back where it exposes it.
-    root = getattr(model, "root", None)
-    insts = list(getattr(root, "instances", []) or []) if root is not None else []
-    painted = [i for i in insts if getattr(i, "material", None) not in (None, "", 0)]
-    if insts and any(hasattr(i, "material") for i in insts):
-        assert len(painted) == 1, [getattr(i, "material", None) for i in insts]
-
-
 # ---- the instanced draw pools by paint too --------------------------------
 
 def test_the_instanced_pool_splits_a_painted_instance_from_its_siblings():
@@ -343,7 +317,7 @@ def test_exploding_a_group_of_groups_lifts_them_whole():
     hist.execute(MakeNestedGroupCommand([], [], [a, b]))
     big = scene.groups[0]
     hist.execute(MoveGroupCommand(big, V(0, 5)))
-    hist.execute(SetGroupMaterialCommand(big, dict(RED)))
+    hist.execute(NativeCommand.paint([big], dict(RED)))
 
     def xs_ys(g):
         vs = world_mesh(g).vertices

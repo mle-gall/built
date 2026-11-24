@@ -28,6 +28,8 @@ from __future__ import annotations
 import math
 import re
 
+from ingetrazo_core import hatch_clip_segments, hatch_fill_quads
+
 #: The picker's groups: ``(title, patterns)``, in the order shown. ``None``
 #: is not in them: it means «the frame's fill» (solid or 45°, as the frame
 #: says) and the picker puts it first.
@@ -1064,77 +1066,13 @@ def _segments(marks) -> list:
 
 
 def clip_segments(lines, rings) -> list:
-    """The parts of ``lines`` (``(x0, y0, x1, y1)``) inside ``rings``,
-    even-odd — a hollow wall stays hollow — as segments."""
-    rings = [[(float(x), float(y)) for x, y in r] for r in rings
-             if len(r) >= 3]
-    boxes = [(min(p[0] for p in r), min(p[1] for p in r),
-              max(p[0] for p in r), max(p[1] for p in r)) for r in rings]
-
-    def inside(x, y) -> bool:
-        hit = False
-        for r, b in zip(rings, boxes):
-            if not (b[0] <= x <= b[2] and b[1] <= y <= b[3]):
-                continue
-            for (ax, ay), (bx, by) in zip(r, r[1:] + r[:1]):
-                if (ay > y) != (by > y) and \
-                        x < ax + (y - ay) * (bx - ax) / (by - ay):
-                    hit = not hit
-        return hit
-    out = []
-    for x0, y0, x1, y1 in lines:
-        dx, dy = x1 - x0, y1 - y0
-        lo = (min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1))
-        ts = [0.0, 1.0]
-        for r, b in zip(rings, boxes):
-            if b[0] > lo[2] or b[2] < lo[0] or b[1] > lo[3] or b[3] < lo[1]:
-                continue
-            for (ax, ay), (bx, by) in zip(r, r[1:] + r[:1]):
-                ex, ey = bx - ax, by - ay
-                den = dx * ey - dy * ex
-                if abs(den) < 1e-12:
-                    continue
-                t = ((ax - x0) * ey - (ay - y0) * ex) / den
-                u = ((ax - x0) * dy - (ay - y0) * dx) / den
-                if 0.0 < t < 1.0 and -1e-9 <= u <= 1.0 + 1e-9:
-                    ts.append(t)
-        ts.sort()
-        for t0, t1 in zip(ts, ts[1:]):
-            if t1 - t0 < 1e-9:
-                continue
-            tm = (t0 + t1) / 2.0
-            if inside(x0 + dx * tm, y0 + dy * tm):
-                out.append((x0 + dx * t0, y0 + dy * t0,
-                            x0 + dx * t1, y0 + dy * t1))
-    return out
+    """Clip an iterable of paper segments against the even-odd fill."""
+    return hatch_clip_segments(list(lines), list(rings))
 
 
 def fill_quads(rings) -> list:
-    """The region inside ``rings`` (even-odd: a hollow wall stays hollow)
-    cut into horizontal strips, each a quadrilateral ``((x, y) bottom left,
-    bottom right, top left, top right)`` — what a DXF R12 SOLID holds (it
-    has no hatch), so a solid fill reaches any CAD as it is."""
-    rings = [[(float(x), float(y)) for x, y in r] for r in rings
-             if len(r) >= 3]
-    edges = [(a, b) for r in rings for a, b in zip(r, r[1:] + r[:1])
-             if abs(a[1] - b[1]) > 1e-12]
-    ys = sorted({p[1] for r in rings for p in r})
-    out = []
-
-    def x_at(edge, y):
-        (ax, ay), (bx, by) = edge
-        return ax + (y - ay) * (bx - ax) / (by - ay)
-    for y0, y1 in zip(ys, ys[1:]):
-        if y1 - y0 < 1e-12:
-            continue
-        ym = (y0 + y1) / 2.0
-        live = sorted((e for e in edges
-                       if min(e[0][1], e[1][1]) < ym < max(e[0][1], e[1][1])),
-                      key=lambda e: x_at(e, ym))
-        for left, right in zip(live[0::2], live[1::2]):
-            out.append(((x_at(left, y0), y0), (x_at(right, y0), y0),
-                        (x_at(left, y1), y1), (x_at(right, y1), y1)))
-    return out
+    """Return ordered bottom and top corners for each DXF SOLID strip."""
+    return hatch_fill_quads(list(rings))
 
 
 def hatch_lines(key, rings, form=None, frame_scale: float = 1.0,

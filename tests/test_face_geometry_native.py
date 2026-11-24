@@ -226,3 +226,23 @@ def test_store_triangulation_keeps_model_corners(monkeypatch):
     got = triangles(scene, [face.key])["faces"][0]["triangles"]
     np.testing.assert_array_equal(got, [[ring[0], ring[1], ring[2]],
                                         [ring[0], ring[2], ring[3]]])
+
+
+def test_preview_face_preserves_recorded_newell_geometry():
+    """Binary64 measurements recorded before removing both object kernels."""
+    import hashlib
+    import struct
+
+    from core.geometry import Face
+
+    rng = random.Random(54172)
+    digest = hashlib.sha256()
+    for _ in range(2048):
+        points = [V(*(rng.uniform(-3e4, 3e4) for _ in range(3)))
+                  for _ in range(rng.randrange(24))]
+        face = Face(points)
+        digest.update(struct.pack(">4d", *face._newell().toTuple(), face.area()))
+        count = len(points)
+        expected = tuple(sum(v.toTuple()[i] for v in points) / count for i in range(3)) if count else (0., 0., 0.)
+        assert face.centroid().toTuple() == expected
+    assert digest.hexdigest() == "da8241c0d49afb069a5ffaab8cbd3a0ebf6463112cf7369cb674ac09a2056755"

@@ -32,6 +32,7 @@ mod restamp;
 mod settings;
 mod feed;
 mod execute;
+pub mod commands;
 mod file_view;
 pub(crate) mod drawing;
 pub mod occurrences;

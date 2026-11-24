@@ -24,7 +24,7 @@ from core.mesh import element_identity
 import math
 from typing import Iterable, Optional, Sequence
 
-from ingetrazo_core import Vec3 as QVector3D
+from ingetrazo_core import Vec3 as QVector3D, polygon_newell as _newell
 
 from core.geometry import Edge, Face
 from core.history import (
@@ -1001,17 +1001,6 @@ def _append_active_tag(scene, commands) -> None:
                  if isinstance(c, AddFaceCommand) and c.auto]
     if face_cmds:
         commands.append(AutoTagDrawnFacesCommand(face_cmds, tag))
-
-
-def _newell(loop) -> QVector3D:
-    nx = ny = nz = 0.0
-    n = len(loop)
-    for i in range(n):
-        p, q = loop[i], loop[(i + 1) % n]
-        nx += (p.y() - q.y()) * (p.z() + q.z())
-        ny += (p.z() - q.z()) * (p.x() + q.x())
-        nz += (p.x() - q.x()) * (p.y() + q.y())
-    return QVector3D(nx, ny, nz)
 
 
 def face_up_or_toward(loop, eye=None):

@@ -927,10 +927,8 @@ class ShellWindow(WindowDocumentCommands, object if NATIVE else QObject):
         return files.import_progress(self, title, monotonic=monotonic)
 
     def _parse_stl_threaded(self, path, scale, simplify_mode, cb, report=None):
-        from app_shell import files
-        from formats.stl import parse_stl
-        return files.parse_threaded(parse_stl, path, cb, scale=scale,
-                                    simplify_mode=simplify_mode, report=report)
+        from ingetrazo_core import parse_stl_threaded
+        return parse_stl_threaded(path, scale, simplify_mode, cb, report)
 
     @staticmethod
     def _clipboard_available():

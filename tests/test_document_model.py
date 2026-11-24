@@ -11,8 +11,8 @@ from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 from core import doc_model
 from core.group import Group
 from core.history import (CommandRejected, Command, CompoundCommand, History,
-                          HideCommand, LockCommand, MoveGroupCommand,
-                          RenameGroupCommand)
+                          HideCommand, MoveGroupCommand,
+                          NativeCommand)
 from core.layers import Layer
 from core.materials import Material
 from core.mesh import Mesh
@@ -392,7 +392,7 @@ def test_history_undoes_document_commands_by_their_transaction():
     h = History(scene)
     before = g.xform.data()
     h.execute(MoveGroupCommand(g, QVector3D(0.7, 0.2, 0.0)))
-    h.execute(RenameGroupCommand(g, "moved"))
+    h.execute(NativeCommand.rename(g, "moved"))
     h.execute(HideCommand([g], True))
     assert all(c._doc_txn is not None for c in h.undo_stack)
     for _ in range(3):
@@ -409,8 +409,8 @@ def test_a_compound_of_document_commands_is_one_transaction():
     gs = [Group(Mesh(), name=f"g{i}") for i in range(50)]
     scene.groups.extend(gs)
     h = History(scene)
-    h.execute(CompoundCommand([RenameGroupCommand(g, "R") for g in gs]
-                              + [LockCommand(gs, True)]))
+    h.execute(CompoundCommand([NativeCommand.rename(g, "R") for g in gs]
+                              + [NativeCommand.lock(gs, True)]))
     assert h.undo_stack[-1]._doc_txn is not None
     h.undo()
     assert [g.name for g in gs] == [f"g{i}" for i in range(50)]
@@ -583,7 +583,7 @@ def test_geometry_commit_failure_rolls_back_all_targets_and_fields(monkeypatch):
 
     monkeypatch.setattr(StoreMesh, "_journal_state", capture)
     command = CompoundCommand([
-        RenameGroupCommand(part, "after"),
+        NativeCommand.rename(part, "after"),
         *(SnapshotMutation(lambda _, m=m: m.add_edge(QVector3D(), QVector3D(1, 0, 0)), mesh=m)
           for m in (left, right)),
     ])
@@ -647,7 +647,7 @@ def test_occurrence_group_survives_retention_and_replays_one_record():
     h.max_steps = 1
     session = object()
     for name in ("middle", "after"):
-        cmd = RenameGroupCommand(group, name)
+        cmd = NativeCommand.rename(group, name)
         cmd._occurrences = (session,)
         h.execute(cmd)
     OccurrenceCommands.fold(h, session)
@@ -712,7 +712,7 @@ def test_mixed_compound_replays_native_child_without_its_inverse(monkeypatch):
         def undo(self, scene):
             assert host_state.pop() == group.name
 
-    rename = RenameGroupCommand(group, "after")
+    rename = NativeCommand.rename(group, "after")
     history = History(scene)
     history.execute(CompoundCommand([rename, Extension()]))
     assert not history.last_error and host_state == ["after"]
@@ -734,7 +734,7 @@ def test_nested_execute_advances_only_the_outer_revision():
         doc_undo = True
 
         def do(self, scene):
-            history.execute(RenameGroupCommand(group, "after"))
+            history.execute(NativeCommand.rename(group, "after"))
 
         def undo(self, scene):
             pytest.fail("expected document replay")

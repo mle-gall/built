@@ -48,9 +48,6 @@ _ALLOWED = {
         "registers", "find_edge", "add_edge", "add_edges_welded", "_rekey",
         "_insert_into_face_loops")},
     # Not elements: names that look like them.
-    **{("core/triangulate.py", fn): "ear-clipping list nodes" for fn in (
-        "_is_ear", "_cure_local_intersections", "_split_earcut",
-        "_get_leftmost", "_middle_inside", "_intersects_polygon")},
     ("core/topology.py", "__call__"): "id()-keyed memo of a QVector3D",
     ("core/history_commands.py", "_sync"): "tag-state dict values against a sentinel, not elements",
     ("core/ai.py", "_tidy_groups"): "groups",

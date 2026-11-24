@@ -358,7 +358,7 @@ fn xform_of(data: &Bound<'_, PyAny>, src: &Bound<'_, PyAny>) -> PyResult<Xform> 
     Ok(Xform { f, src })
 }
 
-fn fval_to_py<'py>(py: Python<'py>, v: FVal) -> PyResult<Bound<'py, PyAny>> {
+pub(super) fn fval_to_py<'py>(py: Python<'py>, v: FVal) -> PyResult<Bound<'py, PyAny>> {
     Ok(match v {
         FVal::Definition(Some(d)) => d.0.get().geometry.clone_ref(py).into_bound(py),
         FVal::Definition(None) | FVal::Str(None) | FVal::Val(None) | FVal::Xf(None) => py.None().into_bound(py),
@@ -622,7 +622,7 @@ fn member_key(obj: &Bound<'_, PyAny>) -> PyResult<Key> {
     )))
 }
 
-fn keys_of<'py>(items: &Bound<'py, PyAny>) -> PyResult<Vec<(Key, *mut pyo3::ffi::PyObject, Bound<'py, PyAny>)>> {
+pub(super) fn keys_of<'py>(items: &Bound<'py, PyAny>) -> PyResult<Vec<(Key, *mut pyo3::ffi::PyObject, Bound<'py, PyAny>)>> {
     // Snapshot first: `scene.groups = scene.groups[::-1]` or a generator
     // reading the list it replaces must see the list as it was.
     let mut out = Vec::new();
@@ -2604,7 +2604,7 @@ fn doc_view_changed(py: Python<'_>, key: Key, which: u8, view: &Bound<'_, PyAny>
     super::assembly::finish_result(py, r.map_err(err))
 }
 
-fn fval_for(f: Field, v: &Bound<'_, PyAny>) -> PyResult<FVal> {
+pub(super) fn fval_for(f: Field, v: &Bound<'_, PyAny>) -> PyResult<FVal> {
     Ok(match f {
         Field::Billboard => FVal::Val(Some(Value::from_py(v)?)),
         Field::Component | Field::Hidden | Field::Locked | Field::Visible => FVal::Bool(v.is_truthy()?),
@@ -3042,6 +3042,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(doc_attr_patch, m)?)?;
     m.add_class::<super::anchor::ElementAnchor>()?;
     m.add_class::<super::history::DocumentHistory>()?;
+    super::commands::register(m)?;
     m.add_class::<super::feed::FeedReaders>()?;
     m.add_class::<DocRecord>()?;
     m.add_class::<DocAttr>()?;

@@ -28,7 +28,7 @@ from contextvars import ContextVar
 from typing import Iterable, Optional
 from itertools import count
 
-from ingetrazo_core import Vec3 as QVector3D
+from ingetrazo_core import Vec3 as QVector3D, polygon_centroid, polygon_net_area, polygon_newell
 
 
 # Weld tolerance — two positions within this many decimals (~0.1 mm at metric
@@ -310,29 +310,7 @@ class Face:
 
     # ---- Geometry (ported from legacy Face, over shared positions) ----------
     def _newell(self) -> QVector3D:
-        """Newell's area-weighted normal, accumulated in DOUBLE precision.
-
-        Summing in ``QVector3D`` (float32) left a horizontal face — every
-        vertex at the same z — with a normal like ``(2.9e-6, 0, 1)``, and
-        small faces far from the origin up to ``(6e-4, 0, 1)``. Harmless for
-        shading, fatal for texture projection: the .skp basis is ``Z × n``,
-        which snaps to the world axes only for a vertical normal, so that
-        noise turned the projection 90° against the plane the .skp writer
-        computes in float64 from the same vertices (Marco's pool: every
-        horizontal countertop, floor and slab of the .skp). Doubles make
-        a constant-z face exactly vertical, like the writer's own plane."""
-        loop = self.loop
-        count = len(loop)
-        nx = ny = nz = 0.0
-        for i in range(count):
-            curr = loop[i].position
-            nxt = loop[(i + 1) % count].position
-            x0, y0, z0 = curr.x(), curr.y(), curr.z()
-            x1, y1, z1 = nxt.x(), nxt.y(), nxt.z()
-            nx += (y0 - y1) * (z0 + z1)
-            ny += (z0 - z1) * (x0 + x1)
-            nz += (x0 - x1) * (y0 + y1)
-        return QVector3D(nx, ny, nz)
+        return polygon_newell(self.vertices)
 
     def normal(self) -> QVector3D:
         if len(self.loop) < 3:
@@ -359,39 +337,10 @@ class Face:
         return 0.5 * self._newell().length()
 
     def net_area(self) -> float:
-        """``area()`` with the hole loops subtracted: the surface a
-        person measuring the face means — a wall's window opening is
-        not wall. ``area()`` itself stays gross on purpose (the engine
-        reads it: heal thresholds, the dominant normal), so the
-        user-facing numbers — Entity Info, quantities, labels — read
-        this one instead (#742)."""
-        if len(self.loop) < 3:
-            return 0.0
-        area = self.area()
-        for hole in self.hole_loops:
-            count = len(hole)
-            if count < 3:
-                continue
-            nx = ny = nz = 0.0
-            for i in range(count):
-                curr = hole[i].position
-                nxt = hole[(i + 1) % count].position
-                x0, y0, z0 = curr.x(), curr.y(), curr.z()
-                x1, y1, z1 = nxt.x(), nxt.y(), nxt.z()
-                nx += (y0 - y1) * (z0 + z1)
-                ny += (z0 - z1) * (x0 + x1)
-                nz += (x0 - x1) * (y0 + y1)
-            area -= 0.5 * QVector3D(nx, ny, nz).length()
-        return max(area, 0.0)
+        return polygon_net_area(self.vertices, self.holes)
 
     def centroid(self) -> QVector3D:
-        count = len(self.loop)
-        if count == 0:
-            return QVector3D(0.0, 0.0, 0.0)
-        cx = sum(v.position.x() for v in self.loop) / count
-        cy = sum(v.position.y() for v in self.loop) / count
-        cz = sum(v.position.z() for v in self.loop) / count
-        return QVector3D(cx, cy, cz)
+        return polygon_centroid(self.vertices)
 
     def triangulate(self, normal: QVector3D | None = None
                     ) -> list[tuple[QVector3D, QVector3D, QVector3D]]:

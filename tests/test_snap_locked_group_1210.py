@@ -9,7 +9,7 @@ from PySide6.QtCore import Qt
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core.group import Group
-from core.history import History, LockCommand
+from core.history import History, NativeCommand
 from core.mesh import Mesh
 from tools.rust_tools import LineTool
 from tests.controller_surface import ControllerSurface as Viewport
@@ -73,7 +73,7 @@ def test_lock_keeps_the_same_snap_and_undo_redo_keeps_it(box, point, kind):
         assert (snap.point - target).length() < 1e-5
 
     check()  # Build the caches before the lock changes.
-    history.execute(LockCommand([group], True))
+    history.execute(NativeCommand.lock([group], True))
     check()
     assert vp.pick_group(*px) is None
     assert not vp.scene.entity_selectable(group)
