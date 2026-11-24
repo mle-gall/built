@@ -8,7 +8,7 @@ from core.timers import timer
 from core import library
 from core.i18n import current_language, tr
 from ingetrazo_render import ComponentCatalogue
-from views import chrome_sheet
+from ingetrazo_render import chrome_sheet
 
 # Two Library windows can request the same archive. Serialise index and
 # archive writes. The thumbnail service has its own coalescing worker pool.

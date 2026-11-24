@@ -54,6 +54,7 @@ mod report_sheets;
 mod inspector_host;
 mod shell_events;
 mod deliveries_host;
+mod sheet_runtime;
 pub mod ui;
 mod host_context;
 mod inspector;
@@ -2776,7 +2777,7 @@ impl Renderer {
     fn ui_set_form(&mut self, title: String, fields: Vec<ui::FormField>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_form(title, fields); }
     }
-    /// The large sheet (views/chrome_sheet.py): the whole sheet as JSON
+    /// The large sheet (sheet_runtime.rs): the whole sheet as JSON
     /// (ui/large_sheet.rs `Spec`); "" closes it.
     fn ui_set_large_sheet(&mut self, spec: &str) -> PyResult<()> {
         match self.ui.as_mut() {
@@ -3163,7 +3164,7 @@ impl Renderer {
 /// Public so the `built` app can register the module statically
 /// (`append_to_inittab`) and share one renderer with the embedded Python.
 /// Check a large sheet's JSON against the chrome's schema without a
-/// renderer (views/chrome_sheet.py tests): "" when it parses, else why.
+/// renderer (sheet_runtime.rs tests): "" when it parses, else why.
 #[pyfunction]
 fn large_sheet_check(spec: &str) -> String {
     match serde_json::from_str::<ui::large_sheet::Spec>(spec) {
@@ -3253,6 +3254,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     inspector_host::register(m)?;
     shell_events::register(m)?;
     deliveries_host::register(m)?;
+    sheet_runtime::register(m)?;
     native_view_actions::register(m)?;
     plugin_workspace::register(m)?;
     m.add_class::<link_watch::LinkWatch>()?;

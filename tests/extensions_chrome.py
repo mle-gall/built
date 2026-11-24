@@ -2,7 +2,7 @@
 from types import SimpleNamespace
 
 from core import extension_manager as manager, extensions
-from views import chrome_sheet
+from ingetrazo_render import chrome_sheet
 from ingetrazo_render import ExtensionsSheet as Extensions
 
 

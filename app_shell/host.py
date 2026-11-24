@@ -671,7 +671,8 @@ class Host:
 
     def close(self):
         from app_shell import windows
-        from views import chrome_forms, chrome_sheet
+        from ingetrazo_render import chrome_sheet
+        from views import chrome_forms
         if self._device is not None:
             self.focus(False)
         chrome_sheet.close(self.window)

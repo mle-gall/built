@@ -247,7 +247,7 @@ def test_cancel_on_a_slow_preview_turns_the_preview_off(monkeypatch):
     from core.camera import OrbitCamera
     from core.history import History
     from core.scene import Scene
-    from views import chrome_sheet
+    from ingetrazo_render import chrome_sheet
     from PySide6.QtCore import QTimer
 
     scene = Scene()

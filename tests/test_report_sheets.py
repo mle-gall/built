@@ -8,7 +8,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from views import chrome_sheet
+from ingetrazo_render import chrome_sheet
 from ingetrazo_render import AboutSheet as About, ExtensionsSheet as Extensions, CutListSheet as CutList
 
 

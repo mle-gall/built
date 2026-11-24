@@ -448,7 +448,7 @@ def _saved(model):
 
 
 def _export_sheet(win, path, fill="2", *, opener=None, scene=None):
-    from views import chrome_sheet
+    from ingetrazo_render import chrome_sheet
 
     (opener or win._on_export_view_svg)()
     provider = chrome_sheet.current(win)
@@ -1264,7 +1264,7 @@ def test_a_scene_is_exported_and_the_view_comes_back(native_host, tmp_path):
         model.receive("svg_scene", "1")
         assert not mob.visible
 
-    from views import chrome_sheet
+    from ingetrazo_render import chrome_sheet
     from core.settings import settings as current_settings
 
     settings = current_settings()

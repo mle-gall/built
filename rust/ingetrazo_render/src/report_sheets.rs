@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! The About, Extensions and Cut list sheets on the window: providers of the
-//! large sheet (`views/chrome_sheet.py`) over their Rust view models
+//! large sheet (`sheet_runtime.rs`) over their Rust view models
 //! (`about.rs`, `extensions.rs`, `surfaces.rs`).
 //!
 //! What stays Python is what each one reports on or acts through: the
@@ -17,10 +17,10 @@ fn opt<'py>(o: &Bound<'py, PyAny>, name: &str) -> Option<Bound<'py, PyAny>> {
     o.getattr(name).ok().filter(|v| !v.is_none())
 }
 
-/// Whether this is the `built` binary (`views.chrome_sheet.in_shell`, which
+/// Whether this is the `built` binary (`chrome_sheet.in_shell`, which
 /// tests replace).
 fn in_shell(py: Python<'_>) -> PyResult<bool> {
-    py.import("views.chrome_sheet")?.call_method0("in_shell")?.is_truthy()
+    py.import("ingetrazo_render.chrome_sheet")?.call_method0("in_shell")?.is_truthy()
 }
 
 fn json_dumps<'py>(py: Python<'py>, v: &Bound<'py, PyAny>) -> PyResult<String> {
@@ -33,7 +33,7 @@ fn json_loads<'py>(py: Python<'py>, s: &str) -> PyResult<Bound<'py, PyAny>> {
 
 /// A sheet whose spec a Rust view model built, for the sheet host.
 fn spec_sheet<'py>(py: Python<'py>, spec: &str) -> PyResult<Bound<'py, PyAny>> {
-    py.import("views.chrome_sheet")?.getattr("Spec")?.call1((json_loads(py, spec)?,))
+    py.import("ingetrazo_render.chrome_sheet")?.getattr("Spec")?.call1((json_loads(py, spec)?,))
 }
 
 fn tr(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
@@ -115,16 +115,17 @@ pub fn about_review<'py>(
     }
     let shell = in_shell(py)?;
     let (mut qt, mut pyside) = (String::new(), String::new());
-    let mut size: Option<(f64, f64, f64)> = None;
+    // The values as Python has them (ints print as 1280, not 1280.0).
+    let mut size: Option<Bound<'py, PyAny>> = None;
     if let Some(host) = &host {
-        size = Some((host.getattr("width")?.extract()?, host.getattr("height")?.extract()?, host.getattr("scale")?.extract()?));
+        size = Some(PyList::new(py, [host.getattr("width")?, host.getattr("height")?, host.getattr("scale")?])?.into_any());
     } else if !shell {
         qt = py.import("PySide6.QtCore")?.call_method0("qVersion")?.extract()?;
         pyside = py.import("PySide6")?.getattr("__version__")?.extract()?;
         let screen = py.import("PySide6.QtGui")?.getattr("QGuiApplication")?.call_method0("primaryScreen")?;
         if !screen.is_none() {
             let s = screen.call_method0("size")?;
-            size = Some((s.call_method0("width")?.extract()?, s.call_method0("height")?.extract()?, screen.call_method0("devicePixelRatio")?.extract()?));
+            size = Some(PyList::new(py, [s.call_method0("width")?, s.call_method0("height")?, screen.call_method0("devicePixelRatio")?])?.into_any());
         }
     }
     let has_env = |k: &str| environ.call_method1("get", (k,)).and_then(|v| v.is_truthy()).unwrap_or(false);
@@ -175,7 +176,7 @@ struct AboutCopied {
 #[pymethods]
 impl AboutCopied {
     fn __call__(&self, py: Python<'_>) -> PyResult<()> {
-        let sheets = py.import("views.chrome_sheet")?;
+        let sheets = py.import("ingetrazo_render.chrome_sheet")?;
         let win = self.win.bind(py);
         if sheets.call_method1("current", (win,))?.is(self.sheet.bind(py)) {
             sheets.call_method1("refresh", (win,))?;
@@ -849,7 +850,7 @@ fn show_report_sheet<'py>(py: Python<'py>, win: &Bound<'py, PyAny>, sid: &str) -
         "cutlist" => Py::new(py, CutListSheet::new())?.into_any(),
         _ => return Err(pyo3::exceptions::PyKeyError::new_err(sid.to_owned())),
     };
-    py.import("views.chrome_sheet")?.call_method1("open", (win, provider))
+    py.import("ingetrazo_render.chrome_sheet")?.call_method1("open", (win, provider))
 }
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {

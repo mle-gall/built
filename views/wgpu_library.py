@@ -731,7 +731,7 @@ def item(view, key):
 # ---- the sheet -------------------------------------------------------------------------
 
 def _chrome_sheet():
-    from views import chrome_sheet
+    from ingetrazo_render import chrome_sheet
     return chrome_sheet
 
 

@@ -150,7 +150,7 @@ def _window_with(native_host, group):
 
 def test_copy_cut_list_fills_the_clipboard(native_host, monkeypatch):
     win, scene = _window_with(native_host, _stool())
-    from views import chrome_sheet
+    from ingetrazo_render import chrome_sheet
     ctx = chrome_sheet.Ctx(win, win._doc.stand_in)
     from app_shell import native
     clipboard = {}

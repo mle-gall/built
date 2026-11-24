@@ -9,7 +9,8 @@ from PySide6.QtCore import QEventLoop, QTimer
 from PySide6.QtWidgets import QApplication, QMainWindow
 
 from core import update_check as uc
-from views import chrome_dialogs, chrome_sheet, release_check as ud
+from ingetrazo_render import chrome_sheet
+from views import chrome_dialogs, release_check as ud
 
 
 class Store:

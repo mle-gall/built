@@ -374,7 +374,7 @@ def chrome_frame(view):
         _chrome_form(view, win)
         from views import wgpu_start
         wgpu_start.before_frame(view, win)
-        from views import chrome_sheet
+        from ingetrazo_render import chrome_sheet
         chrome_sheet.before_frame(view, win)
     cpu, gpu = renderer.render()
     after_frame(view)
@@ -405,7 +405,7 @@ def before_frame(view) -> None:
     _chrome_form(view, win)
     from views import wgpu_start
     wgpu_start.before_frame(view, win)
-    from views import chrome_sheet
+    from ingetrazo_render import chrome_sheet
     chrome_sheet.before_frame(view, win)
     if not view._ui_tools_sent and win._tool_actions:
         _send_tools(view, win)
@@ -2588,7 +2588,7 @@ def _run(win, actions, source_view=None) -> None:
             chrome_dialogs._repaint(win)
             continue
         if kind == "lsheet":
-            from views import chrome_sheet
+            from ingetrazo_render import chrome_sheet
             chrome_sheet.action(win, arg)
             continue
         if kind == "start":
@@ -3003,7 +3003,7 @@ def claims_key(view, event) -> bool:
     Escape while its popup is open)? Then no window shortcut fires."""
     if not getattr(view, "_ui_attached", False):
         return False
-    from views import chrome_sheet
+    from ingetrazo_render import chrome_sheet
     large = chrome_sheet.claims_key(view, event)
     if large is not None:
         # The large sheet owns every key but the window's ⌘ shortcuts.
@@ -3030,7 +3030,7 @@ def key(view, event, pressed: bool) -> bool:
             view.renderer.ui_open_commands()
             view.update()
         return True
-    from views import chrome_sheet
+    from ingetrazo_render import chrome_sheet
     if chrome_sheet.claims_key(view, event) is False:
         return False
     from views import wgpu_sheets

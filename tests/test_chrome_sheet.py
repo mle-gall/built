@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""The large sheet's Python side (views/chrome_sheet.py): a provider's sheet
+"""The large sheet's Python side (ingetrazo_render.chrome_sheet, sheet_runtime.rs): a provider's sheet
 sent as JSON, actions routed back, fields applied at once, close and focus,
 key ownership, and the fallback where the chrome cannot draw. The drawing,
 Esc order, arrows and type-to-search are tested in Rust (ui/large_sheet.rs);
@@ -14,7 +14,7 @@ from PySide6.QtGui import QKeyEvent
 from PySide6.QtWidgets import QApplication
 
 from views import chrome_forms
-from views import chrome_sheet as cs
+from ingetrazo_render import chrome_sheet as cs
 
 _app = QApplication.instance() or QApplication([])
 

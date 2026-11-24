@@ -11,7 +11,7 @@
 //! └ footer: links ……………………………………………………………… key hints ┘
 //! ```
 //!
-//! Python (views/chrome_sheet.py) owns everything shown: it sends the whole
+//! Python (sheet_runtime.rs) owns everything shown: it sends the whole
 //! sheet as JSON (`set_large_sheet`) when anything changed, and answers the
 //! actions, `lsheet:<sheet id>\u{1f}<verb>[\u{1f}<arg>…]`:
 //!

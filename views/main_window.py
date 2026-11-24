@@ -6028,7 +6028,7 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         if not self._confirm_quit():
             event.ignore()
             return
-        from views import chrome_sheet
+        from ingetrazo_render import chrome_sheet
         chrome_sheet.close(self)
         _forms.close_all(self)
         self._release_check = None

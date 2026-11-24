@@ -34,7 +34,7 @@ mod drawing_hatches;
 mod drawing_cuts;
 mod export;
 /// The large sheet over the dimmed model: Library, start page, Settings
-/// (views/chrome_sheet.py, docs/ui-patterns.md).
+/// (sheet_runtime.rs, docs/ui-patterns.md).
 pub mod large_sheet;
 
 pub mod tokens;
@@ -801,7 +801,7 @@ impl Ui {
         if self.gallery.is_some() || self.font_picker.is_some() { return true; }
         if name == "Escape" && (self.ctx_menu.is_some() || self.strip.menus_open() || self.egui_popup_open() || self.panels.data["terrain"].is_object()) { return true; }
         // The large sheet owns every key while it is up (Python keeps the
-        // window's ⌘ shortcuts, views/chrome_sheet.py).
+        // window's ⌘ shortcuts, sheet_runtime.rs).
         if self.lsheet.open { return true; }
         if self.sheets.shown { return self.sheets_claims_key(name); }
         if self.scene_move_key(name, mods).is_some() { return true; }

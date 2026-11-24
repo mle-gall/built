@@ -199,7 +199,7 @@ def test_running_export_observes_cancellation(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize("one_off", [True, False], ids=["export", "delivery"])
 def test_svg_sheet_previews_the_page_it_writes(one_off, tmp_path, monkeypatch):
-    from views import chrome_sheet as sheet
+    from ingetrazo_render import chrome_sheet as sheet
     from tests.test_chrome_sheet import View
 
     scene = _tagged_wall_scene()

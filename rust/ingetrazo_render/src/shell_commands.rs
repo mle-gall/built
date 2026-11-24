@@ -371,7 +371,7 @@ fn bind_window_commands(win: &Bound<'_, PyAny>) -> PyResult<()> {
     now.sort();
     before.sort();
     if now != before {
-        let sheets = py.import("views.chrome_sheet")?;
+        let sheets = py.import("ingetrazo_render.chrome_sheet")?;
         let sheet = sheets.call_method1("current", (win,))?;
         if opt(&sheet, "id").is_some_and(|id| id.extract::<String>().ok().as_deref() == Some("settings")) {
             sheet.setattr("_actions", py.None())?;
