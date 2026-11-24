@@ -65,8 +65,14 @@ def test_link_place_and_reload_when_the_source_changes(win, tmp_path):
     assert str(src.resolve()) in win._link_watcher()._fs.files()
     # The source changes on disk (another tab's save, another app).
     _source(src, faces=3)
-    win._link_watcher()._changed(str(src.resolve()))
-    _settle(win._link_watcher().SETTLE_MS * 4)   # the OS event restarts it
+    watcher = win._link_watcher()
+    watcher._changed(str(src.resolve()))
+    # The settle timer is armed; what it runs when it fires reloads the
+    # link. Fired here rather than waited for: on a loaded machine under
+    # pytest-xdist four settle periods of wall time were not enough.
+    assert watcher._timer.isActive()
+    watcher._timer.stop()
+    watcher._flush()
     (g,) = links.linked_groups(scene)
     assert _faces(g) == 3
 
@@ -170,8 +176,12 @@ def test_a_reloaded_link_keeps_the_layers_rows(win, tmp_path):
     original = type(panel).refresh
     panel.refresh = lambda *a, **k: (rebuilt.append(1), original(panel, *a, **k))
     _source(src, faces=3)                     # same tags, more geometry
-    win._link_watcher()._changed(str(src.resolve()))
-    _settle(win._link_watcher().SETTLE_MS * 4)
+    watcher = win._link_watcher()
+    watcher._changed(str(src.resolve()))
+    assert watcher._timer.isActive()          # fired, not waited for (see above)
+    watcher._timer.stop()
+    watcher._flush()
+    _settle()                                 # what the reload deferred
     (g,) = links.linked_groups(scene)
     assert _faces(g) == 3
     assert not rebuilt
