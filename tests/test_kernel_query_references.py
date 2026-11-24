@@ -182,6 +182,9 @@ def test_materialised_drawing_rollback_and_replay(monkeypatch):
     cmd = SnapshotCompound([AddEdgeCommand(V(7, 0, 0), V(8, 0, 0))], heal=False)
 
     def fail_after_changes():
+        # Whatever state the command exposes cannot corrupt the executor's rollback.
+        if cmd.before is not None:
+            cmd.before.clear()
         face.attrs['paint'] = 'blue'
         mesh.edges[0].hidden = False
         raise RuntimeError('injected after the drawing edit')
