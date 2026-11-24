@@ -1099,6 +1099,13 @@ impl ApplicationHandler<UserEvent> for App {
         for id in self.wins.iter().map(|(id,_)| *id).collect::<Vec<_>>() {
             let w = self.win(id).unwrap();
             if let Some(pointer) = &w.pointer_input {
+                // winit filters "spurious" Wayland wakes on an unbounded wait.
+                // Data for our pinch queue is exactly such a wake. A finite
+                // deadline lets it reach about_to_wait even with a stationary
+                // cursor. Idle windows still sleep on the display socket.
+                if pointer.has_private_wayland_queue() && kinetic_wake.is_none() {
+                    kinetic_wake = Some(Instant::now() + Duration::from_secs(24 * 3600));
+                }
                 for (kind, delta) in pointer.normal() {
                     w.host.call("gesture", (kind, delta, w.cursor.0, w.cursor.1));
                     w.window.request_redraw();

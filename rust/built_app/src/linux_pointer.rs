@@ -86,6 +86,9 @@ impl Pointer {
             false
         }
     }
+    pub fn has_private_wayland_queue(&self) -> bool {
+        matches!(self.source.borrow().source, Source::Wayland(_))
+    }
     pub fn momentum(
         &self,
         now: std::time::Instant,
