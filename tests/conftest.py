@@ -170,15 +170,21 @@ def _process_qt_and_units():
 
 @pytest.fixture(autouse=True)
 def _paint_tool_choice():
-    """The Paint tool's chosen material lives on the class
-    (``PaintTool.current_*``: colour, texture, opacity, material, library
-    revision), as the app keeps it across documents. Tests set it directly;
-    under pytest-xdist the next file on the worker painted with it
-    (test_pool_water, test_library_paint_selection: no opacity)."""
+    """The Paint tool keeps its state on the class, as the app keeps it
+    across documents: the chosen material (``PaintTool.current_*``: colour,
+    texture, opacity, material, library revision), the recent materials and
+    whether the pipette is armed (``sample_armed``). Tests set them
+    directly; under pytest-xdist the next file on the worker painted with
+    another material (test_pool_water, test_library_paint_selection) or
+    sampled instead of painting (test_edit_textured_material_everywhere)."""
+    from copy import copy
     from tools.paint import PaintTool
-    before = {k: v for k, v in vars(PaintTool).items() if k.startswith("current_")}
+
+    def mine(key):
+        return key.startswith("current_") or key in ("sample_armed", "recent")
+    before = {k: copy(v) for k, v in vars(PaintTool).items() if mine(k)}
     yield
-    for key in [k for k in vars(PaintTool) if k.startswith("current_") and k not in before]:
+    for key in [k for k in vars(PaintTool) if mine(k) and k not in before]:
         delattr(PaintTool, key)
     for key, value in before.items():
         setattr(PaintTool, key, value)

@@ -41,7 +41,8 @@ must leave process-wide state as it found it.
 - `os.environ` (`_process_environment`). The app writes it on purpose
   (`--python-engine` sets `INGETRAZO_RUST=0`), which turned the engine off
   for every later test on a worker;
-- the Paint tool's chosen material (`PaintTool.current_*`, class state);
+- the Paint tool's class state: its chosen material (`PaintTool.current_*`),
+  recent materials and armed pipette;
 - the scene `core.units` formats with (`bind_scene`), and the Qt application
   and organization names, which name the settings file;
 - the drawing axes, the SKP parse tables and `core._native.native`.
