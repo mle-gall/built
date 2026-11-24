@@ -227,9 +227,9 @@ def picture(view_widget, frame):
     return w, h, px.tobytes()
 
 
-def drawing(source, frame):
-    """A vector frame's lines in paper mm, frame-local, and their kinds
-    (``core.hlr`` KIND_*), or None when its saved view is gone."""
+def _hlr(source, frame, **kw):
+    """The frame's hidden-line pass (Rust camera and geometry) and the map
+    from its camera plane to frame paper mm; None when its view is gone."""
     from core._native import qt_hypot
     from core.composition import model_height_for_frame
     from core.hlr import hlr_drawing
@@ -241,24 +241,56 @@ def drawing(source, frame):
     camera = frame_camera(source.camera, frame, view, scene)
     geometry, _tags = NATIVE.sheet_frame_geometry(scene._root, list(scene.groups), scene.loose_mesh,
                                                   view or None, qt_hypot() or "libc++-fma")
-    d = hlr_drawing(facade, camera, geometry=geometry, profiles=bool(getattr(frame, "profiles", True)),
-                    fills=(getattr(frame, "cut_fill", "solid") or "solid") != "none",
-                    hidden=bool(getattr(frame, "hidden_lines", False)))
+    d = hlr_drawing(facade, camera, geometry=geometry, **kw)
     model_h = model_height_for_frame(frame.h_mm, frame.scale_n)
     k = frame.h_mm / model_h                       # paper mm per metre
     half_h = model_h / 2.0
     half_w = half_h * (frame.w_mm / frame.h_mm)
-    segs = np.asarray(d.segs, float).reshape(-1, 4)
-    out = np.empty_like(segs)
-    out[:, 0::2] = (segs[:, 0::2] + half_w) * k
-    out[:, 1::2] = (half_h - segs[:, 1::2]) * k
-    fills = []
-    for ring in d.loops:
-        mm = np.asarray(ring, float).reshape(-1, 2).copy()
-        mm[:, 0] = (mm[:, 0] + half_w) * k
-        mm[:, 1] = (half_h - mm[:, 1]) * k
-        fills.append(mm)
-    return out, np.asarray(d.kinds, np.int8), fills
+
+    def to_mm(xy):
+        out = np.asarray(xy, float).copy()
+        out[..., 0] = (out[..., 0] + half_w) * k
+        out[..., 1] = (half_h - out[..., 1]) * k
+        return out
+    return d, to_mm
+
+
+def drawing(source, frame):
+    """A vector frame's lines in paper mm, frame-local, and their kinds
+    (``core.hlr`` KIND_*), and its cut rings; None when its view is gone."""
+    got = _hlr(source, frame, profiles=bool(getattr(frame, "profiles", True)),
+               fills=(getattr(frame, "cut_fill", "solid") or "solid") != "none",
+               hidden=bool(getattr(frame, "hidden_lines", False)))
+    if got is None:
+        return None
+    d, to_mm = got
+    segs = to_mm(np.asarray(d.segs, float).reshape(-1, 2, 2)).reshape(-1, 4)
+    fills = [to_mm(np.asarray(ring, float).reshape(-1, 2)) for ring in d.loops]
+    return segs, np.asarray(d.kinds, np.int8), fills
+
+
+def snaps(source, frame):
+    """What the drawing tools catch in ``frame`` (the composer's
+    ``frame_snap_points`` / ``frame_snap_edges``, exact pass): the drawn
+    edges' ends and middles in page mm with their model points, and the
+    edges themselves, clipped to the frame. None when there is nothing to
+    catch (its view is gone, or a perspective frame)."""
+    if getattr(frame, "perspective", False):
+        return None
+    got = _hlr(source, frame, profiles=False, fills=False, hidden=False)
+    if got is None:
+        return None
+    d, to_mm = got
+    segs = to_mm(np.asarray(d.segs, float).reshape(-1, 2, 2)) + (frame.x_mm, frame.y_mm)
+    world = np.asarray(d.world, float).reshape(-1, 2, 3)
+    pts = np.concatenate([segs[:, 0], segs[:, 1], segs.mean(axis=1)]).reshape(-1, 2)
+    wpts = np.concatenate([world[:, 0], world[:, 1], world.mean(axis=1)]).reshape(-1, 3)
+    x0, y0, x1, y1 = frame.x_mm - 0.5, frame.y_mm - 0.5, frame.x_mm + frame.w_mm + 0.5, frame.y_mm + frame.h_mm + 0.5
+    keep = (pts[:, 0] >= x0) & (pts[:, 0] <= x1) & (pts[:, 1] >= y0) & (pts[:, 1] <= y1)
+    flat = segs.reshape(-1, 4)
+    near = ((np.maximum(flat[:, 0], flat[:, 2]) >= x0) & (np.minimum(flat[:, 0], flat[:, 2]) <= x1)
+            & (np.maximum(flat[:, 1], flat[:, 3]) >= y0) & (np.minimum(flat[:, 1], flat[:, 3]) <= y1))
+    return pts[keep], wpts[keep], flat[near], world[near]
 
 
 def frame_contents(view_widget, comps, ground=None):
@@ -339,3 +371,44 @@ class Ground:
                 self._survey = PhotoMeshSampler(survey, datum)
             sampler = self._survey
         return NATIVE.sheet_terrain_profiles(comp, scene, self._dem, sampler)
+
+
+def capture_hold(scene, item, attr, segment=None) -> bool:
+    """Hold ``item.<attr>`` (a model point a sheet tool caught) by the model
+    element under it, so it follows the model however far that moves: the
+    edge it lies along, else the vertex (the model's own attachments,
+    core.annotation_anchor; the composer's ``_follow_anchor`` capture)."""
+    from ingetrazo_core import Vec3
+    from core.annotation_anchor import Attachment, edge_by_endpoints
+    from core.dimension import resolve_vertex_anchor
+    cur = getattr(item, attr, None)
+    if not cur:
+        return False
+    slot = "hold_" + attr[0]
+    if segment is not None:
+        hit, owner = edge_by_endpoints(scene, *(Vec3(*p) for p in segment))
+        ref = Attachment.capture(scene, hit, owner, Vec3(*cur)) if hit is not None else None
+        if ref is not None:
+            setattr(item, slot, (tuple(cur), ref))
+            return True
+    hold = resolve_vertex_anchor(scene, Vec3(*cur))
+    if hold is not None:
+        owner = hold.chain[-1] if hold.chain else None
+        ref = Attachment.capture(scene, hold.vertex, owner, Vec3(*cur))
+        if ref is not None:
+            setattr(item, slot, (tuple(cur), ref))
+            return True
+    return False
+
+
+def anchor(item, frame, scene, points) -> None:
+    """Bind ``item`` to ``frame``'s model: its uid (made when it has none),
+    each ``(attr, picked point)`` as a world point with its hold."""
+    import uuid
+    if not frame.uid:
+        frame.uid = uuid.uuid4().hex
+    item.anchor_uid = frame.uid
+    for attr, pt in points:
+        setattr(item, attr, [float(v) for v in pt["world"]])
+        if attr in ("a_world", "b_world"):
+            capture_hold(scene, item, attr, pt.get("segment"))

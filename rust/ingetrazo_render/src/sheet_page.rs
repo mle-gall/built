@@ -159,6 +159,11 @@ pub struct Page {
     pub editing: Option<(u64, String)>,
     /// The editor wants the keyboard (it just opened).
     pub edit_focus: bool,
+    /// What each frame offers the drawing tools to snap to.
+    pub snaps: HashMap<u64, crate::sheet_tools::FrameSnaps>,
+    /// The clicks a snapping tool has gathered, and the snap under the cursor.
+    pub pick: Option<crate::sheet_tools::Pick>,
+    hot: Option<crate::sheet_tools::Pt>,
 }
 
 fn snap(value: f64, targets: &[f64]) -> Option<f64> {
@@ -191,6 +196,7 @@ impl Page {
         let keys: Vec<u64> = doc.items.iter().map(|i| i.key).collect();
         self.selection.retain(|k| keys.contains(k));
         self.lines.retain(|k, _| keys.contains(k));
+        self.snaps.retain(|k, _| keys.contains(k));
         let gone: Vec<u64> = self.natives.keys().filter(|k| !keys.contains(k)).copied().collect();
         for k in gone {
             self.drop_native(k);
@@ -198,6 +204,80 @@ impl Page {
         self.raw = text;
         self.doc = Some(doc);
     }
+    /// A snapping tool's pointer: the snap under the cursor, and a click
+    /// taken (snapped when it caught the model). The linear dimension takes
+    /// two points (⇧ on the second puts it on a row or a column), then
+    /// the click that sets its offset makes it.
+    fn pick_pointer(&mut self, kind: &str, p: Pos2, mods: u8, out: &mut Vec<String>) {
+        use crate::sheet_tools::{sep_of, snap_at, Pt};
+        let mm = self.to_mm(p);
+        let thr = 7.0 / f64::from(self.zoom.max(1e-6));
+        let pick = self.pick.get_or_insert_with(|| crate::sheet_tools::Pick { tool: self.tool.clone(), ..Default::default() });
+        if pick.tool != self.tool {
+            *pick = crate::sheet_tools::Pick { tool: self.tool.clone(), ..Default::default() };
+        }
+        let offsetting = pick.tool == "cota" && pick.pts.len() == 2;
+        self.hot = if offsetting { None } else { snap_at(&self.snaps, mm, thr) };
+        self.cursor = "crosshair";
+        if kind == "move" {
+            return;
+        }
+        let pt = self.hot.clone().unwrap_or_else(|| Pt::free(mm));
+        let Some(pick) = self.pick.as_mut() else { return };
+        match (pick.tool.as_str(), pick.pts.len()) {
+            ("cota", 0) => pick.pts.push(pt),
+            ("cota", 1) => {
+                let a = pick.pts[0].p;
+                pick.axis = if mods & 4 != 0 {
+                    if (pt.p[0] - a[0]).abs() >= (pt.p[1] - a[1]).abs() { "h".into() } else { "v".into() }
+                } else {
+                    String::new()
+                };
+                pick.pts.push(pt);
+            }
+            ("cota", _) => {
+                let (a, b) = (&pick.pts[0], &pick.pts[1]);
+                let sep = sep_of(a.p, b.p, &pick.axis, mm);
+                let body = serde_json::json!({"a": a.json(), "b": b.json(), "sep": sep, "axis": pick.axis});
+                out.push(format!("sheets:cota\u{1f}{body}"));
+                self.pick = None;
+                self.hot = None;
+            }
+            _ => {}
+        }
+    }
+
+    /// The tool's clicks so far and the snap dot, over the page.
+    fn paint_pick(&self, painter: &egui::Painter) {
+        use crate::sheet_tools::{line_ends, sep_of};
+        let stroke = Stroke::new(1.0_f32, ACCENT);
+        if let (Some(pick), Some(cur)) = (&self.pick, self.pointer_mm) {
+            let scr = |q: [f64; 2]| self.to_screen(q[0], q[1]);
+            match (pick.tool.as_str(), pick.pts.len()) {
+                ("cota", 1) => {
+                    let to = self.hot.as_ref().map_or(cur, |h| h.p);
+                    painter.extend(egui::Shape::dashed_line(&[scr(pick.pts[0].p), scr(to)], stroke, 4.0, 3.0));
+                }
+                ("cota", 2) => {
+                    let (a, b) = (pick.pts[0].p, pick.pts[1].p);
+                    let (a2, b2) = line_ends(a, b, sep_of(a, b, &pick.axis, cur), &pick.axis);
+                    for (p, q) in [(a, a2), (b, b2), (a2, b2)] {
+                        painter.extend(egui::Shape::dashed_line(&[scr(p), scr(q)], stroke, 4.0, 3.0));
+                    }
+                }
+                _ => {}
+            }
+        }
+        if let Some(h) = &self.hot {
+            let c = self.to_screen(h.p[0], h.p[1]);
+            if h.segment.is_some() {
+                painter.circle_stroke(c, 4.5, Stroke::new(1.5_f32, ACCENT));
+            } else {
+                painter.circle_filled(c, 4.5, ACCENT);
+            }
+        }
+    }
+
     /// Start typing in text item `key` (its words as the document has them).
     pub fn edit_text(&mut self, key: u64) {
         let text = self.item(key).and_then(|i| i.data["fields"]["text"].as_str().map(str::to_string));
@@ -318,6 +398,11 @@ impl Page {
             (_, "zoom") | (_, "zoom_ventana") => "Click to zoom in, ⌥-click to zoom out.",
             (_, "vista") => "Drag a rectangle to place a model view.",
             (_, t) if PLACE_TOOLS.contains(&t) => "Click to place it, or drag its box.",
+            (_, "cota") => match self.pick.as_ref().map_or(0, |p| p.pts.len()) {
+                0 => "Click the first point: it snaps to the drawing's corners, middles and edges.",
+                1 => "Click the second point; ⇧ keeps the dimension level or plumb.",
+                _ => "Click where the dimension line goes. Esc starts again.",
+            },
             _ if !self.selection.is_empty() => "Drag to move, the handles resize. Arrows nudge 1 mm, ⇧ 10 mm, ⌥ 0.1 mm. Esc clears.",
             _ => "Click an item to select it, ⇧-click to add. Drag to move it.",
         }
@@ -446,6 +531,11 @@ impl Page {
         if matches!(kind, "press" | "double") && self.editing.is_some() {
             // A press elsewhere on the page ends the typing.
             self.commit_text(out);
+        }
+        if crate::sheet_tools::PICK_TOOLS.contains(&self.tool.as_str()) && kind != "leave"
+            && (kind == "move" || button == 1) && !matches!(self.drag, Some(Drag::Pan { .. })) {
+            self.pick_pointer(kind, p, mods, out);
+            return;
         }
         let tool = self.tool.as_str();
         match kind {
@@ -618,6 +708,10 @@ impl Page {
             "ArrowUp" => (0.0, -step),
             "ArrowDown" => (0.0, step),
             "Escape" => {
+                if self.pick.take().is_some() {
+                    self.hot = None;
+                    return true;
+                }
                 if self.drag.take().is_some() {
                     self.preview.clear();
                     return true;
@@ -834,6 +928,7 @@ impl Page {
             painter.rect_filled(r, 0, ACCENT.gamma_multiply(0.08));
             painter.rect_stroke(r, 0, Stroke::new(1.0_f32, ACCENT), egui::StrokeKind::Middle);
         }
+        self.paint_pick(&painter);
     }
 
     fn paint_frame(&self, painter: &egui::Painter, item: &Item, rect: Rect) {
@@ -1028,6 +1123,34 @@ mod tests {
         p.pointer("press", at(&p, 300.0, 250.0), 1, 0, &mut out);
         p.pointer("release", at(&p, 300.0, 250.0), 1, 0, &mut out);
         assert_eq!(out, vec!["sheets:place\u{1f}300.000\u{1f}250.000\u{1f}300.000\u{1f}250.000\u{1f}escala".to_string()]);
+    }
+
+    #[test]
+    fn the_dimension_tool_snaps_two_points_and_its_offset_click_makes_it() {
+        let mut p = page();
+        p.tool = "cota".into();
+        p.snaps.insert(1, crate::sheet_tools::FrameSnaps {
+            points: vec![[50.0, 60.0], [90.0, 60.0]],
+            world: vec![[1.0, 2.0, 0.0], [5.0, 2.0, 0.0]],
+            ..Default::default()
+        });
+        let mut out = vec![];
+        p.pointer("move", at(&p, 50.4, 60.3), 0, 0, &mut out);
+        assert!(p.hot.is_some());
+        p.pointer("press", at(&p, 50.4, 60.3), 1, 0, &mut out);
+        p.pointer("press", at(&p, 89.8, 60.2), 1, 0, &mut out);
+        p.pointer("move", at(&p, 70.0, 52.0), 0, 0, &mut out);
+        assert!(p.hot.is_none(), "the offset does not snap");
+        p.pointer("press", at(&p, 70.0, 52.0), 1, 0, &mut out);
+        assert_eq!(out.len(), 1);
+        let body: serde_json::Value = serde_json::from_str(out[0].strip_prefix("sheets:cota\u{1f}").unwrap()).unwrap();
+        assert_eq!(body["a"]["p"], serde_json::json!([50.0, 60.0]));
+        assert_eq!(body["b"]["world"], serde_json::json!([5.0, 2.0, 0.0]));
+        assert_eq!(body["a"]["frame"], 1);
+        assert!((body["sep"].as_f64().unwrap() - -8.0).abs() < 1e-9);
+        assert!(p.pick.is_none());
+        p.pointer("press", at(&p, 10.0, 10.0), 1, 0, &mut out);
+        assert!(p.key("Escape", 0, &mut out) && p.pick.is_none());
     }
 
     #[test]

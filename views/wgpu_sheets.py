@@ -47,7 +47,9 @@ RAIL = [["select", "pan", "zoom", "zoom_ventana", "estilo"],
 #: The tools the native page runs (ui/page.rs); the others open the
 #: classic sheet editor with that tool.
 NATIVE_TOOLS = {"select", "pan", "zoom", "zoom_ventana", "vista", "texto", "llamada", "cajetin", "escala",
-                "norte", "leyenda", "perfil", "linea", "flecha", "terreno", "rect", "elipse"}
+                "norte", "leyenda", "perfil", "linea", "flecha", "terreno", "rect", "elipse", "cota"}
+#: The tools that snap to the frames' model (ui/sheet_tools.rs PICK_TOOLS).
+SNAP_TOOLS = {"cota"}
 #: Qt cursors for the page's cursor names.
 _CURSORS = {"": Qt.ArrowCursor, "move": Qt.SizeAllCursor, "grab": Qt.OpenHandCursor,
             "grabbing": Qt.ClosedHandCursor, "crosshair": Qt.CrossCursor,
@@ -242,6 +244,7 @@ class Workspace:
         self._content = {}              # frame key → the fields its content was made from
         self._ground = None             # the samplers terrain profiles read
         self._edit_after = None         # a new text block, opened for typing once on the page
+        self._snapped = {}              # frame key → what its snaps were worked out from
         self._tried = {}                # frame key → the page a render was tried on
         self._more = False              # frames still to render after this turn
         self._selection = None          # the keys the page and the composer agree on
@@ -279,6 +282,7 @@ class Workspace:
         self._sent = {}
         self._page = None
         self._content = {}
+        self._snapped = {}
         self._tried = {}
         self._selection = None
         renderer = getattr(view, "renderer", None)
@@ -495,6 +499,50 @@ class Workspace:
             self._edit_after = item._doc_key
         self._tool("select")
 
+    def _cota(self, body) -> None:
+        """A linear dimension the page measured: the record (sheets::create),
+        bound to the model when both ends caught the same frame, one step of
+        the history. The tool stays armed for the next."""
+        import ingetrazo_core as NATIVE
+        from core.composition import AddItemCommand
+        from views import wgpu_sheet_frames
+        comp = self.composer.comp
+        scene = self.composer._scene()
+        a, b = body["a"], body["b"]
+        item = NATIVE.sheet_new_cota(comp, tuple(a["p"]), tuple(b["p"]), float(body.get("sep", 0.0)),
+                                     body.get("axis", ""), scene)
+        frame = self._models().get(a.get("frame"))
+        if frame is not None and a.get("frame") == b.get("frame") and a.get("world") and b.get("world"):
+            wgpu_sheet_frames.anchor(item, frame, scene, [("a_world", a), ("b_world", b)])
+            item.scale_n = frame.scale_n
+        self._run(AddItemCommand(comp, item))
+        self._page = None
+
+    def _send_snaps(self, renderer) -> None:
+        """What each frame offers a snapping tool (wgpu_sheet_frames.snaps),
+        one frame per turn, again when the model or the frame changed."""
+        from views import wgpu_sheet_frames
+        comp = self.composer
+        scene = comp._scene()
+        for frame in list(comp.comp.frames):
+            key = frame._doc_key
+            sig = (getattr(scene, "version", None), self._content.get(key), frame.x_mm, frame.y_mm)
+            if self._snapped.get(key) == sig:
+                continue
+            self._snapped[key] = sig
+            try:
+                got = wgpu_sheet_frames.snaps(self.view.source_viewport, frame)
+            except Exception:  # noqa: BLE001 — a frame that cannot draw offers nothing
+                import traceback
+                traceback.print_exc()
+                got = None
+            import numpy as np
+            if got is None:
+                got = (np.empty((0, 2)), np.empty((0, 3)), np.empty((0, 4)), np.empty((0, 2, 3)))
+            renderer.page_frame_snaps(key, *(np.ascontiguousarray(a, float).reshape(-1).tolist() for a in got))
+            self._more = True
+            return
+
     def _tool(self, name: str) -> None:
         """Arm a tool of the rail (the composer's tool state, until the
         workspace keeps its own)."""
@@ -540,6 +588,8 @@ class Workspace:
         self._keep_a_sheet()
         self._send_page(renderer)
         self._send_contents(renderer)
+        if self.composer.tool_mode in SNAP_TOOLS and not self._more:
+            self._send_snaps(renderer)
         self._send(renderer, view)
 
     def _once(self, key, value, send) -> None:
@@ -678,6 +728,9 @@ class Workspace:
                             if int(k) in models])
         elif verb == "font":
             self._font(self._models().get(int(rest)))
+        elif verb == "cota":
+            import json
+            self._cota(json.loads(rest))
         elif verb == "refresh":
             model = self._models().get(int(rest))
             if model is not None:

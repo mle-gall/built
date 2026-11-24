@@ -2115,6 +2115,17 @@ impl Renderer {
     fn page_edit_text(&mut self, key: u64) {
         if let Some(ui) = self.ui.as_mut() { ui.page_edit_text(key); }
     }
+    /// What frame ``key`` offers the drawing tools: points (M,2) page mm
+    /// with their model points (M,3), edges (E,4) with theirs (E,6).
+    fn page_frame_snaps(&mut self, key: u64, points: Vec<f64>, world: Vec<f64>, edges: Vec<f64>, edge_world: Vec<f64>) {
+        let s = crate::sheet_tools::FrameSnaps {
+            points: points.chunks_exact(2).map(|c| [c[0], c[1]]).collect(),
+            world: world.chunks_exact(3).map(|c| [c[0], c[1], c[2]]).collect(),
+            edges: edges.chunks_exact(4).map(|c| [c[0], c[1], c[2], c[3]]).collect(),
+            edge_world: edge_world.chunks_exact(6).map(|c| [[c[0], c[1], c[2]], [c[3], c[4], c[5]]]).collect(),
+        };
+        if let Some(ui) = self.ui.as_mut() { ui.page.snaps.insert(key, s); }
+    }
     fn page_frame_forget(&mut self, key: u64) {
         if let Some(ui) = self.ui.as_mut() { ui.page.forget_content(key); }
     }
@@ -2890,6 +2901,7 @@ mod sheet_host;
 mod scene_photo;
 /// The Sheets workspace's page, native (docs/rust-sheets.md).
 pub mod sheet_page;
+pub mod sheet_tools;
 mod camera_inspector;
 mod registry_editor;
 mod render_result;

@@ -164,3 +164,52 @@ pub fn sheet_new_item<'py>(py: Python<'py>, comp: &Bound<'py, PyAny>, tool: &str
     item.setattr("z", super::display::sheet_next_z(comp)?)?;
     Ok(Some(item))
 }
+
+/// The document's length unit and precision a new annotation is born with
+/// (`_document_length_style`), and whether a cota shows its unit symbol.
+fn length_style<'py>(py: Python<'py>, scene: Option<&Bound<'py, PyAny>>, kw: &Bound<'py, PyDict>) -> PyResult<()> {
+    let chosen = py.import("core.units")?.getattr("model_units_of")?.call1((scene,))?;
+    kw.set_item("units", chosen.get_item("length")?)?;
+    kw.set_item("decimals", chosen.get_item("precision")?.call_method0("__int__")?)?;
+    Ok(())
+}
+
+/// A linear dimension from page point ``a`` to ``b`` with its line ``sep``
+/// mm off them (``axis`` "h"/"v": forced onto a row or a column), in the
+/// look `_new_cota` gives a new one: the document's units, its unit symbol
+/// when its dimension style shows it, ISO's text above the middle of the
+/// line, aligned with it, a 0.5 mm gap, arrows; at the sheet's first
+/// frame's scale. Not yet added; its z puts it on top.
+#[pyfunction]
+#[pyo3(signature = (comp, a, b, sep=0.0, axis="", scene=None))]
+pub fn sheet_new_cota<'py>(py: Python<'py>, comp: &Bound<'py, PyAny>, a: (f64, f64), b: (f64, f64), sep: f64,
+                           axis: &str, scene: Option<Bound<'py, PyAny>>) -> PyResult<Bound<'py, PyAny>> {
+    let c = py.import("core.composition")?;
+    let kw = PyDict::new(py);
+    length_style(py, scene.as_ref(), &kw)?;
+    let shows = match scene.as_ref().map(|s| s.getattr_opt("dimension_style")).transpose()?.flatten() {
+        Some(style) if style.is_truthy()? => match style.call_method1("get", ("show_unit", true)) {
+            Ok(v) => v.is_truthy()?,
+            Err(_) => true,
+        },
+        _ => true,
+    };
+    kw.set_item("show_unit", shows)?;
+    kw.set_item("offset_mm", 0.5)?;
+    kw.set_item("text_align", "aligned")?;
+    kw.set_item("text_pos", "above")?;
+    kw.set_item("text_along", "middle")?;
+    kw.set_item("ends", "arrow")?;
+    let frames = comp.getattr("frames")?;
+    let n: f64 = if frames.len()? > 0 { frames.get_item(0)?.getattr("scale_n")?.extract()? } else { 100.0 };
+    kw.set_item("x_mm", a.0)?;
+    kw.set_item("y_mm", a.1)?;
+    kw.set_item("dx_mm", b.0 - a.0)?;
+    kw.set_item("dy_mm", b.1 - a.1)?;
+    kw.set_item("scale_n", n)?;
+    kw.set_item("sep_mm", sep)?;
+    kw.set_item("axis", axis)?;
+    let item = c.getattr("CotaItem")?.call((), Some(&kw))?;
+    item.setattr("z", super::display::sheet_next_z(comp)?)?;
+    Ok(item)
+}

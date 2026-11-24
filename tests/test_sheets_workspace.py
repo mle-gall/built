@@ -539,15 +539,59 @@ def test_a_new_text_opens_for_typing_and_the_words_are_one_edit(host):
     assert text.text == "Text"
 
 
+def test_the_snaps_are_the_composer_s(host):
+    """What a frame offers the drawing tools (wgpu_sheet_frames.snaps: Rust
+    camera and geometry) is what the composer's frame_snap_points offered:
+    the same page points with the same model points behind them."""
+    import numpy as np
+    from views import wgpu_sheet_frames
+    ws = _sheets(host)
+    plan = ws.composer.comp.frames[0]
+    pts, wpts, edges, ew = wgpu_sheet_frames.snaps(host.view.source_viewport, plan)
+    want_pts, want_w = ws.composer.frame_snap_points(plan)
+    assert len(pts) > 10
+    canon = lambda p, w: sorted(tuple(np.round(np.r_[a, b], 6)) for a, b in zip(p, w))  # noqa: E731
+    assert canon(pts, wpts) == canon(want_pts, want_w)
+    want_e = ws.composer.frame_snap_edges(plan)
+    assert len(edges) == len(want_e[0])
+
+
+def test_a_dimension_measured_on_the_page_is_bound_to_the_model(host):
+    """The page's ``sheets:cota``: the record in the document's units,
+    measuring the two points; both on one frame's drawing, it is bound to
+    that frame's model points and holds them; one step of the history; the
+    tool stays armed."""
+    import numpy as np
+    from views import wgpu_sheet_frames
+    ws = _sheets(host)
+    comp = ws.composer
+    plan = comp.comp.frames[0]
+    pts, wpts, _e, _w = wgpu_sheet_frames.snaps(host.view.source_viewport, plan)
+    i = int(np.argmin(pts[:, 0] + pts[:, 1]))
+    j = int(np.argmax(pts[:, 0] - pts[:, 1]))
+    pt = lambda k: {"p": pts[k].tolist(), "world": wpts[k].tolist(), "frame": plan._doc_key, "segment": None}  # noqa: E731
+    _run_actions(host, "sheets:tool\x1fcota")
+    before = len(comp.comp.cotas)
+    _run_actions(host, "sheets:cota\x1f" + json.dumps({"a": pt(i), "b": pt(j), "sep": -6.0, "axis": "h"}))
+    assert len(comp.comp.cotas) == before + 1 and comp.tool_mode == "cota"
+    ct = comp.comp.cotas[-1]
+    assert (ct.x_mm, ct.y_mm) == tuple(pts[i]) and (ct.sep_mm, ct.axis) == (-6.0, "h")
+    assert ct.anchor_uid == plan.uid and ct.a_world == wpts[i].tolist() and ct.b_world == wpts[j].tolist()
+    assert ct.scale_n == plan.scale_n and ct.units == "m"
+    assert getattr(ct, "hold_a", None) is not None                      # held by the model's vertex
+    ws._undo()
+    assert len(comp.comp.cotas) == before
+
+
 def test_tools_not_native_yet_open_the_classic_editor(host, monkeypatch):
     ws = _sheets(host)
     opened = []
     monkeypatch.setattr(type(ws), "open_classic", lambda self, tool="": opened.append(tool))
-    _run_actions(host, "sheets:tool\x1fcota")
-    assert opened == ["cota"] and ws.composer.tool_mode != "cota"
+    _run_actions(host, "sheets:tool\x1fcota_ang")
+    assert opened == ["cota_ang"] and ws.composer.tool_mode != "cota_ang"
     groups = host.view.renderer.last("ui_set_sheet_tools")[0]
     names = {t[0]: t[1] for g in groups for t in g}
-    assert "classic" in names["cota"] and "classic" not in names["vista"]
+    assert "classic" in names["cota_ang"] and "classic" not in names["cota"]
 
 
 def test_pan_and_zoom(host):
