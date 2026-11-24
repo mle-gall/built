@@ -44,6 +44,8 @@ mod host_steps;
 mod draw_steps;
 mod erase_steps;
 mod vertex_steps;
+mod plane_steps;
+mod explode_steps;
 mod file_view;
 pub(crate) mod drawing;
 pub mod occurrences;
