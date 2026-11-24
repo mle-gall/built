@@ -17,6 +17,7 @@ pub mod saved_view;
 pub mod section_cut;
 pub mod section_fill;
 pub mod selection;
+pub mod tag_edits;
 pub mod tag_folders;
 pub mod texture_maths;
 pub mod units_format;
@@ -35,5 +36,6 @@ pub fn register_model(m: &Bound<'_, PyModule>) -> PyResult<()> {
     saved_view::register(m)?;
     hlr_view::register(m)?;
     texture_maths::register(m)?;
+    tag_edits::register(m)?;
     Ok(())
 }

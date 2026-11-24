@@ -368,51 +368,9 @@ class _LayerMethods:
         self.printable = bool(printable)
 
     def to_dict(self) -> dict:
-        entry: dict = {"name": self.name, "uid": self.uid}
-        if self.key != self.name:
-            entry["key"] = self.key
-        if not self.visible:
-            entry["visible"] = False
-        if self.locked:
-            entry["locked"] = True
-        if self.color is not None:
-            entry["color"] = [round(float(c), 4) for c in self.color[:3]]
-        if self.folder:
-            entry["folder"] = self.folder
-        if self.linetype != "continuous":
-            entry["linetype"] = self.linetype
-        if self.lineweight is not None:
-            entry["lineweight"] = round(float(self.lineweight), 3)
-        if self.cut_weight is not None:
-            entry["cut_weight"] = round(float(self.cut_weight), 3)
-        if self.hatch:
-            entry["hatch"] = self.hatch
-        if self.hatch_angle:
-            entry["hatch_angle"] = round(self.hatch_angle, 3)
-        if abs(self.hatch_scale - 1.0) > 1e-9:
-            entry["hatch_scale"] = round(self.hatch_scale, 4)
-        if self.hatch_offset is not None:
-            entry["hatch_offset"] = [round(v, 2) for v in self.hatch_offset]
-        if self.hatch_on_paper is not None:
-            entry["hatch_on_paper"] = self.hatch_on_paper
-        if self.brick is not None:
-            entry["brick"] = [round(v, 2) for v in self.brick]
-        if self.hatch_cross:
-            entry["hatch_cross"] = True
-        if self.joints is not None:
-            entry["joints"] = self.joints
-        if self.mortar:
-            entry["mortar"] = True
-        for key in ("hatch_ground", "hatch_color"):
-            value = getattr(self, key)
-            if value is not None:
-                entry[key] = (value if value == GROUND_LAYER
-                              else [round(float(c), 4) for c in value])
-        if self.opacity < 1.0:
-            entry["opacity"] = round(float(self.opacity), 3)
-        if not self.printable:
-            entry["printable"] = False
-        return entry
+        """The tag as a file stores it: defaults left out (the document's
+        own archive, ``file_styles.rs``)."""
+        return _rs.igz_archive_layer(self)
 
     def has_style(self) -> bool:
         """Whether anything beyond the name and visibility is set — what
@@ -431,47 +389,8 @@ class _LayerMethods:
 
     @classmethod
     def from_dict(cls, raw: dict) -> "Layer":
-        color = raw.get("color")
-        if not (isinstance(color, (list, tuple)) and len(color) >= 3):
-            color = None
-        else:
-            try:
-                color = tuple(min(1.0, max(0.0, float(c))) for c in color[:3])
-            except (TypeError, ValueError):
-                color = None
-        folder = raw.get("folder")
-        weight = _pen_mm(raw.get("lineweight"))
-        cut_weight = _pen_mm(raw.get("cut_weight"))
-        try:
-            opacity = float(raw.get("opacity", 1.0))
-        except (TypeError, ValueError):
-            opacity = 1.0
-        name = raw.get("name", DEFAULT_LAYER)
-        key = raw.get("key")
-        return cls(name, uid=raw.get("uid"),
-                   key=key if isinstance(key, str) and key else None,
-                   visible=raw.get("visible", True),
-                   locked=raw.get("locked", False),
-                   color=color,
-                   folder=folder if isinstance(folder, str) else None,
-                   linetype=raw.get("linetype", "continuous"),
-                   lineweight=weight, opacity=opacity,
-                   printable=raw.get("printable", True) is not False,
-                   cut_weight=cut_weight,
-                   hatch=raw.get("hatch") if isinstance(raw.get("hatch"), str)
-                   else None,
-                   hatch_ground=raw.get("hatch_ground"),
-                   hatch_color=raw.get("hatch_color"),
-                   hatch_angle=raw.get("hatch_angle", 0.0),
-                   hatch_scale=raw.get("hatch_scale", 1.0),
-                   hatch_offset=raw.get("hatch_offset"),
-                   hatch_on_paper=(raw.get("hatch_on_paper")
-                                   if isinstance(raw.get("hatch_on_paper"),
-                                                 bool) else None),
-                   brick=raw.get("brick"),
-                   hatch_cross=raw.get("hatch_cross") is True,
-                   joints=raw.get("joints"),
-                   mortar=raw.get("mortar") is True)
+        """A tag from its stored form, read defensively (``file_styles.rs``)."""
+        return _rs.igz_load_layer(raw, cls)
 
 
 
@@ -569,15 +488,6 @@ def light_layer_color(ly) -> tuple:
     """The layer's colour three quarters of the way to white — a ground a
     hatch still reads on."""
     return tuple(c + (1.0 - c) * 0.75 for c in layer_color(ly))
-
-
-def _pen_mm(raw) -> float | None:
-    """A stored pen width in millimetres, kept to 0.05–5; ``None`` when
-    unset or unreadable."""
-    try:
-        return min(5.0, max(0.05, float(raw))) if raw is not None else None
-    except (TypeError, ValueError):
-        return None
 
 
 def layer_color(layer) -> tuple:
@@ -885,130 +795,6 @@ def hide_unprinted(scene) -> None:
         ly.visible = False
 
 
-def active_layer(scene) -> str:
-    """Where new objects go: the document's active layer while it exists,
-    is visible and is not locked — anything else falls back to the default
-    layer, so nothing new is ever drawn straight into hiding."""
-    name = getattr(scene, "active_layer", None)
-    if not name or name == DEFAULT_LAYER:
-        return DEFAULT_LAYER
-    ly = scene.layer(name)
-    if ly is None or not effective_visible(scene, ly) or ly.locked:
-        return DEFAULT_LAYER
-    return ly.key
-
-
-def folders_of(scene) -> list[str]:
-    """The folder names of the Layers panel, in order: the ones the document
-    lists (empty folders included), then any a layer names that is missing
-    from that list."""
-    out = [f for f in getattr(scene, "layer_folders", None) or ()
-           if isinstance(f, str) and f]
-    seen = set(out)
-    for ly in getattr(scene, "layers", None) or ():
-        if ly.folder and ly.folder not in seen:
-            seen.add(ly.folder)
-            out.append(ly.folder)
-    # Importers may still assign folder names directly.
-    uids = getattr(scene, "layer_folder_uids", {})
-    scene.layer_folder_uids = {f: uids.get(f) or new_uid() for f in out}
-    return out
-
-
-def folder_visible(scene, key, *, ancestors=True) -> bool:
-    """Folder flags are independent of tags; tolerate malformed cycles."""
-    flags = getattr(scene, "folder_visibility", {})
-    parents = getattr(scene, "folder_parents", {})
-    seen = set()
-    while key and key not in seen:
-        seen.add(key)
-        if not flags.get(key, True):
-            return False
-        key = parents.get(key) if ancestors else None
-    return True
-
-
-def effective_visible(scene, layer) -> bool:
-    return bool(layer.visible and folder_visible(scene, layer.folder))
-
-
-def folder_label(scene, key) -> str:
-    """What a folder shows: its label, else its key (a folder made before
-    keys existed is named by its key)."""
-    if not key:
-        return ""
-    return (getattr(scene, "layer_folder_names", None) or {}).get(key) or key
-
-
-def layer_label(scene, ref) -> str:
-    """What the tag ``ref`` (a key, or a label) shows."""
-    ly = scene.layer(ref) if ref else None
-    return ly.name if ly is not None else (ref or DEFAULT_LAYER)
-
-
-def path_label(scene, ref, sep: str = "/") -> str:
-    """The tag's label with its folders' in front — «Observation Deck/Steel/
-    Beams»: unique where a bare label is not, for what has to tell tags
-    apart by text (a DXF layer table, an IFC presentation layer, a sheet
-    legend)."""
-    ly = scene.layer(ref) if ref else None
-    if ly is None:
-        return ref or DEFAULT_LAYER
-    parts = [ly.name]
-    f = ly.folder if ly.key != DEFAULT_LAYER else None
-    seen = set()
-    while f and f not in seen:
-        seen.add(f)
-        parts.append(folder_label(scene, f))
-        f = folder_parent(scene, f)
-    return sep.join(reversed(parts))
-
-
-def export_labels(scene, sep: str = "/") -> dict:
-    """``{tag key: folder path}`` — the names a tag goes out under where a
-    format needs them unique and readable (a DXF layer table, IFC layers):
-    a key is stable but may be an old long name or a uid."""
-    return {ly.key: path_label(scene, ly.key, sep)
-            for ly in getattr(scene, "layers", ())}
-
-
-def unique_name(taken, base: str) -> str:
-    """``base 1``, ``base 2``… — the first one not in ``taken``."""
-    taken = set(taken)
-    n = 1
-    while f"{base} {n}" in taken:
-        n += 1
-    return f"{base} {n}"
-
-
-def _parent_in(parents: dict, known: set, name: str) -> str | None:
-    """:func:`folder_parent` against an already-read folder set."""
-    return _rs.tag_folder_parent(parents or {}, list(known), name)
-
-
-def folder_parent(scene, name: str, *, known=None) -> str | None:
-    """The folder ``name`` sits in, or ``None`` at the top. A parent that
-    no longer exists, or one that would make a loop, reads as the top."""
-    return _parent_in(getattr(scene, "folder_parents", None) or {},
-                      set(folders_of(scene)) if known is None else known, name)
-
-
-def subfolders(scene, name: str, deep: bool = False) -> list[str]:
-    """The folders directly in ``name`` — or, ``deep``, at any depth
-    (``rust/ingetrazo_core/src/tag_folders.rs``). The folder list is read
-    once: reading it for every folder and level made opening the ride
-    (hundreds of linked tag folders) take 15 s more."""
-    return _rs.tag_subfolders(folders_of(scene),
-                              getattr(scene, "folder_parents", None) or {},
-                              name, bool(deep))
-
-
-def layers_in_folder(scene, name: str) -> list[str]:
-    """The keys of every layer in folder ``name`` or in a folder inside it."""
-    folders = {name, *subfolders(scene, name, deep=True)}
-    return [ly.key for ly in scene.layers if ly.folder in folders]
-
-
 def ordered_names(scene) -> list[str]:
     """The layer names in the order the Layers tab lists them with «Sort by
     order created», folders unfolded: the default layer first, then each
@@ -1024,119 +810,6 @@ def ordered_names(scene) -> list[str]:
                                 folders_of(scene),
                                 getattr(scene, "folder_parents", None) or {},
                                 DEFAULT_LAYER)
-
-
-def add_folder(scene, base: str, parent: str | None = None) -> str:
-    """A new, empty folder at the end of the list — inside ``parent``
-    when given; returns its name."""
-    name = unique_name(folders_of(scene), base)
-    scene.layer_folders = folders_of(scene) + [name]
-    if parent and parent in folders_of(scene):
-        scene.folder_parents = {**(getattr(scene, "folder_parents", None)
-                                   or {}), name: parent}
-    folders_of(scene)
-    return name
-
-
-def move_folder(scene, name: str, parent: str | None) -> bool:
-    """Put the folder ``name`` inside ``parent`` (``None``: at the top).
-    Refused into itself or into a folder inside it."""
-    if name not in folders_of(scene):
-        return False
-    if parent is not None and (parent == name or parent not in folders_of(scene)
-                               or parent in subfolders(scene, name, deep=True)):
-        return False
-    parents = dict(getattr(scene, "folder_parents", None) or {})
-    if parent:
-        parents[name] = parent
-    else:
-        parents.pop(name, None)
-    scene.folder_parents = parents
-    return True
-
-
-def rename_folder(scene, old: str, new: str) -> bool:
-    """Give the folder ``old`` (its key) the label ``new``. Only the label
-    changes: the layers in it and its subfolders still name it by its key,
-    and two folders may share a label («Steel» in every building part)."""
-    folders = folders_of(scene)
-    if old not in folders or not new or not new.strip():
-        return False
-    names = dict(getattr(scene, "layer_folder_names", None) or {})
-    if new == old:
-        names.pop(old, None)
-    else:
-        names[old] = new
-    scene.layer_folder_names = names
-    return True
-
-
-def remove_folder(scene, name: str) -> None:
-    """Delete a folder; what it held — layers and folders — moves up into
-    the folder it sat in (or to the top)."""
-    up = folder_parent(scene, name)
-    for ly in scene.layers:
-        if ly.folder == name:
-            ly.folder = up
-    parents = dict(getattr(scene, "folder_parents", None) or {})
-    for f, p in list(parents.items()):
-        if p == name:
-            if up:
-                parents[f] = up
-            else:
-                del parents[f]
-    parents.pop(name, None)
-    scene.folder_parents = parents
-    scene.layer_folders = [f for f in folders_of(scene) if f != name]
-    scene.layer_folder_uids.pop(name, None)
-    scene.folder_visibility.pop(name, None)
-    labels = getattr(scene, "layer_folder_names", None)
-    if isinstance(labels, dict):
-        labels.pop(name, None)
-
-
-def move_to_folder(scene, names, folder: str | None) -> None:
-    """File the layers ``names`` under ``folder`` (``None``: out of any).
-    The default layer stays out of folders: it is not a layer anyone
-    files, it is where the unsorted goes."""
-    if folder and folder not in folders_of(scene):
-        scene.layer_folders = folders_of(scene) + [folder]
-    for name in names:
-        ly = scene.layer(name)
-        if ly is not None and ly.key != DEFAULT_LAYER:
-            ly.folder = folder or None
-    folders_of(scene)
-
-
-def set_visible(scene, names, on: bool) -> bool:
-    """Show or hide the layers ``names``. Returns True when that hid the
-    active layer, which then gives way to the default layer (new objects
-    must never be drawn straight into hiding)."""
-    for name in names:
-        ly = scene.layer(name)
-        if ly is not None:
-            ly.visible = bool(on)
-    return _release_active(scene)
-
-
-def set_locked(scene, names, on: bool) -> bool:
-    """Lock or unlock the layers ``names``; like :func:`set_visible`,
-    True when that locked the active layer."""
-    for name in names:
-        ly = scene.layer(name)
-        if ly is not None:
-            ly.locked = bool(on)
-    return _release_active(scene)
-
-
-def isolate(scene, names) -> bool:
-    """Show only the layers ``names`` (and the default layer: it holds the
-    insides of every object, so hiding it would empty the visible ones)."""
-    keep = {ly.key for ly in (scene.layer(n) for n in names) if ly is not None}
-    keep.add(DEFAULT_LAYER)
-    for ly in scene.layers:
-        ly.visible = ly.key in keep
-    return _release_active(scene)
 
 
 def taggable(entities) -> list:
@@ -1162,342 +835,51 @@ def selection_layers(scene) -> set[str]:
     return {layer_of(e) for e in taggable(getattr(scene, "selection", None))}
 
 
-def is_isolated(scene, name: str) -> bool:
-    """Whether ``name`` is the one layer showing — besides the default
-    layer, which :func:`isolate` always keeps on."""
-    ly = scene.layer(name)
-    if ly is None or not ly.visible or ly.key == DEFAULT_LAYER:
-        return False
-    others = [o for o in scene.layers
-              if o.key not in (ly.key, DEFAULT_LAYER)]
-    return bool(others) and not any(o.visible for o in others)
-
-
-def set_active(scene, name: str | None) -> None:
-    """Make ``name`` the layer new objects go to — shown and unlocked, as a
-    layer you are about to draw on has to be. ``None`` or the default
-    layer: back to the default."""
-    ly = scene.layer(name) if name else None
-    if ly is None or ly.key == DEFAULT_LAYER:
-        scene.active_layer = None
-        return
-    ly.visible = True
-    ly.locked = False
-    scene.active_layer = ly.key
-
-
-def layer_state(scene) -> dict:
-    """The layers' display state — visibility, lock, the active layer — to
-    come back to (:func:`apply_layer_state`)."""
-    return {"folders": dict(scene.folder_visibility), "layers": {ly.key: (ly.visible, ly.locked)
-                       for ly in scene.layers},
-            "active": getattr(scene, "active_layer", None)}
-
-
-def apply_layer_state(scene, state: dict) -> None:
-    """Put back a :func:`layer_state`. Layers made since keep theirs, and a
-    layer deleted since is simply not there to restore."""
-    for ly in scene.layers:
-        saved = state.get("layers", {}).get(ly.key)
-        if saved is not None:
-            ly.visible, ly.locked = saved
-    scene.folder_visibility = dict(state.get("folders", {}))
-    active = state.get("active")
-    scene.active_layer = active if active and scene.layer(active) else None
-    _release_active(scene)
-
-
-def hide_in_scenes(scene, names, hidden: bool = True) -> int:
-    """Hide (or show) the layers ``names`` in every saved scene — for a
-    layer made after the plans were set up, which would otherwise turn up in
-    all of them. Returns how many scenes changed."""
-    names = [scene.layer(n).key for n in names if scene.layer(n) is not None]
-    changed = 0
-    for view in getattr(scene, "saved_views", None) or ():
-        before = list(getattr(view, "hidden_layers", None) or [])
-        if hidden:
-            after = before + [n for n in names if n not in before]
-        else:
-            after = [n for n in before if n not in names]
-        if after != before:
-            view.hidden_layers = after
-            changed += 1
-    return changed
-
-
 #: The key a layer template file is recognised by.
 TEMPLATE_KEY = "ingetrazo_layers"
 
 
-def template_of(scene) -> dict:
-    """The document's layers as a template: names, colours, line types,
-    weights, opacity, folders and visibility — no geometry. Saved as JSON
-    and loaded into another document (:func:`apply_template`), it is an
-    office standard carried from one project to the next."""
-    out = {TEMPLATE_KEY: 1,
-           "folders": folders_of(scene),
-           "layers": [ly.to_dict() for ly in scene.layers]}
-    out["folder_uids"] = dict(scene.layer_folder_uids)
-    labels = dict(getattr(scene, "layer_folder_names", None) or {})
-    if labels:
-        out["folder_names"] = labels
-    parents = {f: folder_parent(scene, f) for f in folders_of(scene)
-               if folder_parent(scene, f)}
-    if parents:
-        out["folder_parents"] = parents
-    used = {ly.linetype[len(CUSTOM_LINETYPE):] for ly in scene.layers
-            if ly.linetype.startswith(CUSTOM_LINETYPE)}
-    own = {n: e for n, e in (getattr(scene, "line_types", None) or {}).items()
-           if n in used}
-    if own:
-        out["line_types"] = own
-    if getattr(scene, "linetype_colors", None):
-        out["linetype_colors"] = {k: list(v)
-                                  for k, v in scene.linetype_colors.items()}
-    if getattr(scene, "bricks", None):
-        out["bricks"] = {k: [round(float(v), 2) for v in size]
-                         for k, size in scene.bricks.items()}
-    return out
-
-
-def matched_template(scene, data):
-    """Resolve identities to local names; a name collision keeps the local uid."""
-    import copy
-    data = copy.deepcopy(data)
-    folders_of(scene)
-    folder_names = {}
-    incoming = data.get("folder_uids") or {}
-    for name in data.get("folders") or ():
-        if not isinstance(name, str) or not name:
-            continue
-        uid = incoming.get(name)
-        folder_names[name] = next((n for n, u in scene.layer_folder_uids.items()
-                                   if uid and u == uid), name)
-    data["folders"] = [folder_names[n] for n in folder_names]
-    data["folder_uids"] = {folder_names[n]: u for n, u in incoming.items()
-                           if n in folder_names}
-    data["folder_parents"] = {folder_names.get(n, n): folder_names.get(p, p)
-                              for n, p in (data.get("folder_parents") or {}).items()}
-    for raw in data.get("layers", ()):
-        if not isinstance(raw, dict):
-            continue
-        match = next((ly for ly in scene.layers
-                      if raw.get("uid") and ly.uid == raw["uid"]), None)
-        if match is not None:
-            raw["name"] = match.name
-            raw["key"] = match.key
-        if raw.get("folder"):
-            raw["folder"] = folder_names.get(raw["folder"], raw["folder"])
-    return data
-
-
-def template_name_map(scene, data):
-    resolved = matched_template(scene, data)
-    def key(raw):
-        return raw.get("key") or raw.get("name")
-    return {key(a): key(b) for a, b in zip(data.get("layers", ()),
-                                           resolved.get("layers", ()))
-            if isinstance(a, dict) and isinstance(b, dict) and key(a)}
-
-
-def _folder_identities(scene, data, previous):
-    folders_of(scene)
-    for name, uid in (data.get("folder_uids") or {}).items():
-        if name not in previous and name in scene.layer_folder_uids and uid:
-            scene.layer_folder_uids[name] = uid
-
-
-def _folder_labels(scene, data, previous):
-    """A template's folder labels, for the folders it brought in."""
-    incoming = data.get("folder_names") or {}
-    if not isinstance(incoming, dict):
-        return
-    names = dict(getattr(scene, "layer_folder_names", None) or {})
-    for key, label in incoming.items():
-        if key not in previous and key in folders_of(scene) \
-                and isinstance(label, str) and label:
-            names[key] = label
-    scene.layer_folder_names = names
-
-
-def apply_template(scene, data) -> tuple[int, int]:
-    """Bring a template's layers into ``scene``: the missing ones are added,
-    the ones with the same name take the template's look (colour, line,
-    opacity, folder) and keep their visibility, and nothing is removed.
-    Returns ``(added, updated)``; raises ValueError on a file that is not a
-    layer template."""
-    if not isinstance(data, dict) or TEMPLATE_KEY not in data \
-            or not isinstance(data.get("layers"), list):
-        raise ValueError("not a layer template")
-    data = matched_template(scene, data)
-    previous = set(folders_of(scene))
-    for f in data.get("folders") or ():
-        if isinstance(f, str) and f and f not in folders_of(scene):
-            scene.layer_folders = folders_of(scene) + [f]
-    raw_parents = data.get("folder_parents")
-    if isinstance(raw_parents, dict):
-        for f, p in raw_parents.items():
-            if isinstance(f, str) and isinstance(p, str):
-                move_folder(scene, f, p)
-    _folder_identities(scene, data, previous)
-    _folder_labels(scene, data, previous)
-    load_line_types(scene, data.get("line_types"))
-    load_linetype_colors(scene, data.get("linetype_colors"))
-    load_bricks(scene, data.get("bricks"))
-    added = updated = 0
-    for raw in data["layers"]:
-        if not isinstance(raw, dict) or not isinstance(raw.get("name"), str) \
-                or not raw["name"]:
-            continue
-        new = Layer.from_dict(raw)
-        ly = scene.layer(new.key)
-        if ly is None:
-            if new.key == DEFAULT_LAYER:
-                continue
-            scene.layers.append(new)
-            added += 1
-            continue
-        ly.color = new.color
-        ly.linetype = new.linetype
-        ly.lineweight = new.lineweight
-        ly.cut_weight = new.cut_weight
-        ly.hatch = new.hatch
-        ly.hatch_ground = new.hatch_ground
-        ly.hatch_color = new.hatch_color
-        ly.hatch_angle = new.hatch_angle
-        ly.hatch_scale = new.hatch_scale
-        ly.hatch_offset = new.hatch_offset
-        ly.hatch_on_paper = new.hatch_on_paper
-        ly.brick = new.brick
-        ly.hatch_cross = new.hatch_cross
-        ly.joints = new.joints
-        ly.mortar = new.mortar
-        ly.opacity = new.opacity
-        if ly.key != DEFAULT_LAYER:
-            ly.folder = new.folder
-        updated += 1
-    _release_active(scene)
-    return added, updated
-
-
-def template_for(scene, names) -> dict:
-    """:func:`template_of` narrowed to the tags called ``names`` and the
-    folders they sit in (their parents too): what a copy carries so the
-    document it is pasted into can give the pasted geometry its tags."""
-    wanted = {scene.layer(n).key for n in names
-              if n and n != DEFAULT_LAYER and scene.layer(n) is not None}
-    layers = [ly for ly in scene.layers if ly.key in wanted]
-    folders: list = []
-    for ly in layers:
-        f = ly.folder
-        while f and f not in folders:
-            folders.append(f)
-            f = folder_parent(scene, f)
-    out = {TEMPLATE_KEY: 1,
-           "folders": [f for f in folders_of(scene) if f in folders],
-           "layers": [ly.to_dict() for ly in layers]}
-    out["folder_uids"] = {f: scene.layer_folder_uids[f] for f in out["folders"]}
-    labels = getattr(scene, "layer_folder_names", None) or {}
-    if any(f in labels for f in out["folders"]):
-        out["folder_names"] = {f: labels[f] for f in out["folders"] if f in labels}
-    parents = {f: folder_parent(scene, f) for f in out["folders"]
-               if folder_parent(scene, f)}
-    if parents:
-        out["folder_parents"] = parents
-    return out
-
-
-def add_missing(scene, data) -> tuple[list, list]:
-    """Bring a template's tags into ``scene`` without touching what is
-    there: only tags (and folders) the document lacks are added, with their
-    colour, line and folder, visible and unlocked — pasted geometry must
-    show. A tag the document already has keeps its own look, visibility and
-    folder. Returns ``(tag names added, folders added)`` for
-    :func:`remove_added`."""
-    if not isinstance(data, dict) or not isinstance(data.get("layers"), list):
-        return [], []
-    data = matched_template(scene, data)
-    have_folders = set(folders_of(scene))
-    new_folders = [f for f in data.get("folders") or ()
-                   if isinstance(f, str) and f and f not in have_folders]
-    if new_folders:
-        scene.layer_folders = folders_of(scene) + new_folders
-    raw_parents = data.get("folder_parents")
-    if isinstance(raw_parents, dict):
-        for f in new_folders:
-            p = raw_parents.get(f)
-            if isinstance(p, str) and p:
-                move_folder(scene, f, p)
-    _folder_identities(scene, data, have_folders)
-    added: list = []
-    for raw in data["layers"]:
-        if not isinstance(raw, dict) or not isinstance(raw.get("name"), str) \
-                or not raw["name"]:
-            continue
-        key = raw.get("key") or raw["name"]
-        if key == DEFAULT_LAYER or scene.layer_by_key(key) is not None:
-            continue
-        new = Layer.from_dict(raw)
-        new.visible = True
-        new.locked = False
-        scene.layers.append(new)
-        added.append(new.key)
-    _folder_labels(scene, data, have_folders)
-    return added, new_folders
-
-
-def remove_added(scene, layers, folders) -> None:
-    """Undo :func:`add_missing`: drop exactly the tags and folders it
-    added."""
-    # Commands remember uids so a rename between paste and undo is harmless.
-    gone = {next((ly.key for ly in scene.layers if ly.uid == token), token)
-            for token in layers}
-    scene.layers[:] = [ly for ly in scene.layers if ly.key not in gone]
-    folders_of(scene)
-    drop = {next((name for name, uid in scene.layer_folder_uids.items()
-                  if uid == token), token) for token in folders}
-    if drop:
-        scene.layer_folders = [f for f in folders_of(scene) if f not in drop]
-        parents = getattr(scene, "folder_parents", None)
-        if isinstance(parents, dict):
-            for f in drop:
-                parents.pop(f, None)
-        folders_of(scene)
-    _release_active(scene)
-def load_line_types(scene, raw) -> int:
-    """Bring line types stored as ``{name: {"label", "pattern"}}`` (a file,
-    a template) into the document, read defensively; returns how many."""
-    if not isinstance(raw, dict):
-        return 0
-    own = dict(getattr(scene, "line_types", None) or {})
-    n = 0
-    for name, entry in list(raw.items())[:500]:
-        if not (isinstance(name, str) and name and isinstance(entry, dict)):
-            continue
-        pattern = clean_pattern(entry.get("pattern"))
-        if pattern is None:
-            continue
-        label = entry.get("label")
-        own[name[:64]] = {"label": label[:120] if isinstance(label, str)
-                          else name[:64], "pattern": pattern}
-        own[name[:64]].update(clean_line_text(entry, pattern) or {})
-        pieces = clean_pattern(entry.get("pieces"))
-        if pieces is not None:
-            own[name[:64]]["pieces"] = pieces
-        colour = clean_line_colour(entry.get("color"))
-        if colour is not None:
-            own[name[:64]]["color"] = colour
-        n += 1
-    scene.line_types = own
-    return n
-
-
-def _release_active(scene) -> bool:
-    name = getattr(scene, "active_layer", None)
-    if name and active_layer(scene) == DEFAULT_LAYER:
-        scene.active_layer = None
-        return True
-    return False
+# ---- Folders, display state, templates: Rust ---------------------------------
+# ``rust/ingetrazo_core/src/model/tag_edits.rs``, step for step on the scene's
+# root tables (``layer_folders``, ``folder_parents``, ``layer_folder_names``,
+# ``layer_folder_uids``, ``folder_visibility``, ``active_layer``) and its tags.
+#
+# Folders: ``folders_of`` (the document's list, then any a tag names; each
+# given a uid), ``folder_parent`` (a parent that is gone or makes a loop reads
+# as the top), ``subfolders``, ``layers_in_folder``, ``folder_visible`` (its
+# own switch and its parents'), ``effective_visible``; the labels
+# ``folder_label``, ``layer_label``, ``path_label`` («Observation Deck/Steel/
+# Beams», for what has to tell tags apart by text) and ``export_labels``;
+# ``unique_name``. Edits: ``add_folder``, ``move_folder`` (refused into
+# itself or a folder inside it), ``rename_folder`` (only the label: tags and
+# subfolders name a folder by its key), ``remove_folder`` (what it held
+# moves up), ``move_to_folder`` (the default tag stays out of folders).
+#
+# Display state: ``active_layer`` (where new objects go: the active tag while
+# it shows and is unlocked, else the default one), ``set_visible``,
+# ``set_locked``, ``isolate`` (the default tag stays on), ``is_isolated``,
+# ``set_active``, ``layer_state`` / ``apply_layer_state``, ``hide_in_scenes``
+# (a tag made after the plans were set up, kept out of them).
+#
+# Templates, an office standard carried between projects: ``template_of``,
+# ``template_for`` (the tags a copy carries), ``matched_template`` (identities
+# resolved to local names), ``template_name_map``, ``apply_template`` (the
+# missing tags added, the others restyled; ``(added, updated)``),
+# ``add_missing`` / ``remove_added`` (a paste's tags and their undo), and
+# ``load_line_types``.
+_te = _rs.tag_edits
+for _name in ("folders_of", "folder_parent", "folder_visible", "effective_visible",
+              "folder_label", "layer_label", "path_label", "export_labels", "unique_name",
+              "layers_in_folder", "add_folder", "move_folder", "rename_folder",
+              "remove_folder", "move_to_folder", "active_layer", "set_visible", "set_locked",
+              "isolate", "is_isolated", "set_active", "layer_state", "apply_layer_state",
+              "hide_in_scenes", "template_of", "matched_template", "template_name_map",
+              "apply_template", "template_for", "add_missing", "remove_added",
+              "load_line_types"):
+    globals()[_name] = getattr(_te, _name)
+del _name
+subfolders = _te.tag_scene_subfolders
+_release_active = _te.tag_release_active
 
 
 def object_ids(scene, *, include_groups=True) -> set:
