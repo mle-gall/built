@@ -246,6 +246,15 @@ impl ExtensionMenus {
         }
         Ok(())
     }
+    fn tips(&self) -> HashMap<String, String> {
+        self.state
+            .borrow()
+            .nodes
+            .iter()
+            .filter(|n| !n.removed && !n.tip.is_empty())
+            .map(|n| (n.id.clone(), n.tip.clone()))
+            .collect()
+    }
     fn commands(&self) -> Vec<(String, String, String, String)> {
         self.state
             .borrow()
@@ -420,13 +429,27 @@ impl ExtensionMenu {
         s.revision += 1;
         Ok(())
     }
-    fn removeAction(&self, action: &ExtensionAction) -> PyResult<()> {
-        if self.state.ptr_eq(&action.0.state) {
-            action.0.update(|n| {
-                if n.parent == self.parent && n.owner == self.owner {
-                    n.removed = true;
-                }
-            })?;
+    fn removeAction(&self, action: &Bound<'_, PyAny>) -> PyResult<()> {
+        let tree = self
+            .state
+            .upgrade()
+            .ok_or_else(|| PyValueError::new_err("extension window closed"))?;
+        let native = action.extract::<PyRef<ExtensionAction>>().ok();
+        let mut s = tree.borrow_mut();
+        let index = s.nodes.iter().enumerate().position(|(i, n)| {
+            n.owner == self.owner
+                && n.parent == self.parent
+                && !n.removed
+                && (native
+                    .as_ref()
+                    .is_some_and(|a| a.0.index == i && self.state.ptr_eq(&a.0.state))
+                    || n.legacy
+                        .as_ref()
+                        .is_some_and(|a| a.bind(action.py()).is(action)))
+        });
+        if let Some(i) = index {
+            s.nodes[i].removed = true;
+            s.revision += 1;
         }
         Ok(())
     }
@@ -493,7 +516,11 @@ impl ExtensionAction {
     fn statusTip(&self) -> PyResult<String> {
         self.0.read(|n| n.tip.clone())
     }
-    fn setShortcut(&self, key: String) -> PyResult<()> {
+    fn setShortcut(&self, key: &Bound<'_, PyAny>) -> PyResult<()> {
+        let key = match key.extract::<String>() {
+            Ok(s) => s,
+            Err(_) => key.call_method0("toString")?.extract()?,
+        };
         self.0.update(|n| n.shortcut = key)
     }
     fn trigger(&self, py: Python<'_>) -> PyResult<()> {

@@ -22,7 +22,7 @@ class ShellAction:
         return self.text()
 
     def statusTip(self):
-        return ""
+        return self.property("statusTip") or ""
 
     def menu(self):
         return None

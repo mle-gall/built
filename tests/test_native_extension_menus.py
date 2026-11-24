@@ -50,6 +50,10 @@ def test_raw_plugin_action_tracks_live_changes():
     raw.setText("Highlights")
     raw.setEnabled(False)
     assert tree.rows()[0][2:] == ("Highlights", "", 1, False)
+    parent = tree.root("extra")
+    parent.addAction(raw)
+    parent.removeAction(raw)
+    assert len(tree.rows()) == 1
     shiboken6.delete(raw)
     assert not tree.rows()
 
@@ -64,7 +68,7 @@ def test_window_registry_isolation_and_setup_rollback(tmp_path, monkeypatch):
         assert app.scene is app.window.viewport.scene
         flag = app.add_menu("Tools").addAction("Marks", events.append)
         flag.setCheckable(True)
-        app.add_menu_action("Other", lambda: None, "Space")
+        app.add_menu_action("Other", lambda: None, "Space", tip="Run another command")
         app.window.fixture_flag = flag
 
     def broken(app):
@@ -84,7 +88,8 @@ def test_window_registry_isolation_and_setup_rollback(tmp_path, monkeypatch):
         assert [row[2] for row in menus.rows()] == ["Marks", "Other"]
         command = menus.rows()[0][0]
         action = first._registry_actions["menu:" + command]
-        assert first._registry_actions["menu:" + menus.rows()[1][0]].portable_keys() == []
+        other = first._registry_actions["menu:" + menus.rows()[1][0]]
+        assert other.portable_keys() == [] and other.statusTip() == "Run another command"
         action.setShortcuts(["Ctrl+Alt+J"])
         assert menus.rows()[0][3] == "Ctrl+Alt+J"
         assert menus.commands()[0][3] == ""

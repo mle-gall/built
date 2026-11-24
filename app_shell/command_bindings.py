@@ -17,6 +17,7 @@ def refresh(win):
     enabled = {}
     if menus is not None:
         menu.extend(menus.commands())
+        tips = menus.tips()
         enabled = {row[0]: row[-1] for row in menus.rows()}
     actions = win._registry_actions
     old_keys = set(actions)
@@ -46,6 +47,7 @@ def refresh(win):
         act.setProperty("nativeMenuId", menu_id)
         if menu_id in enabled:
             act.setText(label)
+            act.setProperty("statusTip", tips.get(menu_id, ""))
             act.setEnabled(enabled[menu_id])
         elif menu_id in native_items:
             act.setEnabled(native_items[menu_id].isEnabled())
