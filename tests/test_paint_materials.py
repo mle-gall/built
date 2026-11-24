@@ -182,7 +182,7 @@ def test_restamp_updates_registry_and_every_face():
 def test_restamp_reaches_groups_painted_whole():
     """Issue #155 (@fafecm): a colour painted on a loose face and on a group
     as a whole; editing the colour changed the face and left the group."""
-    from core.history import SetGroupMaterialCommand
+    from core.history import NativeCommand
     scene = Scene()
     history = History(scene)
     old = Material("Azul", color=(0.1, 0.6, 0.9))
@@ -198,9 +198,9 @@ def test_restamp_reaches_groups_painted_whole():
     other = Group(Mesh(), name="Otro")           # a different paint
     _quad(other.mesh, z=7.0)
     scene.groups.append(other)
-    history.execute(SetGroupMaterialCommand(box, old.face_attrs()))
-    history.execute(SetGroupMaterialCommand(other, {"color": (0.2, 0.2, 0.2)}))
-    history.execute(SetGroupMaterialCommand(inner, old.face_attrs()))
+    history.execute(NativeCommand.paint([box], old.face_attrs()))
+    history.execute(NativeCommand.paint([other], {"color": (0.2, 0.2, 0.2)}))
+    history.execute(NativeCommand.paint([inner], old.face_attrs()))
 
     history.execute(RestampMaterialCommand(
         "Azul", Material("Azul", color=(0.6, 1.0, 0.4))))

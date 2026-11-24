@@ -22,10 +22,10 @@ from core.history import (AddKeptComponentsCommand,  # noqa: E402
                           ExplodeViewCommand,
                           FlipGroupsCommand, HideCommand, History,
                           InsertGroupCommand, KeepComponentCommand,
-                          LockCommand, MakeNestedGroupCommand, MoveGroupCommand,
-                          PurgeUnusedCommand, RenameGroupCommand,
+                          MakeNestedGroupCommand, MoveGroupCommand,
+                          PurgeUnusedCommand, NativeCommand,
                           ReparentGroupsCommand, RotateGroupCommand,
-                          ScaleGroupCommand, SetGroupMaterialCommand,
+                          ScaleGroupCommand,
                           SetLayerVisibilityCommand, SetMaterialFinishCommand,
                           SetPluginDataCommand, SetRecordCommand,
                           SetStructureNodeCommand, TagGroupsCommand)
@@ -241,7 +241,7 @@ def slice_two(scene, h):
         out.append(dump(scene))
     # An in-place edit of a record, outside any command, then a step.
     parts[0].ifc["name"] = "Edited in place"
-    h.execute(RenameGroupCommand(parts[0], "After the edit"))
+    h.execute(NativeCommand.rename(parts[0], "After the edit"))
     out.append(dump(scene))
     h.undo()
     out.append(dump(scene))
@@ -748,11 +748,11 @@ def main(work: Path):
     part = a.children[1]
     extra = Group(Mesh(), name="Inserted", uid="inserted")
     cmds = [
-        RenameGroupCommand(part, "Renamed part"),
-        LockCommand([scene.groups[1]], True),
+        NativeCommand.rename(part, "Renamed part"),
+        NativeCommand.lock([scene.groups[1]], True),
         HideCommand([scene.groups[2], part], True),
         AssignLayerCommand([scene.groups[1]], "Brand new tag"),
-        SetGroupMaterialCommand(part, {"color": (1.0, 0.0, 0.0), "mat": "Mat 1"}),
+        NativeCommand.paint([part], {"color": (1.0, 0.0, 0.0), "mat": "Mat 1"}),
         MoveGroupCommand(part, QVector3D(0.1, 0.2, 0.3)),
         MoveGroupCommand(scene.groups[2], QVector3D(0.0, 1.0, 0.0)),
         InsertGroupCommand(extra),

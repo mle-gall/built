@@ -1773,7 +1773,7 @@ class OutlinerPanel(QWidget):
     def toggle_locked(self, groups=None) -> None:
         """Unlock the rows when any of them is locked, lock them otherwise —
         one undoable step."""
-        from core.history import LockCommand
+        from core.protocol import commands
         if groups is None:
             groups = self._selected_groups()
             current = self._group_of(self.tree.currentItem())
@@ -1787,7 +1787,7 @@ class OutlinerPanel(QWidget):
                         or g in outliner.open_path(self._scene())
                         for g in groups):
             self._window.viewport.end_group_edit()
-        self._window.viewport.history.execute(LockCommand(groups, lock))
+        commands.lock(self._window.viewport.history, groups, lock)
         self._keep_picked(groups)
         self._adopt_tree_only()
         self._window.viewport.update()
@@ -1847,12 +1847,13 @@ class OutlinerPanel(QWidget):
     def batch_rename(self, groups, names) -> bool:
         """Give ``groups`` the ``names`` — one undo step, the rows whose
         name does not change left out."""
-        from core.history import CompoundCommand, RenameGroupCommand
-        cmds = [RenameGroupCommand(g, n) for g, n in zip(groups, names)
-                if n.strip() and n != g.name]
-        if not cmds:
+        from core.protocol import commands
+        pairs = [(g, n) for g, n in zip(groups, names)
+                 if n.strip() and n != g.name]
+        if not pairs:
             return False
-        self._window.viewport.history.execute(CompoundCommand(cmds))
+        commands.rename_placements(self._window.viewport.history,
+                                   [g for g, _ in pairs], [n for _, n in pairs])
         self._window.viewport.update()
         self.refresh()
         return True
@@ -2374,14 +2375,13 @@ class OutlinerPanel(QWidget):
     def _on_item_changed(self, item, column) -> None:
         if self._updating or column != COL_NAME:
             return
-        from core.history import RenameGroupCommand
+        from core.protocol import commands
         group = self._group_of(item)
         if group is None:
             return
         name = item.text(COL_NAME).strip()
         if name and name != group.name:
-            self._window.viewport.history.execute(
-                RenameGroupCommand(group, name))
+            commands.rename_placement(self._window.viewport.history, group, name)
             self._window.viewport.update()
         self.refresh()
 

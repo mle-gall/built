@@ -89,6 +89,28 @@ def on_activate(self, viewport):
     viewport.notify_scene_changed()
 ```
 
+### Undoable steps: the plugin command API
+
+The editor's own commands are moving to Rust (docs/commands-port.md). A
+retired Python command class is not coming back, so build on the names
+below. Every one of them makes exactly one undo step on the document's Rust
+history, runs inside a document transaction (a failure rolls the step back
+whole), and publishes one change-feed record.
+
+| Need | Use |
+|---|---|
+| An edit the editor already has | `core.protocol.commands.run(history, name, **args)`, or the function of that name (`lock`, `rename_placement`, `paint_placements`, `move_placements`, `erase`, …). Arguments are keys, placement uids or, in process, the placement handles. The answer is `{"ok", "step", "error", "rejected"}`. These are the same verbs MCP uses. |
+| A typed native step to combine with others | `from ingetrazo_core import NativeCommand`: `NativeCommand.rename(group, name)`, `NativeCommand.rename_each(groups, names)`, `NativeCommand.lock(groups, locked)`, `NativeCommand.paint(groups, paint_or_None)`. |
+| Several steps as one | `core.history.CompoundCommand([step, ...])`. |
+| Any mesh, group or tag change written in Python | `core.history.SnapshotImport(mutate)`, below. |
+| A step with your own inverse | Subclass `core.history.Command` and implement `do(scene)` and `undo(scene)`. Set `doc_undo = True` when everything it changes is document state: the Rust history then undoes and redoes it from its transaction and never calls your `undo`. |
+| Extension data in the file | `core.history.SetPluginDataCommand(key, value)`, or `app.set_document_data` from `setup(app)`. |
+| Declining on purpose | Raise `core.history.CommandRejected("why")` from `do`; History treats it as a no-op and shows the reason. |
+
+Run any of them with `viewport.history.execute(step)`. Do not start a
+second `history.execute` from inside a step's `do`: it folds into the outer
+step, which is rarely what you meant.
+
 On failure, `SnapshotImport` restores the original membership and order of
 groups, layers, saved views, dimensions, text labels and sheets, including
 objects removed by the failed mutation. These collections are restored in
