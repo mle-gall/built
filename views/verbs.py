@@ -1,103 +1,120 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Which verbs apply to what is selected: one table for the inspector's
-chips, the selection bar and the viewport's right-click menu (tree C,
-docs/ui-decisions.md, 2026-11-23: "the inspector offers only verbs that
-apply").
+"""Glue to the one verb source, ``rust/ingetrazo_render/src/verbs.rs``: the
+selection's kind, the verbs that apply, their labels and keys, the menu's
+rows, the inspector's chips and More, the linked-file rows' verbs and what
+runs each verb all live there (architecture review 7, council B5).
 
-The kinds and the read-only rule are the ones ``docs/context-menu.md``
-(branch ``shell/tabs-menu``) lays out for the right-click menu, so that
-both surfaces agree: a linked file's placement or a part inside one is
-read-only here (no Explode, no Edit, no File to, no editable name), raw
-geometry cannot be filed and does not become a component from the
-inspector, a component instance is already one. The menu has more rows per
-kind (Repeat, Rename…, Flip…); the inspector keeps the few that a
-selection needs and puts geometry fixes under More.
-
-Verb ids are the menu's (``open`` is "Open for editing", the inspector's
-Edit chip). Nothing here runs a command: ``views/wgpu_ui._commands`` and
-the menu map ids to their actions.
+Python only reads the document into the facts Rust decides from
+(:func:`facts`); ``views/context_menu.py`` runs the dispatch Rust names.
 """
 from __future__ import annotations
 
-#: Kinds, in docs/context-menu.md's order.
-KINDS = ("faces", "edges", "geometry", "group", "component", "groups", "mixed",
-         "link", "linked_part", "annotation", "guide", "empty",
-         "section", "image", "path")
-#: Kinds whose model is not this document's to edit.
-READ_ONLY = ("link", "linked_part")
-#: Verbs that edit the selected model: never offered on a read-only kind.
-EDITING = ("open", "rename", "explode", "makegroup", "makecomp", "fileto", "unique",
-           "split", "merge", "intersect", "soften", "flip", "reverse", "orient",
-           "heal", "rebuild", "simplify", "replace", "keep", "axes", "join", "topath",
-           "status", "repair")
+import json
 
-_FACE_FIXES = ("intersect", "soften", "reverse", "orient", "heal", "rebuild", "simplify")
-_EDGE_FIXES = ("intersect", "soften", "join", "topath")
-_GROUP_FIXES = ("intersect", "soften", "reverse", "orient", "heal", "rebuild", "split", "simplify")
+from ingetrazo_render import (verbs_constants, verbs_dispatch, verbs_file, verbs_inspector,  # noqa: F401
+                              verbs_kind, verbs_menu, verbs_name_editable, verbs_offered,
+                              verbs_read_only)
 
-#: The inspector's verbs per kind, in chip order; the fixes go under More.
-INSPECTOR = {
-    "faces": ("isolate", "hide", "makegroup") + _FACE_FIXES,
-    "edges": ("isolate", "hide", "makegroup") + _EDGE_FIXES,
-    "geometry": ("isolate", "hide", "makegroup") + tuple(dict.fromkeys(_FACE_FIXES + _EDGE_FIXES)),
-    "group": ("fileto", "isolate", "hide", "open", "explode", "makecomp", "status", "repair") + _GROUP_FIXES,
-    "component": ("fileto", "isolate", "hide", "open", "explode", "unique", "status", "repair") + _GROUP_FIXES,
-    "groups": ("fileto", "isolate", "hide", "makegroup", "makecomp", "status") + _GROUP_FIXES,
-    "mixed": ("fileto", "isolate", "hide", "makegroup") + _FACE_FIXES,
-    "link": ("isolate", "hide", "zoom", "linkopen", "linkreload", "linkunlink", "linkfinder",
-             "linkrelink", "linkpack", "linknested", "contents"),
-    "linked_part": ("isolate", "hide", "zoom", "linkfile", "linkopen"),
-    "annotation": ("hide",),
-    "guide": ("guides",),
-    "empty": (),
-    "section": ("isolate", "hide"),
-    "image": ("isolate", "hide"),
-    "path": ("isolate", "hide", "topath"),
-}
-#: Verbs that live under More ▾ rather than as a chip.
-MORE = frozenset(_FACE_FIXES + _GROUP_FIXES + _EDGE_FIXES + ("guides",))
-
-#: A linked file's row in the tree: the file verbs, by whether the host
-#: places it itself (top) or it comes inside another file (nested, "via").
-FILE_VERBS = {
-    "top": ("linkopen", "linkreload", "linkunlink", "linkfinder", "linkrelink"),
-    "nested": ("linkopen", "linkfinder"),
-}
+KINDS, READ_ONLY, EDITING, MAX_ROWS = (tuple(c) if isinstance(c, list) else c for c in verbs_constants())
 
 
-def kind_of(scene, sel) -> str:
-    """The kind of the selection ``sel`` (docs/context-menu.md)."""
+def _type(e) -> str:
+    return type(e).__name__
+
+
+def facts(scene, sel, win=None, view=None, *, locked_group=None, locked_image=None) -> dict:
+    """What Rust needs to know about the selection ``sel``: counts and
+    flags read from the document, and the header's names and measures.
+    With ``win``, also what the window can do now (Repeat, Hide, Paste…)."""
     from core import links
     from core.group import Group
     from core.mesh import Edge, Face
     sel = list(sel)
-    if not sel:
-        return "empty"
     groups = [e for e in sel if isinstance(e, Group)]
-    if groups:
-        if any(links.linked_ancestor(g) is not None and not links.is_linked(g) for g in groups):
-            return "linked_part"
-        if all(links.is_linked(g) for g in groups) and len(groups) == len(sel):
-            return "link"
-    faces = sum(1 for e in sel if isinstance(e, Face))
-    edges = sum(1 for e in sel if isinstance(e, Edge))
-    if groups and len(groups) == len(sel):
-        if len(groups) == 1:
-            return "component" if groups[0].is_component() else "group"
-        return "groups"
-    if faces + edges == len(sel):
-        return "faces" if not edges else "edges" if not faces else "geometry"
-    if groups and len(groups) + faces + edges == len(sel):
-        return "mixed"
-    for test, kind in ((_annotation, "annotation"), (_guide, "guide"), (_section, "section"),
-                       (_image, "image"), (_path, "path")):
-        if all(test(e) for e in sel):
-            return kind
-    return "mixed"
-
-
-def _annotation(e) -> bool:
-    return type(e).__name__ in ("Dimension", "TextLabel")
+    faces = [e for e in sel if isinstance(e, Face)]
+    edges = [e for e in sel if isinstance(e, Edge)]
+    linked_part = any(links.linked_ancestor(g) is not None and not links.is_linked(g) for g in groups)
+    f = dict(total=len(sel), groups=len(groups), faces=len(faces), edges=len(edges),
+             components=sum(1 for g in groups if g.is_component()),
+             linked_part=linked_part,
+             all_links=bool(groups) and all(links.is_linked(g) for g in groups),
+             all_annotations=bool(sel) and all(_type(e) in ("Dimension", "TextLabel") for e in sel),
+             all_guides=bool(sel) and all(_guide(e) for e in sel),
+             all_sections=bool(sel) and all(_type(e) == "SectionPlane" for e in sel),
+             all_images=bool(sel) and all(_type(e) == "ImagePlane" for e in sel),
+             all_paths=bool(sel) and all(_type(e) == "GeoPath" for e in sel),
+             all_locked=bool(groups) and all(getattr(g, "locked", False) for g in groups))
+    if win is None:
+        return f
+    vp = win.viewport
+    one = sel[0] if len(sel) == 1 else None
+    last = getattr(win, "_last_command", None)
+    if last is not None:
+        f["repeat"] = last[0]
+        f["repeat_value"] = _repeat_value(win, last[0])
+    if locked_group is not None and locked_group not in sel:
+        f["locked_group"] = getattr(locked_group, "name", "") or ("Component" if locked_group.is_component() else "Group")
+    if locked_image is not None and locked_image not in sel:
+        f["locked_image"] = getattr(locked_image, "name", "") or "image"
+    geometry = bool(sel) and len(faces) + len(edges) == len(sel)
+    f.update(hideable=bool(win._hideable(sel)),
+             makes_faces=bool(geometry and win._makes_faces(sel)),
+             textured_face=len(faces) == 1 == len(sel) and win._single_textured_face() is not None,
+             bridgeable=bool(edges and not faces and win._bridgeable(sel)),
+             context=_context_path(scene))
+    loose = [e for e in edges if e in scene.mesh.edges]
+    f.update(loose_edges=len(loose), curve=any(getattr(e, "curve", None) is not None for e in loose))
+    if isinstance(one, Group):
+        f.update(name=getattr(one, "name", "") or "", filed=_filed_path(scene, one),
+                 text3d=bool(getattr(one, "text3d", None)) and not one.locked,
+                 billboard=bool(getattr(one, "billboard", False)))
+        if one.is_component():
+            from core.kept_components import kept_template
+            from core.purge import iter_groups
+            f.update(instances=sum(1 for o in iter_groups(scene.groups or ()) if o.mesh is one.mesh),
+                     replaceable=bool(win._replacement_choices(sel)),
+                     kept=kept_template(scene, one.mesh) is not None)
+        rec = links.link_of(one)
+        if rec:
+            from pathlib import Path
+            f.update(file=Path(rec.get("path", "")).name, include_nested=bool(rec.get("include_nested", True)))
+    if linked_part:
+        part = groups[0]
+        host = links.linked_ancestor(part)
+        f.update(name=getattr(part, "name", "") or "", host=host is not None)
+        if host is not None:
+            from pathlib import Path
+            f["host_file"] = Path((links.link_of(host) or {}).get("path", "")).name
+    if len(groups) > 1 and len(groups) == len(sel):
+        from core.solids import is_solid
+        f["solids"] = sum(1 for g in groups if is_solid(g))
+    if len(faces) == 1:
+        f["area"] = _measure("fmt_area", faces[0].area)
+    if len(edges) == 1:
+        f["length"] = _measure("fmt_len", lambda: (edges[0].b - edges[0].a).length())
+    if one is not None and _type(one) in ("Dimension", "TextLabel"):
+        f["dimension"] = _type(one) == "Dimension"
+        try:
+            f["text"] = (one.text or one.label()) if f["dimension"] else \
+                ((getattr(one, "text", "") or "").strip().splitlines() or [""])[0][:40]
+        except Exception:  # noqa: BLE001
+            f["text"] = ""
+    if one is not None and _guide(one):
+        f["guide_point"] = getattr(one, "direction", None) is None or _type(one) == "GuidePoint"
+    if one is not None and _type(one) in ("SectionPlane", "ImagePlane"):
+        f["name"] = getattr(one, "name", "") or ""
+        f["section_active"] = bool(getattr(one, "active", False))
+        f["image_locked"] = bool(getattr(one, "locked", False))
+    f["path_polygon"] = any(len(getattr(e, "points", ()) or ()) >= 3 for e in sel if _type(e) == "GeoPath")
+    if not sel:
+        from formats import clip as clip_transfer
+        f.update(paste=bool(getattr(vp, "clipboard", None) or clip_transfer.available()),
+                 isolated=vp.__dict__.get("_isolate_base") is not None or bool(getattr(vp, "_previous_views", None)),
+                 guides=bool(list(getattr(scene, "guides", ()) or ())))
+    elif view is not None:
+        from PySide6.QtGui import QKeySequence
+        f["reveal_key"] = QKeySequence("Ctrl+Shift+J").toString(QKeySequence.NativeText)
+    return f
 
 
 def _guide(e) -> bool:
@@ -108,37 +125,69 @@ def _guide(e) -> bool:
         return False
 
 
-def _section(e) -> bool:
-    return type(e).__name__ == "SectionPlane"
+def _measure(fmt, value) -> str:
+    try:
+        from core import units
+        return getattr(units, fmt)(float(value()))
+    except Exception:  # noqa: BLE001
+        return ""
 
 
-def _image(e) -> bool:
-    return type(e).__name__ == "ImagePlane"
+def _repeat_value(win, label) -> str:
+    """The value the last command runs with, when it has one (Push/Pull's
+    distance, which a double-click repeats)."""
+    for tool in (getattr(win, "_tools", {}) or {}).values():
+        if getattr(tool, "name", None) == label:
+            value = getattr(type(tool), "last_distance", None)
+            if isinstance(value, (int, float)) and value:
+                return _measure("fmt_len", lambda: abs(value))
+    return ""
 
 
-def _path(e) -> bool:
-    return type(e).__name__ == "GeoPath"
+def _context_path(scene) -> str:
+    """Where loose geometry lives: the groups open for editing, else Model."""
+    from core.outliner import open_path
+    names = [getattr(g, "name", "") or ("Component" if g is not None and g.is_component() else "Group")
+             for g in open_path(scene)]
+    return " › ".join(names) if names else "Model"
+
+
+def _filed_path(scene, g) -> str:
+    """The group's node path in the project tree, or "Unfiled"."""
+    from core import bim_registry, structure
+    try:
+        key = structure.node_of(g)
+        if key:
+            return " › ".join(structure.path(bim_registry.get(scene), key))
+    except Exception:  # noqa: BLE001 — a stale key: no path, not an error
+        pass
+    return "Unfiled"
+
+
+def kind_of(scene, sel) -> str:
+    """The kind of the selection ``sel`` (docs/context-menu.md)."""
+    return verbs_kind(json.dumps(facts(scene, sel)))
 
 
 def read_only(kind) -> bool:
-    return kind in READ_ONLY
+    return verbs_read_only(kind)
 
 
 def offers(kind, verb) -> bool:
-    """Whether the inspector offers ``verb`` on a selection of ``kind``."""
-    if kind in READ_ONLY and verb in EDITING:
-        return False
-    return verb in INSPECTOR.get(kind, ())
-
-
-def inspector_verbs(kind) -> tuple:
-    return tuple(v for v in INSPECTOR.get(kind, ()) if offers(kind, v))
+    """Whether the inspector of ``kind`` offers ``verb``."""
+    return verbs_offered(kind, verb)
 
 
 def name_editable(kind) -> bool:
     """A name field edits in place only on this document's own things."""
-    return kind not in READ_ONLY and kind != "empty"
+    return verbs_name_editable(kind)
 
 
-def file_verbs(nested: bool) -> tuple:
-    return FILE_VERBS["nested" if nested else "top"]
+def file_verbs(nested: bool, state: str = "resolved") -> tuple:
+    """The verb ids of a linked file's tree row."""
+    return tuple(v for v, _ in verbs_file(nested, state))
+
+
+def file_verb_rows(nested: bool, state: str) -> list:
+    """(id, label) of a linked file's tree row."""
+    return verbs_file(nested, state)

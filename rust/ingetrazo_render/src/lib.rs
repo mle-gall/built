@@ -4,6 +4,8 @@ mod window_timers;
 mod panic_log;
 mod overlay;
 mod commands;
+/// The one verb source: kinds, menu rows, inspector verbs, dispatch.
+mod verbs;
 pub mod ui;
 mod host_context;
 mod inspector;
@@ -2933,6 +2935,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(commands::command_chrome, m)?)?;
     m.add_function(wrap_pyfunction!(commands::activate_view_command, m)?)?;
     m.add_function(wrap_pyfunction!(commands::rail_layout, m)?)?;
+    verbs::register(m)?;
     m.add_function(wrap_pyfunction!(ui::tokens::chrome_token, m)?)?;
     m.add_function(wrap_pyfunction!(commands::leave_navigation, m)?)?;
     m.add_function(wrap_pyfunction!(commands::view_shortcut, m)?)?;
