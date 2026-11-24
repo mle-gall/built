@@ -161,7 +161,8 @@ def test_a_dialog_opened_by_the_agent_is_cancelled_not_waited_for(monkeypatch):
     stay — over the bridge nobody answers, so exec() held the UI thread for
     good and the next call ran inside that dialog. Now the dialog is
     cancelled at once, the reply names it, and nothing was deleted."""
-    import time
+    from PySide6.QtCore import QEvent, QObject
+    from PySide6.QtWidgets import QDialog
     from plugins.ai_bridge import _Bridge
     from views.main_window import MainWindow
     monkeypatch.setenv("INGETRAZO_AI_PORT", "0")
@@ -176,11 +177,32 @@ def test_a_dialog_opened_by_the_agent_is_cancelled_not_waited_for(monkeypatch):
                "print(len(scene.compositions))")
         reply = _ask(bridge, "run_python", {"code": two})
         assert reply["ok"] and reply["result"]["stdout"].strip() == "2"
-        t0 = time.monotonic()
-        reply = _ask(bridge, "run_python", {
-            "code": "viewport.window()._composer._on_comp_del()\n"
-                    "print(len(scene.compositions))"})
-        assert time.monotonic() - t0 < 5
+        # The operation itself, not wall time (a loaded machine stretched
+        # this past a 5 s limit): every dialog the call shows is rejected by
+        # the bridge's guard, so exec() returns «Cancel» instead of waiting.
+        # A dialog left waiting would hold the call until the client's own
+        # socket timeout failed it.
+        shown = []
+
+        class Watch(QObject):
+            def eventFilter(self, obj, event):  # noqa: N802
+                if isinstance(obj, QDialog) and event.type() in (QEvent.Show, QEvent.Hide):
+                    shown.append((event.type(), obj.result()))
+                return False
+        watch = Watch()
+        app = QApplication.instance()
+        app.installEventFilter(watch)
+        try:
+            reply = _ask(bridge, "run_python", {
+                "code": "viewport.window()._composer._on_comp_del()\n"
+                        "print(len(scene.compositions))"})
+        finally:
+            app.removeEventFilter(watch)
+        assert reply["ok"]
+        shows = [r for t, r in shown if t == QEvent.Show]
+        hides = [r for t, r in shown if t == QEvent.Hide]
+        assert shows and len(hides) == len(shows)
+        assert all(r == QDialog.Rejected for r in hides)
         result = reply["result"]
         assert result["stdout"].strip() == "2"          # «No»: nothing deleted
         assert any("Delete" in t for t in result["dialogs_cancelled"])

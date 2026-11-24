@@ -38,6 +38,7 @@ mod soften;
 mod stitch_command;
 mod erase;
 mod drawing_face;
+pub(crate) use drawing_face::Outline;
 pub(crate) mod drawing_plane;
 mod drawing_edges;
 pub mod edit;

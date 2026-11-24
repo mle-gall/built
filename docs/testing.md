@@ -1,0 +1,102 @@
+# Running the tests
+
+The suite runs in parallel with [pytest-xdist](https://pypi.org/project/pytest-xdist/)
+(in `requirements.txt`). Give it the number of workers; everything else is set
+by `tests/conftest.py`: file-level scheduling (`--dist loadfile`, so a file's
+module fixtures are built once and its tests share one worker) and crashed
+workers replaced (`--max-worker-restart 8`).
+
+```bash
+export HOME=$(mktemp -d) BUILT_SETTINGS_DIR=$(mktemp -d)   # never the real profile
+python -m pytest -n 4 -m "not slow and not window" tests  # delegate subset: while iterating
+python -m pytest -n 8 -m "not slow" tests     # fast suite: before handing work back
+python -m pytest -n 8 tests                   # full suite: before installing a build
+python -m pytest tests/test_x.py::test_y      # one test, serially (no -n)
+```
+
+| Selection | Tests (2026-11-24) | What it leaves out |
+|---|---|---|
+| Delegate subset, `-m "not slow and not window"` | about 7 500 of 14 200; 2.5 min at `-n 4` with the machine loaded, under 3 min quiet | the `window` files and the `slow` tests |
+| Fast suite, `-m "not slow"` | about 12 000 | the `slow` tests |
+| Full suite | all | nothing |
+
+The delegate subset covers the document and its kernels (store, topology,
+booleans, push/pull, snapping, inference), file formats (IGZ/Built, SKP,
+IFC, DXF, STL and the rest), the Rust bridges, the chrome's data and view
+models, tools driven without a window, and the Project tree. It leaves out
+the files marked `window`: `tests/conftest.py` marks a file that builds an
+application window (`MainWindow`, `ComposerWindow`, the shell's `Host`) or
+launches the app. Run the delegate subset while iterating, the tests of the
+files you touched, and the fast suite before handing work back. Work on
+windows, docks, menus or dialogs needs the fast suite.
+
+Use at most `-n 8`: other agents share the machine. Without `-n` nothing
+changes from a plain serial pytest run.
+
+## The `slow` marker
+
+`slow` marks tests whose cost is the point and which the fast suite leaves
+to the full run:
+
+- long fuzz sweeps: the default run takes a seeded sample of each sweep's
+  cases (`tests/fuzz.py`) and `slow` runs the whole sweep. The sample comes
+  from `BUILT_FUZZ_SEED` (`0` unless set; `random` draws one per run, the
+  same in every worker). The header prints it; set it again to collect the
+  same cases;
+- real-size data, where the size is what is tested: the 20 000-placement
+  composite in `test_file_io_parity.py` (`large-*`; the default run checks the
+  same format-3 paths on a scaled composite with the large-document threshold
+  lowered), thousands of faces in `test_move_copy_exact_mesh_1087.py`;
+- external programs, such as a real Blender.
+
+Mark a new test `slow` only when shrinking its data would make it say
+nothing. Otherwise shrink it.
+
+## Keeping tests independent
+
+Under xdist many files run one after another in the same process, so a test
+must leave process-wide state as it found it.
+
+`tests/conftest.py` puts back, after every test:
+
+- `os.environ` (`_process_environment`). The app writes it on purpose
+  (`--python-engine` sets `INGETRAZO_RUST=0`), which turned the engine off
+  for every later test on a worker;
+- the Paint tool's class state: its chosen material (`PaintTool.current_*`),
+  recent materials and armed pipette;
+- the scene `core.units` formats with (`bind_scene`), and the Qt application
+  and organization names, which name the settings file;
+- the drawing axes, the SKP parse tables and `core._native.native`.
+
+Each test file also gets an empty settings store of its own
+(`_settings_per_module`): windows save their geometry and docks when they
+close, and the next file on the worker restored them.
+
+A leak guard (`_leak_guard`, on by default) fails a test, at teardown, that
+leaves the environment, the Qt application names or the settings location
+changed after its own monkeypatch has undone what it did. The message names
+what changed. Undo it in the test with `monkeypatch` or a `finally`; for a
+settings store of the test's own, ask for the `private_settings` fixture
+instead of calling `QSettings.setPath`. Two process set-ups are not leaks:
+the native shell's Qt host, started once per process and undone at the end
+of its module (`tests/shell_isolation.py`), and the profile `main.py` sets
+when it is first imported. `BUILT_LEAK_GUARD=0` turns the guard off.
+
+The guard does not cover the class and module state the fixtures put back
+(the Paint tool, `core.units`, the drawing axes). For a new kind of leak,
+compare a fingerprint of process state before and after each test across an
+xdist run and look at what changed just before the failing test on its
+worker.
+- Use `monkeypatch` for module globals. A `monkeypatch.delenv` or `setattr`
+  done after the code under test has written the value records that value
+  and puts it back at teardown.
+- Bound a cost with what the operation does (a call that must not happen, a
+  count) or with `time.process_time()`, never with wall time: under eight
+  workers wall time measures the machine.
+
+## Shared fixtures
+
+- `tests/composite_fixture.py` builds the linked-files composite. Build it
+  once per module (`scope="module"`), at the size the test needs: the
+  Project tree tests use 2 000 placements for what the tree shows and 20 000
+  only for the three tests that bound its cost.

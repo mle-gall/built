@@ -5,21 +5,9 @@ from unittest.mock import Mock
 import pytest
 from PySide6.QtCore import QRect, QSize, Qt
 from PySide6.QtGui import QResizeEvent
-from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDockWidget, QScrollArea, QWidget
 
 from views.main_window import MainWindow
-
-
-def _wait_for(cond, timeout_ms=3000):
-    """Under a loaded suite an 80 ms timer can fire late: wait for it."""
-    import time
-    end = time.monotonic() + timeout_ms / 1000
-    while not cond():
-        if time.monotonic() > end:
-            return False
-        QTest.qWait(10)
-    return True
 
 
 @pytest.fixture
@@ -92,7 +80,13 @@ def test_metal_resize_burst_configures_only_final_size():
         view.paintEvent(None)
         view.draw_frame.assert_not_called()
         del view.draw_frame
-        assert _wait_for(lambda: view.renderer.resize.called)
+        # One debounce armed for the whole burst; what it runs when it fires
+        # configures the final size once. (Fired here rather than waited
+        # for: on a loaded machine under pytest-xdist the 80 ms timer came
+        # later than any wall-clock wait.)
+        assert view._resize_timer.isActive() and view._resize_timer.isSingleShot()
+        view._resize_timer.stop()
+        view._resize_timer.timeout.emit()
         view.renderer.resize.assert_called_once_with(359, 200, view.devicePixelRatioF())
         assert view._pick_frame_dirty
         view._finish_resize()
@@ -133,7 +127,11 @@ def test_mac_tree_repaints_once_resize_settles(monkeypatch, enabled):
         for width in range(300, 360):
             tree.resizeEvent(QResizeEvent(QSize(width, 200), QSize(width - 1, 200)))
         assert not tree.updatesEnabled()
-        assert _wait_for(lambda: not tree._resize_paint_timer.isActive())
+        # The settle timer, fired rather than waited for (a wall-clock wait
+        # through the event loop took 127 s once under pytest-xdist).
+        assert tree._resize_paint_timer.isActive() and tree._resize_paint_timer.isSingleShot()
+        tree._resize_paint_timer.stop()
+        tree._resize_paint_timer.timeout.emit()
         assert tree.updatesEnabled() == enabled
         assert not tree._resize_paint_timer.isActive()
     finally:

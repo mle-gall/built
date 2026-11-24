@@ -46,7 +46,8 @@ RAIL = [["select", "pan", "zoom", "zoom_ventana", "estilo"],
         ["cota", "cota_cadena", "cota_base", "cota_ang", "cota_radio"]]
 #: The tools the native page runs (ui/page.rs); the others open the
 #: classic sheet editor with that tool.
-NATIVE_TOOLS = {"select", "pan", "zoom", "zoom_ventana", "vista"}
+NATIVE_TOOLS = {"select", "pan", "zoom", "zoom_ventana", "vista", "texto", "llamada", "cajetin", "escala",
+                "norte", "leyenda", "perfil", "linea", "flecha", "terreno", "rect", "elipse"}
 #: Qt cursors for the page's cursor names.
 _CURSORS = {"": Qt.ArrowCursor, "move": Qt.SizeAllCursor, "grab": Qt.OpenHandCursor,
             "grabbing": Qt.ClosedHandCursor, "crosshair": Qt.CrossCursor,
@@ -240,6 +241,7 @@ class Workspace:
         self._page = None               # the snapshot the page has
         self._content = {}              # frame key → the fields its content was made from
         self._ground = None             # the samplers terrain profiles read
+        self._edit_after = None         # a new text block, opened for typing once on the page
         self._tried = {}                # frame key → the page a render was tried on
         self._more = False              # frames still to render after this turn
         self._selection = None          # the keys the page and the composer agree on
@@ -337,11 +339,14 @@ class Workspace:
         if page != self._page:
             self._page = page
             renderer.page_set(page)
+        key, self._edit_after = self._edit_after, None
+        if key is not None:
+            renderer.page_edit_text(key)
 
     def _choices(self) -> dict:
         """The lists the inspector offers (ingetrazo_render sheet_inspector.rs)."""
         from core.style import BUILTIN_STYLES, user_styles
-        from views.composer import _STD_VIEWS
+        from core.composition import STD_VIEWS as _STD_VIEWS
         from core.i18n import tr
         scene = self.composer._scene()
         views = [["__current__", tr("Current view")]]
@@ -382,7 +387,7 @@ class Workspace:
                 if frame.style == "vectorial" and not comp.frame_is_perspective(frame):
                     got = wgpu_sheet_frames.drawing(self.view.source_viewport, frame)
                     if got is not None:
-                        segs, kinds = got
+                        segs, kinds, _fills = got
                         renderer.page_frame_lines(key, np.ascontiguousarray(segs, np.float32),
                                                   np.ascontiguousarray(kinds, np.uint8))
                 else:
@@ -473,17 +478,31 @@ class Workspace:
             self._page = None
             self.view.renderer.page_select([m._doc_key for m in copies])
 
-    def _place(self, x0, y0, x1, y1) -> None:
-        """The View tool's rectangle: a model view there (60 × 50 mm at least)."""
+    def _place(self, x0, y0, x1, y1, tool: str = "vista") -> None:
+        """A placement tool's click or drag: the item it makes there
+        (sheets::create), one step of the history, then back to Select. A
+        new text block opens for typing."""
         import ingetrazo_core as NATIVE
-        from core.composition import NEW_FRAME_STYLE, AddItemCommand, MarcoVista
+        from core.composition import AddItemCommand
         comp = self.composer.comp
-        frame = MarcoVista(x_mm=min(x0, x1), y_mm=min(y0, y1), w_mm=max(abs(x1 - x0), 60.0),
-                           h_mm=max(abs(y1 - y0), 50.0), style=NEW_FRAME_STYLE)
-        frame.z = NATIVE.sheet_next_z(comp)
-        self._run(AddItemCommand(comp, frame))
+        item = NATIVE.sheet_new_item(comp, tool, x0, y0, x1, y1, self.composer._scene())
+        if item is None:
+            return
+        self._run(AddItemCommand(comp, item))
         self._page = None
-        self.view.renderer.page_select([frame._doc_key])
+        self.view.renderer.page_select([item._doc_key])
+        if tool == "texto":
+            self._edit_after = item._doc_key
+        self._tool("select")
+
+    def _tool(self, name: str) -> None:
+        """Arm a tool of the rail (the composer's tool state, until the
+        workspace keeps its own)."""
+        comp = self.composer
+        comp.tool_mode = name
+        act = comp._tool_actions.get(name)
+        if act is not None:
+            act.setChecked(True)
 
     def _font(self, model) -> None:
         """The font picker for a sheet text; the choice is one history step."""
@@ -645,8 +664,9 @@ class Workspace:
         elif verb == "rects":
             self._move(rest)
         elif verb == "place":
-            if comp.tool_mode == "vista":
-                self._place(*(float(v) for v in rest.split(SEP)))
+            parts = rest.split(SEP)
+            tool = parts[4] if len(parts) > 4 else comp.tool_mode
+            self._place(*(float(v) for v in parts[:4]), tool=tool)
         elif verb in ("set", "sheet", "set_many"):
             import json
             models = self._models()
@@ -848,14 +868,21 @@ class Workspace:
         troubled = []
         try:
             with chrome_dialogs.busy(parent, f"{labels[kind]} · {name}", output_path=path):
-                if kind == "pdf":
-                    comp.refresh_all_frames()
-                    comp.export_pdf(path)
-                elif kind == "pdf_all":
-                    troubled = comp.export_all_pdf(path)
+                if kind in ("pdf", "pdf_all"):
+                    from views import wgpu_sheet_frames
+                    comps = [comp.comp] if kind == "pdf" else list(comp._scene().compositions)
+                    if self._ground is None:
+                        self._ground = wgpu_sheet_frames.Ground(self._touch)
+                    troubled = wgpu_sheet_frames.export_pdf(
+                        self.view, comps, path, self._ground,
+                        getattr(comp._window, "_current_path", None))
                 elif kind == "png":
-                    comp.refresh_all_frames()
-                    comp.export_image(path, comp.IMAGE_EXPORT_DPI)
+                    from views import wgpu_sheet_frames
+                    if self._ground is None:
+                        self._ground = wgpu_sheet_frames.Ground(self._touch)
+                    troubled = wgpu_sheet_frames.export_image(
+                        self.view, comp.comp, path, 200.0, self._ground,
+                        getattr(comp._window, "_current_path", None))
                 elif kind == "dxf":
                     comp.export_frame_dxf(self._frame(), path)
                 elif kind == "svg":

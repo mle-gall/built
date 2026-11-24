@@ -29,6 +29,7 @@ import random
 
 import numpy as np
 import pytest
+from tests import fuzz
 from ingetrazo_core import Vec3 as V
 
 import core._native as _native
@@ -378,7 +379,7 @@ def run(seed, n_ops):
     return r
 
 
-@pytest.mark.parametrize("seed", range(16))
+@pytest.mark.parametrize("seed", fuzz.sample(range(16), 6, "store_random_ops"))
 def test_random_ops_match_the_python_mesh(seed):
     r = run(seed, 160)
     assert r.ops > 40
@@ -547,7 +548,7 @@ def _engine_run(monkeypatch, scenario, seed, store):
 
 
 @pytest.mark.parametrize("scenario", ["cube", "prism", "plan", "group"])
-@pytest.mark.parametrize("seed", range(6))
+@pytest.mark.parametrize("seed", fuzz.sample(range(60), 3, "store_engine_fuzz"))
 def test_engine_fuzz_on_a_store_backed_mesh(monkeypatch, scenario, seed):
     """The engine certifier (draw on faces, push/pull, undo/redo, with its
     invariants after every commit) with the loose mesh starting in the
@@ -563,7 +564,7 @@ def test_engine_fuzz_on_a_store_backed_mesh(monkeypatch, scenario, seed):
 
 @pytest.mark.slow
 @pytest.mark.parametrize("scenario", ["cube", "prism", "plan", "group"])
-@pytest.mark.parametrize("seed", range(6, 60))
+@pytest.mark.parametrize("seed", range(60))
 def test_engine_fuzz_on_a_store_backed_mesh_fuzz(monkeypatch, scenario, seed):
     import tests.test_fuzz_engine as FE
     py = _engine_run(monkeypatch, scenario, seed, False)[0]

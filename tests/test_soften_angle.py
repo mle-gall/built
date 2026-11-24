@@ -376,9 +376,7 @@ def test_the_dialog_has_smooth_normals_ticked_as_.skp():
     assert form.values()["smooth"]
 
 
-def test_the_dialog_passes_smooth_normals_to_the_command(monkeypatch, tmp_path):
-    from PySide6.QtCore import QSettings
-    QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, str(tmp_path / "qs"))
+def test_the_dialog_passes_smooth_normals_to_the_command(monkeypatch, tmp_path, private_settings):
     monkeypatch.setenv("INGETRAZO_AUTOSAVE_DIR", str(tmp_path / "autosave"))
     from views.main_window import MainWindow
     from views import chrome_forms

@@ -185,9 +185,9 @@ def _navigator(rows, packed, scene, key) -> None:
                                               np.uint8).view("<u4")[0])
 
 
-def render(view_widget, frame, key) -> bool:
-    """Render ``frame`` into the page texture ``key``; False when it has
-    nothing to show (its saved view is gone)."""
+def _render(view_widget, frame, **out):
+    """The renderer's pass for a shaded frame, with the frame's camera,
+    rows and look; ``out`` says where the picture goes."""
     from core.composition import RENDER_DPI, pen_px
     source = view_widget.source_viewport
     scene = source.scene
@@ -197,13 +197,34 @@ def render(view_widget, frame, key) -> bool:
     facade = frame_scene(scene, frame, view)
     style = frame_style(source, facade, frame)
     w_px, h_px = frame.render_px(RENDER_DPI)
-    view_widget.render_image(
-        w_px, h_px, sharp_shadows=True, page_key=key, scene=facade, style=style,
+    return view_widget.render_image(
+        w_px, h_px, sharp_shadows=True, scene=facade, style=style,
         camera=lambda origin: frame_camera(source.camera, frame, view, scene, origin),
         rows=lambda: frame_rows(view_widget, scene, frame, view),
         edge_px=pen_px(getattr(frame, "pen_edge_mm", 0.18), RENDER_DPI),
-        profile_px=pen_px(getattr(frame, "pen_profile_mm", 0.35), RENDER_DPI))
-    return True
+        profile_px=pen_px(getattr(frame, "pen_profile_mm", 0.35), RENDER_DPI), **out)
+
+
+def render(view_widget, frame, key) -> bool:
+    """Render ``frame`` into the page texture ``key``; False when it has
+    nothing to show (its saved view is gone)."""
+    return _render(view_widget, frame, page_key=key) is not False
+
+
+def picture(view_widget, frame):
+    """A shaded frame's render read back for a file: ``(w, h, rgba)``, or
+    None when its saved view is gone."""
+    from PySide6.QtGui import QImage
+    image = _render(view_widget, frame)
+    if image is False or image is None or image.isNull():
+        return None
+    rgba = image.convertToFormat(QImage.Format_RGBA8888)
+    w, h = rgba.width(), rgba.height()
+    rows = np.frombuffer(rgba.constBits(), np.uint8, count=rgba.bytesPerLine() * h).reshape(h, -1)
+    # The render composed its own background: on paper it is opaque.
+    px = rows[:, :w * 4].reshape(h, w, 4).copy()
+    px[..., 3] = 255
+    return w, h, px.tobytes()
 
 
 def drawing(source, frame):
@@ -231,7 +252,64 @@ def drawing(source, frame):
     out = np.empty_like(segs)
     out[:, 0::2] = (segs[:, 0::2] + half_w) * k
     out[:, 1::2] = (half_h - segs[:, 1::2]) * k
-    return out, np.asarray(d.kinds, np.int8)
+    fills = []
+    for ring in d.loops:
+        mm = np.asarray(ring, float).reshape(-1, 2).copy()
+        mm[:, 0] = (mm[:, 0] + half_w) * k
+        mm[:, 1] = (half_h - mm[:, 1]) * k
+        fills.append(mm)
+    return out, np.asarray(d.kinds, np.int8), fills
+
+
+def frame_contents(view_widget, comps, ground=None):
+    """Each frame's content for a file, worked out afresh: ``(contents,
+    pictures, profiles, troubled)`` as sheet_pdf / sheet_image take them;
+    ``troubled`` names the sheets where a frame would not render (it
+    prints its placeholder, the rest goes on)."""
+    source = view_widget.source_viewport
+    scene = source.scene
+    contents, pictures, profiles, troubled = {}, {}, {}, []
+    for comp in comps:
+        if ground is not None:
+            profiles.update(ground.profiles(comp, scene) or {})
+        for frame in comp.frames:
+            key = frame._doc_key
+            try:
+                if saved_view(scene, frame) is False:
+                    contents[key] = {"missing": frame.view_key[6:]}
+                elif frame.style == "vectorial" and not getattr(frame, "perspective", False):
+                    got = drawing(source, frame)
+                    if got is not None:
+                        segs, kinds, fills = got
+                        contents[key] = {"segs": segs, "kinds": kinds, "fills": fills}
+                else:
+                    got = picture(view_widget, frame)
+                    if got is not None:
+                        contents[key] = {"image": got[:2]}
+                        pictures[f"frame:{key}"] = got
+            except Exception:  # noqa: BLE001 — one frame, not the document
+                import traceback
+                traceback.print_exc()
+                if comp.name not in troubled:
+                    troubled.append(comp.name)
+    return contents, pictures, profiles or None, troubled
+
+
+def export_pdf(view_widget, comps, path, ground=None, doc_path=None) -> list:
+    """Sheets ``comps`` into the PDF at ``path`` (sheets::pdf); returns the
+    names of the sheets where a frame would not render."""
+    contents, pictures, profiles, troubled = frame_contents(view_widget, comps, ground)
+    NATIVE.sheet_pdf(str(path), list(comps), contents, pictures, profiles, view_widget.source_viewport.scene,
+                     None if doc_path is None else str(doc_path))
+    return troubled
+
+
+def export_image(view_widget, comp, path, dpi=200.0, ground=None, doc_path=None) -> list:
+    """Sheet ``comp`` as a PNG or JPEG at ``dpi`` (sheets::raster)."""
+    contents, pictures, profiles, troubled = frame_contents(view_widget, [comp], ground)
+    NATIVE.sheet_image(str(path), comp, float(dpi), contents, pictures, profiles,
+                       view_widget.source_viewport.scene, None if doc_path is None else str(doc_path))
+    return troubled
 
 
 class Ground:

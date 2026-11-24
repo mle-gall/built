@@ -248,7 +248,7 @@ def test_frames_show_the_vector_pass_and_the_renders(host, monkeypatch):
 
     def drawing(source, frame):
         assert frame.style == "vectorial"
-        return np.array([[0, 0, 10, 0], [0, 0, 0, 5]], float), np.array([0, 1], np.int8)
+        return np.array([[0, 0, 10, 0], [0, 0, 0, 5]], float), np.array([0, 1], np.int8), []
     monkeypatch.setattr(wgpu_sheet_frames, "drawing", drawing)
     shaded = []
 
@@ -495,6 +495,50 @@ def test_the_view_tool_places_a_frame(host):
     assert len(comp.comp.frames) == before
 
 
+@pytest.mark.parametrize("tool,where,check", [
+    ("texto", "texts", lambda i: i.text == "Text" and (i.x_mm, i.y_mm) == (40.0, 200.0)),
+    ("escala", "scalebars", lambda i: i.scale_n == 100.0),
+    ("norte", "nortes", lambda i: (i.x_mm, i.y_mm) == (40.0, 200.0)),
+    ("leyenda", "leyendas", lambda i: (i.x_mm, i.y_mm) == (40.0, 200.0)),
+    ("rect", "shapes", lambda i: (i.kind, i.w_mm, i.h_mm) == ("rect", 30.0, 20.0)),
+    ("terreno", "shapes", lambda i: (i.kind, i.stroke_mm, i.invert) == ("terreno", 0.5, False)),
+    ("llamada", "llamadas", lambda i: i.number == "1" and i.frame_uid),
+    ("perfil", "perfiles", lambda i: (i.w_mm, i.h_mm) == (80.0, 40.0)),
+])
+def test_the_placement_tools_make_their_item_in_one_step(host, tool, where, check):
+    """A click or a drag with an item tool armed: the item there, with the
+    composer's defaults (sheets::create), one step of the history, then
+    back to Select."""
+    ws = _sheets(host)
+    comp = ws.composer
+    _run_actions(host, f"sheets:tool\x1f{tool}")
+    assert comp.tool_mode == tool
+    before = len(getattr(comp.comp, where))
+    x0, y0, x1, y1 = (40, 200, 70, 220) if tool != "llamada" else (40, 40, 60, 60)
+    _run_actions(host, f"sheets:place\x1f{x0}\x1f{y0}\x1f{x1}\x1f{y1}\x1f{tool}")
+    items = getattr(comp.comp, where)
+    assert len(items) == before + 1 and check(items[-1])
+    assert comp.tool_mode == "select"
+    assert host.view.renderer.page_selection() == [items[-1]._doc_key]
+    ws._undo()
+    assert len(getattr(comp.comp, where)) == before
+
+
+def test_a_new_text_opens_for_typing_and_the_words_are_one_edit(host):
+    ws = _sheets(host)
+    comp = ws.composer
+    rec = host.view.renderer
+    _run_actions(host, "sheets:tool\x1ftexto")
+    _run_actions(host, "sheets:place\x1f40\x1f200\x1f40\x1f200\x1ftexto")
+    host.view.draw_frame()
+    text = comp.comp.texts[-1]
+    assert rec.last("page_edit_text") == (text._doc_key,)
+    _run_actions(host, f"sheets:set\x1f{text._doc_key}\x1f" + json.dumps({"text": "Planta\nbaja"}))
+    assert text.text == "Planta\nbaja"
+    ws._undo()
+    assert text.text == "Text"
+
+
 def test_tools_not_native_yet_open_the_classic_editor(host, monkeypatch):
     ws = _sheets(host)
     opened = []
@@ -539,3 +583,7 @@ def test_export_pdf_from_the_workspace(host, tmp_path, monkeypatch):
     assert asked and asked[0][1].endswith(".pdf")                    # next to the document
     assert Path(asked[0][1]).parent == Path(host.window._current_path).parent
     assert ws.last_export == str(out)
+    pymupdf = pytest.importorskip("pymupdf")
+    doc = pymupdf.open(str(out))                                     # the Rust writer's
+    assert doc.page_count == 1 and "Inter" in " ".join(f[3] for f in doc[0].get_fonts())
+    assert "Top (plan)" in doc[0].get_text()

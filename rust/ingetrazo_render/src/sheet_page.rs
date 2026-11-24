@@ -25,7 +25,6 @@ pub const PT_PER_MM: f32 = 72.0 / 25.4;
 const SNAP_MM: f64 = 2.0;
 /// Handle half-size in points.
 const HANDLE: f32 = 4.0;
-const PT_TO_MM: f32 = 25.4 / 72.0;
 /// The ink of the vector pass and of text without its own colour.
 const INK_ON_PAPER: Color32 = Color32::from_rgb(0x1e, 0x24, 0x2c);
 /// The screen-only guide round a borderless frame and the margin.
@@ -50,6 +49,8 @@ pub struct Snapshot {
     pub size: [f64; 2],
     pub margin: f64,
     pub border: J,
+    /// The sheet border's display list (sheets::items_c), if any.
+    pub raw_border: Option<J>,
     pub guides_v: Vec<f64>,
     pub guides_h: Vec<f64>,
     pub items: Vec<Item>,
@@ -83,6 +84,7 @@ impl Snapshot {
             size: [v["size"][0].as_f64()?, v["size"][1].as_f64()?],
             margin: v["margin"].as_f64().unwrap_or(10.0),
             border: v["border"].clone(),
+            raw_border: v["border_display"].as_array().filter(|a| !a.is_empty()).map(|_| v["border_display"].clone()),
             guides_v: nums(&v["guides"]["v"]),
             guides_h: nums(&v["guides"]["h"]),
             fields: v["fields"].clone(),
@@ -91,6 +93,11 @@ impl Snapshot {
         })
     }
 }
+
+/// The tools a click or a drag on the page places an item with
+/// (ingetrazo_core sheets::create PLACE_TOOLS).
+pub const PLACE_TOOLS: [&str; 13] = ["vista", "texto", "llamada", "cajetin", "escala", "norte", "leyenda", "perfil",
+                                     "linea", "flecha", "terreno", "rect", "elipse"];
 
 /// What a frame shows: its line drawing, paper mm in the frame, with a
 /// line class each (0 edge, 1 profile, 2 cut, 3 hidden), or a picture.
@@ -148,17 +155,10 @@ pub struct Page {
     style_clip: Option<(String, serde_json::Map<String, J>)>,
     /// A passing word for the bottom bar (style copied, grouped…).
     flash: Option<(&'static str, std::time::Instant)>,
-}
-
-fn hex(s: &str, fallback: Color32) -> Color32 {
-    let h = s.trim_start_matches('#');
-    if h.len() != 6 {
-        return fallback;
-    }
-    match u32::from_str_radix(h, 16) {
-        Ok(v) => Color32::from_rgb((v >> 16) as u8, (v >> 8) as u8, v as u8),
-        Err(_) => fallback,
-    }
+    /// A text item being typed in on the page: its key and the words so far.
+    pub editing: Option<(u64, String)>,
+    /// The editor wants the keyboard (it just opened).
+    pub edit_focus: bool,
 }
 
 fn snap(value: f64, targets: &[f64]) -> Option<f64> {
@@ -197,6 +197,73 @@ impl Page {
         }
         self.raw = text;
         self.doc = Some(doc);
+    }
+    /// Start typing in text item `key` (its words as the document has them).
+    pub fn edit_text(&mut self, key: u64) {
+        let text = self.item(key).and_then(|i| i.data["fields"]["text"].as_str().map(str::to_string));
+        if let Some(t) = text {
+            self.selection = vec![key];
+            self.editing = Some((key, t));
+            self.edit_focus = true;
+        }
+    }
+    /// The words typed: one edit of the document, unless nothing changed.
+    pub fn commit_text(&mut self, out: &mut Vec<String>) {
+        if let Some((key, text)) = self.editing.take() {
+            let was = self.item(key).and_then(|i| i.data["fields"]["text"].as_str().map(str::to_string));
+            if was.as_deref() != Some(text.as_str()) {
+                out.push(format!("sheets:set\u{1f}{key}\u{1f}{}", serde_json::json!({"text": text})));
+            }
+        }
+    }
+    /// The words over the item, at its size, on paper; leaving the field
+    /// (or ⌘↩, or a press on the page) is one edit, Esc puts them back.
+    pub fn text_editor(&mut self, ctx: &egui::Context, out: &mut Vec<String>) {
+        let Some(key) = self.editing.as_ref().map(|e| e.0) else { return };
+        let Some((rect, size)) = self.text_box(key) else {
+            self.editing = None;
+            return;
+        };
+        let focus = std::mem::take(&mut self.edit_focus);
+        let (mut commit, mut cancel) = (false, false);
+        egui::Area::new(egui::Id::new("sheet_text_editor"))
+            .fixed_pos(rect.min)
+            .order(egui::Order::Foreground)
+            .show(ctx, |ui| {
+                let Some((_, text)) = self.editing.as_mut() else { return };
+                egui::Frame::new().fill(Color32::WHITE).stroke(Stroke::new(1.0_f32, ACCENT)).show(ui, |ui| {
+                    let edit = egui::TextEdit::multiline(text)
+                        .font(FontId::proportional(size))
+                        .text_color(INK_ON_PAPER)
+                        .background_color(Color32::WHITE)
+                        .frame(false)
+                        .margin(egui::Margin::ZERO)
+                        .desired_width(rect.width().max(60.0))
+                        .desired_rows(1);
+                    let resp = ui.add(edit);
+                    if focus {
+                        resp.request_focus();
+                    }
+                    let (escape, submit) = ui.input(|i| (i.key_pressed(egui::Key::Escape),
+                                                         i.key_pressed(egui::Key::Enter) && i.modifiers.command));
+                    if escape {
+                        cancel = true;
+                    } else if submit || (resp.lost_focus() && !focus) {
+                        commit = true;
+                    }
+                });
+            });
+        if cancel {
+            self.editing = None;
+        } else if commit {
+            self.commit_text(out);
+        }
+    }
+    /// The screen box a text item is typed in, and its type size in points.
+    pub fn text_box(&self, key: u64) -> Option<(Rect, f32)> {
+        let i = self.item(key)?;
+        let size = i.data["fields"]["size_pt"].as_f64().unwrap_or(14.0) * 25.4 / 72.0 * 0.75;
+        Some((self.screen_rect(self.rect_of(i)), (size as f32 * self.zoom).max(6.0)))
     }
     pub fn clear(&mut self) {
         let mut freed = std::mem::take(&mut self.freed);
@@ -250,6 +317,7 @@ impl Page {
             (_, "pan") => "Drag to move the sheet. Scroll pans, ⌘-scroll zooms.",
             (_, "zoom") | (_, "zoom_ventana") => "Click to zoom in, ⌥-click to zoom out.",
             (_, "vista") => "Drag a rectangle to place a model view.",
+            (_, t) if PLACE_TOOLS.contains(&t) => "Click to place it, or drag its box.",
             _ if !self.selection.is_empty() => "Drag to move, the handles resize. Arrows nudge 1 mm, ⇧ 10 mm, ⌥ 0.1 mm. Esc clears.",
             _ => "Click an item to select it, ⇧-click to add. Drag to move it.",
         }
@@ -375,6 +443,10 @@ impl Page {
         if self.doc.is_none() {
             return;
         }
+        if matches!(kind, "press" | "double") && self.editing.is_some() {
+            // A press elsewhere on the page ends the typing.
+            self.commit_text(out);
+        }
         let tool = self.tool.as_str();
         match kind {
             "leave" => {
@@ -382,6 +454,16 @@ impl Page {
                 self.cursor = "";
             }
             "press" | "double" => {
+                if kind == "double" && button == 1 && !PLACE_TOOLS.contains(&tool) {
+                    // A text block: typed in where it is.
+                    let mm = self.to_mm(p);
+                    if let Some(k) = self.hit(mm) {
+                        if self.item(k).is_some_and(|i| i.kind == "text" && !i.locked) {
+                            self.edit_text(k);
+                            return;
+                        }
+                    }
+                }
                 if button == 3 || tool == "pan" {
                     self.drag = Some(Drag::Pan { last: p });
                     self.cursor = "grabbing";
@@ -395,7 +477,7 @@ impl Page {
                     return;
                 }
                 let mm = self.to_mm(p);
-                if tool == "vista" {
+                if PLACE_TOOLS.contains(&tool) {
                     self.drag = Some(Drag::Place { from: mm, to: mm });
                     return;
                 }
@@ -475,7 +557,7 @@ impl Page {
                     self.hover = self.hit(self.to_mm(p));
                     self.cursor = match (tool, self.handle_at(p)) {
                         ("pan", _) => "grab",
-                        ("vista", _) => "crosshair",
+                        (t, _) if PLACE_TOOLS.contains(&t) => "crosshair",
                         ("zoom" | "zoom_ventana", _) => "zoom",
                         (_, Some((_, h))) => Self::cursor_for_handle(h),
                         _ if self.hover.is_some_and(|k| self.selection.contains(&k)) => "move",
@@ -516,8 +598,8 @@ impl Page {
                         }
                     }
                     Some(Drag::Place { from, to }) => {
-                        out.push(format!("sheets:place\u{1f}{:.3}\u{1f}{:.3}\u{1f}{:.3}\u{1f}{:.3}",
-                                         from[0], from[1], to[0], to[1]));
+                        out.push(format!("sheets:place\u{1f}{:.3}\u{1f}{:.3}\u{1f}{:.3}\u{1f}{:.3}\u{1f}{}",
+                                         from[0], from[1], to[0], to[1], self.tool));
                     }
                     _ => {}
                 }
@@ -691,18 +773,12 @@ impl Page {
         painter.rect_filled(paper, 0.0, Color32::WHITE);
         let clip = paper.intersect(screen);
         let painter = painter.with_clip_rect(clip);
-        let z = self.zoom;
         let m = doc.margin;
         dashed_rect(&painter, self.screen_rect([m, m, doc.size[0] - 2.0 * m, doc.size[1] - 2.0 * m]), GUIDE_ON_PAPER);
-        if doc.border["on"].as_bool().unwrap_or(false) {
-            let w = (doc.border["mm"].as_f64().unwrap_or(0.5) as f32 * z).max(1.0);
-            let c = hex(doc.border["color"].as_str().unwrap_or(""), INK_ON_PAPER);
-            let r = (doc.border["radius_mm"].as_f64().unwrap_or(0.0) as f32 * z) as u8;
-            let rect = self.screen_rect([m, m, doc.size[0] - 2.0 * m, doc.size[1] - 2.0 * m]);
-            painter.rect_stroke(rect, r, Stroke::new(w, c), egui::StrokeKind::Middle);
-            if doc.border["style"].as_str() == Some("double") {
-                painter.rect_stroke(rect.shrink(w * 3.0), r, Stroke::new(w * 0.5, c), egui::StrokeKind::Middle);
-            }
+        // The sheet's border: its display list (sheets::items_c).
+        if let Some(ops) = doc.raw_border.as_ref() {
+            let place = crate::sheet_display::Place { origin: self.to_screen(0.0, 0.0), zoom: self.zoom };
+            crate::sheet_display::paint(&painter, ctx, &mut self.pictures, ops, place);
         }
         let guide = ACCENT.gamma_multiply(0.45);
         for x in &doc.guides_v {
@@ -713,13 +789,16 @@ impl Page {
             let sy = self.to_screen(0.0, *y).y;
             painter.hline(paper.x_range(), sy, Stroke::new(1.0_f32, guide));
         }
-        for item in doc.items.iter().filter(|i| !i.hidden) {
+        let typing = self.editing.as_ref().map(|e| e.0);
+        for item in doc.items.iter().filter(|i| !i.hidden && Some(i.key) != typing) {
             let r = self.rect_of(item);
             let rect = self.screen_rect(r);
             match item.kind.as_str() {
-                "frame" => self.paint_frame(&painter, item, rect),
-                "text" => self.paint_text(&painter, ctx, item, rect),
-                "titleblock" => self.paint_title_block(&painter, item, rect),
+                "frame" => {
+                    self.paint_frame(&painter, item, rect);
+                    let place = crate::sheet_display::Place { origin: rect.min, zoom: self.zoom };
+                    crate::sheet_display::paint(&painter, ctx, &mut self.pictures, &item.data["display"], place);
+                }
                 _ => {
                     let place = crate::sheet_display::Place { origin: rect.min, zoom: self.zoom };
                     crate::sheet_display::paint(&painter, ctx, &mut self.pictures, &item.data["display"], place);
@@ -780,117 +859,16 @@ impl Page {
                 }
             }
         }
-        if f["border"].as_bool().unwrap_or(false) {
-            let w = (f["border_mm"].as_f64().unwrap_or(0.3) as f32 * z).max(1.0);
-            painter.rect_stroke(rect, 0, Stroke::new(w, hex(f["border_color"].as_str().unwrap_or(""), INK_ON_PAPER)),
-                                egui::StrokeKind::Middle);
-        } else {
+        if !f["border"].as_bool().unwrap_or(false) {
+            // A borderless frame still reads as a frame on screen (never printed).
             dashed_rect(painter, rect, GUIDE_ON_PAPER);
         }
         if !self.has_content(item.key) {
             painter.text(rect.left_top() + vec2(6.0, 6.0), Align2::LEFT_TOP, "Updating the view…",
                          FontId::proportional(TYPE_META), FAINT);
         }
-        if f["show_title"].as_bool().unwrap_or(false) {
-            let size = (f["title_mm"].as_f64().unwrap_or(4.0) as f32 * z).max(4.0);
-            let mut title = f["title"].as_str().unwrap_or("").to_string();
-            if f["title_scale"].as_bool().unwrap_or(true) {
-                title = format!("{title}    ESC. {}", f["scale"].as_str().unwrap_or(""));
-            }
-            let above = f["title_pos"].as_str() == Some("above");
-            let y = if above { rect.top() - size * 0.4 } else { rect.bottom() + size * 0.4 };
-            let anchor = if above { Align2::LEFT_BOTTOM } else { Align2::LEFT_TOP };
-            painter.text(pos2(rect.left(), y), anchor, title, FontId::proportional(size), INK_ON_PAPER);
-            let rule_y = if above { y + 0.15 * size } else { y + size * 1.3 };
-            painter.hline(rect.x_range(), rule_y, Stroke::new((0.25 * z).max(0.6), INK_ON_PAPER));
-        }
     }
 
-    fn paint_text(&mut self, painter: &egui::Painter, ctx: &egui::Context, item: &Item, rect: Rect) {
-        let t = &item.data["text"];
-        let z = self.zoom;
-        let size = (t["size_pt"].as_f64().unwrap_or(14.0) as f32 * PT_TO_MM * z).max(1.0);
-        let colour = hex(t["color"].as_str().unwrap_or(""), INK_ON_PAPER);
-        let mut job = egui::text::LayoutJob::default();
-        let format = egui::TextFormat {
-            font_id: FontId::proportional(size),
-            color: colour,
-            italics: t["italic"].as_bool().unwrap_or(false),
-            underline: if t["underline"].as_bool().unwrap_or(false) { Stroke::new((size / 14.0).max(0.6), colour) } else { Stroke::NONE },
-            ..Default::default()
-        };
-        job.append(t["text"].as_str().unwrap_or(""), 0.0, format);
-        job.wrap.max_width = rect.width().max(1.0);
-        job.halign = match t["align"].as_str() {
-            Some("center") => egui::Align::Center,
-            Some("right") => egui::Align::RIGHT,
-            _ => egui::Align::LEFT,
-        };
-        let galley = ctx.fonts(|f| f.layout_job(job));
-        let h = galley.size().y.max(size);
-        self.text_h.insert(item.key, (h / z.max(1e-6)) as f64);
-        let block = Rect::from_min_size(rect.min, vec2(rect.width(), h));
-        let bg = t["bg_color"].as_str().unwrap_or("");
-        if !bg.is_empty() {
-            let a = t["bg_opacity"].as_f64().unwrap_or(1.0).clamp(0.0, 1.0) as f32;
-            painter.rect_filled(block.expand(1.0 * z), 0, hex(bg, Color32::WHITE).gamma_multiply(a));
-        }
-        let x = match t["align"].as_str() {
-            Some("center") => block.center().x,
-            Some("right") => block.right(),
-            _ => block.left(),
-        };
-        painter.galley(pos2(x, block.top()), galley.clone(), colour);
-        if t["bold"].as_bool().unwrap_or(false) {
-            // Faux bold: the font set has one weight.
-            painter.galley(pos2(x + (size / 28.0).max(0.4), block.top()), galley, colour);
-        }
-    }
-
-    fn paint_title_block(&self, painter: &egui::Painter, item: &Item, rect: Rect) {
-        let t = &item.data["titleblock"];
-        let z = self.zoom;
-        let rows: Vec<(String, String)> = t["rows"].as_array().map(|a| a.iter().map(|r| (
-            r[0].as_str().unwrap_or("").to_string(), r[1].as_str().unwrap_or("").to_string())).collect()).unwrap_or_default();
-        let line = hex(t["line_color"].as_str().unwrap_or(""), INK_ON_PAPER);
-        let label_c = hex(t["label_color"].as_str().unwrap_or(""), FAINT);
-        let text_c = hex(t["text_color"].as_str().unwrap_or(""), INK_ON_PAPER);
-        let border = Stroke::new((t["border_mm"].as_f64().unwrap_or(0.5) as f32 * z).max(1.0), line);
-        let grid = Stroke::new((t["line_mm"].as_f64().unwrap_or(0.2) as f32 * z).max(0.6), line);
-        let fill = t["fill_color"].as_str().unwrap_or("");
-        let minimal = t["layout"].as_str() == Some("minimal");
-        let cols = t["columns"].as_i64().unwrap_or(1).max(1) as usize;
-        let per_col = rows.len().div_ceil(cols).max(1);
-        let col_w = rect.width() / cols as f32;
-        let row_h = rect.height() / per_col as f32;
-        let label_w = match t["label_mm"].as_f64().unwrap_or(0.0) as f32 {
-            w if w > 0.0 => w * z,
-            _ => col_w * 0.3,
-        };
-        let size = (row_h * 0.42).min(3.2 * z).max(1.0);
-        for (n, (label, value)) in rows.iter().enumerate() {
-            let (c, r) = (n / per_col, n % per_col);
-            let cell = Rect::from_min_size(pos2(rect.left() + c as f32 * col_w, rect.top() + r as f32 * row_h), vec2(col_w, row_h));
-            let lab = Rect::from_min_max(cell.min, pos2(cell.left() + label_w, cell.bottom()));
-            if !fill.is_empty() {
-                painter.rect_filled(lab, 0, hex(fill, Color32::WHITE));
-            }
-            if !minimal {
-                painter.rect_stroke(cell, 0, grid, egui::StrokeKind::Middle);
-                painter.vline(lab.right(), cell.y_range(), grid);
-            } else if r + 1 < per_col {
-                painter.hline(cell.x_range(), cell.bottom(), grid);
-            }
-            painter.text(pos2(lab.left() + 1.0 * z, lab.center().y), Align2::LEFT_CENTER, label,
-                         FontId::proportional(size * 0.8), label_c);
-            painter.text(pos2(lab.right() + 1.5 * z, cell.center().y), Align2::LEFT_CENTER, value,
-                         FontId::proportional(size), text_c);
-        }
-        painter.rect_stroke(rect, 0, border, egui::StrokeKind::Middle);
-        if t["double_border"].as_bool().unwrap_or(false) {
-            painter.rect_stroke(rect.shrink(1.2 * z), 0, Stroke::new(grid.width, line), egui::StrokeKind::Middle);
-        }
-    }
 }
 
 fn dashed_rect(painter: &egui::Painter, r: Rect, colour: Color32) {
@@ -906,7 +884,8 @@ mod tests {
         let mut p = Page { tool: "select".into(), ..Default::default() };
         p.set(r#"{"key":7,"size":[420,297],"margin":10,"border":{"on":false},"guides":{"v":[100],"h":[]},
             "items":[{"key":1,"kind":"frame","rect":[20,20,190,150],"locked":false,"hidden":false,"editable":true,"frame":{}},
-                     {"key":2,"kind":"text","rect":[20,190,180,6],"locked":false,"hidden":false,"editable":true,"text":{}},
+                     {"key":2,"kind":"text","rect":[20,190,180,6],"locked":false,"hidden":false,"editable":true,"text":{},
+                      "fields":{"text":"Planta","size_pt":14}},
                      {"key":3,"kind":"frame","rect":[230,20,150,150],"locked":true,"hidden":false,"editable":true,"frame":{}}]}"#.into());
         p.zoom = 2.0;
         p.origin = pos2(100.0, 50.0);
@@ -993,7 +972,7 @@ mod tests {
         p.pointer("press", at(&p, 300.0, 200.0), 1, 0, &mut out);
         p.pointer("move", at(&p, 380.0, 260.0), 1, 0, &mut out);
         p.pointer("release", at(&p, 380.0, 260.0), 1, 0, &mut out);
-        assert_eq!(out, vec!["sheets:place\u{1f}300.000\u{1f}200.000\u{1f}380.000\u{1f}260.000".to_string()]);
+        assert_eq!(out, vec!["sheets:place\u{1f}300.000\u{1f}200.000\u{1f}380.000\u{1f}260.000\u{1f}vista".to_string()]);
         out.clear();
         p.set_selection(vec![2]);
         assert!(p.key("ArrowRight", 4, &mut out));
@@ -1012,7 +991,7 @@ mod tests {
         assert!(a.starts_with("sheets:set_many\u{1f}1\u{1f}{\"group_id\":\"") && a.contains("\u{1f}2\u{1f}"), "{a}");
         // The document says they are grouped: a click on one takes both.
         let grouped = p.raw.replacen("\"editable\":true,\"frame\":{}}", "\"editable\":true,\"frame\":{},\"fields\":{\"group_id\":\"g\",\"style\":\"vectorial\"}}", 1)
-            .replace("\"text\":{}}", "\"text\":{},\"fields\":{\"group_id\":\"g\"}}");
+            .replace("\"size_pt\":14}", "\"size_pt\":14,\"group_id\":\"g\"}");
         p.set(grouped);
         p.set_selection(vec![]);
         let q = at(&p, 50.0, 50.0);
@@ -1030,6 +1009,25 @@ mod tests {
         assert!(p.command("paste_style", &mut out));
         assert!(out.is_empty());
         assert!(p.hint().contains("another kind"));
+    }
+
+    #[test]
+    fn a_double_click_types_in_a_text_and_an_item_tool_places_its_kind() {
+        let mut p = page();
+        let mut out = vec![];
+        p.pointer("double", at(&p, 30.0, 192.0), 1, 0, &mut out);
+        assert_eq!(p.editing, Some((2, "Planta".to_string())));
+        p.commit_text(&mut out);
+        assert!(out.is_empty(), "unchanged words are no edit");
+        p.edit_text(2);
+        p.editing.as_mut().unwrap().1.push_str(" baja");
+        p.commit_text(&mut out);
+        assert_eq!(out, vec![format!("sheets:set\u{1f}2\u{1f}{}", serde_json::json!({"text": "Planta baja"}))]);
+        out.clear();
+        p.tool = "escala".into();
+        p.pointer("press", at(&p, 300.0, 250.0), 1, 0, &mut out);
+        p.pointer("release", at(&p, 300.0, 250.0), 1, 0, &mut out);
+        assert_eq!(out, vec!["sheets:place\u{1f}300.000\u{1f}250.000\u{1f}300.000\u{1f}250.000\u{1f}escala".to_string()]);
     }
 
     #[test]

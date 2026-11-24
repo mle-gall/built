@@ -19,11 +19,8 @@ from views import wgpu_library as L
 
 
 @pytest.fixture(autouse=True)
-def _throwaway_settings(tmp_path, monkeypatch):
+def _throwaway_settings(private_settings, monkeypatch):
     from PySide6.QtCore import QSettings
-    QSettings.setDefaultFormat(QSettings.IniFormat)
-    for scope in (QSettings.UserScope, QSettings.SystemScope):
-        QSettings.setPath(QSettings.IniFormat, scope, str(tmp_path))
     QSettings().clear()
     monkeypatch.setenv("INGETRAZO_STORE", "0")
 

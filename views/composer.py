@@ -55,14 +55,7 @@ _HANDLE_MM = 3.0          # corner resize handle, in paper mm
 _SNAP_MM = 2.0
 
 #: Standard views offered as frame sources (label key → camera.set_view key).
-_STD_VIEWS = (
-    ("Top (plan)", "top"),
-    ("Front", "front"),
-    ("Back", "back"),
-    ("Left", "left"),
-    ("Right", "right"),
-    ("Isometric", "iso"),
-)
+from core.composition import STD_VIEWS as _STD_VIEWS  # noqa: E402
 
 
 # ── mm-space painters (shared by canvas and PDF) ────────────────────────────

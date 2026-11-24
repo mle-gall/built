@@ -10,8 +10,7 @@ from views.settings_sheet import Env, SettingsSheet
 
 
 @pytest.fixture
-def settings_file(tmp_path):
-    QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, str(tmp_path))
+def settings_file(private_settings):
     # Qt with no organisation set cannot persist even an INI preference.
     from PySide6.QtCore import QCoreApplication
     previous = QCoreApplication.organizationName()

@@ -83,6 +83,16 @@ def parse_scale(text: str, default: float = 100.0) -> float:
 #: Print resolution for the raster fill of a view frame.
 RENDER_DPI = 300
 
+#: The standard views a frame can show, (label, key): ``view_key`` "std:<key>".
+STD_VIEWS = (
+    ("Top (plan)", "top"),
+    ("Front", "front"),
+    ("Back", "back"),
+    ("Left", "left"),
+    ("Right", "right"),
+    ("Isometric", "iso"),
+)
+
 #: Points → millimetres (text sizes on paper).
 PT_TO_MM = 25.4 / 72.0
 
