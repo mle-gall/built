@@ -23,12 +23,12 @@ from __future__ import annotations
 import math
 
 from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QColor, QFont, QPen
+from PySide6.QtGui import QColor, QFont, QPen, QValidator
 from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import (
     QCheckBox, QDialog, QDialogButtonBox, QDoubleSpinBox, QFormLayout,
     QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem,
-    QPushButton, QVBoxLayout, QWidget,
+    QPushButton, QToolTip, QVBoxLayout, QWidget,
 )
 
 from core.i18n import current_language
@@ -150,6 +150,67 @@ def _height_step(unit: str) -> float:
     return 0.10 if unit in ("m", "cm", "mm") else 4 * 0.0254
 
 
+class LengthSpinBox(QDoubleSpinBox):
+    """A spin box whose value is metres and whose text is the document's
+    unit. The arrows add one step of the shown precision (1 mm in a
+    millimetre document); text that is not a length («5 m²», «abc») is not
+    taken, and the reason shows next to the field."""
+
+    def __init__(self, parent=None, minimum: float = 0.0,
+                 maximum: float = 1000.0, unit: str | None = None,
+                 decimals: int | None = None) -> None:
+        super().__init__(parent)
+        self._units = _units()
+        self._unit = unit or self._units.model_unit()
+        # At least to the millimetre: a 2 mm text in a document shown to the
+        # centimetre must not read «0 cm».
+        self._shown = self._units.fine_precision() if decimals is None else decimals
+        # Qt rounds the stored value to decimals(): metres to the micron
+        # keep every unit's shown precision exact.
+        super().setDecimals(9)
+        self.setRange(minimum, maximum)
+        self.setSingleStep(self._units.display_step(self._unit, self._shown))
+        self.setAccelerated(True)
+
+    def unit(self) -> str:
+        return self._unit
+
+    def textFromValue(self, value: float) -> str:
+        return self._units.localized(
+            self._units.format_length(value, self._unit, self._shown))
+
+    def valueFromText(self, text: str) -> float:
+        r = self._units.parse(text, "length", self._unit)
+        return r.value if r.ok else self.value()
+
+    def _reading(self, text: str):
+        r = self._units.parse(text, "length", self._unit)
+        if r.ok and not self.minimum() - 1e-12 <= r.value <= self.maximum() + 1e-12:
+            from core.i18n import tr
+            return None, tr("Out of range: {low} to {high}",
+                            low=self.textFromValue(self.minimum()),
+                            high=self.textFromValue(self.maximum()))
+        return (r.value, "") if r.ok else (None, r.message())
+
+    def validate(self, text: str, pos: int):
+        value, _ = self._reading(text)
+        state = QValidator.Acceptable if value is not None \
+            else QValidator.Intermediate
+        return state, text, pos
+
+    def error_text(self) -> str:
+        """Why the text in the field is not taken («» when it is)."""
+        return self._reading(self.lineEdit().text())[1]
+
+    def fixup(self, text: str) -> str:
+        msg = self._reading(text)[1]
+        if msg:
+            # Leaving the field puts the last good value back; say why.
+            QToolTip.showText(self.mapToGlobal(self.rect().bottomLeft()),
+                              msg, self)
+        return text
+
+
 class _LevelDialog(QDialog):
     def __init__(self, parent, title: str, name: str, z: float) -> None:
         super().__init__(parent)
@@ -159,7 +220,6 @@ class _LevelDialog(QDialog):
         form.addRow(_t("Name:"), self.name)
         if _units() is not None:
             # The height in the document's units; value() stays in metres.
-            from views.length_field import LengthSpinBox
             self.z = LengthSpinBox(minimum=-1000.0, maximum=1000.0)
             self.z.setSingleStep(_height_step(self.z.unit()))
         else:

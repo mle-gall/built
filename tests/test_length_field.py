@@ -1,10 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""Issue #287: in a millimetre document the 3D Text dialog asked for the
-height and the extrusion in metres. Its fields now show and read the
-document's units (``views.length_field.LengthSpinBox``) while the values
-behind them stay metres — and the value box takes the feet-and-inches
-forms people write (``5' 3 1/2"``)."""
+"""Document-unit input in the Levels plugin, native 3D Text and the value box."""
 from __future__ import annotations
 
 import random
@@ -18,7 +14,7 @@ if QApplication.instance() is None:
 
 from core import units  # noqa: E402
 from core.scene import Scene  # noqa: E402
-from views.length_field import LengthSpinBox  # noqa: E402
+from examples.extensions.niveles import LengthSpinBox  # noqa: E402
 from tests.controller_surface import ControllerSurface as Viewport
 
 IN = 0.0254
