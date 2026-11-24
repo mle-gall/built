@@ -2746,8 +2746,6 @@
  "The tabs on the left of the page: drag any tab there, or back to the right.": "แท็บทางด้านซ้ายของหน้ากระดาษ: ลากแท็บใดๆ มาที่นี่ หรือลากกลับไปทางขวา",
  "Browser": "เบราว์เซอร์",
  "Properties and the Browser open, the other panels closed, all on the right in the factory order.": "เปิดคุณสมบัติและเบราว์เซอร์ ปิดแผงควบคุมอื่น ทั้งหมดอยู่ทางขวาตามลำดับเริ่มต้น",
- "Restore default toolbars": "คืนค่าแถบเครื่องมือเริ่มต้น",
- "Every toolbar back in its factory place and order, the hidden ones shown again. The panels stay as they are.": "คืนค่าแถบเครื่องมือทั้งหมดกลับสู่ตำแหน่งและลำดับเริ่มต้น และแสดงแถบที่ซ่อนไว้ ส่วนแผงควบคุมจะคงเดิม",
  "{n} attempts in a row failed — stopping here. Rephrase the request or type \"continue\" to let it try again.": "พยายามล้มเหลวติดต่อกัน {n} ครั้ง — หยุดการทำงานที่นี่ โปรดปรับเปลี่ยนคำร้องขอหรือพิมพ์ \"continue\" เพื่อลองอีกครั้ง",
  "The local server is loading the model — the first answer takes longer.": "เซิร์ฟเวอร์ในเครื่องกำลังโหลดโมเดล — คำตอบแรกอาจใช้เวลานานขึ้น",
  "{model} is a small model and often fails at writing code. A code model works much better, e.g. {suggested} (ollama pull {suggested}).": "{model} เป็นโมเดลขนาดเล็กและมักเขียนโค้ดล้มเหลว โมเดลสำหรับเขียนโค้ดจะทำงานได้ดีกว่ามาก เช่น {suggested} (ollama pull {suggested})",

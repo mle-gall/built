@@ -2747,8 +2747,6 @@
  "The tabs on the left of the page: drag any tab there, or back to the right.": "ແທັບຢູ່ເບື້ອງຊ້າຍຂອງໜ້າ: ສາມາດລາກແທັບໃດກໍໄດ້ໄປໄວ້ບ່ອນນັ້ນ, ຫຼື ລາກກັບມາເບື້ອງຂວາ.",
  "Browser": "ໂປຣແກຣມທ່ອງເບິ່ງ",
  "Properties and the Browser open, the other panels closed, all on the right in the factory order.": "ເປີດແຜງຄຸນສົມບັດ ແລະ ແຜງທ່ອງເບິ່ງ, ອັດແຜງອື່ນໆທັງໝົດ, ຈັດວາງຢູ່ເບື້ອງຂວາຕາມລຳດັບເລີ່ມຕົ້ນ.",
- "Restore default toolbars": "ຄືນຄ່າແຖບເຄື່ອງມືເລີ່ມຕົ້ນ",
- "Every toolbar back in its factory place and order, the hidden ones shown again. The panels stay as they are.": "ນຳແຖບເຄື່ອງມືທຸກອັນກັບຄືນສູ່ຕຳແໜ່ງ ແລະ ລຳດັບເລີ່ມຕົ້ນ, ແຖບທີ່ເຊື່ອງໄວ້ຈະສະແດງຄືນໃໝ່. ສ່ວນແຜງຕ່າງໆຍັງຄົງຄືເກົ່າ.",
  "{n} attempts in a row failed — stopping here. Rephrase the request or type \"continue\" to let it try again.": "ລອງໃໝ່ຕິດຕໍ່ກັນ {n} ຄັ້ງບໍ່ສຳເລັດ — ຂໍຢຸດພຽງເທົ່ານີ້. ກະລຸນາປ່ຽນຄຳຮ້ອງຂໍໃໝ່ ຫຼື ພິມ \"continue\" ເພື່ອໃຫ້ລອງອີກຄັ້ງ.",
  "The local server is loading the model — the first answer takes longer.": "ເຊີບເວີພາຍໃນກຳລັງໂຫຼດໂມເດວ — ຄຳຕອບທຳອິດຈະໃຊ້ເວລາດົນກວ່າປົກກະຕິ.",
  "{model} is a small model and often fails at writing code. A code model works much better, e.g. {suggested} (ollama pull {suggested}).": "{model} ເປັນໂມເດວຂະໜາດນ້ອຍ ແລະ ມັກຈະຂຽນໂຄ້ດຜິດພາດ. ໂມເດວສຳລັບຂຽນໂຄ້ດໂດຍສະເພາະຈະເຮັດວຽກໄດ້ດີກວ່າ ເຊັ່ນ {suggested} (ollama pull {suggested}).",

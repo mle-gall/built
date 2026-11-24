@@ -2746,8 +2746,6 @@
  "The tabs on the left of the page: drag any tab there, or back to the right.": "페이지 왼쪽의 탭: 아무 탭이나 이곳으로 드래그하거나, 다시 오른쪽으로 드래그하세요.",
  "Browser": "브라우저",
  "Properties and the Browser open, the other panels closed, all on the right in the factory order.": "속성과 브라우저는 열고 나머지 패널은 닫아, 모두 오른쪽에 기본 순서로 둡니다.",
- "Restore default toolbars": "기본 도구 모음 복원",
- "Every toolbar back in its factory place and order, the hidden ones shown again. The panels stay as they are.": "모든 도구 모음을 기본 위치와 순서로 되돌리고, 숨긴 도구 모음을 다시 표시합니다. 패널은 그대로 둡니다.",
  "{n} attempts in a row failed — stopping here. Rephrase the request or type \"continue\" to let it try again.": "{n}번 연속 실패했습니다 — 여기서 멈춥니다. 요청을 바꿔 말하거나 \"continue\"를 입력해 다시 시도하게 하세요.",
  "The local server is loading the model — the first answer takes longer.": "로컬 서버가 모델을 불러오는 중입니다 — 첫 응답은 더 오래 걸립니다.",
  "{model} is a small model and often fails at writing code. A code model works much better, e.g. {suggested} (ollama pull {suggested}).": "{model}은(는) 작은 모델이라 코드 작성에 자주 실패합니다. 코드 모델이 훨씬 낫습니다. 예: {suggested} (ollama pull {suggested}).",

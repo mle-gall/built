@@ -908,7 +908,7 @@ def _paint_divider(tb) -> None:
 
 class _CustomizeBar(QObject):
     """The floating pill of the customize mode, over the bottom of the
-    view: what to do, Restore Defaults and Done (Return or Esc)."""
+    view: instructions and Done (Return or Esc)."""
 
     def __init__(self, window, chrome: _Chrome) -> None:
         super().__init__(window)
@@ -927,14 +927,6 @@ class _CustomizeBar(QObject):
                        frame)
         row.addWidget(label)
         row.addSpacing(8)
-        reset = QPushButton(tr("Restore Defaults"), frame)
-        reset.setAutoDefault(False)
-        restore = getattr(window, "restore_default_toolbars", None)
-        if callable(restore):
-            reset.clicked.connect(restore)
-        else:
-            reset.hide()
-        row.addWidget(reset)
         done = QPushButton(tr("Done"), frame)
         done.setDefault(True)
         done.clicked.connect(lambda: chrome.set_editing(False))

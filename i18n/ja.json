@@ -2760,8 +2760,6 @@
  "The tabs on the left of the page: drag any tab there, or back to the right.": "ページ左側のタブ領域です。タブをここへドラッグしたり、右側へ戻したりできます。",
  "Browser": "ブラウザ",
  "Properties and the Browser open, the other panels closed, all on the right in the factory order.": "プロパティとブラウザを開き、他のパネルを閉じ、すべてを右側の初期順序に戻します。",
- "Restore default toolbars": "ツールバーを初期配置に戻す",
- "Every toolbar back in its factory place and order, the hidden ones shown again. The panels stay as they are.": "すべてのツールバーを初期位置と順序に戻し、非表示のものを再表示します。パネルは変更しません。",
  "{n} attempts in a row failed — stopping here. Rephrase the request or type \"continue\" to let it try again.": "{n} 回連続で失敗したため、ここで停止します。依頼を書き直すか、「continue」と入力して再試行してください。",
  "The local server is loading the model — the first answer takes longer.": "ローカルサーバーがモデルを読み込んでいます。最初の回答には時間がかかります。",
  "{model} is a small model and often fails at writing code. A code model works much better, e.g. {suggested} (ollama pull {suggested}).": "{model} は小規模なモデルで、コードの生成に失敗しがちです。{suggested} などのコード向けモデルを使うと改善します（ollama pull {suggested}）。",
