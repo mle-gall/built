@@ -371,6 +371,33 @@ impl Default for Style {
     }
 }
 
+/// A line of text laid out at the origin, kept by its font, words, anchor
+/// and ink: a marker's label is the same from frame to frame and only its
+/// place changes, and the layout (font lookup, shaping, outlines) was most
+/// of a label's cost. Bounded; a full cache starts again.
+fn text_run(font: &AnnotationFont, text: &str, anchor: &str, ink: Color) -> Option<std::rc::Rc<resvg::usvg::Tree>> {
+    use std::{cell::RefCell, collections::HashMap, rc::Rc};
+    type Key = (String, String, u64, bool, bool, String, [u8; 4]);
+    thread_local! {
+        static RUNS: RefCell<HashMap<Key, Rc<resvg::usvg::Tree>>> = RefCell::new(HashMap::new());
+    }
+    let key: Key = (text.to_owned(), font.family.clone(), font.size.to_bits(), font.bold, font.italic,
+                    anchor.to_owned(), ink.0);
+    if let Some(tree) = RUNS.with(|runs| runs.borrow().get(&key).cloned()) {
+        return Some(tree);
+    }
+    // The extent only sizes the fragment's viewport; it does not clip the run.
+    let tree = Rc::new(font.text_tree(text, (0., 0.), (1., 1.), anchor, ink)?);
+    RUNS.with(|runs| {
+        let mut runs = runs.borrow_mut();
+        if runs.len() >= 512 {
+            runs.clear();
+        }
+        runs.insert(key, tree.clone());
+    });
+    Some(tree)
+}
+
 fn demultiply(rgba: &mut [u8]) {
     for pixel in rgba.chunks_exact_mut(4) {
         let a = u32::from(pixel[3]);
@@ -441,14 +468,17 @@ impl AnnotationCanvas {
     }
 
     fn text(&mut self, text: &str, at: (f64, f64), anchor: &str, ink: Color) -> PyResult<()> {
-        let tree = self
-            .state
-            .font
-            .text_tree(text, at, (self.width, self.height), anchor, ink)
+        let tree = text_run(&self.state.font, text, anchor, ink)
             .ok_or_else(|| PyValueError::new_err("invalid annotation text"))?;
-        let transform = self.scale();
-        let bounds = tree.root().abs_stroke_bounding_box();
-        self.mark_logical(bounds, 2.);
+        // Placed in device pixels, after the scale: a whole-pixel move then
+        // draws the same pixels.
+        let scale = self.scale();
+        let transform = scale.post_translate(at.0 as f32 * scale.sx, at.1 as f32 * scale.sy);
+        let b = tree.root().abs_stroke_bounding_box();
+        let (x, y) = (at.0 as f32, at.1 as f32);
+        if let Some(bounds) = Rect::from_ltrb(b.left() + x, b.top() + y, b.right() + x, b.bottom() + y) {
+            self.mark_logical(bounds, 2.);
+        }
         resvg::render(&tree, transform, &mut self.target()?.as_mut());
         Ok(())
     }
@@ -977,6 +1007,25 @@ mod tests {
         let (x, y) = (60usize, 60usize);
         let at = ((y - r[1] as usize) * w + (x - r[0] as usize)) * 4;
         assert_eq!(&rgba[at..at + 4], &[255, 0, 0, 255]);
+    }
+
+    #[test]
+    fn a_label_laid_out_once_draws_the_same_ink_wherever_it_goes() {
+        let ink = Color([20, 160, 90, 255]);
+        let draw = |at: (f64, f64)| {
+            let mut canvas = AnnotationCanvas::new(400, 200, 200.).unwrap();
+            canvas.text("On Edge 3", at, "start", ink).unwrap();
+            (canvas.drawn_region().unwrap(), canvas.overlay.unwrap())
+        };
+        let (ra, a) = draw((10., 30.));
+        let (rb, b) = draw((40., 50.)); // 60 and 40 physical pixels on
+        assert_eq!((rb[0] - ra[0], rb[1] - ra[1]), (60, 40));
+        assert!(a.data().iter().any(|&v| v > 0));
+        for y in ra[1]..ra[3] {
+            for x in ra[0]..ra[2] {
+                assert_eq!(a.pixel(x, y), b.pixel(x + 60, y + 40), "at {x},{y}");
+            }
+        }
     }
 
     #[test]
