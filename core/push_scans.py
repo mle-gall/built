@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import sys
 
+import ingetrazo_core as kernel
 from ingetrazo_core import Vec3 as QVector3D
 
 
@@ -150,7 +151,7 @@ def inward_limit(mesh, base_face, n: QVector3D, anchor: QVector3D,
     got = s.face_indices([base_face])
     if not got or got[0] is None:
         return None
-    return _mod("scan_inward_limit")(s.native, got[0], _xyz(n), _xyz(anchor),
+    return kernel.scan_inward_limit(s.native, got[0], _xyz(n), _xyz(anchor),
                                      float(stitch_tol), *args)
 
 
@@ -321,37 +322,6 @@ def set_minus(mesh, kind: str, after_keys, before: set):
     return out
 
 
-def tjunction_arrays(mesh, seed_lo, seed_hi, tol):
-    """``sweep_tjunctions``' arrays cut down to what a scoped sweep can
-    touch: the edges whose box meets the seed box ``[seed_lo, seed_hi]``
-    (the sweep's own scope test, bounds included) and the vertices inside
-    one of their boxes grown by ``tol`` (the only ones its slab tests can
-    keep), both in list order — ``(positions, ends as indices into those
-    vertices, vertices, edges)`` as ``stitch_arrays`` gives them — or
-    ``None`` (scans off, or an edge end the vertex list does not hold)."""
-    import numpy as np
-    fn = _mod("scan_tjunction_arrays")
-    s = _scan(mesh) if fn is not None else None
-    if s is None:
-        return None
-    got = fn(s.native, tuple(float(x) for x in seed_lo),
-             tuple(float(x) for x in seed_hi), float(tol))
-    if got is None:
-        return None
-    eidx, vidx, pos, ends = got
-    from core import store_mesh
-    if s.store_backed:
-        verts = store_mesh._Indexed(mesh, s.native.keys_at("vertex", vidx),
-                                    store_mesh.VertexView)
-        edges = store_mesh._Indexed(mesh, s.native.keys_at("edge", eidx),
-                                    store_mesh.EdgeView)
-    else:
-        verts = s.native.keys_at("vertex", vidx)
-        edges = s.native.keys_at("edge", eidx)
-    return (np.asarray(pos, dtype=np.float64).reshape(-1, 3),
-            np.asarray(ends, dtype=np.int64).reshape(-1, 2), verts, edges)
-
-
 def _native_face(mesh, face):
     """``(scan, index)`` of ``face`` on a scan of ``mesh`` (built even with
     the scans off: these questions have no Python loop behind them)."""
@@ -368,7 +338,7 @@ def classify_base(mesh, face):
     s, i = _native_face(mesh, face)
     if s is None:
         return False, False
-    return _mod("scan_classify_base")(s.native, i, *_geom_args())
+    return kernel.scan_classify_base(s.native, i, *_geom_args())
 
 
 def sweeps_free_sheet(mesh, face, loops) -> bool:
@@ -377,7 +347,7 @@ def sweeps_free_sheet(mesh, face, loops) -> bool:
     s, i = _native_face(mesh, face)
     if s is None:
         return True
-    return _mod("scan_sweeps_free_sheet")(
+    return kernel.scan_sweeps_free_sheet(
         s.native, i, [[_xyz(p) for p in lp] for lp in loops], *_geom_args())
 
 
@@ -387,7 +357,7 @@ def surface_normal(mesh, face) -> QVector3D:
     s, i = _native_face(mesh, face)
     if s is None:
         return face.normal().normalized()
-    return QVector3D(*_mod("scan_surface_normal")(s.native, i, *_geom_args()))
+    return QVector3D(*kernel.scan_surface_normal(s.native, i, *_geom_args()))
 
 
 def cap_passes_wall(mesh, face, cap, normal: QVector3D, d: float) -> bool:
@@ -396,5 +366,5 @@ def cap_passes_wall(mesh, face, cap, normal: QVector3D, d: float) -> bool:
     s, i = _native_face(mesh, face)
     if s is None:
         return False
-    return _mod("scan_cap_passes_wall")(s.native, i, [_xyz(p) for p in cap], _xyz(normal),
+    return kernel.scan_cap_passes_wall(s.native, i, [_xyz(p) for p in cap], _xyz(normal),
                                         float(d), *_geom_args())

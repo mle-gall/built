@@ -9,7 +9,7 @@ use super::{
 use std::collections::{HashMap, HashSet};
 type Point = [f64; 3];
 
-pub(super) fn junctions(
+pub(crate) fn junctions(
     points: &[Point],
     edges: &[[i64; 2]],
     bounds: Option<[Point; 2]>,
@@ -64,6 +64,55 @@ pub(super) fn junctions(
         }
     }
     Ok(hits)
+}
+
+/// List-order vertices and edges in a stitch operation's work area.
+pub(crate) fn junction_scope(
+    live_v: Vec<u32>,
+    live_e: Vec<u32>,
+    bounds: Option<[Point; 2]>,
+    tol: f64,
+    pos: impl Fn(u32) -> Point,
+    ends: impl Fn(u32) -> [u32; 2],
+) -> (Vec<u32>, Vec<u32>) {
+    let Some([lo, hi]) = bounds else {
+        return (live_v, live_e);
+    };
+    let edges: Vec<u32> = live_e
+        .into_iter()
+        .filter(|&e| {
+            let [a, b] = ends(e).map(&pos);
+            (0..3).all(|k| a[k].max(b[k]) >= lo[k] && a[k].min(b[k]) <= hi[k])
+        })
+        .collect();
+    if edges.is_empty() {
+        return (Vec::new(), edges);
+    }
+    let mut bx = [
+        f64::INFINITY,
+        f64::INFINITY,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        f64::NEG_INFINITY,
+        f64::NEG_INFINITY,
+    ];
+    for &e in &edges {
+        for p in ends(e).map(&pos) {
+            for k in 0..3 {
+                bx[k] = bx[k].min(p[k]);
+                bx[k + 3] = bx[k + 3].max(p[k]);
+            }
+        }
+    }
+    let g = tol * (1.0 + 1e-6) + 1e-12;
+    let verts = live_v
+        .into_iter()
+        .filter(|&v| {
+            let p = pos(v);
+            (0..3).all(|k| p[k] >= bx[k] - g && p[k] <= bx[k + 3] + g)
+        })
+        .collect();
+    (verts, edges)
 }
 
 /// What `Store::stitch_connect` did: the dedupe's `(dropped, kept)`
@@ -151,42 +200,12 @@ impl Store {
     /// The vertices and edges a T-junction round can touch, in list order:
     /// every one without bounds; with them, the edges whose box meets the
     /// bounds and the vertices inside the union of their boxes grown by
-    /// `tol` (`pushscan::scan_tjunction_arrays`).
+    /// `tol` (`MeshScan::stitch_hits`).
     fn junction_scope(&self, bounds: Option<[Point; 2]>, tol: f64) -> (Vec<u32>, Vec<u32>) {
         let live_e = self.live_slots(Kind::Edge);
         let live_v = self.live_slots(Kind::Vertex);
-        let Some([lo, hi]) = bounds else {
-            return (live_v, live_e);
-        };
-        let pos = |v: u32| *self.state.vpos.get(v as usize);
-        let edges: Vec<u32> = live_e
-            .into_iter()
-            .filter(|&e| {
-                let [a, b] = self.state.ends.get(e as usize).map(pos);
-                (0..3).all(|k| a[k].max(b[k]) >= lo[k] && a[k].min(b[k]) <= hi[k])
-            })
-            .collect();
-        if edges.is_empty() {
-            return (Vec::new(), edges);
-        }
-        let mut bx = [f64::INFINITY, f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
-        for &e in &edges {
-            for p in self.state.ends.get(e as usize).map(pos) {
-                for k in 0..3 {
-                    bx[k] = bx[k].min(p[k]);
-                    bx[k + 3] = bx[k + 3].max(p[k]);
-                }
-            }
-        }
-        let g = tol * (1.0 + 1e-6) + 1e-12;
-        let verts = live_v
-            .into_iter()
-            .filter(|&v| {
-                let p = pos(v);
-                (0..3).all(|k| p[k] >= bx[k] - g && p[k] <= bx[k + 3] + g)
-            })
-            .collect();
-        (verts, edges)
+        junction_scope(live_v, live_e, bounds, tol,
+            |v| *self.state.vpos.get(v as usize), |e| *self.state.ends.get(e as usize))
     }
     /// Ordered admission, including the discovery order used to populate the
     /// editor's face set. A failed dissolve resumes at the next starting face.

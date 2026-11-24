@@ -574,63 +574,10 @@ def _whole_drawing_plane(scene, points):
     if sc is None:
         verts = [v.position for v in scene.mesh.vertices] + list(points)
         return coplanar_plane(verts)
-    import numpy as np
     from core._native import qt_hypot
-    if sc.store_backed and qt_hypot() is not None:
-        plane = scene.mesh._store.drawing_plane([p.toTuple() for p in points], qt_hypot())
-        return None if plane is None else tuple(QVector3D(*p) for p in plane)
-    P = sc.native.vertex_positions()
-    extra = [QVector3D(p) for p in points]
-    n_mesh = len(P)
-    total = n_mesh + len(extra)
-
-    def at(i):
-        return sc.vec(i) if i < n_mesh else extra[i - n_mesh]
-
-    if total < 3:
-        return coplanar_plane([at(i) for i in range(total)])
-    o = at(0)
-    # The direction and the normal: the first points that give them, in
-    # the function's own float32 arithmetic, found by walking from the
-    # start (a flat drawing settles them within its first points; the
-    # array pass below only skips points that cannot qualify).
-    allp = np.vstack([P, np.array([(q.x(), q.y(), q.z()) for q in extra],
-                                  dtype=np.float64).reshape(-1, 3)])
-    rel = allp - np.array([o.x(), o.y(), o.z()])
-    dist = np.sqrt((rel * rel).sum(axis=1))
-    d1 = None
-    for i in np.flatnonzero(dist > 0.99e-6).tolist():
-        if i == 0:
-            continue
-        p = at(i)
-        if (p - o).length() > 1e-6:
-            d1 = (p - o).normalized()
-            break
-    if d1 is None:
-        return (o, QVector3D(0, 0, 1))
-    dv = np.array([d1.x(), d1.y(), d1.z()])
-    cross = np.cross(dv, rel)
-    clen = np.sqrt((cross * cross).sum(axis=1))
-    n = None
-    for i in np.flatnonzero(clen > 0.99e-6 - 1e-6 * dist).tolist():
-        if i == 0:
-            continue
-        c = QVector3D.crossProduct(d1, at(i) - o)
-        if c.length() > 1e-6:
-            n = c.normalized()
-            break
-    if n is None:
-        return (o, QVector3D(0, 0, 1))
-    tol = 1e-4
-    nv = np.array([n.x(), n.y(), n.z()])
-    off = np.abs(rel @ nv)
-    slack = 1e-5 * dist + 1e-7
-    if bool((off > tol + slack).any()):
-        return None
-    for i in np.flatnonzero(off > tol - slack).tolist():
-        if abs(QVector3D.dotProduct(n, at(i) - o)) > tol:
-            return None
-    return (o, n)
+    source = scene.mesh._store if sc.store_backed else sc.native
+    plane = source.drawing_plane([p.toTuple() for p in points], qt_hypot())
+    return None if plane is None else tuple(QVector3D(*p) for p in plane)
 
 
 def _append_face_plane_rebuild(scene, commands, points) -> None:
@@ -653,17 +600,13 @@ def _append_face_plane_rebuild(scene, commands, points) -> None:
     from core import scan_index
     sc = scan_index.scan(scene.mesh)
     from core._native import qt_hypot
-    if sc is not None and sc.store_backed and qt_hypot() is not None:
-        plane = scene.mesh._store.rebuild_plane([p.toTuple() for p in points], 400, qt_hypot())
+    if sc is not None:
+        source = scene.mesh._store if sc.store_backed else sc.native
+        plane = source.rebuild_plane([p.toTuple() for p in points], 400, qt_hypot())
         if plane is not None:
             commands.append(RebuildPlaneFacesCommand(*(QVector3D(*p) for p in plane)))
         return
     faces = scene.mesh.faces
-    if sc is not None:
-        import numpy as np
-        pts = np.array([(p.x(), p.y(), p.z()) for p in points],
-                       dtype=np.float64).reshape(-1, 3)
-        faces = sc.faces(sc.native.faces_through(pts, tol))
     for f in faces:
         origin = f.vertices[0]
         normal = f.normal()
@@ -681,10 +624,6 @@ def _append_face_plane_rebuild(scene, commands, points) -> None:
             # Hand-drawn planes stay far below this; past it, keep the naive
             # path (imports should live in a Group anyway).
             others = scene.mesh.faces
-            if sc is not None:
-                others = sc.faces(sc.native.faces_coplanar(
-                    (origin.x(), origin.y(), origin.z()),
-                    (normal.x(), normal.y(), normal.z()), tol, 0.999 - 1e-5))
             on_plane = sum(
                 1 for g in others
                 if abs(QVector3D.dotProduct(g.vertices[0] - origin,
