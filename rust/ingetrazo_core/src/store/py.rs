@@ -522,6 +522,14 @@ fn rows3<'py, T: numpy::Element + Copy>(py: Python<'py>, rows: &[[T; 3]]) -> Bou
 
 #[pymethods]
 impl PyMeshStore {
+    #[staticmethod]
+    #[pyo3(signature = (mesh, namespace, scale=10_000.0, tol2=1e-8, fused=false))]
+    fn _from_objects<'py>(mesh: &Bound<'py, PyAny>, namespace: u64, scale: f64, tol2: f64, fused: bool)
+        -> PyResult<(Self, Bound<'py, PyDict>, Bound<'py, PyDict>)> {
+        let (store, own, views) = super::from_objects::read(mesh, namespace, Weld { scale, tol2, fused })?;
+        Ok((Self::wrap(store), own, views))
+    }
+
     /// An empty store in key namespace `namespace` (`next(_KEY_NAMESPACES)`).
     #[new]
     #[pyo3(signature = (namespace, scale = 10_000.0, tol2 = 1e-8, fused = false))]
