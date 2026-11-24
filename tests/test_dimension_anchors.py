@@ -9,7 +9,7 @@ ends, «los extremos no tiene para cambiarla»."""
 from __future__ import annotations
 
 import pytest
-from PySide6.QtCore import QPointF, Qt
+from core.input_types import QPointF, Qt
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.dimension import Dimension

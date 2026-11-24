@@ -10,21 +10,12 @@ the file in double precision and subtracting one whole-metre offset before
 the first vertex turns single precision (formats/recenter.py)."""
 from __future__ import annotations
 
-import os
 import struct
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
 
-_inst = QApplication.instance()
-if _inst is None:
-    _app = QApplication([])
-elif not isinstance(_inst, QApplication):
-    pytest.skip("a non-widget QGuiApplication is already active",
-                allow_module_level=True)
 
 from core.group import Group                                      # noqa: E402
 from core.mesh import Mesh                                        # noqa: E402

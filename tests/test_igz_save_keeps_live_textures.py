@@ -8,9 +8,9 @@ The next save of the session — an autosave is enough — found no path and
 wrote the document without the image."""
 from __future__ import annotations
 
+from tests.raster_samples import solid_raster
 import zipfile
 
-from PySide6.QtGui import QImage
 from ingetrazo_core import Vec3 as V
 
 from core.group import Group
@@ -21,8 +21,7 @@ from formats import igz
 
 def _png(tmp_path):
     png = tmp_path / "wood.png"
-    img = QImage(4, 4, QImage.Format_RGB32)
-    img.fill(0x8B5A2B)
+    img = solid_raster(4, 4, (139, 90, 43))
     img.save(str(png))
     return png
 

@@ -5,15 +5,10 @@ before — the ones behind them (#833): the back grips used to be painted on
 top of the front ones, in whatever order the box listed them."""
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-from PySide6.QtGui import QColor, QImage, QPainter
+from ingetrazo_render import AnnotationCanvas
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
-_app = QApplication.instance() or QApplication([])
 
 from tools.scale import ScaleTool  # noqa: E402
 
@@ -41,18 +36,17 @@ class _Box:
 
 def _centre_colour(vp, order):
     vp.active_tool = _Box(order)
-    img = QImage(400, 400, QImage.Format_RGB32)
-    img.fill(QColor(255, 255, 255))
-    px = vp._world_to_pixel(V(0, 0, 2))
-    p = QPainter(img)
-    vp._draw_scale_box(p)
-    p.end()
-    return img.pixelColor(int(px[0]), int(px[1])).name()
+    x, y = vp._world_to_pixel(V(0, 0, 2))
+    canvas = AnnotationCanvas(400, 400, 400)
+    vp._draw_scale_box(canvas)
+    rgba = canvas.composite(b"\xff" * (400 * 400 * 4))
+    pixel = (int(y) * 400 + int(x)) * 4
+    return rgba[pixel:pixel + 3].hex()
 
 
 def test_the_front_grip_is_drawn_on_top_whatever_the_order():
     vp = _viewport()
-    red = "#dc2828"
+    red = "dc2828"
     assert _centre_colour(vp, ["top", "bottom"]) == red
     assert _centre_colour(vp, ["bottom", "top"]) == red
 

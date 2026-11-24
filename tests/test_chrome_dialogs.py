@@ -7,6 +7,7 @@ Offscreen there is no Metal frame: ``live`` is replaced by a stand-in view
 and the test plays the chrome (marks the sheet drawn, clicks or types)."""
 from __future__ import annotations
 
+from tests.raster_samples import solid_raster
 from types import SimpleNamespace
 
 import pytest
@@ -189,9 +190,7 @@ def test_information_call_sites_post_toasts(win, tmp_path, monkeypatch, method, 
         monkeypatch.setattr(autosave, "discarded_dir", lambda: tmp_path)
     elif method == "_on_insert_faceme_image":
         picture = tmp_path / "opaque.png"
-        from PySide6.QtGui import QImage
-        image = QImage(2, 2, QImage.Format.Format_RGB32)
-        image.fill(0xFFFFFFFF)
+        image = solid_raster(2, 2, (255, 255, 255))
         assert image.save(str(picture))
         monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *a: (str(picture), ""))
 

@@ -8,7 +8,7 @@ shortcut takes it back on the release, as Move, Rotate and Flip do."""
 from __future__ import annotations
 
 import pytest
-from PySide6.QtCore import Qt
+from core.input_types import Qt
 
 from tools.protractor import ProtractorTool
 from tools.rust_tools import RectangleTool

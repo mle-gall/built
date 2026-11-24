@@ -6,11 +6,11 @@ binary reopens exactly as the same model written as JSON — same vertices,
 edges, faces, holes, flags, attributes, in the same order."""
 from __future__ import annotations
 
+from tests.raster_samples import solid_raster
 import json
 import zipfile
 
 import pytest
-from PySide6.QtGui import QImage
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core.group import Group
@@ -30,8 +30,7 @@ def _scene(tmp_path) -> Scene:
     scene = Scene()
     m = scene.mesh
     png = tmp_path / "wood.png"
-    img = QImage(4, 4, QImage.Format_RGB32)
-    img.fill(0x8B5A2B)
+    img = solid_raster(4, 4, (139, 90, 43))
     img.save(str(png))
     # A slab with two holes, one nested in the other (the nested one is
     # dropped on load, both ways).

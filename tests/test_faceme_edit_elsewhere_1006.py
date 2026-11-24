@@ -12,14 +12,10 @@ not-yet-built group of the experimental engine to check the selection."""
 from __future__ import annotations
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
-_app = QApplication.instance() or QApplication([])
 
 from core.group import Group  # noqa: E402
 from core.mesh import DeferredMesh, Mesh  # noqa: E402
@@ -27,10 +23,6 @@ from core.mesh import DeferredMesh, Mesh  # noqa: E402
 
 def V(x, y, z=0.0):
     return QVector3D(float(x), float(y), float(z))
-
-
-
-
 
 
 def _figure(vp, placed=False):

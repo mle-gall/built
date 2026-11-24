@@ -7,19 +7,15 @@ through the catcher plane from underneath. The GL pass needs a screen;
 what is pinned here is the camera's answer and that the catcher pass
 returns before drawing anything when the camera is below it.
 """
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import math
 from types import SimpleNamespace
 
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
 
 from core.camera import OrbitCamera
 
-_app = QApplication.instance() or QApplication([])
 
 #: The catcher's height in the viewport.
 CATCHER_Z = -0.005

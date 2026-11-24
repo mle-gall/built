@@ -9,20 +9,16 @@ background box of Export image the file is opaque only where the model is.
 """
 from __future__ import annotations
 
+from tests.raster_samples import pixels, solid_raster
 import json
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 from tests.controller_surface import live_image
-from tests.shell_isolation import restore_shell_patches  # noqa: F401
+from tests.shell_isolation import native_gpu_host, native_question_host, restore_shell_patches  # noqa: F401
 import pytest
-from PySide6.QtGui import QColor, QImage
+from ingetrazo_render import SurveyRaster
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
 
-_app = QApplication.instance() or QApplication([])
 V = QVector3D
 WIDTH = 900
 GLASS = {"color": (0.2, 0.55, 0.85), "opacity": 0.3}
@@ -48,21 +44,11 @@ ZONES = {"background": V(-7.5, -2, 4.5), "glass": V(-3, -2, 2.8),
 
 
 @pytest.fixture
-def view(tmp_path, native_host):
-    from PySide6.QtCore import Qt
-    from PySide6.QtWidgets import QWidget
-    from views.wgpu_surface import window_handles
-    if QApplication.platformName() in ("offscreen", "minimal"):
-        pytest.skip("requires an unshown native GPU surface")
-    surface = QWidget()
-    surface.setAttribute(Qt.WA_DontShowOnScreen)
-    surface.resize(native_host.width, native_host.height)
-    native_host.ns_view, native_host.surface_handles = window_handles(surface)
-    vp = native_host.viewport
+def view(tmp_path, native_gpu_host):
+    vp = native_gpu_host.viewport
     mesh = vp.scene.mesh
     tex = tmp_path / "blue.png"
-    img = QImage(8, 8, QImage.Format_RGB32)
-    img.fill(QColor(40, 90, 200))
+    img = solid_raster(8, 8, (40, 90, 200))
     img.save(str(tex))
     _box(mesh, -2, 6, 0, 4, 0, 3, color=(0.75, 0.35, 0.25))
     _pane(mesh, -6, 0, -2, **GLASS)
@@ -71,17 +57,12 @@ def view(tmp_path, native_host):
           texture={"path": str(tex), "sw": 1, "sh": 1})
     vp.scene.version += 1
     cam = vp.camera
-    cam.set_aspect(native_host.width, native_host.height)
+    cam.set_aspect(native_gpu_host.width, native_gpu_host.height)
     cam.perspective = False
     cam.target = V(0, 0, 1.5)
     cam.distance, cam.yaw, cam.pitch = 22.0, -1.5707963, 0.12
-    try:
-        native_host.view.set_scene(vp.scene)
-        yield native_host.window, vp, tmp_path
-    finally:
-        native_host.view.closeEvent()
-        native_host.ns_view = 0
-        surface.close()
+    native_gpu_host.view.set_scene(vp.scene)
+    return native_gpu_host.window, vp, tmp_path
 
 
 def _saved(vp, folder, style, **kw):
@@ -89,21 +70,14 @@ def _saved(vp, folder, style, **kw):
     from core.style import style_by_name
     vp.style_override = style_by_name(style)
     path = folder / "out.png"
-    assert vp.render_image(WIDTH, sharp_shadows=True, **kw).save(str(path))
-    return QImage(str(path)).convertToFormat(QImage.Format_ARGB32)
-
-
-def _rgba(img):
-    """``img`` (Format_ARGB32) as rows of R, G, B, A."""
-    buf = np.frombuffer(img.constBits(), np.uint8).reshape(
-        img.height(), img.bytesPerLine())[:, :img.width() * 4]
-    return buf.reshape(img.height(), img.width(), 4)[..., [2, 1, 0, 3]].astype(float)
+    assert vp.render_raster(WIDTH, sharp_shadows=True, **kw).save(str(path))
+    return pixels(SurveyRaster.open(path)).astype(int)
 
 
 def _at(vp, img, zone):
     x, y = vp._world_to_pixel(ZONES[zone])
     scale = WIDTH / vp.width()
-    return img.pixelColor(int(x * scale), int(y * scale))
+    return tuple(img[int(y * scale), int(x * scale)])
 
 
 @pytest.mark.parametrize("style", ["Default", "Shaded", "Monochrome",
@@ -114,7 +88,7 @@ def test_a_normal_picture_is_opaque_behind_the_glass(view, style, sun):
     vp.scene.shadows.enabled = sun
     img = _saved(vp, folder, style)
     for zone in ZONES:
-        assert _at(vp, img, zone).alpha() == 255, zone
+        assert _at(vp, img, zone)[3] == 255, zone
 
 
 def test_the_occlusion_pass_leaves_the_same_blending(view, monkeypatch):
@@ -124,7 +98,7 @@ def test_the_occlusion_pass_leaves_the_same_blending(view, monkeypatch):
     monkeypatch.setenv("INGETRAZO_AO", "1")
     img = _saved(vp, folder, "Default")
     for zone in ZONES:
-        assert _at(vp, img, zone).alpha() == 255, zone
+        assert _at(vp, img, zone)[3] == 255, zone
 
 
 @pytest.mark.parametrize("style", ["Default", "Monochrome", "Hidden line",
@@ -132,7 +106,7 @@ def test_the_occlusion_pass_leaves_the_same_blending(view, monkeypatch):
 def test_the_transparent_background_is_alpha_zero(view, style):
     _win, vp, folder = view
     img = _saved(vp, folder, style, transparent=True)
-    assert _at(vp, img, "background").alpha() == 0
+    assert _at(vp, img, "background")[3] == 0
 
 
 def test_the_box_only_lasts_that_picture(view):
@@ -141,10 +115,10 @@ def test_the_box_only_lasts_that_picture(view):
     # The view on screen first: no export call sets the flag for it.
     live = live_image(vp)
     x, y = vp._world_to_pixel(ZONES["background"])
-    ratio = live.devicePixelRatioF()
-    pixel = live.pixelColor(int(x * ratio), int(y * ratio))
-    assert pixel.alpha() == 255
-    assert _at(vp, _saved(vp, folder, "Default"), "background").alpha() == 255
+    ratio = live.width / vp.width()
+    pixel = pixels(live)[int(y * ratio), int(x * ratio)]
+    assert pixel[3] == 255
+    assert _at(vp, _saved(vp, folder, "Default"), "background")[3] == 255
 
 
 def test_glass_on_nothing_keeps_its_own_opacity_and_colour(view):
@@ -152,13 +126,13 @@ def test_glass_on_nothing_keeps_its_own_opacity_and_colour(view):
     colour is the glass's, not darkened by the empty background."""
     _win, vp, folder = view
     img = _saved(vp, folder, "Shaded", transparent=True)
-    assert _at(vp, img, "glass").alpha() == pytest.approx(0.3 * 255, abs=2)
-    assert _at(vp, img, "double").alpha() == pytest.approx(0.51 * 255, abs=2)
+    assert _at(vp, img, "glass")[3] == pytest.approx(0.3 * 255, abs=2)
+    assert _at(vp, img, "double")[3] == pytest.approx(0.51 * 255, abs=2)
     glass = _at(vp, img, "glass")
-    assert glass.blue() > glass.green() > glass.red() > 25
-    assert glass.blue() > 140, "the colour must not come out premultiplied"
-    assert _at(vp, img, "glass_on_solid").alpha() == 255
-    assert _at(vp, img, "solid").alpha() == 255
+    assert glass[2] > glass[1] > glass[0] > 25
+    assert glass[2] > 140, "the colour must not come out premultiplied"
+    assert _at(vp, img, "glass_on_solid")[3] == 255
+    assert _at(vp, img, "solid")[3] == 255
 
 
 def test_the_model_is_the_same_as_in_a_normal_picture(view):
@@ -166,7 +140,7 @@ def test_the_model_is_the_same_as_in_a_normal_picture(view):
     plain = _saved(vp, folder, "Shaded")
     clear = _saved(vp, folder, "Shaded", transparent=True)
     for zone in ("solid", "glass_on_solid", "tex_on_solid"):
-        assert _at(vp, plain, zone).getRgb() == _at(vp, clear, zone).getRgb()
+        assert _at(vp, plain, zone) == _at(vp, clear, zone)
 
 
 @pytest.mark.parametrize("style", ["Hidden line", "Monochrome", "Architectural"])
@@ -176,8 +150,8 @@ def test_the_edges_leave_no_halo(view, style):
     are the edge's colour at a low alpha and carry no fringe of a background
     that is not there."""
     _win, vp, folder = view
-    plain = _rgba(_saved(vp, folder, style))
-    clear = _rgba(_saved(vp, folder, style, transparent=True))
+    plain = _saved(vp, folder, style)
+    clear = _saved(vp, folder, style, transparent=True)
     bg = np.array(vp._effective_style().background[:3]) * 255.0
     a = clear[..., 3:] / 255.0
     over = clear[..., :3] * a + bg * (1.0 - a)
@@ -192,23 +166,22 @@ def test_a_shadow_on_the_ground_is_translucent_black(view):
     _win, vp, folder = view
     vp.scene.shadows.enabled = True
     img = _saved(vp, folder, "Shaded", transparent=True)
-    w, h = img.width(), img.height()
-    seen = [img.pixelColor(x, y) for y in range(0, h, 2)
-            for x in range(0, w, 2)]
-    shadow = [c for c in seen if 0 < c.alpha() < 255
-              and c.red() == c.green() == c.blue() == 0]
-    assert shadow, "the shadow on the ground must reach the picture"
-    # ...and a shadow is not what the background turned into:
-    assert sum(1 for c in seen if c.alpha() == 0) > len(seen) // 2
+    seen = img[::2, ::2]
+    alpha = seen[..., 3]
+    shadow = (alpha > 0) & (alpha < 255) & (seen[..., :3] == 0).all(axis=-1)
+    assert shadow.any(), "the shadow on the ground must reach the picture"
+    assert (alpha == 0).mean() > .5
 
 
 @pytest.fixture
-def export(view, monkeypatch):
+def export(view, native_question_host, monkeypatch):
     """Export image as the menu runs it, its file dialog answered: ``run``
     ticks the box as told and returns the file read back. ``seen`` holds the
     dialog as the user found it."""
     from ingetrazo_render import chrome_forms
     from views.filedialogs import file_dialogs
+    from app_shell import native
+    monkeypatch.setattr(native, "available", lambda: True)
     win, vp, folder = view
     seen = {}
 
@@ -226,7 +199,7 @@ def export(view, monkeypatch):
         if tick is not None:
             form.receive("transparent", "1" if tick else "0")
         form.press("ok")
-        return QImage(str(target)).convertToFormat(QImage.Format_ARGB32)
+        return pixels(SurveyRaster.open(target)).astype(int)
 
     return vp, run, seen
 
@@ -235,15 +208,15 @@ def test_the_box_is_offered_for_a_png_and_starts_off(export):
     vp, run, seen = export
     img = run("a.png")
     assert seen == {"enabled": True, "checked": False, "tip": ""}
-    assert _at(vp, img, "background").alpha() == 255
+    assert _at(vp, img, "background")[3] == 255
 
 
 def test_ticking_it_makes_the_png_transparent(export):
     vp, run, _seen = export
     img = run("a.png", tick=True)
-    assert img.width() == WIDTH
-    assert _at(vp, img, "background").alpha() == 0
-    assert _at(vp, img, "solid").alpha() == 255
+    assert img.shape[1] == WIDTH
+    assert _at(vp, img, "background")[3] == 0
+    assert _at(vp, img, "solid")[3] == 255
 
 
 def test_the_next_export_does_not_remember_it(export):
@@ -260,7 +233,8 @@ def test_a_jpeg_does_not_offer_it(export, name):
     img = run(name)
     assert seen["enabled"] is False and seen["checked"] is False
     assert seen["tip"]
-    assert _at(vp, img, "background").lightness() > 150
+    r, g, b, _ = _at(vp, img, "background")
+    assert (min(r, g, b) + max(r, g, b)) / 2 > 150
 
 
 def test_a_disabled_box_never_counts():
@@ -284,7 +258,7 @@ def test_the_new_texts_are_translated():
 
 
 def _grey(c):
-    return c.red() == c.green() == c.blue()
+    return c[0] == c[1] == c[2]
 
 
 def test_monochrome_glass_is_translucent_and_neutral(view):
@@ -293,13 +267,13 @@ def test_monochrome_glass_is_translucent_and_neutral(view):
     solid = _at(vp, img, "solid")
     glass = _at(vp, img, "glass")
     double = _at(vp, img, "double")
-    assert solid.getRgb()[:3] == (255, 255, 255)
-    assert _at(vp, img, "background").getRgb()[:3] == (255, 255, 255)
-    assert _grey(glass) and glass.red() == pytest.approx(217, abs=2)
-    assert _grey(double) and double.red() < glass.red()
+    assert solid[:3] == (255, 255, 255)
+    assert _at(vp, img, "background")[:3] == (255, 255, 255)
+    assert _grey(glass) and glass[0] == pytest.approx(217, abs=2)
+    assert _grey(double) and double[0] < glass[0]
     for zone in ("glass_on_solid", "tex_on_solid"):
         over = _at(vp, img, zone)
-        assert _grey(over) and over.red() == pytest.approx(217, abs=2), zone
+        assert _grey(over) and over[0] == pytest.approx(217, abs=2), zone
 
 
 def test_a_textured_pane_lets_the_model_through_in_monochrome(view):
@@ -309,7 +283,7 @@ def test_a_textured_pane_lets_the_model_through_in_monochrome(view):
     img = _saved(vp, folder, "Monochrome")
     x, y0 = vp._world_to_pixel(V(4, 0, 0))
     scale = WIDTH / vp.width()
-    tones = [img.pixelColor(int(x * scale), int(y0 * scale) + d).red()
+    tones = [img[int(y0 * scale) + d, int(x * scale)][0]
              for d in range(-3, 4)]
     assert min(tones) < 190, tones
 
@@ -318,21 +292,21 @@ def test_monochrome_glass_on_a_transparent_background(view):
     _win, vp, folder = view
     img = _saved(vp, folder, "Monochrome", transparent=True)
     glass = _at(vp, img, "glass")
-    assert glass.alpha() == pytest.approx(76, abs=2)
-    assert _grey(glass) and glass.red() == pytest.approx(127, abs=2)
+    assert glass[3] == pytest.approx(76, abs=2)
+    assert _grey(glass) and glass[0] == pytest.approx(127, abs=2)
 
 
 def test_the_glass_of_another_mode_keeps_its_colour(view):
     _win, vp, folder = view
     glass = _at(vp, _saved(vp, folder, "Shaded"), "glass")
-    assert glass.blue() > glass.red() + 15
+    assert glass[2] > glass[0] + 15
 
 
 def test_hidden_line_leaves_the_glass_as_it_was(view):
     """Not asked for: the plan style still ignores the colour runs."""
     _win, vp, folder = view
     assert _at(vp, _saved(vp, folder, "Hidden line"),
-               "glass").getRgb()[:3] == (255, 255, 255)
+               "glass")[:3] == (255, 255, 255)
 
 
 def test_a_pane_seen_from_behind_is_the_same_grey(view):
@@ -342,5 +316,5 @@ def test_a_pane_seen_from_behind_is_the_same_grey(view):
     img = _saved(vp, folder, "Monochrome")
     x, y = vp._world_to_pixel(ZONES["glass"])
     scale = WIDTH / vp.width()
-    c = img.pixelColor(int(x * scale), int(y * scale))
-    assert _grey(c) and c.red() == pytest.approx(217, abs=2)
+    c = tuple(img[int(y * scale), int(x * scale)])
+    assert _grey(c) and c[0] == pytest.approx(217, abs=2)

@@ -8,16 +8,10 @@ not a point the user could pick. Past the end the nearest point of the
 edge IS the endpoint, which its own snap had already turned down."""
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-from PySide6.QtCore import Qt  # noqa: E402
+from core.input_types import Qt
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
-if QApplication.instance() is None:
-    QApplication([])
 
 from core.edits import build_add_edges  # noqa: E402
 from tools.rust_tools import LineTool  # noqa: E402

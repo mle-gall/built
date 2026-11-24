@@ -7,7 +7,7 @@ the reason, to be fixed instead of typed again."""
 from __future__ import annotations
 
 import pytest
-from PySide6.QtCore import Qt
+from core.input_types import Qt
 from ingetrazo_core import Vec3 as QVector3D
 
 from ingetrazo_render import KeyEvent, ShortcutOverride

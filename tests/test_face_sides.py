@@ -12,22 +12,14 @@ material propio del reverso.
 """
 from __future__ import annotations
 
+from tests.raster_samples import solid_raster
 import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QImage
+from core.input_types import QPointF, Qt
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
 
-_inst = QApplication.instance()
-if _inst is None:
-    _app = QApplication([])
-elif not isinstance(_inst, QApplication):
-    pytest.skip("a non-widget QGuiApplication is already active",
-                allow_module_level=True)
 
 from core.history import History, SetFaceBackCommand              # noqa: E402
 from core.materials import Material, back_is_default, is_translucent  # noqa: E402
@@ -96,13 +88,11 @@ def test_el_reves_es_el_por_defecto_salvo_que_tenga_algo_o_el_frente_sea_translu
     assert is_translucent({"color": [0, 0, 1], "opacity": 0.4})
     assert not back_is_default({"color": [0, 0, 1], "opacity": 0.4})
     # malla / hoja: textura con píxeles transparentes de verdad
-    calada = QImage(8, 8, QImage.Format_RGBA8888)
-    calada.fill(0x00000000)
-    calada.setPixelColor(0, 0, Qt.red)
-    calada.save(str(tmp_path / "malla.png"), "PNG")
-    opaca = QImage(8, 8, QImage.Format_RGB32)
-    opaca.fill(0xFF336699)
-    opaca.save(str(tmp_path / "muro.png"), "PNG")
+    from ingetrazo_render import SurveyRaster
+    calada = SurveyRaster(8, 8, bytes((255, 0, 0, 255)) + bytes(63 * 4))
+    calada.save(str(tmp_path / "malla.png"))
+    opaca = solid_raster(8, 8, (51, 102, 153))
+    opaca.save(str(tmp_path / "muro.png"))
     assert not back_is_default({"texture": {"path": str(tmp_path / "malla.png")}})
     assert back_is_default({"texture": {"path": str(tmp_path / "muro.png")}})
 

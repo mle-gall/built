@@ -11,7 +11,7 @@ The one who does not join in is the rotated rectangle: with its base edge
 down the arrows are the viewport's LINEAR axis lock, which its width reads
 (``RotatedRectangleTool._width_dir``), so it keeps
 ``plane_lock_after_the_first_point = False`` and hands them back."""
-from PySide6.QtCore import QPointF, Qt
+from core.input_types import QPointF, Qt
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import History

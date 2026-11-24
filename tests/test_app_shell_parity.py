@@ -9,9 +9,8 @@ Every file is synthetic or from tests/fixtures; settings go to tmp_path.
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QTimer
+from core.input_codes import StandardButton
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QMessageBox
 from tests.shell_isolation import restore_shell_patches  # noqa: F401  (autouse)
 
 FIXTURES = Path(__file__).parent / "fixtures" / "shell"
@@ -45,7 +44,7 @@ def answers(monkeypatch):
     def question(parent, title, text, buttons=None, defaultButton=None):
         asked.append(title)
         got = queue.pop(0) if queue else "no"
-        return QMessageBox.Yes if got in ("yes", "save") else QMessageBox.No
+        return StandardButton.Yes if got in ("yes", "save") else StandardButton.No
 
     monkeypatch.setattr(cd, "ask", ask)
     monkeypatch.setattr(cd, "question", question)
@@ -243,20 +242,6 @@ def test_open_dialog_goes_through_the_native_panel(host, tmp_path, monkeypatch):
     assert host.state()["path"] == str(src)
 
 
-def test_a_legacy_qt_modal_is_reported_without_blocking_the_window(host):
-    """Offscreen nobody can answer a Qt modal: it is rejected at once and
-    reported with the name of the unavailable feature."""
-    got = QMessageBox.question(None, "Some old dialog", "Really?")
-    assert got != QMessageBox.Yes
-    st = host.state()
-    assert st["blocked_widgets"]
-    # The note the status bar was given, not whether it still shows: it is
-    # timed (6 s of wall time), and on a loaded machine the dialog's round
-    # trip alone took that long under pytest-xdist.
-    assert host.not_here_log
-    assert host.not_here_log[-1] in host.window.statusBar()._msg.text()
-
-
 def test_right_click_builds_the_menu_for_what_was_hit(host, tmp_path, monkeypatch):
     """The native app's right-click menu (docs/context-menu.md): what is
     under the pointer is selected first, and the menu is that kind's. The
@@ -276,14 +261,12 @@ def test_right_click_builds_the_menu_for_what_was_hit(host, tmp_path, monkeypatc
     assert host.errors == []
 
 
-def test_qt_timers_started_from_python_wake_the_loop(host):
-    from app_shell import qt_host
+def test_native_timer_wakes_the_loop(host):
     fired = []
-    QTimer.singleShot(250, lambda: fired.append(1))
-    left = qt_host.next_timer_ms()
-    assert left is not None and left <= 250
+    host.timers.later(host.window, 250, lambda: fired.append(True))
     _, delay, *_ = host.idle()
-    assert delay is not None and delay <= 250
+    assert delay is not None and 0 <= delay <= 250
+    assert not fired
 
 
 def test_menu_edit_commands(host, tmp_path):

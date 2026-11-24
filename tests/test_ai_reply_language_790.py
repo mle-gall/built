@@ -8,14 +8,6 @@ reply in the language the user writes in, falling back to the
 interface's."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-from PySide6.QtWidgets import QApplication  # noqa: E402
-
-_app = QApplication.instance() or QApplication([])
-
 
 def test_the_prompt_no_longer_pins_spanish():
     from plugins.ai_assistant import system_prompt

@@ -3,7 +3,6 @@ from pathlib import Path
 
 import pytest
 
-from PySide6.QtCore import QSettings
 
 from ingetrazo_render.chrome_sheet import Ctx
 from ingetrazo_render.settings_sheet import Env, SettingsSheet
@@ -11,15 +10,7 @@ from ingetrazo_render.settings_sheet import Env, SettingsSheet
 
 @pytest.fixture
 def settings_file(private_settings):
-    # Qt with no organisation set cannot persist even an INI preference.
-    from PySide6.QtCore import QCoreApplication
-    previous = QCoreApplication.organizationName()
-    if not previous:
-        QCoreApplication.setOrganizationName("IngeTrazo")
-    try:
-        yield Path(QSettings().fileName())
-    finally:
-        QCoreApplication.setOrganizationName(previous)
+    return Path(private_settings) / "IngeTrazo" / "IngeTrazo.ini"
 
 
 class Controls:

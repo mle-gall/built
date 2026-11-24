@@ -14,7 +14,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from PySide6.QtGui import QColor, QImage
+from tests.raster_samples import solid_raster
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.group import Group
@@ -51,10 +51,9 @@ def _stub(scene):
 @pytest.fixture
 def images(tmp_path):
     out = {}
-    for name, col in (("tan", QColor(200, 160, 110)),
-                      ("gray", QColor(170, 170, 175))):
-        img = QImage(8, 8, QImage.Format.Format_RGBA8888)
-        img.fill(col)
+    for name, col in (("tan", (200, 160, 110)),
+                      ("gray", (170, 170, 175))):
+        img = solid_raster(8, 8, col)
         p = tmp_path / f"{name}.png"
         img.save(str(p))
         out[name] = str(p)

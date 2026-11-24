@@ -9,24 +9,17 @@ and the Protractor show for their guide mode (#29), while copy is on.
 """
 from __future__ import annotations
 
+from ingetrazo_render import KeyEvent, ShortcutOverride
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QKeyEvent
-from PySide6.QtWidgets import QApplication
-
-_app = QApplication.instance() or QApplication([])
+from core.input_types import Qt
 
 
 def _ctrl(vp):
-    vp.keyPressEvent(QKeyEvent(QKeyEvent.KeyPress, Qt.Key_Control,
-                               Qt.ControlModifier))
-    vp.keyReleaseEvent(QKeyEvent(QKeyEvent.KeyRelease, Qt.Key_Control,
-                                 Qt.NoModifier))
+    vp.keyPressEvent(KeyEvent(True, Qt.Key_Control, Qt.ControlModifier))
+    vp.keyReleaseEvent(KeyEvent(False, Qt.Key_Control, Qt.NoModifier))
 
 
 def _shows(vp, key, plus):
@@ -61,12 +54,9 @@ def test_picking_the_tool_up_again_starts_without_the_plus(native_window, key):
 def _ctrl_shortcut(vp, key, text):
     """Ctrl held for a shortcut: the letter reaches the viewport as a
     ShortcutOverride when a menu action owns it (Ctrl+Z), never alone."""
-    from PySide6.QtCore import QEvent
-    vp.keyPressEvent(QKeyEvent(QKeyEvent.KeyPress, Qt.Key_Control,
-                               Qt.ControlModifier))
-    vp.event(QKeyEvent(QEvent.ShortcutOverride, key, Qt.ControlModifier, text))
-    vp.keyReleaseEvent(QKeyEvent(QKeyEvent.KeyRelease, Qt.Key_Control,
-                                 Qt.NoModifier))
+    vp.keyPressEvent(KeyEvent(True, Qt.Key_Control, Qt.ControlModifier))
+    vp.event(ShortcutOverride(key, Qt.ControlModifier, text))
+    vp.keyReleaseEvent(KeyEvent(False, Qt.Key_Control, Qt.NoModifier))
 
 
 @pytest.mark.parametrize("key", ["move", "rotate", "flip"])

@@ -13,11 +13,11 @@ NaN. Every inference built on it (intersection, through point…) handed the
 tool a NaN point."""
 from __future__ import annotations
 
+from ingetrazo_render import MouseEvent
 import math
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from PySide6.QtCore import QEvent, QPointF, Qt  # noqa: E402
-from PySide6.QtGui import QMouseEvent
+from core.input_types import QPointF, Qt
 from ingetrazo_core import Vec3 as V
 
 
@@ -34,9 +34,7 @@ def _move(vp, w):
 
 
 def _click(vp, px, py):
-    vp._dispatch_tool_click(QMouseEvent(
-        QEvent.MouseButtonPress, QPointF(px, py), QPointF(px, py),
-        Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
+    vp._dispatch_tool_click(MouseEvent('press', px, py, Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
 
 
 def _type(vp, text):

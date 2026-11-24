@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import pytest
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
 
 from core import explode
 from core.group import Group, copy_group, world_mesh
@@ -15,7 +14,6 @@ from core.mesh import Mesh
 from core.parts import part_points
 from core.scene import Scene
 
-_app = QApplication.instance() or QApplication([])
 
 _QUADS = ((0, 2, 3, 1), (4, 5, 7, 6), (0, 1, 5, 4),
           (2, 6, 7, 3), (0, 4, 6, 2), (1, 3, 7, 5))

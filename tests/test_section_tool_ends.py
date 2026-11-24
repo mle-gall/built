@@ -4,16 +4,10 @@
 the name prompt can be switched off."""
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-from PySide6.QtCore import QPointF, QSettings, Qt  # noqa: E402
+from core.input_types import QPointF, Qt
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
-if QApplication.instance() is None:
-    QApplication([])
 
 from core.history import History  # noqa: E402
 from core.scene import Scene  # noqa: E402

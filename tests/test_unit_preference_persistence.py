@@ -6,13 +6,12 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
-from PySide6.QtCore import QCoreApplication
-from PySide6.QtWidgets import QWidget
 
 from core import units
 from core.scene import Scene
 from formats import igz
 from ingetrazo_render.settings_sheet import Env, SettingsSheet
+from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
 from tests.units_chrome import edit_unit, units_row
 
 
@@ -21,15 +20,8 @@ METRES = {"length": "m", "precision": 2, "area": "m2", "area_precision": 2}
 
 
 @pytest.fixture(autouse=True)
-def isolated_preferences(tmp_path):
-    """Use the suite's isolated INI store with a separate identity per test."""
-    previous = (QCoreApplication.organizationName(), QCoreApplication.applicationName())
-    QCoreApplication.setOrganizationName("UnitPreferencePersistenceTests")
-    QCoreApplication.setApplicationName(tmp_path.name)
+def isolated_preferences(private_settings):
     units.remember_new_document_units(CM)
-    yield
-    QCoreApplication.setOrganizationName(previous[0])
-    QCoreApplication.setApplicationName(previous[1])
 
 
 class _Viewport:
@@ -52,7 +44,7 @@ class _Viewport:
 
 
 def _window(settings):
-    window = QWidget()
+    window = SimpleNamespace()
     window.viewport = _Viewport(settings)
     return window
 
@@ -141,13 +133,14 @@ def test_explicitly_enabling_defaults_remembers_unchanged_document_units():
     assert units.new_document_units() == METRES
 
 
-def test_cancel_does_not_change_units_or_the_document_only_choice():
+def test_cancel_does_not_change_units_or_the_document_only_choice(native_question_host):
+    units.remember_new_document_units(CM)
     window = _window(CM)
     edit_unit(window, "for_new", 0)
 
     from ingetrazo_render import chrome_forms, units_question
-    other_window = _window(CM)
-    other_window._documents, other_window._tool_actions = [], {}
+    other_window = native_question_host.window
+    units.apply_units(other_window.viewport.scene, CM)
     units_question.offer_at_start(other_window)
     form = chrome_forms.current(other_window)
     form.receive("profile", "4")

@@ -12,16 +12,11 @@
 from __future__ import annotations
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QPointF, Qt  # noqa: E402
+from core.input_types import QPointF, Qt
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
-if QApplication.instance() is None:
-    QApplication([])
 
 from core.edits import build_add_edge, build_add_edges, face_up_or_toward  # noqa: E402
 from core.group import Group  # noqa: E402
