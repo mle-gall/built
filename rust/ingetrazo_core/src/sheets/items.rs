@@ -21,17 +21,20 @@ const SQRT2: f64 = std::f64::consts::SQRT_2;
 
 /// Strings and tables the painters take from Python, by name.
 #[derive(Default, Clone, Debug)]
-pub struct Extra(pub HashMap<String, Value>);
+pub struct Extra {
+    pub values: HashMap<String, Value>,
+    pub swatch_ops: HashMap<usize, Vec<super::paint::Op>>,
+}
 
 impl Extra {
     pub fn text(&self, k: &str) -> String {
-        match self.0.get(k) {
+        match self.values.get(k) {
             Some(Value::Str(s)) => s.clone(),
             _ => String::new(),
         }
     }
     pub fn nums(&self, k: &str) -> Vec<f64> {
-        match self.0.get(k) {
+        match self.values.get(k) {
             Some(Value::List(v)) | Some(Value::Tuple(v)) => v.iter().filter_map(num).collect(),
             _ => Vec::new(),
         }
@@ -132,6 +135,10 @@ fn get<'a>(d: &'a [(Value, Value)], key: &str) -> Option<&'a Value> {
     d.iter().find(|(k, _)| matches!(k, Value::Str(s) if s == key)).map(|(_, v)| v)
 }
 
+pub(super) fn legend_chip(i: usize) -> [f64; 4] {
+    [2.2, 7.5 + 5.5 * i as f64 + 0.8, 4.0, 3.2]
+}
+
 pub fn paint_legend(p: &mut Painter, f: &Fields, x: &Extra) {
     let w = f.num("w_mm", 55.0);
     let h = legend_height(f);
@@ -157,9 +164,13 @@ pub fn paint_legend(p: &mut Painter, f: &Fields, x: &Extra) {
         let fill = rgb.map_or(Rgba(226, 232, 238, 255), |c| Rgba::from_f(c[0], c[1], c[2]));
         p.set_brush(Some(fill));
         p.set_pen(Pen::new(INK, 0.2));
-        p.rect([2.2, y + 0.8, 4.0, 3.2]);
-        // A swatch's cut hatch (views/hatch_paint.py) is drawn by the Python
-        // painter only; the native legend shows its colour and line type.
+        let chip = legend_chip(i);
+        p.rect(chip);
+        if let Some(ops) = x.swatch_ops.get(&i) {
+            p.ops.extend_from_slice(ops);
+            p.set_brush(None);
+            p.rect(chip);
+        }
         let pattern = x.nums(&format!("pattern.{i}"));
         if !pattern.is_empty() {
             let dash: Vec<f64> = pattern.iter().map(|d| d.max(0.05) / 0.25 * 0.4).collect();

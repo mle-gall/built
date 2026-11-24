@@ -590,6 +590,11 @@ class Workspace:
                                   if k in model._record_fields and abs(getattr(model, k) - v) > 1e-9}))
         self._edit(edits)
 
+    def _lock_items(self) -> None:
+        selection = [item for item in self._selected_models() if item is not self.composer.comp]
+        on = not all(item.locked for item in selection)
+        self._edit([(item, {"locked": on}) for item in selection if item.locked != on])
+
     def _delete(self) -> None:
         from core.composition import CompoundCommand, RemoveItemCommand
         comp = self.composer.comp
@@ -968,6 +973,12 @@ class Workspace:
                 self._tool(rest)
         elif verb == "select":
             pass                         # the page keeps its selection; the dock reads it
+        elif verb == "lock_items":
+            self._lock_items()
+        elif verb == "delete_items":
+            self._delete()
+        elif verb == "duplicate_items":
+            self._duplicate()
         elif verb == "rects":
             self._move(rest)
         elif verb == "place":
@@ -1281,7 +1292,9 @@ class Workspace:
         return True
 
     def context_menu(self, event) -> None:
-        self.flash("The page has no context menu yet: the dock and the shortcuts have its commands", 2500)
+        pos = event.pos()
+        self.view.renderer.page_pointer("context", float(pos.x()), float(pos.y()), 2, 0)
+        self._touch()
 
     def _shortcuts(self):
         comp = self.composer
@@ -1300,16 +1313,12 @@ class Workspace:
             view = self.view
             if comp.comp in comps and view is not None and getattr(view, "renderer", None) is not None:
                 view.renderer.ui_rename_sheet(comps.index(comp.comp))
-        def lock():
-            sel = self._selected_models()
-            on = not all(getattr(m, "locked", False) for m in sel)
-            self._edit([(m, {"locked": on}) for m in sel if m is not comp.comp])
         # The document's history: what the page and the dock change, undone
         # in the order it was done, with the model's edits.
         return [(seqs(QKeySequence.Undo), self._undo),
                 (seqs(QKeySequence.Redo, "Ctrl+Shift+Z"), lambda: self._undo(redo=True)),
                 (seqs(QKeySequence.Delete, Qt.Key_Backspace, Qt.Key_Delete), self._delete),
-                (seqs("Ctrl+D"), self._duplicate), (seqs("Ctrl+L"), lock),
+                (seqs("Ctrl+D"), self._duplicate), (seqs("Ctrl+L"), self._lock_items),
                 (seqs("Ctrl+G"), lambda: self.view.renderer.page_command("group")),
                 (seqs("Ctrl+Shift+G"), lambda: self.view.renderer.page_command("ungroup")),
                 (seqs("Ctrl+Shift+C"), lambda: self.view.renderer.page_command("copy_style")),

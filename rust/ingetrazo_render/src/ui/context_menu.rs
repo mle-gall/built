@@ -102,7 +102,15 @@ impl Ui {
             });
         if let Some(id) = clicked {
             self.ctx_menu = None;
-            self.actions.push(format!("ctx:{id}"));
+            if self.sheets.shown {
+                if let Some(command) = id.strip_prefix("page:") {
+                    self.page.command(command, &mut self.actions);
+                } else {
+                    self.actions.push(id);
+                }
+            } else {
+                self.actions.push(format!("ctx:{id}"));
+            }
         }
     }
 }

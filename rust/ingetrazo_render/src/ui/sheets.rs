@@ -223,6 +223,7 @@ impl Ui {
     // ---- What Python sends ---------------------------------------------------
     pub fn show_sheets(&mut self, shown: bool) {
         if self.sheets.shown != shown {
+            self.close_context_menu();
             self.sheets.close_popups();
             self.sheets.renaming = None;
             self.sheets.zoom_buf = None;
@@ -659,7 +660,16 @@ impl Ui {
     }
     /// A pointer event the chrome left to the page; returns the cursor it wants.
     pub fn page_pointer(&mut self, kind: &str, x: f32, y: f32, button: u8, mods: u8) -> &'static str {
-        self.page.pointer(kind, pos2(x, y), button, mods, &mut self.actions);
+        if kind == "context" {
+            let at = pos2(x, y);
+            if !self.over_chrome(at) {
+                if let Some((title, rows)) = self.page.context_at(at, &mut self.actions) {
+                    self.set_context_menu(x, y, title, String::new(), rows);
+                }
+            }
+        } else {
+            self.page.pointer(kind, pos2(x, y), button, mods, &mut self.actions);
+        }
         self.page.cursor
     }
     /// A frame rendered into ``texture`` (lib.rs ``page_frame_render``),

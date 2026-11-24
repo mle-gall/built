@@ -659,7 +659,7 @@ pub fn paint_profile(p: &mut Painter, f: &Fields, x: &Extra) {
     p.rect([0.0, 0.0, w, h]);
     let t = f.num("text_mm", 2.4).max(1.0);
     p.text_mm([2.0, 1.0, w - 4.0, t * 1.7], &x.text("title"), t * 1.15, true, align::LEFT | align::TOP, ink);
-    let samples: Vec<(f64, Option<f64>)> = match x.0.get("samples") {
+    let samples: Vec<(f64, Option<f64>)> = match x.values.get("samples") {
         Some(Value::List(v)) => v.iter().filter_map(|s| match s {
             Value::List(pair) | Value::Tuple(pair) if pair.len() == 2 => {
                 let st = match &pair[0] { Value::Float(f) => *f, Value::Int(i) => *i as f64, _ => return None };
@@ -681,7 +681,7 @@ pub fn paint_profile(p: &mut Painter, f: &Fields, x: &Extra) {
     if pw < 10.0 || ph < 8.0 {
         return;
     }
-    let length = match x.0.get("length") {
+    let length = match x.values.get("length") {
         Some(Value::Float(l)) if *l != 0.0 => *l,
         _ => 1.0,
     };

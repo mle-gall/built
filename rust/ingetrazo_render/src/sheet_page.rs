@@ -111,6 +111,8 @@ enum Drag {
     Move { grab: [f64; 2], from: Vec<(u64, [f64; 4])> },
     /// One item by a handle (0..8 clockwise from top-left).
     Resize { key: u64, handle: u8, grab: [f64; 2], from: [f64; 4] },
+    /// Preview a linear dimension's paper offset, keeping its two model anchors.
+    DimensionLine { key: u64, grab: [f64; 2], original: f64, offset: f64, dot: Option<[f64; 2]> },
     /// The View tool's rectangle.
     Place { from: [f64; 2], to: [f64; 2], hit: Option<crate::sheet_tools::Pt>, press: Pos2, waiting: bool },
     /// The hand.
@@ -194,6 +196,7 @@ impl Page {
         let other = self.doc.as_ref().is_none_or(|d| d.key != doc.key || d.size != doc.size);
         if other {
             self.fit = Some(false);
+            self.drag = None;
             self.selection.clear();
             self.preview.clear();
         }
@@ -215,9 +218,9 @@ impl Page {
     /// two points (⇧ on the second puts it on a row or a column), then
     /// the click that sets its offset makes it.
     /// The page's linear dimensions' lines (a new one's offset lines up on them).
-    fn cota_lines(&self) -> Vec<([f64; 2], [f64; 2])> {
+    fn cota_lines(&self, exclude: Option<u64>) -> Vec<([f64; 2], [f64; 2])> {
         let Some(doc) = self.doc.as_ref() else { return Vec::new() };
-        doc.items.iter().filter(|i| i.kind == "dimension" && !i.hidden)
+        doc.items.iter().filter(|i| i.kind == "dimension" && !i.hidden && Some(i.key) != exclude)
             .filter_map(|i| crate::sheet_tools::cota_line(&i.data["fields"])).collect()
     }
     /// The offset the cursor at `mm` gives the dimension line of a→b, onto a
@@ -225,7 +228,7 @@ impl Page {
     /// the end of the line it took.
     fn offset_at(&self, a: [f64; 2], b: [f64; 2], axis: &str, mm: [f64; 2]) -> (f64, Option<[f64; 2]>) {
         let thr = 7.0 / f64::from(self.zoom.max(1e-6));
-        crate::sheet_tools::snap_sep(a, b, axis, mm, &self.cota_lines(), thr)
+        crate::sheet_tools::snap_sep(a, b, axis, mm, &self.cota_lines(None), thr)
     }
     /// The one dimension selected, unlocked: where a chain or a baseline
     /// run carries on from (`_seed_run_from`, AutoCAD's DIMCONTINUE and
@@ -471,7 +474,7 @@ impl Page {
     pub fn set_tool(&mut self, tool: String) {
         self.pick = None;
         self.hot = None;
-        if matches!(self.drag, Some(Drag::Place { .. })) {
+        if matches!(self.drag, Some(Drag::Place { .. } | Drag::DimensionLine { .. })) {
             self.drag = None;
         }
         self.painter_armed = tool == "estilo";
@@ -741,6 +744,32 @@ impl Page {
             .map(|(h, _)| (key, h as u8))
     }
 
+    fn dimension_handle(&self) -> Option<(u64, Pos2, Pos2)> {
+        let [key] = self.selection[..] else { return None };
+        let item = self.item(key)?;
+        if item.kind != "dimension" || item.locked || item.hidden { return None; }
+        let (a, b) = crate::sheet_tools::cota_line(&item.data["fields"])?;
+        Some((key, self.to_screen(a[0], a[1]), self.to_screen(b[0], b[1])))
+    }
+
+    fn dimension_line_at(&self, p: Pos2) -> Option<u64> {
+        let (key, a, b) = self.dimension_handle()?;
+        let ab = b - a;
+        let t = ((p - a).dot(ab) / ab.length_sq()).clamp(0.0, 1.0);
+        (p.distance(a + t * ab) <= HANDLE + 2.0).then_some(key)
+    }
+
+    fn dragged_offset(&self, key: u64, grab: [f64; 2], original: f64, p: Pos2) -> Option<(f64, Option<[f64; 2]>)> {
+        let (a, b, current, axis) = self.run_seed()?;
+        if self.selection != [key] || current != original { return None; }
+        let [_, _, nx, ny] = crate::sheet_tools::sep_frame(a, b, &axis)?;
+        let correction = original - crate::sheet_tools::sep_of(a, b, &axis, grab);
+        let mm = self.to_mm(p);
+        let at = [mm[0] + nx * correction, mm[1] + ny * correction];
+        Some(crate::sheet_tools::snap_sep(a, b, &axis, at, &self.cota_lines(Some(key)),
+                                         7.0 / f64::from(self.zoom.max(1e-6))))
+    }
+
     fn cursor_for_handle(h: u8) -> &'static str {
         match h {
             0 | 4 => "resize_nwse",
@@ -803,7 +832,7 @@ impl Page {
                         }
                     }
                 }
-                if button == 3 || tool == "pan" {
+                if button == 3 || (tool == "pan" && button == 1) {
                     self.drag = Some(Drag::Pan { last: p });
                     self.cursor = "grabbing";
                     return;
@@ -839,6 +868,12 @@ impl Page {
                     }
                     self.drag = Some(Drag::Place { from: snapped.p, to: snapped.p, hit: snapped.world.is_some().then_some(snapped),
                                                    press: p, waiting: false });
+                    return;
+                }
+                if let Some(key) = self.dimension_line_at(p) {
+                    let original = self.item(key).unwrap().data["fields"]["sep_mm"].as_f64().unwrap_or(0.0);
+                    self.drag = Some(Drag::DimensionLine { key, grab: mm, original, offset: original, dot: None });
+                    self.cursor = "move";
                     return;
                 }
                 if let Some((key, handle)) = self.handle_at(p) {
@@ -894,6 +929,10 @@ impl Page {
                     }
                     self.cursor = "move";
                 }
+                Some(Drag::DimensionLine { key, grab, original, .. }) => {
+                    self.drag = self.dragged_offset(key, grab, original, p).map(|(offset, dot)|
+                        Drag::DimensionLine { key, grab, original, offset, dot });
+                }
                 Some(Drag::Resize { key, handle, grab, from }) => {
                     let mm = self.to_mm(p);
                     let (dx, dy) = (mm[0] - grab[0], mm[1] - grab[1]);
@@ -924,6 +963,7 @@ impl Page {
                         ("pan", _) => "grab",
                         (t, _) if PLACE_TOOLS.contains(&t) => "crosshair",
                         ("zoom" | "zoom_ventana", _) => "zoom",
+                        _ if self.dimension_line_at(p).is_some() => "move",
                         (_, Some((_, h))) => Self::cursor_for_handle(h),
                         _ if self.hover.is_some_and(|k| self.selection.contains(&k)) => "move",
                         _ => "",
@@ -955,6 +995,18 @@ impl Page {
                             .filter_map(|(k, r)| self.preview.get(k).filter(|n| *n != r).map(|n| (*k, *n))).collect();
                         if !moved.is_empty() {
                             out.push(Self::rects_action(&moved));
+                        }
+                    }
+                    Some(Drag::DimensionLine { key, grab, original, .. }) => {
+                        if p.distance(self.to_screen(grab[0], grab[1])) > 0.5 {
+                            if let Some((offset, _)) = self.dragged_offset(key, grab, original, p) {
+                                if (offset - original).abs() > 1e-8 {
+                                    if let Some(action) = self.doc.as_ref().and_then(|doc|
+                                        crate::sheet_inspector::edit(doc, &format!("{key}:sep_mm"), &offset.to_string())) {
+                                        out.push(format!("sheets:{action}"));
+                                    }
+                                }
+                            }
                         }
                     }
                     Some(Drag::Resize { key, from, .. }) => {
@@ -1047,6 +1099,11 @@ impl Page {
         let selected: Vec<&Item> = self.selection.iter().filter_map(|k| doc.items.iter().find(|i| i.key == *k)).collect();
         let field = |i: &Item, f: &str| i.data["fields"][f].clone();
         match name {
+            "edit_text" => {
+                if let [item] = selected.as_slice() {
+                    if !item.locked && item.kind == "text" { self.edit_text(item.key); }
+                }
+            }
             "group" => {
                 let members: Vec<&Item> = selected.iter().copied().filter(|i| i.kind != "titleblock").collect();
                 if members.len() < 2 {
@@ -1097,6 +1154,17 @@ impl Page {
             _ => return false,
         }
         true
+    }
+
+    /// Right-click keeps an existing selection or selects the item under the pointer.
+    pub fn context_at(&mut self, at: Pos2, out: &mut Vec<String>) -> Option<(String, Vec<crate::verbs::Row>)> {
+        let hit = self.hit(self.to_mm(at));
+        if !hit.is_some_and(|k| self.selection.contains(&k)) {
+            self.selection = self.with_groups(hit.into_iter().collect());
+            out.push(self.select_action());
+        }
+        Some(crate::verbs::sheet_menu(self.doc.as_ref()?, &self.selection,
+                                      self.style_clip.as_ref().map(|(kind, _)| kind.as_str())))
     }
 
     /// The selection with each picked item's group around it.
@@ -1212,6 +1280,22 @@ impl Page {
                     painter.rect_stroke(h, 1.5, Stroke::new(1.0_f32, ACCENT), egui::StrokeKind::Inside);
                 }
             }
+        }
+        if let Some((_, mut a, mut b)) = self.dimension_handle() {
+            if let Some(Drag::DimensionLine { offset, dot, .. }) = &self.drag {
+                if let Some((p, q, _, axis)) = self.run_seed() {
+                    let (v, w) = crate::sheet_tools::line_ends(p, q, *offset, &axis);
+                    a = self.to_screen(v[0], v[1]);
+                    b = self.to_screen(w[0], w[1]);
+                    for line in [[self.to_screen(p[0], p[1]), a], [a, b], [b, self.to_screen(q[0], q[1])]] {
+                        painter.line_segment(line, Stroke::new(1.5, ACCENT));
+                    }
+                    if let Some(d) = dot { painter.circle_filled(self.to_screen(d[0], d[1]), 3.5, ACCENT); }
+                }
+            }
+            let mid = a + (b - a) * 0.5;
+            painter.circle_filled(mid, HANDLE, Color32::WHITE);
+            painter.circle_stroke(mid, HANDLE, Stroke::new(1.5, ACCENT));
         }
         if let Some(Drag::Place { from, to, .. }) = &self.drag {
             let r = Rect::from_two_pos(self.to_screen(from[0], from[1]), self.to_screen(to[0], to[1]));
@@ -1438,6 +1522,57 @@ mod tests {
                      {"key":4,"kind":"dimension","rect":[100,50,40,10],"locked":false,"hidden":false,"editable":false,
                       "fields":{"x_mm":100.0,"y_mm":60.0,"dx_mm":40.0,"dy_mm":0.0,"sep_mm":-10.0,"axis":""}}]}"#.into());
         p
+    }
+
+    #[test]
+    fn line_drag_skips_itself_and_commits_only_the_offset_on_release() {
+        let mut p = page_with_a_dimension();
+        p.zoom = 2.0;
+        let doc = p.doc.as_mut().unwrap();
+        let mut target = doc.items.last().unwrap().clone();
+        target.key = 5;
+        target.data["fields"]["x_mm"] = serde_json::json!(20.0);
+        target.data["fields"]["sep_mm"] = serde_json::json!(-25.0);
+        doc.items.push(target);
+        p.selection = vec![4];
+        let mut out = Vec::new();
+        let start = at(&p, 120.0, 50.0);
+        let end = at(&p, 120.0, 36.5);
+        p.pointer("press", start, 1, 0, &mut out);
+        p.pointer("move", at(&p, 120.0, 49.0), 1, 0, &mut out);
+        assert!(matches!(p.drag, Some(Drag::DimensionLine { offset: -11.0, dot: None, .. })));
+        p.pointer("move", end, 1, 0, &mut out);
+        assert!(matches!(p.drag, Some(Drag::DimensionLine { offset: -25.0, dot: Some(_), .. })));
+        assert!(out.is_empty());
+        p.key("Escape", 0, &mut out);
+        p.pointer("release", end, 1, 0, &mut out);
+        assert!(out.is_empty());
+        p.pointer("press", start, 1, 0, &mut out);
+        p.pointer("release", end, 1, 0, &mut out);
+        assert_eq!(out, vec!["sheets:set\x1f4\x1f{\"sep_mm\":-25.0}"]);
+        p.doc.as_mut().unwrap().items[1].locked = true;
+        assert!(p.dimension_line_at(start).is_none());
+    }
+
+    #[test]
+    fn context_hit_preserves_a_multi_selection_and_offers_the_dock_edit() {
+        let mut p = page_with_a_dimension();
+        let mut out = Vec::new();
+        p.selection = vec![1, 4];
+        let hit = at(&p, 120.0, 53.0);
+        let (title, _) = p.context_at(hit, &mut out).unwrap();
+        assert_eq!(title, "2 items");
+        assert!(out.is_empty());
+        p.selection.clear();
+        let (title, rows) = p.context_at(hit, &mut out).unwrap();
+        assert_eq!((title.as_str(), &p.selection[..]), ("Dimension", &[4][..]));
+        let edit = crate::sheet_inspector::edit(p.doc.as_ref().unwrap(), "4:show_unit", "1").unwrap();
+        assert!(rows.iter().flat_map(|row| &row.1).any(|entry| entry.0 == format!("sheets:{edit}")));
+        let blank = at(&p, 300.0, 250.0);
+        let (title, rows) = p.context_at(blank, &mut out).unwrap();
+        assert!(p.selection.is_empty());
+        assert_eq!(title, "Sheet");
+        assert!(rows.iter().flat_map(|row| &row.1).any(|entry| entry.0 == "sheets:fit"));
     }
 
     fn cota_of(action: &str) -> serde_json::Value {
