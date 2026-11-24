@@ -443,21 +443,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         box.addWidget(bar)
         self._doc_stack = QStackedWidget(area)
         box.addWidget(self._doc_stack, 1)
-        # The active project's scenes as tabs, under the viewport
-        # (views/scene_tabs.py); each project keeps its own on/off.
-        from views.scene_tabs import SceneTabRow
-        scenes = self._scene_tabs = SceneTabRow(area)
-        scenes.sceneClicked.connect(self._on_scene_tab)
-        scenes.addRequested.connect(self._add_scene_from_tabs)
-        scenes.menuRequested.connect(self._scene_tab_menu)
-        scenes.barMenuRequested.connect(self._scene_bar_menu)
-        scenes.renameRequested.connect(self._rename_scene_tab)
-        scenes.moveRequested.connect(self._move_scene_tab)
-        scenes.setVisible(False)
-        from views.scene_player import ScenePlayer
-        self.scene_player = ScenePlayer(self)
-        self.scene_player.activeChanged.connect(self._on_player_active)
-        box.addWidget(scenes)
         self._empty_on = False
         # The views button: the layouts of the project in front.
         from views.multi_view import LayoutPicker
@@ -1411,10 +1396,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
             lambda _c=False: self._show_camera_settings())
         camera_menu.addAction(self._act_camera_settings)
 
-        # Scene transitions (views/scene_player.py): the camera glides from
-        # scene to scene, and Play runs through them all, for a presentation.
-        camera_menu.addMenu(self._build_animation_menu())
-
         # Styles: the model's display look — face mode, edges,
         # background. Scenes remember the style; the composer's live-look
         # frames inherit it.
@@ -1683,18 +1664,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         # does the same on the left, next to it so the key can be found.
         window_menu.addAction(self._act_sidebar)
         window_menu.addAction(self._act_left_sidebar)
-        # The scenes as tabs under the viewport, for the project in front
-        # (Alt+E: E for «escenas»; each project keeps its own choice).
-        scenes_action = QAction(tr("Show scenes as tabs"), self)
-        scenes_action.setCheckable(True)
-        scenes_action.setChecked(bool(self._doc.scene_tabs))
-        scenes_action.setShortcut(QKeySequence("Alt+E"))
-        scenes_action.setStatusTip(tr(
-            "This project's scenes as tabs under the view; a click shows one."))
-        scenes_action.toggled.connect(lambda on: self.set_scene_tabs(on))
-        self.addAction(scenes_action)
-        window_menu.addAction(scenes_action)
-        self._act_scene_tabs = scenes_action
         # With several views, the one under the pointer alone and back.
         maximize_action = QAction(tr("Maximize view"), self)
         maximize_action.setShortcut(QKeySequence("Ctrl+Space"))
@@ -4648,13 +4617,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         if pending:
             pending.job.cancel()
             return
-        # A scene glide or a run is stopped first, and alone: the player's
-        # filter sits on the viewport, but this window shortcut takes Esc
-        # before the viewport ever sees it, so the camera went on to the
-        # scene (Windows round 0.6.2, #1342).
-        if self.scene_player.is_active():
-            self.scene_player.stop()
-            return
         # One cascade, the viewport's — this action's shortcut fires before
         # the viewport ever sees the key, and its own copy lacked the
         # «step out of the group» stop.
@@ -5589,225 +5551,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
                        and not self.is_empty())
         full = grid is not None and grid.maximized_index() is not None
         act.setText(tr("Restore views") if full else tr("Maximize view"))
-
-    # ---- the active project's scenes as tabs (views/scene_tabs.py) --------
-    def _refresh_scene_tabs(self) -> None:
-        """Show the active project's scenes under the viewport: while it
-        has some and asks for them, and no extension's workspace holds the
-        window. A project without scenes has no row, and its first scene
-        brings it (Scenes panel, «+ Scene»)."""
-        row = self.__dict__.get("_scene_tabs")
-        doc = self.__dict__.get("_doc")
-        if row is None or doc is None or doc.viewport is None:
-            return
-        if getattr(doc.stand_in, "_drawing_frame", False):
-            # Reached from inside paintGL (the Scenes panel follows
-            # sceneVersionChanged): the row coming or going resizes the
-            # view in the middle of its frame, and macOS crashed on the
-            # flush after an import that brought scenes (#1316). Once the
-            # frame is out, then; a burst asks once.
-            if not self.__dict__.get("_scene_tabs_queued"):
-                self._scene_tabs_queued = True
-                QTimer.singleShot(0, self, self._refresh_scene_tabs_queued)
-            return
-        act = self.__dict__.get("_act_scene_tabs")
-        if act is not None and act.isChecked() != bool(doc.scene_tabs):
-            act.blockSignals(True)            # the project in front's choice
-            act.setChecked(bool(doc.scene_tabs))
-            act.blockSignals(False)
-        self._sync_animation_menu()          # the project in front's choice
-        views = list(getattr(self.viewport.scene, "saved_views", []) or [])
-        on = (bool(views) and bool(doc.scene_tabs) and self._workspace is None
-               and not self.__dict__.get("_empty_on"))
-        if on:
-            row.show_views(views)
-        if row.isHidden() == on:
-            row.setVisible(on)
-
-    def _refresh_scene_tabs_queued(self) -> None:
-        self._scene_tabs_queued = False
-        self._refresh_scene_tabs()
-
-    def set_scene_tabs(self, on: bool, doc=None) -> None:
-        """Show ``doc``'s (default: the active project's) scenes as tabs."""
-        doc = doc or self._doc
-        doc.scene_tabs = bool(on)
-        self._refresh_scene_tabs()
-        # Turned on with nothing to show: say why no row came up.
-        if on and doc is self._doc and not self.viewport.scene.saved_views:
-            self.statusBar().showMessage(tr(
-                "This project has no scenes yet: its tabs appear with the "
-                "first one (Scenes panel, «+ Scene»)."), 4000)
-
-    def _on_scene_tab(self, index: int) -> None:
-        views = self._scene_tabs.tabs.views
-        if 0 <= index < len(views):
-            self.tray.scenes.show_view(views[index])
-
-    def _rename_scene_tab(self, index: int) -> None:
-        # From the event loop: this can come from a double-click on the
-        # bar, still in the middle of its mouse events.
-        views = self._scene_tabs.tabs.views
-        if 0 <= index < len(views):
-            QTimer.singleShot(
-                0, lambda v=views[index]: self.tray.scenes.ask_rename(v))
-
-    def _move_scene_tab(self, index: int, to: int) -> None:
-        views = self.viewport.scene.saved_views
-        if 0 <= index < len(views):
-            self.tray.scenes.move_view(views[index], to)
-
-    def _scene_tab_menu(self, index: int, global_pos) -> None:
-        from views.scene_tabs import menu_upwards
-        menu = self._build_scene_tab_menu(index)
-        menu.exec(menu_upwards(menu, global_pos))
-
-    def _scene_bar_menu(self, global_pos) -> None:
-        from views.scene_tabs import menu_upwards
-        menu = self._build_scene_bar_menu()
-        menu.exec(menu_upwards(menu, global_pos))
-
-    # ---- scene transitions (views/scene_player.py) -------------------------
-    def _build_animation_menu(self):
-        """Camera ▸ Animation: play the scenes, step through them, and the
-        document's transition times."""
-        from PySide6.QtGui import QKeySequence
-        from PySide6.QtWidgets import QMenu
-        menu = QMenu(tr("Animation"), self)
-        menu.aboutToShow.connect(self._sync_animation_menu)
-        glide = self._act_scene_transitions = QAction(
-            tr("Scene Transitions"), self)
-        glide.setCheckable(True)
-        glide.setChecked(True)
-        glide.setStatusTip(tr(
-            "On: showing a scene glides the camera there. Off: it jumps "
-            "straight to it. Saved with the project."))
-        glide.toggled.connect(self.set_scene_transitions)
-        menu.addAction(glide)
-        menu.addSeparator()
-        play = self._act_play_scenes = QAction(tr("Play"), self)
-        play.setCheckable(True)
-        play.setStatusTip(tr(
-            "Go through every scene in turn, gliding from one to the next; "
-            "Esc or a click in the view stops it."))
-        play.triggered.connect(lambda on: self.play_scenes(bool(on)))
-        menu.addAction(play)
-        for label, tip, keys, step in (
-                (tr("Next Scene"), tr("Glide to the next scene."),
-                 "PgDown", 1),
-                (tr("Previous Scene"), tr("Glide to the previous scene."),
-                 "PgUp", -1)):
-            act = QAction(label, self)
-            act.setStatusTip(tip)
-            act.setShortcut(QKeySequence(keys))
-            act.triggered.connect(lambda _c=False, k=step: self.step_scene(k))
-            self.addAction(act)
-            menu.addAction(act)
-        menu.addSeparator()
-        video = QAction(tr("Export Video…"), self)
-        video.setStatusTip(tr(
-            "Save the scenes as a video: the camera glides from one to "
-            "the next, with the times of Camera ▸ Animation."))
-        video.triggered.connect(lambda _c=False: self.export_video())
-        menu.addAction(video)
-        settings = QAction(tr("Animation Settings…"), self)
-        settings.setStatusTip(tr(
-            "How long the camera takes from one scene to the next, and how "
-            "long Play stays on each."))
-        settings.triggered.connect(lambda _c=False: self.ask_animation())
-        menu.addAction(settings)
-        self._act_animation_settings = settings
-        return menu
-
-    def _sync_animation_menu(self) -> None:
-        """The menu shows the project in front's choice."""
-        act = self.__dict__.get("_act_scene_transitions")
-        anim = getattr(self.viewport.scene, "animation", None)
-        if act is not None and anim is not None                 and act.isChecked() != anim.enabled:
-            act.blockSignals(True)
-            act.setChecked(anim.enabled)
-            act.blockSignals(False)
-
-    def _on_player_active(self, on: bool) -> None:
-        act = self.__dict__.get("_act_play_scenes")
-        if act is not None and act.isChecked() != (
-                on and self.scene_player.is_playing()):
-            act.blockSignals(True)
-            act.setChecked(on and self.scene_player.is_playing())
-            act.blockSignals(False)
-
-    def _build_scene_bar_menu(self):
-        """The scene row's own right-click menu (off the tabs): play the
-        scenes, or hide the row. Alt+E, Window ▸ and the project tab's menu
-        bring it back."""
-        from PySide6.QtGui import QKeySequence
-        from PySide6.QtWidgets import QMenu
-        menu = QMenu(self)
-        menu.setAttribute(Qt.WA_DeleteOnClose)
-        self._add_play_entry(menu)
-        menu.addSeparator()
-        act = menu.addAction(tr("Hide scenes"))
-        act.setShortcut(QKeySequence("Alt+E"))
-        act.setShortcutVisibleInContextMenu(True)
-        act.setStatusTip(tr(
-            "Hide this project's scene tabs; Alt+E shows them again."))
-        act.triggered.connect(lambda _c=False: self.set_scene_tabs(False))
-        return menu
-
-    def _build_scene_tab_menu(self, index: int):
-        """A scene tab's right-click menu: keep the current view in that
-        scene, rename it, or delete it."""
-        from PySide6.QtGui import QKeySequence
-        from PySide6.QtWidgets import QMenu
-        menu = QMenu(self)
-        menu.setAttribute(Qt.WA_DeleteOnClose)
-        views = self._scene_tabs.tabs.views
-        view = views[index] if 0 <= index < len(views) else None
-        self._add_play_entry(menu)
-        menu.addSeparator()
-        update = menu.addAction(tr("Update"))
-        update.setStatusTip(tr("Update the selected scene from the current view"))
-        update.setEnabled(view is not None)
-        update.triggered.connect(
-            lambda _c=False, v=view: self.tray.scenes.update_view(v))
-        camera = menu.addAction(tool_icon("camera_settings"),
-                                tr("Camera Settings…"))
-        camera.setStatusTip(tr(
-            "Show this scene and set its camera: lens, shift, frame and "
-            "more. The changes are kept in the scene."))
-        camera.setEnabled(view is not None)
-        camera.triggered.connect(
-            lambda _c=False, v=view: self.edit_scene_camera(v))
-        rename = menu.addAction(tr("Rename…"))
-        rename.setEnabled(view is not None)
-        rename.triggered.connect(
-            lambda _c=False, i=index: self._rename_scene_tab(i))
-        menu.addSeparator()
-        act = menu.addAction(tr("Delete"))
-        act.setShortcut(QKeySequence.Delete)
-        act.setShortcutVisibleInContextMenu(True)
-        act.setStatusTip(tr("Delete the selected scenes"))
-        act.setEnabled(view is not None)
-        act.triggered.connect(
-            lambda _c=False, v=view: self.tray.scenes.delete_views([v]))
-        return menu
-
-    def _add_play_entry(self, menu) -> None:
-        """«Play» or, while the scenes play, «Stop» — the scene row's menus."""
-        if self.scene_player.is_playing():
-            act = menu.addAction(tr("Stop"))
-            act.setStatusTip(tr("Stop going through the scenes."))
-            act.triggered.connect(lambda _c=False: self.play_scenes(False))
-        else:
-            act = menu.addAction(tr("Play"))
-            act.setStatusTip(tr(
-                "Go through every scene in turn, gliding from one to the "
-                "next; Esc or a click in the view stops it."))
-            act.triggered.connect(lambda _c=False: self.play_scenes(True))
-
-    def _add_scene_from_tabs(self) -> None:
-        # The panel marks its tab: in a folder it is not the last one.
-        self.tray.scenes.add_scene()
 
     def _update_tab(self, doc=None) -> None:
         """The tab's name, its unsaved-changes dot and its tooltip."""

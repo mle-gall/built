@@ -200,7 +200,7 @@ pub fn build() -> muda::Result<Menus> {
                 groups.insert(entry.path, sub);
             }
         }
-        if matches!(entry.id,"scene_transitions"|"hide_rest"|"hide_similar"|"rest_normal"|"rest_fade"|"rest_hide") {
+        if matches!(entry.id,"scene_play"|"scene_transitions"|"hide_rest"|"hide_similar"|"rest_normal"|"rest_fade"|"rest_hide") {
             let check=CheckMenuItem::with_id(entry.id,entry.label,true,false,None);
             groups[entry.path].append(&check)?;
             model_checks.push(check);
@@ -219,10 +219,11 @@ pub fn build() -> muda::Result<Menus> {
 }
 
 impl Menus {
-    pub fn reflect_model_checks(&self, rest: &str, transitions: bool, similar: bool) {
+    pub fn reflect_model_checks(&self, rest: &str, transitions: bool, similar: bool, playing: bool) {
         for item in &self.model_checks {
             let on=match item.id().0.as_str(){
                 "scene_transitions"=>transitions,
+                "scene_play"=>playing,
                 "hide_similar"=>similar,
                 "hide_rest"=>rest=="hide",
                 id=>id.strip_prefix("rest_")==Some(rest),

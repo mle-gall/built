@@ -1,6 +1,84 @@
 //! Navigation uses the marked saved view of the active document.
 use pyo3::{prelude::*, types::PyDict};
 
+/// The scene selected for recall and editing belongs to the document.
+#[pyclass]
+#[derive(Default)]
+pub struct SceneMark {
+    view: Option<Py<PyAny>>,
+    revision: Option<(usize, u64)>,
+}
+
+#[pymethods]
+impl SceneMark {
+    #[new]
+    fn new() -> Self {
+        Self::default()
+    }
+
+    #[getter]
+    fn tabs(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn marked_view(&self, py: Python<'_>) -> Option<Py<PyAny>> {
+        self.view.as_ref().map(|view| view.clone_ref(py))
+    }
+
+    fn mark_view(&mut self, view: Option<Py<PyAny>>) {
+        self.view = view;
+        self.revision = None;
+    }
+
+    fn for_scene<'py>(
+        mut slf: PyRefMut<'py, Self>,
+        scene: &Bound<'py, PyAny>,
+    ) -> PyResult<PyRefMut<'py, Self>> {
+        if let Some(view) = &slf.view {
+            let revision = (
+                scene.as_ptr() as usize,
+                scene.getattr("content_version")?.extract()?,
+            );
+            if slf.revision != Some(revision) {
+                let views = scene.getattr("saved_views")?;
+                if !views.try_iter()?.try_fold(false, |found, item| {
+                    Ok::<_, PyErr>(found || item?.is(view.bind(scene.py())))
+                })? {
+                    slf.view = None;
+                }
+                slf.revision = Some(revision);
+            }
+        }
+        Ok(slf)
+    }
+}
+
+/// The egui row is from the last painted menu. A scene deleted, moved to
+/// another document, or undone since that frame must not change this camera.
+#[pyfunction]
+fn show_listed_scene(
+    win: &Bound<'_, PyAny>,
+    listed: &Bound<'_, PyAny>,
+    index: usize,
+) -> PyResult<()> {
+    if index < listed.len()? {
+        let selected = listed.get_item(index)?;
+        let current = win
+            .getattr("viewport")?
+            .getattr("scene")?
+            .getattr("saved_views")?;
+        for view in current.try_iter()? {
+            if view?.is(&selected) {
+                win.getattr("tray")?
+                    .getattr("scenes")?
+                    .call_method1("show_view", (selected,))?;
+                break;
+            }
+        }
+    }
+    Ok(())
+}
+
 #[pyfunction]
 pub fn marked_scene_index(win: &Bound<'_, PyAny>) -> PyResult<isize> {
     let marked = win
@@ -112,6 +190,8 @@ fn scene_transitions(win: &Bound<'_, PyAny>, on: bool) -> PyResult<()> {
     Ok(())
 }
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<SceneMark>()?;
+    m.add_function(wrap_pyfunction!(show_listed_scene, m)?)?;
     m.add_function(wrap_pyfunction!(marked_scene_index, m)?)?;
     m.add_function(wrap_pyfunction!(step_scene, m)?)?;
     m.add_function(wrap_pyfunction!(play_scenes, m)?)?;

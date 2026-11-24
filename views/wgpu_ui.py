@@ -261,9 +261,6 @@ def _one_theme(win) -> None:
     status = win.statusBar()
     if status is not None:
         status.hide()
-    scenes = getattr(win, "_scene_tabs", None)
-    if scenes is not None:
-        scenes.setMaximumHeight(0)
     # The side panels' pull handles: nothing to pull with the docks hidden.
     from PySide6.QtWidgets import QWidget
     for name in ("sidebar_handle", "left_sidebar_handle"):
@@ -2620,11 +2617,10 @@ def _run(win, actions, source_view=None) -> None:
                         panel.update_view(marked)
                         win.viewport.flash_status(f"Updated “{marked.name}” from the view")
                     elif marked is not None and arg in ("scene:up", "scene:down"):
-                        views = list(getattr(win.viewport.scene, "saved_views", []) or [])
-                        if marked in views:
-                            i = views.index(marked) + (-1 if arg == "scene:up" else 1)
-                            if 0 <= i < len(views):
-                                panel.move_view(marked, i)
+                        from ingetrazo_core import scene_tree
+                        vp = win.viewport
+                        if scene_tree.move_among_siblings(vp.history, marked, arg == "scene:up"):
+                            vp.notify_scene_changed()
                     elif marked is not None and arg == "scene:rename":
                         view._ui_pending = ("scene_rename", marked)
                         view.renderer.ui_set_prompt("Rename scene", f"{ED}edit{ED}scene{ED}{marked.name}",
@@ -2635,18 +2631,10 @@ def _run(win, actions, source_view=None) -> None:
                                                     [("yes", "Delete"), ("no", "Cancel")])
                     view._ui_tabs = None
             elif arg in ("scene:prev", "scene:next"):
-                views = getattr(view, "_ui_scene_views", [])
-                row = getattr(getattr(win, "_scene_tabs", None), "tabs", None)
-                marked = row.marked_view() if row is not None else None
-                if views:
-                    i = views.index(marked) if marked in views else -1
-                    i = (i + (1 if arg == "scene:next" else -1)) % len(views)
-                    win.tray.scenes.show_view(views[i])
-            elif arg.startswith("scene:"):
-                views = getattr(view, "_ui_scene_views", [])
-                i = int(arg.partition(":")[2])
-                if 0 <= i < len(views):
-                    win.tray.scenes.show_view(views[i])
+                win.step_scene(1 if arg == "scene:next" else -1)
+            elif arg.startswith("scene:") and arg[6:].isdecimal():
+                from ingetrazo_render import show_listed_scene
+                show_listed_scene(win, getattr(view, "_ui_scene_views", []), int(arg[6:]))
         elif kind == "deliver":
             view = getattr(getattr(win, "_doc", None), "stand_in", None)
             data = getattr(view, "_ui_tree", None) or {}

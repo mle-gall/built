@@ -33,6 +33,16 @@ class WindowDocumentCommands:
     _RECENT_MAX = 10
     _CAMERA_FIELDS = native.DOCUMENT_CAMERA_FIELDS
 
+    def _refresh_scene_tabs(self) -> None:
+        view = getattr(self._doc, "stand_in", None)
+        if view is not None:
+            view._ui_tabs = None
+
+    @property
+    def _scene_tabs(self):
+        vp = self.viewport
+        return self._doc.scene_mark.for_scene(vp.scene) if vp is not None else None
+
     @property
     def viewport(self):
         doc = self.__dict__.get("_doc")

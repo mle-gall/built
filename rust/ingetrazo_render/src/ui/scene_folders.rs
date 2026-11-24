@@ -307,6 +307,23 @@ mod tests {
     }
 
     #[test]
+    fn unavailable_picture_retries_after_the_delay_and_keeps_a_successful_reply() {
+        let ctx = crate::ui::test_context();
+        let mut browser = Browser::default();
+        let scenes = [row("scene:0", "A", "", "")];
+        let folders = [row("", "All scenes", "1", "doc")];
+        let initial = frame(&ctx, &mut browser, &scenes, &folders, 0.);
+        let request = initial[0].strip_prefix("scenephoto:").unwrap();
+        browser.finish(&ctx, request, None);
+        assert!(frame(&ctx, &mut browser, &scenes, &folders, 0.2).is_empty());
+        let retry = frame(&ctx, &mut browser, &scenes, &folders, 0.5);
+        assert_eq!(retry, initial);
+        browser.finish(&ctx, request, Some((1, 1, vec![255, 0, 0, 255])));
+        assert!(browser.photos["A"].texture.is_some());
+        assert!(frame(&ctx, &mut browser, &scenes, &folders, 1.).is_empty());
+    }
+
+    #[test]
     fn list_mode_stays_picture_free_and_late_replies_cannot_cross_documents() {
         let ctx = crate::ui::test_context();
         let mut browser = Browser::default();

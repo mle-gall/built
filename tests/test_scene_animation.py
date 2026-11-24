@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""Scene transitions (core/scene_animation.py, views/scene_player.py):
+"""Scene transitions (core/scene_animation.py, views/scene_playback.py):
 showing a scene glides the camera there instead of jumping, the rest of
 the scene comes in on arrival, Play runs through every scene in turn,
 anything the user does takes the view back, and the document keeps its
@@ -8,13 +8,12 @@ transition and pause times."""
 from __future__ import annotations
 
 import math
-import sys
+from unittest.mock import Mock
 
 import pytest
-from PySide6.QtWidgets import QApplication
 
-if QApplication.instance() is None:
-    QApplication(sys.argv[:1])
+from tests.scene_controls import choose, interrupt
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 from core.scene_animation import (DEFAULT_PAUSE, DEFAULT_TRANSITION,  # noqa: E402
                                   MAX_SECONDS, Pose, Run, SceneAnimation,
@@ -183,41 +182,14 @@ class _Clock:
         return self.now
 
 
-class _Viewport:
-    """What the player needs of a viewport: a camera, a scene, update,
-    and event filters (a real QWidget for those)."""
-
-    def __init__(self) -> None:
-        from PySide6.QtWidgets import QWidget
-
-        from core.camera import OrbitCamera
-        from core.scene import Scene
-        self.widget = QWidget()
-        self.camera = OrbitCamera()
-        self.scene = Scene()
-        self.updates = 0
-
-    def update(self) -> None:
-        self.updates += 1
-
-    def installEventFilter(self, obj) -> None:  # noqa: N802
-        self.widget.installEventFilter(obj)
-
-    def removeEventFilter(self, obj) -> None:  # noqa: N802
-        self.widget.removeEventFilter(obj)
-
-
 @pytest.fixture
-def rig():
-    from PySide6.QtCore import QObject
-
-    from views.scene_player import ScenePlayer
-    window = QObject()
-    window.viewport = _Viewport()
+def rig(native_host, monkeypatch):
+    win = native_host.window
     clock = _Clock()
-    player = ScenePlayer(window, clock=clock)
-    yield window, player, clock
-    player.cancel()
+    monkeypatch.setattr(win.scene_player, "_clock", clock)
+    monkeypatch.setattr(win.viewport, "update", Mock())
+    win.viewport.camera.target = (0, 0, 0)
+    return win, win.scene_player, clock
 
 
 def _view(name, view="top", x=0.0):
@@ -248,7 +220,7 @@ def test_a_glide_moves_the_camera_bit_by_bit_and_arrives(rig):
     assert cam.target.x() == pytest.approx(8.0)
     assert cam.pitch == pytest.approx(view.pitch)
     assert arrived == [view] and not player.is_active()
-    assert window.viewport.updates == 2
+    assert window.viewport.update.call_count == 2
 
 
 def test_no_glide_without_time_or_when_already_there(rig):
@@ -279,53 +251,29 @@ def test_moving_the_camera_mid_glide_stops_it_where_it_is(rig):
 
 @pytest.mark.parametrize("kind", ["press", "wheel", "esc"])
 def test_a_click_the_wheel_or_esc_in_the_view_stops_it(rig, kind):
-    from PySide6.QtCore import QEvent, QPoint, QPointF, Qt
-    from PySide6.QtGui import QKeyEvent, QMouseEvent, QWheelEvent
-    window, player, clock = rig
-    view = _view("Planta", x=8.0)
-    player.glide_to(view, 2.0, lambda v: None)
-    if kind == "press":
-        ev = QMouseEvent(QEvent.MouseButtonPress, QPointF(5, 5),
-                         QPointF(5, 5), Qt.MiddleButton, Qt.MiddleButton,
-                         Qt.NoModifier)
-    elif kind == "wheel":
-        ev = QWheelEvent(QPointF(5, 5), QPointF(5, 5), QPoint(0, 0),
-                         QPoint(0, 120), Qt.NoButton, Qt.NoModifier,
-                         Qt.NoScrollPhase, False)
-    else:
-        ev = QKeyEvent(QEvent.KeyPress, Qt.Key_Escape, Qt.NoModifier)
-    # Straight to the player's filter: in a long run of test files, a
-    # window an earlier file left behind keeps an application-wide key
-    # filter that may take Esc first (the CI's sixth batch did).
-    eaten = player.eventFilter(window.viewport.widget, ev)
+    window, player, _ = rig
+    player.glide_to(_view("Planta", x=8), 2., lambda v: None)
+    interrupt(window, kind)
     assert not player.is_active()
-    assert eaten is (kind == "esc")          # Esc is the player's alone
 
 
-def test_the_player_watches_the_viewport_while_it_moves(rig):
-    """The filter is on the viewport only while a glide or a run is on."""
-    from PySide6.QtCore import QEvent, QPointF, Qt
-    from PySide6.QtGui import QMouseEvent
-    window, player, _clock = rig
-
-    def press():
-        QApplication.sendEvent(window.viewport.widget, QMouseEvent(
-            QEvent.MouseButtonPress, QPointF(5, 5), QPointF(5, 5),
-            Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
-    player.glide_to(_view("Planta", x=8.0), 2.0, lambda v: None)
-    press()
-    assert not player.is_active()
+def test_the_player_releases_the_display_after_stop_or_cancel(rig):
+    window, player, _ = rig
     arrived = []
-    player.glide_to(_view("Alzado", "front", x=-8.0), 2.0, arrived.append)
+    player.glide_to(_view("A", x=8), 2., arrived.append)
+    assert player._display is window.view
+    interrupt(window, "press")
+    assert len(arrived) == 1 and player._display is None
+    player.glide_to(_view("B", x=-8), 2., arrived.append)
     player.cancel()
-    press()                                  # nothing to stop, nothing done
-    assert arrived == [] and not player.is_active()
+    interrupt(window, "press")
+    assert len(arrived) == 1 and player._display is None
 
 
 def test_another_project_in_front_stops_it(rig):
     window, player, clock = rig
     player.glide_to(_view("Planta", x=8.0), 2.0, lambda v: None)
-    window.viewport = _Viewport()
+    window.new_document()
     clock.now += 0.5
     player.tick()
     assert not player.is_active()
@@ -395,15 +343,8 @@ def test_play_with_a_parallel_scene_does_not_stop_itself(rig):
 
 # ---- In the window ------------------------------------------------------------
 @pytest.fixture
-def win():
-    from views.main_window import MainWindow
-    w = MainWindow()
-    yield w
-    w.scene_player.cancel()
-    for doc in list(w._documents):
-        doc.saved_content = doc.viewport.scene.content_version
-    w._saved_version = w.viewport.scene.version
-    w.close()
+def win(native_host):
+    return native_host.window
 
 
 def _scenes(win, *specs):
@@ -415,13 +356,13 @@ def _scenes(win, *specs):
         for ly in scene.layers:
             ly.visible = ly.name not in hidden
         scene.saved_views.append(SavedView.capture(name, scene, cam))
-    win.tray.scenes.refresh()
+    win.viewport.scene.version += 1
 
 
 def _visible(win):
     """Make the window's checks believe the viewport is on screen (the
     tests run with the window unshown, where a scene still jumps)."""
-    win.viewport.isVisible = lambda: True
+    win.view.renderer = Mock()
 
 
 def _with_layer(win, name):
@@ -436,10 +377,10 @@ def test_a_scene_tab_glides_and_its_layers_come_on_arrival(win):
     clock = _Clock()
     win.scene_player._clock = clock
     win.viewport.camera.set_view("iso")
-    win._scene_tabs.tabs.tabBarClicked.emit(0)
+    choose(win, 0)
     player = win.scene_player
     assert player.is_active()
-    assert win._scene_tabs.tabs.currentIndex() == 0      # marked at once
+    assert win._scene_tabs.marked_view() is win.viewport.scene.saved_views[0]      # marked at once
     muebles = [ly for ly in win.viewport.scene.layers
                if ly.name == "Muebles"][0]
     assert muebles.visible                     # not yet: still on the way
@@ -460,7 +401,7 @@ def test_with_transitions_off_a_scene_still_jumps(win):
     _visible(win)
     win.viewport.scene.animation = SceneAnimation(enabled=False)
     win.viewport.camera.set_view("iso")
-    win._scene_tabs.tabs.tabBarClicked.emit(0)
+    choose(win, 0)
     assert not win.scene_player.is_active()
     top = type(win.viewport.camera)()
     top.set_view("top")
@@ -470,9 +411,7 @@ def test_with_transitions_off_a_scene_still_jumps(win):
 def test_next_and_previous_scene_go_round_the_ends(win):
     _scenes(win, ("A", "top", set()), ("B", "front", set()),
             ("C", "right", set()))
-    # Qt marks the first tab as the scenes come: «next» is the one after
-    # the scene underlined, as the row shows it.
-    assert win._scene_tabs.tabs.currentIndex() == 0
+    choose(win, 0)
     shown = []
     win.tray.scenes.show_view = lambda v, animate=True: (
         shown.append(v.name), win._scene_tabs.mark_view(v))
@@ -486,18 +425,10 @@ def test_next_and_previous_scene_go_round_the_ends(win):
 
 def test_play_from_the_menu_and_stop_follows_the_menu(win):
     _scenes(win, ("A", "top", set()), ("B", "front", set()))
-    win.play_scenes(True)
+    win.run_command("scene_play")
     assert win.scene_player.is_playing()
-    assert win._act_play_scenes.isChecked()
-    win.play_scenes(False)
+    win.run_command("scene_play")
     assert not win.scene_player.is_active()
-    assert not win._act_play_scenes.isChecked()
-
-
-def _esc_action(win):
-    from PySide6.QtGui import QAction, QKeySequence
-    return next(a for a in win.findChildren(QAction)
-                if a.shortcut() == QKeySequence("Esc"))
 
 
 def test_the_window_s_esc_stops_a_glide_and_keeps_the_selection(win):
@@ -507,56 +438,47 @@ def test_the_window_s_esc_stops_a_glide_and_keeps_the_selection(win):
     _scenes(win, ("Planta", "top", set()), ("Alzado", "front", set()))
     _visible(win)
     win.viewport.camera.set_view("iso")
-    win._scene_tabs.tabs.tabBarClicked.emit(1)
+    choose(win, 1)
     assert win.scene_player.is_active()
-    cleared = []
-    win.viewport.escape = lambda: cleared.append(True)
-    _esc_action(win).trigger()
+    scene = win.viewport.scene
+    from core.group import Group
+    from core.mesh import Mesh
+    group = Group(Mesh(), "Esc selection")
+    scene.groups.append(group)
+    win.view.set_scene(scene)
+    scene.select([group])
+    interrupt(win, "esc")
     assert not win.scene_player.is_active()
-    assert cleared == []                     # the selection stays
-    _esc_action(win).trigger()               # nothing moving: the cascade
-    assert cleared == [True]
+    assert set(scene.selection) == {group}
+    interrupt(win, "esc")               # nothing moving: the cascade
+    assert not scene.selection
 
 
 def test_the_window_s_esc_stops_play(win):
     _scenes(win, ("A", "top", set()), ("B", "front", set()))
     win.play_scenes(True)
     assert win.scene_player.is_playing()
-    _esc_action(win).trigger()
+    interrupt(win, "esc")
     assert not win.scene_player.is_active()
-    assert not win._act_play_scenes.isChecked()
 
 
 def test_play_without_scenes_says_why(win):
     win.play_scenes(True)
     assert not win.scene_player.is_active()
-    assert not win._act_play_scenes.isChecked()
     from core.i18n import tr
     assert win.statusBar().currentMessage().startswith(
         tr("This project has no scenes to play: keep a view as a scene "
            "first (Scenes panel, «+ Scene»).")[:20])
 
 
-def test_the_scene_menus_offer_play_then_stop(win):
-    _scenes(win, ("A", "top", set()), ("B", "front", set()))
-    from core.i18n import tr
-    texts = [a.text() for a in win._build_scene_tab_menu(0).actions()]
-    assert tr("Play") in texts
-    texts = [a.text() for a in win._build_scene_bar_menu().actions()]
-    assert tr("Play") in texts
-    win.play_scenes(True)
-    texts = [a.text() for a in win._build_scene_bar_menu().actions()]
-    assert tr("Stop") in texts and tr("Play") not in texts
-
-
 def test_page_up_and_down_are_no_other_commands_shortcut(win):
-    from PySide6.QtGui import QAction, QKeySequence
-    from core.i18n import tr
-    for keys, label in (("PgDown", "Next Scene"), ("PgUp", "Previous Scene")):
-        seq = QKeySequence(keys)
-        owners = {a.text() for a in win.findChildren(QAction)
-                  if seq in a.shortcuts()}
-        assert owners == {tr(label)}
+    from core.shortcuts import action_keys
+    from views.settings_sheet import SettingsSheet
+    sheet = SettingsSheet("keyboard")
+    sheet._win = win
+    for key, command in (("PgDown", "scene_next"), ("PgUp", "scene_previous")):
+        action = sheet._action("sc:menu:" + command)
+        assert [a for a in sheet.actions() if key in action_keys(a)] == [action]
 
 
 def test_the_settings_change_the_document(win, monkeypatch):
@@ -590,19 +512,18 @@ def test_the_menu_turns_the_transitions_off_and_on(win):
     """Camera ▸ Animation ▸ Scene Transitions: one click, no dialog."""
     _scenes(win, ("Planta", "top", set()))
     _visible(win)
-    act = win._act_scene_transitions
-    assert act.isChecked()
+    assert win.viewport.scene.animation.enabled
     before = win.viewport.scene.version
-    act.trigger()                                   # off
+    win.run_command("scene_transitions")                                   # off
     assert not win.viewport.scene.animation.enabled
     assert win.viewport.scene.version > before      # the project changed
     win.viewport.camera.set_view("iso")
-    win._scene_tabs.tabs.tabBarClicked.emit(0)
+    choose(win, 0)
     assert not win.scene_player.is_active()         # it jumped
-    act.trigger()                                   # on again
+    win.run_command("scene_transitions")                                   # on again
     assert win.viewport.scene.animation.enabled
     win.viewport.camera.set_view("iso")
-    win._scene_tabs.tabs.tabBarClicked.emit(0)
+    choose(win, 0)
     assert win.scene_player.is_active()             # it glides
 
 
@@ -611,7 +532,7 @@ def test_turning_them_off_keeps_the_times_and_stops_a_glide(win):
     _visible(win)
     win.viewport.scene.animation = SceneAnimation(transition=4.0, pause=0.5)
     win.viewport.camera.set_view("iso")
-    win._scene_tabs.tabs.tabBarClicked.emit(0)
+    choose(win, 0)
     assert win.scene_player.is_active()
     win.set_scene_transitions(False)
     assert not win.scene_player.is_active()
@@ -620,12 +541,13 @@ def test_turning_them_off_keeps_the_times_and_stops_a_glide(win):
 
 
 def test_the_toggle_shows_the_choice_of_the_project_in_front(win):
-    win.viewport.scene.animation = SceneAnimation(enabled=False)
-    win._sync_animation_menu()
-    assert not win._act_scene_transitions.isChecked()
-    win.viewport.scene.animation = SceneAnimation()
-    win._refresh_scene_tabs()
-    assert win._act_scene_transitions.isChecked()
+    first = win._doc
+    win.run_command("scene_transitions")
+    assert not win.viewport.scene.animation.enabled
+    win.new_document()
+    assert win.viewport.scene.animation.enabled
+    win.activate_document(first)
+    assert not win.viewport.scene.animation.enabled
 
 
 # ---- The video ---------------------------------------------------------------
@@ -898,3 +820,44 @@ def test_normalizing_the_movie_suffix_preserves_an_unconfirmed_file(win, monkeyp
     ve.run_export(win)
     assert prompts and existing.name in prompts[0][2]
     assert existing.read_bytes() == b"original movie"
+
+
+def test_playback_and_transitions_follow_the_front_document_in_the_native_menu(tmp_path):
+    import json
+    from pathlib import Path
+    import sys
+
+    from scripts.isolated_launch import run
+
+    root = Path(__file__).resolve().parents[1]
+    binary = root / "rust/built_app/target/release/built"
+    if sys.platform != "darwin" or not binary.is_file():
+        pytest.skip("requires the macOS release menu")
+    profile = tmp_path / "profile"
+    probe = profile / "data/ingetrazo/plugins/playback_probe.py"
+    probe.parent.mkdir(parents=True)
+    probe.write_text("""import json
+from pathlib import Path
+
+def setup(app):
+    def record():
+        items = app.window._menu_items
+        checks = [items[key].isChecked() for key in ("scene_play", "scene_transitions")]
+        with Path(__file__).with_suffix(".jsonl").open("a") as output:
+            print(json.dumps(checks), file=output)
+    app.add_menu_action("Read animation menu", record)
+""")
+    steps = tmp_path / "steps.txt"
+    commands = ["menu scene_add", "menu scene_add", "menu extension:playback_probe:0",
+                "menu scene_play", "menu extension:playback_probe:0", "key escape",
+                "menu extension:playback_probe:0", "menu scene_transitions",
+                "menu extension:playback_probe:0", "state", "quit"]
+    steps.write_text("wait 500\n" + "\nwait 120\n".join(commands) + "\n")
+    result = run([binary, "--root", root, "--venv", root / ".venv", "--new-instance",
+                  "--script", steps, root / "tests/fixtures/shell/slab-and-cube.igz"],
+                 settings=profile, capture_output=True, text=True, timeout=60, check=True)
+    assert [json.loads(line) for line in probe.with_suffix(".jsonl").read_text().splitlines()] == [
+        [False, True], [True, True], [False, True], [False, False]]
+    state = next(json.loads(s.removeprefix("[built] state ")) for s in result.stdout.splitlines()
+                 if s.startswith("[built] state "))
+    assert state["errors"] == 0

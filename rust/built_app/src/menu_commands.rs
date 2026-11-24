@@ -111,6 +111,10 @@ impl NativeMenuCommand {
     fn enabled(&self) -> bool {
         self.item.isEnabled()
     }
+    #[pyo3(name = "isChecked")]
+    fn checked(&self) -> bool {
+        self.item.state() == 1
+    }
     fn set_shortcut(&self, portable: &str, factory: bool) {
         if factory {
             self.apply_equivalent(&self.factory.text, self.factory.modifiers);

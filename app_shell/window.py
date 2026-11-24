@@ -155,23 +155,6 @@ class ShellProjectTabs:
         pass
 
 
-class _SceneRow:
-    """``window._scene_tabs`` (the scene ‹ › chips read which one is marked)."""
-
-    def __init__(self):
-        self.tabs = self
-        self._marked = None
-
-    def marked_view(self):
-        return self._marked
-
-    def mark_view(self, view):
-        self._marked = view
-
-    def setMaximumHeight(self, *_):
-        pass
-
-
 class ShellScenes:
     """The Scenes panel's verbs the bottom bar's scene chips call
     (views/tray.py ScenesPanel), over core's own scene commands."""
@@ -361,7 +344,6 @@ class ShellWindow(WindowDocumentCommands, object if NATIVE else QObject):
         self._documents = []
         self._reclaim_timer = host.timers.timer(self._reclaim_closed_documents)
         self._project_tabs = ShellProjectTabs(self)
-        self._scene_tabs = _SceneRow()
         self.tray = _Tray(self)
         from views.scene_playback import WindowPlayback
         self.scene_player = WindowPlayback(self, host.timers)
@@ -520,7 +502,6 @@ class ShellWindow(WindowDocumentCommands, object if NATIVE else QObject):
         from core import units as _units
         _units.bind_scene(doc.viewport.scene)
         _axes.sync(getattr(doc.viewport.scene, "drawing_frame", None))
-        self._scene_tabs.mark_view(None)
         self._activate_tool("select")
         doc.viewport.prune_stale_selection()
         doc.viewport.update()
@@ -797,11 +778,6 @@ class ShellWindow(WindowDocumentCommands, object if NATIVE else QObject):
         view = getattr(self._doc, "stand_in", None)
         if view is not None:
             view._ui_docs = None
-
-    def _refresh_scene_tabs(self) -> None:
-        view = getattr(self._doc, "stand_in", None)
-        if view is not None:
-            view._ui_tabs = None
 
     def _show_empty_area(self) -> None:
         from views import wgpu_start

@@ -1,170 +1,100 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
-"""Add, Update and Delete Scene are window actions (#695, discussions #639
-and #640: «a shortcut to add or remove scenes»).
-
-The Scenes panel's buttons were the only way in, and a button is no
-``QAction``: Preferences ▸ Shortcuts had nothing to give a key to. They are
-now Camera ▸ Scenes, with no factory keys, and each runs what its button
-runs.
-"""
-from __future__ import annotations
-
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
+"""Scene commands share the native Camera menu, Keyboard table and document history."""
 import pytest
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QKeySequence
-from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication
 
-_inst = QApplication.instance()
-if _inst is None:
-    _app = QApplication([])
-elif not isinstance(_inst, QApplication):
-    pytest.skip("a non-widget QGuiApplication is already active",
-                allow_module_level=True)
+from core.input_types import Qt
+from tests.scene_controls import choose, prompt
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
+from views.settings_sheet import SettingsSheet
 
-import core.extensions as extensions                              # noqa: E402
 
-_KEYS = ("scene_show", "scene_add", "scene_update", "scene_rename",
-         "scene_duplicate", "scene_delete")
+KEYS = ("scene_show", "scene_add", "scene_update", "scene_rename", "scene_duplicate", "scene_delete")
 
 
 @pytest.fixture
-def win(tmp_path, monkeypatch):
-    monkeypatch.setattr(extensions, "plugin_dirs", lambda: [tmp_path])
-    from views.main_window import MainWindow
-    w = MainWindow()
-    w.show()
-    yield w
-    w._saved_version = w.viewport.scene.version   # no "save?" modal
-    w.close()
+def win(native_host):
+    return native_host.window
 
 
-def test_each_takes_a_key_in_preferences_and_have_none_yet(win):
-    from views.shortcuts import action_key, collect_actions
-    keys = {action_key(a): a for a in collect_actions(win)}
-    for key in _KEYS:
-        assert key in keys, f"{key} is not offered in Preferences ▸ Shortcuts"
-        assert keys[key].shortcut().isEmpty(), "the known interface changed"
+def keyboard(win):
+    sheet = SettingsSheet("keyboard")
+    sheet._win = win
+    return sheet
+
+
+def test_each_takes_a_key_in_preferences_and_has_none_yet(win):
+    sheet = keyboard(win)
+    for key in KEYS:
+        action = sheet._action("sc:menu:" + key)
+        assert action in sheet.actions() and action.portable_keys() == []
 
 
 def test_they_live_in_camera_scenes(win):
-    from PySide6.QtWidgets import QMenu
-    menus = {m.title(): m for m in win.menuBar().findChildren(QMenu)}
-    scenes = menus["Scenes"]
-    assert scenes.menuAction() in menus["Camera"].actions()
-    assert [a.objectName() for a in scenes.actions()] == list(_KEYS)
+    for key in KEYS:
+        assert win._command_paths["menu:" + key] == "Camera ▸ Scenes"
 
 
-def test_add_update_and_delete_do_what_the_buttons_do(win):
-    scene = win.viewport.scene
-    cam = win.viewport.camera
-    acts = win._scene_actions
-    n = len(scene.saved_views)
-
-    acts["scene_add"].trigger()
-    assert len(scene.saved_views) == n + 1
-    added = scene.saved_views[-1]
+def test_add_update_and_delete_reach_history(win):
+    assert win.run_command("scene_add")
+    added, = win.viewport.scene.saved_views
     assert "added" in win.statusBar().currentMessage()
-    # The new scene is the current one, so Update right after updates it.
-    cam.distance = added.distance * 2
-    acts["scene_update"].trigger()
-    assert added.distance == pytest.approx(cam.distance)
-
-    acts["scene_delete"].trigger()
-    assert added not in scene.saved_views
-    assert win.viewport.history.undo()            # still one undo step
-    assert scene.saved_views[-1] is added
+    win.viewport.camera.distance *= 2
+    win.run_command("scene_update")
+    assert added.distance == pytest.approx(win.viewport.camera.distance)
+    prompt(win, "scene_delete", "yes")
+    assert not win.viewport.scene.saved_views
+    assert win.viewport.history.undo()
+    assert win.viewport.scene.saved_views == [added]
 
 
-def test_without_a_selected_scene_the_status_bar_says_why(win):
-    scene = win.viewport.scene
-    win.tray.scenes.refresh()                     # nothing selected
-    before = list(scene.saved_views)
-    for key in ("scene_show", "scene_update", "scene_rename",
-                "scene_duplicate", "scene_delete"):
-        win.statusBar().clearMessage()
-        win._scene_actions[key].trigger()
-        assert "Select a scene" in win.statusBar().currentMessage()
-    assert scene.saved_views == before
+def test_without_a_selected_scene_the_status_explains(win):
+    for key in KEYS:
+        if key != "scene_add":
+            win.statusBar().showMessage("", 0)
+            assert win.run_command(key)
+            assert "Select a scene" in win.statusBar().currentMessage()
+    assert not win.viewport.scene.saved_views
 
 
 def test_a_key_given_to_add_scene_adds_one(win):
-    seq = QKeySequence("Ctrl+Alt+Shift+F11")
-    from PySide6.QtGui import QAction
-    assert not any(a.shortcut() == seq for a in win.findChildren(QAction))
-    win._scene_actions["scene_add"].setShortcut(seq)
-    QTest.keyClick(win.viewport.keys_stand_in, Qt.Key_F1)       # the first key is dropped
-    QApplication.processEvents()
-    n = len(win.viewport.scene.saved_views)
-    QTest.keyClick(win.viewport.keys_stand_in, Qt.Key_F11,
-                   Qt.ControlModifier | Qt.AltModifier | Qt.ShiftModifier)
-    QApplication.processEvents()
-    assert len(win.viewport.scene.saved_views) == n + 1
+    sheet = keyboard(win)
+    sheet._assign(sheet._action("sc:menu:scene_add"), ["Ctrl+Alt+Shift+F11"])
+    modifiers = (Qt.ControlModifier | Qt.AltModifier | Qt.ShiftModifier).value
+    win._host.key(True, Qt.Key_F11, modifiers)
+    win._host.key(False, Qt.Key_F11, modifiers)
+    assert len(win.viewport.scene.saved_views) == 1
 
 
-def _add(win, name):
-    win._scene_actions["scene_add"].trigger()
-    view = win.viewport.scene.saved_views[-1]
-    view.name = name
-    win.tray.scenes.select_view(view)
-    return view
+def test_show_scene_brings_the_selected_camera_back(win):
+    win.run_command("scene_add")
+    view, = win.viewport.scene.saved_views
+    win.viewport.camera.distance *= 3
+    win.run_command("scene_show")
+    assert win.viewport.camera.distance == pytest.approx(view.distance)
+    assert view.name in win.statusBar().currentMessage()
 
 
-def test_show_scene_brings_the_selected_scene_back(win):
-    cam = win.viewport.camera
-    view = _add(win, "Planta")
-    cam.distance = view.distance * 3
-    # At once, without the glide of scene transitions (#1342), which the
-    # tests of views/scene_player.py check.
-    win.viewport.scene.animation = None
-    win._scene_actions["scene_show"].trigger()
-    assert cam.distance == pytest.approx(view.distance)
-    assert "Planta" in win.statusBar().currentMessage()
-
-
-def test_rename_scene_follows_the_browsers_rule(win, monkeypatch):
-    from PySide6.QtWidgets import QInputDialog
-    other = _add(win, "Corte")
-    view = _add(win, "Planta")
-    # The name prompt is for the Scenes tab out of sight; in sight, the
-    # row itself is edited (test_scenes_tab).
-    win.scenes_dock.hide()
-    QApplication.processEvents()
-    answer = ["Corte", True]
-    monkeypatch.setattr(QInputDialog, "getText",
-                        lambda *a, **k: tuple(answer))
-    win._scene_actions["scene_rename"].trigger()
-    assert view.name == "Planta" and other.name == "Corte"
-    assert "Corte" in win.statusBar().currentMessage()
-
-    answer[0] = "  Fachada  "
-    win._scene_actions["scene_rename"].trigger()
-    assert view.name == "Fachada"
-    assert win.tray.scenes.current_view() is view
-
-    answer[:] = ["Outra", False]                  # Cancel
-    win._scene_actions["scene_rename"].trigger()
+def test_rename_from_the_camera_menu_validates_and_can_be_cancelled(win):
+    for _ in range(2):
+        win.run_command("scene_add")
+    other, view = win.viewport.scene.saved_views
+    before = view.name
+    prompt(win, "scene_rename", "yes", other.name)
+    assert view.name == before and other.name in win.statusBar().currentMessage()
+    prompt(win, "scene_rename", "yes", "  Fachada  ")
+    assert view.name == "Fachada" and win._scene_tabs.marked_view() is view
+    prompt(win, "scene_rename", "no", "Outra")
     assert view.name == "Fachada"
 
 
-def test_duplicate_scene_puts_a_copy_right_after_and_makes_it_current(win):
+def test_duplicate_inserts_after_the_original_and_never_reuses_a_name(win):
+    for _ in range(2):
+        win.run_command("scene_add")
     scene = win.viewport.scene
-    view = _add(win, "Planta")
-    _add(win, "Corte")
-    win.tray.scenes.select_view(view)
-    acts = win._scene_actions
-    acts["scene_duplicate"].trigger()
-    i = scene.saved_views.index(view)
-    copy = scene.saved_views[i + 1]
-    assert copy is not view and copy.name.startswith("Planta")
-    assert copy.to_dict() | {"name": view.name} == view.to_dict()
-    assert win.tray.scenes.current_view() is copy
-    # Again from the original: the names never clash.
-    win.tray.scenes.select_view(view)
-    acts["scene_duplicate"].trigger()
-    names = [v.name for v in scene.saved_views]
-    assert len(names) == len(set(names))
+    original = scene.saved_views[0]
+    for _ in range(2):
+        choose(win, 0)
+        win.run_command("scene_duplicate")
+        copy = scene.saved_views[1]
+        assert copy is win._scene_tabs.marked_view() and copy is not original
+        assert copy.to_dict() | {"name": original.name} == original.to_dict()
+    assert len({v.name for v in scene.saved_views}) == 4

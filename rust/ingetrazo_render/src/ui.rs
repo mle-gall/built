@@ -1411,8 +1411,25 @@ impl Ui {
                                     rows.push(("scene:down", "Move later".into()));
                                     rows.push(("scene:delete", format!("Delete “{c}”")));
                                 }
+                                let scenes = self.tabs.get(1).map(Vec::as_slice).unwrap_or_default();
+                                let selected = scenes.iter().position(|s| s.4 == 1);
                                 for (id, label) in rows {
-                                    if menu_row(ui, &(id.to_owned(), label, String::new(), "check".into(), -1, true)) {
+                                    let arrow = match id {
+                                        "scene:up" => Some((egui::Key::ArrowUp, "Alt+↑")),
+                                        "scene:down" => Some((egui::Key::ArrowDown, "Alt+↓")),
+                                        _ => None,
+                                    };
+                                    let enabled = arrow.is_none() || selected.is_some_and(|i| {
+                                        let peers = if id == "scene:up" { &scenes[..i] } else { &scenes[i+1..] };
+                                        peers.iter().any(|row| row.3 == scenes[i].3)
+                                    });
+                                    if let Some((key, _)) = arrow {
+                                        if enabled && !ctx.wants_keyboard_input() && ui.input_mut(|i| i.consume_key(egui::Modifiers::ALT, key)) {
+                                            self.actions.push(format!("tab:{id}"));
+                                        }
+                                    }
+                                    let hint = arrow.map_or("", |(_, hint)| hint);
+                                    if menu_row(ui, &(id.to_owned(), label, hint.into(), "check".into(), -1, enabled)) {
                                         clicked = Some(format!("tab:{id}"));
                                     }
                                 }
