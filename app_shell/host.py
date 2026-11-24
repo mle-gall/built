@@ -426,6 +426,9 @@ class Host:
         grid = getattr(self.window._doc, "model_views", None)
         if grid is None or not grid.visible:
             return self.view
+        if self._modal():
+            grid.layout.cancel()
+            return self.view
         from views.wgpu_view import _ui_claims
         if not grid.layout.captured and _ui_claims(self.view, method, event):
             return None

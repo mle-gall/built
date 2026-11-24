@@ -49,6 +49,7 @@ wait 200
 state
 menu layout:single
 wait 200
+key escape
 state
 quit
 """)
