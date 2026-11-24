@@ -44,6 +44,8 @@ fn unpack<'py, const N: usize>(value: &Obj<'py>) -> PyResult<[Obj<'py>; N]> {
 }
 mod pushpull;
 mod scale;
+mod texture;
+mod texture_preview;
 type Args<'py> = Bound<'py, PyTuple>;
 type Reply<'py> = PyResult<Obj<'py>>;
 type Method = (
@@ -71,6 +73,12 @@ fn screen<'py>(ctx: &Obj<'py>) -> PyResult<(Obj<'py>, Obj<'py>)> {
 fn registration(module: &str, name: &str) -> Option<(&'static [Method], &'static str)> {
     Some(match (module, name) {
         ("tools.scale_host", "ScaleHost") => (scale::METHODS, stringify!(scale)),
+        ("tools.texture_position_metal", "TexturePreview") => {
+            (texture_preview::METHODS, stringify!(texture_preview))
+        }
+        ("tools.texture_position", "TexturePositionTool") => {
+            (texture::METHODS, stringify!(texture))
+        }
         ("tools.pushpull", "PushPullTool") => (pushpull::METHODS, stringify!(pushpull)),
         _ => return None,
     })
