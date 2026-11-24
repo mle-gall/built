@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 from ingetrazo_core import Vec3
-from PySide6.QtCore import QPointF, Qt
+from core.input_types import ScreenPoint, Input
 
 from core.geometry import Face
 from tests.tool_parity import FIXTURES, _pt, _r
@@ -40,8 +40,8 @@ def replay(steps):
     for op, *args in steps:
         if op in ("hover", "click"):
             x, y, *ctrl = args
-            ctx = ToolContext(vp, Vec3(x, y, 0), QPointF(100*x, 100*y),
-                              Qt.ControlModifier if ctrl else Qt.NoModifier,
+            ctx = ToolContext(vp, Vec3(x, y, 0), ScreenPoint(100*x, 100*y),
+                              Input.ControlModifier if ctrl else Input.NoModifier,
                               None)
             getattr(tool, "on_" + op)(ctx)
         elif op in ("release", "on_cancel"):
