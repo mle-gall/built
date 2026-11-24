@@ -6,11 +6,17 @@ el agente dibuja, consulta y **ve** el modelo en vivo — y cada acción suya
 es un paso de undo transaccional (si su código falla, el documento se
 revierte entero; el guard de hermeticidad valida sus recetas).
 
-En la aplicación nativa, `built --mcp` inicia el servidor MCP por entrada y
-salida estándar. Para operar sobre un documento abierto hace falta además el
-puente dentro de la aplicación. Su implementación actual depende de Qt y
-acepta órdenes de procesos locales sin autenticación. El ejecutable nativo
-mantiene desactivado ese componente.
+## Built nativo en macOS y Linux
+
+En el panel **Plugins**, abre **AI Bridge (MCP)** y pulsa **Start bridge**.
+El puente acepta peticiones para el documento activo hasta que pulses
+**Stop bridge** o cierres la ventana. Usa un socket Unix en un directorio
+privado del usuario (modo 0700). El archivo del socket tiene modo 0600.
+Configura el cliente MCP para ejecutar el binario de Built con el argumento
+`--mcp`. Si usas `BUILT_SETTINGS_DIR`, ambos procesos deben usar el mismo
+perfil. El cliente sigue usando entrada y salida estándar.
+Los procesos de la misma cuenta con acceso al perfil pueden ejecutar
+herramientas, incluida la consola Python.
 
 ## Uso en la interfaz clásica
 

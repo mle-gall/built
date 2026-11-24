@@ -6,12 +6,6 @@ from __future__ import annotations
 import random
 
 import pytest
-from PySide6.QtGui import QValidator
-from PySide6.QtWidgets import QApplication
-
-if QApplication.instance() is None:
-    QApplication([])
-
 from core import units  # noqa: E402
 from core.scene import Scene  # noqa: E402
 from examples.extensions.niveles import LengthSpinBox  # noqa: E402
@@ -55,8 +49,8 @@ def test_the_field_shows_the_documents_unit(doc):
 def test_the_field_reads_what_is_typed(doc, typed, metres):
     doc("mm", 0)
     box = LengthSpinBox(minimum=0.0, maximum=1000.0)
-    assert box.validate(typed, 0)[0] == QValidator.Acceptable
-    assert box.valueFromText(typed) == pytest.approx(metres)
+    assert not box.read(typed)[1]
+    assert box.read(typed)[0] == pytest.approx(metres)
 
 
 def test_the_field_refuses_what_is_not_a_length(doc):
@@ -64,15 +58,11 @@ def test_the_field_refuses_what_is_not_a_length(doc):
     box = LengthSpinBox(minimum=0.001, maximum=1.0)
     box.setValue(0.25)
     for bad in ("5 m²", "abc", "2 l"):
-        assert box.validate(bad, 0)[0] == QValidator.Intermediate
-        assert box.valueFromText(bad) == pytest.approx(0.25)   # unchanged
-    box.lineEdit().setText("5 m²")
-    assert box.error_text() == "Expected a length"
-    box.lineEdit().setText("2 m")                    # above the 1 m ceiling
-    assert box.validate("2 m", 0)[0] == QValidator.Intermediate
-    assert box.error_text().startswith("Out of range")
-    box.lineEdit().setText("300")
-    assert box.error_text() == ""
+        assert box.read(bad)[0] is None
+        assert box.value() == pytest.approx(0.25)
+    assert box.read("5 m²")[1] == "Expected a length"
+    assert box.read("2 m")[1].startswith("Out of range")
+    assert box.read("300")[1] == ""
 
 
 def test_arrows_step_one_shown_unit(doc):
@@ -156,7 +146,7 @@ class _Key:
         return 0
 
     def modifiers(self):
-        from PySide6.QtCore import Qt
+        from core.input_types import Qt
         return Qt.NoModifier
 
 

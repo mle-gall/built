@@ -414,7 +414,7 @@ Wilson's Windowizer 3 by Bane Andreev, an architect, written with AI help.
 - Solid Inspector shows watertightness problems, highlights their edges in the viewport and repairs selected meshes in one undo step.
 - AI Assistant uses a native dock panel for chat, provider settings and background requests.
 - Render with Blender uses a dock for lights and camera controls and a utility panel for its image preview.
-- The separate AI Bridge currently requires the Classic Qt host. The native executable provides the stdio MCP server entry point (`built --mcp`). Live document tools also require a running in-app bridge.
+- AI Bridge runs document commands on the native host thread. On macOS and Linux, its Start bridge button opens a private Unix socket for the current profile. The listener stops when the window closes.
 
 ## Roadmap
 
@@ -503,8 +503,7 @@ def setup(app):
     # Retain unsubscribe and invoke it in your extension's teardown.
 ```
 
-The bridge calls `fn(**args)` on the Qt main thread with the dialog guard
-active. Return plain JSON values (string-keyed dicts, lists, finite numbers,
+The bridge calls `fn(**args)` on the native document thread. Forms and sheets opened by a call are cancelled before its reply. Return plain JSON values (string-keyed dicts, lists, finite numbers,
 strings, booleans or null); invalid output raises a clear error. Schemas are
 advertised to clients, not a runtime JSON Schema validator: validate domain
 arguments in the callable. Read `app.scene` inside the callable so it follows

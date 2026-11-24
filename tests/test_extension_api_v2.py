@@ -22,7 +22,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
-from PySide6.QtGui import QColor, QImage, QPainter
+from ingetrazo_render import AnnotationCanvas
 from ingetrazo_core import Vec3 as V
 
 from core.history import History
@@ -58,9 +58,13 @@ def test_reopening_plugin_panels_preserves_each_instance(native_host, monkeypatc
     def factory(app, invalidate):
         return SimpleNamespace(id="main", title=app.key, slot="dock", sections=lambda: [])
 
-    win._panel_factories = {"first": factory, "second": factory}
-    for key in ("first", "second", "first"):
-        assert plugin_panels.open_panel(win, key)
+    win._panel_factories = {}
+    app = _app_for(win)
+    first_key = app.add_panel("First", factory, panel="first")
+    assert app.show_panel(first_key)
+    second_key = app.add_panel("Second", factory, panel="second")
+    assert app.show_panel(second_key)
+    assert app.show_panel(first_key)
     sent = [json.loads(call.args[0]) for call in renderer.ui_plugin_panel.call_args_list]
     assert [(s["plugin"], s["panel"]) for s in sent] == [("first", "main"), ("second", "main")]
     first, second = (s["instance"] for s in sent)
@@ -72,12 +76,9 @@ def test_reopening_plugin_panels_preserves_each_instance(native_host, monkeypatc
 
 def _frame(vp):
     """One overlay pass on an image (offscreen has no GL frame to paint)."""
-    img = QImage(200, 200, QImage.Format_ARGB32)
-    img.fill(0)
-    p = QPainter(img)
-    vp._draw_extension_overlays(p)
-    p.end()
-    return img
+    painter = AnnotationCanvas(200, 200, 200)
+    vp._draw_extension_overlays(painter)
+    return painter
 
 
 def test_an_overlay_draws_and_never_leaks_painter_state(native_window):
@@ -87,17 +88,18 @@ def test_an_overlay_draws_and_never_leaks_painter_state(native_window):
 
     def paint(viewport, painter):
         seen.append(viewport)
-        painter.setPen(QColor("#FF0000"))
-        painter.translate(1000, 1000)          # must not survive the call
+        font = painter.font()
+        font.setPointSize(64)
+        painter.setFont(font)
 
     def after(viewport, painter):
-        seen.append(painter.transform().dx())
+        seen.append(painter.fontMetrics().height())
 
     app = _app_for(win)
     app.add_overlay(paint)
     app.add_overlay(after)
     _frame(vp)
-    assert seen[0] is vp and seen[1] == 0
+    assert seen == [vp, AnnotationCanvas(200, 200, 200).fontMetrics().height()]
 
 
 def test_a_failing_overlay_is_dropped_once_and_the_others_still_run(native_window, caplog):
