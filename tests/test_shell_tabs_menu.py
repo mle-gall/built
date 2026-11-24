@@ -467,7 +467,7 @@ def test_with_the_chrome_the_menu_goes_to_it(host, kinds, monkeypatch):
     view._ui_attached = True
     view._ui_tools_sent = True
     try:
-        from app_shell.events import ContextMenuEvent
+        from ingetrazo_render import ContextMenuEvent
         view.contextMenuEvent(ContextMenuEvent(520, 410, 0))
         x, y, title, subtitle, rows = stub.menu
         assert (x, y, title) == (520.0, 410.0, "Box A")

@@ -292,7 +292,7 @@ def setup(app):
 def test_sheet_binding_shares_the_keyboard_table_and_follows_the_active_document(win, monkeypatch):
     from core.input_types import Qt
     from core.shortcuts import export_shortcuts, import_shortcuts
-    from app_shell.events import KeyEvent
+    from ingetrazo_render import KeyEvent
     from tests.scene_controls import chrome
     from views import wgpu_sheets
     from views.settings_sheet import SettingsSheet

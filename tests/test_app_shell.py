@@ -80,7 +80,7 @@ def test_undo_from_the_menu(host):
 
 
 def test_events_answer_the_qt_calls_the_handlers_make():
-    from app_shell.events import KeyEvent, MouseEvent, NativeGestureEvent, WheelEvent
+    from ingetrazo_render import KeyEvent, MouseEvent, NativeGestureEvent, WheelEvent
     m = MouseEvent("press", 10.5, 20, Qt.LeftButton.value, Qt.LeftButton.value,
                    (Qt.ShiftModifier | Qt.ControlModifier).value)
     assert m.position().x() == 10.5 and m.button() == Qt.LeftButton

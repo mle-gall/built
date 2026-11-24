@@ -1744,7 +1744,7 @@ class MetalView(ViewNavigation):
         source._cycle_reference_mode(edge)
         if pos is not None:
             # The lock shows at once, the hand still (GL's _refresh_snap).
-            from app_shell.events import MouseEvent
+            from ingetrazo_render import MouseEvent
             from views import input_state
             held = input_state.modifiers(self)
             self.hover(pos.x(), pos.y(), held)

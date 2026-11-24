@@ -564,7 +564,7 @@ def test_typing_the_lens_with_zoom_on(native_host):
     cam.set_projection("perspective")
     vp.set_nav_mode(None)
 
-    from app_shell.events import KeyEvent
+    from ingetrazo_render import KeyEvent
     five = KeyEvent(True, Qt.Key_5, 0, "5", False)
     assert not vp._handle_value_key(five)
     assert vp._value_buffer == ""

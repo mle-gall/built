@@ -8,7 +8,7 @@ from __future__ import annotations
 import pytest
 from PySide6.QtCore import Qt
 from ingetrazo_core import Vec3 as QVector3D
-from app_shell.events import KeyEvent
+from ingetrazo_render import KeyEvent
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.controller_surface import ControllerSurface as Viewport
 
