@@ -381,6 +381,38 @@ def copy_placements(history, placements, delta, count=1, mode="x"):
     return answer
 
 
+def rotate_selection(history, center, axis, angles, copy=False, placements=(), vertices=(),
+                     edges=(), faces=(), images=(), guides=(), sections=()):
+    """Rotate named entities, or stamp copies at the supplied angles, in one step."""
+    from math import isfinite
+    from core.coordinate_frame import point_in_frame
+    from core.rotate_ops import rotation_command
+    from ingetrazo_core import Vec3
+    scene = history.scene
+    if len(center) != 3 or len(axis) != 3 or not all(map(isfinite, (*center, *axis, *angles))):
+        raise ValueError("finite centre, axis and angles required")
+    if Vec3(*axis).length() < 1e-12 or not angles or (not copy and len(angles) != 1):
+        raise ValueError("a nonzero axis and one angle (or one per copy) required")
+
+    def records(items, indices):
+        if any(type(i) is not int or not 0 <= i < len(items) for i in indices):
+            raise KeyError("unknown record index")
+        return [items[i] for i in dict.fromkeys(indices)]
+
+    mesh = scene.mesh
+    origin = getattr(store_of(mesh), "frame_origin", None)
+    start = point_in_frame(center, origin) if origin is not None else Vec3(*center)
+    cmd = rotation_command(start, Vec3(*axis), copy, _placements(history, placements),
+                           [v.position for v in _need(mesh, "vertex", vertices)],
+                           _need(mesh, "face", faces), _need(mesh, "edge", edges),
+                           records(scene.guides, guides), records(scene.section_planes, sections),
+                           records(scene.image_planes, images), angles)
+    before = history.revision
+    if cmd is not None:
+        history.execute(cmd)
+    return _answer(history, before)
+
+
 def scale_selection(history, anchor, factors, vertices=(), placements=(), images=(), axes=None):
     """Scale loose vertex keys, placement uids/paths and reference image indices
     about an open-mesh point. Optional axes orient the grip box. One undo step."""
@@ -1209,6 +1241,7 @@ COMMANDS = {"set_location": set_location, "set_model_units": set_model_units, "s
             "add_guide_circle": add_guide_circle, "add_arc": add_arc,
             "move_placements": move_placements, "copy_placements": copy_placements,
             "move_selection": move_selection, "scale_selection": scale_selection,
+            "rotate_selection": rotate_selection,
             "divide_edges": divide_edges, "join_edges": join_edges,
             "move_vertices": move_vertices, "erase": erase,
             "reverse_faces": reverse_faces, "push_pull": push_pull, "orient_faces": orient_faces,

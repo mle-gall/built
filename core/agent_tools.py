@@ -274,3 +274,15 @@ BUILTIN_TOOLS.append(dict(
         "images": {"type": "array", "items": {"type": "integer", "minimum": 0}},
         "axes": {"type": "array", "items": _SCALE_TRIPLE, "minItems": 3, "maxItems": 3},
     }, required=["anchor", "factors"])))
+
+_RECORD_INDICES = {"type": "array", "items": {"type": "integer", "minimum": 0}}
+BUILTIN_TOOLS.append(dict(
+    name="rotate_selection", mutates=True,
+    description="Rotate named geometry about an axis or stamp a polar array of copies. Angles are degrees.",
+    inputSchema=dict(type="object", properties={
+        "center": _SCALE_TRIPLE, "axis": _SCALE_TRIPLE,
+        "angles": {"type": "array", "items": {"type": "number"}, "minItems": 1},
+        "copy": {"type": "boolean"}, "vertices": _KEYS, "edges": _KEYS, "faces": _KEYS,
+        "placements": {"type": "array", "items": {"oneOf": [{"type": "string"}, _KEYS]}},
+        "images": _RECORD_INDICES, "guides": _RECORD_INDICES, "sections": _RECORD_INDICES,
+    }, required=["center", "axis", "angles"])))

@@ -37,3 +37,10 @@ class ProtocolTools:
                   vertices=vertices, placements=placements, images=images, axes=axes)
         self._viewport.update()
         return {**out, "step": out["step"].to_json() if out["step"] else None}
+
+    def _tool_rotate_selection(self, center, axis, angles, **targets):
+        from core.protocol.commands import run
+        out = run(self._viewport.history, "rotate_selection", center=center, axis=axis,
+                  angles=angles, **targets)
+        self._viewport.update()
+        return {**out, "step": out["step"].to_json() if out["step"] else None}

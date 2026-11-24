@@ -8,6 +8,7 @@
 
 mod scale_grip;
 mod scale_tool;
+mod rotate;
 pub mod gesture;
 pub mod line;
 pub mod move_tool;
@@ -343,6 +344,7 @@ pub fn new_tool(kind: &str) -> Option<Box<dyn Tool>> {
         "arc3" => Some(Box::new(arc::ThreePointArcTool::default())),
         "center_arc" => Some(Box::new(arc::CenterArcTool::center())),
         "pie" => Some(Box::new(arc::CenterArcTool::pie())),
+        "rotate" => Some(Box::new(rotate::Rotate::default())),
         "scale" => Some(Box::new(scale_tool::ScaleTool::default())),
         "move" => Some(Box::new(move_tool::MoveTool::default())),
         _ => None,

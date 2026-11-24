@@ -80,7 +80,7 @@ class _Host:
         try:
             answer = run(history, name, **args)
         except (KeyError, ValueError) as error:
-            if name != "scale_selection":
+            if name not in ("scale_selection", "rotate_selection"):
                 raise
             # A stale target during hot retype must leave the machine
             # free to redo the original command.
@@ -1697,3 +1697,29 @@ from tools.scale_host import ScaleHost
 class ScaleTool(ScaleHost, RustTool):
     kind = "scale"
     uses_snap = ScaleHost.uses_snap
+
+from tools.rotate_host import RotateHost
+
+
+class RotateTool(RotateHost, RustTool):
+    kind = "rotate"
+    _READ_DURING = ("start_point", "ref_point", "copy", "array_token")
+
+    def __init__(self):
+        RustTool.__init__(self)
+        RotateHost.__init__(self)
+
+    # The shared protractor clears its arms at reset. Inside a machine
+    # callback the machine already did that; direct setters let Move
+    # start a rotation from a selected group's grip.
+    def _set_arm(self, key, point):
+        if self._during is None:
+            self._machine.set(key, _tuple(point))
+
+    start_point = property(lambda self: self._point("start_point"),
+                           lambda self, p: self._set_arm("start_point", p))
+    ref_point = property(lambda self: self._point("ref_point"),
+                         lambda self, p: self._set_arm("ref_point", p))
+    _copy = property(lambda self: bool(self._state("copy")),
+                     lambda self, on: self._machine.set("copy", bool(on)))
+    _last = property(lambda self: True if self._state("retype") else None)
