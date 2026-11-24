@@ -8,6 +8,7 @@ cursor was set. After every operation the viewport now unsets and sets the
 tool's cursor again, and does the same when the pointer comes back in."""
 from __future__ import annotations
 
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -19,17 +20,6 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 
 if QApplication.instance() is None:
     QApplication([])
-
-
-@pytest.fixture
-def window(monkeypatch, tmp_path):
-    from core import extensions
-    monkeypatch.setattr(extensions, "plugin_dirs", lambda: [tmp_path])
-    from views.main_window import MainWindow
-    win = MainWindow()
-    yield win
-    win._saved_version = win.viewport.scene.version
-    win.close()
 
 
 def _spy(vp, monkeypatch):
@@ -46,9 +36,9 @@ def _click(vp):
                        Qt.NoModifier)
 
 
-def test_an_operation_puts_the_tool_cursor_back(window, monkeypatch):
-    vp = window.viewport
-    window._activate_tool("pushpull")
+def test_an_operation_puts_the_tool_cursor_back(native_window, monkeypatch):
+    vp = native_window.viewport
+    native_window._activate_tool("pushpull")
     tool = vp.active_tool
     from core.history import AddEdgeCommand
     from ingetrazo_core import Vec3 as V
@@ -57,22 +47,22 @@ def test_an_operation_puts_the_tool_cursor_back(window, monkeypatch):
     calls = _spy(vp, monkeypatch)
     vp._dispatch_tool_click(_click(vp))
     assert calls == ["unset"]                         # re-asserted…
-    assert vp.cursor().shape() == Qt.BitmapCursor     # …as the tool's icon
+    assert vp.cursor() == "tool:pushpull"     # …as the tool's icon
 
 
-def test_a_click_that_makes_nothing_leaves_the_cursor_alone(window,
+def test_a_click_that_makes_nothing_leaves_the_cursor_alone(native_window,
                                                             monkeypatch):
-    vp = window.viewport
-    window._activate_tool("line")
+    vp = native_window.viewport
+    native_window._activate_tool("line")
     monkeypatch.setattr(vp.active_tool, "on_click", lambda ctx: None)
     calls = _spy(vp, monkeypatch)
     vp._dispatch_tool_click(_click(vp))
     assert calls == []
 
 
-def test_nothing_is_forced_while_a_camera_mode_owns_the_pointer(window,
+def test_nothing_is_forced_while_a_camera_mode_owns_the_pointer(native_window,
                                                                 monkeypatch):
-    vp = window.viewport
+    vp = native_window.viewport
     vp.set_nav_mode("orbit")
     calls = _spy(vp, monkeypatch)
     vp._reassert_tool_cursor()

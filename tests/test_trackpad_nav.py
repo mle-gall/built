@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import math
 
+from ingetrazo_core import Vec3 as QVector3D
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
 from PySide6.QtCore import QPoint, QPointF, Qt
 from PySide6.QtGui import (QInputDevice, QNativeGestureEvent,
@@ -379,45 +381,32 @@ def test_a_smart_zoom_asks_the_window(vp):
     assert seen == [1]
 
 
-class _Window:
-    """The two MainWindow methods under test, over a real viewport, with
-    Zoom Extents framing a fixed box."""
-
-    def __init__(self, vp):
-        from types import MethodType
-
-        from ingetrazo_core import Vec3 as QVector3D
-        from views.main_window import MainWindow
-        self.viewport = vp
-        self._camera_pose = MethodType(MainWindow._camera_pose, self)
-        self._on_smart_zoom = MethodType(MainWindow._on_smart_zoom, self)
-        self.box = (QVector3D(0, 0, 0), QVector3D(20, 10, 6))
-        vp.smartZoomRequested.connect(self._on_smart_zoom)
-
-    def _on_zoom_extents(self):
-        self.viewport.camera.fit_box(*self.box)
-
-
-def test_a_double_tap_frames_the_model_and_a_second_goes_back(vp):
-    win = _Window(vp)
+def test_a_double_tap_frames_the_model_and_a_second_goes_back(native_host):
+    native_host.attach_surface()
+    win, vp = native_host.window, native_host.viewport
+    vp.scene.mesh.add_edge(QVector3D(0, 0, 0), QVector3D(20, 10, 6))
+    vp.notify_scene_changed()
     vp.camera.distance = 2.0
     start = win._camera_pose()
-    smart_zoom(vp)
+    native_host.gesture("smart_zoom", 0., 350., 230.)
     framed = win._camera_pose()
     assert framed != start
-    smart_zoom(vp)
+    native_host.gesture("smart_zoom", 0., 350., 230.)
     assert win._camera_pose() == pytest.approx(start)
 
 
-def test_after_moving_the_view_a_double_tap_frames_again(vp):
-    win = _Window(vp)
+def test_after_moving_the_view_a_double_tap_frames_again(native_host):
+    native_host.attach_surface()
+    win, vp = native_host.window, native_host.viewport
+    vp.scene.mesh.add_edge(QVector3D(0, 0, 0), QVector3D(20, 10, 6))
+    vp.notify_scene_changed()
     vp.camera.distance = 2.0
     start = win._camera_pose()
-    smart_zoom(vp)
+    native_host.gesture("smart_zoom", 0., 350., 230.)
     framed = win._camera_pose()
-    pinch(vp, 0.2)
+    native_host.gesture("zoom", 0.2, 350., 230.)
     moved = win._camera_pose()
-    smart_zoom(vp)
+    native_host.gesture("smart_zoom", 0., 350., 230.)
     assert win._camera_pose() == pytest.approx(framed)
     assert win._camera_pose() != pytest.approx(start)
     assert win._camera_pose() != pytest.approx(moved)

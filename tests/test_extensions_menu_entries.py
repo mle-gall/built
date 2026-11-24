@@ -3,25 +3,12 @@
 """The Extensions menu's own entries all work. «Develop an extension…» lost
 the guide's address when the example-extensions submenu went away and did
 nothing but raise (app bench, 10-10)."""
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-from PySide6.QtWidgets import QApplication  # noqa: E402
-
-_app = QApplication.instance() or QApplication([])
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 
-def test_develop_an_extension_opens_the_guide(monkeypatch):
-    from PySide6.QtGui import QDesktopServices
-    from views.main_window import MainWindow
+def test_develop_an_extension_opens_the_guide(native_host, monkeypatch):
     opened = []
-    monkeypatch.setattr(QDesktopServices, "openUrl",
-                        staticmethod(lambda url: opened.append(url.toString()) or True))
-    win = MainWindow()
-    try:
-        win._on_develop_plugin()
-        assert opened and opened[0].endswith("docs/plugins.md")
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    monkeypatch.setattr("core.desktop_open.open_url", opened.append)
+    action = native_host.window._registry_actions["menu:develop_plugin"]
+    action.trigger()
+    assert opened == ["https://github.com/ingelibre/ingetrazo/blob/main/docs/plugins.md"]

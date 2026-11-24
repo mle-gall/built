@@ -9,6 +9,7 @@ and the Protractor show for their guide mode (#29), while copy is on.
 """
 from __future__ import annotations
 
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -21,17 +22,6 @@ from PySide6.QtWidgets import QApplication
 _app = QApplication.instance() or QApplication([])
 
 
-@pytest.fixture
-def win():
-    from views.main_window import MainWindow
-    w = MainWindow()
-    w.show()
-    _app.processEvents()
-    yield w
-    w._saved_version = w.viewport.scene.version
-    w.close()
-
-
 def _ctrl(vp):
     vp.keyPressEvent(QKeyEvent(QKeyEvent.KeyPress, Qt.Key_Control,
                                Qt.ControlModifier))
@@ -40,15 +30,13 @@ def _ctrl(vp):
 
 
 def _shows(vp, key, plus):
-    from views.icons import tool_cursor
-    want = tool_cursor(key, plus)
-    return vp.cursor().pixmap().cacheKey() == want.pixmap().cacheKey()
+    return vp.cursor() == f"tool:{key}{'+' if plus else ''}"
 
 
 @pytest.mark.parametrize("key", ["move", "rotate", "flip"])
-def test_ctrl_puts_a_plus_on_the_cursor_and_takes_it_off(win, key):
-    vp = win.viewport
-    win._activate_tool(key)
+def test_ctrl_puts_a_plus_on_the_cursor_and_takes_it_off(native_window, key):
+    vp = native_window.viewport
+    native_window._activate_tool(key)
     assert vp.active_tool.cursor_plus is False
     assert _shows(vp, key, plus=False)
     _ctrl(vp)
@@ -60,12 +48,12 @@ def test_ctrl_puts_a_plus_on_the_cursor_and_takes_it_off(win, key):
 
 
 @pytest.mark.parametrize("key", ["move", "rotate", "flip"])
-def test_picking_the_tool_up_again_starts_without_the_plus(win, key):
-    vp = win.viewport
-    win._activate_tool(key)
+def test_picking_the_tool_up_again_starts_without_the_plus(native_window, key):
+    vp = native_window.viewport
+    native_window._activate_tool(key)
     _ctrl(vp)
-    win._activate_tool("line")
-    win._activate_tool(key)
+    native_window._activate_tool("line")
+    native_window._activate_tool(key)
     assert vp.active_tool.cursor_plus is False
     assert _shows(vp, key, plus=False)
 
@@ -82,11 +70,11 @@ def _ctrl_shortcut(vp, key, text):
 
 
 @pytest.mark.parametrize("key", ["move", "rotate", "flip"])
-def test_ctrl_z_leaves_the_copy_mode_alone(win, key):
+def test_ctrl_z_leaves_the_copy_mode_alone(native_window, key):
     """The Tape's #183, on the copy tools: Ctrl+Z (or Ctrl+C…) used to
     switch copy mode on the way, without a word."""
-    vp = win.viewport
-    win._activate_tool(key)
+    vp = native_window.viewport
+    native_window._activate_tool(key)
     _ctrl_shortcut(vp, Qt.Key_Z, "z")
     assert vp.active_tool.cursor_plus is False
     assert _shows(vp, key, plus=False)
@@ -96,16 +84,16 @@ def test_ctrl_z_leaves_the_copy_mode_alone(win, key):
     assert _shows(vp, key, plus=True)
 
 
-def test_the_plus_goes_when_the_one_copy_is_made(win):
+def test_the_plus_goes_when_the_one_copy_is_made(native_window):
     """Flip (like Rotate) arms Ctrl for ONE operation: once the copy is
     made the mode is off, and the cursor must say so too."""
     from types import SimpleNamespace
     from ingetrazo_core import Vec3 as V
-    vp = win.viewport
+    vp = native_window.viewport
     scene = vp.scene
     face = scene.mesh.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)])
     scene.selection = [face]
-    win._activate_tool("flip")
+    native_window._activate_tool("flip")
     tool = vp.active_tool
     _ctrl(vp)
     assert _shows(vp, "flip", plus=True)

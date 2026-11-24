@@ -3,34 +3,17 @@
 """Help ▸ Documentation opens the online manual (#1036), at the address the
 manual is really published on, and its texts exist in every language."""
 import json
-import os
 from pathlib import Path
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-from PySide6.QtWidgets import QApplication  # noqa: E402
-
-_app = QApplication.instance() or QApplication([])
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 
-def test_help_documentation_opens_the_manual(monkeypatch):
-    from PySide6.QtGui import QDesktopServices
-    from views.main_window import MainWindow
-    from core.i18n import tr
+def test_help_documentation_opens_the_manual(native_host, monkeypatch):
     opened = []
-    monkeypatch.setattr(QDesktopServices, "openUrl",
-                        staticmethod(lambda url: opened.append(url.toString()) or True))
-    win = MainWindow()
-    try:
-        help_menu = next(a.menu() for a in win.menuBar().actions()
-                         if a.text() == tr("Help"))
-        act = next(a for a in help_menu.actions()
-                   if a.text() == tr("Documentation"))
-        act.trigger()
-        assert opened == ["https://ingetrazo-docs.pages.dev/"]
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    monkeypatch.setattr("core.desktop_open.open_url", opened.append)
+    action = native_host.window._registry_actions["menu:documentation"]
+    action.trigger()
+    assert opened == ["https://ingetrazo-docs.pages.dev/"]
 
 
 def test_documentation_texts_translated_everywhere():

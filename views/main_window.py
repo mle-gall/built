@@ -304,60 +304,6 @@ class _StayOpenMenu(QMenu):
         super().keyPressEvent(event)
 
 
-class _DockDropZone(QWidget):
-    """Where a dragged tray tab can go, shown while it is dragged: a
-    translucent panel at one edge of the viewport, lit while the pointer is
-    over it; dropping there docks the tray (or the whole side) there."""
-
-    def __init__(self, window, area, label: str) -> None:
-        super().__init__(window)
-        self.window_ = window
-        self.area = area
-        self.label = label
-        self._hot = False
-        self.setAcceptDrops(True)
-        self.hide()
-
-    def set_hot(self, on: bool) -> None:
-        self._hot = on
-        self.update()
-
-    def dragEnterEvent(self, event) -> None:
-        if event.mimeData().hasFormat(self.window_.DOCK_MIME):
-            event.acceptProposedAction()
-            self.set_hot(True)
-
-    def dragMoveEvent(self, event) -> None:
-        if event.mimeData().hasFormat(self.window_.DOCK_MIME):
-            event.acceptProposedAction()
-
-    def dragLeaveEvent(self, event) -> None:
-        self.set_hot(False)
-
-    def dropEvent(self, event) -> None:
-        if event.mimeData().hasFormat(self.window_.DOCK_MIME):
-            self.window_.drop_on_side(event.mimeData(), self.area)
-            event.acceptProposedAction()
-        self.set_hot(False)
-
-    def paintEvent(self, event) -> None:
-        from PySide6.QtGui import QColor, QPainter, QPen
-        p = QPainter(self)
-        p.setRenderHint(QPainter.Antialiasing)
-        from views.theme import accent_color
-        accent = accent_color()
-        fill = QColor(accent)
-        fill.setAlpha(110 if self._hot else 45)
-        p.setBrush(fill)
-        pen = QPen(accent, 2 if self._hot else 1)
-        pen.setStyle(Qt.SolidLine if self._hot else Qt.DashLine)
-        p.setPen(pen)
-        p.drawRoundedRect(self.rect().adjusted(4, 4, -4, -4), 8, 8)
-        p.setPen(QColor(255, 255, 255) if self._hot else accent)
-        p.drawText(self.rect(), Qt.AlignCenter | Qt.TextWordWrap, self.label)
-        p.end()
-
-
 class _OpenAborted(Exception):
     """Raised by an open's progress callback when the user closed the
     window while the file was still coming in (#1269): the load unwinds
@@ -2195,8 +2141,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
 
     # ---- Side trays on either side, as in the sheet composer ----------------
     #: A tray tab dragged out of its bar: the dock's object name.
-    DOCK_MIME = "application/x-ingetrazo-dock"
-    _OUT_PX = 24
 
     def _setup_side_docks(self) -> None:
         """The trays as the composer's side panels: tabs on top, like the
@@ -2703,8 +2647,7 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         QTimer.singleShot(0, self, self._place_sidebar_handle)
 
     def _side_dock_event(self, obj, event) -> bool:
-        """The drag-a-tab-to-the-other-side part of the event filter: True
-        when the event was taken."""
+        """Track layout changes in the remaining Qt tray tests."""
         from PySide6.QtCore import QEvent, QTimer
         t = event.type()
         if obj is self:
@@ -2731,126 +2674,8 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
                 if _tab_end_room(obj):
                     QTimer.singleShot(0, obj,
                                       lambda: self._measure_tabs_again(obj))
-            elif t == QEvent.MouseMove and event.buttons() & Qt.LeftButton:
-                i = obj.property("ingetrazo_press")
-                if i is not None and (i >= 0 or i == -2):
-                    r = obj.rect().adjusted(-self._OUT_PX, -self._OUT_PX,
-                                            self._OUT_PX, self._OUT_PX)
-                    if not r.contains(event.position().toPoint()):
-                        obj.setProperty("ingetrazo_press", -1)
-                        self._drag_dock_tab(obj, i, event)
-                        return True
-            elif t in (QEvent.DragEnter, QEvent.DragMove) and \
-                    event.mimeData().hasFormat(self.DOCK_MIME):
-                event.acceptProposedAction()
-                return True
-            elif t == QEvent.Drop and \
-                    event.mimeData().hasFormat(self.DOCK_MIME):
-                here = self._dock_of_tab(obj, 0)
-                if here is not None:
-                    self.drop_on_side(event.mimeData(),
-                                      self.dockWidgetArea(here))
-                event.acceptProposedAction()
-                return True
             return False
         return False
-
-    def drop_dock_on_viewport(self, event) -> None:
-        """A tray tab dropped on the viewport (its own drop handler calls
-        this): to the left side on the left half, to the right on the
-        right half."""
-        x = event.position().x()
-        self.drop_on_side(event.mimeData(), Qt.LeftDockWidgetArea
-                          if x < self.viewport.width() / 2
-                          else Qt.RightDockWidgetArea)
-        event.acceptProposedAction()
-
-    def _dock_named(self, mime):
-        name = bytes(mime.data(self.DOCK_MIME)).decode("utf-8")
-        return next((d for d in self._sidebar_docks()
-                     if d.objectName() == name), None)
-
-    def drop_on_side(self, mime, area) -> None:
-        """What a dragged tab carries goes to the ``area`` side: one tray
-        (its object name), or a whole side (``group:<area>``)."""
-        text = bytes(mime.data(self.DOCK_MIME)).decode("utf-8")
-        if text.startswith("group:"):
-            self.move_side(Qt.DockWidgetArea(int(text[6:])), area)
-            return
-        dock = self._dock_named(mime)
-        if dock is not None:
-            self.move_dock(dock, area)
-
-    def move_side(self, from_area, to_area) -> None:
-        """Every tray of one side to the other, in their order, the one in
-        front staying in front: the whole sidebar dragged across."""
-        if from_area == to_area:
-            return
-        docks = self._side_docks(from_area)
-        if not docks:
-            return
-        front = next((d for d in docks
-                      if not d.visibleRegion().isEmpty()), docks[0])
-        for d in docks:
-            self.move_dock(d, to_area)
-        front.raise_()
-
-    # ---- Drop zones: where a dragged tab can go -------------------------------
-    def _drop_zones(self) -> list:
-        zones = getattr(self, "_zones", None)
-        if zones is None:
-            zones = self._zones = [
-                _DockDropZone(self, Qt.LeftDockWidgetArea,
-                              tr("Left side")),
-                _DockDropZone(self, Qt.RightDockWidgetArea,
-                              tr("Right side"))]
-        return zones
-
-    def show_drop_zones(self, on: bool) -> None:
-        """While a tab is dragged, a panel at each edge of the viewport
-        says where it can be docked; the one under the pointer lights up,
-        and dropping there docks it on that side."""
-        from PySide6.QtCore import QRect
-        vp = self.viewport.keys_stand_in or self.viewport
-        top_left = vp.mapTo(self, vp.rect().topLeft())
-        w = max(120, min(220, vp.width() // 4))
-        h = vp.height()
-        for zone in self._drop_zones():
-            if not on:
-                zone.hide()
-                continue
-            x = top_left.x() + (0 if zone.area == Qt.LeftDockWidgetArea
-                                else vp.width() - w)
-            zone.setGeometry(QRect(x, top_left.y(), w, h))
-            zone.set_hot(False)
-            zone.show()
-            zone.raise_()
-
-    def _drag_dock_tab(self, bar, index, event) -> None:
-        from PySide6.QtCore import QEvent, QMimeData
-        from PySide6.QtGui import QDrag, QMouseEvent
-        group = index == -2
-        dock = self._dock_of_tab(bar, 0 if group else index)
-        # End Qt's own move of the tab first, where it stands.
-        from PySide6.QtWidgets import QApplication
-        QApplication.sendEvent(bar, QMouseEvent(
-            QEvent.MouseButtonRelease, event.position(),
-            event.globalPosition(), Qt.LeftButton, Qt.NoButton,
-            event.modifiers()))
-        if dock is None:
-            return
-        data = QMimeData()
-        payload = (f"group:{int(self.dockWidgetArea(dock).value)}" if group
-                   else dock.objectName())
-        data.setData(self.DOCK_MIME, payload.encode("utf-8"))
-        drag = QDrag(bar)
-        drag.setMimeData(data)
-        drag.setPixmap(bar.grab() if group else bar.grab(bar.tabRect(index)))
-        self.show_drop_zones(True)
-        try:
-            drag.exec(Qt.MoveAction)
-        finally:
-            self.show_drop_zones(False)
 
     def _on_preferences(self) -> None:
         """Window ▸ Preferences: the scattered QSettings in one dialog."""
@@ -2907,7 +2732,8 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         act = ext_menu.addAction(tr("Develop an extension…"))
         act.setStatusTip(tr(
             "Open the guide to writing extensions for IngeTrazo."))
-        act.triggered.connect(self._on_develop_plugin)
+        from ingetrazo_render import run_model_menu
+        act.triggered.connect(lambda: run_model_menu(self, "develop_plugin"))
 
         # The app itself (main.py) defers the plugins' setup until the window
         # is on screen (#440, @cdblue999: 26 third-party extensions held the
@@ -3140,9 +2966,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
                 tr("Could not load extensions: {error}",
                    error=f"{type(exc).__name__}: {exc}"))
 
-    PLUGIN_GUIDE_URL = ("https://github.com/ingelibre/ingetrazo"
-                        "/blob/main/docs/plugins.md")
-
     @staticmethod
     def example_extensions() -> list:
         """``(path, title, blurb)`` of each extension shipped with the app
@@ -3158,10 +2981,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         folder = user_plugins_dir()
         folder.mkdir(parents=True, exist_ok=True)
         open_url(folder)
-
-    def _on_develop_plugin(self) -> None:
-        from core.desktop_open import open_url
-        open_url(self.PLUGIN_GUIDE_URL)
 
     # ---- Extension panels (views.extension_api.ExtensionApp.add_panel) -------
     def _register_extension_dock(self, dock) -> None:
@@ -4532,21 +4351,8 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         self.viewport.update()
 
     def _on_smart_zoom(self) -> None:
-        """A trackpad's smart zoom (two-finger double tap): Zoom Extents;
-        another one with the view untouched since goes back to where it
-        was, the way a double tap zooms in and back out on macOS (#248)."""
-        back = getattr(self, "_smart_zoom_back", None)
-        if back is not None and back[1] == self._camera_pose():
-            cam = self.viewport.camera
-            x, y, z, cam.distance, cam.yaw, cam.pitch = back[0]
-            cam.target = (x, y, z)
-            self._smart_zoom_back = None
-            self.viewport.update()
-            return
-        before = self._camera_pose()
-        self._on_zoom_extents()
-        after = self._camera_pose()
-        self._smart_zoom_back = (before, after) if after != before else None
+        from ingetrazo_render import smart_zoom
+        smart_zoom(self)
 
     def _on_zoom_selection(self) -> None:
         """Zoom Extents over the selection. Nothing selected: nothing."""

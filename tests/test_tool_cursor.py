@@ -4,6 +4,7 @@
 into the tool's icon; Offset has an arrow with a badge, Select keeps the arrow."""
 from __future__ import annotations
 
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import sys
 
 from PySide6.QtCore import Qt
@@ -50,21 +51,16 @@ def test_offset_keeps_an_arrow_tip_with_its_icon_beside_it():
     assert tool_cursor("offset") is cur
 
 
-def test_activating_tools_swaps_the_viewport_cursor():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        assert vp.cursor().shape() != Qt.BitmapCursor   # select at startup
-        win._activate_tool("line")
-        assert vp.cursor().shape() == Qt.BitmapCursor
-        win._activate_tool("pushpull")
-        assert vp.cursor().shape() == Qt.BitmapCursor
-        win._activate_tool("select")
-        assert vp.cursor().shape() != Qt.BitmapCursor   # back to the arrow
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_activating_tools_swaps_the_viewport_cursor(native_host):
+    win = native_host.window
+    vp = win.viewport
+    assert not str(vp.cursor()).startswith("tool:")   # select at startup
+    win._activate_tool("line")
+    assert vp.cursor() == "tool:line"
+    win._activate_tool("pushpull")
+    assert vp.cursor() == "tool:pushpull"
+    win._activate_tool("select")
+    assert not str(vp.cursor()).startswith("tool:")   # back to the arrow
 
 
 def test_tool_cursor_respects_cursor_style_preference():
