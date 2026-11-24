@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import threading
 from types import SimpleNamespace
 
@@ -14,10 +15,9 @@ from tests.test_ai_bridge import _ask
 
 
 @pytest.fixture
-def model(monkeypatch):
-    from views.main_window import MainWindow
+def model(native_host, monkeypatch):
     monkeypatch.setenv("INGETRAZO_AI_PORT", "0")
-    win = MainWindow()
+    win = native_host.window
     scene = win.viewport.scene
     scene.groups.clear()
     mesh = Mesh()
@@ -35,8 +35,6 @@ def model(monkeypatch):
     bridge = _Bridge(win.viewport)
     yield win, bridge, parent, child, layer
     bridge.stop()
-    win._saved_version = scene.version
-    win.close()
 
 
 def call(bridge, tool, **args):
@@ -129,7 +127,7 @@ def test_tree_entity_selection_and_layers(model):
     assert next(r for r in rows if r["uid"] == layer.uid)["groups"] == 1
     call(bridge, "set_layer_visibility", uids_or_names=[layer.uid], visible=False)
     assert not layer.visible
-    win.layers_dock.panel.previous_state()
+    assert call(bridge, "undo")["ok"]
     assert win.viewport.scene.layer("Walls").visible
 
 
@@ -180,15 +178,13 @@ def test_screenshot_frames_shared_camera_and_captures_metal(model, monkeypatch, 
     win, bridge, _, child, _ = model
     targets = []
 
-    def capture(w, h):
+    def capture(w, h, **options):
         targets.append(win.viewport.camera.target.x())
         image = QImage(w, h, QImage.Format_RGB32)
         image.fill(0xff123456)
         return image
 
-    monkeypatch.setattr(win._doc, "stand_in", SimpleNamespace(
-        isVisible=lambda: True, render_image=capture))
-    monkeypatch.setattr(win.viewport, "render_image", lambda w, h: None)
+    monkeypatch.setattr(win.view, "render_image", capture)
     monkeypatch.setattr("plugins.ai_bridge.tempfile.gettempdir", lambda: str(tmp_path))
     for args in ({"uids": [child.uid]}, {}):
         shot = call(bridge, "screenshot", width=90, height=65, **args)

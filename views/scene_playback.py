@@ -20,7 +20,7 @@ class Playback:
 
     def glide_to(self, view, seconds, arrive):
         self.cancel()
-        vp = self._window.viewport
+        vp = self._window._active_view()
         if not self.timeline.start_glide(Pose.of_camera(vp.camera), Pose.of_view(view), seconds, self._clock()):
             return False
         self._start(vp, [view], arrive)
@@ -33,7 +33,7 @@ class Playback:
             return False
         start %= len(views)
         order = views[start:] + views[:start]
-        vp = self._window.viewport
+        vp = self._window._active_view()
         self.timeline.start_run(Pose.of_camera(vp.camera), [Pose.of_view(v) for v in order],
                                 transition, pause, self._clock())
         self._start(vp, order, arrive)
@@ -73,7 +73,7 @@ class Playback:
         if not self.is_active():
             return
         vp = self._viewport
-        if vp is not self._window.viewport:
+        if vp is not self._window._active_view():
             self.cancel()
             return
         camera = vp.camera

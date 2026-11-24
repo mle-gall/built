@@ -4,9 +4,12 @@
 in-app agent loop with a scripted fake model."""
 from __future__ import annotations
 
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import json
 import os
 import sys
+
+import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -19,6 +22,17 @@ from core import ai  # noqa: E402
 
 
 # ---- Provider layer ---------------------------------------------------------
+
+@pytest.fixture
+def plugin_parent():
+    """Own the optional Qt plugin widgets for one native document test."""
+    from PySide6.QtCore import QCoreApplication, QEvent
+    from PySide6.QtWidgets import QWidget
+    parent = QWidget()
+    yield parent
+    parent.deleteLater()
+    QCoreApplication.sendPostedEvents(parent, QEvent.DeferredDelete)
+
 
 def test_detect_provider_by_key_prefix():
     assert ai.detect_provider("gsk_xxx") == "groq"
@@ -129,112 +143,97 @@ def test_strip_thoughts_removes_leaked_monologue():
     assert ai.strip_thoughts(code) == code
 
 
-def test_recipe_helpers_build_correct_solids():
+def test_recipe_helpers_build_correct_solids(native_host):
     # revolve/extrude are the one-line builders recipes should reach for:
     # a closed, outward-oriented, soft-edged group per call.
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        scope: dict = {"__name__": "__ai__"}
-        r = ai.run_transactional(vp, (
-            "g1 = revolve([(0.5, 0.0), (0.5, 1.0)], name='Cil',"
-            " color=(1, 0, 0, 1))\n"
-            "g2 = revolve([(0.6, 0.0), (0.7, 0.2), (0.6, 0.4), (0.4, 0.4),"
-            " (0.4, 0.0)], closed=True, name='Aro')\n"
-            "g3 = revolve([(0.4, 0.0), (0.5, 0.3), (0.5, 0.5)],"
-            " scallop=(0.1, 8), name='Festón')\n"
-            "g4 = extrude([(0, 0), (1, 0), (1, 1), (0, 1)], 0.0, 0.5,"
-            " name='Caja', color=(0, 1, 0, 1))\n"
-            "print(len(g1.mesh.faces), len(g4.mesh.faces))"), scope)
-        assert r["error"] is None and r["changed"]
-        names = [g.name for g in vp.scene.groups[-4:]]
-        assert names == ["Cil", "Aro", "Festón", "Caja"]
-        cil, aro, feston, caja = vp.scene.groups[-4:]
-        assert len(cil.mesh.faces) == 32 + 2       # sides + two caps
-        assert len(caja.mesh.faces) == 6
-        assert all(f.attrs.get("color") == (1, 0, 0, 1)
-                   for f in cil.mesh.faces)
-        # Every solid is watertight and the curved sides came out soft.
-        from core.orient import is_closed
-        for g in (cil, aro, feston, caja):
-            assert is_closed(g.mesh)
-        assert any(e.soft for e in cil.mesh.edges)
-        # The scallop carves INTO the stone: nominal radius is the max.
-        import math as m
-        rmax = max(m.hypot(v.position.x(), v.position.y())
-                   for v in feston.mesh.vertices)
-        assert abs(rmax - 0.5) < 1e-5
-        # ONE undo step for the whole recipe.
-        assert vp.history.undo_stack
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    win = native_host.window
+    vp = win.viewport
+    scope: dict = {"__name__": "__ai__"}
+    r = ai.run_transactional(vp, (
+        "g1 = revolve([(0.5, 0.0), (0.5, 1.0)], name='Cil',"
+        " color=(1, 0, 0, 1))\n"
+        "g2 = revolve([(0.6, 0.0), (0.7, 0.2), (0.6, 0.4), (0.4, 0.4),"
+        " (0.4, 0.0)], closed=True, name='Aro')\n"
+        "g3 = revolve([(0.4, 0.0), (0.5, 0.3), (0.5, 0.5)],"
+        " scallop=(0.1, 8), name='Festón')\n"
+        "g4 = extrude([(0, 0), (1, 0), (1, 1), (0, 1)], 0.0, 0.5,"
+        " name='Caja', color=(0, 1, 0, 1))\n"
+        "print(len(g1.mesh.faces), len(g4.mesh.faces))"), scope)
+    assert r["error"] is None and r["changed"]
+    names = [g.name for g in vp.scene.groups[-4:]]
+    assert names == ["Cil", "Aro", "Festón", "Caja"]
+    cil, aro, feston, caja = vp.scene.groups[-4:]
+    assert len(cil.mesh.faces) == 32 + 2       # sides + two caps
+    assert len(caja.mesh.faces) == 6
+    assert all(f.attrs.get("color") == (1, 0, 0, 1)
+               for f in cil.mesh.faces)
+    # Every solid is watertight and the curved sides came out soft.
+    from core.orient import is_closed
+    for g in (cil, aro, feston, caja):
+        assert is_closed(g.mesh)
+    assert any(e.soft for e in cil.mesh.edges)
+    # The scallop carves INTO the stone: nominal radius is the max.
+    import math as m
+    rmax = max(m.hypot(v.position.x(), v.position.y())
+               for v in feston.mesh.vertices)
+    assert abs(rmax - 0.5) < 1e-5
+    # ONE undo step for the whole recipe.
+    assert vp.history.undo_stack
 
 
-def test_failed_recipe_leaves_no_orphan_groups():
+def test_failed_recipe_leaves_no_orphan_groups(native_host):
     # A recipe that dies AFTER extrude/revolve appended groups must roll
     # back whole: History.execute only restored the mesh, so the groups
     # survived with no undo entry (45 orphan pieces in a live session).
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        scene = vp.scene
-        n_groups = len(scene.groups)
-        n_layers = len(scene.layers)
-        depth = len(vp.history.undo_stack)
-        scope: dict = {"__name__": "__ai__"}
-        r = ai.run_transactional(vp, (
-            "extrude([(0, 0), (1, 0), (1, 1), (0, 1)], 0.0, 0.5, name='Caja')\n"
-            "from core.layers import Layer\n"
-            "scene.layers.append(Layer('Huérfana'))\n"
-            "raise ValueError('boom')"), scope)
-        assert r["error"] is not None and not r["changed"]
-        assert "ValueError: boom" in r["stderr"]
-        assert len(scene.groups) == n_groups
-        assert len(scene.layers) == n_layers
-        assert len(vp.history.undo_stack) == depth
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    win = native_host.window
+    vp = win.viewport
+    scene = vp.scene
+    n_groups = len(scene.groups)
+    n_layers = len(scene.layers)
+    depth = len(vp.history.undo_stack)
+    scope: dict = {"__name__": "__ai__"}
+    r = ai.run_transactional(vp, (
+        "extrude([(0, 0), (1, 0), (1, 1), (0, 1)], 0.0, 0.5, name='Caja')\n"
+        "from core.layers import Layer\n"
+        "scene.layers.append(Layer('Huérfana'))\n"
+        "raise ValueError('boom')"), scope)
+    assert r["error"] is not None and not r["changed"]
+    assert "ValueError: boom" in r["stderr"]
+    assert len(scene.groups) == n_groups
+    assert len(scene.layers) == n_layers
+    assert len(vp.history.undo_stack) == depth
 
 
-def test_failed_recipe_restores_deleted_groups_layers_and_history():
-    from views.main_window import MainWindow
+def test_failed_recipe_restores_deleted_groups_layers_and_history(native_host):
 
-    win = MainWindow()
-    try:
-        vp, scope = win.viewport, {"__name__": "__ai__"}
-        for name in ("First", "Second", "Redo"):
-            result = ai.run_transactional(
-                vp, f"box((0, 0, 0), (1, 1, 1), name={name!r})", scope)
-            assert result["error"] is None
-        assert vp.history.undo()
-        scene = vp.scene
-        groups, layers = scene.groups, scene.layers
-        before_groups, before_layers = list(groups), list(layers)
-        undo, redo = list(vp.history.undo_stack), list(vp.history.redo_stack)
+    win = native_host.window
+    vp, scope = win.viewport, {"__name__": "__ai__"}
+    for name in ("First", "Second", "Redo"):
+        result = ai.run_transactional(
+            vp, f"box((0, 0, 0), (1, 1, 1), name={name!r})", scope)
+        assert result["error"] is None
+    assert vp.history.undo()
+    scene = vp.scene
+    groups, layers = scene.groups, scene.layers
+    before_groups, before_layers = list(groups), list(layers)
+    undo, redo = list(vp.history.undo_stack), list(vp.history.redo_stack)
 
-        result = ai.run_transactional(vp, (
-            "groups.pop(0)\n"
-            "groups.reverse()\n"
-            "box((0, 0, 0), (2, 2, 2), name='Discarded')\n"
-            "layers.clear()\n"
-            "raise ValueError('rollback deletion')"), scope)
+    result = ai.run_transactional(vp, (
+        "groups.pop(0)\n"
+        "groups.reverse()\n"
+        "box((0, 0, 0), (2, 2, 2), name='Discarded')\n"
+        "layers.clear()\n"
+        "raise ValueError('rollback deletion')"), scope)
 
-        assert result["error"] is not None and not result["changed"]
-        assert scene.groups is groups and scope["groups"] is groups
-        assert scene.layers is layers and scope["layers"] is layers
-        assert groups == before_groups
-        assert layers == before_layers
-        assert vp.history.undo_stack == undo
-        assert vp.history.redo_stack == redo
-        assert vp.history.redo()
-        assert [g.name for g in scene.groups][-3:] == ["First", "Second", "Redo"]
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    assert result["error"] is not None and not result["changed"]
+    assert scene.groups is groups and scope["groups"] is groups
+    assert scene.layers is layers and scope["layers"] is layers
+    assert groups == before_groups
+    assert layers == before_layers
+    assert vp.history.undo_stack == undo
+    assert vp.history.redo_stack == redo
+    assert vp.history.redo()
+    assert [g.name for g in scene.groups][-3:] == ["First", "Second", "Redo"]
 
 
 def test_supports_vision_by_provider_or_model():
@@ -298,9 +297,8 @@ def test_truncated_code_detects_a_cut_reply():
 
 # ---- In-app agent loop ------------------------------------------------------
 
-def test_assistant_loop_executes_recipes_transactionally(monkeypatch):
+def test_assistant_loop_executes_recipes_transactionally(plugin_parent, native_host, monkeypatch):
     from plugins.ai_assistant import AsistenteDialog
-    from views.main_window import MainWindow
 
     replies = iter([
         "Dibujo la arista:\n```python\n"
@@ -316,43 +314,38 @@ def test_assistant_loop_executes_recipes_transactionally(monkeypatch):
 
     monkeypatch.setattr(ai, "chat", fake_chat)
 
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        dlg = AsistenteDialog(vp, parent=win)
-        dlg._key.setText("sk-ant-test")
-        dlg._shots.setChecked(False)           # offscreen has no GL anyway
-        edges0 = len(vp.scene.mesh.edges)
-        depth0 = len(vp.history.undo_stack)
+    win = native_host.window
+    vp = win.viewport
+    dlg = AsistenteDialog(vp, parent=plugin_parent)
+    dlg._key.setText("sk-ant-test")
+    dlg._shots.setChecked(False)           # offscreen has no GL anyway
+    edges0 = len(vp.scene.mesh.edges)
+    depth0 = len(vp.history.undo_stack)
 
-        dlg._input.setText("dibuja una arista de 3 m")
-        dlg._on_send()
-        app = QApplication.instance()
-        for _ in range(2000):
-            app.processEvents()
-            if not dlg._busy:
-                break
-        assert not dlg._busy
+    dlg._input.setText("dibuja una arista de 3 m")
+    dlg._on_send()
+    app = QApplication.instance()
+    for _ in range(2000):
+        app.processEvents()
+        if not dlg._busy:
+            break
+    assert not dlg._busy
 
-        assert len(vp.scene.mesh.edges) == edges0 + 1
-        assert len(vp.history.undo_stack) == depth0 + 1   # ONE undo step
-        # The model got the execution feedback on the second turn.
-        assert any("arista lista" in m["text"]
-                   for m in seen[1] if m["role"] == "user")
-        # The transcript keeps user → assistant → feedback → assistant.
-        roles = [m["role"] for m in dlg._convo]
-        assert roles == ["user", "assistant", "user", "assistant"]
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    assert len(vp.scene.mesh.edges) == edges0 + 1
+    assert len(vp.history.undo_stack) == depth0 + 1   # ONE undo step
+    # The model got the execution feedback on the second turn.
+    assert any("arista lista" in m["text"]
+               for m in seen[1] if m["role"] == "user")
+    # The transcript keeps user → assistant → feedback → assistant.
+    roles = [m["role"] for m in dlg._convo]
+    assert roles == ["user", "assistant", "user", "assistant"]
 
 
-def test_photo_attaches_to_next_message_only(monkeypatch, tmp_path):
+def test_photo_attaches_to_next_message_only(plugin_parent, native_host, monkeypatch, tmp_path):
     # The attached photo rides the NEXT user message as scaled JPEG and is
     # cleared afterwards — execution feedback turns must not re-send it.
     from PySide6.QtGui import QImage
     from plugins.ai_assistant import AsistenteDialog
-    from views.main_window import MainWindow
 
     photo = tmp_path / "fuente.jpg"
     big = QImage(3000, 1500, QImage.Format_RGB32)
@@ -371,56 +364,51 @@ def test_photo_attaches_to_next_message_only(monkeypatch, tmp_path):
 
     monkeypatch.setattr(ai, "chat", fake_chat)
 
-    win = MainWindow()
-    try:
-        dlg = AsistenteDialog(win.viewport, parent=win)
-        dlg._provider.setCurrentIndex(0)   # Auto: the sk-ant key → vision
-        dlg._key.setText("sk-ant-test")
-        dlg._shots.setChecked(False)
-        assert not dlg._foto_chip.isVisibleTo(dlg)     # nothing attached yet
+    win = native_host.window
+    dlg = AsistenteDialog(win.viewport, parent=plugin_parent)
+    dlg._provider.setCurrentIndex(0)   # Auto: the sk-ant key → vision
+    dlg._key.setText("sk-ant-test")
+    dlg._shots.setChecked(False)
+    assert not dlg._foto_chip.isVisibleTo(dlg)     # nothing attached yet
 
-        dlg._attach_photo(str(photo))
-        assert dlg._foto is not None
-        b64, mime, name = dlg._foto
-        assert mime == "image/jpeg" and name == "fuente.jpg"
-        assert dlg._foto_chip.isVisibleTo(dlg)
+    dlg._attach_photo(str(photo))
+    assert dlg._foto is not None
+    b64, mime, name = dlg._foto
+    assert mime == "image/jpeg" and name == "fuente.jpg"
+    assert dlg._foto_chip.isVisibleTo(dlg)
 
-        # The upload is scaled down to the cap, aspect kept.
-        import base64 as b64mod
-        sent = QImage.fromData(b64mod.b64decode(b64), "JPEG")
-        assert max(sent.width(), sent.height()) == dlg.FOTO_MAX_EDGE
-        assert sent.width() == 1280 and sent.height() == 640
+    # The upload is scaled down to the cap, aspect kept.
+    import base64 as b64mod
+    sent = QImage.fromData(b64mod.b64decode(b64), "JPEG")
+    assert max(sent.width(), sent.height()) == dlg.FOTO_MAX_EDGE
+    assert sent.width() == 1280 and sent.height() == 640
 
-        dlg._input.setText("recrea la fuente; taza de 4 m")
-        dlg._on_send()
-        app = QApplication.instance()
-        for _ in range(2000):
-            app.processEvents()
-            if not dlg._busy:
-                break
-        assert not dlg._busy
+    dlg._input.setText("recrea la fuente; taza de 4 m")
+    dlg._on_send()
+    app = QApplication.instance()
+    for _ in range(2000):
+        app.processEvents()
+        if not dlg._busy:
+            break
+    assert not dlg._busy
 
-        first_user = seen[0][0]
-        assert first_user["image_b64"] == b64
-        assert first_user["image_mime"] == "image/jpeg"
-        assert dlg._foto is None                       # cleared after send
-        assert not dlg._foto_chip.isVisibleTo(dlg)
-        # The feedback turn carries no photo (and no screenshot: shots off).
-        feedback = seen[1][2]
-        assert feedback["role"] == "user"
-        assert "image_b64" not in feedback
-        assert "image_png_b64" not in feedback
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    first_user = seen[0][0]
+    assert first_user["image_b64"] == b64
+    assert first_user["image_mime"] == "image/jpeg"
+    assert dlg._foto is None                       # cleared after send
+    assert not dlg._foto_chip.isVisibleTo(dlg)
+    # The feedback turn carries no photo (and no screenshot: shots off).
+    feedback = seen[1][2]
+    assert feedback["role"] == "user"
+    assert "image_b64" not in feedback
+    assert "image_png_b64" not in feedback
 
 
-def test_cut_reply_gets_a_retry_not_a_silent_stop(monkeypatch):
+def test_cut_reply_gets_a_retry_not_a_silent_stop(plugin_parent, native_host, monkeypatch):
     # Live failure (gemini-2.5-flash): reply cut mid-```python → the loop
     # used to end silently with nothing drawn. Now it tells the model and
     # asks for a shorter complete block, and the retry still executes.
     from plugins.ai_assistant import TOKENS_BY_PROVIDER, AsistenteDialog
-    from views.main_window import MainWindow
 
     replies = iter([
         "Empiezo con el pedestal:\n```python\nimport math\nm = Mesh()",
@@ -438,42 +426,37 @@ def test_cut_reply_gets_a_retry_not_a_silent_stop(monkeypatch):
 
     monkeypatch.setattr(ai, "chat", fake_chat)
 
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        dlg = AsistenteDialog(vp, parent=win)
-        dlg._provider.setCurrentIndex(0)   # Auto: the AIza key → gemini
-        dlg._key.setText("AIzaTest")
-        dlg._shots.setChecked(False)
-        edges0 = len(vp.scene.mesh.edges)
+    win = native_host.window
+    vp = win.viewport
+    dlg = AsistenteDialog(vp, parent=plugin_parent)
+    dlg._provider.setCurrentIndex(0)   # Auto: the AIza key → gemini
+    dlg._key.setText("AIzaTest")
+    dlg._shots.setChecked(False)
+    edges0 = len(vp.scene.mesh.edges)
 
-        dlg._input.setText("modela la fuente de la foto")
-        dlg._on_send()
-        app = QApplication.instance()
-        for _ in range(2000):
-            app.processEvents()
-            if not dlg._busy:
-                break
-        assert not dlg._busy
+    dlg._input.setText("modela la fuente de la foto")
+    dlg._on_send()
+    app = QApplication.instance()
+    for _ in range(2000):
+        app.processEvents()
+        if not dlg._busy:
+            break
+    assert not dlg._busy
 
-        # The retry request went out, the shorter block ran, the loop ended
-        # on the closing summary — and every turn asked for Gemini's budget
-        # (its hidden thinking bills against the same max_tokens).
-        assert any("se cortó a mitad del bloque" in m["text"]
-                   for m in seen[1] if m["role"] == "user")
-        assert len(vp.scene.mesh.edges) == edges0 + 1
-        assert budgets == [TOKENS_BY_PROVIDER["gemini"]] * 3
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    # The retry request went out, the shorter block ran, the loop ended
+    # on the closing summary — and every turn asked for Gemini's budget
+    # (its hidden thinking bills against the same max_tokens).
+    assert any("se cortó a mitad del bloque" in m["text"]
+               for m in seen[1] if m["role"] == "user")
+    assert len(vp.scene.mesh.edges) == edges0 + 1
+    assert budgets == [TOKENS_BY_PROVIDER["gemini"]] * 3
 
 
-def test_step_limit_announces_instead_of_silent_stop(monkeypatch):
+def test_step_limit_announces_instead_of_silent_stop(plugin_parent, native_host, monkeypatch):
     # Second live failure mode: the model was still sending recipes when
     # MAX_ROUNDS ran out and the loop just went quiet. Now it says so and
     # points at "continue" (the convo survives, so continuing works).
     import plugins.ai_assistant as pa
-    from views.main_window import MainWindow
 
     monkeypatch.setattr(pa, "MAX_ROUNDS", 1)
     replies = iter([
@@ -484,39 +467,34 @@ def test_step_limit_announces_instead_of_silent_stop(monkeypatch):
     monkeypatch.setattr(ai, "chat",
                         lambda *a, **k: next(replies))
 
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        dlg = pa.AsistenteDialog(vp, parent=win)
-        dlg._provider.setCurrentIndex(0)   # Auto: the AIza key → gemini
-        dlg._key.setText("AIzaTest")
-        dlg._shots.setChecked(False)
-        edges0 = len(vp.scene.mesh.edges)
+    win = native_host.window
+    vp = win.viewport
+    dlg = pa.AsistenteDialog(vp, parent=plugin_parent)
+    dlg._provider.setCurrentIndex(0)   # Auto: the AIza key → gemini
+    dlg._key.setText("AIzaTest")
+    dlg._shots.setChecked(False)
+    edges0 = len(vp.scene.mesh.edges)
 
-        dlg._input.setText("haz dos pasos")
-        dlg._on_send()
-        app = QApplication.instance()
-        for _ in range(2000):
-            app.processEvents()
-            if not dlg._busy:
-                break
-        assert not dlg._busy
+    dlg._input.setText("haz dos pasos")
+    dlg._on_send()
+    app = QApplication.instance()
+    for _ in range(2000):
+        app.processEvents()
+        if not dlg._busy:
+            break
+    assert not dlg._busy
 
-        # The second recipe was NOT executed (limit hit) and the chat says
-        # why instead of ending silently.
-        assert len(vp.scene.mesh.edges) == edges0
-        assert "Step limit reached" in dlg._chat.toPlainText()
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    # The second recipe was NOT executed (limit hit) and the chat says
+    # why instead of ending silently.
+    assert len(vp.scene.mesh.edges) == edges0
+    assert "Step limit reached" in dlg._chat.toPlainText()
 
 
-def test_consecutive_failures_hand_control_back(monkeypatch):
+def test_consecutive_failures_hand_control_back(plugin_parent, native_host, monkeypatch):
     # #461: llama3.2 fed its own TypeError back for all 12 rounds. Three
     # failed blocks in a row stop the loop and say so; a success between
     # failures resets the count.
     import plugins.ai_assistant as pa
-    from views.main_window import MainWindow
 
     sent = []
     replies = iter(["```python\n1/0\n```", "```python\nprint('ok')\n```"]
@@ -527,26 +505,22 @@ def test_consecutive_failures_hand_control_back(monkeypatch):
         return next(replies)
 
     monkeypatch.setattr(ai, "chat", fake_chat)
-    win = MainWindow()
-    try:
-        dlg = pa.AsistenteDialog(win.viewport, parent=win)
-        dlg._provider.setCurrentIndex(0)
-        dlg._key.setText("AIzaTest")
-        dlg._shots.setChecked(False)
-        dlg._input.setText("dibuja un cubo")
-        dlg._on_send()
-        app = QApplication.instance()
-        for _ in range(2000):
-            app.processEvents()
-            if not dlg._busy:
-                break
-        assert not dlg._busy
-        # fail, ok, fail ×3 → stop: five blocks, not twelve.
-        assert len(sent) == 5
-        assert "3 attempts in a row failed" in dlg._chat.toPlainText()
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    win = native_host.window
+    dlg = pa.AsistenteDialog(win.viewport, parent=plugin_parent)
+    dlg._provider.setCurrentIndex(0)
+    dlg._key.setText("AIzaTest")
+    dlg._shots.setChecked(False)
+    dlg._input.setText("dibuja un cubo")
+    dlg._on_send()
+    app = QApplication.instance()
+    for _ in range(2000):
+        app.processEvents()
+        if not dlg._busy:
+            break
+    assert not dlg._busy
+    # fail, ok, fail ×3 → stop: five blocks, not twelve.
+    assert len(sent) == 5
+    assert "3 attempts in a row failed" in dlg._chat.toPlainText()
 
 
 def test_small_local_models_are_flagged():
@@ -557,66 +531,55 @@ def test_small_local_models_are_flagged():
     assert not ai.small_local_model("groq", "llama3.2")
 
 
-def test_box_helper_builds_a_closed_box():
+def test_box_helper_builds_a_closed_box(native_host):
     from core.orient import is_closed
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        r = ai.run_transactional(
-            vp, "g = box((1, 2, 0), (6, 6, 6), name='Cubo')", {"__name__": "__ai__"})
-        assert r["error"] is None and r["changed"]
-        g = vp.scene.groups[-1]
-        assert g.name == "Cubo" and len(g.mesh.faces) == 6
-        assert is_closed(g.mesh)
-        xs = sorted({round(v.position.x(), 6) for v in g.mesh.vertices})
-        zs = sorted({round(v.position.z(), 6) for v in g.mesh.vertices})
-        assert xs == [1.0, 7.0] and zs == [0.0, 6.0]
-        # A model that appends what the helpers already added (live with
-        # qwen3.5): no duplicate, and house()'s LIST is flattened, not
-        # left in scene.groups to crash the next paint.
-        n0 = len(vp.scene.groups)
-        r = ai.run_transactional(vp, (
-            "b = box((20, 0, 0), (1, 1, 1))\ngroups.append(b)\n"
-            "gs = house(6, 4, origin=(30, 0))\ngroups.append(gs)"),
-            {"__name__": "__ai__"})
-        assert r["error"] is None
-        from core.group import Group
-        added = vp.scene.groups[n0:]
-        assert all(isinstance(x, Group) for x in vp.scene.groups)
-        # box + house walls, floor, roof (no openings → no carpentry).
-        assert len(added) == len({id(x) for x in added}) == 1 + 3
-        # The recipe book teaches it to both doors.
-        from core import ai_recipes
-        assert "box((x,y,z), (dx,dy,dz)" in ai_recipes.RECIPES
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    win = native_host.window
+    vp = win.viewport
+    r = ai.run_transactional(
+        vp, "g = box((1, 2, 0), (6, 6, 6), name='Cubo')", {"__name__": "__ai__"})
+    assert r["error"] is None and r["changed"]
+    g = vp.scene.groups[-1]
+    assert g.name == "Cubo" and len(g.mesh.faces) == 6
+    assert is_closed(g.mesh)
+    xs = sorted({round(v.position.x(), 6) for v in g.mesh.vertices})
+    zs = sorted({round(v.position.z(), 6) for v in g.mesh.vertices})
+    assert xs == [1.0, 7.0] and zs == [0.0, 6.0]
+    # A model that appends what the helpers already added (live with
+    # qwen3.5): no duplicate, and house()'s LIST is flattened, not
+    # left in scene.groups to crash the next paint.
+    n0 = len(vp.scene.groups)
+    r = ai.run_transactional(vp, (
+        "b = box((20, 0, 0), (1, 1, 1))\ngroups.append(b)\n"
+        "gs = house(6, 4, origin=(30, 0))\ngroups.append(gs)"),
+        {"__name__": "__ai__"})
+    assert r["error"] is None
+    from core.group import Group
+    added = vp.scene.groups[n0:]
+    assert all(isinstance(x, Group) for x in vp.scene.groups)
+    # box + house walls, floor, roof (no openings → no carpentry).
+    assert len(added) == len({id(x) for x in added}) == 1 + 3
+    # The recipe book teaches it to both doors.
+    from core import ai_recipes
+    assert "box((x,y,z), (dx,dy,dz)" in ai_recipes.RECIPES
 
 
-def test_encode_photo_rejects_garbage(tmp_path):
+def test_encode_photo_rejects_garbage(plugin_parent, native_host, tmp_path):
     from plugins.ai_assistant import AsistenteDialog
-    from views.main_window import MainWindow
     bad = tmp_path / "no-es-imagen.jpg"
     bad.write_bytes(b"not an image at all")
-    win = MainWindow()
-    try:
-        dlg = AsistenteDialog(win.viewport, parent=win)
-        assert dlg._encode_photo(str(bad)) is None
-        dlg._attach_photo(str(bad))                    # reports, no crash
-        assert dlg._foto is None
-        assert "Could not read the image." in dlg._chat.toPlainText()
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    win = native_host.window
+    dlg = AsistenteDialog(win.viewport, parent=plugin_parent)
+    assert dlg._encode_photo(str(bad)) is None
+    dlg._attach_photo(str(bad))                    # reports, no crash
+    assert dlg._foto is None
+    assert "Could not read the image." in dlg._chat.toPlainText()
 
 
-def test_send_becomes_stop_and_a_stopped_turn_is_discarded(monkeypatch):
+def test_send_becomes_stop_and_a_stopped_turn_is_discarded(plugin_parent, native_host, monkeypatch):
     """While a turn runs, Send turns into Stop; stopping frees the UI at
     once and the late reply lands nowhere (stale gen is dropped)."""
     import threading
     from plugins.ai_assistant import AsistenteDialog
-    from views.main_window import MainWindow
     gate = threading.Event()
 
     def slow_chat(*a, **k):
@@ -624,9 +587,9 @@ def test_send_becomes_stop_and_a_stopped_turn_is_discarded(monkeypatch):
         return "late answer"
 
     monkeypatch.setattr(ai, "chat", slow_chat)
-    win = MainWindow()
+    win = native_host.window
     try:
-        dlg = AsistenteDialog(win.viewport, parent=win)
+        dlg = AsistenteDialog(win.viewport, parent=plugin_parent)
         dlg._provider.setCurrentIndex(0)
         dlg._key.setText("sk-ant-test")
         dlg._input.setText("hola")
@@ -644,81 +607,69 @@ def test_send_becomes_stop_and_a_stopped_turn_is_discarded(monkeypatch):
         assert len(dlg._convo) == 2                    # a current one lands
     finally:
         gate.set()
-        win._saved_version = win.viewport.scene.version
-        win.close()
 
 
-def test_dropped_or_pasted_image_attaches_with_thumbnail(tmp_path):
+def test_dropped_or_pasted_image_attaches_with_thumbnail(plugin_parent, native_host, tmp_path):
     """An image dragged onto the prompt (or pasted from the clipboard)
     attaches like Photo… — and the chip shows a thumbnail preview."""
     from PySide6.QtCore import QMimeData, QUrl
     from PySide6.QtGui import QImage
     from pathlib import Path
     from plugins.ai_assistant import AsistenteDialog, _drop_image
-    from views.main_window import MainWindow
     photo = tmp_path / "pieza.png"
     assert QImage(64, 32, QImage.Format_RGB32).save(str(photo))
-    win = MainWindow()
-    try:
-        dlg = AsistenteDialog(win.viewport, parent=win)
-        mime = QMimeData()
-        mime.setUrls([QUrl.fromLocalFile(str(photo))])
-        path = _drop_image(mime)
-        assert Path(path) == photo     # toLocalFile() uses / on Windows
-        dlg._on_drop_image(path)
-        assert dlg._foto is not None and dlg._foto[2] == "pieza.png"
-        assert dlg._foto_chip.isVisibleTo(dlg)
-        assert not dlg._foto_chip.pixmap().isNull()      # the thumbnail
-        dlg._clear_foto()
-        assert dlg._foto_chip.pixmap().isNull()
+    win = native_host.window
+    dlg = AsistenteDialog(win.viewport, parent=plugin_parent)
+    mime = QMimeData()
+    mime.setUrls([QUrl.fromLocalFile(str(photo))])
+    path = _drop_image(mime)
+    assert Path(path) == photo     # toLocalFile() uses / on Windows
+    dlg._on_drop_image(path)
+    assert dlg._foto is not None and dlg._foto[2] == "pieza.png"
+    assert dlg._foto_chip.isVisibleTo(dlg)
+    assert not dlg._foto_chip.pixmap().isNull()      # the thumbnail
+    dlg._clear_foto()
+    assert dlg._foto_chip.pixmap().isNull()
 
-        # A pasted clipboard bitmap (no file behind it) attaches too.
-        dlg._on_drop_image(QImage(20, 10, QImage.Format_RGB32))
-        assert dlg._foto is not None
+    # A pasted clipboard bitmap (no file behind it) attaches too.
+    dlg._on_drop_image(QImage(20, 10, QImage.Format_RGB32))
+    assert dlg._foto is not None
 
-        # Non-image drags do not pretend to be photos.
-        mime2 = QMimeData()
-        other = tmp_path / "x.txt"
-        other.write_text("hi")
-        mime2.setUrls([QUrl.fromLocalFile(str(other))])
-        assert _drop_image(mime2) is None
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    # Non-image drags do not pretend to be photos.
+    mime2 = QMimeData()
+    other = tmp_path / "x.txt"
+    other.write_text("hi")
+    mime2.setUrls([QUrl.fromLocalFile(str(other))])
+    assert _drop_image(mime2) is None
 
 
-def test_sent_photo_bubble_is_clickable(tmp_path, monkeypatch):
+def test_sent_photo_bubble_is_clickable(plugin_parent, native_host, tmp_path, monkeypatch):
     """A sent photo lands in the chat as a thumbnail resource; clicking
     its link opens the viewer dialog with the full image."""
     from PySide6.QtCore import QUrl
     from PySide6.QtGui import QImage, QTextDocument
     from PySide6.QtWidgets import QDialog
     from plugins.ai_assistant import AsistenteDialog
-    from views.main_window import MainWindow
     photo = tmp_path / "pieza.png"
     assert QImage(64, 32, QImage.Format_RGB32).save(str(photo))
-    win = MainWindow()
-    try:
-        dlg = AsistenteDialog(win.viewport, parent=win)
-        b64, mime = dlg._encode_photo(str(photo))
-        dlg._append_foto(b64, mime, "pieza.png")
-        assert len(dlg._fotos) == 1
-        # The thumbnail is a document resource under foto:0.
-        res = dlg._chat.document().resource(
-            QTextDocument.ImageResource, QUrl("foto:0"))
-        assert isinstance(res, QImage) and not res.isNull()
-        # Clicking it opens a dialog (exec is patched — offscreen).
-        opened = []
-        monkeypatch.setattr(QDialog, "exec",
-                            lambda self: opened.append(self.windowTitle()))
-        dlg._on_chat_link(QUrl("foto:0"))
-        assert opened == ["pieza.png"]
-        dlg._on_chat_link(QUrl("foto:9"))          # out of range: no crash
-        dlg._on_chat_link(QUrl("https://x"))       # foreign links ignored
-        assert len(opened) == 1
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    win = native_host.window
+    dlg = AsistenteDialog(win.viewport, parent=plugin_parent)
+    b64, mime = dlg._encode_photo(str(photo))
+    dlg._append_foto(b64, mime, "pieza.png")
+    assert len(dlg._fotos) == 1
+    # The thumbnail is a document resource under foto:0.
+    res = dlg._chat.document().resource(
+        QTextDocument.ImageResource, QUrl("foto:0"))
+    assert isinstance(res, QImage) and not res.isNull()
+    # Clicking it opens a dialog (exec is patched — offscreen).
+    opened = []
+    monkeypatch.setattr(QDialog, "exec",
+                        lambda self: opened.append(self.windowTitle()))
+    dlg._on_chat_link(QUrl("foto:0"))
+    assert opened == ["pieza.png"]
+    dlg._on_chat_link(QUrl("foto:9"))          # out of range: no crash
+    dlg._on_chat_link(QUrl("https://x"))       # foreign links ignored
+    assert len(opened) == 1
 
 
 def test_user_agent_defeats_cloudflare_and_headers_carry_it():
@@ -730,54 +681,49 @@ def test_user_agent_defeats_cloudflare_and_headers_carry_it():
         assert headers["User-Agent"].startswith("IngeTrazo/")
 
 
-def test_provider_selector_overrides_autodetect(monkeypatch):
+def test_provider_selector_overrides_autodetect(plugin_parent, native_host, monkeypatch):
     from plugins.ai_assistant import AsistenteDialog
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        dlg = AsistenteDialog(win.viewport, parent=win)
-        dlg._provider.setCurrentIndex(0)             # Auto (QSettings persist
-        dlg._key.setText("sk-ant-algo")              # between tests) → key wins
-        assert dlg._effective_provider() == "anthropic"
-        idx = dlg._provider.findData("groq")
-        dlg._provider.setCurrentIndex(idx)           # explicit wins
-        assert dlg._effective_provider() == "groq"
-        assert "console.groq.com" in dlg._key_link.text()
-        assert (dlg._model.lineEdit().placeholderText()
-                == ai.DEFAULT_MODELS["groq"])
+    win = native_host.window
+    dlg = AsistenteDialog(win.viewport, parent=plugin_parent)
+    dlg._provider.setCurrentIndex(0)             # Auto (QSettings persist
+    dlg._key.setText("sk-ant-algo")              # between tests) → key wins
+    assert dlg._effective_provider() == "anthropic"
+    idx = dlg._provider.findData("groq")
+    dlg._provider.setCurrentIndex(idx)           # explicit wins
+    assert dlg._effective_provider() == "groq"
+    assert "console.groq.com" in dlg._key_link.text()
+    assert (dlg._model.lineEdit().placeholderText()
+            == ai.DEFAULT_MODELS["groq"])
 
-        # Probar conexión reports through the same reply channel. Groq's
-        # own slot is empty here, and an empty key no longer reaches the
-        # network (it is answered locally, in plain words) — paste one.
-        dlg._key.setText("gsk_prueba")
-        monkeypatch.setattr(ai, "probar_conexion",
-                            lambda *a, **k: (True, "OK"))
-        dlg._on_probar()
-        app = QApplication.instance()
-        for _ in range(2000):
-            app.processEvents()
-            if dlg._probar.isEnabled():
-                break
-        assert dlg._probar.isEnabled()
-        assert "Connection OK" in dlg._chat.toPlainText()
+    # Probar conexión reports through the same reply channel. Groq's
+    # own slot is empty here, and an empty key no longer reaches the
+    # network (it is answered locally, in plain words) — paste one.
+    dlg._key.setText("gsk_prueba")
+    monkeypatch.setattr(ai, "probar_conexion",
+                        lambda *a, **k: (True, "OK"))
+    dlg._on_probar()
+    app = QApplication.instance()
+    for _ in range(2000):
+        app.processEvents()
+        if dlg._probar.isEnabled():
+            break
+    assert dlg._probar.isEnabled()
+    assert "Connection OK" in dlg._chat.toPlainText()
 
-        # "Models" fills the combo with what the key can actually use.
-        monkeypatch.setattr(ai, "list_models",
-                            lambda *a, **k: ["openai/gpt-oss-120b",
-                                             "qwen/qwen3-32b"])
-        dlg._model.setEditText("")
-        dlg._on_modelos()
-        for _ in range(2000):
-            app.processEvents()
-            if dlg._modelos.isEnabled():
-                break
-        assert dlg._modelos.isEnabled()
-        assert [dlg._model.itemText(i) for i in range(dlg._model.count())] \
-            == ["openai/gpt-oss-120b", "qwen/qwen3-32b"]
-        dlg._model.hidePopup()
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    # "Models" fills the combo with what the key can actually use.
+    monkeypatch.setattr(ai, "list_models",
+                        lambda *a, **k: ["openai/gpt-oss-120b",
+                                         "qwen/qwen3-32b"])
+    dlg._model.setEditText("")
+    dlg._on_modelos()
+    for _ in range(2000):
+        app.processEvents()
+        if dlg._modelos.isEnabled():
+            break
+    assert dlg._modelos.isEnabled()
+    assert [dlg._model.itemText(i) for i in range(dlg._model.count())] \
+        == ["openai/gpt-oss-120b", "qwen/qwen3-32b"]
+    dlg._model.hidePopup()
 
 
 def test_list_models_filters_and_strips(monkeypatch):
@@ -844,62 +790,52 @@ def test_panel_builds_without_fixed_font_lookup(monkeypatch):
         QApplication.instance().processEvents()
 
 
-def test_chat_colors_follow_theme():
+def test_chat_colors_follow_theme(plugin_parent, native_host):
     from PySide6.QtGui import QColor, QPalette
     from plugins.ai_assistant import AsistenteDialog
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        dlg = AsistenteDialog(win.viewport, parent=win)
-        light = QPalette()
-        light.setColor(QPalette.ColorRole.Base, QColor("#ffffff"))
-        dlg.setPalette(light)
-        assert dlg._chat_colors()["ai"] == "#1a202c"
-        dark = QPalette()
-        dark.setColor(QPalette.ColorRole.Base, QColor("#252525"))
-        dlg.setPalette(dark)
-        assert dlg._chat_colors()["ai"] == "#e8eaed"   # readable on dark
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    win = native_host.window
+    dlg = AsistenteDialog(win.viewport, parent=plugin_parent)
+    light = QPalette()
+    light.setColor(QPalette.ColorRole.Base, QColor("#ffffff"))
+    dlg.setPalette(light)
+    assert dlg._chat_colors()["ai"] == "#1a202c"
+    dark = QPalette()
+    dark.setColor(QPalette.ColorRole.Base, QColor("#252525"))
+    dlg.setPalette(dark)
+    assert dlg._chat_colors()["ai"] == "#e8eaed"   # readable on dark
 
 
-def test_each_provider_remembers_its_own_key_and_model(monkeypatch, tmp_path):
+def test_each_provider_remembers_its_own_key_and_model(plugin_parent, native_host, monkeypatch, tmp_path):
     # Pasting the Gemini key must not erase the Groq one: switching
     # providers when tokens run out has to be two clicks (user report).
     from PySide6.QtCore import QSettings
     from plugins.ai_assistant import AsistenteDialog
-    from views.main_window import MainWindow
     ini = str(tmp_path / "cfg.ini")
     monkeypatch.setattr(
         AsistenteDialog, "_settings",
         lambda self: QSettings(ini, QSettings.Format.IniFormat))
-    win = MainWindow()
-    try:
-        dlg = AsistenteDialog(win.viewport, parent=win)
-        dlg._provider.setCurrentIndex(dlg._provider.findData("groq"))
-        dlg._key.setText("gsk_AAA")
-        dlg._model.setEditText("openai/gpt-oss-120b")
+    win = native_host.window
+    dlg = AsistenteDialog(win.viewport, parent=plugin_parent)
+    dlg._provider.setCurrentIndex(dlg._provider.findData("groq"))
+    dlg._key.setText("gsk_AAA")
+    dlg._model.setEditText("openai/gpt-oss-120b")
 
-        dlg._provider.setCurrentIndex(dlg._provider.findData("gemini"))
-        assert dlg._key.text() == ""                 # gemini slot is empty
-        dlg._key.setText("AIzaBBB")
+    dlg._provider.setCurrentIndex(dlg._provider.findData("gemini"))
+    assert dlg._key.text() == ""                 # gemini slot is empty
+    dlg._key.setText("AIzaBBB")
 
-        dlg._provider.setCurrentIndex(dlg._provider.findData("groq"))
-        assert dlg._key.text() == "gsk_AAA"          # restored
-        assert dlg._model.currentText() == "openai/gpt-oss-120b"
+    dlg._provider.setCurrentIndex(dlg._provider.findData("groq"))
+    assert dlg._key.text() == "gsk_AAA"          # restored
+    assert dlg._model.currentText() == "openai/gpt-oss-120b"
 
-        dlg._provider.setCurrentIndex(dlg._provider.findData("gemini"))
-        assert dlg._key.text() == "AIzaBBB"          # gemini kept its own
+    dlg._provider.setCurrentIndex(dlg._provider.findData("gemini"))
+    assert dlg._key.text() == "AIzaBBB"          # gemini kept its own
 
-        # A fresh dialog on the same settings restores the last provider.
-        dlg._save_settings()
-        dlg2 = AsistenteDialog(win.viewport, parent=win)
-        assert dlg2._provider.currentData() == "gemini"
-        assert dlg2._key.text() == "AIzaBBB"
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    # A fresh dialog on the same settings restores the last provider.
+    dlg._save_settings()
+    dlg2 = AsistenteDialog(win.viewport, parent=plugin_parent)
+    assert dlg2._provider.currentData() == "gemini"
+    assert dlg2._key.text() == "AIzaBBB"
 
 
 def test_a_busy_provider_is_retried_with_backoff(monkeypatch):
@@ -951,58 +887,53 @@ def test_a_busy_provider_is_retried_with_backoff(monkeypatch):
     assert len(calls) == 1
 
 
-def test_house_wall_and_prism_helpers_build_closed_solids():
+def test_house_wall_and_prism_helpers_build_closed_solids(native_host):
     """Marco (2026-09-15): «se puede optimizar para que me dibuje algo
     mejor?». One call builds a house with walls of real thickness, a door
     leaf, glass panes and a roof — every solid watertight."""
     from core.orient import is_closed
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        scope: dict = {"__name__": "__ai__"}
-        r = ai.run_transactional(vp, (
-            "gs = house(6, 4, doors=[('S', 2.5, 0.9, 2.1)],"
-            " windows=[('S', 0.6, 1.0, 1.2, 1.0), ('E', 1.5, 1.0, 1.2, 1.0),"
-            " ('N', 1.0, 1.0, 1.2, 1.0)])\n"
-            "w = wall((10, 0), (14, 0), 3, 0.2, openings=[(1, 0, 0.9, 2.1), (2.5, 1, 1, 1)],"
-            " peak=(2, 1), name='Muro')\n"
-            "p = prism([(20, 0, 0), (22, 0, 0), (22, 1, 0), (20, 1, 0)], (0, 0, 0.3),"
-            " holes=[[(20.5, 0.3, 0), (21.5, 0.3, 0), (21.5, 0.7, 0), (20.5, 0.7, 0)]],"
-            " name='Losa')\n"
-            "print(len(gs))"), scope)
-        assert r["error"] is None, r["error"]
-        assert r["stdout"].strip() == "4"
-        names = [g.name for g in vp.scene.groups[-6:]]
-        assert names == ["Casa · Paredes", "Casa · Piso", "Casa · Carpintería",
-                         "Casa · Techo", "Muro", "Losa"]
-        walls, floor, carp, roof, muro, losa = vp.scene.groups[-6:]
-        for g in (walls, floor, roof, muro, losa):
-            assert is_closed(g.mesh), g.name
-        # The front wall has a notch for the door and a hole for the window;
-        # the gable ends rise to the ridge.
-        zs = [v.position.z() for v in walls.mesh.vertices]
-        assert max(zs) > 3.0 + 1.0
-        assert any(len(f.hole_loops) == 1 for f in walls.mesh.faces)
-        # Carpentry: one door leaf (a solid) and three panes (faces with opacity).
-        panes = [f for f in carp.mesh.faces if f.attrs.get("opacity")]
-        assert len(panes) == 3
-        assert len(carp.mesh.faces) == 3 + 6
-        # The roof overhangs the walls on every side.
-        xs = [v.position.x() for v in roof.mesh.vertices]
-        assert min(xs) < 0 and max(xs) > 6
-        # The slab kept its hole.
-        assert sum(1 for f in losa.mesh.faces if f.hole_loops) == 2
-        # Hip and flat roofs close too.
-        r = ai.run_transactional(vp, (
-            "a = house(5, 8, roof='hip', origin=(30, 0), name='H')\n"
-            "b = house(5, 5, roof='flat', origin=(40, 0), name='F')"), scope)
-        assert r["error"] is None, r["error"]
-        for g in vp.scene.groups[-6:]:
-            assert is_closed(g.mesh), g.name
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    win = native_host.window
+    vp = win.viewport
+    scope: dict = {"__name__": "__ai__"}
+    r = ai.run_transactional(vp, (
+        "gs = house(6, 4, doors=[('S', 2.5, 0.9, 2.1)],"
+        " windows=[('S', 0.6, 1.0, 1.2, 1.0), ('E', 1.5, 1.0, 1.2, 1.0),"
+        " ('N', 1.0, 1.0, 1.2, 1.0)])\n"
+        "w = wall((10, 0), (14, 0), 3, 0.2, openings=[(1, 0, 0.9, 2.1), (2.5, 1, 1, 1)],"
+        " peak=(2, 1), name='Muro')\n"
+        "p = prism([(20, 0, 0), (22, 0, 0), (22, 1, 0), (20, 1, 0)], (0, 0, 0.3),"
+        " holes=[[(20.5, 0.3, 0), (21.5, 0.3, 0), (21.5, 0.7, 0), (20.5, 0.7, 0)]],"
+        " name='Losa')\n"
+        "print(len(gs))"), scope)
+    assert r["error"] is None, r["error"]
+    assert r["stdout"].strip() == "4"
+    names = [g.name for g in vp.scene.groups[-6:]]
+    assert names == ["Casa · Paredes", "Casa · Piso", "Casa · Carpintería",
+                     "Casa · Techo", "Muro", "Losa"]
+    walls, floor, carp, roof, muro, losa = vp.scene.groups[-6:]
+    for g in (walls, floor, roof, muro, losa):
+        assert is_closed(g.mesh), g.name
+    # The front wall has a notch for the door and a hole for the window;
+    # the gable ends rise to the ridge.
+    zs = [v.position.z() for v in walls.mesh.vertices]
+    assert max(zs) > 3.0 + 1.0
+    assert any(len(f.hole_loops) == 1 for f in walls.mesh.faces)
+    # Carpentry: one door leaf (a solid) and three panes (faces with opacity).
+    panes = [f for f in carp.mesh.faces if f.attrs.get("opacity")]
+    assert len(panes) == 3
+    assert len(carp.mesh.faces) == 3 + 6
+    # The roof overhangs the walls on every side.
+    xs = [v.position.x() for v in roof.mesh.vertices]
+    assert min(xs) < 0 and max(xs) > 6
+    # The slab kept its hole.
+    assert sum(1 for f in losa.mesh.faces if f.hole_loops) == 2
+    # Hip and flat roofs close too.
+    r = ai.run_transactional(vp, (
+        "a = house(5, 8, roof='hip', origin=(30, 0), name='H')\n"
+        "b = house(5, 5, roof='flat', origin=(40, 0), name='F')"), scope)
+    assert r["error"] is None, r["error"]
+    for g in vp.scene.groups[-6:]:
+        assert is_closed(g.mesh), g.name
 
 
 def test_code_less_claims_and_agentic_models_are_caught():

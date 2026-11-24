@@ -304,60 +304,6 @@ class _StayOpenMenu(QMenu):
         super().keyPressEvent(event)
 
 
-class _DockDropZone(QWidget):
-    """Where a dragged tray tab can go, shown while it is dragged: a
-    translucent panel at one edge of the viewport, lit while the pointer is
-    over it; dropping there docks the tray (or the whole side) there."""
-
-    def __init__(self, window, area, label: str) -> None:
-        super().__init__(window)
-        self.window_ = window
-        self.area = area
-        self.label = label
-        self._hot = False
-        self.setAcceptDrops(True)
-        self.hide()
-
-    def set_hot(self, on: bool) -> None:
-        self._hot = on
-        self.update()
-
-    def dragEnterEvent(self, event) -> None:
-        if event.mimeData().hasFormat(self.window_.DOCK_MIME):
-            event.acceptProposedAction()
-            self.set_hot(True)
-
-    def dragMoveEvent(self, event) -> None:
-        if event.mimeData().hasFormat(self.window_.DOCK_MIME):
-            event.acceptProposedAction()
-
-    def dragLeaveEvent(self, event) -> None:
-        self.set_hot(False)
-
-    def dropEvent(self, event) -> None:
-        if event.mimeData().hasFormat(self.window_.DOCK_MIME):
-            self.window_.drop_on_side(event.mimeData(), self.area)
-            event.acceptProposedAction()
-        self.set_hot(False)
-
-    def paintEvent(self, event) -> None:
-        from PySide6.QtGui import QColor, QPainter, QPen
-        p = QPainter(self)
-        p.setRenderHint(QPainter.Antialiasing)
-        from views.theme import accent_color
-        accent = accent_color()
-        fill = QColor(accent)
-        fill.setAlpha(110 if self._hot else 45)
-        p.setBrush(fill)
-        pen = QPen(accent, 2 if self._hot else 1)
-        pen.setStyle(Qt.SolidLine if self._hot else Qt.DashLine)
-        p.setPen(pen)
-        p.drawRoundedRect(self.rect().adjusted(4, 4, -4, -4), 8, 8)
-        p.setPen(QColor(255, 255, 255) if self._hot else accent)
-        p.drawText(self.rect(), Qt.AlignCenter | Qt.TextWordWrap, self.label)
-        p.end()
-
-
 class _OpenAborted(Exception):
     """Raised by an open's progress callback when the user closed the
     window while the file was still coming in (#1269): the load unwinds
@@ -444,11 +390,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         self._doc_stack = QStackedWidget(area)
         box.addWidget(self._doc_stack, 1)
         self._empty_on = False
-        # The views button: the layouts of the project in front.
-        from views.multi_view import LayoutPicker
-        self._layout_picker = LayoutPicker(self)
-        self._layout_picker.chosen.connect(self.set_view_layout)
-        bar.viewsRequested.connect(self._pick_view_layout)
         self._doc.viewport = self._make_viewport()
         self._doc_stack.addWidget(self._doc.viewport.keys_stand_in or self._doc.viewport)
         bar.add(self._doc)
@@ -996,14 +937,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         vp = self._active_view()
         vp.set_projection(mode)
         self._sync_projection_buttons(vp.camera.projection_mode())
-
-    def on_active_view_changed(self) -> None:
-        """Another of several views is worked in (or back to one view): the
-        Styles and the projection buttons show what that view shows."""
-        self._sync_style_menu()
-        if self.__dict__.get("_projection_actions"):
-            self._sync_projection_buttons(
-                self._active_view().camera.projection_mode())
 
     def _refresh_toolbar_icons(self) -> None:
         """Re-draw the programmatic toolbar icons for the current palette so a
@@ -1664,15 +1597,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         # does the same on the left, next to it so the key can be found.
         window_menu.addAction(self._act_sidebar)
         window_menu.addAction(self._act_left_sidebar)
-        # With several views, the one under the pointer alone and back.
-        maximize_action = QAction(tr("Maximize view"), self)
-        maximize_action.setShortcut(QKeySequence("Ctrl+Space"))
-        maximize_action.setEnabled(False)
-        maximize_action.triggered.connect(self._toggle_maximized_view)
-        self.addAction(maximize_action)
-        window_menu.addAction(maximize_action)
-        self._act_maximize_view = maximize_action
-
         window_menu.addSeparator()
         # Ctrl+U: the units panel straight away (the Preferences page).
         units_action = QAction(tr("Units…"), self)
@@ -2089,8 +2013,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         if btn is None:
             return
         from PySide6.QtCore import QPoint
-        # The stack of projects, not the viewport: with several views the
-        # viewport is one cell of them (views/multi_view.py).
         area = self.__dict__.get("_doc_stack") or self._shown_viewport()
         # Nothing open (the empty area): no panels, no handles.
         empty = bool(self.__dict__.get("_empty_on"))
@@ -2217,8 +2139,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
 
     # ---- Side trays on either side, as in the sheet composer ----------------
     #: A tray tab dragged out of its bar: the dock's object name.
-    DOCK_MIME = "application/x-ingetrazo-dock"
-    _OUT_PX = 24
 
     def _setup_side_docks(self) -> None:
         """The trays as the composer's side panels: tabs on top, like the
@@ -2725,8 +2645,7 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         QTimer.singleShot(0, self, self._place_sidebar_handle)
 
     def _side_dock_event(self, obj, event) -> bool:
-        """The drag-a-tab-to-the-other-side part of the event filter: True
-        when the event was taken."""
+        """Track layout changes in the remaining Qt tray tests."""
         from PySide6.QtCore import QEvent, QTimer
         t = event.type()
         if obj is self:
@@ -2753,126 +2672,8 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
                 if _tab_end_room(obj):
                     QTimer.singleShot(0, obj,
                                       lambda: self._measure_tabs_again(obj))
-            elif t == QEvent.MouseMove and event.buttons() & Qt.LeftButton:
-                i = obj.property("ingetrazo_press")
-                if i is not None and (i >= 0 or i == -2):
-                    r = obj.rect().adjusted(-self._OUT_PX, -self._OUT_PX,
-                                            self._OUT_PX, self._OUT_PX)
-                    if not r.contains(event.position().toPoint()):
-                        obj.setProperty("ingetrazo_press", -1)
-                        self._drag_dock_tab(obj, i, event)
-                        return True
-            elif t in (QEvent.DragEnter, QEvent.DragMove) and \
-                    event.mimeData().hasFormat(self.DOCK_MIME):
-                event.acceptProposedAction()
-                return True
-            elif t == QEvent.Drop and \
-                    event.mimeData().hasFormat(self.DOCK_MIME):
-                here = self._dock_of_tab(obj, 0)
-                if here is not None:
-                    self.drop_on_side(event.mimeData(),
-                                      self.dockWidgetArea(here))
-                event.acceptProposedAction()
-                return True
             return False
         return False
-
-    def drop_dock_on_viewport(self, event) -> None:
-        """A tray tab dropped on the viewport (its own drop handler calls
-        this): to the left side on the left half, to the right on the
-        right half."""
-        x = event.position().x()
-        self.drop_on_side(event.mimeData(), Qt.LeftDockWidgetArea
-                          if x < self.viewport.width() / 2
-                          else Qt.RightDockWidgetArea)
-        event.acceptProposedAction()
-
-    def _dock_named(self, mime):
-        name = bytes(mime.data(self.DOCK_MIME)).decode("utf-8")
-        return next((d for d in self._sidebar_docks()
-                     if d.objectName() == name), None)
-
-    def drop_on_side(self, mime, area) -> None:
-        """What a dragged tab carries goes to the ``area`` side: one tray
-        (its object name), or a whole side (``group:<area>``)."""
-        text = bytes(mime.data(self.DOCK_MIME)).decode("utf-8")
-        if text.startswith("group:"):
-            self.move_side(Qt.DockWidgetArea(int(text[6:])), area)
-            return
-        dock = self._dock_named(mime)
-        if dock is not None:
-            self.move_dock(dock, area)
-
-    def move_side(self, from_area, to_area) -> None:
-        """Every tray of one side to the other, in their order, the one in
-        front staying in front: the whole sidebar dragged across."""
-        if from_area == to_area:
-            return
-        docks = self._side_docks(from_area)
-        if not docks:
-            return
-        front = next((d for d in docks
-                      if not d.visibleRegion().isEmpty()), docks[0])
-        for d in docks:
-            self.move_dock(d, to_area)
-        front.raise_()
-
-    # ---- Drop zones: where a dragged tab can go -------------------------------
-    def _drop_zones(self) -> list:
-        zones = getattr(self, "_zones", None)
-        if zones is None:
-            zones = self._zones = [
-                _DockDropZone(self, Qt.LeftDockWidgetArea,
-                              tr("Left side")),
-                _DockDropZone(self, Qt.RightDockWidgetArea,
-                              tr("Right side"))]
-        return zones
-
-    def show_drop_zones(self, on: bool) -> None:
-        """While a tab is dragged, a panel at each edge of the viewport
-        says where it can be docked; the one under the pointer lights up,
-        and dropping there docks it on that side."""
-        from PySide6.QtCore import QRect
-        vp = self.viewport.keys_stand_in or self.viewport
-        top_left = vp.mapTo(self, vp.rect().topLeft())
-        w = max(120, min(220, vp.width() // 4))
-        h = vp.height()
-        for zone in self._drop_zones():
-            if not on:
-                zone.hide()
-                continue
-            x = top_left.x() + (0 if zone.area == Qt.LeftDockWidgetArea
-                                else vp.width() - w)
-            zone.setGeometry(QRect(x, top_left.y(), w, h))
-            zone.set_hot(False)
-            zone.show()
-            zone.raise_()
-
-    def _drag_dock_tab(self, bar, index, event) -> None:
-        from PySide6.QtCore import QEvent, QMimeData
-        from PySide6.QtGui import QDrag, QMouseEvent
-        group = index == -2
-        dock = self._dock_of_tab(bar, 0 if group else index)
-        # End Qt's own move of the tab first, where it stands.
-        from PySide6.QtWidgets import QApplication
-        QApplication.sendEvent(bar, QMouseEvent(
-            QEvent.MouseButtonRelease, event.position(),
-            event.globalPosition(), Qt.LeftButton, Qt.NoButton,
-            event.modifiers()))
-        if dock is None:
-            return
-        data = QMimeData()
-        payload = (f"group:{int(self.dockWidgetArea(dock).value)}" if group
-                   else dock.objectName())
-        data.setData(self.DOCK_MIME, payload.encode("utf-8"))
-        drag = QDrag(bar)
-        drag.setMimeData(data)
-        drag.setPixmap(bar.grab() if group else bar.grab(bar.tabRect(index)))
-        self.show_drop_zones(True)
-        try:
-            drag.exec(Qt.MoveAction)
-        finally:
-            self.show_drop_zones(False)
 
     def _on_preferences(self) -> None:
         """Window ▸ Preferences: the scattered QSettings in one dialog."""
@@ -2929,7 +2730,8 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         act = ext_menu.addAction(tr("Develop an extension…"))
         act.setStatusTip(tr(
             "Open the guide to writing extensions for IngeTrazo."))
-        act.triggered.connect(self._on_develop_plugin)
+        from ingetrazo_render import run_model_menu
+        act.triggered.connect(lambda: run_model_menu(self, "develop_plugin"))
 
         # The app itself (main.py) defers the plugins' setup until the window
         # is on screen (#440, @cdblue999: 26 third-party extensions held the
@@ -3162,9 +2964,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
                 tr("Could not load extensions: {error}",
                    error=f"{type(exc).__name__}: {exc}"))
 
-    PLUGIN_GUIDE_URL = ("https://github.com/ingelibre/ingetrazo"
-                        "/blob/main/docs/plugins.md")
-
     @staticmethod
     def example_extensions() -> list:
         """``(path, title, blurb)`` of each extension shipped with the app
@@ -3180,10 +2979,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         folder = user_plugins_dir()
         folder.mkdir(parents=True, exist_ok=True)
         open_url(folder)
-
-    def _on_develop_plugin(self) -> None:
-        from core.desktop_open import open_url
-        open_url(self.PLUGIN_GUIDE_URL)
 
     # ---- Extension panels (views.extension_api.ExtensionApp.add_panel) -------
     def _register_extension_dock(self, dock) -> None:
@@ -3653,9 +3448,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
             display.tools.pick_up()
             display.set_scene(self.viewport.scene)
             display.update()
-        grid = self._doc.view_grid if self.__dict__.get("_doc") else None
-        if grid is not None and key != "select":
-            grid.cross.hide()
         action = self._tool_actions.get(key)
         if action is not None:
             action.setChecked(True)
@@ -3857,73 +3649,19 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
 
     # ---- Display styles ----------------------------------------------------
     def _active_view(self):
-        """The view the Styles and the projection act on: with several views,
-        the one worked in (its label in the accent colour); else the
-        window's own."""
-        doc = self.__dict__.get("_doc")
-        grid = getattr(doc, "view_grid", None) if doc is not None else None
-        if grid is not None and grid.is_enabled():
-            cell = grid.active_cell()
-            vp = cell.viewport if cell is not None else None
-            if vp is not None and not cell.isHidden():
-                return vp
         return self.viewport
 
     def active_style(self):
-        """The style the active view shows (to read: menu, Styles panel)."""
-        vp = self._active_view()
-        if vp is self.viewport:
-            return getattr(vp.scene, "display_style", None)
-        return vp._view_style()
+        return self.viewport.scene.display_style
 
-    def own_style(self):
-        """The style to change in place, the active view's own: a view of
-        several that still showed the window's style gets a copy first, so
-        what is changed there stays there."""
-        vp = self._active_view()
-        style = getattr(vp.scene, "display_style", None)
-        if vp is self.viewport:
-            self.keep_other_views_style()
-            return style
-        if vp.view_style is None and style is not None:
-            vp.view_style = style.copy()
-        return vp.view_style
+    own_style = active_style
 
-    def set_active_style(self, style) -> None:
-        """Give the active view ``style``: the window's view keeps it in the
-        scene (saved with the file); another of several views, its own."""
-        vp = self._active_view()
-        if vp is self.viewport:
-            self.keep_other_views_style()
-            vp.scene.display_style = style
-        else:
-            vp.view_style = style
+    def set_active_style(self, style):
+        self.viewport.scene.display_style = style
         self.repaint_styled()
 
-    def keep_other_views_style(self) -> None:
-        """The window's view is about to change its style (a style, a
-        switch, a scene): the other views shown keep the one they show, so
-        a change in one view never reaches the others."""
-        doc = self.__dict__.get("_doc")
-        grid = getattr(doc, "view_grid", None) if doc is not None else None
-        if grid is None or not grid.is_enabled():
-            return
-        style = getattr(self.viewport.scene, "display_style", None)
-        if style is None:
-            return
-        for vp in grid.extras():
-            if vp.view_style is None:
-                vp.view_style = style.copy()
-
-    def repaint_styled(self) -> None:
-        """Redraw every view shown after a style change: the others keep
-        their own style, and none waits for the mouse to show it."""
+    def repaint_styled(self):
         self.viewport.update()
-        doc = self.__dict__.get("_doc")
-        grid = getattr(doc, "view_grid", None) if doc is not None else None
-        if grid is not None and grid.is_enabled():
-            for vp in grid.visible_extras():
-                vp.update()
 
     def _apply_display_style(self, preset) -> None:
         """Activate a built-in style (a COPY — presets stay pristine) in the
@@ -4609,26 +4347,10 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         from views.wgpu_ui import free_area   # the panels' free area (B8)
         self.viewport.camera.fit_box(bounds[0], bounds[1], free=free_area(self))
         self.viewport.update()
-        grid = self._doc.view_grid
-        if grid is not None:                 # every view shown frames it
-            grid.fit_box(bounds[0], bounds[1])
 
     def _on_smart_zoom(self) -> None:
-        """A trackpad's smart zoom (two-finger double tap): Zoom Extents;
-        another one with the view untouched since goes back to where it
-        was, the way a double tap zooms in and back out on macOS (#248)."""
-        back = getattr(self, "_smart_zoom_back", None)
-        if back is not None and back[1] == self._camera_pose():
-            cam = self.viewport.camera
-            x, y, z, cam.distance, cam.yaw, cam.pitch = back[0]
-            cam.target = (x, y, z)
-            self._smart_zoom_back = None
-            self.viewport.update()
-            return
-        before = self._camera_pose()
-        self._on_zoom_extents()
-        after = self._camera_pose()
-        self._smart_zoom_back = (before, after) if after != before else None
+        from ingetrazo_render import smart_zoom
+        smart_zoom(self)
 
     def _on_zoom_selection(self) -> None:
         """Zoom Extents over the selection. Nothing selected: nothing."""
@@ -4639,9 +4361,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         from views.wgpu_ui import free_area   # the panels' free area (B8)
         self.viewport.camera.fit_box(lo, hi, free=free_area(self))
         self.viewport.update()
-        grid = self._doc.view_grid
-        if grid is not None:                 # every view shown frames it,
-            grid.fit_box(lo, hi)             # as Zoom Extents does
 
     def _sheet_tab_menu(self, index: int, global_pos) -> None:
         self._ensure_composer().sheet_tab_menu(index, global_pos, self)
@@ -4769,13 +4488,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
     def _on_standard_view(self, key: str) -> None:
         """A standard view (Views bar, Ctrl+1…7) in the view being worked
         in; one of several extra views takes it as its cell's view."""
-        vp = self._active_view()
-        if vp is not self.viewport:
-            grid = self._doc.view_grid
-            cell = next(c for c in grid.cells if c.viewport is vp)
-            cell.pick_view(key)
-            self._sync_projection_buttons(vp.camera.projection_mode())
-            return
         if key == "iso":
             self.viewport.camera.snap_iso()
         else:
@@ -5327,7 +5039,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
             doc.composer.show()
         self.documentChanged.emit()
         self._refresh_scene_tabs()
-        self._light_views_button()
         vp.setFocus()
 
     # ---- every project closed: the empty area --------
@@ -5350,8 +5061,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         self._activate_tool("select")
         bar = self._project_tabs
         bar.tabs.setVisible(False)
-        bar.views_button.setVisible(False)
-        self._layout_picker.hide()
         self._hide_panels()
         strip = getattr(self, "_sheet_tabs", None)
         if strip is not None:
@@ -5371,7 +5080,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         self._empty_on = False
         bar = self._project_tabs
         bar.tabs.setVisible(True)
-        bar.views_button.setVisible(True)
         self.set_tool_filter(None)
         self._doc_stack.setVisible(True)
         self._show_panels_again()
@@ -5379,7 +5087,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         if strip is not None and self._workspace is None:
             strip.setVisible(True)
         self._refresh_scene_tabs()
-        self._light_views_button()
         self._place_sidebar_handle()
         self.viewport.setFocus()
         self._update_title()
@@ -5410,121 +5117,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         for d in on_top:
             if isValid(d):
                 d.raise_()
-
-    # ---- one, two, three or four views of a project (views/multi_view.py) ---
-    def view_layout(self) -> str:
-        """The project in front's layout: ``single``, ``two``,
-        ``two_wide``, ``three`` or ``four``."""
-        return self._doc.view_layout
-
-    def set_view_layout(self, key: str) -> None:
-        """Show the project in front as ``key`` says; the other projects
-        keep theirs. Not an edit of the document."""
-        from views.multi_view import LAYOUT_KEYS
-        doc = self._doc
-        if key not in LAYOUT_KEYS or key == doc.view_layout:
-            self._light_views_button()
-            return
-        grid = self._view_grid_of(doc, make=key != "single")
-        if grid is None and key != "single":
-            self.statusBar().showMessage(tr(
-                "An extension shows its own views here: close it first."),
-                5000)
-            self._light_views_button()
-            return
-        clean = not self._is_dirty()
-        doc.view_layout = key
-        if grid is not None:
-            grid.set_layout(key)
-        if clean:
-            self._saved_version = self.viewport.scene.version
-        self._light_views_button()
-        self._update_title()
-
-    def _views_dict(self, doc):
-        """How many views ``doc`` shows and where their lines are, for its
-        file; None for one view."""
-        grid = doc.view_grid
-        if grid is None or doc.view_layout == "single":
-            return None
-        return {"layout": doc.view_layout, **grid.lines_state()}
-
-    def _apply_views_home(self) -> None:
-        """Open in the views the file was saved in; a file without them
-        leaves the tab's as they are."""
-        home = getattr(self.viewport.scene, "views_home", None)
-        if not isinstance(home, dict) or not isinstance(home.get("layout"), str):
-            return
-        self.set_view_layout(home["layout"])
-        grid = self._doc.view_grid
-        if grid is not None and self._doc.view_layout == home["layout"]:
-            grid.apply_lines_state(home)
-
-    def _view_grid_of(self, doc, make: bool = False):
-        """``doc``'s grid of views; with ``make``, made now if it has none
-        — its viewport moves into it once, into the tab's slot, the way an
-        extension puts its own widget there. None while an extension's
-        widget holds the slot."""
-        grid = doc.view_grid
-        if grid is not None or not make:
-            return grid
-        from views.wgpu_view import WgpuView
-        if (getattr(doc, "_renderer_wgpu", False)
-                and isinstance(doc.stand_in, WgpuView)):
-            return self._make_metal_grid(doc)
-        return None
-
-    def _make_metal_grid(self, doc):
-        """Under Metal: the native view moves into the grid's window cell
-        (its NSView and the resident scene stay); the other cells get views
-        of that scene (views/wgpu_peer.py). It stays ``doc.stand_in``: the
-        window's Metal paths keep reaching the document's first view."""
-        from views.multi_view import ViewGrid
-        display = doc.stand_in
-        stack = self._doc_stack
-        index = stack.indexOf(display)
-        grid = ViewGrid(doc.viewport, display=display)
-        grid.setObjectName("view_grid")
-        doc.view_grid = grid
-        stack.insertWidget(index if index >= 0 else stack.count(), grid)
-        display.show()
-        if doc is self._doc:
-            stack.setCurrentWidget(grid)
-        return grid
-
-    def _pick_view_layout(self) -> None:
-        self._light_views_button()          # the click toggled it
-        self._layout_picker.show_for(self.view_layout(),
-                                     self._project_tabs.views_button)
-
-    def _light_views_button(self) -> None:
-        button = self.__dict__.get("_project_tabs")
-        doc = self.__dict__.get("_doc")
-        if button is None or doc is None:
-            return
-        button = button.views_button
-        on = doc.view_layout != "single"
-        if button.isChecked() != on:
-            button.setChecked(on)
-        self._sync_maximize_action()
-
-    def _toggle_maximized_view(self) -> None:
-        grid = self._doc.view_grid
-        if grid is not None:
-            grid.toggle_maximized_here()
-
-    def _sync_maximize_action(self) -> None:
-        """Window ▸ Maximize view (Ctrl+Space): only with several views, and
-        Restore views while one fills the area."""
-        act = self.__dict__.get("_act_maximize_view")
-        doc = self.__dict__.get("_doc")
-        if act is None or doc is None:
-            return
-        grid = doc.view_grid
-        act.setEnabled(grid is not None and grid.is_enabled()
-                       and not self.is_empty())
-        full = grid is not None and grid.maximized_index() is not None
-        act.setText(tr("Restore views") if full else tr("Maximize view"))
 
     def _update_tab(self, doc=None) -> None:
         """The tab's name, its unsaved-changes dot and its tooltip."""
@@ -5619,17 +5211,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         if stand_in is not None:
             self._doc_stack.removeWidget(stand_in)
             stand_in.hide()
-        # Its grid of views goes with it, extra viewports and all.
-        grid, doc.view_grid = doc.view_grid, None
-        if grid is not None:
-            grid.release_surfaces()
-            for extra in grid.extras():
-                try:
-                    extra.set_active_tool(None)
-                except Exception:  # noqa: BLE001 — never block closing
-                    pass
-            grid.deleteLater()
-        # Release peer surfaces before closing their shared Metal renderer.
         from views.wgpu_view import WgpuView
         if isinstance(display, WgpuView):
             display._refresh_timer.stop()
@@ -5729,9 +5310,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
     def _follow_in_extra_views(self) -> None:
         """The window's viewport has another document: the project's other
         views go with it, or a tool in one would edit the one left behind."""
-        grid = self._doc.view_grid
-        if grid is not None:
-            grid.follow_document()
 
     def workspace(self):
         """The extension workspace shown instead of the model, or None."""
@@ -5941,7 +5519,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
             self._doc._after_picture = []
             self.viewport.inference.reset()
             self._apply_camera_home()
-            self._apply_views_home()
             self._current_path = path
             self._remember_recent(path)
             self._doc._after_picture.append(self._after_links_loaded)
@@ -5986,13 +5563,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
                           "it to keep the repaired document.",
                           n=repaired, name=path.name)
                 _dialogs.warning(self, tr("Document repaired"), text)
-            # The project's other views show what came in, not what was there.
-            grid = self._doc.view_grid
-            if grid is not None:
-                clean = not self._is_dirty()
-                grid.follow_document()
-                if clean:
-                    self._saved_version = self.viewport.scene.version
             self.viewport.notify_scene_changed()
             # The panels wait for the first picture; the scene tabs row
             # reads the scenes itself and comes up with the document.
@@ -6108,7 +5678,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
             import copy
             scene = copy.copy(doc.viewport.scene)
             scene.camera_home = self._camera_dict(doc.viewport)
-            scene.views_home = self._views_dict(doc)
             stats = igz_format.export_igz(scene, path, confirm)
             if stats and stats["missing"]:
                 _dialogs.warning(self, tr("Saved with missing textures"),
@@ -6133,7 +5702,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
             return
         try:
             vp.scene.camera_home = self._camera_dict(vp)
-            vp.scene.views_home = self._views_dict(doc)
             # Linked files: their paths relative to where this is saved.
             from core import links as _links
             _links.refresh_paths(vp.scene, path)
@@ -6543,37 +6111,9 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
             dialog.setModal(False)
             dialog.show()
 
-    def _on_export_stl(self) -> None:
-        # An STL records no unit and slicers read it as millimetres, so the
-        # model's own metres came out 1000x too small (#513): ask, the way
-        # the import does, with millimetres first and the last choice kept.
-        from PySide6.QtWidgets import (QComboBox, QDialog, QDialogButtonBox,
-                                       QFormLayout)
-
-        keys = ["mm", "cm", "m", "in", "ft"]
-        labels = [tr("Millimetres"), tr("Centimetres"), tr("Metres"),
-                  tr("Inches"), tr("Feet")]
-        settings = QSettings()
-        guess = str(settings.value("export/stl_unit", "mm") or "mm")
-        dialog = QDialog(self)
-        dialog.setWindowTitle(tr("Export STL"))
-        form = QFormLayout(dialog)
-        units = QComboBox(dialog)
-        units.addItems(labels)
-        units.setCurrentIndex(keys.index(guess) if guess in keys else 0)
-        form.addRow(tr("Unit of the STL file (3D printing programs expect "
-                       "millimetres)"), units)
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.Ok | QDialogButtonBox.Cancel, dialog)
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        form.addRow(buttons)
-        if dialog.exec() != QDialog.Accepted:
-            return
-        unit = keys[units.currentIndex()]
-        settings.setValue("export/stl_unit", unit)
-        self._export("STL", "stl", tr("STL mesh (*.stl)"),
-                     lambda scene, path: stl_format.save_stl(scene, path, unit))
+    def _on_export_stl(self):
+        from views.wgpu_deliveries import export_form
+        return export_form(self, one_off=True, initial_format="stl")
 
     def _on_export_obj(self) -> None:
         self._export("OBJ", "obj", tr("Wavefront OBJ (*.obj)"), obj_format.save_obj)
@@ -6614,65 +6154,9 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         texture images beside the .dae (send both, or use GLB)."""
         self._export("COLLADA", "dae", tr("COLLADA (*.dae)"), dae_format.save_dae)
 
-    def _on_export_view_dxf(self) -> None:
-        """The view on screen as a 2D line drawing for CAD, hidden lines
-        removed (José Castro Basso, FADU–UDELAR) — see _view_line_groups."""
-        path, _ = file_dialogs.getSaveFileName(
-            self, tr("Export current view as DXF"), "vista.dxf",
-            "DXF (*.dxf)")
-        if not path:
-            return
-        from formats.dxf_out import save_dxf_layers
-        self._export_view_lines(path, save_dxf_layers, tr("Export DXF failed"))
-
-    def _export_view_lines(self, path: str, save, failed: str) -> None:
-        QApplication.setOverrideCursor(Qt.WaitCursor)
-        try:
-            from core.hlr import (KIND_CUT, KIND_PROFILE, hlr_drawing,
-                                  hlr_perspective)
-            vp = self._active_view()    # with several views, the active one
-            geometry = vp.hlr_geometry()
-            solids, texts = [], []
-            if vp.camera.perspective:
-                groups = [("VISTA", hlr_perspective(vp.scene, vp.camera,
-                                                    geometry=geometry))]
-            elif len(vp.scene.layers) > 1:
-                # With layers, each one as a DXF layer of its own, with its
-                # colour and line type — as the composer's export.
-                from core.layers import line_styles
-                from formats.dxf_views import dxf_groups_by_layer
-                tagged = vp.hlr_geometry(tags=True)
-                d = hlr_drawing(vp.scene, vp.camera, layers=True,
-                                geometry=tagged)
-                d.styles = line_styles(vp.scene, True)
-                from core.layers import export_labels
-                d.labels = export_labels(vp.scene)
-                groups = dxf_groups_by_layer(d, "VISTA", hidden_lines=False,
-                                             texts=texts)
-            else:
-                d = hlr_drawing(vp.scene, vp.camera, geometry=geometry)
-                k = d.kinds
-                groups = [("VISTA", d.segs[(k != KIND_CUT)
-                                           & (k != KIND_PROFILE)]),
-                          ("VISTA-PERFIL", d.segs[k == KIND_PROFILE]),
-                          ("VISTA-CORTE", d.segs[k == KIND_CUT])]
-            if not vp.camera.perspective:
-                # The cut hatches and fills too, as a sheet at 1:50 draws
-                # them — as the composer's export does at its frame's scale.
-                from formats.dxf_views import dxf_cut_layers
-                lines, solids = dxf_cut_layers(
-                    vp.scene, vp.camera,
-                    geometry=tagged if len(vp.scene.layers) > 1
-                    else vp.hlr_geometry(tags=True))
-                groups += lines
-            n = save(path, groups, solids, texts)
-        except Exception as exc:  # noqa: BLE001
-            QApplication.restoreOverrideCursor()
-            _dialogs.critical(self, failed, str(exc))
-            return
-        QApplication.restoreOverrideCursor()
-        self.statusBar().showMessage(
-            tr("Exported {n} lines to {name}", n=n, name=path), 5000)
+    def _on_export_view_dxf(self):
+        from views.wgpu_deliveries import export_form
+        return export_form(self, one_off=True, initial_format="dxf")
 
     def _export(self, label: str, suffix: str, file_filter, writer) -> None:
         base = (self._current_path.stem if self._current_path is not None
@@ -6766,8 +6250,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         for doc in self._documents:
             if doc.composer is not None:
                 doc.composer.close()
-            if doc.view_grid is not None:
-                doc.view_grid.release_surfaces()
             if doc.viewport is not None:
                 display = getattr(doc.viewport, "keys_stand_in", None)
                 if display is not None:

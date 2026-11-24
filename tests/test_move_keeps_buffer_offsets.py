@@ -12,6 +12,7 @@ draw then made over. Each answer here is checked against the one made
 afresh, and the frame against what it has to show."""
 from __future__ import annotations
 
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -38,9 +39,6 @@ def _square(x0, y0, s=1.0, color=None):
     return m
 
 
-def _close(win):
-    win._saved_version = win.viewport.scene.version
-    win.close()
 
 
 def _cube():
@@ -55,12 +53,11 @@ def _cube():
 
 
 @pytest.fixture
-def placed():
+def placed(native_host):
     from core.group import Group
-    from views.main_window import MainWindow
-    win = MainWindow()
+    win = native_host.window
     v = win.viewport
-    v.resize(1000, 700)
+    native_host.resize(1000, 700, 1.)
     v.scene.guides.clear()
     proto, glass = _cube(), _cube()
     for f in glass.faces:
@@ -77,10 +74,7 @@ def placed():
     v.camera.perspective = False
     v.camera.fit_to(V(-2, -2, 0), V(18, 12, 1))
     v._PICK_LAZY_MIN_FACES = 1
-    try:
-        yield v
-    finally:
-        _close(win)
+    yield v
 
 
 def test_the_lazy_pick_table_is_kept_on_pick_up_and_its_rows_follow_a_drop(placed):
@@ -138,49 +132,45 @@ def test_an_eviction_keeps_the_bakes_the_static_buffers_draw(placed,
             assert id(g) in inst                   # the draw still needs it
 
 
-def test_arc_midpoints_are_kept_per_mesh_however_many_and_follow_the_content(
+def test_arc_midpoints_are_kept_per_mesh_however_many_and_follow_the_content(native_host,
         monkeypatch):
     from core.group import Group
-    from views.main_window import MainWindow
     from tests.controller_surface import ControllerSurface as Viewport
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        calls = []
+    win = native_host.window
+    vp = win.viewport
+    calls = []
 
-        def mids(mesh):
-            calls.append(id(mesh))
-            return [V(0.0, 0.0, 0.0)]
-        monkeypatch.setattr(type(vp), "_mesh_arc_midpoints",
-                            staticmethod(mids))
-        gs = []
-        for k in range(2100):                      # more than 2 048 meshes
-            g = Group(_square(0.0, 0.0, 0.1), name=f"S{k}")
-            m = QMatrix4x4()
-            m.translate(float(k), 0.0, 0.0)
-            g.xform = m
-            gs.append(g)
-        vp.scene.groups += gs
-        vp.scene.version += 1
-        vp._arc_midpoints(0.0, 0.0)
-        first = len(calls)
-        assert first >= 2100
-        kept = vp._arc_mid_cache[1]
-        vp.scene.select([gs[0]])                   # a view-only change
-        vp._arc_midpoints(0.0, 0.0)
-        assert len(calls) == first
-        assert vp._arc_mid_cache[1] is kept        # not even remapped
+    def mids(mesh):
+        calls.append(id(mesh))
+        return [V(0.0, 0.0, 0.0)]
+    monkeypatch.setattr(type(vp), "_mesh_arc_midpoints",
+                        staticmethod(mids))
+    gs = []
+    for k in range(2100):                      # more than 2 048 meshes
+        g = Group(_square(0.0, 0.0, 0.1), name=f"S{k}")
         m = QMatrix4x4()
-        m.translate(0.0, 9.0, 0.0)
-        gs[5].xform = m
-        vp.scene.version += 1                      # content: remapped...
-        vp._arc_midpoints(0.0, 0.0)
-        assert len(calls) == first                 # ...not worked out again
-        pts = {(round(p.x(), 6), round(p.y(), 6))
-               for p, _ctx in vp._arc_mid_cache[1]}   # (point, snap context)
-        assert (0.0, 9.0) in pts and (5.0, 0.0) not in pts
-    finally:
-        _close(win)
+        m.translate(float(k), 0.0, 0.0)
+        g.xform = m
+        gs.append(g)
+    vp.scene.groups += gs
+    vp.scene.version += 1
+    vp._arc_midpoints(0.0, 0.0)
+    first = len(calls)
+    assert first >= 2100
+    kept = vp._arc_mid_cache[1]
+    vp.scene.select([gs[0]])                   # a view-only change
+    vp._arc_midpoints(0.0, 0.0)
+    assert len(calls) == first
+    assert vp._arc_mid_cache[1] is kept        # not even remapped
+    m = QMatrix4x4()
+    m.translate(0.0, 9.0, 0.0)
+    gs[5].xform = m
+    vp.scene.version += 1                      # content: remapped...
+    vp._arc_midpoints(0.0, 0.0)
+    assert len(calls) == first                 # ...not worked out again
+    pts = {(round(p.x(), 6), round(p.y(), 6))
+           for p, _ctx in vp._arc_mid_cache[1]}   # (point, snap context)
+    assert (0.0, 9.0) in pts and (5.0, 0.0) not in pts
 
 
 def test_a_moved_container_moves_the_rows_of_the_placements_inside_it(placed):

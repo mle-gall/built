@@ -21,7 +21,7 @@ def menu():
     vp = SimpleNamespace(scene=scene, history=History(scene), camera=OrbitCamera(),
                          update=lambda: None, notify_scene_changed=lambda: None)
     messages = []
-    host = SimpleNamespace(viewport=vp, _scene_tabs=SceneMark(), active_style=lambda: None,
+    host = SimpleNamespace(viewport=vp, _active_view=lambda: vp, _scene_tabs=SceneMark(), active_style=lambda: None,
                            statusBar=lambda: SimpleNamespace(showMessage=lambda s, ms: messages.append(s)),
                            _doc=SimpleNamespace(stand_in=None))
     return ShellScenes(host), host, messages

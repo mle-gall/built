@@ -13,6 +13,7 @@ hidden inside a group drew there the same way.
 """
 from __future__ import annotations
 
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import math
 import os
 
@@ -146,31 +147,25 @@ def test_a_face_hidden_inside_a_group_is_left_out():
     assert _tris(scene) == 2 * BOX - 4
 
 
-def test_collect_geometry_agrees_with_the_viewport():
+def test_collect_geometry_agrees_with_the_viewport(native_host):
     """The two ways a sheet gets the model see the same thing."""
-    from views.main_window import MainWindow
-    win = MainWindow()
-    win.resize(800, 600)
-    win.show()
+    win = native_host.window
+    native_host.resize(800, 600, 1.)
     _app.processEvents()
-    try:
-        vp = win.viewport
-        top = _box(0, "top")
-        child = _nest(top, _box(5, "child"))
-        vp.scene.groups.append(top)
-        vp.notify_scene_changed()
-        _app.processEvents()
+    vp = win.viewport
+    top = _box(0, "top")
+    child = _nest(top, _box(5, "child"))
+    vp.scene.groups.append(top)
+    vp.notify_scene_changed()
+    _app.processEvents()
 
-        def both():
-            return len(vp.hlr_geometry()[0]), _tris(vp.scene)
+    def both():
+        return len(vp.hlr_geometry()[0]), _tris(vp.scene)
 
-        assert both() == (2 * BOX, 2 * BOX)
-        vp.history.execute(HideCommand([child], hidden=True))
-        _app.processEvents()
-        assert both() == (BOX, BOX)
-        vp.history.undo()
-        _app.processEvents()
-        assert both() == (2 * BOX, 2 * BOX)
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    assert both() == (2 * BOX, 2 * BOX)
+    vp.history.execute(HideCommand([child], hidden=True))
+    _app.processEvents()
+    assert both() == (BOX, BOX)
+    vp.history.undo()
+    _app.processEvents()
+    assert both() == (2 * BOX, 2 * BOX)

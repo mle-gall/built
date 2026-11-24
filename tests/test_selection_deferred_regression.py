@@ -6,6 +6,8 @@ from core.mesh import Mesh, DeferredMesh
 from core.group import Group
 from core.scene import Scene
 from formats import igz
+from tests.controller_surface import live_image
+from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
 from tests.test_rendering_surface_regressions import viewport
 from tests.test_viewport_smooth_shading import _cylinder
 
@@ -24,33 +26,47 @@ def test_overlay_buffers_do_not_expand_lazy_mesh_or_follow_unrelated_edits(viewp
     loaded=Scene();igz.load_into(loaded,path)
     mesh=loaded.groups[0].mesh
     assert type(mesh) is DeferredMesh
-    vp=viewport;vp.scene.groups.extend(loaded.groups);vp.scene.version+=1
-    vp.makeCurrent()
-    try:
-        first={kind:vp._hidden_edge_draw(mesh,kind) for kind in ('visible','hidden','selected_hidden')}
-        assert type(mesh) is DeferredMesh
-        vp.scene.version+=1 # edit elsewhere, not this prototype
-        for kind,entry in first.items():
-            assert vp._hidden_edge_draw(mesh,kind) is entry
-        assert type(mesh) is DeferredMesh
-    finally:vp.doneCurrent()
+    group = loaded.groups.pop()
+    vp = viewport
+    vp.scene.groups.append(group)
+    vp.scene.show_hidden_geometry = True
+    vp.scene.select([group])
+    vp.scene.version += 1
+    display = vp.keys_stand_in
+    live_image(vp)
+    packed = display.packed
+    geometry = packed.vertices
+    assert packed.hidden_edge_commands["count"].sum() > 0
+    assert packed.edge_commands["count"].sum() > 0
+    assert type(mesh) is DeferredMesh
+    vp.scene.version += 1
+    live_image(vp)
+    assert display.packed.vertices is geometry and type(mesh) is DeferredMesh
 
 
 def test_edit_surroundings_keep_original_instance_batch(viewport):
-    from views.document_interaction import _InstanceBatch
-    from types import SimpleNamespace
-    vp=viewport
-    subject=Group(Mesh(),'open')
-    vp.scene.edit_group=subject
-    vp._edit_rest_mode='fade'
-    other=Group(Mesh(),'other')
-    batch=_InstanceBatch([other])
-    parts=vp._instanced_batches(batch)
-    assert parts[0][0] is batch
-    batch2=_InstanceBatch([subject])
-    parts=vp._instanced_batches(batch2)
-    assert parts[1][0] is batch2
-    vp.scene.edit_group=None
+    vp = viewport
+    mesh = _cylinder(Mesh())
+    subject = Group(mesh, "open")
+    other = Group(mesh, "other")
+    other.xform = QMatrix4x4()
+    other.xform.translate(3, 0, 0)
+    vp.scene.groups.extend([subject, other])
+    vp.scene.version += 1
+    vp.set_edit_rest_mode("fade")
+    live_image(vp)
+    display = vp.keys_stand_in
+    def row_and_prototype(group):
+        row, = display.uid_rows[group.uid]
+        return row, int(display.packed.instances["info"][row, 0])
+
+    resident = row_and_prototype(other)
+    vp.begin_group_edit(subject)
+    live_image(vp)
+    assert row_and_prototype(other) == resident
+    vp.end_group_edit()
+    live_image(vp)
+    assert row_and_prototype(other) == resident
 
 
 def test_context_reuses_assemblies_sharing_an_empty_container_mesh(viewport):

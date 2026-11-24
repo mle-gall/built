@@ -16,7 +16,8 @@ struct Out { @builtin(position) position: vec4f, @location(0) color: vec4f, @loc
  }
  var o: Out; o.position = camera.vp * point;
  let shade = select(0.62+0.38*abs(dot(normalize(normal),normalize(vec3f(0.35,0.25,1.)))),1.,EDGE || MARK);
- let unpainted = select(style.front.rgb, style.back.rgb, mark_pose.counts.y != 0u && color.r == 1.);
+ let face_color = select(style.front.rgb, style.back.rgb, mark_pose.counts.y != 0u && color.r == 1.);
+ let unpainted = select(face_color, style.edge.rgb, GHOST && EDGE);
  o.color = vec4f(select(color.rgb,unpainted,color.a == 0.)*shade,select(color.a,1.,color.a == 0.));
  o.section = dot(point,style.section_plane); return o;
 }

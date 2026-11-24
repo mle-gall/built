@@ -1,4 +1,5 @@
 """Tube triangulation, transformed smooth instances and thin back materials."""
+from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
 import math
 import os
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
@@ -60,19 +61,11 @@ def pixels(image):
 
 
 @pytest.fixture
-def viewport():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    win.show()
+def viewport(native_gpu_host):
+    win = native_gpu_host.window
     _app.processEvents()
-    try:
-        vp = win.viewport
-        if not vp.keys_stand_in._can_create_surface():
-            pytest.skip('requires a GPU presentation surface')
-        yield vp
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    vp = win.viewport
+    yield vp
 
 
 def test_thin_plate_reverse_material_does_not_show_through(viewport):

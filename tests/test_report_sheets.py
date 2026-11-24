@@ -1,4 +1,5 @@
 """Exercise the Rust sheet specs via the same host bindings as both apps."""
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import csv
 import io
 import json
@@ -111,10 +112,8 @@ def test_cut_list_group_copy_export(tmp_path, monkeypatch):
         assert list(csv.reader(f)) == sheet.table
 
 
-@pytest.mark.parametrize(("sid", "handler"), [("about", "_on_about"), ("extensions", "_on_manage_extensions"),
-                                               ("cutlist", "_on_cut_list")])
-def test_offscreen_window_commands_open_report_sheets(sid, handler):
-    from views.main_window import MainWindow
-    win = SimpleNamespace()
-    getattr(MainWindow, handler)(win)
+@pytest.mark.parametrize("sid", ["about", "extensions", "cutlist"])
+def test_offscreen_window_commands_open_report_sheets(native_host, sid):
+    win = native_host.window
+    win.run_command(sid)
     assert chrome_sheet.current(win).id == sid

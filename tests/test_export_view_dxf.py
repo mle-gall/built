@@ -3,7 +3,8 @@ the view on screen as CAD lines, hidden lines removed — parallel on the
 composer's layers, perspective and two-point as the window frames them."""
 from __future__ import annotations
 
-from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
+from tests.shell_isolation import one_off_export, restore_shell_patches  # noqa: F401
+from tests.shell_isolation import native_window  # noqa: F401
 import math
 
 import numpy as np
@@ -27,32 +28,24 @@ def _lines(path):
                if t == "LINE" and text[i - 1] == "0")
 
 
-def test_the_view_goes_out_as_dxf_in_every_projection(tmp_path, monkeypatch):
-    from views import main_window as mw
-    from views.main_window import MainWindow
+def test_the_view_goes_out_as_dxf_in_every_projection(native_host, tmp_path, monkeypatch):
 
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        vp.resize(800, 600)
-        vp.camera.set_aspect(800, 600)
-        _fountain_like(vp.scene)
-        lo, hi = vp.scene.bounds()
-        vp.camera.fit_to(lo, hi, 1.2)
-        out = {}
-        for mode in ("parallel", "perspective", "two_point"):
-            vp.camera.perspective = mode != "parallel"
-            vp.camera.two_point = mode == "two_point"
-            path = tmp_path / f"{mode}.dxf"
-            monkeypatch.setattr(mw.file_dialogs, "getSaveFileName",
-                                lambda *a, p=path, **k: (str(p), ""))
-            win._on_export_view_dxf()
-            out[mode] = _lines(path)
-        assert all(n > 20 for n in out.values()), out
-        assert "VISTA-PERFIL" in (tmp_path / "parallel.dxf").read_text()
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    win = native_host.window
+    vp = win.viewport
+    native_host.resize(800, 600, 1.)
+    vp.camera.set_aspect(800, 600)
+    _fountain_like(vp.scene)
+    lo, hi = vp.scene.bounds()
+    vp.camera.fit_to(lo, hi, 1.2)
+    out = {}
+    for mode in ("parallel", "perspective", "two_point"):
+        vp.camera.perspective = mode != "parallel"
+        vp.camera.two_point = mode == "two_point"
+        path = tmp_path / f"{mode}.dxf"
+        one_off_export(win, "dxf", path)
+        out[mode] = _lines(path)
+    assert all(n > 20 for n in out.values()), out
+    assert "VISTA-PERFIL" in (tmp_path / "parallel.dxf").read_text()
 
 
 def test_perspective_reads_the_same_from_the_caches_and_the_walk(native_window):
@@ -70,3 +63,17 @@ def test_perspective_reads_the_same_from_the_caches_and_the_walk(native_window):
     la = np.hypot(a[:, 2] - a[:, 0], a[:, 3] - a[:, 1]).sum()
     lb = np.hypot(b[:, 2] - b[:, 0], b[:, 3] - b[:, 1]).sum()
     assert la > 0 and abs(la - lb) < 1e-6 * max(la, 1.0)
+
+
+def test_the_current_view_dxf_carries_the_hatches_too(native_host, tmp_path):
+    from tests.test_layer_cut import _wall_and_door
+    win = native_host.window
+    scene = win.viewport.scene
+    _wall_and_door(scene)
+    scene.layer("Muros").hatch = "brick"
+    win.viewport.camera.set_view("top")
+    win.viewport.camera.perspective = False
+    path = tmp_path / "vista.dxf"
+    one_off_export(win, "dxf", path)
+    text = path.read_text(encoding="ascii", errors="replace")
+    assert "MUROS-TRAMA" in text

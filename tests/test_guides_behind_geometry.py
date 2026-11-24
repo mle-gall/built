@@ -15,6 +15,7 @@ same recipe as the axes, world-space dashes and depth-write off.
 """
 from __future__ import annotations
 
+from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -126,21 +127,6 @@ def test_a_small_guide_circle_still_gets_enough_dashes():
 
 # ── The real thing: pixels ──────────────────────────────────────────────────
 
-def _viewport():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    win.show()
-    _app.processEvents()
-    vp = win.viewport
-    if not vp.keys_stand_in._can_create_surface():
-        # Closed before skipping: a shown window left behind took the
-        # keyboard from the next test's own (CI's batch 5, no OpenGL:
-        # Join Segments' Esc never reached its viewport).
-        win._saved_version = vp.scene.version
-        win.close()
-        pytest.skip("the Qt platform has no native GPU surface")
-    return win, vp
-
 
 def _pixels(img: QImage):
     a = img.convertToFormat(QImage.Format_RGB32)
@@ -157,7 +143,7 @@ def _changed(before, after) -> int:
     return int((np.abs(after - before).sum(axis=2) > 8).sum())
 
 
-def _scene_looking_down_minus_y():
+def _scene_looking_down_minus_y(native_gpu_host):
     """A wall in the XZ plane at y = 0, seen from the eye at y = +20. So
     y > 0 is IN FRONT of the wall and y < 0 is behind it.
 
@@ -165,7 +151,7 @@ def _scene_looking_down_minus_y():
     middle of a ~17 m window, and the ends of the guide poking past its
     edges are legitimately visible — they would read as a failure when they
     are the tool working."""
-    win, vp = _viewport()
+    win, vp = native_gpu_host.window, native_gpu_host.viewport
     scene = vp.scene
     scene.mesh.add_face([V(-60, 0, -60), V(60, 0, -60), V(60, 0, 60),
                          V(-60, 0, 60)])
@@ -177,43 +163,35 @@ def _scene_looking_down_minus_y():
     return win, vp
 
 
-def test_a_wall_hides_the_guide_behind_it():
-    win, vp = _scene_looking_down_minus_y()
-    try:
-        assert vp.camera.eye().y() > 0          # the eye really is on +Y
-        bare = _pixels(live_image(vp))
+def test_a_wall_hides_the_guide_behind_it(native_gpu_host):
+    win, vp = _scene_looking_down_minus_y(native_gpu_host)
+    assert vp.camera.eye().y() > 0          # the eye really is on +Y
+    bare = _pixels(live_image(vp))
 
-        vp.scene.guides[:] = [Guide(V(0, 4, 0), V(1, 0, 0))]     # in front
-        shown = _changed(bare, _pixels(
-            live_image(vp)))
+    vp.scene.guides[:] = [Guide(V(0, 4, 0), V(1, 0, 0))]     # in front
+    shown = _changed(bare, _pixels(
+        live_image(vp)))
 
-        vp.scene.guides[:] = [Guide(V(0, -4, 0), V(1, 0, 0))]    # behind
-        hidden = _changed(bare, _pixels(
-            live_image(vp)))
+    vp.scene.guides[:] = [Guide(V(0, -4, 0), V(1, 0, 0))]    # behind
+    hidden = _changed(bare, _pixels(
+        live_image(vp)))
 
-        assert shown > 50, "a guide in front of the wall must be drawn"
-        assert hidden == 0, (
-            f"the wall must hide the guide behind it "
-            f"(hidden={hidden}px, shown={shown}px)")
-    finally:
-        win._saved_version = vp.scene.version
-        win.close()
+    assert shown > 50, "a guide in front of the wall must be drawn"
+    assert hidden == 0, (
+        f"the wall must hide the guide behind it "
+        f"(hidden={hidden}px, shown={shown}px)")
 
 
-def test_a_sheet_render_still_carries_no_guides():
+def test_a_sheet_render_still_carries_no_guides(native_gpu_host):
     """A styled composer frame never drew the scaffolding and must not
     start now that the pass moved into GL."""
-    win, vp = _scene_looking_down_minus_y()
+    win, vp = _scene_looking_down_minus_y(native_gpu_host)
+    from core.style import style_by_name
+    vp.style_override = style_by_name("Architectural")
     try:
-        from core.style import style_by_name
-        vp.style_override = style_by_name("Architectural")
-        try:
-            bare = _pixels(vp.render_image(300, 300, overlays=False))
-            vp.scene.guides[:] = [Guide(V(0, 4, 0), V(1, 0, 0))]
-            after = _pixels(vp.render_image(300, 300, overlays=False))
-        finally:
-            vp.style_override = None
-        assert _changed(bare, after) == 0
+        bare = _pixels(vp.render_image(300, 300, overlays=False))
+        vp.scene.guides[:] = [Guide(V(0, 4, 0), V(1, 0, 0))]
+        after = _pixels(vp.render_image(300, 300, overlays=False))
     finally:
-        win._saved_version = vp.scene.version
-        win.close()
+        vp.style_override = None
+    assert _changed(bare, after) == 0

@@ -51,6 +51,16 @@ impl DocumentViews {
         self.model.borrow().shares()
     }
 
+    fn command_view<'py>(&self, doc: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+        if self.visible() {
+            if let Some(pane) = self.display(doc.py(), self.active()) {
+                return pane.getattr("source_viewport");
+            }
+        }
+        let front = doc.getattr("front_view")?;
+        if front.is_none() { doc.getattr("viewport") } else { Ok(front) }
+    }
+
     fn choose(&self, doc: &Bound<'_, PyAny>, key: &str) -> PyResult<()> {
         self.model.borrow_mut().choose(key)?;
         if key == "single" {
@@ -171,6 +181,7 @@ impl DocumentViews {
             }
         }
         let active = self.active();
+        let preview = self.model.borrow().hover.unwrap_or(active);
         let mut tiles = Vec::with_capacity(panes.len());
         for (id, x, y, w, h) in panes {
             let display = self.ensure_pane(doc, id)?;
@@ -180,15 +191,15 @@ impl DocumentViews {
             host.setattr("width", w.max(1))?;
             host.setattr("height", h.max(1))?;
             let vp = display.getattr("source_viewport")?;
-            if id == active {
+            if id == preview {
                 self.activate(doc, &vp)?;
             }
+            vp.setattr("tool_preview", id == preview)?;
             tiles.push((display, vp, [x, y, w, h], id == active));
         }
         let tr = py.import("core.i18n")?.getattr("tr")?;
         let mut batch = Vec::with_capacity(tiles.len());
         for (display, vp, bounds, selected) in tiles {
-            vp.setattr("tool_preview", selected)?;
             display.call_method0("draw_frame")?;
             let camera = vp.getattr("camera")?;
             let forward = camera
@@ -247,6 +258,10 @@ impl DocumentViews {
                 .call_method1("_ui_claims", (&primary, method, event))?
                 .is_truthy()?
         {
+            self.model.borrow_mut().hover = None;
+            if let Some(pane) = self.display(doc.py(), self.active()) {
+                self.activate(doc, &pane.getattr("source_viewport")?)?;
+            }
             return Ok(None);
         }
         let pos = event.call_method0("position")?;
@@ -263,8 +278,20 @@ impl DocumentViews {
                 .borrow_mut()
                 .divider(kind, x as f32, y as f32, left, self.tolerance.get());
         if let Some(cursor) = cursor {
-            host.call_method1("cursor_changed", (cursor,))?;
-            return Ok(None);
+            let crossing_blocks_tool = if cursor == "move" && !captured {
+                let front = doc.getattr("front_view")?;
+                let vp = if front.is_none() { doc.getattr("viewport")? } else { front };
+                let tool = vp.getattr("active_tool")?;
+                !vp.getattr("nav_mode")?.is_none()
+                    || (!tool.is_none() && !tool.getattr("name")?.eq("Select")?)
+            } else {
+                false
+            };
+            if !crossing_blocks_tool {
+                host.call_method1("cursor_changed", (cursor,))?;
+                return Ok(None);
+            }
+            self.cancel_divider();
         }
         let hit = self.model.borrow_mut().pointer(kind, x, y, held != 0);
         let Some((id, local_x, local_y)) = hit else {
@@ -273,9 +300,7 @@ impl DocumentViews {
         let Some(display) = self.display(doc.py(), id) else {
             return Ok(None);
         };
-        if id == self.active() {
-            self.activate(doc, &display.getattr("source_viewport")?)?;
-        }
+        self.activate(doc, &display.getattr("source_viewport")?)?;
         event.call_method1("set_local_position", (local_x, local_y))?;
         Ok(Some(display))
     }
@@ -302,14 +327,14 @@ impl DocumentViews {
             event.call_method0("accept")?;
             Ok(None)
         } else {
-            Ok(self.display(py, self.active()))
+            Ok(self.display(py, self.model.borrow().hover.unwrap_or(self.active())))
         }
     }
 
     fn fit_bounds(&self, win: &Bound<'_, PyAny>, bounds: &Bound<'_, PyAny>) -> PyResult<()> {
         let args = PyTuple::new(win.py(), bounds.try_iter()?.collect::<PyResult<Vec<_>>>()?)?;
         if self.visible() {
-            for id in 0..4 {
+            for id in self.model.borrow().panes.iter().map(|p| p.id) {
                 if let Some(pane) = self.display(win.py(), id) {
                     pane.getattr("source_viewport")?
                         .getattr("camera")?

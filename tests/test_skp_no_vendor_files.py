@@ -6,6 +6,7 @@ downloaded -- there is no .skp export, and no bundle carries openskp's
 SDK-written blank template."""
 from __future__ import annotations
 
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from pathlib import Path
 
 import pytest
@@ -15,14 +16,13 @@ _app = QApplication.instance() or QApplication([])
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_an_unreadable_skp_is_reported_and_nothing_else_runs(monkeypatch, tmp_path):
+def test_an_unreadable_skp_is_reported_and_nothing_else_runs(native_host, monkeypatch, tmp_path):
     from PySide6.QtWidgets import QMessageBox
 
-    from views.main_window import MainWindow
 
     for name in ("_find_skp_converter", "_install_skp_converter",
                  "_extract_skp_dlls", "_on_export_skp"):
-        assert not hasattr(MainWindow, name), name
+        assert not hasattr(native_host.window, name), name
     said = []
     monkeypatch.setattr("views.chrome_dialogs.warning",
                         staticmethod(lambda *a, **k: said.append(a[2]) or QMessageBox.Ok))
@@ -39,36 +39,19 @@ def test_an_unreadable_skp_is_reported_and_nothing_else_runs(monkeypatch, tmp_pa
     import subprocess
     monkeypatch.setattr(subprocess, "run",
                         lambda *a, **k: pytest.fail("ran an external program"))
-    win = MainWindow()
-    try:
-        bad = tmp_path / "roto.skp"
-        bad.write_bytes(b"not a .skp file at all")
-        assert win.import_skp_path(bad) is False
-        assert said and "COLLADA" in said[-1]
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    win = native_host.window
+    bad = tmp_path / "roto.skp"
+    bad.write_bytes(b"not a .skp file at all")
+    assert win.import_skp_path(bad) is False
+    assert said and "COLLADA" in said[-1]
 
 
-def test_no_skp_export_in_the_menu():
-    from views.main_window import MainWindow
+def test_no_skp_export_in_the_menu(native_host):
 
-    win = MainWindow()
-    try:
-        exports = []
-        for action in win.menuBar().actions():
-            menu = action.menu()
-            if menu is None:
-                continue
-            for sub in menu.actions():
-                inner = sub.menu()
-                if inner is not None and sub.text().replace("&", "") in ("Export", "Exportar"):
-                    exports += [a.text() for a in inner.actions()]
-        assert exports, "no Export menu found"
-        assert not [t for t in exports if ".skp" in t], exports
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    win = native_host.window
+    exports = [key for key in win._registry_actions if key.startswith("menu:export:")]
+    assert "menu:export:dxf" in exports
+    assert "menu:export:skp" not in exports
 
 
 def test_the_bundle_spec_leaves_the_sdk_template_out():

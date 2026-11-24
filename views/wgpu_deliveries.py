@@ -52,7 +52,10 @@ def export_form(win, key=None, one_off=False, initial_format="ifc"):
     nodes = Tree(scene, registry).nodes
     fmt = record.get("format", initial_format)
 
-    from ingetrazo_core import delivery_field_visible, delivery_record, delivery_scopes
+    from core.settings import settings
+    from ingetrazo_core import delivery_defaults, delivery_field_visible, delivery_record, delivery_scopes
+
+    scope, unit = delivery_defaults(fmt, one_off, str(settings().value("export/stl_unit", "mm")))
 
     def scopes(fmt):
         return delivery_scopes(fmt, bool(nodes))
@@ -97,6 +100,8 @@ def export_form(win, key=None, one_off=False, initial_format="ifc"):
         elif answer != "export":
             delivery_key = commands.run(history, "create_delivery", delivery=r)["key"]
         if one_off:
+            if r["format"] == "stl":
+                settings().setValue("export/stl_unit", r["options"]["unit"])
             enqueue(win, delivery_key, r)
         view = chrome_dialogs.view_of(win)
         if view:
@@ -107,7 +112,7 @@ def export_form(win, key=None, one_off=False, initial_format="ifc"):
     fields = [
         Field("name", "edit", "Name", record.get("name", "New delivery"), focus=True),
         Field("format", "choice", "Format", fmt, options=[(k, k.upper()) for k in deliveries.FORMATS]),
-        Field("scope", "choice", "Scope", record.get("scope", "whole"), options=scopes(fmt)),
+        Field("scope", "choice", "Scope", record.get("scope", scope), options=scopes(fmt)),
         Field("node", "choice", "Project node", record.get("node", next(iter(nodes), "")),
               options=[(k, n["name"]) for k, n in nodes.items()], visible=shows("node")),
         Field("names", "edit", "Names (one per line, blank for all)", "\n".join(options.get("names", [])),
@@ -117,7 +122,7 @@ def export_form(win, key=None, one_off=False, initial_format="ifc"):
               visible=shows("profile")),
         Field("textures", "check", "Embed textures", options.get("textures", True),
               visible=shows("textures")),
-        Field("unit", "choice", "Units", options.get("unit", "mm"), options=["mm", "cm", "m", "in", "ft"],
+        Field("unit", "choice", "Units", options.get("unit", unit), options=["mm", "cm", "m", "in", "ft"],
               visible=shows("unit")),
         Field("destination", "path", "Destination", record.get("destination", ""), pick="save",
               filters=f"{fmt.upper()} (*.{fmt})")]
@@ -250,6 +255,8 @@ def enqueue(win, key, record):
     current = getattr(win, "_current_path", None)
     if current:
         ctx["project_directory"] = Path(current).parent
+    if record["format"] == "dxf" and record["scope"] == "visible":
+        ctx["view_geometry"] = active.hlr_geometry
     if record["format"] == "pdf":
         ctx["pdf_writer"] = lambda p, sheets: _write_pdf(win, p, sheets)
     if record["format"] == "svg":

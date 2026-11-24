@@ -4,6 +4,7 @@
 localhost, transactionally, and the MCP layer frames it for Claude."""
 from __future__ import annotations
 
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import json
 import os
 import socket
@@ -66,108 +67,98 @@ def _ask(bridge, tool, args=None):
     return result.result()
 
 
-def test_bridge_runs_python_transactionally(monkeypatch):
+def test_bridge_runs_python_transactionally(native_host, monkeypatch):
     from plugins.ai_bridge import _Bridge
-    from views.main_window import MainWindow
     monkeypatch.setenv("INGETRAZO_AI_PORT", "0")   # ephemeral test port
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        bridge = _Bridge(vp)
-        bridge.start()
-        assert bridge.port
+    win = native_host.window
+    vp = win.viewport
+    bridge = _Bridge(vp)
+    bridge.start()
+    assert bridge.port
 
-        edges0 = len(vp.scene.mesh.edges)
-        reply = _ask(bridge, "run_python", {"code": (
-            "mesh.add_edge(QVector3D(0,0,0), QVector3D(2,0,0))")})
-        assert reply["ok"] and reply["result"]["changed"] is True
-        assert len(vp.scene.mesh.edges) == edges0 + 1
-        assert vp.history.undo()                    # ONE undoable step
-        assert len(vp.scene.mesh.edges) == edges0
+    edges0 = len(vp.scene.mesh.edges)
+    reply = _ask(bridge, "run_python", {"code": (
+        "mesh.add_edge(QVector3D(0,0,0), QVector3D(2,0,0))")})
+    assert reply["ok"] and reply["result"]["changed"] is True
+    assert len(vp.scene.mesh.edges) == edges0 + 1
+    assert vp.history.undo()                    # ONE undoable step
+    assert len(vp.scene.mesh.edges) == edges0
 
-        # A crashing script rolls back whole and reports the error.
-        depth = len(vp.history.undo_stack)
-        reply = _ask(bridge, "run_python", {"code": (
-            "mesh.add_edge(QVector3D(9,0,0), QVector3D(9,9,0))\n"
-            "raise RuntimeError('boom')")})
-        assert reply["ok"] and reply["result"]["changed"] is False
-        assert reply["result"]["error"]
-        assert len(vp.scene.mesh.edges) == edges0   # nothing half-applied
-        assert len(vp.history.undo_stack) == depth
+    # A crashing script rolls back whole and reports the error.
+    depth = len(vp.history.undo_stack)
+    reply = _ask(bridge, "run_python", {"code": (
+        "mesh.add_edge(QVector3D(9,0,0), QVector3D(9,9,0))\n"
+        "raise RuntimeError('boom')")})
+    assert reply["ok"] and reply["result"]["changed"] is False
+    assert reply["result"]["error"]
+    assert len(vp.scene.mesh.edges) == edges0   # nothing half-applied
+    assert len(vp.history.undo_stack) == depth
 
-        # Inspect-only runs leave no undo entry.
-        reply = _ask(bridge, "run_python",
-                     {"code": "print(len(mesh.edges))"})
-        assert reply["ok"] and reply["result"]["changed"] is False
-        assert reply["result"]["stdout"].strip() == str(edges0)
-        assert len(vp.history.undo_stack) == depth
+    # Inspect-only runs leave no undo entry.
+    reply = _ask(bridge, "run_python",
+                 {"code": "print(len(mesh.edges))"})
+    assert reply["ok"] and reply["result"]["changed"] is False
+    assert reply["result"]["stdout"].strip() == str(edges0)
+    assert len(vp.history.undo_stack) == depth
 
-        reply = _ask(bridge, "query_model")
-        assert reply["ok"]
-        assert reply["result"]["edges"] == edges0
-        assert "layers" in reply["result"]
+    reply = _ask(bridge, "query_model")
+    assert reply["ok"]
+    assert reply["result"]["edges"] == edges0
+    assert "layers" in reply["result"]
 
-        reply = _ask(bridge, "query_groups", {"limit": 1})
-        assert reply["ok"] and "next_offset" in reply["result"]
-        bridge._scope["job_status"] = {"done": True}
-        reply = _ask(bridge, "query_status", {"name": "job_status"})
-        assert reply["ok"] and reply["result"]["value"] == {"done": True}
-        assert len(vp.history.undo_stack) == depth
+    reply = _ask(bridge, "query_groups", {"limit": 1})
+    assert reply["ok"] and "next_offset" in reply["result"]
+    bridge._scope["job_status"] = {"done": True}
+    reply = _ask(bridge, "query_status", {"name": "job_status"})
+    assert reply["ok"] and reply["result"]["value"] == {"done": True}
+    assert len(vp.history.undo_stack) == depth
 
-        reply = _ask(bridge, "no_such_tool")
-        assert reply["ok"] is False and "unknown tool" in reply["error"]
+    reply = _ask(bridge, "no_such_tool")
+    assert reply["ok"] is False and "unknown tool" in reply["error"]
 
-        bridge.stop()
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    bridge.stop()
 
 
-def test_a_sheet_made_through_the_bridge_is_one_undoable_step(monkeypatch):
+def test_a_sheet_made_through_the_bridge_is_one_undoable_step(native_host, monkeypatch):
     """#694: a sheet appended by ``run_python`` was no step at all — the
     reply said nothing changed, and the agent's undo took the user's last
     edit while the sheet stayed. A script that failed after appending one
     left it behind."""
     from core.history import AddEdgeCommand
     from plugins.ai_bridge import _Bridge
-    from views.main_window import MainWindow
     from ingetrazo_core import Vec3 as QVector3D
     monkeypatch.setenv("INGETRAZO_AI_PORT", "0")
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        vp.history.execute(AddEdgeCommand(QVector3D(0, 0, 0),
-                                          QVector3D(3, 0, 0)))  # the user's
-        edges = len(vp.scene.mesh.edges)
-        sheets = len(vp.scene.compositions)
-        bridge = _Bridge(vp)
-        bridge.start()
-        add = ("from core.composition import Composicion\n"
-               "c = Composicion(name='A1')\n"
-               "c.frames.append(c.default_frame())\n"
-               "scene.compositions.append(c)\n")
+    win = native_host.window
+    vp = win.viewport
+    vp.history.execute(AddEdgeCommand(QVector3D(0, 0, 0),
+                                      QVector3D(3, 0, 0)))  # the user's
+    edges = len(vp.scene.mesh.edges)
+    sheets = len(vp.scene.compositions)
+    bridge = _Bridge(vp)
+    bridge.start()
+    add = ("from core.composition import Composicion\n"
+           "c = Composicion(name='A1')\n"
+           "c.frames.append(c.default_frame())\n"
+           "scene.compositions.append(c)\n")
 
-        reply = _ask(bridge, "run_python", {"code": add})
-        assert reply["ok"] and reply["result"]["changed"] is True
-        assert len(vp.scene.compositions) == sheets + 1
-        assert _ask(bridge, "undo")["result"]["ok"]
-        assert len(vp.scene.compositions) == sheets      # the sheet went
-        assert len(vp.scene.mesh.edges) == edges         # the user's edge stayed
-        assert _ask(bridge, "redo")["result"]["ok"]
-        assert vp.scene.compositions[-1].name == "A1"
-        assert vp.history.undo()
+    reply = _ask(bridge, "run_python", {"code": add})
+    assert reply["ok"] and reply["result"]["changed"] is True
+    assert len(vp.scene.compositions) == sheets + 1
+    assert _ask(bridge, "undo")["result"]["ok"]
+    assert len(vp.scene.compositions) == sheets      # the sheet went
+    assert len(vp.scene.mesh.edges) == edges         # the user's edge stayed
+    assert _ask(bridge, "redo")["result"]["ok"]
+    assert vp.scene.compositions[-1].name == "A1"
+    assert vp.history.undo()
 
-        reply = _ask(bridge, "run_python",
-                     {"code": add + "raise RuntimeError('boom')"})
-        assert reply["result"]["error"] and reply["result"]["changed"] is False
-        assert len(vp.scene.compositions) == sheets      # nothing half-applied
-        bridge.stop()
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    reply = _ask(bridge, "run_python",
+                 {"code": add + "raise RuntimeError('boom')"})
+    assert reply["result"]["error"] and reply["result"]["changed"] is False
+    assert len(vp.scene.compositions) == sheets      # nothing half-applied
+    bridge.stop()
 
 
-def test_a_dialog_opened_by_the_agent_is_cancelled_not_waited_for(monkeypatch, private_settings):
+def test_a_dialog_opened_by_the_agent_is_cancelled_not_waited_for(native_host, monkeypatch, private_settings):
     """#694: deleting a sheet asks Yes/No, and the last sheet says it must
     stay — over the bridge nobody answers, so exec() held the UI thread for
     good and the next call ran inside that dialog. Now the dialog is
@@ -175,13 +166,12 @@ def test_a_dialog_opened_by_the_agent_is_cancelled_not_waited_for(monkeypatch, p
     from PySide6.QtCore import QEvent, QObject
     from PySide6.QtWidgets import QDialog
     from plugins.ai_bridge import _Bridge
-    from views.main_window import MainWindow
     from core.settings import settings
     # This checks a real modal round trip. A paper preview needs a GPU
     # surface and cannot render on the offscreen Qt platform used here.
     settings().setValue("composer/auto_render", "0")
     monkeypatch.setenv("INGETRAZO_AI_PORT", "0")
-    win = MainWindow()
+    win = native_host.window
     bridge = _Bridge(win.viewport)
     try:
         bridge.start()
@@ -203,7 +193,7 @@ def test_a_dialog_opened_by_the_agent_is_cancelled_not_waited_for(monkeypatch, p
         try:
             reply = _ask(bridge, "run_python", {
                 "code": "from PySide6.QtWidgets import QMessageBox\n"
-                        "answer = QMessageBox.question(viewport.window(), 'Delete', 'Delete the sheet?')\n"
+                        "answer = QMessageBox.question(None, 'Delete', 'Delete the sheet?')\n"
                         "print(answer == QMessageBox.StandardButton.Yes)"})
         finally:
             app.removeEventFilter(watch)
@@ -220,34 +210,27 @@ def test_a_dialog_opened_by_the_agent_is_cancelled_not_waited_for(monkeypatch, p
         assert _ask(bridge, "query_model")["ok"]
     finally:
         bridge.stop()
-        win._saved_version = win.viewport.scene.version
         comp = getattr(win, "_composer", None)
         if comp is not None:
             comp.hide()
-        win.close()
 
 
-def test_a_call_arriving_inside_a_running_one_is_refused():
+def test_a_call_arriving_inside_a_running_one_is_refused(native_host):
     """A call delivered by an event loop nested in the previous one must
     not run inside that one's undo step."""
     import threading as _t
     from plugins.ai_bridge import _Bridge
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        bridge = _Bridge(win.viewport)
-        bridge._busy = True
-        job = {"req": {"id": 7, "tool": "query_model"}, "done": _t.Event(),
-               "reply": None}
-        bridge._run_on_main(job)
-        assert job["done"].is_set() and job["reply"]["ok"] is False
-        assert "previous call" in job["reply"]["error"]
-        bridge._busy = False
-        bridge._run_on_main(job)
-        assert job["reply"]["ok"] is True
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    win = native_host.window
+    bridge = _Bridge(win.viewport)
+    bridge._busy = True
+    job = {"req": {"id": 7, "tool": "query_model"}, "done": _t.Event(),
+           "reply": None}
+    bridge._run_on_main(job)
+    assert job["done"].is_set() and job["reply"]["ok"] is False
+    assert "previous call" in job["reply"]["error"]
+    bridge._busy = False
+    bridge._run_on_main(job)
+    assert job["reply"]["ok"] is True
 
 
 def test_mcp_server_protocol_and_bridge_down_message(monkeypatch):
@@ -415,7 +398,7 @@ def _send_raw(bridge, payload: bytes) -> bytes:
     return out["got"]
 
 
-def test_a_web_page_cannot_run_code_through_the_bridge(monkeypatch):
+def test_a_web_page_cannot_run_code_through_the_bridge(native_host, monkeypatch):
     """Loopback is not a wall against the browser on the same machine. A page
     can POST to http://127.0.0.1:4763 with ``fetch(..., {mode: "no-cors",
     body})``: a text/plain POST needs no CORS preflight, so the browser sends
@@ -423,29 +406,24 @@ def test_a_web_page_cannot_run_code_through_the_bridge(monkeypatch):
     line and headers fail as bad JSON — and the body line, a tool call, ran.
     These are the bytes that request puts on the wire."""
     from plugins.ai_bridge import _Bridge
-    from views.main_window import MainWindow
     monkeypatch.setenv("INGETRAZO_AI_PORT", "0")
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        bridge = _Bridge(vp)
-        bridge.start()
-        edges0 = len(vp.scene.mesh.edges)
-        body = (json.dumps({"id": 1, "tool": "run_python", "args": {"code": (
-            "mesh.add_edge(QVector3D(0,0,0), QVector3D(7,0,0))")}}) + "\n").encode()
-        request = (
-            f"POST / HTTP/1.1\r\nHost: 127.0.0.1:{bridge.port}\r\n"
-            "Origin: https://example.com\r\n"
-            "Content-Type: text/plain;charset=UTF-8\r\n"
-            f"Content-Length: {len(body)}\r\n\r\n").encode() + body
-        _send_raw(bridge, request)
-        assert len(vp.scene.mesh.edges) == edges0, (
-            "an HTTP request's body ran as a bridge tool call")
+    win = native_host.window
+    vp = win.viewport
+    bridge = _Bridge(vp)
+    bridge.start()
+    edges0 = len(vp.scene.mesh.edges)
+    body = (json.dumps({"id": 1, "tool": "run_python", "args": {"code": (
+        "mesh.add_edge(QVector3D(0,0,0), QVector3D(7,0,0))")}}) + "\n").encode()
+    request = (
+        f"POST / HTTP/1.1\r\nHost: 127.0.0.1:{bridge.port}\r\n"
+        "Origin: https://example.com\r\n"
+        "Content-Type: text/plain;charset=UTF-8\r\n"
+        f"Content-Length: {len(body)}\r\n\r\n").encode() + body
+    _send_raw(bridge, request)
+    assert len(vp.scene.mesh.edges) == edges0, (
+        "an HTTP request's body ran as a bridge tool call")
 
-        # The agent's own client is unaffected.
-        reply = _ask(bridge, "run_python", {"code": "1 + 1"})
-        assert reply["ok"]
-        bridge.stop()
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    # The agent's own client is unaffected.
+    reply = _ask(bridge, "run_python", {"code": "1 + 1"})
+    assert reply["ok"]
+    bridge.stop()

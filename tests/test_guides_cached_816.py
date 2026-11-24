@@ -9,6 +9,7 @@ NumPy pass now, and reused (with their upload) until the camera, the
 guides or their selection change."""
 from __future__ import annotations
 
+from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -50,35 +51,27 @@ def _pixels(img):
     return buf.copy()
 
 
-def test_the_edit_box_sharing_the_buffer_does_not_eat_the_guides():
+def test_the_edit_box_sharing_the_buffer_does_not_eat_the_guides(native_gpu_host):
     """The dashed box of the group being edited reuses the guides' buffer;
     a cached frame must not draw the box where the guides were."""
     from core.group import Group
     from core.mesh import Mesh
-    from views.main_window import MainWindow
-    win = MainWindow()
-    win.show()
+    win = native_gpu_host.window
     _app.processEvents()
     vp = win.viewport
-    try:
-        if not vp.keys_stand_in._can_create_surface():
-            pytest.skip("the Qt platform has no native GPU surface")
-        m = Mesh()
-        m.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)])
-        g = Group(m, "g")
-        vp.scene.groups.append(g)
-        vp.scene.guides.append(Guide(V(0, 3, 0), V(1, 0, 0)))
-        vp.camera.target, vp.camera.distance = V(0.5, 1.5, 0), 8.0
-        vp.camera.set_view("top")
-        vp.scene.begin_group_edit(g)
-        vp.scene.version += 1
-        first = _pixels(live_image(vp))
-        second = _pixels(live_image(vp))
-        assert (first == second).all()
-        # And the guide is really there: a row of guide-blue pixels.
-        vp.scene.guides[:] = []
-        bare = _pixels(live_image(vp))
-        assert (first != bare).any()
-    finally:
-        win._saved_version = vp.scene.version
-        win.close()
+    m = Mesh()
+    m.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)])
+    g = Group(m, "g")
+    vp.scene.groups.append(g)
+    vp.scene.guides.append(Guide(V(0, 3, 0), V(1, 0, 0)))
+    vp.camera.target, vp.camera.distance = V(0.5, 1.5, 0), 8.0
+    vp.camera.set_view("top")
+    vp.scene.begin_group_edit(g)
+    vp.scene.version += 1
+    first = _pixels(live_image(vp))
+    second = _pixels(live_image(vp))
+    assert (first == second).all()
+    # And the guide is really there: a row of guide-blue pixels.
+    vp.scene.guides[:] = []
+    bare = _pixels(live_image(vp))
+    assert (first != bare).any()

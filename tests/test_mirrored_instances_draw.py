@@ -11,9 +11,10 @@ first frame. They draw instanced now, in batches under a clockwise front
 face. This renders both placements and reads the pixels: each shows its
 front colour, not the back tint.
 
-Needs a GL context that renders; skipped where the platform has none."""
+Requires a native wgpu surface for pixel readback."""
 from __future__ import annotations
 
+from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 import os
 
@@ -29,53 +30,41 @@ _app = QApplication.instance() or QApplication([])
 AMARILLO = (1.0, 0.85, 0.0)
 
 
-def test_a_mirrored_placement_draws_instanced_with_its_front_colour():
+def test_a_mirrored_placement_draws_instanced_with_its_front_colour(native_gpu_host):
     from core.group import Group
     from core.mesh import Mesh
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        win.show()
-        for _ in range(10):
-            _app.processEvents()
-        vp = win.viewport
-        if not vp.keys_stand_in._can_create_surface():
-            pytest.skip("the Qt platform has no native GPU surface")
-        sc = vp.scene
-        sc.guides.clear()
-        proto = Mesh()
-        f = proto.add_face([V(-1, -1, 0), V(1, -1, 0), V(1, 1, 0), V(-1, 1, 0)])
-        if f.normal().z() < 0:
-            f.flip()
-        f.attrs["color"] = list(AMARILLO)
-        derecha, espejo = QMatrix4x4(), QMatrix4x4()
-        derecha.translate(-2.0, 0.0, 0.0)
-        espejo.translate(2.0, 0.0, 0.0)
-        espejo.scale(-1.0, 1.0, 1.0)
-        for m in (derecha, espejo):
-            g = Group(proto, name="Pieza")
-            g.xform = m
-            sc.groups.append(g)
-        sc.version += 1
-        vp.camera.set_view("top")                     # looking down -Z: the front
-        vp.camera.perspective = False
-        vp.camera.fit_to(V(-4, -2, 0), V(4, 2, 0))
-        for _ in range(5):
-            _app.processEvents()
-        img = live_image(vp)
-        packed = vp.keys_stand_in.packed
-        placements = [i for i, group in enumerate(packed.groups) if group is not None and group.mesh is proto]
-        assert len(placements) == 2
-        assert len(set(packed.instances['info'][placements, 0])) == 1
-        dpr = img.width() / max(vp.width(), 1)
-        for x in (-2.0, 2.0):
-            px = vp._world_to_pixel(V(x, 0.5, 0))     # off the red axis
-            c = img.pixelColor(int(px[0] * dpr), int(px[1] * dpr))
-            r, g, b = c.redF(), c.greenF(), c.blueF()
-            assert r > 0.6 and g > 0.5 and b < 0.35, (x, (r, g, b))
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    win = native_gpu_host.window
+    vp = win.viewport
+    sc = vp.scene
+    sc.guides.clear()
+    proto = Mesh()
+    f = proto.add_face([V(-1, -1, 0), V(1, -1, 0), V(1, 1, 0), V(-1, 1, 0)])
+    if f.normal().z() < 0:
+        f.flip()
+    f.attrs["color"] = list(AMARILLO)
+    derecha, espejo = QMatrix4x4(), QMatrix4x4()
+    derecha.translate(-2.0, 0.0, 0.0)
+    espejo.translate(2.0, 0.0, 0.0)
+    espejo.scale(-1.0, 1.0, 1.0)
+    for m in (derecha, espejo):
+        g = Group(proto, name="Pieza")
+        g.xform = m
+        sc.groups.append(g)
+    sc.version += 1
+    vp.camera.set_view("top")                     # looking down -Z: the front
+    vp.camera.perspective = False
+    vp.camera.fit_to(V(-4, -2, 0), V(4, 2, 0))
+    img = live_image(vp)
+    packed = vp.keys_stand_in.packed
+    placements = [i for i, group in enumerate(packed.groups) if group is not None and group.mesh is proto]
+    assert len(placements) == 2
+    assert len(set(packed.instances['info'][placements, 0])) == 1
+    dpr = img.width() / max(vp.width(), 1)
+    for x in (-2.0, 2.0):
+        px = vp._world_to_pixel(V(x, 0.5, 0))     # off the red axis
+        c = img.pixelColor(int(px[0] * dpr), int(px[1] * dpr))
+        r, g, b = c.redF(), c.greenF(), c.blueF()
+        assert r > 0.6 and g > 0.5 and b < 0.35, (x, (r, g, b))
 
 
 def _prisma(n=12, r=1.0, h=2.0):

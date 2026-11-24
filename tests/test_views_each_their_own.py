@@ -1,188 +1,99 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""Of several views, the one clicked is the one worked in: Camera ▸ Style,
-the Styles panel, Alt+X, the projection buttons and the standard views act
-on it alone, and every view shown repaints at once (a 0.6.1 review on
-Windows: Wireframe asked for the Top view went to two views, the others
-caught up only under the mouse, and Perspective changed the Perspective
-view while Top was the active one)."""
-from __future__ import annotations
-
-import sys
-
+"""Camera and display commands act on the selected pane of the native document."""
 import pytest
-from PySide6.QtCore import QPoint, Qt
-from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication
 
-if QApplication.instance() is None:
-    QApplication(sys.argv[:1])
+from tests.model_panes import grid  # noqa: F401
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
+from views import view_commands
 
 
-@pytest.fixture
-def win():
-    from views.main_window import MainWindow
-    w = MainWindow()
-    w.resize(1400, 800)
-    w.show()
-    w.set_view_layout("four")
-    QApplication.processEvents()
-    yield w
-    for doc in list(w._documents):
-        doc.saved_content = doc.viewport.scene.content_version
-    w._saved_version = w.viewport.scene.version
-    w.close()
+def mode(vp):
+    return vp._effective_style().face_mode
 
 
-def _cell(win, view):
-    return next(c for c in win._doc.view_grid.cells if c.view == view)
+def test_style_edge_switch_and_menu_checks_follow_clicks(grid):
+    win = grid.win
+    top = grid.click("Top")
+    main = win._doc.viewport
+    assert view_commands.run(win, "style_wireframe")
+    assert mode(top) == "wireframe" and mode(main) != "wireframe"
+    assert view_commands._snapshot(win)[2] == "Wireframe"
+    assert view_commands.run(win, "back_edges")
+    assert top.view_style.back_edges != main.scene.display_style.back_edges
+    grid.click("Perspective")
+    assert view_commands._snapshot(win)[2] != "Wireframe"
+    assert view_commands.run(win, "style_xray")
+    assert mode(main) == "xray"
+    assert mode(top) == "wireframe"
+    assert all(mode(p.source_viewport) != "xray" for p in grid.panes().values()
+               if p.source_viewport is not main)
+    grid.click("Top")
+    assert view_commands.run(win, "xray") and mode(top) == "xray"
+    assert view_commands.run(win, "xray") and mode(top) == "wireframe"
+    assert mode(main) == "xray"
 
 
-def _click(cell):
-    """A click in an empty corner of the view, as the hand does."""
-    vp = cell.viewport
-    QTest.mouseClick(vp.keys_stand_in, Qt.LeftButton, Qt.NoModifier,
-                     QPoint(vp.width() - 6, vp.height() - 6))
-    QApplication.processEvents()
+def test_projection_and_standard_shortcuts_change_the_clicked_pane(grid):
+    from core.input_types import Qt
+    win = grid.win
+    top = grid.click("Top")
+    main = win._doc.viewport
+    original = main.camera.forward().toTuple()
+    assert view_commands._snapshot(win)[1] == "parallel"
+    grid.host.key(True, Qt.Key_P, Qt.ShiftModifier.value, "P")
+    assert top.camera.perspective and view_commands._snapshot(win)[1] == "perspective"
+    assert view_commands.run(win, "projection_parallel")
+    assert not top.camera.perspective and main.camera.perspective
+    front = grid.click("Front")
+    grid.host.key(True, Qt.Key_1, Qt.ControlModifier.value, "1")
+    assert front.camera.forward().toTuple() == pytest.approx(top.camera.forward().toTuple())
+    assert main.camera.forward().toTuple() == original
 
 
-def _mode(cell):
-    return cell.viewport._effective_style().face_mode
+def test_single_view_edits_the_model_style_and_projection(grid):
+    grid.win.set_view_layout("single")
+    assert grid.win._active_view() is grid.win._doc.viewport
+    assert view_commands.run(grid.win, "style_wireframe")
+    assert mode(grid.win.viewport) == grid.win.viewport.scene.display_style.face_mode == "wireframe"
+    assert view_commands.run(grid.win, "projection_parallel")
+    assert not grid.win.viewport.camera.perspective
 
 
-def test_a_style_goes_to_the_view_clicked_only(win):
-    top, persp = _cell(win, "top"), _cell(win, "perspective")
-    others = [c for c in win._doc.view_grid.cells if c is not top]
-    before = {c.index: _mode(c) for c in others}
-    _click(top)
-    win._style_actions["Wireframe"].trigger()
-    assert _mode(top) == "wireframe"
-    assert {c.index: _mode(c) for c in others} == before
-    assert win.viewport is persp.viewport        # the document's style...
-    assert win.viewport.scene.display_style.face_mode == before[persp.index]
+def test_switching_projects_restores_each_panes_camera_and_style(grid):
+    win = grid.win
+    first = win._doc
+    grid.click("Top")
+    view_commands.run(win, "style_wireframe")
+    view_commands.run(win, "projection_perspective")
+    win.set_field_of_view(65)
+    other = win.new_document()
+    assert other.view_layout == "single" and mode(win.viewport) != "wireframe"
+    win.activate_document(first)
+    grid.frame()
+    assert first.view_layout == "four" and mode(win._active_view()) == "wireframe"
+    assert win._active_view().camera.fov_deg == pytest.approx(65)
 
 
-def test_the_windows_own_view_takes_a_style_and_the_others_keep_theirs(win):
-    persp = _cell(win, "perspective")
-    others = [c for c in win._doc.view_grid.cells if c is not persp]
-    before = {c.index: _mode(c) for c in others}
-    _click(persp)
-    win._style_actions["X-ray"].trigger()
-    assert _mode(persp) == "xray"
-    assert {c.index: _mode(c) for c in others} == before
+def test_scene_capture_update_and_recall_use_the_panes_own_style(grid):
+    win = grid.win
+    top = grid.click("Top")
+    view_commands.run(win, "style_wireframe")
+    win.run_command("scene_add")
+    saved = win.viewport.scene.saved_views[-1]
+    assert saved.pitch == top.camera.pitch and saved.style["face_mode"] == "wireframe"
+    main = win._doc.viewport
+    original = main.camera.pitch, mode(main)
+    front = grid.click("Front")
+    win.tray.scenes.show_view(saved, animate=False)
+    assert front.camera.pitch == saved.pitch and mode(front) == "wireframe"
+    assert (main.camera.pitch, mode(main)) == original
+    grid.click("Perspective")
+    win.tray.scenes.update_view(saved)
+    assert (saved.pitch, saved.style["face_mode"]) == original
 
 
-def test_every_view_shown_repaints_with_a_style(win, monkeypatch):
-    painted = []
-    for cell in win._doc.view_grid.cells:
-        monkeypatch.setattr(cell.viewport, "update",
-                            lambda c=cell: painted.append(c.index))
-    _click(_cell(win, "top"))
-    painted.clear()
-    win._style_actions["Wireframe"].trigger()
-    assert sorted(set(painted)) == [0, 1, 2, 3]
-
-
-def test_an_edge_toggle_goes_to_the_view_clicked_only(win):
-    top, front = _cell(win, "top"), _cell(win, "front")
-    _click(top)
-    edges = top.viewport._effective_style().edges
-    win._act_style_edges.setChecked(not edges)
-    assert top.viewport._effective_style().edges is (not edges)
-    assert front.viewport._effective_style().edges is edges
-    assert win.viewport._effective_style().edges is edges
-
-
-def test_the_menu_says_the_style_of_the_view_clicked(win):
-    top, persp = _cell(win, "top"), _cell(win, "perspective")
-    _click(top)
-    win._style_actions["Wireframe"].trigger()
-    _click(persp)
-    assert not win._style_actions["Wireframe"].isChecked()
-    _click(top)
-    assert win._style_actions["Wireframe"].isChecked()
-
-
-def test_the_styles_panel_edits_the_view_clicked(win):
-    from core.style import style_by_name
-    top, front = _cell(win, "top"), _cell(win, "front")
-    _click(top)
-    panel = win.styles_panel
-    panel._on_pick(panel._combo.findData("Wireframe"))
-    assert _mode(top) == "wireframe"
-    assert _mode(front) != "wireframe"
-    assert panel._style() is top.viewport.view_style
-    del style_by_name
-
-
-def test_alt_x_comes_back_in_the_same_view(win):
-    top, front = _cell(win, "top"), _cell(win, "front")
-    _click(top)
-    was = _mode(top)
-    win._toggle_xray()
-    assert _mode(top) == "xray" and _mode(front) != "xray"
-    win._toggle_xray()
-    assert _mode(top) == was
-
-
-def test_a_projection_button_changes_the_view_clicked(win):
-    top, persp = _cell(win, "top"), _cell(win, "perspective")
-    assert not top.viewport.camera.perspective
-    assert persp.viewport.camera.perspective
-    _click(top)
-    win._projection_actions["perspective"].trigger()
-    assert top.viewport.camera.perspective
-    win._projection_actions["parallel"].trigger()
-    assert not top.viewport.camera.perspective
-    assert persp.viewport.camera.perspective     # untouched both times
-
-
-def test_the_projection_buttons_say_the_view_clicked(win):
-    top, persp = _cell(win, "top"), _cell(win, "perspective")
-    _click(top)
-    assert win._projection_actions["parallel"].isChecked()
-    _click(persp)
-    assert win._projection_actions["perspective"].isChecked()
-
-
-def test_a_standard_view_goes_to_the_view_clicked(win):
-    front, persp = _cell(win, "front"), _cell(win, "perspective")
-    yaw = persp.viewport.camera.yaw
-    _click(front)
-    QTest.keySequence(win, "Ctrl+1")             # Top
-    QApplication.processEvents()
-    assert front.view == "top"
-    assert front.header.text() == "Top"
-    assert persp.viewport.camera.yaw == yaw
-
-
-def test_one_view_works_as_before(win):
-    win.set_view_layout("single")
-    QApplication.processEvents()
-    assert win._active_view() is win.viewport
-    win._style_actions["Wireframe"].trigger()
-    assert win.viewport.scene.display_style.face_mode == "wireframe"
-    win._projection_actions["parallel"].trigger()
-    assert not win.viewport.camera.perspective
-
-
-def test_each_views_style_stays_with_its_project_tab(win):
-    top = _cell(win, "top")
-    _click(top)
-    win._style_actions["Wireframe"].trigger()
-    state = win._doc.view_grid.state()
-    grid = win._doc.view_grid
-    grid.restore(None)
-    assert _mode(top) != "wireframe"
-    grid.restore(state)
-    assert _mode(top) == "wireframe"
-
-
-def test_shift_p_changes_the_view_clicked(win):
-    top, persp = _cell(win, "top"), _cell(win, "perspective")
-    _click(top)
-    QTest.keySequence(win, "Shift+P")
-    QApplication.processEvents()
-    assert top.viewport.camera.perspective
-    assert persp.viewport.camera.perspective
-    assert win._projection_actions["perspective"].isChecked()
+def test_hover_moves_the_preview_but_export_and_style_keep_the_clicked_camera(grid):
+    top = grid.click("Top")
+    preview = grid.point("Front")
+    assert preview is not top and grid.win._active_view() is top
+    view_commands.run(grid.win, "style_wireframe")
+    assert mode(top) == "wireframe" and mode(preview) != "wireframe"

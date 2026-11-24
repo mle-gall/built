@@ -16,6 +16,7 @@ outside, this time for real.
 """
 from __future__ import annotations
 
+from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -404,43 +405,35 @@ def _same_colour(a, b):
 @pytest.mark.parametrize("xform, centre",
                          [(_translation(), V(3, 0)), (_mirror(), V(-3, 0))],
                          ids=["moved", "mirrored"])
-def test_inside_and_outside_show_the_same_colour(xform, centre):
-    """Needs a GL context that renders; skipped where the platform has none."""
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        win.show()
-        for _ in range(10):
-            _app.processEvents()
-        vp = win.viewport
-        if not vp.keys_stand_in._can_create_surface():
-            pytest.skip("the Qt platform has no native GPU surface")
-        scene = vp.scene
-        scene.guides.clear()
-        proto = _square()
-        if proto.faces[0].normal().z() > 0:         # inverted, seen from above
-            proto.faces[0].loop.reverse()
-        g = _placed(proto, xform)
-        scene.groups.append(g)
-        scene.version += 1
-        vp.camera.set_view("top")
-        vp.camera.perspective = False
-        vp.camera.fit_to(centre - V(3, 3), centre + V(3, 3))
-        q = centre + V(0.2, 0.5)                    # off the axes
+def test_inside_and_outside_show_the_same_colour(native_gpu_host, xform, centre):
+    """Requires a native wgpu surface for pixel readback."""
+    win = native_gpu_host.window
+    for _ in range(10):
+        _app.processEvents()
+    vp = win.viewport
+    scene = vp.scene
+    scene.guides.clear()
+    proto = _square()
+    if proto.faces[0].normal().z() > 0:         # inverted, seen from above
+        proto.faces[0].loop.reverse()
+    g = _placed(proto, xform)
+    scene.groups.append(g)
+    scene.version += 1
+    vp.camera.set_view("top")
+    vp.camera.perspective = False
+    vp.camera.fit_to(centre - V(3, 3), centre + V(3, 3))
+    q = centre + V(0.2, 0.5)                    # off the axes
 
-        back = _pixel(vp, q)
-        vp.begin_group_edit(g)
-        assert _same_colour(_pixel(vp, q), back), "entering changed the side"
-        vp.history.execute(FlipFacesCommand([scene.mesh.faces[0]]))
-        front = _pixel(vp, q)
-        assert not _same_colour(front, back), "reversing changed nothing"
-        vp.end_one_group_edit()
-        assert _same_colour(_pixel(vp, q), front), \
-            "the face went back on leaving the component"
-        vp.history.undo()
-        assert _same_colour(_pixel(vp, q), back), "undo did not redraw"
-        vp.history.redo()
-        assert _same_colour(_pixel(vp, q), front), "redo did not redraw"
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    back = _pixel(vp, q)
+    vp.begin_group_edit(g)
+    assert _same_colour(_pixel(vp, q), back), "entering changed the side"
+    vp.history.execute(FlipFacesCommand([scene.mesh.faces[0]]))
+    front = _pixel(vp, q)
+    assert not _same_colour(front, back), "reversing changed nothing"
+    vp.end_one_group_edit()
+    assert _same_colour(_pixel(vp, q), front), \
+        "the face went back on leaving the component"
+    vp.history.undo()
+    assert _same_colour(_pixel(vp, q), back), "undo did not redraw"
+    vp.history.redo()
+    assert _same_colour(_pixel(vp, q), front), "redo did not redraw"

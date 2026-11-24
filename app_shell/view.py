@@ -34,6 +34,9 @@ class ShellView(MetalView, WidgetShim):
     def winId(self):
         return self._host.ns_view
 
+    def _can_create_surface(self):
+        return bool(self._host.ns_view)
+
     def isVisible(self):
         # Headless (no surface yet, or the smoke test): nothing presents,
         # as a hidden WgpuView, so nothing creates a renderer.

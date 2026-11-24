@@ -563,6 +563,7 @@ pub fn command_description(label: &str, key: &str) -> Option<&'static str> {
             "menu:clear_texture_cache" => "Delete the images extracted from imported .skp files.",
             "menu:convert_path" => "Turn the selected paths into edges of the model; a closed path becomes a face, ready to push up.",
             "menu:delete_guides" => "Remove every guide line and guide point from the model.",
+            "menu:develop_plugin" => "Open the developer guide for writing a Built extension.",
             "menu:documentation" => "Open the IngeTrazo documentation in the web browser.",
             "menu:explode_group" => "Break the selected groups apart, back into the geometry around them.",
             "menu:export:dae" => "Bring in a COLLADA model with its materials and textures.",

@@ -8,6 +8,7 @@ few views over turned, scaled and mirrored copies that hide one another.
 Skipped without the engine."""
 from __future__ import annotations
 
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import math
 import os
 
@@ -41,12 +42,12 @@ def _cube(sx=1.0, sy=1.0, sz=1.0, at=(0.0, 0.0, 0.0)):
     return m
 
 
-def _window(lazy):
+def _window(native_host, lazy):
     from core.group import Group
-    from views.main_window import MainWindow
-    win = MainWindow()
+    win = native_host.window
+    win.new_document()
     vp = win.viewport
-    vp.resize(900, 640)
+    native_host.resize(900, 640, 1.)
     vp.scene.guides.clear()
     rng = np.random.default_rng(7)
     protos = [_cube(), _cube(2.0, 0.5, 1.5), _cube(0.3, 0.3, 3.0)]
@@ -83,10 +84,6 @@ def _window(lazy):
     return win, vp
 
 
-def _close(win):
-    win._saved_version = win.viewport.scene.version
-    win.close()
-
 
 VIEWS = ((30.0, 35.0, True), (200.0, 20.0, True), (115.0, 60.0, False),
          (300.0, 10.0, True))
@@ -106,14 +103,10 @@ def _key(p):
 
 
 @pytest.fixture
-def pair():
-    a, va = _window(lazy=True)
-    b, vb = _window(lazy=False)
-    try:
-        yield va, vb
-    finally:
-        _close(a)
-        _close(b)
+def pair(native_host):
+    a, va = _window(native_host, lazy=True)
+    b, vb = _window(native_host, lazy=False)
+    yield va, vb
 
 
 def test_the_unbaked_corner_is_the_baked_one_everywhere(pair):
@@ -243,17 +236,17 @@ def test_the_faces_under_the_cursor_are_the_baked_ones(pair):
     assert seen > 200 and crossed >= 3 and edged > 3, (seen, crossed, edged)
 
 
-def test_of_two_coplanar_faces_the_smaller_copy_is_picked():
+def test_of_two_coplanar_faces_the_smaller_copy_is_picked(native_host):
     """Two copies of one cube whose tops are one plane — a 4×4 slab, then
     a small block standing in it: the ray meets both tops at the same
     depth and the smaller face wins, by its area as placed."""
     from core.group import Group
-    from views.main_window import MainWindow
     out = []
     for lazy in (True, False):
-        win = MainWindow()
+        win = native_host.window
+        win.new_document()
         vp = win.viewport
-        vp.resize(600, 400)
+        native_host.resize(600, 400, 1.)
         vp.scene.guides.clear()
         proto = _cube()
         for name, (sx, sy, tx, ty) in (("big", (4.0, 4.0, 0.0, 0.0)),
@@ -277,8 +270,6 @@ def test_of_two_coplanar_faces_the_smaller_copy_is_picked():
         face, place = vp.pick_face_placement(x, y)
         out.append((_key(face.centroid()), place.name))
         assert not lazy or not getattr(vp, "_pick_live", None)
-        win._saved_version = vp.scene.version
-        win.close()
     assert out[0] == out[1] and out[0][1] == "small"
 
 
@@ -394,33 +385,30 @@ def test_rays_the_static_engine_leaves_open_are_settled_as_before(pair,
     assert 0 < hidden < 4 * 300
 
 
-def test_camera_changes_reuse_pick_geometry_until_a_placement_moves():
+def test_camera_changes_reuse_pick_geometry_until_a_placement_moves(native_host):
     """Camera-dependent candidate cuts must not rebuild scene geometry.
 
     Keep the loose index, placement bounds and native instance set across
     orbit/projection changes; moving a placement must still invalidate them.
     """
-    win, vp = _window(lazy=True)
-    try:
-        _set_view(vp, VIEWS[0])
-        table = vp._pick_lazy_table()
-        index = vp._pick_index(near="skip")
-        instances = vp._pick_instance_set(table)
-        assert instances is not None
-        for view in VIEWS[1:]:
-            _set_view(vp, view)
-            assert vp._pick_lazy_table() is table
-            assert vp._pick_index(near="skip") is index
-            assert vp._pick_instance_set(table) is instances
-        group = next(g for g in vp.scene.groups if g.xform is not None)
-        moved = QMatrix4x4(group.xform)
-        moved.translate(5, 0, 0)
-        group.xform = moved
-        vp.scene.version += 1
-        vp._tick += 1
-        changed = vp._pick_lazy_table()
-        assert changed is not table
-        assert vp._pick_instance_set(changed) is not instances
-        assert vp._pick_index(near="skip") is not index
-    finally:
-        _close(win)
+    win, vp = _window(native_host, lazy=True)
+    _set_view(vp, VIEWS[0])
+    table = vp._pick_lazy_table()
+    index = vp._pick_index(near="skip")
+    instances = vp._pick_instance_set(table)
+    assert instances is not None
+    for view in VIEWS[1:]:
+        _set_view(vp, view)
+        assert vp._pick_lazy_table() is table
+        assert vp._pick_index(near="skip") is index
+        assert vp._pick_instance_set(table) is instances
+    group = next(g for g in vp.scene.groups if g.xform is not None)
+    moved = QMatrix4x4(group.xform)
+    moved.translate(5, 0, 0)
+    group.xform = moved
+    vp.scene.version += 1
+    vp._tick += 1
+    changed = vp._pick_lazy_table()
+    assert changed is not table
+    assert vp._pick_instance_set(changed) is not instances
+    assert vp._pick_index(near="skip") is not index

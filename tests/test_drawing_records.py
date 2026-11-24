@@ -3,6 +3,7 @@
 """Drawing records, history, archive and sheet export on synthetic models."""
 from __future__ import annotations
 
+from tests.shell_isolation import one_off_export, restore_shell_patches  # noqa: F401
 import json
 import random
 
@@ -558,35 +559,27 @@ def test_a_layer_not_printed_survives_save_and_open(tmp_path):
     assert back.layer("Ref").printable is False
 
 
-def test_the_view_dxf_writes_each_layer_with_its_colour(tmp_path,
+def test_the_view_dxf_writes_each_layer_with_its_colour(native_host, tmp_path,
                                                         monkeypatch):
     import re
-    from views import main_window as mw
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        vp.resize(800, 600)
-        vp.camera.set_aspect(800, 600)
-        src = _two_boxes_scene()
-        vp.scene.layers[:] = src.layers
-        vp.scene.groups[:] = _moved(src)
-        vp.scene.layer("B").color = (1.0, 0.0, 0.0)
-        vp.notify_scene_changed()
-        lo, hi = vp.scene.bounds()
-        vp.camera.fit_to(lo, hi, 1.2)
-        vp.camera.perspective = False
-        path = tmp_path / "vista.dxf"
-        monkeypatch.setattr(mw.file_dialogs, "getSaveFileName",
-                            lambda *a, **k: (str(path), ""))
-        win._on_export_view_dxf()
-        text = path.read_text(encoding="ascii")
-        assert re.search(r"0\nLAYER\n2\nB(-PERFIL)?\n70\n0\n62\n1\n",
-                         text)                               # red
-        assert re.search(r"\n2\nA(-PERFIL)?\n", text)
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    win = native_host.window
+    vp = win.viewport
+    native_host.resize(800, 600, 1.)
+    vp.camera.set_aspect(800, 600)
+    src = _two_boxes_scene()
+    vp.scene.layers[:] = src.layers
+    vp.scene.groups[:] = _moved(src)
+    vp.scene.layer("B").color = (1.0, 0.0, 0.0)
+    vp.notify_scene_changed()
+    lo, hi = vp.scene.bounds()
+    vp.camera.fit_to(lo, hi, 1.2)
+    vp.camera.perspective = False
+    path = tmp_path / "vista.dxf"
+    one_off_export(win, "dxf", path)
+    text = path.read_text(encoding="ascii")
+    assert re.search(r"0\nLAYER\n2\nB(-PERFIL)?\n70\n0\n62\n1\n",
+                     text)                               # red
+    assert re.search(r"\n2\nA(-PERFIL)?\n", text)
 
 
 def test_every_line_type_has_a_name_a_dxf_twin_and_a_pattern(tmp_path):

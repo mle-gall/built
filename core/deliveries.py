@@ -179,21 +179,23 @@ def _write_view(model, record, path, camera, view, svg_picture, screen_mm):
         return _write_drawing(model, path, cam, view.name if view else "VISTA", record, svg_picture, screen_mm)
 
 
-def _write_drawing(model, path, cam, label, record, svg_picture, screen_mm):
+def _write_drawing(model, path, cam, label, record, svg_picture, screen_mm, geometry=None):
     from core.hlr import hlr_drawing, hlr_perspective
     fmt, opts = record["format"], record["options"]
     solids, texts = [], []
     if cam.perspective:
-        groups = [(label, hlr_perspective(model, cam))]
+        groups = [(label, hlr_perspective(model, cam, geometry=geometry))]
     else:
         from core.layers import export_labels, line_styles
         from formats.dxf_views import dxf_cut_layers, dxf_groups_by_layer
-        drawing = hlr_drawing(model, cam, layers=True)
+        drawing = hlr_drawing(model, cam, layers=True, geometry=geometry)
         drawing.styles = line_styles(model, True)
         drawing.labels = export_labels(model)
+        if fmt == "dxf" and len(model.layers) == 1:
+            drawing.labels[model.layers[0].key] = label
         groups = dxf_groups_by_layer(drawing, label, False, texts=texts)
         if fmt == "dxf":
-            cuts, solids = dxf_cut_layers(model, cam)
+            cuts, solids = dxf_cut_layers(model, cam, geometry=geometry)
             groups.extend(cuts)
     if fmt == "svg":
         from core.vista_caras import view_faces
@@ -228,7 +230,7 @@ def preview_svg(scene, record, *, camera, svg_picture=None, screen_mm=None):
     return _write_view(scoped(scene, record), record, None, camera, view, svg_picture, screen_mm)
 
 
-def write_steps(scene, record, *, camera=None, pdf_writer=None, svg_picture=None, screen_mm=None, project_directory=None):
+def write_steps(scene, record, *, camera=None, pdf_writer=None, svg_picture=None, screen_mm=None, project_directory=None, view_geometry=None):
     """Yield progress between output files. Publish only after every writer succeeds."""
     validate(record)
     fmt, opts = record["format"], record["options"]
@@ -251,6 +253,10 @@ def write_steps(scene, record, *, camera=None, pdf_writer=None, svg_picture=None
                 failed = pdf_writer(str(path), sheets)
                 if failed:
                     raise ValueError("Frames failed on sheets: " + ", ".join(failed))
+                continue
+            if fmt == "dxf" and record["scope"] == "visible" and view_geometry is not None:
+                geometry = view_geometry(tags=not camera.perspective)
+                _write_drawing(scene, path, camera, "VISTA", record, None, None, geometry)
                 continue
             model = scoped(scene, record)
             if fmt == "ifc":

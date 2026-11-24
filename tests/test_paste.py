@@ -3,6 +3,7 @@
 """Paste tool: stamp copied geometry at the cursor, as one undoable step."""
 from __future__ import annotations
 
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from types import SimpleNamespace
 
 from PySide6.QtCore import QPointF, Qt
@@ -283,32 +284,24 @@ def test_clipboard_survives_deleting_the_original():
     assert scene.groups[0].name == "Caja"
 
 
-def test_paste_stamps_once_and_returns_to_select():
+def test_paste_stamps_once_and_returns_to_select(native_host, monkeypatch):
     # One stamp per paste: after the click the Select tool is back,
     # nothing keeps following the cursor. The clipboard survives, so pasting
     # again stamps another copy.
-    import sys
-    from PySide6.QtWidgets import QApplication
-    if QApplication.instance() is None:
-        QApplication(sys.argv[:1])
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        vp.clipboard = {"faces": [([V(0, 0), V(1, 0), V(1, 1), V(0, 1)], [])],
-                        "edges": [], "ref": V(0, 0, 0)}
-        win._on_paste()
-        assert isinstance(vp.active_tool, PasteTool)
-        ctx = ToolContext(viewport=vp, world=V(5, 5, 0), screen=QPointF(0, 0),
-                          modifiers=Qt.NoModifier, snap=None)
-        vp.active_tool.on_click(ctx)
-        assert vp.active_tool is win._tools["select"]
-        assert len(vp.scene.mesh.faces) == 1
-        win._on_paste()                      # clipboard kept: paste again works
-        assert isinstance(vp.active_tool, PasteTool)
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    monkeypatch.setattr("formats.clip.current_offer", lambda: None)
+    win = native_host.window
+    vp = win.viewport
+    vp.clipboard = {"faces": [([V(0, 0), V(1, 0), V(1, 1), V(0, 1)], [])],
+                    "edges": [], "ref": V(0, 0, 0)}
+    win._on_paste()
+    assert isinstance(vp.active_tool, PasteTool)
+    ctx = ToolContext(viewport=vp, world=V(5, 5, 0), screen=QPointF(0, 0),
+                      modifiers=Qt.NoModifier, snap=None)
+    vp.active_tool.on_click(ctx)
+    assert vp.active_tool is win._tools["select"]
+    assert len(vp.scene.mesh.faces) == 1
+    win._on_paste()                      # clipboard kept: paste again works
+    assert isinstance(vp.active_tool, PasteTool)
 
 
 def test_cut_group_removes_it_and_paste_restores():
@@ -425,24 +418,16 @@ def test_paste_in_place_lands_on_the_original_and_selects_it():
     assert PasteTool.in_place(_VP(scene, hist, None)) is False
 
 
-def test_paste_in_place_menu_action_keeps_the_active_tool():
-    import sys
-    from PySide6.QtWidgets import QApplication
-    if QApplication.instance() is None:
-        QApplication(sys.argv[:1])
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        vp = win.viewport
-        vp.clipboard = {"faces": [([V(0, 0), V(1, 0), V(1, 1), V(0, 1)], [])],
-                        "edges": [], "ref": V(0, 0, 0)}
-        before = vp.active_tool
-        win._on_paste_in_place()
-        assert vp.active_tool is before
-        assert len(vp.scene.mesh.faces) == 1
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_paste_in_place_menu_action_keeps_the_active_tool(native_host, monkeypatch):
+    monkeypatch.setattr("formats.clip.current_offer", lambda: None)
+    win = native_host.window
+    vp = win.viewport
+    vp.clipboard = {"faces": [([V(0, 0), V(1, 0), V(1, 1), V(0, 1)], [])],
+                    "edges": [], "ref": V(0, 0, 0)}
+    before = vp.active_tool
+    win._on_paste_in_place()
+    assert vp.active_tool is before
+    assert len(vp.scene.mesh.faces) == 1
 
 
 def test_undoing_a_paste_leaves_no_loose_edges_behind():

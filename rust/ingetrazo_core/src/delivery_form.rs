@@ -194,7 +194,16 @@ pub fn delivery_error(record: &str) -> PyResult<String> {
     Ok(validate(&parse(record)?).unwrap_or_default())
 }
 
+/// Initial values for an unsaved delivery opened by a File menu shortcut.
+#[pyfunction]
+fn delivery_defaults<'a>(format: &str, one_off: bool, last_unit: &'a str) -> (&'static str, &'a str) {
+    let scope = if one_off && format == "dxf" { "visible" } else { "whole" };
+    let unit = if one_off && STL_UNITS.contains(&last_unit) { last_unit } else { "mm" };
+    (scope, unit)
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(delivery_defaults, m)?)?;
     m.add_function(wrap_pyfunction!(delivery_formats, m)?)?;
     m.add_function(wrap_pyfunction!(delivery_scopes, m)?)?;
     m.add_function(wrap_pyfunction!(delivery_field_visible, m)?)?;

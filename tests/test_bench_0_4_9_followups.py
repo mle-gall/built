@@ -11,6 +11,7 @@
 """
 from __future__ import annotations
 
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -84,25 +85,20 @@ def test_line_closing_a_wall_in_front_of_the_camera_shows_its_front():
 
 # ---- the hidden view switched off drops the ghosts from the selection ----
 
-def test_switching_the_hidden_view_off_deselects_the_ghost():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        scene = win.viewport.scene
-        m = Mesh()
-        m.add_face([V(0, 0), V(1, 0), V(1, 1), V(0, 1)])
-        g = Group(m, "caja")
-        g.xform = QMatrix4x4()
-        g.hidden = True
-        scene.groups.append(g)
-        win._set_hidden_view("show_hidden_objects", True)
-        scene.selection.add(g)
-        win._set_hidden_view("show_hidden_objects", False)
-        assert g not in scene.selection
-        win._saved_version = scene.version
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_switching_the_hidden_view_off_deselects_the_ghost(native_host):
+    win = native_host.window
+    scene = win.viewport.scene
+    m = Mesh()
+    m.add_face([V(0, 0), V(1, 0), V(1, 1), V(0, 1)])
+    g = Group(m, "caja")
+    g.xform = QMatrix4x4()
+    g.hidden = True
+    scene.groups.append(g)
+    win._set_hidden_view("show_hidden_objects", True)
+    scene.selection.add(g)
+    win._set_hidden_view("show_hidden_objects", False)
+    assert g not in scene.selection
+    win._saved_version = scene.version
 
 
 # ---- the Tape says it is on an axis --------------------------------------

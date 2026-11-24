@@ -69,6 +69,7 @@ pub struct ModelViews {
     preset: usize,
     #[pyo3(get)]
     active: usize,
+    hover: Option<usize>,
     maximized: bool,
     capture: Option<usize>,
     dividers: crate::pane_dividers::Dividers,
@@ -82,6 +83,7 @@ impl ModelViews {
         Self {
             preset: 0,
             active: 1,
+            hover: None,
             maximized: false,
             capture: None,
             dividers: Default::default(),
@@ -114,11 +116,13 @@ impl ModelViews {
     }
     fn toggle_maximized(&mut self) {
         if self.preset != 0 {
+            self.active = self.hover.unwrap_or(self.active);
             self.maximized = !self.maximized;
         }
         self.cancel();
     }
     fn cancel(&mut self) {
+        self.hover = None;
         self.capture = None;
         self.dividers.cancel();
     }
@@ -148,6 +152,7 @@ impl ModelViews {
     }
     /// Read the existing archive schema, tolerating malformed optional fields.
     fn restore(&mut self, home: &Bound<'_, PyAny>) {
+        *self = Self::new();
         let Some(key) = home
             .get_item("layout")
             .ok()
@@ -280,6 +285,7 @@ impl ModelViews {
             .collect()
     }
     fn pointer(&mut self, kind: &str, x: f64, y: f64, held: bool) -> Option<(usize, f64, f64)> {
+        self.hover = None;
         let p = self.panes.iter().find(|p| match self.capture {
             Some(id) => p.id == id,
             None => {
@@ -289,6 +295,7 @@ impl ModelViews {
                     && y < (p.y + p.height).into()
             }
         })?;
+        self.hover = Some(p.id);
         if matches!(kind, "press" | "double" | "wheel" | "gesture") {
             self.active = p.id;
         }
@@ -322,7 +329,7 @@ mod tests {
         views.toggle_maximized();
         assert_eq!(
             views.arrange(900, 600, [-1., -1., 1., 1.]),
-            [(0, 0, 0, 900, 600)]
+            [(1, 0, 0, 900, 600)]
         );
         views.choose("single").unwrap();
         assert_eq!(views.active, 1);

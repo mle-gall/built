@@ -10,8 +10,6 @@ from core.i18n import tr
 class Document:
     """One open project: its viewport and the window's record of it."""
 
-    view_layout = "single"
-
     def __init__(self, viewport=None) -> None:
         from core.group import new_uid
         self.tab_id = new_uid()
@@ -34,14 +32,6 @@ class Document:
         self.last_sheet: int = 0
         from ingetrazo_render import SceneMark
         self.scene_mark = SceneMark()
-        #: How many views it shows (views/multi_view.py LAYOUTS) and the
-        #: grid holding them, made the first time it shows more than one.
-        self.view_grid = None
-        #: What an extension put in this project's place in the viewport
-        #: stack with ``setCentralWidget`` (MultiView's grid of views, which
-        #: holds this viewport), or a blank placeholder between its
-        #: ``takeCentralWidget`` and that call; None = the viewport itself.
-        #: See MainWindow.centralWidget.
         self.stand_in = None
         #: The view an extension made ``window.viewport`` while this project
         #: is in front (a split pane), or None. ``viewport`` stays the
@@ -50,12 +40,6 @@ class Document:
 
     def slot_widget(self):
         """The widget this project shows in the viewport stack."""
-        grid = getattr(self, "view_grid", None)
-        # Under Metal the stand-in (the native view) sits in a cell of the
-        # project's grid: the grid is what the stack shows.
-        if (grid is not None and self.stand_in is not None
-                and getattr(grid, "display", None) is self.stand_in):
-            return grid
         if self.stand_in is not None:
             return self.stand_in
         return getattr(self.viewport, "keys_stand_in", None) or self.viewport

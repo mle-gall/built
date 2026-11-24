@@ -118,7 +118,10 @@ class MetalView(ViewNavigation):
         return self.source_viewport._horizon_ndc_y(mvp)
 
     def _model_diag(self):
-        return float(np.linalg.norm(self.packed.world_bounds[1]-self.packed.world_bounds[0]))
+        if self.packed is None:
+            return self.source_viewport._model_diag() if self.source_viewport is not None else 0.0
+        lo, hi = self.packed.world_bounds
+        return float(np.linalg.norm(hi - lo))
 
     def _prepare_surface(self):
         """Winit already owns the surface. Widget hosts configure theirs here."""
@@ -160,7 +163,7 @@ class MetalView(ViewNavigation):
     def paintEngine(self):
         return None
 
-    # ---- more views of the same resident scene (views/wgpu_peer.py) -------
+    # ---- more views of the same resident scene (views/resident_peer.py) -------
     @property
     def _shared(self):
         """The view holding the resident scene: this one; a peer's first."""

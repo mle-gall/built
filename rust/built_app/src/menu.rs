@@ -189,7 +189,7 @@ pub fn build() -> muda::Result<Menus> {
     let draw = Submenu::new("Draw", true);
     let mut groups = std::collections::HashMap::from([
         ("File", file.clone()), ("File ▸ Import", import.clone()), ("Edit", edit.clone()), ("Camera", view.clone()),
-        ("Window", window.clone()), ("Draw", draw.clone()), ("Tools", tools.clone()), ("Help", help.clone()),
+        ("Plugins", plugins.clone()), ("Window", window.clone()), ("Draw", draw.clone()), ("Tools", tools.clone()), ("Help", help.clone()),
     ]);
     let mut model_checks = Vec::new();
     for entry in ingetrazo_render::model_menu::entries() {

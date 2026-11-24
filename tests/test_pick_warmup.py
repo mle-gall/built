@@ -7,6 +7,7 @@ taken only on the GUI thread, and only if the document has not moved on.
 Skipped without the engine."""
 from __future__ import annotations
 
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.controller_surface import ControllerSurface
 import os
 
@@ -19,7 +20,7 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 
 import core._native as _native  # noqa: E402
 from tests.test_lazy_native_snap import (  # noqa: E402
-    VIEWS, _close, _face_key, _set_view, _window)
+    VIEWS, _face_key, _set_view, _window)
 from views import document_interaction as vpmod  # noqa: E402
 
 _app = QApplication.instance() or QApplication([])
@@ -36,150 +37,127 @@ def every_chunk_has_a_grid(monkeypatch):
     monkeypatch.setattr(vpmod, "_SPAN_CELL_TRIS", 4, raising=False)
 
 
-def test_the_warmed_index_answers_as_the_cold_one():
-    a, va = _window(lazy=True)
-    b, vb = _window(lazy=True)
-    try:
-        va.start_pick_warmup()
-        warm = va._pick_warm
-        assert warm is not None
-        warm.join()
-        assert warm.protos and warm.grids
-        seen = 0
-        for view in VIEWS:
-            _set_view(va, view)
-            _set_view(vb, view)
-            for x in np.arange(8.3, 900, 41.0):
-                for y in np.arange(5.9, 640, 43.0):
-                    x, y = float(x), float(y)
-                    va._input_serial = vb._input_serial = (x, y)
-                    fa = va.pick_face_placement(x, y)
-                    fb = vb.pick_face_placement(x, y)
-                    assert _face_key(*fa) == _face_key(*fb), (view, x, y)
-                    ga, gb = va.pick_group(x, y), vb.pick_group(x, y)
-                    assert (getattr(ga, "name", None)
-                            == getattr(gb, "name", None)), (view, x, y)
-                    seen += fb[0] is not None
-        assert seen > 50
-        # And they did use what the threads made, not their own.
-        assert va._pick_warm is None
-        for key, ip in warm.protos.items():
-            assert va._inst_proto_cache[key] is ip
-        for chunk, snap in warm.grids:
-            assert chunk["_span_grid"] is snap["_span_grid"]
-    finally:
-        _close(a)
-        _close(b)
+def test_the_warmed_index_answers_as_the_cold_one(native_host):
+    a, va = _window(native_host, lazy=True)
+    b, vb = _window(native_host, lazy=True)
+    va.start_pick_warmup()
+    warm = va._pick_warm
+    assert warm is not None
+    warm.join()
+    assert warm.protos and warm.grids
+    seen = 0
+    for view in VIEWS:
+        _set_view(va, view)
+        _set_view(vb, view)
+        for x in np.arange(8.3, 900, 41.0):
+            for y in np.arange(5.9, 640, 43.0):
+                x, y = float(x), float(y)
+                va._input_serial = vb._input_serial = (x, y)
+                fa = va.pick_face_placement(x, y)
+                fb = vb.pick_face_placement(x, y)
+                assert _face_key(*fa) == _face_key(*fb), (view, x, y)
+                ga, gb = va.pick_group(x, y), vb.pick_group(x, y)
+                assert (getattr(ga, "name", None)
+                        == getattr(gb, "name", None)), (view, x, y)
+                seen += fb[0] is not None
+    assert seen > 50
+    # And they did use what the threads made, not their own.
+    assert va._pick_warm is None
+    for key, ip in warm.protos.items():
+        assert va._inst_proto_cache[key] is ip
+    for chunk, snap in warm.grids:
+        assert chunk["_span_grid"] is snap["_span_grid"]
 
 
-def test_a_grid_of_arrays_that_have_changed_is_left_out():
-    a, va = _window(lazy=True)
-    try:
-        va.start_pick_warmup()
-        warm = va._pick_warm
-        warm.join()
-        assert len(warm.grids) >= 2
-        moved, swapped = warm.grids[0][0], warm.grids[1][0]
-        moved["rev"] = (moved.get("rev") or 0, "after")
-        swapped["v0"] = swapped["v0"].copy()
-        vpmod._pick_warm_take(va)
-        assert "_span_grid" not in moved
-        assert "_span_grid" not in swapped
-    finally:
-        _close(a)
+def test_a_grid_of_arrays_that_have_changed_is_left_out(native_host):
+    a, va = _window(native_host, lazy=True)
+    va.start_pick_warmup()
+    warm = va._pick_warm
+    warm.join()
+    assert len(warm.grids) >= 2
+    moved, swapped = warm.grids[0][0], warm.grids[1][0]
+    moved["rev"] = (moved.get("rev") or 0, "after")
+    swapped["v0"] = swapped["v0"].copy()
+    vpmod._pick_warm_take(va)
+    assert "_span_grid" not in moved
+    assert "_span_grid" not in swapped
 
 
-def test_a_new_document_forgets_the_warmup():
-    a, va = _window(lazy=True)
-    try:
-        va.start_pick_warmup()
-        assert va._pick_warm is not None
-        va._pick_warm.join()
-        va.reset_document_caches()
-        assert va._pick_warm is None
-    finally:
-        _close(a)
+def test_a_new_document_forgets_the_warmup(native_host):
+    a, va = _window(native_host, lazy=True)
+    va.start_pick_warmup()
+    assert va._pick_warm is not None
+    va._pick_warm.join()
+    va.reset_document_caches()
+    assert va._pick_warm is None
 
 
-def test_a_model_without_lazy_placements_starts_nothing():
-    a, va = _window(lazy=False)
-    try:
-        va.start_pick_warmup()
-        assert getattr(va, "_pick_warm", None) is None
-    finally:
-        _close(a)
+def test_a_model_without_lazy_placements_starts_nothing(native_host):
+    a, va = _window(native_host, lazy=False)
+    va.start_pick_warmup()
+    assert getattr(va, "_pick_warm", None) is None
 
 
-def test_the_pointer_that_got_there_first_needs_no_warmup():
-    a, va = _window(lazy=True)
-    try:
-        _set_view(va, VIEWS[0])
-        va._input_serial = (100.0, 100.0)
-        va.pick_group(100.0, 100.0)
-        assert va._inst_set_memo is not None
-        va.start_pick_warmup()
-        assert getattr(va, "_pick_warm", None) is None
-    finally:
-        _close(a)
+def test_the_pointer_that_got_there_first_needs_no_warmup(native_host):
+    a, va = _window(native_host, lazy=True)
+    _set_view(va, VIEWS[0])
+    va._input_serial = (100.0, 100.0)
+    va.pick_group(100.0, 100.0)
+    assert va._inst_set_memo is not None
+    va.start_pick_warmup()
+    assert getattr(va, "_pick_warm", None) is None
 
 
-def test_the_box_bounds_are_those_of_the_chunk_asked_alone():
+def test_the_box_bounds_are_those_of_the_chunk_asked_alone(native_host):
     from tools.select_host import _local_bounds
-    a, va = _window(lazy=True)
-    try:
-        va.start_pick_warmup()
-        warm = va._pick_warm
-        warm.join()
-        assert warm.bounds
-        vpmod._pick_warm_take(va)
-        for chunk, _s in warm.bounds:
-            hit = chunk["_box_bounds"]
-            # Weakly keyed on the triangle arrays, by the edges themselves.
-            assert hit[0][0]() is chunk["v0"] and hit[1] is chunk["edges"]
-            alone = {k: chunk[k] for k in ("v0", "e1", "e2", "edges")}
-            want = _local_bounds(alone)
-            assert (hit[2][0] == want[0]).all() and (hit[2][1] == want[1]).all()
-    finally:
-        _close(a)
+    a, va = _window(native_host, lazy=True)
+    va.start_pick_warmup()
+    warm = va._pick_warm
+    warm.join()
+    assert warm.bounds
+    vpmod._pick_warm_take(va)
+    for chunk, _s in warm.bounds:
+        hit = chunk["_box_bounds"]
+        # Weakly keyed on the triangle arrays, by the edges themselves.
+        assert hit[0][0]() is chunk["v0"] and hit[1] is chunk["edges"]
+        alone = {k: chunk[k] for k in ("v0", "e1", "e2", "edges")}
+        want = _local_bounds(alone)
+        assert (hit[2][0] == want[0]).all() and (hit[2][1] == want[1]).all()
 
 
-def test_the_box_of_a_placement_nobody_baked():
+def test_the_box_of_a_placement_nobody_baked(native_host):
     """Its selection box asks for no world bake, and is what the bake carried:
     fresh after a move, a new frame or an edit of the prototype."""
     from ingetrazo_core import Matrix4 as QMatrix4x4
-    a, va = _window(lazy=True)
-    b, vb = _window(lazy=False)
-    try:
-        ga = next(g for g in va.scene.groups if g.name == "C33")
-        gb = next(g for g in vb.scene.groups if g.name == "C33")
-        cached = getattr(va, "_inst_chunks", None) or {}
-        cached.pop(id(ga), None)
-        vb._group_chunk(gb)                # the way through the bake
-        assert va._group_obb(ga) == vb._group_obb(gb)
-        assert id(ga) not in (getattr(va, "_inst_chunks", None) or {})
-        assert id(gb) in vb._inst_chunks
-        kept = va._group_obb(ga)
-        assert va._group_obb(ga) is kept
-        for g in (ga, gb):
-            m = QMatrix4x4(g.xform)
-            m.translate(1.0, 2.0, 0.5)
-            g.xform = m
-        moved = va._group_obb(ga)
-        assert moved is not kept
-        fresh = type(va)._compute_obb(ga)
-        assert moved == fresh
-        # The prototype edited: a new bake of it, so a new box.
-        ga.mesh.add_face([V(9, 9, 9), V(10, 9, 9), V(10, 10, 9)])
-        ga.mesh._chunk_dirty = True
-        va.scene.version += 1
-        assert va._group_obb(ga) == type(va)._compute_obb(ga)
-        assert va._group_obb(ga) != moved
-        # Once baked for another reason, the bake carries the box again.
-        va._group_chunk(ga)
-        assert id(ga) in va._inst_chunks
-        assert va._group_obb(ga) == type(va)._compute_obb(ga)
-        va.reset_document_caches()
-        assert va._inst_obb is None
-    finally:
-        _close(a)
-        _close(b)
+    a, va = _window(native_host, lazy=True)
+    b, vb = _window(native_host, lazy=False)
+    ga = next(g for g in va.scene.groups if g.name == "C33")
+    gb = next(g for g in vb.scene.groups if g.name == "C33")
+    cached = getattr(va, "_inst_chunks", None) or {}
+    cached.pop(id(ga), None)
+    vb._group_chunk(gb)                # the way through the bake
+    assert va._group_obb(ga) == vb._group_obb(gb)
+    assert id(ga) not in (getattr(va, "_inst_chunks", None) or {})
+    assert id(gb) in vb._inst_chunks
+    kept = va._group_obb(ga)
+    assert va._group_obb(ga) is kept
+    for g in (ga, gb):
+        m = QMatrix4x4(g.xform)
+        m.translate(1.0, 2.0, 0.5)
+        g.xform = m
+    moved = va._group_obb(ga)
+    assert moved is not kept
+    fresh = type(va)._compute_obb(ga)
+    assert moved == fresh
+    # The prototype edited: a new bake of it, so a new box.
+    ga.mesh.add_face([V(9, 9, 9), V(10, 9, 9), V(10, 10, 9)])
+    ga.mesh._chunk_dirty = True
+    va.scene.version += 1
+    assert va._group_obb(ga) == type(va)._compute_obb(ga)
+    assert va._group_obb(ga) != moved
+    # Once baked for another reason, the bake carries the box again.
+    va._group_chunk(ga)
+    assert id(ga) in va._inst_chunks
+    assert va._group_obb(ga) == type(va)._compute_obb(ga)
+    va.reset_document_caches()
+    assert va._inst_obb is None

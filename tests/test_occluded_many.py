@@ -18,6 +18,7 @@ Rays ask the pick index (NumPy), so this runs headless, GL or not.
 """
 from __future__ import annotations
 
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 import os
 import random
@@ -53,14 +54,12 @@ def _scene_points(sc, rng, n):
 
 
 @pytest.fixture(params=[4, 80], ids=["few-spans", "many-spans"])
-def viewport(request):
+def viewport(native_host, request):
     # 4 blocks: the pick index's spans stay under 64 (``_ray_aabb`` per
     # span); 80: past it (the vectorised slab) — both prefilters covered.
     from core.group import Group
     from core.mesh import Mesh
-    from views.main_window import MainWindow
-    win = MainWindow()
-    win.show()
+    win = native_host.window
     for _ in range(10):
         _app.processEvents()
     vp = win.viewport          # rays ask the pick index: no GL needed
@@ -84,8 +83,6 @@ def viewport(request):
     spans = len(getattr(vp._pick_index(), "tri_spans", None) or ())
     assert (spans > 64) == (request.param > 64), spans   # the regime asked
     yield vp
-    win._saved_version = sc.version          # no «save changes?» on close
-    win.close()
 
 
 @pytest.mark.parametrize("view", ["iso", "front", "back", "top", "left"])
@@ -271,84 +268,78 @@ def test_pick_vertex_batches_like_one_ray_at_a_time(viewport, view,
     assert sum(g is not None for g in got) > 10
 
 
-def test_pick_vertex_dense_hidden_corners(monkeypatch):
+def test_pick_vertex_dense_hidden_corners(native_host, monkeypatch):
     """Two grids of short edges seen through and around a wall, offset by
     less than the pick radius: at most pixels the nearest corner is hidden
     behind the wall and a visible one lies a few pixels away — the batches
     must answer the one-at-a-time loop's corner every time."""
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        win.show()
-        for _ in range(10):
-            _app.processEvents()
-        vp = win.viewport
-        sc = vp.scene
-        _box(sc.mesh, -3, -0.1, -1, 3, 0.1, 1)            # the wall, y≈0
-        import numpy as np
-        xs, zs = np.meshgrid(np.arange(-0.6, 0.6, 0.006),
-                             np.arange(-0.4, 0.4, 0.006))   # dense, behind
-        for x, z in zip(xs.ravel().tolist(), zs.ravel().tolist()):
-            sc.mesh.add_edge(V(x, 1.0, z), V(x + 0.002, 1.0, z))
-        for k in range(12):                              # sparse, in front
-            for j in range(8):
-                x, z = -0.59 + 0.1 * k, -0.39 + 0.1 * j
-                sc.mesh.add_edge(V(x, -0.5, z), V(x + 0.004, -0.5, z))
-        sc.version += 1
-        vp.camera.set_view("front")
-        vp.camera.fit_to(V(-0.7, -1, -0.5), V(0.7, 1, 0.5))
+    win = native_host.window
+    for _ in range(10):
         _app.processEvents()
-        rng = random.Random(1)
-        pixels = []
-        for k in range(12):                 # around each front corner
-            for j in range(8):
-                p = vp._world_to_pixel(V(-0.59 + 0.1 * k, -0.5,
-                                         -0.39 + 0.1 * j))
-                if p is not None:
-                    pixels.append((p[0] + rng.uniform(-4, 4),
-                                   p[1] + rng.uniform(-4, 4)))
+    vp = win.viewport
+    sc = vp.scene
+    _box(sc.mesh, -3, -0.1, -1, 3, 0.1, 1)            # the wall, y≈0
+    import numpy as np
+    xs, zs = np.meshgrid(np.arange(-0.6, 0.6, 0.006),
+                         np.arange(-0.4, 0.4, 0.006))   # dense, behind
+    for x, z in zip(xs.ravel().tolist(), zs.ravel().tolist()):
+        sc.mesh.add_edge(V(x, 1.0, z), V(x + 0.002, 1.0, z))
+    for k in range(12):                              # sparse, in front
+        for j in range(8):
+            x, z = -0.59 + 0.1 * k, -0.39 + 0.1 * j
+            sc.mesh.add_edge(V(x, -0.5, z), V(x + 0.004, -0.5, z))
+    sc.version += 1
+    vp.camera.set_view("front")
+    vp.camera.fit_to(V(-0.7, -1, -0.5), V(0.7, 1, 0.5))
+    _app.processEvents()
+    rng = random.Random(1)
+    pixels = []
+    for k in range(12):                 # around each front corner
+        for j in range(8):
+            p = vp._world_to_pixel(V(-0.59 + 0.1 * k, -0.5,
+                                     -0.39 + 0.1 * j))
+            if p is not None:
+                pixels.append((p[0] + rng.uniform(-4, 4),
+                               p[1] + rng.uniform(-4, 4)))
 
-        def picks():
-            out = []
-            for x, y in pixels:
-                r = vp.pick_vertex(x, y)
-                out.append(None if r is None else r.toTuple())
-            return out
-        got = picks()
-        monkeypatch.setattr(type(vp), "_occluded_many", None, raising=False)
-        want = picks()
-        assert got == want
-        front = sum(1 for g in got if g is not None and abs(g[1] + 0.5) < 1e-6)
-        assert front > 20, front                        # the batches answered
-        assert vp._is_occluded(V(0.0, 1.0, 0.0))        # the dense grid hides
-        # The rule itself, from an independent projection of every corner:
-        # the answer is visible and every corner nearer to the cursor than
-        # it (within the pick radius) is hidden.
-        ends = []
-        for e in sc.mesh.edges:
-            ends += [e.a, e.b]
-        px = [vp._world_to_pixel(p) for p in ends]
-        thr = vp.pick_threshold_px
-        hidden_memo: dict = {}
+    def picks():
+        out = []
+        for x, y in pixels:
+            r = vp.pick_vertex(x, y)
+            out.append(None if r is None else r.toTuple())
+        return out
+    got = picks()
+    monkeypatch.setattr(type(vp), "_occluded_many", None, raising=False)
+    want = picks()
+    assert got == want
+    front = sum(1 for g in got if g is not None and abs(g[1] + 0.5) < 1e-6)
+    assert front > 20, front                        # the batches answered
+    assert vp._is_occluded(V(0.0, 1.0, 0.0))        # the dense grid hides
+    # The rule itself, from an independent projection of every corner:
+    # the answer is visible and every corner nearer to the cursor than
+    # it (within the pick radius) is hidden.
+    ends = []
+    for e in sc.mesh.edges:
+        ends += [e.a, e.b]
+    px = [vp._world_to_pixel(p) for p in ends]
+    thr = vp.pick_threshold_px
+    hidden_memo: dict = {}
 
-        def hidden(p):
-            k = p.toTuple()
-            if k not in hidden_memo:
-                hidden_memo[k] = vp._is_occluded(p)
-            return hidden_memo[k]
-        for (x, y), r in zip(pixels, got):
-            d = [((q[0] - x) ** 2 + (q[1] - y) ** 2) ** 0.5
-                 if q is not None else float("inf") for q in px]
-            if r is None:
-                assert all(hidden(p) for p, dd in zip(ends, d) if dd < thr - 1e-6)
-                continue
-            dr = min(dd for p, dd in zip(ends, d) if p.toTuple() == r)
-            assert not hidden(V(*r))
-            assert all(hidden(p) for p, dd in zip(ends, d)
-                       if dd < dr - 1e-6 and p.toTuple() != r)
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    def hidden(p):
+        k = p.toTuple()
+        if k not in hidden_memo:
+            hidden_memo[k] = vp._is_occluded(p)
+        return hidden_memo[k]
+    for (x, y), r in zip(pixels, got):
+        d = [((q[0] - x) ** 2 + (q[1] - y) ** 2) ** 0.5
+             if q is not None else float("inf") for q in px]
+        if r is None:
+            assert all(hidden(p) for p, dd in zip(ends, d) if dd < thr - 1e-6)
+            continue
+        dr = min(dd for p, dd in zip(ends, d) if p.toTuple() == r)
+        assert not hidden(V(*r))
+        assert all(hidden(p) for p, dd in zip(ends, d)
+                   if dd < dr - 1e-6 and p.toTuple() != r)
 
 
 @pytest.mark.parametrize("view", ["iso", "front", "back", "top", "left"])

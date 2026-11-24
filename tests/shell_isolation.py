@@ -96,3 +96,45 @@ def native_window(native_host):
     """A fresh document in the native window."""
     native_host.window.new_document()
     return native_host.window
+
+
+def one_off_export(win, fmt, destination):
+    """Drive the File menu, Export sheet and queued writer on the UI thread."""
+    from views import chrome_sheet
+    win.run_command(f"export:{fmt}")
+    ctx = chrome_sheet.Ctx(win, win.view)
+    provider = chrome_sheet.current(win)
+    assert provider.id == "export"
+    form = provider.build(ctx).forms()[0]
+    assert form.value("format") == fmt
+    form.receive("destination", str(destination))
+    form.press("export")
+    for _ in range(20):
+        if not win._delivery_queue:
+            break
+        win._host.idle()
+    assert not win._delivery_queue and destination.is_file()
+    return form
+
+
+@pytest.fixture
+def native_gpu_host(native_host, monkeypatch):
+    """Attach the native renderer to a hidden platform window for pixel readbacks."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QApplication, QWidget
+    from views.wgpu_surface import window_handles
+    if QApplication.platformName() in {"offscreen", "minimal"}:
+        pytest.skip("pixel readback requires a native window system")
+    surface = QWidget()
+    surface.setAttribute(Qt.WA_DontShowOnScreen)
+    surface.resize(native_host.width, native_host.height)
+    handle, platform = window_handles(surface)
+    # The window handle must outlive the renderer in native_host's teardown.
+    native_host._test_surface = surface
+    native_host.ns_view = handle
+    native_host.surface_handles = platform
+    # Pixel assertions sample model coordinates. Keep egui out of that buffer.
+    from views import wgpu_ui
+    monkeypatch.setattr(wgpu_ui, "attach", lambda view: None)
+    assert native_host.attach_surface() is not None
+    return native_host
