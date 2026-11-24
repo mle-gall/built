@@ -4,7 +4,7 @@
 from functools import partialmethod
 from ingetrazo_core import (
     GeometryCache as _GeometryCache, skp_remember as _remember_geometry,
-    skp_segments_iter, skp_segments_get, skp_packed_eq, skp_packed_repr,
+    skp_segments_add, skp_segments_iter, skp_segments_get, skp_packed_eq, skp_packed_repr,
 )
 
 from ingetrazo_core import FlatGeometry, PrototypeGeometry, image_stage_geometry
@@ -24,11 +24,7 @@ class SoftSegments:
         self.chunks = []
         self.size = 0
 
-    def add(self, points):
-        points = points.reshape(-1, 2, 3)
-        points.setflags(write=False)
-        self.chunks.append(points)
-        self.size += len(points)
+    add = partialmethod(skp_segments_add)
 
     def __len__(self):
         return self.size

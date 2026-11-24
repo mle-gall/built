@@ -4,7 +4,7 @@
 
 from functools import partialmethod
 from ingetrazo_core import (
-    skp_rows_get, skp_rows_iter, skp_packed_eq, skp_packed_repr,
+    skp_rows_init, skp_rows_get, skp_rows_iter, skp_packed_eq, skp_packed_repr,
     skp_flatten_rings as flatten_rings,
 )
 
@@ -19,10 +19,7 @@ class PointRows:
 
     __slots__ = ("_array", "_indices")
 
-    def __init__(self, array, indices=None):
-        self._array = array.view()
-        self._array.setflags(write=False)
-        self._indices = range(len(array)) if indices is None else indices
+    __init__ = partialmethod(skp_rows_init)
 
     def _coordinate_span(self):
         """Borrow read-only rows in this exact order; no Python float expansion."""

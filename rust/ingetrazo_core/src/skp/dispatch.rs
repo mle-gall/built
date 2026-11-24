@@ -120,8 +120,40 @@ fn skp_load<'p>(
     let payload = module.call_method("parse_skp", (path,), Some(&kw))?;
     module.call_method1("apply_payload", (scene, payload))
 }
+#[pyclass(name = "ModelImportBackend")]
+struct Backend;
+#[pymethods]
+impl Backend {
+    #[new]
+    fn new() -> Self {
+        Self
+    }
+    #[classattr]
+    fn name() -> &'static str {
+        "openskp"
+    }
+    fn available(&self, py: Python<'_>) -> PyResult<bool> {
+        py.import("ingetrazo_core")?.hasattr("skp_vff_model")
+    }
+    fn supports(&self, fmt: &str) -> bool {
+        fmt == "skp"
+    }
+    #[pyo3(signature=(path,progress=None))]
+    fn parse<'p>(
+        &self,
+        py: Python<'p>,
+        path: &Obj<'p>,
+        progress: Option<&Obj<'p>>,
+    ) -> PyResult<Obj<'p>> {
+        let kw = PyDict::new(py);
+        kw.set_item("progress", progress)?;
+        py.import("formats.skp_reader")?
+            .call_method("parse", (path,), Some(&kw))
+    }
+}
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     super::packed::register(m)?;
+    m.add_class::<Backend>()?;
     m.add_function(wrap_pyfunction!(skp_detect_format, m)?)?;
     m.add_function(wrap_pyfunction!(skp_backends_status, m)?)?;
     m.add_function(wrap_pyfunction!(skp_can_handle, m)?)?;

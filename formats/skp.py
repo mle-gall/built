@@ -9,7 +9,6 @@ separate document transaction, so a failed read cannot partially change a scene.
 """
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 
 
@@ -26,24 +25,7 @@ class NeedsConverter(Exception):
         self.reason = reason
 
 
-class _OpenSkpBackend:
-    """Native .skp reader. The classic provider is loaded on demand."""
-
-    name = "openskp"
-
-    def available(self) -> bool:
-        try:
-            from ingetrazo_core import skp_vff_model  # noqa: F401
-        except ImportError:
-            return False
-        return True
-
-    def supports(self, fmt: str) -> bool:
-        return fmt == "skp"
-
-    def parse(self, path, progress=None):
-        from formats import skp_reader
-        return skp_reader.parse(path, progress=progress)
+from ingetrazo_core import ModelImportBackend as _OpenSkpBackend
 
 
 #: Reader order for import and capability queries.

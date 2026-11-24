@@ -331,10 +331,40 @@ fn skp_parse_raw<'p>(
         Ok(model)
     })
 }
+#[pyfunction(signature=(owner,array,indices=None))]
+fn skp_rows_init(owner: &Obj<'_>, array: &Obj<'_>, indices: Option<&Obj<'_>>) -> PyResult<()> {
+    let py = owner.py();
+    let view = array.call_method0("view")?;
+    let kw = PyDict::new(py);
+    kw.set_item("write", false)?;
+    view.call_method("setflags", (), Some(&kw))?;
+    owner.setattr("_array", view)?;
+    let indices = match indices {
+        Some(r) => r.clone(),
+        None => py
+            .import("builtins")?
+            .call_method1("range", (array.len()?,))?,
+    };
+    owner.setattr("_indices", indices)
+}
+#[pyfunction]
+fn skp_segments_add(owner: &Obj<'_>, points: &Obj<'_>) -> PyResult<()> {
+    let py = owner.py();
+    let points = points.call_method1("reshape", (-1, 2, 3))?;
+    let kw = PyDict::new(py);
+    kw.set_item("write", false)?;
+    points.call_method("setflags", (), Some(&kw))?;
+    owner
+        .getattr("chunks")?
+        .call_method1("append", (&points,))?;
+    owner.setattr("size", owner.getattr("size")?.add(points.len()?)?)
+}
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     macro_rules! add{($($f:ident),*)=>{$(m.add_function(wrap_pyfunction!($f,m)?)?;)*}}
     m.add_class::<GeometryCache>()?;
     add!(
+        skp_rows_init,
+        skp_segments_add,
         skp_remember,
         skp_packed_repr,
         skp_packed_eq,

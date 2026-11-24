@@ -1,8 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Host bindings for the Rust .skp reader and classic model provider."""
-import gc
 from collections import OrderedDict
-from contextlib import contextmanager
 
 from core.texture import (
     colorize_image as _colorize_image, image_has_cutout as _image_has_cutout,

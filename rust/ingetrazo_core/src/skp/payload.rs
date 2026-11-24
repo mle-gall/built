@@ -70,7 +70,7 @@ pub fn skp_soften_bulk(
     segments: &Obj<'_>,
     tick: &Obj<'_>,
 ) -> PyResult<()> {
-    let mut ids = HashMap::new();
+    let mut ids: Option<Bound<PyDict>> = None;
     let mut points = HashMap::new();
     let key = |p: &Obj<'_>| -> PyResult<[u64; 3]> {
         Ok(xyz(p)?
@@ -80,7 +80,6 @@ pub fn skp_soften_bulk(
     for (i, v) in vertices.try_iter()?.enumerate() {
         let v = v?;
         points.insert(key(&v.getattr("position")?)?, Some(i));
-        ids.insert(v.as_ptr(), i);
     }
     let mut lookup = |p: &Obj<'_>| -> PyResult<Option<usize>> {
         let k = key(p)?;
@@ -91,13 +90,20 @@ pub fn skp_soften_bulk(
         let idx = if v.is_none() {
             None
         } else {
-            // Stores can return fresh Python proxies for the same vertex.
-            ids.get(&v.as_ptr()).copied().or_else(|| {
-                vertices
-                    .call_method1("index", (&v,))
-                    .ok()
-                    .and_then(|n| n.extract().ok())
-            })
+            // Store vertices can be distinct proxies for the same vertex.
+            // Cache their equality-based indices only when a weld lookup is needed.
+            if ids.is_none() {
+                let by_vertex = PyDict::new(mesh.py());
+                for (i, vertex) in vertices.try_iter()?.enumerate() {
+                    by_vertex.set_item(vertex?, i)?;
+                }
+                ids = Some(by_vertex);
+            }
+            ids.as_ref()
+                .unwrap()
+                .get_item(&v)?
+                .map(|idx| idx.extract::<usize>())
+                .transpose()?
         };
         points.insert(k, idx);
         Ok(idx)
