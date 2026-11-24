@@ -6,6 +6,46 @@ use pyo3::{
     types::{PyDict, PyList},
 };
 
+/// Ask once for both import options. The header only suggests the drawing unit.
+#[pyfunction]
+fn dxf_options(win: &Bound<'_, PyAny>, header_scale: Option<f64>) -> PyResult<Option<(f64, bool)>> {
+    const UNITS: [(&str, &str, f64); 5] = [
+        ("mm", "Millimetres", 0.001), ("cm", "Centimetres", 0.01),
+        ("m", "Metres", 1.0), ("in", "Inches", 0.0254), ("ft", "Feet", 0.3048),
+    ];
+    let py = win.py();
+    let store = py.import("core.settings")?.call_method0("settings")?;
+    let saved = store.call_method1("value", ("import/dxf_unit", "mm"))?;
+    let saved_key = saved.extract::<&str>().ok();
+    let default = UNITS.iter().find(|u| Some(u.2) == header_scale)
+        .or_else(|| UNITS.iter().find(|u| Some(u.0) == saved_key))
+        .unwrap_or(&UNITS[0]);
+    let kwargs = PyDict::new(py);
+    kwargs.set_item("type", py.get_type::<pyo3::types::PyBool>())?;
+    let faces = store.call_method("value", ("import/dxf_make_faces", false), Some(&kwargs))?;
+    let checklist = PyList::new(py, [(translated(py, "Create faces from closed planar outlines", None)?, faces)])?;
+    let buttons = PyList::new(py, [("cancel", translated(py, "Cancel", None)?)])?;
+    for (key, label, _) in UNITS {
+        buttons.append((key, translated(py, label, None)?))?;
+    }
+    let kwargs = PyDict::new(py);
+    kwargs.set_item("default", default.0)?;
+    kwargs.set_item("cancel", "cancel")?;
+    kwargs.set_item("checklist", &checklist)?;
+    let answer = py.import("views.chrome_dialogs")?.call_method("ask", (
+        win, translated(py, "What unit is this drawing in?", None)?,
+        translated(py, "What unit is this drawing in? (CAD headers often lie)", None)?, buttons,
+    ), Some(&kwargs))?;
+    let choice = answer.extract::<Option<&str>>()?.unwrap_or(default.0);
+    let Some((key, _, factor)) = UNITS.iter().find(|u| u.0 == choice) else {
+        return Ok(None);
+    };
+    let faces = checklist.get_item(0)?.get_item(1)?.extract::<bool>()?;
+    store.call_method1("setValue", ("import/dxf_unit", key))?;
+    store.call_method1("setValue", ("import/dxf_make_faces", faces))?;
+    Ok(Some((*factor, faces)))
+}
+
 #[pyfunction]
 fn guarded_load(
     load: &Bound<'_, PyAny>,
@@ -377,5 +417,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(report_import, m)?)?;
     m.add_function(wrap_pyfunction!(survey_note, m)?)?;
     m.add_function(wrap_pyfunction!(dxf_failure, m)?)?;
+    m.add_function(wrap_pyfunction!(dxf_options, m)?)?;
     Ok(())
 }

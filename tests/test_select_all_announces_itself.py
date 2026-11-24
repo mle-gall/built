@@ -9,37 +9,24 @@ entities, the viewport drew none of them selected, Entity Info said
 """
 from __future__ import annotations
 
-import os
-import sys
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
-
-if QApplication.instance() is None:
-    QApplication(sys.argv[:1])
 
 
 def V(x, y, z=0.0):
     return QVector3D(float(x), float(y), float(z))
 
 
-def test_select_all_bumps_the_version_and_notifies():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        scene = win.viewport.scene
-        scene.mesh.add_face([V(0, 0), V(2, 0), V(2, 2), V(0, 2)])
-        seen: list = []
-        win.viewport.sceneVersionChanged.connect(seen.append)
+def test_select_all_bumps_the_version_and_notifies(native_host):
+    win = native_host.window
+    scene = win.viewport.scene
+    scene.mesh.add_face([V(0, 0), V(2, 0), V(2, 2), V(0, 2)])
+    seen: list = []
+    win._doc_change_hooks = [lambda: seen.append(scene.version)]
 
-        before = scene.version
-        win._on_select_all()
+    before = scene.version
+    win._on_select_all()
 
-        assert scene.selection, "nothing selected"
-        assert scene.version > before          # the GL colour caches are keyed on it
-        assert seen and seen[-1] == scene.version   # and the tray hears about it
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    assert scene.selection, "nothing selected"
+    assert scene.version > before          # the GL colour caches are keyed on it
+    assert seen and seen[-1] == scene.version   # and the tray hears about it

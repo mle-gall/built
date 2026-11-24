@@ -11,29 +11,24 @@ from core.group import Group
 from core.mesh import Mesh
 from core.scene import Scene
 from formats import igz
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 
-def test_the_view_is_asked_to_paint_after_opening(tmp_path):
-    from views.main_window import MainWindow
+def test_the_view_is_asked_to_paint_after_opening(native_host, tmp_path, monkeypatch):
     scene = Scene()
     m = Mesh()
     m.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)])
     scene.groups.append(Group(m, name="Caja"))
     path = tmp_path / "caja.igz"
     igz.save_scene(scene, path)
-    win = MainWindow()
-    try:
-        asked = []
-        orig = win.viewport.update
+    win = native_host.window
+    frames = []
+    original = native_host.request_frame
 
-        def update(*a):
-            asked.append(win.viewport.updatesEnabled())
-            return orig(*a)
-        win.viewport.update = update
-        assert win.open_path(path)
-        assert True in asked                 # a frame asked with paint on
-        assert win.viewport.updatesEnabled()
-        assert [g.name for g in win.viewport.scene.groups] == ["Caja"]
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    def request_frame():
+        frames.append([g.name for g in win.viewport.scene.groups])
+        original()
+
+    monkeypatch.setattr(native_host, "request_frame", request_frame)
+    assert win.open_path(path)
+    assert ["Caja"] in frames

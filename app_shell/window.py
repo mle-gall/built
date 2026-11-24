@@ -956,10 +956,6 @@ class ShellWindow(WindowDocumentCommands, object if NATIVE else QObject):
         return files.parse_threaded(parse_stl, path, cb, scale=scale,
                                     simplify_mode=simplify_mode, report=report)
 
-    def _dxf_options(self, path, header_scale=None):
-        from app_shell import files
-        return files.dxf_options(self, path, header_scale)
-
     @staticmethod
     def _clipboard_available():
         from ingetrazo_render import ModelClipboard

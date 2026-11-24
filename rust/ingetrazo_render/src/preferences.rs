@@ -574,7 +574,11 @@ impl PreferencesView {
                     {"id":"kb_change","label":change,"key":"↩","role":1}]}));
             }
             if !words.is_empty() {
-                let text = format!("{name} {path} {keys}").to_lowercase();
+                let portable = keys.split(", ")
+                    .filter_map(crate::shortcut_text::shortcut_text)
+                    .map(|seq| seq.0)
+                    .collect::<Vec<_>>().join(" ");
+                let text = format!("{name} {path} {keys} {portable}").to_lowercase();
                 if !words.iter().all(|word| text.contains(word)) {
                     continue;
                 }

@@ -9,17 +9,8 @@ All and Invert Selection.
 """
 from __future__ import annotations
 
-import os
-import sys
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-from PySide6.QtGui import QKeySequence
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
-
-if QApplication.instance() is None:
-    QApplication(sys.argv[:1])
 
 from core.scene import Scene
 
@@ -39,9 +30,8 @@ def _loose(scene):
 
 def _action(win):
     """The window's Ctrl+T owner, the way the menu holds it."""
-    from PySide6.QtGui import QAction
-    acts = [a for a in win.findChildren(QAction)
-            if a.shortcut() == QKeySequence("Ctrl+T")]
+    from views.shortcuts import action_keys, collect_actions
+    acts = [a for a in collect_actions(win) if "Ctrl+T" in action_keys(a)]
     assert len(acts) == 1                     # one owner: never ambiguous
     return acts[0]
 
@@ -73,56 +63,36 @@ def test_clear_selection_on_an_empty_selection_is_a_no_op():
 
 # ---- the window: menu, shortcut, status bar, configurability ----------------
 
-def test_edit_menu_offers_it():
+def test_edit_menu_offers_it(native_host):
     from core.i18n import source_of
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        assert source_of(_action(win).text()) == "Select None"
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    win = native_host.window
+    assert source_of(_action(win).text()) == "Select None"
 
 
-def test_it_empties_the_selection_without_dirtying_the_document():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        scene = win.viewport.scene
-        a = _square(scene.mesh, 0)
-        b = _square(scene.mesh, 5)
-        scene.select([a, b, *_loose(scene)])
-        win._saved_version = scene.version         # as if just saved
-        assert not win._is_dirty()
+def test_it_empties_the_selection_without_dirtying_the_document(native_host):
+    win = native_host.window
+    scene = win.viewport.scene
+    a = _square(scene.mesh, 0)
+    b = _square(scene.mesh, 5)
+    scene.select([a, b, *_loose(scene)])
+    win._saved_version = scene.version         # as if just saved
+    assert not win._is_dirty()
 
-        seen: list = []
-        win.viewport.sceneVersionChanged.connect(seen.append)
-        _action(win).trigger()
+    seen: list = []
+    win._doc_change_hooks = [lambda: seen.append(scene.version)]
+    _action(win).trigger()
 
-        assert not scene.selection
-        assert seen and seen[-1] == scene.version  # the tray hears about it
-        assert win.statusBar().currentMessage()
-        assert not win._is_dirty()                 # view-only, not an edit
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    assert not scene.selection
+    assert seen and seen[-1] == scene.version  # the tray hears about it
+    assert win.statusBar().currentMessage()
+    assert not win._is_dirty()                 # view-only, not an edit
 
 
-def test_the_shortcut_is_configurable_like_any_other(monkeypatch):
-    from PySide6.QtCore import QSettings
-    from PySide6.QtWidgets import QMessageBox
-    from views.main_window import MainWindow
-    from views.shortcuts import ShortcutsPanel, action_key, collect_actions
-    monkeypatch.setattr(QMessageBox, "question",
-                        staticmethod(lambda *a, **k: QMessageBox.Yes))
-    QSettings().remove("shortcuts")
-    win = MainWindow()
-    try:
-        act = next(a for a in collect_actions(win)
-                   if action_key(a) == "text:Select None")
-        assert ShortcutsPanel(win).assign(act, [QKeySequence("Ctrl+Alt+N")])
-        assert [s.toString() for s in act.shortcuts()] == ["Ctrl+Alt+N"]
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
-        QSettings().remove("shortcuts")
+def test_the_shortcut_is_configurable_like_any_other(native_host):
+    from views.settings_sheet import SettingsSheet
+    win = native_host.window
+    sheet = SettingsSheet("keyboard")
+    sheet._win = win
+    act = _action(win)
+    sheet._assign(act, ["Ctrl+Alt+N"])
+    assert act.portable_keys() == ["Ctrl+Alt+N"]

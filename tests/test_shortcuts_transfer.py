@@ -4,31 +4,15 @@
 computer — Preferences ▸ Keyboard shortcuts ▸ Export… / Import…."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-import pytest  # noqa: E402
-from PySide6.QtCore import QSettings  # noqa: E402
-from PySide6.QtGui import QKeySequence  # noqa: E402
-from PySide6.QtWidgets import QApplication  # noqa: E402
-
-import core.extensions as extensions  # noqa: E402
-from views import shortcuts as sc  # noqa: E402
-
-_app = QApplication.instance() or QApplication([])
+import pytest
+from core.settings import settings
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
+from views import shortcuts as sc
 
 
 @pytest.fixture
-def ventana(tmp_path, monkeypatch):
-    monkeypatch.setattr(extensions, "plugin_dirs", lambda: [tmp_path])
-    QSettings().remove("shortcuts")
-    from views.main_window import MainWindow
-    win = MainWindow()
-    yield win
-    QSettings().remove("shortcuts")
-    win._saved_version = win.viewport.scene.version   # no "save?" modal
-    win.close()
+def ventana(native_host):
+    return native_host.window
 
 
 def _action(win, key):
@@ -36,24 +20,24 @@ def _action(win, key):
 
 
 def _keys(act):
-    return [s.toString(QKeySequence.PortableText) for s in act.shortcuts()]
+    return act.portable_keys()
 
 
 def test_export_then_import_brings_the_keys_back(ventana):
     line = ventana._tool_actions["line"]
     key = sc.action_key(line)
-    line.setShortcuts([QKeySequence("Ctrl+Alt+L")])
-    sc.save_shortcut(line, line.shortcuts())
+    line.setShortcuts(["Ctrl+Alt+L"])
+    sc.save_shortcut(line, line.portable_keys())
     data = sc.export_shortcuts(ventana)
     assert data["format"] == sc.EXPORT_FORMAT
     assert data["shortcuts"][key] == "Ctrl+Alt+L"
     # Another machine: factory keys.
     line.setShortcuts(sc.default_shortcuts(line))
-    QSettings().remove("shortcuts")
+    settings().remove("shortcuts")
     applied, skipped, _clashes = sc.import_shortcuts(ventana, data)
     assert applied > 0 and skipped == 0
     assert _keys(_action(ventana, key)) == ["Ctrl+Alt+L"]
-    assert QSettings().value(f"shortcuts/{key}") == "Ctrl+Alt+L"  # remembered
+    assert settings().value(f"shortcuts/{key}") == "Ctrl+Alt+L"  # remembered
 
 
 def test_a_key_the_file_gives_away_is_taken_from_the_other_action(ventana):

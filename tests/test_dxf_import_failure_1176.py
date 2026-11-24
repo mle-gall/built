@@ -9,29 +9,17 @@ moves the version on, so even a failure that was caught left the new tab
 looking changed, and it stayed."""
 from __future__ import annotations
 
-import os
 import shutil
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-import pytest  # noqa: E402
+import pytest
 
 ezdxf = pytest.importorskip("ezdxf")
 
-from PySide6.QtCore import QEventLoop, QTimer  # noqa: E402
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
-from core.history import AddEdgeCommand  # noqa: E402
-from formats import dwg_bridge, dxf_in  # noqa: E402
-
-_app = QApplication.instance() or QApplication([])
-
-
-def _settle(ms: int = 0) -> None:
-    loop = QEventLoop()
-    QTimer.singleShot(ms, loop.quit)
-    loop.exec()
+from core.history import AddEdgeCommand
+from formats import dwg_bridge, dxf_in
 
 
 def _dxf(tmp_path, fill=None, name="drawing.dxf"):
@@ -66,25 +54,18 @@ def _edit(win):
 
 
 @pytest.fixture
-def win():
-    from views.main_window import MainWindow
-    w = MainWindow()
-    yield w
-    for d in w.documents():
-        d.saved_content = d.viewport.scene.content_version
-    w.close()
-    _settle()
+def win(native_host):
+    return native_host.window
 
 
 @pytest.fixture
-def errors(monkeypatch):
+def errors(win, monkeypatch):
     shown = []
     monkeypatch.setattr("views.chrome_dialogs.critical",
                         lambda _parent, title, text: shown.append((title, text)))
     # The unit dialog answered: metres, no faces from the outlines.
-    from views.main_window import MainWindow
-    monkeypatch.setattr(MainWindow, "_dxf_options",
-                        lambda _self, _path, _scale=None: (1.0, False))
+    monkeypatch.setattr(win, "_dxf_options",
+                        lambda _path, _scale=None: (1.0, False))
     return shown
 
 
@@ -113,8 +94,6 @@ def test_a_real_skipped_kind_reaches_the_message(win, errors, tmp_path):
     path = _dxf(tmp_path, _only_text)
     assert win.open_path(path) is False
     assert "TEXT ×2" in errors[0][1]
-
-
 
 
 # ---- No tab stays (#1176) ---------------------------------------------------
@@ -161,7 +140,7 @@ def test_the_untouched_tab_in_front_stays_untouched(win, errors, tmp_path):
     assert not win._is_dirty()
     assert win._doc_is_blank(mine)
     assert mine.import_name is None
-    assert "*" not in win.windowTitle()
+    assert "*" not in win._host._title
 
 
 def test_import_from_the_menu_into_a_saved_project_keeps_it_saved(
@@ -191,7 +170,9 @@ def test_a_dwg_with_nothing_to_import_goes_the_same_way(win, errors, tmp_path,
         return temp
     monkeypatch.setattr(dwg_bridge, "have_dwg_support", lambda: True)
     monkeypatch.setattr(dwg_bridge.DwgConverter, "convert", convert)
-    assert win.open_path(tmp_path / "furniture.dwg") is False
+    source = tmp_path / "furniture.dwg"
+    source.touch()  # the converter is stubbed, the file-open check is real
+    assert win.open_path(source) is False
     assert win.documents() == [mine]
     assert not temp.exists()
     title, text = errors[0]

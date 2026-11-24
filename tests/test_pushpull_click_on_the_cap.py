@@ -22,39 +22,31 @@ ray always hits.
 from __future__ import annotations
 
 import math
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
+import pytest
 from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QMouseEvent
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
+from app_shell.events import MouseEvent
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
-_app = QApplication.instance() or QApplication([])
 
-
-def _ground_level_pull():
-    """Rafael's setup: camera 6° above the ground looking along the model,
+def _ground_level_pull(native_host, pitch):
+    """Rafael's setup: camera just above the ground looking along the model,
     an 8 × 5 rectangle on the ground, Push/Pull engaged on it."""
-    from views.main_window import MainWindow
-    win = MainWindow()
-    win.show()
-    win.resize(1600, 900)
-    _app.processEvents()
+    win = native_host.window
+    native_host.resize(1600, 900, 1.)
     vp = win.viewport
     cam = vp.camera
     cam.target = QVector3D(4, 2.5, 0)
     cam.distance = 18.0
-    cam.pitch = math.radians(6.0)
+    cam.pitch = math.radians(pitch)
     cam.yaw = math.radians(-60.0)
     face = vp.scene.mesh.add_face([QVector3D(0, 0, 0), QVector3D(8, 0, 0),
                                    QVector3D(8, 5, 0), QVector3D(0, 5, 0)])
     vp.scene.version += 1
     vp.update()
-    _app.processEvents()
     win._activate_tool("pushpull")
-    return win, vp, face
+    return vp, face
 
 
 def _hover(vp, px, py):
@@ -64,40 +56,35 @@ def _hover(vp, px, py):
 
 def _click(vp, px, py):
     vp._last_mouse_pos = QPointF(px, py)
-    vp._dispatch_tool_click(QMouseEvent(
-        QMouseEvent.MouseButtonPress, QPointF(px, py),
-        Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
+    vp._dispatch_tool_click(MouseEvent("press", px, py, button=1, held=1))
 
 
-def test_the_pull_follows_the_cursor_past_the_horizon_and_the_top_click_commits():
-    win, vp, face = _ground_level_pull()
-    try:
-        tool = vp.active_tool
-        cx, cy = vp._world_to_pixel(QVector3D(4, 2.5, 0))
-        _hover(vp, cx, cy)
-        assert tool.hovered_face == face
-        _click(vp, cx, cy)
-        assert tool.dragging
-        # The cursor climbs; above the horizon the ground no longer answers
-        # (the old failure), yet the extrusion keeps growing.
-        heights = []
-        for dy in (40, 120, 200, 280, 360, 400):
-            _hover(vp, cx, cy - dy)
-            heights.append(tool.extrusion)
-        assert heights == sorted(heights) and heights[0] > 0.3
-        assert heights[-1] > 5.0, heights
-        # Click ON THE TOP of the box being pulled — where Rafael clicks.
-        px, py = vp._world_to_pixel(QVector3D(4, 2.5, tool.extrusion))
-        assert py < cy - 300                  # well above the horizon
-        _hover(vp, px, py)
-        _click(vp, px, py)
-        assert not tool.dragging
-        assert len(vp.scene.mesh.faces) == 6  # the box is committed
-        top = max(v.position.z() for v in vp.scene.mesh.vertices)
-        assert top > 5.0
-    finally:
-        win._saved_version = vp.scene.version
-        win.close()
+@pytest.mark.parametrize("pitch", [5.8, 6.0])
+def test_the_pull_follows_the_cursor_past_the_horizon_and_the_top_click_commits(native_host, pitch):
+    vp, face = _ground_level_pull(native_host, pitch)
+    tool = vp.active_tool
+    cx, cy = vp._world_to_pixel(QVector3D(4, 2.5, 0))
+    _hover(vp, cx, cy)
+    assert tool.hovered_face == face
+    _click(vp, cx, cy)
+    assert tool.dragging
+    # The cursor climbs; above the horizon the ground no longer answers
+    # (the old failure), yet the extrusion keeps growing.
+    heights = []
+    for dy in (40, 120, 200, 280, 360, 400):
+        _hover(vp, cx, cy - dy)
+        heights.append(tool.extrusion)
+    assert heights == sorted(heights) and heights[0] > 0.3
+    assert heights[-1] > 5.0, heights
+    # Click ON THE TOP of the box being pulled — where Rafael clicks.
+    px, py = vp._world_to_pixel(QVector3D(4, 2.5, tool.extrusion))
+    assert py < cy - 300                  # well above the horizon
+    _hover(vp, px, py)
+    _click(vp, px, py)
+    assert not tool.dragging
+    assert len(vp.scene.mesh.faces) == 6  # the box is committed
+    top = max(v.position.z() for v in vp.scene.mesh.vertices)
+    assert top > 5.0
 
 
 def test_drag_plane_contains_the_push_axis_and_faces_the_camera():

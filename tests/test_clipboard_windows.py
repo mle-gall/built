@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QApplication
 from core.group import Group, copy_group
 from core.mesh import Mesh
 from formats import clip
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 
 @pytest.fixture(scope="module")
@@ -75,27 +76,24 @@ def test_the_offer_is_rendered_on_demand(app):
     assert mime.retrieveData("text/plain", None) is None
 
 
-@pytest.mark.parametrize("env, expect", [
-    ({"APPIMAGE": "/tmp/IngeTrazo.AppImage"},
-     ["/tmp/IngeTrazo.AppImage", "--new-window"]),
-    ({"FLATPAK_ID": "com.ingetrazo.IngeTrazo"},
-     ["flatpak-spawn", "ingetrazo", "--new-window"]),
-])
-def test_a_new_window_starts_from_its_own_package(monkeypatch, env, expect):
-    from views.main_window import MainWindow
-    monkeypatch.delenv("APPIMAGE", raising=False)
-    monkeypatch.delenv("FLATPAK_ID", raising=False)
-    for k, v in env.items():
-        monkeypatch.setenv(k, v)
-    assert MainWindow._new_window_command() == expect
+@pytest.mark.parametrize("package", ["APPIMAGE", "FLATPAK_ID", None])
+def test_new_window_uses_the_running_application(native_host, tmp_path, monkeypatch, package):
+    from app_shell.host import Host
+    from views import wgpu_start
 
-
-def test_a_new_window_from_the_repo_runs_main_py(monkeypatch):
-    from views.main_window import MainWindow
-    monkeypatch.delenv("APPIMAGE", raising=False)
-    monkeypatch.delenv("FLATPAK_ID", raising=False)
-    cmd = MainWindow._new_window_command()
-    assert cmd[-2].endswith("main.py") and cmd[-1] == "--new-window"
+    if package:
+        monkeypatch.setenv(package, str(tmp_path / "package"))
+    native_host.window.run_command("new_window")
+    token = native_host.extras()["new_window"]
+    assert token
+    other = Host(0, 900, 600, 1., settings=str(native_host.settings_dir))
+    try:
+        assert other.adopt(token)
+        assert wgpu_start.shown(other.window)
+        assert other.window.viewport.scene is not native_host.window.viewport.scene
+        assert native_host.extras()["new_window"] is None
+    finally:
+        other.close()
 
 
 def test_quitting_leaves_the_copy_as_plain_data(app):

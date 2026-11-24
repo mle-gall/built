@@ -581,6 +581,9 @@ class WindowDocumentCommands:
     def _import_dae_path(self, path):
         return native.import_file(self, path, "dae")
 
+    def _dxf_options(self, path, header_scale=None):
+        return native.dxf_options(self, header_scale)
+
     def _import_dxf_path(self, path, label=None):
         return native.import_file(self, path, "dxf", label=label)
 

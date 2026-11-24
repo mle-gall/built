@@ -6,30 +6,21 @@ added another, a 35-digit number reached the Tape and Scale, overflowed
 the geometry's float32 coordinates to inf, and NaN followed."""
 from __future__ import annotations
 
-import os
+import pytest
+from PySide6.QtCore import Qt
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-import pytest  # noqa: E402
-from PySide6.QtCore import QEvent, Qt  # noqa: E402
-from PySide6.QtGui import QKeyEvent  # noqa: E402
-from PySide6.QtWidgets import QApplication  # noqa: E402
-
-_app = QApplication.instance() or QApplication([])
+from app_shell.events import KeyEvent, ShortcutOverride
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 
 
 @pytest.fixture
-def vp():
-    from views.main_window import MainWindow
-    w = MainWindow()
-    w._activate_tool("line")
-    yield w.viewport
-    w._saved_version = w.viewport.scene.version   # no "save?" modal
-    w.close()
+def vp(native_window):
+    native_window._activate_tool("line")
+    return native_window.viewport
 
 
 def _override(vp, key, text, mods=Qt.NoModifier):
-    ev = QKeyEvent(QEvent.ShortcutOverride, key, mods, text)
+    ev = ShortcutOverride(key, mods.value, text)
     vp.event(ev)
     return ev.isAccepted()
 
@@ -44,9 +35,9 @@ def test_a_digit_continues_the_value_but_alt_digit_stays_a_shortcut(vp):
 
 def test_alt_digit_never_lands_in_the_buffer(vp):
     vp._set_value_buffer("12")
-    vp.keyPressEvent(QKeyEvent(QEvent.KeyPress, Qt.Key_1, Qt.AltModifier, "1"))
+    vp.keyPressEvent(KeyEvent(True, Qt.Key_1, Qt.AltModifier.value, "1"))
     assert vp._value_buffer == "12"
-    vp.keyPressEvent(QKeyEvent(QEvent.KeyPress, Qt.Key_3, Qt.NoModifier, "3"))
+    vp.keyPressEvent(KeyEvent(True, Qt.Key_3, 0, "3"))
     assert vp._value_buffer == "123"
 
 
@@ -76,7 +67,7 @@ def test_a_document_with_a_nan_corner_opens_without_it(tmp_path):
     from core.scene import Scene
     from formats import igz
     good = Scene()
-    V3 = __import__("PySide6.QtGui", fromlist=["QVector3D"]).QVector3D
+    from ingetrazo_core import Vec3 as V3
     good.mesh.add_face([V3(0, 0, 0), V3(1, 0, 0), V3(1, 1, 0), V3(0, 1, 0)])
     good.mesh.add_face([V3(3, 0, 0), V3(4, 0, 0), V3(4, 1, 0)])
     path = tmp_path / "reja.igz"

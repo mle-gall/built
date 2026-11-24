@@ -511,9 +511,7 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
             self.restoreState(state)
         self._show_default_trays(st)
         self._place_new_toolbars(st)
-        # Packed on the first show (see showEvent): the toolbars have no
-        # geometry to read their order from until the window is laid out.
-        self._toolbars_packed = False
+        self._fit_docks_on_show = True
         geo = st.value("ui/window_geometry")
         if geo:
             self.restoreGeometry(geo)
@@ -548,10 +546,9 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
             view = self._shown_viewport()
             if view is not None:
                 view.setFocus(Qt.OtherFocusReason)
-        if not getattr(self, "_toolbars_packed", True):
+        if getattr(self, "_fit_docks_on_show", False):
             from PySide6.QtCore import QTimer
-            self._toolbars_packed = True
-            QTimer.singleShot(0, self, self._pack_toolbars)
+            self._fit_docks_on_show = False
             QTimer.singleShot(0, self, self._fit_docks_to_screen)
         if getattr(self, "_tray_width_pending", False):
             self._tray_width_pending = False
@@ -593,120 +590,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
             import sys as _sys
             print(f"Built: 3D mouse unavailable ({exc!r})",
                   file=_sys.stderr)
-
-    def _pack_toolbars(self) -> None:
-        """Re-seat every docked toolbar so each takes exactly the length of
-        what it holds, in the area, order and rows it already has.
-
-        A saved layout (the factory blob or the user's own) stores each
-        toolbar's LENGTH along its line, and ``restoreState`` applies it
-        whatever the toolbar holds today: the Annotate bar came back 100 px
-        longer than its six buttons (saved with bigger icons) and left a
-        hole before Walkthrough — the youtuber's fresh install showed the
-        walk icons stranded at the bottom of the column, and Marco's too
-        (2026-09-20). Removing and adding a toolbar back drops the stored
-        length for its size hint, which is all we ever want; nothing here
-        lets a toolbar be stretched on purpose."""
-        from PySide6.QtCore import Qt
-        areas = (Qt.LeftToolBarArea, Qt.RightToolBarArea,
-                 Qt.TopToolBarArea, Qt.BottomToolBarArea)
-        for area in areas:
-            vertical = area in (Qt.LeftToolBarArea, Qt.RightToolBarArea)
-            bars = [tb for tb in self.findChildren(QToolBar)
-                    if not tb.isFloating() and self.toolBarArea(tb) == area]
-            if len(bars) < 2:
-                continue
-            # rows first, then along the row — so breaks come back in place
-            bars.sort(key=self._toolbar_seat_key(vertical))
-            seats = [(tb, self.toolBarBreak(tb), tb.isVisibleTo(self))
-                     for tb in bars]
-            for tb, brk, shown in seats:
-                self.removeToolBar(tb)
-                if brk:
-                    self.addToolBarBreak(area)
-                self.addToolBar(area, tb)
-                tb.setVisible(shown)
-        self._wrap_toolbar_rows()
-        # macOS glass: the traffic lights' room stays first in the top row.
-        from views import mac_glass
-        mac_glass.seat_lights(self)
-
-    def _toolbar_seat_key(self, vertical: bool):
-        """Sort key of a docked toolbar: its row (its column, in a side
-        area) first, then its place along it — in reading order. Right to
-        left (#1067) the first bar of a row is the rightmost one; ordered
-        by x they came back reversed and the overflow ate the first bars
-        (Select, Undo…)."""
-        rtl = self.isRightToLeft()
-
-        def key(tb):
-            g = tb.geometry()
-            x = -(g.x() + g.width()) if rtl else g.x()
-            return (x, g.y()) if vertical else (g.y(), x)
-        return key
-
-    def addToolBar(self, *args):  # noqa: N802 — Qt override
-        """Every toolbar, the window's own and an extension's — at start-up
-        or later from its menu — goes through here; a row that no longer
-        fits on the screen is wrapped once the layout has settled."""
-        result = super().addToolBar(*args)
-        timer = self.__dict__.get("_toolbar_wrap_timer")
-        if timer is None:
-            from PySide6.QtCore import QTimer
-            timer = self._toolbar_wrap_timer = QTimer(self)
-            timer.setSingleShot(True)
-            timer.setInterval(0)
-            timer.timeout.connect(self._wrap_toolbar_rows)
-        timer.start()
-        return result
-
-    def _wrap_toolbar_rows(self) -> None:
-        """Start a new row of toolbars where a row stops fitting on the
-        screen. Qt never wraps a row by itself, and every toolbar keeps at
-        least its handle and its overflow arrow: with the 52 extensions of
-        the catalog installed, 34 toolbars shared the top row and the window
-        could not be narrower than 2205 px on a 1477 px screen — Marco
-        could not resize it (18-10). A row that fits is left as it is, so
-        the factory layout and the user's own never move."""
-        from PySide6.QtCore import Qt
-        screen = self.screen()
-        if screen is None or not self.isVisible():
-            return
-        self.layout().activate()
-        avail = screen.availableGeometry()
-        frame_w = self.frameGeometry().width() - self.width()
-        frame_h = self.frameGeometry().height() - self.height()
-        wrapped = False
-        for area in (Qt.TopToolBarArea, Qt.BottomToolBarArea,
-                     Qt.LeftToolBarArea, Qt.RightToolBarArea):
-            vertical = area in (Qt.LeftToolBarArea, Qt.RightToolBarArea)
-            limit = (avail.height() - frame_h - self.menuBar().height()
-                     if vertical else avail.width() - frame_w) - 8
-            bars = [tb for tb in self.findChildren(QToolBar)
-                    if not tb.isFloating() and tb.isVisibleTo(self)
-                    and self.toolBarArea(tb) == area]
-            bars.sort(key=self._toolbar_seat_key(vertical))
-            row = None
-            used = 0
-            for tb in bars:
-                g = tb.geometry()
-                line = g.x() if vertical else g.y()
-                hint = tb.minimumSizeHint()
-                size = hint.height() if vertical else hint.width()
-                if line != row:
-                    row, used = line, size
-                    continue
-                if used + size > limit:
-                    self.insertToolBarBreak(tb)
-                    wrapped = True
-                    used = size
-                else:
-                    used += size
-        if wrapped:
-            self.layout().activate()
-            if not self.isMaximized() and not self.isFullScreen() \
-                    and self.frameGeometry().width() > avail.width():
-                self.resize(avail.width() - frame_w, self.height())
 
     def createPopupMenu(self):  # noqa: N802 — Qt override
         """Include toolbar customization in the standard Qt context menu."""
@@ -3237,8 +3120,7 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         _shortcuts.apply_user_shortcuts(self)
 
         if self._defer_extensions and set(self.findChildren(QToolBar)) - bars_before:
-            if not self.restore_late_toolbars():
-                self._wrap_toolbar_rows()
+            self.restore_late_toolbars()
         from PySide6.QtCore import QTimer
         QTimer.singleShot(0, self, self._fit_docks_to_screen)
 
@@ -3269,13 +3151,7 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         self.__dict__.setdefault("_ext_action_owner", {})[action] = plug.stem
 
     def restore_late_toolbars(self) -> bool:
-        """Put toolbars that arrived after the window was laid out where the
-        saved layout had them: the saved state again, the trays that start
-        shown, new bars placed, then every bar re-seated to its own length
-        (a raw restoreState brings back the stored lengths and the gaps
-        they leave). False, and nothing touched, without a saved layout.
-        The extensions' setup takes this path, and so does an extension
-        whose worker adds its bars later (ExtensionApp.restore_toolbar_layout)."""
+        """Restore saved areas for extension toolbars added after startup."""
         st = QSettings()
         state = st.value("ui/window_state")
         if not state:
@@ -3283,7 +3159,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         restored = bool(self.restoreState(state))
         self._show_default_trays(st)
         self._place_new_toolbars(st)
-        self._pack_toolbars()
         return restored
 
     def _fit_docks_to_screen(self) -> None:
@@ -3467,16 +3342,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         new_action.setShortcut(QKeySequence.New)
         new_action.triggered.connect(self._on_new)
         actions.append(new_action)
-
-        # A second IngeTrazo beside this one: each window is its own
-        # document, and Copy/Paste now crosses between them (issue #76).
-        window_action = QAction(tr("New Window"), self)
-        window_action.setStatusTip(tr(
-            "Open another Built window with its own document; copy "
-            "and paste work between them."))
-        window_action.setShortcut(QKeySequence("Ctrl+Shift+N"))
-        window_action.triggered.connect(self._on_new_window)
-        actions.append(window_action)
 
         open_action = QAction(tr("Open…"), self)
         open_action.setStatusTip(tr(
@@ -5145,24 +5010,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         from views.inspector_bridge import open_camera
         return open_camera(self)
 
-    @staticmethod
-    def _new_window_command() -> list[str]:
-        """How to start another IngeTrazo from this one. Each package needs
-        its own way: the AppImage's mount and the Flatpak sandbox both go
-        away with the process that owns them, so the new window must get
-        its own rather than run from ours."""
-        import os
-        import sys
-        from core.paths import app_root, is_frozen
-        flag = "--new-window"        # skip the single-instance handover
-        if os.environ.get("APPIMAGE"):
-            return [os.environ["APPIMAGE"], flag]
-        if os.environ.get("FLATPAK_ID"):
-            return ["flatpak-spawn", "ingetrazo", flag]
-        if is_frozen():
-            return [sys.executable, flag]
-        return [sys.executable, str(app_root() / "main.py"), flag]
-
     # ---- Documents: one project per tab (#1066, views/documents.py) ---------
     # What the window kept for its single document now lives on the active
     # Document; these properties keep the old names reading and writing it,
@@ -6452,13 +6299,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         for key, action in self._tool_actions.items():
             action.setEnabled(self._tool_filter is None or key in self._tool_filter)
 
-    def _on_new_window(self) -> None:
-        from PySide6.QtCore import QProcess
-        cmd = self._new_window_command()
-        if not QProcess.startDetached(cmd[0], cmd[1:]):
-            _dialogs.warning(self, tr("New Window"),
-                                tr("Could not start another Built window."))
-
     # ---- Recent files -------------------------------------------------------
 
     def _fill_recent_menu(self) -> None:
@@ -7164,54 +7004,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
             tr("AutoCAD DXF (*.dxf);;All files (*)"))
         if path_str:
             self._import_dxf_path(Path(path_str))
-
-    def _dxf_options(self, path, header_scale=None
-                     ) -> "tuple[float, bool] | None":
-        """``(scale, make_faces)`` for a drawing, or ``None`` if cancelled.
-        The header's declaration of the unit (when there is one) arrives
-        preselected; without one, the last answer does, and the last answer
-        about faces too — importing a batch from one office is Enter, Enter,
-        Enter. Faces start off (#1109): the classic CAD linework, and the
-        speed on big drawings, unless asked for."""
-        from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog,
-                                       QDialogButtonBox, QVBoxLayout)
-
-        keys = ["mm", "cm", "m", "in", "ft"]
-        factors = {"mm": 0.001, "cm": 0.01, "m": 1.0,
-                   "in": 0.0254, "ft": 0.3048}
-        labels = [tr("Millimetres"), tr("Centimetres"), tr("Metres"),
-                  tr("Inches"), tr("Feet")]
-        by_scale = {v: k for k, v in factors.items()}
-        last = (by_scale.get(header_scale)
-                or str(QSettings().value("import/dxf_unit", "mm") or "mm"))
-        idx = keys.index(last) if last in keys else 0
-        dlg = QDialog(self)
-        dlg.setWindowTitle(tr("Import DXF"))
-        lay = QVBoxLayout(dlg)
-        lay.addWidget(QLabel(
-            tr("What unit is this drawing in? (CAD headers often lie)")))
-        combo = QComboBox(dlg)
-        combo.addItems(labels)
-        combo.setCurrentIndex(idx)
-        lay.addWidget(combo)
-        faces = QCheckBox(tr("Create faces from closed planar outlines"), dlg)
-        faces.setToolTip(tr("Slower on big drawings. You can also do it "
-                            "later, with the lines selected: Tools ▸ Make "
-                            "Faces."))
-        faces.setChecked(QSettings().value("import/dxf_make_faces", False,
-                                           type=bool))
-        lay.addWidget(faces)
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.Ok | QDialogButtonBox.Cancel, dlg)
-        buttons.accepted.connect(dlg.accept)
-        buttons.rejected.connect(dlg.reject)
-        lay.addWidget(buttons)
-        if dlg.exec() != QDialog.Accepted:
-            return None
-        key = keys[combo.currentIndex()]
-        QSettings().setValue("import/dxf_unit", key)
-        QSettings().setValue("import/dxf_make_faces", faces.isChecked())
-        return factors[key], faces.isChecked()
 
     def _on_import_photomesh(self):
         from views.survey_import import import_photomesh
