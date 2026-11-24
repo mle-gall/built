@@ -849,6 +849,13 @@ impl PyMeshStore {
         Ok(store.face_triangles(face, normal, crate::hypot_of(hypot)?))
     }
 
+    #[pyo3(signature=(key, xform=None))]
+    fn curve_centers(&self, py: Python<'_>, key: u128, xform: Option<&Bound<'_, PyAny>>)
+        -> PyResult<crate::snap_boundary::Centers> {
+        let f = live_of(&self.inner, Kind::Face, key)?;
+        crate::snap_boundary::store_centers(py, &self.inner, f, xform)
+    }
+
     fn face_positions(&self, key: u128) -> PyResult<Vec<Vec<(f64, f64, f64)>>> {
         let f = any_of(&self.inner, Kind::Face, key)?;
         let st = &self.inner.state;

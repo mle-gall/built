@@ -137,6 +137,7 @@ mod linetypes;
 mod pyfloat;
 mod value_field;
 mod inference_state;
+mod snap_boundary;
 mod snap_curve;
 mod snap_planes;
 mod pack;
@@ -494,6 +495,8 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pick::box_mesh_arrays, m)?)?;
     m.add_function(wrap_pyfunction!(pick::box_packed_rows, m)?)?;
     m.add_function(wrap_pyfunction!(pick::nearest_segments_px, m)?)?;
+    m.add_function(wrap_pyfunction!(snap_boundary::boundary_runs, m)?)?;
+    m.add_function(wrap_pyfunction!(snap_boundary::curve_centers, m)?)?;
     m.add_function(wrap_pyfunction!(snap_curve::arc_midpoint, m)?)?;
     m.add_function(wrap_pyfunction!(snap_planes::plane_cut_ray, m)?)?;
     m.add_function(wrap_pyfunction!(snap_planes::plane_alignments, m)?)?;
