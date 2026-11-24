@@ -1811,7 +1811,8 @@ from tools.fillet_host import FilletHost
 class FilletTool(FilletHost, RustTool):
     kind = "fillet"
     _READ_DURING = ("sizing",)
-    sizing = property(lambda self: self._state("sizing"))
+    sizing = property(lambda self: self._state("sizing"),
+                      lambda self, value: self._machine.set("sizing", bool(value)))
 
     def __init__(self):
         RustTool.__init__(self)
@@ -1858,10 +1859,14 @@ class FlipTool(FlipHost, RustTool):
     shortcut = None
     _READ_DURING = ("hover_point", "hover_axis", "lock_axis", "copy")
     hover_point = _point_property("hover_point")
-    _lock_axis = property(lambda self: self._state("lock_axis"))
-    _hover_axis = property(lambda self: self._state("hover_axis"))
-    _copy = property(lambda self: self._state("copy"))
+    _lock_axis = property(lambda self: self._state("lock_axis"),
+                          lambda self, axis: self._machine.set("lock_axis", axis))
+    _hover_axis = property(lambda self: self._state("hover_axis"),
+                           lambda self, axis: self._machine.set("hover_axis", axis))
+    _copy = property(lambda self: self._state("copy"),
+                     lambda self, value: self._machine.set("copy", bool(value)))
     cursor_plus = _copy
+
 
 class FreehandTool(RustTool):
     kind = "freehand"

@@ -75,6 +75,16 @@ impl Tool for Fillet {
     fn state(&self) -> Json {
         json!({"sizing":self.sizing})
     }
+    fn set(&mut self, key: &str, value: &Json) -> bool {
+        if key != "sizing" {
+            return false;
+        }
+        let Some(sizing) = value.as_bool() else {
+            return false;
+        };
+        self.sizing = sizing;
+        true
+    }
     fn event(&mut self, ev: &ToolEvent, host: &mut dyn ToolHost) -> Reply {
         match ev {
             ToolEvent::Activate | ToolEvent::Deactivate | ToolEvent::Cancel => {
