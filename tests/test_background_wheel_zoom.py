@@ -85,3 +85,13 @@ def test_a_slide_gesture_picks_the_point_under_the_cursor_once():
         Viewport.wheelEvent(vp, event)
     assert len(picks) == 1
     assert vp.camera.distance != 50.0
+
+
+def test_recentering_and_zoom_keep_their_grazing_ray_boundaries():
+    view = SimpleNamespace(
+        camera=SimpleNamespace(target=V(1, 0, 0), eye=lambda: V(0, 0, 0)),
+        _pixel_to_ray=lambda x, y: (V(0, 0, 0), V(1e-6, 1, 0)),
+        _depth_world_at=lambda x, y: ('miss', None),
+    )
+    assert Viewport._point_at_centre_depth(view, 0, 0).toTuple() == (1.0, 1e6, 0.0)
+    assert Viewport._world_under_cursor(view, 0, 0) is None

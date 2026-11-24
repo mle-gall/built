@@ -10,7 +10,15 @@ use pyo3::types::PyTuple;
 struct Bounds(Option<(DVec3, DVec3)>);
 impl Bounds {
     fn add(&mut self, p: DVec3) {
-        self.0 = Some(self.0.map_or((p, p), |(a, b)| (a.min(p), b.max(p))));
+        self.0 = Some(self.0.map_or((p, p), |(a, b)| {
+            // Array reductions propagate a NaN coordinate. The camera then
+            // refuses the fitted range for the frame.
+            let bad = p.is_nan_mask() | a.is_nan_mask();
+            (
+                DVec3::select(bad, DVec3::NAN, a.min(p)),
+                DVec3::select(bad, DVec3::NAN, b.max(p)),
+            )
+        }));
     }
     fn vertices(verts: &Obj) -> PyResult<Self> {
         let mut bounds = Self::default();

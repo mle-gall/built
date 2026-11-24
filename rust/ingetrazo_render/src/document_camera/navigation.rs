@@ -3,22 +3,32 @@
 use super::*;
 use pyo3::types::{PyDict, PyFloat, PyTuple};
 
+#[derive(Clone, Copy)]
+enum FocalPlane {
+    Recentre,
+    BackgroundZoom,
+}
+
 fn focal_hit<'py>(
     camera: &Obj<'py>,
     origin: &Obj<'py>,
     direction: &Obj<'py>,
-    min_length: f64,
+    usage: FocalPlane,
 ) -> PyResult<Obj<'py>> {
     let target = xyz(&camera.getattr("target")?)?;
     let origin = xyz(origin)?;
     let direction = xyz(direction)?;
     let view = target - xyz(&camera.call_method0("eye")?)?;
-    if view.length() <= min_length {
+    if matches!(usage, FocalPlane::BackgroundZoom) && view.length() <= 1e-9 {
         return Ok(none(camera.py()));
     }
-    let view = view.normalize();
+    let view = view.normalize_or_zero();
     let along = direction.dot(view);
-    if along.abs() > 1e-6 {
+    let crosses = match usage {
+        FocalPlane::Recentre => along.abs() >= 1e-6,
+        FocalPlane::BackgroundZoom => along.abs() > 1e-6,
+    };
+    if crosses {
         let distance = (target - origin).dot(view) / along;
         if distance > 0. {
             return vec3(camera.py(), origin + direction * distance);
@@ -33,7 +43,12 @@ fn centre_depth<'py>(v: &Obj<'py>, x: f64, y: f64) -> PyResult<Obj<'py>> {
     if origin.is_none() || direction.is_none() {
         return Ok(none(v.py()));
     }
-    focal_hit(&v.getattr("camera")?, &origin, &direction, 0.)
+    focal_hit(
+        &v.getattr("camera")?,
+        &origin,
+        &direction,
+        FocalPlane::Recentre,
+    )
 }
 
 #[pyfunction]
@@ -69,7 +84,12 @@ fn cursor_world<'py>(v: &Obj<'py>, x: f64, y: f64) -> PyResult<Obj<'py>> {
             }
         }
     }
-    focal_hit(&v.getattr("camera")?, &origin, &direction, 1e-9)
+    focal_hit(
+        &v.getattr("camera")?,
+        &origin,
+        &direction,
+        FocalPlane::BackgroundZoom,
+    )
 }
 
 #[pyfunction]
