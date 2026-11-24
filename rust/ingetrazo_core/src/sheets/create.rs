@@ -249,3 +249,72 @@ pub fn sheet_new_chain_total<'py>(py: Python<'py>, comp: &Bound<'py, PyAny>, a: 
     item.setattr("sep_mm", total)?;
     Ok(item)
 }
+
+/// The frame of ``comp`` under page point (x, y), the topmost first.
+fn frame_at<'py>(comp: &Bound<'py, PyAny>, x: f64, y: f64) -> PyResult<Option<Bound<'py, PyAny>>> {
+    let frames: Vec<Bound<'py, PyAny>> = comp.getattr("frames")?.try_iter()?.collect::<PyResult<_>>()?;
+    for f in frames.iter().rev() {
+        let n = |k: &str| -> PyResult<f64> { f.getattr(k)?.extract() };
+        if n("x_mm")? <= x && x <= n("x_mm")? + n("w_mm")? && n("y_mm")? <= y && y <= n("y_mm")? + n("h_mm")? {
+            return Ok(Some(f.clone()));
+        }
+    }
+    Ok(None)
+}
+
+/// A radius or diameter dimension (`place_radial`): the centre and a point
+/// on the arc (page mm), at the scale of the frame the centre fell in, in
+/// the document's units; None for a circle under half a millimetre.
+#[pyfunction]
+#[pyo3(signature = (comp, centre, arc_point, kind="radius", scene=None))]
+pub fn sheet_new_radial<'py>(py: Python<'py>, comp: &Bound<'py, PyAny>, centre: (f64, f64), arc_point: (f64, f64),
+                             kind: &str, scene: Option<Bound<'py, PyAny>>) -> PyResult<Option<Bound<'py, PyAny>>> {
+    let r = (arc_point.0 - centre.0).hypot(arc_point.1 - centre.1);
+    if r < 0.5 {
+        return Ok(None);
+    }
+    let n: f64 = match frame_at(comp, centre.0, centre.1)? {
+        Some(f) => f.getattr("scale_n")?.extract()?,
+        None => {
+            let frames = comp.getattr("frames")?;
+            if frames.len()? > 0 { frames.get_item(0)?.getattr("scale_n")?.extract()? } else { 100.0 }
+        }
+    };
+    let kw = PyDict::new(py);
+    length_style(py, scene.as_ref(), &kw)?;
+    let shows = match scene.as_ref().map(|s| s.getattr_opt("dimension_style")).transpose()?.flatten() {
+        Some(style) if style.is_truthy()? => style.call_method1("get", ("show_unit", true)).map_or(Ok(true), |v| v.is_truthy())?,
+        _ => true,
+    };
+    kw.set_item("show_unit", shows)?;
+    kw.set_item("x_mm", centre.0)?;
+    kw.set_item("y_mm", centre.1)?;
+    kw.set_item("radius_mm", r)?;
+    kw.set_item("scale_n", n)?;
+    kw.set_item("kind", if kind == "diameter" { "diameter" } else { "radius" })?;
+    kw.set_item("angle_deg", (arc_point.1 - centre.1).atan2(arc_point.0 - centre.0).to_degrees())?;
+    let item = py.import("core.composition")?.getattr("CotaRadialItem")?.call((), Some(&kw))?;
+    item.setattr("z", super::display::sheet_next_z(comp)?)?;
+    Ok(Some(item))
+}
+
+/// An angular dimension (`place_angular`): the vertex, a point on each arm
+/// (page mm) and the arc's radius (2 mm at least).
+#[pyfunction]
+pub fn sheet_new_angular<'py>(py: Python<'py>, comp: &Bound<'py, PyAny>, vertex: (f64, f64), a: (f64, f64), b: (f64, f64),
+                              radius_mm: f64) -> PyResult<Option<Bound<'py, PyAny>>> {
+    if (a.0 - vertex.0).hypot(a.1 - vertex.1) < 1e-6 || (b.0 - vertex.0).hypot(b.1 - vertex.1) < 1e-6 {
+        return Ok(None);
+    }
+    let kw = PyDict::new(py);
+    kw.set_item("x_mm", vertex.0)?;
+    kw.set_item("y_mm", vertex.1)?;
+    kw.set_item("ax_mm", a.0 - vertex.0)?;
+    kw.set_item("ay_mm", a.1 - vertex.1)?;
+    kw.set_item("bx_mm", b.0 - vertex.0)?;
+    kw.set_item("by_mm", b.1 - vertex.1)?;
+    kw.set_item("radius_mm", radius_mm.max(2.0))?;
+    let item = py.import("core.composition")?.getattr("CotaAngularItem")?.call((), Some(&kw))?;
+    item.setattr("z", super::display::sheet_next_z(comp)?)?;
+    Ok(Some(item))
+}

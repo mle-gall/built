@@ -290,7 +290,55 @@ def snaps(source, frame):
     flat = segs.reshape(-1, 4)
     near = ((np.maximum(flat[:, 0], flat[:, 2]) >= x0) & (np.minimum(flat[:, 0], flat[:, 2]) <= x1)
             & (np.maximum(flat[:, 1], flat[:, 3]) >= y0) & (np.minimum(flat[:, 1], flat[:, 3]) <= y1))
-    return pts[keep], wpts[keep], flat[near], world[near]
+    return pts[keep], wpts[keep], flat[near], world[near], circles(source, frame)
+
+
+_CIRCLES = {}
+
+
+def circles(source, frame):
+    """The model's circles and arcs ``frame`` sees face on, as page
+    ``(cx, cy, r)`` mm (the composer's ``frame_circles``): what the radius
+    tool takes from one click on the arc. The model's circles are collected
+    once per model version (core.hlr.collect_circles)."""
+    from core.hlr import _to_cam, camera_basis, collect_circles
+    if getattr(frame, "perspective", False):
+        return np.empty((0, 3))
+    scene = source.scene
+    stamp = (id(scene), getattr(scene, "version", None))
+    if _CIRCLES.get("stamp") != stamp:
+        _CIRCLES.update(stamp=stamp, circles=collect_circles(scene))
+    view = saved_view(scene, frame)
+    if view is False:
+        return np.empty((0, 3))
+    camera = frame_camera(source.camera, frame, view, scene)
+    eye, right, up, fwd = camera_basis(camera)
+    got = _hlr_to_mm(frame)
+    out = []
+    for c, r, n in _CIRCLES["circles"]:
+        if abs(n.x() * fwd[0] + n.y() * fwd[1] + n.z() * fwd[2]) < 0.9995:
+            continue                                  # seen at a slant
+        c3 = np.array([c.x(), c.y(), c.z()], float)
+        cam = _to_cam(np.stack([c3, c3 + right * r]), eye, right, up, fwd)[:, :2]
+        (px, py), (qx, qy) = got(cam)
+        out.append((frame.x_mm + px, frame.y_mm + py, float(np.hypot(qx - px, qy - py))))
+    return np.array(out, float).reshape(-1, 3)
+
+
+def _hlr_to_mm(frame):
+    """A frame's camera plane (metres) to frame paper mm."""
+    from core.composition import model_height_for_frame
+    model_h = model_height_for_frame(frame.h_mm, frame.scale_n)
+    k = frame.h_mm / model_h
+    half_h = model_h / 2.0
+    half_w = half_h * (frame.w_mm / frame.h_mm)
+
+    def to_mm(xy):
+        out = np.asarray(xy, float).copy()
+        out[..., 0] = (out[..., 0] + half_w) * k
+        out[..., 1] = (half_h - out[..., 1]) * k
+        return out
+    return to_mm
 
 
 def frame_contents(view_widget, comps, ground=None):

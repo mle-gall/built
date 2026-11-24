@@ -547,7 +547,7 @@ def test_the_snaps_are_the_composer_s(host):
     from views import wgpu_sheet_frames
     ws = _sheets(host)
     plan = ws.composer.comp.frames[0]
-    pts, wpts, edges, ew = wgpu_sheet_frames.snaps(host.view.source_viewport, plan)
+    pts, wpts, edges, ew, _circles = wgpu_sheet_frames.snaps(host.view.source_viewport, plan)
     want_pts, want_w = ws.composer.frame_snap_points(plan)
     assert len(pts) > 10
     canon = lambda p, w: sorted(tuple(np.round(np.r_[a, b], 6)) for a, b in zip(p, w))  # noqa: E731
@@ -566,7 +566,7 @@ def test_a_dimension_measured_on_the_page_is_bound_to_the_model(host):
     ws = _sheets(host)
     comp = ws.composer
     plan = comp.comp.frames[0]
-    pts, wpts, _e, _w = wgpu_sheet_frames.snaps(host.view.source_viewport, plan)
+    pts, wpts, _e, _w, _c = wgpu_sheet_frames.snaps(host.view.source_viewport, plan)
     i = int(np.argmin(pts[:, 0] + pts[:, 1]))
     j = int(np.argmax(pts[:, 0] - pts[:, 1]))
     pt = lambda k: {"p": pts[k].tolist(), "world": wpts[k].tolist(), "frame": plan._doc_key, "segment": None}  # noqa: E731
@@ -598,15 +598,40 @@ def test_a_chain_s_total_stacks_one_row_beyond_its_line(host):
     assert comp.tool_mode == "cota_cadena"
 
 
+def test_radius_and_angle_dimensions_from_the_page(host):
+    ws = _sheets(host)
+    comp = ws.composer
+    plan = comp.comp.frames[0]
+    _run_actions(host, "sheets:tool\x1fcota_radio")
+    _run_actions(host, "sheets:radial\x1f" + json.dumps({"c": [60, 60], "p": [70, 60], "kind": "diameter"}))
+    r = comp.comp.cotas_rad[-1]
+    assert (r.x_mm, r.y_mm, r.radius_mm, r.kind, r.angle_deg, r.scale_n) == (60, 60, 10.0, "diameter", 0.0,
+                                                                              plan.scale_n)
+    _run_actions(host, "sheets:tool\x1fcota_ang")
+    _run_actions(host, "sheets:angular\x1f" + json.dumps({"v": [100, 230], "a": [120, 230], "b": [100, 210], "r": 8.0}))
+    a = comp.comp.cotas_ang[-1]
+    assert (a.ax_mm, a.ay_mm, a.bx_mm, a.by_mm, a.radius_mm) == (20, 0, 0, -20, 8.0)
+    assert comp.tool_mode == "cota_ang"
+
+
+def test_the_frame_s_circles_are_the_composer_s(host):
+    from views import wgpu_sheet_frames
+    ws = _sheets(host)
+    plan = ws.composer.comp.frames[0]
+    got = wgpu_sheet_frames.circles(host.view.source_viewport, plan)
+    want = ws.composer.frame_circles(plan)
+    assert sorted(map(tuple, got.round(6).tolist())) == sorted(tuple(round(v, 6) for v in c) for c in want)
+
+
 def test_tools_not_native_yet_open_the_classic_editor(host, monkeypatch):
     ws = _sheets(host)
     opened = []
     monkeypatch.setattr(type(ws), "open_classic", lambda self, tool="": opened.append(tool))
-    _run_actions(host, "sheets:tool\x1fcota_ang")
-    assert opened == ["cota_ang"] and ws.composer.tool_mode != "cota_ang"
+    _run_actions(host, "sheets:tool\x1fpoligono")
+    assert opened == ["poligono"] and ws.composer.tool_mode != "poligono"
     groups = host.view.renderer.last("ui_set_sheet_tools")[0]
     names = {t[0]: t[1] for g in groups for t in g}
-    assert "classic" in names["cota_ang"] and "classic" not in names["cota"]
+    assert "classic" in names["poligono"] and "classic" not in names["cota"]
 
 
 def test_pan_and_zoom(host):

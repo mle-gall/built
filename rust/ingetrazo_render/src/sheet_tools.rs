@@ -16,6 +16,8 @@ pub struct FrameSnaps {
     pub world: Vec<[f64; 3]>,
     pub edges: Vec<[f64; 4]>,
     pub edge_world: Vec<[[f64; 3]; 2]>,
+    /// The circles it sees face on: page centre and radius, mm.
+    pub circles: Vec<[f64; 3]>,
 }
 
 /// A point a tool took: where on the page, and when it caught the model,
@@ -125,7 +127,36 @@ pub struct Pick {
 }
 
 /// The tools that snap to the model and gather clicks on the page.
-pub const PICK_TOOLS: [&str; 3] = ["cota", "cota_cadena", "cota_base"];
+pub const PICK_TOOLS: [&str; 5] = ["cota", "cota_cadena", "cota_base", "cota_ang", "cota_radio"];
+
+/// The circle whose ring passes within `thr` of `at`: ``(cx, cy, r)``.
+pub fn circle_at(snaps: &HashMap<u64, FrameSnaps>, at: [f64; 2], thr: f64) -> Option<[f64; 3]> {
+    let mut best: Option<(f64, [f64; 3])> = None;
+    for s in snaps.values() {
+        for c in s.circles.iter().filter(|c| c[2] >= 0.5) {
+            let d = ((at[0] - c[0]).hypot(at[1] - c[1]) - c[2]).abs();
+            if d <= thr && best.is_none_or(|b| d < b.0) {
+                best = Some((d, *c));
+            }
+        }
+    }
+    best.map(|b| b.1)
+}
+
+/// ⇧ on an angular dimension's arm: an exact multiple of 15°, the first
+/// arm from the page's horizontal, the second from the first (`_ang_step`).
+pub fn ang_step(at: [f64; 2], pts: &[Pt]) -> [f64; 2] {
+    let Some(v) = pts.first().map(|p| p.p) else { return at };
+    let (dx, dy) = (at[0] - v[0], at[1] - v[1]);
+    let r = dx.hypot(dy);
+    if r < 1e-9 {
+        return at;
+    }
+    let base = pts.get(1).map_or(0.0, |a| (a.p[1] - v[1]).atan2(a.p[0] - v[0]).to_degrees());
+    let deg = ((dy.atan2(dx).to_degrees() - base) / 15.0).round() * 15.0 + base;
+    let rad = deg.to_radians();
+    [v[0] + r * rad.cos(), v[1] + r * rad.sin()]
+}
 
 /// ⇧ while a run's offset is chosen: as DIMLINEAR, the cursor pulled out
 /// above or below the two points measures horizontally, to a side
@@ -187,6 +218,7 @@ mod tests {
             world: vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.5, 0.0, 0.0]],
             edges: vec![[10.0, 10.0, 20.0, 10.0]],
             edge_world: vec![[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]],
+            circles: vec![],
         });
         let p = snap_at(&s, [10.5, 10.4], 1.0).unwrap();
         assert_eq!((p.p, p.world, p.frame, p.segment), ([10.0, 10.0], Some([0.0, 0.0, 0.0]), Some(5), None));

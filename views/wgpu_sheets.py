@@ -48,9 +48,9 @@ RAIL = [["select", "pan", "zoom", "zoom_ventana", "estilo"],
 #: classic sheet editor with that tool.
 NATIVE_TOOLS = {"select", "pan", "zoom", "zoom_ventana", "vista", "texto", "llamada", "cajetin", "escala",
                 "norte", "leyenda", "perfil", "linea", "flecha", "terreno", "rect", "elipse", "cota",
-                "cota_cadena", "cota_base"}
+                "cota_cadena", "cota_base", "cota_ang", "cota_radio"}
 #: The tools that snap to the frames' model (ui/sheet_tools.rs PICK_TOOLS).
-SNAP_TOOLS = {"cota", "cota_cadena", "cota_base"}
+SNAP_TOOLS = {"cota", "cota_cadena", "cota_base", "cota_ang", "cota_radio"}
 #: Qt cursors for the page's cursor names.
 _CURSORS = {"": Qt.ArrowCursor, "move": Qt.SizeAllCursor, "grab": Qt.OpenHandCursor,
             "grabbing": Qt.ClosedHandCursor, "crosshair": Qt.CrossCursor,
@@ -524,6 +524,23 @@ class Workspace:
         self._run(AddItemCommand(comp, item))
         self._page = None
 
+    def _dimension(self, kind: str, body) -> None:
+        """A radius / diameter or an angle the page measured: the record
+        (sheets::create), one step of the history; the tool stays armed."""
+        import ingetrazo_core as NATIVE
+        from core.composition import AddItemCommand
+        comp = self.composer.comp
+        scene = self.composer._scene()
+        if kind == "radial":
+            item = NATIVE.sheet_new_radial(comp, tuple(body["c"]), tuple(body["p"]), body.get("kind", "radius"), scene)
+        else:
+            item = NATIVE.sheet_new_angular(comp, tuple(body["v"]), tuple(body["a"]), tuple(body["b"]),
+                                            float(body["r"]))
+        if item is None:
+            return
+        self._run(AddItemCommand(comp, item))
+        self._page = None
+
     def _send_snaps(self, renderer) -> None:
         """What each frame offers a snapping tool (wgpu_sheet_frames.snaps),
         one frame per turn, again when the model or the frame changed."""
@@ -544,7 +561,7 @@ class Workspace:
                 got = None
             import numpy as np
             if got is None:
-                got = (np.empty((0, 2)), np.empty((0, 3)), np.empty((0, 4)), np.empty((0, 2, 3)))
+                got = (np.empty((0, 2)), np.empty((0, 3)), np.empty((0, 4)), np.empty((0, 2, 3)), np.empty((0, 3)))
             renderer.page_frame_snaps(key, *(np.ascontiguousarray(a, float).reshape(-1).tolist() for a in got))
             self._more = True
             return
@@ -740,6 +757,9 @@ class Workspace:
                             if int(k) in models])
         elif verb == "font":
             self._font(self._models().get(int(rest)))
+        elif verb in ("radial", "angular"):
+            import json
+            self._dimension(verb, json.loads(rest))
         elif verb in ("cota", "cota_total"):
             import json
             self._cota(json.loads(rest), total=verb == "cota_total")

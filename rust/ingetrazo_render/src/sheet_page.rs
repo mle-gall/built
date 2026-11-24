@@ -218,15 +218,51 @@ impl Page {
         if pick.tool != self.tool {
             *pick = crate::sheet_tools::Pick { tool: self.tool.clone(), ..Default::default() };
         }
-        let offsetting = (pick.tool == "cota" || pick.sep.is_none()) && pick.pts.len() == 2;
+        let offsetting = match pick.tool.as_str() {
+            "cota_ang" => pick.pts.len() == 3,
+            "cota_radio" => false,
+            _ => pick.sep.is_none() && pick.pts.len() == 2,
+        };
         self.hot = if offsetting { None } else { snap_at(&self.snaps, mm, thr) };
         self.cursor = "crosshair";
         if kind == "move" {
             return;
         }
-        let pt = self.hot.clone().unwrap_or_else(|| Pt::free(mm));
+        let mut pt = self.hot.clone().unwrap_or_else(|| Pt::free(mm));
         let Some(pick) = self.pick.as_mut() else { return };
+        if pick.tool == "cota_ang" && mods & 4 != 0 && !pick.pts.is_empty() && pick.pts.len() < 3 {
+            pt = Pt::free(crate::sheet_tools::ang_step(pt.p, &pick.pts));
+        }
         match (pick.tool.as_str(), pick.pts.len()) {
+            ("cota_ang", n) if n < 3 => pick.pts.push(pt),
+            ("cota_ang", _) => {
+                let v = pick.pts[0].p;
+                let r = (mm[0] - v[0]).hypot(mm[1] - v[1]);
+                let body = serde_json::json!({"v": v, "a": pick.pts[1].p, "b": pick.pts[2].p, "r": r});
+                out.push(format!("sheets:angular\u{1f}{body}"));
+                self.pick = None;
+                self.hot = None;
+            }
+            ("cota_radio", n) => {
+                // One click on the arc: the circle lends its centre and its
+                // radius, the click says which way the line leaves. Else the
+                // centre, then a point on the arc. ⌘ makes it a diameter.
+                let kind = if mods & 2 != 0 { "diameter" } else { "radius" };
+                let ring = if n == 0 { crate::sheet_tools::circle_at(&self.snaps, mm, thr) } else { None };
+                let (c, q) = if let Some([cx, cy, r]) = ring {
+                    let a = (mm[1] - cy).atan2(mm[0] - cx);
+                    ([cx, cy], [cx + r * a.cos(), cy + r * a.sin()])
+                } else if n == 0 {
+                    pick.pts.push(pt);
+                    return;
+                } else {
+                    (pick.pts[0].p, pt.p)
+                };
+                let body = serde_json::json!({"c": c, "p": q, "kind": kind});
+                out.push(format!("sheets:radial\u{1f}{body}"));
+                self.pick = None;
+                self.hot = None;
+            }
             ("cota", 0) => pick.pts.push(pt),
             ("cota", 1) => {
                 let a = pick.pts[0].p;
@@ -310,8 +346,26 @@ impl Page {
         let stroke = Stroke::new(1.0_f32, ACCENT);
         if let (Some(pick), Some(cur)) = (&self.pick, self.pointer_mm) {
             let scr = |q: [f64; 2]| self.to_screen(q[0], q[1]);
-            let run = pick.tool != "cota";
+            let run = pick.tool == "cota_cadena" || pick.tool == "cota_base";
             match (pick.tool.as_str(), pick.pts.len()) {
+                ("cota_ang", n) if n >= 1 => {
+                    let v = scr(pick.pts[0].p);
+                    for q in pick.pts.iter().skip(1) {
+                        painter.line_segment([v, scr(q.p)], stroke);
+                    }
+                    let to = self.hot.as_ref().map_or(cur, |h| h.p);
+                    if n < 3 {
+                        painter.extend(egui::Shape::dashed_line(&[v, scr(to)], stroke, 4.0, 3.0));
+                    } else {
+                        painter.circle_stroke(v, (scr(cur) - v).length(), Stroke::new(1.0_f32, ACCENT.gamma_multiply(0.6)));
+                    }
+                }
+                ("cota_radio", 1) => {
+                    let c = scr(pick.pts[0].p);
+                    let to = scr(self.hot.as_ref().map_or(cur, |h| h.p));
+                    painter.line_segment([c, to], stroke);
+                    painter.circle_stroke(c, (to - c).length(), Stroke::new(1.0_f32, ACCENT.gamma_multiply(0.6)));
+                }
                 (_, n) if run && n >= 2 && pick.sep.is_some() => {
                     let base = pick.tool == "cota_base";
                     let prev = if base { pick.pts[0].p } else { pick.pts[n - 1].p };
@@ -477,6 +531,16 @@ impl Page {
                 1 => "Click the second point; ⇧ keeps the run level or plumb.",
                 2 if self.pick.as_ref().is_some_and(|p| p.sep.is_none()) => "Click where the dimension line goes.",
                 _ => "Click the next point. Click the last one again, or Esc, to end the run.",
+            },
+            (_, "cota_ang") => match self.pick.as_ref().map_or(0, |p| p.pts.len()) {
+                0 => "Click the angle's vertex: it snaps to the drawing.",
+                1 => "Click a point on the first arm; ⇧ steps it by 15°.",
+                2 => "Click a point on the second arm; ⇧ steps the angle by 15°.",
+                _ => "Click where the arc goes.",
+            },
+            (_, "cota_radio") => match self.pick.as_ref().map_or(0, |p| p.pts.len()) {
+                0 => "Click on a circle or an arc, or its centre; ⌘ for a diameter.",
+                _ => "Click a point on the arc; ⌘ for a diameter.",
             },
             (_, "cota") => match self.pick.as_ref().map_or(0, |p| p.pts.len()) {
                 0 => "Click the first point: it snaps to the drawing's corners, middles and edges.",
@@ -1252,6 +1316,29 @@ mod tests {
         assert!((second["sep"].as_f64().unwrap() - -10.0).abs() < 1e-9, "on the chain's line");
         p.pointer("press", at(&p, 120.0, 260.0), 1, 0, &mut out);
         assert!(out[2].starts_with("sheets:cota_total\u{1f}") && p.pick.is_none());
+    }
+
+    #[test]
+    fn a_click_on_an_arc_dimensions_it_and_an_angle_takes_four_clicks() {
+        let mut p = page();
+        p.snaps.insert(1, crate::sheet_tools::FrameSnaps { circles: vec![[100.0, 100.0, 10.0]], ..Default::default() });
+        p.tool = "cota_radio".into();
+        let mut out = vec![];
+        p.pointer("press", at(&p, 100.0, 110.4), 1, 2, &mut out);
+        let body: serde_json::Value = serde_json::from_str(out[0].strip_prefix("sheets:radial\u{1f}").unwrap()).unwrap();
+        assert_eq!(body["c"], serde_json::json!([100.0, 100.0]));
+        assert_eq!(body["kind"], "diameter");
+        assert!((body["p"][1].as_f64().unwrap() - 110.0).abs() < 1e-9);
+        out.clear();
+        p.tool = "cota_ang".into();
+        for (x, y) in [(50.0, 250.0), (70.0, 251.0), (50.0, 230.0), (58.0, 250.0)] {
+            p.pointer("press", at(&p, x, y), 1, if x == 70.0 { 4 } else { 0 }, &mut out);
+        }
+        let body: serde_json::Value = serde_json::from_str(out[0].strip_prefix("sheets:angular\u{1f}").unwrap()).unwrap();
+        // ⇧ put the arm on 0°, its length kept.
+        assert!((body["a"][1].as_f64().unwrap() - 250.0).abs() < 1e-9);
+        assert!((body["a"][0].as_f64().unwrap() - (50.0 + 20f64.hypot(1.0))).abs() < 1e-9);
+        assert!((body["r"].as_f64().unwrap() - 8.0).abs() < 1e-9);
     }
 
     #[test]
