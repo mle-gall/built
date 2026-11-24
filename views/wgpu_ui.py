@@ -428,9 +428,7 @@ def before_frame(view) -> None:
     _form(view, win)
     from views import wgpu_deliveries
     wgpu_deliveries.bind(win)
-    _tree(view, win)
-    if view.__dict__.get("_ui_lens") == 1 and view.renderer.ui_tick_tag_counts(win.viewport.history):
-        view.update()
+    _sync_project_rows(view, win)
     from views import wgpu_library
     wgpu_library.before_frame(view, win)
     _inspector(view, win)
@@ -765,6 +763,14 @@ def open_line_type(win, name, tags):
     return opened
 
 
+def _sync_project_rows(view, win):
+    if view.renderer.ui_project_hidden() is True:
+        return
+    _tree(view, win)
+    if view.__dict__.get("_ui_lens") == 1 and view.renderer.ui_tick_tag_counts(win.viewport.history):
+        view.update()
+
+
 def _tree(view, win, *, discover=False):
     """Bind the membership index, revision and disclosure state to the native sidebar providers."""
     scene = getattr(win.viewport, "scene", None)
@@ -776,7 +782,8 @@ def _tree(view, win, *, discover=False):
     if discover:
         flt = ""
     lens = 0 if discover else view.__dict__.get("_ui_lens", 0)
-    sel_ids = {id(e) for e in scene.selection}
+    from ingetrazo_render import browser_selection
+    sel_ids = {id(e) for e in scene.selection} if discover or lens != 0 else browser_selection(scene)
     from ingetrazo_core import ProjectSheets
     catalog = view.__dict__.get("_ui_sheet_catalog")
     if catalog is None:
@@ -815,7 +822,7 @@ def _tree(view, win, *, discover=False):
             exp.add(f"n:{k}")
     rows = filing_rows(scene, model, exp, pages, flt, discover, ROW_CAP, lens, sel_ids,
                        active, KINDS, TIPS, FILE_STATES)
-    rows, path_bar = project_sidebar(scene, tree, rows, flt, exp, str(getattr(win, "_current_path", "") or ""), lens == 1)
+    rows, path_bar = project_sidebar(scene, tree, rows, flt, exp, str(getattr(win, "_current_path", "") or ""), lens == 1, sel_ids)
     rows.extend(catalog.rows(flt, exp))
     if "_project" in getattr(win, "__dict__", {}):
         from app_shell import project as built_project
@@ -845,7 +852,7 @@ def _tree(view, win, *, discover=False):
                          active=active, node_of=node_of, nodes=nodes, tree=tree, counts=counts,
                          node_layers={k: list(c) for k, c in node_layers.items()})
     view.renderer.ui_set_tree(rows, len(unfiled))
-    view.renderer.ui_set_catalog_info(Path(str(getattr(win, "_current_path", "") or "")).name, tree, counts)
+    view.renderer.ui_set_catalog_info(Path(str(getattr(win, "_current_path", "") or "")).name, tree, counts, len(sel_ids))
     view.renderer.ui_set_edit_path(path_bar)
     if hasattr(view.renderer, "ui_set_proposal_available"):
         view.renderer.ui_set_proposal_available(not mode and tree._host_roots < 0)
@@ -1427,6 +1434,26 @@ def _tree_action(win, view, action) -> None:
             from ingetrazo_render import tree_header_state
             tree_header_state(vp, rk, verb == "headerlock")
             rebuild()
+        elif verb == "batchrename":
+            from ingetrazo_core import browser_rename
+            from views import chrome_forms
+            model = browser_rename(scene, rk)
+            if model is not None:
+                single = model.single_row()
+                if single is None or not view.renderer.ui_rename_browser_row(single):
+                    chrome_forms.show(win, chrome_forms.BrowserRenameForm(win, model))
+        elif verb == "isolatetags":
+            import json
+            from ingetrazo_render import isolate_tags
+            isolate_tags(vp, json.loads(rk))
+            rebuild()
+        elif verb in ("scenetaghide", "scenetagshow") and kind == "preview-tag":
+            from ingetrazo_core import tags_in_saved_views
+            tags_in_saved_views(vp.history, [ident], verb == "scenetaghide")
+            vp.notify_scene_changed()
+        elif verb == "mergetag" and kind == "preview-tag":
+            from ingetrazo_render import choose_merge_tag
+            choose_merge_tag(win, ident)
         elif verb == "purgetags":
             from ingetrazo_render import tree_purge_tags
             tree_purge_tags(win)
@@ -1454,7 +1481,7 @@ def _tree_action(win, view, action) -> None:
                       if kind == "section" else item())
             tree_delete_rows(vp, target)
             rebuild()
-        elif verb in ("isolaterows", "pickrow", "roweye", "toggleitem", "group", "component", "explode", "unique", "instances"):
+        elif verb in ("isolaterows", "pickrow", "roweye", "rowlock", "toggleitem", "group", "component", "explode", "unique", "instances"):
             from ingetrazo_render import tree_group_action
             tree_group_action(win, copies() if kind == "d" else item(), verb)
         elif verb == "hosteye":

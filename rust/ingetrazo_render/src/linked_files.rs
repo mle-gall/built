@@ -54,7 +54,6 @@ fn link_document<'py>(
         win.call_method("_start_place", (&comp,), Some(&kw))?;
     }
     win.call_method0("_link_watcher")?.call_method0("refresh")?;
-    win.call_method0("_refresh_layer_views")?;
     Ok(comp)
 }
 
@@ -63,7 +62,6 @@ fn link_changed(win: &Bound<'_, PyAny>, note: &str) -> PyResult<()> {
     let vp = win.getattr("viewport")?;
     vp.call_method0("notify_scene_changed")?;
     vp.call_method0("update")?;
-    win.call_method0("_refresh_layer_views")?;
     win.call_method0("_link_watcher")?.call_method0("refresh")?;
     if !note.is_empty() {
         win.call_method0("statusBar")?

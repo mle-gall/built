@@ -234,6 +234,7 @@ pub struct Node {
     selected: u32,
     dim: bool,
     local_placement: bool,
+    control_tips: [String; 2],
     /// The selection, marked once (tree A): 1 this row holds it (lit), 2 a
     /// row above the one holding it (a quiet dot), 0 neither.
     mark: u8,
@@ -258,6 +259,7 @@ pub struct Column {
     sort: tree_order::Sort,
     ordered: Vec<usize>,
     unfiled: u32,
+    browser_picks: usize,
     issue_at: Option<usize>,
     export_focus: (Option<String>, std::collections::HashSet<String>),
     filter: String,
@@ -441,7 +443,7 @@ impl Ui {
     /// row, eye, lock, expandable, expanded, selected]).
     pub fn set_tree(&mut self, rows: Vec<(Vec<String>, Vec<i64>)>, unfiled: u32) {
         let col = self.column.get_or_insert_with(|| Column {
-            nodes: Vec::new(), path: Vec::new(), host: Default::default(), overview: Default::default(), styles: Default::default(), reveal: None, proposal_available: false, proposal_dismissed: false, sort: Default::default(), ordered: Vec::new(), unfiled: 0, issue_at: None, export_focus: Default::default(), filter: String::new(),
+            nodes: Vec::new(), path: Vec::new(), host: Default::default(), overview: Default::default(), styles: Default::default(), reveal: None, proposal_available: false, proposal_dismissed: false, sort: Default::default(), ordered: Vec::new(), unfiled: 0, browser_picks: 0, issue_at: None, export_focus: Default::default(), filter: String::new(),
             filing: None, focus_filter: false, group_rows: Vec::new(), row_menu: None, renaming: None, focus_rename: false, head_menu: None,
             kind_menu: None, kinds: Vec::new(), prompt: None, lens: Lens::Filing, edits: Default::default(), mode: String::new(), issues: false,
             identity: Vec::new(),
@@ -451,7 +453,7 @@ impl Ui {
         let g = |v: &Vec<i64>, i: usize| v.get(i).copied().unwrap_or(0);
         let s = |v: &Vec<String>, i: usize| v.get(i).cloned().unwrap_or_default();
         let mut linked_ancestors: Vec<bool> = Vec::new();
-        col.nodes = rows.into_iter().map(|(t, n)| {
+        col.nodes = rows.into_iter().map(|(mut t, n)| {
             let raw = s(&t, 2);
             let (kind, tip) = match raw.split_once('\u{1e}') {
                 Some((k, tip)) => (k.to_string(), tip.to_string()),
@@ -462,7 +464,11 @@ impl Ui {
             let linked = linked_ancestors.last().copied().unwrap_or(false) || key.starts_with("n:link:") || s(&t, 4) == "link";
             linked_ancestors.push(linked);
             Node {
-            dim: g(&n, 11) != 0,
+            control_tips: if (g(&n, 5) == 2 || g(&n, 6) == 2) && t.len() >= 7 {
+                let lock = t.pop().unwrap();
+                [t.pop().unwrap(), lock]
+            } else { Default::default() },
+            dim: g(&n, 11) != 0 || g(&n, 5) == 2,
             local_placement: !linked && matches!(g(&n, 4), 1 | 2) && (key.starts_with("i:") || key.starts_with("c:")),
             key, name: s(&t, 1), kind, tip, badge: s(&t, 3), icon: s(&t, 4),
             depth: g(&n, 0) as usize, count: g(&n, 1) as u32, problems: g(&n, 2) as u32, active: g(&n, 3) != 0,
@@ -490,6 +496,17 @@ impl Ui {
     pub fn cursor_shape(&self) -> &'static str { self.cursor_shape }
     pub fn set_issues(&mut self, on: bool) {
         if let Some(col) = self.column.as_mut() { col.issues = on; }
+    }
+    pub fn set_browser_picks(&mut self, count: usize) {
+        if let Some(col) = self.column.as_mut() { col.browser_picks = count; }
+    }
+    pub fn rename_browser_row(&mut self, id: &str) -> bool {
+        let Some(col) = self.column.as_mut() else { return false };
+        let Some(node) = col.nodes.iter().find(|n| n.local_placement && n.key.split_once(':').is_some_and(|(_, k)| k == id)) else { return false };
+        col.renaming = Some((node.key.clone(), node.name.clone()));
+        col.reveal = Some(node.key.clone());
+        col.focus_rename = true;
+        true
     }
     pub fn reveal_row(&mut self, key: String) {
         self.plugins.showing = false;
@@ -701,6 +718,9 @@ impl Ui {
         self.model_panes.push((id, Rect::from_min_size(pos2(x,y), vec2(width,height)), active, label));
     }
 
+    pub fn project_hidden(&self) -> bool {
+        self.review || self.sheets.shown || self.gallery.is_some()
+    }
     pub fn toggle_review(&mut self) { self.set_review(!self.review); }
 
     pub fn set_review(&mut self, on: bool) {
@@ -1071,6 +1091,10 @@ impl Ui {
                     self.ctx_menu = None;
                     self.strip.close_menus();
                     if let Some(col) = self.column.as_mut() {
+                        if !self.captured && button == egui::PointerButton::Primary && col.lens == Lens::Drawing {
+                            col.styles.clear_focus();
+                            col.highlighted = None;
+                        }
                         col.row_menu = None;
                         col.kind_menu = None;
                         col.head_menu = None;
@@ -1910,8 +1934,7 @@ impl Ui {
                                         }
                                         if let Some((a,b)) = cols.swatch {
                                             let sw = Rect::from_center_size(pos2((a+b)*0.5,cy),vec2(12.0,12.0));
-                                            if let Some(color) = parse_hex(&cell(0)) { ui.painter().rect_filled(sw, CornerRadius::same(R_INSET), color); }
-                                            ui.painter().rect_stroke(sw, CornerRadius::same(R_INSET), Stroke::new(1.0_f32, EDGE), egui::StrokeKind::Inside);
+                                            kit::tag_swatch(ui, sw, parse_hex(cells.get(20).or(cells.first()).map_or("", String::as_str)));
                                         }
                                     } else if col.lens == Lens::Export {
                                         let right = rect.right() - SPACE_S;
@@ -1936,11 +1959,18 @@ impl Ui {
                                     let g = ui.painter().layout_no_wrap(n.count.to_string(), meta(), DIM);
                                     ui.painter().galley(pos2(count_col - g.size().x, cy - g.size().y / 2.0), g, DIM);
                                 }
-                                let show_ctl = resp.hovered() || n.eye == 0 || n.lock == 1;
+                                let show_ctl = resp.hovered() || n.eye == 0 || n.lock >= 1;
                                 let control_edge = cols.flags.map_or(count_col, |(_, b)| b + 36.0);
                                 let (_, lock_r) = tree_slots(ui, control_edge, cy, -1, n.lock, show_ctl || col.lens == Lens::Drawing);
                                 let eye_r = Rect::from_center_size(pos2(rect.min.x + 10., cy), vec2(16., ROW_H));
-                                if n.eye >= 0 { kit::paint_eye(ui, eye_r, n.eye != 0); }
+                                if n.eye >= 0 { kit::paint_row_eye(ui, eye_r, n.eye); }
+                                if resp.hovered() {
+                                    for (slot, tip) in [(eye_r, &n.control_tips[0]), (lock_r, &n.control_tips[1])] {
+                                        if !tip.is_empty() && ui.rect_contains_pointer(slot) {
+                                            resp.clone().on_hover_text(tip);
+                                        }
+                                    }
+                                }
                                 // A row with no eye or lock (problems, library) keeps its width for the name.
                                 let bare = n.eye < 0 && n.lock < 0 && n.problems == 0;
                                 let right = if col.lens == Lens::Drawing { cols.name_right } else if col.lens == Lens::Export { cells_left.min(cols.name_right) - 8.0 }
@@ -2082,6 +2112,15 @@ impl Ui {
                                 let on_control = |p: Pos2| (n.expandable && tri.contains(p)) ||
                                     (n.eye >= 0 && eye_r.expand(2.0).contains(p)) ||
                                     (n.lock >= 0 && lock_r.expand(2.0).contains(p));
+                                if drawing_row {
+                                    for (lock, state, slot, verb) in [(false, n.eye, eye_r, "eye"), (true, n.lock, lock_r, "lock")] {
+                                        if state < 0 { continue; }
+                                        let hit = ui.interact(slot, resp.id.with(verb), Sense::click_and_drag());
+                                        if hit.contains_pointer() && ui.input(|i| i.pointer.primary_pressed()) {
+                                            actions.push(col.styles.state_action(n, lock).unwrap_or_else(|| format!("{verb}\u{1f}{}", n.key)));
+                                        }
+                                    }
+                                }
                                 let drag_started = resp.drag_started() &&
                                     !ui.input(|i| i.pointer.press_origin().is_some_and(on_control));
                                 if drawing_row {
@@ -2103,12 +2142,14 @@ impl Ui {
                                     if col.lens==Lens::Drawing && n.cells.len()<7 && !n.key.starts_with("preview-folder:") {col.styles.clear_focus();}
                                     if n.expandable && tri.contains(p) {
                                         actions.push(format!("toggle\u{1f}{}", n.key));
+                                    } else if drawing_row && on_control(p) {
+                                        // Drawing controls own their gesture from the press onward.
                                     } else if n.eye >= 0 && eye_r.expand(2.0).contains(p) {
                                         let edit = (col.lens == Lens::Drawing).then(|| col.styles.state_action(n, false)).flatten();
                                         actions.push(edit.unwrap_or_else(|| format!("{}\u{1f}{}", if n.local_placement { "roweye" } else { "eye" }, n.key)));
                                     } else if n.lock >= 0 && lock_r.expand(2.0).contains(p) {
                                         let edit = (col.lens == Lens::Drawing).then(|| col.styles.state_action(n, true)).flatten();
-                                        actions.push(edit.unwrap_or_else(|| format!("lock\u{1f}{}", n.key)));
+                                        actions.push(edit.unwrap_or_else(|| format!("{}\u{1f}{}", if n.local_placement { "rowlock" } else { "lock" }, n.key)));
                                     } else if col.lens == Lens::Drawing && n.cells.len() >= 7 && !linked && col.filing.is_none() {
                                         col.focused_row = Some(n.key.clone());
                                         resp.surrender_focus();
@@ -2295,8 +2336,8 @@ impl Ui {
                 ("-", ""), ("linkopen", "Edit source"), ("linkfinder", "Show in Finder"),
                 ("linkreload", "Reload"), ("linkrelink", "Locate…"), ("linkunlink", "Unlink")];
             let section_menu: &[(&str, &str)] = &[("sectioncut", "Toggle cut"), ("eye", "Show / hide"), ("deleterows", "Delete")];
-            let tag_menu: &[(&str, &str)] = &[("newtag", "New tag"), ("rename", "Rename"), ("tagactive", "Make active"), ("tagassign", "Move selection here"), ("tagselect", "Select items"), ("tagisolate", "Isolate"), ("deletetag", "Delete"), ("purgetags", "Purge unused tags…")];
-            let menu = if key.starts_with("preview-tag:") { tag_menu } else if key.starts_with("preview-folder:") { &[("newtag", "New tag in folder")] } else if key.starts_with("section:") { section_menu } else if row == 0 && key.starts_with("n:link") { link_menu } else if row == 0 { node_menu }
+            let tag_menu: &[(&str, &str)] = &[("newtag", "New tag"), ("rename", "Rename"), ("tagactive", "Make active"), ("tagassign", "Move selection here"), ("tagselect", "Select items"), ("tagisolate", "Toggle tag isolation"), ("mergetag", "Merge into…"), ("scenetaghide", "Hide in all saved scenes"), ("scenetagshow", "Show in all saved scenes"), ("deletetag", "Delete"), ("purgetags", "Purge unused tags…")];
+            let menu = if key.starts_with("preview-tag:") { tag_menu } else if key.starts_with("preview-folder:") { &[("newtag", "New tag in folder"), ("tagisolate", "Toggle tag isolation")] } else if key.starts_with("section:") { section_menu } else if row == 0 && key.starts_with("n:link") { link_menu } else if row == 0 { node_menu }
                 else if row == 5 { comp_menu } else { item_menu };
             let resp = egui::Area::new(egui::Id::new("row_menu"))
                 .fixed_pos(at + vec2(4.0, 4.0))
@@ -2308,7 +2349,7 @@ impl Ui {
                         let row = col.nodes.iter().find(|n| n.key == key);
                         let editable_file = row.is_some_and(|n| n.icon.starts_with("file:") && !n.badge.starts_with("via "));
                         for (id, label) in menu {
-                            if matches!(*id, "rename" | "deletetag") && key == "preview-tag:Layer 0" { continue; }
+                            if matches!(*id, "rename" | "deletetag" | "mergetag" | "tagisolate") && key == "preview-tag:Layer 0" { continue; }
                             if row.is_some_and(|n| n.icon == "file:missing") &&
                                 matches!(*id, "contents" | "isolate" | "zoom" | "linkopen" | "linkfinder" | "linkreload") { continue; }
                             if matches!(*id, "linkreload" | "linkrelink" | "linkunlink") &&
@@ -2332,15 +2373,21 @@ impl Ui {
                                 ui.painter().hline(r.x_range().shrink(6.0), r.center().y, Stroke::new(1.0_f32, EDGE));
                                 continue;
                             }
+                            let multi_rename = *id == "rename" && row.is_some_and(|n| n.local_placement && n.selected > 0)
+                                && col.browser_picks > 1;
+                            let label = if multi_rename { "Rename selected…" } else { *label };
                             let item = (id.to_string(), label.to_string(), String::new(), String::new(), -1i8, true);
                             let (r, rect) = menu_row_resp(ui, &item);
                             if r.clicked() {
                                 match *id {
+                                    "rename" if multi_rename => actions.push(col.rename_request(true)),
                                     "rename" => {
                                         let name = col.nodes.iter().find(|n| n.key == key).map(|n| n.name.clone()).unwrap_or_default();
                                         col.renaming = Some((key.clone(), name));
                                         col.focus_rename = true;
                                     }
+                                    "tagisolate" if row.is_some() => actions.push(col.styles.isolate_action(row.unwrap())),
+                                    "lockitem" if row.is_some_and(|n| n.local_placement) => actions.push(format!("rowlock\u{1f}{key}")),
                                     "kind" => { col.kind_menu = Some((key.clone(), pos2(rect.max.x + 4.0, rect.min.y))); }
                                     _ => actions.push(format!("{id}\u{1f}{key}")),
                                 }
@@ -2414,6 +2461,10 @@ impl Ui {
                                         }
                                     }
                                 }
+                                if col.styles.catalog.tag_isolation && menu_row(ui, &("endtagisolate".into(), "End tag isolation".into(), String::new(), String::new(), -1, true)) {
+                                    actions.push("isolatetags\u{1f}[]".into());
+                                    close = true;
+                                }
                                 if col.lens == Lens::Drawing && menu_row(ui, &("purgetags".into(), "Purge unused tags…".into(), String::new(), String::new(), -1, true)) {
                                     actions.push("purgetags\u{1f}".into());
                                     close = true;
@@ -2429,6 +2480,15 @@ impl Ui {
                                     col.sort = options[index].0;
                                     col.ordered = col.sort.order(&col.nodes);
                                     actions.push(format!("sort\u{1f}{index}"));
+                                    close = true;
+                                }
+                            }
+                            if col.mode.is_empty() && col.lens == Lens::Filing {
+                                let picked = col.browser_picks > 0;
+                                let enabled = picked || col.unfiled > 0 || col.nodes.iter().any(|n| n.local_placement || n.key.starts_with("n:") && n.count > 0);
+                                let label = if picked { "Rename selected…" } else if col.filter.is_empty() { "Rename model rows…" } else { "Rename matching rows…" };
+                                if menu_row(ui, &("batchrename".into(), label.into(), String::new(), String::new(), -1, enabled)) {
+                                    actions.push(col.rename_request(picked));
                                     close = true;
                                 }
                             }
@@ -3463,8 +3523,11 @@ fn an_eye_gesture_never_opens_or_drags_its_occurrence() {
     let Some(mut ui) = test_chrome() else { return };
     ui.ctx = test_context();
     ui.set_tree(["House", "Shed"].into_iter().map(|name|
-        (vec![format!("i:{name}"), name.into()], vec![0, 0, 0, 0, 1, 1, 0])
+        (vec![format!("i:{name}"), name.into(), "".into(), "".into(), "group".into(), "Hidden by Building".into(), "Locked by Building".into()], vec![0, 0, 0, 0, 1, 2, 2])
     ).collect(), 0);
+    let house = &ui.column.as_ref().unwrap().nodes[0];
+    assert!(house.dim && house.cells.is_empty());
+    assert_eq!(house.control_tips, ["Hidden by Building", "Locked by Building"]);
     for _ in 0..3 { tree_frame(&mut ui, vec![]); }
     let at = tree_frame(&mut ui, vec![]);
     let eye = pos2(at["Name"].x - 26., at["House"].y);
@@ -3499,6 +3562,13 @@ fn focused_tree_keys_win_over_viewport_shortcuts() {
     let pos = tree_frame(&mut ui, vec![])["A"];
     tree_click(&mut ui, pos, egui::PointerButton::Primary);
     assert_eq!(ui.take_actions(), ["tree:pickrow\x1fi:A"]);
+    assert!(!ui.claims_key("ArrowRight", 0)); // axis lock belongs to the model
+    assert!(ui.claims_key("ArrowDown", 0));
+    ui.set_review(true);
+    assert!(ui.project_hidden() && !ui.claims_key("ArrowDown", 0));
+    ui.set_review(false);
+    assert!(ui.claims_key("ArrowDown", 0));
+    ui.take_actions();
     assert!(!ui.claims_key("Z", 1));
     assert!(!ui.claims_key("Space", 4));
     for (key, mods, action) in [
@@ -3544,5 +3614,87 @@ fn drawing_lock_and_visibility_address_the_selected_tags() {
         assert_eq!(patch["tags"], serde_json::json!(["a", "b"]));
         assert_eq!(patch[field], expected);
         assert!(col.styles.state_action(&col.nodes[2], lock).is_none());
+    }
+}
+
+#[test]
+fn drawing_controls_own_press_drag_and_double_click_and_release_focus_to_model() {
+    let Some(mut ui) = test_chrome() else { return };
+    ui.ctx = test_context();
+    let rows = |visible: bool| ["Walls", "Doors", "Other"].map(|name| {
+        let mut text = vec![String::new(); 22];
+        text[0] = format!("preview-tag:{name}");
+        text[1] = name.into();
+        text[10] = name.into();
+        (text, vec![0, 0, 0, 0, 6, i64::from(visible), 0])
+    }).to_vec();
+    ui.set_tree(rows(true), 0);
+    ui.set_lens(1);
+    for _ in 0..3 { tree_frame(&mut ui, vec![]); }
+    let col = ui.column.as_mut().unwrap();
+    col.styles.pick(&col.nodes[0], false);
+    col.styles.pick(&col.nodes[1], true);
+    let at = tree_frame(&mut ui, vec![]);
+    let eye = pos2(at["Name"].x - 26., at["Walls"].y);
+    let set_visible = |value| format!("tree:tagstate\x1f{}", serde_json::json!({"tags":["Doors","Walls"], "visible":value}));
+    assert_eq!(tree_drag(&mut ui, eye, at["Other"]), [set_visible(false)]);
+    for visible in [false, true] {
+        ui.set_tree(rows(visible), 0);
+        tree_frame(&mut ui, vec![]);
+        tree_click(&mut ui, eye, egui::PointerButton::Primary);
+        assert_eq!(ui.take_actions(), [set_visible(!visible)]);
+        let col = ui.column.as_ref().unwrap();
+        assert!(col.styles.selected(&col.nodes[0]) && col.styles.selected(&col.nodes[1]));
+        assert!(!col.styles.selected(&col.nodes[2]) && col.renaming.is_none());
+    }
+    ui.hit.push(Rect::from_center_size(eye, vec2(24., 24.)));
+    assert!(ui.pointer("press", eye.x, eye.y, 1, 0));
+    ui.pointer("release", eye.x, eye.y, 1, 0);
+    assert!(ui.column.as_ref().unwrap().styles.active());
+    assert!(!ui.pointer("press", 300., 400., 1, 0));
+    assert!(!ui.column.as_ref().unwrap().styles.active());
+}
+
+#[test]
+fn browser_rename_uses_focused_row_selection_and_header_scope() {
+    let Some(mut ui) = test_chrome() else { return };
+    ui.ctx = test_context();
+    let rows = ["Box", "Door"].map(|name| (
+        vec![format!("i:{name}"), name.into()],
+        vec![0, 0, 0, 0, 1, -1, -1, 0, 0, 1],
+    ));
+    ui.set_tree(rows.to_vec(), 0);
+    ui.set_browser_picks(2);
+    let col = ui.column.as_mut().unwrap();
+    col.focused_row = Some("i:Box".into());
+    let selected = format!("tree:{}", col.rename_request(true));
+    assert!(ui.key("F2", true, 0));
+    assert_eq!(ui.take_actions(), [selected.clone()]);
+    for _ in 0..3 { tree_frame(&mut ui, vec![]); }
+    let at = tree_frame(&mut ui, vec![])["Box"];
+    tree_click(&mut ui, at, egui::PointerButton::Secondary);
+    ui.take_actions();
+    for _ in 0..3 { tree_frame(&mut ui, vec![]); }
+    let rename = tree_frame(&mut ui, vec![])["Rename selected…"];
+    tree_click(&mut ui, rename, egui::PointerButton::Primary);
+    assert_eq!(ui.take_actions(), [selected]);
+    assert!(ui.rename_browser_row("Door"));
+    assert_eq!(ui.column.as_mut().unwrap().renaming.take().unwrap().0, "i:Door");
+    assert!(!ui.rename_browser_row("removed"));
+    for (empty, filter, label) in [
+        (false, "", "Rename model rows…"), (false, "Door", "Rename matching rows…"),
+        (true, "", "Rename model rows…")
+    ] {
+        if empty { ui.set_tree(vec![], 0); }
+        ui.set_browser_picks(0);
+        let col = ui.column.as_mut().unwrap();
+        col.filter = filter.into();
+        col.head_menu = Some(pos2(680., 80.));
+        let action = format!("tree:{}", col.rename_request(false));
+        for _ in 0..3 { tree_frame(&mut ui, vec![]); }
+        let p = tree_frame(&mut ui, vec![])[label];
+        tree_click(&mut ui, p, egui::PointerButton::Primary);
+        if empty { assert!(ui.take_actions().is_empty()); }
+        else { assert_eq!(ui.take_actions(), [action]); }
     }
 }

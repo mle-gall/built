@@ -261,10 +261,19 @@ impl TreePaint {
                 )?
             }
         };
+        let changed = PyList::empty(py);
         for group in groups.iter() {
             if !group.getattr("material")?.eq(&stamp)? {
-                cmds.append(history.call_method1("SetGroupMaterialCommand", (group, &stamp))?)?;
+                changed.append(group)?;
             }
+        }
+        if !changed.is_empty() {
+            // One native delta over every changed placement.
+            cmds.append(
+                py.import("ingetrazo_core")?
+                    .getattr("NativeCommand")?
+                    .call_method1("paint", (changed, &stamp))?,
+            )?;
         }
         let command = history.call_method1("CompoundCommand", (cmds,))?;
         py.import("views.tree_navigation")?

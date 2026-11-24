@@ -58,8 +58,12 @@ pub mod atoms {
     use super::*;
     /// The visibility eye: open, or closed with a slash.
     pub fn paint_eye(ui: &egui::Ui, r: Rect, on: bool) {
+        paint_row_eye(ui, r, i8::from(on));
+    }
+    pub fn paint_row_eye(ui: &egui::Ui, r: Rect, state: i8) {
         let c = r.center();
-        let col = if on { DIM } else { WARN };
+        let on = state == 1;
+        let col = match state { 2 => FAINT, 1 => DIM, _ => WARN };
         let pts: Vec<Pos2> = (0..=16)
             .map(|i| {
                 let t = std::f32::consts::PI * i as f32 / 16.0;
@@ -83,8 +87,12 @@ pub mod atoms {
 
     /// The lock: shackle closed when locked, open when not.
     pub fn paint_lock(ui: &egui::Ui, r: Rect, on: bool) {
+        paint_row_lock(ui, r, i8::from(on));
+    }
+    pub(super) fn paint_row_lock(ui: &egui::Ui, r: Rect, state: i8) {
         let c = r.center();
-        let col = if on { INK } else { FAINT };
+        let on = state > 0;
+        let col = if state == 1 { INK } else { FAINT };
         let body = Rect::from_center_size(c + vec2(0.0, 2.0), vec2(9.0, 7.0));
         ui.painter().rect_filled(body, CornerRadius::same(2), col);
         let shackle =
@@ -650,6 +658,17 @@ pub mod molecules {
     pub fn number<'a>(value: &'a mut f64, units: &str) -> egui::DragValue<'a> {
         egui::DragValue::new(value).suffix(units)
     }
+    /// The default uncoloured tag has a slash. Other tags show their model colour.
+    pub fn tag_swatch(ui: &egui::Ui, rect: Rect, colour: Option<Color32>) {
+        let painter = ui.painter();
+        let corners = CornerRadius::same(R_INSET);
+        if let Some(colour) = colour {
+            painter.rect_filled(rect, corners, colour);
+        } else {
+            painter.line_segment([rect.left_top(), rect.right_bottom()], Stroke::new(1.5, ERROR));
+        }
+        painter.rect_stroke(rect, corners, Stroke::new(1., EDGE), egui::StrokeKind::Inside);
+    }
     pub fn swatch(ui: &mut egui::Ui, value: &mut Color32) -> egui::Response {
         ui.color_edit_button_srgba(value)
     }
@@ -842,10 +861,10 @@ pub mod molecules {
         let slot = |dx| Rect::from_center_size(pos2(count_right - dx, y), vec2(16., 16.));
         let (e, l) = (slot(64.), slot(44.));
         if show && eye >= 0 {
-            paint_eye(ui, e, eye == 1);
+            paint_row_eye(ui, e, eye);
         }
         if show && lock >= 0 {
-            paint_lock(ui, l, lock == 1);
+            atoms::paint_row_lock(ui, l, lock);
         }
         (e, l)
     }
@@ -1928,6 +1947,25 @@ pub fn scene_preview_row(ui:&mut egui::Ui,name:&str,current:bool,image:Option<&e
     hit.on_hover_text(name)
 }
 
+/// Paired names in a scrollable preview. Unchanged values use the secondary ink.
+pub fn rename_preview(ui: &mut egui::Ui, before: &str, after: &str, pairs: &[String]) {
+    let row = |ui: &mut egui::Ui, left: &str, right: &str, header: bool| {
+        ui.columns(2, |cells| {
+            for (i, value) in [left, right].into_iter().enumerate() {
+                let changed = !header && i == 1 && left != right;
+                let font = if changed { strong(TYPE_BODY) } else { meta() };
+                let color = if changed { INK } else { DIM };
+                cells[i].add(egui::Label::new(egui::RichText::new(value).font(font).color(color)).truncate()).on_hover_text(value);
+            }
+        });
+    };
+    row(ui, before, after, true);
+    egui::ScrollArea::vertical().id_salt("rename preview").max_height(ROW_H * 8.)
+        .show_rows(ui, ROW_H, pairs.len() / 2, |ui, indices| {
+            for i in indices { row(ui, &pairs[2*i], &pairs[2*i + 1], false); }
+        });
+}
+
 pub fn line_sample(ui: &egui::Ui, rect: Rect, mm: &str, pattern: &str, color: Color32) {
     let width = (mm.parse::<f32>().unwrap_or(0.18)*3.8).clamp(0.7, 5.);
     let dash: &[f32] = match pattern {
@@ -1999,4 +2037,27 @@ pub fn tag_inspector(ui:&mut egui::Ui, key:&str, name:&str, count:u32, cells:&[S
         prop_row(ui,"Colour",if cells[0].is_empty(){"By material"}else{&cells[0]});
     }
     menu
+}
+
+#[cfg(test)]
+mod tag_swatch_tests {
+    use super::*;
+
+    #[test]
+    fn only_an_uncoloured_tag_has_a_downward_slash() {
+        let ctx = egui::Context::default();
+        for colour in [None, Some(ACCENT)] {
+            let mut rect = Rect::NOTHING;
+            let frame = ctx.run(Default::default(), |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    rect = ui.allocate_exact_size(vec2(16.,16.), Sense::hover()).0;
+                    tag_swatch(ui, rect, colour);
+                });
+            });
+            let slash = frame.shapes.iter().any(|s| matches!(&s.shape,
+                egui::Shape::LineSegment { points, stroke }
+                if *points == [rect.left_top(), rect.right_bottom()] && stroke.color == ERROR));
+            assert_eq!(slash, colour.is_none());
+        }
+    }
 }

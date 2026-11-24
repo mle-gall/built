@@ -16,6 +16,9 @@ from typing import Iterable, Optional
 from core.mesh import element_identity
 from core.element_set import ElementSet
 from ingetrazo_core import Vec3 as QVector3D
+# Typed native steps (docs/commands-port.md): placement renames, locks and
+# whole-placement paint are Rust deltas, created through the protocol verbs.
+from ingetrazo_core import NativeCommand
 
 from core.group import Group
 from core import doc_model as _doc
@@ -4399,34 +4402,6 @@ class ReparentGroupsCommand(Command):
         scene.version += 1
 
 
-class LockCommand(Command):
-    """Lock (or unlock) groups and components: a locked object stays drawn
-    but cannot be picked, selected or opened. Previous flags are kept, so a
-    mixed set undoes exactly."""
-
-    doc_undo = True
-
-    def __init__(self, groups, locked: bool = True) -> None:
-        self._groups = list(groups)
-        self._locked = bool(locked)
-        self._prev: list = []
-
-    def doc_after(self, scene, phase) -> None:
-        if phase == "redo" and self._locked:
-            _unselect(scene, self._groups)
-        scene.version += 1
-
-    def do(self, scene) -> None:
-        self._prev = _definitions.lock_placements(self._groups, self._locked)
-        if self._locked:
-            _unselect(scene, self._groups)
-        scene.version += 1
-
-    def undo(self, scene) -> None:
-        _definitions.restore_locks(self._groups, self._prev)
-        scene.version += 1
-
-
 class MakeComponentOfCommand(Command):
     """Make Component over a selection that holds groups (or groups and
     loose geometry): ONE component containing them, each still a group
@@ -4492,28 +4467,6 @@ class MergeGroupsCommand(Command):
         scene.selection.discard(self._merged)
         for idx, g in sorted(zip(self._indices or [], self._groups)):
             scene.groups.insert(min(idx, len(scene.groups)), g)
-        scene.version += 1
-
-
-class SetGroupMaterialCommand(Command):
-    """Paint a group or component instance as a whole (issue #47): the
-    container's ``material`` is set — ``None`` unpaints — and every face
-    inside wearing the default material shows it; faces painted themselves
-    keep their own. Nothing in the mesh changes, so undo is a plain swap."""
-
-    doc_undo = True
-
-    def __init__(self, group, material) -> None:
-        self.group = group
-        self.material = dict(material) if material else None
-        self._old = None
-
-    def do(self, scene) -> None:
-        self._old = _definitions.set_placement_field(self.group, "material", self.material)
-        scene.version += 1
-
-    def undo(self, scene) -> None:
-        _definitions.set_placement_field(self.group, "material", self._old)
         scene.version += 1
 
 
@@ -4801,25 +4754,6 @@ def _merge_overlapping_planes(scene, before, added, *, on_rebuild=None,
     scene.selection = set(keep)
     _drop_dead_elements(scene, mesh)
     return len(planes)
-
-
-class RenameGroupCommand(Command):
-    """Give a group, component or part a new name (the Parts tray's edit)."""
-
-    doc_undo = True
-
-    def __init__(self, group: Group, name: str) -> None:
-        self.group = group
-        self.name = name
-        self.old: Optional[str] = None
-
-    def do(self, scene) -> None:
-        self.old = _definitions.set_placement_field(self.group, "name", self.name)
-        scene.version += 1
-
-    def undo(self, scene) -> None:
-        _definitions.set_placement_field(self.group, "name", self.old)
-        scene.version += 1
 
 
 class ExplodeViewCommand(Command):

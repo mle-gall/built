@@ -2573,14 +2573,18 @@ impl Renderer {
         if let Some(ui) = self.ui.as_mut() { ui.panels.set(key, value); }
         Ok(())
     }
+    fn ui_project_hidden(&self) -> bool {
+        self.ui.as_ref().is_some_and(|ui| ui.project_hidden())
+    }
     fn ui_toggle_review(&mut self) {
         if let Some(ui) = self.ui.as_mut() { ui.toggle_review(); }
     }
     fn ui_show_inspector(&mut self) {
         if let Some(ui) = self.ui.as_mut() { ui.show_inspector(); }
     }
-    fn ui_set_catalog_info(&mut self, filename: String, tree: &Bound<'_,PyAny>, counts: &Bound<'_,PyAny>) -> PyResult<()> {
-        if let Some(ui)=self.ui.as_mut() { ui.set_catalog_info(filename,tree,counts)?; }
+    #[pyo3(signature=(filename, tree, counts, picked=0))]
+    fn ui_set_catalog_info(&mut self, filename: String, tree: &Bound<'_,PyAny>, counts: &Bound<'_,PyAny>, picked: usize) -> PyResult<()> {
+        if let Some(ui)=self.ui.as_mut() { ui.set_catalog_info(filename,tree,counts)?; ui.set_browser_picks(picked); }
         Ok(())
     }
     #[pyo3(signature = (owner, lines, patterns=None, scene=None))]
@@ -2711,6 +2715,9 @@ impl Renderer {
     }
     fn ui_set_activity(&mut self, history: Vec<ui::ActivityRow>, banner: String) {
         if let Some(ui) = self.ui.as_mut() { ui.set_activity(history, banner); }
+    }
+    fn ui_rename_browser_row(&mut self, id: &str) -> bool {
+        self.ui.as_mut().is_some_and(|ui| ui.rename_browser_row(id))
     }
     fn ui_reveal_row(&mut self, key: String) {
         if let Some(ui) = self.ui.as_mut() { ui.reveal_row(key); }
@@ -3206,8 +3213,10 @@ fn parallel_annotation_ray(eye: [f64; 3], forward: [f64; 3], point: [f64; 3]) ->
 }
 
 /// Document state comes from the controller. Headless views have no dock to unwind.
-#[pyfunction(signature = (busy, selected, editing, renderer=None, array_pending=false))]
-fn model_escape(busy: bool, selected: bool, editing: bool, mut renderer: Option<PyRefMut<'_, Renderer>>, array_pending: bool) -> &'static str {
+#[pyfunction(signature = (busy, selected, editing, renderer=None, array_pending=false, typed=false, constrained=false))]
+fn model_escape(busy: bool, selected: bool, editing: bool, mut renderer: Option<PyRefMut<'_, Renderer>>, array_pending: bool, typed: bool, constrained: bool) -> &'static str {
+    if typed { return "value"; }
+    if constrained { return "constraint"; }
     ui::Ui::model_escape(renderer.as_mut().and_then(|r| r.ui.as_mut()), busy, array_pending, selected, editing)
 }
 
@@ -3308,9 +3317,14 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(tree_grouping::row_actions::tree_header_state, m)?)?;
     m.add_function(wrap_pyfunction!(tree_grouping::row_actions::tree_purge_tags, m)?)?;
     m.add_function(wrap_pyfunction!(tree_grouping::row_actions::tree_delete_tag, m)?)?;
+    m.add_function(wrap_pyfunction!(tree_grouping::tag_visibility::isolate_tags, m)?)?;
+    m.add_function(wrap_pyfunction!(tree_grouping::tag_visibility::has_tag_actions, m)?)?;
+    m.add_function(wrap_pyfunction!(tree_grouping::tag_visibility::viewport_tag_menu, m)?)?;
+    m.add_function(wrap_pyfunction!(tree_grouping::tag_visibility::choose_merge_tag, m)?)?;
     m.add_function(wrap_pyfunction!(tree_grouping::row_actions::tree_tag_action, m)?)?;
     m.add_function(wrap_pyfunction!(tree_grouping::row_actions::tree_delete_rows, m)?)?;
     m.add_function(wrap_pyfunction!(tree_grouping::tree_group_rows, m)?)?;
+    m.add_function(wrap_pyfunction!(tree_grouping::placement_controls::browser_selection, m)?)?;
     m.add_function(wrap_pyfunction!(tree_grouping::tree_group_action, m)?)?;
     m.add_function(wrap_pyfunction!(model_escape, m)?)?;
     m.add_function(wrap_pyfunction!(context_targets, m)?)?;

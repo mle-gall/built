@@ -123,6 +123,32 @@ pub(crate) fn row(
     )
 }
 
+/// A closed control can belong to the row itself or to an enclosing placement.
+pub(crate) fn placement_controls(row: &mut Row, group: &Bound<'_, PyAny>) -> PyResult<()> {
+    row.1[5] = i64::from(!group.getattr("hidden")?.is_truthy()?);
+    row.1[6] = i64::from(group.getattr("locked")?.is_truthy()?);
+    let (hidden, locked) = group.cast::<crate::doc::py::PyPlacement>()?.get()._closed_ancestors();
+    let mut tips = [String::new(), String::new()];
+    for (i, ancestor, open, message) in [
+        (0, hidden, 1, "Hidden by «{name}»"),
+        (1, locked, 0, "Locked by «{name}»"),
+    ] {
+        if let Some(name) = ancestor.filter(|_| row.1[5 + i] == open) {
+            let tr = group.py().import("core.i18n")?.getattr("tr")?;
+            let fields = pyo3::types::PyDict::new(group.py());
+            fields.set_item("name", if name.is_empty() {
+                tr.call1(("Unnamed group",))?.extract()?
+            } else { name })?;
+            tips[i] = tr.call((message,), Some(&fields))?.extract()?;
+            row.1[5 + i] = 2;
+        }
+    }
+    if row.1[5] == 2 || row.1[6] == 2 {
+        row.0.extend(tips);
+    }
+    Ok(())
+}
+
 fn loose_visible(mesh: &Bound<'_, PyAny>) -> PyResult<bool> {
     let hidden = mesh
         .py()
@@ -221,11 +247,12 @@ fn loose(scene: &Bound<'_, PyAny>, depth: usize, query: &str) -> PyResult<Option
     Ok(matches.then_some(r))
 }
 
-#[pyfunction]
+#[pyfunction(signature = (scene, query, expanded, browser_selected=None))]
 pub(crate) fn project_context_rows(
     scene: &Bound<'_, PyAny>,
     query: &str,
     expanded: HashSet<String>,
+    browser_selected: Option<HashSet<usize>>,
 ) -> PyResult<Vec<Row>> {
     let group = scene.getattr("edit_group")?;
     let mut rows = Vec::new();
@@ -277,10 +304,12 @@ pub(crate) fn project_context_rows(
                     depth,
                     1,
                     0,
-                    usize::from(selection.contains(&g)?),
+                    usize::from(match &browser_selected {
+                        Some(ids) => ids.contains(&(g.as_ptr() as usize)),
+                        None => selection.contains(&g)?,
+                    }),
                 );
-                r.1[5] = i64::from(!g.getattr("hidden")?.is_truthy()?);
-                r.1[6] = i64::from(g.getattr("locked")?.is_truthy()?);
+                placement_controls(&mut r, &g)?;
                 r.1[7] = i64::from(children.is_truthy()?);
                 r.1[8] = i64::from(open);
                 rows.push(r);

@@ -23,16 +23,7 @@ pub fn tree_tag_action(win: &Bound<'_, PyAny>, tag: &str, isolate: bool) -> PyRe
         ui.call_method1("_select", (win, entities))?;
         return Ok(());
     }
-    let matches = PyList::empty(win.py());
-    for group in scene.getattr("groups")?.try_iter()? {
-        let group = group?;
-        let layer: Option<String> = group.getattr("layer")?.extract()?;
-        if layer.as_deref().unwrap_or("Layer 0") == tag {
-            matches.append(group)?;
-        }
-    }
-    ui.call_method1("_isolate", (win, matches))?;
-    Ok(())
+    super::tag_visibility::isolate_tags(&vp, vec![format!("preview-tag:{tag}")])
 }
 
 /// Delete the addressed occurrence or section, including the other picked rows
@@ -261,10 +252,14 @@ pub fn tree_header_state(vp: &Bound<'_, PyAny>, scope: &str, lock: bool) -> PyRe
         if !any && !scene.getattr("edit_group")?.is_none() {
             vp.call_method0("end_group_edit")?;
         }
-        let name = if lock { "LockCommand" } else { "HideCommand" };
-        let cmd = py
-            .import("core.history")?
-            .call_method1(name, (rows, !any))?;
+        let cmd = if lock {
+            py.import("ingetrazo_core")?
+                .getattr("NativeCommand")?
+                .call_method1("lock", (rows, !any))?
+        } else {
+            py.import("core.history")?
+                .call_method1("HideCommand", (rows, !any))?
+        };
         py.import("views.tree_navigation")?
             .call_method1("execute", (vp, cmd))?;
     }

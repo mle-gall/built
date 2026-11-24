@@ -98,21 +98,12 @@ fn name_definition(
     if targets.is_empty() && template.is_none() {
         return Ok(());
     }
-    if !template.is_none() && !targets.contains(&template)? {
-        targets.append(template)?;
-    }
-    if !targets.contains(definition)? {
-        targets.append(definition)?;
-    }
-    let history = py.import("core.history")?;
-    let commands = PyList::empty(py);
-    for group in targets.iter() {
-        commands.append(history.call_method1("RenameGroupCommand", (group, name))?)?;
-    }
-    commit(
-        &view,
-        &history.call_method1("CompoundCommand", (commands,))?,
-    )
+    // The protocol verb renames every copy, the kept template and this
+    // definition as one native step (docs/commands-port.md).
+    py.import("core.protocol.commands")?
+        .call_method1("rename_component", (view.getattr("history")?, definition, name))?;
+    view.call_method0("notify_scene_changed")?;
+    Ok(())
 }
 
 #[pyfunction]

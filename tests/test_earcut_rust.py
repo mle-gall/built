@@ -11,25 +11,22 @@ different valid triangulation would still move the seams of a textured
 face and the pixels of every picture test."""
 from __future__ import annotations
 
-import numpy as np
-import pytest
+import hashlib
+import math
+import random
 
-from core import _native
+import numpy as np
+from ingetrazo_core import Vec3
+
 from core import triangulate as T
 
-native = _native.available()
-pytestmark = pytest.mark.skipif(native is None or not hasattr(native, "earcut"),
-                                reason="Rust engine without earcut")
 
-
-def _both(points, holes=None):
-    rust = native.earcut(np.asarray(points, dtype=np.float64).reshape(-1, 2),
-                         list(holes or []))
-    # The Python port works on Python floats (its ``_sign`` subtracts
-    # booleans, which NumPy's refuse): hand it those, as every caller does.
-    py = T.earcut_py([(float(x), float(y)) for x, y in points],
-                     list(holes or []))
-    return [tuple(t) for t in rust.tolist()], py
+def _record(digest, points, holes):
+    triangles = T.earcut(points, holes)
+    for triangle in triangles:
+        digest.update(bytes(triangle))
+    digest.update(b"\xff")
+    return len(triangles)
 
 
 def _star(rng, n, r0=1.0, r1=3.0, cx=0.0, cy=0.0):
@@ -40,6 +37,7 @@ def _star(rng, n, r0=1.0, r1=3.0, cx=0.0, cy=0.0):
 
 def test_random_polygons_with_holes_give_the_same_triangles():
     rng = np.random.default_rng(20261111)
+    digest = hashlib.sha256()
     seen = 0
     for _ in range(300):
         outer = _star(rng, int(rng.integers(3, 40)))
@@ -51,10 +49,9 @@ def test_random_polygons_with_holes_give_the_same_triangles():
             c = rng.uniform(-0.6, 0.6, 2)
             pts.append(_star(rng, int(rng.integers(3, 9)), 0.1, 0.4, *c)[::-1])
         points = np.concatenate(pts)
-        rust, py = _both(points, holes)
-        assert rust == py
-        seen += len(py)
+        seen += _record(digest, points, holes)
     assert seen > 5000
+    assert digest.hexdigest() == "c2864355b4a028b07c602aeb63d00f2c3df805743a45dbb672b48e4eeb80c338"
 
 
 def test_the_degenerate_cases_recover_the_same_way():
@@ -78,30 +75,29 @@ def test_the_degenerate_cases_recover_the_same_way():
         # clockwise outer, counter-clockwise hole (both turned round)
         ([(0, 0), (0, 4), (4, 4), (4, 0), (1, 1), (3, 1), (3, 3), (1, 3)], [4]),
     ]
+    digest = hashlib.sha256()
     for points, holes in cases:
-        rust, py = _both(np.asarray(points, dtype=float), holes)
-        assert rust == py, (points, holes)
+        _record(digest, points, holes)
+    assert digest.hexdigest() == "f0a4116822a9f680ea96ad9d100821b198c527efe56187d99f47e54d7d0682c9"
 
 
-def test_triangulate_goes_through_the_engine_when_it_is_on(monkeypatch):
-    from ingetrazo_core import Vec3 as V
-    called = []
-    real = native.earcut
+def test_projected_vertex_identity_and_order():
+    rng = random.Random(372901)
+    digest = hashlib.sha256()
+    for k in range(500):
+        size = rng.randrange(3, 65)
+        radii = [rng.uniform(2., 7.) for _ in range(size)]
+        tilt = rng.uniform(-2., 2.)
 
-    class Spy:
-        def __getattr__(self, name):
-            return getattr(native, name)
+        def point(x, y):
+            return Vec3(600000. + x, 6800000. + y, tilt * x + y)
 
-        def earcut(self, pts, holes):
-            called.append(len(pts))
-            return real(pts, holes)
-
-    monkeypatch.setattr(_native, "native", Spy())
-    outer = [V(0, 0, 0), V(4, 0, 0), V(4, 4, 0), V(0, 4, 0)]
-    hole = [V(1, 1, 0), V(1, 3, 0), V(3, 3, 0), V(3, 1, 0)]
-    tris = T.triangulate(outer, [hole])
-    assert called == [8] and len(tris) == 8
-    # A convex face without holes fans in Python: no call.
-    assert len(T.triangulate(outer)) == 2 and called == [8]
-    monkeypatch.setattr(_native, "native", None)
-    assert T.triangulate(outer, [hole]) == tris and called == [8]
+        outer = [point(r * math.cos(i * math.tau / size),
+                       r * math.sin(i * math.tau / size))
+                 for i, r in enumerate(radii)]
+        hole = [point(-1, -1), point(-1, 1), point(1, 1), point(1, -1)] if k % 2 else []
+        indices = {id(p): i for i, p in enumerate(outer + hole)}
+        for tri in T.triangulate(outer, [hole]):
+            digest.update(bytes(indices[id(p)] for p in tri))
+        digest.update(b'\xff')
+    assert digest.hexdigest() == "d0d073e0c5bd3c2c1cde744f4416a5e93cbedcdf907776c0eb5c9759b78b6389"

@@ -27,7 +27,7 @@ elif not isinstance(_inst, QApplication):
 
 from core.group import Group                                      # noqa: E402
 from core.history import (History, RestampMaterialCommand,        # noqa: E402
-                          SetGroupMaterialCommand)
+                          NativeCommand)
 from core.materials import Material, free_name                    # noqa: E402
 from core.mesh import Mesh                                        # noqa: E402
 from core.scene import Scene                                      # noqa: E402
@@ -60,7 +60,7 @@ def _painted_scene():
     whole = Group(Mesh(), name="Bloque")
     _quad(whole.mesh, z=7.0)
     scene.groups.append(whole)
-    history.execute(SetGroupMaterialCommand(whole, azul.face_attrs()))
+    history.execute(NativeCommand.paint([whole], azul.face_attrs()))
     return scene, history, loose, red, deep, whole
 
 

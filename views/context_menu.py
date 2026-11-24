@@ -26,6 +26,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from views import verbs as _verbs
+from ingetrazo_render import viewport_tag_menu
 
 KINDS, READ_ONLY, EDITING, MAX_ROWS = _verbs.KINDS, _verbs.READ_ONLY, _verbs.EDITING, _verbs.MAX_ROWS
 
@@ -165,13 +166,8 @@ def _file_to(win, view, sel, arg, facts):
 
 
 def _lock(win, view, sel, arg, facts):
-    from views import wgpu_ui
-    groups = _groups(sel)
-    if len(groups) == 1:
-        _tree(win, view, "lockitem", groups[0])
-    else:
-        wgpu_ui._core(win.viewport, "lock", placements=_uids(groups), locked=not facts.get("all_locked"))
-        win.viewport.update()
+    from ingetrazo_render import context_lock
+    context_lock(win.viewport, _groups(sel), not facts.get("all_locked"))
 
 
 def _keep(win, view, sel, arg, facts):
@@ -227,7 +223,8 @@ def _reveal(win, view, sel, arg, facts):
     wgpu_ui._tree_action(win, view, "revealselection" + wgpu_ui.SEP)
 
 
-_GLUE = {"intersect": _intersect, "isolate": _isolate, "fileto": _file_to, "lock": _lock,
+_GLUE = {"selectiontag": lambda win, view, sel, arg, facts: viewport_tag_menu(win, sel),
+         "intersect": _intersect, "isolate": _isolate, "fileto": _file_to, "lock": _lock,
          "keep": _keep, "contents": _contents, "link": _link, "selectlink": _select_link,
          "deleteguide": _delete_guide, "showall": _show_all, "secname": _section_name,
          "reveal": _reveal,

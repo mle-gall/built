@@ -319,32 +319,6 @@ fn set_placement_field<'py>(g: &Obj<'py>, field: &str, value: &Obj<'py>) -> PyRe
     Ok(old)
 }
 #[pyfunction]
-fn lock_placements<'py>(groups: &Obj<'py>, locked: bool) -> PyResult<Obj<'py>> {
-    let py = groups.py();
-    let previous = py
-        .import("core.history_commands")?
-        .call_method1("_bulk_set", (groups, "locked", locked))?;
-    if !previous.is_none() {
-        return Ok(previous);
-    }
-    let flags = PyList::empty(py);
-    for g in groups.try_iter()? {
-        let g = g?;
-        flags.append(g.hasattr("locked")? && g.getattr("locked")?.is_truthy()?)?;
-    }
-    for g in groups.try_iter()? {
-        g?.setattr("locked", locked)?;
-    }
-    Ok(flags.into_any())
-}
-#[pyfunction]
-fn restore_locks(groups: &Obj<'_>, previous: &Obj<'_>) -> PyResult<()> {
-    for (g, v) in groups.try_iter()?.zip(previous.try_iter()?) {
-        g?.setattr("locked", v?)?;
-    }
-    Ok(())
-}
-#[pyfunction]
 fn append_members(list: &Obj<'_>, items: &Obj<'_>) -> PyResult<()> {
     list.call_method1("extend", (items,))?;
     Ok(())
@@ -463,8 +437,6 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     sub.add_function(wrap_pyfunction!(delete_placement, &sub)?)?;
     sub.add_function(wrap_pyfunction!(restore_placement, &sub)?)?;
     sub.add_function(wrap_pyfunction!(set_placement_field, &sub)?)?;
-    sub.add_function(wrap_pyfunction!(lock_placements, &sub)?)?;
-    sub.add_function(wrap_pyfunction!(restore_locks, &sub)?)?;
     sub.add_function(wrap_pyfunction!(append_members, &sub)?)?;
     sub.add_function(wrap_pyfunction!(remove_members, &sub)?)?;
     sub.add_function(wrap_pyfunction!(rebuild_letter_placement, &sub)?)?;

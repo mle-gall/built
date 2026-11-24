@@ -33,7 +33,7 @@ from collections.abc import Mapping
 from itertools import count
 
 import numpy as np
-from ingetrazo_core import Vec3 as QVector3D
+from ingetrazo_core import Vec3 as QVector3D, polygon_centroid, polygon_net_area, polygon_newell as _newell
 
 from core import mesh as _mesh
 from core.mesh import Edge, Face, Mesh, Vertex
@@ -488,20 +488,6 @@ def _face_entry(m, key) -> list:
     return hit
 
 
-def _newell(ring) -> QVector3D:
-    """``Face._newell`` over a ring of ``(x, y, z)`` float32 values held as
-    doubles: the same sums, so the same bits."""
-    count_ = len(ring)
-    nx = ny = nz = 0.0
-    for i in range(count_):
-        x0, y0, z0 = ring[i]
-        x1, y1, z1 = ring[(i + 1) % count_]
-        nx += (y0 - y1) * (z0 + z1)
-        ny += (z0 - z1) * (x0 + x1)
-        nz += (x0 - x1) * (y0 + y1)
-    return QVector3D(nx, ny, nz)
-
-
 class FaceView(_ViewMixin, Face):
     __slots__ = ("_m",)
 
@@ -701,28 +687,13 @@ class FaceView(_ViewMixin, Face):
         rings = self._positions() if _store_of(self._m) is not None else None
         if rings is None:
             return Face.net_area(self)
-        if len(rings[0]) < 3:
-            return 0.0
-        area = 0.5 * _newell(rings[0]).length()
-        for hole in rings[1:]:
-            if len(hole) < 3:
-                continue
-            area -= 0.5 * _newell(hole).length()
-        return max(area, 0.0)
+        return polygon_net_area(rings[0], rings[1:])
 
     def centroid(self) -> QVector3D:
         rings = self._positions() if _store_of(self._m) is not None else None
         if rings is None:
             return Face.centroid(self)
-        loop = rings[0]
-        n = len(loop)
-        if n == 0:
-            return QVector3D(0.0, 0.0, 0.0)
-        # Face.centroid sums float32 QVector3D components as doubles.
-        cx = sum(p[0] for p in loop) / n
-        cy = sum(p[1] for p in loop) / n
-        cz = sum(p[2] for p in loop) / n
-        return QVector3D(cx, cy, cz)
+        return polygon_centroid(rings[0])
 
 
 _VIEW_TYPES = (VertexView, EdgeView, FaceView)

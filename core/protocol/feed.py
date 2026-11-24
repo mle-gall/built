@@ -294,8 +294,8 @@ def _journal_covers(cmd) -> bool:
     the step's journal names every placement they wrote, so listing them
     again (20,000 uids for Lock all) is only cost."""
     from core import history as H
-    if isinstance(cmd, (H.LockCommand, H.RenameGroupCommand)):
-        return True
+    if getattr(cmd, "journal_covers", False):
+        return True                 # a native step (docs/commands-port.md)
     if isinstance(cmd, H.MoveGroupCommand):
         return getattr(cmd.group, "xform", None) is not None
     if isinstance(cmd, (H.HideCommand, H.AssignLayerCommand)):
@@ -318,6 +318,11 @@ def _known_placements(cmd, phase, step, scene=None, journalled=False) -> bool:
         step.placements["modified"].extend(scene._root._definition_uids(definition))
     if journalled and _journal_covers(cmd):
         return True
+    if isinstance(cmd, H.NativeCommand):
+        if not journalled:
+            # Run outside a document transaction: name what it writes.
+            step.placements["modified"].extend(g.uid for g in cmd.targets)
+        return cmd.journal_covers
     if getattr(cmd, "keeps_rows", False) or isinstance(cmd, _geometry_only()):
         return True
     from core.solids import SolidOperationCommand
@@ -332,11 +337,8 @@ def _known_placements(cmd, phase, step, scene=None, journalled=False) -> bool:
         adding = isinstance(cmd, H.InsertGroupCommand) != (phase == "undo")
         step.placements["created" if adding else "removed"].append(uid)
         return True
-    if isinstance(cmd, (H.MoveGroupCommand, H.RenameGroupCommand)) and uid:
+    if isinstance(cmd, H.MoveGroupCommand) and uid:
         step.placements["modified"].append(uid)
-        return True
-    if isinstance(cmd, H.LockCommand):
-        step.placements["modified"].extend(g.uid for g in cmd._groups)
         return True
     undo = phase == "undo"
     if isinstance(cmd, H.ExplodeGroupCommand) and uid:

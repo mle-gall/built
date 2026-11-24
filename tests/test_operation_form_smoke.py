@@ -727,6 +727,35 @@ def dispatch(self, command):
         self.fixture_filed_tag=tag.folder==folder
         wgpu_ui._tree_action(self.window,self.view,wgpu_ui.SEP.join(("rename","preview-tag:"+tag.key,"Unused survey tag")))
         wgpu_ui._tree_action(self.window,self.view,wgpu_ui.SEP.join(("purgetags","")))
+    elif command=="fixture-selection-tag":
+        from views import context_menu
+        from core.group import Group
+        group=Group(name="Loose tag target")
+        scene.groups.append(group)
+        scene.select([group])
+        menu_state=context_menu.build(self.window,self.view)
+        context_menu.run(self.window,self.view,menu_state.kind,"selectiontag",menu_state.sel)
+    elif command=="fixture-rename":
+        from core.group import Group
+        if not hasattr(self,"fixture_rename"):
+            self.fixture_rename=[Group(name="Panel A"), Group(name="Panel B")]
+            scene.groups.extend(self.fixture_rename)
+        scene.select(self.fixture_rename)
+        order=[[g.uid,False] for g in self.fixture_rename]
+        wgpu_ui._tree_action(self.window,self.view,"batchrename"+wgpu_ui.SEP+json.dumps([id(scene),True,"",order]))
+    elif command=="fixture-merge-tag":
+        from core.layers import Layer
+        if scene.layer_by_key("Merge me") is None:
+            scene.layers.append(Layer("Merge me"))
+            scene.groups[0].layer="Merge me"
+            scene.version+=1
+        wgpu_ui._tree_action(self.window,self.view,wgpu_ui.SEP.join(("mergetag","preview-tag:Merge me")))
+    elif command=="fixture-finish-merge":
+        from views import chrome_forms
+        form=chrome_forms.current(self.window)
+        options=form.field("item").keys()
+        form.receive("item",str(next(i for i, label in enumerate(options) if label.endswith("Paths"))))
+        form.press("ok")
     elif command=="fixture-delete-tag":
         from core.layers import Layer
         if scene.layer_by_key("Disposable") is None:
@@ -767,10 +796,14 @@ def dispatch(self, command):
 def facts(self):
     scene=self.viewport.scene
     from views.chrome_dialogs import current_sheet
+    from views import chrome_forms
+    choice=chrome_forms.current(self.window)
     question=current_sheet(self.window)
     paths=scene.layer("Paths")
     row=self.window._scene_tabs.marked_view()
-    return dict(state(self), photo=getattr(self,"fixture_photo",False), restored=getattr(self,"fixture_restored",False),
+    return dict(state(self), rename_names=[g.name for g in getattr(self,"fixture_rename",[])],
+        choice=choice.fields[0].value if choice and choice.fields else None, group_tag=scene.groups[0].layer,
+        photo=getattr(self,"fixture_photo",False), restored=getattr(self,"fixture_restored",False),
         hatch_prefs=getattr(self,"fixture_hatch_prefs",False),
         paint_sheet=getattr(self,"fixture_paint_sheet",None), row_paint=getattr(self,"fixture_row_paint",None),
         swatch=getattr(self,"fixture_swatch",False), editor=self.renderer.ui_input_state()["drawing_line"],
@@ -820,6 +853,29 @@ state
 menu fixture-confirm-delete
 wait 200
 state
+menu fixture-selection-tag
+wait 200
+state
+key escape
+wait 150
+state
+menu fixture-merge-tag
+wait 200
+state
+menu fixture-finish-merge
+wait 200
+state
+menu fixture-rename
+wait 250
+state
+key escape
+wait 150
+state
+menu fixture-rename
+wait 250
+key enter
+wait 200
+state
 quit
 """)
     result = run([str(BIN), "--root", str(ROOT), "--venv", str(venv), "--new-instance",
@@ -839,6 +895,14 @@ quit
     assert "Paths" in [tag["name"] for tag in json.loads((tmp_path / "drawing.json").read_text())["layers"]]
     assert proposed["created_tag"] and proposed["tag_in_folder"] and "Unused survey tag" in proposed["question"], log
     assert not purged["created_tag"] and not purged["question"], log
+    selection, cancelled, merge, moved = states[9:13]
+    assert selection["choice"] and selection["choice"].startswith("Assign to ") and cancelled["choice"] is None, log
+    assert merge["choice"] and merge["group_tag"] == "Merge me", log
+    assert moved["choice"] is None and moved["group_tag"] == "Paths", log
+    opened_rename, cancelled_rename, applied_rename = states[13:16]
+    assert opened_rename["form_open"] and not cancelled_rename["form_open"], log
+    assert cancelled_rename["rename_names"] == ["Panel A", "Panel B"], log
+    assert not applied_rename["form_open"] and applied_rename["rename_names"] == ["Panel01", "Panel02"], log
     opened, saved, edited = states[:3]
     assert edited["hatch_prefs"] == {"pinned": ["brick", "glass"], "recent": ["brick", "glass"],
                                      "saved": {"brick": [[300, 150, 80, 12, 8]]}, "removed": {}}

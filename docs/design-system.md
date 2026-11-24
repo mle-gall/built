@@ -62,7 +62,8 @@ Token names are unchanged, so other branches rebase cleanly. The following value
 | Molecules: fields | `field`, `search`, `number` with unit, `swatch` | Edit a name, a measurement, a local filter or a document colour. Preserve identity across frames and keep IME text in the focused editor. |
 | Molecules: formatted prose | `kit::prose` | Render formatted release-note paragraphs with heading, emphasis, code and actionable link spans. |
 | Bevel cross-section | `CurveEditor` | Show the sampled outline and its control points. Double-click adds a point or changes its kind. Use the numeric fields for precise placement. The inspector and gallery use the same editor. |
-| Drawing previews | `hatch_swatch`, `line_type_preview`, `piece_sample` | Show the selected hatch colours, signed dash rhythm and text, or scaled masonry dimensions in the Drawing inspector and gallery. |
+| Drawing previews | `tag_swatch`, `hatch_swatch`, `line_type_preview`, `piece_sample` | Show a tag’s model colour or the uncoloured default’s diagonal slash, selected hatch colours, signed dash rhythm and text, or scaled masonry dimensions in the Drawing inspector and gallery. |
+| Rename preview | `rename_preview` | Show the old and proposed names side by side. Changed names use stronger text. Long lists scroll within the form. |
 | Saved-view row | `scene_preview_row` | Reserve a thumbnail beside the saved-view name and indicate the active view while its image loads. |
 | Render preview | `render_preview` | Fit the image or inspect at actual pixel size. Scroll to zoom around the pointer and drag to pan. The plugin utility and gallery share the control. |
 | SVG page preview | `svg_preview` | Fit the full page in a neutral well. Drag to pan and scroll to zoom. Composition guides draw over the page in the preview. |

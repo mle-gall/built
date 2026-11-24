@@ -203,8 +203,7 @@ impl<'py> Catalogue<'py> {
             r.0[3] = "⛓".into();
         }
         r.1[2] = self.bad.contains(&id(g)) as i64;
-        r.1[5] = (!g.getattr("hidden")?.is_truthy()?) as i64;
-        r.1[6] = g.getattr("locked")?.is_truthy()? as i64;
+        crate::project_tree::placement_controls(&mut r, g)?;
         r.1[7] = kids.is_truthy()? as i64;
         r.1[8] = open as i64;
         rows.push(r);

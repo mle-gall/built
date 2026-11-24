@@ -560,8 +560,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         self.georef_tray = GeorefTray(self)
         from views.outliner import ProjectBrowser
         self.project_browser = ProjectBrowser(self)
-        from views.layers_panel import LayersDock
-        self.layers_dock = LayersDock(self)
         self._lay_out_trays()
         # The tabs show only an icon each (the name is their tooltip): the
         # name heads the panel instead, in place of the dock's own title
@@ -569,8 +567,7 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         for dock, key in ((self.tray, "panel_properties"),
                           (self.bim_tray, "panel_bim"),
                           (self.georef_tray, "panel_terrain"),
-                          (self.project_browser, "panel_browser"),
-                          (self.layers_dock, "layers_panel")):
+                          (self.project_browser, "panel_browser")):
             self.set_dock_icon(dock, key)
             dock.setTitleBarWidget(QWidget(dock))
         self.tray.raise_()
@@ -947,9 +944,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         for btn in self.findChildren(QToolButton, "panel_options_button"):
             btn.setIcon(tool_icon("panel_options"))
         self._sync_tab_icons()
-        layers = getattr(getattr(self, "layers_dock", None), "panel", None)
-        if layers is not None:
-            layers.refresh_icons()
         browser = getattr(getattr(self, "project_browser", None),
                           "outliner", None)
         if browser is not None:
@@ -1731,7 +1725,7 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
     #: The factory order of the side tray's tabs, all on the right:
     #: Properties first, the model's tree next, then the workspaces.
     def _default_tray_order(self) -> list:
-        return [self.tray, self.project_browser, self.layers_dock,
+        return [self.tray, self.project_browser,
                 self.bim_tray, self.georef_tray]
 
     def _lay_out_trays(self) -> None:
@@ -1886,7 +1880,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
                             getattr(self, "bim_tray", None),
                             getattr(self, "georef_tray", None),
                             getattr(self, "project_browser", None),
-                            getattr(self, "layers_dock", None),
                             *getattr(self, "_extension_docks", ()))
                 if d is not None]
 
@@ -4011,7 +4004,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
                or (isinstance(e, Edge) and getattr(e, "hidden", False))
                for e in sel):
             menu.addAction(tr("Unhide"), self._on_unhide_selected)
-        self._add_layer_submenu(menu, sel)
         self._add_select_submenu(menu, sel)
         if has_group:
             groups = [e for e in sel if isinstance(e, Group)]
@@ -4065,8 +4057,9 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
                                lambda g=groups[0]: self._on_change_axes(g))
             # Lock, the Browser's padlock from the model (#782): the
             # selected groups in one undoable step.
+            from ingetrazo_render import context_lock
             menu.addAction(tr("Lock"),
-                           lambda gs=groups: self._lock_groups(gs))
+                           lambda gs=groups: context_lock(self.viewport, gs, True))
             # The Solid Tools are offered on a selection of solids.
             from core.solids import is_solid
             solid = [e for e in sel if isinstance(e, Group) and is_solid(e)]
@@ -4155,47 +4148,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
             # swapping them all for another (Replace Component…).
             sub.addAction(tr("All Instances")).triggered.connect(
                 grow(lambda s: same_definition(scene, s)))
-
-    def _add_layer_submenu(self, menu, sel) -> None:
-        """Right-click ▸ Layer ▸ the document's layers, the selection's own
-        one ticked, plus «New layer…». Not the usual place (that road is
-        Entity Info), but it is where Rafael looked — «botón derecho… no lo veo
-        tampoco» (2026-09-16, 39:30) — and it costs nothing to be there."""
-        from core.layers import layer_of, taggable
-        targets = taggable(sel)
-        if not targets:
-            return
-        current = {layer_of(e) for e in targets}
-        # Parented explicitly: built in a helper, a submenu returned by
-        # ``addMenu(str)`` can be collected with this frame's locals before
-        # the menu ever opens.
-        from PySide6.QtWidgets import QMenu
-        sub = QMenu(tr("Layer"), menu)
-        menu.addMenu(sub)
-        from core.layers import path_label
-        for ly in self.viewport.scene.layers:
-            act = sub.addAction(path_label(self.viewport.scene, ly.key))
-            act.setCheckable(True)
-            act.setChecked(len(current) == 1 and ly.key in current)
-            act.triggered.connect(
-                lambda _c=False, name=ly.key: self._assign_layer(name))
-        sub.addSeparator()
-        sub.addAction(tr("New layer…"), self._assign_new_layer)
-        # The layer of what was clicked, without looking for it in the
-        # Layers panel: hide it, show it alone, or draw on it next.
-        panel = getattr(getattr(self, "layers_dock", None), "panel", None)
-        if panel is not None:
-            names = sorted(current)
-            sub.addSeparator()
-            sub.addAction(tr("Hide this layer") if len(names) == 1
-                          else tr("Hide these layers"),
-                          lambda: panel.set_visible(names, False))
-            sub.addAction(tr("Isolate this layer") if len(names) == 1
-                          else tr("Isolate these layers"),
-                          lambda: panel.isolate(names))
-            if len(names) == 1:
-                sub.addAction(tr("Make this layer active"),
-                              lambda: panel.set_active(names[0]))
 
     def _on_toggle_shadows(self, on: bool) -> None:
         """Camera ▸ Shadows: flip the scene's sun on/off (the tray panel
@@ -4716,8 +4668,7 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
             return dispatch
         vp.projectionChanged.connect(live(self._sync_projection_buttons))
         vp.smartZoomRequested.connect(live(self._on_smart_zoom))
-        for name in ("tray", "bim_tray", "georef_tray", "project_browser",
-                     "layers_dock"):
+        for name in ("tray", "bim_tray", "georef_tray", "project_browser"):
             panel = getattr(self, name, None)
             if panel is not None:
                 vp.sceneVersionChanged.connect(
@@ -5726,12 +5677,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         from app_shell.files import link_document
         link_document(self)
 
-    def _refresh_layer_views(self) -> None:
-        dock = getattr(self, "layers_dock", None)
-        refresh = getattr(getattr(dock, "panel", None), "refresh", None)
-        if callable(refresh):
-            refresh()
-
     def _fill_links_menu(self, menu) -> None:
         """File ▸ Linked Files: one submenu per source — open it, reload
         it, pack it into this document, show its tags as it has them."""
@@ -5806,21 +5751,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
     def _set_survey_capture(self, datum, lo, hi):
         self.georef_tray.base_map.setup_for_bounds(datum, lo, hi)
 
-    def _lock_groups(self, groups) -> None:
-        """Lock the groups (the right-click's Lock): one undoable step,
-        leaving first the edit of any of them that is open — as the
-        Browser's padlock does."""
-        from core.history import LockCommand
-        from core import outliner
-        scene = self.viewport.scene
-        groups = [g for g in groups if not getattr(g, "locked", False)]
-        if not groups:
-            return
-        if any(g is scene.edit_group or g in outliner.open_path(scene)
-               for g in groups):
-            self.viewport.end_group_edit()
-        self.viewport.history.execute(LockCommand(groups, True))
-        self.viewport.update()
 
     def add_appimage_to_menu(self) -> None:
         """Write the launcher + icon for the running AppImage."""

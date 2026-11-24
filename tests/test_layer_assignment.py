@@ -11,15 +11,7 @@ Layer submenu, and all three go through one undoable command.
 """
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-from PySide6.QtGui import QGuiApplication
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
-
-_app = QApplication.instance() or QApplication([])
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from core.group import Group
@@ -56,14 +48,6 @@ def test_assign_layer_command_moves_a_mixed_selection_and_undoes_exactly():
     assert layer_of(g) == "Mobiliario"
 
 
-def _window():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    win.show()
-    _app.processEvents()
-    return win
-
-
 def test_inspector_tag_field_single_mixed_and_empty_selection(native_host):
     import json
     from tests.native_tree import action, tag_picker
@@ -85,40 +69,36 @@ def test_inspector_tag_field_single_mixed_and_empty_selection(native_host):
     assert tag_picker(native_host, []) is None
 
 
-def test_right_click_layer_submenu_and_new_layer():
-    from PySide6.QtWidgets import QMenu
-    from views import chrome_forms
-    win = _window()
-    vp = win.viewport
-    try:
-        scene = vp.scene
-        scene.layers.append(Layer("Muros"))
-        g = Group(Mesh(), name="caja")
-        scene.groups.append(g)
-        scene.select([g])
-        menu = QMenu()
-        win._add_layer_submenu(menu, list(scene.selection))
-        sub = [a for a in menu.actions() if a.menu() is not None][0].menu()
-        names = [a.text() for a in sub.actions() if not a.isSeparator()]
-        assert names[:2] == ["Layer 0", "Muros"] and names[2] == "New layer…"
-        # …then what to do with the clicked object's own layer.
-        assert names[3:] == ["Hide this layer", "Isolate this layer",
-                             "Make this layer active"]
-        ticked = [a.text() for a in sub.actions() if a.isChecked()]
-        assert ticked == ["Layer 0"]
-        [a for a in sub.actions() if a.text() == "Muros"][0].trigger()
-        assert layer_of(g) == "Muros"
+def tag_form(host):
+    from views import chrome_forms, context_menu
+    win = host.window
+    menu = context_menu.build(win, host.view)
+    assert menu.find("selectiontag").enabled
+    assert context_menu.run(win, host.view, menu.kind, "selectiontag", menu.sel)
+    return chrome_forms.current(win)
 
-        win._assign_new_layer()
-        form = chrome_forms.current(win)
-        form.receive("text", "Jardín")
-        form.press("ok")
-        assert layer_of(g) == "Jardín" and scene.layer("Jardín") is not None
-        vp.history.undo()
-        assert layer_of(g) == "Muros" and scene.layer("Jardín") is None
-    finally:
-        win._saved_version = vp.scene.version
-        win.close()
+
+def test_right_click_tag_choice_and_new_tag(native_host):
+    from views import chrome_forms
+    scene = native_host.viewport.scene
+    scene.layers.append(Layer("Muros"))
+    group = Group(name="Box")
+    scene.groups.append(group)
+    scene.select([group])
+    form = tag_form(native_host)
+    assert form.fields[0].value == "Assign to Layer 0"
+    form.receive("item", str(form.field("item").keys().index("Assign to Muros")))
+    form.press("ok")
+    assert layer_of(group) == "Muros"
+    form = tag_form(native_host)
+    form.receive("item", str(form.field("item").keys().index("New tag…")))
+    form.press("ok")
+    form = chrome_forms.current(native_host.window)
+    form.receive("text", "Jardín")
+    form.press("ok")
+    assert layer_of(group) == "Jardín" and scene.layer("Jardín") is not None
+    assert native_host.viewport.history.undo() and layer_of(group) == "Muros"
+    assert scene.layer("Jardín") is None
 
 
 def test_drawing_assign_moves_the_selection_or_explains_what_is_missing(native_host, monkeypatch):

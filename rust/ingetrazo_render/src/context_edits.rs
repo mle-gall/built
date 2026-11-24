@@ -257,14 +257,33 @@ fn section_action(win: &Bound<'_, PyAny>, verb: &str) -> PyResult<()> {
 }
 
 #[pyfunction]
+fn context_lock(vp: &Bound<'_, PyAny>, groups: Vec<Bound<'_, PyAny>>, lock: bool) -> PyResult<()> {
+    let scene = vp.getattr("scene")?;
+    if scene.getattr("worksession_read_only").is_ok_and(|v| v.is_truthy().unwrap_or(false)) { return Ok(()); }
+    let py = vp.py();
+    let root = scene.getattr("_root")?;
+    let open = root.getattr("_edit_path")?;
+    let picks = PyList::empty(py);
+    let mut editing = false;
+    for g in groups {
+        if root.call_method1("_occurrence_path", (&g,))?.is_none() || g.getattr("locked")?.is_truthy()? == lock { continue; }
+        editing |= open.contains(&g)?;
+        picks.append(g)?;
+    }
+    if picks.is_empty() { return Ok(()); }
+    if editing && lock { vp.call_method0("end_group_edit")?; }
+    py.import("views.tree_navigation")?.call_method1("execute", (
+        vp, py.import("ingetrazo_core")?.getattr("NativeCommand")?.call_method1("lock", (picks, lock))?,
+    ))?;
+    Ok(())
+}
+
+#[pyfunction]
 fn unlock_group(vp: &Bound<'_, PyAny>, group: &Bound<'_, PyAny>) -> PyResult<()> {
     let groups = PyList::new(vp.py(), [group])?;
-    execute(
-        vp,
-        &vp.py()
-            .import("core.history")?
-            .call_method1("LockCommand", (&groups, false))?,
-    )?;
+    vp.py()
+        .import("core.protocol.commands")?
+        .call_method1("lock", (vp.getattr("history")?, &groups, false))?;
     let scene = vp.getattr("scene")?;
     if scene
         .call_method1("entity_selectable", (group,))?
@@ -442,6 +461,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(explode_curves, m)?)?;
     m.add_function(wrap_pyfunction!(align_face, m)?)?;
     m.add_function(wrap_pyfunction!(section_action, m)?)?;
+    m.add_function(wrap_pyfunction!(context_lock, m)?)?;
     m.add_function(wrap_pyfunction!(unlock_group, m)?)?;
     m.add_function(wrap_pyfunction!(assign_tag, m)?)?;
     m.add_function(wrap_pyfunction!(next_tag, m)?)?;
