@@ -1103,6 +1103,28 @@ def _paint_with(win, key) -> None:
 UNIT_TEXT = {"m2": "m²", "m3": "m³", "m": "m", "und": "u", "kg": "kg"}
 
 
+from contextlib import contextmanager
+
+
+@contextmanager
+def _wait_cursor(viewport):
+    from core.input_types import NATIVE, Qt
+    if NATIVE:
+        previous = viewport.cursor()
+        viewport.setCursor(Qt.WaitCursor)
+        try:
+            yield
+        finally:
+            viewport.setCursor(previous)
+    else:
+        from PySide6.QtWidgets import QApplication
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            yield
+        finally:
+            QApplication.restoreOverrideCursor()
+
+
 def _measure(view, win, auto=False) -> None:
     """Quantity takeoff (the BIM panel's metrado), per item. The first
     measure walks every tagged object (7.5 s on the 99k-object Ride file),
@@ -1118,11 +1140,8 @@ def _measure(view, win, auto=False) -> None:
         q = view._ui_qty = {"scene": id(scene), "memo": {}, "sig": None, "by_group": {}}
     if q["sig"] == scene.content_version:
         return
-    from PySide6.QtCore import Qt
-    from PySide6.QtWidgets import QApplication
     t0 = time.perf_counter()
-    QApplication.setOverrideCursor(Qt.WaitCursor)
-    try:
+    with _wait_cursor(win.viewport):
         objs = bim.collect_objects(scene, q["memo"])
         by_group = {}
         for obj in objs:
@@ -1144,8 +1163,6 @@ def _measure(view, win, auto=False) -> None:
         q["by_group"] = by_group
         q["sig"] = scene.content_version
         q["count"] = len(objs)
-    finally:
-        QApplication.restoreOverrideCursor()
     if not auto:
         win.viewport.flash_status(f"Measured {len(objs)} items in {time.perf_counter() - t0:.1f} s")
     view._ui_tree_sig = None
@@ -1173,19 +1190,14 @@ def _qty_rows(per_unit) -> list:
 
 
 def _export_csv(win) -> None:
-    from PySide6.QtCore import Qt
-    from PySide6.QtWidgets import QApplication
     from core.bim import quantities_csv
     from views.filedialogs import file_dialogs
     path, _ = file_dialogs.getSaveFileName(win, "Export quantities CSV", "metrado.csv", "CSV (*.csv);;All files (*)")
     if not path:
         return
-    QApplication.setOverrideCursor(Qt.WaitCursor)
-    try:
+    with _wait_cursor(win.viewport):
         with open(path, "w", encoding="utf-8") as fh:
             fh.write(quantities_csv(win.viewport.scene))
-    finally:
-        QApplication.restoreOverrideCursor()
     win.viewport.flash_status(f"Quantities exported to {path}")
 
 

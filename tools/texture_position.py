@@ -376,19 +376,36 @@ class TexturePositionTool(Tool):
         """The tool's own right-click menu (replaces the viewport's)."""
         if not self.active:
             return False
-        from PySide6.QtWidgets import QMenu
-        menu = QMenu(getattr(viewport, "keys_stand_in", None) or viewport)
-        menu.addAction(tr("Done"), lambda: self.commit(viewport))
-        menu.addAction(tr("Reset"), lambda: (self.reset(), viewport.update()))
-        flip = menu.addMenu(tr("Flip"))
-        flip.addAction(tr("Left / Right"), lambda: (self.flip(True), viewport.update()))
-        flip.addAction(tr("Up / Down"), lambda: (self.flip(False), viewport.update()))
-        rot = menu.addMenu(tr("Rotate"))
-        for deg in (90, 180, 270):
-            rot.addAction(f"{deg}°", lambda d=deg: (self.rotate(d), viewport.update()))
-        undo = menu.addAction(tr("Undo"), lambda: (self.undo_step(), viewport.update()))
-        undo.setEnabled(bool(self.undo_depth))
-        menu.exec(global_pos)
+        from core.input_types import NATIVE
+        rows = self._placement.menu_rows()
+        if NATIVE:
+            from views.context_menu import Menu, Row, Verb, send
+            view = viewport.view
+            pos = view.mapFromGlobal(global_pos)
+            menu = Menu("texture_position", tr("Position Texture"), "",
+                        [Row([Verb(key, tr(label), enabled=on) for key, label, on in items], tr(group) if group else "")
+                         for group, items in rows], at=(pos.x(), pos.y()), facts={"tool": self})
+            view._ctx_menu = menu
+            send(view, menu)
+        else:
+            from PySide6.QtWidgets import QMenu
+            menu = QMenu(getattr(viewport, "keys_stand_in", None) or viewport)
+            for group, items in rows:
+                section = menu.addMenu(tr(group)) if group else menu
+                for key, label, on in items:
+                    action = section.addAction(tr(label), lambda checked=False, key=key: self.menu_action(viewport, key))
+                    action.setEnabled(on)
+            menu.exec(global_pos)
+        return True
+
+    def menu_action(self, viewport, key):
+        if not self.active:
+            return False
+        if key == "done":
+            self.commit(viewport)
+        elif not self._placement.menu_action(key):
+            return False
+        viewport.update()
         return True
 
     # ---- Preview --------------------------------------------------------------

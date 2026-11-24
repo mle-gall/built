@@ -1076,7 +1076,10 @@ fn main() {
         python::shutdown_workers();
         std::process::exit(result);
     }
-    let event_loop = match EventLoop::<UserEvent>::with_user_event().build() {
+    let mut builder = EventLoop::<UserEvent>::with_user_event();
+    #[cfg(windows)]
+    winit::platform::windows::EventLoopBuilderExtWindows::with_msg_hook(&mut builder, native::raw_input_message);
+    let event_loop = match builder.build() {
         Ok(l) => l,
         Err(e) => {
             eprintln!("built: {e}");

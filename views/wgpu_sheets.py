@@ -245,7 +245,7 @@ class SheetHost:
         from views import wgpu_sheet_frames
         view = self._ws.view or self._ws._front_view()
         comps = list(self._sheets()) if sheets is None else list(sheets)
-        return wgpu_sheet_frames.export_pdf(view, comps, path, wgpu_sheet_frames.Ground(lambda: None),
+        return wgpu_sheet_frames.export_pdf(view, comps, path, wgpu_sheet_frames.Ground(lambda: None, view),
                                             getattr(self._window, "_current_path", None),
                                             getattr(self._window, "_ext_sheet_annots", None))
 
@@ -323,6 +323,8 @@ def _int(v) -> int:
 
 
 def _alive(obj) -> bool:
+    if NATIVE:
+        return obj is not None and not getattr(obj, "_closed", False)
     try:
         from shiboken6 import isValid
         return obj is not None and isValid(obj) and not getattr(obj, "_closed", False)
@@ -461,7 +463,7 @@ class Workspace:
         # Terrain profiles: the ground under their path (sheets::profile).
         if self._ground is None:
             from views.wgpu_sheet_frames import Ground
-            self._ground = Ground(self._touch)
+            self._ground = Ground(self._touch, self.view)
         profiles = self._ground.profiles(comp.comp, comp._scene())
         page = NATIVE.sheet_page_json(comp.comp, profiles, self._choices())
         if page != self._page:
@@ -1210,14 +1212,14 @@ class Workspace:
                     from views import wgpu_sheet_frames
                     comps = [comp.comp] if kind == "pdf" else list(comp._scene().compositions)
                     if self._ground is None:
-                        self._ground = wgpu_sheet_frames.Ground(self._touch)
+                        self._ground = wgpu_sheet_frames.Ground(self._touch, self.view)
                     troubled = wgpu_sheet_frames.export_pdf(
                         self.view, comps, path, self._ground,
                         getattr(comp._window, "_current_path", None), getattr(comp._window, "_ext_sheet_annots", None))
                 elif kind == "png":
                     from views import wgpu_sheet_frames
                     if self._ground is None:
-                        self._ground = wgpu_sheet_frames.Ground(self._touch)
+                        self._ground = wgpu_sheet_frames.Ground(self._touch, self.view)
                     troubled = wgpu_sheet_frames.export_image(
                         self.view, comp.comp, path, 200.0, self._ground,
                         getattr(comp._window, "_current_path", None), getattr(comp._window, "_ext_sheet_annots", None))

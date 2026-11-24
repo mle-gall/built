@@ -3,7 +3,9 @@ from core.input_types import QPoint, Qt
 
 
 def _window_input(owner):
-    host = getattr(getattr(owner, "view", owner), "__dict__", {}).get("_host")
+    host = getattr(owner, "__dict__", {}).get("_host")
+    if not hasattr(host, "input_state"):
+        host = getattr(getattr(owner, "view", None), "__dict__", {}).get("_host")
     return getattr(host, "input_state", None)
 
 

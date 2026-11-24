@@ -15,7 +15,7 @@ use std::{
 
 #[pyclass(frozen, module = "ingetrazo_render")]
 pub struct SurveyRaster {
-    pixels: RgbaImage,
+    pub(crate) pixels: RgbaImage,
 }
 
 const MAX_PIXELS: u64 = 128 * 1024 * 1024;
@@ -84,6 +84,10 @@ impl SurveyRaster {
         Ok(Self {
             pixels: py.detach(|| crate::image_assets::resize(self.pixels.clone(), width, height)),
         })
+    }
+
+    fn material_png<'py>(&self, py: Python<'py>, source: &[u8]) -> PyResult<Bound<'py, PyBytes>> {
+        crate::material_png::encode(py, self.width(), self.height(), self.pixels.as_raw(), source)
     }
 
     fn png<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {

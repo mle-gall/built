@@ -1,14 +1,14 @@
 """Bind site lookup and tile requests from the Settings sheet to georef services."""
-from PySide6.QtCore import QObject
+from georef.transport import Service
 
 from core.i18n import tr
 from georef.geocode import Geocoder, IpLocator
 from georef.tile_fetcher import TileFetcher
 
 
-class SiteRequests(QObject):
-    def __init__(self, draft, source, refresh):
-        super().__init__()
+class SiteRequests(Service):
+    def __init__(self, draft, source, refresh, owner=None):
+        super().__init__(owner)
         self.draft, self.source, self.refresh = draft, source, refresh
         self.tiles = TileFetcher(parent=self)
         self.tiles.tileReady.connect(self.tile_ready)
@@ -45,4 +45,6 @@ class SiteRequests(QObject):
     def close(self):
         self.refresh = lambda: None
         self.tiles.cancel_all()
+        self.searcher.deleteLater()
+        self.locator.deleteLater()
         self.deleteLater()

@@ -398,16 +398,8 @@ def _state(sheet, back) -> str:
 
 def reveal(path) -> None:
     """Show the file in the Finder (both apps)."""
-    import subprocess
-    try:
-        if sys.platform == "darwin":
-            subprocess.Popen(["open", "-R", str(path)])
-        else:
-            from PySide6.QtCore import QUrl
-            from PySide6.QtGui import QDesktopServices
-            QDesktopServices.openUrl(QUrl.fromLocalFile(str(Path(path).parent)))
-    except OSError:
-        pass
+    from core import desktop_open
+    desktop_open.reveal(path)
 
 # ---- Rows --------------------------------------------------------------------
 def last_file() -> str:

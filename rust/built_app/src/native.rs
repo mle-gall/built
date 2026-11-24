@@ -385,10 +385,40 @@ fn spawn_self(args: Vec<String>) -> bool {
     std::process::Command::new(exe).arg("--new-instance").args(args).spawn().is_ok()
 }
 
+#[cfg(windows)]
+static RAW_INPUT: std::sync::Mutex<Option<Py<PyAny>>> = std::sync::Mutex::new(None);
+
+#[cfg(windows)]
+#[pyfunction]
+fn set_raw_input_handler(callback: Option<Py<PyAny>>) {
+    *RAW_INPUT.lock().unwrap() = callback;
+}
+
+#[cfg(windows)]
+pub fn raw_input_message(msg: *const std::ffi::c_void) -> bool {
+    use windows::Win32::UI::WindowsAndMessaging::{MSG, WM_INPUT};
+    // The winit hook supplies a valid MSG until this callback returns.
+    if !msg.is_null() && unsafe { (*msg.cast::<MSG>()).message } == WM_INPUT {
+        Python::attach(|py| {
+            let callback = RAW_INPUT.lock().unwrap().as_ref().map(|f| f.clone_ref(py));
+            if let Some(callback) = callback {
+                if let Err(err) = callback.call1(py, (msg as usize,)) {
+                    crate::python::report(py, err, "3D mouse report");
+                }
+            }
+        });
+    }
+    false
+}
+
 #[pymodule]
 pub fn built_shell(m: &Bound<'_, PyModule>) -> PyResult<()> {
     #[cfg(target_os = "macos")]
     m.add_function(wrap_pyfunction!(crate::menu_commands::menu_commands, m)?)?;
+    #[cfg(windows)]
+    m.add_function(wrap_pyfunction!(set_raw_input_handler,m)?)?;
+    m.add_function(wrap_pyfunction!(crate::platform_paths::cache_directory, m)?)?;
+    m.add_function(wrap_pyfunction!(crate::platform_paths::local_data_directory, m)?)?;
     m.add_function(wrap_pyfunction!(crate::platform_paths::preferred_languages, m)?)?;
     m.add_function(wrap_pyfunction!(crate::platform_paths::documents_directory, m)?)?;
     m.add_function(wrap_pyfunction!(crate::platform_paths::recovery_directory, m)?)?;

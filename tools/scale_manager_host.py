@@ -18,13 +18,13 @@ class ScaleManagerTool(RustTool):
         self._machine.set("target", group.uid if group is not None else None)
 
     def host_scale_editor(self, vp, uid):
-        from PySide6.QtCore import QTimer
+        from core.timers import later
         from core.i18n import tr
         group, self._target_group = self._target_group, None
         if uid is None:
             vp.flash_status(tr("Select one group or component first"))
         else:
-            QTimer.singleShot(0, lambda: self._run(vp, group))
+            later(vp, 0, lambda: self._run(vp, group))
 
     def on_deactivate(self, vp):
         self._target_group = None
@@ -32,7 +32,7 @@ class ScaleManagerTool(RustTool):
 
     @staticmethod
     def _run(vp, group):
-        from views.scale_dialog import ask_scale
+        from views.scale_editor import ask_scale
         window = vp.window()
         def closed():
             vp.update()

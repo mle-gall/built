@@ -5,8 +5,7 @@ import threading
 import sys
 
 from core.settings import settings as QSettings
-from PySide6.QtCore import QTimer
-from PySide6.QtWidgets import QApplication
+from core.timers import later
 
 from core import desktop_open, update_check
 from core.i18n import tr
@@ -58,11 +57,13 @@ def start_check(window, quiet=False, fetch=None, current=__version__):
     def present(model):
         if window._release_check is not result:
             return
-        busy = (chrome_dialogs.modal(window) or QApplication.activeModalWidget() is not None
-                or chrome_dialogs.async_host(window) is None)
+        busy = chrome_dialogs.modal(window) or chrome_dialogs.async_host(window) is None
+        if not busy and not chrome_sheet.in_shell():
+            from PySide6.QtWidgets import QApplication
+            busy = QApplication.activeModalWidget() is not None
         mode = model.presentation(busy)
         if mode == "wait":
-            QTimer.singleShot(_RETRY_MS, window, lambda: present(model))
+            later(window, _RETRY_MS, lambda: present(model))
         elif mode == "review":
             chrome_sheet.open(window, ReleaseSheet(model))
         elif mode != "silent":
@@ -77,7 +78,7 @@ def start_check(window, quiet=False, fetch=None, current=__version__):
         if window._release_check is not result:
             return
         if not result.done():
-            QTimer.singleShot(100, window, receive)
+            later(window, 100, receive)
             return
         try:
             release = result.result()
@@ -89,4 +90,4 @@ def start_check(window, quiet=False, fetch=None, current=__version__):
                               quiet, update_check.is_newer(release.version, current),
                               update_check.is_skipped(settings, release.version)))
 
-    QTimer.singleShot(0, window, receive)
+    later(window, 0, receive)

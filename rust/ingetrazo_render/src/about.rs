@@ -121,7 +121,10 @@ impl AboutReview {
         facts.extend([
             ("Language", s("language").into()),
             ("Engine", s("engine").into()),
-            ("Renderer", source["renderer"].as_str().unwrap_or("wgpu").into()),
+            (
+                "Renderer",
+                source["renderer"].as_str().unwrap_or("wgpu").into(),
+            ),
             ("Commit", s("commit").into()),
         ]);
         let mut info = title.clone();
@@ -175,4 +178,48 @@ impl AboutReview {
     fn contributors() -> Vec<Credit> {
         credits().to_owned()
     }
+}
+
+/// Notices accept the inline links, emphasis and line breaks from document
+/// commands. The activity list displays their readable text.
+#[pyfunction]
+pub fn notice_text(markup: &str) -> String {
+    let mut output = String::with_capacity(markup.len());
+    let mut rest = markup;
+    while let Some((before, after)) = rest.split_once('<') {
+        output.push_str(before);
+        if !after.starts_with(|c: char| c.is_ascii_alphabetic() || c == '/') {
+            output.push('<');
+            rest = after;
+            continue;
+        }
+        let mut quote = None;
+        let end = after.char_indices().find_map(|(i, c)| {
+            if let Some(q) = quote {
+                if c == q {
+                    quote = None;
+                }
+            } else if c == '\'' || c == '"' {
+                quote = Some(c);
+            } else if c == '>' {
+                return Some(i);
+            }
+            None
+        });
+        let Some(end) = end else {
+            output.push('<');
+            output.push_str(after);
+            return output;
+        };
+        let tag = after[..end]
+            .split(|c: char| c.is_whitespace() || c == '/')
+            .next()
+            .unwrap_or("");
+        if tag.eq_ignore_ascii_case("br") {
+            output.push('\n');
+        }
+        rest = &after[end + 1..];
+    }
+    output.push_str(rest);
+    output
 }

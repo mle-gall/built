@@ -428,7 +428,7 @@ def _native_groups(spec, put):
 def _ndof(env):
     from views.ndof_input import shared_input
     model, _ = _device_preferences(env)
-    driver = shared_input().backend_name or ""
+    driver = shared_input(env.win).backend_name or ""
     live = env.device_readings.text(tr) if getattr(env, "device_readings", None) else ("—", "—")
     return _native_groups(model.groups(tr, driver, live), lambda env, key, v: _device_edit(env, {key: v}))
 
@@ -683,7 +683,7 @@ class SettingsSheet(chrome_sheet.Provider):
         from views.ndof_input import shared_input
         from ingetrazo_render import DeviceReadings
         if active and self._device is None:
-            dev = shared_input()
+            dev = shared_input(self._win)
             if dev.backend_name:
                 self._readings = DeviceReadings()
                 self._device = dev
@@ -867,7 +867,7 @@ class SettingsSheet(chrome_sheet.Provider):
             site.map_toggle()
             if site.map and self.site_requests is None:
                 from views.location_backend import SiteRequests
-                self.site_requests = SiteRequests(site, self.site_source, ctx.refresh)
+                self.site_requests = SiteRequests(site, self.site_source, ctx.refresh, ctx.win)
             elif not site.map and self.site_requests is not None:
                 self.site_requests.close()
                 self.site_requests = None

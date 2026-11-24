@@ -159,7 +159,14 @@ def _svg_context(win, active, scene, record, preview=False):
             scene.show_axes = old and axes
             try:
                 with framed(active.camera, frame) if frame else nullcontext():
-                    image = renderer.render_image(PREVIEW_IMAGE_PX if preview else EXPORT_IMAGE_PX, overlays=False, sharp_shadows=True)
+                    width = PREVIEW_IMAGE_PX if preview else EXPORT_IMAGE_PX
+                    if NATIVE:
+                        from ingetrazo_render import SurveyRaster
+                        display = getattr(renderer, "keys_stand_in", renderer)
+                        pixels = display.render_pixels(width, overlays=False, sharp_shadows=True)
+                        image = SurveyRaster(*pixels) if pixels else None
+                    else:
+                        image = renderer.render_image(width, overlays=False, sharp_shadows=True)
                     return image, view_rect(active.camera)
             finally:
                 scene.show_axes = old
@@ -228,7 +235,7 @@ def _write_pdf(win, path, sheets) -> list:
     scene = win.viewport.history.scene
     wanted = None if sheets is None else {s._doc_key for s in sheets}
     comps = [c for c in scene.compositions if wanted is None or c._doc_key in wanted]
-    return wgpu_sheet_frames.export_pdf(view, comps, path, wgpu_sheet_frames.Ground(lambda: None),
+    return wgpu_sheet_frames.export_pdf(view, comps, path, wgpu_sheet_frames.Ground(lambda: None, view),
                                         getattr(win, "_current_path", None), getattr(win, "_ext_sheet_annots", None))
 
 

@@ -1,18 +1,8 @@
-"""Headless Qt for the shell: value types, painting and timers, no widgets.
+"""Select native preferences and, on demand, host Qt extension widgets offscreen.
 
-``start`` must run before anything imports ``views`` or ``core`` modules that
-read QSettings at import time. Interactive launches share the classic app's
-profile. Automation and tests use isolated settings.
-
-The application object is an offscreen ``QApplication`` (no window ever
-reaches AppKit; winit owns the screen). It used to be a QGuiApplication,
-but borrowed code that still builds a Qt widget (a QMessageBox fallback, a
-QMenu, a dialog an extension opens) then aborted the process: "Must
-construct a QApplication before a QWidget". Now such a widget can exist,
-and :class:`WidgetGuard` stops it from waiting for an answer nobody can
-see: a top-level widget that shows is rejected or closed at once, and the
-host is told, so the status says "needs the classic app" instead of the
-app hanging behind an invisible modal dialog.
+Winit drives the native window and its timers. A plugin that imports Qt GUI can
+use actions and callbacks. The guard intercepts attempts to open a widget that
+would otherwise wait for input outside the shell.
 """
 from __future__ import annotations
 
@@ -45,7 +35,7 @@ def configure_settings(profile: str | None) -> None:
 
 
 def start(settings: str | None = None, *, temporary: bool = False) -> str | None:
-    """Create the offscreen QApplication once; return the settings dir."""
+    """Select the shell profile before document or plugin imports."""
     global _APP, _SETTINGS_DIR
     profile = settings or os.environ.get("BUILT_SETTINGS_DIR")
     if not profile and not temporary and ("pytest" in sys.modules or "PYTEST_CURRENT_TEST" in os.environ):

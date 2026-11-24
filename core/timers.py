@@ -14,5 +14,8 @@ def later(owner, delay, callback):
     if (queue := getattr(host, "timers", None)) is not None:
         queue.later(owner, delay, callback)
     else:
-        from PySide6.QtCore import QTimer
-        QTimer.singleShot(delay, owner, callback)
+        from PySide6.QtCore import QObject, QTimer
+        if isinstance(owner, QObject):
+            QTimer.singleShot(delay, owner, callback)
+        else:
+            QTimer.singleShot(delay, callback)

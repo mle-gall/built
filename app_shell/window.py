@@ -326,7 +326,11 @@ def new_shell_window(host):
     return ShellWindow(host, plugins)
 
 
+from core.host_callbacks import Signal
+
+
 class ShellWindow(WindowDocumentCommands, object if NATIVE else QObject):
+    _extension_closed = Signal()
 
     def __init__(self, host, plugins=None):
         super().__init__()

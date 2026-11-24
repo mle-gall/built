@@ -29,7 +29,8 @@ import struct
 import sys
 import time
 
-from PySide6.QtCore import QObject, Signal
+from core.host_callbacks import HostService, Signal
+from core.input_types import NATIVE
 
 from core.ndof import NdofSample, from_hid, from_spacenavd
 
@@ -37,7 +38,7 @@ SPNAV_SOCKETS = ("/var/run/spnav.sock", "/run/spnav.sock")
 _SPNAV_PACKET = struct.Struct("=8i")
 
 
-class NdofInput(QObject):
+class NdofInput(HostService):
     """One 3D mouse, whichever the platform. ``motion`` carries an
     :class:`NdofSample` and the seconds since the previous one; ``button``
     the button number and whether it went down."""
@@ -58,6 +59,7 @@ class NdofInput(QObject):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self._backend = None
+        self._driver_checked = False
         self._last_t: float | None = None
         self._moved_t: float | None = None
 
@@ -137,7 +139,6 @@ class SpnavBackend:
 
     def open(self) -> bool:
         import socket
-        from PySide6.QtCore import QSocketNotifier
         path = next((p for p in SPNAV_SOCKETS if os.path.exists(p)), None)
         if path is None:
             return False
@@ -149,15 +150,23 @@ class SpnavBackend:
             return False
         sock.setblocking(False)
         self.sock = sock
-        self.notifier = QSocketNotifier(sock.fileno(),
-                                        QSocketNotifier.Read, self.owner)
-        self.notifier.activated.connect(self._read)
+        if NATIVE:
+            from core.timers import timer
+            self.notifier = timer(self.owner, self._read, 12, repeat=True)
+            self.notifier.start()
+        else:
+            from PySide6.QtCore import QSocketNotifier
+            self.notifier = QSocketNotifier(sock.fileno(), QSocketNotifier.Read, self.owner)
+            self.notifier.activated.connect(self._read)
         return True
 
     def close(self) -> None:
         if self.notifier is not None:
-            self.notifier.setEnabled(False)
-            self.notifier.deleteLater()
+            if NATIVE:
+                self.notifier.stop()
+            else:
+                self.notifier.setEnabled(False)
+                self.notifier.deleteLater()
             self.notifier = None
         if self.sock is not None:
             self.sock.close()
@@ -251,7 +260,6 @@ class RawInputBackend:
     def open(self) -> bool:
         import ctypes
         from ctypes import wintypes
-        from PySide6.QtCore import QAbstractNativeEventFilter, QCoreApplication
 
         class RAWINPUTDEVICE(ctypes.Structure):
             _fields_ = [("usUsagePage", wintypes.USHORT),
@@ -265,6 +273,11 @@ class RawInputBackend:
         if not user32.RegisterRawInputDevices(
                 ctypes.byref(dev), 1, ctypes.sizeof(dev)):
             return False
+        if NATIVE:
+            from app_shell.native import _shell
+            _shell.set_raw_input_handler(self._on_msg)
+            return True
+        from PySide6.QtCore import QAbstractNativeEventFilter, QCoreApplication
         backend = self
 
         class _Filter(QAbstractNativeEventFilter):
@@ -281,6 +294,10 @@ class RawInputBackend:
         return True
 
     def close(self) -> None:
+        if NATIVE:
+            from app_shell.native import _shell
+            _shell.set_raw_input_handler(None)
+            return
         if self.filter is not None:
             from PySide6.QtCore import QCoreApplication
             app = QCoreApplication.instance()
@@ -424,12 +441,21 @@ def cap_in_use() -> bool:
     return _shared is not None and _shared.in_use()
 
 
-def shared_input() -> NdofInput:
+def shared_input(window=None) -> NdofInput:
     """The application's one 3D mouse connection — several model windows
     share it and the active one moves (a device has one driver socket)."""
     global _shared
     if _shared is None:
-        from PySide6.QtCore import QCoreApplication
-        _shared = NdofInput(QCoreApplication.instance())
+        if not NATIVE:
+            from PySide6.QtCore import QCoreApplication
+            window = QCoreApplication.instance()
+        _shared = NdofInput(window)
+    if NATIVE and window is not None:
+        host = window._host
+        if _shared._host is not None and _shared._host is not host:
+            host.timers.transfer_context(_shared._host.timers, _shared)
+        _shared._host = host
+    if not _shared._driver_checked and (not NATIVE or _shared._host is not None):
+        _shared._driver_checked = True
         _shared.start()
     return _shared

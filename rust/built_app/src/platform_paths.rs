@@ -103,13 +103,28 @@ pub fn documents_directory() -> Option<PathBuf> {
 
 #[pyfunction]
 pub fn recovery_directory(profile: Option<PathBuf>) -> Option<PathBuf> {
-    let root = profile.map(|p| p.join("data")).or_else(|| {
+    let root = data_root(profile, true)?;
+    Some(root.join("IngeTrazo").join("IngeTrazo"))
+}
+
+#[pyfunction]
+pub fn local_data_directory(profile: Option<PathBuf>) -> Option<PathBuf> {
+    data_root(profile, false)
+}
+
+fn data_root(profile: Option<PathBuf>, _roaming: bool) -> Option<PathBuf> {
+    profile.map(|p| p.join("data")).or_else(|| {
         #[cfg(target_os = "macos")]
         {
             env::var_os("HOME").map(|p| PathBuf::from(p).join("Library/Application Support"))
         }
         #[cfg(windows)]
         {
+            if !_roaming {
+                return env::var_os("LOCALAPPDATA")
+                    .map(PathBuf::from)
+                    .or_else(|| known_folder(&windows::Win32::UI::Shell::FOLDERID_LocalAppData));
+            }
             env::var_os("APPDATA")
                 .map(PathBuf::from)
                 .or_else(|| known_folder(&windows::Win32::UI::Shell::FOLDERID_RoamingAppData))
@@ -121,6 +136,27 @@ pub fn recovery_directory(profile: Option<PathBuf>) -> Option<PathBuf> {
                 .filter(|p| p.is_absolute())
                 .or_else(|| env::var_os("HOME").map(|p| PathBuf::from(p).join(".local/share")))
         }
-    })?;
-    Some(root.join("IngeTrazo").join("IngeTrazo"))
+    })
+}
+
+#[pyfunction]
+pub fn cache_directory(profile: Option<PathBuf>) -> Option<PathBuf> {
+    if let Some(profile) = profile {
+        return Some(profile.join("cache"));
+    }
+    #[cfg(target_os = "macos")]
+    {
+        env::var_os("HOME").map(|p| PathBuf::from(p).join("Library/Caches"))
+    }
+    #[cfg(windows)]
+    {
+        data_root(None, false)
+    }
+    #[cfg(not(any(target_os = "macos", windows)))]
+    {
+        env::var_os("XDG_CACHE_HOME")
+            .map(PathBuf::from)
+            .filter(|p| p.is_absolute())
+            .or_else(|| env::var_os("HOME").map(|p| PathBuf::from(p).join(".cache")))
+    }
 }

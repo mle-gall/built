@@ -267,10 +267,9 @@ def notify(parent, title, text, *, tone="info", button="OK", action_label="", ac
         print(f"{title}: {text}", file=sys.stderr)
         return False
     if "<br" in text:
-        from PySide6.QtGui import QTextDocument
-        document = QTextDocument()
-        document.setHtml(text)
-        text = document.toPlainText()
+        from html import unescape
+        from ingetrazo_render import notice_text
+        text = unescape(notice_text(text))
     _record(win, title, text, tone, action_label, action)
     return True
 

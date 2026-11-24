@@ -46,6 +46,9 @@ def texture_cache_root() -> Path:
     override = os.environ.get("INGETRAZO_TEXTURE_CACHE")
     if override:
         return Path(override)
+    from app_shell.native import _shell
+    if _shell is not None:
+        return Path(_shell.local_data_directory(os.environ.get("BUILT_SETTINGS_DIR"))) / "IngeTrazo" / "textures"
     base = ""
     try:
         from PySide6.QtCore import QStandardPaths
@@ -671,7 +674,7 @@ def colorize_image(data, target_rgb, ctype=COLORIZE_SHIFT):
                 hls_to_rgb(hue, lum, sat) * 255.0 + 0.5, 0, 255).astype(np.uint8)
         result[:, 3] = alpha.reshape(-1)
         del rgb, flat
-        return SurveyRaster(w, h, result.tobytes()).png()
+        return SurveyRaster(w, h, result.tobytes()).material_png(bytes(data))
     except Exception:
         return data
 

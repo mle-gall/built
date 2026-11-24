@@ -111,7 +111,7 @@ def svg_text(groups, scale_n: float = 100.0, pens: dict | None = None,
         xs = np.concatenate([np.asarray(r, dtype=float)[:, 0] for f in faces for r in f.rings])
         ys = np.concatenate([np.asarray(r, dtype=float)[:, 1] for f in faces for r in f.rings])
         extra = (float(xs.min()), float(ys.min()), float(xs.max()), float(ys.max()))
-    picture = image is not None and image[0] is not None and not image[0].isNull()
+    picture = image is not None and image[0] is not None and not getattr(image[0], "isNull", lambda: False)()
 
     def under(page, taken):
         k = page["k"]
@@ -262,135 +262,44 @@ def _face_layers(faces, px, py, taken, bake_px_per_mm=None,
 
 
 def _uv_to_page(pins, px, py):
-    """The map (a ``QTransform``) taking a texture tile's own coordinates
-    — (u, −v), so the image's top row sits at v = 1 as the viewport draws
-    it — to the page, through the four pinned points: projective, so a
-    face seen in perspective gets its texture exactly as the viewport lays
-    it (an affine map only guesses it). ``None`` for a degenerate face."""
-    from PySide6.QtCore import QPointF
-    from PySide6.QtGui import QPolygonF, QTransform
-    src = QPolygonF([QPointF(u, -v) for _xy, (u, v) in pins])
-    dst = QPolygonF([QPointF(px(x), py(y)) for (x, y), _uv in pins])
-    t = QTransform()
-    if not QTransform.quadToQuad(src, dst, t):
-        return None
-    return t
+    """Project a repeated texture through its four UV pins onto the page."""
+    from ingetrazo_render import UvProjection
+    return UvProjection.pins([(u, -v) for _, (u, v) in pins],
+                             [(px(x), py(y)) for (x, y), _ in pins])
 
 
-def _bake(img, m, rings, px, py, px_per_mm=None):
-    """The texture ``img`` laid onto the page by ``m`` (tile → page),
-    drawn into an image over the box of the face's ``rings``:
-    ``(x, y, w, h, uri)`` in page millimetres, or ``None`` for a face too
-    small to draw. The painter works in the tile's own coordinates and
-    fills the face's own outline taken back there — never the box, whose
-    far corners a perspective map can throw past the horizon."""
-    import math
-
-    from PySide6.QtCore import QPointF, Qt
-    from PySide6.QtGui import (QBrush, QImage, QPainter, QPainterPath,
-                               QPolygonF, QTransform)
-    xs = [px(x) for r in rings for x in r[:, 0]]
-    ys = [py(y) for r in rings for y in r[:, 1]]
-    bx, by = min(xs), min(ys)
-    bw, bh = max(xs) - bx, max(ys) - by
-    if bw <= 1e-6 or bh <= 1e-6:
-        return None
-    back, ok = m.inverted()
-    if not ok:
-        return None
-    s = min(px_per_mm or BAKE_PX_PER_MM, MAX_BAKE_PX / max(bw, bh))
-    w, h = max(1, math.ceil(bw * s)), max(1, math.ceil(bh * s))
-    alpha = img.hasAlphaChannel()
-    out = QImage(w, h, QImage.Format_ARGB32 if alpha
-                 else QImage.Format_RGB32)
-    out.fill(Qt.transparent if alpha else Qt.white)
-    # The face, a hair wider so its edge pixels are filled too, in tile
-    # coordinates.
-    grow = 1.0 / s
-    face = QPainterPath()
-    face.setFillRule(Qt.OddEvenFill)
-    for r in rings:
-        pts = [QPointF(px(x), py(y)) for x, y in r]
-        cx = sum(p.x() for p in pts) / len(pts)
-        cy = sum(p.y() for p in pts) / len(pts)
-        wide = []
-        for p in pts:
-            dx, dy = p.x() - cx, p.y() - cy
-            d = math.hypot(dx, dy) or 1.0
-            wide.append(back.map(QPointF(p.x() + dx / d * grow,
-                                         p.y() + dy / d * grow)))
-        face.addPolygon(QPolygonF(wide))
-        face.closeSubpath()
-    # A tile that comes out smaller than the image: shrink the image to
-    # about twice the pixels the tile will take first, smoothly — sampled
-    # straight, a fine texture far away broke into stripes (moiré), which
-    # the viewport's mipmaps never show.
-    o = m.map(QPointF(0.0, 0.0))
-    tile_px = [math.hypot(q.x() - o.x(), q.y() - o.y()) * s
-               for q in (m.map(QPointF(1.0, 0.0)), m.map(QPointF(0.0, 1.0)))]
-    tw = max(4, min(img.width(), math.ceil(2.0 * tile_px[0])))
-    th = max(4, min(img.height(), math.ceil(2.0 * tile_px[1])))
-    if tw < img.width() or th < img.height():
-        img = img.scaled(tw, th, Qt.IgnoreAspectRatio,
-                         Qt.SmoothTransformation)
-    brush = QBrush(img)
-    brush.setTransform(QTransform.fromScale(1.0 / img.width(),
-                                            1.0 / img.height()))
-    p = QPainter(out)
-    p.setRenderHint(QPainter.SmoothPixmapTransform)
-    p.setRenderHint(QPainter.Antialiasing)
-    # Tile → page → this image's pixels.
-    p.setTransform(m * QTransform.fromTranslate(-bx, -by)
-                   * QTransform.fromScale(s, s))
-    p.setPen(Qt.NoPen)
-    p.setBrush(brush)
-    p.drawPath(face)
-    p.end()
-    return bx, by, bw, bh, _encode(out)
+def _bake(img, projection, rings, px, py, px_per_mm=None):
+    page = [[(px(x), py(y)) for x, y in ring] for ring in rings]
+    result = img.bake(projection, page, px_per_mm or BAKE_PX_PER_MM, MAX_BAKE_PX)
+    if result is not None:
+        (x, y), (width, height), pixels = result
+        return x, y, width, height, _encode(pixels, img.alpha)
 
 
-def _shaded_texture(path, shade: float):
-    """The texture at ``path`` darkened by ``shade`` (the face's light) and
-    kept within :data:`MAX_TEXTURE_PX`, or ``None`` if it cannot be read."""
-    from PySide6.QtCore import Qt
-    from PySide6.QtGui import QColor, QImage, QPainter
-    src = QImage(str(path))
-    if src.isNull():
-        return None
-    if max(src.width(), src.height()) > MAX_TEXTURE_PX:
-        src = src.scaled(MAX_TEXTURE_PX, MAX_TEXTURE_PX, Qt.KeepAspectRatio,
-                         Qt.SmoothTransformation)
-    alpha = src.hasAlphaChannel()
-    img = src.convertToFormat(QImage.Format_ARGB32 if alpha
-                              else QImage.Format_RGB32)
-    if shade < 0.999:
-        p = QPainter(img)
-        p.setCompositionMode(QPainter.CompositionMode_Multiply)
-        g = max(0, min(255, round(255 * float(shade))))
-        p.fillRect(img.rect(), QColor(g, g, g))
-        if alpha:                   # Multiply fills the clear pixels too
-            p.setCompositionMode(QPainter.CompositionMode_DestinationIn)
-            p.drawImage(0, 0, src)
-        p.end()
-    return img
+def _shaded_texture(path, shade):
+    from ingetrazo_render import SvgTexture
+    return SvgTexture.open(path, shade, MAX_TEXTURE_PX)
 
 
-def _encode(img) -> str:
-    """``img`` as a ``data:`` URI: JPEG unless it has transparency."""
+def _encode(img, alpha=None):
     import base64
-
-    from PySide6.QtCore import QBuffer, QByteArray, QIODevice
-    alpha = img.hasAlphaChannel()
-    data = QByteArray()
-    buf = QBuffer(data)
-    buf.open(QIODevice.WriteOnly)
-    img.save(buf, "PNG" if alpha else "JPG", -1 if alpha else 90)
-    buf.close()
+    from ingetrazo_render import SurveyRaster
+    if isinstance(img, SurveyRaster):
+        alpha = True if alpha is None else alpha
+        data = img.png() if alpha else img.jpeg()
+    else:
+        # A widget extension can still pass a QImage as the background.
+        from PySide6.QtCore import QBuffer, QByteArray, QIODevice
+        alpha = img.hasAlphaChannel()
+        data = QByteArray()
+        buffer = QBuffer(data)
+        buffer.open(QIODevice.WriteOnly)
+        img.save(buffer, "PNG" if alpha else "JPG", -1 if alpha else 90)
+        buffer.close()
     mime = "image/png" if alpha else "image/jpeg"
     return f"data:{mime};base64," + base64.b64encode(bytes(data)).decode()
 
 
-def _image_uri(path, shade: float):
-    """The shaded texture at ``path`` as a ``data:`` URI, or ``None``."""
+def _image_uri(path, shade):
     img = _shaded_texture(path, shade)
-    return None if img is None else _encode(img)
+    return None if img is None else _encode(img.raster(), img.alpha)

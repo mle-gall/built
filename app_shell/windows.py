@@ -2,8 +2,8 @@
 rule).
 
 Each winit window has its own :class:`app_shell.host.Host`, its own
-ShellWindow (its projects) and its own renderer. They share one Python, one
-Qt application, the settings, the recent list and the link sources already
+ShellWindow (its projects) and its own renderer. They share one Python interpreter,
+the settings, the recent list and the link sources already
 read. This replaces "⇧⌘N starts another `built` process" (an Archicad-style
 instance per window, which costs memory and start-up time and races on the
 settings).

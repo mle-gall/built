@@ -397,6 +397,10 @@ def default_cache_dir() -> Path:
     ``main.py``); falls back to ``~/.cache/ingetrazo`` if Qt returns nothing.
     Lives here, away from QtNetwork, so the viewport can read the cache
     inside paintGL without loading the network stack (#327)."""
+    from app_shell.native import _shell
+    if _shell is not None:
+        import os
+        return Path(_shell.local_data_directory(os.environ.get("BUILT_SETTINGS_DIR"))) / "IngeTrazo" / "IngeTrazo" / "tiles"
     from PySide6.QtCore import QStandardPaths
     base = QStandardPaths.writableLocation(
         QStandardPaths.StandardLocation.AppLocalDataLocation)

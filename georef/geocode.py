@@ -22,12 +22,11 @@ import json
 from dataclasses import dataclass
 from urllib.parse import quote
 
-from PySide6.QtCore import QObject, QUrl, Signal
-from PySide6.QtNetwork import (
-    QNetworkAccessManager,
-    QNetworkReply,
-    QNetworkRequest,
-)
+from georef.transport import NATIVE, Service, Signal
+if not NATIVE:
+    from PySide6.QtCore import QUrl
+    from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
+
 
 NOMINATIM = "https://nominatim.openstreetmap.org/search"
 IPAPI = "https://ipapi.co/json/"
@@ -81,14 +80,18 @@ def parse_ip(data: bytes):
         return None
 
 
-class _Fetcher(QObject):
+class _Fetcher(Service):
     """Shared async GET helper with the required User-Agent."""
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        self._nam = QNetworkAccessManager(self)
+        if not NATIVE:
+            self._nam = QNetworkAccessManager(self)
 
     def _get(self, url: str, on_bytes, on_error) -> None:
+        if NATIVE:
+            from georef.transport import request
+            return request(self, url, _USER_AGENT, on_bytes, on_error)
         req = QNetworkRequest(QUrl(url))
         req.setRawHeader(b"User-Agent", _USER_AGENT)
         req.setAttribute(QNetworkRequest.Attribute.RedirectPolicyAttribute,

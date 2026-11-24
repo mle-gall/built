@@ -407,6 +407,26 @@ impl TexturePlacement {
     fn undo_depth(&self) -> usize {
         self.history.len()
     }
+    /// The same operations used by the pin editor and its local undo stack.
+    fn menu_rows(&self) -> Vec<(&'static str, Vec<(&'static str, &'static str, bool)>)> {
+        vec![
+            ("", vec![("done", "Done", true)]),
+            ("", vec![("reset", "Reset", true)]),
+            ("Flip", vec![("horizontal", "Left / Right", true), ("vertical", "Up / Down", true)]),
+            ("Rotate", vec![("90", "90°", true), ("180", "180°", true), ("270", "270°", true)]),
+            ("", vec![("undo", "Undo", !self.history.is_empty())]),
+        ]
+    }
+    fn menu_action(&mut self, py: Python<'_>, action: &str) -> PyResult<bool> {
+        match action {
+            "reset" => self.reset(py)?,
+            "horizontal" | "vertical" => self.flip(py, action == "horizontal")?,
+            "90" | "180" | "270" => self.rotate(py, action.parse().unwrap())?,
+            "undo" => return self.undo_step(py),
+            _ => return Ok(false),
+        }
+        Ok(true)
+    }
     fn changed(&self, py: Python<'_>) -> bool {
         match (self.map.borrow(py).uvw(), self.entry.uvw()) {
             (Some(a), Some(b)) => a.iter().zip(b).any(|(x, y)| (x - y).abs() > 1e-9),

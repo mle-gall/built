@@ -30,7 +30,7 @@ class ProfileBinding:
             else:
                 from georef.dem import DEMSampler
 
-                self.sampler = DEMSampler(scene.georef)
+                self.sampler = DEMSampler(scene.georef, parent=view) if hasattr(view, "_host") else DEMSampler(scene.georef)
                 self.sampler.changed.connect(self.changed)
                 self.sampler.changed.connect(view.update)
             self.dirty = True

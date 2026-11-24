@@ -73,6 +73,9 @@ impl Default for AnnotationFont {
 }
 
 impl AnnotationFont {
+    pub(super) fn outline_face(family: &str, bold: bool, italic: bool) -> Option<fontdb::ID> {
+        Self { family: family.to_owned(), bold, italic, ..Self::default() }.face()
+    }
     fn face(&self) -> Option<fontdb::ID> {
         let families = [
             fontdb::Family::Name(&self.family),

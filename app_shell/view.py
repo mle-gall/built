@@ -1,4 +1,4 @@
-"""The Metal view: ``views.wgpu_view.WgpuView``'s Python on a QObject.
+"""The Metal view: ``views.wgpu_view.WgpuView``'s document bindings on a native window.
 
 The renderer surface is the winit window's NSView, handed over by Rust; the
 renderer itself is the statically linked ``ingetrazo_render`` module, so

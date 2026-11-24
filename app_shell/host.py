@@ -610,7 +610,7 @@ class Host:
         if on:
             self._front()
             from views.ndof_input import shared_input
-            if self._device is None and (device := shared_input()).backend_name:
+            if self._device is None and (device := shared_input(self.window)).backend_name:
                 self._device = device
                 device.motion.connect(self.window._on_ndof_motion)
                 device.button.connect(self.window._on_ndof_button)
@@ -675,6 +675,7 @@ class Host:
             close(self.window)
         self.window.scene_player.cancel()
         self.window._extension_menus.clear()
+        self.window._extension_closed.emit()
         self.timers.cancel_all()
         for doc in list(self.window._documents):
             doc.model_views.suspend(doc)

@@ -440,7 +440,13 @@ def active_view_builder(win):
         shown = getattr(vp.scene, "show_axes", True)
         vp.scene.show_axes = shown and axes
         try:
-            if aspect is None:
+            from core.input_types import NATIVE
+            if NATIVE:
+                from ingetrazo_render import SurveyRaster
+                height = max(64, round(width_px / aspect)) if aspect else None
+                frame = vp.keys_stand_in.render_pixels(width_px, height, overlays=False, sharp_shadows=True)
+                picture = SurveyRaster(*frame) if frame else None
+            elif aspect is None:
                 picture = vp.render_image(width_px, overlays=False,
                                           sharp_shadows=True)
             else:
@@ -483,7 +489,7 @@ def open_view_export(win, frame_builder=None):
     import json
     from pathlib import Path
     from core.settings import settings as QSettings
-    from PySide6.QtCore import QIODevice, QSaveFile
+    from ingetrazo_core import AtomicDocument
     from core.i18n import tr
     from core.saved_views import SavedView
     from core.sun import scene_sun_direction
@@ -542,13 +548,9 @@ def open_view_export(win, frame_builder=None):
                 with svg_progress(win, history, "Export SVG"):
                     text, count = draw()
                 data = text.encode("utf-8")
-                output = QSaveFile(str(path))
-                if (
-                    not output.open(QIODevice.WriteOnly)
-                    or output.write(data) != len(data)
-                    or not output.commit()
-                ):
-                    raise OSError(output.errorString())
+                output = AtomicDocument(path)
+                output.write(data)
+                output.publish()
                 for key, value in json.loads(svg.view_preferences()).items():
                     settings.setValue(key, value)
                 win.statusBar().showMessage(
