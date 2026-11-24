@@ -705,6 +705,8 @@ class Host:
             "ime_area": self._ime_area,
             "clipboard": bool(getattr(self.viewport, "clipboard", None)),
             "pasteboard": self._pasteboard_types(),
+            "project": win.query_worksession() if win.__dict__.get("_project") is not None else None,
+            "read_only": [bool(getattr(d, "read_only", False)) for d in win._documents],
         }
 
     def _tab_rects(self):

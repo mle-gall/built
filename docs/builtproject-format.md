@@ -66,7 +66,9 @@ the same directory, is flushed and synced, and is renamed over the manifest;
 the directory is then synced. A reader therefore sees either the old manifest
 or the new one. Keys are written in sorted order with two-space indentation
 and a final newline, so a manifest under version control diffs cleanly.
-Numbers keep their exact decimal text.
+Rust keeps every number's decimal text through its reads and writes; a
+registry value Python edits is written as Python's shortest round-trip
+form.
 
 ### What is shared, and why
 
@@ -270,6 +272,7 @@ for an old build can export it from the manifest
 | Function or class | Does |
 |---|---|
 | `project_manifest_load(path)` | Validated manifest as JSON text (envelope only; the registry is validated in Python). |
+| `project_manifest_peek(path)` | A manifest or an `.igzproj`, validated, never converted. |
 | `project_manifest_save(path, json)` | Atomic write of a full manifest. |
 | `project_manifest_new(path, registry_json, identity_json)` | A new manifest with a fresh id; fails if the file exists. |
 | `project_sync_host(path, host_rel, files_json, links_json)` | Owner-scoped files/links update (§4.1). |
@@ -277,6 +280,14 @@ for an old build can export it from the manifest
 | `project_convert(path)` | §5; returns the manifest path and what happened. |
 | `project_legacy_json(path)` | The `.igzproj` value of a manifest (export and tests). |
 | `project_resolve_pointer(host_path, pointer_json)` | §2; the project path or `None`. |
+| `project_relative(path, dir)` | A path in manifest spelling (§1). |
 | `project_members(path)` | Files and roles of a manifest or `.igzproj`, read-only (the Start page; never converts). |
 | `project_session_dir(override=None)` | §3's directory. |
 | `ProjectSession` | The open project in a window: plan, member states, editable file, read-only test, tree rows, Problems, session load and save. |
+
+Python glue: `formats/project.py` (registry and filter validation around
+the Rust calls), `core/project.py` (the scene's pointer, merge base and
+fallback registry), `app_shell/project.py` (the native window), and the
+classic `views/worksession.py`, which now reads and writes the per-user
+session through `ProjectSession`. They are listed in
+[python-glue.md](python-glue.md#built-projects).

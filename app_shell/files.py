@@ -227,7 +227,8 @@ def open_dialog(win) -> bool:
     win.viewport.end_group_edit()
     path, _ = file_dialogs.getOpenFileName(
         win, tr("Open Built document"), "",
-        built.DOCUMENT_FILTER + ";;Imports (*.skp *.dae *.dxf *.dwg *.rfa *.glb *.gltf)")
+        built.DOCUMENT_FILTER + ";;Built projects (*.builtproject *.igzproj)"
+        ";;Imports (*.skp *.dae *.dxf *.dwg *.rfa *.glb *.gltf)")
     if not path:
         return False
     return open_path(win, Path(path))
@@ -255,10 +256,13 @@ def open_path(win, path: Path) -> bool:
     path = Path(path)
     host = win._host
     suffix = path.suffix.lower()
-    if suffix == ".igzproj":
-        return open_in_classic(win, path, why="Projects (.igzproj)")
     if win._closed:
         return False
+    if suffix in (".builtproject", ".igzproj"):
+        # Built projects open here (app_shell/project.py); an .igzproj
+        # is converted in place first.
+        from app_shell import project
+        return project.open_project(win, path)
     for doc in win._documents:
         if doc.same_file(path):
             win.activate_document(doc)
@@ -720,10 +724,13 @@ def do_save(win, path: Path, copy: bool = False) -> bool:
     from core import links as _links
     from formats import igz as igz_format
     from views import chrome_dialogs as cd
+    from app_shell import project
     doc = win._doc
     vp = doc.viewport
     scene = vp.scene
     try:
+        if not copy:
+            project.before_save(win, doc, path)
         scene.camera_home = win._camera_dict(vp)
         scene.views_home = None
         _links.refresh_paths(scene, path)
@@ -768,6 +775,7 @@ def do_save(win, path: Path, copy: bool = False) -> bool:
     win._remember_recent(path)
     win._host.recent_changed()
     win._saved_version = scene.version
+    project.saved(win, doc)
     win._update_title()
     return True
 
@@ -882,6 +890,8 @@ def request_close(win) -> bool:
     auto = win.__dict__.get("_background_autosave")
     if auto is not None:
         auto.cancel()
+    from app_shell import project
+    project.persist(win)
     win._closed = True
     return True
 
