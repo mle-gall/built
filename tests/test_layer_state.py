@@ -1,17 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""Layer state, selection membership and marks in the legacy dock."""
+"""Layer state, selection membership and marks in the Drawing lens."""
 from __future__ import annotations
 
-import os
 import random
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
 import pytest
-from PySide6.QtWidgets import QApplication
-
-_app = QApplication.instance() or QApplication([])
+from tests.test_project_drawing_filters import Project
 
 from core import layers as L
 from core.group import Group
@@ -20,27 +15,17 @@ from core.mesh import Mesh
 from core.scene import Scene
 
 
-@pytest.fixture
-def win():
-    from views.main_window import MainWindow
-    w = MainWindow()
-    w.show()
-    _app.processEvents()
-    yield w
-    w._saved_version = w.viewport.scene.version
-    w.close()
-
-
-def _doc(win):
-    scene = win.viewport.scene
+def drawing():
+    project = Project()
+    scene = project.scene
     scene.layers += [Layer("A"), Layer("B")]
     ga = Group(Mesh(), name="ga")
     ga.layer = "A"
     gb = Group(Mesh(), name="gb")
     gb.layer = "B"
     scene.groups += [ga, gb]
-    win.viewport.notify_scene_changed()
-    return scene, ga, gb
+    project.action("lens", "1")
+    return project, ga, gb
 
 
 def test_is_isolated_reads_the_default_layer_as_always_on():
@@ -54,44 +39,34 @@ def test_is_isolated_reads_the_default_layer_as_always_on():
     assert not L.is_isolated(scene, "Solo")
 
 
-def _holds(panel):
-    from views.layers_panel import ROLE_HOLDS
-    return sorted(panel._key(it)[1] for it in panel._all_items()
-                  if it.data(0, ROLE_HOLDS))
+def marked(project):
+    return {key: state[10] for key, (_, state) in project.rows().items()
+            if key.startswith("preview-") and state[10]}
 
 
-def test_the_panel_marks_the_selections_layer_and_not_the_active(win):
-    scene, ga, gb = _doc(win)
-    panel = win.layers_dock.panel
+def test_drawing_marks_selection_tags_without_changing_the_active_tag():
+    project, a, b = drawing()
+    scene = project.scene
     L.set_active(scene, "B")
-    scene.select([ga])
-    win.viewport.notify_scene_changed()
-    _app.processEvents()                              # the rebuild is deferred
-    assert _holds(panel) == ["A"]
-    assert L.active_layer(scene) == "B"               # untouched
-    scene.select([ga, gb])
-    win.viewport.notify_scene_changed()
-    _app.processEvents()
-    assert _holds(panel) == ["A", "B"]                # several: all of them
+    scene.select([a])
+    assert marked(project) == {"preview-tag:A": 1}
+    assert L.active_layer(scene) == "B"
+    scene.select([a, b])
+    assert marked(project) == {"preview-tag:A": 1, "preview-tag:B": 1}
     scene.clear_selection()
-    win.viewport.notify_scene_changed()
-    _app.processEvents()
-    assert _holds(panel) == []
+    assert marked(project) == {}
 
 
-def test_a_folded_folder_carries_the_mark(win):
-    scene, ga, _gb = _doc(win)
-    panel = win.layers_dock.panel
+def test_a_folded_folder_carries_the_mark():
+    project, a, _ = drawing()
+    scene = project.scene
     L.move_to_folder(scene, ["A"], "Arq")
-    scene.select([ga])
-    win.viewport.notify_scene_changed()
-    _app.processEvents()                              # the rebuild is deferred
-    folder = panel.item_for("Arq", "folder")
-    assert _holds(panel) == ["A"]                     # open: the layer
-    folder.setExpanded(False)
-    assert _holds(panel) == ["A", "Arq"]              # folded: the folder too
-    folder.setExpanded(True)
-    assert _holds(panel) == ["A"]
+    scene.select([a])
+    assert marked(project) == {"preview-folder:Arq": 1}
+    project.action("toggle", "preview-folder:Arq")
+    assert marked(project) == {"preview-folder:Arq": 2, "preview-tag:A": 1}
+    project.action("toggle", "preview-folder:Arq")
+    assert marked(project) == {"preview-folder:Arq": 1}
 
 
 @pytest.mark.parametrize("seed", range(10))

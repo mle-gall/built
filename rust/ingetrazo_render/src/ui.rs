@@ -555,7 +555,8 @@ impl Ui {
         if let Some(col) = self.column.as_mut() { col.proposal_available = available; }
     }
     pub fn set_tree_sort(&mut self, index: usize) {
-        if let (Some(col), Some(&(sort, _))) = (self.column.as_mut(), tree_order::Sort::OPTIONS.get(index)) {
+        if let Some(col) = self.column.as_mut() {
+            let sort = tree_order::Sort::OPTIONS.get(index).map(|&(sort, _)| sort).unwrap_or_default();
             if col.sort != sort {
                 col.sort = sort;
                 col.ordered = sort.order(&col.nodes);
@@ -3166,6 +3167,47 @@ fn occurrence_menu_runs_the_document_action_and_closes() {
         .take_actions()
         .contains(&format!("tree:explode\u{1f}{key}")));
     assert!(ui.column.unwrap().row_menu.is_none());
+}
+
+#[test]
+fn a_tree_refresh_keeps_the_selected_row_at_its_scroll_position() {
+    let Some(mut ui) = test_chrome() else { return };
+    ui.ctx = test_context();
+    let rows = |count: usize| (0..count).map(|i| {
+        let mut text = vec![String::new(); 12];
+        text[0] = format!("preview-tag:{i}");
+        text[1] = format!("Tag {i}");
+        text[10] = i.to_string();
+        (text, vec![0, 0, 0, 0, 6, 1, 0])
+    }).collect();
+    ui.set_tree(rows(100), 0);
+    ui.column.as_mut().unwrap().lens = Lens::Drawing;
+    for _ in 0..3 { tree_frame(&mut ui, vec![]); }
+    ui.reveal_row("preview-tag:50".into());
+    let at = tree_frame(&mut ui, vec![])["Tag 50"];
+    tree_click(&mut ui, at, egui::PointerButton::Primary);
+    let before = tree_frame(&mut ui, vec![])["Tag 50"];
+    ui.set_tree(rows(101), 0);
+    let after = tree_frame(&mut ui, vec![])["Tag 50"];
+    let col = ui.column.as_ref().unwrap();
+    assert!(col.styles.selected(&col.nodes[50]));
+    assert!((before.y - after.y).abs() < 1., "{before:?} -> {after:?}");
+}
+
+#[test]
+fn name_sort_uses_the_new_label_and_unknown_preferences_restore_project_order() {
+    let Some(mut ui) = test_chrome() else { return };
+    let groups = |a: &str| vec![
+        (vec!["i:a".into(), a.into()], vec![0, 0, 0, 0, 1]),
+        (vec!["i:b".into(), "Muro 2".into()], vec![0, 0, 0, 0, 1]),
+    ];
+    ui.set_tree(groups("Muro 1"), 0);
+    ui.set_tree_sort(1);
+    assert_eq!(ui.column.as_ref().unwrap().ordered, [0, 1]);
+    ui.set_tree(groups("Muro 10"), 0);
+    assert_eq!(ui.column.as_ref().unwrap().ordered, [1, 0]);
+    ui.set_tree_sort(usize::MAX);
+    assert_eq!(ui.column.as_ref().unwrap().ordered, [0, 1]);
 }
 
 #[test]

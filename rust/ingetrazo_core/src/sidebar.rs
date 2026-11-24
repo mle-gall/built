@@ -83,7 +83,7 @@ fn imported_families(scene: &Bound<'_, PyAny>, name: &str) -> Option<String> {
     serde_json::to_string(&families).ok()
 }
 
-#[pyfunction]
+#[pyfunction(signature = (scene, tree, rows, query, expanded, filename, drawing_lens=false))]
 pub(crate) fn project_sidebar(
     scene: &Bound<'_, PyAny>,
     tree: &Bound<'_, PyAny>,
@@ -91,6 +91,7 @@ pub(crate) fn project_sidebar(
     query: &str,
     expanded: HashSet<String>,
     filename: &str,
+    drawing_lens: bool,
 ) -> PyResult<(Vec<Row>, PathBar)> {
     let group = scene.getattr("edit_group")?;
     let tags_only = tree.getattr("_host_roots")?.extract::<i64>()? < 0;
@@ -110,6 +111,12 @@ pub(crate) fn project_sidebar(
                 .unwrap_or_else(|| "Layer 0".into());
             *counts.entry(tag).or_default() += 1;
         }
+        let selected: HashSet<String> = if drawing_lens {
+            scene.py().import("core.layers")?.call_method1("selection_layers", (scene,))?.extract()?
+        } else {
+            HashSet::new()
+        };
+        let mut folder_selected = HashMap::<String, i64>::new();
         let parents = scene.getattr("folder_parents")?;
         let mut folder_counts = HashMap::<String, i64>::new();
         for layer in scene.getattr("layers")?.try_iter()? {
@@ -123,14 +130,19 @@ pub(crate) fn project_sidebar(
                     break;
                 }
                 *folder_counts.entry(name.clone()).or_default() += count;
+                if selected.contains(&key) {
+                    *folder_selected.entry(name.clone()).or_default() += 1;
+                }
                 folder = parents.call_method1("get", (name,))?.extract()?;
             }
         }
         for (text, flags) in &mut tags {
             if let Some(tag) = text[0].strip_prefix("preview-tag:") {
                 flags[1] = counts.get(tag).copied().unwrap_or_default();
+                flags[9] = i64::from(selected.contains(tag));
             } else if let Some(folder) = text[0].strip_prefix("preview-folder:") {
                 flags[1] = folder_counts.get(folder).copied().unwrap_or_default();
+                flags[9] = folder_selected.get(folder).copied().unwrap_or_default();
             }
         }
         // Tagged placements are represented by their tag. Keep the original

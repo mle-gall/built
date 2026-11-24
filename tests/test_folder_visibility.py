@@ -1,8 +1,8 @@
 """Synthetic regressions for independent folder visibility and stable tag rows."""
-from types import SimpleNamespace
+import json
 
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication
+from tests.test_project_drawing_filters import Project
+from views.wgpu_ui import SEP
 
 from core import layers as L
 from core.scene import Scene
@@ -38,66 +38,39 @@ def test_independent_flags_and_every_undo_redo():
     assert L.layer_state(scene) == final
 
 
-def panel_for(scene):
-    from views.layers_panel import LayersPanel
-    viewport = SimpleNamespace(scene=scene, history=History(scene), notify_scene_changed=lambda: None,
-                               isAncestorOf=lambda widget: False)
-    window = SimpleNamespace(viewport=viewport, isVisible=lambda: False,
-                             statusBar=lambda: SimpleNamespace(showMessage=lambda *a: None))
-    return LayersPanel(window)
+def test_expand_collapse_reuses_the_document_projection():
+    project = Project(scene=document())
+    project.rows()
+    projection = project.view._ui_tree_model[1]
+    for expanded in (True, False, True):
+        rows = project.action("toggle", "preview-folder:parent")
+        assert ("preview-folder:nested" in rows) == expanded
+        assert project.view._ui_tree_model[1] is projection
 
 
-def test_expand_collapse_never_refreshes(monkeypatch):
-    from views.layers_panel import KIND_FOLDER, COL_NAME
-    panel = panel_for(document())
-    calls = []
-    original = panel.refresh
-    monkeypatch.setattr(panel, 'refresh', lambda: (calls.append(True), original()))
-    item = panel.item_for('parent', KIND_FOLDER)
-    for expanded in [False, True, False]:
-        item.setExpanded(expanded)
-        # A decoration/name-column notification is not a rename. Qt's
-        # itemChanged carries a column, not the role that changed.
-        panel.tree.itemChanged.emit(item, COL_NAME)
-        QApplication.processEvents()
-    assert calls == []
-    assert panel.item_for('parent', KIND_FOLDER) is item
-    panel.close()
-
-
-def test_visibility_and_rename_keep_rows_and_expansion(monkeypatch):
-    from views.layers_panel import KIND_FOLDER, COL_NAME, COL_EYE
-    scene = document()
-    panel = panel_for(scene)
-    parent = panel.item_for('parent', KIND_FOLDER)
-    nested = panel.item_for('nested', KIND_FOLDER)
-    child = panel.item_for('A')
-    nested.setExpanded(False)
-    monkeypatch.setattr(panel, 'refresh', lambda: (_ for _ in ()).throw(AssertionError('rebuild')))
-    panel.click_cell((KIND_FOLDER, 'parent'), COL_EYE)
-    assert parent.isExpanded() and not nested.isExpanded()
-    assert panel.item_for('A') is child
-    assert child.data(COL_EYE, Qt.UserRole + 2)
-    panel.set_visible(['A'], False)
-    panel.click_cell((KIND_FOLDER, 'parent'), COL_EYE)
-    assert not scene.layer('A').visible
-    assert not child.data(COL_EYE, Qt.UserRole + 2)
-    parent.setText(COL_NAME, 'Renamed')
-    QApplication.processEvents()
-    assert panel.item_for('parent', KIND_FOLDER) is parent
-    assert L.folder_label(scene, 'parent') == 'Renamed'
-    panel.close()
+def test_visibility_and_rename_keep_row_keys_and_expansion():
+    project = Project(scene=document())
+    parent, nested = "preview-folder:parent", "preview-folder:nested"
+    project.action("toggle", parent)
+    rows = project.action("eye", parent)
+    assert rows[parent][1][8] and not rows[nested][1][8]
+    assert project.scene.layer("A").visible and not rows["preview-tag:B"][1][5]
+    project.action("tagstate", json.dumps({"tags": ["A"], "visible": False}))
+    project.action("eye", parent)
+    rows = project.action("tagfolder", "rename" + SEP + json.dumps({"folder": "parent", "name": "Renamed"}))
+    assert rows[parent][0] == "Renamed" and rows[parent][1][8]
+    assert not rows[nested][1][8] and not project.scene.layer("A").visible
 
 
 def test_structural_refresh_keeps_folded_folder():
-    from views.layers_panel import KIND_FOLDER
-    scene = document()
-    panel = panel_for(scene)
-    panel.item_for('parent', KIND_FOLDER).setExpanded(False)
-    scene.layers.append(L.Layer('C'))
-    panel.refresh()
-    assert not panel.item_for('parent', KIND_FOLDER).isExpanded()
-    panel.close()
+    project = Project(scene=document())
+    for _ in range(2):
+        project.action("toggle", "preview-folder:parent")
+    project.scene.layers.append(L.Layer("C"))
+    project.scene.version += 1
+    rows = project.rows()
+    assert "preview-tag:C" in rows and "preview-folder:nested" not in rows
+    assert not rows["preview-folder:parent"][1][8]
 
 
 def test_igz_folder_and_child_flags_roundtrip_and_legacy(tmp_path):
@@ -162,25 +135,21 @@ def test_metal_visibility_uses_instance_updates_without_repack(monkeypatch):
 
 
 def test_folder_eye_sequence_is_three_undoable_toggles():
-    from views.layers_panel import KIND_FOLDER, COL_EYE
     scene = document()
-    panel = panel_for(scene)
-    history = panel._window.viewport.history
-    panel.click_cell((KIND_FOLDER, 'parent'), COL_EYE)
-    assert scene.layer('A').visible  # ancestor hiding never changes this
-    panel.set_visible(['A'], False)
-    panel.click_cell((KIND_FOLDER, 'parent'), COL_EYE)
-    assert not scene.layer('A').visible and scene.layer('B').visible
+    project = Project(scene=scene)
+    history = project.win.viewport.history
+    project.action("eye", "preview-folder:parent")
+    assert scene.layer("A").visible
+    project.action("tagstate", json.dumps({"tags": ["A"], "visible": False}))
+    project.action("eye", "preview-folder:parent")
+    assert not scene.layer("A").visible and scene.layer("B").visible
     assert len(history.undo_stack) == 3
     for _ in range(3):
         assert history.undo()
-        panel._refresh_after_change()
-    assert scene.layer('A').visible and L.folder_visible(scene, 'parent')
+    assert scene.layer("A").visible and L.folder_visible(scene, "parent")
     for _ in range(3):
         assert history.redo()
-        panel._refresh_after_change()
-    assert not scene.layer('A').visible and L.folder_visible(scene, 'parent')
-    panel.close()
+    assert not scene.layer("A").visible and L.folder_visible(scene, "parent")
 
 
 def test_linked_tags_keep_folder_flags_separate(tmp_path):
@@ -193,25 +162,3 @@ def test_linked_tags_keep_folder_flags_separate(tmp_path):
     assert tag.visible and not L.effective_visible(scene, tag)
     scene.folder_visibility[tag.folder] = True
     assert L.effective_visible(scene, tag)
-
-
-def test_full_refresh_preserves_selection_and_scroll():
-    scene = document()
-    scene.layers.extend(L.Layer(f'Z{i:03}') for i in range(100))
-    panel = panel_for(scene)
-    panel.resize(500, 350)
-    panel.show()
-    QApplication.processEvents()
-    item = panel.item_for('Z050')
-    item.setSelected(True)
-    panel.tree.setCurrentItem(item)
-    panel.tree.scrollToItem(item)
-    bar = panel.tree.verticalScrollBar()
-    scroll = bar.value()
-    assert scroll > 0
-    scene.layers.append(L.Layer('ZZZ'))
-    panel.refresh()
-    assert panel.item_for('Z050').isSelected()
-    assert panel.tree.currentItem() is panel.item_for('Z050')
-    assert bar.value() == scroll
-    panel.close()

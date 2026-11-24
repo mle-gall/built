@@ -813,7 +813,7 @@ def _tree(view, win, *, discover=False):
             exp.add(f"n:{k}")
     rows = filing_rows(scene, model, exp, pages, flt, discover, ROW_CAP, lens, sel_ids,
                        active, KINDS, TIPS, FILE_STATES)
-    rows, path_bar = project_sidebar(scene, tree, rows, flt, exp, str(getattr(win, "_current_path", "") or ""))
+    rows, path_bar = project_sidebar(scene, tree, rows, flt, exp, str(getattr(win, "_current_path", "") or ""), lens == 1)
     rows.extend(catalog.rows(flt, exp))
     if "_project" in getattr(win, "__dict__", {}):
         from app_shell import project as built_project

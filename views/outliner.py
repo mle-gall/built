@@ -297,31 +297,6 @@ def fill_icon(color, on: bool) -> QIcon:
     return QIcon(pm)
 
 
-def _remember_widths(header, key: str, columns, quiet=None) -> None:
-    """Give ``columns`` the widths the user left them at, and keep them
-    as they are dragged (per user, not per document). ``quiet()`` true:
-    a resize the program made, not the user — not kept."""
-    from core.settings import settings as QSettings
-    saved = QSettings().value(key)
-    if isinstance(saved, str):
-        saved = saved.split(",")
-    if isinstance(saved, (list, tuple)) and len(saved) == len(columns):
-        for col, width in zip(columns, saved):
-            try:
-                if int(width) >= 40:
-                    header.resizeSection(col, int(width))
-            except (TypeError, ValueError):
-                pass
-
-    def save(*_args) -> None:
-        if quiet is not None and quiet():
-            return
-        QSettings().setValue(key, ",".join(
-            str(header.sectionSize(c)) for c in columns))
-
-    header.sectionResized.connect(save)
-
-
 def _tool_button(text: str, tip: str, slot) -> QToolButton:
     btn = QToolButton()
     btn.setText(text)
@@ -1030,11 +1005,11 @@ class OutlinerPanel(QWidget):
                                         self._expand_or_collapse)
         self._expand_btn.setIcon(node_icon("layers_expand"))
         bar.addWidget(self._expand_btn)
-        # Order: the document's, by layer or by name. A way of reading the
+        # Order: the document's or by layer. A way of reading the
         # tree — the model is left as it is, so drag, rename and isolate go
         # on working on the same groups.
         self._order_btn = _tool_button("", tr(
-            "Order the rows: as the model holds them, by layer or by name"),
+            "Order the rows: as the model holds them or by layer"),
             self._open_order_menu)
         self._order_btn.setIcon(node_icon("layers_order"))
         bar.addWidget(self._order_btn)
@@ -1063,16 +1038,6 @@ class OutlinerPanel(QWidget):
         head.resizeSection(COL_TYPE, 110)
         head.setSectionResizeMode(COL_LAYER, QHeaderView.Interactive)
         head.resizeSection(COL_LAYER, 80)
-        # Until the user drags a column edge, Name, Type and Layer share the
-        # panel's width as it changes (see _fit_columns).
-        self._fitting = False
-        from core.settings import settings as QSettings
-        self._auto_fit = not QSettings().contains("browser/model_columns")
-        # Kept only once the user has sized them: while they follow the
-        # panel, what Qt or the fitting does to them is nobody's choice.
-        _remember_widths(head, "browser/model_columns",
-                         (COL_NAME, COL_TYPE),
-                         quiet=lambda: self._fitting or self._auto_fit)
         for col, width in ((COL_MATERIAL, 100), (COL_COPIES, 60),
                            (COL_IFC, 110)):
             head.setSectionResizeMode(col, QHeaderView.Interactive)
@@ -1103,12 +1068,6 @@ class OutlinerPanel(QWidget):
         head.setFirstSectionMovable(True)
         self._apply_column_order()
         head.sectionMoved.connect(self._save_column_order)
-        head.sectionResized.connect(self._on_section_resized)
-        # A user's resize is a drag on the header: Qt resizes sections on
-        # its own too (the old last column stops stretching when a new one
-        # is shown), and those must not end the fitting.
-        self._header_pressed = False
-        head.viewport().installEventFilter(self)
         self.tree.headerItem().setIcon(COL_EYE, node_icon("eye"))
         self.tree.headerItem().setToolTip(COL_EYE, tr(
             "Visible — click to hide everything, or to show it all again"))
@@ -1191,23 +1150,6 @@ class OutlinerPanel(QWidget):
         super().showEvent(ev)
         if self._stale:
             self.refresh()
-        if not getattr(self, "_room_made", False):
-            # Columns turned on in an earlier session: the first time the
-            # panel has a width, make room for them as when turned on.
-            self._room_made = True
-            from PySide6.QtCore import QTimer
-            QTimer.singleShot(0, self._make_room_for_shown)
-
-    def _make_room_for_shown(self) -> None:
-        if self._auto_fit:
-            self._fit_columns()
-            self._scroll_to_column(COL_NAME)
-            return
-        head = self.tree.header()
-        for col in (COL_MATERIAL, COL_COPIES, COL_IFC):
-            if not head.isSectionHidden(col):
-                self._make_room_for(col)
-        self._scroll_to_column(COL_NAME)               # the names first
 
     def _document_name(self) -> str:
         w = self._window
@@ -1954,7 +1896,7 @@ class OutlinerPanel(QWidget):
                 item.setHidden(not shown)
 
     # ---- Order ---------------------------------------------------------------
-    #: QSettings key of the rows' order: the document's, by layer or by name.
+    #: QSettings key of the rows' order: the document's or by layer.
     ORDER_KEY = "browser/order"
 
     @property
@@ -1964,7 +1906,7 @@ class OutlinerPanel(QWidget):
         return v if v in dict(self.ORDERS) else "document"
 
     def set_order_by(self, how: str) -> None:
-        """Order the rows as the model holds them, by layer or by name —
+        """Order the rows as the model holds them or by layer —
         siblings only: a group stays inside its parent. A way of reading
         the tree, remembered between sessions; the model is left as it
         is."""
@@ -1978,8 +1920,7 @@ class OutlinerPanel(QWidget):
 
     #: The ways to order the rows, in menu order: (key, label).
     ORDERS = (("document", "Document order"),
-              ("layer", "Order by layer"),
-              ("name", "Order by name"))
+              ("layer", "Order by layer"))
 
     def _fill_order_actions(self, menu) -> None:
         from PySide6.QtGui import QActionGroup
@@ -2033,11 +1974,8 @@ class OutlinerPanel(QWidget):
         return outliner.outline_rank(self._layer_outline(scene))
 
     def _display_walk(self, scene) -> list:
-        """The rows' groups in the order they show: the document's, each
-        container's children by layer (in the Layers tab's own order), or
-        by name with the numbers read as numbers."""
-        if self.order_by == "name":
-            return outliner.walk_by_name(scene.groups)
+        """The rows' groups in the order they show: the document's, or each
+        container's children by layer (in the Layers tab's own order)."""
         if self.order_by != "layer":
             return outliner.walk(scene.groups)
         return outliner.walk_by_layer(scene.groups, self._layer_rank(scene))
@@ -2047,13 +1985,8 @@ class OutlinerPanel(QWidget):
         order: the model's shape and, ordering by layer, each row's layer
         and the order the layers are in (a layer filed into another folder,
         or the Layers tab sorted another way, moves the rows without
-        changing any of their layers); ordering by name, the names (a
-        renamed row moves to its place)."""
+        changing any of their layers)."""
         shape = outliner.structure(scene.groups)
-        if self.order_by == "name":
-            return (shape, "name",
-                    tuple((id(g), g.name or "")
-                          for g, _p, _d in outliner.walk(scene.groups)))
         if self.order_by != "layer":
             return (shape, False)
         return (shape, True,
@@ -2958,9 +2891,6 @@ class OutlinerPanel(QWidget):
         viewport.notify_scene_changed()
 
     # ---- Columns ---------------------------------------------------------
-    #: Columns of a fixed width: the eye, the padlock and the target.
-    _FIXED = (COL_EYE, COL_LOCK, COL_ISOLATE)
-
     #: The step, in pixels, from one level of nesting to the next.
     INDENT = 12
 
@@ -3018,207 +2948,23 @@ class OutlinerPanel(QWidget):
         from core.settings import settings as QSettings
         st = QSettings()
         for key in ("browser/model_column_order",
-                    "browser/model_hidden_columns", "browser/model_columns",
+                    "browser/model_hidden_columns",
                     self.ORDER_KEY):
             st.remove(key)
-        # Following the panel from here on — before the columns move or
-        # hide, or the header's saver keeps the widths being dropped.
-        self._auto_fit = True
         self._apply_column_order(self.COLUMN_ORDER)
         self._apply_column_choice()
         for col, width in self.COLUMN_WIDTHS.items():
-            self._set_width(col, width)
-        self._widths_before = None
-        self._fit_columns()
+            self.tree.header().resizeSection(col, width)
         self.tree.horizontalScrollBar().setValue(0)
         self._shape = None                  # the rows, as the model holds them
         self.refresh()
-
-    def _set_width(self, col: int, width: int) -> None:
-        """Resize a column as the program, not the user: not remembered,
-        and it does not stop the columns following the panel."""
-        self._fitting = True
-        try:
-            self.tree.header().resizeSection(col, int(width))
-        finally:
-            self._fitting = False
 
     def eventFilter(self, obj, ev) -> bool:
         from PySide6.QtCore import QEvent
         if obj is self.tree.header() and ev.type() in (QEvent.Resize,
                                                        QEvent.Show):
             self._place_columns_button()
-        if obj is self.tree.header().viewport():
-            if ev.type() == QEvent.MouseButtonPress:
-                self._header_pressed = True
-            elif ev.type() == QEvent.MouseButtonRelease:
-                self._header_pressed = False
         return super().eventFilter(obj, ev)
-
-    def _on_section_resized(self, col, old, new) -> None:
-        """A column edge dragged by the user: from now on the columns keep
-        the widths given them. Only with the mouse down on the header — not
-        what Qt does on its own — and not one being shown or hidden."""
-        self._place_columns_button()        # it follows its column
-        if (self._fitting or not self._header_pressed or not old
-                or not new):
-            return
-        head = self.tree.header()
-        getattr(self, "_grown", {}).pop(col, None)   # the user's width now
-        if self._auto_fit:
-            self._auto_fit = False
-            # The widths are the user's now: kept from this drag on (the
-            # header's own saver ran before this, while they were not).
-            from core.settings import settings as QSettings
-            QSettings().setValue("browser/model_columns", ",".join(
-                str(head.sectionSize(c)) for c in (COL_NAME, COL_TYPE)))
-
-    #: Who gives up room, and down to how much, when the columns do not fit.
-    #: Name stops at ``_name_floor``: below it the tree's indent and icons
-    #: leave no room for the name itself and the rows read as nothing — a
-    #: short scroll bar is the lesser evil.
-    _FIT_STEPS = ((COL_TYPE, 80), (COL_IFC, 70), (COL_MATERIAL, 70),
-                  (COL_NAME, None), (COL_LAYER, 60), (COL_COPIES, 45),
-                  (COL_TYPE, 45), (COL_LAYER, 45), (COL_MATERIAL, 45),
-                  (COL_IFC, 45), (COL_COPIES, 35))
-
-    def _name_floor(self) -> int:
-        """The narrowest the Name column may get: the indent of the
-        document row and of a top-level group, the icon, and some ten
-        characters of the name."""
-        icon = self.tree.iconSize().width()
-        return max(110, self.tree.indentation() * 2
-                   + (icon if icon > 0 else 16) + 84)
-
-    def _fit_columns(self) -> None:
-        """Every column shown shares the panel's width, without a scroll
-        bar — Material, Copies and IFC class too, as they are turned on.
-        They give up room in ``_FIT_STEPS`` order: first what reads well
-        shorter (Type, IFC class, Material), then Name, then all of them
-        down to a last floor, where a long text ends in «…». Only while
-        the user has not sized the columns by hand."""
-        if not self._auto_fit:
-            return
-        self._grown = {}                    # starting over from the defaults
-        head = self.tree.header()
-        room = self.tree.viewport().width()
-        if room <= 0:
-            return
-        shown = [c for c in range(head.count()) if not head.isSectionHidden(c)]
-        # The one that takes what room is left: the last.
-        last = max(shown, key=head.visualIndex)
-        # The eye, the padlock and the target are fixed: their real size
-        # (the style's minimum section can be wider than the 26 px asked).
-        widths = {c: (head.sectionSize(c) if c in self._FIXED
-                      else self.COLUMN_WIDTHS.get(c, head.sectionSize(c)))
-                  for c in shown}
-        over = sum(widths.values()) - room
-        for c, floor in self._FIT_STEPS:
-            if over <= 0:
-                break
-            if floor is None:
-                floor = self._name_floor()
-            # Qt never draws a section narrower than the style's minimum:
-            # a floor below it is room counted that never comes.
-            floor = max(floor, head.minimumSectionSize())
-            if c in widths:
-                give = min(over, max(0, widths[c] - floor))
-                widths[c] -= give
-                over -= give
-        # Still over: the floors above assume the three marks take
-        # 26 px, and a style whose narrowest section is wider (38 px with
-        # Fusion here) leaves 13 px of scroll bar with every column on —
-        # the short columns go down to 40 px, still a readable «…».
-        if over > 0:
-            least = max(head.minimumSectionSize(), 40)
-            for c in (COL_COPIES, COL_TYPE, COL_LAYER, COL_MATERIAL, COL_IFC):
-                if over <= 0:
-                    break
-                if c in widths:
-                    give = min(over, max(0, widths[c] - least))
-                    widths[c] -= give
-                    over -= give
-        # The last one too: the header stretches it over any room left,
-        # but never below the width it was given.
-        for c, width in widths.items():
-            if c in self._FIXED:
-                continue
-            if c == last:
-                width = max(width, room - sum(
-                    w for k, w in widths.items() if k != last))
-            if head.sectionSize(c) != width:
-                self._set_width(c, width)
-        self._grow_columns()
-
-    #: How wide a column may grow to show its contents whole.
-    _GROW_CAP = {COL_NAME: 340, COL_TYPE: 170, COL_LAYER: 160,
-                 COL_MATERIAL: 180, COL_COPIES: 70, COL_IFC: 170}
-
-    def _wanted_width(self, col: int) -> int:
-        """What ``col`` needs to show its title and the rows on screen
-        whole (the Name column with their indent), up to ``_GROW_CAP``."""
-        head = self.tree.header()
-        want = max(self.tree.sizeHintForColumn(col),
-                   head.sectionSizeFromContents(col).width()) + 6
-        if col == COL_MATERIAL:
-            want += _MaterialCellDelegate.ARROW    # the ▾ beside the name
-        return min(want, self._GROW_CAP.get(col, want))
-
-    def _grow_columns(self) -> None:
-        """Room to spare — the panel made wider — goes to the columns cut
-        short, Name first, each up to what shows its contents whole; the
-        last column keeps the rest. Columns already whole are left as they
-        are, sized by hand or not. Programme widths: not remembered.
-
-        What was grown is remembered (``_grown``: the width before) and
-        given back first each time, so a panel made narrow again returns
-        the columns to the user's widths instead of keeping the growth."""
-        head = self.tree.header()
-        grown = getattr(self, "_grown", None) or {}
-        for c, base in grown.items():
-            if not head.isSectionHidden(c) and head.sectionSize(c) != base:
-                self._set_width(c, base)
-        self._grown = {}
-        room = self.tree.viewport().width()
-        shown = [c for c in range(head.count()) if not head.isSectionHidden(c)]
-        if room <= 0 or len(shown) < 2:
-            return
-        last = max(shown, key=head.visualIndex)
-        others = [c for c in shown if c != last]
-        floor_last = self._MIN_WIDTH.get(last, 60)
-        free = room - sum(head.sectionSize(c) for c in others) - floor_last
-        for c in (COL_NAME, COL_TYPE, COL_LAYER, COL_MATERIAL, COL_COPIES,
-                  COL_IFC):
-            if free <= 0:
-                break
-            if c not in others or c in self._FIXED:
-                continue
-            size = head.sectionSize(c)
-            grow = min(free, max(0, self._wanted_width(c) - size))
-            if grow:
-                self._grown[c] = size
-                self._set_width(c, size + grow)
-                free -= grow
-        # The last column: what is left (the header only ever stretches it
-        # wider, so a narrower share is set here).
-        rest = room - sum(head.sectionSize(c) for c in others)
-        if last not in self._FIXED and rest >= floor_last \
-                and head.sectionSize(last) != rest:
-            self._set_width(last, rest)
-
-    def resizeEvent(self, ev) -> None:
-        super().resizeEvent(ev)
-        if not getattr(self, "_fit_queued", False):
-            from PySide6.QtCore import QTimer
-            self._fit_queued = True
-
-            def fit() -> None:
-                self._fit_queued = False
-                if self._auto_fit:
-                    self._fit_columns()     # shares, then grows
-                else:
-                    self._grow_columns()    # the user's widths, cut ones grown
-            QTimer.singleShot(0, fit)
 
     def _hidden_columns(self) -> set:
         from core.settings import settings as QSettings
@@ -3258,100 +3004,6 @@ class OutlinerPanel(QWidget):
                 self._save_column_order()
         self._apply_column_choice()
         self._place_columns_button()
-        if self._auto_fit:
-            # Following the panel: every column shown shares it.
-            self._fit_columns()
-            self._scroll_to_column(col if shown else COL_NAME)
-        elif shown:
-            self._make_room_for(col)
-        else:
-            self._give_room_back()
-
-    #: How narrow each column may get to make room for another one.
-    _MIN_WIDTH = {COL_NAME: 110, COL_TYPE: 70, COL_LAYER: 60,
-                  COL_MATERIAL: 70, COL_COPIES: 45, COL_IFC: 70}
-    #: The optional columns, which the others make room for.
-    _EXTRA = (COL_MATERIAL, COL_COPIES, COL_IFC)
-
-    def _make_room_for(self, col: int) -> None:
-        """A column turned on lands past the right edge of a sidebar-wide
-        panel: Name, Type and Layer already fill it, so Material, Copies and
-        IFC class seemed not to appear at all. The Name column gives up
-        room first, then the others down to a readable width, and the view
-        scrolls to the new column if it still does not fit. The widths
-        before the first such squeeze are kept, to give back."""
-        head = self.tree.header()
-        room = self.tree.viewport().width()
-        if room <= 0:
-            return
-        shown = [c for c in range(head.count()) if not head.isSectionHidden(c)]
-        if getattr(self, "_widths_before", None) is None:
-            self._widths_before = {c: head.sectionSize(c)
-                                   for c in (COL_NAME, COL_TYPE, COL_LAYER)}
-        over = sum(head.sectionSize(c) for c in shown) - room
-        for c in (COL_NAME, COL_TYPE, COL_LAYER) + self._EXTRA:
-            if over <= 0:
-                break
-            if c not in shown or c == col:
-                continue
-            size = head.sectionSize(c)
-            give = min(over, max(0, size - self._MIN_WIDTH[c]))
-            if give:
-                self._set_width(c, size - give)
-                over -= give
-        self._scroll_to_column(col)
-
-    def _scroll_to_column(self, col: int) -> None:
-        """Bring ``col`` into view once the tree has laid the new widths
-        out (the scroll bar's range is stale until then)."""
-        from PySide6.QtCore import QTimer
-
-        def go() -> None:
-            head = self.tree.header()
-            bar = self.tree.horizontalScrollBar()
-            room = self.tree.viewport().width()
-            left = head.sectionViewportPosition(col)
-            right = left + head.sectionSize(col)
-            if col == COL_NAME:
-                bar.setValue(0)         # the names, with the eye before
-            elif left < 0:
-                bar.setValue(max(0, bar.value() + left))
-            elif right > room:
-                bar.setValue(min(bar.maximum(),
-                                 bar.value() + min(left, right - room)))
-        self.tree.updateGeometries()
-        go()
-        QTimer.singleShot(0, go)
-
-    def _give_room_back(self) -> None:
-        """A column turned off: with none of the optional ones left, the
-        others go back to the widths they had before making room; with some
-        left, the room freed goes to Name first, up to that width. The last
-        column shown is left out of the sums: the header stretches it over
-        whatever is left, so its size says nothing about the room there is."""
-        head = self.tree.header()
-        before = getattr(self, "_widths_before", None) or {}
-        shown = [c for c in range(head.count()) if not head.isSectionHidden(c)]
-        if not any(c in shown for c in self._EXTRA):
-            for c, width in before.items():
-                self._set_width(c, width)
-            self._widths_before = None
-        elif shown:
-            room = self.tree.viewport().width()
-            last = max(shown, key=head.visualIndex)
-            free = room - sum(head.sectionSize(c) for c in shown
-                              if c != last) - self._MIN_WIDTH.get(last, 0)
-            for c in (COL_NAME, COL_TYPE, COL_LAYER):
-                if free <= 0:
-                    break
-                if c not in shown or c == last:
-                    continue
-                size = head.sectionSize(c)
-                grow = min(free, max(0, before.get(c, size) - size))
-                if grow:
-                    self._set_width(c, size + grow)
-                    free -= grow
-        self._scroll_to_column(COL_NAME)
 
     def _columns_menu(self):
         """Which columns show — the Layers tab's way: the menu stays open

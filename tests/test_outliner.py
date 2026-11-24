@@ -281,20 +281,6 @@ def test_the_fill_colour_comes_from_the_styles_panel_picker():
 
 # ---- A cut's own fill, renaming planes, column widths -----------------------
 
-def test_the_name_column_width_is_the_users_and_is_remembered():
-    from PySide6.QtWidgets import QHeaderView
-    win, scene, panel = _window_with()
-    head = panel.tree.header()
-    assert head.sectionResizeMode(0) == QHeaderView.Interactive
-    panel._header_pressed = True        # a drag on the header, mouse down
-    head.resizeSection(0, 321)
-    panel._header_pressed = False
-    _close(win)
-    win2, scene2, panel2 = _window_with()
-    assert panel2.tree.header().sectionSize(0) == 321
-    _close(win2)
-
-
 # ---- 8 · What an extension says a group is ------------------------------------
 
 def test_an_extension_names_its_groups_in_the_type_column():

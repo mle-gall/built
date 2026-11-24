@@ -315,8 +315,7 @@ def test_the_order_menu_offers_the_two_ways_and_ticks_the_one_in_use():
         menu = QMenu(panel)
         panel._fill_order_actions(menu)
         acts = {a.text(): a for a in menu.actions()}
-        assert set(acts) == {"Document order", "Order by layer",
-                             "Order by name"}
+        assert set(acts) == {"Document order", "Order by layer"}
         assert acts["Document order"].isChecked()
         assert not acts["Order by layer"].isChecked()
 
@@ -408,8 +407,7 @@ def test_the_bar_has_an_order_button_with_the_drawn_icon():
     try:
         b = panel._order_btn
         assert b is not None and b.parent() is panel
-        assert b.toolTip() == ("Order the rows: as the model holds them, "
-                               "by layer or by name")
+        assert b.toolTip() == "Order the rows: as the model holds them or by layer"
         assert b.icon().cacheKey() == node_icon("layers_order").cacheKey()
         from views.icons import tool_icon
         assert not tool_icon("layers_order").isNull()
