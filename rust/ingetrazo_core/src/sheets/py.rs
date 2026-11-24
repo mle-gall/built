@@ -102,5 +102,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(super::pdf::sheet_pdf, m)?)?;
     m.add_function(wrap_pyfunction!(super::dxf::sheet_dxf, m)?)?;
     m.add_function(wrap_pyfunction!(super::raster::sheet_image, m)?)?;
+    m.add_function(wrap_pyfunction!(super::create::sheet_new_item, m)?)?;
     Ok(())
 }

@@ -8,6 +8,7 @@
 //! - `page`: the page display list the renderer paints.
 
 pub mod camera;
+pub mod create;
 pub mod display;
 pub mod drawing;
 pub mod dxf;

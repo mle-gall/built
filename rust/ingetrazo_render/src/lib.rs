@@ -2110,6 +2110,10 @@ impl Renderer {
         if let Some(ui) = self.ui.as_mut() { ui.page.set_lines(key, segs, kinds); }
         Ok(())
     }
+    /// Open the page's text editor on text item ``key``.
+    fn page_edit_text(&mut self, key: u64) {
+        if let Some(ui) = self.ui.as_mut() { ui.page_edit_text(key); }
+    }
     fn page_frame_forget(&mut self, key: u64) {
         if let Some(ui) = self.ui.as_mut() { ui.page.forget_content(key); }
     }

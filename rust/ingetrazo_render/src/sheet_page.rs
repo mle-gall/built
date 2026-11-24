@@ -94,6 +94,11 @@ impl Snapshot {
     }
 }
 
+/// The tools a click or a drag on the page places an item with
+/// (ingetrazo_core sheets::create PLACE_TOOLS).
+pub const PLACE_TOOLS: [&str; 13] = ["vista", "texto", "llamada", "cajetin", "escala", "norte", "leyenda", "perfil",
+                                     "linea", "flecha", "terreno", "rect", "elipse"];
+
 /// What a frame shows: its line drawing, paper mm in the frame, with a
 /// line class each (0 edge, 1 profile, 2 cut, 3 hidden), or a picture.
 #[derive(Default)]
@@ -150,6 +155,10 @@ pub struct Page {
     style_clip: Option<(String, serde_json::Map<String, J>)>,
     /// A passing word for the bottom bar (style copied, grouped…).
     flash: Option<(&'static str, std::time::Instant)>,
+    /// A text item being typed in on the page: its key and the words so far.
+    pub editing: Option<(u64, String)>,
+    /// The editor wants the keyboard (it just opened).
+    pub edit_focus: bool,
 }
 
 fn snap(value: f64, targets: &[f64]) -> Option<f64> {
@@ -188,6 +197,73 @@ impl Page {
         }
         self.raw = text;
         self.doc = Some(doc);
+    }
+    /// Start typing in text item `key` (its words as the document has them).
+    pub fn edit_text(&mut self, key: u64) {
+        let text = self.item(key).and_then(|i| i.data["fields"]["text"].as_str().map(str::to_string));
+        if let Some(t) = text {
+            self.selection = vec![key];
+            self.editing = Some((key, t));
+            self.edit_focus = true;
+        }
+    }
+    /// The words typed: one edit of the document, unless nothing changed.
+    pub fn commit_text(&mut self, out: &mut Vec<String>) {
+        if let Some((key, text)) = self.editing.take() {
+            let was = self.item(key).and_then(|i| i.data["fields"]["text"].as_str().map(str::to_string));
+            if was.as_deref() != Some(text.as_str()) {
+                out.push(format!("sheets:set\u{1f}{key}\u{1f}{}", serde_json::json!({"text": text})));
+            }
+        }
+    }
+    /// The words over the item, at its size, on paper; leaving the field
+    /// (or ⌘↩, or a press on the page) is one edit, Esc puts them back.
+    pub fn text_editor(&mut self, ctx: &egui::Context, out: &mut Vec<String>) {
+        let Some(key) = self.editing.as_ref().map(|e| e.0) else { return };
+        let Some((rect, size)) = self.text_box(key) else {
+            self.editing = None;
+            return;
+        };
+        let focus = std::mem::take(&mut self.edit_focus);
+        let (mut commit, mut cancel) = (false, false);
+        egui::Area::new(egui::Id::new("sheet_text_editor"))
+            .fixed_pos(rect.min)
+            .order(egui::Order::Foreground)
+            .show(ctx, |ui| {
+                let Some((_, text)) = self.editing.as_mut() else { return };
+                egui::Frame::new().fill(Color32::WHITE).stroke(Stroke::new(1.0_f32, ACCENT)).show(ui, |ui| {
+                    let edit = egui::TextEdit::multiline(text)
+                        .font(FontId::proportional(size))
+                        .text_color(INK_ON_PAPER)
+                        .background_color(Color32::WHITE)
+                        .frame(false)
+                        .margin(egui::Margin::ZERO)
+                        .desired_width(rect.width().max(60.0))
+                        .desired_rows(1);
+                    let resp = ui.add(edit);
+                    if focus {
+                        resp.request_focus();
+                    }
+                    let (escape, submit) = ui.input(|i| (i.key_pressed(egui::Key::Escape),
+                                                         i.key_pressed(egui::Key::Enter) && i.modifiers.command));
+                    if escape {
+                        cancel = true;
+                    } else if submit || (resp.lost_focus() && !focus) {
+                        commit = true;
+                    }
+                });
+            });
+        if cancel {
+            self.editing = None;
+        } else if commit {
+            self.commit_text(out);
+        }
+    }
+    /// The screen box a text item is typed in, and its type size in points.
+    pub fn text_box(&self, key: u64) -> Option<(Rect, f32)> {
+        let i = self.item(key)?;
+        let size = i.data["fields"]["size_pt"].as_f64().unwrap_or(14.0) * 25.4 / 72.0 * 0.75;
+        Some((self.screen_rect(self.rect_of(i)), (size as f32 * self.zoom).max(6.0)))
     }
     pub fn clear(&mut self) {
         let mut freed = std::mem::take(&mut self.freed);
@@ -241,6 +317,7 @@ impl Page {
             (_, "pan") => "Drag to move the sheet. Scroll pans, ⌘-scroll zooms.",
             (_, "zoom") | (_, "zoom_ventana") => "Click to zoom in, ⌥-click to zoom out.",
             (_, "vista") => "Drag a rectangle to place a model view.",
+            (_, t) if PLACE_TOOLS.contains(&t) => "Click to place it, or drag its box.",
             _ if !self.selection.is_empty() => "Drag to move, the handles resize. Arrows nudge 1 mm, ⇧ 10 mm, ⌥ 0.1 mm. Esc clears.",
             _ => "Click an item to select it, ⇧-click to add. Drag to move it.",
         }
@@ -366,6 +443,10 @@ impl Page {
         if self.doc.is_none() {
             return;
         }
+        if matches!(kind, "press" | "double") && self.editing.is_some() {
+            // A press elsewhere on the page ends the typing.
+            self.commit_text(out);
+        }
         let tool = self.tool.as_str();
         match kind {
             "leave" => {
@@ -373,6 +454,16 @@ impl Page {
                 self.cursor = "";
             }
             "press" | "double" => {
+                if kind == "double" && button == 1 && !PLACE_TOOLS.contains(&tool) {
+                    // A text block: typed in where it is.
+                    let mm = self.to_mm(p);
+                    if let Some(k) = self.hit(mm) {
+                        if self.item(k).is_some_and(|i| i.kind == "text" && !i.locked) {
+                            self.edit_text(k);
+                            return;
+                        }
+                    }
+                }
                 if button == 3 || tool == "pan" {
                     self.drag = Some(Drag::Pan { last: p });
                     self.cursor = "grabbing";
@@ -386,7 +477,7 @@ impl Page {
                     return;
                 }
                 let mm = self.to_mm(p);
-                if tool == "vista" {
+                if PLACE_TOOLS.contains(&tool) {
                     self.drag = Some(Drag::Place { from: mm, to: mm });
                     return;
                 }
@@ -466,7 +557,7 @@ impl Page {
                     self.hover = self.hit(self.to_mm(p));
                     self.cursor = match (tool, self.handle_at(p)) {
                         ("pan", _) => "grab",
-                        ("vista", _) => "crosshair",
+                        (t, _) if PLACE_TOOLS.contains(&t) => "crosshair",
                         ("zoom" | "zoom_ventana", _) => "zoom",
                         (_, Some((_, h))) => Self::cursor_for_handle(h),
                         _ if self.hover.is_some_and(|k| self.selection.contains(&k)) => "move",
@@ -507,8 +598,8 @@ impl Page {
                         }
                     }
                     Some(Drag::Place { from, to }) => {
-                        out.push(format!("sheets:place\u{1f}{:.3}\u{1f}{:.3}\u{1f}{:.3}\u{1f}{:.3}",
-                                         from[0], from[1], to[0], to[1]));
+                        out.push(format!("sheets:place\u{1f}{:.3}\u{1f}{:.3}\u{1f}{:.3}\u{1f}{:.3}\u{1f}{}",
+                                         from[0], from[1], to[0], to[1], self.tool));
                     }
                     _ => {}
                 }
@@ -698,7 +789,8 @@ impl Page {
             let sy = self.to_screen(0.0, *y).y;
             painter.hline(paper.x_range(), sy, Stroke::new(1.0_f32, guide));
         }
-        for item in doc.items.iter().filter(|i| !i.hidden) {
+        let typing = self.editing.as_ref().map(|e| e.0);
+        for item in doc.items.iter().filter(|i| !i.hidden && Some(i.key) != typing) {
             let r = self.rect_of(item);
             let rect = self.screen_rect(r);
             match item.kind.as_str() {
@@ -792,7 +884,8 @@ mod tests {
         let mut p = Page { tool: "select".into(), ..Default::default() };
         p.set(r#"{"key":7,"size":[420,297],"margin":10,"border":{"on":false},"guides":{"v":[100],"h":[]},
             "items":[{"key":1,"kind":"frame","rect":[20,20,190,150],"locked":false,"hidden":false,"editable":true,"frame":{}},
-                     {"key":2,"kind":"text","rect":[20,190,180,6],"locked":false,"hidden":false,"editable":true,"text":{}},
+                     {"key":2,"kind":"text","rect":[20,190,180,6],"locked":false,"hidden":false,"editable":true,"text":{},
+                      "fields":{"text":"Planta","size_pt":14}},
                      {"key":3,"kind":"frame","rect":[230,20,150,150],"locked":true,"hidden":false,"editable":true,"frame":{}}]}"#.into());
         p.zoom = 2.0;
         p.origin = pos2(100.0, 50.0);
@@ -879,7 +972,7 @@ mod tests {
         p.pointer("press", at(&p, 300.0, 200.0), 1, 0, &mut out);
         p.pointer("move", at(&p, 380.0, 260.0), 1, 0, &mut out);
         p.pointer("release", at(&p, 380.0, 260.0), 1, 0, &mut out);
-        assert_eq!(out, vec!["sheets:place\u{1f}300.000\u{1f}200.000\u{1f}380.000\u{1f}260.000".to_string()]);
+        assert_eq!(out, vec!["sheets:place\u{1f}300.000\u{1f}200.000\u{1f}380.000\u{1f}260.000\u{1f}vista".to_string()]);
         out.clear();
         p.set_selection(vec![2]);
         assert!(p.key("ArrowRight", 4, &mut out));
@@ -898,7 +991,7 @@ mod tests {
         assert!(a.starts_with("sheets:set_many\u{1f}1\u{1f}{\"group_id\":\"") && a.contains("\u{1f}2\u{1f}"), "{a}");
         // The document says they are grouped: a click on one takes both.
         let grouped = p.raw.replacen("\"editable\":true,\"frame\":{}}", "\"editable\":true,\"frame\":{},\"fields\":{\"group_id\":\"g\",\"style\":\"vectorial\"}}", 1)
-            .replace("\"text\":{}}", "\"text\":{},\"fields\":{\"group_id\":\"g\"}}");
+            .replace("\"size_pt\":14}", "\"size_pt\":14,\"group_id\":\"g\"}");
         p.set(grouped);
         p.set_selection(vec![]);
         let q = at(&p, 50.0, 50.0);
@@ -916,6 +1009,25 @@ mod tests {
         assert!(p.command("paste_style", &mut out));
         assert!(out.is_empty());
         assert!(p.hint().contains("another kind"));
+    }
+
+    #[test]
+    fn a_double_click_types_in_a_text_and_an_item_tool_places_its_kind() {
+        let mut p = page();
+        let mut out = vec![];
+        p.pointer("double", at(&p, 30.0, 192.0), 1, 0, &mut out);
+        assert_eq!(p.editing, Some((2, "Planta".to_string())));
+        p.commit_text(&mut out);
+        assert!(out.is_empty(), "unchanged words are no edit");
+        p.edit_text(2);
+        p.editing.as_mut().unwrap().1.push_str(" baja");
+        p.commit_text(&mut out);
+        assert_eq!(out, vec![format!("sheets:set\u{1f}2\u{1f}{}", serde_json::json!({"text": "Planta baja"}))]);
+        out.clear();
+        p.tool = "escala".into();
+        p.pointer("press", at(&p, 300.0, 250.0), 1, 0, &mut out);
+        p.pointer("release", at(&p, 300.0, 250.0), 1, 0, &mut out);
+        assert_eq!(out, vec!["sheets:place\u{1f}300.000\u{1f}250.000\u{1f}300.000\u{1f}250.000\u{1f}escala".to_string()]);
     }
 
     #[test]
