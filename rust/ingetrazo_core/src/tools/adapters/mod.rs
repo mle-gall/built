@@ -70,6 +70,7 @@ mod rotate_host_api;
 mod rotate_tool_api;
 mod rotated_rectangle_tool_api;
 mod scale;
+mod section_plane_tool_api;
 mod select_tool_api;
 mod solid_tool_api;
 mod tape_host_api;
@@ -201,6 +202,10 @@ fn registration(module: &str, name: &str) -> Option<(&'static [Method], &'static
             (eraser_host_api::METHODS, stringify!(eraser_host_api))
         }
         ("tools.paste_host", "PasteHost") => (paste_host_api::METHODS, stringify!(paste_host_api)),
+        ("tools.section_host", "SectionPlaneTool") => (
+            section_plane_tool_api::METHODS,
+            stringify!(section_plane_tool_api),
+        ),
         ("tools.pushpull", "PushPullTool") => (pushpull::METHODS, stringify!(pushpull)),
         _ => return None,
     })
