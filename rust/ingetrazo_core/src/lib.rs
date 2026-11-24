@@ -177,6 +177,10 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pushscan::scan_parallel_overlapping, m)?)?;
     m.add_function(wrap_pyfunction!(pushscan::scan_lateral_exit, m)?)?;
     m.add_function(wrap_pyfunction!(pushscan::scan_inward_limit, m)?)?;
+    m.add_function(wrap_pyfunction!(pushscan::scan_classify_base, m)?)?;
+    m.add_function(wrap_pyfunction!(pushscan::scan_sweeps_free_sheet, m)?)?;
+    m.add_function(wrap_pyfunction!(pushscan::scan_surface_normal, m)?)?;
+    m.add_function(wrap_pyfunction!(pushscan::scan_cap_passes_wall, m)?)?;
     m.add_function(wrap_pyfunction!(pushscan::scan_vertices_in_boxes, m)?)?;
     m.add_function(wrap_pyfunction!(pushscan::scan_cracked_edges, m)?)?;
     m.add_function(wrap_pyfunction!(pushscan::scan_faces_meeting_rings, m)?)?;
