@@ -446,7 +446,8 @@ impl AnnotationCanvas {
         background: &Bound<'py, PyBytes>,
     ) -> PyResult<Bound<'py, PyBytes>> {
         let src = background.as_bytes();
-        if src.len() as u64 != u64::from(self.size.width()) * u64::from(self.size.height()) * 4 {
+        let pixels = u64::from(self.size.width()) * u64::from(self.size.height());
+        if pixels.checked_mul(4) != Some(src.len() as u64) {
             return Err(PyValueError::new_err("invalid capture pixel length"));
         }
         let Some(layer) = &self.overlay else {

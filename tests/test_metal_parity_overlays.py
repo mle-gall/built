@@ -277,3 +277,10 @@ def test_capture_marks_composite_over_straight_alpha_and_escape_label_text():
     np.testing.assert_allclose(pixels[2, 2], [170, 0, 85, 192], atol=1)
     assert pixels[:, 10:, 1].max() > 160
     assert pixels[35, 95].tolist() == list(base[:4])
+
+
+def test_capture_rejects_impossible_pixel_dimensions_without_allocating():
+    from ingetrazo_render import AnnotationCanvas
+
+    with pytest.raises(ValueError):
+        AnnotationCanvas(1 << 31, 1 << 31, 800).composite(b"")
