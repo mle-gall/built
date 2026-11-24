@@ -497,3 +497,23 @@ def test_la_caja_del_contenedor_sigue_a_sus_hijos():
     padre.children.remove(h2)
     scene.version += 1
     assert caja() == (10.0, 11.0), "sin el pavimento, la caja encoge"
+
+
+def test_hidden_rest_changes_index_membership_but_never_touchable_ids():
+    from types import SimpleNamespace
+    from views.document_interaction import DocumentInteraction as Controller
+    ctx, outside = object(), object()
+    child = SimpleNamespace(context=ctx, owner=None)
+    subject = SimpleNamespace(context=None, owner=ctx)
+    all_groups = [outside, ctx, child, subject]
+    view = SimpleNamespace(scene=SimpleNamespace(edit_group=ctx),
+                           _placements=lambda: all_groups)
+    view._context_placements = lambda: Controller._context_placements(view)
+    view._owner_of = lambda group: Controller._owner_of(view, group)
+    lazy = (None, None, None, None, {id(child)})
+    assert Controller._pick_candidates(view, False, lazy) == (
+        {id(child)}, [outside], {id(child): (1, child)})
+    assert Controller._pick_candidates(view, True, lazy) == (
+        {id(child)}, [], {id(child): (0, child)})
+    view.scene.edit_group = None
+    assert Controller._context_placements(view) is all_groups

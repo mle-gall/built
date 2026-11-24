@@ -12978,55 +12978,12 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
                 and self._edit_rest_mode == "hide")
 
     def _pick_candidates(self, oculto, lazy):
-        """What the pick index takes from the placements: the ids the
-        context lets you touch, the fixed placements in order, and the lazy
-        ones as ``id → (position, group)`` (see ``_pick_index``)."""
-        scene = self.scene
-        del_contexto = self._context_placements()
-        tocables = {id(g) for g in del_contexto}
-        # What the current context lets you TOUCH: the whole scene at the
-        # root, the children of the group you are inside otherwise. This
-        # used to be `if scene.edit_group is None`, which took EVERY group
-        # out of the index while you were inside one — so a group's children
-        # were drawn and could not be clicked, and «todo está combinado»
-        # (Marco, 2026-09-11).
-        # What the snap engine may LAND ON is the whole model. Inside a
-        # group the snap still infers against the rest — faded, but every
-        # corner and edge of it is a reference. Holding only the context
-        # here meant no green dot on the pavement while moving a nested
-        # group onto it («me debería salir un punto verde de la referencia»,
-        # Marco, 2026-09-11). So the index carries every placement and the
-        # context decides SELECTABILITY, not membership: the rest occludes
-        # and snaps, and cannot be picked. What the open group itself owns is
-        # already here as the loose part. «Hide» is the exception — what is
-        # not drawn is not there.
-        ctx = scene.edit_group
-        if ctx is None or oculto:
-            candidatos = del_contexto
-        else:
-            candidatos = [g for g in self._placements()
-                          if g is not ctx and self._owner_of(g) is not ctx]
-        lazy_ids = lazy[4] if lazy is not None else ()
-        fixed = [g for g in candidatos if id(g) not in lazy_ids]
-        lazy_pos = {id(g): (i, g) for i, g in enumerate(candidatos)
-                    if id(g) in lazy_ids}
-        return tocables, fixed, lazy_pos
+        from ingetrazo_render import pick_candidates
+        return pick_candidates(self, oculto, lazy)
 
     def _context_placements(self):
-        """The placements the CURRENT context lets you touch.
-
-        At the root that is the whole scene. Inside a group it is its
-        children and their subtrees — never the model around it, which is
-        exactly why you cannot grab the rest of the drawing while you are
-        inside a group.
-        """
-        ctx = self.scene.edit_group
-        todo = self._placements()
-        if ctx is None:
-            return todo
-        return [g for g in todo
-                if getattr(g, "context", None) is ctx
-                and getattr(g, "owner", None) is not ctx]
+        from ingetrazo_render import context_placements
+        return context_placements(self)
 
     def _owner_of(self, group):
         """The object a click on ``group`` must select: a nested placement
