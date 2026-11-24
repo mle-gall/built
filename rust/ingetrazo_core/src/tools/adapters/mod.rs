@@ -46,6 +46,7 @@ mod eye_host_api;
 mod fillet_host_api;
 mod first_person_host_api;
 mod move_host_api;
+mod offset_host_api;
 mod position_camera_host_api;
 mod pushpull;
 mod rotate_host_api;
@@ -113,6 +114,9 @@ fn registration(module: &str, name: &str) -> Option<(&'static [Method], &'static
             first_person_host_api::METHODS,
             stringify!(first_person_host_api),
         ),
+        ("tools.offset_host", "OffsetHost") => {
+            (offset_host_api::METHODS, stringify!(offset_host_api))
+        }
         ("tools.pushpull", "PushPullTool") => (pushpull::METHODS, stringify!(pushpull)),
         _ => return None,
     })
@@ -194,6 +198,7 @@ pub fn register_tool_adapter<'py>(cls: &Obj<'py>) -> Reply<'py> {
 }
 
 mod move_functions;
+mod offset_functions;
 mod selection;
 mod walk_functions;
 #[pyfunction]
@@ -205,6 +210,7 @@ pub fn register_tool_functions(namespace: &Bound<'_, PyDict>) -> PyResult<()> {
         .extract()?;
     let methods = match module.as_str() {
         "tools.select_host" => selection::METHODS,
+        "tools.offset_host" => offset_functions::METHODS,
         "tools.move_host" => move_functions::METHODS,
         "tools.walkthrough_host" => walk_functions::METHODS,
         _ => {
