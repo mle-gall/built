@@ -21,7 +21,7 @@ _app = QApplication.instance() or QApplication([])
 
 from core.camera import OrbitCamera
 from tools.base import ToolContext
-from tools import walkthrough as wt
+from tools import walkthrough as wt, walkthrough_host
 from tools.walkthrough import (LookAroundTool, PositionCameraTool, WalkTool,
                                eye_height)
 
@@ -310,10 +310,10 @@ def test_wall_feelers_ask_only_as_far_as_the_step_reaches(monkeypatch):
             asked.append(reach)
             return None
 
-    assert not wt._blocked(Stub(), V(0, 0, 1.68), V(0.1, 0, 0), 1.68,
+    assert not walkthrough_host._blocked(Stub(), V(0, 0, 1.68), V(0.1, 0, 0), 1.68,
                            0.4, 0.5)
     assert asked == [pytest.approx(0.5), pytest.approx(0.5)]
     asked.clear()
-    monkeypatch.setattr(wt, "_NO_WALK_REACH", True)
-    wt._blocked(Stub(), V(0, 0, 1.68), V(0.1, 0, 0), 1.68, 0.4, 0.5)
+    monkeypatch.setattr(walkthrough_host, "_NO_WALK_REACH", True)
+    walkthrough_host._blocked(Stub(), V(0, 0, 1.68), V(0.1, 0, 0), 1.68, 0.4, 0.5)
     assert asked == [None, None]

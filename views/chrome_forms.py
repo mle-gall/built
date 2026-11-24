@@ -41,7 +41,7 @@ from core.i18n import tr
 _seq = itertools.count(1)
 
 #: Dialog field flags (ui/dialog.rs).
-DISABLED, FOCUS, MULTILINE, PASSWORD, FULL = 1, 2, 4, 8, 16
+DISABLED, FOCUS, MULTILINE, PASSWORD, FULL, COMMIT_ON_BLUR = 1, 2, 4, 8, 16, 32
 _ROLES = {"default": 1, "discard": 2, "cancel": 3}
 
 
@@ -58,7 +58,7 @@ class Field:
 
     def __init__(self, fid, kind, label="", value=None, *, options=(), lo=0.0, hi=0.0,
                  decimals=0, suffix="", tip="", enabled=True, visible=True, focus=False,
-                 multiline=False, password=False, full=False, row_label="", note="",
+                 multiline=False, password=False, full=False, commit_on_blur=False, row_label="", note="",
                  pick=None, filters="", fmt=None):
         self.id = str(fid)
         self.kind = kind
@@ -69,6 +69,7 @@ class Field:
         self.suffix, self.tip = suffix, tip
         self.enabled, self.visible = enabled, visible
         self.focus, self.multiline, self.password, self.full = focus, multiline, password, full
+        self.commit_on_blur = commit_on_blur
         self.row_label = row_label      # check: the left column's label
         self.note = note                # button: a note right of it
         self.pick = pick                # path: "open" | "save" | "folder"
@@ -90,6 +91,8 @@ class Field:
             f |= PASSWORD
         if self.full:
             f |= FULL
+        if self.commit_on_blur:
+            f |= COMMIT_ON_BLUR
         return f
 
 

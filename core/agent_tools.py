@@ -339,7 +339,38 @@ BUILTIN_TOOLS.append(dict(
         "plane": {"type": "array", "description": "Source texture plane [normal, signed offset]."}
     }, oneOf=[{"required": ["placement"]}, {"required": ["faces"]}])))
 
+_PATH_POINTS = {"type": "array", "items": _VECTOR, "minItems": 2}
+_INDEX = {"type": "integer", "minimum": 0}
+_BINDING = {"type": ["object", "null"]}
 for _name, _desc, _fields, _required in (
+    ("follow_me", "Sweep an open-mesh face along a path in metres.",
+     {"face": _TEXT, "path": _PATH_POINTS, "closed": {"type": "boolean"}}, ["face", "path"]),
+    ("solid_operation", "Combine sibling solids in pick order. For subtract and trim, put the cutter first.",
+     {"operation": {"enum": ["outer_shell", "union", "subtract", "trim", "intersect", "split"]},
+      "placements": _KEYS}, ["operation", "placements"]),
+    ("place_group", "Stamp a copy of a placement using three basis axes and a translation.",
+     {"template": _OCCURRENCE, "basis": {"type": "array", "items": _VECTOR, "minItems": 3, "maxItems": 3},
+      "offset": _VECTOR, "point": _VECTOR, "attachment": _BINDING}, ["template", "basis", "offset"]),
+    ("erase_stroke", "Erase a batch of targets in one undo step. Hide applies to edges and placements.",
+     {"hide": {"type": "boolean"}, "edges": _KEYS, "placements": _OCCURRENCES, "guides": _RECORD_INDICES,
+      "dimensions": _RECORD_INDICES, "geo_paths": _RECORD_INDICES, "text_labels": _RECORD_INDICES}, []),
+    ("add_geo_path", "Trace a geographic path through the supplied nodes.",
+     {"points": _PATH_POINTS, "closed": {"type": "boolean"}}, ["points"]),
+    ("move_geo_path_node", "Move a node using its path and node indices.",
+     {"path": _INDEX, "node": _INDEX, "point": _VECTOR}, ["path", "node", "point"]),
+    ("add_text_label", "Place a leader and label in the model.",
+     {"anchor": _VECTOR, "offset": _VECTOR, "text": _TEXT, "attachment": _BINDING}, ["anchor", "offset", "text"]),
+    ("add_dimension", "Place an aligned or axis-parallel dimension.",
+     {"a": _VECTOR, "b": _VECTOR, "offset": _VECTOR, "axis": {"enum": ["x", "y", "z", None]},
+      "attachments": {"type": "array", "items": _BINDING, "minItems": 2, "maxItems": 2}}, ["a", "b", "offset"]),
+    ("place_section_plane", "Place a section plane with an optional name and drawing symbol.",
+     {"point": _VECTOR, "normal": _VECTOR, "name": _TEXT, "symbol": _TEXT}, ["point", "normal"]),
+    ("set_north", "Set the model north angle in degrees.", {"degrees": {"type": "number"}}, ["degrees"]),
+    ("add_image_plane", "Place a reference image using its origin and two edge vectors.",
+     {"path": _TEXT, "origin": _VECTOR, "u": _VECTOR, "v": _VECTOR, "aspect": {"type": "number"},
+      "name": _TEXT}, ["path", "origin", "u", "v"]),
+    ("set_group_scale", "Set absolute scale factors along a placement's local axes.",
+     {"placement": _OCCURRENCE, "factors": _VECTOR}, ["placement", "factors"]),
     ("add_guide", "Create a construction line or guide point.", {"point": _VECTOR, "direction": _VECTOR,
                                                                    "origin": _VECTOR}, ["point"]),
     ("change_guide", "Re-aim an existing construction line.", {"index": {"type": "integer", "minimum": 0},

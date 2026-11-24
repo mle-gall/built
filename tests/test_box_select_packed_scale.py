@@ -23,7 +23,7 @@ from core.camera import OrbitCamera
 from core.group import Group
 from core.mesh import Edge, Face, Mesh, Vertex
 from core.scene import Scene
-import tools.select as select
+import tools.select_host as select
 from tools.rust_tools import SelectTool
 from views.wgpu_mesh_tools import MeshToolAccess, _viewport_class
 from views.wgpu_scene import pack_scene

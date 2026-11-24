@@ -316,7 +316,7 @@ def test_the_drag_preview_carries_the_whole_subtree():
 
 
 def test_box_selection_reaches_nested_geometry():
-    from tools.select import _box_group_fast
+    from tools.select_host import _box_group_fast
 
     scene = Scene()
     top, _ = _tree()

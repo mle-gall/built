@@ -1,1 +1,1 @@
-from tools.rust_tools import ScaleTool as ScaleTool
+from tools.rust_tools import ScaleTool

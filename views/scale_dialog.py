@@ -7,7 +7,7 @@ from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (QDialog, QFormLayout, QLineEdit, QPushButton,
                                QVBoxLayout)
 
-from core.group_scale import group_scale, scale_command
+from core.group_scale import group_scale
 from core.i18n import tr
 
 
@@ -77,10 +77,10 @@ class ScaleDialog(QDialog):
             return None
 
     def _set(self, target) -> None:
-        cmd = scale_command(self._group, target) if target else None
-        if cmd is not None:
+        from core.protocol.commands import run
+        if target:
             vp = self._window.viewport
-            vp.history.execute(cmd)
+            run(vp.history, "set_group_scale", placement=self._group.uid, factors=target)
             vp.update()
         self._refresh()      # invalid or unchanged input snaps back
 
@@ -97,5 +97,49 @@ class ScaleDialog(QDialog):
         self._set((1.0, 1.0, 1.0))
 
 
-def ask_scale(window, group) -> None:
-    ScaleDialog(window, group).exec()
+def ask_scale(window, group, done=None) -> None:
+    from views.chrome_dialogs import in_shell
+    if not in_shell():
+        ScaleDialog(window, group).exec()
+        if done:
+            done()
+        return
+    from core.protocol.commands import run
+    from views.chrome_forms import Field, Form, show
+    def refresh(form):
+        for axis, value in zip("xyz", group_scale(group)):
+            form.set(axis, _fmt(value))
+
+    def apply(form, factors):
+        vp = window.viewport
+        run(vp.history, "set_group_scale", placement=group.uid, factors=factors)
+        refresh(form)
+        vp.update()
+
+    def change(form, field, value):
+        values = list(group_scale(group))
+        try:
+            values["xyz".index(field)] = float(value.replace(",", "."))
+        except ValueError:
+            refresh(form)
+            return
+        import math
+        if all(map(math.isfinite, values)):
+            apply(form, values)
+        else:
+            refresh(form)
+
+    def action(form, key):
+        if key == "reset":
+            apply(form, (1., 1., 1.))
+        else:
+            getattr(window.viewport.history, key)()
+            refresh(form)
+            window.viewport.update()
+
+    fields = [Field(key, "edit", key.upper(), _fmt(value), commit_on_blur=True)
+              for key, value in zip("xyz", group_scale(group))]
+    fields.append(Field("reset", "button", tr("Reset scale")))
+    fields.extend([Field("undo", "button", tr("Undo")), Field("redo", "button", tr("Redo"))])
+    show(window, Form(tr("Scale"), fields, buttons=[("ok", tr("Close"))],
+                      on_change=change, on_button=action, on_done=lambda *_: done() if done else None))

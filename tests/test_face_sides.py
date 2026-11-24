@@ -146,7 +146,7 @@ def test_pintar_el_reves_con_textura_posicionada_respeta_el_plano():
     vp = _Visor(desde_abajo=True)
     f = _quad(vp.scene.mesh)
     otra = vp.scene.mesh.add_face([V(0, 0), V(4, 0), V(4, 0, 3), V(0, 0, 3)])
-    from tools.paint import _face_plane
+    from core.paint_ops import _face_plane
     PaintTool.current_texture = {"path": "x.png", "sw": 1, "sh": 1,
                                  "uvw": [1, 0, 0, 0, 0, 1, 0, 0]}
     PaintTool.current_texture_plane = _face_plane(f)

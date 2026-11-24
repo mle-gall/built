@@ -281,7 +281,7 @@ class _PickWarm:
     def __init__(self, mod, protos, grids, bounds=()):
         import queue
         import threading
-        from tools.select import _local_bounds as local_bounds
+        from tools.select_host import _local_bounds as local_bounds
         self.protos: dict = {}
         self.grids: list = []
         self.bounds: list = []

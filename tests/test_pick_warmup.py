@@ -124,7 +124,7 @@ def test_the_pointer_that_got_there_first_needs_no_warmup():
 
 
 def test_the_box_bounds_are_those_of_the_chunk_asked_alone():
-    from tools.select import _local_bounds
+    from tools.select_host import _local_bounds
     a, va = _window(lazy=True)
     try:
         va.start_pick_warmup()

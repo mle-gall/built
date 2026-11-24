@@ -587,7 +587,7 @@ def _location(env) -> list:
 def _put_north(env, value) -> None:
     """North through the command the North tool and the Shadows panel use
     (one undo step): typing «30» is one step, not one per key."""
-    from core.history import SetNorthCommand
+    from core.protocol.commands import run
     from core.sun import scene_north_deg
     from tools.north import refresh_north_display
     vp = env.vp
@@ -597,9 +597,8 @@ def _put_north(env, value) -> None:
     last = SettingsSheet.north_cmd
     if last is not None and history.undo_stack and history.undo_stack[-1] is last:
         history.undo()                  # the step being typed: replaced
-    cmd = SetNorthCommand(float(value))
-    history.execute(cmd)
-    SettingsSheet.north_cmd = cmd
+    changed = run(history, "set_north", degrees=float(value))
+    SettingsSheet.north_cmd = history.undo_stack[-1] if changed["ok"] else None
     refresh_north_display(vp)
 
 

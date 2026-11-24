@@ -312,7 +312,7 @@ class ScaleHost:
         return self._factors_for(self._ctx, viewport, *xy)
 
     def host_pick_grip(self, viewport, xy):
-        from tools.move import gather_images, gather_targets
+        from tools.move_host import gather_images, gather_targets
         ctx = self._ctx
         self._refresh_box(viewport)
         sx, sy = xy

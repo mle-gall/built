@@ -1,1 +1,1 @@
-from tools.rust_tools import RotateTool as RotateTool
+from tools.rust_tools import RotateTool

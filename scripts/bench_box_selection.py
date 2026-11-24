@@ -33,7 +33,7 @@ def main() -> None:
     if args.triangles < 1:
         parser.error('--triangles must be positive')
     sys.path.insert(0, str(args.source.resolve()))
-    from tools.select import _box_group_fast, _local_bounds
+    from tools.select_host import _box_group_fast, _local_bounds
     if args.instance:
         # Exclude module loading from the geometry scratch measurement.
         import views.viewport  # noqa: F401

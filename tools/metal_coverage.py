@@ -31,7 +31,7 @@ def registry(root):
             cls = node.args[0].func.id
             key = re.sub(r'(?<!^)(?=[A-Z])', '_', cls[:-4]).lower()
             result.setdefault(key, cls)
-    solids = ast.parse((root / 'tools/solid_tools.py').read_text())
+    solids = ast.parse((root / 'tools/solid_host.py').read_text())
     for node in solids.body:
         if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == 'SOLID_TOOLS' for t in node.targets):
             result.update((pair.elts[0].value, pair.elts[1].id) for pair in node.value.elts)
@@ -41,7 +41,14 @@ def registry(root):
 def table(root=None):
     from views.wgpu_tools import TOOL_DISPATCH
     root = Path(root) if root else Path(__file__).resolve().parents[1]
-    sources = [p.read_text() for p in (root / 'tools').glob('*.py')]
+    classes = {}
+    for file in (root / 'tools').glob('*.py'):
+        source = file.read_text()
+        lines = source.splitlines()
+        for node in ast.parse(source).body:
+            if isinstance(node, ast.ClassDef):
+                classes[node.name] = ([ast.unparse(base) for base in node.bases],
+                                      "\n".join(lines[node.lineno - 1:node.end_lineno]))
     rows = ['| Registry key | Class | Metal status | GL hooks / preview dependencies |',
             '| --- | --- | --- | --- |']
     for key, cls in registry(root).items():
@@ -49,17 +56,20 @@ def table(root=None):
         if key == 'section':
             status += ' — after the crate work'
         hooks = set()
-        for source in sources:
-            if 'class ' + cls + '(' not in source:
+        seen = set()
+        pending = [cls]
+        while pending:
+            name = pending.pop()
+            if name in seen or name not in classes:
                 continue
-            bases = re.search(r'^class ' + cls + r'\(([^)]*)\)', source, re.M)
-            mixins = bases.group(1).split(', ') if bases else []
-            if 'RustTool' in mixins and len(mixins) > 1:
-                # The viewport callbacks live on the tool's host mixin.
-                source = '\n'.join(text for text in sources for base in mixins
-                                   if base.endswith('Host') and 'class ' + base in text)
-            if 'RustTool' in mixins:
-                hooks.add('Rust state machine')
+            seen.add(name)
+            if name == "RustTool":
+                hooks.add("Rust state machine")
+                continue
+            if name == "Tool":
+                continue
+            bases, source = classes[name]
+            pending.extend(bases)
             hooks.update(re.findall(r'(?:viewport|vp)\.((?:pick_\w+|\w*preview\w*|_world_to_pixel|_pixel_to_ray))', source))
             if 'rubber_band_lines' in source:
                 hooks.add('rubber_band_lines')

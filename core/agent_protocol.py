@@ -3,6 +3,8 @@
 """The core protocol's feed and read queries for the agent bridge
 (docs/core-protocol.md §5): an agent names faces, edges and vertices by
 ``(mesh key, element key)`` and follows what each step changed."""
+from functools import partialmethod
+
 from core.protocol import queries as Q
 
 
@@ -87,3 +89,25 @@ class ProtocolTools:
 
     def _tool_change_guide(self, index, direction):
         return self._edit_command("change_guide", index=index, direction=direction)
+
+    _tool_follow_me = partialmethod(_edit_command, "follow_me")
+    _tool_solid_operation = partialmethod(_edit_command, "solid_operation")
+    _tool_add_geo_path = partialmethod(_edit_command, "add_geo_path")
+    _tool_move_geo_path_node = partialmethod(_edit_command, "move_geo_path_node")
+    _tool_add_text_label = partialmethod(_edit_command, "add_text_label")
+    _tool_add_dimension = partialmethod(_edit_command, "add_dimension")
+    _tool_place_section_plane = partialmethod(_edit_command, "place_section_plane")
+    _tool_add_image_plane = partialmethod(_edit_command, "add_image_plane")
+    _tool_set_group_scale = partialmethod(_edit_command, "set_group_scale")
+    _tool_erase_stroke = partialmethod(_edit_command, "erase_stroke")
+
+    def _tool_set_north(self, degrees):
+        out = self._edit_command("set_north", degrees=degrees)
+        if out["ok"]:
+            from tools.north import refresh_north_display
+            refresh_north_display(self._viewport)
+        return out
+
+    def _tool_place_group(self, template, basis, offset, point=None, attachment=None):
+        return self._edit_command("place_group", template=template, basis=basis, offset=offset,
+                                  point=point, attachment=attachment)
