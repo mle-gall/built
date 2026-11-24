@@ -18,10 +18,15 @@ from ingetrazo_core import Vec3 as QVector3D
 # Typed native steps (docs/commands-port.md): placement renames, locks and
 # whole-placement paint are Rust deltas, created through the protocol verbs.
 from ingetrazo_core import NativeCommand
+# Hide and Tag steps (rust/ingetrazo_core/src/doc/tag_steps.rs).
+from ingetrazo_core import AssignLayerCommand, HideCommand, HideEdgesCommand
+# Face paint steps (rust/ingetrazo_core/src/doc/paint_steps.rs).
+from ingetrazo_core import (SetFaceBackCommand, SetFaceColorCommand, SetFaceMaterialTagCommand,
+                            SetFaceOpacityCommand, SetFaceTextureCommand)
 # Group and component steps (rust/ingetrazo_core/src/doc/group_steps.rs).
 from ingetrazo_core import (ReplaceComponentCommand, KeepComponentCommand, AddKeptComponentsCommand, GroupToComponentCommand, EditText3DCommand, ReparentGroupsCommand, MergeGroupsCommand, MakeUniqueCommand, InsertGroupCommand, DeleteGroupCommand, SetStructureNodeCommand, SplitIntoPiecesCommand,
                             SetMaterialFinishCommand, MakeGroupCommand, MakeNestedGroupCommand,
-                            MakeComponentOfCommand, GroupInContextCommand)
+                            MakeComponentOfCommand, GroupInContextCommand, ExplodeViewCommand)
 # Annotation, section, guide, image, survey, saved-scene and sheet steps
 # (rust/ingetrazo_core/src/doc/steps.rs): the retired classes' names.
 from ingetrazo_core import (RecordStep, AddDimensionCommand, DeleteDimensionsCommand, AddTextLabelCommand, MoveTextLabelsCommand, MoveGuidesCommand, RotateGuidesCommand, MoveDimensionsCommand, EditTextLabelCommand, EditDimensionTextCommand, DeleteTextLabelsCommand, AddGuideCommand, PlaceSectionPlaneCommand, DeleteSectionPlanesCommand, ReverseSectionPlaneCommand, SetActiveSectionCommand, SetSectionModeCommand, SetSectionFillCommand, RenameSectionPlaneCommand, AddSheetCommand, PlaceViewCommand, SheetCommand, InsertSheetCommand, RemoveSheetCommand, MoveSheetCommand, CreatePlanCommand, AddSceneCommand, DeleteScenesCommand, UpdateSceneCommand, SceneTreeCommand, MoveSectionPlanesCommand, RotateSectionPlanesCommand, ChangeGuideCommand, DeleteGuidesCommand, AddImagePlaneCommand, DeleteImagePlanesCommand, TransformImagePlaneCommand, SetImagePlaneOpacityCommand, MoveImagePlanesCommand, RotateImagePlanesCommand, ScaleImagePlanesCommand, AddGeoPathCommand, DeleteGeoPointsCommand, DeleteGeoPathsCommand, ToggleGeoPathClosedCommand, SetGeoPathSurfaceCommand, MoveGeoPathNodeCommand)
@@ -145,13 +150,19 @@ class MeshCommand(Command):
         return (scene.mesh,)
 
 
-# A native mesh step: History enlists its store (``geometry_meshes``).
-MeshCommand.register(MakeGroupCommand)
+# Native mesh steps: History enlists their stores (``geometry_meshes``).
+for _mesh_step in (MakeGroupCommand, HideCommand, HideEdgesCommand, AssignLayerCommand):
+    MeshCommand.register(_mesh_step)
 
 
 class FaceAttributeCommand(MeshCommand):
     def geometry_meshes(self, scene):
         return {getattr(face, "_m", None) for face in self._faces}
+
+
+for _paint in (SetFaceColorCommand, SetFaceOpacityCommand, SetFaceTextureCommand,
+               SetFaceBackCommand, SetFaceMaterialTagCommand):
+    FaceAttributeCommand.register(_paint)
 
 
 class SetPluginDataCommand(Command):
@@ -722,21 +733,6 @@ def _all_placements(items) -> bool:
     return all(isinstance(e, Group) for e in items)
 
 
-def _bulk_set(items, field, value):
-    """Write ``value`` into ``field`` of every placement of ``items`` as one
-    document op (``doc_set_many``: Lock, Hide or Tag of a whole selection),
-    returning the previous values; ``None`` when not every item is a
-    document placement (the caller writes them one by one)."""
-    if not items:
-        return None
-    try:
-        prev = _doc.NATIVE.doc_get_many(items, field)
-        _doc.NATIVE.doc_set_many(items, field, value)
-    except (TypeError, RuntimeError):
-        return None
-    return prev
-
-
 def _unselect(scene, items) -> None:
     """``scene.selection.discard(e)`` for every item: from the selection's
     side when it is the smaller (Lock or Hide of 20,000 placements with a
@@ -854,65 +850,6 @@ def _carrier_meshes(entities, field):
             and field not in getattr(e, "_record_fields", ())}
 
 
-class AssignLayerCommand(MeshCommand):
-    """Move entities onto a layer — the Tag field in Entity Info.
-
-    Faces, edges, groups and annotations alike (``core.layers.assign_layer``
-    knows where each one keeps its label). Previous labels are captured at
-    ``do`` time, so a mixed selection undoes exactly. A layer that does not
-    exist yet is created (Rafael's «no sé cómo cambiar el objeto de capa»,
-    2026-09-16 — the panel's button was the only road and it was not
-    understood; this is what Entity Info and the right-click go through)."""
-
-    def __init__(self, entities, layer: str) -> None:
-        self._entities = list(entities)
-        self._layer = layer
-        self._prev: list = []
-        self._created = False
-
-    def geometry_meshes(self, scene):
-        return _carrier_meshes(self._entities, "layer")
-
-    def doc_undo(self, scene):
-        return not self.geometry_meshes(scene)
-
-    def doc_after(self, scene, phase) -> None:
-        # The meshes to re-validate come from the transaction (History).
-        scene.version += 1
-
-    def do(self, scene) -> None:
-        from core.layers import DEFAULT_LAYER, Layer, assign_layer, layer_of
-        ly = scene.layer(self._layer)
-        if ly is None:
-            ly = Layer(self._layer)
-            scene.layers.append(ly)
-            self._created = True
-        # The tag's key is what the entities carry; ``layer`` may be a label.
-        self._layer = ly.key
-        prev = _bulk_set(self._entities, "layer",
-                         None if self._layer == DEFAULT_LAYER else self._layer)
-        if prev is not None:
-            self._prev = [p or DEFAULT_LAYER for p in prev]
-        else:
-            self._prev = [layer_of(e) for e in self._entities]
-            for e in self._entities:
-                assign_layer(e, self._layer)
-        if not _all_placements(self._entities):
-            _dirty_group_chunks(scene)
-        scene.version += 1
-
-    def undo(self, scene) -> None:
-        from core.layers import assign_layer
-        for e, prev in zip(self._entities, self._prev):
-            assign_layer(e, prev)
-        if self._created:
-            ly = scene.layer_by_key(self._layer)
-            if ly is not None:
-                scene.layers.remove(ly)
-        _dirty_group_chunks(scene)
-        scene.version += 1
-
-
 class DeleteLayerCommand(Command):
     """Delete a layer: what it carried goes to the default layer, and the
     scenes forget it. Undo puts the layer back at its place in the list,
@@ -1008,159 +945,6 @@ def _set_hidden(entity, hidden: bool) -> None:
             attrs.pop("hidden", None)
     else:
         entity.hidden = hidden
-
-
-class HideCommand(MeshCommand):
-    """Hide (or unhide) objects, faces and edges — Edit ▸ Hide
-    and Edit ▸ Unhide.
-
-    An OBJECT (group or component, ``Group.hidden``) and a FACE
-    (``attrs["hidden"]``) disappear from every consumer that asks
-    ``Scene.entity_visible``: render, pick, snap, bounds, export; an
-    object's nested placements go with it, and a group's chunk leaves its
-    hidden faces out. A hidden EDGE stays in the topology (its faces keep
-    their boundary) but draws neither as a line nor as a profile /
-    silhouette. Previous per-entity flags are captured at ``do`` time, so
-    a mixed selection (some already hidden) undoes exactly."""
-
-    def __init__(self, entities, hidden: bool = True) -> None:
-        self._entities = [e for e in entities
-                          if hasattr(e, "hidden") or hasattr(e, "attrs")]
-        self._hidden = hidden
-        self._prev: list[bool] = []
-
-    @property
-    def entities(self) -> list:
-        return list(self._entities)
-
-    @property
-    def hides(self) -> bool:
-        return self._hidden
-
-    def geometry_meshes(self, scene):
-        return _carrier_meshes(self._entities, "hidden")
-
-    def doc_undo(self, scene):
-        return not self.geometry_meshes(scene)
-
-    def doc_after(self, scene, phase) -> None:
-        if phase == "redo" and self._hidden:
-            _unselect(scene, self._entities)
-        # The meshes to re-validate come from the transaction (History).
-        scene.version += 1
-
-    def do(self, scene) -> None:
-        prev = (_bulk_set(self._entities, "hidden", self._hidden)
-                if _all_placements(self._entities) else None)
-        if prev is not None:
-            self._prev = prev
-        else:
-            self._prev = [_is_hidden(e) for e in self._entities]
-            for e in self._entities:
-                _set_hidden(e, self._hidden)
-        if self._hidden:
-            # An invisible entity must not linger in the selection: every
-            # selection consumer (move, delete, paint) assumes it can see
-            # what it operates on.
-            _unselect(scene, self._entities)
-        if prev is None:
-            _dirty_group_chunks(scene)
-        scene.version += 1
-
-    def undo(self, scene) -> None:
-        for e, prev in zip(self._entities, self._prev):
-            _set_hidden(e, prev)
-        _dirty_group_chunks(scene)
-        scene.version += 1
-
-
-class HideEdgesCommand(HideCommand):
-    """The edges-only spelling, kept for callers that grew up with it."""
-
-    def __init__(self, edges, hidden: bool = True) -> None:
-        super().__init__(edges, hidden=hidden)
-
-
-class _FacePaintCommand(FaceAttributeCommand):
-    """Apply owned paint fields inside the enlisted geometry transaction."""
-    def __init__(self, faces, value):
-        self._faces = list(faces)
-        self._value = value
-        self._old = None
-
-    def do(self, scene):
-        self._paint([(self.field, self._value)])
-        _dirty_group_chunks(scene)
-        scene.version += 1
-
-    def undo(self, scene):
-        self._restore_paint([self.field])
-        _dirty_group_chunks(scene)
-        scene.version += 1
-
-    def _paint(self, fields):
-        from ingetrazo_core import apply_face_paint
-        capture = self._old is None and not self._journal_geometry
-        saved = apply_face_paint(self._faces, fields, capture)
-        if capture:
-            self._old = saved
-
-    def _restore_paint(self, fields):
-        from ingetrazo_core import restore_face_paint
-        restore_face_paint(self._faces, fields, self._old or [])
-
-
-class SetFaceColorCommand(_FacePaintCommand):
-    """Set or clear the front colour of each selected face."""
-
-    field = "color"
-
-    def __init__(self, faces, color) -> None:
-        super().__init__(faces, list(color) if color is not None else None)
-
-
-class SetFaceOpacityCommand(_FacePaintCommand):
-    """Set or clear the opacity of coloured or textured faces."""
-
-    field = "opacity"
-
-    def __init__(self, faces, opacity) -> None:
-        super().__init__(faces, float(opacity) if opacity is not None else None)
-
-
-class SetFaceMaterialTagCommand(_FacePaintCommand):
-    """Set (or clear with ``None``) the registry identity ``attrs["mat"]``
-    on a set of faces — the companion of the colour/texture stamp, so a
-    paint stroke carries the material's NAME (core.materials) and the
-    per-material takeoff stays truthful. Painting anonymously clears the
-    tag: a red face is no longer "Concreto visto".
-
-    When ``material`` is given, ``do`` also ensures it exists in the scene
-    registry (a library swatch registers itself on first use); ``undo``
-    removes it again only if this very command added it."""
-
-    def __init__(self, faces, name, material=None) -> None:
-        self._faces = list(faces)
-        self._name = name
-        self._material = material
-        self._old: Optional[list] = None
-        self._registered = False
-
-    def do(self, scene) -> None:
-        if (self._material is not None and self._name
-                and self._name not in getattr(scene, "materials", {})):
-            scene.materials[self._name] = self._material
-            self._registered = True
-        self._paint([("pbr", self._material),
-                     ("mat", self._name)])
-        scene.version += 1
-
-    def undo(self, scene) -> None:
-        self._restore_paint(["pbr", "mat"])
-        if self._registered:
-            scene.materials.pop(self._name, None)
-            self._registered = False
-        scene.version += 1
 
 
 class RestampMaterialCommand(MeshCommand):
@@ -1430,27 +1214,6 @@ class AddGeoPointsCommand(Command):
         if self._datum is not None:
             scene.georef = self._prev_datum
         scene.version += 1
-
-
-class SetFaceTextureCommand(_FacePaintCommand):
-    """Set or clear a texture with an independent mapping per face."""
-
-    field = "texture"
-
-    def __init__(self, faces, texture) -> None:
-        super().__init__(faces, dict(texture) if texture is not None else None)
-
-
-class SetFaceBackCommand(_FacePaintCommand):
-    """Apply per-face back paint and preserve legacy two-sided flags on replay."""
-
-    field = "back"
-
-    def __init__(self, faces, backs) -> None:
-        super().__init__(faces, None)
-        if backs is None or isinstance(backs, dict):
-            backs = [backs] * len(self._faces)
-        self._value = [dict(b) if isinstance(b, dict) else None for b in backs]
 
 
 def translate_points(scene, keys: set, delta: QVector3D) -> None:
@@ -3030,32 +2793,6 @@ def _merge_overlapping_planes(scene, before, added, *, on_rebuild=None,
     scene.selection = set(keep)
     _drop_dead_elements(scene, mesh)
     return len(planes)
-
-
-class ExplodeViewCommand(Command):
-    """Pull a component's parts apart to ``factor`` along ``mode`` — or put
-    them back with ``factor=0`` (see :mod:`core.explode`)."""
-
-    #: Matrices, ``exploded`` and ``explode_offset`` are document fields.
-    doc_undo = True
-
-    def __init__(self, container: Group, factor: float,
-                 mode: str = "outward") -> None:
-        self.container = container
-        self.factor = factor
-        self.mode = mode
-        self.before = None
-
-    def do(self, scene) -> None:
-        from core import explode
-        self.before = explode.snapshot(self.container)
-        explode.apply_explode(self.container, self.factor, self.mode)
-        scene.version += 1
-
-    def undo(self, scene) -> None:
-        from core import explode
-        explode.restore(self.container, self.before)
-        scene.version += 1
 
 
 class MoveGroupCommand(GroupTransformCommand):

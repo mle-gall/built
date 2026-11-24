@@ -333,6 +333,12 @@ fn after_in_context(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>, phase: Opti
     version(scene)
 }
 
+fn run_explode_view(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
+    // The parts' matrices, `exploded` and `explode_offset` are document fields.
+    crate::placement_transform::apply_explode(&s.arg(py, 0), s.arg(py, 1).extract()?, &s.arg(py, 2).extract::<String>()?, &none(py))?;
+    version(scene)
+}
+
 // ------------------------------------------------------------ the classes
 
 macro_rules! steps {
@@ -366,6 +372,23 @@ steps! {
     MakeNestedGroup = "MakeNestedGroupCommand";
     MakeComponentOf = "MakeComponentOfCommand";
     GroupInContext = "GroupInContextCommand";
+    ExplodeView = "ExplodeViewCommand";
+}
+
+#[pymethods]
+impl ExplodeView {
+    /// Pull a component's parts apart to `factor` along `mode`, or put
+    /// them back with `factor=0` (see `core.explode`).
+    #[new]
+    #[pyo3(signature = (container, factor, mode = "outward"))]
+    fn new(py: Python<'_>, container: Obj<'_>, factor: f64, mode: &str) -> PyResult<PyClassInitializer<Self>> {
+        let args = vec![
+            ("container", container),
+            ("factor", factor.into_pyobject(py)?.into_any()),
+            ("mode", pyo3::types::PyString::new(py, mode).into_any()),
+        ];
+        Ok(PyClassInitializer::from(RecordStep::new("ExplodeViewCommand", run_explode_view, args)).add_subclass(Self))
+    }
 }
 
 #[pymethods]
