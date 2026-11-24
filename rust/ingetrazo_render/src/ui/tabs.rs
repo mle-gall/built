@@ -319,8 +319,7 @@ mod tests {
         (String::new(), name.to_owned(), front, false, false, String::new(), String::new())
     }
 
-    /// Lay the strip out once in a headless egui frame, `max_w` wide.
-    fn lay_out(strip: &mut Strip, max_w: f32) -> egui::FullOutput {
+    fn context() -> egui::Context {
         let ctx = egui::Context::default();
         // The app's Inter for every family the chrome names (this crate
         // builds egui without its bundled fonts).
@@ -333,13 +332,55 @@ mod tests {
             fonts.families.insert(family, vec!["inter".into()]);
         }
         ctx.set_fonts(fonts);
-        let mut frame = || ctx.run(egui::RawInput::default(), |ctx| {
+        ctx
+    }
+
+    fn frame(ctx: &egui::Context, strip: &mut Strip, width: f32, events: Vec<egui::Event>)
+        -> (egui::FullOutput, Vec<String>)
+    {
+        let mut commands = Vec::new();
+        let input = egui::RawInput { events, ..Default::default() };
+        let output = ctx.run(input, |ctx| {
             egui::CentralPanel::default().show(ctx, |ui| {
-                ui.horizontal(|ui| strip.show(ui, max_w));
+                ui.horizontal(|ui| commands = strip.show(ui, width));
             });
         });
-        frame();
-        frame()
+        (output, commands)
+    }
+
+    fn lay_out(strip: &mut Strip, width: f32) -> egui::FullOutput {
+        let ctx = context();
+        frame(&ctx, strip, width, Vec::new());
+        frame(&ctx, strip, width, Vec::new()).0
+    }
+
+    #[test]
+    fn right_edge_closes_the_pointed_tab_and_middle_click_closes_its_body() {
+        use egui::{Event, PointerButton};
+        let ctx = context();
+        let mut strip = Strip {
+            tabs: vec![tab("Drawing", true), tab("مخطط", false)], ..Default::default()
+        };
+        frame(&ctx, &mut strip, 700.0, Vec::new());
+        for front in [0, 1] {
+            strip.tabs[0].2 = front == 0;
+            strip.tabs[1].2 = front == 1;
+            frame(&ctx, &mut strip, 700.0, Vec::new());
+            for index in [0, 1] {
+                let rect = strip.rects[index].unwrap();
+                let at_edge = pos2(rect.right() - 7.0, rect.center().y);
+                for (pos, button, verb) in [
+                    (at_edge, PointerButton::Primary, "close"),
+                    (rect.center(), PointerButton::Primary, "activate"),
+                    (rect.center(), PointerButton::Middle, "close"),
+                ] {
+                    let event = |pressed| Event::PointerButton { pos, button, pressed, modifiers: Default::default() };
+                    frame(&ctx, &mut strip, 700.0, vec![Event::PointerMoved(pos), event(true)]);
+                    let (_, actions) = frame(&ctx, &mut strip, 700.0, vec![event(false)]);
+                    assert!(actions.contains(&format!("ptab:{verb}:{index}")), "{actions:?}");
+                }
+            }
+        }
     }
 
     #[test]

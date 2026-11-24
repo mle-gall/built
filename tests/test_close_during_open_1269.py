@@ -42,6 +42,37 @@ def test_close_during_the_load_unwinds_it_and_closes(doc, tmp_path, command):
     binary = root / "rust/built_app/target/release/built"
     if sys.platform != "darwin" or not binary.is_file():
         pytest.skip("requires the macOS release shell")
+    profile = tmp_path / "settings"
+    plugin = profile / "data/ingetrazo/plugins/paused_reader.py"
+    plugin.parent.mkdir(parents=True)
+    # Keep the second worker at a progress boundary independently of CPU speed.
+    # The real open job still creates, polls, cancels and releases the worker.
+    plugin.write_text("""from pathlib import Path
+import ingetrazo_core
+
+def setup(app):
+    reader = ingetrazo_core.DocumentOpen
+
+    class HeldReader:
+        def __init__(self, worker):
+            self.worker = worker
+
+        def progress(self):
+            return 0.4, "Loading"
+
+        def ready(self):
+            return False
+
+        def cancel(self):
+            self.worker.cancel()
+            Path(__file__).with_suffix(".cancelled").touch()
+
+    def start(path, *args, **kwargs):
+        worker = reader(path, *args, **kwargs)
+        return HeldReader(worker) if Path(path).name == "plan.igz" else worker
+
+    ingetrazo_core.DocumentOpen = start
+""")
     script = tmp_path / "close.txt"
     # Start from a real window, then close during a worker open. A lost close
     # reaches the second state. The script's own quit is just a timeout guard.
@@ -49,7 +80,9 @@ def test_close_during_the_load_unwinds_it_and_closes(doc, tmp_path, command):
     result = isolated_launch.run(
         [binary, "--new-instance", "--root", root, "--venv", root / ".venv", "--size",
          "900x600", "--script", script, root / "tests/fixtures/shell/slab-and-cube.igz"],
-        capture_output=True, text=True, timeout=60, check=True)
+        settings=profile, capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, result.stderr
+    assert plugin.with_suffix(".cancelled").exists(), result.stderr
     assert result.stdout.count("[built] state ") == 1, result.stdout
     assert "[built] error" not in result.stderr
 

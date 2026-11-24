@@ -13,7 +13,7 @@ import threading
 from collections import deque
 from pathlib import Path
 
-from ingetrazo_render import ModelClipboard, cold_start_document as cold_start
+from ingetrazo_render import ModelClipboard, cold_start_document as cold_start, request_close
 
 from core.i18n import tr
 
@@ -855,37 +855,5 @@ def close_document(win, doc=None, ask=True) -> bool:
     return True
 
 
-def request_close(win) -> bool:
-    """The window's close and Quit (MainWindow.closeEvent's checks): no
-    while a question waits or a file is coming in; one question for
-    every project with unsaved changes; then the recovery slots go."""
-    from core import autosave
-    from views import chrome_dialogs as cd
-    if cd.current_sheet(win) is not None:
-        return False
-    if win._open_in_progress:
-        win._open_aborted = True        # the load unwinds at its next step
-        return False
-    if cd.modal(win):
-        return False
-    if win._workspace is not None and not win.leave_workspace():
-        return False
-    if not win._confirm_quit():
-        return False
-    for doc in win._documents:
-        try:
-            autosave.clear(doc.path, untitled=doc.untitled_no)
-        except Exception:  # noqa: BLE001
-            pass
-    auto = win.__dict__.get("_background_autosave")
-    if auto is not None:
-        auto.cancel()
-    from app_shell import project
-    project.persist(win)
-    win._closed = True
-    return True
-
-
-# ---- the start of a session ---------------------------------------------------------
 def sync_foreign_clipboard(win):
     _clipboard.adopt(win)

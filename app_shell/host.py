@@ -160,6 +160,8 @@ class Host:
         view._ui_units_sent = False
         if view.source_viewport is not None:
             view.source_viewport._chrome_owns_labels = True
+        # Open may fit the model before the first frame of this tab.
+        view.camera.set_aspect(view.width(), view.height())
         view._physical_size = None
         view._selection_signature = None
         view._tint_signature = None
@@ -408,6 +410,15 @@ class Host:
         self._front()
         ok = self._guard("close", files.request_close, self.window)
         return bool(ok)
+
+    def confirm_window_close(self):
+        from ingetrazo_render import confirm_window_close
+        self._front()
+        return confirm_window_close(self.window)
+
+    def finish_window_close(self):
+        from ingetrazo_render import finish_window_close
+        finish_window_close(self.window)
 
     # ---- input ---------------------------------------------------------
     def _guard(self, where, fn, *args):

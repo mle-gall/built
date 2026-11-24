@@ -14,19 +14,19 @@ every open/save cycle. The rich fixture carries dimensions too."""
 from __future__ import annotations
 
 import os
+from pathlib import Path
+import sys
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
+import pytest
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
-from core.dimension import Dimension  # noqa: E402
-from core.layers import Layer  # noqa: E402
-from core.scene import Scene  # noqa: E402
-from core.section import SectionPlane  # noqa: E402
-from formats import igz  # noqa: E402
-
-_app = QApplication.instance() or QApplication([])
+from core.dimension import Dimension
+from core.layers import Layer
+from core.scene import Scene
+from core.section import SectionPlane
+from formats import igz
+from scripts.isolated_launch import run
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 #: Runtime-only or identity fields: not document state, or compared apart.
 _SKIP = {"mesh", "version", "view_version", "selection"}
@@ -169,68 +169,58 @@ def test_new_after_a_document_with_only_planes_clears_them():
     assert s.show_section_cuts is True
 
 
-def _close(win):
-    win._saved_version = win.viewport.scene.version     # no «save?» modal
-    win.close()
+def test_the_window_opens_another_file_without_the_old_planes(native_host, tmp_path):
+    from tests.test_tree_links import _View
+    from views import view_commands, wgpu_ui
+
+    view = _View()
+    view._ui_exp = {"sections:all"}
+    for path, expected, checked in [(_rich(tmp_path), ["Plan", "A"], 0), (_plain(tmp_path), [], 1)]:
+        assert native_host.open_path(path)
+        win = native_host.window
+        assert [plane.name for plane in win.viewport.scene.section_planes] == expected
+        view_commands.sync(view, win)
+        clusters, menus = view.renderer.calls["ui_set_cluster"]
+        states = {item[0]: item[4] for group in list(clusters) + [rows for _, rows in menus]
+                  for item in group}
+        assert states["section_planes"] == states["section_cuts"] == checked
+        wgpu_ui._tree(view, win)
+        rows, _ = view.renderer.calls["ui_set_tree"]
+        assert [row[0] for row, _ in rows if row[0].startswith("section:")] == [
+            f"section:{plane.uid}" for plane in win.viewport.scene.section_planes]
 
 
-def test_the_window_opens_another_file_without_the_old_planes(tmp_path):
-    """Through the real File ▸ Open path: the menu toggles, the Outliner's
-    section folder and the drawn picture all follow the opened file — the
-    picture compared with a window that only ever opened the plain one."""
-    from views.main_window import MainWindow
+def test_opening_plain_after_sections_renders_the_same_picture(tmp_path):
+    root = Path(__file__).resolve().parents[1]
+    binary = root / "rust/built_app/target/release/built"
+    if sys.platform != "darwin" or not binary.is_file():
+        pytest.skip("requires the macOS release shell")
     rich, plain = _rich(tmp_path), _plain(tmp_path)
-    win = MainWindow()
-    win.show()
-    QApplication.processEvents()
-    try:
-        assert win.open_path(rich)
-        QApplication.processEvents()
-        assert len(win.viewport.scene.section_planes) == 2
-        assert not win._act_show_splanes.isChecked()
-        assert win.open_path(plain)
-        QApplication.processEvents()
-        scene = win.viewport.scene
-        assert scene.section_planes == []
-        assert win._act_show_splanes.isChecked()
-        assert win._act_show_scuts.isChecked()
-        browser = getattr(win, "project_browser", None)
-        if browser is not None:
-            # On screen, the Outliner refreshes 300 ms after the last change
-            # (on purpose: one refresh per burst of edits); hidden, when it
-            # is shown. Wait for it as a person would see it.
-            from PySide6.QtTest import QTest
-            ol = browser.outliner
-            if ol.isVisible():
-                for _ in range(40):
-                    if ol._sec_root is None or ol._sec_root.childCount() == 0:
-                        break
-                    QTest.qWait(50)
-            else:
-                ol.refresh()
-            if ol._sec_root is not None:
-                assert ol._sec_root.childCount() == 0
-        vp = win.viewport
-        if not vp.keys_stand_in._can_create_surface():
-            return                       # no GL here: the data checks stand
-        vp.keys_stand_in.setFixedSize(400, 300)       # same frame as the reference
-        QApplication.processEvents()
-        reused = vp.render_image(320, 240)
-    finally:
-        _close(win)
-    ref = MainWindow()
-    ref.show()
-    QApplication.processEvents()
-    try:
-        assert ref.open_path(plain)
-        QApplication.processEvents()
-        ref.viewport.keys_stand_in.setFixedSize(400, 300)
-        QApplication.processEvents()
-        expected = ref.viewport.render_image(320, 240)
-    finally:
-        _close(ref)
-    assert reused is not None and expected is not None
-    assert reused == expected
+    pictures = []
+    for prefix in [[], [rich]]:
+        profile = tmp_path / f"profile-{len(prefix)}"
+        plugin = profile / "data/ingetrazo/plugins/view_sample.py"
+        plugin.parent.mkdir(parents=True)
+        plugin.write_text("""def setup(app):
+    from pathlib import Path
+    def sample():
+        view = app.viewport.keys_stand_in
+        width, height, pixels = view.render_pixels(320, 240, overlays=True)
+        assert (width, height) == (320, 240)
+        Path(__file__).with_suffix(".rgba").write_bytes(pixels)
+    app.add_menu_action("Sample model view", sample)
+""")
+        script = profile / "open.txt"
+        script.write_text("\n".join(["wait 200", *(f"open {p}" for p in [*prefix, plain]),
+                                      "wait 250", "menu extension:view_sample:0", "quit", ""]))
+        result = run([binary, "--new-instance", "--root", root, "--venv", root / ".venv",
+                      "--size", "800x600", "--script", script], settings=profile,
+                     env=dict(os.environ, BUILT_START="0"), text=True, capture_output=True, timeout=60)
+        assert result.returncode == 0 and "[built] error" not in result.stderr, result.stderr
+        image = plugin.with_suffix(".rgba").read_bytes()
+        assert len(image) == 320 * 240 * 4 and len(set(image[::4])) > 1
+        pictures.append(image)
+    assert pictures[0] == pictures[1]
 
 
 def test_a_file_already_doubled_opens_with_each_dimension_once(tmp_path):

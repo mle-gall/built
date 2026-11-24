@@ -454,3 +454,86 @@ def test_saving_legacy_document_offers_built_and_export_keeps_active_path(win, t
     with zipfile.ZipFile(target) as archive:
         assert json.loads(archive.read("document.json"))["igz_format"] == 3
     assert _edges_in_file(target) == _edges_in_file(native) + 1
+
+
+def test_closing_a_clean_tab_asks_nothing(win, tmp_path, monkeypatch):
+    asked = []
+    monkeypatch.setattr(win, "_confirm_discard",
+                        lambda prompt: asked.append(prompt) or True)
+    _edges(win.viewport, 1)
+    win._saved_version = win.viewport.scene.version
+    win._on_new()
+    assert win.close_document()
+    assert asked == []
+    assert len(win.documents()) == 1
+
+
+def test_closing_asks_only_about_that_project(win, monkeypatch):
+    _edges(win.viewport, 1)
+    a = win.active_document()
+    win._on_new()
+    _edges(win.viewport, 1)
+    b = win.active_document()
+    asked = []
+    monkeypatch.setattr(win, "_confirm_discard",
+                        lambda prompt: asked.append(prompt) or False)
+    assert not win.close_document(b)              # cancelled: stays
+    assert len(asked) == 1 and b in win.documents()
+    monkeypatch.setattr(win, "_confirm_discard",
+                        lambda prompt: asked.append(prompt) or True)
+    assert win.close_document(b)
+    assert len(asked) == 2
+    assert win.documents() == [a]
+    assert win.active_document() is a
+    assert win._doc_is_dirty(a)                   # A's work untouched
+
+
+def test_closing_the_last_tab_leaves_an_empty_project(win, monkeypatch):
+    monkeypatch.setattr(win, "_confirm_discard", lambda prompt: True)
+    _edges(win.viewport, 1)
+    old = win.active_document()
+    assert win.close_document()
+    assert len(win.documents()) == 1
+    assert win.active_document() is not old
+    assert win._doc_is_blank()
+
+
+def test_quitting_asks_once_for_every_modified_project(win, monkeypatch):
+    _edges(win.viewport, 1)
+    win._on_new()
+    _edges(win.viewport, 1)
+    win._on_new()                                  # a clean third one
+    boxes = []
+
+    def answer(*args, checklist, **kw):
+        boxes.append(checklist)
+        return "cancel"
+    monkeypatch.setattr("views.chrome_dialogs.ask", answer)
+    assert not win._confirm_quit()
+    assert len(boxes) == 1
+    assert len(boxes[0]) == 2 and all("Untitled" in label and checked for label, checked in boxes[0])
+    monkeypatch.setattr("views.chrome_dialogs.ask", lambda *a, **kw: "discard")
+    assert win._confirm_quit()
+
+
+def test_cancelling_quit_in_a_later_window_keeps_the_first_window_recoverable(
+        native_host, win, tmp_path, monkeypatch):
+    from app_shell.host import Host
+    first = _new_tab(win, 3, tmp_path / "first.built")
+    _autosave_now(win)
+    slot = autosave.pending(first.path)
+    assert _edges_in_file(slot) == 3
+    other = Host(0, 900, 600, 1., settings=native_host.settings_dir)
+    try:
+        _new_tab(other.window, 2, tmp_path / "second.built")
+        answers = iter(["discard", "cancel"])
+        monkeypatch.setattr("views.chrome_dialogs.ask", lambda *a, **k: next(answers))
+        assert native_host.confirm_window_close()
+        assert not other.confirm_window_close()
+        assert not win._closed and not other.window._closed
+        assert slot == autosave.pending(first.path) and win._doc_is_dirty(first)
+        monkeypatch.setattr("views.chrome_dialogs.ask", lambda *a, **k: "discard")
+        assert native_host.request_close()
+        assert autosave.pending(first.path) is None and win._closed
+    finally:
+        other.close()

@@ -235,6 +235,31 @@ mod perf {
     }
 }
 
+#[derive(Default)]
+struct LaunchFiles {
+    pending: Vec<PathBuf>,
+    argv: Vec<PathBuf>,
+}
+
+impl LaunchFiles {
+    fn window_for(&mut self, path: &Path, window: Option<WindowId>) -> Option<WindowId> {
+        if window.is_none() {
+            self.pending.push(path.to_path_buf());
+        }
+        window
+    }
+
+    #[cfg(any(target_os = "macos", test))]
+    fn is_argv_replay(&mut self, path: &Path) -> bool {
+        if let Some(index) = self.argv.iter().position(|p| same_path(p, path)) {
+            self.argv.remove(index);
+            true
+        } else {
+            false
+        }
+    }
+}
+
 struct App {
     args: Args,
     /// The open windows, oldest first.
@@ -251,17 +276,12 @@ struct App {
     exit_code: i32,
     /// Tool cursors made from the pixmaps Python draws, by key.
     cursors: HashMap<String, CustomCursor>,
-    /// Files handed over before the window and its host exist (a cold
-    /// launch from Finder: the odoc event comes before `resumed`).
-    pending_opens: Vec<PathBuf>,
+    launch_files: LaunchFiles,
     /// The recent files the File menu shows, as last sent.
     #[cfg(target_os = "macos")]
     recent_sig: Option<Vec<String>>,
     #[cfg(target_os = "macos")]
     extension_sig: Option<(WindowId,(u64,u64))>,
-    /// Files given on the command line: AppKit hands them to the Open
-    /// With hook too (as odoc), which must not open them a second time.
-    cli_files: Vec<PathBuf>,
     started: bool,
 }
 
@@ -371,6 +391,11 @@ impl App {
                         return;
                     }
                 }
+                for (_, w) in &self.wins {
+                    if w.host.call0("finish_window_close").is_none() {
+                        return;
+                    }
+                }
                 event_loop.exit();
             }
             "activate" => {
@@ -413,6 +438,9 @@ impl App {
         if !ok {
             return;
         }
+        if self.win(id).is_some_and(|w| w.host.call0("finish_window_close").is_none()) {
+            return;
+        }
         if let Some(i) = self.wins.iter().position(|(w, _)| *w == id) {
             let (_, w) = self.wins.remove(i);
             // The renderer (and its CAMetalLayer) before the window goes.
@@ -429,10 +457,7 @@ impl App {
 
     fn open(&mut self, path: &Path) {
         let t = Instant::now();
-        let Some(id) = self.front() else {
-            self.pending_opens.push(path.to_path_buf());
-            return;
-        };
+        let Some(id) = self.launch_files.window_for(path, self.front()) else { return };
         if let Some(w) = self.win(id) {
             w.host.call("open_path", (path.to_string_lossy().to_string(),));
         }
@@ -747,7 +772,7 @@ impl App {
             }
         }
         let mut files: Vec<PathBuf> = self.args.file.clone().into_iter().collect();
-        files.append(&mut self.pending_opens);
+        files.append(&mut self.launch_files.pending);
         if files.is_empty() {
             // A cold start without a file: the start page (recents, new,
             // templates), and the untitled drawings an earlier session
@@ -908,9 +933,9 @@ impl App {
     }
 }
 
-/// `Host.request_close()`: True once nothing unsaved stands in the way.
+/// Ask without retiring recovery slots until all affected windows agree.
 fn ask_close(host: &python::Host) -> bool {
-    host.call0("request_close")
+    host.call0("confirm_window_close")
         .map(|v| pyo3::Python::attach(|py| v.extract::<bool>(py).unwrap_or(false)))
         .unwrap_or(false)
 }
@@ -981,8 +1006,7 @@ impl ApplicationHandler<UserEvent> for App {
             UserEvent::Open(path) => self.open(&path),
             #[cfg(target_os = "macos")]
             UserEvent::AppKitOpen(path) => {
-                if let Some(i) = self.cli_files.iter().position(|p| same_path(p, &path)) {
-                    self.cli_files.remove(i);
+                if self.launch_files.is_argv_replay(&path) {
                     return;
                 }
                 self.open(&path)
@@ -1152,23 +1176,22 @@ fn main() {
         timings: Timings { process, python_ready, window: None, host: None, opened: None, first_frame: None },
         exit_code: 0,
         cursors: HashMap::new(),
-        pending_opens: Vec::new(),
+        launch_files: LaunchFiles::default(),
         #[cfg(target_os = "macos")]
         recent_sig: None,
         #[cfg(target_os = "macos")]
         extension_sig: None,
-        cli_files: Vec::new(),
         started: false,
     };
     // AppKit may replay existing paths from argv as open-document events,
     // including operands of options such as --script and --shots.
-    app.cli_files = app.args.launch_paths();
+    app.launch_files.argv = app.args.launch_paths();
     // AppKit replays every argv operand as an open-document event, including
     // option values such as `--size 1280x800`: ignore each of them once.
     for a in std::env::args().skip(1).filter(|a| !a.starts_with('-')) {
         let p = absolute(Path::new(&a));
-        if !app.cli_files.iter().any(|q| same_path(q, &p)) {
-            app.cli_files.push(p);
+        if !app.launch_files.argv.iter().any(|q| same_path(q, &p)) {
+            app.launch_files.argv.push(p);
         }
     }
     if let Err(e) = event_loop.run_app(&mut app) {
@@ -1203,6 +1226,28 @@ mod profile_tests {
         let args = parse_args(["--script", "steps", "--shots", "shots", "--size", "1600x1000",
                                "--settings", "profile", "model.igz"].map(str::to_owned).into_iter()).unwrap();
         assert_eq!(args.launch_paths(), ["model.igz", "steps", "shots", "profile"].map(|s| absolute(Path::new(s))));
+    }
+
+    #[test]
+    fn desktop_open_waits_for_a_window_and_routes_later_files_immediately() {
+        let mut files = LaunchFiles::default();
+        let id = WindowId::from(1);
+        assert_eq!(files.window_for(Path::new("cold.built"), None), None);
+        assert_eq!(files.pending, [PathBuf::from("cold.built")]);
+        for path in ["next.igz", "Local de.skp"] {
+            assert_eq!(files.window_for(Path::new(path), Some(id)), Some(id));
+        }
+        assert_eq!(files.pending, [PathBuf::from("cold.built")]);
+    }
+
+    #[test]
+    fn appkit_ignores_each_command_line_open_once() {
+        let args = parse_args(["--new-instance", "house.built"].map(str::to_owned).into_iter()).unwrap();
+        let mut files = LaunchFiles { argv: args.launch_paths(), ..Default::default() };
+        let path = args.file.unwrap();
+        assert!(!files.is_argv_replay(Path::new("other.built")));
+        assert!(files.is_argv_replay(&path));
+        assert!(!files.is_argv_replay(&path));
     }
 
     #[test]
