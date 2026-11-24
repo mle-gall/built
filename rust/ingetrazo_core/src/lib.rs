@@ -119,11 +119,11 @@ mod alignment;
 
 #[pymodule]
 fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    stl::register(m)?;
+    alignment::register(m)?;
     m.add("TAG_PALETTE", pyo3::types::PyTuple::new(m.py(), doc::drawing::PALETTE)?)?;
     m.add_function(wrap_pyfunction!(doc::drawing::automatic_tag_color, m)?)?;
     m.add_function(wrap_pyfunction!(browser_rename::browser_rename, m)?)?;
-    stl::register(m)?;
-    alignment::register(m)?;
     screen::register(m)?;
     scene_animation::register(m)?;
     survey_pixels::register(m)?;
