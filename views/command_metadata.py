@@ -4,13 +4,13 @@
 import re
 
 from core.settings import settings as QSettings
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction, QKeySequence
+from PySide6.QtGui import QAction
+from ingetrazo_render import shortcut_text
 from PySide6.QtWidgets import QMainWindow, QMenu, QMenuBar, QToolBar
 
 from core import string_search
 from core.i18n import source_of, tr
-from views.shortcuts import _plain, action_key, collect_actions
+from views.shortcuts import _plain, action_key, action_keys, collect_actions
 
 
 #: The command that opens this box — kept out of its own list.
@@ -32,17 +32,17 @@ _TRAILING = re.compile(r"\s*\(([^()]+)\)\s*$")
 
 def _keys_in(text: str):
     """The shortcut a label carries at its end — «Ungroup (Ctrl+Shift+G)»
-    — as a QKeySequence, or ``None`` when the brackets say something else
+    — in portable spelling, or ``None`` when the brackets say something else
     («Português (Brasil)», «AI Bridge (MCP)»)."""
     m = _TRAILING.search(text)
     if m is None:
         return None
     inner = m.group(1).strip()
-    seq = QKeySequence.fromString(inner, QKeySequence.PortableText)
-    if seq.isEmpty() or seq[0].key() == Qt.Key_unknown:
+    seq = shortcut_text(inner)
+    if seq is None:
         return None
-    same = seq.toString(QKeySequence.PortableText).replace(" ", "").lower()
-    return seq if same == inner.replace(" ", "").lower() else None
+    same = seq[0].replace(" ", "").lower()
+    return seq[0] if same == inner.replace(" ", "").lower() else None
 
 
 def _without_keys(text: str) -> str:
@@ -160,15 +160,16 @@ class Command:
         self.key = action_key(action)
         english = _plain(source_of(action.text()))
         name = _label(action)
-        keys = action.shortcut()
+        keys = next(iter(action_keys(action)), "")
         in_text = _keys_in(english)
         if in_text is not None:
             # «Ungroup (Ctrl+Shift+G)»: the keys go to their column.
             name, english = _without_keys(name), _without_keys(english)
-            keys = keys if not keys.isEmpty() else in_text
+            keys = keys or in_text
         self.name = name
         self.path = path
-        self.keys = keys.toString(QKeySequence.NativeText)
+        parsed = shortcut_text(keys)
+        self.keys = parsed[1] if parsed else ""
         trail = path.split(_SEP) if path else []
         self.items = (
             string_search.Item(trail + [name]),
@@ -220,7 +221,7 @@ def _signature(action: QAction, path: str) -> tuple:
     one made at the last opening still holds."""
     return (action.objectName(), action.text(), action.toolTip(),
             action.statusTip(),
-            action.shortcut().toString(QKeySequence.PortableText), path)
+            next(iter(action_keys(action)), ""), path)
 
 
 def commands(window, scope: str = "") -> list:

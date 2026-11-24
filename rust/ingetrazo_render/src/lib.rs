@@ -2898,6 +2898,7 @@ mod preferences;
 mod about;
 mod sheet_host;
 mod scene_photo;
+mod shortcut_text;
 /// The Sheets workspace's page, native (docs/rust-sheets.md).
 pub mod sheet_page;
 mod camera_inspector;
@@ -3000,6 +3001,8 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(commands::command_description, m)?)?;
     m.add_function(wrap_pyfunction!(commands::shortcut_conflicts, m)?)?;
     m.add_function(wrap_pyfunction!(commands::shortcut_reserved, m)?)?;
+    m.add_function(wrap_pyfunction!(shortcut_text::shortcut_text, m)?)?;
+    m.add_function(wrap_pyfunction!(shortcut_text::shortcut_alternatives, m)?)?;
     m.add_class::<SceneUpload>()?;
     m.add_class::<Renderer>()
 }

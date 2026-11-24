@@ -1,10 +1,9 @@
 """Bind the Rust registry to the window's tool actions and the installed menu."""
-from PySide6.QtGui import QKeySequence
 
 from app_shell.command_action import ShellAction
 
 from core.i18n import tr
-from ingetrazo_render import command_registry
+from ingetrazo_render import command_registry, shortcut_text
 from views import shortcuts
 
 
@@ -32,10 +31,10 @@ def refresh(win):
             act.changed = lambda k=key: _reflect(win, k)
         act = actions[key]
         old = act.property(shortcuts._DEFAULTS)
-        sequences = [QKeySequence(s) for s in defaults]
-        portable = shortcuts._to_text(sequences)
+        sequences = [parsed[0] for s in defaults if (parsed := shortcut_text(s))]
+        portable = "; ".join(sequences)
         if old != portable:
-            current = shortcuts._to_text(act.shortcuts())
+            current = "; ".join(act.portable_keys())
             act.setProperty(shortcuts._DEFAULTS, portable)
             if old is None or current == old:
                 act.setShortcuts(sequences)
@@ -77,13 +76,15 @@ def _run(win, key):
 
 def _reflect(win, key):
     act = win._registry_actions[key]
-    portable = act.shortcut().toString(QKeySequence.PortableText)
+    keys = act.portable_keys()
+    portable = keys[0] if keys else ""
     item = win._menu_items.get(act.property("nativeMenuId"))
     if item is not None:
-        item.set_shortcut(portable, act.shortcut() == QKeySequence(item.keys))
+        factory = shortcut_text(item.keys)
+        item.set_shortcut(portable, portable == (factory[0] if factory else ""))
     if key.startswith("view:"):
         bindings = win.__dict__.setdefault("_view_bindings", {})
-        value = (act.shortcut().toString(QKeySequence.NativeText), act.isEnabled())
+        value = (shortcut_text(portable)[1] if keys else "", act.isEnabled())
         if bindings.get(key[5:]) != value:
             bindings[key[5:]] = value
             win._view_binding_version = vars(win).get("_view_binding_version", 0) + 1

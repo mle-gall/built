@@ -31,7 +31,6 @@ from __future__ import annotations
 import types
 
 from PySide6.QtCore import QObject, Qt, Signal
-from PySide6.QtGui import QKeySequence
 
 from app_shell.command_action import ShellAction
 from views.view_host import MISSING
@@ -453,7 +452,7 @@ class ShellWindow(QObject):
                 shortcut = "Space"          # bound by MainWindow, not the tool
             action = ShellAction(self, tr(getattr(tool, "name", key)), checkable=True)
             alternate = getattr(tool, "shortcut_alt", None)
-            action.setShortcuts([QKeySequence(s) for s in (shortcut, alternate) if s])
+            action.setShortcuts([s for s in (shortcut, alternate) if s])
             self._tool_actions[key] = action
         self._tool_defaults = [(k, a.text(), a.state.portable_keys())
                               for k, a in self._tool_actions.items()]
