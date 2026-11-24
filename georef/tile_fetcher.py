@@ -4,14 +4,11 @@
 from functools import partialmethod
 from operator import attrgetter
 from ingetrazo_core import (
-    fetch_init, tile_request, tile_pump, tile_start, tile_finished, tile_completed, tile_cancel,
+    fetch_init, tile_request, tile_pump, tile_start, tile_completed, tile_cancel,
     tile_failed as _tile_failed,
 )
 from ingetrazo_render import SurveyRaster
-from georef.transport import NATIVE, Service, Signal
-if not NATIVE:
-    from PySide6.QtCore import QUrl
-    from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
+from georef.transport import Service, Signal
 
 
 from georef.tiles import TileCache, TileSource, default_cache_dir  # noqa: F401 — re-exported
@@ -34,6 +31,5 @@ class TileFetcher(Service):
     request = partialmethod(tile_request)
     _pump = partialmethod(tile_pump)
     _start_download = partialmethod(tile_start)
-    _on_finished = partialmethod(tile_finished)
     _completed = partialmethod(tile_completed)
     cancel_all = partialmethod(tile_cancel)

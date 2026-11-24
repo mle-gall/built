@@ -3,15 +3,11 @@
 """Host signals for asynchronous place and IP lookups."""
 from dataclasses import dataclass
 from functools import partialmethod
-from georef.transport import NATIVE, Service, Signal
+from georef.transport import Service, Signal
 from ingetrazo_core import (
-    geocode_url, parse_places, parse_ip, geocoder_init, geo_get, geo_reply as _finish_reply,
+    geocode_url, parse_places, parse_ip, geocoder_init, geo_get,
     geo_search, geo_locate, geocode_received, ip_received,
 )
-
-if not NATIVE:
-    from PySide6.QtCore import QUrl
-    from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 
 
 NOMINATIM = "https://nominatim.openstreetmap.org/search"

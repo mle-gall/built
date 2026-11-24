@@ -455,23 +455,31 @@ fn default_cache_dir(py: Python<'_>) -> PyResult<Obj<'_>> {
         .extract::<PathBuf>()?
         .join("IngeTrazo/IngeTrazo")
     } else {
-        let q = py.import("PySide6.QtCore")?.getattr("QStandardPaths")?;
-        let s = q
-            .call_method1(
-                "writableLocation",
-                (q.getattr("StandardLocation")?
-                    .getattr("AppLocalDataLocation")?,),
-            )?
-            .extract::<String>()?;
-        if s.is_empty() {
-            py.import("pathlib")?
-                .getattr("Path")?
-                .call_method0("home")?
-                .extract::<PathBuf>()?
-                .join(".cache/ingetrazo")
-        } else {
-            PathBuf::from(s)
-        }
+        // A script interpreter has no winit module. Respect its explicit profile
+        // and the same per-user data locations as the application.
+        let base = std::env::var_os("BUILT_SETTINGS_DIR")
+            .map(|p| PathBuf::from(p).join("data"))
+            .or_else(|| {
+                #[cfg(target_os = "macos")]
+                {
+                    std::env::var_os("HOME")
+                        .map(|p| PathBuf::from(p).join("Library/Application Support"))
+                }
+                #[cfg(windows)]
+                {
+                    std::env::var_os("LOCALAPPDATA").map(PathBuf::from)
+                }
+                #[cfg(not(any(target_os = "macos", windows)))]
+                {
+                    std::env::var_os("XDG_DATA_HOME")
+                        .map(PathBuf::from)
+                        .or_else(|| {
+                            std::env::var_os("HOME").map(|p| PathBuf::from(p).join(".local/share"))
+                        })
+                }
+            })
+            .ok_or_else(|| pyo3::exceptions::PyOSError::new_err("Missing user data directory"))?;
+        base.join("IngeTrazo/IngeTrazo")
     };
     path_obj(py, &root.join("tiles"))
 }

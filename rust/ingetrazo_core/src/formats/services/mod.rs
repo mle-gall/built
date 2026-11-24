@@ -81,40 +81,12 @@ fn survey_request<'p>(
 fn init_service(o: &Obj<'_>, parent: Option<&Obj<'_>>) -> PyResult<()> {
     module(o.py())?
         .getattr("Service")?
-        .call_method1("__init__", (o, parent))?;
+        .call_method1("bind_host", (o, parent))?;
     Ok(())
-}
-fn init_net(o: &Obj<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
-    if !m.getattr("NATIVE")?.is_truthy()? {
-        o.setattr("_nam", m.call_method1("QNetworkAccessManager", (o,))?)?
-    }
-    Ok(())
-}
-fn qt_get<'p>(m: &Bound<'p, PyModule>, o: &Obj<'p>, url: &Obj<'p>) -> PyResult<Obj<'p>> {
-    let cls = m.getattr("QNetworkRequest")?;
-    let r = cls.call1((m.call_method1("QUrl", (url,))?,))?;
-    r.call_method1(
-        "setRawHeader",
-        (
-            PyBytes::new(o.py(), b"User-Agent"),
-            m.getattr("_USER_AGENT")?,
-        ),
-    )?;
-    r.call_method1(
-        "setAttribute",
-        (
-            cls.getattr("Attribute")?
-                .getattr("RedirectPolicyAttribute")?,
-            cls.getattr("RedirectPolicy")?
-                .getattr("NoLessSafeRedirectPolicy")?,
-        ),
-    )?;
-    o.getattr("_nam")?.call_method1("get", (r,))
 }
 #[pyfunction(signature=(owner,parent=None))]
 fn geocoder_init(owner: &Obj<'_>, parent: Option<&Obj<'_>>) -> PyResult<()> {
-    init_service(owner, parent)?;
-    init_net(owner, &owner.py().import("georef.geocode")?)
+    init_service(owner, parent)
 }
 #[pyfunction]
 fn geo_get<'p>(
@@ -125,37 +97,10 @@ fn geo_get<'p>(
 ) -> PyResult<Obj<'p>> {
     let py = owner.py();
     let m = py.import("georef.geocode")?;
-    if m.getattr("NATIVE")?.is_truthy()? {
-        return module(py)?.call_method1(
-            "request",
-            (owner, url, m.getattr("_USER_AGENT")?, on_bytes, on_error),
-        );
-    }
-    let r = qt_get(&m, owner, &url.into_pyobject(py)?.into_any())?;
-    let cb = partial(py, (m.getattr("_finish_reply")?, &r, on_bytes, on_error))?;
-    r.getattr("finished")?.call_method1("connect", (cb,))?;
-    Ok(py.None().into_bound(py))
-}
-#[pyfunction]
-fn geo_reply(reply: &Obj<'_>, on_bytes: &Obj<'_>, on_error: &Obj<'_>) -> PyResult<()> {
-    let py = reply.py();
-    let result = (|| {
-        let no = py
-            .import("georef.geocode")?
-            .getattr("QNetworkReply")?
-            .getattr("NetworkError")?
-            .getattr("NoError")?;
-        if reply.call_method0("error")?.eq(no)? {
-            on_bytes.call1((py
-                .get_type::<PyBytes>()
-                .call1((reply.call_method0("readAll")?,))?,))?
-        } else {
-            on_error.call1((reply.call_method0("errorString")?,))?
-        };
-        Ok(())
-    })();
-    reply.call_method0("deleteLater")?;
-    result
+    module(py)?.call_method1(
+        "request",
+        (owner, url, m.getattr("_USER_AGENT")?, on_bytes, on_error),
+    )
 }
 #[pyfunction(signature=(query,limit=8))]
 fn geocode_url(py: Python<'_>, query: &str, limit: i64) -> PyResult<String> {
@@ -268,7 +213,7 @@ fn fetch_init(o: &Obj<'_>, cache: Option<Obj<'_>>, parent: Option<&Obj<'_>>) -> 
         None => m.call_method1("TileCache", (m.call_method0("default_cache_dir")?,))?,
     };
     o.setattr("_cache", cache)?;
-    init_net(o, &m)?;
+
     o.setattr("_inflight", PyDict::new(py))?;
     o.setattr("_queue", PyList::empty(py))?;
     o.setattr("_queued", PySet::empty(py)?)
@@ -344,61 +289,10 @@ fn tile_start(o: &Obj<'_>, source: &Obj<'_>, x: i64, y: i64, z: i64) -> PyResult
     let k = key(py, source, x, y, z)?;
     let url = source.call_method1("url", (x, y, z))?;
     let active = o.getattr("_inflight")?;
-    if m.getattr("NATIVE")?.is_truthy()? {
-        let ok = partial(py, (o.getattr("_completed")?, &k))?;
-        let fail = partial(py, (m.getattr("_tile_failed")?, o, &k))?;
-        let job =
-            module(py)?.call_method1("request", (o, url, m.getattr("_USER_AGENT")?, ok, fail))?;
-        active.set_item(k, job)?
-    } else {
-        let reply = qt_get(&m, o, &url)?;
-        active.set_item(k, &reply)?;
-        let cb = partial(
-            py,
-            (
-                o.getattr("_on_finished")?,
-                source.getattr("id")?,
-                x,
-                y,
-                z,
-                &reply,
-            ),
-        )?;
-        reply.getattr("finished")?.call_method1("connect", (cb,))?;
-    }
-    Ok(())
-}
-#[pyfunction]
-fn tile_finished(
-    o: &Obj<'_>,
-    source_id: &str,
-    x: i64,
-    y: i64,
-    z: i64,
-    reply: &Obj<'_>,
-) -> PyResult<()> {
-    let py = o.py();
-    let result = (|| {
-        let k = (source_id, x, y, z);
-        let no = tile_api(py)?
-            .getattr("QNetworkReply")?
-            .getattr("NetworkError")?
-            .getattr("NoError")?;
-        if reply.call_method0("error")?.eq(no)? {
-            let data = py
-                .get_type::<PyBytes>()
-                .call1((reply.call_method0("readAll")?,))?;
-            o.call_method1("_completed", (k, data))?
-        } else {
-            o.call_method1(
-                "_completed",
-                (k, py.None(), reply.call_method0("errorString")?),
-            )?
-        };
-        Ok(())
-    })();
-    reply.call_method0("deleteLater")?;
-    result
+    let ok = partial(py, (o.getattr("_completed")?, &k))?;
+    let fail = partial(py, (m.getattr("_tile_failed")?, o, &k))?;
+    let job = module(py)?.call_method1("request", (o, url, m.getattr("_USER_AGENT")?, ok, fail))?;
+    active.set_item(k, job)
 }
 #[pyfunction(signature=(o,key,data,error=""))]
 fn tile_completed(o: &Obj<'_>, key: &Obj<'_>, data: &Obj<'_>, error: &str) -> PyResult<()> {
@@ -452,7 +346,89 @@ fn tile_cancel(o: &Obj<'_>) -> PyResult<()> {
     }
     Ok(())
 }
+/// Service notifications are owned by the object and execute on the window timer queue.
+#[pyclass(subclass, dict, weakref)]
+struct SurveyService;
+#[pymethods]
+impl SurveyService {
+    #[new]
+    #[pyo3(signature=(*_args,**_kwargs))]
+    fn new(_args: &Bound<'_, pyo3::types::PyTuple>, _kwargs: Option<&Bound<'_, PyDict>>) -> Self {
+        Self
+    }
+    #[pyo3(signature=(parent=None))]
+    fn bind_host(slf: &Bound<'_, Self>, parent: Option<&Obj<'_>>) -> PyResult<()> {
+        let py = slf.py();
+        let inherited = parent
+            .map(|p| p.getattr_opt("_host"))
+            .transpose()?
+            .flatten()
+            .filter(|p| !p.is_none());
+        let host = match inherited {
+            Some(h) => h,
+            None => {
+                let active = py.import("app_shell.modal")?.call_method0("host")?;
+                if active.is_none() {
+                    let kw = PyDict::new(py);
+                    kw.set_item(
+                        "timers",
+                        py.import("ingetrazo_render")?
+                            .call_method0("WindowTimers")?,
+                    )?;
+                    py.import("types")?
+                        .call_method("SimpleNamespace", (), Some(&kw))?
+                } else {
+                    active
+                }
+            }
+        };
+        slf.setattr("_host", host)
+    }
+    #[pyo3(name = "deleteLater")]
+    fn dispose(slf: &Bound<'_, Self>) -> PyResult<()> {
+        slf.getattr("_host")?
+            .getattr("timers")?
+            .call_method1("cancel_context", (slf,))?;
+        Ok(())
+    }
+}
+#[pyclass]
+struct SurveySignal {
+    name: String,
+}
+#[pymethods]
+impl SurveySignal {
+    #[new]
+    #[pyo3(signature=(*_types))]
+    fn new(_types: &Bound<'_, pyo3::types::PyTuple>) -> Self {
+        Self {
+            name: String::new(),
+        }
+    }
+    fn __set_name__(&mut self, _owner: &Obj<'_>, name: String) {
+        self.name = name;
+    }
+    fn __get__<'p>(
+        slf: &Bound<'p, Self>,
+        owner: Option<&Obj<'p>>,
+        _cls: Option<&Obj<'p>>,
+    ) -> PyResult<Obj<'p>> {
+        let Some(owner) = owner else {
+            return Ok(slf.clone().into_any());
+        };
+        let signal = slf
+            .py()
+            .import("ingetrazo_render")?
+            .call_method0("ChangeCallbacks")?;
+        owner
+            .getattr("__dict__")?
+            .set_item(&slf.borrow().name, &signal)?;
+        Ok(signal)
+    }
+}
 pub(super) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    functions!(m;survey_download,survey_redirect,survey_request,geocoder_init,geo_get,geo_reply,geocode_url,parse_places,parse_ip,geocode_received,ip_received,geo_search,geo_locate,fetch_init,tile_request,tile_pump,tile_failed,tile_start,tile_finished,tile_completed,tile_cancel);
+    m.add_class::<SurveyService>()?;
+    m.add_class::<SurveySignal>()?;
+    functions!(m;survey_download,survey_redirect,survey_request,geocoder_init,geo_get,geocode_url,parse_places,parse_ip,geocode_received,ip_received,geo_search,geo_locate,fetch_init,tile_request,tile_pump,tile_failed,tile_start,tile_completed,tile_cancel);
     dem::register(m)
 }
