@@ -14,7 +14,7 @@ pub fn setting(py: Python<'_>, key: &str, default: &str) -> PyResult<String> {
 }
 
 #[pyfunction]
-fn load_slide_mode(py: Python<'_>) -> PyResult<String> {
+pub(super) fn load_slide_mode(py: Python<'_>) -> PyResult<String> {
     Ok(match setting(py, "nav/trackpad_slide", "zoom")?
         .to_ascii_lowercase()
         .as_str()
@@ -43,6 +43,29 @@ fn is_finger_device(ev: &Obj) -> PyResult<bool> {
         enum_name(&ev.call_method0("device")?, "type")?.as_str(),
         "TouchPad" | "TouchScreen"
     ))
+}
+
+/// Zoom per pixel of trackpad or touchscreen slide, against a wheel notch's
+/// 120 angle units: 20 px of travel per 10% step.
+pub(super) const TRACKPAD_ZOOM_GAIN: f64 = 3.0;
+
+/// Cocoa's natural-scroll flag reverses a finger device's zoom direction.
+#[pyfunction]
+#[pyo3(signature = (event, invert=false))]
+pub(super) fn zoom_steps(event: &Obj, invert: bool) -> PyResult<f64> {
+    let mut steps = event.call_method0("angleDelta")?.call_method0("y")?.extract::<f64>()? / 120.;
+    let finger = is_finger_device(event)?;
+    if finger {
+        // A slide hands over 2 angle units per pixel: 60 px per 10% step
+        // made a whole trackpad slide barely zoom (owner, 2026-11-24, ride
+        // file). Mouse wheel notches keep their 120 units per step.
+        steps *= TRACKPAD_ZOOM_GAIN;
+    }
+    if event.py().import("sys")?.getattr("platform")?.eq("darwin")?
+        && finger && event.call_method0("inverted")?.is_truthy()? {
+        steps = -steps;
+    }
+    Ok(if invert { -steps } else { steps })
 }
 
 #[pyfunction]
@@ -170,7 +193,7 @@ fn drag(view: &Obj, g: &mut Gesture, pos: &Obj, mode: &str, dx: f64, mut dy: f64
 }
 
 #[pyfunction]
-fn slide(view: &Obj, ev: &Obj) -> PyResult<bool> {
+pub(super) fn slide(view: &Obj, ev: &Obj) -> PyResult<bool> {
     if !is_slide(ev)? {
         return Ok(false);
     }
@@ -308,7 +331,9 @@ pub fn register(parent: &Bound<'_, PyModule>) -> PyResult<()> {
         slide_mode,
         slide_pixels,
         load_slide_mode,
-        pinch_steps
+        pinch_steps,
+        zoom_steps
     );
+    m.add("TRACKPAD_ZOOM_GAIN", TRACKPAD_ZOOM_GAIN)?;
     parent.add_submodule(&m)
 }

@@ -37,7 +37,7 @@ def attach(view) -> None:
         return
     view._ui_timer = view._view_timer(view.update)
     renderer.ui_enable(FONT if os.path.exists(FONT) else None)
-    from views import wgpu_library
+    from ingetrazo_render import wgpu_library
     wgpu_library.install(win)
     if hasattr(renderer, "ui_set_dock_width"):
         from core.settings import settings as QSettings
@@ -355,7 +355,7 @@ def chrome_frame(view):
         wgpu_tabs.document_tabs(view).sync(view.renderer, win, LIGHTS_ROOM)
         _sheet_and_jobs(view, win)
         _chrome_form(view, win)
-        from views import wgpu_start
+        from ingetrazo_render import wgpu_start
         wgpu_start.before_frame(view, win)
         from ingetrazo_render import chrome_sheet
         chrome_sheet.before_frame(view, win)
@@ -386,7 +386,7 @@ def before_frame(view) -> None:
         menus.present(view)
     _sheet_and_jobs(view, win)
     _chrome_form(view, win)
-    from views import wgpu_start
+    from ingetrazo_render import wgpu_start
     wgpu_start.before_frame(view, win)
     from ingetrazo_render import chrome_sheet
     chrome_sheet.before_frame(view, win)
@@ -411,7 +411,7 @@ def before_frame(view) -> None:
     _form(view, win)
     from ingetrazo_render import bind_deliveries
     bind_deliveries(win)
-    from views import wgpu_library
+    from ingetrazo_render import wgpu_library
     wgpu_library.before_frame(view, win)
     _sync_project_rows(view, win)
     from ingetrazo_render import inspector_sync
@@ -1050,7 +1050,7 @@ def _component_verb(win, view, verb, key) -> None:
 
 def _paint_with(win, key) -> None:
     """Apply a material from the strip or the Library: Paint becomes active."""
-    from views.wgpu_library import _catalogue, _pick_paint
+    from ingetrazo_render.wgpu_library import _catalogue, _pick_paint
     kind, _, rest = key.partition(":")
     if kind == "m":
         _pick_paint(win, name=rest)
@@ -1201,7 +1201,7 @@ def _tree_action(win, view, action) -> None:
             from ingetrazo_render import show_report_sheet as show
             show(win, "cutlist")
         elif verb == "insp" and key.startswith("lib:"):
-            from views import wgpu_library
+            from ingetrazo_render import wgpu_library
             wgpu_library.action(win, view, key[4:])
         elif verb == "insp" and key.startswith("form:"):
             _open_form(view, key[5:])
@@ -1334,7 +1334,7 @@ def _tree_action(win, view, action) -> None:
             view.renderer.ui_set_tree_group_rows(rk, tree_group_rows(scene, copies() if kind == "d" else item()))
         elif verb == "paintrows":
             from ingetrazo_render import TreePaint
-            from views.wgpu_library import open_library
+            from ingetrazo_render.wgpu_library import open_library
             target = TreePaint(scene, copies() if kind == "d" else item())
             open_library(win, "materials", scope="s:model", paint_target=target)
         elif verb in ("into", "beside", "root", "outdent"):
@@ -1515,7 +1515,7 @@ def _tree_action(win, view, action) -> None:
             view._ui_issues = not view.__dict__.get("_ui_issues", False)
             rebuild()
         elif verb == "mode":
-            from views import wgpu_library
+            from ingetrazo_render import wgpu_library
             wgpu_library.set_mode(view, win, rk)
         elif verb == "item" and rk == "solid:active":
             _select(win, [])
@@ -1854,7 +1854,7 @@ def _tree_action(win, view, action) -> None:
                 elif what == "delete":
                     _delete_node(vp, arg)
                 elif what == "lib":
-                    from views import wgpu_library
+                    from ingetrazo_render import wgpu_library
                     wgpu_library.confirmed(win, view, arg, extra)
                 elif what == "visibility_set":
                     document, operation, key = arg
@@ -1905,7 +1905,7 @@ def _tree_action(win, view, action) -> None:
                         raise ValueError("This curve cannot be rebuilt")
                     vp.update()
             elif what == "libmat":
-                from views import wgpu_library
+                from ingetrazo_render import wgpu_library
                 wgpu_library.edit_field(win, view, arg, extra)
             elif what == "groupname":
                 from ingetrazo_render import inspector_rename
@@ -2000,7 +2000,7 @@ def _inspector(view, win) -> None:
     registry = bim_registry.get(scene)
     nodes = structure._nodes(registry)
     data = getattr(view, "_ui_tree", None) or {}
-    from views import wgpu_library
+    from ingetrazo_render import wgpu_library
     if wgpu_library.inspector_key(view, win) is not None:
         got = wgpu_library.inspector(view, win)
         if got is not None:
@@ -2534,7 +2534,7 @@ def _run(win, actions, source_view=None) -> None:
             chrome_sheet.action(win, arg)
             continue
         if kind == "start":
-            from views import wgpu_start
+            from ingetrazo_render import wgpu_start
             wgpu_start.action(win, arg)
             continue
         if kind == "sheets":
@@ -2566,13 +2566,13 @@ def _run(win, actions, source_view=None) -> None:
             view = getattr(getattr(win, "_doc", None), "stand_in", None)
             _tree_action(win, view, arg)
         elif kind == "pal":
-            from views import wgpu_library
+            from ingetrazo_render import wgpu_library
             wgpu_library.paint_from_strip(win, arg)
         elif kind == "libsheet":
-            from views import wgpu_library
+            from ingetrazo_render import wgpu_library
             wgpu_library.open_library(win, arg or None)
         elif kind == "lib":
-            from views import wgpu_library
+            from ingetrazo_render import wgpu_library
             wgpu_library.action(win, getattr(getattr(win, "_doc", None), "stand_in", None), arg)
         elif kind == "dockw":
             view = getattr(getattr(win, "_doc", None), "stand_in", None)
@@ -2666,7 +2666,7 @@ def _run(win, actions, source_view=None) -> None:
             view = getattr(getattr(win, "_doc", None), "stand_in", None)
             data = getattr(view, "_ui_tree", None) or {}
             if arg in ("unfiled", "problems"):
-                from views import wgpu_library
+                from ingetrazo_render import wgpu_library
                 wgpu_library.set_mode(view, win, "problems")
             elif arg == "active" and data.get("active"):
                 _select(win, _tree_groups(view, data["active"]))

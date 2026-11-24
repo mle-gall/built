@@ -21,11 +21,14 @@ use pyo3::prelude::*;
 use pyo3::PyClassInitializer;
 use pyo3::types::{PyDict, PyList, PyTuple};
 use pyo3::PyTraverseError;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
 pub(super) type Obj<'py> = Bound<'py, PyAny>;
 pub(super) type Run = for<'py> fn(&RecordStep, Python<'py>, &Obj<'py>) -> PyResult<()>;
 /// A step's own after-effect, in place of the shared pick and bump.
+#[derive(Clone, Copy)]
+pub(super) struct Meshes(pub for<'py> fn(&RecordStep, Python<'py>, &Obj<'py>) -> PyResult<Vec<Obj<'py>>>);
 #[derive(Clone, Copy)]
 pub(super) struct After(pub for<'py> fn(&RecordStep, Python<'py>, &Obj<'py>, Option<&str>) -> PyResult<()>);
 
@@ -76,6 +79,13 @@ pub struct RecordStep {
     /// Results an execute publishes under the retired class's attribute
     /// names (`_owner`, `index`): None until it runs.
     named: Mutex<Vec<(&'static str, Option<Py<PyAny>>)>>,
+    /// The meshes whose store a History step enlists (a mesh step).
+    meshes: Option<Meshes>,
+    doc_undo: bool,
+    /// History journals the enlisted stores (`_journal_geometry`).
+    journal: AtomicBool,
+    /// Set while a direct `undo` (outside History's replay) runs.
+    direct: AtomicBool,
 }
 
 impl RecordStep {
@@ -93,6 +103,10 @@ impl RecordStep {
             memory: Mutex::new(Vec::new()),
             own: Mutex::new(None),
             named: Mutex::new(Vec::new()),
+            meshes: None,
+            doc_undo: true,
+            journal: AtomicBool::new(false),
+            direct: AtomicBool::new(false),
         }
     }
     fn paint(mut self) -> Self {
@@ -106,6 +120,40 @@ impl RecordStep {
     pub(super) fn groups(mut self) -> Self {
         self.keeps_groups = true;
         self
+    }
+    /// A mesh step: History enlists these meshes' stores for the step.
+    pub(super) fn on_meshes(mut self, meshes: Meshes) -> Self {
+        self.meshes = Some(meshes);
+        self
+    }
+    /// A step whose own inverse undoes what History does not journal
+    /// (`doc_undo` false): History replays it by its transaction only when
+    /// it journals the step's stores.
+    pub(super) fn own_inverse(mut self) -> Self {
+        self.doc_undo = false;
+        self
+    }
+    /// As `own_inverse`, only when `own` holds (a step whose targets may
+    /// or may not include mesh elements).
+    pub(super) fn own_inverse_if(mut self, own: bool) -> Self {
+        self.doc_undo = !own;
+        self
+    }
+    /// Whether History journals the step's stores (else its snapshots undo them).
+    pub(super) fn journalled(&self) -> bool {
+        self.journal.load(Ordering::Relaxed)
+    }
+    /// Whether the replay running is a direct undo, outside History.
+    pub(super) fn is_direct(&self) -> bool {
+        self.direct.load(Ordering::Relaxed)
+    }
+    fn read_journal(slf: &Bound<'_, Self>) -> PyResult<()> {
+        let flag = match slf.as_any().getattr_opt("_journal_geometry")? {
+            Some(v) => v.is_truthy()?,
+            None => false,
+        };
+        slf.get().journal.store(flag, Ordering::Relaxed);
+        Ok(())
     }
     pub(super) fn hook(mut self, after: After) -> Self {
         self.hook = Some(after);
@@ -123,6 +171,13 @@ impl RecordStep {
     pub(super) fn publish(&self, name: &'static str, value: Obj<'_>) {
         if let Some(slot) = self.named.lock().unwrap().iter_mut().find(|(n, _)| *n == name) {
             slot.1 = Some(value.unbind());
+        }
+    }
+    /// A published result (None until the step ran).
+    pub(super) fn as_named<'py>(&self, py: Python<'py>, name: &str) -> PyResult<Obj<'py>> {
+        match self.named.lock().unwrap().iter().find(|(k, _)| *k == name) {
+            Some((_, v)) => Ok(v.as_ref().map_or_else(|| py.None().into_bound(py), |v| v.clone_ref(py).into_bound(py))),
+            None => Err(PyAttributeError::new_err(name.to_owned())),
         }
     }
     pub(super) fn remember(&self, values: Vec<Obj<'_>>) {
@@ -244,9 +299,12 @@ fn rotation<'py>(py: Python<'py>, centre: &Obj<'py>, axis: &Obj<'py>, deg: f64) 
 #[pymethods]
 #[allow(non_upper_case_globals)]
 impl RecordStep {
-    /// Undone and redone by the step's document transaction.
-    #[classattr]
-    const doc_undo: bool = true;
+    /// Undone and redone by the step's document transaction, unless it
+    /// keeps a real inverse for meshes History does not journal.
+    #[getter]
+    fn doc_undo(&self) -> bool {
+        self.doc_undo
+    }
     #[getter]
     fn history_name(&self) -> &'static str {
         self.name
@@ -268,8 +326,17 @@ impl RecordStep {
         let py = slf.py();
         let me = slf.get();
         let doc = py.import("core.doc_model")?;
-        let key: Key = scene.getattr("_root")?.getattr("_doc_key")?.extract()?;
+        // A stand-in scene without a document (a tool's preview, a test
+        // fixture) runs the operation alone: there is nothing to journal.
+        let key: Option<Key> = match scene.getattr_opt("_root")? {
+            Some(root) => Some(root.getattr("_doc_key")?.extract()?),
+            None => None,
+        };
         let outer = lock().depth();
+        if key.is_none() && outer == 0 {
+            Self::read_journal(slf)?;
+            return (me.run)(me, py, scene);
+        }
         if outer == 0 {
             // A direct call: the step's own transaction.
             doc.call_method1("begin", (key,))?;
@@ -277,9 +344,10 @@ impl RecordStep {
             // Inside another step (History, a compound): a savepoint whose
             // ops this step keeps a copy of, for its own direct undo.
             doc.call_method0("flush")?;
-            lock().begin(Some(key)).ok_or_else(|| PyRuntimeError::new_err("Document writer reservation lost"))?;
+            lock().begin(key).ok_or_else(|| PyRuntimeError::new_err("Document writer reservation lost"))?;
         }
         let pins = lock().open.as_ref().map_or(0, |o| o.pins.len());
+        Self::read_journal(slf)?;
         let result = (me.run)(me, py, scene);
         let own = match (&result, outer) {
             (Ok(()), 0) => {
@@ -330,7 +398,11 @@ impl RecordStep {
             py.import("core.doc_model")?.call_method0("flush")?;
             txn.call_method0("undo")?;
         }
-        me.after(py, scene, Some("undo"))
+        Self::read_journal(slf)?;
+        me.direct.store(true, Ordering::Relaxed);
+        let r = me.after(py, scene, Some("undo"));
+        me.direct.store(false, Ordering::Relaxed);
+        r
     }
 
     fn bind_transaction(slf: &Bound<'_, Self>, txn: &Obj<'_>) -> PyResult<()> {
@@ -339,8 +411,17 @@ impl RecordStep {
 
     /// What a transaction undo or redo still does beside the document.
     #[pyo3(signature = (scene, phase = None))]
-    fn doc_after(&self, py: Python<'_>, scene: &Obj<'_>, phase: Option<&str>) -> PyResult<()> {
-        self.after(py, scene, phase)
+    fn doc_after(slf: &Bound<'_, Self>, scene: &Obj<'_>, phase: Option<&str>) -> PyResult<()> {
+        Self::read_journal(slf)?;
+        slf.get().after(slf.py(), scene, phase)
+    }
+
+    /// The meshes a mesh step's History transaction enlists.
+    fn geometry_meshes<'py>(&self, py: Python<'py>, scene: &Obj<'py>) -> PyResult<Bound<'py, PyTuple>> {
+        match self.meshes {
+            Some(Meshes(f)) => PyTuple::new(py, f(self, py, scene)?),
+            None => PyTuple::new(py, [scene.getattr("mesh")?]),
+        }
     }
 
     fn __repr__(&self) -> String {

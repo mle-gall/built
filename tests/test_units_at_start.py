@@ -120,7 +120,7 @@ def test_a_document_already_open_is_not_asked_about(win, tmp_path):
     from core.scene import Scene
     from formats import igz
     from ingetrazo_core import Vec3
-    from views import wgpu_start
+    from ingetrazo_render import wgpu_start
 
     path = tmp_path / "plano.igz"
     igz.save_scene(Scene(), path)

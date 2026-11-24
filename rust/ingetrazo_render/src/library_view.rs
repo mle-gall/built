@@ -1,4 +1,4 @@
-//! The Library sheet's view model (views/wgpu_library.py): the scopes and
+//! The Library sheet's view model (library_host.rs): the scopes and
 //! categories on the side, the facet and the search, the sort, how the
 //! content groups, each tile's words and menu, the details of a material,
 //! and which of the model's materials only linked files wear.

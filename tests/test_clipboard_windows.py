@@ -79,7 +79,7 @@ def test_the_offer_is_rendered_on_demand(app):
 @pytest.mark.parametrize("package", ["APPIMAGE", "FLATPAK_ID", None])
 def test_new_window_uses_the_running_application(native_host, tmp_path, monkeypatch, package):
     from app_shell.host import Host
-    from views import wgpu_start
+    from ingetrazo_render import wgpu_start
 
     if package:
         monkeypatch.setenv(package, str(tmp_path / "package"))

@@ -9,6 +9,40 @@ from scripts.isolated_launch import run
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 
+def test_make_component_shows_once_with_loose_geometry_and_a_group(native_host):
+    from core.group import Group
+    from core.mesh import Mesh
+    from ingetrazo_core import Vec3
+    from ingetrazo_render import context_menu_build
+
+    win = native_host.window
+    scene = win.viewport.scene
+    group = Group(Mesh(), name="G")
+    scene.groups.append(group)
+    face = scene.mesh.add_face([Vec3(0, 0, 0), Vec3(2, 0, 0), Vec3(1, 1, 0)])
+    scene.select([group, face])
+    menu = context_menu_build(win, win.view)
+    assert menu.kind == "mixed" and menu.ids().count("makecomp") == 1
+
+
+def test_multiple_plugins_keep_their_declared_order_and_paths(native_host):
+    from views.extension_api import ExtensionApp
+
+    win = native_host.window
+    calls = []
+    display = ExtensionApp(win, "display_thing").add_menu("Display")
+    for name in ("Bigger", "Smaller", "Reset"):
+        display.addAction(name, lambda checked=False, name=name: calls.append(name))
+    ExtensionApp(win, "solo_tool").add_menu_action("Solo…", lambda: calls.append("Solo"))
+    menus = win._extension_menus
+    rows = [row for row in menus.rows() if row[2] in ("Bigger", "Smaller", "Reset", "Solo…")]
+    assert [(row[1], row[2]) for row in rows] == [
+        (["Display"], "Bigger"), (["Display"], "Smaller"), (["Display"], "Reset"), ([], "Solo…")]
+    for command, *_ in rows:
+        assert menus.trigger(command)
+    assert calls == ["Bigger", "Smaller", "Reset", "Solo"]
+
+
 def test_nested_actions_checked_state_and_ancestor_visibility():
     from ingetrazo_render import ExtensionMenus
     menus = ExtensionMenus()

@@ -146,6 +146,7 @@ pub struct FeedReaders {
     browser_version: i64,
     filing_epoch: u64,
     dirty_paint: HashSet<String>,
+    dirty_library_paint: HashSet<String>,
 }
 
 #[pymethods]
@@ -176,6 +177,8 @@ impl FeedReaders {
         let serial = self.stamp(py)?;
         if reader == "mesh_paint" {
             self.dirty_paint.clear();
+        } else if reader == "library_paint" {
+            self.dirty_library_paint.clear();
         }
         self.scans.insert(reader, (version, serial));
         Ok(())
@@ -183,6 +186,10 @@ impl FeedReaders {
 
     fn dirty_paint_meshes(&self) -> Vec<String> {
         self.dirty_paint.iter().cloned().collect()
+    }
+
+    fn dirty_library_paint_meshes(&self) -> Vec<String> {
+        self.dirty_library_paint.iter().cloned().collect()
     }
 
     fn current(&self, py: Python<'_>, reader: &str, version: i64) -> PyResult<bool> {
@@ -218,7 +225,7 @@ impl FeedReaders {
     ) -> PyResult<()> {
         let now = self.stamp(py)?;
         for (reader, stamp) in &mut self.scans {
-            if *stamp == (before, serial) && matches!(reader.as_str(), "mesh_paint" | "filing")
+            if *stamp == (before, serial) && matches!(reader.as_str(), "mesh_paint" | "library_paint" | "filing")
             {
                 *stamp = (after, now);
             }
@@ -267,9 +274,14 @@ impl FeedReaders {
                     .and_then(|c| c.getattr("backing")?.eq("store"))
                     .unwrap_or(false)
             });
-        if keyed_paint && self.scans.get("mesh_paint") == Some(&(before, serial)) {
-            for change in changes.try_iter()? {
-                self.dirty_paint.insert(change?.getattr("key")?.extract()?);
+        if keyed_paint {
+            for (reader, pending) in [("mesh_paint", &mut self.dirty_paint),
+                                       ("library_paint", &mut self.dirty_library_paint)] {
+                if self.scans.get(reader) == Some(&(before, serial)) {
+                    for change in changes.try_iter()? {
+                        pending.insert(change?.getattr("key")?.extract()?);
+                    }
+                }
             }
         }
         let command: String = step.getattr("command")?.extract()?;
@@ -282,7 +294,7 @@ impl FeedReaders {
             let keep = match reader.as_str() {
                 "paint" | "bim" => paint && !registry && !membership && !tag_changes,
                 "rows" => (paint || rows) && !membership && !tag_changes && !registry,
-                "mesh_paint" => (paint || groups || keyed_paint) && !registry,
+                "mesh_paint" | "library_paint" => (paint || groups || keyed_paint) && !registry,
                 "filing" => !registry && !tag_changes && (
                     matches!(command.as_str(), "DeleteGroupCommand" | "InsertGroupCommand")
                     || (command == "MoveGroupCommand" && paint)),

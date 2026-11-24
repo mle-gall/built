@@ -160,6 +160,28 @@ impl App {
 mod tests {
     use super::carry;
 
+    #[test]
+    fn equal_travel_survives_slow_and_inertial_delivery() {
+        for (count, step, last, calls) in [
+            (10, -4.0, 0.0, 10),
+            (100, -0.4, 0.0, 40),
+            (133, -0.3, -0.1, 40),
+        ] {
+            let mut remainder = (0.0, 0.0);
+            let mut sent = 0.0;
+            let mut forwarded = 0;
+            for delta in std::iter::repeat_n(step, count).chain([last]) {
+                let (dx, dy) = carry(&mut remainder, (0.0, delta));
+                assert_eq!(dx, 0.0);
+                assert!(dy <= 0.0 && dy.fract() == 0.0);
+                sent += dy;
+                forwarded += usize::from(dy != 0.0);
+            }
+            assert_eq!((sent, forwarded), (-40.0, calls));
+            assert!(remainder.1.abs() < 1e-12);
+        }
+    }
+
     /// A slow slide and an inertia tail, in fractions of a pixel: what is
     /// handed over adds up to the travel, never goes the other way, and is
     /// never more than half a pixel behind.

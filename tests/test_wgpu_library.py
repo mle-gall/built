@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
-"""The Library dock place (views/wgpu_library.py): providers by type, the
+"""The Library dock place (ingetrazo_render.wgpu_library): providers by type, the
 rows the dock draws (sections, categories, sort, filter, folds), the dock
 places (Project | Library, and back to where Project was), and the core
 protocol commands the Library edits through."""
@@ -15,7 +15,7 @@ from core.history import History, InsertGroupCommand
 from core.materials import Material
 from core.protocol import commands as C
 from core.scene import Scene
-from views import wgpu_library as L
+from ingetrazo_render import wgpu_library as L
 
 
 @pytest.fixture(autouse=True)

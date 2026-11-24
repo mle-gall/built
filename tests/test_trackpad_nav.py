@@ -465,3 +465,39 @@ def test_the_metal_view_orbits_and_pinches_too():
     finally:
         v.renderer = None
         v.close()
+
+
+def test_off_centre_navigation_pose_sequence(vp):
+    """Pin yaw, pitch, distance and target at each input boundary."""
+    vp.resize(640, 480)
+    assert not vp.isVisible()
+    vp.camera.aspect = 640 / 480
+    at = QPointF(328, 196)
+    actual = []
+    finger_slide(vp, 10, -2, steps=3, at=at)
+    actual.append(pose(vp))
+    finger_slide(vp, -7, 4, steps=4, mods=Qt.ShiftModifier, at=at)
+    actual.append(pose(vp))
+    notch(vp, 120, at=at)
+    actual.append(pose(vp))
+    finger_slide(vp, 0, -1, steps=8, device=REAL_TRACKPAD, at=at)
+    actual.append(pose(vp))
+    slide(vp, 0, -2, phase=Qt.ScrollMomentum, device=REAL_TRACKPAD, at=at)
+    actual.append(pose(vp))
+    pinch(vp, 0.14, at=at)
+    actual.append(pose(vp))
+
+    # Captured with the shared controller, in logical pixels and model metres.
+    angles = (-0.9817477042468, 0.4843288674284)
+    expected = [
+        (20.0,               0.0,             0.0,             0.0),
+        (20.0,               0.6607480921166, 0.7507715990379, 0.4887651759596),
+        (18.0,               0.6444203731316, 0.8249120716871, 0.6231755993485),
+        # Trackpad slide and inertia zoom at TRACKPAD_ZOOM_GAIN (3x, 2026-11-24);
+        # the wheel notch above and the pinch's ratio below are unchanged.
+        (15.2075943724250,   0.6216235659419, 0.9284272082153, 0.8108398106865),
+        (14.58,              0.6164999736671, 0.9516922799171, 0.8530174233435),
+        (12.7894736842105,   0.6018823684073, 1.0180675135888, 0.9733501234406),
+    ]
+    for observed, values in zip(actual, expected, strict=True):
+        assert observed == pytest.approx((*angles, *values), rel=1e-10, abs=1e-10)

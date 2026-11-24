@@ -309,7 +309,8 @@ def test_a_path_field_picks_through_file_dialogs(monkeypatch, tmp_path):
 
 
 def test_the_library_image_picker_follows_the_host(monkeypatch, tmp_path):
-    from views import filedialogs, wgpu_library
+    from ingetrazo_render import wgpu_library
+    from views import filedialogs
 
     class Picker:
         @staticmethod

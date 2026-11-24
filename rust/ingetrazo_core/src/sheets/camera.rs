@@ -38,6 +38,9 @@ pub struct Cam {
     pub clip_far: Option<f64>,
     /// What the view holds as a sphere (centre, radius): the parallel depth range.
     pub depth_reach: Option<(DVec3, f64)>,
+    /// The perspective near / far fitted to what the view shows
+    /// (`OrbitCamera.fit_depth_range`), while it holds for this view.
+    pub fitted: Option<(f64, f64)>,
 }
 
 impl Default for Cam {
@@ -60,6 +63,7 @@ impl Default for Cam {
             clip_near: None,
             clip_far: None,
             depth_reach: None,
+            fitted: None,
         }
     }
 }
@@ -104,19 +108,25 @@ impl Cam {
         }
         DMat4::look_at_rh(self.eye(), self.target, self.up_vector().normalize_or_zero())
     }
-    fn near_plane(&self) -> f64 {
+    pub fn near_plane(&self) -> f64 {
         if let Some(n) = self.clip_near {
             return n.max(NEAR_FLOOR);
         }
+        if let Some((n, _)) = self.fitted {
+            return n;
+        }
         self.znear.min((self.distance * 0.02).max(NEAR_FLOOR))
     }
-    fn far_plane(&self) -> f64 {
+    pub fn far_plane(&self) -> f64 {
         if let Some(f) = self.clip_far {
             return f.max(self.near_plane() * 1.01);
         }
+        if let Some((_, f)) = self.fitted {
+            return f;
+        }
         self.zfar.max(self.distance * FAR_PER_DISTANCE)
     }
-    fn parallel_depth(&self) -> f64 {
+    pub fn parallel_depth(&self) -> f64 {
         let far = self.far_plane();
         let Some((centre, radius)) = self.depth_reach else { return far };
         let held = (self.eye() - centre).length() + radius;
