@@ -47,6 +47,7 @@ mod fillet_host_api;
 mod first_person_host_api;
 mod move_host_api;
 mod offset_host_api;
+mod paint_host_api;
 mod position_camera_host_api;
 mod protractor_base_api;
 mod protractor_host_api;
@@ -132,6 +133,7 @@ fn registration(module: &str, name: &str) -> Option<(&'static [Method], &'static
             protractor_tool_api::METHODS,
             stringify!(protractor_tool_api),
         ),
+        ("tools.paint_host", "PaintHost") => (paint_host_api::METHODS, stringify!(paint_host_api)),
         ("tools.pushpull", "PushPullTool") => (pushpull::METHODS, stringify!(pushpull)),
         _ => return None,
     })
@@ -214,6 +216,7 @@ pub fn register_tool_adapter<'py>(cls: &Obj<'py>) -> Reply<'py> {
 
 mod move_functions;
 mod offset_functions;
+mod paint_functions;
 mod selection;
 mod walk_functions;
 #[pyfunction]
@@ -225,6 +228,7 @@ pub fn register_tool_functions(namespace: &Bound<'_, PyDict>) -> PyResult<()> {
         .extract()?;
     let methods = match module.as_str() {
         "tools.select_host" => selection::METHODS,
+        "tools.paint_host" => paint_functions::METHODS,
         "tools.offset_host" => offset_functions::METHODS,
         "tools.move_host" => move_functions::METHODS,
         "tools.walkthrough_host" => walk_functions::METHODS,
