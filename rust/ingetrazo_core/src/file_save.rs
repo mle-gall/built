@@ -348,7 +348,10 @@ fn igz_write_prepared_inner<'p>(
     stats.set_item("missing", missing)?;
     Ok(stats.into_any())
 }
+#[path = "file_publish.rs"]
+mod publish;
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    publish::register(m)?;
     m.add_function(wrap_pyfunction!(igz_save_scene_inner, m)?)?;
     m.add_function(wrap_pyfunction!(igz_prepare_and_write, m)?)?;
     m.add_function(wrap_pyfunction!(igz_spool_json, m)?)?;
