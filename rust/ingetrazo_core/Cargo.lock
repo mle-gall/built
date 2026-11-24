@@ -253,6 +253,8 @@ dependencies = [
  "serde_json",
  "tiny-skia",
  "zmij",
+ "zune-core",
+ "zune-jpeg",
 ]
 
 [[package]]

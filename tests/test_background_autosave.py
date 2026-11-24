@@ -185,7 +185,7 @@ def test_survey_arrays_and_images_are_detached(tmp_path):
     igz.write_prepared(snap,path,background=True)
     recovered=Scene();igz.load_into(recovered,path)
     np.testing.assert_array_equal(recovered.photo_mesh.vertices,expected)
-    assert recovered.photo_mesh.images[0].pixelColor(0,0).blue()>100
+    assert recovered.photo_mesh.images[0].rgba()[2]>100
 
 
 def test_trackpad_camera_motion_defers_snapshot_slices(win):

@@ -33,7 +33,25 @@ fn choice(id: &str, label: &str, index: usize, items: &[(&str, &str)]) -> Field 
     )
 }
 
+const VIDEO_SIZES: [(u32, u32); 4] = [(1280, 720), (1920, 1080), (2560, 1440), (3840, 2160)];
+const VIDEO_RATES: [u32; 4] = [24, 25, 30, 60];
+
 enum Options {
+    Animation {
+        enabled: bool,
+        transition: String,
+        valid_transition: f64,
+        pause: String,
+    },
+    Video {
+        view: (u32, u32),
+        scenes: usize,
+        seconds: f64,
+        size: usize,
+        view_label: String,
+        duration_label: String,
+        rate: usize,
+    },
     MeshImport {
         unit: usize,
         simplify: Option<usize>,
@@ -67,7 +85,7 @@ fn number_row(
     raw: &str,
     range: (f64, f64),
     suffix: &str,
-    step: u32,
+    step: impl ToString,
     flags: u32,
 ) -> Field {
     (
@@ -99,8 +117,53 @@ fn check(id: &str, label: &str, on: bool, flags: u32, tip: &str) -> Field {
     )
 }
 
+fn seconds(value: &str) -> Option<f64> {
+    value
+        .trim()
+        .replace(',', ".")
+        .parse()
+        .ok()
+        .filter(|x| (0. ..=60.).contains(x))
+}
+
 #[pymethods]
 impl OperationForm {
+    #[staticmethod]
+    fn animation(enabled: bool, transition: f64, pause: f64) -> Self {
+        Self {
+            number: String::new(),
+            options: Options::Animation {
+                enabled,
+                transition: transition.to_string(),
+                valid_transition: transition,
+                pause: pause.to_string(),
+            },
+        }
+    }
+    #[staticmethod]
+    #[pyo3(signature=(width, height, scenes, seconds, view_label="Like the view ({w} × {h})", duration_label="{scenes} scenes, {seconds} s ({frames} frames)"))]
+    fn video(
+        width: u32,
+        height: u32,
+        scenes: usize,
+        seconds: f64,
+        view_label: &str,
+        duration_label: &str,
+    ) -> Self {
+        Self {
+            number: String::new(),
+            options: Options::Video {
+                view: (width.max(2) & !1, height.max(2) & !1),
+                scenes,
+                seconds,
+                size: 1,
+                view_label: view_label.into(),
+                duration_label: duration_label.into(),
+                rate: 2,
+            },
+        }
+    }
+
     #[staticmethod]
     #[pyo3(signature = (unit, simplify=None))]
     fn mesh_import(unit: &str, simplify: Option<&str>) -> Self {
@@ -161,6 +224,84 @@ impl OperationForm {
 
     fn rows(&self) -> Vec<Field> {
         match self.options {
+            Options::Animation {
+                enabled,
+                ref transition,
+                ref pause,
+                ..
+            } => vec![
+                check(
+                    "enabled",
+                    "Glide from scene to scene",
+                    enabled,
+                    0,
+                    "Off: showing a scene jumps straight to it, as it always did.",
+                ),
+                number_row(
+                    "transition",
+                    "Scene transition:",
+                    transition,
+                    (0., 60.),
+                    " s",
+                    0.5,
+                    if enabled { 0 } else { DISABLED },
+                ),
+                number_row("pause", "Scene delay:", pause, (0., 60.), " s", 0.5, 0),
+            ],
+            Options::Video {
+                view,
+                scenes,
+                seconds,
+                size,
+                ref view_label,
+                ref duration_label,
+                rate,
+            } => {
+                let mut sizes: Vec<String> = VIDEO_SIZES
+                    .iter()
+                    .map(|(w, h)| format!("{w} × {h}"))
+                    .collect();
+                sizes.push(
+                    view_label
+                        .replace("{w}", &view.0.to_string())
+                        .replace("{h}", &view.1.to_string()),
+                );
+                let rates = VIDEO_RATES.iter().map(u32::to_string).collect();
+                let row = |id: &str, label: &str, at: usize, options: Vec<String>| {
+                    (
+                        id.into(),
+                        "choice".into(),
+                        label.into(),
+                        String::new(),
+                        at as f64,
+                        0.,
+                        options.len() as f64,
+                        options,
+                        0,
+                        String::new(),
+                    )
+                };
+                let frames = (seconds * f64::from(VIDEO_RATES[rate])).round_ties_even() as u64 + 1;
+                vec![
+                    row("size", "Video size:", size, sizes),
+                    row("fps", "Frames per second:", rate, rates),
+                    (
+                        "duration".into(),
+                        "text".into(),
+                        "Duration:".into(),
+                        duration_label
+                            .replace("{scenes}", &scenes.to_string())
+                            .replace("{seconds}", &format!("{seconds:.1}"))
+                            .replace("{frames}", &frames.to_string()),
+                        0.,
+                        0.,
+                        0.,
+                        vec![],
+                        0,
+                        String::new(),
+                    ),
+                ]
+            }
             Options::MeshImport { unit, simplify } => {
                 let label = if simplify.is_some() {
                     "An STL file does not record its unit. What is this model in?"
@@ -277,6 +418,36 @@ impl OperationForm {
     fn receive(&mut self, id: &str, raw: &str) {
         let on = raw == "1";
         match &mut self.options {
+            Options::Animation {
+                enabled,
+                transition,
+                valid_transition,
+                pause,
+            } => match id {
+                "enabled" => {
+                    *enabled = on;
+                    if !on && seconds(transition).is_none() {
+                        *transition = valid_transition.to_string();
+                    }
+                }
+                "transition" if *enabled => {
+                    *transition = raw.into();
+                    if let Some(value) = seconds(raw) {
+                        *valid_transition = value;
+                    }
+                }
+                "pause" => *pause = raw.into(),
+                _ => (),
+            },
+            Options::Video { size, rate, .. } => {
+                if let Ok(n) = raw.parse::<usize>() {
+                    match id {
+                        "size" if n <= VIDEO_SIZES.len() => *size = n,
+                        "fps" if n < VIDEO_RATES.len() => *rate = n,
+                        _ => (),
+                    }
+                }
+            }
             Options::MeshImport { unit, simplify } => {
                 if let Ok(index) = raw.parse::<usize>() {
                     match id {
@@ -326,6 +497,11 @@ impl OperationForm {
 
     fn invalid_range(&self) -> Option<(u32, u32)> {
         match self.options {
+            Options::Animation {
+                ref transition,
+                ref pause,
+                ..
+            } if seconds(transition).is_none() || seconds(pause).is_none() => Some((0, 60)),
             Options::Soften { harden: false, .. } if self.angle().is_none() => Some((0, 180)),
             Options::Image { .. } if self.width().is_none() => Some((640, 16384)),
             _ => None,
@@ -335,6 +511,24 @@ impl OperationForm {
     fn values(&self, py: Python<'_>) -> PyResult<Py<PyDict>> {
         let values = PyDict::new(py);
         match self.options {
+            Options::Animation {
+                enabled,
+                ref transition,
+                ref pause,
+                ..
+            } => {
+                values.set_item("enabled", enabled)?;
+                values.set_item("transition", seconds(transition))?;
+                values.set_item("pause", seconds(pause))?;
+            }
+            Options::Video {
+                view, size, rate, ..
+            } => {
+                let (w, h) = VIDEO_SIZES.get(size).copied().unwrap_or(view);
+                values.set_item("width", w)?;
+                values.set_item("height", h)?;
+                values.set_item("fps", VIDEO_RATES[rate])?;
+            }
             Options::MeshImport { unit, simplify } => {
                 values.set_item("unit", UNITS[unit].0)?;
                 if let Some(index) = simplify {

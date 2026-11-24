@@ -929,13 +929,8 @@ class BaseMapPanel(QWidget):
 
     def _capture_around(self, src, scene, datum, minx, miny, maxx, maxy) -> None:
         from PySide6.QtCore import QSignalBlocker
-        margin = 0.15 * max(maxx - minx, maxy - miny, 200.0)
-        cx, cy = (minx + maxx) / 2.0, (miny + maxy) / 2.0
-        self._capture_w = (maxx - minx) + 2 * margin
-        self._capture_l = (maxy - miny) + 2 * margin
         layer = TileLayer(src, zoom=self._zoom.value())
-        layer.set_rectangle(self._capture_w, self._capture_l, cx=cx, cy=cy)
-        layer.cap_detail(datum, max_tiles=500)
+        self._capture_w, self._capture_l = layer.capture_bounds(datum, minx, miny, maxx, maxy)
         layer.visible = self._show.isChecked()
         layer.terrain3d = bool(getattr(self._window, "_terrain_on", False))
         scene.tile_layer = layer

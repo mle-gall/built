@@ -6,9 +6,8 @@ use pyo3::pybacked::PyBackedBytes;
 use std::ffi::{c_char, c_int, c_uint, c_ulong, c_void};
 use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom, Write};
-use std::os::fd::{AsRawFd, FromRawFd};
+use std::os::fd::FromRawFd;
 use std::os::unix::fs::FileExt;
-use std::path::PathBuf;
 
 unsafe extern "C" {
     fn dup(fd: c_int) -> c_int;
@@ -20,73 +19,6 @@ fn file(fd: i32) -> io::Result<File> {
         Err(io::Error::last_os_error())
     } else {
         Ok(unsafe { File::from_raw_fd(copy) })
-    }
-}
-
-/// Keep an unpublished save beside its destination so that rename is atomic.
-/// A failed encoder, cancelled save or failed rename discards only this file.
-#[pyclass]
-pub struct AtomicDocument {
-    target: PathBuf,
-    temp: Option<PathBuf>,
-    file: Option<File>,
-}
-
-impl Drop for AtomicDocument {
-    fn drop(&mut self) {
-        self.discard();
-    }
-}
-
-#[pymethods]
-impl AtomicDocument {
-    #[new]
-    fn new(py: Python<'_>, target: PathBuf) -> PyResult<Self> {
-        use std::hash::{BuildHasher, RandomState};
-        use std::sync::atomic::{AtomicU64, Ordering};
-        static NEXT: AtomicU64 = AtomicU64::new(0);
-        Ok(py.detach(|| -> io::Result<Self> {
-            loop {
-                let id = RandomState::new().hash_one(NEXT.fetch_add(1, Ordering::Relaxed));
-                let temp = target.with_file_name(format!(".{id:016x}.part"));
-                match File::create_new(&temp) {
-                    Ok(file) => {
-                        return Ok(Self {
-                            target,
-                            temp: Some(temp),
-                            file: Some(file),
-                        })
-                    }
-                    Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
-                    Err(e) => return Err(e),
-                }
-            }
-        })?)
-    }
-
-    fn fileno(&self) -> PyResult<i32> {
-        self.file
-            .as_ref()
-            .map(File::as_raw_fd)
-            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("closed document output"))
-    }
-
-    fn publish(&mut self, py: Python<'_>) -> PyResult<()> {
-        self.file.take();
-        let temp = self
-            .temp
-            .as_ref()
-            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("closed document output"))?;
-        py.detach(|| std::fs::rename(temp, &self.target))?;
-        self.temp.take();
-        Ok(())
-    }
-
-    fn discard(&mut self) {
-        self.file.take();
-        if let Some(path) = self.temp.take() {
-            let _ = std::fs::remove_file(path);
-        }
     }
 }
 

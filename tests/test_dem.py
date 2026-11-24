@@ -9,7 +9,7 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
-from PySide6.QtGui import QColor, QGuiApplication, QImage
+from ingetrazo_render import SurveyRaster
 from ingetrazo_core import Vec3 as QVector3D
 
 from georef.datum import SceneDatum
@@ -22,39 +22,34 @@ from georef.dem import (
 )
 
 
-_app = QGuiApplication.instance() or QGuiApplication([])
-
-
-def _solid(color: QColor) -> QImage:
-    img = QImage(4, 4, QImage.Format.Format_RGBA8888)
-    img.fill(color)
-    return img
+def _solid(r, g, b):
+    return SurveyRaster(4, 4, bytes((r, g, b, 255)) * 16)
 
 
 # ---- RGB → elevation decode ----------------------------------------------------
 
 def test_decode_terrarium_known_height():
     # terrarium: h = R*256 + G + B/256 - 32768. Encode +100 m → (128,100,0).
-    field = decode_elevation(_solid(QColor(128, 100, 0)), "terrarium")
+    field = decode_elevation(_solid(128, 100, 0), "terrarium")
     assert field.shape == (4, 4)
     assert np.allclose(field, 100.0, atol=1e-3)
 
 
 def test_decode_terrarium_sub_metre_blue_channel():
     # B carries the sub-metre part: (128,100,128) → 100 + 128/256 = 100.5 m.
-    field = decode_elevation(_solid(QColor(128, 100, 128)), "terrarium")
+    field = decode_elevation(_solid(128, 100, 128), "terrarium")
     assert np.allclose(field, 100.5, atol=1e-3)
 
 
 def test_decode_mapbox_known_height():
     # mapbox: h = -10000 + (R*65536 + G*256 + B)*0.1. +100 m → (1,138,136).
-    field = decode_elevation(_solid(QColor(1, 138, 136)), "mapbox")
+    field = decode_elevation(_solid(1, 138, 136), "mapbox")
     assert np.allclose(field, 100.0, atol=0.2)
 
 
 def test_decode_sea_level():
     # terrarium zero → (128,0,0) = 128*256 - 32768 = 0 m.
-    field = decode_elevation(_solid(QColor(128, 0, 0)), "terrarium")
+    field = decode_elevation(_solid(128, 0, 0), "terrarium")
     assert np.allclose(field, 0.0, atol=1e-3)
 
 

@@ -271,13 +271,13 @@ def test_load_atlas_downscales_and_caches(tmp_path, monkeypatch):
     QImage(1024, 1024, QImage.Format.Format_RGB32).save(str(src), "PNG")
 
     img = load_atlas(src, (256, 256))
-    assert (img.width(), img.height()) == (256, 256)
+    assert (img.width, img.height) == (256, 256)
 
     cached = list((tmp_path / "cache" / "odm").glob("*.jpg"))
     assert len(cached) == 1
     # Second read must come from the cache, not the 1024px original.
     again = load_atlas(src, (256, 256))
-    assert (again.width(), again.height()) == (256, 256)
+    assert (again.width, again.height) == (256, 256)
 
 
 # ---- querying the surface --------------------------------------------------
@@ -537,7 +537,7 @@ def test_atlases_are_embedded_not_referenced(tmp_path):
 
     restored, out = _round_trip(tmp_path, mesh)
     assert 0 in restored.images
-    assert (restored.images[0].width(), restored.images[0].height()) == (64, 64)
+    assert (restored.images[0].width, restored.images[0].height) == (64, 64)
     # And it really is inside the container, not a path pointing outside.
     import zipfile
     with zipfile.ZipFile(out) as zf:
@@ -621,3 +621,17 @@ def test_empty_mesh_has_empty_bounds(tmp_path):
     mesh = load_odm_obj(obj, _datum_at_anchor())
     assert mesh.vertex_count == 0
     assert mesh.bounds() == (None, None)
+
+
+def test_atlas_reduction_keeps_orientation_and_straight_alpha(tmp_path):
+    from PySide6.QtGui import QColor, QImage
+    from ingetrazo_render import SurveyRaster
+    image = QImage(4, 4, QImage.Format.Format_RGBA8888)
+    image.fill(QColor(255, 0, 0, 0))
+    for y in range(4):
+        for x in (0, 2):
+            image.setPixelColor(x, y, QColor(0, 255 if y < 2 else 0, 255 if y >= 2 else 0))
+    path = tmp_path / "bands.png"
+    assert image.save(str(path))
+    reduced = SurveyRaster.atlas(path, (2, 2))
+    assert reduced.rgba() == bytes((0, 255, 0, 128)) * 2 + bytes((0, 0, 255, 128)) * 2

@@ -8299,14 +8299,8 @@ class MainWindow(WorksessionMixin, QMainWindow):
 
     def ask_animation(self) -> None:
         """The document's transition settings, in a small dialog."""
-        from views.scene_player import ask_animation_settings
-        scene = self.viewport.scene
-        fresh = ask_animation_settings(self, scene.animation)
-        if fresh is None or fresh == scene.animation:
-            return
-        scene.animation = fresh
-        scene.version += 1                 # the document changed: title «*»
-        self._sync_animation_menu()
+        from views.scene_playback import edit_animation
+        edit_animation(self)
 
     def _build_scene_bar_menu(self):
         """The scene row's own right-click menu (off the tabs): play the
@@ -10558,126 +10552,12 @@ class MainWindow(WorksessionMixin, QMainWindow):
                           int(round(100 * float(getattr(image, "opacity", 1.0)))), 5, 100,
                           done=fade, suffix="%", step=5)
 
-    def _on_import_orthophoto(self) -> None:
-        """Import a GeoTIFF orthomosaic (a WebODM ``odm_orthophoto.tif``, a
-        QGIS export) as a georeferenced reference image: the file's own
-        pixel → UTM transform places it on the scene's datum at its true
-        size and orientation, so the model is traced over the real ground.
-        Display-only, like every reference image (invariant #4); locked on
-        arrival so a stray drag never moves the survey."""
-        from georef.datum import SceneDatum
-        from georef.geotiff import (GeoTiffError, describe, read_info,
-                                    read_rgba, rgba_to_qimage,
-                                    unsupported_reason)
+    def _on_import_orthophoto(self):
+        from views.survey_import import import_orthophoto
+        import_orthophoto(self)
 
-        path_str, _ = file_dialogs.getOpenFileName(
-            self, tr("Import orthomosaic"), "",
-            tr("GeoTIFF (*.tif *.tiff);;All files (*)"))
-        if not path_str:
-            return
-        path = Path(path_str)
-        try:
-            info = read_info(path)
-        except (GeoTiffError, OSError) as exc:
-            _dialogs.critical(self, tr("Import orthomosaic"), str(exc))
-            return
-        if not info.georeferenced:
-            _dialogs.warning(
-                self, tr("Import orthomosaic"),
-                tr("{name} carries no georeference (no map transform or an "
-                   "unknown coordinate system). Import it with "
-                   "File ▸ Import ▸ Image and size it by hand.",
-                   name=path.name))
-            return
-        reason = unsupported_reason(info)
-        if reason:
-            _dialogs.critical(
-                self, tr("Import orthomosaic"),
-                tr("{name}: {reason} is not supported by this reader.",
-                   name=path.name, reason=reason))
-            return
-
-        scene = self.viewport.scene
-        corners = info.corners_geodetic()
-        datum = getattr(scene, "georef", None)
-        datum_existed = datum is not None
-        if datum is None:
-            # The picture knows where it is — anchor the scene on its centre
-            # rather than asking for coordinates the user would look up.
-            lat = sum(c[0] for c in corners) / 4.0
-            lon = sum(c[1] for c in corners) / 4.0
-            datum = SceneDatum(lat, lon)
-            scene.georef = datum
-
-        dlg, cb = self._import_progress(tr("Importing {name}…", name=path.name))
-        max_px = 8192
-        try:
-            max_px = max(1024, min(8192, int(self.viewport.max_texture_size())))
-        except Exception:  # noqa: BLE001 — no GL context yet: keep the default
-            pass
-        try:
-            rgba, factor = read_rgba(
-                info, max_px=max_px,
-                progress=lambda fr: (cb(fr * 0.9, "Decoding the orthomosaic…")
-                                     or True))
-        except (GeoTiffError, OSError, MemoryError) as exc:
-            _dialogs.close_failed(dlg, exc)
-            _dialogs.critical(self, tr("Import orthomosaic"), str(exc))
-            return
-        cb(0.92, "Storing the picture…")
-        image = rgba_to_qimage(rgba)
-        del rgba
-        from PySide6.QtCore import QBuffer, QByteArray
-        from core.texture import cache_image
-        data = QByteArray()
-        buf = QBuffer(data)
-        buf.open(QBuffer.WriteOnly)
-        ext = "webp"
-        if not image.save(buf, "WEBP", 92):        # no WebP plugin: PNG
-            buf.close()
-            data = QByteArray()
-            buf = QBuffer(data)
-            buf.open(QBuffer.WriteOnly)
-            image.save(buf, "PNG")
-            ext = "png"
-        buf.close()
-        try:
-            cached = cache_image(bytes(data), f"{path.stem}.{ext}", "imported")
-        except OSError as exc:
-            _dialogs.close_failed(dlg, exc)
-            _dialogs.critical(self, tr("Import orthomosaic"), str(exc))
-            return
-        dlg.close()
-
-        # Place it: the plane's origin is the picture's bottom-left, u its
-        # width, v its height — the corners come in that order, already
-        # turned by the datum's north angle. On the datum plane (Z = 0),
-        # like the base map.
-        from core.image_plane import ImagePlane
-        from core.history import AddImagePlaneCommand
-        bl, br, _tr, tl = [datum.geodetic_to_local(lat, lon)
-                           for lat, lon in corners]
-        u, v = br - bl, tl - bl
-        aspect = v.length() / u.length() if u.length() > 1e-9 else 1.0
-        plane = ImagePlane(str(cached), bl, u, v, aspect=aspect,
-                           name=path.stem, locked=True)
-        self.viewport.history.execute(AddImagePlaneCommand(plane))
-        if not datum_existed:
-            lo, hi = QVector3D(bl), QVector3D(bl)
-            for c in plane.corners():
-                lo = QVector3D(min(lo.x(), c.x()), min(lo.y(), c.y()), 0.0)
-                hi = QVector3D(max(hi.x(), c.x()), max(hi.y(), c.y()), 0.0)
-            self.georef_tray.base_map.setup_for_bounds(datum, lo, hi)
-            self.viewport.camera.set_view("top")
-            self.viewport.camera.fit_to(lo, hi)
-        self.georef_tray.on_scene_changed()
-        self.viewport.update()
-        w_m, h_m = u.length(), v.length()
-        self.statusBar().showMessage(
-            tr("Imported {name} — {w:.0f} × {h:.0f} m, {info}{reduced}",
-               name=path.name, w=w_m, h=h_m, info=describe(info),
-               reduced=(tr(", reduced {k}×", k=factor) if factor > 1 else "")),
-            8000)
+    def _set_survey_capture(self, datum, lo, hi):
+        self.georef_tray.base_map.setup_for_bounds(datum, lo, hi)
 
     def _unlock_image(self, image) -> None:
         """Unlock one reference image (from the right-click over it) and
@@ -11114,16 +10994,15 @@ class MainWindow(WorksessionMixin, QMainWindow):
                     self.progressed.emit(0.05, "Reading mesh…")
                     mesh = load_odm_obj(path, datum, ground_ref=ground)
 
-                    from PySide6.QtGui import QImageReader
+                    from ingetrazo_render import raster_dimensions
                     sizes, index_of = [], []
                     for i, material in enumerate(mesh.materials):
                         if material.texture is None or not material.texture.is_file():
                             continue
-                        reader = QImageReader(str(material.texture))
-                        size = reader.size()
-                        if not size.isValid():
+                        size = raster_dimensions(material.texture)
+                        if size is None:
                             continue
-                        sizes.append((size.width(), size.height()))
+                        sizes.append(size)
                         index_of.append(i)
 
                     targets = plan_texture_sizes(sizes, gl_max)
@@ -11133,7 +11012,7 @@ class MainWindow(WorksessionMixin, QMainWindow):
                             0.15 + 0.85 * n / max(1, len(index_of)),
                             "Loading textures…")
                         image = load_atlas(mesh.materials[i].texture, target)
-                        if not image.isNull():
+                        if image is not None:
                             images[i] = image
                     self.finished.emit(mesh, images, None)
                 except Exception as exc:  # noqa: BLE001 — reported to caller

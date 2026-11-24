@@ -12,14 +12,14 @@ def _vertices(positions, uvs, origin, triangles=None):
 
 
 def _texture(image, fallback, limit):
-    if image is None or image.isNull():
+    from georef.raster import as_raster
+    image = as_raster(image)
+    if image is None:
         return 1, 1, np.array((*fallback, 255), np.uint8)
-    # Tile, terrain and survey providers still hand over a QImage.
-    from PySide6.QtGui import QImage
-    image = image.convertToFormat(QImage.Format_RGBA8888)
-    if max(image.width(), image.height()) <= limit:
-        return image.width(), image.height(), np.frombuffer(bytes(image.constBits()), np.uint8)
-    return fit_reference_rgba(image.width(), image.height(), bytes(image.constBits()), limit)
+    rgba = image.rgba()
+    if max(image.width, image.height) <= limit:
+        return image.width, image.height, np.frombuffer(rgba, np.uint8)
+    return fit_reference_rgba(image.width, image.height, rgba, limit)
 
 
 def sync(view, style, *, scene=None):
@@ -45,7 +45,7 @@ def sync(view, style, *, scene=None):
     revision = getattr(source, '_reference_revision', 0)
 
     def changed(key, signature, image=None):
-        layers[key] = (signature, image.cacheKey() if image is not None else None)
+        layers[key] = (signature, image.cacheKey() if hasattr(image, "cacheKey") else image)
         return layers[key] != old.get(key)
 
     def upload(key, geometry, image, fallback=(255, 255, 255), opacity=1.,

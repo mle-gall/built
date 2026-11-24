@@ -8,13 +8,13 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtGui import QGuiApplication, QImage
+from ingetrazo_render import SurveyRaster
 from ingetrazo_core import Vec3 as QVector3D
 
 from georef.datum import SceneDatum
 from georef.terrain import build_mosaic, build_terrain
 
-_app = QGuiApplication.instance() or QGuiApplication([])
+
 
 
 class StubSampler:
@@ -94,14 +94,13 @@ def test_mosaic_composites_tiles():
                       target_cell_m=100, zoom=15)
     tx0, ty0, ntx, nty, zoom = t.tile_range
     # Provide a solid red image for each covering tile.
-    red = QImage(256, 256, QImage.Format.Format_RGB32)
-    red.fill(0xFFFF0000)
+    red = SurveyRaster(256, 256, bytes((255, 0, 0, 255)) * (256 * 256))
     images = {(tx0 + dx, ty0 + dy, zoom): red
               for dx in range(ntx) for dy in range(nty)}
     mosaic = build_mosaic(t, images)
     assert mosaic is not None
-    assert mosaic.width() == ntx * 256 and mosaic.height() == nty * 256
-    assert mosaic.pixelColor(10, 10).red() == 255
+    assert mosaic.width == ntx * 256 and mosaic.height == nty * 256
+    assert mosaic.rgba() == bytes((255, 0, 0, 255)) * (mosaic.width * mosaic.height)
 
 
 def test_mosaic_none_when_no_images():
@@ -109,3 +108,14 @@ def test_mosaic_none_when_no_images():
     t = build_terrain(DATUM, sampler, 3000.0, (-300, -300, 300, 300),
                       target_cell_m=100, zoom=15)
     assert build_mosaic(t, {}) is None
+
+
+def test_mosaic_keeps_missing_tiles_grey_and_blends_translucent_tiles():
+    from types import SimpleNamespace
+    area = SimpleNamespace(tile_range=(5, 6, 2, 1, 7))
+    translucent = SurveyRaster(1, 1, bytes((255, 0, 0, 128)))
+    tiles = {(5, 6, 7): translucent, (6, 6, 8): translucent}
+    mosaic = build_mosaic(area, tiles)
+    pixels = mosaic.rgba()
+    assert all(abs(c - want) <= 1 for c, want in zip(pixels[:4], (197, 69, 69, 255)))
+    assert pixels[256 * 4:256 * 4 + 4] == bytes((138, 138, 138, 255))

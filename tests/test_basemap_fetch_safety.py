@@ -100,7 +100,7 @@ def test_a_tile_on_disk_is_read_at_once_without_the_network(tmp_path):
     cache.put("osm", 1, 2, 3, bytes(data))
     viewport._tile_disk_cache = cache
     got = viewport._disk_cached_tile(PRESETS["osm"], 1, 2, 3)
-    assert got is not None and got.pixelColor(0, 0) == QColor(10, 120, 30)
+    assert got is not None and got.rgba()[:4] == bytes((10, 120, 30, 255))
     assert viewport._disk_cached_tile(PRESETS["osm"], 9, 9, 3) is None
     assert viewport._tile_fetcher is None, "the network manager was built"
     viewport.deleteLater()

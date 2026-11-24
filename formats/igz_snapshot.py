@@ -1,7 +1,7 @@
 """Cooperative, detached snapshots for background IGZ recovery writes.
 
 Only the UI thread reads the model. Geometry and metadata cross into the
-worker as owned numeric arrays / Python values, never live meshes or widgets. Survey images use owned QImage values.
+worker as owned numeric arrays / Python values, never live meshes or widgets. Survey images share immutable pixels.
 """
 from formats import built
 from array import array
@@ -206,7 +206,7 @@ class Survey:
 
 
 def survey_steps(source):
-    from PySide6.QtGui import QImage
+    from georef.raster import as_raster
     import copy
     mesh = SimpleNamespace()
     for name in ('vertices', 'uvs', 'triangles'):
@@ -214,6 +214,5 @@ def survey_steps(source):
     for name in ('materials', 'source', 'anchor', 'visible', 'layer', 'vertical_reference'):
         setattr(mesh, name, copy.deepcopy(getattr(source, name)))
         yield
-    # QImage's implicit sharing detaches on edits; no GUI resources are used.
-    mesh.images = {key: QImage(image) for key, image in source.images.items()}
+    mesh.images = {key: as_raster(image) for key, image in source.images.items()}
     return Survey(mesh)
