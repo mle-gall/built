@@ -264,7 +264,11 @@ def test_a_qt_dialog_the_borrowed_code_shows_is_refused_not_waited_for(host):
     assert got != QMessageBox.Yes
     st = host.state()
     assert st["blocked_widgets"]
-    assert "Classic App" in st["status"]
+    # The note the status bar was given, not whether it still shows: it is
+    # timed (6 s of wall time), and on a loaded machine the dialog's round
+    # trip alone took that long under pytest-xdist.
+    assert host.not_here_log
+    assert "Classic App" in host.window.statusBar()._msg.text()
 
 
 def test_right_click_builds_the_menu_for_what_was_hit(host, tmp_path, monkeypatch):

@@ -192,7 +192,12 @@ def test_python_engine_flag_wins_for_one_run(monkeypatch):
         assert general_settings.value("rust_engine") == "1"   # old key is untouched
         assert _native.wanted() is False
     finally:
-        monkeypatch.delenv("INGETRAZO_RUST", raising=False)
+        # start_guard wrote the variable itself, not through monkeypatch: a
+        # monkeypatch.delenv here would record its "0" and put it back at
+        # teardown, turning the engine off for every later test on the
+        # same worker (the bake tests under xdist).
+        import os
+        os.environ.pop("INGETRAZO_RUST", None)
         general_settings.set_value("rust_engine", "0")
         general_settings.set_value(_native.STARTING, "0")
 
