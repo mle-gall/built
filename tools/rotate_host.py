@@ -5,7 +5,7 @@ from __future__ import annotations
 
 
 from PySide6.QtCore import Qt
-from ingetrazo_core import TransformPose, Vec3 as QVector3D
+from ingetrazo_core import CopyWire, MatrixGesture, Vec3 as QVector3D
 
 from core.group import Group
 from core.history import rotation_matrix
@@ -30,10 +30,8 @@ class RotateHost(CopyPreview, ProtractorBase):
         self._verts: list = []
         self._sel_faces: list = []          # for copy mode (loose geometry)
         self._sel_edges: list = []
-        self._base_segments: list = []      # wireframe for the copy preview
-        self._groups_ghost_due = False
-        self._preview_deg = 0.0
-        self._orig = None                   # the preview's snapshot
+        self._base_segments = CopyWire()      # wireframe for the copy preview
+        self._gesture = MatrixGesture()
 
     # ---- Lifecycle ----------------------------------------------------------
     def on_activate(self, viewport):
@@ -96,7 +94,7 @@ class RotateHost(CopyPreview, ProtractorBase):
         if not transform_grab(self, ctx, "rotate"):
             viewport.flash_status(tr("Select (or click) the geometry to rotate first"))
             return False
-        self._vp_preview = TransformPose.begin(viewport, self)
+        self._gesture.begin(self, viewport, False)
         self._gather_copy_entities(ctx)
         self._centre_plane = (ctx.world, QVector3D(self._axis()))
         self._axis_drag_armed = True
@@ -124,7 +122,7 @@ class RotateHost(CopyPreview, ProtractorBase):
     def host_swing_angle(self, viewport, _):
         if self._copy and self.hover_point is not None:
             return self._angle_to(self.hover_point)
-        return self._preview_deg
+        return self._gesture.angle
 
     def on_release(self, viewport) -> None:
         """A real DRAG from the centre fixes the rotation axis along it
@@ -157,8 +155,7 @@ class RotateHost(CopyPreview, ProtractorBase):
         self._machine.set("close_window", None)
 
     def host_park_rotation(self, viewport, _):
-        self._revert_preview(viewport)
-        self._end_vp_preview(viewport)
+        self._gesture.revert(viewport, False)
 
     def host_end_rotation(self, viewport, _):
         self._during.update(start_point=None, ref_point=None, copy=False, array_token=None)
@@ -208,32 +205,11 @@ class RotateHost(CopyPreview, ProtractorBase):
         return "Angle"
 
     # ---- Internals ----------------------------------------------------------
-    def _pose(self, viewport, matrix):
-        if self._orig is None:
-            self._orig = TransformPose(self, viewport.scene, "rotate", getattr(self, "_vp_preview", False))
-        self._orig.apply(viewport.scene, matrix)
+    def _apply_preview(self, viewport, target_deg):
+        self._gesture.rotate(self, viewport, target_deg)
 
-    def _apply_preview(self, viewport, target_deg: float) -> None:
-        m = rotation_matrix(self.start_point, self._axis(), target_deg)
-        self._pose(viewport, m)
-        self._preview_deg = target_deg
-        if getattr(self, "_vp_preview", False):
-            viewport.set_groups_preview_matrix(m)
-
-    def _revert_preview(self, viewport) -> None:
-        if getattr(self, "_orig", None) is not None:
-            self._pose(viewport, None)       # the exact values from before
-            self._orig = None
-        self._preview_deg = 0.0
-        if getattr(self, "_vp_preview", False):
-            from ingetrazo_core import Matrix4 as QMatrix4x4
-            viewport.set_groups_preview_matrix(QMatrix4x4())  # park, keep freeze
-
-    def _end_vp_preview(self, viewport) -> None:
-        end = getattr(viewport, "end_groups_preview", None)
-        if getattr(self, "_vp_preview", False) and end is not None:
-            end()
-        self._vp_preview = False
+    def _revert_preview(self, viewport):
+        self._gesture.revert(viewport, True)
 
     def _make_builder(self):
         # Compatibility for extensions that assemble their own History step.
@@ -266,7 +242,4 @@ class RotateHost(CopyPreview, ProtractorBase):
         self._verts = []
         self._sel_faces = []
         self._sel_edges = []
-        self._base_segments = []
-        self._groups_ghost_due = False
-        self._preview_deg = 0.0
-        self._orig = None       # the preview's snapshot (see _snapshot)
+        self._base_segments = CopyWire()

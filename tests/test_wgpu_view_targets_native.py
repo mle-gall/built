@@ -140,3 +140,17 @@ def test_a_view_goes_and_the_first_stays(two):
     with pytest.raises(ValueError):
         renderer.remove_target(0)
     assert _red(_capture(renderer, 64, 64)[32, 32])
+
+
+def test_settled_pick_tile_keeps_pixel_rows_and_invalidates_on_camera_change(two):
+    renderer, _ = two
+    renderer.resize(149, 141, 1.)
+    renderer.set_camera(*_camera())
+    renderer.render(False)
+    renderer.render(False)
+    assert renderer.pick_cache_valid
+    assert renderer.pick(74, 70) == 0
+    assert renderer.pick(1, 1) == -1           # same tile as the face
+    assert renderer.pick(148, 140) == -1       # clipped tile at both edges
+    renderer.set_camera(*_camera(shift_x=5.))
+    assert renderer.pick(74, 70) == -1

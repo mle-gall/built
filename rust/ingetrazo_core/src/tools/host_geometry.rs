@@ -153,11 +153,12 @@ impl ToolBounds {
                 Some(matrix.call_method0("ravel")?.extract()?)
             };
             let d = mesh.getattr("__dict__")?;
-            if let Some(st) = d.cast::<PyDict>()?.get_item("_store")?.filter(|s| !s.is_none()) {
-                self.add_store(
-                    &*crate::store::py::PyMeshStore::read(&st)?,
-                    transform,
-                );
+            if let Some(st) = d
+                .cast::<PyDict>()?
+                .get_item("_store")?
+                .filter(|s| !s.is_none())
+            {
+                self.add_store(&*crate::store::py::PyMeshStore::read(&st)?, transform);
             } else {
                 let points = api.call_method1("_local_points", (mesh,))?;
                 if !points.is_none() {
@@ -169,7 +170,11 @@ impl ToolBounds {
     }
     #[staticmethod]
     #[pyo3(signature=(scene, frame=None, *, images=false))]
-    fn selection(scene: &Bound<'_, PyAny>, frame: Option<[P3; 4]>, images: bool) -> PyResult<Self> {
+    pub(super) fn selection(
+        scene: &Bound<'_, PyAny>,
+        frame: Option<[P3; 4]>,
+        images: bool,
+    ) -> PyResult<Self> {
         let mut bounds = Self::new(frame);
         for item in scene.getattr("selection")?.try_iter()? {
             let item = item?;
@@ -186,7 +191,7 @@ impl ToolBounds {
         }
         Ok(bounds)
     }
-    fn limits(&self) -> (Option<Vec3>, Option<Vec3>) {
+    pub(super) fn limits(&self) -> (Option<Vec3>, Option<Vec3>) {
         if self.lo.x > self.hi.x {
             (None, None)
         } else {

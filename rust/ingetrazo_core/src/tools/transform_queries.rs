@@ -199,6 +199,7 @@ type Segment = [DVec3; 2];
 pub struct CopyWire {
     loose: Vec<Segment>,
     placements: Vec<Segment>,
+    pending_groups: Vec<Py<PyAny>>,
 }
 
 #[pymethods]
@@ -277,6 +278,44 @@ impl CopyWire {
             }
         }
         Ok((faces, edges, wire))
+    }
+
+    #[staticmethod]
+    pub(super) fn capture(tool: &Bound<'_, PyAny>, ctx: &Bound<'_, PyAny>) -> PyResult<()> {
+        let groups = tool.getattr("_groups")?;
+        let guides = tool.getattr("_moved_guides")?;
+        let (faces, edges, mut wire) =
+            Self::gather(ctx, &guides, !groups.is_truthy()? && !guides.is_truthy()?)?;
+        wire.pending_groups = groups.extract()?;
+        wire.pending_groups.reverse();
+        tool.setattr("_sel_faces", faces)?;
+        tool.setattr("_sel_edges", edges)?;
+        tool.setattr("_base_segments", wire)
+    }
+
+    fn fill_groups(&mut self) -> PyResult<()> {
+        while let Some(group) = self.pending_groups.pop() {
+            Python::attach(|py| self.add_group(group.bind(py)))?;
+        }
+        Ok(())
+    }
+
+    fn move_lines(
+        &mut self,
+        grab: &Bound<'_, PyAny>,
+        hover: &Bound<'_, PyAny>,
+        copy: bool,
+    ) -> PyResult<Vec<(Vec3, Vec3)>> {
+        if grab.is_none() || hover.is_none() {
+            return Ok(vec![]);
+        }
+        let (g, h) = (xyz(grab)?, xyz(hover)?);
+        let mut lines = vec![(g.into(), h.into())];
+        if copy {
+            self.fill_groups()?;
+            lines.extend(self.lines(None, Some((h - g).into())));
+        }
+        Ok(lines)
     }
 
     fn add_group(&mut self, group: &Bound<'_, PyAny>) -> PyResult<()> {

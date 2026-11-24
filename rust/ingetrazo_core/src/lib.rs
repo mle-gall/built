@@ -306,8 +306,18 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(tools::transform_queries::transform_grab, m)?)?;
     m.add_function(wrap_pyfunction!(tools::packed_selection::box_from_pack, m)?)?;
     m.add_class::<tools::transform_pose::TransformPose>()?;
+    m.add_class::<tools::transform_pose::MatrixGesture>()?;
+    m.add_class::<tools::move_gesture::MoveGesture>()?;
+    m.add_class::<tools::move_hover::GripTurn>()?;
+    m.add_function(wrap_pyfunction!(tools::overlay_marks::tool_overlay_marks, m)?)?;
+    m.add_class::<tools::copy_history::CopySelection>()?;
+    m.add_class::<tools::copy_history::MoveCopies>()?;
+    m.add_function(wrap_pyfunction!(tools::polar_history::rotation_command, m)?)?;
     m.add_class::<tools::texture_rows::TextureToolRows>()?;
     m.add_class::<tools::push_stage::PushSlide>()?;
+    m.add_class::<tools::push_stage::PushStages>()?;
+    m.add_function(wrap_pyfunction!(tools::push_stage::present_push_preview, m)?)?;
+    m.add_function(wrap_pyfunction!(tools::push_preview::push_light_faces, m)?)?;
     m.add_function(wrap_pyfunction!(tools::chunk_selection::chunk_bounds, m)?)?;
     m.add_function(wrap_pyfunction!(tools::chunk_selection::box_chunk_group, m)?)?;
     m.add_function(wrap_pyfunction!(tools::push_targets::push_reference_target, m)?)?;

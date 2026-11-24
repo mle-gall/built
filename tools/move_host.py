@@ -3,21 +3,18 @@
 """Viewport bindings for the Rust Move tool, including live deformation and grips."""
 from __future__ import annotations
 
+from tools.overlay_painter import draw_overlay
 from PySide6.QtCore import Qt
 from ingetrazo_core import Vec3 as QVector3D
 
-from core.group import Group
 from core.i18n import tr
-from core.guide import Guide
-from core.history import CompoundCommand
-from core.textlabel import TextLabel
 from tools.base import ToolContext
 from tools.rust_tool_base import RustTool, _mods, _point_property, _tuple
 from core.units import fmt_len
 
 
 
-from ingetrazo_core import (CopyWire, TransformPose, moving_faces, rotation_handles as rotation_grips,
+from ingetrazo_core import (CopyWire, GripTurn, MoveGesture, TransformPose, moving_faces, rotation_handles as rotation_grips,
                             snap_exclusions, track_move_grips, transform_records, transform_targets as gather_targets)
 
 
@@ -32,16 +29,10 @@ def gather_dimensions(ctx, groups, vertices):
 
 class CopyPreview:
     def _gather_copy_entities(self, ctx):
-        self._groups_ghost_due = True
-        self._sel_faces, self._sel_edges, self._base_segments = CopyWire.gather(
-            ctx, self._moved_guides, not self._groups and not self._moved_guides)
+        CopyWire.capture(self, ctx)
 
     def _fill_groups_ghost(self):
-        # Imported components may be huge. Only read placement edges for a copy.
-        if self._groups_ghost_due:
-            self._groups_ghost_due = False
-            for group in self._groups:
-                self._base_segments.add_group(group)
+        self._base_segments.fill_groups()
 
 
 #: How near (px) the cursor must come to a rotation grip to take it.
@@ -66,7 +57,7 @@ class MoveHost(CopyPreview, RustTool):
         RustTool.__init__(self)
         self.chain_first_point = None  # silence close-snap
         self._ctx = None
-        self._build = None             # the copy builder of the array window
+        self._move_gesture = MoveGesture()
         self._clear_sets()
         # Rotation grips (issue #115): the group they sit on, the grips,
         # the one under the cursor, and — once one is taken — the Rotate
@@ -74,25 +65,12 @@ class MoveHost(CopyPreview, RustTool):
         self._grip_group = None
         self._grips: list = []
         self._hot_grip: int | None = None
-        self._grip_rot = None
-        self._grip_rot_done = None             # its hot retype after the commit
+        self._turn = GripTurn()
+
+    _grip_rot = property(lambda self: self._turn.active)
 
     def _clear_sets(self) -> None:
-        self._pose = None
-        self._positions: list[QVector3D] = []  # unique positions to translate
-        self._verts: list = []                 # resolved vertex objects (identity)
-        self._groups: list[Group] = []         # whole groups being moved
-        self._splanes: list = []               # section planes being moved
-        self._images: list = []                # reference images being moved
-        self._labels: list[TextLabel] = []     # leader texts whose label moves
-        self._moved_guides: list[Guide] = []   # construction guides being moved
-        self._dims: dict = {}                  # dimension → "line" | "rigid"
-        self._preview_delta = QVector3D(0.0, 0.0, 0.0)  # currently applied live
-        self._sel_faces: list = []             # loose geometry copy mode duplicates
-        self._sel_edges: list = []
-        self._base_segments: list = []         # wireframe for the copy preview
-        self._groups_ghost_due = False
-        self._vp_preview = False
+        self._move_gesture.finish(self, self._state("window") is not None)
 
     # ---- The machine's state -----------------------------------------------
     start_point = _point_property("grab")
@@ -119,63 +97,15 @@ class MoveHost(CopyPreview, RustTool):
         if callable(update):
             update()
 
-    # ---- Host verbs the machine calls (``ToolHost::call``) -----------------
-    def host_grab(self, viewport, world):
-        return self._grab_under(self._ctx, QVector3D(*world))
-
-    def host_preview(self, viewport, delta):
-        self._apply_preview(viewport, QVector3D(*delta))
-
-    def host_park(self, viewport, _args):
-        """Copy on: the original stops following the cursor."""
-        self._revert_preview(viewport)
-        park = getattr(viewport, "set_groups_preview_offset", None)
-        if self._vp_preview and park is not None:
-            park(QVector3D(0.0, 0.0, 0.0))
-
-    def host_revert(self, viewport, _args):
-        self._end_freeze(viewport)
-        self._revert_preview(viewport)
-
-    def host_move(self, viewport, delta):
-        from core.move_ops import move_commands
-        commands = move_commands(QVector3D(*delta), groups=self._groups, positions=self._positions,
-                                 labels=self._labels, guides=self._moved_guides, dims=self._dims,
-                                 splanes=self._splanes, images=self._images)
-        if len(commands) == 1:
-            viewport.history.execute(commands[0])
-        elif commands:
-            viewport.history.execute(CompoundCommand(commands))
-        self._tell_join(viewport, commands)
-
-    def host_copy(self, viewport, args):
-        """Stamp copies at ``deltas``; ``fresh`` makes the builder from what
-        is grabbed now, else the array window re-uses the last one.
-        Answers the history token when the copy is the top of the stack."""
-        if args["fresh"] or self._build is None:
-            self._build = self._make_copy_builder(viewport.scene)
-        cmd = self._build([QVector3D(*d) for d in args["deltas"]])
-        if cmd is None:
-            return None
-        viewport.history.execute(cmd)
-        stack = getattr(viewport.history, "undo_stack", None)
-        if not stack or stack[-1] is not cmd:
-            return None
-        from tools.rust_tool_base import _Host
-        return _Host(viewport).revision()
-
     # ---- Lifecycle ----------------------------------------------------------
     def on_activate(self, viewport) -> None:
-        self._grip_rot = self._grip_rot_done = None
+        self._turn.clear()
         self._clear_grips()
         self._send(viewport, {"type": "activate"})
         self._after(viewport)
 
     def on_deactivate(self, viewport) -> None:
-        if self._grip_rot is not None:
-            self._grip_rot.on_cancel(viewport)
-        # A helper left here kept the next Move a Rotate (#480).
-        self._grip_rot = self._grip_rot_done = None
+        self._turn.cancel(viewport)
         self._clear_grips()
         self._send(viewport, {"type": "deactivate"})
         self._handles.clear()
@@ -218,30 +148,14 @@ class MoveHost(CopyPreview, RustTool):
     # ---- Spatial input ------------------------------------------------------
     def on_click(self, ctx: ToolContext) -> None:
         viewport = ctx.viewport
-        self._grip_rot_done = None           # a click ends the angle retype
-        if self._grip_rot is not None:
-            rot = self._grip_rot
-            rot.on_click(ctx)                # the second click commits
-            if rot.start_point is None:
-                self._grip_rot, self._grip_rot_done = None, rot
-                self._clear_grips()
-            return
-        if self.start_point is None and self._hot_grip is not None:
-            self._start_grip_rotation(ctx)
+        if self._turn.click(self, ctx):
             return
         self._ctx = ctx
-        self._send(viewport, self._pointer("click", ctx))
-        self._ctx = None
+        try:
+            self._send(viewport, self._pointer("click", ctx))
+        finally:
+            self._ctx = None
         self._after(viewport)
-
-    def _grab_under(self, ctx: ToolContext, world) -> bool:
-        from ingetrazo_core import transform_grab
-        viewport = ctx.viewport
-        if not transform_grab(self, ctx, "move"):
-            return False
-        self._vp_preview = TransformPose.begin(viewport, self)
-        self._gather_copy_entities(ctx)
-        return True
 
     def on_hover(self, ctx: ToolContext) -> None:
         if self._grip_rot is not None:
@@ -255,19 +169,12 @@ class MoveHost(CopyPreview, RustTool):
     def value_is_unitless(self) -> bool:
         """A rotation grip held (or just used) takes an ANGLE (#176);
         otherwise the value is a distance."""
-        rot = self._grip_rot or self._grip_rot_done
-        return rot is not None and self.start_point is None
+        return self._turn.takes_angle and self.start_point is None
 
     def on_value(self, viewport, value) -> bool:
-        rot = self._grip_rot or self._grip_rot_done
-        if rot is not None and self.start_point is None:
-            # A typed angle: exact turn while a grip is held, or the hot
-            # retype of the one just made.
-            done = rot.on_value(viewport, value)
-            if self._grip_rot is not None and rot.start_point is None:
-                self._grip_rot, self._grip_rot_done = None, rot
-                self._clear_grips()
-            return done
+        turn = self._turn.value(self, viewport, value)
+        if turn is not None:
+            return turn
         consumed = self._send(viewport, {"type": "value", "value": value})["consumed"]
         self._after(viewport)
         return consumed
@@ -289,6 +196,7 @@ class MoveHost(CopyPreview, RustTool):
         """Esc right after a copy: «3x» / «/3» stop applying and a bare X
         is the Text shortcut again (#542)."""
         self._send(None, {"type": "key", "key": "CloseArray"})
+        self._move_gesture.close_array()
 
     def on_array_value(self, viewport, count: int, mode: str,
                        step: float | None = None) -> bool:
@@ -300,9 +208,7 @@ class MoveHost(CopyPreview, RustTool):
         return done
 
     def on_cancel(self, viewport) -> None:
-        if self._grip_rot is not None:
-            self._grip_rot.on_cancel(viewport)
-            self._grip_rot = None
+        if self._turn.cancel(viewport):
             self._clear_grips()
             viewport.update()
             return
@@ -313,20 +219,7 @@ class MoveHost(CopyPreview, RustTool):
     def rubber_band_lines(self):
         if self._grip_rot is not None:
             return self._grip_rot.rubber_band_lines()
-        # The geometry deforms live, so the only extra cue is the move vector
-        # from the grab point to the cursor (also carries the axis-lock colour).
-        grab, hover = self.grab, self.hover_point
-        if grab is None or hover is None:
-            return []
-        segments = [(grab, hover)]
-        if self._copy:
-            self._fill_groups_ghost()
-        if self._copy and self._base_segments:
-            # Copy mode: the original stays put — preview the translated
-            # COPY as a wireframe at the cursor offset.
-            d = hover - grab
-            segments.extend(self._base_segments.lines(delta=d.toTuple()))
-        return segments
+        return self._base_segments.move_lines(self.grab, self.hover_point, self._copy)
 
     def value_label(self):
         if self._grip_rot is not None:
@@ -400,48 +293,9 @@ class MoveHost(CopyPreview, RustTool):
         from ingetrazo_core import move_grip_hit
         return move_grip_hit(viewport, self._grips, (x, y), GRIP_PX) if self._grips else None
 
-    def _start_grip_rotation(self, ctx: ToolContext) -> None:
-        """Hand the turn to a Rotate tool set up the classic way: the
-        protractor on the grip's face, its centre where the axis through
-        the box centre pierces that face, the grip as the zero arm."""
-        from tools.rotate import RotateTool
-        viewport = ctx.viewport
-        pos, face_c, normal = self._grips[self._hot_grip]
-        group = self._grip_group
-        rot = RotateTool()
-        rot.on_activate(viewport)
-        rot._groups = [group]
-        rot._vp_preview = False
-        begin = getattr(viewport, "begin_groups_preview", None)
-        if begin is not None:
-            begin([group])
-            rot._vp_preview = True
-        rot._gather_copy_entities(ctx)
-        rot._custom_axis = QVector3D(normal).normalized()
-        rot.start_point = QVector3D(face_c)
-        rot.ref_point = QVector3D(pos)
-        rot.hover_point = QVector3D(pos)
-        self._grip_rot = rot
-        viewport.flash_status(tr(
-            "Rotate: move to turn, click or type the angle. Ctrl = copy"))
-        viewport.update()
+    overlay_kind = "move"
+    draw_overlay = draw_overlay
 
-    def draw_overlay(self, viewport, painter) -> None:
-        """The red rotation grips — the «+» marks on the box."""
-        if self._grip_rot is not None or not self._grips:
-            return
-        from PySide6.QtCore import QPointF
-        from PySide6.QtGui import QColor, QPen
-        red = QColor(220, 40, 40)
-        for i, (pos, _c, _n) in enumerate(self._grips):
-            p = viewport._world_to_pixel(pos)
-            if p is None:
-                continue
-            hot = i == self._hot_grip
-            r = 6.0 if hot else 4.0
-            painter.setPen(QPen(red, 3.0 if hot else 2.0))
-            painter.drawLine(QPointF(p[0] - r, p[1]), QPointF(p[0] + r, p[1]))
-            painter.drawLine(QPointF(p[0], p[1] - r), QPointF(p[0], p[1] + r))
 
     # ---- Internals ----------------------------------------------------------
     @staticmethod
@@ -459,27 +313,6 @@ class MoveHost(CopyPreview, RustTool):
 
     def _shift(self, viewport, step: QVector3D) -> None:
         TransformPose(self, viewport.scene, "move", False).translate(viewport.scene, step)
-
-    def _apply_preview(self, viewport, target_delta):
-        if (target_delta - self._preview_delta).length() < 1e-12:
-            return
-        if self._pose is None:
-            self._pose = TransformPose(self, viewport.scene, "move", self._vp_preview)
-        self._pose.translate(viewport.scene, target_delta)
-        if self._vp_preview:
-            viewport.set_groups_preview_offset(target_delta)
-        self._preview_delta = target_delta
-
-    def _revert_preview(self, viewport):
-        if self._pose is not None and self._preview_delta.length() >= 1e-12:
-            self._pose.apply(viewport.scene)
-        self._pose = None
-        self._preview_delta = QVector3D()
-
-    def _end_freeze(self, viewport) -> None:
-        end = getattr(viewport, "end_groups_preview", None)
-        if end is not None:
-            end()
 
     def _commit(self, viewport, delta) -> None:
         """Commit what is grabbed by ``delta`` (as a typed delta would)."""

@@ -13,10 +13,9 @@ parent-context axes, and the magenta custom plane from hovering a face.
 """
 from __future__ import annotations
 
+from tools.overlay_painter import draw_overlay
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QPen, QPolygonF
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtCore import QPointF
 
 from ingetrazo_core import ToolMachine
 from core.group import Group
@@ -25,7 +24,6 @@ from core.axes import AXES as _AXES
 from core.i18n import tr
 from tools.base import Tool, ctrl_clause
 
-_PLANE_RGBA = {"x": (216, 56, 68), "y": (40, 158, 90), "z": (52, 102, 198)}
 
 
 class FlipHost(Tool):
@@ -89,27 +87,9 @@ class FlipHost(Tool):
         return result["committed"]
 
     # ---- Overlay ------------------------------------------------------------
-    def draw_overlay(self, viewport, painter) -> None:
-        """The three semi-transparent axis planes over the selection; the
-        hovered / arrow-locked one highlights."""
-        lo, hi = self._bounds(viewport)
-        if lo is None:
-            return
-        centre = (lo + hi) * 0.5
-        half = (hi - lo) * 0.5
-        margin = 1.15
-        for axis, n in _AXES.items():
-            quad = self._plane_quad(axis, centre, half, margin)
-            pts = [viewport._world_to_pixel(q) for q in quad]
-            if any(p is None for p in pts):
-                continue
-            poly = QPolygonF([QPointF(*p) for p in pts])
-            r, g, b = _PLANE_RGBA[axis]
-            active = axis == (self._lock_axis or self._hover_axis)
-            painter.setPen(QPen(QColor(r, g, b), 2.2 if active else 1.2))
-            painter.setBrush(QColor(r, g, b, 90 if active else 36))
-            painter.drawPolygon(poly)
-        painter.setBrush(Qt.NoBrush)
+    overlay_kind = "flip"
+    draw_overlay = draw_overlay
+
 
     # ---- Internals ----------------------------------------------------------
     def _bounds(self, viewport):
