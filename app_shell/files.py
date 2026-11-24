@@ -937,24 +937,21 @@ def classic_command(path=None) -> list:
     return [python, str(root / "main.py"), "--new-window", *extra]
 
 
-def open_in_classic(win, path=None, why: str | None = None) -> bool:
-    """Open the document (or ``path``) in the classic Qt app: what the
-    native app cannot do yet stays one click away. Unsaved changes are
-    saved first, when the user says so: the classic app reads the file."""
+def open_in_classic(win, *, why: str | None = None) -> bool:
+    """Open the active document for an explicit Classic command, after the save prompt."""
     from views import chrome_dialogs as cd
-    if path is None:
-        doc = win._doc
-        if doc is not None and win._doc_is_dirty(doc):
-            got = cd.ask(win, tr("Save before opening in the classic app?"),
-                         tr("The classic app opens the file on disk. Save your changes first?"),
-                         [("discard", tr("Open Without Saving")), ("cancel", tr("Cancel")),
-                          ("save", tr("Save and Open"))],
-                         default="save", cancel="cancel", discard="discard")
-            if got == "cancel":
-                return False
-            if got == "save" and not save(win):
-                return False
-        path = getattr(doc, "path", None)
+    doc = win._doc
+    if doc is not None and win._doc_is_dirty(doc):
+        got = cd.ask(win, tr("Save before opening in the classic app?"),
+                     tr("The classic app opens the file on disk. Save your changes first?"),
+                     [("discard", tr("Open Without Saving")), ("cancel", tr("Cancel")),
+                      ("save", tr("Save and Open"))],
+                     default="save", cancel="cancel", discard="discard")
+        if got == "cancel":
+            return False
+        if got == "save" and not save(win):
+            return False
+    path = getattr(doc, "path", None)
     cmd = classic_command(path)
     try:
         subprocess.Popen(cmd, start_new_session=True, stdout=subprocess.DEVNULL,

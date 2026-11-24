@@ -187,7 +187,7 @@ class TileLayer:
         #: file saved with the terrain on reopened flat after a restart, and
         #: what stood on the terrain floated over the map.
         self.terrain3d = False
-        # (x, y, z) -> QImage, populated asynchronously by the fetcher.
+        # (x, y, z) -> SurveyRaster, populated asynchronously by the fetcher.
         self.images: dict[tuple[int, int, int], object] = {}
         # Capture patches: local-metre rectangles ``(cx, cy, hw, hh)`` that the
         # base map covers. A single site is one square; a road is a long strip;
@@ -236,6 +236,14 @@ class TileLayer:
         layer.opacity = max(0.0, min(1.0, float(raw.get("opacity", 1.0))))
         layer.terrain3d = bool(raw.get("terrain3d", False))
         return layer
+
+    def capture_bounds(self, datum, minx, miny, maxx, maxy):
+        """Cover an imported survey plus its working margin, within the tile budget."""
+        from ingetrazo_core import survey_rectangle
+        width, length, cx, cy = survey_rectangle(minx, miny, maxx, maxy)
+        self.set_rectangle(width, length, cx=cx, cy=cy)
+        self.cap_detail(datum, max_tiles=500)
+        return width, length
 
     def set_rectangle(self, width_m: float, length_m: float,
                       cx: float = 0.0, cy: float = 0.0) -> None:

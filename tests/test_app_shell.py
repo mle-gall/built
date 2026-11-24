@@ -368,3 +368,50 @@ def test_scene_menu_acts_on_marked_scene_and_export_uses_chosen_format(host, mon
         win._registry_actions["menu:export:" + fmt].trigger()
         assert formats[-1] == (None, True, fmt)
     assert host.errors == []
+
+
+def test_native_scene_playback_stops_on_input_and_switches_documents_safely(host):
+    from core.scene_animation import SceneAnimation
+
+    assert host.open(FIXTURE)
+    win, viewport = host.window, host.viewport
+    host.menu("scene_add")
+    viewport.camera.set_view("top")
+    host.menu("scene_add")
+    scene = viewport.scene
+    scene.animation = SceneAnimation(transition=0.1, pause=0.1)
+    clock = [100.]
+    win.scene_player._clock = lambda: clock[0]
+    host.menu("scene_play")
+    assert win.scene_player.is_playing()
+    clock[0] += .15
+    win.scene_player.tick()
+    assert win._scene_tabs.marked_view() is scene.saved_views[0]
+    host.key(True, Qt.Key_Escape)
+    assert not win.scene_player.is_active()
+    host.menu("scene_previous")
+    assert win._scene_tabs.marked_view() is scene.saved_views[-1]
+    host.menu("scene_transitions")
+    assert not scene.animation.enabled
+    host.menu("scene_play")
+    original = win.active_document()
+    win.new_document()
+    assert not win.scene_player.is_active()
+    assert host.viewport.scene is not original.viewport.scene
+    assert host.errors == []
+
+
+def test_native_edit_context_display_and_preference(host):
+    assert host.open(FIXTURE)
+    win, vp = host.window, host.viewport
+    host.menu("rest_normal")
+    assert vp.edit_rest_mode == "normal"
+    host.menu("hide_rest")
+    assert vp.edit_rest_mode == "hide"
+    host.menu("hide_rest")
+    assert vp.edit_rest_mode == "normal"
+    host.menu("rest_fade")
+    host.menu("hide_similar")
+    assert vp.edit_rest_mode == "fade" and vp.scene.hide_similar_components
+    win._registry_actions["menu:hide_similar"].trigger()
+    assert not vp.scene.hide_similar_components and not host.errors

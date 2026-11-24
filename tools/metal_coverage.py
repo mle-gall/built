@@ -52,7 +52,13 @@ def table(root=None):
         for source in sources:
             if 'class ' + cls + '(' not in source:
                 continue
-            if 'class ' + cls + '(RustTool)' in source:
+            bases = re.search(r'^class ' + cls + r'\(([^)]*)\)', source, re.M)
+            mixins = bases.group(1).split(', ') if bases else []
+            if 'RustTool' in mixins and len(mixins) > 1:
+                # The viewport callbacks live on the tool's host mixin.
+                source = '\n'.join(text for text in sources for base in mixins
+                                   if base.endswith('Host') and 'class ' + base in text)
+            if 'RustTool' in mixins:
                 hooks.add('Rust state machine')
             hooks.update(re.findall(r'(?:viewport|vp)\.((?:pick_\w+|\w*preview\w*|_world_to_pixel|_pixel_to_ray))', source))
             if 'rubber_band_lines' in source:

@@ -16,7 +16,7 @@ upload/render lives in the viewport.
 """
 from __future__ import annotations
 
-from PySide6.QtGui import QImage, QPainter
+from georef.raster import SurveyRaster, as_raster
 from ingetrazo_core import Vec3 as QVector3D
 
 from georef.tiles import deg2num, tiles_covering
@@ -37,7 +37,7 @@ class TerrainObject:
         self.ny = ny                      # grid rows (y / north)
         self.bbox = bbox                  # (minx, miny, maxx, maxy) local metres
         self.visible = True
-        self.texture_image = None         # QImage mosaic (set by build_mosaic)
+        self.texture_image = None         # RGBA mosaic (set by build_mosaic)
 
     def height_at(self, x: float, y: float) -> float | None:
         """Bilinearly interpolated terrain Z at local ``(x, y)``, or ``None`` if
@@ -134,22 +134,7 @@ def build_terrain(datum, sampler, ground_ref: float, bbox,
                          nx=nx, ny=ny, bbox=bbox)
 
 
-def build_mosaic(terrain: TerrainObject, images: dict) -> QImage | None:
-    """Composite the covering tiles into one image for ``terrain``.
-
-    ``images`` maps ``(x, y, zoom)`` → ``QImage``. Missing tiles are left blank;
-    returns ``None`` if none are available yet.
-    """
-    tx0, ty0, ntx, nty, zoom = terrain.tile_range
-    mosaic = QImage(ntx * TILE_PX, nty * TILE_PX, QImage.Format.Format_RGB32)
-    mosaic.fill(0xFF8A8A8A)   # neutral grey so still-loading tiles don't read black
-    painter = QPainter(mosaic)
-    any_tile = False
-    for (x, y, z), img in images.items():
-        if z != zoom:
-            continue
-        if tx0 <= x < tx0 + ntx and ty0 <= y < ty0 + nty:
-            painter.drawImage((x - tx0) * TILE_PX, (y - ty0) * TILE_PX, img)
-            any_tile = True
-    painter.end()
-    return mosaic if any_tile else None
+def build_mosaic(terrain: TerrainObject, images: dict) -> SurveyRaster | None:
+    """Composite the covering tiles, with grey for the parts still loading."""
+    tiles = {key: raster for key, image in images.items() if (raster := as_raster(image)) is not None}
+    return SurveyRaster.mosaic(terrain.tile_range, tiles, TILE_PX)

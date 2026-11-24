@@ -17,6 +17,11 @@ enum Handler {
     Tool(&'static str),
     View(&'static str),
     Scene(&'static str),
+    Playback,
+    Transitions,
+    Step(i32),
+    RestMode(&'static str),
+    DisplaySettings,
     Export(&'static str),
 }
 
@@ -35,6 +40,7 @@ fn build_entries() -> Vec<MenuEntry> {
     add("import:obj", "File ▸ Import", "Wavefront OBJ (.obj)…", "", Window("_on_import_obj"));
     add("import:stl", "File ▸ Import", "STL mesh (.stl)…", "", Window("_on_import_stl"));
     for (id, label, method) in [
+        ("import:orthomosaic", "Orthomosaic (GeoTIFF)…", "_on_import_orthophoto"),
         ("import:image", "Image (PNG / JPG)…", "_on_import_image"),
         ("clear_texture_cache", "Clear imported texture cache…", "_on_clear_texture_cache"),
     ] {
@@ -57,6 +63,19 @@ fn build_entries() -> Vec<MenuEntry> {
     ] {
         add(id, "Camera ▸ Scenes", label, "", Scene(action));
     }
+    for (id,label,shortcut,handler) in [
+        ("scene_transitions","Scene Transitions","",Transitions), ("scene_play","Play / Stop","",Playback),
+        ("scene_next","Next Scene","PgDown",Step(1)), ("scene_previous","Previous Scene","PgUp",Step(-1)),
+        ("animation_video","Export Video (.mkv)…","",Window("export_video")),
+        ("animation_settings","Animation Settings…","",Window("ask_animation")),
+    ] { add(id,"Camera ▸ Animation",label,shortcut,handler); }
+    add("export:video","File ▸ Export","Scenes as Video (.mkv)…","",Window("export_video"));
+    for (id,label,mode) in [("rest_normal","Show normally","normal"),("rest_fade","Fade","fade"),("rest_hide","Hide (fastest)","hide")] {
+        add(id,"Camera ▸ Rest of model while editing",label,"",RestMode(mode));
+    }
+    add("rest_intensity","Camera ▸ Rest of model while editing","Fade intensity…","",DisplaySettings);
+    add("hide_rest","Camera ▸ Component Edit","Hide Rest of Model","Alt+Q",Window("_on_toggle_hide_rest"));
+    add("hide_similar","Camera ▸ Component Edit","Hide Similar Components","Alt+W",Window("_on_toggle_hide_similar"));
     for (id, label, keys, method) in [
         ("repeat_last_command", "Repeat last command", "Shift+R", "repeat_last_command"),
         ("invert_selection", "Invert Selection", "Ctrl+Shift+I", "_on_invert_selection"),
@@ -161,6 +180,31 @@ pub fn run_model_menu(win: &Bound<'_, PyAny>, id: &str) -> PyResult<bool> {
             .py()
             .import("views.wgpu_deliveries")?
             .call_method1("export_form", (win, win.py().None(), true, fmt))?,
+        Handler::RestMode(mode) => win
+            .getattr("viewport")?
+            .call_method1("set_edit_rest_mode", (mode,))?,
+        Handler::DisplaySettings => win
+            .py()
+            .import("views.settings_sheet")?
+            .call_method1("show", (win, "display"))?,
+        Handler::Playback => {
+            let playing = win
+                .getattr("scene_player")?
+                .call_method0("is_playing")?
+                .is_truthy()?;
+            win.call_method1("play_scenes", (!playing,))?
+        }
+        Handler::Transitions => {
+            let anim = win
+                .getattr("viewport")?
+                .getattr("scene")?
+                .getattr("animation")?;
+            win.call_method1(
+                "set_scene_transitions",
+                (!anim.getattr("enabled")?.is_truthy()?,),
+            )?
+        }
+        Handler::Step(delta) => win.call_method1("step_scene", (delta,))?,
         Handler::Scene(action) => {
             let marked = win.getattr("_scene_tabs")?.call_method0("marked_view")?;
             let vp = win.getattr("viewport")?;

@@ -1,0 +1,35 @@
+{
+"place_drag_offset": [
+  {"eye":[1.0,2.0,1.68],"direction":[0.0,1.0,0.0],"lines":[],"undo":0,"result":null},
+  {"eye":[1.0,2.0,1.68],"direction":[0.0,1.0,0.0],"lines":[],"undo":0,"result":null},
+  {"eye":[1.0,2.0,1.68],"direction":[0.0,1.0,0.0],"lines":[[[3.0,2.0,1.68],[4.0,6.0,0.0]]],"undo":0,"result":null},
+  {"eye":[3.0,2.0,1.68],"direction":[0.224606273,0.898425094,-0.377338539],"lines":[],"undo":0,"result":null},
+  {"eye":[3.0,2.0,2.5],"direction":[0.224606273,0.898425094,-0.377338539],"lines":[],"undo":0,"result":true},
+  {"eye":[3.0,2.0,2.5],"direction":[0.224606273,0.898425094,-0.377338539],"lines":[],"undo":0,"result":false}],
+"place_cancel": [
+  {"eye":[1.0,2.0,1.68],"direction":[0.0,1.0,0.0],"lines":[],"undo":0,"result":null},
+  {"eye":[1.0,2.0,1.68],"direction":[0.0,1.0,0.0],"lines":[[[1.0,2.0,4.68],[3.0,4.0,5.0]]],"undo":0,"result":null},
+  {"eye":[1.0,2.0,1.68],"direction":[0.0,1.0,0.0],"lines":[],"undo":0,"result":null},
+  {"eye":[1.0,2.0,1.68],"direction":[0.0,1.0,0.0],"lines":[],"undo":0,"result":null}],
+"turn_and_height": [
+  {"eye":[1.0,2.0,1.68],"direction":[0.0,1.0,0.0],"lines":[],"undo":0,"result":null},
+  {"eye":[1.0,2.0,1.68],"direction":[0.707106781,0.707106781,0.0],"lines":[],"undo":0,"result":null},
+  {"eye":[1.0,2.0,1.68],"direction":[0.698401123,0.698401123,0.156434465],"lines":[],"undo":0,"result":null},
+  {"eye":[1.0,2.0,1.68],"direction":[0.698401123,0.698401123,0.156434465],"lines":[],"undo":0,"result":null},
+  {"eye":[1.0,2.0,1.68],"direction":[0.698401123,0.698401123,0.156434465],"lines":[],"undo":0,"result":null},
+  {"eye":[1.0,2.0,1.25],"direction":[0.698401123,0.698401123,0.156434465],"lines":[],"undo":0,"result":true}],
+"walk": [
+  {"eye":[1.0,2.0,1.68],"direction":[0.0,1.0,0.0],"lines":[],"undo":0,"result":null},
+  {"eye":[1.0,2.15,1.68],"direction":[0.0,1.0,0.0],"lines":[],"undo":0,"result":null},
+  {"eye":[1.02355118,2.599383291,1.68],"direction":[0.052335956,0.998629535,0.0],"lines":[],"undo":0,"result":null},
+  {"eye":[1.123414134,2.594149695,1.73],"direction":[0.052335956,0.998629535,0.0],"lines":[],"undo":0,"result":null},
+  {"eye":[1.126031995,2.444172541,1.73],"direction":[-0.017452406,0.999847695,0.0],"lines":[],"undo":0,"result":null},
+  {"eye":[1.126031995,2.444172541,2.0],"direction":[-0.017452406,0.999847695,0.0],"lines":[],"undo":0,"result":true}],
+"first_person": [
+  {"eye":[1.106066017,2.106066017,1.68],"direction":[0.0,1.0,0.0],"lines":[],"undo":0,"result":null},
+  {"eye":[1.106066017,2.106066017,1.68],"direction":[0.0,1.0,0.0],"lines":[],"undo":0,"result":null},
+  {"eye":[0.787867966,2.106066017,1.998198052],"direction":[0.0,1.0,0.0],"lines":[],"undo":0,"result":null},
+  {"eye":[0.787867966,2.106066017,1.998198052],"direction":[0.21515317,0.970493234,0.108866875],"lines":[],"undo":0,"result":null},
+  {"eye":[0.820333908,2.252510418,1.998198052],"direction":[0.21515317,0.970493234,0.108866875],"lines":[],"undo":0,"result":null},
+  {"eye":[0.820333908,2.252510418,1.9],"direction":[0.21515317,0.970493234,0.108866875],"lines":[],"undo":0,"result":true}]
+}

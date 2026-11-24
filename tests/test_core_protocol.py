@@ -498,3 +498,34 @@ def test_resegment_curve_and_repair_solid():
     vp.history.execute(InsertGroupCommand(g))
     out = C.run(vp.history, "repair_solid", placement=g.uid)
     assert out["ok"] and out["repaired"]["holes"] == 1
+
+
+def test_bridge_scales_named_vertices_in_one_undo_step(bridge):
+    win, b = bridge
+    vp = win.viewport
+    face = vp.scene.mesh.faces[-1]
+    before = sorted(v.position.toTuple() for v in face.loop)
+    depth = len(vp.history.undo_stack)
+    result = _call(b, "scale_selection", anchor=[0, 0, 0], factors=[3, 1, 1],
+                   vertices=[str(v.key) for v in face.loop])
+    assert result["ok"] and result["step"]
+    assert len(vp.history.undo_stack) == depth + 1
+    assert sorted(v.position.toTuple() for v in face.loop) == sorted((3*x, y, z) for x, y, z in before)
+    assert vp.history.undo()
+    assert sorted(v.position.toTuple() for v in vp.scene.mesh.faces[-1].loop) == before
+
+
+def test_bridge_rotates_named_vertices_in_one_undo_step(bridge):
+    win, b = bridge
+    vp = win.viewport
+    face = vp.scene.mesh.faces[-1]
+    before = sorted(v.position.toTuple() for v in face.loop)
+    depth = len(vp.history.undo_stack)
+    result = _call(b, "rotate_selection", center=[0, 0, 0], axis=[0, 0, 1], angles=[90],
+                   vertices=[str(v.key) for v in face.loop])
+    assert result["ok"] and result["step"]
+    assert len(vp.history.undo_stack) == depth + 1
+    actual = sorted(tuple(round(x, 9) for x in v.position.toTuple()) for v in face.loop)
+    assert actual == sorted((-y, x, z) for x, y, z in before)
+    assert vp.history.undo()
+    assert sorted(v.position.toTuple() for v in vp.scene.mesh.faces[-1].loop) == before

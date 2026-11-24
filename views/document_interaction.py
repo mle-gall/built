@@ -3608,10 +3608,8 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         data = cache.get(source.id, x, y, z)
         if data is None:
             return None
-        from PySide6.QtCore import QByteArray
-        from PySide6.QtGui import QImage
-        img = QImage()
-        return img if img.loadFromData(QByteArray(data)) else None
+        from ingetrazo_render import SurveyRaster
+        return SurveyRaster.decode(data)
 
     def _schedule_tile_requests(self) -> None:
         """Start missing tile requests after the current GL paint returns."""

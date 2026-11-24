@@ -790,12 +790,13 @@ class MoveView(RectView):
 
     def __init__(self):
         super().__init__()
-        from ingetrazo_core import Matrix4
+        from ingetrazo_core import Matrix4, Vec3
         from core.group import Group
         from core.mesh import Mesh
-        self.scene.mesh.add_face([(0., 0., 0.), (1., 0., 0.), (1., 1., 0.), (0., 1., 0.)])
+        square = [Vec3(0, 0, 0), Vec3(1, 0, 0), Vec3(1, 1, 0), Vec3(0, 1, 0)]
+        self.scene.mesh.add_face(square)
         box = Mesh()
-        box.add_face([(0., 0., 0.), (1., 0., 0.), (1., 1., 0.), (0., 1., 0.)])
+        box.add_face(square)
         self.group = Group(box)
         self.group.uid = "box"
         self.group.xform = Matrix4()
@@ -895,6 +896,175 @@ def run_move(steps):
     return out
 
 
+SCALE_SCENARIOS = {
+    "corner_retype_and_undo": [("click", 400, 300), ("value", 2.0),
+                               ("value", 0.5), ("undo",)],
+    "absolute_and_mirror": [("click", 400, 150), ("value", ("abs_len", 6.0)),
+                            ("value", -1.0), ("undo",)],
+    "center_uniform": [("click", 400, 150), ("key", "Control"),
+                       ("key", "Shift"), ("value", 2.0), ("undo",)],
+    "invalid_then_pair": [("click", 400, 300), ("value", 0.0),
+                          ("value", (1.0, 2.0, 3.0)), ("value", (1.5, 2.0))],
+    "drag_release": [("click", 400, 150), ("release",), ("hover", 600, 150),
+                     ("release",), ("undo",)],
+    "cancel_preview": [("click", 400, 300), ("hover", 800, 600), ("cancel",)],
+}
+
+
+def run_scale(steps):
+    from ingetrazo_core import Vec3
+    from PySide6.QtCore import QPointF, Qt
+    from tools.base import ToolContext
+    from tools.scale import ScaleTool
+
+    view = LineView()
+    view._world_to_pixel = lambda p: (100 * p.x(), 100 * p.y())
+    face = view.scene.mesh.add_face([Vec3(0, 0, 0), Vec3(4, 0, 0),
+                                     Vec3(4, 3, 0), Vec3(0, 3, 0)])
+    view.scene.select([face])
+    tool = ScaleTool()
+    tool.on_activate(view)
+    out = []
+    for kind, *args in steps:
+        result = None
+        if kind in ("click", "hover"):
+            x, y = args
+            point = Vec3(x / 100, y / 100, 0)
+            snap = _Snap("endpoint")
+            snap.point = point
+            ctx = ToolContext(view, point, QPointF(x, y), Qt.NoModifier, snap)
+            (tool.on_click if kind == "click" else tool.on_hover)(ctx)
+        elif kind == "key":
+            result = tool.on_key(view, getattr(Qt, "Key_" + args[0]), Qt.NoModifier)
+        elif kind == "release":
+            tool.on_release(view)
+        elif kind == "value":
+            result = tool.on_value(view, args[0])
+        elif kind == "cancel":
+            tool.on_cancel(view)
+        elif kind == "undo":
+            view.history.undo()
+        box = tool.scale_box_state()
+        out.append({"vertices": sorted(_pt(v.position) for v in view.scene.mesh.vertices),
+                    "grips": [[_pt(p), role] for p, role in box["grips"]],
+                    "snap": tool.uses_snap, "caption": tool.vcb_caption(),
+                    "undo": len(view.history.undo_stack), "result": result})
+    return out
+
+
+ROTATE_SCENARIOS = {
+    "click_then_retype": [("click", 0, 0), ("click", 1, 0), ("hover", 0, 2),
+                          ("click", 0, 2), ("value", -45.0), ("undo",)],
+    "cancel_live_preview": [("click", 0, 0), ("click", 2, 0),
+                            ("hover", 1, 1), ("cancel",)],
+    "coincident_arm_then_value": [("click", 0, 0), ("click", 0, 0),
+                                   ("click", 1, 0), ("value", 90.0)],
+    "copy_polar_array": [("group",), ("copy",), ("click", 0, 0),
+                         ("click", 1, 0), ("value", 45.0),
+                         ("array", 3, "x"), ("array", 3, "/"), ("undo",)],
+}
+
+
+def run_rotate(steps):
+    from PySide6.QtCore import QPointF, Qt
+    from ingetrazo_core import Vec3
+    from tools.base import ToolContext
+    from tools.rotate import RotateTool
+
+    view = MoveView()
+    view.scene.select(view.scene.mesh.faces)
+    tool = RotateTool()
+    tool.on_activate(view)
+    out = []
+    for kind, *args in steps:
+        result = None
+        if kind in ("click", "hover"):
+            ctx = ToolContext(view, Vec3(*args, 0.), QPointF(), Qt.NoModifier, None)
+            (tool.on_click if kind == "click" else tool.on_hover)(ctx)
+        elif kind == "copy":
+            result = tool.on_key(view, Qt.Key_Control, Qt.NoModifier)
+        elif kind == "group":
+            view.scene.select([view.group])
+        elif kind == "value":
+            result = tool.on_value(view, args[0])
+        elif kind == "array":
+            result = tool.on_array_value(view, *args)
+        elif kind == "cancel":
+            tool.on_cancel(view)
+        elif kind == "undo":
+            view.history.undo()
+        out.append({"start": _pt(tool.start_point), "reference": _pt(tool.ref_point),
+                    "copy": tool.cursor_plus, "array": tool.array_pending(view),
+                    "vertices": sorted(_pt(v.position) for v in view.scene.mesh.vertices),
+                    "placements": sorted(_pt(g.xform.map(Vec3())) for g in view.scene.groups),
+                    "undo": len(view.history.undo_stack), "result": result})
+    return out
+
+
+WALKTHROUGH_SCENARIOS = {
+    "place_drag_offset": ("PositionCameraTool", [("click", (3, 2, 0), (100, 100)),
+        ("hover", (4, 6, 0), (106, 100)), ("hover", (4, 6, 0), (107, 100)),
+        ("release",), ("value", 2.5), ("value", -1.0)]),
+    "place_cancel": ("PositionCameraTool", [("click", (1, 2, 3), (100, 100)),
+        ("hover", (3, 4, 5), (130, 150)), ("cancel",), ("release",)]),
+    "turn_and_height": ("LookAroundTool", [("click", (0, 0, 0), (100, 100)),
+        ("hover", (0, 0, 0), (350, 100)), ("hover", (0, 0, 0), (350, 30)),
+        ("release",), ("hover", (0, 0, 0), (200, 100)), ("value", 1.25)]),
+    "walk": ("WalkTool", [("walk", 1, 2, "none"), ("walk", 0, 150, "none"),
+        ("walk", 75, 150, "run"), ("walk", 100, 50, "vertical"),
+        ("walk", -100, -150, "through"), ("value", 2.0)]),
+    "first_person": ("FirstPersonTool", [("keys", "WD", "none"), ("keys", "WS", "none"),
+        ("keys", "AE", "run"), ("look", 250, -125), ("keys", "W", "through"),
+        ("value", 1.9)]),
+}
+
+
+def run_walkthrough(tool_name, steps):
+    from unittest.mock import patch
+    from PySide6.QtCore import QPointF, Qt
+    from ingetrazo_core import Vec3
+    from core.camera import OrbitCamera
+    from tools.base import ToolContext
+    from tools import walkthrough
+
+    view = LineView()
+    view.camera = OrbitCamera()
+    view.camera.look_from(Vec3(1, 2, 1.68), Vec3(0, 1, 0))
+    view.width = lambda: 1000
+    view.height = lambda: 700
+    tool = getattr(walkthrough, tool_name)()
+    tool.on_activate(view)
+    out = []
+    with (patch.object(walkthrough, "eye_height", return_value=1.68),
+          patch.object(walkthrough, "set_eye_height"),
+          patch.object(walkthrough, "look_sensitivity", return_value=25)):
+        for kind, *args in steps:
+            result = None
+            if kind in ("click", "hover"):
+                ctx = ToolContext(view, Vec3(*args[0]), QPointF(*args[1]), Qt.NoModifier, None)
+                (tool.on_click if kind == "click" else tool.on_hover)(ctx)
+            elif kind == "value":
+                result = tool.on_value(view, args[0])
+            elif kind == "release":
+                tool.on_release(view)
+            elif kind == "cancel":
+                tool.on_cancel(view)
+            elif kind == "look":
+                tool.on_look(view, *args)
+            elif kind in ("walk", "keys"):
+                mods = {"none": Qt.NoModifier, "through": Qt.AltModifier,
+                        "vertical": Qt.ShiftModifier, "run": Qt.ControlModifier
+                        if kind == "walk" else Qt.ShiftModifier}[args[-1]]
+                if kind == "walk":
+                    tool.step(view, args[0], args[1], 0.1, mods)
+                else:
+                    tool.step(view, {getattr(Qt, "Key_" + k) for k in args[0]}, 0.1, mods)
+            out.append({"eye": _pt(view.camera.eye()), "direction": _pt(view.camera.forward()),
+                        "lines": [[_pt(a), _pt(b)] for a, b in tool.rubber_band_lines()],
+                        "undo": len(view.history.undo_stack), "result": result})
+    return out
+
+
 def _compact(fixture) -> str:
     """One scenario step per line: the protractors' segments make an
     indented file several times larger than the data."""
@@ -925,6 +1095,15 @@ def record(which=("line", "select", "rectangle", "move", "circle", "rotated_rect
     if "rotated_rectangle" in which:
         rot = {name: run_rot(steps) for name, steps in ROT_SCENARIOS.items()}
         (FIXTURES / "rotated_rectangle.json").write_text(_compact(rot))
+    if "walkthrough" in which:
+        cases = {name: run_walkthrough(*case) for name, case in WALKTHROUGH_SCENARIOS.items()}
+        (FIXTURES / "walkthrough.json").write_text(_compact(cases))
+    if "rotate" in which:
+        rotate = {name: run_rotate(steps) for name, steps in ROTATE_SCENARIOS.items()}
+        (FIXTURES / "rotate.json").write_text(_compact(rotate))
+    if "scale" in which:
+        scale = {name: run_scale(steps) for name, steps in SCALE_SCENARIOS.items()}
+        (FIXTURES / "scale.json").write_text(_compact(scale))
     if "arc" in which:
         arcs = {name: run_arc(name, steps) for name, steps in ARC_SCENARIOS.items()}
         (FIXTURES / "arc.json").write_text(_compact(arcs))

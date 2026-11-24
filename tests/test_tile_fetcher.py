@@ -65,8 +65,8 @@ def test_cache_hit_returns_image_synchronously(tmp_path):
 
     got = fetcher.request(PRESETS["osm"], 5, 6, 7)
     assert got is not None
-    assert not got.isNull()
-    assert got.width() == 4 and got.height() == 4
+    assert got.rgba()[:4] == bytes((255, 0, 0, 255))
+    assert got.width == 4 and got.height == 4
 
 
 def test_zoom_out_of_range_refused(tmp_path):

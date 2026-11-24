@@ -49,6 +49,10 @@ mod settings;
 mod document_watch;
 mod window_input;
 mod window_commands;
+mod scene_animation;
+mod atomic_document;
+mod scene_video;
+mod survey_pixels;
 mod filing_rows;
 mod readiness;
 mod project_sections;
@@ -104,6 +108,9 @@ mod sheets;
 
 #[pymodule]
 fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    scene_animation::register(m)?;
+    survey_pixels::register(m)?;
+    m.add_class::<scene_video::MkvWriter>()?;
     builtproject::register(m)?;
     m.add_class::<settings::NativeSettings>()?;
     m.add_class::<document_watch::DocumentWatch>()?;
@@ -241,6 +248,8 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(snap_curve::snap_circle, m)?)?;
     m.add_class::<inference_state::InferenceMemory>()?;
     m.add_class::<tools::py::ToolMachine>()?;
+    m.add_class::<tools::py::ScaleGripSpec>()?;
+    m.add_function(wrap_pyfunction!(tools::py::scale_box_geometry, m)?)?;
     m.add_function(wrap_pyfunction!(tools::arc::py_last_fillet_d, m)?)?;
     m.add_function(wrap_pyfunction!(tools::py::select_mode, m)?)?;
     m.add_function(wrap_pyfunction!(tools::py::select_pick, m)?)?;
@@ -276,7 +285,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     #[cfg(unix)]
     m.add_function(wrap_pyfunction!(file_archive::igz_write_zip, m)?)?;
     #[cfg(unix)]
-    m.add_class::<file_archive::AtomicDocument>()?;
+    m.add_class::<atomic_document::AtomicDocument>()?;
     #[cfg(unix)]
     m.add_function(wrap_pyfunction!(file_archive::igz_write_plain, m)?)?;
     #[cfg(unix)]

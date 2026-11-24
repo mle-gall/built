@@ -25,6 +25,7 @@ mod textures;
 pub mod tool_cursors;
 mod annotation_canvas;
 mod image_assets;
+mod survey_raster;
 mod material_textures;
 // R-look: isolated style and background passes.
 mod style;
@@ -2970,6 +2971,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(image_assets::fit_reference_rgba, m)?)?;
     m.add_function(wrap_pyfunction!(image_assets::swatch_pixels, m)?)?;
     m.add_function(wrap_pyfunction!(image_assets::svg_preview, m)?)?;
+    m.add_class::<survey_raster::SurveyRaster>()?;
     m.add_function(wrap_pyfunction!(image_assets::raster_dimensions, m)?)?;
     m.add_function(wrap_pyfunction!(material_textures::material_texture_array, m)?)?;
     navigation::register(m)?;

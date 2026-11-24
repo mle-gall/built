@@ -247,6 +247,10 @@ def test_classic_app_command_opens_the_same_file(host, tmp_path, monkeypatch):
     assert cmd[-1] == str(src) and cmd[-2] == "--new-window" and cmd[-3].endswith("main.py")
     monkeypatch.setenv("BUILT_CLASSIC", "/Applications/Built.app/Contents/MacOS/built --qt")
     assert files.classic_command(src) == ["/Applications/Built.app/Contents/MacOS/built", "--qt", str(src)]
+    monkeypatch.setattr(host.window, "_doc_is_dirty", lambda doc: True)
+    monkeypatch.setattr("views.chrome_dialogs.ask", lambda *args, **kwargs: "cancel")
+    assert not files.open_in_classic(host.window, why="The classic sheet editor")
+    assert len(started) == 1
 
 
 def test_open_dialog_goes_through_the_native_panel(host, tmp_path, monkeypatch):

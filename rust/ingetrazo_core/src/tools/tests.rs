@@ -274,3 +274,37 @@ fn circle_ctrl_draws_a_guide_and_a_chord_takes_it_back() {
     assert!(h.log[0].starts_with("add_guide_circle") && h.log[0].contains("\"radius\":2.0"));
     assert!(!t.busy());
 }
+
+#[test]
+fn scale_retype_runs_protocol_commands_and_expires_after_another_edit() {
+    #[derive(Default)]
+    struct ScaleHost(Fake);
+    impl ToolHost for ScaleHost {
+        fn call(&mut self, name: &str, _: serde_json::Value) -> serde_json::Value {
+            match name {
+                "pick_grip" => true.into(),
+                "grip_spec" => serde_json::json!({
+                    "extents": [4, 3, 0], "mask": [true, false, false], "uniform": false
+                }),
+                "scale_targets" => serde_json::json!({"vertices": ["42"], "anchor": [0, 0, 0]}),
+                _ => serde_json::Value::Null,
+            }
+        }
+        fn revision(&mut self) -> u64 { self.0.token }
+        fn run(&mut self, cmd: &Command) -> Answer { self.0.run(cmd) }
+    }
+
+    let mut host = ScaleHost::default();
+    let mut tool = new_tool("scale").unwrap();
+    tool.event(&ToolEvent::Click(Pointer::default()), &mut host);
+    assert!(tool.busy());
+    assert!(tool.event(&ToolEvent::AbsoluteValue(Value::Length(8.0)), &mut host).committed);
+    assert!(!tool.busy());
+    assert!(host.0.log[0].contains("\"factors\":[2.0,1.0,1.0]"));
+    assert!(tool.event(&ToolEvent::Value(Value::Length(-1.0)), &mut host).committed);
+    assert_eq!(host.0.log.iter().map(|l| l.split_whitespace().next().unwrap()).collect::<Vec<_>>(),
+               ["scale_selection", "undo", "scale_selection"]);
+    host.0.token += 1;
+    assert!(!tool.event(&ToolEvent::Value(Value::Length(3.0)), &mut host).consumed);
+    assert_eq!(host.0.log.len(), 3);
+}

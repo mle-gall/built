@@ -112,7 +112,7 @@ class PhotoMesh:
         self.source = source            # the .obj it came from
         self.anchor = anchor            # None = placed at the origin, ungeoreferenced
         self.visible = True
-        # material index → the QImage actually in use (already downscaled to
+        # material index → the immutable raster in use (already downscaled to
         # what this GPU accepts). Carried on the mesh so saving the document
         # never has to reach back to the 455 MB ODM export — an .igz that only
         # works while the original folder survives would defeat the point.
@@ -370,6 +370,7 @@ ATLAS_ENTRY = "survey/atlas-{:02d}.jpg"
 
 def pack_mesh(mesh: PhotoMesh) -> tuple[dict, dict]:
     """``(json_metadata, blobs)`` for storing ``mesh`` in an ``.igz``."""
+    from georef.raster import as_raster
     import io
 
     import numpy as np
@@ -383,10 +384,10 @@ def pack_mesh(mesh: PhotoMesh) -> tuple[dict, dict]:
     for index, material in enumerate(mesh.materials):
         entry = {"name": material.name,
                  "start": int(material.start), "count": int(material.count)}
-        image = mesh.images.get(index)
-        if image is not None and not image.isNull():
+        image = as_raster(mesh.images.get(index))
+        if image is not None:
             member = ATLAS_ENTRY.format(index)
-            data = _image_bytes(image)
+            data = image.jpeg()
             if data:
                 blobs[member] = data
                 entry["atlas"] = member
@@ -406,20 +407,6 @@ def pack_mesh(mesh: PhotoMesh) -> tuple[dict, dict]:
     return meta, blobs
 
 
-def _image_bytes(image) -> bytes:
-    """A QImage as JPEG bytes. Aerial imagery has no alpha and no hard edges,
-    so JPEG is the right trade — and the container stores blobs uncompressed,
-    which would make PNG pay twice."""
-    from PySide6.QtCore import QBuffer, QByteArray
-
-    store = QByteArray()
-    buffer = QBuffer(store)
-    buffer.open(QBuffer.OpenModeFlag.WriteOnly)
-    ok = image.save(buffer, "JPG", 92)
-    buffer.close()
-    return bytes(store) if ok else b""
-
-
 def unpack_mesh(meta: dict, read_blob) -> PhotoMesh | None:
     """Rebuild a :class:`PhotoMesh` from ``meta`` plus a ``read_blob(member)``.
 
@@ -429,7 +416,7 @@ def unpack_mesh(meta: dict, read_blob) -> PhotoMesh | None:
     import io
 
     import numpy as np
-    from PySide6.QtGui import QImage
+    from ingetrazo_render import SurveyRaster
 
     try:
         raw = read_blob(meta.get("geometry", GEOMETRY_ENTRY))
@@ -462,8 +449,8 @@ def unpack_mesh(meta: dict, read_blob) -> PhotoMesh | None:
         data = read_blob(member)
         if not data:
             continue
-        image = QImage()
-        if image.loadFromData(data) and not image.isNull():
+        image = SurveyRaster.decode(data)
+        if image is not None:
             images[index] = image
 
     mesh = PhotoMesh(vertices, uvs, triangles, materials, anchor=anchor)
@@ -777,54 +764,24 @@ def plan_texture_sizes(sizes, gl_max: int,
 
 
 def load_atlas(path: Path, target: tuple[int, int]):
-    """Read one atlas at ``target`` size, going through the app's texture cache.
-
-    Two Qt facts make this less obvious than it looks:
-
-    - ``QImageReader`` refuses images over :meth:`allocationLimit` (256 MB by
-      default), which every ODM atlas exceeds. It has to be lifted or the read
-      returns null with a misleading "out of memory".
-    - ``setScaledSize`` does **not** avoid decoding the full image for PNG —
-      measured 7.4 s and 2.5 GB peak for the 24576px atlas, the same with or
-      without it. Hence the cache: that cost is paid once per file, and later
-      opens read a small JPEG instead.
-    """
-    from PySide6.QtCore import QSize, Qt
-    from PySide6.QtGui import QImageReader
+    """Load a budgeted atlas or reuse the source-specific downscaled JPEG."""
+    from ingetrazo_render import SurveyRaster
+    from formats.igz import _write_atomic
 
     path = Path(path)
     cached = _atlas_cache_path(path, target)
     if cached is not None and cached.is_file():
-        reader = QImageReader(str(cached))
-        image = reader.read()
-        if not image.isNull():
-            return image
-
-    previous = QImageReader.allocationLimit()
-    QImageReader.setAllocationLimit(0)          # 0 = no limit
-    try:
-        reader = QImageReader(str(path))
-        source = reader.size()
-        if source.isValid() and (source.width() > target[0]
-                                 or source.height() > target[1]):
-            reader.setScaledSize(source.scaled(
-                QSize(*target), Qt.AspectRatioMode.KeepAspectRatio))
-        image = reader.read()
-    finally:
-        QImageReader.setAllocationLimit(previous)
-
-    if image.isNull():
-        return image
-    if cached is not None:
+        raster = SurveyRaster.atlas(cached, target)
+        if raster is not None:
+            return raster
+    raster = SurveyRaster.atlas(path, target)
+    if raster is not None and cached is not None:
         try:
             cached.parent.mkdir(parents=True, exist_ok=True)
-            # JPEG: aerial imagery has no alpha and no hard edges to preserve,
-            # and a PNG of the same atlas is an order of magnitude slower to
-            # re-read — which is the whole point of caching it.
-            image.save(str(cached), "JPG", 92)
-        except OSError:
-            pass                                # cache is an optimisation only
-    return image
+            _write_atomic(cached, raster.jpeg())
+        except (ValueError, OSError):
+            pass  # The decoded raster can still be displayed.
+    return raster
 
 
 def _atlas_cache_path(path: Path, target: tuple[int, int]) -> Path | None:
