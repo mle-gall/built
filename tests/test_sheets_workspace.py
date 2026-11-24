@@ -585,6 +585,93 @@ def test_a_dimension_measured_on_the_page_is_bound_to_the_model(host):
     assert len(comp.comp.cotas) == before
 
 
+def test_a_bound_dimension_follows_its_frame_and_the_model(host):
+    """sheets::anchors: a dimension bound to a frame's model points is
+    reprojected when the frame moves or rescales, and its ends follow the
+    model's vertices when the model moves."""
+    import numpy as np
+    from views import wgpu_sheet_frames
+    ws = _sheets(host)
+    comp = ws.composer
+    plan = comp.comp.frames[0]
+    pts, wpts, _e, _w, _c = wgpu_sheet_frames.snaps(host.view.source_viewport, plan)
+    i = int(np.argmin(pts[:, 0] + pts[:, 1]))
+    j = int(np.argmax(pts[:, 0] - pts[:, 1]))
+    pt = lambda k: {"p": pts[k].tolist(), "world": wpts[k].tolist(), "frame": plan._doc_key, "segment": None}  # noqa: E731
+    _run_actions(host, "sheets:tool\x1fcota")
+    _run_actions(host, "sheets:cota\x1f" + json.dumps({"a": pt(i), "b": pt(j), "sep": -6.0, "axis": ""}))
+    ct = comp.comp.cotas[-1]
+    x0, dx0 = ct.x_mm, ct.dx_mm
+    host.view.draw_frame()
+    assert (ct.x_mm, ct.dx_mm) == pytest.approx((x0, dx0))           # nothing moved: nothing changes
+    plan.x_mm += 10.0
+    host.view.draw_frame()
+    assert ct.x_mm == pytest.approx(x0 + 10.0) and ct.dx_mm == pytest.approx(dx0)
+    plan.scale_n = plan.scale_n * 2.0
+    host.view.draw_frame()
+    assert ct.dx_mm == pytest.approx(dx0 / 2.0) and ct.scale_n == plan.scale_n
+    # The vertex under one end moves 0.6 m along x: that end goes with it.
+    scene = comp._scene()
+    from ingetrazo_core import Vec3
+    mesh = scene.mesh
+    before = list(ct.a_world)
+    v = next(v for v in mesh.vertices if np.allclose(v.position.toTuple(), before))
+    mesh.move_vertex(v, Vec3(0.6, 0.0, 0.0))
+    scene.version += 1
+    host.view.draw_frame()
+    assert ct.a_world == pytest.approx([before[0] + 0.6, before[1], before[2]])
+
+
+@pytest.mark.parametrize("by_layer", [False, True])
+def test_a_plan_cut_fills_each_ring_with_its_layer_s_look(host, by_layer):
+    """End to end, with a section plane: the cut rings of a vector frame and
+    each ring's look (colour, pattern, ground, ink, form) as the workspace
+    hands them to the painter (wgpu_sheet_frames.drawing) are the ones the
+    composer's compute_hlr worked out, and the frame's display list fills
+    them with the patterns (sheets::hatching)."""
+    import numpy as np
+    from ingetrazo_core import Vec3
+    from core.layers import Layer
+    from core.section import SectionPlane
+    from views import wgpu_sheet_frames
+    ws = _sheets(host)
+    comp = ws.composer
+    plan = comp.comp.frames[0]
+    plan.cut_fill_by_layer = by_layer
+    scene = comp._scene()
+    scene.layers.append(Layer("Muros", hatch="brick", color=(0.8, 0.4, 0.3)))
+    scene.layers.append(Layer("Losa", hatch="concrete", color=(0.5, 0.5, 0.55)))
+    for f in scene.mesh.faces:                       # the box east of x = 6 is concrete, the rest walls
+        xs = [v.x() for v in f.vertices]
+        f.attrs["layer"] = "Losa" if min(xs) >= 5.99 else "Muros"
+    sp = SectionPlane(Vec3(0.0, 0.0, 1.0), Vec3(0.0, 0.0, 1.0))     # a plan cut through the boxes
+    scene.section_planes.append(sp)
+    scene.set_active_section(sp)
+    scene.version += 1
+    got = wgpu_sheet_frames.drawing(host.view.source_viewport, plan)
+    comp._invalidate_geometry_caches()
+    comp.compute_hlr(plan)
+    want_rings = comp.hlr_fills[id(plan)]
+    want_looks = comp.hlr_fill_styles[id(plan)]
+    assert len(got["fills"]) == len(want_rings) >= 3
+    canon = lambda r: tuple(sorted(map(tuple, np.round(np.asarray(r, float), 4))))  # noqa: E731
+    assert sorted(map(canon, got["fills"])) == sorted(map(canon, want_rings))
+    rgb = lambda q: None if q is None else [round(v, 4) for v in q.getRgbF()[:3]]  # noqa: E731
+    mine = {canon(r): (None if c is None else [round(v, 4) for v in c], h, f and f.get("cut"))
+            for r, (c, h, _g, _i, f) in zip(got["fills"], got["fill_looks"])}
+    theirs = {canon(r): (rgb(look[0]), look[1], look[4] and look[4].get("cut"))
+              for r, look in zip(want_rings, want_looks)}
+    assert mine == theirs
+    assert {h for _c, h, _g, _i, _f in got["fill_looks"]} == {"brick", "concrete"}
+    ops = json.loads(NATIVE_display(plan, got))
+    assert sum(o["op"] == "line" for o in ops) > len(got["segs"]) + 10       # the patterns' marks
+
+
+def NATIVE_display(frame, content):
+    import ingetrazo_core as NATIVE
+    return NATIVE.sheet_frame_display(frame, content, True)
+
+
 def test_a_chain_s_total_stacks_one_row_beyond_its_line(host):
     ws = _sheets(host)
     comp = ws.composer

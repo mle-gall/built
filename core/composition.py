@@ -2046,3 +2046,18 @@ def apply_frame_camera(camera, frame: MarcoVista,
     camera.perspective = False
     camera.distance = ortho_distance_for_height(
         frame.model_height_m(), camera.fov_deg)
+
+
+#: The drag-and-drop type of a saved scene dragged onto a sheet.
+SCENE_MIME = "application/x-ingetrazo-scene"
+
+
+def frame_view_name(frame) -> str:
+    """The view's own name: the scene's, the standard view's, or «View»."""
+    from core.i18n import tr
+    key = frame.view_key
+    if key.startswith("scene:"):
+        return key[6:]
+    if key.startswith("std:"):
+        return {k: tr(lbl) for lbl, k in STD_VIEWS}.get(key[4:], key[4:])
+    return tr("View")

@@ -46,13 +46,17 @@ pub struct Pictures {
 impl Pictures {
     fn get(&mut self, ctx: &egui::Context, path: &str) -> Option<egui::TextureId> {
         self.loaded.entry(path.to_string()).or_insert_with(|| {
-            // An image item's source carries its look after a ␟ (for the writers).
-            let file = path.split('\u{1f}').next().unwrap_or(path);
+            // An image item's source carries its look after a ␟: composited
+            // as the writers composite it (ingetrazo_core sheets::picture).
+            let (file, look) = crate::sheet_picture::split_source(path);
             let img = image::open(file).ok()?;
             let img = if img.width().max(img.height()) > 2048 { img.thumbnail(2048, 2048) } else { img };
             let rgba = img.to_rgba8();
-            let size = [rgba.width() as usize, rgba.height() as usize];
-            let color = egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw());
+            let (w, h, raw) = match look {
+                Some(l) => crate::sheet_picture::composite(rgba.as_raw(), rgba.width(), rgba.height(), &l),
+                None => (rgba.width(), rgba.height(), rgba.into_raw()),
+            };
+            let color = egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &raw);
             Some(ctx.load_texture(format!("sheet-picture:{path}"), color, egui::TextureOptions::LINEAR))
         }).as_ref().map(|t| t.id())
     }

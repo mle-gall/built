@@ -900,12 +900,12 @@ class _Tree(SideTree):
                 if self._panel._group_of(it) is not None]
 
     def mimeTypes(self):
-        from views.composer import SCENE_MIME
+        from core.composition import SCENE_MIME
         return [SCENE_MIME]
 
     def mimeData(self, items):
         from PySide6.QtCore import QMimeData
-        from views.composer import SCENE_MIME
+        from core.composition import SCENE_MIME
         groups = [g for item in items if (g := self._panel._group_of(item)) is not None]
         data = QMimeData()
         data.setData(SCENE_MIME, "\n".join(g.name for g in groups).encode())
@@ -4209,14 +4209,14 @@ class _SheetsTree(QTreeWidget):
         self.setDefaultDropAction(Qt.CopyAction)
 
     def mimeTypes(self):
-        from views.composer import SCENE_MIME
+        from core.composition import SCENE_MIME
         return [SCENE_MIME]
 
     def mimeData(self, items):
         """The dragged scenes, by name — what the page of the composer (and
         a sheet row here) takes."""
         from PySide6.QtCore import QMimeData
-        from views.composer import SCENE_MIME
+        from core.composition import SCENE_MIME
         names = [d[1].name for d in (it.data(0, Qt.UserRole) for it in items)
                  if d and d[0] == "scene"]
         data = QMimeData()
@@ -4484,7 +4484,7 @@ class SheetsPanel(QWidget):
         current_key = self._key(current) if current is not None else None
         self._related = []
         from core.composition import format_scale
-        from views.composer import frame_view_name
+        from core.composition import frame_view_name
         expanded = {self._key(it) for it in self._all_items()
                     if it.isExpanded()}
         first = self.tree.topLevelItemCount() == 0

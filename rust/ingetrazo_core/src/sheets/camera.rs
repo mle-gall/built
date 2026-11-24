@@ -413,6 +413,11 @@ fn v3(d: &Bound<'_, PyDict>, k: &str) -> PyResult<Option<DVec3>> {
 /// OrbitCamera fields — target, distance, yaw, pitch, up, fov_deg,
 /// perspective, two_point, shift_x, shift_y, roll_deg, clip_near,
 /// clip_far, depth_reach as ``(centre, radius)``; None: a new camera).
+/// `base_cam` for the other sheet modules.
+pub fn base_cam_of(base: Option<&Bound<'_, PyDict>>) -> PyResult<Cam> {
+    base_cam(base)
+}
+
 fn base_cam(base: Option<&Bound<'_, PyDict>>) -> PyResult<Cam> {
     let mut c = Cam::default();
     let Some(d) = base else { return Ok(c) };

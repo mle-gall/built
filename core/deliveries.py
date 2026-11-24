@@ -187,7 +187,7 @@ def _write_drawing(model, path, cam, label, record, svg_picture, screen_mm):
         groups = [(label, hlr_perspective(model, cam))]
     else:
         from core.layers import export_labels, line_styles
-        from views.composer import dxf_cut_layers, dxf_groups_by_layer
+        from formats.dxf_views import dxf_cut_layers, dxf_groups_by_layer
         drawing = hlr_drawing(model, cam, layers=True)
         drawing.styles = line_styles(model, True)
         drawing.labels = export_labels(model)

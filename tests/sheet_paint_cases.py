@@ -115,6 +115,8 @@ def _frame_drawing(seed: int):
 FRAME_CONTENT = {}
 #: The layer styles of a case: ``(tags per segment, {tag: line_styles row})``.
 FRAME_STYLES = {}
+#: The looks of a case's cut rings: ``[(colour, hatch, ground, ink, form)]``.
+FRAME_FILLS = {}
 
 
 def cases_d():
@@ -175,6 +177,33 @@ def cases_d():
         add(f"frame-layers-{i}", (None, (segs, kinds, fills), None), hidden_lines=True,
             pen_edge_mm=pens[0], pen_profile_mm=pens[1], pen_cut_mm=pens[2])
         FRAME_STYLES[f"frame-layers-{i}"] = (tags, styles)
+    import numpy as np
+    # The cut filled layer by layer: one look per ring (colour, pattern,
+    # ground, ink, form), as compute_hlr hands them to the painter.
+    walls = [np.array([[10, 10], [60, 10], [60, 14], [10, 14]], float),          # a wall cut in plan
+             np.array([[10, 20], [14, 20], [14, 60], [10, 60]], float),
+             np.array([[30, 30], [45, 30], [45, 32], [30, 32]], float),          # a board along
+             np.array([[50, 40], [53, 40], [53, 47], [50, 47]], float)]          # a stud across
+    looks = {
+        "solid-by-layer": [((0.8, 0.3, 0.2), None, None, None, None)] * 2 + [((0.2, 0.5, 0.8), None, None, None, None)] * 2,
+        "diagonal": [((0.8, 0.3, 0.2), "diagonal", None, None, {"angle": 0.0, "scale": 1.0})] * 2
+        + [(None, "diagonal", (0.9, 0.9, 0.7), (0.1, 0.2, 0.6), {"angle": 30.0, "scale": 2.0})] * 2,
+        "concrete": [(None, "concrete", None, None, {"scale": 1.0})] * 4,
+        "crosshatch": [((0.5, 0.5, 0.5), "crosshatch", None, None, {"angle": 15.0, "scale": 0.7})] * 4,
+        "insulation": [(None, "insulation", (1.0, 1.0, 0.9), None, {"scale": 1.0})] * 4,
+        "brick-plan": [((0.8, 0.4, 0.3), "brick", None, None, {"cut": "plan", "scale_n": 20.0, "scale": 1.0,
+                                                               "joints": "single"})] * 4,
+        "brick-section": [((0.8, 0.4, 0.3), "brick", None, None, {"cut": "vertical", "scale_n": 20.0, "scale": 1.0,
+                                                                  "joints": "double", "mortar": True})] * 4,
+        "brick-small": [(None, "brick", None, None, {"cut": "plan", "scale_n": 200.0, "scale": 1.0})] * 4,
+        "wood-cross": [((0.6, 0.4, 0.2), "wood", None, None, {"cut": "plan", "cross": True, "scale_n": 20.0,
+                                                              "scale": 1.0})] * 4,
+    }
+    for name, look in looks.items():
+        segs, kinds, _f = _frame_drawing(40)
+        add(f"frame-fills-{name}", (None, (segs[:6], kinds[:6], walls), None), cut_fill="solid", cut_hatch_mm=1.5,
+            pen_hatch_mm=0.1, scale_n=20.0)
+        FRAME_FILLS[f"frame-fills-{name}"] = look
     return out
 
 
@@ -186,6 +215,10 @@ def frame_content(name: str):
     if drawing is not None:
         segs, kinds, fills = drawing
         out.update(segs=segs, kinds=kinds, fills=fills)
+    if name in FRAME_FILLS:
+        out["fill_looks"] = [(None if c is None else list(c), h, None if g is None else list(g),
+                              None if i is None else list(i), None if f is None else dict(f))
+                             for c, h, g, i, f in FRAME_FILLS[name]]
     if name in FRAME_STYLES:
         tags, styles = FRAME_STYLES[name]
         out["tags"] = tags
@@ -325,8 +358,14 @@ def python_ops(item, name: str = ""):
         if drawing is not None:
             segs, kinds, fills = drawing
         img = QImage(image[0], image[1], QImage.Format_RGB32) if image is not None else None
+        fill_styles = None
+        if name in FRAME_FILLS:
+            from PySide6.QtGui import QColor
+            qc = lambda c: None if c is None else QColor.fromRgbF(*c)  # noqa: E731
+            fill_styles = [(qc(col), h, qc(g), qc(i), None if f is None else dict(f))
+                           for col, h, g, i, f in FRAME_FILLS[name]]
         c.paint_frame_mm(p, item, img, hlr=segs, kinds=kinds, fills=fills, missing=missing,
-                         styles=FRAME_STYLES.get(name))
+                         styles=FRAME_STYLES.get(name), fill_styles=fill_styles)
     elif kind == "PerfilTerreno":
         profile, path_name, message = profile_of(name)
         c.paint_perfil_mm(p, item, profile, path_name, message)
