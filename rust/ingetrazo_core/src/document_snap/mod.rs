@@ -86,6 +86,7 @@ fn index<'py>(v: &Obj<'py>, near: Obj<'py>) -> PyResult<Obj<'py>> {
 fn skip_index<'py>(v: &Obj<'py>) -> PyResult<Obj<'py>> {
     index(v, "skip".into_pyobject(v.py())?.into_any())
 }
+mod candidates;
 mod bounds;
 mod centers;
 mod nearby;
@@ -93,6 +94,7 @@ mod projection;
 mod records;
 mod scene;
 pub fn register(m: &Bound<PyModule>) -> PyResult<()> {
+    candidates::register(m)?;
     bounds::register(m)?;
     nearby::register(m)?;
     projection::register(m)?;
