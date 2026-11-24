@@ -75,6 +75,7 @@ mod image_tool_api;
 mod line_tool_api;
 mod move_host_api;
 mod namespace;
+mod definitions;
 mod north_tool_api;
 mod offset_host_api;
 mod paint_host_api;
