@@ -42,8 +42,11 @@ fn unpack<'py, const N: usize>(value: &Obj<'py>) -> PyResult<[Obj<'py>; N]> {
     row.try_into()
         .map_err(|_| pyo3::exceptions::PyValueError::new_err("invalid row"))
 }
+mod eye_host_api;
 mod fillet_host_api;
+mod first_person_host_api;
 mod move_host_api;
+mod position_camera_host_api;
 mod pushpull;
 mod rotate_host_api;
 mod rotate_tool_api;
@@ -51,6 +54,7 @@ mod scale;
 mod select_tool_api;
 mod texture;
 mod texture_preview;
+mod walk_host_api;
 type Args<'py> = Bound<'py, PyTuple>;
 type Reply<'py> = PyResult<Obj<'py>>;
 type Method = (
@@ -97,6 +101,18 @@ fn registration(module: &str, name: &str) -> Option<(&'static [Method], &'static
         ("tools.rust_tools", "RotateTool") => {
             (rotate_tool_api::METHODS, stringify!(rotate_tool_api))
         }
+        ("tools.walkthrough_host", "EyeHost") => (eye_host_api::METHODS, stringify!(eye_host_api)),
+        ("tools.walkthrough_host", "PositionCameraHost") => (
+            position_camera_host_api::METHODS,
+            stringify!(position_camera_host_api),
+        ),
+        ("tools.walkthrough_host", "WalkHost") => {
+            (walk_host_api::METHODS, stringify!(walk_host_api))
+        }
+        ("tools.walkthrough_host", "FirstPersonHost") => (
+            first_person_host_api::METHODS,
+            stringify!(first_person_host_api),
+        ),
         ("tools.pushpull", "PushPullTool") => (pushpull::METHODS, stringify!(pushpull)),
         _ => return None,
     })
@@ -179,6 +195,7 @@ pub fn register_tool_adapter<'py>(cls: &Obj<'py>) -> Reply<'py> {
 
 mod move_functions;
 mod selection;
+mod walk_functions;
 #[pyfunction]
 pub fn register_tool_functions(namespace: &Bound<'_, PyDict>) -> PyResult<()> {
     let factory = Registrar::new(namespace.py())?;
@@ -189,6 +206,7 @@ pub fn register_tool_functions(namespace: &Bound<'_, PyDict>) -> PyResult<()> {
     let methods = match module.as_str() {
         "tools.select_host" => selection::METHODS,
         "tools.move_host" => move_functions::METHODS,
+        "tools.walkthrough_host" => walk_functions::METHODS,
         _ => {
             return Err(pyo3::exceptions::PyValueError::new_err(format!(
                 "Unknown tool module {module}"

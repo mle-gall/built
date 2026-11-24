@@ -107,3 +107,22 @@ def test_push_adapter_state_and_topology(seed, recorded, monkeypatch):
 @pytest.mark.parametrize("name", sorted(adapter_sequences()))
 def test_adapter_event_prefix(name, recorded):
     assert replay_adapter(name) == recorded["adapters"][name]
+
+
+def test_plugin_can_connect_and_disconnect_a_bound_native_tool_slot():
+    from PySide6.QtCore import QObject, Signal
+    from tools.rust_tools import SelectTool
+
+    class Events(QObject):
+        hover = Signal(object, int, int, int)
+
+    class RecordingSelect(SelectTool):
+        def _px(self, viewport, kind, x, y, modifiers=0, t=0.0):
+            calls.append((viewport, kind, x, y, modifiers))
+
+    tool, events, calls = RecordingSelect(), Events(), []
+    events.hover.connect(tool.hover_at)
+    events.hover.emit(events, 7, 11, 3)
+    events.hover.disconnect(tool.hover_at)
+    events.hover.emit(events, 8, 12, 4)
+    assert calls == [(events, "hover", 7, 11, 3)]
