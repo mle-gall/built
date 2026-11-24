@@ -1039,6 +1039,49 @@ def run_change_axes(steps):
     return out
 
 
+FOLLOWME_SCENARIOS = {
+    "preselection": ["select_edges", "activate", "profile", "click", "undo"],
+    "drag_release": ["activate", "profile", "click", "release", "edge0", "edge1", "release", "undo"],
+    "rollback": ["activate", "profile", "click", "edge0", "edge1", "edge1", "value", "cancel", "release"],
+    "perimeter": ["activate", "profile", "click", "alt", "click", "undo"],
+}
+
+
+def run_followme(steps):
+    from PySide6.QtCore import Qt
+    from core.scene import Scene
+    from tests.test_followme import _Vp2, _ctx, V
+    from tools.followme import FollowMeTool
+    vp, tool = _Vp2(Scene()), FollowMeTool()
+    mesh = vp.scene.mesh
+    profile = mesh.add_face([V(0, 0, .5), V(-1, 0, .5), V(-1, 0, 1.5), V(0, 0, 1.5)])
+    perimeter = mesh.add_face([V(0, 0, 0), V(6, 0, 0), V(6, 6, 0), V(0, 6, 0)])
+    edges = [mesh.add_edge(V(0, 0, 0), V(0, 3, 0)), mesh.add_edge(V(0, 3, 0), V(2, 3, 0))]
+    out = []
+    for step in steps:
+        result = None
+        if step == "select_edges":
+            vp.scene.selection.update(edges)
+        elif step in ("profile", "alt"):
+            vp._pick = profile if step == "profile" else perimeter
+            tool.on_hover(_ctx(vp, 20, 10, mods=Qt.NoModifier if step == "profile" else Qt.AltModifier))
+        elif step.startswith("edge"):
+            vp._edge = edges[int(step[-1])]
+            tool.on_hover(_ctx(vp, 80, 10))
+        elif step == "click":
+            tool.on_click(_ctx(vp, 20, 10))
+        elif step == "undo":
+            vp.history.undo()
+        elif step == "value":
+            result = tool.on_value(vp, 2)
+        else:
+            getattr(tool, "on_" + step)(vp)
+        out.append({"band": [[_pt(a), _pt(b)] for a, b in tool.rubber_band_lines()],
+                    "preview": len(tool.preview_faces()), "faces": len(mesh.faces),
+                    "vertices": len(mesh.vertices), "undo": len(vp.history.undo_stack), "result": result})
+    return out
+
+
 FREEHAND_SCENARIOS = {
     "simplified": [("click", 0, 0), ("hover", .01, 0), ("hover", .5, .01),
                    ("hover", 1, 0), ("hover", 1, 1), ("release",), ("undo",)],
@@ -1517,6 +1560,9 @@ def record(which=("line", "select", "rectangle", "move", "circle", "rotated_rect
     if "change_axes" in which:
         cases = {name: run_change_axes(steps) for name, steps in CHANGE_AXES_SCENARIOS.items()}
         (FIXTURES / "change_axes.json").write_text(_compact(cases))
+    if "followme" in which:
+        cases = {name: run_followme(steps) for name, steps in FOLLOWME_SCENARIOS.items()}
+        (FIXTURES / "followme.json").write_text(_compact(cases))
     if "freehand" in which:
         cases = {name: run_freehand(steps) for name, steps in FREEHAND_SCENARIOS.items()}
         (FIXTURES / "freehand.json").write_text(_compact(cases))

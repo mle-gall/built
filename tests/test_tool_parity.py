@@ -154,3 +154,8 @@ def test_freehand_matches_the_recorded_python_tool(name):
 @pytest.mark.parametrize("name", sorted(tp.CHANGE_AXES_SCENARIOS))
 def test_change_axes_matches_the_recorded_python_tool(name):
     assert tp.run_change_axes(tp.CHANGE_AXES_SCENARIOS[name]) == tp.load("change_axes")[name]
+
+
+@pytest.mark.parametrize("name", sorted(tp.FOLLOWME_SCENARIOS))
+def test_followme_matches_the_recorded_python_tool(name):
+    assert tp.run_followme(tp.FOLLOWME_SCENARIOS[name]) == tp.load("followme")[name]
