@@ -3,10 +3,11 @@ from contextlib import ExitStack, contextmanager
 import math
 import time
 import numpy as np
-from PySide6.QtCore import Qt, Signal, QTimer, QEvent, QCoreApplication
-from PySide6.QtGui import QColor
+from core.input_types import NATIVE, QEvent, Qt
+from core.host_callbacks import Signal
+from core.timers import later
+from views.paint_types import QColor
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication, QWidget
 from core.camera import OrbitCamera
 from views.wgpu_scene import pack_scene
 from tools.rust_tools import selection_mode
@@ -119,9 +120,13 @@ class MetalView(ViewNavigation):
     def _model_diag(self):
         return float(np.linalg.norm(self.packed.world_bounds[1]-self.packed.world_bounds[0]))
 
+    def _prepare_surface(self):
+        """Winit already owns the surface. Widget hosts configure theirs here."""
+
     def _view_timer(self, callback, interval=0):
         if self._timer_queue is not None:
             return self._timer_queue.timer(callback, interval)
+        from PySide6.QtCore import QTimer
         timer = QTimer(self, singleShot=True, interval=interval)
         timer.timeout.connect(callback)
         return timer
@@ -129,14 +134,8 @@ class MetalView(ViewNavigation):
     def __init__(self, parent=None, *, timers=None):
         super().__init__(parent)
         self._timer_queue = timers
-        # Keep the inspector's trees and forms in Qt's backing store. Making
-        # every sibling an NSView turns each splitter step into native layout.
-        if QApplication.platformName() == 'cocoa':
-            QCoreApplication.setAttribute(Qt.AA_DontCreateNativeWidgetSiblings)
         self._resize_timer = self._view_timer(self._finish_resize, 80)
-        if QApplication.platformName() not in ('offscreen', 'minimal'):
-            for attr in (Qt.WA_NativeWindow, Qt.WA_PaintOnScreen, Qt.WA_NoSystemBackground):
-                self.setAttribute(attr)
+        self._prepare_surface()
         self.camera = OrbitCamera()
         self.source_viewport = None
         self.setFocusPolicy(Qt.StrongFocus)
@@ -218,7 +217,7 @@ class MetalView(ViewNavigation):
         tool = getattr(self.source_viewport, 'active_tool', None)
         reset = self.tools.start_point is not None and getattr(tool, 'start_point', None) is None
         if self.isVisible() and (tool is not self.tools.tool or reset):
-            QTimer.singleShot(0, self._sync_tool_dispatch)
+            later(self, 0, self._sync_tool_dispatch)
 
     def _sync_tool_dispatch(self):
         if self.isVisible():
@@ -340,7 +339,7 @@ class MetalView(ViewNavigation):
                         self._inference_future = None
                     if not getattr(self, '_inference_queued', False):
                         self._inference_queued = True
-                        QTimer.singleShot(0, self._refresh_inference)
+                        later(self, 0, self._refresh_inference)
             self._content_token = token
             self._paint_key = paint_key
             self.build_seconds = time.perf_counter() - start
@@ -440,7 +439,7 @@ class MetalView(ViewNavigation):
                 return
             old = tracker.adopt_reserved()
             if old is False:
-                QTimer.singleShot(50, self, adopt)
+                later(self, 50, adopt)
                 return
             index = self.inference_index
             packed = getattr(index, 'packed', None)
@@ -450,7 +449,7 @@ class MetalView(ViewNavigation):
                 from dataclasses import replace
                 index.packed = replace(packed, vertices=self.packed.vertices,
                                        indices=self.packed.indices)
-        QTimer.singleShot(50, self, adopt)
+        later(self, 50, adopt)
 
     def _measure_boxes_later(self, scene, groups):
         """One container box per idle slice, from a few seconds after the
@@ -468,8 +467,8 @@ class MetalView(ViewNavigation):
             if not pending:
                 return
             self._group_obb(pending.pop(0))
-            QTimer.singleShot(250, self, step)
-        QTimer.singleShot(3000, self, step)
+            later(self, 250, step)
+        later(self, 3000, step)
 
     def blank(self):
         """Only the background, while another document loads into this
@@ -860,13 +859,22 @@ class MetalView(ViewNavigation):
                                              self.devicePixelRatioF())
                 self._had_center_cue = ref is not None
         if annotations or primitives or section_widgets or getattr(self, "_had_overlay", False):
-            from views.wgpu_overlay import rasterize, pixels
+            from views import wgpu_overlay
             before = time.perf_counter()
-            image = rasterize(primitives, self.width(), self.height(), self.devicePixelRatioF(),
-                              self.tools.draw_annotations if annotations else None)
-            if section_widgets:
-                self._paint_section_widgets(image)
-            self.renderer.set_overlay(image.width(), image.height(), pixels(image))
+            w, h, scale = self.width(), self.height(), self.devicePixelRatioF()
+            draw = self.tools.draw_annotations if annotations else None
+            if hasattr(self.renderer, "set_annotation_layer"):
+                from ingetrazo_render import AnnotationCanvas
+                layer = AnnotationCanvas(max(1, int(w * scale)), max(1, int(h * scale)), w)
+                wgpu_overlay.paint_layer(layer, primitives, draw)
+                if section_widgets:
+                    self._draw_section_widgets(layer)
+                self.renderer.set_annotation_layer(layer)
+            else:
+                image = wgpu_overlay.rasterize(primitives, w, h, scale, draw)
+                if section_widgets:
+                    self._paint_section_widgets(image)
+                self.renderer.set_overlay(image.width(), image.height(), wgpu_overlay.pixels(image))
             self.overlay_ms = (time.perf_counter() - before) * 1000
             self._had_overlay = annotations or bool(primitives) or section_widgets
         # End R3c-2a section widgets.
@@ -904,20 +912,22 @@ class MetalView(ViewNavigation):
             return
         camera.fit_depth_range(lo[None], hi[None])
 
-    def _paint_section_widgets(self, image):
-        """R3c-2a: reuse GL's frame, brackets and symbols at Metal's size."""
+    def _draw_section_widgets(self, painter):
         from types import SimpleNamespace
-        from PySide6.QtGui import QPainter
         from views.document_interaction import DocumentInteraction
         context = SimpleNamespace(scene=self.scene, camera=self.camera,
                                   width=self.width, height=self.height)
         context.section_plane_frame = lambda sp: DocumentInteraction.section_plane_frame(context, sp)
         context._clip_segment_front = lambda a, b: DocumentInteraction._clip_segment_front(context, a, b)
         context._world_to_pixel = lambda p: DocumentInteraction._world_to_pixel(context, p)
+        DocumentInteraction._draw_section_planes(context, painter)
+
+    def _paint_section_widgets(self, image):
+        from PySide6.QtGui import QPainter
         painter = QPainter(image)
         painter.setRenderHint(QPainter.Antialiasing)
         try:
-            DocumentInteraction._draw_section_planes(context, painter)
+            self._draw_section_widgets(painter)
         finally:
             painter.end()
 
@@ -1334,8 +1344,8 @@ class MetalView(ViewNavigation):
         if self.tools.mode != 'mesh' and hasattr(self.renderer, 'set_preview_mesh'):
             return
         from core.mesh import Edge
-        from PySide6.QtCore import QPointF
-        from PySide6.QtGui import QPen
+        from core.input_types import QPointF
+        from views.paint_types import QPen
         entities = [(e, False) for e in self.scene.selection if isinstance(e, Edge)]
         hovered = getattr(self.tools, '_mesh_hover', getattr(self.source_viewport, '_hover_entity', None))
         if isinstance(hovered, Edge) and hovered not in self.scene.selection:
@@ -1714,12 +1724,12 @@ class MetalView(ViewNavigation):
         source._cycle_reference_mode(edge)
         if pos is not None:
             # The lock shows at once, the hand still (GL's _refresh_snap).
-            from PySide6.QtGui import QMouseEvent
+            from app_shell.events import MouseEvent
             from views import input_state
             held = input_state.modifiers(self)
             self.hover(pos.x(), pos.y(), held)
-            self.tools.hover(QMouseEvent(QEvent.MouseMove, pos, pos,
-                                         Qt.NoButton, Qt.NoButton, held))
+            self.tools.hover(MouseEvent("move", pos.x(), pos.y(),
+                                       modifiers=int(getattr(held, "value", held))))
 
     @_tool_frame
     def keyReleaseEvent(self, event):
@@ -1816,8 +1826,20 @@ class MetalView(ViewNavigation):
         self._billboards = self._reference_cache = None
 
 
-class WgpuView(MetalView, QWidget):
-    """Qt presentation surface for a document."""
+if not NATIVE:
+    from PySide6.QtWidgets import QWidget
 
-    def _can_create_surface(self):
-        return self.testAttribute(Qt.WA_PaintOnScreen)
+    class WgpuView(MetalView, QWidget):
+        """Qt presentation surface for a document."""
+
+        def _prepare_surface(self):
+            from PySide6.QtCore import QCoreApplication
+            from PySide6.QtWidgets import QApplication
+            if QApplication.platformName() == 'cocoa':
+                QCoreApplication.setAttribute(Qt.AA_DontCreateNativeWidgetSiblings)
+            if QApplication.platformName() not in ('offscreen', 'minimal'):
+                for attr in (Qt.WA_NativeWindow, Qt.WA_PaintOnScreen, Qt.WA_NoSystemBackground):
+                    self.setAttribute(attr)
+
+        def _can_create_surface(self):
+            return self.testAttribute(Qt.WA_PaintOnScreen)

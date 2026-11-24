@@ -3,6 +3,8 @@
 
 
 def draw_overlay(tool, viewport, painter):
+    if hasattr(painter, "draw_tool"):
+        return painter.draw_tool(tool.overlay_kind, tool, viewport)
     from ingetrazo_render import tool_overlay_tile
     from PySide6.QtCore import QPointF
     from PySide6.QtGui import QImage

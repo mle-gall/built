@@ -34,7 +34,7 @@ class GeoPathTool(RustTool):
             vp.scene.version += 1
 
     def on_key(self, vp, key, modifiers):
-        from PySide6.QtCore import Qt
+        from core.input_types import Qt
         if key not in (Qt.Key_Enter, Qt.Key_Return):
             return False
         self._send(vp, {"type": "key", "key": "Enter"})

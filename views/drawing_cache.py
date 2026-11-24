@@ -44,12 +44,12 @@ def _code(code):
 def signature():
     global _SIGNATURE
     if _SIGNATURE is None:
-        from PySide6.QtCore import qVersion
+        from ingetrazo_render import build_commit
         from core import lazy_mesh, mesh, materials, texture, _native
         from formats import igz
         from views import array_bake, viewport
         h = hashlib.sha256(str((_VERSION, sys.version_info[:3],
-                               np.__version__, qVersion())).encode())
+                               np.__version__, build_commit)).encode())
         for module in (lazy_mesh, mesh, materials, texture, igz, array_bake, viewport):
             # Both normal Python and PyInstaller expose their compiled
             # module. Hash all code/constants, including class properties,
@@ -316,9 +316,9 @@ def store():
     global _STORE
     if _STORE is None:
         try:
-            from PySide6.QtCore import QStandardPaths
+            from core.paths import cache_directory
             root = os.environ.get('INGETRAZO_DRAWING_CACHE_DIR') or str(
-                Path(QStandardPaths.writableLocation(QStandardPaths.GenericCacheLocation))
+                cache_directory()
                 / 'IngeTrazo' / 'drawing')
             _STORE = Store(Path(root) / ('v%d.sqlite' % _VERSION))
         except (OSError, sqlite3.Error):

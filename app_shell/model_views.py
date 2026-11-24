@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from ingetrazo_render import DocumentViews, view_layouts
-from views.documents import Document
+from core.document_host import Document
 from app_shell.view import ShellView
 from views.document_controller import DocumentController
 from views.resident_peer import ResidentPeer, TargetRenderer, raw_renderer

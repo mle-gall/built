@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from ingetrazo_core import (box_records, box_placements, box_chunk_group, chunk_bounds as _local_bounds, box_from_pack as _box_groups_packed,
                             segment_overlaps_box as _seg_rect_overlap)
-from views import prompts as _prompts
 
 from core.dimension import Dimension
 from core.textlabel import TextLabel

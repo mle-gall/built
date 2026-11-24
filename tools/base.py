@@ -17,7 +17,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from PySide6.QtCore import QPointF, Qt
+from core.input_types import QPointF, Qt
 from ingetrazo_core import Vec3 as QVector3D, cursor_pixel_scale, cursor_plane_reference, cursor_plane_color, plane_input
 
 from core.snap import POINT_SNAP_KINDS, SnapResult

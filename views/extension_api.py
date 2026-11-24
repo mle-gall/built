@@ -68,7 +68,7 @@ def _make_pick_tool(prompt: str, done, cancelled):
     a ceiling, an endpoint), ``cancelled()`` on Esc. Built here and not at
     module level: a module-level Tool would get its own Extensions-menu
     entry (core/extensions.py), and the panel is the only way in."""
-    from PySide6.QtCore import Qt
+    from core.input_types import Qt
     from tools.base import Tool
 
     class _PickPoint(Tool):
@@ -124,7 +124,10 @@ class ExtensionApp:
                                description=description, input_schema=input_schema,
                                mutates=mutates)
         self._agent_tool_unsubscribers.append(unsubscribe)
-        self.window.destroyed.connect(unsubscribe)
+        if getattr(self.window, "_extension_closed", None) is not None:
+            self.window._extension_closed.connect(unsubscribe)
+        else:
+            self.window.destroyed.connect(unsubscribe)
         return unsubscribe
 
     def remove_agent_tools(self):

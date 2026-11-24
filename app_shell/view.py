@@ -1,4 +1,4 @@
-"""The Metal view: ``views.wgpu_view.WgpuView``'s Python on a QObject.
+"""The Metal view: ``views.wgpu_view.WgpuView``'s document bindings on a native window.
 
 The renderer surface is the winit window's NSView, handed over by Rust; the
 renderer itself is the statically linked ``ingetrazo_render`` module, so
@@ -57,6 +57,7 @@ class ShellView(MetalView, WidgetShim):
 
     def closeEvent(self, event=None):
         self._closed = True
+        self._host.timers.cancel_context(self)
         for timer in self._presentation_timers():
             if timer is not None:
                 timer.stop()

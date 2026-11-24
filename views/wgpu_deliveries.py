@@ -4,8 +4,17 @@ from collections import deque
 from contextlib import contextmanager
 from pathlib import Path
 
-from PySide6.QtCore import QTimer, QUrl
-from PySide6.QtGui import QDesktopServices
+from core.input_types import NATIVE
+from core.desktop_open import open_url
+if not NATIVE:
+    from PySide6.QtCore import QTimer
+
+
+def _next(win, fn):
+    if NATIVE:
+        win._host.timers.later(win, 0, fn)
+    else:
+        QTimer.singleShot(0, fn)
 
 from core import bim_registry, deliveries
 from core.protocol import commands
@@ -150,7 +159,14 @@ def _svg_context(win, active, scene, record, preview=False):
             scene.show_axes = old and axes
             try:
                 with framed(active.camera, frame) if frame else nullcontext():
-                    image = renderer.render_image(PREVIEW_IMAGE_PX if preview else EXPORT_IMAGE_PX, overlays=False, sharp_shadows=True)
+                    width = PREVIEW_IMAGE_PX if preview else EXPORT_IMAGE_PX
+                    if NATIVE:
+                        from ingetrazo_render import SurveyRaster
+                        display = getattr(renderer, "keys_stand_in", renderer)
+                        pixels = display.render_pixels(width, overlays=False, sharp_shadows=True)
+                        image = SurveyRaster(*pixels) if pixels else None
+                    else:
+                        image = renderer.render_image(width, overlays=False, sharp_shadows=True)
                     return image, view_rect(active.camera)
             finally:
                 scene.show_axes = old
@@ -219,7 +235,7 @@ def _write_pdf(win, path, sheets) -> list:
     scene = win.viewport.history.scene
     wanted = None if sheets is None else {s._doc_key for s in sheets}
     comps = [c for c in scene.compositions if wanted is None or c._doc_key in wanted]
-    return wgpu_sheet_frames.export_pdf(view, comps, path, wgpu_sheet_frames.Ground(lambda: None),
+    return wgpu_sheet_frames.export_pdf(view, comps, path, wgpu_sheet_frames.Ground(lambda: None, view),
                                         getattr(win, "_current_path", None), getattr(win, "_ext_sheet_annots", None))
 
 
@@ -257,7 +273,7 @@ def enqueue(win, key, record):
                 from views import chrome_dialogs
                 chrome_dialogs._record(
                     win, f"Delivered · {record['name']}", str(folder), "info", "Open folder",
-                    lambda f=folder: QDesktopServices.openUrl(QUrl.fromLocalFile(str(f))))
+                    lambda f=folder: open_url(f))
             except InterruptedError:
                 pass
             except Exception as exc:
@@ -266,17 +282,17 @@ def enqueue(win, key, record):
             else:
                 job.update(fraction, phase)
                 job.draw_now()
-                QTimer.singleShot(0, advance)
+                _next(win, advance)
                 return
         steps.close()
         job.end()
         queue.popleft()
         if queue:
-            QTimer.singleShot(0, queue[0])
+            _next(win, queue[0])
 
     queue.append(advance)
     if len(queue) == 1:
-        QTimer.singleShot(0, advance)
+        _next(win, advance)
     return job
 
 
@@ -288,7 +304,7 @@ def action(win, view, arg):
     elif verb == "folder":
         result = win.__dict__.pop("_delivery_result", None)
         if result:
-            QDesktopServices.openUrl(QUrl.fromLocalFile(str(result[1])))
+            open_url(result[1])
     elif key in deliveries.records(win.viewport.scene):
         if verb == "select":
             view._delivery_key = key

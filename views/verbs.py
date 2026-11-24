@@ -114,8 +114,8 @@ def facts(scene, sel, win=None, view=None, *, locked_group=None, locked_image=No
                  isolated=vp.__dict__.get("_isolate_base") is not None or bool(getattr(vp, "_previous_views", None)),
                  guides=bool(list(getattr(scene, "guides", ()) or ())))
     elif view is not None:
-        from PySide6.QtGui import QKeySequence
-        f["reveal_key"] = QKeySequence("Ctrl+Shift+J").toString(QKeySequence.NativeText)
+        from ingetrazo_render import shortcut_text
+        f["reveal_key"] = shortcut_text("Ctrl+Shift+J")[1]
     return f
 
 

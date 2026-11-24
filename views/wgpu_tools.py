@@ -4,7 +4,7 @@ Live placement moves alter resident matrices only; the document is touched
 once, by the same commands used by MoveTool, after the user commits.
 """
 import numpy as np
-from PySide6.QtCore import Qt
+from core.input_types import Qt
 from core.history import MoveGroupCommand, CompoundCommand
 from tools.base import ToolContext
 from tools.tape import TapeMeasureTool
@@ -143,9 +143,8 @@ class NativeTools(MeshToolAccess):
         """Synchronize an explicitly chosen tool and adopt a hovered Tape origin."""
         if self.sync() != 'tape':
             return
-        from PySide6.QtWidgets import QWidget
         source = self.view.source_viewport
-        if isinstance(self.view, QWidget):
+        if not hasattr(self.view, "_host") and hasattr(self.view, "winId"):
             started = self.tool.start_from_hover(source)
         else:
             pos = getattr(self.view, '_cursor_pos', None)

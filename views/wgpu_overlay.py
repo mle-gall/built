@@ -7,8 +7,8 @@ from dataclasses import dataclass
 import math
 
 import numpy as np
-from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPen, QPolygonF
+from core.input_types import QPointF, QRectF, Qt
+from views.paint_types import QColor, QFont, QPen, QPolygonF
 
 
 @dataclass(frozen=True)
@@ -26,6 +26,7 @@ class Primitive:
 
 def rasterize(primitives, width, height, scale, annotations=None):
     """Return an owned image at physical resolution, drawing in logical units."""
+    from PySide6.QtGui import QImage, QPainter
     image = QImage(max(1, int(width * scale)), max(1, int(height * scale)),
                    QImage.Format_RGBA8888)
     image.setDevicePixelRatio(scale)
@@ -33,40 +34,44 @@ def rasterize(primitives, width, height, scale, annotations=None):
     painter = QPainter(image)
     painter.setRenderHint(QPainter.Antialiasing)
     try:
-        if annotations is not None:
-            annotations(painter)
-        for primitive in primitives:
-            if primitive.kind == "snap":
-                from types import SimpleNamespace
-                c = QColor(primitive.color)
-                snap = SimpleNamespace(kind=primitive.snap_kind, point=primitive.points[0],
-                                       color=c.getRgbF()[:3], guide=None, guides=(),
-                                       axis=None, label=primitive.text, context=None)
-                draw_snap_indicator(painter, snap, lambda p: p,
-                                    lambda a, b: (a, b), labels=False)
-                continue
-            pen = QPen(QColor(primitive.color), primitive.width, primitive.pen_style)
-            if primitive.dash:
-                pen.setDashPattern(primitive.dash)
-                pen.setCapStyle(Qt.FlatCap)
-            painter.setPen(pen)
-            painter.setBrush(QColor(primitive.fill) if primitive.fill else Qt.NoBrush)
-            points = [QPointF(*p) for p in primitive.points]
-            if primitive.kind == "polyline":
-                painter.drawPolyline(QPolygonF(points))
-            elif primitive.kind == "polygon":
-                painter.drawPolygon(QPolygonF(points))
-            elif primitive.kind == "rectangle":
-                painter.drawRect(QRectF(points[0], points[1]).normalized())
-            elif primitive.kind == "point":
-                painter.drawEllipse(points[0], primitive.width, primitive.width)
-            elif primitive.kind == "text":
-                painter.drawText(points[0], primitive.text)
-            else:
-                raise ValueError(f"Unknown overlay primitive: {primitive.kind}")
+        paint_layer(painter, primitives, annotations)
     finally:
         painter.end()
     return image
+
+
+def paint_layer(painter, primitives, annotations=None):
+    if annotations is not None:
+        annotations(painter)
+    for primitive in primitives:
+        if primitive.kind == "snap":
+            from types import SimpleNamespace
+            c = QColor(primitive.color)
+            snap = SimpleNamespace(kind=primitive.snap_kind, point=primitive.points[0],
+                                   color=c.getRgbF()[:3], guide=None, guides=(),
+                                   axis=None, label=primitive.text, context=None)
+            draw_snap_indicator(painter, snap, lambda p: p,
+                                lambda a, b: (a, b), labels=False)
+            continue
+        pen = QPen(QColor(primitive.color), primitive.width, primitive.pen_style)
+        if primitive.dash:
+            pen.setDashPattern(primitive.dash)
+            pen.setCapStyle(Qt.FlatCap)
+        painter.setPen(pen)
+        painter.setBrush(QColor(primitive.fill) if primitive.fill else Qt.NoBrush)
+        points = [QPointF(*p) for p in primitive.points]
+        if primitive.kind == "polyline":
+            painter.drawPolyline(QPolygonF(points))
+        elif primitive.kind == "polygon":
+            painter.drawPolygon(QPolygonF(points))
+        elif primitive.kind == "rectangle":
+            painter.drawRect(QRectF(points[0], points[1]).normalized())
+        elif primitive.kind == "point":
+            painter.drawEllipse(points[0], primitive.width, primitive.width)
+        elif primitive.kind == "text":
+            painter.drawText(points[0], primitive.text)
+        else:
+            raise ValueError(f"Unknown overlay primitive: {primitive.kind}")
 
 
 def pixels(image):

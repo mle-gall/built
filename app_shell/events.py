@@ -12,7 +12,7 @@ convention, which the tools rely on), keys as ``Qt.Key`` values.
 """
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, QPoint, QPointF, Qt
+from core.input_types import QEvent, QPoint, QPointF, Qt
 
 
 def mods(mask: int):
@@ -226,10 +226,10 @@ class _Device:
     """``event.device().type()``: trackpad (TouchPad) or touch screen."""
 
     def __init__(self, touch_screen=False, mouse=False):
-        from PySide6.QtGui import QInputDevice
-        self._type = (QInputDevice.DeviceType.Mouse if mouse
-                      else QInputDevice.DeviceType.TouchScreen if touch_screen
-                      else QInputDevice.DeviceType.TouchPad)
+        from core.input_types import DeviceType
+        self._type = (DeviceType.Mouse if mouse
+                      else DeviceType.TouchScreen if touch_screen
+                      else DeviceType.TouchPad)
 
     def type(self):
         return self._type

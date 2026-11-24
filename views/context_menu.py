@@ -255,7 +255,7 @@ def rename_answered(win, view, g, text) -> None:
 def edit_text(win, view, entity) -> None:
     """Edit text… : what a double-click on the text or dimension does (the
     Select tool's own handler), at the point the menu was opened on."""
-    from PySide6.QtCore import QPointF, Qt
+    from core.input_types import QPointF, Qt
     from ingetrazo_core import Vec3 as QVector3D
     from tools.base import ToolContext
     from tools.rust_tools import SelectTool
@@ -311,6 +311,9 @@ def action(win, view, vid) -> bool:
     verb = menu.find(vid) if menu is not None else None
     if verb is None or not verb.enabled:
         return False
+    if menu.kind == "texture_position":
+        tool = menu.facts["tool"]
+        return tool is view.tools.tool and tool.menu_action(view.tools, vid)
     if not run(win, view, menu.kind, vid, menu.sel, locked_group=menu.locked_group,
                locked_image=menu.locked_image, facts=menu.facts):
         return False

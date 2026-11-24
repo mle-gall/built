@@ -2,7 +2,8 @@
 import json
 from concurrent.futures import ThreadPoolExecutor
 
-from PySide6.QtCore import QTimer
+from core.input_types import NATIVE
+from core.timers import timer
 
 from core import library
 from core.i18n import current_language, tr
@@ -19,9 +20,7 @@ class CatalogueSession:
     def __init__(self, ctx):
         self.ctx, self.document = ctx, ctx.win._doc
         self.model = ComponentCatalogue()
-        self.timer = QTimer()
-        self.timer.setInterval(80)
-        self.timer.timeout.connect(self.poll)
+        self.timer = timer(ctx.win if NATIVE else None, self.poll, 80, repeat=True)
         self.entry = None
         self.artwork = []
         self.index(False)
@@ -35,7 +34,7 @@ class CatalogueSession:
         if self.job is not None:
             self.job.cancel()
             self.job = None
-        self.timer.deleteLater()
+        self.timer = None
 
     def build(self, base, query):
         sheet = NativeSheet("library", spec=self.model.sheet(

@@ -42,6 +42,22 @@ def host_env(environ=None) -> dict:
 def open_url(target) -> bool:
     """Open ``target`` — a ``Path``, a path string, an ``http(s)`` URL or a
     ``QUrl`` — with the desktop's program for it."""
+    if "built_shell" in sys.builtin_module_names:
+        if hasattr(target, "isLocalFile"):
+            arg = target.toLocalFile() if target.isLocalFile() else target.toString()
+        else:
+            arg = str(target)
+        try:
+            if sys.platform == "win32":
+                os.startfile(arg)
+            else:
+                opener = "/usr/bin/open" if sys.platform == "darwin" else "xdg-open"
+                subprocess.Popen([opener, arg], env=host_env(), stdin=subprocess.DEVNULL,
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                 start_new_session=True)
+            return True
+        except OSError:
+            return False
     from PySide6.QtCore import QUrl
     if isinstance(target, Path):
         url = QUrl.fromLocalFile(str(target))
@@ -51,11 +67,7 @@ def open_url(target) -> bool:
         url = QUrl(str(target))
     else:
         url = QUrl.fromLocalFile(str(target))
-    if sys.platform == "darwin" and "built_shell" in sys.builtin_module_names:
-        # The native shell runs Qt offscreen, without Cocoa desktop services.
-        opener = "/usr/bin/open"
-    else:
-        opener = shutil.which("xdg-open") if _launch_ourselves() else None
+    opener = shutil.which("xdg-open") if _launch_ourselves() else None
     if opener:
         arg = url.toLocalFile() if url.isLocalFile() else url.toString()
         try:

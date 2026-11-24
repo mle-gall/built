@@ -116,7 +116,7 @@ class SelectTool(RustTool):
         viewport.update()
 
     def on_key(self, viewport, key, modifiers) -> bool:
-        from PySide6.QtCore import Qt
+        from core.input_types import Qt
         name = {Qt.Key_Delete: "Delete", Qt.Key_Backspace: "Backspace"}.get(key)
         if name is None:
             return False
@@ -259,7 +259,7 @@ class RectangleTool(_PlanarMachine):
         return consumed
 
     def on_key(self, viewport, key, modifiers) -> bool:
-        from PySide6.QtCore import Qt
+        from core.input_types import Qt
         name = {Qt.Key_Control: "Control", Qt.Key_Down: "ArrowDown", Qt.Key_Right: "ArrowRight",
                 Qt.Key_Left: "ArrowLeft", Qt.Key_Up: "ArrowUp"}.get(key)
         if name is not None and self._send_framed(
@@ -274,7 +274,7 @@ class RectangleTool(_PlanarMachine):
         return self.plane_lock_key(viewport, key)
 
     def on_key_release(self, viewport, key) -> bool:
-        from PySide6.QtCore import Qt
+        from core.input_types import Qt
         if key != Qt.Key_Control:
             return False
         tapped = getattr(viewport, "ctrl_tapped", None)
@@ -454,7 +454,7 @@ class _RadialTool(AxisMagnet, _PlanarMachine):
         viewport.update()
 
     def on_key(self, viewport, key, modifiers) -> bool:
-        from PySide6.QtCore import Qt
+        from core.input_types import Qt
         if key == Qt.Key_Control and self._guide_capable:
             self._send_framed(viewport, {"type": "key", "key": "Control", "mods": _mods(modifiers)})
             self._refresh(viewport)
@@ -462,7 +462,7 @@ class _RadialTool(AxisMagnet, _PlanarMachine):
         return self.plane_lock_key(viewport, key)
 
     def on_key_release(self, viewport, key) -> bool:
-        from PySide6.QtCore import Qt
+        from core.input_types import Qt
         if key != Qt.Key_Control:
             return False
         tapped = getattr(viewport, "ctrl_tapped", None)

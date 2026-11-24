@@ -58,7 +58,6 @@ pub fn start(layout: &Layout) -> PyResult<()> {
         let exe = CString::new(exe.as_os_str().as_bytes()).unwrap();
         // Called once on the main thread before PyO3 attaches.
         unsafe { built_initialize(root.as_ptr(), exe.as_ptr()) };
-        std::env::set_var("QT_PLUGIN_PATH", layout.root.join("PySide6/Qt/plugins"));
     }
     #[cfg(not(built_bundle))]
     Python::initialize();

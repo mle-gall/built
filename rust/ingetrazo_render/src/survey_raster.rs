@@ -15,7 +15,7 @@ use std::{
 
 #[pyclass(frozen, module = "ingetrazo_render")]
 pub struct SurveyRaster {
-    pixels: RgbaImage,
+    pub(crate) pixels: RgbaImage,
 }
 
 const MAX_PIXELS: u64 = 128 * 1024 * 1024;
@@ -72,6 +72,104 @@ impl SurveyRaster {
         }))
     }
 
+    #[staticmethod]
+    fn open(py: Python<'_>, path: std::path::PathBuf) -> PyResult<Option<Self>> {
+        Ok(crate::image_assets::decode(py, &path)?.map(|pixels| Self { pixels }))
+    }
+
+    fn resized(&self, py: Python<'_>, width: u32, height: u32) -> PyResult<Self> {
+        if !fits(width, height) {
+            return Err(PyValueError::new_err("invalid raster dimensions"));
+        }
+        Ok(Self {
+            pixels: py.detach(|| crate::image_assets::resize(self.pixels.clone(), width, height)),
+        })
+    }
+
+    fn material_png<'py>(&self, py: Python<'py>, source: &[u8]) -> PyResult<Bound<'py, PyBytes>> {
+        crate::material_png::encode(
+            py,
+            self.width(),
+            self.height(),
+            self.pixels.as_raw(),
+            source,
+        )
+    }
+
+    fn frame_region(
+        &self,
+        py: Python<'_>,
+        region: (f64, f64, f64, f64),
+        width: u32,
+        height: u32,
+    ) -> PyResult<Self> {
+        if !fits(width, height) {
+            return Err(PyValueError::new_err("invalid frame dimensions"));
+        }
+        let (x, y, w, h) = region;
+        let crop = |origin: f64, extent: f64, pixels: u32| {
+            let start = (origin * f64::from(pixels))
+                .round()
+                .clamp(0., f64::from(pixels - 1)) as u32;
+            let length = (extent * f64::from(pixels))
+                .round()
+                .clamp(1., f64::from(pixels - start)) as u32;
+            (start, length)
+        };
+        let (x, w) = crop(x, w, self.width());
+        let (y, h) = crop(y, h, self.height());
+        let pixels = py.detach(|| {
+            let part = imageops::crop_imm(&self.pixels, x, y, w, h).to_image();
+            if (width, height) == (w, h) {
+                part
+            } else {
+                crate::image_assets::resize(part, width, height)
+            }
+        });
+        Ok(Self { pixels })
+    }
+
+    fn save(&self, py: Python<'_>, path: std::path::PathBuf) -> bool {
+        py.detach(|| {
+            if image::ImageFormat::from_path(&path).ok() == Some(image::ImageFormat::Jpeg) {
+                let rgb: image::RgbImage = image::buffer::ConvertBuffer::convert(&self.pixels);
+                rgb.save(path).is_ok()
+            } else {
+                self.pixels.save(path).is_ok()
+            }
+        })
+    }
+
+    fn png<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
+        let data = py
+            .detach(|| {
+                let mut out = Vec::new();
+                crate::captured_frame::encode_png(
+                    &mut out,
+                    self.width(),
+                    self.height(),
+                    self.pixels.as_raw(),
+                )?;
+                Ok::<_, png::EncodingError>(out)
+            })
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(PyBytes::new(py, &data))
+    }
+
+    fn mean_rgb(&self, py: Python<'_>) -> (f64, f64, f64) {
+        py.detach(|| {
+            let mut rgb = [0u64; 3];
+            let mut weight = 0;
+            for pixel in self.pixels.pixels() {
+                let a = u64::from(pixel[3]);
+                weight += a;
+                for (sum, c) in rgb.iter_mut().zip(pixel.0) {
+                    *sum += u64::from(c) * a;
+                }
+            }
+            rgb.map(|v| v as f64 / (weight.max(1) as f64 * 255.)).into()
+        })
+    }
     fn jpeg<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
         let bytes = py
             .detach(|| {

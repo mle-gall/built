@@ -34,8 +34,10 @@ This shares annotation layout/localization rather than duplicating those rules.
 from copy import copy
 
 import numpy as np
-from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QColor, QPainter, QPen
+from core.input_types import NATIVE, QPointF, Qt
+from views.paint_types import QColor, QPen
+if not NATIVE:
+    from PySide6.QtGui import QPainter
 from ingetrazo_core import Vec3 as QVector3D
 
 from views.document_interaction import DocumentInteraction, _guide_vertices, shown_guides
@@ -176,7 +178,7 @@ def draw_annotations(painter, scene, camera, logical_size, *, annotations_only=F
                               clear_segment=clear_segment)
     painter.save()
     try:
-        if isinstance(painter, QPainter):
+        if not NATIVE and isinstance(painter, QPainter):
             painter.setRenderHint(QPainter.Antialiasing)
             painter.setRenderHint(QPainter.TextAntialiasing)
         if not annotations_only:
@@ -251,7 +253,7 @@ def draw_tool_feedback(painter, tools, layout):
         layout._draw_route_marker(painter)
         draw = getattr(DocumentInteraction, "_draw_extension_overlays", None)
         if draw is not None and getattr(tools, "_ext_overlays", None):
-            draw(tools, painter)
+            plugin_paint(painter, lambda p: draw(tools, p))
         if (callable(getattr(tool, "value_label", None))
                 or callable(getattr(tool, "rubber_band_lines", None))):
             layout._draw_length_label(painter)
@@ -300,7 +302,10 @@ def draw_tool_overlays(painter, tools, *, labels=True):
         painter.setBrush(Qt.NoBrush)
         hook = getattr(tool, "draw_overlay", None)
         if callable(hook):
-            hook(tools, painter)
+            if getattr(hook, "__module__", "").startswith("tools."):
+                hook(tools, painter)
+            else:
+                plugin_paint(painter, lambda p: hook(tools, p))
         if not labels:
             return
         if getattr(tools, "reference_mode", None) is not None:
@@ -317,3 +322,24 @@ def draw_tool_overlays(painter, tools, *, labels=True):
             DocumentInteraction._draw_linear_mode_label(tools, painter)
     finally:
         painter.restore()
+
+
+def plugin_paint(target, draw):
+    """An extension requesting a Qt painter contributes its own transparent layer."""
+    if not hasattr(target, "composite_plugin"):
+        return draw(target)
+    from core.input_types import NATIVE
+    if NATIVE:
+        from app_shell.qt_host import enable_plugin_widgets
+        enable_plugin_widgets()
+    from PySide6.QtGui import QImage, QPainter
+    image = QImage(target.width(), target.height(), QImage.Format_RGBA8888_Premultiplied)
+    image.fill(0)
+    image.setDevicePixelRatio(target.devicePixelRatioF())
+    painter = QPainter(image)
+    painter.setRenderHint(QPainter.Antialiasing)
+    try:
+        draw(painter)
+    finally:
+        painter.end()
+    target.composite_plugin(bytes(image.constBits()))

@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from typing import Optional
 
-from PySide6.QtCore import QPointF, Qt
+from core.input_types import QPointF, Qt
 from ingetrazo_core import Vec3 as QVector3D
 
 
@@ -139,6 +139,9 @@ class ViewNavigation:
     def _can_warp_pointer() -> bool:
         """Whether the pointer can be put back after each look move. Wayland
         does not let a client move it; there the look is a plain drag."""
+        from core.input_types import NATIVE
+        if NATIVE:
+            return False  # winit delivers relative look drags in window coordinates
         from PySide6.QtGui import QGuiApplication
         name = QGuiApplication.platformName().lower()
         return not (name.startswith("wayland") or name in ("offscreen",

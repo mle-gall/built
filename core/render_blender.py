@@ -454,10 +454,8 @@ def work_base() -> Path:
     ``~/.var/app``, which Blender's own Flatpak cannot read)."""
     if in_flatpak():
         return Path.home() / ".cache" / "IngeTrazo" / "render"
-    from PySide6.QtCore import QStandardPaths
-    base = QStandardPaths.writableLocation(
-        QStandardPaths.StandardLocation.GenericCacheLocation)
-    return Path(base) / "IngeTrazo" / "render"
+    from core.paths import cache_directory
+    return cache_directory() / "IngeTrazo" / "render"
 
 
 def command(found: BlenderFound, job: Path) -> list:

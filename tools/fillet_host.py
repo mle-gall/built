@@ -3,7 +3,7 @@
 """Resident bevel targets, preview mesh and panel bindings for the Fillet machine."""
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from core.input_types import Qt
 from ingetrazo_core import Vec3 as QVector3D, bevel_nearest_end, bevel_selection, bevel_targets
 
 from core.fillet import CIRCULAR, plan_fillet

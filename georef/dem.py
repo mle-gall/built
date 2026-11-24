@@ -26,7 +26,7 @@ import math
 from dataclasses import dataclass
 
 import numpy as np
-from PySide6.QtCore import QObject, Signal
+from georef.transport import Service, Signal
 from georef.raster import as_raster
 from ingetrazo_core import Vec3 as QVector3D
 
@@ -111,7 +111,7 @@ def pixel_in_tile(lat: float, lon: float, zoom: int) -> tuple[int, int, float, f
     return tx, ty, (xf - tx) * TILE_PX, (yf - ty) * TILE_PX
 
 
-class DEMSampler(QObject):
+class DEMSampler(Service):
     """Elevation sampler over a scene datum.
 
     Decoded heightfields are cached in memory (and their PNGs on disk); missing
@@ -125,7 +125,7 @@ class DEMSampler(QObject):
     changed = Signal()
 
     def __init__(self, datum, source: DEMSource = AWS_TERRAIN, zoom: int = 13,
-                 cache: TileCache | None = None, parent: QObject | None = None) -> None:
+                 cache: TileCache | None = None, parent: Service | None = None) -> None:
         super().__init__(parent)
         self.datum = datum
         self.source = source

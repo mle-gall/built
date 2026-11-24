@@ -265,11 +265,10 @@ def _figure_rows(env) -> list:
 
     def put_image(env, path):
         from pathlib import Path
-        from PySide6.QtGui import QImage
+        from ingetrazo_render import raster_dimensions
         if not path:
             return
-        img = QImage(path)
-        if img.isNull() or img.height() == 0:
+        if not raster_dimensions(path):
             raise ValueError(tr("That file is not a picture Built can read."))
         try:
             stored = str(sf.store_picture(path))
@@ -429,7 +428,7 @@ def _native_groups(spec, put):
 def _ndof(env):
     from views.ndof_input import shared_input
     model, _ = _device_preferences(env)
-    driver = shared_input().backend_name or ""
+    driver = shared_input(env.win).backend_name or ""
     live = env.device_readings.text(tr) if getattr(env, "device_readings", None) else ("—", "—")
     return _native_groups(model.groups(tr, driver, live), lambda env, key, v: _device_edit(env, {key: v}))
 
@@ -677,14 +676,14 @@ class SettingsSheet(chrome_sheet.Provider):
         return self.state.kb_focus
 
     def goto(self, page=None, shortcut_of=None) -> None:
-        from views.shortcuts import action_key
+        from core.shortcuts import action_key
         self.state.goto(page or "", action_key(shortcut_of) if shortcut_of is not None else None)
 
     def _monitor(self, active):
         from views.ndof_input import shared_input
         from ingetrazo_render import DeviceReadings
         if active and self._device is None:
-            dev = shared_input()
+            dev = shared_input(self._win)
             if dev.backend_name:
                 self._readings = DeviceReadings()
                 self._device = dev
@@ -868,7 +867,7 @@ class SettingsSheet(chrome_sheet.Provider):
             site.map_toggle()
             if site.map and self.site_requests is None:
                 from views.location_backend import SiteRequests
-                self.site_requests = SiteRequests(site, self.site_source, ctx.refresh)
+                self.site_requests = SiteRequests(site, self.site_source, ctx.refresh, ctx.win)
             elif not site.map and self.site_requests is not None:
                 self.site_requests.close()
                 self.site_requests = None
@@ -958,7 +957,7 @@ class SettingsSheet(chrome_sheet.Provider):
     # -- keyboard -------------------------------------------------------------------
     def actions(self) -> list:
         if self._actions is None:
-            from views.shortcuts import collect_actions, remember_defaults
+            from core.shortcuts import collect_actions, remember_defaults
             try:
                 if sync := getattr(type(self._win), "refresh_commands", None):
                     sync(self._win)
@@ -978,7 +977,7 @@ class SettingsSheet(chrome_sheet.Provider):
         return self._paths
 
     def _keyboard_snapshot(self):
-        from views.shortcuts import _plain, action_key, action_keys, default_keys
+        from core.shortcuts import _plain, action_key, action_keys, default_keys
         paths = self.paths()
         actions = []
         for act in self.actions():
@@ -988,7 +987,7 @@ class SettingsSheet(chrome_sheet.Provider):
         return json.loads(self.state.keyboard(actions, tr))
 
     def _action(self, item):
-        from views.shortcuts import action_key
+        from core.shortcuts import action_key
         key = item[3:] if item and item.startswith("sc:") else None
         return next((a for a in self.actions() if action_key(a) == key), None) if key else None
 
@@ -1002,7 +1001,7 @@ class SettingsSheet(chrome_sheet.Provider):
         any other command that holds them (after asking) — two commands on
         one key both go dead."""
         from ingetrazo_render import shortcut_conflicts
-        from views.shortcuts import _plain, action_key, action_keys, portable_keys, save_shortcut, set_action_keys
+        from core.shortcuts import _plain, action_key, action_keys, portable_keys, save_shortcut, set_action_keys
         actions = {action_key(a): a for a in self.actions()}
         seqs = portable_keys(seqs)
         clash = shortcut_conflicts(action_key(act), set(seqs),
@@ -1032,7 +1031,7 @@ class SettingsSheet(chrome_sheet.Provider):
         cf.show(self._win, form)
 
     def _change_keys(self, act) -> None:
-        from views.shortcuts import _plain, action_keys
+        from core.shortcuts import _plain, action_keys
 
         def check(form, _answer):
             got = _parse_keys(form.value("keys"))
@@ -1087,7 +1086,7 @@ class SettingsSheet(chrome_sheet.Provider):
                               tr("Restore defaults"), lambda: self.restore_defaults(ctx.win))
 
     def _kb_verb(self, verb) -> None:
-        from views.shortcuts import default_keys, set_action_keys
+        from core.shortcuts import default_keys, set_action_keys
         act = self._action(self.kb_focus)
         if verb == "kb_change" and act is not None:
             self._change_keys(act)
@@ -1103,7 +1102,7 @@ class SettingsSheet(chrome_sheet.Provider):
             def reset():
                 from core.settings import settings as QSettings
                 from app_shell.windows import hosts
-                from views.shortcuts import _GROUP
+                from core.shortcuts import _GROUP
                 st = QSettings()
                 st.remove(_GROUP)
                 st.sync()
@@ -1123,7 +1122,7 @@ class SettingsSheet(chrome_sheet.Provider):
     def _kb_export(self) -> None:
         import json
         from views.filedialogs import file_dialogs
-        from views.shortcuts import export_shortcuts
+        from core.shortcuts import export_shortcuts
         path, _ = file_dialogs.getSaveFileName(self._parent(), tr("Export shortcuts"),
                                                "ingetrazo-shortcuts.json", tr("Shortcuts (*.json)"))
         if not path:
@@ -1139,7 +1138,7 @@ class SettingsSheet(chrome_sheet.Provider):
     def _kb_import(self) -> None:
         import json
         from views.filedialogs import file_dialogs
-        from views.shortcuts import _plain, import_shortcuts
+        from core.shortcuts import _plain, import_shortcuts
         path, _ = file_dialogs.getOpenFileName(self._parent(), tr("Import shortcuts"), "",
                                                tr("Shortcuts (*.json)"))
         if not path:
