@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import types
 
-from PySide6.QtCore import QObject, Qt, Signal
+from PySide6.QtCore import QEvent, QObject, Qt, Signal
 
 from app_shell.command_action import ShellAction
 from views.view_host import MISSING
@@ -461,7 +461,7 @@ class ShellWindow(QObject):
 
     def childEvent(self, event):
         # A plugin may attach an action or an entire submenu to this QObject.
-        if event.added() or event.removed():
+        if event.type() in (QEvent.ChildAdded, QEvent.ChildRemoved):
             self._action_tree_changed = True
         super().childEvent(event)
 
