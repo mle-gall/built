@@ -48,11 +48,13 @@ mod first_person_host_api;
 mod move_host_api;
 mod offset_host_api;
 mod paint_host_api;
+mod planar_machine_api;
 mod position_camera_host_api;
 mod protractor_base_api;
 mod protractor_host_api;
 mod protractor_tool_api;
 mod pushpull;
+mod radial_tool_api;
 mod rotate_host_api;
 mod rotate_tool_api;
 mod scale;
@@ -134,6 +136,12 @@ fn registration(module: &str, name: &str) -> Option<(&'static [Method], &'static
             stringify!(protractor_tool_api),
         ),
         ("tools.paint_host", "PaintHost") => (paint_host_api::METHODS, stringify!(paint_host_api)),
+        ("tools.rust_tools", "_PlanarMachine") => {
+            (planar_machine_api::METHODS, stringify!(planar_machine_api))
+        }
+        ("tools.rust_tools", "_RadialTool") => {
+            (radial_tool_api::METHODS, stringify!(radial_tool_api))
+        }
         ("tools.pushpull", "PushPullTool") => (pushpull::METHODS, stringify!(pushpull)),
         _ => return None,
     })

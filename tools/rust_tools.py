@@ -74,46 +74,17 @@ class SelectTool(RustTool):
 from tools.base import AxisMagnet, PlaneLock
 
 
+@register_tool_adapter
 class _PlanarMachine(PlaneLock, RustTool):
     """Common event, projection and lock bindings of the planar drawing tools."""
     def __init__(self):
         RustTool.__init__(self)
         self._viewport = None
 
-    @property
-    def _plane_state(self):
-        return self._machine
-
     start_point = _point_property("start_point")
     hover_point = _point_property("hover_point")
 
     work_plane = LineTool.work_plane
-
-    def _frame(self, viewport):
-        from core import axes
-        from core.snap import POINT_SNAP_KINDS
-        kind = getattr(self, "snap_kind", None)
-        self._send(viewport, {"type": "frame", "axes": axes.frame(),
-                              "names_point": None if kind is None else kind in POINT_SNAP_KINDS})
-
-    def _send_framed(self, viewport, event):
-        self._frame(viewport)
-        return self._send(viewport, event)
-
-    def _cursor_preview(self):
-        vp, point = self._viewport, self.hover_point
-        if vp is None or point is None:
-            return []
-        from core.axes import plane_axes
-        _, normal = self.preview_plane(vp, point)
-        u, v = plane_axes(normal)
-        scale = self.plane_preview_scale(vp, point, u, v)
-        if scale is None:
-            return []
-        return self._machine.cursor_lines(point, (u.toTuple(), v.toTuple()), self.PREVIEW_PX * scale)
-
-    def rubber_band_lines(self):
-        return self._cursor_preview() if self.start_point is None else super().rubber_band_lines()
 
 
 class RectangleTool(_PlanarMachine):
@@ -288,6 +259,7 @@ class RectangleTool(_PlanarMachine):
         return tr(template, **args) if args else tr(template)
 
 
+@register_tool_adapter
 class _RadialTool(AxisMagnet, _PlanarMachine):
     """Circle and Polygon (``rust/ingetrazo_core/src/tools/circle.rs``): a
     centre, then a radius. The machine owns the plane lock, the side count,
@@ -298,178 +270,6 @@ class _RadialTool(AxisMagnet, _PlanarMachine):
     #: Whether Ctrl toggles the guide-circle mode (only the Circle tool).
     _guide_capable = False
     wireframe_color = None
-
-
-    @property
-    def sides(self):
-        return int(self._state("sides"))
-
-    @sides.setter
-    def sides(self, n):
-        self._machine.set("sides", int(n))
-
-    @property
-    def _guide_mode(self):
-        return bool(self._state("guide_mode"))
-
-    @_guide_mode.setter
-    def _guide_mode(self, on):
-        self._machine.set("guide_mode", bool(on))
-
-    @property
-    def _last(self):
-        """The retype token of the shape just drawn, or None."""
-        return self._state("last_token")
-
-    # ---- the value box ------------------------------------------------------
-    def vcb_caption(self) -> str:
-        """'Sides' before the centre, 'Radius' after — and right after a
-        shape is drawn, while a typed number still resizes it (#414)."""
-        if self.start_point is not None or self._radius_retype_open():
-            return "Radius"
-        return "Sides"
-
-    def _radius_retype_open(self) -> bool:
-        token = self._last
-        return (self.start_point is None and token is not None and self._viewport is not None
-                and _Host(self._viewport).revision() == token)
-
-    def value_is_unitless(self) -> bool:
-        """A side count before the centre (#176); a radius after it, and
-        right after a shape (#414)."""
-        return self.start_point is None and not self._radius_retype_open()
-
-    # ---- events -------------------------------------------------------------
-    def on_activate(self, viewport) -> None:
-        self._send_framed(viewport, {"type": "activate"})
-        self.wireframe_color = None
-
-    def on_deactivate(self, viewport) -> None:
-        self._send_framed(viewport, {"type": "deactivate"})
-        self.wireframe_color = None
-
-    def on_cancel(self, viewport) -> None:
-        self._send_framed(viewport, {"type": "cancel"})
-        self.wireframe_color = None
-        viewport.update()
-
-    def on_click(self, ctx) -> None:
-        self.note_plane(ctx.viewport)
-        self._viewport = ctx.viewport
-        self._send_framed(ctx.viewport, self._pointer("click", ctx))
-        if self.start_point is None:
-            self.wireframe_color = None
-        ctx.viewport.update()
-
-    def on_hover(self, ctx) -> None:
-        self.note_plane(ctx.viewport)
-        self._viewport = ctx.viewport
-        self._send_framed(ctx.viewport, self._pointer("hover", ctx))
-        snap = ctx.snap
-        if (snap is not None and snap.kind == "axis"
-                and self.plane_lock is None and self.plane_ref is None):
-            # A radius magnetised onto an axis rings in the AXIS colour,
-            # not the plane's (#962); a plane lock keeps its own.
-            self.wireframe_color = None
-        else:
-            self.wireframe_color = self.lock_color()
-        ctx.viewport.update()
-
-    def on_segments_value(self, viewport, n: int) -> bool:
-        """«24s»: the side count, typed at any moment; right after a shape,
-        that shape is rebuilt with it, one undo step (#305)."""
-        self._viewport = viewport
-        consumed = self._send_framed(viewport, {"type": "segments", "count": int(n)})["consumed"]
-        if consumed:
-            viewport.update()
-        return consumed
-
-    def on_value(self, viewport, value) -> bool:
-        self._viewport = viewport
-        if isinstance(value, tuple):
-            return False
-        consumed = self._send_framed(viewport, {"type": "value", "value": float(value)})["consumed"]
-        if consumed:
-            if self.start_point is None:
-                self.wireframe_color = None
-            viewport.update()
-        return consumed
-
-    def _refresh(self, viewport):
-        hint = getattr(viewport, "refresh_status_hint", None)
-        if callable(hint):
-            hint()
-        viewport.update()
-
-    def on_key(self, viewport, key, modifiers) -> bool:
-        from core.input_types import Qt
-        if key == Qt.Key_Control and self._guide_capable:
-            self._send_framed(viewport, {"type": "key", "key": "Control", "mods": _mods(modifiers)})
-            self._refresh(viewport)
-            return True
-        return self.plane_lock_key(viewport, key)
-
-    def on_key_release(self, viewport, key) -> bool:
-        from core.input_types import Qt
-        if key != Qt.Key_Control:
-            return False
-        tapped = getattr(viewport, "ctrl_tapped", None)
-        reply = self._send_framed(viewport, {"type": "key_release", "key": "Control",
-                                             "tapped": not callable(tapped) or bool(tapped())})
-        if reply["consumed"]:
-            self._refresh(viewport)
-        return reply["consumed"]
-
-    def status_clause(self) -> str:
-        if not self._guide_capable:
-            return ""
-        from core.i18n import tr
-        return tr("Ctrl = guide")   # short: it rides the line of a long hint
-
-    # ---- preview ------------------------------------------------------------
-    def guide_preview_lines(self):
-        """The dashed rim of the guide circle the next click leaves."""
-        return [(Vec3(*a), Vec3(*b)) for a, b in self._state("guide_ring") or ()]
-
-    def value_label(self):
-        """The radius DRAWN, the rim projected onto the plane, not the
-        straight distance to the cursor."""
-        r = self._state("radius")
-        if r is None:
-            return None
-        from core.i18n import tr
-        from core.units import fmt_len
-        return ("R " + fmt_len(r) + "  (" + tr("{n} sides", n=self.sides) + ")",
-                self.hover_point)
-
-    # ---- what the snap engine and the tests read ------------------------------
-    def plane_points(self):
-        if self.start_point is None:
-            return []
-        return [self.start_point, self.hover_point]
-
-    def _query(self, what, arg):
-        if self._viewport is not None:
-            self._frame(self._viewport)
-        return self._machine.query(what, arg)
-
-    def _axes(self):
-        u, v = self._query("axes", None)
-        return Vec3(*u), Vec3(*v)
-
-    def _points(self, center, rim):
-        return [Vec3(*p) for p in self._query("points", (_tuple(center), _tuple(rim)))]
-
-    def _commit(self, viewport, pts, axes=None, center=None) -> None:
-        """A closed curve with its face through the protocol (``add_face``
-        with ``curve``), outside the machine's retype window."""
-        _Host(viewport).run("add_face", json.dumps(
-            {"outer": [list(_tuple(p)) for p in pts], "curve": True}))
-        viewport.update()
-
-    def _reset(self):
-        self._machine.set("reset", True)
-        self.wireframe_color = None
 
 
 class CircleTool(_RadialTool):
