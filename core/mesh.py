@@ -73,10 +73,7 @@ def _key(p: QVector3D) -> tuple[int, int, int]:
     # neighbouring cells are ±1, so the boundary probes in _lookup and
     # weld_coincident need no float rounding — the rounding calls dominated
     # large imports.
-    x, y, z = p.toTuple()
-    return (round(x * _KEY_SCALE),
-            round(y * _KEY_SCALE),
-            round(z * _KEY_SCALE))
+    return object_replay.mesh_key(p)
 
 
 _weld_candidates = object_replay.weld_candidates
@@ -266,28 +263,10 @@ class Face:
         return polygon_newell(self.vertices)
 
     def normal(self) -> QVector3D:
-        if len(self.loop) < 3:
-            return QVector3D(0.0, 0.0, 1.0)
-        n = self._newell()
-        length = n.length()
-        if length < 1e-9:
-            return QVector3D(0.0, 0.0, 1.0)
-        # Divided by hand, NOT QVector3D.normalized(): Qt returns a NULL
-        # vector for anything shorter than 1e-5 (its float qFuzzyIsNull) —
-        # four orders of magnitude above the guard right above this line. So
-        # a sliver whose Newell normal fell in [1e-9, 1e-5] got (0, 0, 0)
-        # instead of the (0, 0, 1) this function promises, and a zero normal
-        # is a WILDCARD: ``dot(anything, zero) == 0`` passes every plane
-        # test. One 3 mm² sliver imported from a .skp file made every line
-        # drawn anywhere in its group rebuild "its" plane, wiping all 447
-        # faces (Plaza Yanque, 2026-09-10). Dividing keeps the real
-        # direction, which is also strictly more informative.
-        return n / length
+        return object_replay.ring_normal(self.loop)
 
     def area(self) -> float:
-        if len(self.loop) < 3:
-            return 0.0
-        return 0.5 * self._newell().length()
+        return object_replay.loop_area(self.loop)
 
     def net_area(self) -> float:
         return polygon_net_area(self.vertices, self.holes)
@@ -1168,11 +1147,7 @@ def _orient_union_loops(
     Keep the source face's front side and wind holes opposite to the outer
     boundary, without swapping front/back paint.
     """
-    if QVector3D.dotProduct(Face(outer).normal(), normal) < 0:
-        outer.reverse()
-    for hole in holes:
-        if QVector3D.dotProduct(Face(hole).normal(), normal) > 0:
-            hole.reverse()
+    object_replay.orient_union(outer, holes, normal, Face)
 
 
 def _loop_area(loop: list[Vertex]) -> float:

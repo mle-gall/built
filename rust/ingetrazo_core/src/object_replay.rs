@@ -276,6 +276,9 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     sub.add_function(wrap_pyfunction!(crate::kernel::object_incidence::collapse_collinear, &sub)?)?;
     sub.add_function(wrap_pyfunction!(crate::kernel::object_incidence::curve_edges, &sub)?)?;
     sub.add_function(wrap_pyfunction!(crate::kernel::object_incidence::dominant_attrs, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::kernel::object_incidence::mesh_key, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::kernel::object_incidence::ring_normal, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::kernel::object_incidence::orient_union, &sub)?)?;
     sub.add_function(wrap_pyfunction!(crate::kernel::object_incidence::loop_area, &sub)?)?;
     m.add_submodule(&sub)
 }

@@ -11,6 +11,9 @@ type Obj<'py> = Bound<'py, PyAny>;
 #[pyfunction]
 pub(crate) fn ring_positions<'py>(ring: &Obj<'py>) -> PyResult<Vec<Obj<'py>>> {
     let pos = pyo3::intern!(ring.py(), "position");
+    if let Ok(l) = ring.cast_exact::<PyList>() {
+        return l.iter().map(|v| v.getattr(pos)).collect();
+    }
     ring.try_iter()?.map(|v| v?.getattr(pos)).collect()
 }
 #[pyfunction]
@@ -105,16 +108,69 @@ pub(crate) fn dominant_attrs<'py>(faces: &Obj<'py>) -> PyResult<Obj<'py>> {
 }
 #[pyfunction]
 pub(crate) fn loop_area(ring: &Obj<'_>) -> PyResult<f64> {
-    let p = ring_positions(ring)?
-        .iter()
-        .map(xyz)
-        .collect::<PyResult<Vec<_>>>()?;
-    Ok(crate::polygon::raw_newell(&p).length() * 0.5)
+    Ok(ring_newell(ring)?.length() * 0.5)
 }
 #[pyfunction]
 pub(crate) fn reverse_rings(face: &Obj<'_>) -> PyResult<()> {
     for ring in rings(face)? {
         ring.call_method0("reverse")?;
+    }
+    Ok(())
+}
+
+#[pyfunction]
+pub(crate) fn mesh_key<'py>(p: &Obj<'py>) -> PyResult<Bound<'py, pyo3::types::PyTuple>> {
+    let py = p.py();
+    let key = xyz(p)?.to_array().map(|x| (x * 10000.).round_ties_even());
+    if key.iter().all(|x| x.abs() < (1u64 << 62) as f64) {
+        pyo3::types::PyTuple::new(py, key.map(|x| x as i64))
+    } else {
+        let mut out = Vec::new();
+        for x in key {
+            out.push(pyo3::types::PyFloat::new(py, x).call_method0("__round__")?);
+        }
+        pyo3::types::PyTuple::new(py, out)
+    }
+}
+
+fn ring_newell(ring: &Obj<'_>) -> PyResult<glam::DVec3> {
+    let pos = pyo3::intern!(ring.py(), "position");
+    let read = |v: Obj<'_>| xyz(&v.getattr(pos)?);
+    let points = if let Ok(l) = ring.cast_exact::<PyList>() {
+        l.iter().map(read).collect::<PyResult<Vec<_>>>()?
+    } else {
+        ring.try_iter()?
+            .map(|v| read(v?))
+            .collect::<PyResult<Vec<_>>>()?
+    };
+    Ok(crate::polygon::raw_newell(&points))
+}
+
+#[pyfunction]
+pub(crate) fn ring_normal(ring: &Obj<'_>) -> PyResult<crate::math::Vec3> {
+    let n = ring_newell(ring)?;
+    let l = n.length();
+    Ok((if l < 1e-9 { glam::DVec3::Z } else { n / l }).into())
+}
+#[pyfunction]
+pub(crate) fn orient_union(
+    outer: &Obj<'_>,
+    holes: &Obj<'_>,
+    normal: &Obj<'_>,
+    face_type: &Obj<'_>,
+) -> PyResult<()> {
+    let aim = xyz(normal)?;
+    let aligned = |ring: &Obj| -> PyResult<f64> {
+        Ok(xyz(&face_type.call1((ring,))?.call_method0("normal")?)?.dot(aim))
+    };
+    if aligned(outer)? < 0. {
+        outer.call_method0("reverse")?;
+    }
+    for hole in holes.try_iter()? {
+        let hole = hole?;
+        if aligned(&hole)? > 0. {
+            hole.call_method0("reverse")?;
+        }
     }
     Ok(())
 }
