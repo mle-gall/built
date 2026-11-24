@@ -45,6 +45,63 @@ from core import push_scans
 from ingetrazo_core import guarded_push, push_region, push_through_face, translate_prism_cap
 
 
+class _Abandoned(Exception):
+    """A store refusal ends a top-out: no shorter push is tried."""
+
+
+#: Repros written this session, by content: a refusal repeated on every
+#: drag frame writes one file.
+_REPROS: set = set()
+
+
+def _write_repro(mesh, op, reason: str) -> str | None:
+    """``push-refusals/<time>.json`` under the log folder: the mesh as it
+    was (the store's dense arrays, the paint rows and own dicts by face
+    index), the push's arguments and the refusal; logged with the refusal
+    counter (``INGETRAZO_REFUSALS``). The path, or None (a repeat, or no
+    writable folder)."""
+    import json
+    import os
+    import time
+    from core.store_mesh import _attribute_owner, _log_refusal
+    st = mesh._store
+    arrays = {k: v.tolist() for k, v in st.arrays().items()}
+    faces = st.keys("face")
+    index = {k: i for i, k in enumerate(faces)}
+
+    def at(face):
+        return index.get(getattr(face, "key", None))
+
+    owner = _attribute_owner(mesh)
+    data = {
+        "reason": reason,
+        "push": {"face": at(op.base_face), "distance": op.extrusion,
+                 "keep_base": bool(op._keep_base),
+                 "normal": None if op._normal is None else list(op._normal.toTuple()),
+                 "extra_faces": [at(f) for f in op._extra_faces]},
+        "mesh": arrays,
+        "attr_table": owner["_attr_table"],
+        "own_attrs": {index[k]: v for k, v in owner["_attr_own"].items() if k in index},
+    }
+    text = json.dumps(data, default=repr, sort_keys=True)
+    digest = hash(text)
+    if digest in _REPROS:
+        return None
+    _REPROS.add(digest)
+    try:
+        from core.paths import user_log_dir
+        folder = user_log_dir() / "push-refusals"
+        folder.mkdir(parents=True, exist_ok=True)
+        path = folder / f"{time.strftime('%Y%m%d-%H%M%S')}-{len(_REPROS)}.json"
+        path.write_text(text, encoding="utf-8")
+    except OSError:
+        return None
+    log = os.environ.get("INGETRAZO_REFUSALS")
+    if log:
+        _log_refusal(log, "push", None, repro=str(path), reason=reason[:200])
+    return str(path)
+
+
 def _project_loop_2d(loop, normal):
     u, v = plane_basis(normal)
     return [(QVector3D.dotProduct(p, u), QVector3D.dotProduct(p, v)) for p in loop]
@@ -787,6 +844,10 @@ class PushPullOperation:
                 "solid", d=fmt_len(abs(self.extrusion))), 4000)
             type(self).last_distance = self.extrusion
             last = self._retype_state(cmd)
+        elif self._refused and self._store_refusal is not None:
+            viewport.flash_status(
+                tr("Push refused: the geometry kernel could not finish it "
+                   "(left it unchanged; a report was saved)"), 6000)
         elif self._refused:
             # The guard rolled the push back to keep the solid watertight; tell
             # the user so the no-op isn't silent — long timeout, it's easy to
@@ -890,14 +951,44 @@ class PushPullOperation:
         def attempt(distance):
             self.extrusion = distance
             self._mutate(scene)
+            if self._store_refusal is not None:
+                # The kernel, not the guard: a shorter push is not tried.
+                raise _Abandoned
             return self.extrusion, self._refused
 
-        self.extrusion, self._refused, partial = push_top_out(
-            self._target_mesh(scene), attempt, self.extrusion, _MIN_EXTRUDE, self._CLAMP_TRIES)
+        wanted = self.extrusion
+        try:
+            self.extrusion, self._refused, partial = push_top_out(
+                self._target_mesh(scene), attempt, self.extrusion, _MIN_EXTRUDE, self._CLAMP_TRIES)
+        except _Abandoned:
+            self.extrusion, self._refused, partial = wanted, True, False
         if partial:
             self._topped_out = True
 
+    #: Why the store refused the last push (None: it did not), for the
+    #: status; set by _mutate.
+    _store_refusal: str | None = None
+
     def _mutate(self, scene, preview: bool = False) -> None:
+        """:meth:`_mutate_guarded` with the store strict: a store step that
+        refuses refuses the push. The mesh is put back as it was, the push
+        reads as refused and a repro is written (:func:`_write_repro`)."""
+        from core.store_mesh import StoreMesh, StoreRefusal, strict
+        self._store_refusal = None
+        mesh = self._target_mesh(scene)
+        snap = mesh.capture_state() if type(mesh) is StoreMesh else None
+        try:
+            with strict():
+                self._mutate_guarded(scene, preview)
+        except StoreRefusal as e:
+            if snap is None:
+                raise
+            mesh.restore_state(snap)
+            self._refused = True
+            self._store_refusal = str(e)
+            _write_repro(mesh, self, str(e))
+
+    def _mutate_guarded(self, scene, preview: bool = False) -> None:
         """Apply the push and stitch watertight, with a **BIM-grade refusal
         guard**: a push on a closed solid must leave a closed solid (or collapse
         it flat). If the operation would leave the mesh cracked — an ill-defined

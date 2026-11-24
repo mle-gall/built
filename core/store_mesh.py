@@ -2037,21 +2037,52 @@ del _name
 
 # ---- Building, materialising, restoring -------------------------------------
 
+class StoreRefusal(Exception):
+    """A store step refused inside an operation that runs strict
+    (:func:`strict`): the operation refuses instead of finishing on Python
+    objects. The caller puts the mesh back."""
+
+
+_STRICT = [0]
+
+
+class strict:
+    """While held, a store step that would hand the mesh to Python objects
+    (``_py``, ``_materialise``, a refused native call) raises
+    :class:`StoreRefusal` (docs/rust-tools.md §22, decision 1)."""
+
+    def __enter__(self):
+        _STRICT[0] += 1
+        return self
+
+    def __exit__(self, *exc):
+        _STRICT[0] -= 1
+        return False
+
+
 def _note_refusal(step) -> None:
     """With ``INGETRAZO_REFUSALS`` naming a file: one JSON line per store
     step that refused and handed the mesh to Python objects: the step, the
     refusal's message, and the operation on the stack (a push, a cap
     rebuild, a stitch). Measurement for the native push (docs/rust-tools.md
-    §22)."""
+    §22). Under :class:`strict`, the step then raises
+    :class:`StoreRefusal`."""
     import os
-    path = os.environ.get("INGETRAZO_REFUSALS")
-    if not path:
-        return
-    import json
     import sys
     err = sys.exc_info()[1]
+    path = os.environ.get("INGETRAZO_REFUSALS")
+    if path:
+        _log_refusal(path, step, err)
+    if _STRICT[0]:
+        raise StoreRefusal(f"{step}: {err}" if err is not None else step)
+
+
+def _log_refusal(path, step, err, **extra) -> None:
+    import json
+    import os
+    import sys
     ops = []
-    f = sys._getframe(1)
+    f = sys._getframe(2)
     while f is not None:
         name = os.path.basename(f.f_code.co_filename)
         if name in ("push_pull.py", "pushpull.py", "cap_rebuild.py", "history_commands.py",
@@ -2061,7 +2092,7 @@ def _note_refusal(step) -> None:
     test = os.environ.get("PYTEST_CURRENT_TEST", "").split(" ")[0]
     with open(path, "a") as out:
         out.write(json.dumps({"step": step, "reason": "" if err is None else str(err)[:200],
-                              "ops": ops[:6], "test": test}) + "\n")
+                              "ops": ops[:6], "test": test, **extra}) + "\n")
 
 
 def _log_object_fallback(reason):
