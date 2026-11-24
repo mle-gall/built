@@ -50,6 +50,7 @@ mod dimension_tool_api;
 mod eye_host_api;
 mod fillet_host_api;
 mod first_person_host_api;
+mod follow_me_host_api;
 mod move_host_api;
 mod offset_host_api;
 mod paint_host_api;
@@ -180,6 +181,9 @@ fn registration(module: &str, name: &str) -> Option<(&'static [Method], &'static
             (text_tool_api::METHODS, stringify!(text_tool_api))
         }
         ("tools.solid_host", "SolidTool") => (solid_tool_api::METHODS, stringify!(solid_tool_api)),
+        ("tools.followme_host", "FollowMeHost") => {
+            (follow_me_host_api::METHODS, stringify!(follow_me_host_api))
+        }
         ("tools.pushpull", "PushPullTool") => (pushpull::METHODS, stringify!(pushpull)),
         _ => return None,
     })
