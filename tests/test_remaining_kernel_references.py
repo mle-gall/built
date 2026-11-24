@@ -141,3 +141,26 @@ def test_repair_reference(monkeypatch):
 def test_store_repair_reference(monkeypatch):
     monkeypatch.setenv('INGETRAZO_STORE','1')
     assert digest(repair_rows()) == 'ee76db670b286da00c61cf8867ee4ed8ac8eeaa440265fe7424e6a1bc22773a7'
+
+
+def view_rows():
+    from core.mesh import _key as weld_key
+    rows = []
+    for seed in range(16):
+        mesh = Mesh()
+        assert type(mesh).__name__ == 'StoreMesh'
+        base = (0, 650000)[seed % 2]
+        pts = [V(base+x,y,z) for x,y,z in ((0,0,0),(2,0,.001),(2,3,0),(0,3,0))]
+        face = mesh.add_face(pts)
+        for quant in (top._key, lambda p: weld_key(V(*p))):
+            cells = {quant(p.toTuple()) for p in pts[:1+seed%4]}
+            hits = mesh.vertices_in_cells(cells, quant)
+            keys = [v.key for v in hits]
+            rows.append((sorted(mesh.cells_of(keys, quant)), [v.position.toTuple() for v in hits],
+                         face.normal().toTuple(), face.area()))
+    return rows
+
+
+def test_store_view_reference(monkeypatch):
+    monkeypatch.setenv('INGETRAZO_STORE','1')
+    assert digest(view_rows()) == '3973b52522c033a2e0e24b52f615b24e37ec4c6e863f79f666bae1fdc5ab6bec'
