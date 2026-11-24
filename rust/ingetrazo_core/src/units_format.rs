@@ -167,14 +167,6 @@ fn py_floordiv(vx: f64, wx: f64) -> f64 {
     }
 }
 
-/// Python's `round(x, n)`, correctly rounded half to even.
-fn py_round(x: f64, n: usize) -> f64 {
-    if !x.is_finite() {
-        return x;
-    }
-    format!("{x:.n$}").parse().unwrap_or(x)
-}
-
 /// `metres` in `units` to `decimals` (clamped to 0–6). `show_unit` false
 /// leaves the bare number; feet and inches together keep their marks.
 pub fn format_length(metres: f64, units: &str, decimals: i64, show_unit: bool) -> String {
@@ -198,7 +190,7 @@ pub fn format_length(metres: f64, units: &str, decimals: i64, show_unit: bool) -
             let mut feet = py_floordiv(total_in, 12.0) as i128;
             let mut inches = total_in - (feet as f64) * 12.0;
             if u == "ft-in" {
-                if py_round(inches, n) >= 12.0 {
+                if crate::pyfloat::round(inches, n) >= 12.0 {
                     feet += 1;
                     inches = 0.0;
                 }
@@ -231,7 +223,7 @@ pub fn format_signed_level(metres: f64, units: &str, decimals: i64) -> String {
     let d = decimals.max(0) as usize;
     let v = metres;
     if u == "m" {
-        if py_round(v, d) == 0.0 {
+        if crate::pyfloat::round(v, d) == 0.0 {
             return format!("±{:.d$}", 0.0);
         }
         if !v.is_finite() {

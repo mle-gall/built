@@ -15,8 +15,8 @@ parallel projection with the right layers on IS the plan drawing.
 from __future__ import annotations
 
 from core.group import new_uid
+import ingetrazo_core as _rs
 from ingetrazo_core import TAG_PALETTE as PALETTE, automatic_tag_color
-import re
 
 DEFAULT_LAYER = "Layer 0"
 
@@ -34,35 +34,18 @@ SURVEY_LAYER = "Survey"
 DEFAULT_LAYER_COLOR = (0.96, 0.95, 0.925)
 
 #: Line types a layer can ink its edges with, and their dash pattern in
-#: millimetres on paper (dash, gap, …; empty = continuous). The DXF names
-#: are the standard ones every CAD program loads.
-LINETYPES = {
-    "continuous": (),
-    "dashed": (3.0, 1.5),
-    "dashed_short": (1.5, 0.75),          # hidden lines
-    "dashed_long": (8.0, 2.0),
-    "dotted": (0.5, 1.0),
-    "dashdot": (6.0, 1.5, 0.5, 1.5),
-    "dashdotdot": (6.0, 1.5, 0.5, 1.5, 0.5, 1.5),
-    "center": (12.0, 1.5, 2.0, 1.5),      # axes, centre lines
-    "phantom": (12.0, 1.5, 2.0, 1.5, 2.0, 1.5),   # limits, alternate positions
-    "border": (6.0, 1.5, 6.0, 1.5, 0.5, 1.5),
-}
-#: Their names in a DXF: the ones every CAD program ships in its standard
-#: line type file, so the file opens with them already known.
-DXF_LINETYPES = {"continuous": "CONTINUOUS", "dashed": "DASHED",
-                 "dashed_short": "HIDDEN", "dashed_long": "DASHEDX2",
-                 "dotted": "DOT", "dashdot": "DASHDOT",
-                 "dashdotdot": "DIVIDE", "center": "CENTER",
-                 "phantom": "PHANTOM", "border": "BORDER"}
+#: millimetres on paper (dash, gap, …; empty = continuous), with their
+#: names in a DXF — the ones every CAD program ships in its standard line
+#: type file. The catalogue, the ``.lin`` files and the dash layout live in
+#: Rust (``rust/ingetrazo_core/src/linetypes.rs``); the functions below are
+#: their Python names.
+LINETYPES = {key: tuple(pattern) for key, pattern, _dxf in _rs.linetype_table()}
+DXF_LINETYPES = {key: dxf for key, _pattern, dxf in _rs.linetype_table()}
 
 #: The key prefix of a line type the user made or brought in from a line
 #: type file (``.lin``), kept in the document (``Scene.line_types``):
 #: ``"lin:<name>"``.
 CUSTOM_LINETYPE = "lin:"
-#: A line type's limits — what a reasonable pattern needs; a file is data
-#: from anywhere.
-_MAX_PIECES = 32
 
 
 def known_linetype(key) -> bool:
@@ -87,16 +70,10 @@ def linetype_pattern(key, scene=None) -> tuple:
     return ()
 
 
-#: A line type's text (``GAS``, ``AGUA``…): its longest, and its height on
-#: paper in mm — the least and the most.
-_MAX_TEXT = 24
-_TEXT_SIZES = (0.5, 20.0)
-
-
 def text_width(text: str, size: float) -> float:
     """About how wide ``text`` runs at ``size`` mm high, in mm — what a
     line type leaves free for it (a sans serif, capitals mostly)."""
-    return 0.68 * float(size) * len(text)
+    return _rs.linetype_text_width(text, float(size))
 
 
 def clean_line_text(entry, pattern) -> dict | None:
@@ -104,58 +81,23 @@ def clean_line_text(entry, pattern) -> dict | None:
     "text_size", "text_at"}`` — the words, their height (paper mm) and the
     piece of ``pattern`` they sit in, centred (a gap); ``None`` without
     one."""
-    import math
-    if not isinstance(entry, dict) or not pattern:
-        return None
-    text = entry.get("text")
-    if not isinstance(text, str):
-        return None
-    text = "".join(c for c in text if c.isprintable()).strip()[:_MAX_TEXT]
-    if not text:
-        return None
-    try:
-        size = float(entry.get("text_size", 2.5))
-        at = int(entry.get("text_at", len(pattern) - 1))
-    except (TypeError, ValueError):
-        return None
-    if not math.isfinite(size):
-        return None
-    size = min(_TEXT_SIZES[1], max(_TEXT_SIZES[0], size))
-    if not 0 <= at < len(pattern) or pattern[at] >= 0:
-        return None
-    return {"text": text, "text_size": round(size, 3), "text_at": at}
+    return _rs.linetype_clean_line_text(entry, pattern)
 
 
 def with_text(pattern, text: str, size: float = 2.5) -> tuple:
     """``pattern`` (pieces, dash > 0, gap < 0) with ``text`` in it: room
     as wide as the words and a margin each side, added to its last gap (or
-    as a gap of its own) — the text sits centred in that gap. Returns ``(pattern, {"text", "text_size",
-    "text_at"})``; the pattern alone when there is no text."""
-    text = (text or "").strip()
-    if not text:
-        return list(pattern), None
-    room = text_width(text, size) + 2.0 * max(0.6, 0.4 * float(size))
-    out = list(pattern)
-    if out and out[-1] < 0:
-        out[-1] = round(out[-1] - room, 3)     # the last gap, widened
-    else:
-        out.append(-round(room, 3))
-    return out, clean_line_text({"text": text, "text_size": size,
-                                 "text_at": len(out) - 1}, out)
+    as a gap of its own) — the text sits centred in that gap. Returns
+    ``(pattern, {"text", "text_size", "text_at"})``; the pattern alone when
+    there is no text."""
+    return _rs.linetype_with_text(pattern, text, float(size))
 
 
 def text_offset(pattern, at: int) -> float:
     """Where along one period of the drawn pattern (:func:`drawn_dashes`,
     which moves a leading gap to the end) the middle of piece ``at`` of
     ``pattern`` falls, in mm."""
-    period = sum(abs(v) for v in pattern)
-    raw = sum(abs(v) for v in pattern[:at]) + abs(pattern[at]) / 2.0
-    lead = 0.0
-    for v in pattern:
-        if v >= 0:
-            break
-        lead += abs(v)
-    return (raw - lead) % period if period > 0 else 0.0
+    return _rs.linetype_text_offset(pattern, int(at))
 
 
 def linetype_text(key, scene=None):
@@ -273,41 +215,7 @@ def dash_segments(segs, pattern, unit: float = MODEL_DASH_SCALE):
     mm, restarting on each segment as a pen does: ``(dashes, gaps)``, two
     (K, 2, 3) float32 arrays. A dot is drawn as a short dash. Too fine a
     pattern for a long edge (over 400 periods) leaves it whole."""
-    import numpy as np
-    segs = np.asarray(segs, dtype=np.float64).reshape(-1, 2, 3)
-    empty = np.zeros((0, 2, 3), dtype=np.float32)
-    if not len(segs) or not pattern:
-        return segs.astype(np.float32), empty
-    lengths = [max(float(v), 0.25) * unit if i % 2 == 0
-               else max(float(v), 0.0) * unit
-               for i, v in enumerate(pattern)]
-    if len(lengths) % 2:
-        lengths.append(0.0)
-    period = sum(lengths)
-    dashes: list = []
-    gaps: list = []
-    for a, b in segs:
-        d = b - a
-        total = float(np.linalg.norm(d))
-        if total <= 1e-12:
-            continue
-        if period <= 1e-12 or total / period > 400:
-            dashes.append((a, b))
-            continue
-        u = d / total
-        t = 0.0
-        k = 0
-        while t < total:
-            step = lengths[k % len(lengths)]
-            end = min(total, t + step)
-            if end > t:
-                (dashes if k % 2 == 0 else gaps).append((a + u * t,
-                                                         a + u * end))
-            t = end
-            k += 1
-    as_array = (lambda xs: np.asarray(xs, dtype=np.float32).reshape(-1, 2, 3)
-                if xs else empty)
-    return as_array(dashes), as_array(gaps)
+    return _rs.linetype_dash_segments(segs, tuple(pattern or ()), float(unit))
 
 
 def text_marks(p0, p1, spec) -> list:
@@ -315,30 +223,7 @@ def text_marks(p0, p1, spec) -> list:
     the pattern restarting at ``p0`` as a pen restarts it on each line):
     ``[(x, y, degrees)]``, the middle of each word that fits whole, turned
     along the line and kept reading upright. ``spec``: :func:`linetype_text`."""
-    import math
-    if spec is None:
-        return []
-    text, size, offset, period = spec
-    dx, dy = p1[0] - p0[0], p1[1] - p0[1]
-    length = math.hypot(dx, dy)
-    if length <= 1e-9 or period <= 1e-9:
-        return []
-    half = text_width(text, size) / 2.0
-    angle = math.degrees(math.atan2(dy, dx))
-    if angle > 90.0:
-        angle -= 180.0
-    elif angle <= -90.0:
-        angle += 180.0
-    out = []
-    t = offset
-    n = 0
-    while t + half <= length and n < 2000:
-        if t - half >= 0.0:
-            f = t / length
-            out.append((p0[0] + dx * f, p0[1] + dy * f, angle))
-        t += period
-        n += 1
-    return out
+    return _rs.linetype_text_marks(p0, p1, spec)
 
 
 def drawn_dashes(pieces) -> tuple:
@@ -346,52 +231,19 @@ def drawn_dashes(pieces) -> tuple:
     a pen draws them: dash, gap, dash, gap… in turn, all ≥ 0, starting with
     a dash — two pieces of a kind in a row joined, a leading gap moved to
     the end."""
-    runs: list = []                    # [(drawn?, length)]
-    for v in pieces:
-        drawn = v >= 0
-        if runs and runs[-1][0] == drawn and not (drawn and v == 0):
-            runs[-1] = (drawn, runs[-1][1] + abs(v))
-        else:
-            runs.append((drawn, abs(v)))
-    if runs and not runs[0][0]:
-        runs = runs[1:] + runs[:1]
-    out: list = []
-    for drawn, length in runs:
-        if out and (len(out) % 2 == 0) != drawn:
-            out[-1] += 0.0 if drawn else length    # never two of a kind
-            continue
-        out.append(length)
-    if len(out) % 2:
-        out.append(0.0)
-    return tuple(out)
+    return tuple(_rs.linetype_drawn_dashes(pieces))
 
 
 def file_dashes(drawn) -> tuple:
     """:func:`drawn_dashes` the other way: dash, −gap, … for a file."""
-    return tuple(v if i % 2 == 0 else -v for i, v in enumerate(drawn))
+    return tuple(_rs.linetype_file_dashes(drawn))
 
 
 def clean_pattern(raw) -> list | None:
     """A dash pattern as typed or read from a file, kept sane: finite
     numbers in mm, at most a few dozen pieces, something drawn and
     something left blank; ``None`` when there is no such pattern."""
-    import math
-    if not isinstance(raw, (list, tuple)):
-        return None
-    out = []
-    for v in raw[:_MAX_PIECES]:
-        try:
-            v = float(v)
-        except (TypeError, ValueError):
-            return None
-        if not math.isfinite(v) or abs(v) > 1000.0:
-            return None
-        out.append(round(v, 4))
-    if not out or sum(abs(v) for v in out) < 0.05:
-        return None
-    if not any(v < 0 for v in out) or not any(v >= 0 for v in out):
-        return None                    # all gap, or a continuous line
-    return out
+    return _rs.linetype_clean_pattern(raw)
 
 
 def parse_lin(text: str) -> tuple[dict, list]:
@@ -401,89 +253,10 @@ def parse_lin(text: str) -> tuple[dict, list]:
     "text_size", "text_at"]}}, skipped)``: the line types in mm — with
     their text, when a piece writes one (``["GAS",STANDARD,S=2.5,…]``: the
     two gaps around it made one, the text centred in it) — and the names
-    of those that carry a shape (``[NAME,file.shx,…]``), left out. The
-    format has no unit: a pattern whose every piece is a fraction of a
-    unit is taken as inches (the imperial files) and turned into mm."""
-    found: dict = {}
-    skipped: list = []
-    name = label = None
-    for raw in text.splitlines():
-        line = raw.split(";;", 1)[0].strip()
-        if not line or line.startswith(";"):
-            continue
-        if line.startswith("*"):
-            head, _, label = line[1:].partition(",")
-            name = head.strip()[:64] or None
-            label = label.strip()[:120]
-            continue
-        if name is None:
-            continue
-        body = line[1:] if line[:1].upper() == "A" else line
-        body = body.lstrip(",")
-        words = None                   # (text, size) of a text piece
-        at = None                      # the gap it sits in, once known
-        nums: list = []
-        bad = False
-        for part in re.split(r",(?![^\[]*\])", body):
-            part = part.strip()
-            if not part:
-                continue
-            if part.startswith("["):
-                inner = [v.strip() for v in part.strip("[]").split(",")]
-                first = inner[0] if inner else ""
-                if not (first.startswith('"') and first.endswith('"')
-                        and len(first) > 2) or words is not None:
-                    bad = True         # a shape, or two texts: left out
-                    break
-                size = 0.1
-                for item in inner[1:]:
-                    k, _, v = item.partition("=")
-                    if k.strip().upper() == "S":
-                        try:
-                            size = float(v)
-                        except ValueError:
-                            pass
-                words = (first[1:-1], size)
-                # The gap before it and the one after are one room.
-                at = len(nums) - 1 if nums and nums[-1] < 0 else None
-                continue
-            try:
-                v = float(part)
-            except ValueError:
-                bad = True
-                break
-            if at is not None and len(nums) - 1 == at and v < 0:
-                nums[at] += v
-                at = -1                # merged: keep it where it is
-                continue
-            if words is not None and at is None and v < 0:
-                at = len(nums)         # no gap before: the one after
-            nums.append(v)
-            if at == -1:
-                at = None
-        if bad:
-            skipped.append(name)
-            name = None
-            continue
-        inches = bool(nums) and all(abs(v) <= 1.0 for v in nums)
-        if inches:
-            nums = [v * 25.4 for v in nums]
-        pattern = clean_pattern(nums)
-        if pattern is not None:
-            entry = {"label": label or name, "pattern": pattern}
-            if words is not None:
-                gaps = [i for i, v in enumerate(pattern) if v < 0]
-                # The widest gap holds the text when its place was lost.
-                where = max(gaps, key=lambda i: -pattern[i]) if gaps else None
-                spec = clean_line_text(
-                    {"text": words[0], "text_size":
-                     words[1] * (25.4 if inches else 1.0), "text_at": where},
-                    pattern)
-                if spec is not None:
-                    entry.update(spec)
-            found[name] = entry
-        name = None
-    return found, skipped
+    of those that carry a shape (``[NAME,file.shx,…]``), left out. A
+    pattern whose every piece is a fraction of a unit is taken as inches
+    (the imperial files) and turned into mm."""
+    return _rs.linetype_parse_lin(text)
 
 
 def to_lin(entries) -> str:
@@ -491,26 +264,7 @@ def to_lin(entries) -> str:
     pattern[, text spec])]`` — that :func:`parse_lin` and drawing programs
     read. A text goes in the middle of its gap, as the format writes one:
     ``["GAS",STANDARD,S=2.5,R=0.0,X=-…,Y=-…]`` between its two halves."""
-    lines = [";; Line types exported from IngeTrazo (millimetres)", ""]
-    for entry in entries:
-        name, label, pattern = entry[:3]
-        spec = entry[3] if len(entry) > 3 else None
-        if not pattern:
-            continue
-        safe = re.sub(r"[^A-Za-z0-9_-]+", "_", name).strip("_") or "LINE"
-        lines.append(f"*{safe},{label.replace(',', ' ')}")
-        pieces = [f"{v:g}" for v in pattern]
-        if spec:
-            at, size = spec["text_at"], spec["text_size"]
-            half = pattern[at] / 2.0
-            words = spec["text"].replace('"', "'")
-            pieces[at:at + 1] = [
-                f"{half:g}",
-                f'["{words}",STANDARD,S={size:g},R=0.0,'
-                f"X={-text_width(words, size) / 2.0:g},Y={-size / 2.0:g}]",
-                f"{half:g}"]
-        lines.append("A," + ",".join(pieces))
-    return "\n".join(lines) + "\n"
+    return _rs.linetype_to_lin(entries)
 
 
 #: How much a locked layer's faces wash toward white: drawn, but plainly
