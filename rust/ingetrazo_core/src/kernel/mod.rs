@@ -10,6 +10,7 @@ use pyo3::prelude::*;
 pub(crate) fn register_kernel(m: &Bound<'_,PyModule>) -> PyResult<()> {
     object_drawing::register(m)?;
     object_replay::register(m)?;
+    snap::inputs::register(m)?;
     push_queries::register(m)?;
     store::planar_api::register(m)?;
     m.add_function(wrap_pyfunction!(snap::inputs::edge_tag,m)?)?;

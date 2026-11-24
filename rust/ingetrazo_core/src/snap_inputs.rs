@@ -121,3 +121,121 @@ pub(crate) fn point_inputs(
         .collect::<PyResult<_>>()?;
     Ok((quads, extras))
 }
+
+/// Use renderer-owned packed columns when supplied, or read the reference handles once.
+#[pyfunction]
+fn make_query(edges: &Obj<'_>, projector: &Obj<'_>, cursor: [f64; 2]) -> PyResult<SnapQuery> {
+    let projection = projector
+        .getattr_opt("snap_projection")?
+        .filter(|p| !p.is_none());
+    let (matrix, size, callback) = if let Some(p) = projection {
+        let (m, s) = p.extract()?;
+        (Some(m), Some(s), None)
+    } else {
+        (None, None, Some(projector.clone().unbind()))
+    };
+    if let Some(columns) = edges.getattr_opt("snap_columns")? {
+        let columns = columns.call0()?;
+        let (a, b, tags, grouped) = columns.extract()?;
+        SnapQuery::new(a, b, tags, grouped, matrix, size, cursor, callback)
+    } else {
+        from_objects(
+            edges,
+            Projection::from_parts(matrix, size, callback)?,
+            cursor,
+        )
+    }
+}
+
+#[pyfunction]
+#[pyo3(signature=(query,edges,radius,hidden,*,midpoints=false,quadrants=None,centers=None,line=None,hidden_many=None))]
+fn point_result<'py>(
+    query: &Obj<'py>,
+    edges: &Obj<'py>,
+    radius: f64,
+    hidden: Option<&Obj<'py>>,
+    midpoints: bool,
+    quadrants: Option<&Obj<'py>>,
+    centers: Option<&Obj<'py>>,
+    line: Option<super::Line>,
+    hidden_many: Option<&Obj<'py>>,
+) -> PyResult<Option<Obj<'py>>> {
+    let py = query.py();
+    let empty = pyo3::types::PyTuple::empty(py);
+    let centers = centers.unwrap_or(empty.as_any());
+    let (quads, extra) = point_inputs(quadrants.unwrap_or(empty.as_any()), centers)?;
+    let visibility = if let Some(h) = hidden {
+        if h.is_truthy()? {
+            let batch = match hidden_many {
+                Some(v) if v.is_truthy()? => Some(v.clone().unbind()),
+                _ => None,
+            };
+            Some(
+                crate::snap_visibility::PointVisibility::new(h.clone().unbind(), batch)
+                    .into_pyobject(py)?,
+            )
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+    let choice = if let Ok(native) = query.cast::<SnapQuery>() {
+        native
+            .borrow()
+            .points(
+                py,
+                radius,
+                midpoints,
+                quads,
+                extra,
+                visibility.as_ref().map(|v| v.as_any()),
+                line,
+            )?
+            .map(|(p, i, k)| (p, i, k.to_owned()))
+    } else {
+        query
+            .call_method1(
+                "points",
+                (radius, midpoints, quads, extra, visibility, line),
+            )?
+            .extract::<Option<(P, i64, String)>>()?
+    };
+    let Some((p, i, kind)) = choice else {
+        return Ok(None);
+    };
+    let context = if i >= 0 {
+        edges.get_item(i)?.getattr_opt("context")?
+    } else if i <= -2 {
+        Some(centers.get_item(-2 - i)?.get_item(1)?)
+    } else {
+        None
+    };
+    let api = py.import("core.snap")?;
+    let color = api.getattr(match kind.as_str() {
+        "midpoint" | "quadrant" | "arc_midpoint" => "COLOR_MIDPOINT",
+        "face_center" => "COLOR_ON_FACE",
+        "origin" | "component_origin" => "COLOR_ORIGIN",
+        _ => "COLOR_ENDPOINT",
+    })?;
+    let kw = pyo3::types::PyDict::new(py);
+    kw.set_item("context", context)?;
+    Ok(Some(api.getattr("SnapResult")?.call(
+        (
+            crate::math::Vec3::from(glam::DVec3::from_array(p)),
+            kind,
+            color,
+        ),
+        Some(&kw),
+    )?))
+}
+pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    let sub = PyModule::new(m.py(), "snap_query")?;
+    sub.add_function(wrap_pyfunction!(edge_tag, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(edge_columns, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(make_query, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(point_result, &sub)?)?;
+    sub.add_class::<SnapQuery>()?;
+    sub.add_class::<crate::snap_visibility::PointVisibility>()?;
+    m.add_submodule(&sub)
+}
