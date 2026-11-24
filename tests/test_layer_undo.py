@@ -25,7 +25,7 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 _app = QApplication.instance() or QApplication([])
 
 from core.group import Group
-from tests.shell_isolation import restore_shell_patches  # noqa: F401
+from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
 from core.history import DeleteLayerCommand, History
 from core.layers import (DEFAULT_LAYER, Layer, assign_layer, layer_of,
                          rename_layer)
@@ -281,22 +281,22 @@ def test_panel_add_and_rename_stay_off_the_undo_stack():
         win.close()
 
 
-def test_panel_delete_asks_when_the_layer_has_content(native_host):
+def test_panel_delete_asks_when_the_layer_has_content(native_question_host):
     from tests.native_tree import action
     from views import chrome_dialogs as dialogs
-    win = native_host.window
+    win = native_question_host.window
     scene = win.viewport.scene
     face = _square(scene.mesh)
     scene.layers.extend([Layer("Muros"), Layer("Vacia")])
     for entity in [face, *scene.mesh.edges]:
         assign_layer(entity, "Muros")
-    action(native_host, "deletetag", "preview-tag:Vacia")
+    action(native_question_host, "deletetag", "preview-tag:Vacia")
     assert scene.layer("Vacia") is None and dialogs.current_sheet(win) is None
-    action(native_host, "deletetag", "preview-tag:Muros")
+    action(native_question_host, "deletetag", "preview-tag:Muros")
     sheet = dialogs.current_sheet(win)
     assert "Muros" in sheet.text and "5" in sheet.text
     assert dialogs.answer(win, "cancel") and layer_of(face) == "Muros"
-    action(native_host, "deletetag", "preview-tag:Muros")
+    action(native_question_host, "deletetag", "preview-tag:Muros")
     assert dialogs.answer(win, "delete")
     assert scene.layer("Muros") is None and layer_of(face) == DEFAULT_LAYER
     assert win.viewport.history.undo() and layer_of(face) == "Muros"

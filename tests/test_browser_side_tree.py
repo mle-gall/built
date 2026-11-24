@@ -4,7 +4,7 @@
 import pytest
 
 from tests.native_tree import action, group_rows
-from tests.shell_isolation import restore_shell_patches  # noqa: F401
+from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
 from tests.test_browser_layer_order import _container, _group
 from tests.test_project_occurrences import _two_planes
 from tests.test_tree_links import _visible
@@ -104,17 +104,17 @@ def test_read_only_and_stale_rows_cannot_delete_the_selection(model):
     assert vp.scene.groups == [house, tree] and not vp.history.undo_stack
 
 
-def test_deleting_a_tag_rechecks_the_document_after_confirmation(native_host):
+def test_deleting_a_tag_rechecks_the_document_after_confirmation(native_question_host):
     from core.layers import Layer
     from views import chrome_dialogs
     from core.group import Group
-    win = native_host.window
+    win = native_question_host.window
     scene = win.viewport.scene
     scene.layers.append(Layer("Glass"))
     group = Group(name="Pane")
     group.layer = "Glass"
     scene.groups.append(group)
-    action(native_host, "deletetag", "preview-tag:Glass")
+    action(native_question_host, "deletetag", "preview-tag:Glass")
     scene.version += 1
     assert chrome_dialogs.answer(win, "delete") and scene.layer("Glass") is not None
     assert group.layer == "Glass"

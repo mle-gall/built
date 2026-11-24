@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
-from tests.shell_isolation import restore_shell_patches  # noqa: F401
+from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
 from core.group import Group
 from core.history import History, PurgeUnusedCommand
 from core.layers import DEFAULT_LAYER, Layer, assign_layer
@@ -195,11 +195,11 @@ def _row(panel, name):
     return panel.item_for(name)
 
 
-def test_deleting_a_layer_reassigns_faces_INSIDE_groups(native_host):
+def test_deleting_a_layer_reassigns_faces_INSIDE_groups(native_question_host):
     from core.layers import layer_of
     from tests.native_tree import action
     from views import chrome_dialogs
-    scene = native_host.viewport.scene
+    scene = native_question_host.viewport.scene
     inner = Mesh()
     f = _quad(inner)
     deep = Mesh()
@@ -212,8 +212,8 @@ def test_deleting_a_layer_reassigns_faces_INSIDE_groups(native_host):
     scene.layers.append(Layer("CANAL"))
     assign_layer(f, "CANAL")
     assign_layer(g, "CANAL")
-    action(native_host, "deletetag", "preview-tag:CANAL")
-    assert chrome_dialogs.answer(native_host.window, "delete")
+    action(native_question_host, "deletetag", "preview-tag:CANAL")
+    assert chrome_dialogs.answer(native_question_host.window, "delete")
     assert scene.layer("CANAL") is None
     assert layer_of(f) == layer_of(g) == DEFAULT_LAYER
 

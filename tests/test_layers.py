@@ -7,7 +7,7 @@ from ingetrazo_core import Vec3 as QVector3D
 
 from core.layers import DEFAULT_LAYER, Layer, assign_layer, layer_of
 from core.scene import Scene
-from tests.shell_isolation import restore_shell_patches  # noqa: F401
+from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
 from formats import igz
 
 
@@ -216,12 +216,12 @@ def test_hidden_layer_hides_annotations_from_picks():
     assert pick_dim(100, 150) is None
 
 
-def test_assigning_and_releasing_annotations_in_the_native_document(native_host):
+def test_assigning_and_releasing_annotations_in_the_native_document(native_question_host):
     from core.dimension import Dimension
     from core.textlabel import TextLabel
     from tests.native_tree import action
     from views import chrome_dialogs
-    win = native_host.window
+    win = native_question_host.window
     scene = win.viewport.scene
     dim = Dimension(V(0, 0), V(2, 0), V(0, -1))
     label = TextLabel(V(1, 0), V(.5, .5, 1), "Pileta")
@@ -231,7 +231,7 @@ def test_assigning_and_releasing_annotations_in_the_native_document(native_host)
     scene.select([dim, label])
     win._assign_layer("Anotaciones")
     assert layer_of(dim) == layer_of(label) == "Anotaciones"
-    action(native_host, "deletetag", "preview-tag:Anotaciones")
+    action(native_question_host, "deletetag", "preview-tag:Anotaciones")
     assert chrome_dialogs.answer(win, "delete")
     assert scene.layer("Anotaciones") is None
     assert layer_of(dim) == layer_of(label) == DEFAULT_LAYER
