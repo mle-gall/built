@@ -66,6 +66,9 @@ class _Host:
     def run(self, name, args):
         from core.protocol.commands import run
         args = json.loads(args)
+        if name == "paste_clipboard":
+            answer = run(self.vp.history, name, **args, clipboard=self.tool._clip)
+            return answer["ok"], self.revision(), 0, answer.get("error")
         if name == "bevel_selection":
             args["_plan"] = self.tool._plan
         if name == "paint_material":
@@ -1835,3 +1838,13 @@ class TapeMeasureTool(TapeHost, RustTool):
     def _edge(self, edge):
         self._source = edge
         self._machine.set("direction", _tuple(edge.b - edge.a) if edge is not None else None)
+
+from tools.paste_host import PasteHost
+
+
+class PasteTool(PasteHost, RustTool):
+    kind = "paste"
+    shortcut = None
+    description = None
+    start_point = _point_property("start_point")
+    _offset = _point_property("offset")

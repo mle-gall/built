@@ -114,6 +114,18 @@ def _push_face(history, f, distance, keep_base, tool):
     return _answer(history, before)
 
 
+def paste_clipboard(history, offset, *, clipboard):
+    """Stamp the bound document clipboard with a model-space displacement."""
+    import math
+    from ingetrazo_core import Vec3
+    from core.paste_ops import stamp_clipboard
+    if len(offset) != 3 or not all(map(math.isfinite, offset)):
+        raise ValueError("paste offset must be a finite vector")
+    before = history.revision
+    ok = clipboard and stamp_clipboard(history, clipboard, Vec3(*offset))
+    return _answer(history, before, ok)
+
+
 def bevel_selection(history, radius, segments=8, profile=.5, measure="radius", corners="round",
                     shape=None, edges=(), vertices=(), _plan=None):
     """Round keyed edges or bevel keyed corners of the open mesh in a single step."""
@@ -1410,7 +1422,7 @@ COMMANDS = {"set_location": set_location, "set_model_units": set_model_units, "s
             "add_guide": add_guide, "change_guide": change_guide, "add_guide_circle": add_guide_circle, "add_arc": add_arc,
             "move_placements": move_placements, "copy_placements": copy_placements,
             "move_selection": move_selection, "scale_selection": scale_selection,
-            "bevel_selection": bevel_selection, "rotate_selection": rotate_selection, "offset_outline": offset_outline, "paint_material": paint_material,
+            "paste_clipboard": paste_clipboard, "bevel_selection": bevel_selection, "rotate_selection": rotate_selection, "offset_outline": offset_outline, "paint_material": paint_material,
             "divide_edges": divide_edges, "join_edges": join_edges,
             "move_vertices": move_vertices, "erase": erase,
             "reverse_faces": reverse_faces, "push_pull": push_pull, "orient_faces": orient_faces,

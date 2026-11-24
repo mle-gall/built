@@ -301,6 +301,11 @@ BUILTIN_TOOLS.append(dict(
     }, required=["distance"], oneOf=[{"required": ["face"]}, {"required": ["points", "normal"]}])))
 
 BUILTIN_TOOLS.append(dict(
+    name="paste_clipboard", mutates=True,
+    description="Stamp the document's model clipboard at its original position plus an offset in metres.",
+    inputSchema=dict(type="object", properties={"offset": _SCALE_TRIPLE}, required=["offset"])))
+
+BUILTIN_TOOLS.append(dict(
     name="bevel_selection", mutates=True,
     description="Round edges or bevel vertex corners of the open mesh. The size is in metres.",
     inputSchema=dict(type="object", properties={

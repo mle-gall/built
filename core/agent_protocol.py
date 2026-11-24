@@ -60,6 +60,10 @@ class ProtocolTools:
         self._viewport.update()
         return {**out, "step": out["step"].to_json() if out["step"] else None}
 
+    def _tool_paste_clipboard(self, offset):
+        return self._edit_command("paste_clipboard", offset=offset,
+                                  clipboard=getattr(self._viewport, "clipboard", None))
+
     def _tool_bevel_selection(self, radius, segments=8, profile=.5, measure="radius", corners="round",
                               shape=None, edges=(), vertices=()):
         return self._edit_command("bevel_selection", radius=radius, segments=segments, profile=profile,
