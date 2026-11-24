@@ -6,6 +6,7 @@ pub(crate) mod object_repair;
 pub(crate) mod push_queries;
 mod push_scans;
 mod snap_host;
+pub(crate) use snap_host::SnapFrame;
 mod store_views;
 mod snap_surfaces;
 mod topology;

@@ -111,12 +111,24 @@ impl Gesture {
 }
 
 #[pyfunction]
-#[pyo3(signature=(q,frame,state=None))]
-pub fn resolve_snap<'py>(q: &SnapQuery, frame: &Bound<'py, PyAny>, state:Option<&services::FrameState>) -> PyResult<Bound<'py, PyAny>> {
-    let fallback: Gesture;
+#[pyo3(signature = (q, frame, state=None))]
+pub fn resolve_snap<'py>(
+    q: &SnapQuery,
+    frame: &Bound<'py, PyAny>,
+    state: Option<&services::FrameState>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let stored;
+    let fallback;
     let g = match state {
         Some(state) => &state.gesture,
-        None => { fallback=frame.extract()?; &fallback }
+        None if frame.is_instance_of::<crate::kernel::SnapFrame>() => {
+            stored = frame.getattr("state")?.cast_into::<services::FrameState>()?;
+            &stored.get().gesture
+        }
+        None => {
+            fallback = frame.extract()?;
+            &fallback
+        }
     };
     if [g.arrow, g.sticky, g.shift_reference.map(|(_, k)| k)]
         .into_iter()

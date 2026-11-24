@@ -13,7 +13,7 @@ use pyo3::{
 };
 
 #[pyclass(dict, module = "core.snap_frame")]
-struct SnapFrame;
+pub(crate) struct SnapFrame;
 type F<'py> = Bound<'py, SnapFrame>;
 type Obj<'py> = Bound<'py, PyAny>;
 fn vector(p: P) -> Vec3 {
