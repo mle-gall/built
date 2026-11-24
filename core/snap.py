@@ -41,6 +41,7 @@ import math
 from dataclasses import dataclass
 from typing import Callable, Optional
 
+import ingetrazo_core as kernel
 from ingetrazo_core import Vec3 as QVector3D
 
 from core import _native
@@ -184,34 +185,10 @@ def first_point_work_plane(forward: QVector3D, scene_center: QVector3D,
     ``None`` for oblique (orbit) views, where the caller keeps its usual
     ground/face behaviour so freehand modelling is unchanged.
     """
-    if hasattr(_native.native, 'drawing_axis'):
-        from core.axes import is_world
-        hit = _native.native.drawing_axis(forward.normalized().toTuple(), _axis_tuples(),
-                                          threshold, 1e-9, is_world())
-        return (scene_center, QVector3D(*hit[1])) if hit is not None else None
-    if forward.length() < 1e-9:
-        return None
-    f = forward.normalized()
-    from core import axes as _axes
-    if not _axes.is_world():
-        lf = _axes.to_local(f)
-        comps = [(abs(lf.x()), "x"), (abs(lf.y()), "y"), (abs(lf.z()), "z")]
-        best, name = max(comps)
-        if best < threshold:
-            return None
-        a = _axes.axis(name)
-        sign = 1.0 if QVector3D.dotProduct(f, a) > 0 else -1.0
-        return scene_center, a * sign
-    if max(abs(f.x()), abs(f.y()), abs(f.z())) < threshold:
-        return None                     # oblique view — not axis-aligned
-    # snap the normal to the exact dominant axis so the plane is clean
-    if abs(f.x()) >= abs(f.y()) and abs(f.x()) >= abs(f.z()):
-        normal = QVector3D(1.0 if f.x() > 0 else -1.0, 0.0, 0.0)
-    elif abs(f.y()) >= abs(f.z()):
-        normal = QVector3D(0.0, 1.0 if f.y() > 0 else -1.0, 0.0)
-    else:
-        normal = QVector3D(0.0, 0.0, 1.0 if f.z() > 0 else -1.0)
-    return scene_center, normal
+    from core.axes import is_world
+    hit = kernel.drawing_axis(forward.normalized().toTuple(), _axis_tuples(),
+                                      threshold, 1e-9, is_world())
+    return (scene_center, QVector3D(*hit[1])) if hit is not None else None
 
 
 from ingetrazo_core import face_plane_world
@@ -223,33 +200,10 @@ def _detect_axis_alignment(
     """If the start→candidate direction is within ``angle_deg`` of an axis,
     return that axis as ``"x"``/``"y"``/``"z"``. Otherwise ``None``."""
     delta = candidate - start
-    if hasattr(_native.native, 'drawing_axis'):
-        hit = _native.native.drawing_axis(delta.toTuple(), _axis_tuples(),
-                                          math.cos(math.radians(angle_deg)), 1e-6, False)
-        return "xyz"[hit[0]] if hit is not None else None
-    length = delta.length()
-    if length < 1e-6:
-        return None
-    cos_thresh = math.cos(math.radians(angle_deg))
-    from core import axes as _axes
-    if not _axes.is_world():
-        delta = _axes.to_local(delta)     # the context's own axes (#44)
-    nx = abs(delta.x()) / length
-    ny = abs(delta.y()) / length
-    nz = abs(delta.z()) / length
-    # Pick the strongest alignment if multiple pass.
-    candidates = [(nx, "x"), (ny, "y"), (nz, "z")]
-    candidates.sort(reverse=True)
-    if candidates[0][0] >= cos_thresh:
-        return candidates[0][1]
-    return None
+    hit = kernel.drawing_axis(delta.toTuple(), _axis_tuples(),
+                                      math.cos(math.radians(angle_deg)), 1e-6, False)
+    return "xyz"[hit[0]] if hit is not None else None
 
-
-#: An axis whose screen projection is shorter than this is pointing at the
-#: camera: its image is a dot, every cursor is "on" it, and the
-#: perpendicular distance below means nothing. Skip it rather than let it
-#: swallow the screen (looking straight down would glue everything to blue).
-_MIN_AXIS_SCREEN_PX = 12.0
 
 #: How far along an axis the resolved point may land, as a multiple of how
 #: far the cursor itself is from the start. See ``_engaged_axis``.
@@ -281,32 +235,9 @@ def _detect_axis_on_screen(
     origin_px = world_to_pixel(start)
     if origin_px is None:
         return None
-    if hasattr(_native.native, 'screen_axis'):
-        samples = [world_to_pixel(start + a * reach) for a in _AXIS_VECTORS.values()]
-        axis = _native.native.screen_axis(origin_px, samples, candidate_pixel, threshold_px)
-        return "xyz"[axis] if axis is not None else None
-    sx, sy = origin_px
-    cx, cy = candidate_pixel
-    best: Optional[tuple[float, str]] = None
-    for name in ("x", "y", "z"):
-        sample_px = world_to_pixel(start + _AXIS_VECTORS[name] * reach)
-        if sample_px is None:
-            # The sample lands where the camera cannot project (behind it, or
-            # off the near plane) - seen in the plan view zoomed onto the
-            # origin, where the z sample goes behind the camera. No line to
-            # measure against, so this axis offers no answer.
-            continue
-        ax, ay = sample_px
-        dx, dy = ax - sx, ay - sy
-        span = math.hypot(dx, dy)
-        if span < _MIN_AXIS_SCREEN_PX:
-            continue
-        # Distance from the cursor to the INFINITE line: the axis runs both
-        # ways from the start point, as the arrow lock does.
-        dist = abs((cx - sx) * dy - (cy - sy) * dx) / span
-        if dist <= threshold_px and (best is None or dist < best[0]):
-            best = (dist, name)
-    return best[1] if best else None
+    samples = [world_to_pixel(start + a * reach) for a in _AXIS_VECTORS.values()]
+    axis = kernel.screen_axis(origin_px, samples, candidate_pixel, threshold_px)
+    return "xyz"[axis] if axis is not None else None
 
 
 def _still_along_axis(
@@ -432,22 +363,10 @@ def _direction_from_edge(edge, mode: str,
     horizontal plane — cross((0,0,1), (dx,dy,dz)) is (-dy, dx, 0), the old
     formula exactly — and the right thing on a tilted or vertical one.
     """
-    if hasattr(_native.native, 'edge_direction'):
-        normal = plane_normal if plane_normal is not None else _AXIS_VECTORS["z"]
-        direction = _native.native.edge_direction(edge.a.toTuple(), edge.b.toTuple(),
-                                                   mode == 'perpendicular', normal.toTuple())
-        return QVector3D(*direction) if direction is not None else None
-    direction = edge.b - edge.a
-    if direction.length() < 1e-6:
-        return None
-    if mode == "perpendicular":
-        from core.axes import AXES
-        normal = plane_normal if plane_normal is not None else QVector3D(AXES["z"])
-        perp = QVector3D.crossProduct(normal, direction)
-        if perp.length() < 1e-9:
-            return None          # the edge stands square to the plane
-        return perp / perp.length()
-    return direction.normalized()
+    normal = plane_normal if plane_normal is not None else _AXIS_VECTORS["z"]
+    direction = kernel.edge_direction(edge.a.toTuple(), edge.b.toTuple(),
+                                               mode == 'perpendicular', normal.toTuple())
+    return QVector3D(*direction) if direction is not None else None
 
 
 # ---- Entry point ------------------------------------------------------------
@@ -542,39 +461,8 @@ def _line_segment_intersection(
     """Where the infinite line through ``p`` (unit direction ``u``) crosses the
     segment ``a``–``b``, or ``None`` if they're parallel, skew (closest approach
     > ``tol``), or the crossing falls outside the segment."""
-    if hasattr(_native.native, 'lock_crossing'):
-        hit = _native.native.lock_crossing(p.toTuple(), u.toTuple(), a.toTuple(), b.toTuple(), tol)
-        return QVector3D(*hit) if hit is not None else None
-    # Normalized directions and double-precision products avoid cancellation
-    # on long edges, as in topology.segment_intersection. Keep the line
-    # infinite, the segment bounded, and the caller's absolute skew tolerance.
-    pc, ac = p.toTuple(), a.toTuple()
-    uc = u.toTuple()
-    v = tuple(bc - av for bc, av in zip(b.toTuple(), ac))
-    lu, lv = math.hypot(*uc), math.hypot(*v)
-    if lu < 1e-9 or lv < 1e-9:
-        return None
-    uc = tuple(c / lu for c in uc)
-    v = tuple(c / lv for c in v)
-    w = tuple(pv - av for pv, av in zip(pc, ac))
-
-    def dot(x, y):
-        return sum(a * b for a, b in zip(x, y))
-
-    aa, bb, cc = dot(uc, uc), dot(uc, v), dot(v, v)
-    dd, ee = dot(uc, w), dot(v, w)
-    denom = aa * cc - bb * bb
-    if denom < 1e-12:
-        return None
-    sc = (bb * ee - cc * dd) / denom
-    tc = (aa * ee - bb * dd) / denom
-    if tc < -1e-6 * lv or tc > (1.0 + 1e-6) * lv:
-        return None
-    on_line = tuple(pv + uv * sc for pv, uv in zip(pc, uc))
-    on_seg = tuple(av + vv * tc for av, vv in zip(ac, v))
-    if math.dist(on_line, on_seg) > tol:
-        return None
-    return QVector3D(*on_seg)
+    hit = kernel.lock_crossing(p.toTuple(), u.toTuple(), a.toTuple(), b.toTuple(), tol)
+    return QVector3D(*hit) if hit is not None else None
 
 
 def _point_on_segment_world(
@@ -596,35 +484,8 @@ def fit_circle(points, tol_rel: float = 0.01):
     or ``None`` when they do not sit on one. Least squares in the points'
     own plane; every point must lie within ``tol_rel`` of the radius (or
     2 mm), so a polyline that merely bends never passes for an arc."""
-    if hasattr(_native.native, 'snap_circle'):
-        hit = _native.native.snap_circle([p.toTuple() for p in points], tol_rel)
-        return (QVector3D(*hit[0]), hit[1]) if hit is not None else None
-    import numpy as np
-    pts = np.array([[p.x(), p.y(), p.z()] for p in points], dtype=np.float64)
-    if len(pts) < 3:
-        return None
-    c0 = pts.mean(axis=0)
-    q = pts - c0
-    # Plane basis: the two dominant directions of the point cloud.
-    _w, v = np.linalg.eigh(q.T @ q)
-    u, w = v[:, 2], v[:, 1]
-    x, y = q @ u, q @ w
-    a = np.c_[2.0 * x, 2.0 * y, np.ones(len(pts))]
-    b = x * x + y * y
-    try:
-        sol, *_ = np.linalg.lstsq(a, b, rcond=None)
-    except np.linalg.LinAlgError:
-        return None
-    cx, cy = sol[0], sol[1]
-    r2 = sol[2] + cx * cx + cy * cy
-    if r2 <= 0.0:
-        return None
-    r = float(math.sqrt(r2))
-    dev = np.abs(np.hypot(x - cx, y - cy) - r)
-    if dev.max() > max(0.002, tol_rel * r):
-        return None
-    c = c0 + u * cx + w * cy
-    return QVector3D(float(c[0]), float(c[1]), float(c[2])), r
+    hit = kernel.snap_circle([p.toTuple() for p in points], tol_rel)
+    return (QVector3D(*hit[0]), hit[1]) if hit is not None else None
 
 
 def arc_sweep_midpoint(points, fit=None) -> Optional[QVector3D]:
@@ -644,15 +505,8 @@ def arc_sweep_midpoint(points, fit=None) -> Optional[QVector3D]:
         if fit is None:
             return None
     c, r = fit[0], fit[1]
-    if hasattr(_native.native, 'arc_midpoint'):
-        point = _native.native.arc_midpoint([p.toTuple() for p in points], c.toTuple(), r)
-        return QVector3D(*point) if point is not None else None
-    m = QVector3D(0.0, 0.0, 0.0)
-    for pt in points:
-        m += (pt - c)
-    if m.length() < 1e-9:
-        return None
-    return c + m.normalized() * r
+    point = kernel.arc_midpoint([p.toTuple() for p in points], c.toTuple(), r)
+    return QVector3D(*point) if point is not None else None
 
 
 def _boundary_runs(loop) -> list:
@@ -767,20 +621,6 @@ def curve_centers_of_face(face, xform=None) -> list:
     return out
 
 
-def _inside_2d(p, poly) -> bool:
-    """Even-odd ray cast: whether ``p`` lies inside ``poly`` [(x, y)]."""
-    x, y = p
-    inside = False
-    j = len(poly) - 1
-    for i in range(len(poly)):
-        xi, yi = poly[i]
-        xj, yj = poly[j]
-        if (yi > y) != (yj > y) and x < (xj - xi) * (y - yi) / (yj - yi) + xi:
-            inside = not inside
-        j = i
-    return inside
-
-
 def face_center_of_face(face, xform=None) -> Optional[QVector3D]:
     """The *Face center* inference: the centre of AREA of the face, holes
     taken out, in world space (``xform`` places a component's face).
@@ -796,72 +636,8 @@ def face_center_of_face(face, xform=None) -> Optional[QVector3D]:
     loops = [list(face.vertices)] + [list(h) for h in (face.holes or [])]
     if xform is not None:
         loops = [[xform.map(QVector3D(p)) for p in loop] for loop in loops]
-    if hasattr(_native.native, 'face_center'):
-        center = _native.native.face_center([[p.toTuple() for p in ring] for ring in loops])
-        return QVector3D(*center) if center is not None else None
-    outer = loops[0]
-    if len(outer) < 3:
-        return None
-    # Newell's normal of the outer loop, in doubles.
-    nx = ny = nz = 0.0
-    for i in range(len(outer)):
-        a, b = outer[i], outer[(i + 1) % len(outer)]
-        nx += (a.y() - b.y()) * (a.z() + b.z())
-        ny += (a.z() - b.z()) * (a.x() + b.x())
-        nz += (a.x() - b.x()) * (a.y() + b.y())
-    nlen = math.sqrt(nx * nx + ny * ny + nz * nz)
-    if nlen < 1e-12:
-        return None
-    n = (nx / nlen, ny / nlen, nz / nlen)
-    # An orthonormal basis (u, v) of the face's plane, origin at a corner.
-    seed = (1.0, 0.0, 0.0) if abs(n[0]) < 0.9 else (0.0, 1.0, 0.0)
-    u = (n[1] * seed[2] - n[2] * seed[1],
-         n[2] * seed[0] - n[0] * seed[2],
-         n[0] * seed[1] - n[1] * seed[0])
-    ul = math.sqrt(u[0] ** 2 + u[1] ** 2 + u[2] ** 2)
-    u = (u[0] / ul, u[1] / ul, u[2] / ul)
-    v = (n[1] * u[2] - n[2] * u[1],
-         n[2] * u[0] - n[0] * u[2],
-         n[0] * u[1] - n[1] * u[0])
-    o = outer[0]
-    ox, oy, oz = o.x(), o.y(), o.z()
-
-    def flat(loop):
-        out = []
-        for p in loop:
-            dx, dy, dz = p.x() - ox, p.y() - oy, p.z() - oz
-            out.append((dx * u[0] + dy * u[1] + dz * u[2],
-                        dx * v[0] + dy * v[1] + dz * v[2]))
-        return out
-
-    flats = [flat(loop) for loop in loops if len(loop) >= 3]
-    area = sx = sy = 0.0
-    for k, poly in enumerate(flats):
-        a = cx = cy = 0.0
-        for i in range(len(poly)):
-            x0, y0 = poly[i]
-            x1, y1 = poly[(i + 1) % len(poly)]
-            cr = x0 * y1 - x1 * y0
-            a += cr
-            cx += (x0 + x1) * cr
-            cy += (y0 + y1) * cr
-        if abs(a) < 1e-18:
-            continue
-        # Each loop's area-weighted centre, whatever its winding: the
-        # outer loop adds, the holes take away.
-        sign = 1.0 if k == 0 else -1.0
-        w = abs(a) * 0.5 * sign
-        area += w
-        sx += w * cx / (3.0 * a)
-        sy += w * cy / (3.0 * a)
-    if area <= 1e-12:
-        return None
-    c = (sx / area, sy / area)
-    if not _inside_2d(c, flats[0]):
-        return None
-    return QVector3D(ox + c[0] * u[0] + c[1] * v[0],
-                     oy + c[0] * u[1] + c[1] * v[1],
-                     oz + c[0] * u[2] + c[1] * v[2])
+    center = kernel.face_center([[p.toTuple() for p in ring] for ring in loops])
+    return QVector3D(*center) if center is not None else None
 
 
 def _vertex_on_line(
@@ -2198,24 +1974,8 @@ def _circle_quadrants(c, r, n):
 def _circle_tangent_points(c, r, n, p):
     """The tangent points on a circle from an external point ``p`` (projected
     onto the circle's plane): 0 (inside), 1 (on the rim) or 2 points."""
-    if hasattr(_native.native, 'circle_tangents'):
-        return [QVector3D(*q) for q in _native.native.circle_tangents(
-            (c.toTuple(), r, n.toTuple()), p.toTuple())]
-    if r <= 0.0:
-        return []
-    proj = p - n * QVector3D.dotProduct(p - c, n)
-    dvec = proj - c
-    d = dvec.length()
-    if d < r:
-        return []                     # inside: no real tangent
-    if d <= r:
-        return [QVector3D(proj)]      # on the rim: the point itself
-    dd = dvec / d
-    w = QVector3D.crossProduct(n, dd)  # unit, in the plane, ⊥ dd
-    cos_b = r / d
-    sin_b = math.sqrt(1.0 - cos_b * cos_b)
-    return [c + (dd * cos_b + w * sin_b) * r,
-            c + (dd * cos_b - w * sin_b) * r]
+    return [QVector3D(*q) for q in kernel.circle_tangents(
+        (c.toTuple(), r, n.toTuple()), p.toTuple())]
 
 
 def compute_snap(
