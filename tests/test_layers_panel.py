@@ -893,47 +893,6 @@ def test_the_line_type_list_shows_the_lines_not_their_names(win):
     assert scene.layer("A").linetype == "center"
 
 
-def test_the_columns_button_switches_columns_and_remembers(win):
-    from PySide6.QtCore import QSettings
-    from views.layers_panel import COL_COUNT, COL_LINETYPE, LayersPanel
-    panel = win.layers_dock.panel
-    QSettings().remove(LayersPanel.HIDDEN_COLUMNS_KEY)
-    panel._apply_column_choice()
-    # By default the weight, the print mark, the transparency, the count
-    # and the cut weight are off.
-    from views.layers_panel import COL_CUT, COL_OPACITY, COL_PRINT, COL_WEIGHT
-    assert panel.hidden_columns() == {COL_WEIGHT, COL_PRINT, COL_OPACITY,
-                                      COL_COUNT, COL_CUT}
-    assert panel.tree.isColumnHidden(COL_COUNT)
-    assert panel.tree.isColumnHidden(COL_OPACITY)
-    assert panel.columns_button.text() == "+5"
-    for c in (COL_COUNT, COL_OPACITY, COL_PRINT,
-              COL_WEIGHT, COL_CUT):                # now chosen: all on
-        panel.set_column_shown(c, True)
-    win.layers_dock.raise_()
-    _app.processEvents()
-    b = panel.columns_button
-    assert b.text() == "⋮" and not b.isHidden()
-    head = panel.tree.header()
-    # At the header's right end, level with it.
-    assert b.geometry().left() == head.geometry().right() + 1
-    panel.set_column_shown(COL_LINETYPE, False)
-    panel.set_column_shown(COL_COUNT, False)
-    assert panel.tree.isColumnHidden(COL_LINETYPE)
-    assert panel.tree.isColumnHidden(COL_COUNT)
-    assert b.text() == "+2"
-    menu = panel._columns_menu()
-    checks = {a.text(): a.isChecked() for a in menu.actions()}
-    assert checks["Line type"] is False and checks["Colour"] is True
-    next(a for a in menu.actions() if a.text() == "Line type").trigger()
-    assert not panel.tree.isColumnHidden(COL_LINETYPE)
-    # Remembered for the next window.
-    assert LayersPanel.hidden_columns(panel) == {COL_COUNT}
-    QSettings().remove(LayersPanel.HIDDEN_COLUMNS_KEY)
-    panel._apply_column_choice()
-    assert b.text() == "+5"                        # back to the default
-
-
 def test_dropped_menus_stay_inside_the_panel(win):
     """Every list opens the same way — its right edge on the cell's or the
     button's — and inside the panel, a margin from its sides."""
@@ -991,99 +950,7 @@ def test_the_weight_list_looks_like_the_line_type_list(win):
     rows[1].grab()
 
 
-def test_the_columns_menu_stays_open_and_shows_all(win):
-    from PySide6.QtCore import QPoint, QSettings
-    from PySide6.QtTest import QTest
-    from views.layers_panel import COL_COLOR, COL_COUNT, COL_WEIGHT, LayersPanel
-    panel = win.layers_dock.panel
-    QSettings().setValue(LayersPanel.HIDDEN_COLUMNS_KEY, "")   # all on
-    QSettings().setValue(LayersPanel.KNOWN_COLUMNS_KEY, ",".join(
-        str(c) for c, _l in LayersPanel.OPTIONAL_COLUMNS))
-    panel._apply_column_choice()
-    menu = panel._columns_menu()
-    menu.popup(QPoint(100, 100))
-    _app.processEvents()
-    acts = {a.text(): a for a in menu.actions() if a.text()}
-
-    def click(text):
-        r = menu.actionGeometry(acts[text])
-        QTest.mouseClick(menu, Qt.LeftButton, Qt.NoModifier, r.center())
-        _app.processEvents()
-
-    click("Colour")
-    click("Line weight")                     # a second switch: still open
-    assert menu.isVisible()
-    assert panel.tree.isColumnHidden(COL_COLOR)
-    assert panel.tree.isColumnHidden(COL_WEIGHT)
-    assert panel.columns_button.text() == "+2"
-    click("Show all columns")
-    assert menu.isVisible()
-    assert not any(panel.tree.isColumnHidden(c)
-                   for c, _l in LayersPanel.OPTIONAL_COLUMNS)
-    assert all(a.isChecked() for a in acts.values() if a.isCheckable())
-    menu.close()
-    assert panel.columns_button.text() == "⋮"
-    assert not panel.tree.isColumnHidden(COL_COUNT)
-
-
-def test_the_transparency_column_and_its_list(win):
-    from PySide6.QtWidgets import QWidgetAction
-    from views.layers_panel import COL_OPACITY, _LineSample
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers += [Layer("A", opacity=0.5), Layer("B"), Layer("C")]
-    panel.set_column_shown(COL_OPACITY, True)
-    assert not panel.tree.isColumnHidden(COL_OPACITY)
-    assert panel.item_for("A").text(COL_OPACITY) == "50 %"
-    assert panel.item_for("B").text(COL_OPACITY) == "—"
-    # With the column on, the name no longer repeats it.
-    assert "50" not in panel.item_for("A").toolTip(0)
-    menu = QMenu()
-    panel._fill_opacities(menu, ["A"], scene.layer("A"))
-    rows = [a.defaultWidget() for a in menu.actions()
-            if isinstance(a, QWidgetAction)]
-    assert all(isinstance(r, _LineSample) and r.swatch for r in rows)
-    assert [r._checked for r in rows] == [False, False, True, False]
-    rows[2].grab()                                    # paints the swatch
-    for n in ("B", "C"):
-        panel.item_for(n).setSelected(True)
-    chosen = {}
-
-    def fake_popup(m, _at):
-        next(a for a in m.actions() if a.text() == "75 %").trigger()
-        chosen["done"] = True
-
-    panel._popup = fake_popup
-    panel.click_cell(("layer", "B"), COL_OPACITY)
-    assert chosen and scene.layer("B").opacity == scene.layer("C").opacity         == 0.25
-    panel.set_column_shown(COL_OPACITY, False)
-    assert "Transparency 50 %" in panel.item_for("A").toolTip(0)
-
-
 # ---- Layers not printed ------------------------------------------------------
-
-
-def test_the_print_column_and_its_header(win):
-    from views.layers_panel import COL_PRINT
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers += [Layer("A"), Layer("B"), Layer("C")]
-    panel.refresh()
-    panel.set_column_shown(COL_PRINT, True)          # off by default
-    for n in ("A", "B"):
-        panel.item_for(n).setSelected(True)
-    panel.click_cell(("layer", "A"), COL_PRINT)
-    assert not scene.layer("A").printable and not scene.layer("B").printable
-    assert scene.layer("C").printable and scene.layer("A").visible
-    panel.set_state_filter("unprinted")
-    shown = {panel._key(it)[1] for it in panel._all_items()
-             if not it.isHidden() and panel._key(it)[0] == "layer"}
-    assert shown == {"A", "B"}
-    panel.set_state_filter("all")
-    panel._on_header_clicked(COL_PRINT)                 # some off → all on
-    assert all(ly.printable for ly in scene.layers)
-    panel._on_header_clicked(COL_PRINT)                 # all on → all off
-    assert not any(ly.printable for ly in scene.layers)
 
 
 # ---- Order and where new rows go -------------------------------------------
@@ -1104,53 +971,6 @@ def test_a_new_layer_goes_into_the_folder_of_the_selected_layer(win):
     panel.tree.setCurrentItem(panel.item_for("Suelta"))
     top = panel.add_layer(edit=False)
     assert scene.layer(top).folder is None           # a loose one: the top
-
-
-def test_default_columns_puts_the_daily_set_back(win):
-    from PySide6.QtCore import QSettings
-    from views.layers_panel import (COL_COLOR, COL_COUNT, COL_CUT,
-                                    COL_LINETYPE, COL_OPACITY, COL_PRINT,
-                                    COL_WEIGHT, LayersPanel)
-    panel = win.layers_dock.panel
-    QSettings().setValue(LayersPanel.HIDDEN_COLUMNS_KEY,
-                         str(COL_COLOR))                # someone's own choice
-    panel._apply_column_choice()
-    menu = panel._columns_menu()
-    next(a for a in menu.actions() if a.text() == "Default columns").trigger()
-    hidden = panel.hidden_columns()
-    assert hidden == {COL_WEIGHT, COL_PRINT, COL_OPACITY, COL_COUNT, COL_CUT}
-    for col in (COL_COLOR, COL_LINETYPE):
-        assert not panel.tree.isColumnHidden(col)
-    assert panel.tree.isColumnHidden(COL_WEIGHT)
-    assert panel.columns_button.text() == "+5"
-
-
-def test_the_line_weight_column_starts_off(win):
-    """Nothing chosen yet: the weight is set once per layer and only shows
-    on sheets, so it waits in the columns menu; the line type stays."""
-    from PySide6.QtCore import QSettings
-    from views.layers_panel import COL_LINETYPE, COL_WEIGHT, LayersPanel
-    panel = win.layers_dock.panel
-    QSettings().remove(LayersPanel.HIDDEN_COLUMNS_KEY)
-    panel._apply_column_choice()
-    assert COL_WEIGHT in panel.hidden_columns()
-    assert panel.tree.isColumnHidden(COL_WEIGHT)
-    assert not panel.tree.isColumnHidden(COL_LINETYPE)
-    menu = panel._columns_menu()
-    act = next(a for a in menu.actions() if a.text() == "Line weight")
-    assert not act.isChecked()
-    act.setChecked(True)                             # one tick brings it back
-    assert not panel.tree.isColumnHidden(COL_WEIGHT)
-
-
-def test_the_columns_menu_reads_show_all_switches_then_defaults(win):
-    panel = win.layers_dock.panel
-    menu = panel._columns_menu()
-    texts = [a.text() for a in menu.actions() if a.text()]
-    assert texts[0] == "Show all columns"
-    assert texts.index("Default columns") == texts.index(
-        "Entities on the layer") + 1                # after the last switch
-    assert texts[-1] == "Default columns"           # nothing after it
 
 
 # ---- DXF: every layer with its colour ---------------------------------------

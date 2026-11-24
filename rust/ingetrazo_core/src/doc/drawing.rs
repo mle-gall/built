@@ -174,6 +174,7 @@ pub(super) fn preview(
         children.entry(parent).or_default().push(folder);
     }
     let query = filter.trim().to_lowercase();
+    let print_attr = attr_id("printable")?;
     let mut result = vec![];
     // Each folder's closing event drops its row if neither it nor any descendant matched.
     enum Visit<'a> {
@@ -234,6 +235,8 @@ pub(super) fn preview(
                             word.strip_prefix('-').map_or((false, word), |t| (true, t));
                         let hit = match token {
                             "is:hidden" => !visible,
+                            "is:visible" => visible,
+                            "is:unprinted" => matches!(node.attr(print_attr), Some(Value::Bool(false))),
                             "is:locked" => tag.locked,
                             _ if token.contains(':') => false,
                             _ => {

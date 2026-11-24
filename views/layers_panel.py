@@ -34,7 +34,7 @@ from core import layers as L
 from core.i18n import tr
 from core.outliner import natural_key  # noqa: F401 — the Browser's too
 from views.tree_icons import isolate_icon, row_icon
-from views.side_tree import SideTree, StayOpenMenu, _HeaderButton
+from views.side_tree import SideTree
 
 (COL_NAME, COL_ACTIVE, COL_EYE, COL_LOCK, COL_COLOR, COL_COUNT,
  COL_ISOLATE, COL_LINETYPE, COL_WEIGHT, COL_OPACITY, COL_PRINT,
@@ -2513,16 +2513,6 @@ class LayersPanel(QWidget):
         head.setSectionsClickable(True)
         head.setSortIndicatorShown(True)
         head.sectionClicked.connect(self._on_header_clicked)
-        # Which columns show — the Browser's way: right-click on the header,
-        # or the button at its right end (which says how many are off).
-        head.setContextMenuPolicy(Qt.CustomContextMenu)
-        head.customContextMenuRequested.connect(
-            lambda _pos: self._open_columns_menu())
-        self.columns_button = _HeaderButton(self.tree)
-        self.columns_button.setToolTip(tr(
-            "Columns: show or hide the active layer, isolate, colour, line "
-            "type, line weight and count"))
-        self.columns_button.clicked.connect(self._open_columns_menu)
         self._sort = (COL_NAME, Qt.AscendingOrder)
         self.tree.setUniformRowHeights(True)
         self.tree.setAlternatingRowColors(True)
@@ -2561,7 +2551,8 @@ class LayersPanel(QWidget):
         # Back in the drawing, the rows picked here let go: a highlighted
         # row left behind reads as a layer still being worked on.
         QApplication.instance().focusChanged.connect(self._on_focus_changed)
-        self._apply_column_choice()
+        for col in (COL_WEIGHT, COL_PRINT, COL_OPACITY, COL_COUNT, COL_CUT):
+            self.tree.setColumnHidden(col, True)
         self.refresh()
 
     def _in_model(self, widget) -> bool:
@@ -3755,75 +3746,6 @@ class LayersPanel(QWidget):
         self._fill_more_menu()
         self._drop(self.more_menu, global_rect(self.more_btn))
 
-    # ---- Which columns show ------------------------------------------------
-    #: The columns that can be switched off (eye, padlock and name stay).
-    OPTIONAL_COLUMNS = ((COL_ACTIVE, "Active layer"), (COL_ISOLATE, "Isolate"),
-                        (COL_COLOR, "Colour"), (COL_LINETYPE, "Line type"),
-                        (COL_WEIGHT, "Line weight"),
-                        (COL_HATCH, "Cut hatch"),
-                        (COL_CUT, "Cut weight"),
-                        (COL_OPACITY, "Transparency"),
-                        (COL_PRINT, "Print"),
-                        (COL_COUNT, "Entities on the layer"))
-    #: QSettings key of the columns switched off.
-    HIDDEN_COLUMNS_KEY = "layers/hidden_columns"
-    #: QSettings key of the optional columns that choice was made among: a
-    #: column added since starts as :data:`DEFAULT_HIDDEN` says, not shown
-    #: because the saved list never named it.
-    KNOWN_COLUMNS_KEY = "layers/known_columns"
-    #: The optional columns before the key above existed.
-    FIRST_COLUMNS = (COL_ACTIVE, COL_ISOLATE, COL_COLOR, COL_LINETYPE,
-                     COL_WEIGHT, COL_OPACITY, COL_PRINT, COL_COUNT)
-
-    #: Off until asked for — what is set now and then, not looked at every
-    #: day: the line weight (set once per layer, and only seen on sheets),
-    #: the print mark (a few reference layers, once per project),
-    #: transparency (a viewing aid), the count (it adds faces, edges and
-    #: objects up, a number that mostly says «empty or not» — which the
-    #: filter and Purge say already) and the cut weight (set once per layer,
-    #: and only seen on a cut sheet). The name keeps room to be read.
-    DEFAULT_HIDDEN = (COL_WEIGHT, COL_PRINT, COL_OPACITY, COL_COUNT, COL_CUT)
-
-    @staticmethod
-    def _columns_value(raw) -> set[int]:
-        if isinstance(raw, (list, tuple)):
-            raw = ",".join(str(v) for v in raw)
-        return {int(v) for v in str(raw or "").split(",")
-                if v.strip().isdigit()}
-
-    def hidden_columns(self) -> set[int]:
-        from core.settings import settings as QSettings
-        settings = QSettings()
-        if not settings.contains(self.HIDDEN_COLUMNS_KEY):
-            return set(self.DEFAULT_HIDDEN)
-        optional = {c for c, _l in self.OPTIONAL_COLUMNS}
-        hidden = self._columns_value(
-            settings.value(self.HIDDEN_COLUMNS_KEY, "")) & optional
-        known = (self._columns_value(settings.value(self.KNOWN_COLUMNS_KEY))
-                 if settings.contains(self.KNOWN_COLUMNS_KEY)
-                 else set(self.FIRST_COLUMNS))
-        return hidden | ((optional - known) & set(self.DEFAULT_HIDDEN))
-
-    def set_column_shown(self, col: int, on: bool) -> None:
-        from core.settings import settings as QSettings
-        hidden = self.hidden_columns()
-        if on:
-            hidden.discard(col)
-        else:
-            hidden.add(col)
-        QSettings().setValue(self.HIDDEN_COLUMNS_KEY,
-                             ",".join(str(c) for c in sorted(hidden)))
-        QSettings().setValue(self.KNOWN_COLUMNS_KEY, ",".join(
-            str(c) for c, _l in self.OPTIONAL_COLUMNS))
-        self._apply_column_choice()
-        self.refresh()                  # the name's tooltip follows the choice
-
-    def _apply_column_choice(self) -> None:
-        hidden = self.hidden_columns()
-        for col, _label in self.OPTIONAL_COLUMNS:
-            self.tree.setColumnHidden(col, col in hidden)
-        self._place_columns_button()
-
     #: QSettings key of the rows' order: one of ``SORT_MODES``.
     SORT_KEY = "layers/sort_by"
 
@@ -3844,61 +3766,6 @@ class LayersPanel(QWidget):
                              how if how in SORT_MODES else "name")
         self._sort = (COL_NAME, Qt.AscendingOrder)
         self.refresh()
-
-    def _columns_menu(self):
-        """Which columns show. It stays open while columns are switched —
-        several in one go; «Show all columns» turns every one on and
-        «Default columns» puts the daily set back."""
-        menu = StayOpenMenu(self)
-        hidden = self.hidden_columns()
-        show_all = menu.addAction(tr("Show all columns"))
-        show_all.setProperty("keep_open", True)
-        menu.addSeparator()
-        switches = []
-        for col, label in self.OPTIONAL_COLUMNS:
-            act = menu.addAction(tr(label))
-            act.setCheckable(True)
-            act.setChecked(col not in hidden)
-            act.toggled.connect(lambda on, c=col: self.set_column_shown(c, on))
-            switches.append(act)
-        # Back to the starting point: last, apart, as a «reset» goes.
-        menu.addSeparator()
-        defaults = menu.addAction(tr("Default columns"))
-        defaults.setProperty("keep_open", True)
-
-        def all_on() -> None:
-            for act in switches:
-                act.setChecked(True)             # each switch applies itself
-        show_all.triggered.connect(all_on)
-
-        def back_to_defaults() -> None:
-            for (col, _label), act in zip(self.OPTIONAL_COLUMNS, switches):
-                act.setChecked(col not in self.DEFAULT_HIDDEN)
-        defaults.triggered.connect(back_to_defaults)
-        return menu
-
-    def _open_columns_menu(self) -> None:
-        self._drop(self._columns_menu(), global_rect(self.columns_button))
-
-    def _place_columns_button(self) -> None:
-        """At the header's right end, as tall as it; «+N» while N columns
-        are off, «⋮» when none — as in the Browser."""
-        b = getattr(self, "columns_button", None)
-        if b is None:
-            return
-        head = self.tree.header()
-        n = len(self.hidden_columns())
-        b.setText(f"+{n}" if n else "⋮")
-        font = b.font()
-        font.setBold(bool(n))
-        b.setFont(font)
-        side = max(head.sizeHint().height(), 18)
-        width = max(side, b.sizeHint().width())
-        b.resize(width, side)
-        if self.tree.button_strip != width:
-            self.tree.button_strip = width
-        self.tree.updateGeometries()
-        b.raise_()
 
     #: How many layer states «Previous layer state» can go back through.
     PREVIOUS_DEPTH = 20

@@ -174,3 +174,27 @@ def test_several_selected_rows_take_one_colour_and_one_look():
     assert [scene.layer(n).visible for n in "ABC"] == [False, False, True]
     drawing_edit(project, "drawingpatch", [["A", "B"], {"color": ""}])
     assert scene.layer("A").color is None and scene.layer("B").color is None
+
+
+def test_cut_pen_defaults_and_transparency_apply_to_the_selected_tags():
+    project = Project(Layer("A", opacity=.5), Layer("B"), Layer("C"))
+    drawing_edit(project, "drawingpatch", [["A", "B"], {"cut_weight": "0.70", "opacity": "0.25"}])
+    for name in ("A", "B"):
+        layer = project.scene.layer(name)
+        assert (layer.cut_weight, layer.lineweight, layer.opacity) == (.7, None, .25)
+    assert project.scene.layer("C").cut_weight is None and project.scene.layer("C").opacity == 1
+    drawing_edit(project, "drawingpatch", [["A", "B"], {"cut_weight": "auto"}])
+    assert all(layer.cut_weight is None for layer in project.scene.layers)
+    project.win.viewport.history.undo()
+    assert project.scene.layer("B").cut_weight == .7
+
+
+def test_unprinted_tags_can_be_found_and_bulk_print_preserves_visibility():
+    project = Project(*(Layer(name) for name in "ABC"))
+    drawing_edit(project, "drawingpatch", [["A", "B"], {"print": "0"}])
+    assert project.names("is:unprinted", "preview-tag:") == ["A", "B"]
+    assert all(project.scene.layer(name).visible for name in "ABC")
+    names = [tag.name for tag in project.scene.layers]
+    for flag in (True, False):
+        drawing_edit(project, "drawingpatch", [names, {"print": str(int(flag))}])
+        assert all(tag.printable == flag for tag in project.scene.layers)
