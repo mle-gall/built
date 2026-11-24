@@ -53,6 +53,21 @@ const EXTRA_TOOLS: &[(&str, &str, &str)] = &[
     ("scale_manager", "tools.scale_manager", "ScaleManagerTool"),
 ];
 
+// These tools are constructed with a clipboard or placement at activation.
+const TRANSIENT_TOOLS: &[(&str, &str, &str)] = &[
+    ("paste", "tools.paste", "PasteTool"),
+    ("place_group", "tools.place_group", "PlaceGroupTool"),
+];
+
+#[pyfunction]
+pub(super) fn transient_tool_class<'py>(py: Python<'py>, key: &str) -> PyResult<Bound<'py, PyAny>> {
+    let (_, module, name) = TRANSIENT_TOOLS
+        .iter()
+        .find(|(k, _, _)| *k == key)
+        .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err(key.to_owned()))?;
+    py.import(*module)?.getattr(*name)
+}
+
 /// Let the coverage audit read the same fixed entries without constructing
 /// tools or opening a document. Solid tools publish their own ordered family.
 #[pyfunction]
@@ -60,6 +75,7 @@ fn window_tool_types() -> Vec<(&'static str, &'static str)> {
     TOOLS
         .iter()
         .chain(EXTRA_TOOLS)
+        .chain(TRANSIENT_TOOLS)
         .map(|&(key, _, name)| (key, name))
         .collect()
 }
@@ -162,7 +178,7 @@ pub fn saved_content(doc: &Bound<'_, PyAny>, version: i64) -> PyResult<i64> {
     Ok(version - view_version)
 }
 
-const CAMERA_FIELDS: [&str; 6] = [
+pub(super) const CAMERA_FIELDS: [&str; 6] = [
     "distance",
     "yaw",
     "pitch",
@@ -437,6 +453,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     )?;
     m.add_function(wrap_pyfunction!(build_tools, m)?)?;
     m.add_function(wrap_pyfunction!(window_tool_types, m)?)?;
+    m.add_function(wrap_pyfunction!(transient_tool_class, m)?)?;
     m.add_function(wrap_pyfunction!(document_blank, m)?)?;
     m.add_function(wrap_pyfunction!(document_dirty, m)?)?;
     m.add_function(wrap_pyfunction!(saved_content, m)?)?;

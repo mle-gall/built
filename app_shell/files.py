@@ -1,16 +1,8 @@
 """Documents in the shell: open, save, close, recover, import, link, copy.
 
-What MainWindow does for these is borrowed where it only needs the
-document (the unsaved-changes question, File ▸ New, the recent list, the
-import pipelines, the links verbs, Select All…: ``ShellWindow.__getattr__``).
-What it does through widgets is redone here: the open (no trays to sync,
-the shell's own progress turn), the save (the Metal view's picture), the
-file dialogs (NSOpenPanel/NSSavePanel through ``app_shell.native``), the
-DXF unit question (on the sheet instead of a QDialog), the pasteboard.
-
-Everything here answers through ``views/chrome_dialogs`` (the egui sheet,
-synchronous thanks to ``app_shell.modal``), so the code paths are the Qt
-app's own.
+The shell binds document commands to the active view, native file panels and
+the model clipboard. Import, link and recovery operations also call the
+existing document backends and the shared chrome dialogs.
 
 Commands (:func:`command`) come from the menu bar (rust/built_app/src/
 menu.rs), the start page and the chrome's document ▾.
@@ -25,7 +17,11 @@ import threading
 from collections import deque
 from pathlib import Path
 
+from ingetrazo_render import ModelClipboard
+
 from core.i18n import tr
+
+_clipboard = ModelClipboard()
 
 #: What open_path reads as a document; the rest are imports.
 IMPORTS = (".skp", ".dae", ".dxf", ".dwg", ".rfa", ".glb", ".gltf")
@@ -97,6 +93,8 @@ def command(win, name, *args):
     if name == "delivery_export":
         from views.wgpu_deliveries import export_form
         return export_form(win, one_off=True)
+    if name in ("cut", "copy", "paste", "paste_in_place"):
+        return _clipboard.run(win, name)
     kind, _, arg = name.partition(":")
     if kind == "extension":
         return win._extension_menus.trigger(name)
@@ -122,10 +120,6 @@ def command(win, name, *args):
         "classic": lambda: open_in_classic(win),
         "prefs": lambda: open_settings(win),
         "library": lambda: open_library(win),
-        "cut": lambda: clipboard_cut(win),
-        "copy": lambda: clipboard_copy(win),
-        "paste": lambda: clipboard_paste(win, in_place=False),
-        "paste_in_place": lambda: clipboard_paste(win, in_place=True),
         "select_all": lambda: win._on_select_all(),
         "select_none": lambda: win._on_select_none(),
         "next_doc": lambda: step_document(win, 1),
@@ -967,101 +961,5 @@ def open_in_classic(win, *, why: str | None = None) -> bool:
     return True
 
 
-# ---- the clipboard: the Mac's pasteboard -------------------------------------------------
-#: The pasteboard type Qt's macOS clipboard gives formats.clip.MIME, so
-#: the classic app and the native one paste each other's copies.
-PASTEBOARD_TYPE = "com.trolltech.anymime.application--x-ingetrazo-clipboard"
-_OWN_COUNT = [None]
-#: The clipboard dict that write was made from (the project that copied).
-_OWN_CLIP = [None]
-
-
-def _publish(win) -> None:
-    from app_shell import native
-    from formats import clip as clip_transfer
-    clip = getattr(win.viewport, "clipboard", None)
-    if not clip or not native.available():
-        return
-    try:
-        data = clip_transfer.encode(clip)
-    except Exception:  # noqa: BLE001 — the in-app copy still works
-        win._host._error("clipboard encode")
-        return
-    if native.pasteboard_write([(PASTEBOARD_TYPE, data)]):
-        _OWN_COUNT[0] = native.pasteboard_types()[1]
-        _OWN_CLIP[0] = clip
-
-
-def clipboard_copy(win) -> None:
-    if _field_has_focus(win):
-        return
-    if win.viewport.copy_selection():
-        _publish(win)
-
-
-def clipboard_cut(win) -> None:
-    if _field_has_focus(win):
-        return
-    if win.viewport.cut_selection():
-        _publish(win)
-
-
-def sync_foreign_clipboard(win) -> None:
-    """MainWindow._sync_foreign_clipboard over the pasteboard: a copy made
-    in another Built (this app or the classic one) wins over this
-    window's older one; a copy in another project of this window is
-    adopted through the same encoding."""
-    from app_shell import native
-    from formats import clip as clip_transfer
-    types, count = native.pasteboard_types()
-    if PASTEBOARD_TYPE not in types:
-        return
-    vp = win.viewport
-    if count == _OWN_COUNT[0] and _OWN_CLIP[0] is not None and (
-            vp.clipboard is _OWN_CLIP[0]
-            or getattr(vp, "_clip_adopted_from", None) is _OWN_CLIP[0]):
-        return                          # this project's copy, or adopted already
-    data = native.pasteboard_read(PASTEBOARD_TYPE)
-    other = clip_transfer.decode(data) if data else None
-    if other is None:
-        return
-    old = vp.clipboard
-    drop = getattr(vp, "_drop_clip_protos", None)
-    if old and callable(drop):
-        drop(old)
-    vp.clipboard = other
-    if count == _OWN_COUNT[0]:
-        vp._clip_adopted_from = _OWN_CLIP[0]   # another project's copy here
-    else:
-        # Another app's copy: from now on it is the one to compare with.
-        _OWN_COUNT[0], _OWN_CLIP[0] = count, other
-        vp._clip_adopted_from = None
-
-
-def _field_has_focus(win) -> bool:
-    view = win._doc.stand_in if win._doc is not None else None
-    renderer = getattr(view, "renderer", None)
-    try:
-        return bool(renderer is not None and renderer.ui_claims_key(""))
-    except Exception:  # noqa: BLE001
-        return False
-
-
-def clipboard_paste(win, in_place: bool) -> None:
-    from app_shell import native
-    view = win._doc.stand_in
-    if _field_has_focus(win):
-        data = native.pasteboard_read("public.utf8-plain-text")
-        if data:
-            view.renderer.ui_text(data.decode("utf-8", "replace"))
-            view.update()
-        return
-    sync_foreign_clipboard(win)
-    if in_place:
-        win._on_paste_in_place()
-    else:
-        win._on_paste()
-        for action in win._tool_actions.values():
-            action.setChecked(False)
-    view.tools.sync()
-    view.update()
+def sync_foreign_clipboard(win):
+    _clipboard.adopt(win)

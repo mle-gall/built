@@ -57,8 +57,7 @@ class Document:
         self.picture_due = False
         #: Its scenes shown as tabs under the viewport (views/scene_tabs.py);
         #: its tab's right-click menu turns them off and on.
-        from views.scene_tabs import SCENE_TABS_DEFAULT
-        self.scene_tabs: bool = SCENE_TABS_DEFAULT
+        self.scene_tabs: bool = True
         #: How many views it shows (views/multi_view.py LAYOUTS) and the
         #: grid holding them, made the first time it shows more than one.
         self.view_grid = None

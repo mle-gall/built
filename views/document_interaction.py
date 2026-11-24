@@ -13000,7 +13000,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
                            else Qt.OpenHandCursor)
 
     # ---- Copy / paste -------------------------------------------------------
-    def copy_selection(self) -> bool:
+    def copy_selection(self, *, publish=True) -> bool:
         """Copy the selected faces, edges and groups into the clipboard (as
         positions, with a reference corner). Returns False if nothing is
         selected."""
@@ -13092,8 +13092,9 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
                           "groups": group_data, "ref": ref}
         # Also on the system clipboard, so another IngeTrazo window can
         # paste it (issue #76); encoded only if that window asks.
-        from formats import clip as clip_transfer
-        clip_transfer.publish(self.clipboard)
+        if publish:
+            from formats import clip as clip_transfer
+            clip_transfer.publish(self.clipboard)
         return True
 
     def _seed_proto_chunk(self, mesh, src_group) -> None:
@@ -13136,9 +13137,10 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
             if w is not None and cache:
                 cache.pop(id(w), None)
 
-    def cut_selection(self) -> bool:
+    def cut_selection(self, *, publish=True) -> bool:
         """Copy the selection, then erase it (one undoable step)."""
-        if not self.copy_selection():
+        copied = self.copy_selection() if publish else self.copy_selection(publish=False)
+        if not copied:
             return False
         from core.history import CompoundCommand, DeleteGroupCommand
         faces = [f for f in self.scene.selection if isinstance(f, Face)]

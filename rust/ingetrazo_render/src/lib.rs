@@ -4,6 +4,14 @@ mod captured_frame;
 use captured_frame::CapturedFrame;
 mod window_timers;
 mod window_document;
+mod face_commands;
+mod model_edit;
+mod profile_commands;
+mod model_visibility;
+mod model_clipboard;
+mod group_edit;
+mod document_starter;
+mod scene_navigation;
 mod window_services;
 mod panic_log;
 mod overlay;
@@ -3000,6 +3008,14 @@ fn context_targets(hit: bool, selection: &Bound<'_, PyAny>) -> PyResult<Vec<Py<P
 #[pymodule]
 pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     window_document::register(m)?;
+    face_commands::register(m)?;
+    model_edit::register(m)?;
+    profile_commands::register(m)?;
+    model_visibility::register(m)?;
+    m.add_class::<model_clipboard::ModelClipboard>()?;
+    group_edit::register(m)?;
+    document_starter::register(m)?;
+    scene_navigation::register(m)?;
     window_services::register(m)?;
     m.add_function(wrap_pyfunction!(tool_cursors::tool_cursor_name, m)?)?;
     m.add_function(wrap_pyfunction!(tool_cursors::tool_cursor_art, m)?)?;
