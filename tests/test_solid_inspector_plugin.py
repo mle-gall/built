@@ -6,20 +6,9 @@ The verdicts and volumes come from the same primitives the BIM layer
 uses, so whatever this dialog says must match what the takeoff would do."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
 import pytest
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
-
-_inst = QApplication.instance()
-if _inst is None:
-    _app = QApplication([])
-elif not isinstance(_inst, QApplication):
-    pytest.skip("a non-widget QGuiApplication is already active",
-                allow_module_level=True)
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 from tests.solid_fixture import _box, _top
 from core.group import Group                                      # noqa: E402
@@ -92,15 +81,14 @@ def test_empty_mesh_is_not_a_solid():
 # ---- Dialog ---------------------------------------------------------------
 
 @pytest.fixture
-def win():
-    from views.main_window import MainWindow
-    w = MainWindow()
-    yield w
-    w._saved_version = w.viewport.scene.version
-    w.close()
+def win(native_host):
+    return native_host.window
 
 
-@pytest.mark.classic_pending
+def _cells(panel):
+    return [row["cells"] for row in panel.sections()[0]["items"][0]["rows"]]
+
+
 def test_dialog_rows_and_highlight(win):
     scene = win.viewport.scene
     _box(scene.mesh, skip_top=True)                  # broken loose solid
@@ -110,8 +98,7 @@ def test_dialog_rows_and_highlight(win):
 
     dlg = SolidInspectorDialog(win.viewport)
     dlg.show()
-    names = [dlg._table.item(i, 0).text()
-             for i in range(dlg._table.rowCount())]
+    names = [row[0] for row in _cells(dlg)]
     assert names[0] == "Loose geometry" and "Caja OK" in names
     # The scale figure is a billboard — flat by design, never listed.
     assert not any(getattr(g, "billboard", False) and g.name in names
@@ -120,22 +107,21 @@ def test_dialog_rows_and_highlight(win):
 
     # The group row shows its closed volume.
     i_g = names.index("Caja OK")
-    assert "8.000" in dlg._table.item(i_g, 4).text()
+    assert "8.000" in _cells(dlg)[i_g][4]
 
     # Highlighting the active row selects the 4 rim edges in the viewport.
-    dlg._table.setCurrentCell(0, 0)
+    dlg.selected = 0
     dlg.highlight()
     assert len(scene.selection) == 4
     assert all(e in scene.mesh.edges for e in scene.selection)
 
     # Highlighting the group row selects the group itself.
-    dlg._table.setCurrentCell(i_g, 0)
+    dlg.selected = i_g
     dlg.highlight()
     assert scene.selection == {g}
     dlg.close()
 
 
-@pytest.mark.classic_pending
 def test_dialog_group_edit_context(win):
     """Inside a group the active row inspects THAT mesh, and the group's
     own listing row is not duplicated."""
@@ -147,26 +133,28 @@ def test_dialog_group_edit_context(win):
     try:
         dlg = SolidInspectorDialog(win.viewport)
         dlg.show()
-        names = [dlg._table.item(i, 0).text()
-                 for i in range(dlg._table.rowCount())]
+        names = [row[0] for row in _cells(dlg)]
         assert names[0] == "Open group: Caseta"
         assert names.count("Caseta") == 0            # not listed twice
-        assert "4 open borders" in dlg._table.item(0, 3).text()
+        assert "4 open borders" in _cells(dlg)[0][3]
         dlg.close()
     finally:
         scene.end_group_edit()
 
 
-@pytest.mark.classic_pending
-def test_tool_metadata_and_singleton(win):
+def test_tool_metadata_and_singleton(win, monkeypatch):
+    from tests.test_render_lights import attach_render_surface
+    view = attach_render_surface(win, monkeypatch)
+    from plugins.solid_inspector import create_panel
+    win._panel_factories["solid_inspector"] = create_panel
     tool = SolidInspectorTool()
     assert tool.name == "Solid Inspector"
     assert tool.shortcut is None and tool.uses_snap is False
     tool.on_activate(win.viewport)
-    first = win._solid_inspector
+    first = next(b for b in view._plugin_bindings.values() if b.key == "solid_inspector")
     tool.on_activate(win.viewport)
-    assert win._solid_inspector is first
-    first.close()
+    assert view._plugin_bindings[first.instance] is first
+    assert view.renderer.ui_plugin_open.call_args.args == (first.instance,)
 
 
 # ---- Faces: internal and reversed -------------------------------------------
@@ -191,8 +179,7 @@ def _two_rooms(mesh):
 
 
 def _row(dlg, name):
-    names = [dlg._table.item(i, 0).text()
-             for i in range(dlg._table.rowCount())]
+    names = [row[0] for row in _cells(dlg)]
     return names.index(name)
 
 
@@ -375,7 +362,6 @@ def test_repair_sound_box_changes_nothing():
 
 # ---- Undo, groups, navigation ----------------------------------------------
 
-@pytest.mark.classic_pending
 def test_repair_is_one_undo_step(win):
     scene = win.viewport.scene
     _box(scene.mesh, skip_top=True)
@@ -393,7 +379,6 @@ def test_repair_is_one_undo_step(win):
     assert is_sound(inspect_mesh(scene.mesh))
 
 
-@pytest.mark.classic_pending
 def test_undo_gives_back_the_partition_marks(win):
     scene = win.viewport.scene
     wall = _two_rooms(scene.mesh)
@@ -405,7 +390,6 @@ def test_undo_gives_back_the_partition_marks(win):
     assert wall.interior is True
 
 
-@pytest.mark.classic_pending
 def test_repair_all_is_one_step_and_skips_sound_rows(win):
     scene = win.viewport.scene
     _box(scene.mesh, skip_top=True)
@@ -422,7 +406,7 @@ def test_repair_all_is_one_step_and_skips_sound_rows(win):
     assert done["holes"] == 1 and done["reversed"] == 6
     assert len(win.viewport.history.undo_stack) == depth + 1
     for name in ("Loose geometry", "A", "B"):
-        assert dlg._table.item(_row(dlg, name), 2).text().startswith("✔")
+        assert _cells(dlg)[_row(dlg, name)][2].startswith("✔")
     assert dlg.repair_all() is None            # nothing left to repair
     dlg.close()
 
@@ -436,7 +420,6 @@ def test_problem_items_group_a_rim_into_one():
         ("open", 4), ("stray", 1)]
 
 
-@pytest.mark.classic_pending
 def test_next_problem_selects_and_frames_each_in_turn(win):
     vp = win.viewport
     scene = vp.scene
@@ -444,7 +427,7 @@ def test_next_problem_selects_and_frames_each_in_turn(win):
     scene.mesh.add_edge(QVector3D(10, 0, 0), QVector3D(11, 0, 0))
     dlg = SolidInspectorDialog(vp)
     dlg.show()
-    dlg._table.setCurrentCell(0, 0)
+    dlg.selected = 0
     first = dlg.next_problem()
     assert first["kind"] == "open"
     assert len(first["ents"]) == 4 and scene.selection == set(first["ents"])
@@ -458,7 +441,6 @@ def test_next_problem_selects_and_frames_each_in_turn(win):
     dlg.close()
 
 
-@pytest.mark.classic_pending
 def test_next_problem_on_a_placed_group_flies_to_its_placement(win):
     vp = win.viewport
     g = Group(Mesh(), name="Lejos")
@@ -469,14 +451,13 @@ def test_next_problem_on_a_placed_group_flies_to_its_placement(win):
     vp.scene.groups.append(g)
     dlg = SolidInspectorDialog(vp)
     dlg.show()
-    dlg._table.setCurrentCell(_row(dlg, "Lejos"), 0)
+    dlg.selected = _row(dlg, "Lejos")
     assert dlg.next_problem() is not None
     assert vp.scene.selection == {g}
     assert 49.0 < vp.camera.target.x() < 53.0
     dlg.close()
 
 
-@pytest.mark.classic_pending
 def test_nested_pieces_are_listed_and_repaired(win):
     """An imported model made of parts: a container with an empty mesh and
     the pieces one level down. The container is no row of its own; each
@@ -492,12 +473,11 @@ def test_nested_pieces_are_listed_and_repaired(win):
     vp.scene.groups.append(whole)
     dlg = SolidInspectorDialog(vp)
     dlg.show()
-    names = [dlg._table.item(i, 0).text()
-             for i in range(dlg._table.rowCount())]
+    names = [row[0] for row in _cells(dlg)]
     assert "Mesa" not in names
     i = _row(dlg, "Mesa ▸ Pata")
-    assert "4 open borders" in dlg._table.item(i, 3).text()
-    dlg._table.setCurrentCell(i, 0)
+    assert "4 open borders" in _cells(dlg)[i][3]
+    dlg.selected = i
     assert dlg.next_problem() is not None
     assert vp.scene.selection == {whole}       # selected from outside
     assert 28.0 < vp.camera.target.y() < 33.0  # through both placements
@@ -506,14 +486,13 @@ def test_nested_pieces_are_listed_and_repaired(win):
     dlg.close()
 
 
-@pytest.mark.classic_pending
 def test_next_problem_on_a_sound_row_returns_none(win):
     g = Group(Mesh(), name="Bien")
     _box(g.mesh)
     win.viewport.scene.groups.append(g)
     dlg = SolidInspectorDialog(win.viewport)
     dlg.show()
-    dlg._table.setCurrentCell(_row(dlg, "Bien"), 0)
+    dlg.selected = _row(dlg, "Bien")
     assert dlg.next_problem() is None
     dlg.close()
 
@@ -589,7 +568,6 @@ def test_repair_item_internal_face_copy_goes_wall_stays():
     assert is_sound(inspect_mesh(mesh))
 
 
-@pytest.mark.classic_pending
 def test_bent_hole_says_why(win):
     mesh = Mesh()
     faces = _box(mesh, skip_top=True)
@@ -599,7 +577,6 @@ def test_bent_hole_says_why(win):
     assert "not flat" in why_not_repairable(mesh, item)
 
 
-@pytest.mark.classic_pending
 def test_walk_and_repair_one_by_one(win):
     """Next shows a problem; Repair this problem fixes only it, as one
     undo step, and the next one comes on screen by itself."""
@@ -609,23 +586,23 @@ def test_walk_and_repair_one_by_one(win):
     scene.mesh.add_edge(QVector3D(10, 0, 0), QVector3D(11, 0, 0))
     dlg = SolidInspectorDialog(vp)
     dlg.show()
-    dlg._table.setCurrentCell(0, 0)
-    assert dlg._fix_btn.isEnabled() is False   # nothing on screen yet
+    dlg.selected = 0
+    assert dlg.can_fix is False   # nothing on screen yet
     assert dlg.next_problem()["kind"] == "open"
-    assert dlg._fix_btn.isEnabled()
-    assert "1 of 2" in dlg._problem_label.text()
+    assert dlg.can_fix
+    assert "1 of 2" in dlg.note
     depth = len(vp.history.undo_stack)
 
     assert dlg.repair_current()["holes"] == 1
     assert len(vp.history.undo_stack) == depth + 1
     cur = dlg._current
     assert cur["item"]["kind"] == "stray" and cur["count"] == 1
-    assert "1 of 1" in dlg._problem_label.text()
+    assert "1 of 1" in dlg.note
 
     assert dlg.repair_current()["stray"] == 1
     assert dlg._current is None
-    assert "No problems left" in dlg._problem_label.text()
-    assert "✔" in dlg._table.item(0, 2).text()
+    assert "No problems left" in dlg.note
+    assert "✔" in _cells(dlg)[0][2]
 
     vp.history.undo()                          # the stray comes back alone
     rep = inspect_mesh(scene.mesh)
@@ -633,27 +610,24 @@ def test_walk_and_repair_one_by_one(win):
     dlg.close()
 
 
-@pytest.mark.classic_pending
 def test_previous_goes_back_and_wraps(win):
     scene = win.viewport.scene
     _box(scene.mesh, skip_top=True)
     scene.mesh.add_edge(QVector3D(10, 0, 0), QVector3D(11, 0, 0))
     dlg = SolidInspectorDialog(win.viewport)
     dlg.show()
-    dlg._table.setCurrentCell(0, 0)
+    dlg.selected = 0
     assert dlg.previous_problem()["kind"] == "stray"   # from the end
     assert dlg.previous_problem()["kind"] == "open"
     assert dlg.next_problem()["kind"] == "stray"
     dlg.close()
 
 
-@pytest.mark.classic_pending
 def test_problem_is_painted_in_its_colour_and_unpainted_on_close(win):
     """The overlay paints the problem on screen in its kind's colour, also
     for a group the user is not inside; closing the dialog takes it off."""
-    from PySide6.QtGui import QImage, QPainter
     vp = win.viewport
-    vp.resize(800, 600)
+    win._host.resize(800, 600, 1.0)
     g = Group(Mesh(), name="Rota")
     _box(g.mesh, skip_top=True)
     g.xform = QMatrix4x4()
@@ -661,28 +635,14 @@ def test_problem_is_painted_in_its_colour_and_unpainted_on_close(win):
     vp.scene.groups.append(g)
     dlg = SolidInspectorDialog(vp)
     dlg.show()
-    assert dlg._paint in vp._ext_overlays
-    dlg._table.setCurrentCell(_row(dlg, "Rota"), 0)
+    dlg.selected = _row(dlg, "Rota")
     dlg.next_problem()
 
-    def painted():
-        img = QImage(vp.width(), vp.height(), QImage.Format_ARGB32)
-        img.fill(0)
-        p = QPainter(img)
-        dlg._paint(vp, p)
-        p.end()
-        red = KINDS["open"][1].rgb() & 0xFFFFFF
-        return sum(1 for y in range(0, img.height(), 2)
-                   for x in range(0, img.width(), 2)
-                   if img.pixel(x, y) & 0xFFFFFF == red)
-
-    assert painted() > 50
+    assert _count_colour(vp, dlg, "open") > 50
     dlg.close()
-    assert dlg._paint not in vp._ext_overlays
-    assert painted() == 0                      # nothing on screen any more
+    assert _count_colour(vp, dlg, "open") == 0
 
 
-@pytest.mark.classic_pending
 def test_click_on_a_row_flies_to_that_object(win):
     vp = win.viewport
     far = Group(Mesh(), name="Lejana")
@@ -693,14 +653,13 @@ def test_click_on_a_row_flies_to_that_object(win):
     dlg = SolidInspectorDialog(vp)
     dlg.show()
     i = _row(dlg, "Lejana")
-    dlg._table.setCurrentCell(i, 0)
-    dlg._table.cellClicked.emit(i, 0)
+    dlg.selected = i
+    dlg.event("objects", "selection", str(i))
     assert vp.scene.selection == {far}
     assert 78.0 < vp.camera.target.y() < 84.0
     dlg.close()
 
 
-@pytest.mark.classic_pending
 def test_refresh_does_not_move_the_camera(win):
     vp = win.viewport
     g = Group(Mesh(), name="Quieta")
@@ -710,7 +669,7 @@ def test_refresh_does_not_move_the_camera(win):
     vp.scene.groups.append(g)
     dlg = SolidInspectorDialog(vp)
     dlg.show()
-    dlg._table.setCurrentCell(_row(dlg, "Quieta"), 0)
+    dlg.selected = _row(dlg, "Quieta")
     before = QVector3D(vp.camera.target)
     dlg.refresh()
     assert vp.camera.target == before
@@ -718,25 +677,20 @@ def test_refresh_does_not_move_the_camera(win):
 
 
 def _count_colour(vp, dlg, kind):
-    from PySide6.QtGui import QImage, QPainter
-    img = QImage(vp.width(), vp.height(), QImage.Format_ARGB32)
-    img.fill(0)
-    p = QPainter(img)
-    dlg._paint(vp, p)
-    p.end()
-    rgb = KINDS[kind][1].rgb() & 0xFFFFFF
-    return sum(1 for y in range(0, img.height(), 2)
-               for x in range(0, img.width(), 2)
-               if img.pixel(x, y) & 0xFFFFFF == rgb)
+    from ingetrazo_render import AnnotationCanvas
+    from views.wgpu_overlay import paint_layer
+    canvas = AnnotationCanvas(800, 600, 800.)
+    paint_layer(canvas, list(dlg.overlay(vp)))
+    pixels = canvas.composite(bytes(800 * 600 * 4))
+    return pixels.count(bytes((*KINDS[kind][1], 255)))
 
 
-@pytest.mark.classic_pending
 def test_highlight_paints_every_problem_of_a_group_in_its_colour(win):
     """Highlight problems on a group you are not inside: all its problems
     on screen at once, each kind in its colour, with a legend — not just
     the group selected."""
     vp = win.viewport
-    vp.resize(800, 600)
+    win._host.resize(800, 600, 1.0)
     g = Group(Mesh(), name="Mezcla")
     _box(g.mesh, skip_top=True)
     g.mesh.add_edge(QVector3D(3, 0, 0), QVector3D(4, 0, 0))
@@ -745,14 +699,14 @@ def test_highlight_paints_every_problem_of_a_group_in_its_colour(win):
     vp.scene.groups.append(g)
     dlg = SolidInspectorDialog(vp)
     dlg.show()
-    dlg._table.setCurrentCell(_row(dlg, "Mezcla"), 0)
+    dlg.selected = _row(dlg, "Mezcla")
     items = dlg.highlight()
     assert sorted(i["kind"] for i in items) == ["open", "stray"]
     assert vp.scene.selection == {g}
     assert 38.0 < vp.camera.target.x() < 46.0          # framed, placed
     assert _count_colour(vp, dlg, "open") > 50
     assert _count_colour(vp, dlg, "stray") > 5
-    legend = dlg._problem_label.text()
+    legend = dlg.note
     assert "Open border (hole) (1)" in legend and "Stray edges (1)" in legend
 
     # Going one by one takes over from the highlight.
@@ -762,7 +716,6 @@ def test_highlight_paints_every_problem_of_a_group_in_its_colour(win):
     dlg.close()
 
 
-@pytest.mark.classic_pending
 def test_highlight_selects_the_problems_of_the_geometry_being_edited(win):
     scene = win.viewport.scene
     _box(scene.mesh)
@@ -770,7 +723,7 @@ def test_highlight_selects_the_problems_of_the_geometry_being_edited(win):
         f.loop.reverse()
     dlg = SolidInspectorDialog(win.viewport)
     dlg.show()
-    dlg._table.setCurrentCell(0, 0)
+    dlg.selected = 0
     items = dlg.highlight()
     assert len(items) == 6 and scene.selection == set(scene.mesh.faces)
     dlg.refresh()                               # refresh lets go of it
@@ -781,35 +734,30 @@ def test_highlight_selects_the_problems_of_the_geometry_being_edited(win):
 # ---- A tab of the side tray ----------------------------------------------------
 
 
-@pytest.mark.classic_pending
 def test_hiding_the_tab_takes_the_colours_off(win):
     scene = win.viewport.scene
     _box(scene.mesh, skip_top=True)
     panel = SolidInspectorPanel(win.viewport)
     panel.show()
-    panel._table.setCurrentCell(0, 0)
+    panel.selected = 0
     assert panel.highlight()
     assert panel._painted
-    panel.hide()                                # another tab in front
+    panel.event("_panel", "closed", None)                                # another tab in front
     assert panel._painted == [] and panel._current is None
-    assert panel._paint in win.viewport._ext_overlays   # still listening
     panel.close()
-    assert panel._paint not in win.viewport._ext_overlays
 
 
-@pytest.mark.classic_pending
 def test_showing_the_tab_inspects_again(win):
     panel = SolidInspectorPanel(win.viewport)
     panel.show()
-    assert panel._table.item(0, 2).text() == "(empty)"
-    panel.hide()
+    assert _cells(panel)[0][2] == "(empty)"
+    panel.event("_panel", "closed", None)
     _box(win.viewport.scene.mesh)               # the model changed meanwhile
     panel.show()
-    assert panel._table.item(0, 2).text().startswith("✔")
+    assert _cells(panel)[0][2].startswith("✔")
     panel.close()
 
 
-@pytest.mark.classic_pending
 def test_one_click_on_a_broken_object_shows_its_first_problem_ready(win):
     """One click, not two: the first problem framed and painted, the card
     filled and «Repair this problem» ready to press."""
@@ -822,20 +770,19 @@ def test_one_click_on_a_broken_object_shows_its_first_problem_ready(win):
     panel = SolidInspectorPanel(vp)
     panel.show()
     i = _row(panel, "Rota")
-    panel._table.setCurrentCell(i, 0)
-    panel._table.cellClicked.emit(i, 0)
+    panel.selected = i
+    panel.event("objects", "selection", str(i))
     cur = panel._current
     assert cur is not None and cur["index"] == 0
     assert cur["item"]["kind"] == "open"
-    assert panel._fix_btn.isEnabled()
-    assert "1 of 1" in panel._problem_label.text()
+    assert panel.can_fix
+    assert "1 of 1" in panel.note
     assert vp.scene.selection == {g}
     assert 58.0 < vp.camera.target.y() < 64.0        # framed where it is
     assert panel.repair_current()["holes"] == 1        # and repaired
     panel.close()
 
 
-@pytest.mark.classic_pending
 def test_one_click_on_a_sound_object_says_so(win):
     g = Group(Mesh(), name="Sana")
     _box(g.mesh)
@@ -843,14 +790,13 @@ def test_one_click_on_a_sound_object_says_so(win):
     panel = SolidInspectorPanel(win.viewport)
     panel.show()
     i = _row(panel, "Sana")
-    panel._table.setCurrentCell(i, 0)
-    panel._table.cellClicked.emit(i, 0)
-    assert panel._current is None and not panel._fix_btn.isEnabled()
-    assert "No problems left" in panel._problem_label.text()
+    panel.selected = i
+    panel.event("objects", "selection", str(i))
+    assert panel._current is None and not panel.can_fix
+    assert "No problems left" in panel.note
     panel.close()
 
 
-@pytest.mark.classic_pending
 def test_showing_the_tab_again_unchanged_does_not_inspect_again(win, monkeypatch):
     """Unfolding the sidebar or leaving clean screen shows the tab again:
     with the model as it was, nothing is inspected again (a large model
@@ -863,20 +809,19 @@ def test_showing_the_tab_again_unchanged_does_not_inspect_again(win, monkeypatch
     real = si.inspect_mesh
     monkeypatch.setattr(si, "inspect_mesh",
                         lambda m: calls.append(m) or real(m))
-    panel.hide()
+    panel.event("_panel", "closed", None)
     win.viewport.scene.view_version += 1        # an orbit: view-only bump
     win.viewport.scene.version += 1
     panel.show()
     assert calls == []
-    assert panel._table.item(0, 2).text().startswith("✔")
-    panel.hide()
+    assert _cells(panel)[0][2].startswith("✔")
+    panel.event("_panel", "closed", None)
     win.viewport.scene.version += 1             # an edit
     panel.show()
     assert calls
     panel.close()
 
 
-@pytest.mark.classic_pending
 @pytest.mark.parametrize("backend", ["python", "store"])
 @pytest.mark.parametrize("edit", ["topology", "attribute", "geometry_version"])
 def test_same_count_group_edit_invalidates_inspection(win, monkeypatch, backend, edit):
@@ -901,7 +846,7 @@ def test_same_count_group_edit_invalidates_inspection(win, monkeypatch, backend,
     calls = []
     real = si.inspect_mesh
     monkeypatch.setattr(si, "inspect_mesh", lambda m: calls.append(m) or real(m))
-    panel.hide()
+    panel.event("_panel", "closed", None)
     face = mesh.faces[0]
     if edit == "topology":
         if backend == "store":
@@ -928,7 +873,6 @@ def test_same_count_group_edit_invalidates_inspection(win, monkeypatch, backend,
     panel.close()
 
 
-@pytest.mark.classic_pending
 def test_hidden_panel_defers_construction_and_explicit_refresh(win, monkeypatch):
     import plugins.solid_inspector as si
     calls = []
@@ -939,7 +883,7 @@ def test_hidden_panel_defers_construction_and_explicit_refresh(win, monkeypatch)
     assert calls == []
     panel.show()
     assert len(calls) == 1
-    panel.hide()
+    panel.event("_panel", "closed", None)
     panel.refresh()
     panel.refresh()
     assert len(calls) == 1

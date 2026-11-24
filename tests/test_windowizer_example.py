@@ -5,42 +5,22 @@ Windowizer 3): windows from faces, as one container group each — and the
 extension API it needed: add_menu, add_context_menu and group.ext."""
 from __future__ import annotations
 
-import os
-import shutil
-import sys
+from pathlib import Path
 
+import pytest
+from ingetrazo_core import Vec3 as V
+from core import extensions
+from core.history import AddFaceCommand
 from examples.extensions import windowizer
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-import pytest  # noqa: E402
-from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication, QMenu  # noqa: E402
-
-import core.extensions as extensions  # noqa: E402
-from core.history import AddFaceCommand  # noqa: E402
-
-_app = QApplication.instance() or QApplication([])
-
-EXAMPLE = os.path.join(os.path.dirname(__file__), os.pardir, "examples",
-                       "extensions", "windowizer.py")
+from views import chrome_dialogs, chrome_forms
 
 
 @pytest.fixture
-def win(tmp_path, monkeypatch):
-    shutil.copy(EXAMPLE, tmp_path / "windowizer.py")
-    monkeypatch.setattr(extensions, "plugin_dirs", lambda: [tmp_path])
-    from views.main_window import MainWindow
-    w = MainWindow()
-    yield w
-    w._saved_version = w.viewport.scene.version   # no "save?" modal
-    w.close()
-
-
-def _mod():
-    return next(m for n, m in sys.modules.items()
-                if n.endswith("windowizer") and hasattr(m, "make_window"))
+def win(monkeypatch, request):
+    examples = Path(windowizer.__file__).parent
+    monkeypatch.setattr(extensions, "plugin_dirs", lambda: [examples])
+    return request.getfixturevalue("native_host").window
 
 
 def _wall(vp):
@@ -63,10 +43,13 @@ def _windowize(win, monkeypatch, **params):
     face = _wall(vp)
     vp.scene.selection.clear()
     vp.scene.selection.add(face)
-    chosen = dict(mod.DEFAULTS, **params)
-    monkeypatch.setattr(mod.WindowizerDialog, "ask",
-                        classmethod(lambda cls, *a, **k: dict(chosen)))
+    monkeypatch.setattr(chrome_dialogs, "async_host", lambda parent: win)
     mod.windowize(vp)
+    form = chrome_forms.forms(win)[-1]
+    for key, value in params.items():
+        form.receive(key, value)
+    form.press("ok")
+    assert not form.error
     wins = [g for g in vp.scene.groups if mod.window_data(g) is not None]
     assert len(wins) == 1
     return mod, vp, wins[0]
@@ -103,9 +86,12 @@ def test_edit_rebuilds_in_place(native_window, monkeypatch):
     mod, vp, g = _windowize(native_window, monkeypatch, rows="1", cols="1")
     vp.scene.selection.clear()
     vp.scene.selection.add(g)
-    monkeypatch.setattr(mod.WindowizerDialog, "ask", classmethod(
-        lambda cls, *a, **k: dict(mod.DEFAULTS, rows="2", cols="3")))
     mod.edit(vp)
+    form = chrome_forms.forms(native_window)[-1]
+    form.receive("rows", "2")
+    form.receive("cols", "3")
+    form.press("ok")
+    assert not form.error
     assert sum(c.name.startswith("Glass") for c in g.children) == 6
     assert vp.history.undo()
     assert sum(c.name.startswith("Glass") for c in g.children) == 1
@@ -139,34 +125,38 @@ def test_erase_closes_the_wall_again(native_window, monkeypatch):
     assert [len(f.holes) for f in back] == [0]
 
 
-@pytest.mark.classic_pending
-def test_its_menus_come_from_the_extension_api(win, monkeypatch):
-    mod = _mod()
-    ext = win._ext_menu
-    subs = [a.menu() for a in ext.actions() if a.menu() is not None]
-    assert any(m.title() == "Windowizer" for m in subs)
+def test_its_menus_come_from_the_extension_api(win):
+    from ingetrazo_render import ExtensionMenus
+    rows = win._extension_menus.rows()
+    assert any(path == ["Windowizer"] and label == "Windowize selected faces"
+               for _, path, label, *_ in rows)
     vp = win.viewport
-    face = _wall(vp)
-    vp.scene.selection.clear()
-    vp.scene.selection.add(face)
-    menu = QMenu()
+    vp.scene.select([_wall(vp)])
+    context = ExtensionMenus()
     for fn in win._ext_context_menus:
-        fn(menu, list(vp.scene.selection))
-    titles = [a.text() for a in menu.actions()]
-    assert "Windowizer" in titles
-    # ...and the window's own QMenu name is never swapped any more.
-    import views.main_window as mw
-    assert mw.QMenu is QMenu
+        fn(context.root("context"), list(vp.scene.selection))
+    assert any(path == ["Windowizer"] and label == "Windowize selected faces"
+               for _, path, label, *_ in context.rows())
 
 
 @pytest.mark.classic_pending
 def test_the_project_browser_reads_a_window_as_a_window(win, monkeypatch):
     mod, vp, g = _windowize(win, monkeypatch, rows="2", cols="3")
-    panel = win.project_browser.outliner
-    panel.refresh()
-    row = panel._items[id(g)]
-    assert row.text(3) == "Window"                      # the Type column
-    tip = row.toolTip(3)
+    from unittest.mock import Mock
+    from views.wgpu_ui import _tree
+    view = win.view
+    monkeypatch.setattr(view, "renderer", Mock())
+    view._ui_exp = {"n:"}
+
+    def window_row():
+        _tree(view, win)
+        tree = view._ui_tree["tree"]
+        key = "i:" + tree.row_id(g)
+        rows = view.renderer.ui_set_tree.call_args.args[0]
+        return next(text for text, flags in rows if text[0] == key)
+
+    label, _, tip = window_row()[2].partition("\x1e")
+    assert label == "Window"
     assert "Panes: 3 × 2" in tip and "Width:" in tip and "Height:" in tip
-    panel.search.setText("window")
-    assert not row.isHidden()
+    view._ui_filter = "window"
+    assert window_row()[1] == g.name

@@ -293,7 +293,7 @@ def _doc_attr(name):
 
 
 def discover_window_plugins():
-    from core.extensions import discover_plugins
+    from plugins._native import discover_plugins
     return discover_plugins(native_panels={
         "render_blender": "plugins._blender_panel", "python_console": "plugins.python_console",
         "ai_assistant": None, "ai_bridge": None, "model_info": None, "solid_inspector": None,
