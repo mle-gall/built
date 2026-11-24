@@ -115,15 +115,11 @@ def remember_picture(doc) -> bool:
     try:
         if view.width() <= 0 or view.height() <= 0:
             return False
-        image = view.render_image(PICTURE_PX)
+        w, h, data = view.render_pixels(PICTURE_PX)
     except Exception:  # noqa: BLE001 — a missing picture only
         return False
-    if image is None or image.isNull():
+    if not data or len(data) != w * h * 4:
         return False
-    from PySide6.QtGui import QImage
-    image = image.convertToFormat(QImage.Format_RGBA8888)
-    w, h = image.width(), image.height()
-    data = bytes(image.constBits())[: w * h * 4]
     doc._tab_picture = (w, h, data)
     doc._tab_picture_n = getattr(doc, "_tab_picture_n", 0) + 1
     doc.picture_due = False

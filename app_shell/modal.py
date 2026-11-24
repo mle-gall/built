@@ -215,18 +215,12 @@ def _answer_when_drawn(loop, answer):
 def capture(h, path) -> bool:
     """The frame as a PNG (the shell's own capture: the renderer's surface,
     never the screen)."""
-    from pathlib import Path
-    from PySide6.QtGui import QImage
     renderer = h.view.renderer
     if renderer is None:
         return False
     renderer.request_capture()
     h.frame()
-    data = renderer.take_capture()
-    if not data:
+    try:
+        return renderer.save_capture(path)
+    except OSError:
         return False
-    w = int(round(h.width * h.scale))
-    hh = len(data) // 4 // max(1, w)
-    img = QImage(bytes(data), w, hh, w * 4, QImage.Format_RGBA8888)
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    return img.copy().save(str(path))

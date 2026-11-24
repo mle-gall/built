@@ -87,6 +87,7 @@ def test_offscreen_size_and_live_camera_unchanged(monkeypatch):
     before = dict(source.camera.__dict__)
     image = view.render_image(123, 47)
     assert (image.width(), image.height()) == (123, 47)
+    assert view.render_pixels(123, 47) == (123, 47, bytes(image.constBits()))
     assert source.camera.__dict__ == before
     view.close()
 

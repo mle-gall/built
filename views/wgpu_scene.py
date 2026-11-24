@@ -693,54 +693,15 @@ def _texture_array(paths, *, device_limit=8192, memory_budget=256*1024*1024):
     every mip fit the 256 MiB GPU budget. CPU source decoding is not budgeted.
     Array textures require equal layer sizes; changing that needs a new ABI.
     """
+    from ingetrazo_render import material_texture_array
+    return material_texture_array(paths, device_limit, memory_budget)
+
+
+def _legacy_texture_pixels(path):
+    """System codecs for formats outside the renderer's built-in decoders."""
     from PySide6.QtGui import QImage
-    from PySide6.QtCore import Qt
-    descriptors = None
-    if any(isinstance(entry, _PbrEntry) for entry in paths):
-        layers = {}
-        descriptors = np.zeros((len(paths)+1, 12), '<u4')
-        for i, entry in enumerate(paths, 1):
-            images = entry.images if isinstance(entry, _PbrEntry) else (entry,)
-            for channel, path in enumerate(images):
-                if path:
-                    descriptors[i, channel] = layers.setdefault(path, len(layers)+1)
-            if isinstance(entry, _PbrEntry):
-                descriptors[i, 6:8] = (1, entry.flip_y)
-                descriptors[i, 8:].view('<f4')[:] = entry.factors
-        paths = layers
-    images = [QImage(path).mirrored() for path in paths]
-    if descriptors is not None:
-        # A missing normal must leave the geometric normal intact. Zero is
-        # the neutral/unused layer for each of the six image roles.
-        available = np.array([0] + [0 if im.isNull() else i
-                                    for i, im in enumerate(images, 1)], np.uint32)
-        descriptors[:, :6] = available[descriptors[:, :6]]
-    width = min(device_limit, max([1] + [im.width() for im in images]))
-    height = min(device_limit, max([1] + [im.height() for im in images]))
-    if device_limit < 1 or memory_budget < (len(images)+1)*4:
-        raise ValueError('texture budget cannot hold one texel per layer')
-    def mip_bytes(w, h):
-        total = 0
-        while True:
-            total += w*h*4*(len(images)+1)
-            if w == h == 1:
-                return total
-            w, h = max(1, w//2), max(1, h//2)
-    while mip_bytes(width, height) > memory_budget:
-        width, height = max(1, width//2), max(1, height//2)
-    levels = []
-    w, h = width, height
-    while True:
-        layers = [bytes([255])*w*h*4]  # layer zero: no texture
-        for im in images:
-            if im.isNull():
-                layers.append(bytes([255])*w*h*4)
-            else:
-                scaled = im.scaled(w, h, Qt.IgnoreAspectRatio, Qt.SmoothTransformation).convertToFormat(QImage.Format_RGBA8888)
-                layers.append(bytes(scaled.constBits()))
-        levels.append(b''.join(layers))
-        if w == h == 1:
-            break
-        w, h = max(1,w//2), max(1,h//2)
-    return (width, height, len(images)+1, levels) + (
-        (descriptors.tobytes(),) if descriptors is not None else ())
+    image = QImage(str(path))
+    if image.isNull():
+        return None
+    image = image.convertToFormat(QImage.Format_RGBA8888)
+    return image.width(), image.height(), bytes(image.constBits())

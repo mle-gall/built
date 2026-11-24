@@ -1,5 +1,6 @@
 """Material handoff tests require no window or GPU device."""
 import numpy as np
+import pytest
 from views.wgpu_scene import _source_arrays, _texture_array
 from PySide6.QtGui import QImage, QColor
 from ingetrazo_core import Vec3 as QVector3D
@@ -59,3 +60,34 @@ def test_array_flips_v_and_supplies_mips(tmp_path):
     assert (w,h,layers) == (2,2,2)
     assert [len(v) for v in levels] == [32,8]
     assert levels[0][16:20] == bytes([0,0,255,255])
+
+
+def test_material_pixels_use_native_codecs_and_preserve_alpha(tmp_path, monkeypatch):
+    from views import wgpu_scene
+    path = tmp_path / "transparent.png"
+    image = QImage(2, 1, QImage.Format_RGBA8888)
+    image.setPixelColor(0, 0, QColor(255, 20, 0, 0))
+    image.setPixelColor(1, 0, QColor(0, 20, 255, 255))
+    assert image.save(str(path))
+    monkeypatch.setattr(wgpu_scene, "_legacy_texture_pixels",
+                        lambda p: pytest.fail(f"Unexpected legacy decode of {p}"))
+    w, h, count, mips = _texture_array([path, tmp_path / "missing.png"])
+    assert (w, h, count) == (2, 1, 3)
+    assert mips[0][8:16] == bytes(image.constBits())
+    assert mips[0][-8:] == b"\xff" * 8
+    r, g, b, a = mips[1][4:8]
+    assert r == 0 and abs(g - 20) <= 1 and b >= 254 and abs(a - 128) <= 1
+
+
+def test_system_codec_fallback_uses_same_orientation_and_budget(tmp_path, monkeypatch):
+    from views import wgpu_scene
+    path = tmp_path / "texture.custom"
+    path.write_bytes(b"synthetic system codec")
+    called = []
+    def decode(p):
+        called.append(p)
+        return 1, 2, bytes((1, 2, 3, 255, 4, 5, 6, 255))
+    monkeypatch.setattr(wgpu_scene, "_legacy_texture_pixels", decode)
+    w, h, count, mips = _texture_array([path])
+    assert (w, h, count) == (1, 2, 2) and called == [path]
+    assert mips[0][8:] == bytes((4, 5, 6, 255, 1, 2, 3, 255))
