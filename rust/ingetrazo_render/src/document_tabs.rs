@@ -76,6 +76,32 @@ impl DocumentTabs {
     /// Send the document ▾ rows and the tab strip to ``renderer`` when they
     /// changed. ``left`` is where the document ▾ starts.
     fn sync(&mut self, py: Python<'_>, renderer: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>, left: f32) -> PyResult<()> {
+        let (docs, names, flags) = self.projects_of(renderer, win, left)?;
+        self.strip(py, renderer, win, docs, names, flags)
+    }
+
+    /// The document ▾ alone (the Sheets workspace's frame).
+    fn sync_projects(&mut self, renderer: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>, left: f32) -> PyResult<()> {
+        self.projects_of(renderer, win, left).map(|_| ())
+    }
+
+    /// The strip is rebuilt on the next frame (after a tab action).
+    fn stale(&mut self) {
+        self.seen = None;
+    }
+
+    /// Everything is sent again on the next frame (a renderer whose chrome
+    /// state was reset).
+    fn reset(&mut self) {
+        *self = Self::default();
+    }
+}
+
+type Read<'py> = (Vec<Bound<'py, PyAny>>, Vec<String>, Vec<bool>);
+
+impl DocumentTabs {
+    /// Read the documents once; send the document ▾ rows when they changed.
+    fn projects_of<'py>(&mut self, renderer: &Bound<'py, PyAny>, win: &Bound<'py, PyAny>, left: f32) -> PyResult<Read<'py>> {
         let docs = documents(win)?;
         let names = docs
             .iter()
@@ -96,6 +122,11 @@ impl DocumentTabs {
                 self.projects = Some(rows);
             }
         }
+        Ok((docs, names, flags))
+    }
+
+    fn strip<'py>(&mut self, py: Python<'py>, renderer: &Bound<'py, PyAny>, win: &Bound<'py, PyAny>,
+                  docs: Vec<Bound<'py, PyAny>>, names: Vec<String>, flags: Vec<bool>) -> PyResult<()> {
         // The strip.
         if !renderer.hasattr("ui_set_project_tabs")? {
             return Ok(());
@@ -132,16 +163,5 @@ impl DocumentTabs {
         }
         self.seen = Some((seen, now));
         Ok(())
-    }
-
-    /// The strip is rebuilt on the next frame (after a tab action).
-    fn stale(&mut self) {
-        self.seen = None;
-    }
-
-    /// Everything is sent again on the next frame (a renderer whose chrome
-    /// state was reset).
-    fn reset(&mut self) {
-        *self = Self::default();
     }
 }
