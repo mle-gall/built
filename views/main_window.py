@@ -7165,54 +7165,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         if path_str:
             self._import_dxf_path(Path(path_str))
 
-    def _dxf_options(self, path, header_scale=None
-                     ) -> "tuple[float, bool] | None":
-        """``(scale, make_faces)`` for a drawing, or ``None`` if cancelled.
-        The header's declaration of the unit (when there is one) arrives
-        preselected; without one, the last answer does, and the last answer
-        about faces too — importing a batch from one office is Enter, Enter,
-        Enter. Faces start off (#1109): the classic CAD linework, and the
-        speed on big drawings, unless asked for."""
-        from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog,
-                                       QDialogButtonBox, QVBoxLayout)
-
-        keys = ["mm", "cm", "m", "in", "ft"]
-        factors = {"mm": 0.001, "cm": 0.01, "m": 1.0,
-                   "in": 0.0254, "ft": 0.3048}
-        labels = [tr("Millimetres"), tr("Centimetres"), tr("Metres"),
-                  tr("Inches"), tr("Feet")]
-        by_scale = {v: k for k, v in factors.items()}
-        last = (by_scale.get(header_scale)
-                or str(QSettings().value("import/dxf_unit", "mm") or "mm"))
-        idx = keys.index(last) if last in keys else 0
-        dlg = QDialog(self)
-        dlg.setWindowTitle(tr("Import DXF"))
-        lay = QVBoxLayout(dlg)
-        lay.addWidget(QLabel(
-            tr("What unit is this drawing in? (CAD headers often lie)")))
-        combo = QComboBox(dlg)
-        combo.addItems(labels)
-        combo.setCurrentIndex(idx)
-        lay.addWidget(combo)
-        faces = QCheckBox(tr("Create faces from closed planar outlines"), dlg)
-        faces.setToolTip(tr("Slower on big drawings. You can also do it "
-                            "later, with the lines selected: Tools ▸ Make "
-                            "Faces."))
-        faces.setChecked(QSettings().value("import/dxf_make_faces", False,
-                                           type=bool))
-        lay.addWidget(faces)
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.Ok | QDialogButtonBox.Cancel, dlg)
-        buttons.accepted.connect(dlg.accept)
-        buttons.rejected.connect(dlg.reject)
-        lay.addWidget(buttons)
-        if dlg.exec() != QDialog.Accepted:
-            return None
-        key = keys[combo.currentIndex()]
-        QSettings().setValue("import/dxf_unit", key)
-        QSettings().setValue("import/dxf_make_faces", faces.isChecked())
-        return factors[key], faces.isChecked()
-
     def _on_import_photomesh(self):
         from views.survey_import import import_photomesh
         import_photomesh(self)

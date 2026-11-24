@@ -4,37 +4,23 @@
 is saved as .igz (user report: opening a .skp file left "Untitled")."""
 from __future__ import annotations
 
-import os
-import sys
-from pathlib import Path
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-from PySide6.QtWidgets import QApplication  # noqa: E402
-
-if QApplication.instance() is None:
-    QApplication(sys.argv[:1])
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 
-def test_title_shows_imported_name_until_igz_takes_over():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        assert "Untitled" in win.windowTitle() or "Sin título" in win.windowTitle()
+def test_title_shows_imported_name_until_igz_takes_over(native_host, tmp_path):
+    win = native_host.window
+    assert "Untitled" in native_host._title or "Sin título" in native_host._title
 
-        win._import_name = "casa bueno.skp"     # what a .skp import sets
-        win._update_title()
-        assert "casa bueno.skp" in win.windowTitle()
+    win._import_name = "casa bueno.skp"     # what a .skp import sets
+    win._update_title()
+    assert "casa bueno.skp" in native_host._title
 
-        win._current_path = Path("/tmp/obra.igz")   # Save As wins over it
-        win._update_title()
-        assert "obra.igz" in win.windowTitle()
-        assert "casa bueno" not in win.windowTitle()
+    win._current_path = tmp_path / "obra.igz"   # Save As wins over it
+    win._update_title()
+    assert "obra.igz" in native_host._title
+    assert "casa bueno" not in native_host._title
 
-        win._current_path = None                 # New clears the import name
-        win._import_name = None
-        win._update_title()
-        assert "obra.igz" not in win.windowTitle()
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    win._current_path = None                 # New clears the import name
+    win._import_name = None
+    win._update_title()
+    assert "obra.igz" not in native_host._title

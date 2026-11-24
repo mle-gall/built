@@ -610,34 +610,6 @@ def import_path(win, path: Path) -> bool:
     return ok
 
 
-def dxf_options(win, path, header_scale=None):
-    """MainWindow._dxf_options on the sheet: the unit, preselected from the
-    header or the last answer; faces as last chosen (the classic app's
-    dialog has the checkbox)."""
-    from core.settings import settings as QSettings
-    from views import chrome_dialogs as cd
-    keys = ["mm", "cm", "m", "in", "ft"]
-    factors = {"mm": 0.001, "cm": 0.01, "m": 1.0, "in": 0.0254, "ft": 0.3048}
-    labels = {"mm": tr("Millimetres"), "cm": tr("Centimetres"), "m": tr("Metres"),
-              "in": tr("Inches"), "ft": tr("Feet")}
-    by_scale = {v: k for k, v in factors.items()}
-    last = by_scale.get(header_scale) or str(QSettings().value("import/dxf_unit", "mm") or "mm")
-    if last not in keys:
-        last = "mm"
-    faces = QSettings().value("import/dxf_make_faces", False, type=bool)
-    got = cd.ask(win, tr("What unit is this drawing in?"),
-                 tr("What unit is this drawing in? (CAD headers often lie)") + "\n" +
-                 (tr("Faces from closed outlines: on") if faces else tr("Faces from closed outlines: off")),
-                 [("cancel", tr("Cancel"))] + [(k, labels[k]) for k in keys],
-                 default=last, cancel="cancel")
-    if got is None:
-        got = last                      # headless: the preselected unit
-    if got == "cancel":
-        return None
-    QSettings().setValue("import/dxf_unit", got)
-    return factors[got], bool(faces)
-
-
 def link_document(win) -> bool:
     """File ▸ Link a Document…: another document placed as a live link,
     with its own nested links (the classic dialog's checkbox, on)."""

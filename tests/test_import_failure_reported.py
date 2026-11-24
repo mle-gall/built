@@ -10,22 +10,16 @@ rollback also moves the version on, so an untouched project asked to be saved
 from __future__ import annotations
 
 import json
-import os
 import struct
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-import pytest  # noqa: E402
-from PySide6.QtCore import QEventLoop, QTimer  # noqa: E402
+import pytest
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
-from core.history import AddEdgeCommand  # noqa: E402
-from formats import dae, glb, obj, skp, stl  # noqa: E402
-from views.filedialogs import file_dialogs  # noqa: E402
+from core.history import AddEdgeCommand
+from formats import dae, glb, obj, skp, stl
+from views.filedialogs import file_dialogs
 
-
-_app = QApplication.instance() or QApplication([])
 
 _CUBE_OBJ = ("v 0 0 0\nv 1 0 0\nv 1 1 0\nv 0 1 0\nf 1 2 3 4\n").encode()
 
@@ -71,12 +65,6 @@ TITLES = {".dae": "Import DAE failed", ".glb": "Import glTF/GLB failed",
           ".stl": "Import STL failed"}
 
 
-def _settle(ms: int = 0) -> None:
-    loop = QEventLoop()
-    QTimer.singleShot(ms, loop.quit)
-    loop.exec()
-
-
 def _edit(win):
     win.viewport.history.execute(AddEdgeCommand(V(0, 0, 5), V(1, 0, 5)))
     win.viewport.notify_scene_changed()
@@ -94,20 +82,13 @@ def _menu_import(win, path, monkeypatch):
     monkeypatch.setattr(file_dialogs, "getOpenFileName",
                         lambda *_a, **_k: (str(path), ""))
     monkeypatch.setattr("views.chrome_forms.show", lambda _, form: form.press("ok"))
-    {".dae": win._on_import_dae, ".glb": win._on_import_glb,
-     ".gltf": win._on_import_glb, ".obj": win._on_import_obj,
-     ".stl": win._on_import_stl}[path.suffix]()
+    kind = "glb" if path.suffix == ".gltf" else path.suffix[1:]
+    win.run_command("import:" + kind)
 
 
 @pytest.fixture
-def win():
-    from views.main_window import MainWindow
-    w = MainWindow()
-    yield w
-    for d in w.documents():
-        d.saved_content = d.viewport.scene.content_version
-    w.close()
-    _settle()
+def win(native_host):
+    return native_host.window
 
 
 @pytest.fixture
@@ -137,7 +118,7 @@ def test_a_broken_file_leaves_a_clean_project_clean(win, errors, tmp_path,
     assert not win._is_dirty()
     assert mine.import_name is None
     assert win._doc_is_blank(mine)
-    assert "*" not in win.windowTitle()
+    assert "*" not in win._host._title
     assert not win.viewport.history.undo_stack
 
 
