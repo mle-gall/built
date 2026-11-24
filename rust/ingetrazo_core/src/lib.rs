@@ -14,6 +14,7 @@ use pyo3::types::PyBytes;
 
 mod math;
 mod navigation;
+mod recents;
 mod command_search;
 mod location;
 mod boxes;
@@ -144,6 +145,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(push_command::push_secondary_faces, m)?)?;
     m.add_function(wrap_pyfunction!(push_command::outline_curve_runs, m)?)?;
     navigation::register(m)?;
+    recents::register(m)?;
     m.add_class::<math::Vec3>()?;
     m.add_class::<math::Vec4>()?;
     m.add_class::<math::Matrix4>()?;

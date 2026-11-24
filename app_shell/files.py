@@ -235,11 +235,11 @@ def open_dialog(win) -> bool:
 
 def open_recent_index(win, arg) -> bool:
     if arg == "clear":
-        from PySide6.QtCore import QSettings
-        QSettings().setValue("recent_files", [])
+        from core import recent
+        recent.clear()
         win._host.recent_changed()
         return True
-    paths = [p for p in win._recent_paths() if Path(p).exists()]
+    paths = win._recent_paths()
     try:
         path = Path(paths[int(arg)])
     except (ValueError, IndexError):
