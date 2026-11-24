@@ -5285,68 +5285,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return max(1e-4, abs(best_t - t_eye) * 1e-4)
 
     def _world_from_pixel(self, x: int, y: int) -> Optional[QVector3D]:
-        """Pixel → world hit on the *current* work plane.
-
-        Plane choice priority:
-        1. ``tool.work_plane``, captured at first click when the user clicked
-           on a face — keeps the rest of the chain coplanar with that face.
-        2. If a tool has a ``start_point``, the plane goes through it; its
-           orientation is horizontal for most camera tilts and vertical only
-           near the horizon (so dragging up/down can move in Z).
-        3. If no ``start_point`` yet and the cursor is over an existing
-           face, that face's plane (this is what lets the user draw a new
-           polygon *inside* an existing one — e.g. on top of a box).
-        4. Ground (Z=0).
-        """
-        origin, direction = self._pixel_to_ray(x, y)
-        if origin is None or direction is None:
-            return None
-        plane_point, plane_normal = self._current_work_plane(cursor=(x, y))
-        # The snap engine needs the plane too — "perpendicular to this edge"
-        # only means something within a plane. Stashed instead of asked for
-        # again: this runs on every mouse move, and the answer can cost a pick.
-        self._last_work_plane = (plane_point, plane_normal)
-        tool = self.active_tool
-        allow_planar_grazing = False
-        if (tool is not None
-                and getattr(tool, "work_plane", None) is None
-                and getattr(tool, "plane_lock", None) is None
-                and getattr(tool, "plane_ref", None) is None):
-            from tools.base import PlaneLock
-            if isinstance(tool, PlaneLock):
-                from core import axes
-                normal = QVector3D(plane_normal).normalized()
-                # Once started, the plane goes through the first point and
-                # keeps the one shown before the click, so it must not turn
-                # unreachable toward the horizon either.
-                anchored = (
-                    getattr(tool, "start_point", None) is not None
-                    or (QVector3D(plane_point) - axes.origin()).length() < 1e-5)
-                principal = any(
-                    abs(QVector3D.dotProduct(normal, axes.axis(name))) > 0.999
-                    for name in ("x", "y", "z")
-                )
-                allow_planar_grazing = anchored and principal
-        hit = self._ray_plane(
-            origin, direction, plane_point, plane_normal,
-            allow_grazing=allow_planar_grazing)
-        if hit is not None:
-            return hit
-        # The ray only grazes the work plane here, so the intersection is
-        # junk: it runs off toward the horizon and a single pixel is worth
-        # hundreds of metres (measured with the ground plane captured and the
-        # camera 16 deg below the horizon: 85 m at mid screen, 405 m twenty
-        # pixels higher, and Marco got 1757.25 m on a 100 m plaza while the
-        # status bar said "On face"). If a real face IS under the cursor,
-        # believe the face — that is what the cursor is pointing at, and what
-        # the inference is already promising.
-        face, group = self.pick_face_inference(x, y)
-        if face is not None:
-            from core.snap import face_plane_world
-            fpoint, fnormal = face_plane_world(face, getattr(group, "xform", None))
-            if fnormal is not None:
-                return self._ray_plane(origin, direction, fpoint, fnormal, allow_grazing=True)
-        return None
+        return ingetrazo_render.world_from_pixel(self, x, y)
 
     #: A ray meeting the work plane below this angle gives a point nobody
     #: asked for. Measured: at 25 deg of camera pitch — an ordinary
@@ -5361,91 +5300,16 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
     @staticmethod
     def _same_plane(a, b, tol: float = 1e-6) -> bool:
-        """Whether the ``(point, normal)`` planes ``a`` and ``b`` are the
-        same plane: parallel normals AND the same offset — two opposite
-        walls are parallel and are not the same plane."""
-        na = QVector3D(a[1]).normalized()
-        nb = QVector3D(b[1]).normalized()
-        if abs(QVector3D.dotProduct(na, nb)) < 1e-3:
-            return False
-        return abs(QVector3D.dotProduct(QVector3D(b[0]) - QVector3D(a[0]),
-                                        na)) < tol
+        return ingetrazo_render.same_plane(a, b, tol)
 
     def _planar_face_plane(self, tool, cursor, captured=None, face_plane=None):
-        """The plane of the face under the cursor when a PLANAR shape is
-        being drawn over one that is not its captured plane, else ``None``.
-
-        A rectangle, circle, polygon or arc lives in ONE plane, and its
-        first click captures the plane of the face it started on — the
-        viewport sets ``tool.work_plane`` and the tool lays its geometry
-        out there (``PlaneLock.drawing_plane``). A capture, though, also
-        FROZE the shape: moving the cursor onto another face left the point
-        and the preview on the captured plane while the badge went on
-        reading «On face» — @pacaeiro, #545: «se eu coloco o rato
-        directamente na face diz (on face), mas o plano permanece
-        imutável». A rectangle started on the top vertex of a cube and
-        drawn over its front face was the plain case: the cursor's point
-        stayed up on the horizontal plane through that vertex.
-
-        An EDGE off the plane already re-planned the shape, through the
-        tool's ``snapped_plane``, because its point comes off the plane; a
-        face did not, because the axis inference answered with a camera
-        plane while the status bar named the face. The face the cursor is
-        over is the same bargain and the plainer one: it is what the cursor
-        points at and what the badge names, so the shape lands on it.
-
-        A snap that names a POINT of the model (``core.snap.
-        POINT_SNAP_KINDS``) is not this bargain and is not decided here:
-        the user aimed at that point, not at the face it happens to lie
-        on, and the tool re-plans onto it through ``PlaneLock.
-        snapped_plane`` — which is where the face's claim is settled too
-        (``Tool.snap_kind``). Here the viewport only reads which face the
-        cursor is over.
-
-        ``None`` keeps the caller's plane: no cursor, no face under it, the
-        face the shape started on (``captured``), a tool that is not a
-        planar shape (a LINE keeps its chain coplanar with the face it was
-        started on), the arrows already locking a direction (anywhere else
-        in here a locked direction leaves the plane where it was), or the
-        user's own plane lock — ``plane_lock`` / the magenta ``plane_ref`` —
-        which never yields."""
-        if cursor is None or tool is None or self.axis_lock is not None:
-            return None
-        if (getattr(tool, "plane_lock", None) is not None
-                or getattr(tool, "plane_ref", None) is not None):
-            return None
-        from tools.base import PlaneLock
-        if not isinstance(tool, PlaneLock):
-            return None
-        if face_plane is None:
-            face_plane = self._hover_face_plane(cursor)
-        if face_plane is None:
-            return None
-        if captured is not None and self._same_plane(captured, face_plane):
-            return None        # the face it started on: nothing to re-plan
-        return face_plane
+        return ingetrazo_render.planar_face_plane(self, tool, cursor, captured, face_plane)
 
     def _ray_plane(self, origin: QVector3D, direction: QVector3D,
                    plane_point: QVector3D, plane_normal: QVector3D,
                    *, allow_grazing: bool = False,
                    ) -> Optional[QVector3D]:
-        """Ray/plane hit, or ``None`` when it is behind the camera or the ray
-        merely grazes the plane."""
-        length = plane_normal.length()
-        if length < 1e-9:
-            return None
-        normal = plane_normal / length
-        denom = QVector3D.dotProduct(normal, direction)
-        if abs(denom) < 1e-12:
-            return None
-        if (not allow_grazing
-                and abs(denom) < math.sin(math.radians(
-                    self.GRAZING_PLANE_DEG))):
-            return None
-        t = QVector3D.dotProduct(normal, plane_point - origin) / denom
-        if t < 0:
-            return None
-        return origin + direction * t
+        return ingetrazo_render.ray_plane(self, origin, direction, plane_point, plane_normal, allow_grazing)
 
     #: XY stays the ground in shallow views and where its cursor-ray hit is
     #: reasonably close compared with the two vertical global planes.
@@ -5541,264 +5405,13 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     def _current_work_plane(
         self, cursor: Optional[tuple[float, float]] = None
     ) -> tuple[QVector3D, QVector3D]:
-        """Return ``(point, normal)`` of the current drawing plane.
-
-        Priority: tool-captured plane > camera-aware plane through the active
-        ``start_point`` > face under cursor (face-plane inference) > ground —
-        except that a PLANAR shape re-plans onto the face the cursor is over,
-        capture or not (#545, see :meth:`_planar_face_plane`). A shape lives
-        in ONE plane, and the face the cursor is over is the one the user
-        means.
-        """
-        tool = self.active_tool
-        if tool is not None:
-            # A tool mid-operation may know better than any plane below —
-            # Push/Pull reads the cursor along its normal and must keep
-            # hearing hovers and clicks above the horizon (see
-            # ``Tool.drag_plane``).
-            own_plane = getattr(tool, "drag_plane", None)
-            own = own_plane(self) if own_plane is not None else None
-            if own is not None:
-                return own
-        captured = getattr(tool, "work_plane", None) if tool is not None else None
-        if captured is not None:
-            # (#545) A planar shape re-plans onto the face the cursor is
-            # over, and takes its capture with it: the preview (drawn on the
-            # tool's own plane, ``PlaneLock.drawing_plane``) and the point
-            # would otherwise sit on two different planes — and that split
-            # IS the bug. ``_planar_face_plane`` holds the whole argument.
-            face_plane = self._planar_face_plane(tool, cursor, captured)
-            if face_plane is not None:
-                tool.work_plane = face_plane
-                return face_plane
-            # The escape hatch: orbiting down to the horizon means "I
-            # want to draw UPWARD now". A first click on a horizontal face
-            # (the ground, a slab) captures its plane and would pin the whole
-            # chain flat forever; at near-horizon views, where the horizontal
-            # plane is unreadable anyway, a HORIZONTAL captured plane yields
-            # to the vertical plane through the start point so the line can
-            # rise in Z. Vertical captured planes (walls) already allow it.
-            start = (getattr(tool, "start_point", None)
-                     if tool is not None else None)
-            from tools.base import PlaneLock
-            if (start is not None and abs(captured[1].normalized().z()) > 0.94
-                    and getattr(tool, "plane_lock", None) is None
-                    and not isinstance(tool, PlaneLock)):
-                # (an arrow-key plane lock is exactly what the user asked
-                # for: it never yields; and a PLANAR shape — rectangle,
-                # circle, arc — lives in its captured plane by definition:
-                # handing it points on another plane squashed it to a line)
-                vertical = self._near_horizon_vertical(start)
-                if vertical is not None:
-                    return vertical
-            return captured
-
-        start = getattr(tool, "start_point", None) if tool is not None else None
-        if start is None:
-            from core import axes
-            from tools.base import PlaneLock
-            if isinstance(tool, PlaneLock):
-                locked = tool.locked_work_plane(axes.origin())
-                if locked is not None:
-                    # A reference point (a dwell, like the Line's) is only
-                    # reachable by alignment if the plane passes through it:
-                    # otherwise its axis lines never meet the plane. When the
-                    # cursor is on one of them, the lock takes that offset.
-                    if cursor is not None:
-                        through = self._locked_plane_through_reference(
-                            tool, cursor)
-                        if through is not None:
-                            return through
-                    # The arrow chooses the plane's ORIENTATION only. Over a
-                    # face, "On face" names a point, so the locked plane is
-                    # anchored there (same normal); with no face under the
-                    # cursor it stays the world plane.
-                    if cursor is not None:
-                        face_plane = self._hover_face_plane(cursor)
-                        if face_plane is not None:
-                            hit = self._ray_hit_plane(cursor, face_plane)
-                            if hit is not None:
-                                return tool.locked_work_plane(hit)
-                    return locked
-            # First-click hover: if the cursor is over an existing face —
-            # loose OR a group's (drawing/measuring on top of an imported
-            # reference model) — use that face's plane so a new polygon
-            # drawn "inside" it lands on the face instead of the ground.
-            if cursor is not None and tool is not None:
-                pick = (getattr(self, "pick_face_inference", None)
-                        or self.pick_face_placement)
-                face, grp = pick(cursor[0], cursor[1])
-                if face is not None:
-                    from core.snap import face_plane_world
-                    return face_plane_world(face, getattr(grp, "xform", None))
-                # No geometry under the cursor, but maybe a reference image:
-                # its plane becomes the drawing plane, which is the whole
-                # point of importing a scan — you trace ON it, at its own
-                # tilt, not on the ground underneath.
-                image = self.image_plane_at(cursor[0], cursor[1])
-                if image is not None:
-                    return image.plane()
-            if isinstance(tool, PlaneLock) and cursor is not None:
-                plane = self._camera_planar_work_plane(cursor)
-                if plane is not None:
-                    return plane
-            # In an axis-aligned (standard) view, an unsnapped first point
-            # belongs on the plane FACING the camera through the model
-            # centre — so measuring/drawing in a front view stays in the
-            # frontal plane instead of dropping to the ground. Oblique
-            # orbit views keep the ground fallback (freehand unchanged).
-            from core.snap import first_point_work_plane
-            forward = self.camera.target - self.camera.eye()
-            lo, hi = self.scene.bounds()
-            center = ((lo + hi) * 0.5 if lo is not None
-                      else QVector3D(0.0, 0.0, 0.0))
-            plane = first_point_work_plane(forward, center)
-            if plane is not None:
-                return plane
-            return QVector3D(0.0, 0.0, 0.0), QVector3D(0.0, 0.0, 1.0)
-
-        base = self._start_point_plane(tool, start)
-        from tools.base import PlaneLock
-        hover_plane = getattr(tool, "hover_plane", None)
-        if isinstance(tool, PlaneLock) and hover_plane is not None:
-            # A planar shape started on a free point lives in the plane the
-            # cursor showed at the first click. The near-horizon vertical
-            # escape in ``_start_point_plane`` is for a Line to rise in Z;
-            # here it flipped the shape from XY to XZ on that click.
-            base = (QVector3D(start), QVector3D(hover_plane[1]))
-        if cursor is not None and self.axis_lock is None:
-            # On Face for the SECOND point (Move's target, the
-            # tape's far end, a line's end): the cursor over another face
-            # lands ON that face. The axis inference still wins — a line
-            # drawn straight up over a slab keeps rising instead of dropping
-            # onto it — and the geometry being moved never offers its own
-            # (already vacated) faces.
-            fp = self._hover_face_plane(cursor)
-            if fp is not None:
-                from tools.base import PlaneLock
-                if isinstance(tool, PlaneLock):
-                    # A PLANAR shape does not get the axis escape below
-                    # (#545, @pacaeiro: «se eu coloco o rato directamente
-                    # na face diz (on face), mas o plano permanece
-                    # imutável»). An EDGE already re-planned the shape,
-                    # through ``snapped_plane``, because its point comes
-                    # off the plane; a face did not, because the axis
-                    # inference handed back the camera plane through the
-                    # first corner while the status bar went on reading
-                    # «On face» — and the shape's own axes had already
-                    # taken the wall's, so the preview and the point sat
-                    # on two different planes. A rectangle started on the
-                    # top vertex of a cube was the plain case: over the
-                    # front face the point came back at (2.00, -1.20,
-                    # 2.00), the horizontal plane through that vertex.
-                    # The point the cursor is over is the one the user
-                    # means: a shape lives in ONE plane, so the face wins
-                    # outright. The arrows and the Down reference never
-                    # reach this branch — a lock is captured as the
-                    # tool's ``work_plane`` by the first click and
-                    # returned above. A line drawn straight up over a
-                    # slab is not a PlaneLock and keeps rising. A snap
-                    # that names a POINT of the model is not this case
-                    # either: ``PlaneLock.snapped_plane`` re-plans the
-                    # shape onto the point (``Tool.snap_kind``).
-                    return fp
-                cand = self._ray_hit_plane(cursor, base)
-                angle = (getattr(tool, "magnetic_axis_deg", None)
-                         or self.inference_angle_deg)
-                from core.snap import _detect_axis_alignment
-                if cand is None or _detect_axis_alignment(
-                        start, cand, angle) is None:
-                    return fp
-        return base
+        return ingetrazo_render.current_work_plane(self, cursor)
 
     def _front_face_at(self, x: float, y: float, which: str = "sel"):
-        """``(face, placement)`` of the front-most face on the ray through
-        pixel ``(x, y)`` that passes ``which`` (see :meth:`_face_hits`), or
-        ``None``. A bare pass with no memo: the face-crossing search asks it
-        at pixels around the cursor, and :meth:`pick_face_any`'s memo holds
-        the cursor's own answer."""
-        o, d = self._pixel_to_ray(x, y)
-        if o is None or d is None:
-            return None
-        import numpy as np
-        idx = self._pick_index(near=DocumentInteraction._ray_near(self, x, y))
-        nat = (self._lazy_native() if hasattr(self, "_lazy_native")
-               else None)
-        if nat is not None and _FRONT_LEAN:
-            return self._front_face_lean(idx, nat, o, d, which)
-        hits = DocumentInteraction._face_hits(self, idx, o, d, which)
-        if hits is None or len(hits.t) == 0:
-            return None
-        i = int(np.argmin(hits.t))
-        return hits.ent(i)[0], hits.place(i)
+        return ingetrazo_render.front_face_at(self, x, y, which)
 
     def _front_face_lean(self, idx, nat, o, d, which: str = "sel"):
-        """_front_face_at's answer over the engine's lazy placements (#158)
-        without gathering every face the ray meets: the index's nearest
-        face, then the lazy placements' only nearer than it (a tie goes to
-        the index's, as the argmin over the index's then the lazy faces
-        does), and of those only the nearest made into a face — the
-        first of equals in placement and prototype face order. Each probe of
-        a face crossing (see _crossing_on_screen) is one of these, ~2 ms
-        over the plant when every face met was made."""
-        import numpy as np
-        best_t, best = float("inf"), None
-        if len(idx.entities):
-            if which == "sel":
-                mask = idx.ent_sel
-            elif which == "infer":
-                mask = getattr(idx, "ent_infer", idx.ent_sel)
-            else:
-                mask = idx.ent_vis
-            face_t = self._ray_hits(idx, o, d, mask, own=False)
-            if face_t is not None and len(face_t):
-                i = int(np.argmin(face_t))
-                if np.isfinite(face_t[i]):
-                    best_t = float(face_t[i])
-                    pidx = getattr(idx, "ent_place_idx", None)
-                    place = (idx.ent_placements[int(pidx[i])]
-                             if pidx is not None and i < len(pidx)
-                             and pidx[i] >= 0
-                             else _entity_owner(idx.entities, i))
-                    best = (idx.entities[i][0], place)
-        if which == "sel":
-            rows = DocumentInteraction._lazy_sel_rows(self, nat)
-        elif which == "infer":
-            rows = nat[1]
-        else:
-            rows = nat[2]
-        if not len(rows):
-            return best
-        iset = nat[0]
-        oo = np.array([o.x(), o.y(), o.z()])
-        dd = np.array([d.x(), d.y(), d.z()])
-        # A margin past the index's nearest: the engine's boxes decide
-        # which triangles to hand, the exact test below which win.
-        reach = (best_t * 1.001 + 1e-6 if np.isfinite(best_t)
-                 else float("inf"))
-        pl, tr, v0, e1, e2 = iset.ray_cands(
-            np.ascontiguousarray(rows, np.int64), tuple(oo.tolist()),
-            tuple(dd.tolist()), reach)
-        if not len(pl):
-            return best
-        t, hit = _moller_trumbore(oo, dd, v0, e1, e2)
-        k = np.flatnonzero(hit & (t < best_t))
-        if not len(k):
-            return best
-        tmin = t[k].min()
-        k = k[t[k] == tmin]
-        groups = self._pick_lazy_table()[0]
-        lazy_pos = self._pick_cands_memo[3]
-        win = None
-        for i, r in zip(pl[k].tolist(), tr[k].tolist()):
-            g = groups[i]
-            base = self._proto_base_chunk(g.mesh, _paint_of(self, g))
-            j = int(base["tri_ent"][r])
-            key = (lazy_pos[id(g)][0], j)
-            if win is None or key < win[0]:
-                win = (key, base, i, j)
-        _key, base, i, j = win
-        return base["faces"][j], groups[i]
+        return ingetrazo_render.front_face_lean(self, idx, nat, o, d, which)
 
     #: How far from the cursor (px) a face crossing snaps, and how far
     #: either side of the crossing the search checks that each face shows.
@@ -5806,237 +5419,32 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     _CROSSING_SIDE_PX = 3.0
 
     def _face_crossing_point(self, px: float, py: float):
-        """Where the face under the cursor meets another face that crosses
-        it with no edge between them — a box sunk into the floor, a beam
-        through a wall: ``(world point, context)`` or ``None`` (#819,
-        the modeller's «Intersection»). A face that goes THROUGH the one in
-        front is met by the cursor's own ray a little behind it, so the
-        candidates come free from that ray's hits (already cast for this
-        hover); a crossing counts only if, either side of it on screen,
-        one face shows and then the other — the two really meet there, in
-        view, and neither is merely in front of the other. ``context`` is
-        "group" / "component" when one of them is inside one, for the
-        «in group» tip."""
-        if _active_cut(self.scene) is not None:
-            return None
-        f_face, f_place = self.pick_face_inference(px, py)   # memoised
-        if f_face is None:
-            return None
-        o, d = self._pixel_to_ray(px, py)
-        if o is None or d is None:
-            return None
-        import numpy as np
-        idx = self._pick_index(near=DocumentInteraction._ray_near(self, px, py))
-        hits = self._infer_hits(idx, o, d)                    # memoised
-        if hits is None or not np.isfinite(hits.t).any():
-            return None
-        face_t = hits.t
-        t_f = float(face_t.min())
-        r = self._CROSSING_RING_PX
-        o2, d2 = self._pixel_to_ray(px + r, py)
-        if o2 is None or d2 is None:
-            return None
-        reach = ((o2 + d2 * t_f) - (o + d * t_f)).length() * 50.0
-        # ``>=``: with the cursor right on the crossing both faces are hit
-        # at the same depth (the face itself is skipped below).
-        cand = np.where((face_t >= t_f) & (face_t <= t_f + reach))[0]
-        if len(cand) == 0:
-            return None
-        cand = cand[np.argsort(face_t[cand], kind="stable")][:7]
-        from core.snap import face_plane_world
-        p_f, n_f = face_plane_world(f_face, getattr(f_place, "xform", None))
-        f = (f_face, f_place, p_f, n_f)
-        pairs = []
-        for i in cand:
-            i = int(i)
-            g_face = hits.ent(i)[0]
-            g_place = hits.place(i)
-            if g_face == f_face and g_place is f_place:
-                continue
-            p_g, n_g = face_plane_world(g_face, getattr(g_place, "xform", None))
-            u = QVector3D.crossProduct(n_f, n_g)
-            if u.length() < 0.02:               # (near) coplanar: no crossing
-                continue
-            g = (g_face, g_place, p_g, n_g, u)
-            sides = self._crossing_sides(px, py, o, d, f, g)
-            if sides is not None:
-                pairs.append((g, sides))
-        # The probes either side of every crossing bake what they cross
-        # first, together: one at a time, each that met a new lazy
-        # placement rebuilt the index for the next (up to five rebuilds a
-        # pointer move with Rectangle over the plant of #158).
-        mat = getattr(self, "_pick_materialize", None)
-        if (mat is not None and hasattr(self, "_pick_lazy_table")
-                and DocumentInteraction._ray_near(self, px, py) != "skip"):
-            for _g, (_x, probes) in pairs:
-                for q in probes:
-                    mat(("px", q[0], q[1]))
-        for g, sides in pairs:
-            found = self._crossing_on_screen(f, g, sides)
-            if found is not None:
-                return found
-        return None
+        return ingetrazo_render.face_crossing_point(self, px, py)
 
     def _crossing_sides(self, px, py, o, d, f, g):
-        """The crossing of plane ``f`` with plane ``g`` nearest the cursor
-        ray, if it is within reach on screen: ``(world point, (pixel one
-        side, pixel the other side))``, or ``None``."""
-        from core.snap import face_crossing_near_ray
-        _f_face, _f_place, p_f, n_f = f
-        _g_face, _g_place, p_g, n_g, _u = g
-        return face_crossing_near_ray(
-            px, py, o, d, (p_f, n_f), (p_g, n_g), self._world_to_pixel,
-            max(self.edge_snap_threshold_px, self._CROSSING_RING_PX),
-            self._CROSSING_SIDE_PX)
+        return ingetrazo_render.crossing_sides(self, px, py, o, d, f, g)
 
     def _crossing_on_screen(self, f, g, found):
-        """The crossing ``found`` by :meth:`_crossing_sides` if it shows
-        face ``f`` on one side and face ``g`` on the other (see
-        :meth:`_face_crossing_point`): ``(world point, context)`` or
-        ``None``."""
-        f_face, f_place = f[0], f[1]
-        g_face, g_place = g[0], g[1]
-        x, probes = found
-        want = {(element_identity(f_face), id(f_place)), (element_identity(g_face), id(g_place))}
-        ids = set()
-        for q in probes:
-            # Each side must show one of the two, the sides not the same
-            # one: a side that does not ends the search there (each probe
-            # is a ray through the model, ~2 ms over the plant of #158,
-            # and dense spots try five crossings a move that fail).
-            h = self._front_face_at(q[0], q[1], "infer")
-            if h is None or (element_identity(h[0]), id(h[1])) not in want:
-                return None
-            ids.add((element_identity(h[0]), id(h[1])))
-        if ids != want:
-            return None
-        context = None
-        found_ctx = []
-        for place in (f_place, g_place):
-            if place is None:
-                continue        # the open context's own loose geometry
-            word = _snap_context_of(self, place)
-            if word is not None:
-                found_ctx.append(word)
-        if "outside" in found_ctx:
-            context = "outside"
-        elif found_ctx:
-            context = found_ctx[0]
-        return x, context
+        return ingetrazo_render.crossing_on_screen(self, f, g, found)
 
     def _face_outline_world(self, px: float, py: float):
-        """The face under the cursor as ``(outer loop, holes, context)`` in
-        world space (``context``: "group" / "component" when it is inside
-        one), or ``None``. What a line piercing the face is tested against.
-        The rest of the model around an open group counts: a line drawn
-        inside it can pierce a face left outside."""
-        face, place = self.pick_face_inference(px, py)    # memoised
-        if face is None:
-            return None
-        xf = getattr(place, "xform", None)
-
-        def w(p):
-            return xf.map(QVector3D(p)) if xf is not None else QVector3D(p)
-        outer = [w(p) for p in face.vertices]
-        holes = [[w(p) for p in h] for h in face.holes]
-        context = None
-        if place is not None:
-            owner = self._owner_of(place)
-            is_comp = getattr(owner, "is_instance", None)
-            if is_comp is not None:
-                # A reference wrapper (the outer loose mesh) has no
-                # ``is_instance``: it is not "in" a group, it IS the root.
-                context = ("component" if is_comp() else "group")
-        return outer, holes, context
+        return ingetrazo_render.face_outline_world(self, px, py)
 
     def _still_face_under(self, px: float, py: float) -> bool:
-        """Whether a face the drag is NOT bending is under the cursor —
-        the «On face» cue never names the face being moved."""
-        face, grp = self.pick_face_inference(px, py)
-        if face is None:
-            return False
-        moving = getattr(self.active_tool, "moving_face_ids", None)
-        return not (grp is None and callable(moving) and element_identity(face) in moving())
+        return ingetrazo_render.still_face_under(self, px, py)
 
     def _face_center_under(self, px: float, py: float):
-        """The «Face center» inference: ``(point, context)`` for the centre
-        of area of the face under the cursor, or ``None`` — no face, the
-        centre falls outside it (an L, a ring), it is too far from the
-        cursor to matter, or the face is in motion (a face being bent, a
-        group being moved: the point would chase the cursor)."""
-        face, place = self.pick_face_placement(px, py)
-        if face is None:
-            return None
-        tool = self.active_tool
-        if place is None:
-            moving = getattr(tool, "moving_face_ids", None)
-            if callable(moving) and element_identity(face) in moving():
-                return None
-            context = None
-        else:
-            owner = self._owner_of(place)
-            excl = getattr(tool, "snap_excluded", None)
-            excl = excl() if callable(excl) else None
-            if excl is not None and (id(owner) in excl[1] or id(place) in excl[1]):
-                return None
-            is_comp = getattr(owner, "is_instance", None)
-            context = "component" if (callable(is_comp) and is_comp()) else "group"
-        from core.snap import face_center_of_face
-        c = face_center_of_face(face, getattr(place, "xform", None))
-        if c is None:
-            return None
-        pc = self._world_to_pixel(c)
-        if pc is None or math.hypot(pc[0] - px, pc[1] - py) > self.POINT_INFERENCE_PX:
-            return None
-        return c, context
+        return ingetrazo_render.face_center_under(self, px, py)
 
     #: More selected faces than this and their centres are neither drawn
     #: nor offered: a «select all» would bury the model in dots.
     FACE_CENTER_SELECTION_MAX = 500
 
     def _selected_face_centers(self) -> list:
-        """The «Face center» of every selected face, ``[QVector3D]`` in
-        world space: drawn as dots and offered to the snap engine wherever
-        the cursor is, so a ring's centre — in its hole, where no face is
-        under the cursor — can be reached. Only faces picked one by one: a
-        selected group offers none (a whole object would fill with dots).
-        An open group's faces are loose and already in world space. A face
-        a tool is bending is left out (its centre would chase the cursor).
-        Cached per scene version and selection."""
-        faces = [e for e in self.scene.selection if isinstance(e, Face)]
-        if not faces or len(faces) > self.FACE_CENTER_SELECTION_MAX:
-            return []
-        moving = getattr(self.active_tool, "moving_face_ids", None)
-        moving = moving() if callable(moving) else ()
-        key = (self.scene.version, tuple(element_identity(f) for f in faces),
-               frozenset(moving))
-        cached = getattr(self, "_sel_face_centers", None)
-        if cached is not None and cached[0] == key:
-            return cached[1]
-        from core.snap import face_center_of_face
-        pts = []
-        for f in faces:
-            if element_identity(f) in moving:
-                continue
-            c = face_center_of_face(f)
-            if c is not None:
-                pts.append(c)
-        self._sel_face_centers = (key, pts)
-        return pts
+        return ingetrazo_render.selected_face_centers(self)
 
     def _face_centers_near(self, px: float, py: float) -> list:
-        """The «Face center» points for the snap engine, ``[(point,
-        context)]``: the face under the cursor, and the selected faces whose
-        centre is near it."""
-        out = []
-        under = self._face_center_under(px, py)
-        if under is not None:
-            out.append(under)
-        for c in self._selected_face_centers():
-            pc = self._world_to_pixel(c)
-            if pc is not None and math.hypot(pc[0] - px, pc[1] - py) <= self.POINT_INFERENCE_PX:
-                out.append((c, None))
-        return out
+        return ingetrazo_render.face_centers_near(self, px, py)
 
     def _draw_selected_face_centers(self, painter: QPainter) -> None:
         """A small dot at the centre of each selected face (the ones the
@@ -6071,89 +5479,16 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         painter.setBrush(Qt.NoBrush)
 
     def _face_context_under(self, px: float, py: float):
-        """The ScreenTip's context for the face under the cursor: "outside"
-        while a group / component is open and the face is not part of it;
-        "group" / "component" for a placement; ``None`` for the open
-        context's own loose mesh (and at the root)."""
-        face, place = self.pick_face_inference(px, py)
-        if face is None:
-            return None
-        return _snap_context_of(self, place)
+        return ingetrazo_render.face_context_under(self, px, py)
 
     def _hover_face_plane(self, cursor):
-        """World plane of the face under the cursor, or None.
-
-        Selected geometry remains a valid plane target for planar drawing
-        tools; other tools must not land on geometry they are moving. The
-        rest of the model outside an open group / component IS a valid
-        target (faded, never selectable): that is how a part is aligned to
-        the floor it sits on when the model is made of components.
-        """
-        face, grp = self.pick_face_inference(cursor[0], cursor[1])
-        if face is None:
-            return None
-        sel = self.scene.selection
-        owner = self._owner_of(grp) if grp is not None else None
-        from tools.base import PlaneLock
-        if (not isinstance(self.active_tool, PlaneLock)
-                and ((owner is not None and owner in sel)
-                     or (grp is None and face in sel))):
-            return None
-        if grp is None:
-            # A face the drag is bending (one corner on a grabbed vertex)
-            # is not somewhere to land: the point would follow the face,
-            # the face the point, and the geometry shook under a still
-            # mouse.
-            moving = getattr(self.active_tool, "moving_face_ids", None)
-            if callable(moving) and element_identity(face) in moving():
-                return None
-        from core.snap import face_plane_world
-        return face_plane_world(face, getattr(grp, "xform", None))
+        return ingetrazo_render.hover_face_plane(self, cursor)
 
     def _locked_plane_through_reference(self, tool, cursor):
-        """The tool's locked plane (same normal) through an acquired or
-        encouraged point, when the cursor lies on one of that point's axis
-        lines inside the plane; else ``None``.
-
-        The arrow only chooses the plane's ORIENTATION. A point the cursor
-        dwelt on (a circle's centre) is aligned with by moving along one of
-        the two world axes the plane holds, and those lines exist only in
-        the plane through the point."""
-        from core import axes
-        refs = list(self._encouraged)
-        if self._acquired_point is not None:
-            refs.append(self._acquired_point)
-        for ref in reversed(refs):
-            plane = tool.locked_work_plane(ref)
-            if plane is None:
-                continue
-            hit = self._ray_hit_plane(cursor, plane)
-            if hit is None:
-                continue
-            normal = QVector3D(plane[1]).normalized()
-            for name in ("x", "y", "z"):
-                a = axes.axis(name)
-                if abs(QVector3D.dotProduct(a, normal)) > 1e-3:
-                    continue
-                foot = ref + a * QVector3D.dotProduct(hit - ref, a)
-                px = self._world_to_pixel(foot)
-                if px is None:
-                    continue
-                if math.hypot(px[0] - cursor[0], px[1] - cursor[1]) \
-                        <= self.snap_threshold_px:
-                    return plane
-        return None
+        return ingetrazo_render.locked_plane_through_reference(self, tool, cursor)
 
     def _ray_hit_plane(self, cursor, plane):
-        origin, direction = self._pixel_to_ray(cursor[0], cursor[1])
-        if origin is None or direction is None:
-            return None
-        point, normal = plane
-        denom = QVector3D.dotProduct(normal, direction)
-        if abs(denom) < 1e-6:
-            return None
-        t = QVector3D.dotProduct(normal, point - origin) / denom
-        return None if t < 0 else origin + direction * t
+        return ingetrazo_render.ray_hit_plane(self, cursor, plane)
 
     def _start_point_plane(self, tool, start):
         """The camera-aware plane through the active start point."""
