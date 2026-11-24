@@ -3,7 +3,7 @@
 //! occurrence tree and its freshly allocated vertex keys.
 use crate::math::Vec3;
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PySet, PyTuple};
+use pyo3::types::{PyDict, PyList, PyTuple};
 
 fn point<'py>(
     py: Python<'py>,
@@ -28,6 +28,47 @@ fn xyz<'py>(item: &Bound<'py, PyAny>, name: &str) -> PyResult<Bound<'py, PyList>
     PyList::new(item.py(), point.cast::<Vec3>()?.borrow().coords())
 }
 
+/// ``obj`` written out with dict keys sorted at every level (two records
+/// that are equal as JSON give the same text); what is not JSON is its str.
+fn canonical(obj: &Bound<'_, PyAny>) -> PyResult<String> {
+    use pyo3::types::{PyBool, PyFloat, PyInt, PyString};
+    let mut out = String::new();
+    fn put(obj: &Bound<'_, PyAny>, out: &mut String) -> PyResult<()> {
+        if obj.is_none() {
+            out.push_str("null");
+        } else if let Ok(b) = obj.cast::<PyBool>() {
+            out.push_str(if b.is_true() { "true" } else { "false" });
+        } else if obj.is_instance_of::<PyInt>() || obj.is_instance_of::<PyFloat>() {
+            out.push_str(&obj.repr()?.to_cow()?);
+        } else if let Ok(s) = obj.cast::<PyString>() {
+            out.push_str(&format!("{:?}", s.to_cow()?));
+        } else if let Ok(d) = obj.cast::<PyDict>() {
+            let mut items = d.iter().map(|(k, v)| Ok((k.str()?.to_cow()?.into_owned(), v)))
+                .collect::<PyResult<Vec<_>>>()?;
+            items.sort_by(|a, b| a.0.cmp(&b.0));
+            out.push('{');
+            for (i, (k, v)) in items.iter().enumerate() {
+                if i > 0 { out.push(','); }
+                out.push_str(&format!("{k:?}:"));
+                put(v, out)?;
+            }
+            out.push('}');
+        } else if obj.is_instance_of::<PyList>() || obj.is_instance_of::<PyTuple>() {
+            out.push('[');
+            for (i, v) in obj.try_iter()?.enumerate() {
+                if i > 0 { out.push(','); }
+                put(&v?, out)?;
+            }
+            out.push(']');
+        } else {
+            out.push_str(&format!("{:?}", obj.str()?.to_cow()?));
+        }
+        Ok(())
+    }
+    put(obj, &mut out)?;
+    Ok(out)
+}
+
 #[pyfunction]
 pub fn igz_load_annotations(
     py: Python<'_>,
@@ -47,11 +88,9 @@ pub fn igz_load_annotations(
         ("core.dimension", "Dimension")
     };
     let class = py.import(module)?.getattr(class)?;
-    let seen = PySet::empty(py)?;
-    let json = py.import("json")?;
-    let options = PyDict::new(py);
-    options.set_item("sort_keys", true)?;
-    options.set_item("default", py.get_type::<pyo3::types::PyString>())?;
+    // A dimension's record as a canonical key (keys sorted at every
+    // level), read in Rust: it was json.dumps per dimension.
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
     for item in items.try_iter()? {
         let raw = item?.cast_into::<PyDict>()?;
         let optional = |name| -> PyResult<Bound<'_, PyAny>> {
@@ -71,11 +110,9 @@ pub fn igz_load_annotations(
             class.call1((anchor, offset, text, optional("layer")?, binding))?
         } else {
             // Documents from before #765 can repeat the identical dimension.
-            let key = json.call_method("dumps", (&raw,), Some(&options))?;
-            if seen.contains(&key)? {
+            if !seen.insert(canonical(raw.as_any())?) {
                 continue;
             }
-            seen.add(key)?;
             let record = class.call1((
                 point(py, &raw, "a", true)?,
                 point(py, &raw, "b", true)?,
@@ -154,4 +191,27 @@ pub fn igz_archive_annotations<'py>(
         list.append(row)?;
     }
     Ok(list)
+}
+
+/// The largest N among the automatic "Group N" names (0 without one), as
+/// its digits (any size).
+#[pyfunction]
+pub fn highest_group_number(names: &Bound<'_, PyAny>) -> PyResult<String> {
+    let mut best = String::from("0");
+    for name in names.try_iter()? {
+        let name = name?;
+        let Ok(s) = name.cast::<pyo3::types::PyString>() else { continue };
+        let s = s.to_cow()?;
+        // As ``^Group (\d+)$``: ``$`` also takes a final newline.
+        let Some(digits) = s.strip_prefix("Group ").map(|d| d.strip_suffix('\n').unwrap_or(d)) else { continue };
+        if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+            continue;
+        }
+        let d = digits.trim_start_matches('0');
+        let d = if d.is_empty() { "0" } else { d };
+        if (d.len(), d) > (best.len(), best.as_str()) {
+            best = d.to_owned();
+        }
+    }
+    Ok(best)
 }
