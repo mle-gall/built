@@ -11,3 +11,9 @@ Terminal=false
 Categories=Graphics;3DGraphics;Engineering;
 MimeType=application/x-ingetrazo;model/vnd.collada+xml;application/vnd.sketchup.skp;
 StartupWMClass=ingetrazo
+Actions=NewWindow;
+
+[Desktop Action NewWindow]
+Name=New Window
+Name[es]=Nueva ventana
+Exec=built --new-window
