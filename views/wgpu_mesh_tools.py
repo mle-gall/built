@@ -674,7 +674,13 @@ class MeshToolAccess:
             renderer.begin_tool_marks(self.scene.selection, getattr(self, '_mesh_hover', None), keys)
             self._moving_marks = renderer
 
-    def begin_groups_preview(self, groups):
+    def begin_groups_preview(self, groups, external=False):
+        if external:
+            from views.wgpu_scene import pack_scene
+            pack = pack_scene(self.scene, roots=groups, texture_images=False)
+            self.view.renderer.begin_group_feedback(pack, self.view.packed.origin)
+            self._clipboard_renderer = self.view.renderer
+            return
         self._begin_rows(groups, include_loose=False)
 
     def _begin_rows(self, groups, include_loose):
@@ -698,6 +704,11 @@ class MeshToolAccess:
         self.set_groups_preview_matrix(matrix)
 
     def set_groups_preview_matrix(self, matrix):
+        clipboard = self.__dict__.get('_clipboard_renderer')
+        if clipboard is not None:
+            clipboard.pose_group_feedback(matrix.data())
+            self.update()
+            return
         if self.original is None:
             return
         transform = matrix.data()
@@ -712,6 +723,11 @@ class MeshToolAccess:
             renderer.pose_tool_geometry(transform)
 
     def end_groups_preview(self):
+        clipboard = self.__dict__.pop('_clipboard_renderer', None)
+        if clipboard is not None:
+            clipboard.end_group_feedback()
+            self.update()
+            return
         marks = getattr(self, '_moving_marks', None)
         if marks is not None:
             marks.end_tool_marks()

@@ -51,6 +51,7 @@ mod preview_texture;
 mod geometry_preview;
 mod tool_feedback;
 mod transform_marks;
+mod group_feedback;
 mod tool_instances;
 mod lines;
 mod references;
@@ -163,6 +164,7 @@ struct Target {
     lines: lines::Lines,
     preview: preview::Preview,
     face_marks: preview::Preview,
+    group_feedback: Option<preview::Preview>,
     sections: sections::Sections,
     camera_data: Vec<f32>,
     look_data: [[f32; 4]; 11],
@@ -215,6 +217,7 @@ struct Renderer {
     preview: preview::Preview,
     lines: lines::Lines,
     face_marks: preview::Preview,
+    group_feedback: Option<preview::Preview>,
     sun: sun::Sun,
     references: references::References,
     host_context: preview::Preview,
@@ -743,6 +746,7 @@ impl Renderer {
             transparency,
             preview,
             face_marks,
+            group_feedback: None,
             host_context,
             ghost_geometry,
             ghost_objects,
@@ -1042,10 +1046,12 @@ impl Renderer {
             p: count as u32,
         });
         self.preview.upload(&self.device,&[],&[]).map_err(PyValueError::new_err)?;
+        self.group_feedback = None;
         self.end_tool_marks();
         self.face_marks.upload(&self.device,&[],&[]).map_err(PyValueError::new_err)?;
         self.ghost_geometry.upload(&self.device,&[],&[]).map_err(PyValueError::new_err)?;
         for t in self.targets.values_mut() {
+            t.group_feedback = None;
             t.preview.upload(&self.device,&[],&[]).map_err(PyValueError::new_err)?;
             t.face_marks.pose_marks(&self.queue,glam::Mat4::IDENTITY.to_cols_array(),0);
             t.face_marks.upload(&self.device,&[],&[]).map_err(PyValueError::new_err)?;
@@ -1441,12 +1447,25 @@ impl Renderer {
         } else {
             let format = self.config.format.remove_srgb_suffix();
             let layout = self.preview.layout();
-            self.preview.textures.get_or_insert_with(|| preview_texture::TexturedPreview::new(self.samples.clone(), &self.device, format, &layout))
+            self.preview.textures.get_or_insert_with(|| preview_texture::TexturedPreview::new(self.samples.clone(), &self.device, format, &layout, false))
                 .upload(py, &self.device, &self.queue, runs)?;
         }
         self.preview.upload_validated(&self.device, triangles, edges);
         Ok(())
     }
+    /// Detached clipboard geometry is baked once, then translated with one uniform.
+    fn begin_group_feedback(&mut self, pack: &Bound<'_, PyAny>, frame: [f64; 3]) -> PyResult<()> {
+        let format = self.config.format.remove_srgb_suffix();
+        let mut layer = preview::Preview::new(self.samples.clone(), &self.device, format, &self.camera, &self.look.buffer, 3);
+        group_feedback::upload(pack, frame, &mut layer, &self.device, &self.queue, self.samples.clone(), format)?;
+        self.group_feedback = Some(layer);
+        Ok(())
+    }
+    fn pose_group_feedback(&self, matrix: [f32; 16]) {
+        if let Some(layer) = &self.group_feedback { layer.pose_group(&self.queue, matrix); }
+    }
+    fn end_group_feedback(&mut self) { self.group_feedback = None; }
+
     /// Depth-tested world-space lines in a named slot (``lines.rs``):
     /// 40-byte segments ``a, b (3 f32), RGBA8, width, dash, gap (f32
     /// physical pixels)``. An empty array empties the slot. A slot is drawn
@@ -2015,7 +2034,7 @@ impl Renderer {
             drop(pass);
             }
             if msaa && !self.pick_pending {
-                self.aa.draw(&mut e, &color, s, self.style, self.edges, self.look.data[6][0] > 0., self.multi, self.queries.as_ref(), Some(edge_only), self.references.active() || self.sections.count > 0 || self.preview.active() || self.face_marks.active() || self.ghost_geometry.active() || self.ghost_objects.active() || self.host_context.active() || self.lines.active_layer(true) || (self.look.data[9][0] > 0. && self.material_transparency), &self.axes, &self.references);
+                self.aa.draw(&mut e, &color, s, self.style, self.edges, self.look.data[6][0] > 0., self.multi, self.queries.as_ref(), Some(edge_only), self.references.active() || self.sections.count > 0 || self.preview.active() || self.group_feedback.as_ref().is_some_and(preview::Preview::active) || self.face_marks.active() || self.ghost_geometry.active() || self.ghost_objects.active() || self.host_context.active() || self.lines.active_layer(true) || (self.look.data[9][0] > 0. && self.material_transparency), &self.axes, &self.references);
             }
             if !edge_only && self.sun.enabled && self.style != 1 && self.style != 4 {
                 if msaa { self.aa.resolve_depth(&self.device, &mut e, &depth, None); }
@@ -2049,9 +2068,11 @@ impl Renderer {
         }
         if msaa {
             self.preview.draw(&mut e, &self.aa.color_view(), &self.aa.depth_view(), Some(&color));
+            if let Some(group) = &self.group_feedback { group.draw(&mut e, &self.aa.color_view(), &self.aa.depth_view(), Some(&color)); }
             self.face_marks.draw(&mut e, &self.aa.color_view(), &self.aa.depth_view(), Some(&color));
         } else {
             self.preview.draw(&mut e, &color, &depth, None);
+            if let Some(group) = &self.group_feedback { group.draw(&mut e, &color, &depth, None); }
             self.face_marks.draw(&mut e, &color, &depth, None);
         }
         for (enabled,ghost) in [(self.host_context.active(), &self.host_context), (self.look.data[9][2]>0.,&self.ghost_geometry),(self.look.data[9][3]>0.,&self.ghost_objects)] {
@@ -2976,6 +2997,7 @@ impl Renderer {
             axes: axes::Axes::new(self.samples.clone(), d, format, &self.camera),
             lines: lines::Lines::new(self.samples.clone(), d, format, &self.camera),
             preview: preview::Preview::new(self.samples.clone(), d, format, &self.camera, &self.look.buffer, 0),
+            group_feedback: None,
             face_marks: preview::Preview::new(self.samples.clone(), d, format, &self.camera, &self.look.buffer, 1),
             sections: sections::Sections::new(self.samples.clone(), d, format, &self.camera),
             camera_data: Vec::new(),
@@ -3039,6 +3061,7 @@ impl Renderer {
         swap(&mut self.lines, &mut t.lines);
         swap(&mut self.preview, &mut t.preview);
         swap(&mut self.face_marks, &mut t.face_marks);
+        swap(&mut self.group_feedback, &mut t.group_feedback);
         swap(&mut self.sections, &mut t.sections);
         swap(&mut self.camera_data, &mut t.camera_data);
         swap(&mut self.look.data, &mut t.look_data);

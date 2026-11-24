@@ -20,6 +20,7 @@ impl Preview {
     ) -> Self {
         let marks = kind == 1;
         let ghost = kind == 2;
+        let clipboard = kind == 3;
         let shader = d.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("tool previews"),
             source: wgpu::ShaderSource::Wgsl(include_str!("preview.wgsl").into()),
@@ -50,7 +51,7 @@ impl Preview {
                         attributes: &wgpu::vertex_attr_array![0=>Float32x3,1=>Float32x3,2=>Unorm8x4] }] },
                 fragment: Some(wgpu::FragmentState { module: &shader, entry_point: Some("fs"), compilation_options: wgpu::PipelineCompilationOptions { constants: &constants, ..Default::default() },
                     targets: &[Some(wgpu::ColorTargetState { format, blend: Some(wgpu::BlendState::ALPHA_BLENDING), write_mask: wgpu::ColorWrites::ALL })] }),
-                primitive: wgpu::PrimitiveState { topology: if edge { wgpu::PrimitiveTopology::LineList } else { wgpu::PrimitiveTopology::TriangleList }, ..Default::default() },
+                primitive: wgpu::PrimitiveState { cull_mode: (clipboard && !edge).then_some(wgpu::Face::Back), topology: if edge { wgpu::PrimitiveTopology::LineList } else { wgpu::PrimitiveTopology::TriangleList }, ..Default::default() },
                 depth_stencil: Some(wgpu::DepthStencilState { format: wgpu::TextureFormat::Depth32Float, depth_write_enabled: !marks && !ghost && !edge,
                     depth_compare: crate::depth::compare(wgpu::CompareFunction::LessEqual), stencil: Default::default(),
                     bias: crate::depth::bias(wgpu::DepthBiasState { constant: if marks || edge {-2} else {0}, slope_scale: if marks || edge {-1.} else {0.}, clamp: 0. }) }),
@@ -115,7 +116,14 @@ impl Preview {
         self.counts[1] = (data.len() / 28) as u32;
     }
     pub fn pose_marks(&self, queue: &wgpu::Queue, matrix: [f32; 16], selected: u32) {
+        self.set_pose(queue, matrix, selected, false);
+    }
+    pub fn pose_group(&self, queue: &wgpu::Queue, matrix: [f32; 16]) {
+        self.set_pose(queue, matrix, 0, true);
+    }
+    fn set_pose(&self, queue: &wgpu::Queue, matrix: [f32; 16], selected: u32, group: bool) {
         let mut data = [0u8; 80];
+        data[68..72].copy_from_slice(&u32::from(group).to_le_bytes());
         data[..64].copy_from_slice(bytemuck::bytes_of(&matrix));
         data[64..68].copy_from_slice(&selected.to_le_bytes());
         queue.write_buffer(&self.mark_pose, 0, &data);

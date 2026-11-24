@@ -11,12 +11,13 @@ override EDGE: bool = false;
 struct Out { @builtin(position) position: vec4f, @location(0) color: vec4f, @location(1) section: f32 }
 @vertex fn vs(@builtin(vertex_index) index: u32, @location(0) pos: vec3f, @location(1) normal: vec3f, @location(2) color: vec4f) -> Out {
  var point = vec4f(pos, 1.);
- if MARK && select(index < mark_pose.counts.x, normal.x > 0.5, EDGE) {
+ if mark_pose.counts.y != 0u || (MARK && select(index < mark_pose.counts.x, normal.x > 0.5, EDGE)) {
   point = mark_pose.matrix * point;
  }
  var o: Out; o.position = camera.vp * point;
  let shade = select(0.62+0.38*abs(dot(normalize(normal),normalize(vec3f(0.35,0.25,1.)))),1.,EDGE || MARK);
- o.color = vec4f(select(color.rgb,style.front.rgb,color.a == 0.)*shade,select(color.a,1.,color.a == 0.));
+ let unpainted = select(style.front.rgb, style.back.rgb, mark_pose.counts.y != 0u && color.r == 1.);
+ o.color = vec4f(select(color.rgb,unpainted,color.a == 0.)*shade,select(color.a,1.,color.a == 0.));
  o.section = dot(point,style.section_plane); return o;
 }
 @fragment fn fs(i: Out) -> @location(0) vec4f {
@@ -38,8 +39,10 @@ struct TextureVertex { @builtin(position) position: vec4f, @location(0) material
 
 @vertex fn texture_vs(@location(0) point: vec3f, @location(1) material: vec4f) -> TextureVertex {
  var v: TextureVertex;
- v.position = camera.vp * vec4f(point, 1.);
- v.section = dot(vec4f(point, 1.), style.section_plane);
+ var world = vec4f(point, 1.);
+ if mark_pose.counts.y != 0u { world = mark_pose.matrix * world; }
+ v.position = camera.vp * world;
+ v.section = dot(world, style.section_plane);
  v.material = material;
  return v;
 }

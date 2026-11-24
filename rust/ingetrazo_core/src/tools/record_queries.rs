@@ -79,6 +79,8 @@ impl ViewportToolHost {
     ) -> PyResult<Option<Value>> {
         let view = self.vp.bind(py);
         Ok(Some(match verb {
+            "begin_paste_preview" | "pose_paste_preview" | "end_paste_preview" | "can_stamp" =>
+                self.paste_service(py, verb, arg)?,
             "sampler_armed" | "probe_container" | "pick_paint_face" | "clear_paint_hover"
             | "mark_paint_face" | "sample_image" | "sample_face" | "paint_targets"
             | "tape_source" => self.paint_service(py, verb, arg)?,

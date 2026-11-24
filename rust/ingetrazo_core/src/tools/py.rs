@@ -643,6 +643,17 @@ impl ToolMachine {
         json_to_py(py, self.fields.get_or_init(|| self.tool.state()).get(key).unwrap_or(&serde_json::Value::Null))
     }
 
+    fn set_paste_clipboard(&mut self, clip: Option<&Bound<'_, PyDict>>) -> PyResult<()> {
+        let geometry = super::paste_host::geometry(clip)?;
+        self.fields.take();
+        self.serial += 1;
+        self.tool.set("clipboard", &geometry);
+        Ok(())
+    }
+    fn paste_faces<'py>(&self, py: Python<'py>, rows: &Bound<'py, PyAny>, offset: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyList>> {
+        super::paste_host::preview_faces(py, &self.tool.preview_surfaces(), rows, offset)
+    }
+
     fn preview_surfaces(&self) -> Vec<Vec<Vec<crate::math::Vec3>>> {
         self.tool.preview_surfaces().iter().map(|face| face.iter().map(|ring|
             ring.iter().map(|point| super::plane::vec((*point).into())).collect()).collect()).collect()

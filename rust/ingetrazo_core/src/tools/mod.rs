@@ -21,6 +21,7 @@ mod image;
 mod scale_manager;
 mod solid;
 mod paste;
+mod paste_host;
 mod flip;
 mod tape;
 mod fillet_tool;

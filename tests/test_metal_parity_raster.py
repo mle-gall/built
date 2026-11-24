@@ -784,3 +784,50 @@ def test_selection_marks_follow_the_grab_and_leave_hover_marks_in_place(native):
     np.testing.assert_array_equal(before[:20], moved[:20])
     native.end_tool_marks()
     np.testing.assert_array_equal(before, capture(native))
+
+
+@pytest.mark.parametrize('aa', [False, True])
+def test_clipboard_group_preview_moves_nested_texture_and_preserves_scene(native, tmp_path, aa):
+    from types import SimpleNamespace
+    from PySide6.QtGui import QColor, QImage
+    from ingetrazo_core import Vec3, Matrix4
+    from core.scene import Scene
+    from core.group import Group
+    from core.mesh import Mesh
+    from views.wgpu_mesh_tools import MeshToolAccess
+
+    upload(native, 255)
+    native.set_antialias(aa)
+    native.set_style(dict(sky=False, edges=False))
+    original = capture(native)
+    path = str(tmp_path / 'clipboard.png')
+    img = QImage(2, 1, QImage.Format_RGBA8888)
+    img.fill(QColor(0, 255, 100))
+    assert img.save(path)
+    mesh = Mesh()
+    face = mesh.add_face([Vec3(x, y, .3) for x, y in
+                          [(-.3, -.3), (.3, -.3), (.3, .3), (-.3, .3)]])
+    face.attrs = {'texture': {'path': path}}
+    child = Group(mesh)
+    root = Group(Mesh())
+    root.children.append(child)
+    placement = Matrix4()
+    placement.translate(Vec3(-.5, 0, 0))
+    root.xform = placement
+    scene = Scene()
+    access = MeshToolAccess()
+    access.scene = scene
+    access.update = lambda: None
+    access.view = SimpleNamespace(renderer=native, packed=SimpleNamespace(origin=(0., 0., 0.)))
+    version = scene.version
+    access.begin_groups_preview([root], external=True)
+    before = capture(native)
+    access.set_groups_preview_offset(Vec3(1., 0, 0))
+    after = capture(native)
+    access.end_groups_preview()
+    np.testing.assert_array_equal(capture(native), original)
+    for frame, on, off in [(before, 16, 48), (after, 48, 16)]:
+        assert frame[32, on, 1] > 220 and frame[32, on, 0] < 20
+        np.testing.assert_array_equal(frame[32, off], original[32, off])
+    assert list(root.children) == [child] and list(scene.groups) == []
+    assert scene.version == version
