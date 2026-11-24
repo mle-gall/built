@@ -1075,12 +1075,6 @@ class LayersPanel(QWidget):
         header: sort by it, twice to turn the order."""
         scene = self._scene()
         names = [ly.key for ly in scene.layers]
-        if col == COL_EYE:
-            self.set_visible(names, not all(ly.visible for ly in scene.layers))
-            return
-        if col == COL_LOCK:
-            self.set_locked(names, not all(ly.locked for ly in scene.layers))
-            return
         if col == COL_ISOLATE:
             self.exit_isolation()
             return
@@ -2398,32 +2392,6 @@ class LayersPanel(QWidget):
                 tr("'{layer}' merged into '{into}'", layer=name, into=into),
                 2500)
 
-    def _on_purge(self) -> None:
-        """The classic "Purge Unused" for tags: sweep the layers nothing
-        carries. One undoable step, and it says what it did — a silent
-        sweep of a panel the user did not look at is how a deliberate
-        empty layer disappears without anyone noticing."""
-        from core.history import PurgeUnusedCommand
-        scene = self._scene()
-        cmd = PurgeUnusedCommand(layers=True, materials=False)
-        n_layers, _ = cmd.counts(scene)
-        if not n_layers:
-            QMessageBox.information(
-                self, tr("Purge"), tr("Every layer is in use."))
-            return
-        names = [ly.name for _i, ly in (cmd._layers or [])]
-        preview = ", ".join(names[:12]) + ("…" if len(names) > 12 else "")
-        if QMessageBox.question(
-                self, tr("Purge"),
-                tr("Delete {n} layers no entity carries?", n=n_layers)
-                + f"\n\n{preview}") != QMessageBox.Yes:
-            return
-        self._window.viewport.history.execute(cmd)
-        self.refresh()
-        self._window.viewport.update()
-        self._window.statusBar().showMessage(
-            tr("{n} unused layers purged", n=n_layers), 3000)
-
     def _on_assign(self) -> None:
         """Move the selection onto the HIGHLIGHTED layer — and say so when
         there is nothing to move or no layer picked: the button used to do
@@ -2475,7 +2443,6 @@ class LayersPanel(QWidget):
             menu.addAction(tr("Add folder"), lambda: self.add_folder())
             menu.addAction(tr("Show all layers"), self.show_all)
             menu.addSeparator()
-            menu.addAction(tr("Purge unused layers…"), self._on_purge)
             return
         kind, name = self._key(item)
         names = self._targets(item)
@@ -2541,7 +2508,6 @@ class LayersPanel(QWidget):
             menu.addAction(tr("Rename"), lambda: self.tree.editItem(item,
                                                                     COL_NAME))
         menu.addSeparator()
-        menu.addAction(tr("Purge unused layers…"), self._on_purge)
 
     #: Line type labels, in menu order.
     LINETYPE_LABELS = (("continuous", "Continuous"), ("dashed", "Dashed"),

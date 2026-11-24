@@ -83,7 +83,7 @@ impl RowLayout {
     }
 
     /// The header row: "Name" over the names, each column's title over it.
-    pub fn header(&self, ui: &mut egui::Ui, left: f32) -> egui::Response {
+    pub fn header(&self, ui: &mut egui::Ui, left: f32, actions: &mut Vec<String>) -> egui::Response {
         let (r, response) = ui.allocate_exact_size(
             vec2(ui.available_width(), super::ROW_H),
             egui::Sense::hover(),
@@ -119,6 +119,25 @@ impl RowLayout {
             _ => at(self.count_right, "Items", egui::Align2::RIGHT_CENTER),
         }
         p.hline(r.x_range(), r.max.y - 0.5, Stroke::new(1.0_f32, EDGE));
+        if self.lens != Lens::Export {
+            let drawing = self.lens == Lens::Drawing;
+            let scope = if drawing { "tags" } else { "placements" };
+            let lock_x = self.flags.map_or(self.count_right - 44., |(_, end)| end - 8.);
+            for (field, x, tip) in [
+                ("eye", left + 10., if drawing { "Show or hide all tags" } else { "Show or hide all top-level groups" }),
+                ("lock", lock_x, if drawing { "Lock or unlock all tags" } else { "Lock or unlock all top-level groups" }),
+            ] {
+                let cell = Rect::from_center_size(pos2(x, cy), vec2(18., super::ROW_H));
+                if field == "eye" {
+                    super::kit::paint_eye(ui, cell.shrink(2.), true);
+                } else {
+                    super::kit::paint_lock(ui, cell.shrink(2.), true);
+                }
+                if ui.interact(cell, egui::Id::new(("project header", field)), egui::Sense::click()).on_hover_text(tip).clicked() {
+                    actions.push(format!("header{field}\u{1f}{scope}"));
+                }
+            }
+        }
         response
     }
 }

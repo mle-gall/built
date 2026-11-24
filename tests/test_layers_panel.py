@@ -21,7 +21,7 @@ from core.group import Group
 from core.layers import DEFAULT_LAYER, Layer, assign_layer
 from core.mesh import Mesh
 from core.saved_views import SavedView
-from tests.shell_isolation import restore_shell_patches  # noqa: F401
+from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
 from tests.test_drawing_records import _square
 from core.scene import Scene
 
@@ -86,28 +86,23 @@ def test_add_goes_into_the_selected_folder_with_the_name_open(win):
         panel.item_for(folder, "folder")
 
 
-def test_purge_lives_in_the_right_click_and_asks_with_the_count(win,
-                                                                monkeypatch):
-    from PySide6.QtWidgets import QMessageBox
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers += [Layer("Vacia 1"), Layer("Vacia 2")]
-    panel.refresh()
-    asked = []
-
-    def question(_parent, _title, text, *a, **k):
-        asked.append(text)
-        return QMessageBox.Yes
-
-    monkeypatch.setattr(QMessageBox, "question", staticmethod(question))
-    for item in (None, panel.item_for("Vacia 1")):
-        menu = QMenu()
-        panel.fill_menu(menu, item)
-        assert "Purge unused layers…" in [a.text() for a in menu.actions()]
-    next(a for a in menu.actions()
-         if a.text() == "Purge unused layers…").trigger()
-    assert asked and "2" in asked[0]
-    assert [ly.name for ly in scene.layers] == [DEFAULT_LAYER]
+def test_purge_asks_for_the_count_and_accepts_only_a_current_confirmation(native_question_host):
+    from tests.native_tree import action
+    from views import chrome_dialogs
+    host = native_question_host
+    scene = host.viewport.scene
+    scene.layers.extend([Layer("Vacia 1"), Layer("Vacia 2")])
+    for answer in ("cancel", "stale", "readonly", "delete"):
+        action(host, "purgetags", "preview-tag:Vacia 1")
+        assert "2" in chrome_dialogs.current_sheet(host.window).text
+        if answer == "stale":
+            scene.version += 1
+        scene.worksession_read_only = answer == "readonly"
+        assert chrome_dialogs.answer(host.window, "cancel" if answer == "cancel" else "delete")
+        assert len(scene.layers) == (1 if answer == "delete" else 3)
+        scene.worksession_read_only = False
+    action(host, "purgetags", "")
+    assert chrome_dialogs.current_sheet(host.window) is None
 
 
 def test_columns_and_indent_follow_the_browser(win):
@@ -145,24 +140,16 @@ def test_the_top_bar_ends_with_expand_colour_by_layer_and_more(win):
     assert not win.viewport.scene.display_style.color_by_layer
 
 
-def test_the_eye_and_padlock_headers_act_on_every_layer(win):
-    from views.layers_panel import COL_EYE, COL_LOCK, COL_NAME
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers += [Layer("A"), Layer("B", visible=False)]
-    panel.refresh()
-    panel._on_header_clicked(COL_EYE)            # not all visible → all on
-    assert all(ly.visible for ly in scene.layers)
-    panel._on_header_clicked(COL_EYE)            # all visible → all off
-    assert not any(ly.visible for ly in scene.layers)
-    panel._on_header_clicked(COL_LOCK)
-    assert all(ly.locked for ly in scene.layers)
-    panel._on_header_clicked(COL_LOCK)
-    assert not any(ly.locked for ly in scene.layers)
-    panel._on_header_clicked(COL_NAME)           # Name: sorts, descending
-    names = [panel.tree.topLevelItem(i).text(0)
-             for i in range(panel.tree.topLevelItemCount())]
-    assert names == [DEFAULT_LAYER, "B", "A"]
+def test_the_eye_and_padlock_headers_act_on_every_layer(native_host):
+    from tests.native_tree import action
+    scene = native_host.viewport.scene
+    scene.layers.extend([Layer("A"), Layer("B", visible=False)])
+    for verb, field, expected in [("headereye", "visible", True), ("headereye", "visible", False),
+                                  ("headerlock", "locked", True), ("headerlock", "locked", False)]:
+        action(native_host, verb, "tags")
+        assert all(getattr(tag, field) == expected for tag in scene.layers)
+    assert len(native_host.viewport.history.undo_stack) == 4
+    assert native_host.viewport.history.undo() and all(tag.locked for tag in scene.layers)
 
 
 def test_a_real_click_on_the_eye_of_a_selected_row_acts_on_all(win):
@@ -539,37 +526,6 @@ def test_back_in_the_drawing_the_picked_rows_let_go(win):
     _app.processEvents()
     if QApplication.focusWidget() is win.viewport.keys_stand_in:
         assert not panel.tree.selectedItems()
-
-
-def test_the_headers_take_a_real_mouse_click(win):
-    """Switching sorting off makes Qt's header unclickable; the eye and
-    padlock headers must still answer the mouse."""
-    from PySide6.QtCore import QPoint
-    from PySide6.QtTest import QTest
-    from views.layers_panel import COL_EYE, COL_LOCK
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers += [Layer("A"), Layer("B")]
-    panel.refresh()
-    win.layers_dock.raise_()
-    _app.processEvents()
-    head = panel.tree.header()
-    assert head.sectionsClickable()
-
-    def click(col):
-        x = head.sectionViewportPosition(col) + head.sectionSize(col) // 2
-        QTest.mouseClick(head.viewport(), Qt.LeftButton, Qt.NoModifier,
-                         QPoint(x, head.height() // 2))
-        _app.processEvents()
-
-    click(COL_EYE)
-    assert not any(ly.visible for ly in scene.layers)
-    click(COL_EYE)
-    assert all(ly.visible for ly in scene.layers)
-    click(COL_LOCK)
-    assert all(ly.locked for ly in scene.layers)
-    click(COL_LOCK)
-    assert not any(ly.locked for ly in scene.layers)
 
 
 def _drag_move(tree, pos):

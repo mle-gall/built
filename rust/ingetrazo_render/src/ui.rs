@@ -1826,7 +1826,7 @@ impl Ui {
                     let row_left = ui.cursor().min.x;
                     let cols = lens::RowLayout::plan(col.lens, row_left, row_left + ui.available_width());
                     let row_room = if col.mode.is_empty() && nodes_len > 0 {
-                        let header = cols.header(ui, row_left);
+                        let header = cols.header(ui, row_left, &mut actions);
                         if col.lens == Lens::Drawing {
                             drawing::drawing_drop(ui, &header, &col.nodes, None, col.styles.owner, &mut actions);
                         }
@@ -2277,7 +2277,7 @@ impl Ui {
                 ("-", ""), ("linkopen", "Edit source"), ("linkfinder", "Show in Finder"),
                 ("linkreload", "Reload"), ("linkrelink", "Locate…"), ("linkunlink", "Unlink")];
             let section_menu: &[(&str, &str)] = &[("sectioncut", "Toggle cut"), ("eye", "Show / hide"), ("deleterows", "Delete")];
-            let tag_menu: &[(&str, &str)] = &[("tagselect", "Select items"), ("tagisolate", "Isolate"), ("deletetag", "Delete")];
+            let tag_menu: &[(&str, &str)] = &[("tagselect", "Select items"), ("tagisolate", "Isolate"), ("deletetag", "Delete"), ("purgetags", "Purge unused tags…")];
             let menu = if key.starts_with("preview-tag:") { tag_menu } else if key.starts_with("section:") { section_menu } else if row == 0 && key.starts_with("n:link") { link_menu } else if row == 0 { node_menu }
                 else if row == 5 { comp_menu } else { item_menu };
             let resp = egui::Area::new(egui::Id::new("row_menu"))
@@ -2366,6 +2366,10 @@ impl Ui {
                         if col.mode.is_empty() {
                             if col.lens == Lens::Filing && tree_filter::controls(ui, &mut col.filter) {
                                 actions.push(format!("filter\u{1f}{}", col.filter));
+                            }
+                            if col.lens == Lens::Drawing && menu_row(ui, &("purgetags".into(), "Purge unused tags…".into(), String::new(), String::new(), -1, true)) {
+                                actions.push("purgetags\u{1f}".into());
+                                close = true;
                             }
                             let options = tree_order::Sort::OPTIONS;
                             let old = options.iter().position(|(sort, _)| *sort == col.sort).unwrap_or(0);
@@ -3206,6 +3210,25 @@ fn occurrence_menu_runs_the_document_action_and_closes() {
         .take_actions()
         .contains(&format!("tree:explode\u{1f}{key}")));
     assert!(ui.column.unwrap().row_menu.is_none());
+}
+
+#[test]
+fn only_eye_and_lock_headers_dispatch_and_each_targets_its_lens() {
+    let Some(mut ui) = test_chrome() else { return };
+    ui.ctx = test_context();
+    ui.set_tree(vec![(vec!["i:sample".into(), "Sample".into()], vec![0, 0, 0, 0, 1, 1, 0])], 0);
+    for (lens, scope) in [(Lens::Filing, "placements"), (Lens::Drawing, "tags")] {
+        ui.column.as_mut().unwrap().lens = lens;
+        for _ in 0..3 { tree_frame(&mut ui, vec![]); }
+        let at = tree_frame(&mut ui, vec![]);
+        tree_click(&mut ui, at["Name"], egui::PointerButton::Primary);
+        assert!(ui.take_actions().is_empty());
+        for field in ["eye", "lock"] {
+            let cell = ui.ctx.read_response(egui::Id::new(("project header", field))).unwrap();
+            tree_click(&mut ui, cell.rect.center(), egui::PointerButton::Primary);
+            assert_eq!(ui.take_actions(), [format!("tree:header{field}\x1f{scope}")]);
+        }
+    }
 }
 
 #[cfg(test)]

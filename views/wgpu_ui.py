@@ -1423,6 +1423,13 @@ def _tree_action(win, view, action) -> None:
         elif verb == "sectioncut" and kind == "section":
             _core(vp, "edit_section_plane", uid=ident, field="cut")
             vp.notify_scene_changed()
+        elif verb in ("headereye", "headerlock"):
+            from ingetrazo_render import tree_header_state
+            tree_header_state(vp, rk, verb == "headerlock")
+            rebuild()
+        elif verb == "purgetags":
+            from ingetrazo_render import tree_purge_tags
+            tree_purge_tags(win)
         elif verb == "deletetag" and kind == "preview-tag":
             from ingetrazo_render import tree_delete_tag
             tree_delete_tag(win, ident)

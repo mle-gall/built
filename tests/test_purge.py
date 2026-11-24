@@ -181,20 +181,6 @@ def test_flags_scope_the_sweep():
     assert "grass" in scene.materials
 
 
-def _window():
-    import os
-    from PySide6.QtWidgets import QApplication
-    from views.main_window import MainWindow
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    if QApplication.instance() is None:
-        QApplication([])
-    return MainWindow()
-
-
-def _row(panel, name):
-    return panel.item_for(name)
-
-
 def test_deleting_a_layer_reassigns_faces_INSIDE_groups(native_question_host):
     from core.layers import layer_of
     from tests.native_tree import action
@@ -218,24 +204,18 @@ def test_deleting_a_layer_reassigns_faces_INSIDE_groups(native_question_host):
     assert layer_of(f) == layer_of(g) == DEFAULT_LAYER
 
 
-def test_the_purge_button_sweeps_and_ctrl_z_brings_them_back(monkeypatch):
-    from PySide6.QtWidgets import QMessageBox
-    monkeypatch.setattr(QMessageBox, "question",
-                        staticmethod(lambda *a, **k: QMessageBox.Yes))
-    win = _window()
-    try:
-        scene = win.viewport.scene
-        panel = win.layers_dock.panel
-        for name in ("CVL_PUNTO", "BUZON", "Trees"):
-            scene.layers.append(Layer(name))
-        panel.refresh()
-        panel._on_purge()
-        assert [ly.name for ly in scene.layers] == [DEFAULT_LAYER]
-        assert panel.tree.topLevelItemCount() == 1
-        win.viewport.history.undo()
-        panel.refresh()
-        assert [ly.name for ly in scene.layers] == [
-            DEFAULT_LAYER, "CVL_PUNTO", "BUZON", "Trees"]
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_the_drawing_purge_removes_only_unused_tags_and_undo_restores_order(native_question_host):
+    from tests.native_tree import action
+    from views import chrome_dialogs
+    host = native_question_host
+    scene = host.viewport.scene
+    names = [DEFAULT_LAYER, "CVL_PUNTO", "BUZON", "Trees"]
+    scene.layers.extend(Layer(name) for name in names[1:])
+    scene.materials["Grass"] = Material("Grass")
+    action(host, "purgetags", "")
+    sheet = chrome_dialogs.current_sheet(host.window)
+    assert "3" in sheet.text and "CVL_PUNTO, BUZON, Trees" in sheet.text
+    assert chrome_dialogs.answer(host.window, "delete")
+    assert [tag.name for tag in scene.layers] == [DEFAULT_LAYER] and "Grass" in scene.materials
+    assert host.viewport.history.undo()
+    assert [tag.name for tag in scene.layers] == names
