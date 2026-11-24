@@ -1,5 +1,6 @@
 """Named deliveries through the protocol, dock and one-off export."""
 import json
+import sys
 import time
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -77,21 +78,17 @@ def drain(timers):
 @pytest.fixture
 def next_turn(monkeypatch):
     from core import input_types
-    from views import chrome_dialogs
-
     from ingetrazo_render import WindowTimers
     timers = WindowTimers()
     monkeypatch.setattr(input_types, "NATIVE", True)
-    monkeypatch.setattr(chrome_dialogs, "in_shell", lambda: True)
+    monkeypatch.setattr(sys, "builtin_module_names", (*sys.builtin_module_names, "built_shell"))
     return SimpleNamespace(timers=timers)
 
 
-def test_queue_keep_cancel(tmp_path, monkeypatch, next_turn):
-    from views import chrome_forms
+def test_queue_keep_cancel(tmp_path, next_turn):
     scene = _tagged_wall_scene()
     vp = SimpleNamespace(history=History(scene), scene=scene, camera=OrbitCamera())
     win = DeliveryWindow(_host=next_turn, viewport=vp)
-    monkeypatch.setattr(chrome_forms, "show", lambda *_: None)
     timers = next_turn.timers
     path = tmp_path / "client.glb"
     form = dock.delivery_export_form(win, one_off=True)

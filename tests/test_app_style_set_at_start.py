@@ -4,7 +4,6 @@
 from unittest.mock import Mock
 
 from views import wgpu_ui
-from plugins._widget_language import FONT
 
 
 def test_startup_installs_the_chrome(native_host, monkeypatch):
@@ -12,7 +11,7 @@ def test_startup_installs_the_chrome(native_host, monkeypatch):
     renderer = Mock()
     monkeypatch.setattr(view, "renderer", renderer)
     wgpu_ui.attach(view)
-    renderer.ui_enable.assert_called_once_with(FONT)
+    renderer.ui_enable.assert_called_once_with(wgpu_ui.FONT)
     assert view._ui_attached
     assert view.source_viewport._chrome_owns_labels
 
