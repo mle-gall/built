@@ -99,6 +99,5 @@ def test_projected_vertex_identity_and_order():
         indices = {id(p): i for i, p in enumerate(outer + hole)}
         for tri in T.triangulate(outer, [hole]):
             digest.update(bytes(indices[id(p)] for p in tri))
-        digest.update(bytes(indices[id(p)] for p in tri))
         digest.update(b'\xff')
     assert digest.hexdigest() == "d0d073e0c5bd3c2c1cde744f4416a5e93cbedcdf907776c0eb5c9759b78b6389"
