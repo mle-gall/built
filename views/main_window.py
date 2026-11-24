@@ -5263,8 +5263,7 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
     def activate_document(self, doc, closing: bool = False) -> None:
         """Bring ``doc``'s tab to the front. The tool in hand is dropped and
         an open group is left in the project left behind; the panels, the
-        menus and the title follow the one in front. ``closing``: the one
-        left behind is about to go, so no hover picture is taken of it."""
+        menus and the title follow the one in front."""
         if doc is None or doc not in self._documents:
             return
         bar = self._project_tabs
@@ -5300,22 +5299,21 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         if doc.composer_shown:
             comp.hide()
 
-    #: Width of the picture a tab in the back shows on hover (px).
-    TAB_PREVIEW_PX = 280
+    #: Fallback width for the document archive thumbnail.
+    ARCHIVE_PREVIEW_PX = 280
 
-    def _tab_thumbnail(self, vp):
-        """The frame the viewport shows, small: the picture of the project
-        on hover over its tab (one frame drawn again, as the view stands)."""
+    def _archive_thumbnail(self, vp):
+        """Render a small archive picture from the document viewport."""
         try:
             if vp.keys_stand_in.renderer is None:
                 return None
-            img = vp.render_image(self.TAB_PREVIEW_PX, overlays=False)
+            img = vp.render_image(self.ARCHIVE_PREVIEW_PX, overlays=False)
         except Exception:  # noqa: BLE001 — a missing picture only
             return None
         if img.isNull():
             return None
         from PySide6.QtCore import Qt as _Qt
-        return img.scaledToWidth(self.TAB_PREVIEW_PX,
+        return img.scaledToWidth(self.ARCHIVE_PREVIEW_PX,
                                  _Qt.SmoothTransformation)
 
     #: Width of the picture a save keeps in the file (px): the start page's
@@ -5342,7 +5340,7 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
                 except Exception:  # noqa: BLE001 — a missing picture only
                     image = None
             return None if blank_picture(image) else image
-        image = self._tab_thumbnail(doc.viewport)
+        image = self._archive_thumbnail(doc.viewport)
         return None if blank_picture(image) else image
 
     #: Panel caches keyed by the scene's content version: two projects can

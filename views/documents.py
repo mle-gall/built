@@ -18,9 +18,6 @@ coming back to it rebuilds nothing.
 """
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Optional
-
 from PySide6.QtCore import QEvent, QPoint, Qt, QTimer, Signal
 from PySide6.QtWidgets import (QHBoxLayout, QSizePolicy, QTabBar, QToolButton,
                                QWidget)
@@ -264,8 +261,6 @@ class ProjectTabBar(QWidget):
     moved = Signal()
     #: The views button: the layouts of the project in front.
     viewsRequested = Signal()
-    #: A right-click on a tab: its document and where (global position).
-    menuRequested = Signal(object, QPoint)
 
     #: The mark of a project with unsaved changes, after its name.
     DIRTY_MARK = " •"
@@ -312,8 +307,6 @@ class ProjectTabBar(QWidget):
         bar.currentChanged.connect(self._on_current)
         bar.tabMoved.connect(lambda *_a: self.moved.emit())
         bar.installEventFilter(self)
-        bar.setContextMenuPolicy(Qt.CustomContextMenu)
-        bar.customContextMenuRequested.connect(self._on_menu)
         row.addWidget(bar, 0, Qt.AlignBottom)
         # «+» right after the last tab, as tall as a tab; drawn, so it is
         # centred to the pixel (a font's «+» sits off centre).
@@ -451,12 +444,6 @@ class ProjectTabBar(QWidget):
         # After the press: QTabBar is still handling it when the signal
         # returns, and the window rebuilds things under the pointer.
         QTimer.singleShot(0, self, lambda d=doc: self.activated.emit(d))
-
-    def _on_menu(self, pos) -> None:
-        i = self.tabs.tabAt(pos)
-        if i >= 0:
-            self.menuRequested.emit(self.tabs.tabData(i),
-                                    self.tabs.mapToGlobal(pos))
 
     def _on_close_index(self, index: int) -> None:
         doc = self.tabs.tabData(index)

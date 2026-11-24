@@ -1024,8 +1024,7 @@ def _starter_components():
 
 
 def _components_in_model(view, win):
-    """``[(name, faces, groups, kept template)]`` from the Components tray's
-    own listing, kept until the model changes."""
+    """Placed and retained component definitions for this document revision."""
     scene = win.viewport.scene
     sig = (id(scene), scene.content_version)
     cache = getattr(view, "_ui_comp_cache", None)

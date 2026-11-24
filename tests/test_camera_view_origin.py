@@ -1,31 +1,56 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Document camera and Metal rows for a detail millions of metres from the scale figure."""
-from types import SimpleNamespace
-from functools import partial
+import math
+
+import pytest
 import numpy as np
 from ingetrazo_core import Vec3 as V
 
 from core import scale_figure
-from tests.test_.skp_inference_gaps import view, move, click, use, refresh
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
+from tests.test_.skp_inference_gaps import _pick, use, refresh
 from tests.test_wgpu_soft_shadows import native
-from views.main_window import MainWindow
+from core.input_types import Qt
 
 BASE = np.array([650000., 6860000., 0.])
 CORNERS = np.array([[.01,.02,0.],[.03,.02,0.],[.03,.04,0.],[.01,.04,0.]])
 
 
+@pytest.fixture
+def view(native_host):
+    v = native_host.view
+    native_host.resize(800, 600, 1.)
+    native_host.viewport.scene.clear()
+    v.set_scene(native_host.viewport.scene)
+    v.camera.target = V(1, 1, 0)
+    v.camera.pitch = math.pi / 2 - .001
+    v.camera.distance = 8.
+    v.pick_row = lambda x, y: _pick(v, x, y)
+    yield v
+    v.renderer = None
+
+
+def move(view, point):
+    view._host.pointer("move", *view._world_to_pixel(point))
+    return view.last_snap
+
+
+def click(view, point):
+    x, y = view._world_to_pixel(point)
+    view._host.pointer("press", x, y, button=1, held=1)
+    view._host.pointer("release", x, y, button=1)
+    refresh(view)
+
+
 def _document(view):
-    window = SimpleNamespace(viewport=view.source_viewport,
-                             _doc=SimpleNamespace(view_grid=None))
-    for name in ("_make_billboard_person", "_extents_bounds", "_figure_bounds", "_image_bounds"):
-        setattr(window, name, partial(getattr(MainWindow, name), window))
-    MainWindow._insert_scale_figure(window)
+    window = view._host.window
+    window._insert_scale_figure()
     assert scale_figure.is_marked(view.scene.groups[0])
     return window
 
 
 def _frame(window, view):
-    MainWindow._on_zoom_extents(window)
+    window._on_zoom_extents()
     view._sync_scene_camera()
     assert view.packed.origin == tuple(BASE)
     lo, hi = view.scene.bounds()
@@ -34,8 +59,6 @@ def _frame(window, view):
 
 
 def test_draw_and_orbit_beside_distant_scale_figure(view):
-    from PySide6.QtCore import Qt
-    from PySide6.QtTest import QTest
     from tools.rust_tools import LineTool
     from tools.rust_tools import RectangleTool
     from tools.pushpull import PushPullTool
@@ -55,8 +78,9 @@ def test_draw_and_orbit_beside_distant_scale_figure(view):
     use(view, PushPullTool())
     click(view, V(*CORNERS.mean(axis=0)))
     assert view.tools.tool.dragging
-    QTest.keyClicks(view, '0.012345m')
-    QTest.keyClick(view, Qt.Key_Return)
+    view._host.text('0.012345m')
+    view._host.key(True, Qt.Key_Return)
+    view._host.key(False, Qt.Key_Return)
     refresh(view)
     assert mesh._store.counts() == (9, 13, 6)
     _frame(window, view)
@@ -75,12 +99,12 @@ def test_draw_and_orbit_beside_distant_scale_figure(view):
         view._sync_scene_camera()
     np.testing.assert_allclose(view._world_to_pixel(pivot), pixel, atol=.02)
     view.scene.selection.add(top)
-    MainWindow._on_zoom_selection(window)
+    window._on_zoom_selection()
     np.testing.assert_allclose(window.viewport.camera.target.toTuple(), BASE + local.mean(axis=0),
                                atol=.004, rtol=0)
 
 
-def test_mixed_scene_metal_frame_and_id_buffer(view, native, tmp_path):
+def test_mixed_scene_metal_frame_and_id_buffer(native, view, tmp_path):
     from core.protocol import commands
     window = _document(view)
     face = view.scene.mesh.add_face(BASE + CORNERS)
@@ -93,7 +117,7 @@ def test_mixed_scene_metal_frame_and_id_buffer(view, native, tmp_path):
     view._scene_dirty = False
     view.source_viewport.camera.aspect = 1.
     view.source_viewport.camera.pitch = .58
-    MainWindow._on_zoom_extents(window)
+    window._on_zoom_extents()
     image = view.render_image(256, 256)
     np.testing.assert_array_equal(view.packed.origin, BASE)
     view.camera.aspect = 1.
@@ -108,11 +132,11 @@ def test_zoom_selection_across_one_wide_mesh(view):
     near = mesh.add_face(CORNERS)
     far = mesh.add_face(BASE + CORNERS)
     refresh(view)
-    window = SimpleNamespace(viewport=view.source_viewport, _doc=SimpleNamespace(view_grid=None))
+    window = view._host.window
     for face, origin in ((far, BASE), (near, np.zeros(3)), (far, BASE)):
         view.scene.selection.clear()
         view.scene.selection.add(face)
-        MainWindow._on_zoom_selection(window)
+        window._on_zoom_selection()
         view._sync_scene_camera()
         np.testing.assert_array_equal(view.packed.origin, origin)
         positions = view.packed.vertices['pos']
