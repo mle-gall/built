@@ -1091,6 +1091,7 @@ fn check(args: &Args) -> i32 {
             return 1;
         }
     };
+    if !launcher::check_extensions(&host) { return 1; }
     if let Some(file) = &args.file {
         let ok = host
             .call("open", (file.to_string_lossy().to_string(),))

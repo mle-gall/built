@@ -362,6 +362,29 @@ pub fn self_check(layout: &python::Layout) -> i32 {
     0
 }
 
+pub fn check_extensions(host: &python::Host) -> bool {
+    let Some(window) = host.call("__getattribute__", ("window",)) else {
+        return false;
+    };
+    Python::attach(|py| {
+        let result = window
+            .bind(py)
+            .getattr("_extension_load_errors")
+            .and_then(|errors| Ok((errors.is_truthy()?, errors.str()?.to_string())));
+        match result {
+            Ok((false, _)) => true,
+            Ok((true, errors)) => {
+                eprintln!("built: extension loading failed: {errors}");
+                false
+            }
+            Err(error) => {
+                eprintln!("built: checking extensions: {error}");
+                false
+            }
+        }
+    })
+}
+
 pub fn exit_now(status: i32) -> ! {
     Python::attach(|py| {
         let flush = || -> PyResult<()> {
