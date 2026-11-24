@@ -389,6 +389,9 @@ fn spawn_self(args: Vec<String>) -> bool {
 pub fn built_shell(m: &Bound<'_, PyModule>) -> PyResult<()> {
     #[cfg(target_os = "macos")]
     m.add_function(wrap_pyfunction!(crate::menu_commands::menu_commands, m)?)?;
+    m.add_function(wrap_pyfunction!(crate::platform_paths::preferred_languages, m)?)?;
+    m.add_function(wrap_pyfunction!(crate::platform_paths::documents_directory, m)?)?;
+    m.add_function(wrap_pyfunction!(crate::platform_paths::recovery_directory, m)?)?;
     m.add_function(wrap_pyfunction!(open_files, m)?)?;
     m.add_function(wrap_pyfunction!(save_file, m)?)?;
     m.add_function(wrap_pyfunction!(pick_folder, m)?)?;

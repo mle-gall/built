@@ -4,6 +4,7 @@ mod pick_tile;
 mod captured_frame;
 use captured_frame::CapturedFrame;
 mod window_timers;
+mod change_callbacks;
 mod window_document;
 mod close_documents;
 mod component_replacement;
@@ -2224,6 +2225,18 @@ impl Renderer {
         self.overlay.center_cue(&self.queue, &self.camera_data,
             [self.config.width, self.config.height], center, radius, cursor, scale);
     }
+    fn set_annotation_layer(&mut self, mut layer: PyRefMut<'_, annotation_canvas::AnnotationCanvas>) -> PyResult<()> {
+        let (w, h) = layer.size();
+        if (w, h) != (self.config.width, self.config.height) {
+            return Err(PyValueError::new_err("overlay must match physical surface dimensions"));
+        }
+        if let Some(rgba) = layer.take_rgba() {
+            self.overlay.upload(&self.device, &self.queue, w, h, &rgba);
+        } else {
+            self.overlay.clear_layer(&self.device, w, h);
+        }
+        Ok(())
+    }
     fn set_overlay(
         &mut self,
         width: u32,
@@ -3219,6 +3232,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(tool_cursors::rail_icon,m)?)?;
     m.add_function(wrap_pyfunction!(tool_cursors::tool_cursor_name, m)?)?;
     m.add_function(wrap_pyfunction!(tool_cursors::tool_cursor_art, m)?)?;
+    m.add_function(wrap_pyfunction!(image_assets::texture_has_alpha,m)?)?;
     m.add_function(wrap_pyfunction!(image_assets::texture_cutout,m)?)?;
     m.add_function(wrap_pyfunction!(image_assets::readable_tga,m)?)?;
     m.add_function(wrap_pyfunction!(survey_import::read_survey_mesh,m)?)?;
@@ -3235,6 +3249,9 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(extension_setup::setup_extension_menus,m)?)?;
     m.add_function(wrap_pyfunction!(model_views::view_layouts, m)?)?;
     m.add_class::<annotation_canvas::AnnotationCanvas>()?;
+    m.add_class::<annotation_canvas::AnnotationFont>()?;
+    m.add_class::<annotation_canvas::Color>()?;
+    m.add_class::<annotation_canvas::NativePen>()?;
     m.add_function(wrap_pyfunction!(tool_overlay::tool_overlay_tile,m)?)?;
     m.add_function(wrap_pyfunction!(image_assets::reference_texture, m)?)?;
     m.add_function(wrap_pyfunction!(image_assets::fit_reference_rgba, m)?)?;
@@ -3294,6 +3311,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<release::ReleaseReview>()?;
     m.add_class::<ui::command_palette::CommandCanvas>()?;
     m.add_class::<window_timers::WindowTimers>()?;
+    m.add_class::<change_callbacks::ChangeCallbacks>()?;
     m.add_class::<window_timers::WindowTimer>()?;
     m.add_class::<camera_inspector::CameraInspector>()?;
     m.add_class::<registry_editor::RegistryEditor>()?;

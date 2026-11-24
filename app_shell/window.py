@@ -7,7 +7,11 @@ from __future__ import annotations
 
 import ingetrazo_render as native
 
-from PySide6.QtCore import QEvent, QObject, Qt
+import sys
+
+from core.input_types import NATIVE, QEvent, Qt
+if not NATIVE:
+    from PySide6.QtCore import QObject
 
 from app_shell.command_action import ShellAction
 from views.view_host import MISSING
@@ -301,19 +305,36 @@ def _doc_attr(name):
     return property(get, put)
 
 
-class ShellWindow(WindowDocumentCommands, QObject):
+def discover_window_plugins():
+    from core.extensions import discover_plugins
+    return discover_plugins(native_panels={
+        "render_blender": "plugins._blender_panel", "python_console": "plugins.python_console",
+        "ai_assistant": None, "ai_bridge": None, "model_info": None, "solid_inspector": None,
+    })
 
-    def __init__(self, host):
+
+def new_shell_window(host):
+    plugins = discover_window_plugins()
+    if NATIVE and "PySide6.QtGui" in sys.modules:
+        from app_shell.qt_host import enable_plugin_widgets
+        enable_plugin_widgets()
+        from PySide6.QtCore import QObject
+
+        class PluginWindow(ShellWindow, QObject):
+            """Parent for raw widget actions contributed by a loaded Qt plugin."""
+        return PluginWindow(host, plugins)
+    return ShellWindow(host, plugins)
+
+
+class ShellWindow(WindowDocumentCommands, object if NATIVE else QObject):
+
+    def __init__(self, host, plugins=None):
         super().__init__()
         self._host = host
-        from core.extensions import discover_plugins
         from core.plugin_panels import install
         from core.extension_manager import extension_startup_state
         self._extension_startup_state = extension_startup_state()
-        plugins, errors = discover_plugins(native_panels={
-            "render_blender": "plugins._blender_panel", "python_console": "plugins.python_console",
-            "ai_assistant": None, "ai_bridge": None, "model_info": None, "solid_inspector": None,
-        })
+        plugins, errors = discover_window_plugins() if plugins is None else plugins
         from ingetrazo_render import ExtensionMenus
         self._extension_menus = ExtensionMenus()
         self._pending_extensions = plugins
@@ -565,6 +586,7 @@ class ShellWindow(WindowDocumentCommands, QObject):
                 view.closeEvent(None)
             except Exception:  # noqa: BLE001
                 pass
+        self._host.timers.cancel_context(doc.viewport)
         doc.viewport = None
         doc.stand_in = None
 

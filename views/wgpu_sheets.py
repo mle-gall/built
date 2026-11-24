@@ -25,8 +25,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from PySide6.QtCore import QEvent, Qt
-from PySide6.QtGui import QKeySequence
+from core.input_types import NATIVE, QEvent, Qt
+from ingetrazo_render import shortcut_text
 
 SEP = "\x1f"
 ED = "\x1d"
@@ -73,6 +73,8 @@ _WINDOW_KEYS = ("Ctrl+S", "Ctrl+Shift+S", "Ctrl+O", "Ctrl+N", "Ctrl+W", "Ctrl+Q"
 # ---- Where the workspace can be ----------------------------------------------
 def _qt_window(win):
     """The QMainWindow behind ``win`` (a DocumentHost answers for one), or None."""
+    if NATIVE:
+        return None
     from PySide6.QtWidgets import QWidget
     real = getattr(win, "_host_window", win) if win is not None else None
     return real if isinstance(real, QWidget) else None
@@ -296,9 +298,9 @@ def _cajetin_template():
     """Where the title block templates live and the one a new title block
     starts from (the composer's ``cajetin_templates_dir`` and
     ``default_cajetin_template_name``): ``(folder, name or None)``."""
-    from PySide6.QtCore import QSettings, QStandardPaths
-    base = (QStandardPaths.writableLocation(QStandardPaths.AppDataLocation)
-            or str(Path.home() / ".ingetrazo"))
+    from core.autosave import _app_data_base
+    from core.settings import settings as QSettings
+    base = _app_data_base()
     name = str(QSettings().value("composer/default_cajetin", "") or "") or None
     return str(Path(base) / "cajetines"), name
 
@@ -306,13 +308,12 @@ def _cajetin_template():
 def _sheet_template():
     """The template file a new sheet starts from (the composer's
     ``default_template_name`` in its ``templates_dir``), or None."""
-    from PySide6.QtCore import QStandardPaths
+    from core.autosave import _app_data_base
     from core.settings import settings
     name = str(settings().value("composer/default_template", "") or "")
     if not name:
         return None
-    base = (QStandardPaths.writableLocation(QStandardPaths.AppDataLocation)
-            or str(Path.home() / ".ingetrazo"))
+    base = _app_data_base()
     return str(Path(base) / "plantillas" / f"{name}.json")
 
 
@@ -1298,10 +1299,7 @@ class Workspace:
         comp = self.composer
 
         def seqs(*keys):
-            out = []
-            for k in keys:
-                out.extend(QKeySequence.keyBindings(k) if isinstance(k, QKeySequence.StandardKey) else [QKeySequence(k)])
-            return out
+            return {parsed[2] for k in keys if (parsed := shortcut_text(k))}
 
         def model():
             to_model(comp._window)
@@ -1313,9 +1311,9 @@ class Workspace:
                 view.renderer.ui_rename_sheet(comps.index(comp.comp))
         # The document's history: what the page and the dock change, undone
         # in the order it was done, with the model's edits.
-        return [(seqs(QKeySequence.Undo), self._undo),
-                (seqs(QKeySequence.Redo, "Ctrl+Shift+Z"), lambda: self._undo(redo=True)),
-                (seqs(QKeySequence.Delete, Qt.Key_Backspace, Qt.Key_Delete), self._delete),
+        return [(seqs("Ctrl+Z"), self._undo),
+                (seqs("Ctrl+Shift+Z", "Ctrl+Y"), lambda: self._undo(redo=True)),
+                (seqs("Backspace", "Del"), self._delete),
                 (seqs("Ctrl+D"), self._duplicate), (seqs("Ctrl+L"), self._lock_items),
                 (seqs("Ctrl+G"), lambda: self.view.renderer.page_command("group")),
                 (seqs("Ctrl+Shift+G"), lambda: self.view.renderer.page_command("ungroup")),
@@ -1329,14 +1327,14 @@ class Workspace:
     @staticmethod
     def _combo(event):
         try:
-            return QKeySequence(_int(event.modifiers()) | _int(event.key()))
+            return _int(event.modifiers()) | _int(event.key())
         except Exception:  # noqa: BLE001
-            return QKeySequence()
+            return None
 
     @staticmethod
     def window_key(event) -> bool:
         combo = Workspace._combo(event)
-        return any(QKeySequence(k).matches(combo) == QKeySequence.ExactMatch for k in _WINDOW_KEYS)
+        return any(shortcut_text(k)[2] == combo for k in _WINDOW_KEYS)
 
     def key(self, event, pressed: bool) -> None:
         """The composer's sheet shortcuts (undo, delete, duplicate, group…,
@@ -1349,7 +1347,7 @@ class Workspace:
         if not repeat:
             combo = self._combo(event)
             for keys, run in self._keys:
-                if any(s.matches(combo) == QKeySequence.ExactMatch for s in keys):
+                if combo in keys:
                     run()
                     self._touch()
                     return

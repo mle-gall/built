@@ -1,6 +1,6 @@
 //! Deadlines driven by the winit and native modal turns. A timer belongs to
 //! its view/window. The queue and the callback do not keep that owner alive.
-use pyo3::prelude::*;
+use pyo3::{prelude::*, types::PyWeakrefReference};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, Weak};
 use std::time::{Duration, Instant};
@@ -45,7 +45,40 @@ impl Deadline {
 struct Slot {
     owner: AtomicU64,
     deadline: Mutex<Deadline>,
-    weak_method: Py<PyAny>,
+    context: Option<Py<PyWeakrefReference>>,
+    callback: Callback,
+}
+
+enum Callback {
+    WeakMethod(Py<PyAny>),
+    Function(Py<PyAny>),
+}
+
+impl Slot {
+    fn belongs_to(&self, context: &Bound<'_, PyAny>) -> bool {
+        self.context
+            .as_ref()
+            .and_then(|r| r.bind(context.py()).upgrade())
+            .is_some_and(|o| o.is(context))
+    }
+
+    fn deliver(&self, py: Python<'_>) -> PyResult<()> {
+        let cb = match &self.callback {
+            Callback::WeakMethod(reference) => reference.bind(py).call0()?,
+            Callback::Function(f) => f.bind(py).clone(),
+        };
+        if cb.is_none()
+            || self
+                .context
+                .as_ref()
+                .is_some_and(|r| r.bind(py).upgrade().is_none())
+        {
+            self.deadline.lock().unwrap().at = None;
+        } else {
+            cb.call0()?;
+        }
+        Ok(())
+    }
 }
 
 #[pyclass]
@@ -81,6 +114,8 @@ impl WindowTimer {
 pub struct WindowTimers {
     id: u64,
     slots: Mutex<Vec<Weak<Slot>>>,
+    // Fire-and-forget callbacks are retained only until delivery or cancellation.
+    pending: Mutex<Vec<Arc<Slot>>>,
 }
 
 impl WindowTimers {
@@ -101,21 +136,33 @@ impl WindowTimers {
         Self {
             id: NEXT_QUEUE.fetch_add(1, Ordering::Relaxed),
             slots: Mutex::default(),
+            pending: Mutex::default(),
         }
     }
 
-    #[pyo3(signature=(method, interval=0, repeat=false))]
+    #[pyo3(signature=(method, interval=0, repeat=false, context=None))]
     fn timer(
         &self,
         method: &Bound<'_, PyAny>,
         interval: u32,
         repeat: bool,
+        context: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<WindowTimer> {
-        let weak_method = method
-            .py()
-            .import("weakref")?
-            .call_method1("WeakMethod", (method,))?
-            .unbind();
+        let callback = if method.getattr("__self__").is_ok() && method.hasattr("__func__")? {
+            Callback::WeakMethod(
+                method
+                    .py()
+                    .import("weakref")?
+                    .call_method1("WeakMethod", (method,))?
+                    .unbind(),
+            )
+        } else {
+            Callback::Function(method.clone().unbind())
+        };
+        let context = context
+            .map(PyWeakrefReference::new)
+            .transpose()?
+            .map(Bound::unbind);
         let slot = Arc::new(Slot {
             owner: AtomicU64::new(self.id),
             deadline: Mutex::new(Deadline {
@@ -124,10 +171,55 @@ impl WindowTimers {
                 repeat,
                 delivering: false,
             }),
-            weak_method,
+            context,
+            callback,
         });
         self.slots.lock().unwrap().push(Arc::downgrade(&slot));
         Ok(WindowTimer(slot))
+    }
+
+    fn later(
+        &self,
+        context: &Bound<'_, PyAny>,
+        ms: u32,
+        callback: &Bound<'_, PyAny>,
+    ) -> PyResult<()> {
+        let timer = self.timer(callback, ms, false, Some(context))?;
+        timer.start(None);
+        self.pending.lock().unwrap().push(timer.0);
+        Ok(())
+    }
+
+    fn cancel_context(&self, context: &Bound<'_, PyAny>) {
+        for slot in self.live().into_iter().filter_map(|s| s.upgrade()) {
+            if slot.belongs_to(context) {
+                slot.deadline.lock().unwrap().at = None;
+            }
+        }
+        let mut pending = self.pending.lock().unwrap();
+        let dropped = pending
+            .extract_if(.., |s| s.belongs_to(context))
+            .collect::<Vec<_>>();
+        drop(pending);
+        drop(dropped);
+    }
+
+    fn transfer_context(&self, source: &WindowTimers, context: &Bound<'_, PyAny>) {
+        if self.id == source.id {
+            return;
+        }
+        for slot in source.live().into_iter().filter_map(|s| s.upgrade()) {
+            if slot.belongs_to(context) {
+                self.adopt(&WindowTimer(slot));
+            }
+        }
+        self.pending.lock().unwrap().extend(
+            source
+                .pending
+                .lock()
+                .unwrap()
+                .extract_if(.., |s| s.belongs_to(context)),
+        );
     }
 
     /// A moved project keeps its scheduled deadlines on the destination window.
@@ -145,6 +237,7 @@ impl WindowTimers {
     /// Release this window's timers on shutdown. A transferred document's
     /// handles may still appear as stale entries in the source queue.
     fn cancel_all(&self) {
+        let _released = std::mem::take(&mut *self.pending.lock().unwrap());
         let slots = std::mem::take(&mut *self.slots.lock().unwrap());
         for slot in slots.into_iter().filter_map(|weak| weak.upgrade()) {
             if slot.owner.load(Ordering::Relaxed) == self.id {
@@ -184,19 +277,21 @@ impl WindowTimers {
                 }
                 timer.delivering = true;
             }
-            let result = slot.weak_method.bind(py).call0().and_then(|method| {
-                if method.is_none() {
-                    slot.deadline.lock().unwrap().at = None;
-                } else {
-                    method.call0()?;
-                }
-                Ok(())
-            });
+            let result = slot.deliver(py);
             slot.deadline.lock().unwrap().delivering = false;
             if let Err(error) = result {
                 first_error.get_or_insert(error);
             }
         }
+        let mut pending = self.pending.lock().unwrap();
+        let finished = pending
+            .extract_if(.., |s| {
+                let d = s.deadline.lock().unwrap();
+                d.at.is_none() && !d.delivering
+            })
+            .collect::<Vec<_>>();
+        drop(pending);
+        drop(finished);
         first_error.map_or(Ok(()), Err)
     }
 }

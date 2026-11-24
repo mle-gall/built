@@ -84,11 +84,11 @@ class Host:
         self.focus_requested = False
         from views.document_controller import DocumentController
         from app_shell.view import ShellView
-        from app_shell.window import ShellWindow
+        from app_shell.window import new_shell_window
         from app_shell import files, modal
         from ingetrazo_core import WindowInput
         self.input_state = WindowInput()
-        self.window = ShellWindow(self)
+        self.window = new_shell_window(self)
         viewport = DocumentController(self)
         try:
             from core import general_settings
@@ -480,7 +480,7 @@ class Host:
         value box and the tool may claim it), then the window's shortcuts
         (the tools' letters), else the view's key handler. While a sheet
         or an exclusive job holds the window, only they hear keys."""
-        from PySide6.QtCore import Qt
+        from core.input_types import Qt
         from app_shell.events import KeyEvent, ShortcutOverride
         from views import chrome_dialogs as cd
         self.input_state.modifiers = modifiers
@@ -767,13 +767,14 @@ class Host:
     def missing(self):
         """Widget/window API the document or extension asked for and the shell
         lacks (probes of the code's own lazily set attributes left out)."""
-        from PySide6.QtWidgets import QWidget
-        from PySide6.QtWidgets import QMainWindow
+        widgets = sys.modules.get("PySide6.QtWidgets")
+        if widgets is None:
+            return {}
         from views.view_host import MISSING
         out = {}
         for name, n in MISSING.most_common():
             bare = name.split(".", 1)[-1]
-            if hasattr(QWidget, bare) or hasattr(QMainWindow, bare):
+            if hasattr(widgets.QWidget, bare) or hasattr(widgets.QMainWindow, bare):
                 out[name] = n
         return out
 

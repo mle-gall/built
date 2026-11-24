@@ -5,8 +5,8 @@ use crate::image_assets::{fonts, svg_tree};
 use pyo3::{exceptions::PyValueError, prelude::*, types::PyBytes};
 use resvg::{
     tiny_skia::{
-        FillRule, IntSize, LineCap, LineJoin, Paint, Path, PathBuilder, Pixmap, Rect, Stroke,
-        StrokeDash, Transform,
+        FillRule, IntSize, LineCap, LineJoin, Paint, Path, PathBuilder, Pixmap, PixmapPaint, Rect,
+        Stroke, StrokeDash, Transform,
     },
     usvg::fontdb,
 };
@@ -17,6 +17,28 @@ fn scalar(obj: &Obj<'_>, field: &str) -> PyResult<f64> {
 }
 fn point(obj: &Obj<'_>) -> PyResult<(f64, f64)> {
     Ok((scalar(obj, "x")?, scalar(obj, "y")?))
+}
+
+fn rectangle(rect: &Obj<'_>) -> PyResult<Option<Rect>> {
+    Ok(Rect::from_xywh(
+        scalar(rect, "x")? as f32,
+        scalar(rect, "y")? as f32,
+        scalar(rect, "width")? as f32,
+        scalar(rect, "height")? as f32,
+    ))
+}
+
+fn polygon(points: &Obj<'_>) -> PyResult<PathBuilder> {
+    let mut path = PathBuilder::new();
+    for (i, p) in points.try_iter()?.enumerate() {
+        let (x, y) = point(&p?)?;
+        if i == 0 {
+            path.move_to(x as f32, y as f32);
+        } else {
+            path.line_to(x as f32, y as f32);
+        }
+    }
+    Ok(path)
 }
 
 fn xml(s: &str) -> String {
@@ -177,6 +199,23 @@ impl AnnotationFont {
 #[pymethods]
 #[allow(non_snake_case)]
 impl AnnotationFont {
+    #[new]
+    #[pyo3(signature=(family=""))]
+    fn new(family: &str) -> Self {
+        Self {
+            family: family.into(),
+            ..Self::default()
+        }
+    }
+    fn setPointSize(&mut self, points: i32) {
+        self.setPointSizeF(points.into());
+    }
+    fn setItalic(&mut self, italic: bool) {
+        self.italic = italic;
+    }
+    fn descent(&self) -> i32 {
+        self.measure(None).2.ceil() as i32
+    }
     fn setPointSizeF(&mut self, points: f64) {
         self.size = points * 96. / 72.;
     }
@@ -195,10 +234,102 @@ impl AnnotationFont {
     }
 }
 
+#[pyclass(name = "PaintColor", frozen, skip_from_py_object)]
 #[derive(Clone, Copy)]
-struct Color([u8; 4]);
+pub struct Color([u8; 4]);
+
+#[pymethods]
+#[allow(non_snake_case)]
+impl Color {
+    #[new]
+    #[pyo3(signature=(r,g=None,b=None,a=255))]
+    fn new(r: &Obj<'_>, g: Option<u8>, b: Option<u8>, a: u8) -> PyResult<Self> {
+        if let (Some(g), Some(b)) = (g, b) {
+            return Ok(Self([r.extract()?, g, b, a]));
+        }
+        if let Ok(s) = r.extract::<String>() {
+            if let Some(hex) = s.strip_prefix('#').filter(|v| v.len() == 8) {
+                if let Ok(argb) = u32::from_str_radix(hex, 16) {
+                    let [a, r, g, b] = argb.to_be_bytes();
+                    return Ok(Self([r, g, b, a]));
+                }
+            }
+            let c = s
+                .parse::<svgtypes::Color>()
+                .map_err(|_| PyValueError::new_err("invalid paint color"))?;
+            return Ok(Self([c.red, c.green, c.blue, c.alpha]));
+        }
+        Self::read(r)
+    }
+    #[staticmethod]
+    #[pyo3(signature=(r,g,b,a=1.0))]
+    fn fromRgbF(r: f64, g: f64, b: f64, a: f64) -> Self {
+        Self([r, g, b, a].map(|v| (v.clamp(0., 1.) * 255.).round() as u8))
+    }
+    fn getRgb(&self) -> (u8, u8, u8, u8) {
+        self.0.into()
+    }
+    fn getRgbF(&self) -> (f64, f64, f64, f64) {
+        self.0.map(|v| f64::from(v) / 255.).into()
+    }
+}
+
+#[pyclass(name = "PaintPen")]
+pub struct NativePen {
+    color: Color,
+    width: f32,
+    cap: LineCap,
+    join: LineJoin,
+    dash: Vec<f32>,
+}
+#[pymethods]
+#[allow(non_snake_case)]
+impl NativePen {
+    #[new]
+    #[pyo3(signature=(color,width=1.,style=1))]
+    fn new(color: &Obj<'_>, width: f32, style: u32) -> PyResult<Self> {
+        let dash = match style {
+            2 => vec![4., 2.],
+            3 => vec![1., 2.],
+            4 => vec![4., 2., 1., 2.],
+            5 => vec![4., 2., 1., 2., 1., 2.],
+            _ => Vec::new(),
+        };
+        Ok(Self {
+            color: Color::read(color)?,
+            width,
+            cap: LineCap::Square,
+            join: LineJoin::Bevel,
+            dash,
+        })
+    }
+    fn setColor(&mut self, color: &Obj<'_>) -> PyResult<()> {
+        self.color = Color::read(color)?;
+        Ok(())
+    }
+    fn setDashPattern(&mut self, dash: Vec<f32>) {
+        self.dash = dash;
+    }
+    fn setCapStyle(&mut self, code: u32) {
+        self.cap = match code {
+            0 => LineCap::Butt,
+            32 => LineCap::Round,
+            _ => LineCap::Square,
+        };
+    }
+    fn setJoinStyle(&mut self, code: u32) {
+        self.join = match code {
+            0 => LineJoin::Miter,
+            128 => LineJoin::Round,
+            _ => LineJoin::Bevel,
+        };
+    }
+}
 impl Color {
     fn read(obj: &Obj<'_>) -> PyResult<Self> {
+        if let Ok(color) = obj.cast::<Self>() {
+            return Ok(*color.borrow());
+        }
         Ok(Self(obj.call_method0("getRgb")?.extract()?))
     }
     fn paint(self) -> Paint<'static> {
@@ -245,6 +376,24 @@ pub struct AnnotationCanvas {
 }
 
 impl AnnotationCanvas {
+    pub(crate) fn size(&self) -> (u32, u32) {
+        (self.size.width(), self.size.height())
+    }
+
+    /// The GPU layer samples straight-alpha sRGB. Demultiply only inked pixels.
+    pub(crate) fn take_rgba(&mut self) -> Option<Vec<u8>> {
+        let mut rgba = self.overlay.take()?.take();
+        for pixel in rgba.chunks_exact_mut(4) {
+            let a = u32::from(pixel[3]);
+            if a != 0 && a != 255 {
+                for channel in &mut pixel[..3] {
+                    *channel = ((u32::from(*channel) * 255 + a / 2) / a).min(255) as u8;
+                }
+            }
+        }
+        Some(rgba)
+    }
+
     fn scale(&self) -> Transform {
         let factor = self.size.width() as f32 / self.width as f32;
         Transform::from_scale(factor, factor)
@@ -301,6 +450,18 @@ impl AnnotationCanvas {
     fn logical_size(&self) -> (f64, f64) {
         (self.width, self.height)
     }
+    fn device(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+    fn width(&self) -> u32 {
+        self.size.width()
+    }
+    fn height(&self) -> u32 {
+        self.size.height()
+    }
+    fn devicePixelRatioF(&self) -> f64 {
+        f64::from(self.size.width()) / self.width
+    }
     fn save(&mut self) {
         self.stack.push(self.state.clone());
     }
@@ -342,6 +503,18 @@ impl AnnotationCanvas {
         Ok(())
     }
     fn setPen(&mut self, pen: &Obj<'_>) -> PyResult<()> {
+        if let Ok(pen) = pen.cast::<NativePen>() {
+            let p = pen.borrow();
+            self.state.pen = Some(p.color);
+            self.state.stroke = Stroke {
+                width: p.width,
+                line_cap: p.cap,
+                line_join: p.join,
+                dash: StrokeDash::new(p.dash.iter().map(|n| n * p.width).collect(), 0.),
+                ..Default::default()
+            };
+            return Ok(());
+        }
         self.state.stroke = Stroke::default();
         if pen.hasattr("widthF")? {
             let width = scalar(pen, "widthF")?.max(0.01) as f32;
@@ -383,17 +556,50 @@ impl AnnotationCanvas {
         self.path(path.finish(), false)
     }
     fn drawPolygon(&mut self, points: &Obj<'_>) -> PyResult<()> {
-        let mut path = PathBuilder::new();
-        for (i, p) in points.try_iter()?.enumerate() {
-            let (x, y) = point(&p?)?;
-            if i == 0 {
-                path.move_to(x as f32, y as f32);
-            } else {
-                path.line_to(x as f32, y as f32);
-            }
-        }
+        let mut path = polygon(points)?;
         path.close();
         self.path(path.finish(), true)
+    }
+    fn drawPolyline(&mut self, points: &Obj<'_>) -> PyResult<()> {
+        self.path(polygon(points)?.finish(), false)
+    }
+    fn composite_plugin(&mut self, data: &Bound<'_, PyBytes>) -> PyResult<()> {
+        let (w, h) = self.size();
+        let image = resvg::tiny_skia::PixmapRef::from_bytes(data.as_bytes(), w, h)
+            .ok_or_else(|| PyValueError::new_err("invalid plugin overlay pixels"))?;
+        self.target()?.draw_pixmap(
+            0,
+            0,
+            image,
+            &PixmapPaint::default(),
+            Transform::identity(),
+            None,
+        );
+        Ok(())
+    }
+    fn drawRect(&mut self, rect: &Obj<'_>) -> PyResult<()> {
+        self.path(rectangle(rect)?.map(PathBuilder::from_rect), true)
+    }
+    fn draw_tool(&mut self, kind: &str, tool: &Obj<'_>, view: &Obj<'_>) -> PyResult<()> {
+        let (w, h) = self.size();
+        if let Some((x, y, tile)) = crate::tool_overlay::render_tile(
+            kind,
+            tool,
+            view,
+            w,
+            h,
+            self.devicePixelRatioF() as f32,
+        )? {
+            self.target()?.draw_pixmap(
+                x as i32,
+                y as i32,
+                tile.as_ref(),
+                &PixmapPaint::default(),
+                Transform::identity(),
+                None,
+            );
+        }
+        Ok(())
     }
     fn drawEllipse(&mut self, center: &Obj<'_>, rx: f64, ry: f64) -> PyResult<()> {
         let (x, y) = point(center)?;
@@ -405,11 +611,25 @@ impl AnnotationCanvas {
         );
         self.path(rect.and_then(PathBuilder::from_oval), true)
     }
-    fn fillRect(&mut self, x: f32, y: f32, w: f32, h: f32, color: &Obj<'_>) -> PyResult<()> {
-        if let Some(rect) = Rect::from_xywh(x, y, w, h) {
+    #[pyo3(signature=(*args))]
+    fn fillRect(&mut self, args: &Bound<'_, pyo3::types::PyTuple>) -> PyResult<()> {
+        let (rect, color) = match args.len() {
+            2 => (rectangle(&args.get_item(0)?)?, args.get_item(1)?),
+            5 => (
+                Rect::from_xywh(
+                    args.get_item(0)?.extract()?,
+                    args.get_item(1)?.extract()?,
+                    args.get_item(2)?.extract()?,
+                    args.get_item(3)?.extract()?,
+                ),
+                args.get_item(4)?,
+            ),
+            _ => return Err(PyValueError::new_err("expected a rectangle and a color")),
+        };
+        if let Some(rect) = rect {
             let transform = self.scale();
             self.target()?
-                .fill_rect(rect, &Color::read(color)?.paint(), transform, None);
+                .fill_rect(rect, &Color::read(&color)?.paint(), transform, None);
         }
         Ok(())
     }

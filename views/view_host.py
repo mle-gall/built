@@ -3,13 +3,15 @@ from __future__ import annotations
 
 from collections import Counter
 
-from PySide6.QtCore import QObject, QPoint, QPointF, QRect, QSize, Qt
+from core.input_types import NATIVE, QPoint, QPointF, QRect, QSize, Qt
+if not NATIVE:
+    from PySide6.QtCore import QObject
 
 #: Widget attributes the copied code looked up and the shim did not have.
 MISSING: Counter = Counter()
 
 
-class WidgetShim(QObject):
+class WidgetShim(object if NATIVE else QObject):
     """The QWidget surface the borrowed methods use, over a host that
     knows the window's size and scale and when a frame is wanted."""
 
@@ -135,6 +137,8 @@ class WidgetShim(QObject):
         # Qt's own events (queued calls of QTimer.singleShot(0, self, fn),
         # child events) still need QObject's handler; the shell's value
         # events (app_shell.events) end here, unclaimed.
+        if NATIVE:
+            return False
         from PySide6.QtCore import QEvent
         if isinstance(e, QEvent):
             return QObject.event(self, e)

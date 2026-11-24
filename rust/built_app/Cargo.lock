@@ -208,6 +208,7 @@ dependencies = [
  "raw-window-handle",
  "rfd",
  "serde_json",
+ "windows",
  "winit",
 ]
 
@@ -1228,6 +1229,7 @@ dependencies = [
  "rustybuzz",
  "serde",
  "serde_json",
+ "svgtypes",
  "wgpu",
  "windows",
 ]

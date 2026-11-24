@@ -255,23 +255,20 @@ pub fn skp_needs_tint(data: &Obj<'_>, declared_rgb: &Obj<'_>) -> PyResult<bool> 
     if !data.is_truthy()? {
         return Ok(false);
     }
-    let class = data.py().import("PySide6.QtGui")?.getattr("QImage")?;
-    let img = class.call_method1("fromData", (data,))?;
-    if img.call_method0("isNull")?.is_truthy()? {
+    let Some(image) = decode_texture(data)? else {
         return Ok(false);
-    }
-    let small = img
-        .call_method1("convertToFormat", (class.getattr("Format_ARGB32")?,))?
-        .call_method1("scaled", (16, 16))?;
+    };
+    let (w, h) = image.dimensions();
+    let sample = |i: u64, n: u32| ((2 * i + 1) * u64::from(n) / 32) as u32;
     let mut sum = [0.; 3];
     let mut alpha = 0.;
     for y in 0..16 {
         for x in 0..16 {
-            let c = small.call_method1("pixelColor", (x, y))?;
-            let a = c.call_method0("alpha")?.extract::<f64>()?;
+            let p = image.get_pixel(sample(x, w), sample(y, h));
+            let a = f64::from(p[3]);
             alpha += a;
-            for (i, k) in ["red", "green", "blue"].iter().enumerate() {
-                sum[i] += c.call_method0(k)?.extract::<f64>()? * a;
+            for k in 0..3 {
+                sum[k] += f64::from(p[k]) * a;
             }
         }
     }
@@ -280,20 +277,34 @@ pub fn skp_needs_tint(data: &Obj<'_>, declared_rgb: &Obj<'_>) -> PyResult<bool> 
 #[pyfunction]
 pub fn skp_inverted_png<'p>(data: &Obj<'p>) -> PyResult<Obj<'p>> {
     let py = data.py();
-    let qt = py.import("PySide6.QtCore")?;
-    let img = py
-        .import("PySide6.QtGui")?
-        .getattr("QImage")?
-        .call_method1("fromData", (data,))?;
-    if img.call_method0("isNull")?.is_truthy()? {
+    let Some(mut image) = decode_texture(data)? else {
         return Ok(none(py));
+    };
+    for p in image.pixels_mut() {
+        for c in &mut p.0[..3] {
+            *c = 255 - *c;
+        }
     }
-    img.call_method0("invertPixels")?;
-    let buf = qt.call_method0("QBuffer")?;
-    buf.call_method1("open", (qt.getattr("QIODevice")?.getattr("WriteOnly")?,))?;
-    if img.call_method1("save", (&buf, "PNG"))?.is_truthy()? {
-        py.get_type::<PyBytes>().call1((buf.call_method0("data")?,))
-    } else {
-        Ok(none(py))
+    let mut out = std::io::Cursor::new(Vec::new());
+    image
+        .write_to(&mut out, image::ImageFormat::Png)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+    Ok(PyBytes::new(py, out.get_ref()).into_any())
+}
+
+/// Decode embedded material images, including the formats supported by the renderer.
+fn decode_texture(data: &Obj<'_>) -> PyResult<Option<image::RgbaImage>> {
+    let img = data
+        .py()
+        .import("ingetrazo_render")?
+        .getattr("SurveyRaster")?
+        .call_method1("decode", (data,))?;
+    if img.is_none() {
+        return Ok(None);
     }
+    Ok(image::RgbaImage::from_raw(
+        img.getattr("width")?.extract()?,
+        img.getattr("height")?.extract()?,
+        img.call_method0("rgba")?.extract()?,
+    ))
 }

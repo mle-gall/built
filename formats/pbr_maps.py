@@ -2,26 +2,18 @@
 from pathlib import Path
 
 import numpy as np
-from PySide6.QtCore import QBuffer, QIODevice, Qt
-from PySide6.QtGui import QImage
+from ingetrazo_render import SurveyRaster
 
 from core.texture import cache_image
 
 
 def _png(pixels, name):
     h, w, _ = pixels.shape
-    image = QImage(pixels.data, w, h, 4*w, QImage.Format_RGBA8888)
-    buf = QBuffer()
-    buf.open(QIODevice.WriteOnly)
-    if not image.save(buf, "PNG"):
-        raise ValueError(f"Could not encode {name}")
-    return str(cache_image(bytes(buf.data()), name, "pbr"))
+    return str(cache_image(SurveyRaster(w, h, pixels.tobytes()).png(), name, "pbr"))
 
 
 def _pixels(image):
-    rgba = image.convertToFormat(QImage.Format_RGBA8888)
-    return np.frombuffer(rgba.constBits(), np.uint8).reshape(
-        rgba.height(), rgba.width(), 4).copy()
+    return np.frombuffer(image.rgba(), np.uint8).reshape(image.height, image.width, 4).copy()
 
 
 def import_recipe(mat, textures, paths):
@@ -40,8 +32,8 @@ def import_recipe(mat, textures, paths):
     if packed and packed == ao:
         recipe["orm_map"] = {"path": packed}
     elif packed:
-        image = QImage(packed)
-        if not image.isNull():
+        image = SurveyRaster.open(packed)
+        if image is not None:
             pixels = _pixels(image)
             for channel, key in ((1, "roughness_map"), (2, "metallic_map")):
                 grey = pixels.copy()
@@ -66,22 +58,21 @@ def export_maps(recipe):
 
     normal = path("normal_map")
     if normal and recipe["normal_map"].get("flip_y"):
-        image = QImage(normal)
-        if not image.isNull():
+        image = SurveyRaster.open(normal)
+        if image is not None:
             pixels = _pixels(image)
             pixels[:, :, 1] = 255 - pixels[:, :, 1]
             normal = _png(pixels, Path(normal).stem + "-opengl.png")
     packed = path("orm_map")
     if not packed:
-        layers = [(i, QImage(src)) for i, key in ((1, "roughness_map"), (2, "metallic_map"))
+        layers = [(i, SurveyRaster.open(src)) for i, key in ((1, "roughness_map"), (2, "metallic_map"))
                   if (src := path(key))]
-        layers = [(i, im) for i, im in layers if not im.isNull()]
+        layers = [(i, im) for i, im in layers if im is not None]
         if layers:
-            w = max(im.width() for _, im in layers)
-            h = max(im.height() for _, im in layers)
+            w = max(im.width for _, im in layers)
+            h = max(im.height for _, im in layers)
             pixels = np.full((h, w, 4), 255, np.uint8)
             for channel, im in layers:
-                pixels[:, :, channel] = _pixels(im.scaled(
-                    w, h, Qt.IgnoreAspectRatio, Qt.SmoothTransformation))[:, :, 0]
+                pixels[:, :, channel] = _pixels(im.resized(w, h))[:, :, 0]
             packed = _png(pixels, "metallic-roughness.png")
     return normal, packed, path("orm_map") or path("ao_map")

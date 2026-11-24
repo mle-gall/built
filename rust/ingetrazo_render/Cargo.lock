@@ -665,6 +665,7 @@ dependencies = [
  "rustybuzz",
  "serde",
  "serde_json",
+ "svgtypes",
  "syn 2.0.119",
  "wgpu",
  "windows",

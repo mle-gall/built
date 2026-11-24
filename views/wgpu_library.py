@@ -1063,7 +1063,7 @@ def _register_icon() -> None:
     from views import icons
     if "components" in icons._DRAW:
         return
-    from PySide6.QtCore import QPointF
+    from core.input_types import QPointF
 
     def draw(p, _ink):
         top = [QPointF(24, 8), QPointF(39, 16), QPointF(24, 24), QPointF(9, 16)]

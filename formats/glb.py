@@ -434,7 +434,7 @@ def _hide_cutout_card_edges(mesh) -> None:
     canopy (hunted on the molle tree). A texture is foliage-like when it
     carries alpha (cutout) or when its faces are confetti (mean area under
     0.02 m²); edges whose faces are all foliage-like go soft (hidden)."""
-    from PySide6.QtGui import QImage
+    from ingetrazo_render import texture_has_alpha
     stats: dict = {}
     for f in mesh.faces:
         t = f.attrs.get("texture") if f.attrs else None
@@ -443,9 +443,7 @@ def _hide_cutout_card_edges(mesh) -> None:
             stats[t["path"]] = (n + 1, area + f.area())
     foliage: dict = {}
     for path, (n, area) in stats.items():
-        img = QImage(path)
-        foliage[path] = ((not img.isNull() and img.hasAlphaChannel())
-                         or (n > 200 and area / n < 0.02))
+        foliage[path] = texture_has_alpha(path) or (n > 200 and area / n < 0.02)
 
     def is_foliage(face) -> bool:
         t = face.attrs.get("texture") if face.attrs else None

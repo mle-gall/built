@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 
-from PySide6.QtCore import Qt
+from core.input_types import Qt
 from ingetrazo_core import CopyWire, MatrixGesture, Vec3 as QVector3D
 
 from core.group import Group

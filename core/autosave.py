@@ -39,6 +39,9 @@ def _app_data_base() -> Path:
     never set them (a test runner) would get a name derived from
     ``argv[0]`` and a different folder again.
     """
+    from app_shell.native import _shell
+    if _shell is not None:
+        return Path(_shell.recovery_directory(os.environ.get("BUILT_SETTINGS_DIR")) or Path.home() / ".ingetrazo")
     if sys.platform == "win32" and os.environ.get("APPDATA"):
         return Path(os.environ["APPDATA"]) / "IngeTrazo" / "IngeTrazo"
     from PySide6.QtCore import QStandardPaths

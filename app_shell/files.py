@@ -799,7 +799,7 @@ def export_igz(win, path=None) -> bool:
     """File ▸ Save a Copy as IngeTrazo (.igz): float32 geometry, after
     saying how far that rounding moves points."""
     import copy as _copy
-    from PySide6.QtWidgets import QMessageBox
+    from views.chrome_dialogs import QMessageBox
     from formats import igz as igz_format
     from views import chrome_dialogs as cd
     from views.filedialogs import file_dialogs

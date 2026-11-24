@@ -32,7 +32,7 @@ impl CapturedFrame {
     }
 }
 
-fn encode_png(
+pub(crate) fn encode_png(
     dest: impl io::Write,
     width: u32,
     height: u32,

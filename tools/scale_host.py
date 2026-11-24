@@ -3,7 +3,7 @@
 """Scale grip picking and resident-row previews for the Rust machine."""
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from core.input_types import Qt
 from ingetrazo_core import MatrixGesture, ScaleGripSpec, scale_grab, Vec3 as QVector3D
 
 from core.i18n import tr

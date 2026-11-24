@@ -40,7 +40,7 @@ class ShellAction:
         return [QKeySequence(key) for key in self.state.portable_keys()]
 
     def setShortcuts(self, sequences):
-        from views.shortcuts import portable_keys
+        from core.shortcuts import portable_keys
         keys = [(parsed[0], parsed[2]) for text in portable_keys(sequences)
                 if (parsed := shortcut_text(text))]
         if self.state.set_keys(keys) and self.changed is not None:

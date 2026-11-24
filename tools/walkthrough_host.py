@@ -3,7 +3,7 @@
 import os
 
 from tools.overlay_painter import draw_overlay
-from PySide6.QtCore import QPointF, Qt, QTimer
+from core.input_types import QPointF, Qt
 from ingetrazo_core import Vec3, ToolMachine
 
 from core.i18n import tr
@@ -129,9 +129,8 @@ class EyeHost:
                 self._timer.stop()
             return
         if self._timer is None:
-            self._timer = QTimer(getattr(viewport, "view", viewport))
-            self._timer.setInterval(self.TICK_MS)
-            self._timer.timeout.connect(self._tick)
+            from core.timers import timer
+            self._timer = timer(getattr(viewport, "view", viewport), self._tick, self.TICK_MS, repeat=True)
         if not self._timer.isActive():
             self._timer.start()
 

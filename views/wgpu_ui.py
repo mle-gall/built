@@ -9,8 +9,10 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer, QSize
-from PySide6.QtGui import QImage, QKeySequence
+from core.input_types import Qt
+from core.timers import later
+from ingetrazo_render import shortcut_text
+from core.shortcuts import action_keys
 
 # Inter 400/500/600 (SIL OFL, resources/fonts/inter); the system font if missing.
 FONT = str(Path(__file__).resolve().parents[1] / "resources" / "fonts" / "inter")
@@ -114,7 +116,8 @@ def _send_tools(view, win) -> None:
                 continue
             if not action.isEnabled():
                 disabled.append(key)
-            shortcut = action.shortcut().toString(QKeySequence.NativeText)
+            primary = next(iter(action_keys(action)), "")
+            shortcut = shortcut_text(primary)[1] if primary else ""
             w, h, rgba = _icon_rgba(key)
             row.append((key, action.text().replace("&", ""), shortcut, w, h, rgba))
         if row:
@@ -198,8 +201,8 @@ def _merge_title_row(win) -> None:
         top = view.mapTo(win, QPoint(0, 0)).y() if view is not None else 0
         chrome._glass.place_lights(top + TOP_H / 2)     # the top bar's centre
     chrome.fit_lights = fit
-    QTimer.singleShot(0, fit)
-    QTimer.singleShot(400, fit)
+    later(win, 0, fit)
+    later(win, 400, fit)
 
 
 def _projects(view, win) -> None:
@@ -452,7 +455,7 @@ def _ctrl() -> str:
     """The native name of the key the tools call Ctrl (⌘ on the Mac)."""
     global _CTRL
     if _CTRL is None:
-        _CTRL = QKeySequence(Qt.CTRL | Qt.Key_A).toString(QKeySequence.NativeText)[:-1].strip("+") or "Ctrl"
+        _CTRL = shortcut_text("Ctrl+A")[1][:-1].strip("+") or "Ctrl"
     return _CTRL
 
 
@@ -2405,7 +2408,7 @@ def after_frame(view) -> None:
     if actions:
         win = _window(view)
         # Never switch tools from inside a paint.
-        QTimer.singleShot(0, view, lambda: _run(win, actions, view))
+        later(view, 0, lambda: _run(win, actions, view))
     delay = renderer.ui_repaint_after_ms()
     if view.__dict__.get("_ui_poll_jobs"):
         delay = 400 if delay is None else min(delay, 400)
@@ -2856,13 +2859,13 @@ _KEYS = {Qt.Key_PageUp: "PageUp", Qt.Key_PageDown: "PageDown", Qt.Key_Escape: "E
 
 
 def _opens_commands(view, event) -> bool:
-    from PySide6.QtGui import QKeySequence
     window = view.window()
     registry = vars(window).get("_registry_actions")
     action = registry.get("command_search") if registry is not None else getattr(window, "_act_search_commands", None)
     if action is None:
         return False
-    return QKeySequence(event.key() | event.modifiers().value) in action.shortcuts()
+    combo = event.key() | event.modifiers().value
+    return any(parsed[2] == combo for key in action_keys(action) if (parsed := shortcut_text(key)))
 
 
 def _all_commands(win):

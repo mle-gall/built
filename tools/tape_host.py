@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """Viewport picks, cursor and overlays for the Rust measuring tape."""
 from tools.overlay_painter import draw_overlay
-from PySide6.QtCore import Qt
+from core.input_types import Qt
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.guide import Guide
@@ -42,7 +42,7 @@ class TapeHost(Tool):
     # ---- Lifecycle ----------------------------------------------------------
     def start_from_hover(self, viewport, pixel=None) -> bool:
         """Picking T over a line starts its guide without a first click."""
-        from PySide6.QtCore import QPointF
+        from core.input_types import QPointF
         from views import input_state
         from views.document_interaction import _HoverEvent
         if self.start_point is not None or self._mode != "line":

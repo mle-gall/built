@@ -31,7 +31,8 @@ import os
 from typing import Optional
 
 from core import _native
-from PySide6.QtCore import Qt, QTimer
+from core.input_types import Qt
+from core.timers import timer
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.snap import COLOR_NONE, SnapResult, compute_snap
@@ -135,10 +136,7 @@ class InferenceEngine:
         # must not steal the reference.
         self._encouraged: list = []
         self._dwell_point: Optional[QVector3D] = None
-        self._dwell_timer = QTimer(viewport)
-        self._dwell_timer.setSingleShot(True)
-        self._dwell_timer.setInterval(viewport.ENCOURAGE_MS)
-        self._dwell_timer.timeout.connect(self._encourage_dwelt)
+        self._dwell_timer = timer(viewport, self._encourage_dwelt, viewport.ENCOURAGE_MS)
 
     @property
     def _encouraged(self):

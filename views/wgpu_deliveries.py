@@ -4,8 +4,17 @@ from collections import deque
 from contextlib import contextmanager
 from pathlib import Path
 
-from PySide6.QtCore import QTimer, QUrl
-from PySide6.QtGui import QDesktopServices
+from core.input_types import NATIVE
+from core.desktop_open import open_url
+if not NATIVE:
+    from PySide6.QtCore import QTimer
+
+
+def _next(win, fn):
+    if NATIVE:
+        win._host.timers.later(win, 0, fn)
+    else:
+        QTimer.singleShot(0, fn)
 
 from core import bim_registry, deliveries
 from core.protocol import commands
@@ -257,7 +266,7 @@ def enqueue(win, key, record):
                 from views import chrome_dialogs
                 chrome_dialogs._record(
                     win, f"Delivered · {record['name']}", str(folder), "info", "Open folder",
-                    lambda f=folder: QDesktopServices.openUrl(QUrl.fromLocalFile(str(f))))
+                    lambda f=folder: open_url(f))
             except InterruptedError:
                 pass
             except Exception as exc:
@@ -266,17 +275,17 @@ def enqueue(win, key, record):
             else:
                 job.update(fraction, phase)
                 job.draw_now()
-                QTimer.singleShot(0, advance)
+                _next(win, advance)
                 return
         steps.close()
         job.end()
         queue.popleft()
         if queue:
-            QTimer.singleShot(0, queue[0])
+            _next(win, queue[0])
 
     queue.append(advance)
     if len(queue) == 1:
-        QTimer.singleShot(0, advance)
+        _next(win, advance)
     return job
 
 
@@ -288,7 +297,7 @@ def action(win, view, arg):
     elif verb == "folder":
         result = win.__dict__.pop("_delivery_result", None)
         if result:
-            QDesktopServices.openUrl(QUrl.fromLocalFile(str(result[1])))
+            open_url(result[1])
     elif key in deliveries.records(win.viewport.scene):
         if verb == "select":
             view._delivery_key = key

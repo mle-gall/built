@@ -3,6 +3,7 @@ pub struct Overlay {
     pipeline: wgpu::RenderPipeline,
     cue: wgpu::Buffer,
     cue_data: [f32; 4],
+    has_ink: bool,
     image: Option<(wgpu::Texture, wgpu::BindGroup, u32, u32)>,
 }
 impl Overlay {
@@ -40,6 +41,7 @@ impl Overlay {
             pipeline,
             cue: crate::buffer(device, &[0; 16], wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST),
             cue_data: [0.; 4],
+            has_ink: false,
             image: None,
         }
     }
@@ -73,6 +75,14 @@ impl Overlay {
         self.ensure(d, w, h);
         self.upload_region(q, 0, 0, w, h, rgba);
     }
+    pub fn clear_layer(&mut self, device: &wgpu::Device, w: u32, h: u32) {
+        if self.has_ink {
+            self.image = None;
+            self.has_ink = false;
+        }
+        self.ensure(device, w, h);
+    }
+
     /// Give the layer a ``w`` × ``h`` image (kept when it already is that size).
     pub fn ensure(&mut self, d: &wgpu::Device, w: u32, h: u32) {
         if self.image.as_ref().map(|v| (v.2, v.3)) != Some((w, h)) {
@@ -112,6 +122,7 @@ impl Overlay {
         if w == 0 || h == 0 || x + w > *iw || y + h > *ih || rgba.len() as u64 != w as u64 * h as u64 * 4 {
             return false;
         }
+        self.has_ink = true;
         q.write_texture(
             wgpu::TexelCopyTextureInfo {
                 texture,

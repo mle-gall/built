@@ -21,6 +21,7 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 
 flate2 = "1"
 resvg = "0.45"
+svgtypes = "0.15"
 rustybuzz = "0.20"
 
 [features]

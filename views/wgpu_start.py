@@ -40,8 +40,10 @@ import time
 from pathlib import Path
 
 from core.settings import settings as QSettings
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QGuiApplication, QImage
+from core.input_types import Qt, NATIVE
+from core.timers import later, timer
+if not NATIVE:
+    from PySide6.QtGui import QGuiApplication
 
 from core import recent
 
@@ -153,11 +155,10 @@ class Page:
                 view.setFocus(Qt.OtherFocusReason)
             except RuntimeError:
                 pass
-        if QGuiApplication.platformName() in ("offscreen", "minimal") and not chrome_sheet.in_shell():
+        if not chrome_sheet.in_shell() and QGuiApplication.platformName() in ("offscreen", "minimal"):
             return True
         if self.dog is None:
-            self.dog = QTimer(win, singleShot=True)
-            self.dog.timeout.connect(self._watchdog)
+            self.dog = timer(win, self._watchdog)
         self.dog.start(WATCHDOG_MS)
         return True
 
@@ -215,9 +216,7 @@ class Page:
                                        name="start-page-thumbnails")
         self.loader.start()
         if self.poll is None:
-            self.poll = QTimer(self.win)
-            self.poll.setInterval(120)
-            self.poll.timeout.connect(self._poll)
+            self.poll = timer(self.win, self._poll, 120, repeat=True)
         self.poll.start()
 
     def _poll(self) -> None:
@@ -254,7 +253,7 @@ class Page:
                     view.setFocus(Qt.OtherFocusReason)
                 except RuntimeError:
                     pass    # the view went first
-            QTimer.singleShot(0, focus)
+            later(win, 0, focus)
 
 
 # ---- The sheet ---------------------------------------------------------------
@@ -567,6 +566,7 @@ def blank_picture(image) -> bool:
     if image is None or image.isNull():
         return True
     from ingetrazo_render import blank_picture as blank_rgba
+    from PySide6.QtGui import QImage
     rgba = image.convertToFormat(QImage.Format_RGBA8888)
     return blank_rgba(rgba.width(), rgba.height(), bytes(rgba.constBits()))
 

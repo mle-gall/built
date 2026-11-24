@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Viewport picking and wireframe bindings for an Eraser stroke."""
-from PySide6.QtCore import Qt
+from core.input_types import Qt
 from core.dimension import Dimension
 from core.group import Group
 from core.guide import Guide, is_guide

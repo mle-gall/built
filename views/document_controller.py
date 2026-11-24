@@ -5,8 +5,7 @@ from views.document_interaction import DocumentInteraction
 
 class DocumentController(DocumentInteraction, WidgetShim):
     def __init__(self, host=None):
-        super().__init__()
-        self._host = host
+        super().__init__(host=host)
         self._enabled = False
 
     @classmethod

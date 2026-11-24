@@ -47,9 +47,16 @@ import itertools
 import time
 import sys
 
-from PySide6.QtCore import QEvent, QEventLoop, QObject, QTimer, Signal
-from PySide6.QtGui import QGuiApplication
-from PySide6.QtWidgets import QApplication, QMessageBox, QWidget
+from core.input_types import NATIVE, QEvent
+from core.host_callbacks import Signal
+from core.timers import timer
+if NATIVE:
+    from core.input_codes import StandardButton as QMessageBox
+    from app_shell.modal import ShellLoop as QEventLoop
+else:
+    from PySide6.QtCore import QEventLoop, QObject
+    from PySide6.QtGui import QGuiApplication
+    from PySide6.QtWidgets import QApplication, QMessageBox, QWidget
 
 #: Cancel if the sheet has still not been drawn after this interval.
 WATCHDOG_MS = 1500
@@ -86,7 +93,7 @@ def view_of(win):
 def live(parent):
     """The Metal view whose chrome can show a sheet for ``parent`` now,
     or ``None`` if a blocking question cannot be drawn."""
-    if QGuiApplication.platformName() in ("offscreen", "minimal"):
+    if NATIVE or QGuiApplication.platformName() in ("offscreen", "minimal"):
         return None
     win = window_of(parent)
     if win is None or getattr(win, "_closed", False):
@@ -198,8 +205,7 @@ def ask(parent, title: str, text: str, buttons, *, default=None, cancel=None,
             sheet.answer = _UNDRAWN
             loop.quit()
 
-    dog = QTimer(singleShot=True)
-    dog.timeout.connect(watchdog)
+    dog = timer(win, watchdog)
     dog.start(WATCHDOG_MS)
     try:
         if sheet.answer is None:
@@ -385,7 +391,7 @@ def answer(win, bid: str) -> bool:
 
 def sheet_key(win, event) -> bool:
     """Enter = default, Esc = cancel, ⌘D = discard. True: it was the sheet's."""
-    from PySide6.QtCore import Qt
+    from core.input_types import Qt
     sheet = current_sheet(win)
     if sheet is None:
         return False
@@ -465,12 +471,13 @@ def question(parent, title, text, buttons=QMessageBox.Yes | QMessageBox.No, defa
 
 
 # ---- Modality while a sheet is up --------------------------------------------
-class _Guard(QObject):
+class _Guard(object if NATIVE else QObject):
     """What a modal QMessageBox does for its window, for the chrome's sheet
     and exclusive jobs: no shortcut, key or click reaches anything else."""
 
     def __init__(self, win):
-        super().__init__(win)
+        if not NATIVE:
+            super().__init__(win)
         self.win = win
         self.menus = []
         self.count = 0
@@ -482,7 +489,8 @@ class _Guard(QObject):
             guard = win._chrome_guard = cls(win)
         guard.count += 1
         if guard.count == 1:
-            QApplication.instance().installEventFilter(guard)
+            if not NATIVE:
+                QApplication.instance().installEventFilter(guard)
             bar = win.menuBar() if hasattr(win, "menuBar") else None
             guard.menus = []
             if bar is not None:
@@ -498,7 +506,8 @@ class _Guard(QObject):
             return
         guard.count -= 1
         if guard.count == 0:
-            QApplication.instance().removeEventFilter(guard)
+            if not NATIVE:
+                QApplication.instance().removeEventFilter(guard)
             for action in guard.menus:
                 try:
                     action.setEnabled(True)
@@ -650,7 +659,7 @@ def find_job(win, jid):
 
 def job_key(win, event) -> bool:
     """Esc cancels the exclusive job, when it can stop."""
-    from PySide6.QtCore import Qt
+    from core.input_types import Qt
     if event.key() == Qt.Key_Escape:
         job = next((j for j in reversed(win.__dict__.get("_chrome_jobs", ()))
                     if j.exclusive and j.cancellable), None)
@@ -705,14 +714,15 @@ class busy:
         return False
 
 
-class ChromeBar(QObject):
+class ChromeBar(object if NATIVE else QObject):
     """The part of ``QProgressDialog`` the loaders use, drawn as a job in
     the top bar instead of a window-modal dialog (``_import_progress``)."""
 
     canceled = Signal()
 
     def __init__(self, win, title: str, *, exclusive=True):
-        super().__init__(win)
+        if not NATIVE:
+            super().__init__(win)
         self._value = 0
         self._visible = True
         self.job = Job(win, title, exclusive=exclusive)

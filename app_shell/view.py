@@ -57,6 +57,7 @@ class ShellView(MetalView, WidgetShim):
 
     def closeEvent(self, event=None):
         self._closed = True
+        self._host.timers.cancel_context(self)
         for timer in self._presentation_timers():
             if timer is not None:
                 timer.stop()

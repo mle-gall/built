@@ -30,6 +30,7 @@ def setup(app):
                 "views.main_window", "views.scene_tabs", "views.side_tree",
                 "views.tray", "views.layers_panel", "views.outliner",
             }),
+            "skp_exporter": "formats.skp_out" in sys.modules,
             "qt_pasteboard": "formats.clip" in sys.modules,
             "scenes": [v.name for v in app.scene.saved_views],
         }))
@@ -122,6 +123,7 @@ quit
     (initial, selected, pasted, in_place, cut, restored, grouped, before_line,
      drawn, move, rotate, pushpull, saved, reopened) = states[:14]
     assert all(s["errors"] == 0 and not s["classic_window_loaded"] for s in states), result.stderr
+    assert all(s["qt_modules"] == [] for s in states), [s["qt_modules"] for s in states]
     assert selected["selection"] > 0 and pasted["edges"] > initial["edges"]
     assert in_place["clipboard"] and in_place["edges"] >= pasted["edges"]
     assert cut["edges"] < in_place["edges"] and restored["edges"] == in_place["edges"]
@@ -136,6 +138,7 @@ quit
         reopened["edges"], reopened["faces"], reopened["groups"])
     snapshot = json.loads(probe.with_suffix(".json").read_text())
     assert not snapshot["classic"]
+    assert not snapshot["skp_exporter"]
     if sys.platform == "darwin":
         assert not snapshot["qt_pasteboard"]
     assert len(set(snapshot["scenes"])) >= 2

@@ -108,6 +108,7 @@ def transfer(src_win, doc, dst_host) -> bool:
     # The project's controller and view now answer to the new window.
     for obj in (doc.viewport, doc.stand_in):
         if obj is not None and hasattr(obj, "_host"):
+            dst_host.timers.transfer_context(src_win._host.timers, obj)
             obj._host = dst_host
     view = doc.stand_in
     if view is not None:
