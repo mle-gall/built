@@ -116,9 +116,12 @@ def test_installed_plugin_toggles_in_a_modelling_window(tmp_path):
     plugins.mkdir(parents=True)
     plugin = plugins / "menu_fixture.py"
     plugin.write_text("""from pathlib import Path
+import sys
 def setup(app):
     action = app.add_menu("Fixture").addAction("Toggle guides")
     action.setCheckable(True)
+    app.add_menu_action("Inspect host", lambda: Path(__file__).with_suffix(".host").write_text(
+        "classic" if "views.main_window" in sys.modules else "native"))
     action.triggered.connect(lambda on: Path(__file__).with_suffix(".state").open("a").write(str(on) + "\\n"))
 """)
     script = tmp_path / "steps.txt"
@@ -131,6 +134,7 @@ click 280 300
 click 340 330
 key escape
 wait 120
+menu extension:menu_fixture:2
 state
 quit
 """)
@@ -143,3 +147,5 @@ quit
     states = [json.loads(line.removeprefix("[built] state ")) for line in
               result.stdout.splitlines() if line.startswith("[built] state ")]
     assert states and all(s["errors"] == 0 and s["edges"] > 0 for s in states), result.stderr
+    assert all(s["borrowed"] == 0 for s in states)
+    assert plugin.with_suffix(".host").read_text() == "native"

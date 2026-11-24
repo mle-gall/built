@@ -3,6 +3,9 @@ import ingetrazo_render as native
 
 
 class WindowDocumentCommands:
+    # Keep full collections off the pointer-move path in large documents.
+    GC_THRESHOLD0 = 50_000
+    _RECENT_MAX = 10
     _CAMERA_FIELDS = native.DOCUMENT_CAMERA_FIELDS
 
     def _camera_dict(self, vp=None):
@@ -52,3 +55,39 @@ class WindowDocumentCommands:
             return DocumentOpen(skp, insert=True).wait(), None
         except Exception as exc:
             return None, exc
+
+    def _forget_coordinate(self) -> None:
+        """A new or opened document: the UTM readout of the one before
+        goes. The viewport only clears it on the next hover, so after File ▸
+        New the bar kept the previous model's easting/northing (#759)."""
+        self.viewport._last_coordinate = ""
+        self.viewport._last_coordinate_full = ""
+        self._status_pending.pop("coordinate", None)
+        self._coord_label.setText("")
+        self._coord_label.setToolTip("")
+
+    def _configure_recovery(self, timer):
+        native.configure_recovery(self, timer)
+
+    def _on_autosave_tick(self):
+        native.request_recovery(self)
+
+    def _on_toggle_eyedropper(self, on):
+        native.toggle_eyedropper(self, on)
+
+    @staticmethod
+    def _recent_paths():
+        from core import recent
+        return recent.menu(limit=WindowDocumentCommands._RECENT_MAX)
+
+    def _remember_recent(self, path, doc=None):
+        native.remember_document(self, path, doc)
+
+    def _tool_key(self, tool):
+        return native.tool_key(self._tools, tool)
+
+    def _link_watcher(self):
+        return native.link_watcher(self)
+
+    def _after_links_loaded(self):
+        native.links_loaded(self)

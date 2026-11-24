@@ -928,41 +928,7 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         if timer is None:
             timer = self._autosave_timer = QTimer(self)
             timer.timeout.connect(self._on_autosave_tick)
-        st = QSettings()
-        enabled = str(_gs.value("autosave", "1", st)) != "0"
-        minutes = max(1, min(60, int(_gs.value("autosave_min", 5, st))))
-        timer.stop()
-        if enabled:
-            timer.start(minutes * 60 * 1000)
-        elif getattr(self, "_background_autosave", None) is not None:
-            self._background_autosave.cancel()
-
-    def _on_autosave_tick(self) -> None:
-        """Queue recovery snapshots; serialization and IO never block this tick."""
-        if getattr(self, "_opening_document", False):
-            return
-        # Housekeeping that rides the same slow tick: a clean collection
-        # now and then — never mid-gesture (over a big model it is ~0.3 s).
-        import sys
-        if sys.getallocatedblocks() > 40_000_000:
-            self._gc_too_slow = True       # tens of millions of objects: ~5 s
-        if getattr(self.viewport, "_last_pos", None) is None \
-                and not getattr(self, "_gc_too_slow", False):
-            import gc
-            import time
-            t0 = time.perf_counter()
-            gc.collect()
-            # On a model of 14 million faces a full collection froze the
-            # app for 4.5 s every five minutes (live profile, #158): once
-            # one takes that long, the housekeeping stops for the session.
-            if time.perf_counter() - t0 > 0.5:
-                self._gc_too_slow = True
-        from core.background_autosave import BackgroundAutosave
-        manager = getattr(self, "_background_autosave", None)
-        if manager is None:
-            manager = self._background_autosave = BackgroundAutosave(self)
-            manager.finished.connect(lambda name, error: _dialogs.autosave_result(self, name, error))
-        manager.request(list(self._documents))
+        self._configure_recovery(timer)
 
     def _offer_untitled_recovery(self) -> None:
         """Offer back every untitled drawing the last session left in its
@@ -4266,12 +4232,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         if not self._status_timer.isActive():
             self._status_timer.start()
 
-    def _tool_key(self, tool) -> str | None:
-        for key, t in self._tools.items():
-            if t is tool:
-                return key
-        return None
-
     def _update_status_hint(self) -> None:
         """Refresh the one-line hint for the active tool and its step: the
         status bar's base message, under any timed one."""
@@ -4322,16 +4282,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         meas = pending.get("measurement")
         if meas is not None and meas != getattr(self, "_vcb_live", None):
             self._on_measurement(meas)
-
-    def _forget_coordinate(self) -> None:
-        """A new or opened document: the UTM readout of the one before
-        goes. The viewport only clears it on the next hover, so after File ▸
-        New the bar kept the previous model's easting/northing (#759)."""
-        self.viewport._last_coordinate = ""
-        self.viewport._last_coordinate_full = ""
-        self._status_pending.pop("coordinate", None)
-        self._coord_label.setText("")
-        self._coord_label.setToolTip("")
 
     def _on_measurement(self, text: str) -> None:
         self._vcb_live = text
@@ -5394,17 +5344,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
             self.viewport.history.execute(
                 cmds[0] if len(cmds) == 1 else CompoundCommand(cmds))
             self.viewport.update()
-
-    def _on_toggle_eyedropper(self, on: bool) -> None:
-        """Arm (or cancel) a one-shot material sample. Arming picks the Paint
-        tool too, so the click that follows the sample paints with what was
-        just picked up — the classic round trip in two clicks."""
-        PaintTool.sample_armed = bool(on)
-        if on:
-            self._activate_tool("paint")
-            self.viewport.flash_status(
-                tr("Click a face to sample its material"))
-        self.viewport._apply_tool_cursor()
 
     def release_eyedropper(self) -> None:
         """Called back by the tool once it has sampled: the button pops out
@@ -8534,25 +8473,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         after_open(self, Path(chosen), recovered)
 
     # ---- Recent files -------------------------------------------------------
-    _RECENT_MAX = 10
-
-    @staticmethod
-    def _recent_paths() -> list:
-        """File ▸ Open Recent: the recent documents still there (core.recent,
-        the start page's list)."""
-        from core import recent as home_recent
-        return home_recent.menu(limit=MainWindow._RECENT_MAX)
-
-    def _remember_recent(self, path, doc=None) -> None:
-        """Put ``path`` at the top of File ▸ Open Recent (native documents
-        only: an import is not a document you reopen)."""
-        if path is None or Path(path).suffix.lower() not in built.DOCUMENT_SUFFIXES:
-            return
-        from core import recent as home_recent
-        home_recent.remember(path)
-        # What the start page shows of it: project, links, problems…
-        from views import wgpu_start
-        wgpu_start.note(self, path, doc=doc)
 
     def _fill_recent_menu(self) -> None:
         menu = self._recent_menu
@@ -8897,15 +8817,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         self._open_aborted = False
         self._saved_version = self.viewport.scene.version
         QTimer.singleShot(0, self.close)
-
-    #: Young-generation threshold: how many net allocations between
-    #: collector passes. Python's default (2000) made the incremental
-    #: collector (3.14) walk slices of the plaza's 1.3 M objects on almost
-    #: every hover — 203 passes and an 80 ms pause per 120 mouse moves;
-    #: at 50 000 the same run did 6 passes of ~0 ms. Measured 2026-09-14
-    #: against ``gc.freeze`` too, which cut the pauses but made every
-    #: allocation-heavy path slower (the cold pick index 23 → 41 ms).
-    GC_THRESHOLD0 = 50_000
 
     def settle_heap(self) -> None:
         """After a document loads: one clean collection over its static
@@ -9734,28 +9645,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
             tr("Texture cache cleared ({count} files).", count=removed), 4000)
 
     # ---- linked documents (core/links.py) ------------------------------------
-    def _link_watcher(self):
-        watcher = self.__dict__.get("_links_watch")
-        if watcher is None:
-            from views.link_watcher import LinkWatcher
-            watcher = self._links_watch = LinkWatcher(self)
-        return watcher
-
-    def _after_links_loaded(self) -> None:
-        """A document was opened: watch its sources, and say which could
-        not be read (their copies stay in place, empty, until found)."""
-        self._link_watcher().refresh()
-        errors = getattr(self.viewport.scene, "link_errors", None) or {}
-        if _dialogs.live(self) is not None and _dialogs.update_link_banner(self):
-            _dialogs._repaint(self)
-            return
-        if errors:
-            _dialogs.warning(
-                self, tr("Linked files"),
-                tr("Some linked documents could not be loaded; their copies "
-                   "stay in place, empty, until the files are found:")
-                + "\n\n" + "\n".join(f"• {e}" for e in errors.values()))
-
     def _on_link_igz(self) -> None:
         """Place another document as a live link (core/links.py)."""
         from core import links

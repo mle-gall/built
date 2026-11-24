@@ -353,7 +353,11 @@ _OWN = {"viewport", "documents", "active_document", "activate_document",
         "_update_title", "_update_tab", "_refresh_scene_tabs", "setWindowTitle",
         "_on_save", "_on_save_as", "_do_save", "_on_export_igz", "_document_picture",
         "_show_empty_area", "_leave_empty_area", "_dismiss_home", "_on_new_window",
-        "_sync_foreign_clipboard", "_on_open", "_open_recent", "_fill_recent_menu"}
+        "_sync_foreign_clipboard", "_on_open", "_open_recent", "_fill_recent_menu",
+        # Optional per-instance attachments and QWidget probes. A lookup
+        # before installation must not load the Classic window class.
+        "_host_window", "_doc_area", "_lib_installed", "_mac_chrome",
+        "_panel_view", "_vcb_name", "_vcb_value", "isWindow"}
 
 #: What a borrowed method may reach for that the shell has nothing for:
 #: answered with a no-op, as a window with that panel closed would.
@@ -477,6 +481,16 @@ class ShellWindow(WindowDocumentCommands, QObject):
         self._act_bridge = self._registry_actions["menu:bridge"]
         self._act_make_faces = self._registry_actions["menu:make_faces"]
         self._act_3dtext = self._registry_actions["menu:text3d"]
+
+    def _setup_autosave(self):
+        self._configure_recovery(self._autosave_timer)
+
+    @property
+    def _last_command(self):
+        return self._command_store.last_command
+
+    def _remember_command(self, label, run):
+        self._command_store.remember(label, run)
 
     def childEvent(self, event):
         # A plugin may attach an action or an entire submenu to this QObject.
