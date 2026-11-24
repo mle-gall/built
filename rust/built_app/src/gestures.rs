@@ -1,9 +1,24 @@
 //! Native gesture dispatch and raw touchscreen contacts, in logical pixels.
 use super::{phase_name, python, App, TouchPhase, WindowId};
 
+/// A slide's delta in whole logical pixels, the rest carried to the next
+/// event. The viewport reads integer deltas (Qt's `pixelDelta` and
+/// `angleDelta`), and a trackpad's slow slide and inertia tail come as
+/// fractions of a pixel. Rounding each event alone dropped every delta under
+/// a quarter pixel and zoomed the 0.25-0.5 px ones backwards: their pixel
+/// delta rounded to nothing, which reads as a mouse wheel, and a mouse wheel
+/// skips the Natural Scrolling flip. Carried, the whole pixels handed over
+/// add up to the finger's travel, in its direction.
+pub(super) fn carry(carry: &mut (f64, f64), delta: (f64, f64)) -> (f64, f64) {
+    let total = (carry.0 + delta.0, carry.1 + delta.1);
+    let whole = (total.0.round(), total.1.round());
+    *carry = (total.0 - whole.0, total.1 - whole.1);
+    whole
+}
+
 impl App {
     pub(super) fn slide(
-        &self,
+        &mut self,
         id: WindowId,
         pos: (f64, f64),
         delta: (f64, f64),
@@ -11,9 +26,18 @@ impl App {
         touch: bool,
         inverted: bool,
     ) {
-        if let Some(w) = self.win(id) {
+        let mods = self.mods();
+        if let Some(w) = self.win_mut(id) {
+            if phase == "start" {
+                w.slide_carry = (0., 0.);
+            }
+            let (dx, dy) = carry(&mut w.slide_carry, delta);
+            // Under a pixel so far: nothing to turn, pan or zoom yet. The
+            // phases that open and close a gesture always go through.
+            if dx == 0. && dy == 0. && matches!(phase, "move" | "momentum") {
+                return;
+            }
             let (x, y) = pos;
-            let (dx, dy) = delta;
             w.host.call(
                 "wheel",
                 (
@@ -24,7 +48,7 @@ impl App {
                     dx * 2.,
                     dy * 2.,
                     phase,
-                    self.mods(),
+                    mods,
                     w.held,
                     inverted,
                     touch,
@@ -129,5 +153,37 @@ impl App {
                 true,
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::carry;
+
+    /// A slow slide and an inertia tail, in fractions of a pixel: what is
+    /// handed over adds up to the travel, never goes the other way, and is
+    /// never more than half a pixel behind.
+    #[test]
+    fn fractional_slides_add_up_in_their_direction() {
+        for step in [0.05, 0.2, 0.3, 0.4, 0.6, 1.4, 3.7] {
+            let mut c = (0., 0.);
+            let (mut sent, mut travel) = (0., 0.);
+            for _ in 0..240 {
+                let (dx, dy) = carry(&mut c, (step * 0.5, -step));
+                assert!(dx >= 0. && dy <= 0., "{step}: handed over against the slide");
+                assert!(dx.fract() == 0. && dy.fract() == 0.);
+                sent += dy;
+                travel -= step;
+                assert!((sent - travel).abs() <= 0.5 + 1e-9, "{step}: {sent} behind {travel}");
+            }
+        }
+        let mut c = (0., 0.);
+        let mut tail = 0.;
+        let mut v = 5.;
+        while v > 0.05 {
+            v *= 0.94;
+            tail += carry(&mut c, (0., v)).1;
+        }
+        assert_eq!(tail, 78.);
     }
 }

@@ -1306,7 +1306,7 @@ class SetTagStateCommand(Command):
         from copy import deepcopy
         from core import layers as L, links
         self.before = L.layer_state(scene)
-        self.links_before = deepcopy({k: e.get("overrides") for k, e in links.registry(scene).items()
+        self.links_before = deepcopy({k: e.get("overrides") for k, e in links.registry_view(scene).items()
                                       if isinstance(e, dict)})
         if self.visible is not None:
             for key in self.folders:
@@ -1324,7 +1324,7 @@ class SetTagStateCommand(Command):
     def undo(self, scene):
         from core import layers as L, links
         L.apply_layer_state(scene, self.before)
-        for key, entry in links.registry(scene).items():
+        for key, entry in links.registry_view(scene).items():
             if isinstance(entry, dict) and key in self.links_before:
                 entry["overrides"] = dict(self.links_before[key] or {})
         scene.version += 1

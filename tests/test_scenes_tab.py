@@ -7,14 +7,16 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 
 def test_one_command_of_each_kind_for_scenes():
-    """Main's AddSceneCommand (with a place and the folder now) and its
-    RenameSceneCommand: no second class of the same name beside them."""
+    """AddSceneCommand (with a place and the folder) and RenameSceneCommand
+    are the native steps: no Python class of the same name beside them."""
+    import ingetrazo_core
     import core.history as H
     import core.saved_views as S
     import core.history_commands as commands
-    assert H.AddSceneCommand is commands.AddSceneCommand
+    assert H.AddSceneCommand is commands.AddSceneCommand is ingetrazo_core.AddSceneCommand
+    assert S.RenameSceneCommand is ingetrazo_core.RenameSceneCommand
     src = open(commands.__file__, encoding="utf8").read()
-    assert src.count("class AddSceneCommand(") == 1
+    assert "class AddSceneCommand(" not in src
     assert "class RenameSceneCommand(" not in src
     assert hasattr(S, "RenameSceneCommand") and hasattr(S, "MoveSceneCommand")
 

@@ -18,7 +18,9 @@ from ingetrazo_core import presentation as _presentation
 
 from core.doc_model import Record, record_fields
 
-from core.history import SavedSceneCommand, CommandRejected
+from core.history import CommandRejected
+# Native steps (docs/commands-port.md), kept under these names.
+from ingetrazo_core import MoveSceneCommand, RenameSceneCommand  # noqa: F401
 
 
 @record_fields("name", "navigator_view", "folder", "target", "distance", "yaw",
@@ -395,52 +397,3 @@ def from_lookat(name: str, eye, target, up, fov_deg: float = 45.0,
                      pitch=pitch, fov_deg=fov_deg, perspective=perspective,
                      hidden_layers=hidden_layers)
 
-
-class RenameSceneCommand(SavedSceneCommand):
-    """A scene's new name, and the sheet views that show it along with it
-    (``core.outliner.rename_scene``). A name refused there is no step."""
-
-    keeps_paint = True
-
-    doc_undo = True
-
-    def __init__(self, view, name: str) -> None:
-        self.view = view
-        self.name = name
-        self._prev = None
-        self._frames: list = []
-
-    def do(self, scene) -> None:
-        renamed = _presentation.rename_view(scene, self.view, self.name)
-        if renamed is None:
-            raise CommandRejected(self.name)
-        self._prev, self._frames = renamed
-        self.doc_after(scene, None)
-
-    def undo(self, scene) -> None:
-        _presentation.restore_view_name(self.view, self._prev, self._frames)
-        self.doc_after(scene, None)
-
-
-class MoveSceneCommand(SavedSceneCommand):
-    """A scene to another place in the list: the order of the list is the
-    order of the scene tabs and the panel, and what the document saves."""
-
-    keeps_paint = True
-
-    doc_undo = True
-
-    def __init__(self, view, index: int) -> None:
-        self.view = view
-        self.index = int(index)
-        self._from = None
-
-    def do(self, scene) -> None:
-        self._from = _presentation.move_item(scene.saved_views, self.view, self.index, False, True)
-        if self._from is None:
-            raise CommandRejected(self.view.name)
-        self.doc_after(scene, None)
-
-    def undo(self, scene) -> None:
-        _presentation.move_item(scene.saved_views, self.view, self._from, False, False)
-        self.doc_after(scene, None)

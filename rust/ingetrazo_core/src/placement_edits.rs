@@ -23,7 +23,7 @@ fn ensure_container(group: &Obj<'_>) -> PyResult<()> {
 }
 
 #[pyfunction]
-fn insert_placement<'py>(
+pub(crate) fn insert_placement<'py>(
     roots: &Obj<'py>,
     context: &Obj<'py>,
     active_mesh: &Obj<'py>,
@@ -70,7 +70,7 @@ fn insert_placement<'py>(
 }
 
 #[pyfunction]
-fn convert_component<'py>(
+pub(crate) fn convert_component<'py>(
     group: &Obj<'py>,
     name: &Obj<'py>,
 ) -> PyResult<(Obj<'py>, Obj<'py>, Obj<'py>)> {
@@ -89,14 +89,14 @@ fn convert_component<'py>(
     Ok(old)
 }
 #[pyfunction]
-fn restore_component(group: &Obj<'_>, old: (Obj<'_>, Obj<'_>, Obj<'_>)) -> PyResult<()> {
+pub(crate) fn restore_component(group: &Obj<'_>, old: (Obj<'_>, Obj<'_>, Obj<'_>)) -> PyResult<()> {
     group.setattr("xform", old.0)?;
     group.setattr("component", old.1)?;
     group.setattr("name", old.2)
 }
 
 #[pyfunction]
-fn nest<'py>(
+pub(crate) fn nest<'py>(
     roots: &Obj<'py>,
     group: &Obj<'py>,
     children: Vec<Obj<'py>>,
@@ -122,7 +122,7 @@ fn nest<'py>(
     Ok((xform, positions))
 }
 #[pyfunction]
-fn unnest(
+pub(crate) fn unnest(
     roots: &Obj<'_>,
     group: &Obj<'_>,
     xform: &Obj<'_>,
@@ -137,7 +137,7 @@ fn unnest(
 }
 
 #[pyfunction]
-fn reparent<'py>(
+pub(crate) fn reparent<'py>(
     roots: &Obj<'py>,
     groups: &Obj<'py>,
     target: &Obj<'py>,
@@ -190,7 +190,7 @@ fn reparent<'py>(
     Ok((state, moves))
 }
 #[pyfunction]
-fn restore_parent(
+pub(crate) fn restore_parent(
     roots: &Obj<'_>,
     target: &Obj<'_>,
     state: Option<TargetState<'_>>,
@@ -210,7 +210,7 @@ fn restore_parent(
     Ok(())
 }
 #[pyfunction]
-fn split_placement<'py>(
+pub(crate) fn split_placement<'py>(
     g: &Obj<'py>,
     pieces: &Obj<'py>,
     emptied: &Obj<'py>,
@@ -233,7 +233,7 @@ fn split_placement<'py>(
     Ok((before, mesh))
 }
 #[pyfunction]
-fn restore_split(g: &Obj<'_>, before: (Obj<'_>, Obj<'_>, Obj<'_>, Obj<'_>)) -> PyResult<()> {
+pub(crate) fn restore_split(g: &Obj<'_>, before: (Obj<'_>, Obj<'_>, Obj<'_>, Obj<'_>)) -> PyResult<()> {
     g.setattr("mesh", before.0)?;
     g.setattr("children", before.1)?;
     g.setattr("xform", before.2)?;
