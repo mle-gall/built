@@ -327,6 +327,7 @@ pub fn menu_rows(f: &Facts, kind: &str) -> Vec<Row> {
             r.one(hide_if(f));
             r.one(zoom());
             r.one(make());
+            if f.bridgeable { r.one(vec![e("bridge", "Bridge")]); }
             if faces {
                 r.one(vec![e("reverse", "Reverse faces"), e("orient", "Orient faces")]);
                 r.family("Intersect", intersect());
@@ -360,9 +361,6 @@ pub fn menu_rows(f: &Facts, kind: &str) -> Vec<Row> {
                     r.one(row);
                 }
                 r.one(vec![soften()]);
-                if f.bridgeable {
-                    r.one(vec![e("bridge", "Bridge")]);
-                }
                 r.family("Flip along", flip());
             }
         }

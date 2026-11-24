@@ -287,6 +287,47 @@ pub fn tree_group_action(
     clicked: &Bound<'_, PyAny>,
     verb: &str,
 ) -> PyResult<()> {
+    if verb == "pickrow" || verb == "roweye" {
+        let vp = win.getattr("viewport")?;
+        let scene = vp.getattr("scene")?;
+        let tree = Occurrences::read(&scene, clicked)?;
+        let Some(i) = tree.rows.iter().position(|r| r.group.is(clicked)) else {
+            return Ok(());
+        };
+        if verb == "pickrow" {
+            if !scene
+                .call_method1("entity_selectable", (clicked,))?
+                .is_truthy()?
+            {
+                return Ok(());
+            }
+            if !win
+                .py()
+                .import("views.tree_navigation")?
+                .call_method1("open_to", (&vp, tree.path(tree.rows[i].parent)))?
+                .is_truthy()?
+            {
+                return Ok(());
+            }
+            scene.call_method1("select", ([clicked],))?;
+        } else {
+            if scene.getattr("worksession_read_only").is_ok_and(|v| v.is_truthy().unwrap_or(false)) {
+                vp.call_method1("flash_status", (translated(win.py(), READ_ONLY, None)?, 4000))?;
+                return Ok(());
+            }
+            let groups = PyList::new(win.py(), tree.targets.iter().map(|&i| &tree.rows[i].group))?;
+            let hide = !clicked.getattr("hidden")?.is_truthy()?;
+            let cmd = win
+                .py()
+                .import("core.history")?
+                .call_method1("HideCommand", (groups, hide))?;
+            win.py()
+                .import("views.tree_navigation")?
+                .call_method1("execute", (&vp, cmd))?;
+        }
+        vp.call_method0("notify_scene_changed")?;
+        return Ok(());
+    }
     if !matches!(
         verb,
         "group" | "component" | "explode" | "toggleitem" | "unique" | "instances"
@@ -370,4 +411,93 @@ pub fn tree_group_action(
     }
     vp.call_method0("update")?;
     Ok(())
+}
+
+/// Move only the outermost picked occurrences. A missing row is distinct
+/// from the header, which explicitly addresses the document root.
+#[pyfunction]
+pub fn tree_move(
+    vp: &Bound<'_, PyAny>,
+    clicked: &Bound<'_, PyAny>,
+    dest: &Bound<'_, PyAny>,
+    mode: &str,
+) -> PyResult<bool> {
+    let scene = vp.getattr("scene")?;
+    let tree = Occurrences::read(&scene, clicked)?;
+    let locate = |group: &Bound<'_, PyAny>| tree.rows.iter().position(|r| r.group.is(group));
+    let Some(source) = locate(clicked).or_else(|| tree.targets.first().copied()) else {
+        return Ok(false);
+    };
+    let target = match mode {
+        "root" => None,
+        "outdent" => {
+            let Some(parent) = tree.rows[source].parent else {
+                return Ok(false);
+            };
+            tree.rows[parent].parent
+        }
+        "into" | "beside" => {
+            let Some(index) = locate(dest) else {
+                return Ok(false);
+            };
+            if mode == "into" {
+                Some(index)
+            } else {
+                tree.rows[index].parent
+            }
+        }
+        _ => return Ok(false),
+    };
+    let selected: HashSet<_> = tree.targets.iter().copied().collect();
+    let moving: Vec<_> = tree
+        .targets
+        .iter()
+        .copied()
+        .filter(|&i| {
+            let parent = tree.rows[i].parent;
+            parent != target
+                && !std::iter::successors(parent, |&j| tree.rows[j].parent)
+                    .any(|j| selected.contains(&j))
+        })
+        .collect();
+    if moving.is_empty() {
+        return Ok(false);
+    }
+    let mut why = tree.refusal(&scene, &moving, false)?;
+    if why.is_empty() {
+        if let Some(j) = target {
+            why = tree.refusal(&scene, &[j], false)?;
+            if why.is_empty()
+                && (tree.rows[j]
+                    .group
+                    .call_method0("is_component")?
+                    .is_truthy()?
+                    || vp
+                        .py()
+                        .import("core.links")?
+                        .call_method1("is_linked", (&tree.rows[j].group,))?
+                        .is_truthy()?)
+            {
+                why = SHARED;
+            }
+        }
+    }
+    if std::iter::successors(target, |&j| tree.rows[j].parent).any(|j| selected.contains(&j)) {
+        why = "A group cannot go inside itself or a group it holds";
+    }
+    if !why.is_empty() {
+        vp.call_method1("flash_status", (translated(vp.py(), why, None)?, 4000))?;
+        return Ok(false);
+    }
+    let groups = PyList::new(vp.py(), moving.iter().map(|&i| &tree.rows[i].group))?;
+    let destination = target.map(|i| &tree.rows[i].group);
+    vp.call_method0("end_group_edit")?;
+    let command = vp
+        .py()
+        .import("core.history")?
+        .call_method1("ReparentGroupsCommand", (groups, destination))?;
+    vp.py()
+        .import("views.tree_navigation")?
+        .call_method1("execute", (vp, command))?;
+    Ok(true)
 }

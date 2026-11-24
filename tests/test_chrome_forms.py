@@ -31,7 +31,7 @@ class FakeRenderer:
     def ui_set_dialog(self, seq, title="", note="", width=420.0, fields=(), buttons=()):
         self.dialogs.append((seq, title, note, width, list(fields), list(buttons)))
 
-    def ui_claims_key(self, name):
+    def ui_claims_key(self, name, mods=0):
         return True
 
     def ui_key(self, name, pressed, mods):

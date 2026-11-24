@@ -765,6 +765,16 @@ pub mod molecules {
         let x = r.max.x - 8.0 - v.size().x;
         leading(ui.painter(), r, x, v, if off { OFF } else { INK });
     }
+    pub fn material_readout(ui: &mut egui::Ui, label: &str, color: Color32, hex: &str) {
+        property_control(ui, label, |ui| {
+            ui.horizontal(|ui| {
+                let (rect, _) = ui.allocate_exact_size(vec2(CONTROL_H, CONTROL_H * 0.6), Sense::hover());
+                ui.painter().rect_filled(rect, CornerRadius::same(R_ROW), color);
+                ui.painter().rect_stroke(rect, CornerRadius::same(R_ROW), Stroke::new(1.0_f32, EDGE), egui::StrokeKind::Inside);
+                ui.label(egui::RichText::new(hex).font(body()).color(INK));
+            });
+        });
+    }
     /// One editable property, with a shared leading label and control baseline.
     pub fn property_control(
         ui: &mut egui::Ui, label: &str, control: impl FnOnce(&mut egui::Ui),

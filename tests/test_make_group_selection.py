@@ -10,11 +10,10 @@ total silence. Both now answer.
 """
 from __future__ import annotations
 
-import os
-
 import pytest
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication, QMessageBox
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
+from views import context_menu
 
 from core.group import Group
 from core.mesh import Mesh
@@ -25,15 +24,8 @@ def V(x, y, z=0.0):
 
 
 @pytest.fixture
-def win():
-    from views.main_window import MainWindow
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    if QApplication.instance() is None:
-        QApplication([])
-    w = MainWindow()
-    yield w
-    w._saved_version = w.viewport.scene.version
-    w.close()
+def win(native_host):
+    return native_host.window
 
 
 def _quad(mesh, x0=0.0, y0=0.0):
@@ -42,34 +34,10 @@ def _quad(mesh, x0=0.0, y0=0.0):
 
 
 def _new_groups(scene, before):
-    """Groups added since *before* — a fresh MainWindow already ships the
+    """Groups added since *before* — a fresh document already ships the
     startup template's scale figure, which is not what these tests measure."""
     known = {id(g) for g in before}
     return [g for g in scene.groups if id(g) not in known]
-
-
-def _answer(monkeypatch, label_fragment):
-    """Drive the dialog: click the button whose text contains *fragment*
-    (None = Cancel). Returns a dict that records the button labels offered."""
-    seen: dict = {}
-
-    def fake_exec(self):
-        seen["labels"] = [b.text() for b in self.buttons()]
-        target = None
-        if label_fragment is not None:
-            target = next((b for b in self.buttons()
-                           if label_fragment.lower() in b.text().lower()), None)
-        if target is None:
-            target = next(b for b in self.buttons()
-                          if self.buttonRole(b)
-                          == QMessageBox.ButtonRole.RejectRole)
-        seen["clicked"] = target
-        return 0
-
-    monkeypatch.setattr(QMessageBox, "exec", fake_exec)
-    monkeypatch.setattr(QMessageBox, "clickedButton",
-                        lambda self: seen.get("clicked"))
-    return seen
 
 
 def test_empty_selection_says_so_instead_of_going_silent(win):
@@ -175,12 +143,10 @@ def test_un_grupo_con_hijos_se_anida_sin_perderlos(win):
     assert len(hijo.mesh.faces) == 1
 
 
-def test_el_menu_del_boton_derecho_ofrece_crear_grupo_con_solo_grupos(win, monkeypatch):
+def test_el_menu_del_boton_derecho_ofrece_crear_grupo_con_solo_grupos(win):
     """«Seleccioné cuatro grupos y solo me sale crear componente y unir
     grupos» (Marco, 2026-09-11). La entrada estaba condicionada a que
     hubiera geometría suelta, porque agrupar grupos no existía."""
-    from PySide6.QtCore import QPoint
-    from PySide6.QtWidgets import QMenu
     scene = win.viewport.scene
     for i in range(4):
         g = Group(Mesh(), name="G%d" % i)
@@ -188,20 +154,9 @@ def test_el_menu_del_boton_derecho_ofrece_crear_grupo_con_solo_grupos(win, monke
         scene.groups.append(g)
     scene.select(list(scene.groups))
 
-    class _Menu(QMenu):
-        abiertos: list = []
-
-        def exec(self, *a, **k):
-            _Menu.abiertos.append(self)
-            return None
-
-    import views.main_window as mw
-    _Menu.abiertos.clear()
-    monkeypatch.setattr(mw, "QMenu", _Menu)
-    win.show_viewport_context_menu(QPoint(0, 0))
-    textos = [a.text() for a in _Menu.abiertos[0].actions()]
-    assert "Make Group" in textos
-    assert "Merge Groups" in textos          # la de siempre sigue
+    verbs = context_menu.build(win).ids()
+    assert "makegroup" in verbs
+    assert "merge" in verbs
 
 
 def test_un_grupo_solo_no_se_agrupa_consigo_mismo(win):
@@ -222,13 +177,9 @@ def test_un_grupo_solo_no_se_agrupa_consigo_mismo(win):
     assert win.statusBar().currentMessage()
 
 
-def test_el_menu_no_ofrece_agrupar_a_un_grupo_solo(win, monkeypatch):
+def test_el_menu_no_ofrece_agrupar_a_un_grupo_solo(win):
     """La entrada del clic derecho sigue la misma regla: uno solo no la
     tiene; dos grupos, o un grupo con geometría suelta, sí."""
-    from PySide6.QtCore import QPoint
-    from tests.test_context_menu_reverse import _MenuSinModal
-    import views.main_window as mw
-    monkeypatch.setattr(mw, "QMenu", _MenuSinModal)
     scene = win.viewport.scene
     g1 = Group(Mesh(), name="Banca")
     _quad(g1.mesh, 10.0)
@@ -237,11 +188,9 @@ def test_el_menu_no_ofrece_agrupar_a_un_grupo_solo(win, monkeypatch):
     scene.groups += [g1, g2]
 
     def entradas(sel):
-        _MenuSinModal.abiertos.clear()
         scene.select(sel)
-        win.show_viewport_context_menu(QPoint(0, 0))
-        return [a.text() for a in _MenuSinModal.abiertos[0].actions()]
-    assert "Make Group" not in entradas([g1])
-    assert "Make Group" in entradas([g1, g2])
+        return context_menu.build(win).ids()
+    assert "makegroup" not in entradas([g1])
+    assert "makegroup" in entradas([g1, g2])
     f = _quad(scene.mesh)
-    assert "Make Group" in entradas([g1, f])
+    assert "makegroup" in entradas([g1, f])

@@ -104,11 +104,12 @@ def run(win, view, kind, vid, sel, *, locked_group=None, locked_image=None, fact
     says (``verbs_dispatch``). False when it names nothing to run."""
     how, name, arg = _verbs.verbs_dispatch(kind, vid)
     if how == "slot":
+        from core.mesh import Face
         fn = getattr(win, name, None)
         if fn is None:
             return False
         values = {"": (), "sel0": (sel[0],) if sel else None, "none": (None,),
-                  "face0": tuple(e for e in sel if type(e).__name__ == "Face")[:1] or None,
+                  "face0": next(((e,) for e in sel if isinstance(e, Face)), None),
                   "locked_group": (locked_group,), "locked_image": (locked_image,)}
         args = values.get(arg, (arg,))
         if args is None:

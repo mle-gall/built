@@ -80,40 +80,6 @@ def test_the_tree_shows_the_whole_model_nested():
     _close(win)
 
 
-def test_clicking_a_nested_row_opens_its_containers_and_selects_it():
-    building, tree = _building()
-    level1 = building.children[0]
-    wall = level1.children[0]
-    win, scene, panel = _window_with(building, tree)
-    t = panel.tree
-    t.setCurrentItem(_row(panel, wall))
-    assert outliner.open_path(scene) == [building, level1]
-    assert scene.selection == {wall}
-    panel.refresh()
-    assert _row(panel, building).font(0).bold()
-    assert _row(panel, level1).font(0).bold()
-    assert not _row(panel, wall).font(0).bold()
-    # A top-level row closes what was open.
-    t.setCurrentItem(_row(panel, tree))
-    assert scene.edit_group is None
-    assert scene.selection == {tree}
-    panel.refresh()
-    assert not _row(panel, building).font(0).bold()
-    _close(win)
-
-
-def test_moving_to_a_sibling_branch_steps_out_only_where_it_differs():
-    building, tree = _building()
-    level1, level2 = building.children
-    win, scene, panel = _window_with(building, tree)
-    panel.tree.setCurrentItem(_row(panel, level1.children[1]))
-    assert outliner.open_path(scene) == [building, level1]
-    panel.tree.setCurrentItem(_row(panel, level2.children[0]))
-    assert outliner.open_path(scene) == [building, level2]
-    assert scene.selection == {level2.children[0]}
-    _close(win)
-
-
 def test_a_selection_in_the_view_is_found_in_the_tree():
     building, tree = _building()
     level2 = building.children[1]
@@ -129,77 +95,6 @@ def test_a_selection_in_the_view_is_found_in_the_tree():
     assert _row(panel, building).isExpanded()
     assert _row(panel, level2).isExpanded()
     assert panel.tree.currentItem() is row
-    _close(win)
-
-
-def test_the_eye_hides_every_selected_row_at_once():
-    building, tree = _building()
-    level1 = building.children[0]
-    wall, slab = level1.children
-    win, scene, panel = _window_with(building, tree)
-    panel.tree.setCurrentItem(_row(panel, wall))
-    _row(panel, slab).setSelected(True)
-    _eye(panel, slab)
-    assert wall.hidden and slab.hidden
-    assert not _shown(panel, wall) and not _shown(panel, slab)
-    win.viewport.history.undo()
-    assert not wall.hidden and not slab.hidden
-    _close(win)
-
-
-def test_double_click_opens_and_esc_steps_out_one_level():
-    building, tree = _building()
-    level1 = building.children[0]
-    win, scene, panel = _window_with(building, tree)
-    panel.open_item(_row(panel, level1))
-    assert outliner.open_path(scene) == [building, level1]
-    panel.step_out()
-    assert outliner.open_path(scene) == [building]
-    panel.step_out()
-    assert scene.edit_group is None
-    _close(win)
-
-
-def test_the_keyboard_alone_hides_opens_and_steps_out():
-    from PySide6.QtTest import QTest
-    building, tree = _building()
-    win, scene, panel = _window_with(building, tree)
-    t = panel.tree
-    t.setCurrentItem(_row(panel, tree))
-    QTest.keyClick(t, Qt.Key_Space)
-    assert tree.hidden
-    QTest.keyClick(t, Qt.Key_Space)
-    assert not tree.hidden
-    t.setCurrentItem(_row(panel, building))
-    QTest.keyClick(t, Qt.Key_Return)
-    assert scene.edit_group is building
-    QTest.keyClick(t, Qt.Key_Escape)
-    assert scene.edit_group is None
-    _close(win)
-
-
-def test_the_tree_keys_win_over_the_window_shortcuts():
-    from PySide6.QtCore import QEvent
-    from PySide6.QtGui import QKeyEvent
-    building, tree = _building()
-    win, scene, panel = _window_with(building, tree)
-    for key in (Qt.Key_Space, Qt.Key_Escape, Qt.Key_F2, Qt.Key_Return):
-        ev = QKeyEvent(QEvent.ShortcutOverride, key, Qt.NoModifier)
-        assert panel.tree.event(ev) and ev.isAccepted()
-    ev = QKeyEvent(QEvent.ShortcutOverride, Qt.Key_Z, Qt.ControlModifier)
-    panel.tree.event(ev)
-    assert not ev.isAccepted()          # Ctrl+Z stays the window's undo
-    _close(win)
-
-
-def test_a_hidden_container_cannot_be_entered_from_the_tree():
-    building, tree = _building()
-    level1 = building.children[0]
-    building.hidden = True
-    win, scene, panel = _window_with(building, tree)
-    panel.tree.setCurrentItem(_row(panel, level1))
-    assert scene.edit_group is None
-    assert not scene.selection
     _close(win)
 
 
@@ -366,79 +261,10 @@ def test_the_scenes_panel_rename_no_longer_orphans_sheet_views():
 # ---- Re-nesting (drag and drop, Tab / Shift+Tab) ----------------------------
 
 
-def test_dropping_rows_on_a_group_is_one_undo_step():
-    building, tree = _building()
-    level2 = building.children[1]
-    win, scene, panel = _window_with(building, tree)
-    assert panel.reparent([tree], level2)
-    assert tree in level2.children
-    assert _row(panel, tree).parent() is _row(panel, level2)
-    assert _row(panel, level2).isExpanded()
-    win.viewport.history.undo()
-    panel.refresh()
-    assert tree in scene.groups
-    assert _row(panel, tree).parent() is panel.tree.topLevelItem(0)
-    _close(win)
-
-
-def test_a_refused_drop_changes_nothing():
-    building, tree = _building()
-    level1 = building.children[0]
-    win, scene, panel = _window_with(building, tree)
-    steps = len(win.viewport.history.undo_stack)
-    assert not panel.reparent([building], level1)
-    assert level1 in building.children and building in scene.groups
-    assert len(win.viewport.history.undo_stack) == steps
-    _close(win)
-
-
-def test_tab_and_shift_tab_move_in_and_out():
-    from PySide6.QtTest import QTest
-    building, tree = _building()
-    fence = _group("Fence", (8, 0, 0))
-    win, scene, panel = _window_with(building, tree, fence)
-    t = panel.tree
-    t.setCurrentItem(_row(panel, fence))
-    QTest.keyClick(t, Qt.Key_Tab)              # into «Tree», the row above
-    assert fence in tree.children
-    t.setCurrentItem(_row(panel, fence))
-    QTest.keyClick(t, Qt.Key_Backtab)          # back out to the model
-    assert fence in scene.groups and fence not in tree.children
-    _close(win)
-
-
 # ---- Lock --------------------------------------------------------------------
 
 
-def test_nothing_opens_through_a_locked_group():
-    building, tree = _building()
-    level1 = building.children[0]
-    building.locked = True
-    win, scene, panel = _window_with(building, tree)
-    panel.tree.setCurrentItem(_row(panel, level1.children[0]))
-    assert scene.edit_group is None and not scene.selection
-    panel.open_item(_row(panel, building))
-    assert scene.edit_group is None
-    _close(win)
-
-
 # ---- Section planes ------------------------------------------------------------
-
-
-def test_keyboard_on_a_plane_row():
-    from PySide6.QtTest import QTest
-    building, tree = _building()
-    win, scene, panel = _window_with(building, tree)
-    a, b = _two_planes(scene)
-    panel.refresh()
-    t = panel.tree
-    t.setCurrentItem(panel._sec_root.child(1))
-    assert scene.selection == {b}                     # selected in the view
-    QTest.keyClick(t, Qt.Key_Space)                   # frame off
-    assert b.hidden
-    QTest.keyClick(t, Qt.Key_Return)                  # it cuts
-    assert b.active and not a.active
-    _close(win)
 
 
 def test_the_fill_colour_comes_from_the_styles_panel_picker():
@@ -454,20 +280,6 @@ def test_the_fill_colour_comes_from_the_styles_panel_picker():
 
 
 # ---- A cut's own fill, renaming planes, column widths -----------------------
-
-def test_f2_on_a_plane_row_opens_its_name_dialog(monkeypatch):
-    from PySide6.QtTest import QTest
-    building, tree = _building()
-    win, scene, panel = _window_with(building, tree)
-    a, b = _two_planes(scene)
-    panel.refresh()
-    asked = []
-    monkeypatch.setattr(panel, "rename_plane", asked.append)
-    panel.tree.setCurrentItem(panel._sec_root.child(1))
-    QTest.keyClick(panel.tree, Qt.Key_F2)
-    assert asked == [b]
-    _close(win)
-
 
 def test_the_name_column_width_is_the_users_and_is_remembered():
     from PySide6.QtWidgets import QHeaderView

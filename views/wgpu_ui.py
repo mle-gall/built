@@ -1397,7 +1397,21 @@ def _tree_action(win, view, action) -> None:
         if verb == "grouprows":
             from ingetrazo_render import tree_group_rows
             view.renderer.ui_set_tree_group_rows(rk, tree_group_rows(scene, copies() if kind == "d" else item()))
-        elif verb in ("toggleitem", "group", "component", "explode", "unique", "instances"):
+        elif verb in ("into", "beside", "root", "outdent"):
+            from ingetrazo_render import tree_move
+            target = _group_by_uid(win, extra.partition(":")[2]) if extra else None
+            if tree_move(vp, item(), target, verb):
+                if verb == "into":
+                    exp.add(extra)
+                rebuild()
+        elif verb == "stepout":
+            if scene.edit_group is not None:
+                vp.end_one_group_edit()
+                rebuild()
+        elif verb == "sectioncut" and kind == "section":
+            _core(vp, "edit_section_plane", uid=ident, field="cut")
+            vp.notify_scene_changed()
+        elif verb in ("pickrow", "roweye", "toggleitem", "group", "component", "explode", "unique", "instances"):
             from ingetrazo_render import tree_group_action
             tree_group_action(win, copies() if kind == "d" else item(), verb)
         elif verb == "hosteye":
@@ -1589,6 +1603,11 @@ def _tree_action(win, view, action) -> None:
                     vp.notify_scene_changed()
                 except (OSError, ValueError) as exc:
                     vp.flash_status(str(exc))
+        elif verb == "tagstate":
+            import json
+            _core(vp, "set_tag_state", **json.loads(rk))
+            vp.notify_scene_changed()
+            rebuild()
         elif verb == "drawingpatch":
             import json
             targets, patch = json.loads(rk)
@@ -1737,6 +1756,9 @@ def _tree_action(win, view, action) -> None:
             _core(vp, "edit_structure_node", node=node, field="parent", value=extra)
             vp.notify_scene_changed()
             rebuild()
+        elif verb == "rename" and kind == "section":
+            _core(vp, "edit_section_plane", uid=ident, field="name", value=extra)
+            vp.notify_scene_changed()
         elif verb == "rename":
             if node:
                 _core(vp, "edit_structure_node", node=node, field="name", value=extra)
@@ -2826,7 +2848,7 @@ def _form_apply(win, view, arg) -> None:
 
 _KEYS = {Qt.Key_PageUp: "PageUp", Qt.Key_PageDown: "PageDown", Qt.Key_Escape: "Escape",
          Qt.Key_Return: "Enter", Qt.Key_Enter: "Enter",
-         Qt.Key_Backspace: "Backspace", Qt.Key_Delete: "Delete", Qt.Key_Tab: "Tab",
+         Qt.Key_Backspace: "Backspace", Qt.Key_Delete: "Delete", Qt.Key_Tab: "Tab", Qt.Key_Backtab: "Tab", Qt.Key_Space: "Space", Qt.Key_F2: "F2",
          Qt.Key_Up: "ArrowUp", Qt.Key_Down: "ArrowDown", Qt.Key_Left: "ArrowLeft",
          Qt.Key_Right: "ArrowRight", Qt.Key_Home: "Home", Qt.Key_End: "End",
          Qt.Key_A: "A", Qt.Key_C: "C", Qt.Key_V: "V", Qt.Key_X: "X", Qt.Key_Y: "Y", Qt.Key_Z: "Z",
@@ -2912,7 +2934,7 @@ def claims_key(view, event) -> bool:
     if _opens_commands(view, event):
         return True
     name = _KEYS.get(event.key(), "")
-    if view.renderer.ui_claims_key(name):
+    if view.renderer.ui_claims_key(name, _mods(event)):
         return True
     from views import wgpu_sheets
     return wgpu_sheets.claims_key(view, event)
@@ -2943,7 +2965,7 @@ def key(view, event, pressed: bool) -> bool:
             view.update()
         return True
     name = _KEYS.get(event.key(), "")
-    if not view.renderer.ui_claims_key(name):
+    if not view.renderer.ui_claims_key(name, _mods(event)):
         # The Sheets workspace: the page's keys go to the composer.
         return wgpu_sheets.key(view, event, pressed) if sheets else False
     view.renderer.ui_key(name, pressed, _mods(event))

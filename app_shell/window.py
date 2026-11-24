@@ -579,6 +579,7 @@ class ShellWindow(WindowDocumentCommands, QObject):
         self._watch_document(doc)
         self._documents = [doc]
         self._doc = doc
+        self._apply_new_document_units()
 
     # ---- what the chrome and tools call --------------------------------
     def statusBar(self):

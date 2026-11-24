@@ -4,40 +4,30 @@
 and never leak into a file that is opened: a document keeps its own."""
 from __future__ import annotations
 
-import sys
-
-from PySide6.QtWidgets import QApplication
-
-if QApplication.instance() is None:
-    QApplication(sys.argv[:1])
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 MM = {"length": "mm", "precision": 1}
 
 
-def _close(win):
-    win._saved_version = win.viewport.scene.version
-    win.close()
-
-
-def test_new_documents_start_in_the_remembered_units(tmp_path):
-    from core import units
-    from views.main_window import MainWindow
+def test_new_documents_start_in_the_remembered_units(tmp_path, monkeypatch):
+    from app_shell.host import Host
+    from core import settings, units
+    from ingetrazo_core import NativeSettings
+    profile = str(tmp_path / "profile")
+    monkeypatch.setattr(settings, "_store", NativeSettings(profile))
     units.remember_new_document_units(MM)
+    host = Host(0, 900, 600, 1., settings=profile)
     try:
-        win = MainWindow()                          # a restart
-        try:
-            scene = win.viewport.scene
-            assert scene.units == MM
-            assert scene.dimension_style["units"] == "mm"
-            assert scene.version == win._saved_version   # not «modified»
-            scene.units = {"length": "m", "precision": 2}
-            win._saved_version = scene.version
-            win._on_new()                           # File ▸ New
-            assert scene.units == MM
-        finally:
-            _close(win)
+        win = host.window
+        scene = win.viewport.scene
+        assert scene.units == MM
+        assert scene.dimension_style["units"] == "mm"
+        assert not win._is_dirty()
+        scene.units = {"length": "m", "precision": 2}
+        win._on_new()
+        assert win.viewport.scene.units == MM
     finally:
-        units.remember_new_document_units(units.DEFAULT_MODEL_UNITS)
+        host.close()
 
 
 def test_an_opened_document_keeps_its_own_units(tmp_path):

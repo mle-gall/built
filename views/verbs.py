@@ -60,7 +60,7 @@ def facts(scene, sel, win=None, view=None, *, locked_group=None, locked_image=No
     f.update(hideable=bool(win._hideable(sel)),
              makes_faces=bool(geometry and win._makes_faces(sel)),
              textured_face=len(faces) == 1 == len(sel) and win._single_textured_face() is not None,
-             bridgeable=bool(edges and not faces and win._bridgeable(sel)),
+             bridgeable=bool(geometry and win._bridgeable(sel)),
              context=_context_path(scene))
     loose = [e for e in edges if e in scene.mesh.edges]
     f.update(loose_edges=len(loose), curve=any(getattr(e, "curve", None) is not None for e in loose))
