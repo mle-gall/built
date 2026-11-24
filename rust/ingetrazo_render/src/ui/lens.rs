@@ -67,7 +67,7 @@ impl RowLayout {
                     (&mut c.weight, 32.0),
                     (&mut c.print, 28.0),
                 ] {
-                    if room(end - width - 8.0) >= MIN_NAME {
+                    if room(end - width - 6.0 - 4.0) >= MIN_NAME {
                         *cell = Some((end - width, end));
                         end -= width + 6.0;
                     }
