@@ -126,3 +126,22 @@ def test_a_new_capture_keeps_the_terrain_as_it_was(win, dem):
     original = scene.terrain.bbox
     capture(500)
     assert scene.tile_layer.terrain3d and scene.terrain.bbox[2] > original[2]
+
+
+
+def test_closing_before_the_first_picture_skips_the_dem(native_host, tmp_path, monkeypatch, dem):
+    from formats import igz
+    from georef import dem as backend
+    path = tmp_path / "closed.igz"
+    igz.save_scene(_georef_scene(True), path)
+    win = native_host.window
+    assert win.open_path(path)
+    old = win.viewport
+    assert win.close_document(ask=False)
+    asked = []
+    monkeypatch.setattr(backend, "DEMSampler", lambda datum: asked.append(datum))
+    monkeypatch.setattr(native_host.view, "draw_frame", lambda: (0., 0., 0.))
+    native_host.frame()
+    while native_host._after_picture:
+        native_host.idle()
+    assert not asked and old.scene.terrain is None

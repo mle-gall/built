@@ -97,6 +97,37 @@ pub(super) fn rebuild_terrain(v: &Obj) -> PyResult<()> {
     Ok(())
 }
 
+/// Only the original, still-open document may start work after the first picture.
+#[pyfunction]
+fn restore_after_picture(weak_view: &Obj, weak_scene: &Obj) -> PyResult<()> {
+    let view = weak_view.call0()?;
+    if !view.is_none()
+        && view.getattr("scene")?.is(&weak_scene.call0()?)
+        && !opt(&opt(&view, "keys_stand_in")?, "_closed")?.is_truthy()?
+    {
+        restore_terrain(&view)?;
+    }
+    Ok(())
+}
+
+#[pyfunction]
+fn defer_document_terrain(host: &Obj, view: &Obj) -> PyResult<()> {
+    if enabled(view)? {
+        let py = view.py();
+        let reference = py.import("weakref")?.getattr("ref")?;
+        let callback = py.import("functools")?.call_method1(
+            "partial",
+            (
+                wrap_pyfunction!(restore_after_picture, py)?,
+                reference.call1((view,))?,
+                reference.call1((view.getattr("scene")?,))?,
+            ),
+        )?;
+        host.call_method1("after_picture", (callback,))?;
+    }
+    Ok(())
+}
+
 /// Request imagery once per capture. DEM and tile completions subsequently
 /// update geometry and texture independently without resetting the saved camera.
 #[pyfunction]
@@ -146,6 +177,7 @@ pub(super) fn set_terrain_enabled(v: &Obj, on: bool) -> PyResult<()> {
 }
 
 pub(super) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(defer_document_terrain, m)?)?;
     m.add_function(wrap_pyfunction!(restore_terrain, m)?)?;
     m.add_function(wrap_pyfunction!(set_terrain_enabled, m)?)?;
     Ok(())
