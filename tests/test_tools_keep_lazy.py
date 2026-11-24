@@ -47,13 +47,11 @@ def _click(vp, x, y):
 
 
 @pytest.fixture
-def floor(big_enough, tmp_path):
-    win, vp = _window(tmp_path)
+def floor(native_host, big_enough, tmp_path):
+    win, vp = _window(native_host, tmp_path)
     mesh = vp.scene.groups[0].mesh
     assert type(mesh) is M.DeferredMesh
-    yield win, vp, mesh, vp.width() / 2 + 7, vp.height() / 2 + 3
-    win._saved_version = vp.scene.version
-    win.close()
+    return win, vp, mesh, vp.width() / 2 + 7, vp.height() / 2 + 3
 
 
 @pytest.mark.parametrize("tool", ["rectangle", "pushpull", "move", "rotate",
@@ -246,10 +244,20 @@ def test_a_view_moving_into_the_grid_keeps_its_bakes(floor):
     win, vp, _mesh, _x, _y = floor
     primary = vp.keys_stand_in
     packed = primary.packed
+    from app_shell.model_views import make_pane
+    from ingetrazo_render import ModelViews
+
     win.set_view_layout("four")
-    displays = win._doc.view_grid.displays()
-    assert len(displays) == 4
-    assert packed is not None and all(display.packed is packed for display in displays)
+    layout = ModelViews()
+    layout.restore(win._doc.model_views.archive())
+    rectangles = layout.arrange(vp.width(), vp.height(), [-1., -1., 1., 1.])
+    assert len(rectangles) == 4 and packed is not None
+    for index, *_ in rectangles:
+        pane = make_pane(win._doc, index == 1, layout.initial_view(index), None)
+        try:
+            assert pane.packed is packed
+        finally:
+            pane.dispose()
 
 
 def _boxed_scene(tmp_path, closed, placed):
