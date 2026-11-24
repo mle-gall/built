@@ -346,9 +346,31 @@ fn clip_own<'p>(
     }
     api.call_method1("decode", (data.call_method0("data")?,))
 }
+#[pyfunction]
+fn clip_retrieve<'p>(py: Python<'p>, offer: &Obj<'p>, mime: &str) -> PyResult<Obj<'p>> {
+    if mime != MIME {
+        return Ok(py.None().into_bound(py));
+    }
+    let cached = offer.getattr("_bytes")?;
+    if !cached.is_none() {
+        return Ok(cached);
+    }
+    let api = adapter(py)?;
+    let array = api.getattr("QByteArray")?;
+    let result = api
+        .call_method1("encode", (offer.getattr("clip")?,))
+        .and_then(|bytes| array.call1((bytes,)));
+    let data = match result {
+        Err(e) if e.is_instance_of::<pyo3::exceptions::PyException>(py) => array.call0()?,
+        r => r?,
+    };
+    offer.setattr("_bytes", &data)?;
+    Ok(data)
+}
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     macro_rules! add{($($f:ident),*)=>{$(m.add_function(wrap_pyfunction!($f,m)?)?;)*}}
     add!(
+        clip_retrieve,
         clip_encode,
         clip_decode,
         clip_current_offer,

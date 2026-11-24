@@ -24,17 +24,10 @@ class ClipMime(QMimeData):
         return mime == MIME
 
     def retrieveData(self, mime, _type):
-        if mime != MIME:
-            return None
-        if self._bytes is None:
-            try:
-                self._bytes = QByteArray(encode(self.clip))
-            except Exception:  # noqa: BLE001 - never crash the app from here
-                self._bytes = QByteArray()
-        return self._bytes
+        return clip_retrieve(self, mime)
 
 
 from ingetrazo_core import (
-    clip_available as available, clip_current_offer as current_offer, clip_flush as flush,
+    clip_retrieve, clip_available as available, clip_current_offer as current_offer, clip_flush as flush,
     clip_foreign as foreign, clip_own as own, clip_publish as publish,
 )
