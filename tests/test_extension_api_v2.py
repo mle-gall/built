@@ -5,8 +5,7 @@ extension needs beyond Levels: a CAM job, say, which has its own panels,
 draws toolpaths over the view, opens its own files and shows its own
 document in place of the model.
 
-- **Panels** keep a stable name, go back where the user left them, have a
-  Window-menu entry, and asking twice returns the first.
+- **Panels** retain a stable identity in the native plugin host.
 - **Overlays** get the vectorised projection; one that raises is logged
   once and removed, and the painter state never leaks.
 - **File openers**: a document of the extension's type goes to it from
@@ -18,50 +17,16 @@ document in place of the model.
 """
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
 from pathlib import Path
 
 import numpy as np
 import pytest
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
-from PySide6.QtCore import QSettings, Qt
-from PySide6.QtGui import QCloseEvent, QColor, QImage, QPainter
+from PySide6.QtGui import QColor, QImage, QPainter
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication, QLabel
 
 from core.history import History
 from core.scene import Scene
-
-_app = QApplication.instance() or QApplication([])
-
-
-@pytest.fixture
-def win(tmp_path, monkeypatch, private_settings):
-    # A settings store of this test's own. Qt's, pointed elsewhere and put
-    # back: patching PySide6.QtCore.QSettings instead stuck to every module
-    # first imported during the test (views/fold_section.py kept writing to
-    # this tmp file, and later tests read another store).
-    # Isolate the user plugin folder too (test_extension_api.py's own
-    # pattern) — on a machine with a user extension installed,
-    # MainWindow() would discover and load it, and
-    # test_panels_have_stable_names_a_menu_entry_and_are_added_once would
-    # see its panel among the window's own and fail.
-    import core.extensions as extensions
-    monkeypatch.setattr(extensions, "user_plugins_dir",
-                        lambda: tmp_path / "plugins")
-    from views.main_window import MainWindow
-    w = MainWindow()
-    w.resize(1400, 900)
-    w.show()
-    _app.processEvents()
-    yield w
-    w._workspace = None                 # let the window close without prompts
-    w._saved_version = w.viewport.scene.version
-    w.close()
-
 
 def _app_for(win, key="myext"):
     from views.extension_api import ExtensionApp
@@ -79,42 +44,28 @@ def test_the_api_version_stays_2():
 
 # ---- panels -----------------------------------------------------------------------
 
-def test_panels_have_stable_names_a_menu_entry_and_are_added_once(win):
-    app = _app_for(win)
-    main = app.add_panel("My panel", QLabel("main"))
-    extra = app.add_panel("Extra", QLabel("extra"), name="extra")
-    _app.processEvents()
-    assert main.objectName() == "extension_myext"
-    assert extra.objectName() == "extension_myext_extra"
-    assert app.add_panel("Again", QLabel("ignored")) is main
-    mine = {k for k in win.extension_panels() if k.startswith("extension_myext")}
-    assert mine == {"extension_myext", "extension_myext_extra"}
-    # Tabbed with the trays, not squeezed beside them.
-    assert main in win.tabifiedDockWidgets(win.tray) or win.tray in \
-        win.tabifiedDockWidgets(main)
-    # An entry per panel in Window ▸ Panels, with the core's trays.
-    win._fill_panels_menu(win._panels_menu)
-    titles = [a.text() for a in win._panels_menu.actions()]
-    assert "My panel" in titles and "Extra" in titles
+def test_reopening_plugin_panels_preserves_each_instance(native_host, monkeypatch):
+    import json
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+    from core import plugin_panels
 
+    win, view = native_host.window, native_host.view
+    renderer = Mock()
+    monkeypatch.setattr(view, "renderer", renderer)
+    monkeypatch.setattr(view, "_ui_attached", True, raising=False)
 
-def test_a_panel_comes_back_where_the_user_left_it(win, tmp_path):
-    # The left sidebar rather than a floating window: tabs no longer float
-    # (Marco, 29-09 — the sidebar stays put, as in Blender).
-    app = _app_for(win)
-    dock = app.add_panel("Moved", QLabel("x"))
-    win.addDockWidget(Qt.LeftDockWidgetArea, dock)
-    _app.processEvents()
-    state = win.saveState()
-    from views.main_window import MainWindow
-    again = MainWindow()
-    again.restoreState(state)
-    again.show()
-    dock2 = _app_for(again).add_panel("Moved", QLabel("y"))
-    _app.processEvents()
-    assert again.dockWidgetArea(dock2) == Qt.LeftDockWidgetArea
-    again._saved_version = again.viewport.scene.version
-    again.close()
+    def factory(app, invalidate):
+        return SimpleNamespace(id="main", title=app.key, slot="dock", sections=lambda: [])
+
+    win._panel_factories = {"first": factory, "second": factory}
+    for key in ("first", "second", "first"):
+        assert plugin_panels.open_panel(win, key)
+    sent = [json.loads(call.args[0]) for call in renderer.ui_plugin_panel.call_args_list]
+    assert [(s["plugin"], s["panel"]) for s in sent] == [("first", "main"), ("second", "main")]
+    first, second = (s["instance"] for s in sent)
+    assert first != second
+    assert [call.args[0] for call in renderer.ui_plugin_open.call_args_list] == [first, second, first]
 
 
 # ---- overlays -----------------------------------------------------------------------
@@ -129,7 +80,8 @@ def _frame(vp):
     return img
 
 
-def test_an_overlay_draws_and_never_leaks_painter_state(win):
+def test_an_overlay_draws_and_never_leaks_painter_state(native_window):
+    win = native_window
     vp = win.viewport
     seen = []
 
@@ -148,7 +100,8 @@ def test_an_overlay_draws_and_never_leaks_painter_state(win):
     assert seen[0] is vp and seen[1] == 0
 
 
-def test_a_failing_overlay_is_dropped_once_and_the_others_still_run(win, caplog):
+def test_a_failing_overlay_is_dropped_once_and_the_others_still_run(native_window, caplog):
+    win = native_window
     vp = win.viewport
     ran = []
 
@@ -168,7 +121,8 @@ def test_a_failing_overlay_is_dropped_once_and_the_others_still_run(win, caplog)
     assert sum("failed; removed" in r.message for r in caplog.records) == 1
 
 
-def test_the_vectorised_projection_matches_the_per_point_one(win):
+def test_the_vectorised_projection_matches_the_per_point_one(native_window):
+    win = native_window
     vp = win.viewport
     pts = np.array([[0.0, 0.0, 0.0], [1.0, 2.0, 0.5], [-3.0, 1.0, 2.0]])
     px, py, front = _app_for(win).world_to_pixels(pts)

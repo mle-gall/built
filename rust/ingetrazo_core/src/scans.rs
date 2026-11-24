@@ -540,7 +540,7 @@ impl MeshScan {
     }
 
     /// ``(vertices, edges, faces)`` counts (listed vertices only).
-    fn counts(&self, py: Python<'_>) -> (usize, usize, usize) {
+    pub(crate) fn counts(&self, py: Python<'_>) -> (usize, usize, usize) {
         match &self.lists {
             Some(l) => (l[0].bind(py).len(), l[1].bind(py).len(), l[2].bind(py).len()),
             None => (self.n_listed, self.ends.len(), self.n_faces()),
@@ -571,7 +571,7 @@ impl MeshScan {
     }
 
     /// Faces whose outer-loop box meets ``[lo, hi]``.
-    fn faces_meeting(&mut self, py: Python<'_>, lo: (f64, f64, f64), hi: (f64, f64, f64)) -> PyResult<Vec<u32>> {
+    pub(crate) fn faces_meeting(&mut self, py: Python<'_>, lo: (f64, f64, f64), hi: (f64, f64, f64)) -> PyResult<Vec<u32>> {
         self.need(py, FACES)?;
         let w = window(lo, hi);
         let b = self.fboxes();
@@ -612,7 +612,7 @@ impl MeshScan {
     }
 
     /// Edges whose box meets ``[lo, hi]``.
-    fn edges_meeting(&mut self, py: Python<'_>, lo: (f64, f64, f64), hi: (f64, f64, f64)) -> PyResult<Vec<u32>> {
+    pub(crate) fn edges_meeting(&mut self, py: Python<'_>, lo: (f64, f64, f64), hi: (f64, f64, f64)) -> PyResult<Vec<u32>> {
         self.need(py, EDGES)?;
         let w = window(lo, hi);
         let b = self.eboxes();
@@ -719,7 +719,7 @@ impl MeshScan {
             .collect())
     }
 
-    fn split_plan(
+    pub(crate) fn split_plan(
         &mut self,
         py: Python<'_>,
         a: [f64; 3],
@@ -741,7 +741,7 @@ impl MeshScan {
         Ok(crate::store::drawing::split_plan(a, b, edges, h, compensated))
     }
 
-    fn drawing_cycles(
+    pub(crate) fn drawing_cycles(
         &mut self,
         py: Python<'_>,
         a: [f64; 3],

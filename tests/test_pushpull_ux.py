@@ -994,7 +994,7 @@ def test_a_reversed_face_takes_the_facing_of_its_own_surface():
     assert door.normal().normalized().y() > 0      # wound inward
     assert wall.normal().normalized().y() < 0      # the surface faces out
 
-    n = PushPullTool._surface_normal(door)
+    n = PushPullTool._surface_normal(door, scene.mesh)
     assert n.normalized().y() < 0, "the door still disagrees with its wall"
 
 
@@ -1003,7 +1003,7 @@ def test_a_lone_sheet_keeps_its_own_normal():
     scene = Scene()
     sheet = scene.mesh.add_face([V(0, 0), V(2, 0), V(2, 2), V(0, 2)])
     n0 = sheet.normal().normalized()
-    n = PushPullTool._surface_normal(sheet).normalized()
+    n = PushPullTool._surface_normal(sheet, scene.mesh).normalized()
     assert abs(QVector3D.dotProduct(n, n0) - 1.0) < 1e-9
 
 
@@ -1033,7 +1033,7 @@ def test_pushing_a_reversed_door_inward_hides_the_base_face():
     assert dist > 0.0 and not hidden      # the outer face is left covering it
 
     # With the surface's facing the same drag reads as what it is.
-    dist, hidden = _drag_into_the_wall(PushPullTool._surface_normal(door))
+    dist, hidden = _drag_into_the_wall(PushPullTool._surface_normal(door, scene.mesh))
     assert dist < 0.0, "a drag into the wall must read as negative"
     assert hidden == {door}, "the base face was left covering the recess"
 
@@ -1051,7 +1051,7 @@ def test_a_reversed_door_commits_the_push_the_way_it_previewed():
     vp = _StubViewport(scene)
     tool = PushPullTool()
     tool.base_face = door
-    tool._normal = PushPullTool._surface_normal(door)
+    tool._normal = PushPullTool._surface_normal(door, scene.mesh)
     tool._anchor = door.centroid()
     tool._drag_pre_oriented = True
     tool.dragging = True

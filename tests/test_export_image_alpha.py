@@ -16,6 +16,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 from tests.controller_surface import live_image
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
 from PySide6.QtGui import QColor, QImage
 from ingetrazo_core import Vec3 as QVector3D
@@ -47,16 +48,17 @@ ZONES = {"background": V(-7.5, -2, 4.5), "glass": V(-3, -2, 2.8),
 
 
 @pytest.fixture
-def view(tmp_path):
-    from views.main_window import MainWindow
-    win = MainWindow()
-    win.show()
-    _app.processEvents()
-    vp = win.viewport
-    if not vp.keys_stand_in._can_create_surface():
-        win._saved_version = vp.scene.version
-        win.close()
-        pytest.skip("the Qt platform has no native GPU surface")
+def view(tmp_path, native_host):
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QWidget
+    from views.wgpu_surface import window_handles
+    if QApplication.platformName() in ("offscreen", "minimal"):
+        pytest.skip("requires an unshown native GPU surface")
+    surface = QWidget()
+    surface.setAttribute(Qt.WA_DontShowOnScreen)
+    surface.resize(native_host.width, native_host.height)
+    native_host.ns_view, native_host.surface_handles = window_handles(surface)
+    vp = native_host.viewport
     mesh = vp.scene.mesh
     tex = tmp_path / "blue.png"
     img = QImage(8, 8, QImage.Format_RGB32)
@@ -69,14 +71,17 @@ def view(tmp_path):
           texture={"path": str(tex), "sw": 1, "sh": 1})
     vp.scene.version += 1
     cam = vp.camera
+    cam.set_aspect(native_host.width, native_host.height)
     cam.perspective = False
     cam.target = V(0, 0, 1.5)
     cam.distance, cam.yaw, cam.pitch = 22.0, -1.5707963, 0.12
-    yield win, vp, tmp_path
-    vp.style_override = None
-    vp.scene.shadows.enabled = False
-    win._saved_version = vp.scene.version
-    win.close()
+    try:
+        native_host.view.set_scene(vp.scene)
+        yield native_host.window, vp, tmp_path
+    finally:
+        native_host.view.closeEvent()
+        native_host.ns_view = 0
+        surface.close()
 
 
 def _saved(vp, folder, style, **kw):

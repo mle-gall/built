@@ -187,80 +187,16 @@ def clip_to_section(tris, hard, soft, plane, split_cuts: bool = False):
     shortened, and the plane∩triangle intersection segments join the hard
     edges — the sheet composer's hidden-line pass then draws real plans and
     cross-sections. ``plane`` is a core.section.SectionPlane; the hidden
-    side is where ``plane.side(p) > 0``.
+    side is where ``plane.side(p) > 0``. Geometry kept whole comes back as
+    the objects given.
 
     With ``split_cuts`` the chords come back as a fourth list instead of
     joining the hard edges — the drawing that inks them thicker and fills
-    the poché needs to know which lines are the cut."""
-    nx = plane.normal.x()
-    ny = plane.normal.y()
-    nz = plane.normal.z()
-    c = (nx * plane.point.x() + ny * plane.point.y()
-         + nz * plane.point.z())
-    eps = 1e-9
-
-    def dist(p):
-        return p[0] * nx + p[1] * ny + p[2] * nz - c
-
-    def lerp(a, b, da, db):
-        t = da / (da - db)
-        return (a[0] + (b[0] - a[0]) * t,
-                a[1] + (b[1] - a[1]) * t,
-                a[2] + (b[2] - a[2]) * t)
-
-    out_tris: list = []
-    cut_edges: list = []
-    for tri in tris:
-        d = (dist(tri[0]), dist(tri[1]), dist(tri[2]))
-        hidden = [di > eps for di in d]
-        nh = sum(hidden)
-        if nh == 0:
-            out_tris.append(tri)
-            continue
-        if nh == 3:
-            continue
-        # Clip the polygon against the plane (Sutherland–Hodgman, keep
-        # d <= 0) and remember the crossing chord — the section-cut line.
-        poly: list = []
-        crossings: list = []
-        for i in range(3):
-            a, b = tri[i], tri[(i + 1) % 3]
-            da, db = d[i], d[(i + 1) % 3]
-            if da <= eps:
-                poly.append(a)
-            if (da > eps) != (db > eps):
-                x = lerp(a, b, da, db)
-                poly.append(x)
-                crossings.append(x)
-        if len(crossings) == 2:
-            cut_edges.append((crossings[0], crossings[1]))
-        for i in range(1, len(poly) - 1):     # fan
-            out_tris.append((poly[0], poly[i], poly[i + 1]))
-
-    def clip_seg(p0, p1):
-        d0, d1 = dist(p0), dist(p1)
-        if d0 > eps and d1 > eps:
-            return None
-        if d0 <= eps and d1 <= eps:
-            return (p0, p1)
-        x = lerp(p0, p1, d0, d1)
-        return (p0, x) if d0 <= eps else (x, p1)
-
-    out_hard: list = []
-    for p0, p1 in hard:
-        seg = clip_seg(p0, p1)
-        if seg is not None:
-            out_hard.append(seg)
-    if not split_cuts:
-        out_hard.extend(cut_edges)
-    out_soft: list = []
-    for p0, p1, na, nb in soft:
-        seg = clip_seg(p0, p1)
-        if seg is not None:
-            out_soft.append((seg[0], seg[1], na, nb))
-    if split_cuts:
-        return out_tris, out_hard, out_soft, cut_edges
-    return out_tris, out_hard, out_soft
+    the poché needs to know which lines are the cut. In Rust
+    (``rust/ingetrazo_core/src/section_cut.rs``)."""
+    from ingetrazo_core import section_clip
+    out = section_clip(tris, hard, soft, plane, bool(split_cuts))
+    return tuple(out)
 
 
 def solid_depth(ring, tris, normal) -> float | None:
@@ -309,92 +245,21 @@ def section_loops(cut_edges, tol: float | None = None,
     drafter fills with poché. Returns a list of (M, 3) arrays in world
     space, each a closed ring (first point not repeated).
 
-    A watertight solid triangulated conformingly yields chords whose
-    endpoints meet two by two, so walking the adjacency closes every ring;
-    a chain that dead-ends (an open surface: a lone wall face, a roof
-    without walls) is dropped rather than filled — a section fill would
-    leak on those, we prefer to leave them white. Nested rings (a
-    hollow wall, a pipe) are the caller's even-odd fill rule.
+    Endpoints closer than ``tol`` (default: a ten-millionth of the cut's
+    span, at least 1e-9) are one. A watertight solid triangulated
+    conformingly yields chords whose endpoints meet two by two, so walking
+    the adjacency closes every ring; a chain that dead-ends (an open
+    surface: a lone wall face, a roof without walls) is dropped rather than
+    filled. Nested rings (a hollow wall, a pipe) are the caller's even-odd
+    fill rule.
 
     ``members``, a list handed in, receives for each ring returned the
-    rows of ``cut_edges`` it was chained from."""
+    rows of ``cut_edges`` it was chained from. In Rust
+    (``rust/ingetrazo_core/src/section_cut.rs``)."""
     if not len(cut_edges):
         return []
-    E = np.asarray(cut_edges, dtype=np.float64).reshape(-1, 2, 3)
-    if tol is None:
-        span = float((E.max(axis=(0, 1)) - E.min(axis=(0, 1))).max())
-        tol = max(span * 1e-7, 1e-9)
-    # Endpoints → node ids, merging anything closer than tol (a 3×3×3
-    # neighbourhood of quantised cells, so a point on a cell boundary still
-    # finds its twin on the other side).
-    cells: dict = {}
-    nodes: list = []
-    inv = 1.0 / tol
-
-    def node_of(pt) -> int:
-        cx, cy, cz = (int(math.floor(pt[0] * inv)),
-                      int(math.floor(pt[1] * inv)),
-                      int(math.floor(pt[2] * inv)))
-        for dx in (-1, 0, 1):
-            for dy in (-1, 0, 1):
-                for dz in (-1, 0, 1):
-                    for i in cells.get((cx + dx, cy + dy, cz + dz), ()):
-                        q = nodes[i]
-                        if (abs(q[0] - pt[0]) <= tol
-                                and abs(q[1] - pt[1]) <= tol
-                                and abs(q[2] - pt[2]) <= tol):
-                            return i
-        nodes.append((float(pt[0]), float(pt[1]), float(pt[2])))
-        cells.setdefault((cx, cy, cz), []).append(len(nodes) - 1)
-        return len(nodes) - 1
-
-    adj: dict = {}
-    chords: list = []
-    rows: list = []                     # chord → its row of cut_edges
-    for k in range(len(E)):
-        a = node_of(E[k, 0])
-        b = node_of(E[k, 1])
-        if a == b:
-            continue                    # a triangle touching the plane at a point
-        idx = len(chords)
-        chords.append((a, b))
-        rows.append(k)
-        adj.setdefault(a, []).append(idx)
-        adj.setdefault(b, []).append(idx)
-    used = [False] * len(chords)
-    loops: list = []
-    for start in range(len(chords)):
-        if used[start]:
-            continue
-        a0, b0 = chords[start]
-        used[start] = True
-        ring = [a0, b0]
-        walked = [start]
-        cur, prev_chord = b0, start
-        closed = False
-        while True:
-            nxt = None
-            for c in adj.get(cur, ()):
-                if c != prev_chord and not used[c]:
-                    nxt = c
-                    break
-            if nxt is None:
-                break
-            used[nxt] = True
-            walked.append(nxt)
-            x, y = chords[nxt]
-            cur = y if x == cur else x
-            prev_chord = nxt
-            if cur == a0:
-                closed = True
-                break
-            ring.append(cur)
-        if closed and len(ring) >= 3:
-            loops.append(np.asarray([nodes[i] for i in ring],
-                                    dtype=np.float64))
-            if members is not None:
-                members.append([rows[c] for c in walked])
-    return loops
+    from ingetrazo_core import section_loops as native
+    return native(cut_edges, None if tol is None else float(tol), members)
 
 
 def closing_tags(cut_edges, cut_tags) -> list:

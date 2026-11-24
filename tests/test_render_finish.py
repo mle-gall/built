@@ -13,12 +13,9 @@ import struct
 import subprocess
 from pathlib import Path
 
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication
-
-if QApplication.instance() is None:
-    QApplication([])
 
 from core import finish as fin  # noqa: E402
 from core import render_blender as rb  # noqa: E402
@@ -158,24 +155,33 @@ def test_blender_turns_the_finishes_into_materials(tmp_path):
     assert Path(tmp_path / "render.png").is_file()
 
 
-def test_the_material_menu_sets_the_finish(monkeypatch, tmp_path):
-    """Right-click a named swatch ▸ Finish for the render: the choice lands
-    in the registry through the undo history."""
-    from core import extensions
-    monkeypatch.setattr(extensions, "plugin_dirs", lambda: [tmp_path])
-    from views.main_window import MainWindow
-    from views.tray import MaterialsPanel
-    win = MainWindow()
-    try:
-        scene = win.viewport.scene
-        scene.materials["Mármol travertino"] = Material(
-            "Mármol travertino", color=(0.9, 0.85, 0.8))
-        panel = win.findChild(MaterialsPanel)
-        panel._set_finish("Mármol travertino", "water")
-        assert scene.materials["Mármol travertino"].finish == "water"
-        win.viewport.history.undo()
-        assert scene.materials["Mármol travertino"].finish is None
-        assert fin.resolve(None, "Mármol travertino") == "gloss"
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_the_material_inspector_sets_and_clears_the_finish(native_host):
+    from ingetrazo_core import material_inspector
+    from ingetrazo_render import wgpu_library
+    win = native_host.window
+    scene = win.viewport.scene
+    name = "Mármol travertino"
+    mat = scene.materials[name] = Material(name, color=(0.9, 0.85, 0.8))
+
+    def picker():
+        _, sections = material_inspector(scene.materials[name], 0)
+        encoded = dict(dict(sections)["Look"])["Finish"]
+        kind, field, data = encoded.lstrip("\x1d").split("\x1d")
+        assert (kind, field) == ("picker", "libmat:finish:" + name)
+        return json.loads(data)
+
+    at, options = picker()
+    assert [key for key, _ in options] == ["auto", *fin.FINISHES]
+    assert options[at][0] == "auto" and fin.LABELS["gloss"] in options[at][1]
+    before = win.viewport.history.revision
+    wgpu_library.edit_field(win, win.view, "finish:" + name, "auto")
+    with pytest.raises(ValueError, match="Unknown render finish"):
+        wgpu_library.edit_field(win, win.view, "finish:" + name, "unknown")
+    assert win.viewport.history.revision == before
+    for key, expected in [("water", "water"), ("auto", None)]:
+        wgpu_library.edit_field(win, win.view, "finish:" + name, key)
+        assert scene.materials[name].finish == expected
+        assert options[picker()[0]][0] == key
+    assert win.viewport.history.undo() and scene.materials[name].finish == "water"
+    assert win.viewport.history.undo() and scene.materials[name].finish is None
+    assert fin.resolve(None, mat.name) == "gloss"

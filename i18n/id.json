@@ -2578,7 +2578,7 @@
  "Remove the faces left lying over their own subdivisions after drawing or erasing.": "Hapus bidang yang tertinggal di atas pembagiannya sendiri setelah menggambar atau menghapus.",
  "Resize the selection by dragging the grips of its box; the corners keep its proportions.": "Ubah ukuran pilihan dengan menyeret pegangan kotaknya; sudut mempertahankan proporsinya.",
  "Save the document under another name or in another folder.": "Simpan dokumen dengan nama lain atau di folder lain.",
- "Save the document — the model and every sheet — to its .igz file.": "Simpan dokumen — model dan setiap lembar — ke berkas .igz-nya.",
+ "Save the document — the model and every sheet — to its file.": "Simpan dokumen — model dan setiap lembar — ke berkasnya.",
  "Save the model as IFC for BIM software, with what the BIM panel tagged.": "Simpan model sebagai IFC untuk perangkat lunak BIM, beserta yang ditandai di panel BIM.",
  "Save the model as Wavefront OBJ with its materials.": "Simpan model sebagai Wavefront OBJ beserta materialnya.",
  "Save the model as an STL mesh for 3D printing.": "Simpan model sebagai mesh STL untuk cetak 3D.",

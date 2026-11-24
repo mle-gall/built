@@ -13,6 +13,21 @@ mod component_rows;
 mod context_pick;
 mod context_placements;
 mod document_input;
+mod document_chunks;
+mod document_records;
+mod document_state;
+mod document_environment;
+mod document_cache;
+mod document_grid;
+mod document_edits;
+mod document_targets;
+mod document_hlr;
+mod document_placements;
+mod document_annotations;
+mod document_planes;
+mod document_host;
+mod document_bindings;
+mod document_camera;
 mod section_display;
 mod inspection_edits;
 mod context_edits;
@@ -82,6 +97,7 @@ mod textures;
 pub mod tool_cursors;
 pub mod icon_art;
 mod billboards;
+mod document_tabs;
 mod annotation_canvas;
 mod tool_overlay;
 mod image_assets;
@@ -213,6 +229,8 @@ static NEXT_RENDERER_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::Atomi
 #[pyclass(unsendable)]
 struct Renderer {
     id: u64,
+    /// What the document ▾ and the project tabs were last sent (document_tabs.rs).
+    document_tabs: Option<Py<document_tabs::DocumentTabs>>,
     instance: wgpu::Instance,
     /// Inactive views of the same scene, addressed by a never-recycled id.
     targets: std::collections::HashMap<usize, Target>,
@@ -762,6 +780,7 @@ impl Renderer {
         transparency.bind_textures(&device, &textures);
         Ok(Self {
             id: NEXT_RENDERER_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+            document_tabs: None,
             instance, targets: Default::default(), active: 0, next_target: 1, scene_epoch: 0,
             textures, texture_groups, textures_enabled: true, material_transparency: true,
             ao: ao::AmbientOcclusion::new(samples.clone(), &device, format),
@@ -2656,6 +2675,15 @@ impl Renderer {
     fn ui_finish_scene_photo(&mut self,key:&str,pixels:Option<scene_photo::Pixels>){
         if let Some(ui)=self.ui.as_mut(){ui.finish_scene_photo(key,pixels);}
     }
+    /// The window's documents as this renderer's chrome was last sent them
+    /// (``DocumentTabs.sync``, document_tabs.rs): one per renderer, so the
+    /// comparison is always with what it shows.
+    fn document_tabs(&mut self, py: Python<'_>) -> PyResult<Py<document_tabs::DocumentTabs>> {
+        if self.document_tabs.is_none() {
+            self.document_tabs = Some(Py::new(py, document_tabs::DocumentTabs::default())?);
+        }
+        Ok(self.document_tabs.as_ref().unwrap().clone_ref(py))
+    }
     fn ui_set_projects(&mut self, left: f32, docs: Vec<(String, bool, bool)>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_projects(left, docs); }
     }
@@ -3240,7 +3268,21 @@ fn context_targets(hit: bool, selection: &Bound<'_, PyAny>) -> PyResult<Vec<Py<P
 
 #[pymodule]
 pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    document_bindings::register(m)?;
+    document_camera::register(m)?;
     document_input::register(m)?;
+    document_chunks::register(m)?;
+    document_records::register(m)?;
+    document_state::register(m)?;
+    document_environment::register(m)?;
+    document_cache::register(m)?;
+    document_grid::register(m)?;
+    document_edits::register(m)?;
+    document_targets::register(m)?;
+    document_hlr::register(m)?;
+    document_placements::register(m)?;
+    document_annotations::register(m)?;
+    document_planes::register(m)?;
     m.add_class::<tool_instances::InstancePreview>()?;
     window_document::register(m)?;
     close_documents::register(m)?;
@@ -3287,6 +3329,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(icon_art::icon_keys, m)?)?;
     m.add_function(wrap_pyfunction!(icon_art::letter_art, m)?)?;
     m.add_function(wrap_pyfunction!(icon_art::row_icon_art, m)?)?;
+    m.add_class::<document_tabs::DocumentTabs>()?;
     m.add_function(wrap_pyfunction!(billboards::billboard_stances, m)?)?;
     m.add_function(wrap_pyfunction!(billboards::billboard_worlds, m)?)?;
     m.add_function(wrap_pyfunction!(billboards::sprite_mapping, m)?)?;

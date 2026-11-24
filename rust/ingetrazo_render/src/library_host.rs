@@ -896,7 +896,7 @@ impl MaterialsProvider {
             } else {
                 core(ctx, "set_material_base", &with_name(vec![("base", s(py, "color"))])?)?;
             }
-        } else if field == "color" || field.starts_with("brush_") {
+        } else if field == "color" || field == "finish" || field.starts_with("brush_") {
             if field == "color" && textured(&mat()?)? {
                 let (r, g, b) = parse_hex(py, &text)?;
                 core(ctx, "edit_material", &with_name(vec![("color", PyList::new(py, [r, g, b])?.into_any())])?)?;

@@ -9,6 +9,7 @@ pub mod lazy;
 pub mod occluders;
 pub mod prototypes;
 pub mod rays;
+pub mod visibility;
 use crate::math::xyz;
 use numpy::{IntoPyArray, PyArrayMethods};
 use pyo3::{

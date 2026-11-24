@@ -281,7 +281,11 @@ fn igz_write_prepared_inner<'p>(
                     .import("georef.photomesh")?
                     .call_method1("pack_mesh", (survey.getattr("mesh")?,))?;
                 payload.set_item("photo_mesh", result.get_item(0)?)?;
-                survey = result.get_item(1)?;
+                let blobs = result.get_item(1)?;
+                if let Some(png) = survey.getattr("thumbnail").ok().filter(|v| !v.is_none()) {
+                    blobs.set_item("thumbnail.png", png)?;
+                }
+                survey = blobs;
             }
         }
     }

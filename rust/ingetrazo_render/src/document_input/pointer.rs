@@ -179,18 +179,10 @@ fn document_wheel(v: &Obj, ev: &Obj) -> PyResult<()> {
         .transpose()?
         .unwrap_or(0);
     v.setattr("_input_serial", serial + 1)?;
-    if py
-        .import("ingetrazo_render")?
-        .getattr("trackpad_nav")?
-        .call_method1("slide", (v, ev))?
-        .is_truthy()?
-    {
+    if crate::navigation::slide(v, ev)? {
         return update(v);
     }
-    let steps: f64 = py
-        .import("views.wheel_zoom")?
-        .call_method1("zoom_steps", (ev, v.getattr("_invert_wheel")?))?
-        .extract()?;
+    let steps = crate::navigation::zoom_steps(ev, v.getattr("_invert_wheel")?.is_truthy()?)?;
     if steps == 0. {
         ev.call_method0("accept")?;
         return Ok(());
