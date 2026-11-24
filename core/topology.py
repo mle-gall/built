@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import ingetrazo_core as kernel
 
-import math
 from typing import Iterable, Optional
 
 from ingetrazo_core import Vec3 as QVector3D, polygon_is_planar as is_planar
@@ -62,29 +61,7 @@ def same_position(p: QVector3D, q: QVector3D) -> bool:
     return _key(p) == _key(q)
 
 
-def find_duplicate_edge(
-    edges: Iterable[Edge], a: QVector3D, b: QVector3D
-) -> Optional[Edge]:
-    """Return an existing edge whose endpoints coincide with segment ``a``–``b``.
-
-    Orientation-independent: an edge stored as ``b``–``a`` still matches.
-    Coincidence uses the same tolerant position key as the cycle finder, so
-    two endpoints within ≈ 0.1 mm weld to the same node. A degenerate
-    (zero-length) query never matches. Returns ``None`` if no duplicate
-    exists. This is the primitive behind the classic auto-merge: drawing
-    an edge that already exists reuses it instead of stacking a duplicate.
-    """
-    ka, kb = _key(a), _key(b)
-    if ka == kb:
-        return None
-    target = frozenset((ka, kb))
-    for edge in edges:
-        ea, eb = _key(edge.a), _key(edge.b)
-        if ea == eb:
-            continue
-        if frozenset((ea, eb)) == target:
-            return edge
-    return None
+find_duplicate_edge = kernel.object_drawing.find_duplicate_edge
 
 
 def find_smallest_cycle_through(
@@ -132,16 +109,7 @@ def _cycle_adjacency(edges, ka, kb, key=_key) -> dict:
     """``adj[u] -> [(v_key, v_pos), …]`` of the edge graph, in edge order,
     without an existing copy of segment ``ka``–``kb`` (the cycle would just
     find itself, a length-2 loop a→b→a)."""
-    adj: dict[tuple, list[tuple[tuple, QVector3D]]] = {}
-    for edge in edges:
-        ea, eb = key(edge.a), key(edge.b)
-        if ea == eb:
-            continue
-        if {ea, eb} == {ka, kb}:
-            continue
-        adj.setdefault(ea, []).append((eb, edge.b))
-        adj.setdefault(eb, []).append((ea, edge.a))
-    return adj
+    return kernel.object_drawing.graph_adjacency(edges, ka, kb, key)
 
 
 class CycleGraph:
@@ -171,10 +139,7 @@ class CycleGraph:
         if self._scan is not None:
             sc = self._scan
             self._scan = None
-            n = sc._sc.native.counts()[1]
-            for edge in sc._sc.edges(i for i in range(n) if i not in sc._dead):
-                self.add(edge)
-            for edge in sc._extra:
+            for edge in sc.all_elements():
                 self.add(edge)
         return self._adj
 
@@ -302,139 +267,16 @@ def loop_inside_face(mother: Face, loop: list[QVector3D],
     return kernel.FaceOutline(mother).contains(loop, outside_holes)
 
 
-def _loops_cross_2d(a: list, b: list) -> bool:
-    """Whether an edge of polygon ``a`` properly crosses one of ``b``
-    (touching at an end or running along it does not count)."""
-    def side(p, q, r):
-        return (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
-
-    eps = 1e-12
-    # Two outlines whose boxes stand apart have no edges that cross: said
-    # before every edge of one is tried against every edge of the other (a
-    # circle drawn on a face with sixty openings was 60 000 pairs).
-    if a and b:
-        gap = 1e-9
-        ax = [p[0] for p in a]
-        bx = [p[0] for p in b]
-        if min(ax) > max(bx) + gap or min(bx) > max(ax) + gap:
-            return False
-        ay = [p[1] for p in a]
-        by = [p[1] for p in b]
-        if min(ay) > max(by) + gap or min(by) > max(ay) + gap:
-            return False
-    for i in range(len(a)):
-        p1, p2 = a[i], a[(i + 1) % len(a)]
-        for j in range(len(b)):
-            q1, q2 = b[j], b[(j + 1) % len(b)]
-            d1, d2 = side(q1, q2, p1), side(q1, q2, p2)
-            d3, d4 = side(p1, p2, q1), side(p1, p2, q2)
-            if (((d1 > eps and d2 < -eps) or (d1 < -eps and d2 > eps))
-                    and ((d3 > eps and d4 < -eps)
-                         or (d3 < -eps and d4 > eps))):
-                return True
-    return False
+_loops_cross_2d = kernel.loops_cross
 
 
 def hole_merged_with_loop(face: Face, loop: list[QVector3D]):
-    """``(hole_index, merged)`` when ``loop`` — already known to lie inside
-    ``face`` — runs along part of one of its holes' rims: the rectangle
-    drawn on a ring's top against the opening. That is no second hole (two
-    openings sharing an edge triangulate into slivers over both, #489): the
-    opening grows to take it in, ``merged`` being its new outline. ``None``
-    when the loop shares no stretch of rim with any hole."""
-    from core.arrangement import _signed_area
-    from ingetrazo_core import union_plane_regions
-    from core.triangulate import plane_axes
-
-    normal = face.normal()
-    origin = face.vertices[0]
-    u, w = plane_axes(normal)
-    back: dict = {}
-
-    def proj(pts):
-        out = []
-        for p in pts:
-            rel = p - origin
-            xy = (QVector3D.dotProduct(rel, u), QVector3D.dotProduct(rel, w))
-            back[xy] = QVector3D(p)
-            out.append(xy)
-        return out
-
-    # An opening whose box stands clear of the loop's shares no stretch of
-    # rim with it (the clearance is a hundred times the welding distance).
-    loop_box = _points_box(loop)
+    """Return the hole index and grown rim when a drawn loop shares a boundary."""
     store = _drawing_store(face)
     if store is not None:
         from core._native import qt_hypot
-        match = store.shared_hole(face.key, [p.toTuple() for p in loop], qt_hypot())
-        if match is None:
-            return None
-        idx, h, l = match
-        pairs = [(idx, [QVector3D(*p) for p in h], [QVector3D(*p) for p in l])]
-    else:
-        pairs = _shared_hole_pairs(face, loop, loop_box)
-    for idx, h3, l3 in pairs:
-        rings = []
-        for ring in (proj(h3), proj(l3)):
-            if _signed_area(ring) < 0:
-                ring = ring[::-1]
-            rings.append((ring, []))
-        merged = union_plane_regions(rings)
-        if len(merged) != 1 or merged[0][1]:
-            return None
-        return idx, [back[xy] for xy in merged[0][0]]
-    return None
-
-
-def _shared_hole_pairs(face, loop, loop_box):
-    for idx, hole in enumerate(face.holes):
-        if _boxes_apart(loop_box, _points_box(hole), _BOX_PAD):
-            continue
-        h3 = refine_loop_with_points(list(hole), loop)
-        l3 = refine_loop_with_points(list(loop), hole)
-        shared = set(_loop_edges(h3)) & set(_loop_edges(l3))
-        if not shared:
-            continue
-        yield idx, h3, l3
-
-
-def _points_box(pts) -> tuple:
-    """``(lox, loy, loz, hix, hiy, hiz)`` of a list of points."""
-    xyz = [p.toTuple() for p in pts]
-    if not xyz:
-        return (0.0,) * 6
-    xs, ys, zs = zip(*xyz)
-    return (min(xs), min(ys), min(zs), max(xs), max(ys), max(zs))
-
-
-def _boxes_apart(a: tuple, b: tuple, pad: float) -> bool:
-    """Whether two boxes are further than ``pad`` from each other."""
-    return (a[0] > b[3] + pad or b[0] > a[3] + pad
-            or a[1] > b[4] + pad or b[1] > a[4] + pad
-            or a[2] > b[5] + pad or b[2] > a[5] + pad)
-
-
-def _box_holds(face, px, py, pz, pad) -> bool:
-    """Whether the point is inside the box of ``face``'s outer loop, grown
-    by ``pad``."""
-    lox = loy = loz = math.inf
-    hix = hiy = hiz = -math.inf
-    for v in face.vertices:          # a mesh face or a plain one
-        x, y, z = v.toTuple()
-        if x < lox:
-            lox = x
-        if x > hix:
-            hix = x
-        if y < loy:
-            loy = y
-        if y > hiy:
-            hiy = y
-        if z < loz:
-            loz = z
-        if z > hiz:
-            hiz = z
-    return (lox - pad <= px <= hix + pad and loy - pad <= py <= hiy + pad
-            and loz - pad <= pz <= hiz + pad)
+        return store.merged_hole(face.key, [p.toTuple() for p in loop], qt_hypot())
+    return kernel.FaceOutline(face).merged_hole(loop)
 
 
 def find_containing_face(
@@ -463,21 +305,7 @@ def find_containing_face(
         k = mesh._store.containing_face([p.toTuple() for p in loop], candidates,
                                         getattr(exclude, "key", None), hypot)
         return None if k is None else FaceView(mesh, k)
-    best: Optional[Face] = None
-    # A face that holds the loop strictly inside it holds the loop's first
-    # corner inside its box: the rest are passed over without working out
-    # their plane (every face of the model is asked, at every face drawn).
-    px, py, pz = (loop[0].x(), loop[0].y(), loop[0].z()) if loop else (0, 0, 0)
-    pad = _PLANAR_TOLERANCE + 1e-6 * max(abs(px), abs(py), abs(pz), 1.0)
-    for face in faces:
-        if face == exclude:
-            continue
-        if loop and not _box_holds(face, px, py, pz, pad):
-            continue
-        if loop_inside_face(face, loop, outside_holes=True):
-            if best is None or len(face.vertices) < len(best.vertices):
-                best = face
-    return best
+    return kernel.containing_object(faces, loop, exclude)
 
 
 def _loop_edges(loop: list[QVector3D]) -> list[frozenset]:
@@ -502,37 +330,11 @@ def orphaned_edges_at(
         mesh = edges._m
         keys = mesh._store.orphaned_edges_at([p.toTuple() for p in vertices], None, None)
         return [EdgeView(mesh, k) for k in keys]
-    vkeys = {_key(v) for v in vertices}
-    key = KeyMemo()
-    face_edges: set = set()
-    for f in faces:
-        loops = [[key(p) for p in lp] for lp in (f.vertices, *f.holes)]
-        # Only an edge with an end in ``vkeys`` is asked about, and a face
-        # can only carry it if it has that corner: the others are skipped
-        # (exact — every face was walked before).
-        if not any(k in vkeys for lk in loops for k in lk):
-            continue
-        for lk in loops:
-            n = len(lk)
-            face_edges.update(frozenset((lk[i], lk[(i + 1) % n]))
-                              for i in range(n))
-    out: list[Edge] = []
-    for e in edges:
-        ka, kb = key(e.a), key(e.b)
-        if (ka in vkeys or kb in vkeys) and frozenset((ka, kb)) not in face_edges:
-            out.append(e)
-    return out
+    return kernel.orphan_objects(edges, faces, vertices)
 
 
 def _faces_coplanar(n1: QVector3D, n2: QVector3D) -> bool:
     return abs(QVector3D.dotProduct(n1.normalized(), n2.normalized())) > 0.999
-
-
-def _unit_coplanar(n1: QVector3D, n2: QVector3D) -> bool:
-    """``_faces_coplanar`` for normals already known to be unit length —
-    ``Face.normal()`` returns one, and re-normalising both sides ran 14.3M
-    times inside the heal's O(F^2) passes."""
-    return abs(n1.x() * n2.x() + n1.y() * n2.y() + n1.z() * n2.z()) > 0.999
 
 
 def _face_all_edges(face: Face) -> set:
@@ -542,17 +344,7 @@ def _face_all_edges(face: Face) -> set:
     return edges
 
 
-def _point_on_seg_incl(pt: QVector3D, p: QVector3D, q: QVector3D,
-                       tol: float = _SPLIT_TOLERANCE) -> bool:
-    """Whether ``pt`` lies on segment ``p``–``q``, endpoints included."""
-    pq = q - p
-    length = pq.length()
-    if length < tol:
-        return same_position(pt, p)
-    t = QVector3D.dotProduct(pt - p, pq) / (length * length)
-    if t < -tol or t > 1.0 + tol:
-        return False
-    return (pt - (p + pq * t)).length() < tol
+_point_on_seg_incl = kernel.object_drawing.point_on_segment
 
 
 def _segment_on_face_boundary(a: QVector3D, b: QVector3D, face: Face) -> bool:
@@ -667,17 +459,7 @@ def face_is_bordered(face: Face, faces: Iterable[Face]) -> bool:
     keeping the base as a cap. This is orientation-independent, so it works
     regardless of how the face happens to be wound.
     """
-    base_edges = _loop_edges(face.vertices)
-    if not base_edges:
-        return False
-    others: set = set()
-    for f in faces:
-        if f == face:
-            continue
-        others.update(_loop_edges(f.vertices))
-        for hole in f.holes:
-            others.update(_loop_edges(hole))
-    return all(e in others for e in base_edges)
+    return kernel.bordered_object(face, faces)
 
 
 # ---- Chord split (a new edge divides an existing face) ---------------------

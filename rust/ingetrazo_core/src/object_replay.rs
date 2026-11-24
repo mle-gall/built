@@ -240,6 +240,11 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     sub.add_function(wrap_pyfunction!(undo_edge, &sub)?)?;
     sub.add_function(wrap_pyfunction!(explode_curves, &sub)?)?;
     sub.add_function(wrap_pyfunction!(restore_curves, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_relink::add_face, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_relink::remove_face, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_relink::add_hole, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_relink::remove_hole, &sub)?)?;
+    sub.add_function(wrap_pyfunction!(crate::object_relink::surface_of, &sub)?)?;
     sub.add_function(wrap_pyfunction!(crate::object_relink::relink_vertices, &sub)?)?;
     sub.add_function(wrap_pyfunction!(crate::object_relink::relink_edge, &sub)?)?;
     sub.add_function(wrap_pyfunction!(crate::object_relink::relink_face, &sub)?)?;

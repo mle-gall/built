@@ -57,6 +57,33 @@ pub(crate) fn rebuild_plane(
     (count <= cap).then(|| [point(o), point(n)])
 }
 
+pub(crate) struct StrokeSegment {
+    start: glam::DVec3,
+    delta: glam::DVec3,
+    length: f64,
+}
+
+impl StrokeSegment {
+    pub(crate) fn new(start: glam::DVec3, end: glam::DVec3) -> Self {
+        let delta = end - start;
+        Self { start, delta, length: delta.length() }
+    }
+
+    pub(crate) fn contains(&self, point: glam::DVec3, tol: f64) -> bool {
+        if self.length < tol {
+            return super::commands::cell(point.to_array()) == super::commands::cell(self.start.to_array());
+        }
+        let t = (point - self.start).dot(self.delta) / (self.length * self.length);
+        (-tol..=1.0 + tol).contains(&t) && point.distance(self.start + self.delta * t) < tol
+    }
+}
+
+pub(crate) fn path_segments(path: &[Point], closed: bool) -> Vec<StrokeSegment> {
+    path.iter().zip(path.iter().cycle().skip(1))
+        .take(path.len().saturating_sub(usize::from(!closed)))
+        .map(|(&a, &b)| StrokeSegment::new(a.into(), b.into())).collect()
+}
+
 impl Store {
     pub fn drawing_plane(&self, extra: &[Point], h: Hypot) -> Option<[Point; 2]> {
         let vertices = self.state.order[0].live(&self.state.slots[0]);
@@ -105,26 +132,14 @@ impl Store {
     /// Stamp untagged edges whose two ends lie on one path segment. This
     /// includes sub-edges created when another stroke crossed the path.
     pub fn tag_curve_path(&mut self, path: &[Point], closed: bool, id: i64) -> bool {
-        use glam::DVec3;
-        use super::commands::cell;
         if path.len() < 2 { return false; }
-        let segments: Vec<_> = path.iter().zip(path.iter().cycle().skip(1))
-            .take(path.len() - usize::from(!closed))
-            .map(|(&a, &b)| {
-                let start = DVec3::from_array(a);
-                let delta = DVec3::from_array(b) - start;
-                (start, delta, delta.length())
-            }).collect();
+        let segments = path_segments(path, closed);
         let mut tagged = false;
         for edge in self.live_slots(Kind::Edge) {
             if *self.state.ecurve.get(edge as usize) >= 0 { continue; }
             let ends = self.state.ends.get(edge as usize)
-                .map(|v| DVec3::from_array(*self.state.vpos.get(v as usize)));
-            if segments.iter().any(|&(a, ab, length)| ends.iter().all(|&p| {
-                if length < 1e-4 { return cell(p.to_array()) == cell(a.to_array()); }
-                let t = (p - a).dot(ab) / (length * length);
-                (-1e-4..=1. + 1e-4).contains(&t) && (p - (a + ab * t)).length() < 1e-4
-            })) {
+                .map(|v| glam::DVec3::from_array(*self.state.vpos.get(v as usize)));
+            if segments.iter().any(|s| ends.iter().all(|&p| s.contains(p, 1e-4))) {
                 self.set_edge_curve(edge, id);
                 tagged = true;
             }

@@ -59,12 +59,131 @@ impl FaceOutline {
         Ok(self.0.solid_at(xyz(p)?.to_array()))
     }
 
+    fn merged_hole(&self, ring: &Bound<'_, PyAny>) -> PyResult<Option<(usize, Vec<Vec3>)>> {
+        Ok(self
+            .0
+            .merged_hole(ring.py(), &positions(ring)?)?
+            .map(|(i, r)| (i, vectors(r))))
+    }
+
     fn carve(&self, ring: &Bound<'_, PyAny>) -> PyResult<Option<Vec<Vec<Vec3>>>> {
         Ok(self
             .0
             .carve(&positions(ring)?)
             .map(|pieces| pieces.into_iter().map(vectors).collect()))
     }
+}
+
+#[pyfunction]
+pub(crate) fn containing_object<'py>(
+    faces: &Bound<'py, PyAny>,
+    ring: &Bound<'py, PyAny>,
+    exclude: &Bound<'py, PyAny>,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
+    let ring = positions(ring)?;
+    let Some(&p) = ring.first() else {
+        return Ok(None);
+    };
+    let pad = 1e-3 + 1e-6 * p.iter().copied().map(f64::abs).fold(1., f64::max);
+    let mut best = None;
+    let mut count = usize::MAX;
+    for f in faces.try_iter()? {
+        let f = f?;
+        if f.eq(exclude)? {
+            continue;
+        }
+        let outer = f.getattr("vertices")?;
+        let n = outer.len()?;
+        if n >= count || n < 3 {
+            continue;
+        }
+        let bbox = crate::drawing_queries::points_box(&outer)?;
+        if (0..3).all(|i| bbox[i] - pad <= p[i] && p[i] <= bbox[i + 3] + pad)
+            && FaceOutline::new(&f)?.0.contains(&ring, true)
+        {
+            best = Some(f);
+            count = n;
+        }
+    }
+    Ok(best)
+}
+
+type Cell = crate::store::commands::Cell;
+fn segment_key(a: Cell, b: Cell) -> [Cell; 2] {
+    if a <= b {
+        [a, b]
+    } else {
+        [b, a]
+    }
+}
+fn keyed_rings(f: &Bound<'_, PyAny>) -> PyResult<Vec<Vec<Cell>>> {
+    use crate::store::commands::cell;
+    let mut rings = vec![positions(&f.getattr("vertices")?)?];
+    for h in f.getattr("holes")?.try_iter()? {
+        rings.push(positions(&h?)?);
+    }
+    Ok(rings
+        .into_iter()
+        .map(|r| r.into_iter().map(cell).collect())
+        .collect())
+}
+fn segments(r: &[Cell]) -> impl Iterator<Item = [Cell; 2]> + '_ {
+    r.iter()
+        .zip(r.iter().cycle().skip(1))
+        .map(|(&a, &b)| segment_key(a, b))
+}
+#[pyfunction]
+pub(crate) fn orphan_objects<'py>(
+    edges: &Bound<'py, PyAny>,
+    faces: &Bound<'py, PyAny>,
+    vertices: &Bound<'py, PyAny>,
+) -> PyResult<Vec<Bound<'py, PyAny>>> {
+    use crate::store::commands::cell;
+    use std::collections::HashSet;
+    let seeds: HashSet<_> = positions(vertices)?.into_iter().map(cell).collect();
+    let mut attached = HashSet::new();
+    for f in faces.try_iter()? {
+        let rings = keyed_rings(&f?)?;
+        if rings.iter().flatten().any(|p| seeds.contains(p)) {
+            for r in rings {
+                attached.extend(segments(&r));
+            }
+        }
+    }
+    let mut out = Vec::new();
+    for e in edges.try_iter()? {
+        let e = e?;
+        let a = cell(xyz(&e.getattr("a")?)?.to_array());
+        let b = cell(xyz(&e.getattr("b")?)?.to_array());
+        if (seeds.contains(&a) || seeds.contains(&b)) && !attached.contains(&segment_key(a, b)) {
+            out.push(e);
+        }
+    }
+    Ok(out)
+}
+#[pyfunction]
+pub(crate) fn bordered_object(face: &Bound<'_, PyAny>, faces: &Bound<'_, PyAny>) -> PyResult<bool> {
+    use std::collections::HashSet;
+    let r: Vec<_> = positions(&face.getattr("vertices")?)?
+        .into_iter()
+        .map(crate::store::commands::cell)
+        .collect();
+    if r.is_empty() {
+        return Ok(false);
+    }
+    let mut missing: HashSet<_> = segments(&r).collect();
+    for f in faces.try_iter()? {
+        let f = f?;
+        if f.eq(face)? {
+            continue;
+        }
+        for ring in keyed_rings(&f)? {
+            for s in segments(&ring) {
+                missing.remove(&s);
+            }
+        }
+    }
+    Ok(missing.is_empty())
 }
 
 #[pyfunction]

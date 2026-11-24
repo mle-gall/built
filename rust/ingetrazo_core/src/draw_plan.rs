@@ -19,7 +19,7 @@ type Point = [f64; 2];
 fn vertices(it: &Obj<'_>) -> PyResult<Vec<DVec3>> {
     it.try_iter()?.map(|p| xyz(&p?)).collect()
 }
-struct Region {
+pub(crate) struct Region {
     origin: DVec3,
     normal: DVec3,
     axes: [DVec3; 2],
@@ -27,7 +27,7 @@ struct Region {
     holes: Vec<(Vec<DVec3>, Vec<Point>)>,
 }
 impl Region {
-    fn new(f: &Obj<'_>) -> PyResult<Self> {
+    pub(crate) fn new(f: &Obj<'_>) -> PyResult<Self> {
         let outer = vertices(&f.getattr("vertices")?)?;
         let normal = xyz(&f.call_method0("normal")?)?;
         let [x, y, z] = normal.to_array();
@@ -53,6 +53,12 @@ impl Region {
     fn solid(&self, p: DVec3) -> bool {
         let p = self.project(p);
         inside(p, &self.outer, false) && !self.holes.iter().any(|(_, hole)| inside(p, hole, false))
+    }
+    pub(crate) fn contacts(&self, a: DVec3, b: DVec3) -> bool {
+        self.normal.length_squared() > 0.5
+            && (a - self.origin).dot(self.normal).abs() < 1e-4
+            && (b - self.origin).dot(self.normal).abs() < 1e-4
+            && [a, b, (a + b) * 0.5].iter().any(|&p| self.solid(p))
     }
     fn holds(&self, ring: &[Point], cycle: &[DVec3]) -> bool {
         cycle.iter().all(|&p| {
@@ -103,10 +109,22 @@ struct Plan<'py> {
 }
 impl<'py> Plan<'py> {
     fn near_edges(&self, a: &Obj<'py>, b: &Obj<'py>) -> PyResult<Obj<'py>> {
+        if self.near.is_none() {
+            return self.edges.call_method1("pick", ((a, b),));
+        }
         self.near.call_method1("edges", (&self.edges, a, b))
     }
     fn near_faces(&self, a: &Obj<'py>, b: &Obj<'py>) -> PyResult<Obj<'py>> {
+        if self.near.is_none() {
+            return self.faces.call_method1("pick", ((a, b),));
+        }
         self.near.call_method1("faces", (&self.faces, a, b))
+    }
+    fn faces_around(&self, ring: &Obj<'py>) -> PyResult<Obj<'py>> {
+        if self.near.is_none() {
+            return self.faces.call_method1("pick", (ring,));
+        }
+        self.near.call_method1("faces_around", (&self.faces, ring))
     }
     fn duplicate(&self, a: &Obj<'py>, b: &Obj<'py>) -> PyResult<bool> {
         Ok(!self
@@ -212,9 +230,7 @@ impl<'py> Plan<'py> {
             if !self.api.call_method1("is_planar", (&part,))?.is_truthy()? {
                 continue;
             }
-            let local = self
-                .near
-                .call_method1("faces_around", (&self.faces, &part))?;
+            let local = self.faces_around(&part)?;
             if self
                 .api
                 .call_method1("face_exists", (local, &part))?
@@ -312,7 +328,8 @@ impl<'py> Plan<'py> {
         }
         let py = a.py();
         let kw = PyDict::new(py);
-        kw.set_item("key", self.near.getattr("key")?)?;
+        let key_owner = if self.near.is_none() { &self.edges } else { &self.near };
+        kw.set_item("key", key_owner.getattr("key")?)?;
         if !self.scanned {
             kw.set_item("graph", self.edges.call_method0("graph")?)?;
         }
@@ -326,9 +343,7 @@ impl<'py> Plan<'py> {
             if !self.api.call_method1("is_planar", (&cycle,))?.is_truthy()? {
                 continue;
             }
-            let local = self
-                .near
-                .call_method1("faces_around", (&self.faces, &cycle))?;
+            let local = self.faces_around(&cycle)?;
             if self
                 .api
                 .call_method1("face_exists", (&local, &cycle))?
@@ -417,11 +432,39 @@ pub(crate) fn plan_segments<'py>(
 /// key functions and adjacency adapters. Preserve the original vertex handles.
 #[pyfunction]
 pub(crate) fn graph_insert(adj: &Bound<'_, PyDict>, key: &Obj<'_>, edge: &Obj<'_>) -> PyResult<()> {
+    graph_link(adj, key, edge, None)
+}
+
+#[pyfunction]
+pub(crate) fn graph_adjacency<'py>(
+    edges: &Obj<'py>,
+    ka: &Obj<'py>,
+    kb: &Obj<'py>,
+    key: &Obj<'py>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let adj = PyDict::new(edges.py());
+    for edge in edges.try_iter()? {
+        graph_link(&adj, key, &edge?, Some((ka, kb)))?;
+    }
+    Ok(adj)
+}
+
+fn graph_link(
+    adj: &Bound<'_, PyDict>,
+    key: &Obj<'_>,
+    edge: &Obj<'_>,
+    skip: Option<(&Obj<'_>, &Obj<'_>)>,
+) -> PyResult<()> {
     let py = edge.py();
     let a = edge.getattr("a")?;
     let b = edge.getattr("b")?;
     let ka = key.call1((&a,))?;
     let kb = key.call1((&b,))?;
+    if let Some((u, v)) = skip {
+        if (ka.eq(u)? && kb.eq(v)?) || (ka.eq(v)? && kb.eq(u)?) {
+            return Ok(());
+        }
+    }
     if !ka.eq(&kb)? {
         for (k, v, p) in [(&ka, &kb, &b), (&kb, &ka, &a)] {
             let row = if let Some(row) = adj.get_item(k)? {
@@ -436,6 +479,7 @@ pub(crate) fn graph_insert(adj: &Bound<'_, PyDict>, key: &Obj<'_>, edge: &Obj<'_
     }
     Ok(())
 }
+
 #[pyfunction]
 pub(crate) fn graph_remove(
     adj: &Bound<'_, PyDict>,
