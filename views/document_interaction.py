@@ -304,40 +304,6 @@ def _split_chunk_spans(chunk, depth=0, force=False):
 _chunk_uid = itertools.count(1)
 
 
-def _pv_hole(raw):
-    """Zeros the size of ``raw``: a moving group's place in the static
-    buffers while its preview draws it elsewhere. All-zero triangles and
-    lines have no area and no length, so they draw nothing in any pass."""
-    return bytes(len(raw))
-
-
-_ZEROS: dict = {}
-
-
-def _zeros(n: int) -> bytes:
-    """``n`` zero bytes, the same object for the same size: a gone
-    object's place (``_static_slots``) is passed over by identity on the
-    next upload, not compared byte by byte."""
-    z = _ZEROS.get(n)
-    if z is None:
-        if len(_ZEROS) > 256:
-            _ZEROS.clear()
-        z = _ZEROS[n] = bytes(n)
-    return z
-
-
-class _Slot:
-    """One object's place in the static buffers (``_static_slots``): the
-    object, and the byte sizes it took the last time it was laid out, per
-    buffer — what its zeros take once it is gone."""
-
-    __slots__ = ("g", "sizes")
-
-    def __init__(self, g) -> None:
-        self.g = g
-        self.sizes: dict = {}
-
-
 class _LazyChunk(dict):
     """A chunk whose draw-only fields are computed on first use: a component
     placement baked for the pick index (#158's lazy placements, hundreds per
@@ -393,17 +359,6 @@ class _LazyChunk(dict):
         return dict(self.items())
 
 
-#: The recorded, state-tracking instanced passes: ``None`` follows the
-#: experimental engine (on with it, off without — they change how the GPU
-#: is fed, and drivers differ); True/False force them (tests draw both).
-_LEAN_INSTANCED = None
-
-
-def _lean_instanced() -> bool:
-    if _LEAN_INSTANCED is not None:
-        return _LEAN_INSTANCED
-    from core import _native
-    return _native.native is not None
 #: The snap engine's occlusion rays go through core._native's kernel when
 #: the experimental engine is on (tests compare both).
 _OCCL_NATIVE = True
@@ -440,16 +395,6 @@ _OCCLUSION_MEMO = os.environ.get("INGETRAZO_OCCLUSION_MEMO",
 _FIRST_CLEAR = os.environ.get("INGETRAZO_FIRST_CLEAR", "1") != "0"
 #: Span lists this long are culled with NumPy (_visible_spans_np).
 _SPAN_VECTOR_MIN = 64
-#: Recorded instanced passes replayed by the native engine when it is on.
-class _InstanceBatch(list):
-    """One frame's placements of an instanced pool (a plain list of them)
-    with their indices in the pool and the pool's matrix rows, so the
-    matrix buffer is filled by one NumPy take instead of sixteen floats
-    read per placement."""
-
-    __slots__ = ("idx", "mats", "draw_bucket")
-
-
 #: The CPU side of a document's bakes — the render/pick chunks of its
 #: groups, the instances' derived chunks, the fingerprints and the
 #: prototypes' stand-ins — one store per Scene, shared by every viewport
@@ -467,41 +412,15 @@ _SHARED_BAKES = ("_group_chunks", "_inst_chunks", "_fp_memo",
 
 
 def _bake_store_of(scene) -> dict:
-    """The shared store of ``scene``, made on first use; ``None`` for a
-    stand-in that cannot be weakly referenced."""
-    key = id(scene)
-    hit = _BAKE_STORES.get(key)
-    if hit is not None and hit[0]() is scene:
-        return hit[1]
-    try:
-        ref = weakref.ref(scene)
-    except TypeError:
-        return None
-    store: dict = {}
-    _BAKE_STORES[key] = (ref, store)
-    weakref.finalize(scene, _drop_bake_store, key, ref)
-    return store
+    return ingetrazo_render.bake_store_of(scene)
 
 
 def _drop_bake_store(key, ref) -> None:
-    hit = _BAKE_STORES.get(key)
-    if hit is not None and hit[0] is ref:
-        del _BAKE_STORES[key]
+    return ingetrazo_render.drop_bake_store(key, ref)
 
 
 def _bind_bake_store(vp) -> None:
-    """Point ``vp``'s shared caches at its scene's store (made on first
-    use); another scene, another store. A stub without a scene keeps
-    dicts of its own."""
-    store = _bake_store_of(getattr(vp, "scene", None))
-    if store is None:
-        store = {}
-    for name in _SHARED_BAKES:
-        setattr(vp, name, store.setdefault(name, {}))
-    try:
-        _LIVE_VIEWS.add(vp)
-    except TypeError:
-        pass
+    return ingetrazo_render.bind_bake_store(vp)
 
 
 #: Every viewport made, weakly: the decoded textures are kept only while
@@ -510,16 +429,7 @@ _LIVE_VIEWS: "weakref.WeakSet" = weakref.WeakSet()
 
 
 def _several_views_shown() -> bool:
-    shown = 0
-    for vp in list(_LIVE_VIEWS):
-        try:
-            if vp.isVisible():
-                shown += 1
-        except RuntimeError:              # its C++ side already gone
-            continue
-        if shown > 1:
-            return True
-    return False
+    return ingetrazo_render.several_views_shown()
 
 
 #: Texture images decoded once per file, for every GL context that
@@ -532,49 +442,7 @@ _DECODED_BUDGET = 256 * 1024 * 1024
 
 
 def _decoded_texture(path: str):
-    """``(QImage mirrored for GL, cutout)`` of the image at ``path`` — the
-    file's current version — or ``None`` when it cannot be loaded.
-    ``cutout``: a foliage card of low alpha coverage (mip-averaged alpha
-    plus atlas bleed erase or darken the leaves at distance, and the Bayer
-    dither turns the rest into ghost speckle: the textured passes sample
-    the top level only and cut hard at 0.5)."""
-    import os
-    try:
-        st = os.stat(path)
-        stamp = (st.st_mtime_ns, st.st_size)
-    except OSError:
-        stamp = None
-    hit = _DECODED_TEXTURES.get(path)
-    if hit is not None and hit[0] == stamp:
-        _DECODED_TEXTURES[path] = _DECODED_TEXTURES.pop(path)   # newest last
-        return hit[1]
-    img = QImage(path)
-    if img.isNull():
-        _DECODED_TEXTURES.pop(path, None)
-        return None
-    cutout = False
-    if img.hasAlphaChannel():
-        small = img.scaled(64, 64).convertToFormat(QImage.Format_Alpha8)
-        import numpy as _np
-        al = _np.frombuffer(small.constBits(), _np.uint8,
-                            count=small.height() * small.bytesPerLine())
-        cutout = (float((al > 128).mean()) if len(al) else 1.0) < 0.6
-    out = (img.mirrored(), cutout)          # OBJ/.skp V is bottom-up
-    _DECODED_TEXTURES.pop(path, None)
-    if not _several_views_shown():
-        # One view uploads each texture once: keeping the decoded images
-        # only held their memory — ~65 MB on the plaza, all the time
-        # (release check, 14-11). A view that joins decodes again, once,
-        # and from then on the views share the decodings.
-        _DECODED_TEXTURES.clear()
-        return out
-    _DECODED_TEXTURES[path] = (stamp, out)
-    total = sum(v[1][0].sizeInBytes() for v in _DECODED_TEXTURES.values())
-    for old in list(_DECODED_TEXTURES):
-        if total <= _DECODED_BUDGET or old == path:
-            break
-        total -= _DECODED_TEXTURES.pop(old)[1][0].sizeInBytes()
-    return out
+    return ingetrazo_render.decoded_texture(path)
 
 
 def _array_bake():
@@ -1919,26 +1787,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         if hasattr(win, "activate_select_tool"):
             win.activate_select_tool()
 
-    def _texture_avg_color(self, path: str) -> tuple[float, float, float]:
-        """Average colour of a texture image — the "Shaded" face style
-        shows the material COLOUR instead of its texture. Cached per path."""
-        cache = getattr(self, "_tex_avg_cache", None)
-        if cache is None:
-            cache = self._tex_avg_cache = {}
-        c = cache.get(path)
-        if c is None:
-            from core.vista_caras import texture_average
-            c = texture_average(path, cache) or (0.78, 0.78, 0.78)
-            cache[path] = c
-        return c
-
-    #: Default back-face colour, the classic blue-grey: a visible back face
-    #: means "you are looking at the inside" (or at a genuinely inverted
-    #: face) — honest feedback the winding-proof shading used to hide. The
-    #: active style's Back color overrides it (core/style.py).
-    BACK_FACE_COLOR = DEFAULT_BACK_COLOR
-
-
     def _selection_dot_colors(self, face) -> tuple:
         """``(front_dot, back_dot)``: the selection dot colour for each side
         of ``face``, each picked against the paint that side shows — its
@@ -2100,62 +1948,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
 
     def reset_document_caches(self, keep_bakes: bool = False) -> None:
-        """Forget the previous document's chunks at the document boundary.
-
-        ``keep_bakes``: only the GL side goes — a viewport moving to another
-        parent gets a new context and must upload again, but its scene's
-        shared bakes (:data:`_SHARED_BAKES`, CPU arrays) are as good as
-        before, and the views that join it in the grid draw from them.
-
-        The chunk caches are keyed by ``id()`` of groups and meshes and were
-        never emptied: every New / Open kept the old document's chunks — and,
-        through their pick arrays, its Face objects and meshes — alive. The
-        release check measured it on the Plaza Yanque (25-09-2026): five
-        reopenings of the same document, 617 → 1277 MB, 887 → 3219 chunks,
-        71 000 → 135 000 live faces for a 71 000-face model. Opening a
-        document also slowed down reopen after reopen (the garbage collector
-        walking the dead ones). And a CPython id() reused by a new group
-        could meet an old entry — the composer's lesson with frames."""
-        self.view_filter = None
-        self.view_tint = None
-        self.active_view_key = None
-        self._previous_views = []
-        self._view_expression = None
-        self._view_color = None
-        self._view_isolate = True
-        self._view_exact = False
-        self.scene._navigator_allowed = None
-        self.scene._navigator_view_key = None
-        self._pick_warm = None               # its threads end on their own
-        self._inst_obb = None
-        self._pick_warm_due = False
-        for name in self._DOCUMENT_CACHES:
-            if keep_bakes and name in _SHARED_BAKES:
-                continue
-            cache = getattr(self, name, None)
-            if isinstance(cache, dict):
-                cache.clear()
-        self._edges_version = -1          # rebuild the VBOs from nothing
-        self._frozen_cache_version = None
-        self._selected_placements_cache = None
-        self._selected_profile_key = None
-        self._sil_table = None            # holds the old document's bakes
-        self._pick_cat_memo = None        # ...and its pick triangles
-        self._pick_te_memo = None
-        self._pick_loose_memo = None
-        self._lazy_native_memo = None
-        self._static_occl_memo = None
-        self._sil_groups = None
-        self._billboard_groups = None
-        self._placements_memo = None
-        self._epoch_same = None
-        self._pick_lazy_memo = None
-        self._pick_near_memo = self._edge_near_memo = None
-        self._proto_draw_fast = None
-        self._arc_mid_cache = None
-        self._epoch_hist = None           # ids of the old document's objects
-        self._kept_tops_memo = None
-        self._slot_layout = None          # holds its gone objects
+        return ingetrazo_render.reset_document_caches(self, keep_bakes)
 
 
 
@@ -2408,131 +2201,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return ingetrazo_render.normal_of(self, face)
 
     def _static_draw_groups(self, groups):
-        """Of ``groups`` (the placements in draw order), the ones the
-        consolidated passes draw — visible, not face-me, not instanced —
-        in the same order. Kept while only matrices move (a Move: see
-        ``_epoch_only_matrices``), which change none of the three."""
-        epoch_of = getattr(self, "_placements_epoch", None)   # stub VPs in tests
-        if epoch_of is None:
-            return [g for g in groups
-                    if self.scene.entity_visible(g)
-                    and not getattr(g, "billboard", False)
-                    and not self._instanced_eligible(g)]
-        epoch = epoch_of()
-        ids = tuple(map(id, groups))
-        memo = getattr(self, "_static_groups_memo", None)
-        if (memo is not None and memo[1] == ids and memo[2] is self.scene.mesh
-                and (memo[0] == epoch
-                     or self._epoch_only_matrices(memo[0], epoch))):
-            if memo[0] != epoch:
-                self._static_groups_memo = (epoch,) + memo[1:]
-            return memo[3]
-        def static(g):
-            return (self.scene.entity_visible(g)
-                    and not getattr(g, "billboard", False)
-                    and not self._instanced_eligible(g))
-        out = None
-        if memo is not None:
-            # Visible, face-me, instanced: what a placement is, not what
-            # the open context makes of it — kept across a group opened or
-            # closed too (~0.12 s each way on the plant of #158).
-            out = self._refilter(memo[0], memo[3], groups, static, memo[1],
-                                 ctx=memo[2] is not self.scene.mesh)
-        if out is None:
-            out = [g for g in groups if static(g)]
-        self._static_groups_memo = (epoch, ids, self.scene.mesh, out)
-        return out
-
-    #: Past this many objects gone, or this many bytes of their zeros in
-    #: the faces buffer, the static buffers are laid out afresh.
-    _SLOTS_MAX_GONE = 64
-    _SLOTS_MAX_BYTES = 64 << 20
-
-    def _static_slots(self, walk):
-        """``walk`` (the placements the static buffers draw, in order) as
-        slots ``(slot, gone)``, keeping the places of objects taken away
-        since the last layout: a Delete leaves zeros of the deleted object's
-        size where it was, its undo fills them back, a Paste comes at the
-        end. Everything else keeps its offset, so the upload re-sends what
-        changed and not the whole tail after it — up to 0.4 GB of faces on
-        the plant of #158, ~0.4 s each way. The order of what is drawn is
-        the walk's, as laid out afresh. A walk that changed otherwise (an
-        object come in between, an order changed), or too many objects
-        gone, is laid out afresh."""
-        prev = getattr(self, "_slot_layout", None)
-        ids = {id(g): g for g in walk}
-        out = None
-        if prev:
-            known = {id(sl.g) for sl in prev}
-            kept = [id(sl.g) for sl in prev if id(sl.g) in ids]
-            order = [id(g) for g in walk if id(g) in known]
-            if kept == order:
-                n_old = len(order)
-                tail = [g for g in walk if id(g) not in known]
-                if (all(id(g) not in known for g in walk[n_old:])
-                        and len(tail) == len(walk) - n_old):
-                    gone = [sl for sl in prev if id(sl.g) not in ids]
-                    if (len(gone) <= self._SLOTS_MAX_GONE
-                            and sum(sl.sizes.get("f", 0) for sl in gone)
-                            <= self._SLOTS_MAX_BYTES):
-                        out = ([(sl, id(sl.g) not in ids) for sl in prev]
-                               + [(_Slot(g), False) for g in tail])
-        if out is None:
-            old = {id(sl.g): sl for sl in prev or ()}
-            out = [(old.get(id(g)) or _Slot(g), False) for g in walk]
-        self._slot_layout = [sl for sl, _gone in out]
-        return out
-
-    def _announce_after_paint(self, version: int) -> None:
-        """``sceneVersionChanged`` for what this frame found, once the frame
-        is out. ``_sync_edges`` runs inside ``paintGL``, and whoever hears
-        the signal may show or hide widgets beside the view: the scene tab
-        row coming up resized the view in the middle of its frame, and
-        macOS crashed on the flush after (#1316). Every listener runs on the
-        next turn instead, with the latest version; a burst says it once.
-        ``notify_scene_changed`` still says it at once."""
-        self._version_to_announce = version
-        if self.__dict__.get("_announce_queued"):
-            return
-        self._announce_queued = True
-        later(self, 0, self._announce_queued_version)
-
-    def _announce_queued_version(self) -> None:
-        self._announce_queued = False
-        _publish_scene_version(self, self._version_to_announce)
-
-    def _sync_content_key(self) -> tuple:
-        """What the edge and face buffers of ``_sync_edges`` depend on:
-        everything but the selection."""
-        sc = self.scene
-        sup = self._suppressed_faces
-        return (_content_ver(self), self._placements_epoch(), id(sc.mesh),
-                id(sc.edit_group), self._rest_is_hidden(),
-                tuple(sorted(getattr(self, "_preview_groups", None) or ())),
-                frozenset(map(element_identity, sup)) if sup else None,
-                bool(getattr(sc, "show_hidden_objects", False)),
-                bool(getattr(sc, "show_hidden_geometry", False)),
-                getattr(self, "_edges_front_tint", None))
-
-    def _selected_group_placements(self):
-        selected = frozenset(e for e in self.scene.selection
-                             if isinstance(e, Group))
-        if not selected:
-            return []
-        key = (self._placements_epoch(), selected)
-        memo = getattr(self, "_selected_placements_cache", None)
-        if memo is None or memo[0] != key:
-            pv = getattr(self, "_preview_groups", None) or ()
-            # Structure can select members from several containment contexts.
-            # A rendered proxy retains its placement UID across those contexts.
-            selected_uids = {g.uid for g in selected}
-            groups = [g for g in self._placements()
-                      if (self._owner_of(g) in selected or g.uid in selected_uids)
-                      and self.scene.entity_visible(g)
-                      and not getattr(g, "billboard", False)
-                      and id(g) not in pv]
-            memo = self._selected_placements_cache = (key, groups)
-        return memo[1]
+        return ingetrazo_render.static_draw_groups(self, groups)
 
     def _bucket_back_face(self, face, back):
         return ingetrazo_render.bucket_back_face(self, face, back)
@@ -2665,9 +2334,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return edit_box_contains_pixel(self, x, y)
 
     # ---- Section planes ------------------------------------------------------
-
-    def _section_cut_active(self):
-        return _active_cut(self.scene)
 
     def section_plane_frame(self, sp) -> list:
         from ingetrazo_core import section_frame
