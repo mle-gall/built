@@ -898,9 +898,8 @@ class ShellWindow(QObject):
         return files.import_progress(self, title, monotonic=monotonic)
 
     def _parse_skp_threaded(self, skp, cb):
-        from app_shell import files
-        from formats.skp import parse_skp
-        return files.parse_threaded(parse_skp, skp, cb)
+        from views.main_window import MainWindow
+        return MainWindow._parse_skp_threaded(self, skp, cb)
 
     def _parse_stl_threaded(self, path, scale, simplify_mode, cb, report=None):
         from app_shell import files

@@ -169,8 +169,13 @@ def test_skp_import_remaps_on_conflict_with_document():
     scene.materials["Wood"] = Material("Wood", color=(0.1, 0.1, 0.1))
     model = _fake_model({7: NS(name="Wood", color=(255, 0, 0),
                                transparency=1.0, id=7, texture=None)})
+    model.definitions[0].faces[20].back_material_id = 8
+    model.materials_by_id[8] = NS(name="Stone", color=(10, 20, 30),
+                                  transparency=1.0, id=8, texture=None)
+    scene.materials["Stone"] = Material("Stone", color=(1., 1., 1.))
     skp_format.apply_payload(scene, skp_openskp._adapt(model, "a"))
-    assert set(scene.materials) == {"Wood", "Wood (2)"}
+    assert set(scene.materials) == {"Wood", "Wood (2)", "Stone", "Stone (2)"}
     face = scene.groups[0].mesh.faces[0]
     assert face.attrs["mat"] == "Wood (2)"
+    assert face.attrs["back"]["mat"] == "Stone (2)"
     assert scene.materials["Wood"].color == (0.1, 0.1, 0.1)   # untouched

@@ -8934,6 +8934,9 @@ class MainWindow(WorksessionMixin, QMainWindow):
                 self.activate_document(doc)
                 self._dismiss_home()
                 return True
+        if suffix == ".skp" and self.isVisible():
+            from views.document_open import install_skp, start
+            return start(self, path, install_skp)
         if (suffix in built.DOCUMENT_SUFFIXES and self.isVisible()
                 and QApplication.platformName() not in ("offscreen", "minimal")
                 and getattr(self._doc, "_renderer_wgpu", False)):
@@ -9747,63 +9750,11 @@ class MainWindow(WorksessionMixin, QMainWindow):
         return dlg, cb
 
     def _parse_skp_threaded(self, skp, cb):
-        """Parse ``skp`` off the UI thread, keeping the event loop responsive.
-
-        Returns ``(payload, exc)`` — ``payload`` is the parsed geometry (or
-        ``None``), ``exc`` is a ``NeedsConverter`` (the reader cannot read it), any
-        other exception (real failure), or ``None``. The parse touches no
-        ``Scene`` so it is safe off-thread; ``apply_payload`` runs on the UI
-        thread in the caller. A local ``QEventLoop`` blocks here until the
-        worker finishes, so the method stays synchronous while the window and
-        its progress dialog keep painting."""
-        from PySide6.QtCore import QThread, QObject, QEventLoop, Signal, Qt
-
-        from formats import skp as skp_format
-
-        class _Worker(QObject):
-            progressed = Signal(float, str)
-            finished = Signal(object, object)   # (payload, exc)
-
-            def run(self):
-                try:
-                    payload = skp_format.parse_skp(
-                        skp, progress=lambda f, t: self.progressed.emit(f, t))
-                    self.finished.emit(payload, None)
-                except Exception as exc:  # noqa: BLE001 — reported to caller
-                    self.finished.emit(None, exc)
-
-        thread = QThread(self)
-        worker = _Worker()
-        worker.moveToThread(thread)
-        result = {}
-        loop = QEventLoop()
-
-        # The receivers MUST be bound methods of a QObject living in the UI
-        # thread: a queued connection to a bare lambda/function has no
-        # receiver object, so Qt runs it in the EMITTER (worker) thread —
-        # the progress callback then touches the dialog and pumps events
-        # off-thread, which deadlocks before the window ever paints (the
-        # ".skp double-click never opens the app" freeze).
-        class _Relay(QObject):
-            def on_progress(self, f, t):
-                cb(f, t)
-
-            def on_finished(self, payload, exc):
-                result["payload"] = payload
-                result["exc"] = exc
-                loop.quit()
-
-        relay = _Relay(self)
-        worker.progressed.connect(relay.on_progress, Qt.QueuedConnection)
-        worker.finished.connect(relay.on_finished, Qt.QueuedConnection)
-        thread.started.connect(worker.run)
-        thread.start()
-        loop.exec()
-        thread.quit()
-        thread.wait()
-        worker.deleteLater()
-        relay.deleteLater()
-        return result.get("payload"), result.get("exc")
+        from ingetrazo_core import DocumentOpen
+        try:
+            return DocumentOpen(skp, insert=True).wait(), None
+        except Exception as exc:
+            return None, exc
 
     def _parse_stl_threaded(self, path, scale, simplify_mode, cb,
                             report=None):
@@ -9982,23 +9933,25 @@ class MainWindow(WorksessionMixin, QMainWindow):
 
     # ---- SKP import: IngeTrazo's own reader (formats/skp.py) -----------------
     def import_skp_path(self, skp: Path) -> bool:
-        """Import ``skp`` with IngeTrazo's own pure-Python reader (offline,
-        no Wine, no external converter -- see ``formats/skp.py``). A file it
-        cannot read is reported, with the way around it (export COLLADA or
-        OBJ from the original program)."""
+        """Insert the file into the drawing in front as one undoable edit."""
+        host = self.__dict__.get("_host")
+        if (host.ns_view if host is not None else self.isVisible()):
+            from views.document_open import install_insertion, start
+            return start(self, skp, install_insertion, target=self._doc)
         from formats import skp as skp_format
         if skp_format.can_handle(skp):
             # Heavy parse OUTSIDE the undo history, so a failed/empty parse
             # never leaves a half-applied edit.
             dlg, cb = self._import_progress(
                 tr("Importing {name}…", name=skp.name))
-            # The parse is heavy (seconds on a big model) and pure-Python, so
-            # running it on the UI thread starves the event loop and the OS
-            # paints a "not responding" ghost window. It touches no Scene, so
-            # run it in a worker thread while a LOCAL event loop keeps the UI
-            # (and the progress bar) alive; only apply_payload stays on the UI
-            # thread below.
             payload, exc = self._parse_skp_threaded(skp, cb)
+            from ingetrazo_core import SkpInsertion
+            if isinstance(payload, SkpInsertion):
+                from views.document_open import install_insertion
+                try:
+                    return install_insertion(self, skp, dlg, payload)
+                finally:
+                    dlg.close()
             if isinstance(exc, skp_format.NeedsConverter):
                 payload = None             # unreadable: said below
             elif exc is not None:

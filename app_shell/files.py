@@ -6,9 +6,7 @@ import pipelines, the links verbs, Select All…: ``ShellWindow.__getattr__``).
 What it does through widgets is redone here: the open (no trays to sync,
 the shell's own progress turn), the save (the Metal view's picture), the
 file dialogs (NSOpenPanel/NSSavePanel through ``app_shell.native``), the
-DXF unit question (on the sheet instead of a QDialog), the .skp parse
-thread (waited for with the modal pump instead of a QEventLoop), the
-pasteboard.
+DXF unit question (on the sheet instead of a QDialog), the pasteboard.
 
 Everything here answers through ``views/chrome_dialogs`` (the egui sheet,
 synchronous thanks to ``app_shell.modal``), so the code paths are the Qt
@@ -287,6 +285,9 @@ def open_path(win, path: Path) -> bool:
     if suffix in (".obj", ".stl"):
         # Unitless meshes need an answer before an Open creates a tab.
         return win._mesh_import_options(path, open_tab=lambda load: _open_in_tab(win, load)) == "chrome"
+    if suffix == ".skp" and host.ns_view:
+        from views.document_open import install_skp, start
+        return start(win, path, install_skp)
     if suffix not in IMPORTS and host.ns_view:
         from views.document_open import start
         from functools import partial

@@ -8,7 +8,33 @@ use std::sync::{
     Arc, Mutex, Weak,
 };
 
-thread_local! { static STAGING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
+thread_local! {
+    static STAGING: std::cell::RefCell<Option<Weak<State>>> = const { std::cell::RefCell::new(None) };
+    static LAST_YIELD: std::cell::Cell<Option<std::time::Instant>> = const { std::cell::Cell::new(None) };
+}
+
+/// Large record lists may build thousands of facade objects in one extension
+/// call. Let either event loop take the interpreter between short batches.
+pub(crate) fn skp_checkpoint(py: Python<'_>) -> PyResult<()> {
+    STAGING.with_borrow(|state| {
+        let Some(state) = state.as_ref().and_then(Weak::upgrade) else {
+            return Ok(());
+        };
+        if state.cancelled.load(Ordering::Acquire) {
+            return Err(PyInterruptedError::new_err("Opening cancelled"));
+        }
+        LAST_YIELD.with(|last| {
+            if last
+                .get()
+                .is_none_or(|t| t.elapsed() >= std::time::Duration::from_millis(6))
+            {
+                py.detach(|| std::thread::sleep(std::time::Duration::from_micros(250)));
+                last.set(Some(std::time::Instant::now()));
+            }
+        });
+        Ok(())
+    })
+}
 
 type OpenResult = PyResult<Py<PyAny>>;
 type Worker = (Weak<State>, std::thread::JoinHandle<()>);
@@ -54,7 +80,50 @@ impl Progress {
     }
 }
 
-fn prepare(py: Python<'_>, path: Py<PyAny>, state: &Arc<State>) -> PyResult<Py<PyAny>> {
+/// Stage the import undo step on the worker as well as its geometry. Redo
+/// restores the built objects, so the command can release all parser inputs.
+fn read_skp<'py>(
+    py: Python<'py>,
+    path: &Bound<'py, PyAny>,
+    scene: &Bound<'py, PyAny>,
+    args: &Bound<'py, PyDict>,
+) -> PyResult<(Bound<'py, PyAny>, bool)> {
+    let reader = py.import("formats.skp")?;
+    let payload = reader.getattr("parse_skp")?.call((path,), Some(args))?;
+    let empty = payload.call_method1("get", ("empty", false))?.is_truthy()?;
+    let history = py
+        .import("core.history")?
+        .getattr("History")?
+        .call1((scene,))?;
+    // A private document has no listeners to notify. Reserving the editor's
+    // process-wide transaction writer here would reject edits in other tabs.
+    let before = history.call_method0("_objects_before")?;
+    let original = crate::skp::SkpOpenUndo::capture(scene)?;
+    crate::skp::skp_apply(
+        scene,
+        payload.cast::<PyDict>()?,
+        args.get_item("progress")?.as_ref(),
+        None,
+    )?;
+    history.call_method1("_tag_new_objects", (before,))?;
+    let command = Py::new(
+        py,
+        crate::skp::SkpOpenUndo::new(original, crate::skp::SkpOpenUndo::capture(scene)?),
+    )?
+    .into_bound(py);
+    command.setattr("_history_mesh", scene.getattr("mesh")?)?;
+    let stack = history.getattr("_native")?;
+    stack.call_method1("push", (&command, history.getattr("max_steps")?))?;
+    stack.call_method1("advance", ("execute", "SkpOpenUndo"))?;
+    Ok((history, empty))
+}
+
+fn prepare(
+    py: Python<'_>,
+    path: Py<PyAny>,
+    state: &Arc<State>,
+    insert: bool,
+) -> PyResult<Py<PyAny>> {
     let args = PyDict::new(py);
     let report = |base, span| Progress {
         state: state.clone(),
@@ -65,9 +134,33 @@ fn prepare(py: Python<'_>, path: Py<PyAny>, state: &Arc<State>) -> PyResult<Py<P
     reading.__call__(py, 0., "Reading the document…".into())?;
     args.set_item("progress", Py::new(py, reading)?)?;
     let scene = py.import("core.scene")?.getattr("Scene")?.call0()?;
-    py.import("formats.igz")?
-        .getattr("load_into")?
-        .call((&scene, path), Some(&args))?;
+    if insert {
+        let reader = py.import("formats.skp")?;
+        let payload = reader
+            .call_method("parse_skp", (path,), Some(&args))?
+            .cast_into::<PyDict>()?;
+        let empty = payload
+            .get_item("empty")?
+            .is_some_and(|v| v.is_truthy().unwrap_or(false));
+        crate::skp::skp_apply(&scene, &payload, args.get_item("progress")?.as_ref(), None)?;
+        return Ok(Py::new(
+            py,
+            crate::skp::SkpInsertion::stage(&scene, &payload, empty)?,
+        )?
+        .into_any());
+    }
+    let source = path.extract::<std::path::PathBuf>(py)?;
+    let skp = if source
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("skp"))
+    {
+        Some(read_skp(py, path.bind(py), &scene, &args)?)
+    } else {
+        py.import("formats.igz")?
+            .getattr("load_into")?
+            .call((&scene, path), Some(&args))?;
+        None
+    };
     let packing = report(0.60, 0.38);
     packing.__call__(py, 0., "Preparing the view…".into())?;
     args.set_item("progress", Py::new(py, packing)?)?;
@@ -91,6 +184,12 @@ fn prepare(py: Python<'_>, path: Py<PyAny>, state: &Arc<State>) -> PyResult<Py<P
         .import("views.wgpu_ui")?
         .getattr("prepare_tree_model")?
         .call1((&scene,))?;
+    if let Some((history, empty)) = skp {
+        return Ok((scene, (packed, tracker, tree), history, empty)
+            .into_pyobject(py)?
+            .into_any()
+            .unbind());
+    }
     Ok((scene, packed, tracker, tree)
         .into_pyobject(py)?
         .into_any()
@@ -106,11 +205,12 @@ pub struct DocumentOpen {
 impl DocumentOpen {
     #[staticmethod]
     fn staging() -> bool {
-        STAGING.with(|active| active.get())
+        STAGING.with_borrow(Option::is_some)
     }
 
     #[new]
-    fn new(path: Py<PyAny>) -> PyResult<Self> {
+    #[pyo3(signature=(path, *, insert=false))]
+    fn new(path: Py<PyAny>, insert: bool) -> PyResult<Self> {
         let (sender, receiver) = sync_channel(0);
         let state = Arc::new(State {
             cancelled: false.into(),
@@ -139,7 +239,7 @@ impl DocumentOpen {
                     );
                     (process, activity)
                 };
-                STAGING.with(|active| active.set(true));
+                STAGING.with_borrow_mut(|active| *active = Some(Arc::downgrade(&worker)));
                 let result = Python::attach(|py| {
                     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                         // Promote short batches while constructing the private
@@ -149,7 +249,7 @@ impl DocumentOpen {
                         let previous = gc.call_method0("get_threshold")?;
                         let budget = (4096, 4, i32::MAX);
                         gc.call_method1("set_threshold", budget)?;
-                        let result = prepare(py, path, &worker);
+                        let result = prepare(py, path, &worker, insert);
                         if gc
                             .call_method0("get_threshold")?
                             .extract::<(i32, i32, i32)>()?
@@ -214,6 +314,19 @@ impl DocumentOpen {
 
     fn progress(&self) -> (f64, String) {
         self.state.progress.lock().unwrap().clone()
+    }
+
+    /// Headless hosts have no frame pump. Keep the same worker and handoff.
+    fn wait(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let receiver = self
+            .state
+            .result
+            .lock()
+            .unwrap()
+            .take()
+            .ok_or_else(|| PyInterruptedError::new_err("Opening cancelled"))?;
+        py.detach(move || receiver.recv())
+            .map_err(|_| PyInterruptedError::new_err("Document worker exited"))?
     }
 
     fn take(&self) -> PyResult<Option<Py<PyAny>>> {

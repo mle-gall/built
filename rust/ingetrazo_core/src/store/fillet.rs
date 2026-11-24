@@ -505,7 +505,7 @@ fn inward(s: &impl FilletMesh, f: u32, [a, b]: [u32; 2], h: Hypot) -> Option<V3>
 }
 // Mesh.add_face drops holes nested inside a larger hole. Area is measured
 // in XY, while containment uses the inner hole's plane, as in topology.py.
-pub(super) fn maximal_holes(holes: &[Vec<V3>], h: Hypot) -> Vec<bool> {
+pub(crate) fn maximal_holes(holes: &[Vec<V3>], h: Hypot) -> Vec<bool> {
     let areas: Vec<f64> = holes
         .iter()
         .map(|r| {
