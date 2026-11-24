@@ -1332,7 +1332,7 @@ def _tree_action(win, view, action) -> None:
     from core import bim_registry, structure
     from core import layers as L
     from core.group import Group
-    from core.history import CompoundCommand, MakeUniqueCommand, SetRegistryCommand
+    from core.history import SetRegistryCommand
     from views.tree_navigation import execute
     if SEP not in action:
         # The inspector's chips and the delivery counts: "verb:arg".
@@ -1493,7 +1493,13 @@ def _tree_action(win, view, action) -> None:
         view.update()
 
     try:
-        if verb == "hosteye":
+        if verb == "grouprows":
+            from ingetrazo_render import tree_group_rows
+            view.renderer.ui_set_tree_group_rows(rk, tree_group_rows(scene, copies() if kind == "d" else item()))
+        elif verb in ("toggleitem", "group", "component", "explode", "unique", "instances"):
+            from ingetrazo_render import tree_group_action
+            tree_group_action(win, copies() if kind == "d" else item(), verb)
+        elif verb == "hosteye":
             from views import wgpu_tabs
             host, mount = wgpu_tabs.source_context(win)
             if mount is not None:
@@ -1756,12 +1762,10 @@ def _tree_action(win, view, action) -> None:
         elif verb in ("active", "filehere", "file", "newchild", "delete", "kind", "rename", "hidemembers") \
                 and (linked or (verb == "file" and link_structure.is_linked_key(ident if kind == "n" else rk))):
             read_only()
-        elif verb in ("node", "item", "loose") or verb == "instances":
+        elif verb in ("node", "item", "loose"):
             if verb == "node" and node:
                 view._ui_insp_node = None   # set after the selection lands
-            gs = members() if verb != "instances" else [
-                g for g, _s, _r in structure._placements(scene) if item() is not None and g.mesh is item().mesh]
-            _select(win, gs)
+            _select(win, members())
             if verb == "node" and node:
                 sel = list(scene.selection)
                 view._ui_insp_node = (node, (len(sel), id(sel[0]) if sel else 0, id(sel[-1]) if sel else 0))
@@ -1824,12 +1828,6 @@ def _tree_action(win, view, action) -> None:
             gs = members()
             if gs:
                 _core(vp, "hide", placements=[address(g) for g in gs])
-                vp.update()
-        elif verb == "unique":
-            gs = members()
-            comps = [g for g in gs if g.is_component()]
-            if comps:
-                vp.history.execute(CompoundCommand([MakeUniqueCommand(g, rename=True) for g in comps]))
                 vp.update()
         elif verb == "fileto":
             _select(win, members())
@@ -1983,10 +1981,8 @@ def _tree_action(win, view, action) -> None:
                 from views import wgpu_library
                 wgpu_library.edit_field(win, view, arg, extra)
             elif what == "groupname":
-                g = _group_by_uid(win, arg)
-                if g is not None:
-                    _core(vp, "rename_placement", placement=g.uid, name=extra)
-                    vp.update()
+                from ingetrazo_render import inspector_rename
+                inspector_rename(vp, arg, extra)
             view._ui_insp_sig = None
             rebuild()
         elif verb == "showall":
@@ -2229,11 +2225,11 @@ def _inspector(view, win) -> None:
         sections.append(("Actions", [("form:dimstyle", "Dimension style…")]))
     shape = None if groups else _curve_of(scene, sel)
     if shape is not None:
-        # «Sides» for a closed shape, as the Circle and Polygon tools count
-        # them; «Segments» for an arc. Only a flat curve is rebuilt.
-        label = "Sides" if shape.closed else "Segments"
-        value = _edit("segments", str(shape.segments)) if shape.flat else f"{shape.segments} (not flat)"
-        sections.insert(0, ("Circle" if shape.closed else "Arc", [(label, value)]))
+        from ingetrazo_render import inspector_curve
+        sections.insert(0, inspector_curve(scene, shape))
+    elif others:
+        from ingetrazo_render import inspector_totals
+        rows.extend(inspector_totals(scene, sel))
     missing = sum(1 for g in groups if (g.ifc or {}).get("class") and not structure._has_status(g.ifc or {}))
     if missing and verbs.offers(sel_kind, "status"):
         sections.append(("Status", [("Missing on", f"{missing} items")]))

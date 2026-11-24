@@ -9,6 +9,7 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 import pytest
 
+from tests.native_tree import group_rows
 from core.group import Group, copy_group, iter_placements
 from core.history import ExplodeGroupCommand
 from core.mesh import Mesh
@@ -38,20 +39,6 @@ def model(copies=True):
     parent.xform.rotate(30, V(0, 0, 1))
     peer = copy_group(parent, V(20, 0, 0)) if copies else None
     return [parent] + ([peer] if peer else []), parent, peer, target, child
-
-
-def _tree_window(groups):
-    from views.main_window import MainWindow
-    win = MainWindow()
-    vp = win.viewport
-    vp.scene.groups[:] = groups
-    vp.scene.version += 1
-    return win, vp
-
-
-def _tree_close(win):
-    win._saved_version = win.viewport.scene.version
-    win.close()
 
 
 def _window(native_host, groups):
@@ -102,17 +89,14 @@ def test_explode_in_an_assembly_preserves_placement_and_undoes_in_place(native_h
 
 
 @pytest.mark.parametrize('copies', [False, True])
-def test_the_menu_explode_inside_a_component_asks_for_make_unique(copies):
+def test_the_menu_explode_inside_a_component_asks_for_make_unique(native_host, copies):
     groups, parent, peer, target, child = model(copies)
-    win, vp = _tree_window(groups)
-    try:
-        vp.begin_group_edit(parent)
-        vp.scene.selection = {target}
-        steps = len(vp.history.undo_stack)
-        win._on_explode_group()
-        assert parent.children == [target] and target.children == [child]
-        assert len(vp.history.undo_stack) == steps
-        panel = win.project_browser.outliner
-        assert panel.make_refusal([target])
-    finally:
-        _tree_close(win)
+    win, vp = _window(native_host, groups)
+    vp.begin_group_edit(parent)
+    vp.scene.selection = {target}
+    steps = len(vp.history.undo_stack)
+    win._on_explode_group()
+    assert parent.children == [target] and target.children == [child]
+    assert len(vp.history.undo_stack) == steps
+    from core.i18n import tr
+    assert group_rows(native_host, target)[tr("Explode Group")]

@@ -263,6 +263,7 @@ pub struct Column {
     /// "File to…": the next row clicked (or Enter) receives the selection.
     filing: Option<String>,
     focus_filter: bool,
+    group_rows: Vec<(String, String, String)>,
     /// The row menu: row key, row type, where.
     row_menu: Option<(String, u8, Pos2)>,
     /// Inline rename: row key and the text being typed.
@@ -429,12 +430,18 @@ impl Ui {
             }
         }
     }
+    pub fn set_tree_group_rows(&mut self, key: String, rows: Vec<(String, String, String)>) {
+        if let Some(col) = self.column.as_mut() {
+            if col.row_menu.as_ref().is_some_and(|(k, _, _)| k == &key) { col.group_rows = rows; }
+        }
+    }
+
     /// rows: ([key, name, kind, badge, icon], [depth, count, problems, active,
     /// row, eye, lock, expandable, expanded, selected]).
     pub fn set_tree(&mut self, rows: Vec<(Vec<String>, Vec<i64>)>, unfiled: u32) {
         let col = self.column.get_or_insert_with(|| Column {
             nodes: Vec::new(), path: Vec::new(), host: Default::default(), overview: Default::default(), styles: Default::default(), reveal: None, proposal_available: false, proposal_dismissed: false, sort: Default::default(), ordered: Vec::new(), unfiled: 0, issue_at: None, export_focus: Default::default(), filter: String::new(),
-            filing: None, focus_filter: false, row_menu: None, renaming: None, focus_rename: false, head_menu: None,
+            filing: None, focus_filter: false, group_rows: Vec::new(), row_menu: None, renaming: None, focus_rename: false, head_menu: None,
             kind_menu: None, kinds: Vec::new(), prompt: None, lens: Lens::Filing, edits: Default::default(), mode: String::new(), issues: false,
             identity: Vec::new(),
             inspector_title: String::new(),
@@ -2029,7 +2036,9 @@ impl Ui {
                                         }
                                     } else {
                                         col.highlighted = Some(n.key.clone());
-                                        let verb = match n.row { 0 => "node", 3 => "reveal", 4 => "loose", 5 => "mat", _ => "item" };
+                                        let verb = if n.local_placement && ui.input(|i| i.modifiers.shift || i.modifiers.command) {
+                                            "toggleitem"
+                                        } else { match n.row { 0 => "node", 3 => "reveal", 4 => "loose", 5 => "mat", _ => "item" } };
                                         actions.push(format!("{verb}\u{1f}{}", n.key));
                                     }
                                 }
@@ -2038,6 +2047,10 @@ impl Ui {
                                     actions.push(format!("{verb}\u{1f}{}", n.key));
                                 }
                                 if resp.secondary_clicked() && n.row < 6 && n.row != 4 && (n.row != 5 || n.key.starts_with("cm:")) {
+                                    col.group_rows.clear();
+                                    if n.key.starts_with("g:") || n.key.starts_with("i:") || n.key.starts_with("c:") || n.key.starts_with("d:") {
+                                        actions.push(format!("grouprows\u{1f}{}", n.key));
+                                    }
                                     col.row_menu = resp.interact_pointer_pos().map(|p| (n.key.clone(), n.row, p));
                                 }
                             }
@@ -2172,8 +2185,7 @@ impl Ui {
                 ("-", ""), ("rename", "Rename"), ("newchild", "New child node"), ("kind", "Kind  ›"),
                 ("-", ""), ("delete", "Delete node")];
             let item_menu: &[(&str, &str)] = &[("item", "Select"), ("open", "Open for editing"), ("rename", "Rename"),
-                ("-", ""), ("hideitem", "Hide"), ("lockitem", "Lock / unlock"), ("instances", "Select instances"),
-                ("unique", "Make unique"), ("zoom", "Zoom to"), ("-", ""), ("fileto", "File to…")];
+                ("-", ""), ("hideitem", "Hide"), ("lockitem", "Lock / unlock"), ("zoom", "Zoom to"), ("-", ""), ("fileto", "File to…")];
             let comp_menu: &[(&str, &str)] = &[("cplace", "Place a copy"), ("cselect", "Select instances"),
                 ("creplace", "Replace selection with this"), ("-", ""), ("ckeep", "Keep in file"), ("crename", "Rename…")];
             // A linked file's rows are read-only here: no filing, kind or rename.
@@ -2197,6 +2209,20 @@ impl Ui {
                                 matches!(*id, "contents" | "isolate" | "zoom" | "linkopen" | "linkfinder" | "linkreload") { continue; }
                             if matches!(*id, "linkreload" | "linkrelink" | "linkunlink") &&
                                 !editable_file { continue; }
+                            if *id == "hideitem" {
+                                for (verb, label, why) in &col.group_rows {
+                                    let item = (verb.clone(), label.clone(), String::new(), String::new(), -1, why.is_empty());
+                                    let response = menu_row_resp(ui, &item).0;
+                                    if why.is_empty() {
+                                        if response.clicked() {
+                                            actions.push(format!("{verb}\u{1f}{key}"));
+                                            close = true;
+                                        }
+                                    } else {
+                                        response.on_hover_text(why);
+                                    }
+                                }
+                            }
                             if *id == "-" {
                                 let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 7.0), Sense::hover());
                                 ui.painter().hline(r.x_range().shrink(6.0), r.center().y, Stroke::new(1.0_f32, EDGE));
@@ -2981,4 +3007,41 @@ fn dismissal_consumes_press_drag_and_release() {
     assert!(ui.pointer("release", 320., 420., 1, 0));
     assert!(!ui.pointer("press", 300., 400., 1, 0));
     assert!(!ui.pointer("release", 300., 400., 1, 0));
+}
+
+#[test]
+fn occurrence_menu_runs_the_document_action_and_closes() {
+    let Some(mut ui) = test_chrome() else { return };
+    ui.ctx = test_context();
+    let key = "i:box";
+    ui.set_tree(vec![(vec![key.into(), "Box".into()], vec![0, 0, 0, 0, 1, -1, -1])], 0);
+    let screen = Rect::from_min_size(Pos2::ZERO, vec2(1024., 700.));
+    let frame = |ui: &mut Ui, events| {
+        let ctx = ui.ctx.clone();
+        let raw = egui::RawInput { screen_rect: Some(screen), events, ..Default::default() };
+        let frame = ctx.run(raw, |c| ui.right_column(c, screen, 0.));
+        frame.shapes.into_iter().filter_map(|shape| {
+            if let egui::Shape::Text(text) = shape.shape {
+                let at = text.visual_bounding_rect().center();
+                if shape.clip_rect.contains(at) { return Some((text.galley.text().to_owned(), at)); }
+            }
+            None
+        }).collect::<std::collections::HashMap<_, _>>()
+    };
+    let click = |ui: &mut Ui, pos, button| {
+        frame(ui, vec![egui::Event::PointerMoved(pos)]);
+        for pressed in [true, false] {
+            frame(ui, vec![egui::Event::PointerButton {pos, button, pressed, modifiers: Default::default()}]);
+        }
+    };
+    for _ in 0..3 { frame(&mut ui, vec![]); }
+    let at = frame(&mut ui, vec![])["Box"];
+    click(&mut ui, at, egui::PointerButton::Secondary);
+    assert!(ui.take_actions().contains(&format!("tree:grouprows\u{1f}{key}")));
+    ui.set_tree_group_rows(key.into(), vec![("explode".into(), "Explode Group".into(), String::new())]);
+    for _ in 0..3 { frame(&mut ui, vec![]); }
+    let at = frame(&mut ui, vec![])["Explode Group"];
+    click(&mut ui, at, egui::PointerButton::Primary);
+    assert!(ui.take_actions().contains(&format!("tree:explode\u{1f}{key}")));
+    assert!(ui.column.unwrap().row_menu.is_none());
 }

@@ -7,9 +7,9 @@ ones too — selected in the view. Inside a component, Make Unique is greyed
 with the reason."""
 from __future__ import annotations
 
-from PySide6.QtCore import QTimer
+from tests.native_tree import action, group_rows
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
-from PySide6.QtWidgets import QApplication
 
 from core.group import Group, copy_group
 from core.i18n import tr
@@ -22,9 +22,7 @@ def _quad(x=0.0):
     return m
 
 
-def _setup():
-    from views.main_window import MainWindow
-    win = MainWindow()
+def _setup(scene):
     silla = Group(_quad(), name="Silla")
     silla.xform = QMatrix4x4()
     b = copy_group(silla, V(2, 0, 0))
@@ -35,99 +33,78 @@ def _setup():
     d = copy_group(silla, V(6, 0, 0))
     comedor.children = [d]                      # a copy inside a group
     muro = Group(_quad(12.0), name="Muro")
-    scene = win.viewport.scene
     scene.groups[:] = [silla, b, c, comedor, muro]
     scene.version += 1
-    panel = win.project_browser.outliner
-    panel.refresh()
-    return win, scene, panel, (silla, b, c, d, comedor, muro)
+    return silla, b, c, d, comedor, muro
 
 
-def _close(win):
-    win._saved_version = win.viewport.scene.version
-    win.close()
+def test_the_menu_offers_both_on_a_component_and_neither_on_a_group(native_host):
+    silla, b, c, d, comedor, muro = _setup(native_host.viewport.scene)
+    entries = group_rows(native_host, b)
+    assert entries[tr("Make Unique")] == ""
+    assert tr("Select Instances ({n})", n=4) in entries
+    assert tr("Make Unique") not in group_rows(native_host, muro)
 
 
-def _menu(panel, item):
-    """``{text: (enabled, tooltip)}`` of the row's menu, read open."""
-    found = {}
-
-    def read():
-        m = QApplication.activePopupWidget()
-        if m is None:
-            QTimer.singleShot(10, read)
-            return
-        for a in m.actions():
-            found[a.text()] = (a.isEnabled(), a.toolTip())
-        m.close()
-    QTimer.singleShot(0, read)
-    panel._on_context_menu(panel.tree.visualItemRect(item).center())
-    return found
-
-
-def test_the_menu_offers_both_on_a_component_and_neither_on_a_group():
-    win, scene, panel, (silla, b, c, d, comedor, muro) = _setup()
-    try:
-        entries = _menu(panel, panel._items[id(b)])
-        assert entries[tr("Make Unique")][0]
-        assert tr("Select Instances ({n})", n=4) in entries   # 3 + nested
-        plain = _menu(panel, panel._items[id(muro)])
-        assert tr("Make Unique") not in plain
-    finally:
-        _close(win)
+def test_make_unique_on_several_rows_is_one_undo_step_with_own_names(native_host):
+    vp = native_host.viewport
+    silla, b, c, *_ = _setup(vp.scene)
+    vp.scene.select([b])
+    action(native_host, "toggleitem", "i:" + c.uid)
+    revision = vp.history.revision
+    action(native_host, "unique", "i:" + b.uid)
+    assert b.is_component() and c.is_component()
+    assert b.mesh is not silla.mesh and c.mesh is not silla.mesh
+    assert b.mesh is not c.mesh
+    assert {b.name, c.name} == {"Silla #2", "Silla #3"}
+    assert silla.is_component() and silla.name == "Silla"
+    assert vp.history.revision == revision + 1
+    assert vp.history.undo()
+    assert b.mesh is silla.mesh and c.mesh is silla.mesh
+    assert b.name == c.name == "Silla"
 
 
-def test_make_unique_on_several_rows_is_one_undo_step_with_own_names():
-    win, scene, panel, (silla, b, c, d, comedor, muro) = _setup()
-    try:
-        steps = len(win.viewport.history.undo_stack)
-        assert panel.make_unique_rows([b, c])
-        # components of their own, each its definition (#620)
-        assert b.is_component() and c.is_component()
-        assert b.mesh is not silla.mesh and c.mesh is not silla.mesh
-        assert b.mesh is not c.mesh
-        assert {b.name, c.name} == {"Silla #2", "Silla #3"}
-        assert silla.is_component() and silla.name == "Silla"
-        assert len(win.viewport.history.undo_stack) == steps + 1
-        win.viewport.history.undo()
-        assert b.mesh is silla.mesh and c.mesh is silla.mesh
-        assert b.name == c.name == "Silla"
-    finally:
-        _close(win)
+def test_select_instances_takes_every_copy_nested_ones_too(native_host, monkeypatch):
+    vp = native_host.viewport
+    scene = vp.scene
+    silla, b, c, d, comedor, muro = _setup(scene)
+    said = []
+    monkeypatch.setattr(vp, "flash_status", lambda text, *args: said.append(text))
+    vp.begin_group_edit(comedor)
+    action(native_host, "instances", "i:" + d.uid)
+    assert scene.edit_group is None
+    assert set(scene.selection) == {silla, b, c}
+    assert said[-1] == tr("{n} copies selected; {m} more are inside other groups", n=3, m=1)
 
 
-def test_select_instances_takes_every_copy_nested_ones_too():
-    win, scene, panel, (silla, b, c, d, comedor, muro) = _setup()
-    try:
-        assert set(panel.copies_of_rows([b])) == {silla, b, c, d}
-        panel.select_copies([b])
-        # three at the top beat the one in «Comedor»: the top stays open
-        assert scene.edit_group is None
-        assert set(scene.selection) == {silla, b, c}
-        assert "1" in win.statusBar().currentMessage()   # one elsewhere
-    finally:
-        _close(win)
+def test_inside_a_component_make_unique_is_greyed_with_the_reason(native_host, monkeypatch):
+    vp = native_host.viewport
+    tornillo = Group(_quad(20.0), name="Tornillo")
+    tornillo.xform = QMatrix4x4()
+    mueble = Group(_quad(18.0), name="Mueble")
+    mueble.xform = QMatrix4x4()
+    mueble.children = [tornillo]
+    vp.scene.groups.append(mueble)
+    vp.scene.version += 1
+    why = tr("Components keep their parts: Make Unique first to change what is inside one")
+    assert group_rows(native_host, tornillo)[tr("Make Unique")] == why
+    said = []
+    monkeypatch.setattr(vp, "flash_status", lambda text, *args: said.append(text))
+    revision = vp.history.revision
+    action(native_host, "unique", "i:" + tornillo.uid)
+    assert said == [why] and tornillo.is_component()
+    assert vp.history.revision == revision
 
 
-def test_inside_a_component_make_unique_is_greyed_with_the_reason():
-    win, scene, panel, (silla, b, c, d, comedor, muro) = _setup()
-    try:
-        tornillo = Group(_quad(20.0), name="Tornillo")
-        tornillo.xform = QMatrix4x4()
-        mueble = Group(_quad(18.0), name="Mueble")
-        mueble.xform = QMatrix4x4()
-        mueble.children = [tornillo]            # a component of a component
-        scene.groups.append(mueble)
-        scene.version += 1
-        panel.refresh()
-        why = tr("Components keep their parts: Make Unique first to change "
-                 "what is inside one")
-        panel._items[id(mueble)].setExpanded(True)     # the row in sight
-        entries = _menu(panel, panel._items[id(tornillo)])
-        assert entries[tr("Make Unique")] == (False, why)
-        said = []
-        win.viewport.flash_status = lambda text, *a, **k: said.append(text)
-        assert not panel.make_unique_rows([tornillo])
-        assert said == [why] and tornillo.is_component()
-    finally:
-        _close(win)
+def test_collapsed_definition_uses_only_the_copies_in_its_branch(native_host):
+    from ingetrazo_render import tree_group_rows
+
+    scene = native_host.viewport.scene
+    a, b, c, nested, *_ = _setup(scene)
+    native_host.view._ui_tree = {"unfiled": [a, b, c]}
+    key = f"d::{id(a.mesh)}"
+    assert {verb for verb, _, _ in tree_group_rows(scene, [a, b, c])} == {"instances", "unique"}
+    action(native_host, "unique", key)
+    assert len({id(g.mesh) for g in (a, b, c, nested)}) == 4
+    assert native_host.viewport.history.undo()
+    assert all(g.mesh is nested.mesh for g in (a, b, c))

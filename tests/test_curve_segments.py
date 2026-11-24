@@ -11,6 +11,9 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
+from tests.native_tree import action, inspector
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
+from views.wgpu_ui import _edit
 from PySide6.QtCore import QPointF, Qt  # noqa: E402
 from ingetrazo_core import Vec3 as V
 from PySide6.QtWidgets import QApplication  # noqa: E402
@@ -140,87 +143,49 @@ def test_a_pushed_cylinder_is_left_alone(viewport):
 
 
 # ---- The field in Entity Info ---------------------------------------------
-@pytest.fixture
-def window():
-    from views.main_window import MainWindow
-    w = MainWindow()
-    w.show()
-    yield w
-    w._saved_version = w.viewport.scene.version   # no "save?" modal
-    w.close()
-
-
-def _panel(window):
-    from views.tray import EntityInfoPanel
-    return window.findChild(EntityInfoPanel)
-
-
-def test_the_field_shows_for_one_curve_and_rebuilds_it(window):
-    vp = window.viewport
+def test_the_field_shows_for_one_curve_and_rebuilds_it(native_host):
+    vp = native_host.viewport
     _draw(vp, PolygonTool(), V(0, 0, 0), V(2, 0, 0))
     mesh = vp.scene.mesh
-    panel = _panel(window)
-    cid = _curve_edge(mesh).curve
-    vp.scene.selection.update(e for e in mesh.edges if e.curve == cid)
-    panel.refresh()
-    assert panel._seg_box.isVisible() and panel._seg_box.isEnabled()
-    assert panel._seg_caption.text() == "Sides:"
-    assert panel._seg_box.value() == 6
-    assert not panel._name_edit.isVisible()
-    panel._seg_box.setValue(9)
+    edges = [e for e in mesh.edges if e.curve == _curve_edge(mesh).curve]
+    rows = inspector(native_host, edges)
+    assert rows["Polygon"]["Sides"] == _edit("segments", "6")
+    assert "Item" not in rows
+    action(native_host, "edit", "segments", "9")
     assert _loops(mesh) == [(9, [])]
-    assert panel._seg_box.value() == 9
+    assert inspector(native_host, list(mesh.edges))["Polygon"]["Sides"] == _edit("segments", "9")
     vp.history.undo()
-    panel.refresh()
-    assert panel._seg_box.value() == 6
+    assert inspector(native_host, list(mesh.edges))["Polygon"]["Sides"] == _edit("segments", "6")
 
 
-def test_the_field_hides_for_a_plain_edge_or_a_face(window):
-    vp = window.viewport
+def test_the_field_hides_for_a_plain_edge_or_a_face(native_host):
+    vp = native_host.viewport
     _draw(vp, RectangleTool(), V(0, 0, 0), V(4, 4, 0))
-    mesh = vp.scene.mesh
-    panel = _panel(window)
-    vp.scene.selection.add(mesh.edges[0])
-    panel.refresh()
-    assert not panel._seg_box.isVisible()
-    vp.scene.selection.clear()
-    vp.scene.selection.add(mesh.faces[0])
-    panel.refresh()
-    assert not panel._seg_box.isVisible()
+    for entity in (vp.scene.mesh.edges[0], vp.scene.mesh.faces[0]):
+        rows = inspector(native_host, [entity])
+        assert rows.keys().isdisjoint({"Arc", "Polygon", "Circle"})
 
 
-def test_an_arc_reads_segments(window):
-    vp = window.viewport
-    _arc_with_chord(vp.scene.mesh, n=5)
-    mesh = vp.scene.mesh
-    panel = _panel(window)
-    cid = _curve_edge(mesh).curve
-    vp.scene.selection.update(e for e in mesh.edges if e.curve == cid)
-    panel.refresh()
-    assert panel._seg_caption.text() == "Segments:"
-    assert panel._seg_box.value() == 5
-    assert panel._seg_box.minimum() == 2
+def test_an_arc_reads_segments(native_host):
+    mesh = native_host.viewport.scene.mesh
+    _arc_with_chord(mesh, n=5)
+    edges = [e for e in mesh.edges if e.curve == _curve_edge(mesh).curve]
+    assert inspector(native_host, edges)["Arc"]["Segments"] == _edit("segments", "5")
+    action(native_host, "edit", "segments", "1")
+    assert _loops(mesh) == [(6, [])]
+    action(native_host, "edit", "segments", "2")
+    assert _loops(mesh) == [(3, [])]
 
 
-def test_a_curve_is_described_by_its_shape(window):
-    vp = window.viewport
+def test_a_curve_is_described_by_its_shape(native_host):
+    vp = native_host.viewport
     _draw(vp, CircleTool(), V(0, 0, 0), V(2, 0, 0))
     mesh = vp.scene.mesh
-    panel = _panel(window)
-    cid = _curve_edge(mesh).curve
-    text = panel._describe([e for e in mesh.edges if e.curve == cid])
-    assert text.startswith("<b>Circle</b>")
-    assert "Radius" in text and "Diameter" in text and "Perimeter" in text
+    rows = inspector(native_host, list(mesh.edges))
+    assert {"Radius", "Diameter", "Perimeter"} <= rows["Circle"].keys()
     vp.history.execute(ResegmentCurveCommand(_curve_edge(mesh), 6))
-    text = panel._describe([e for e in mesh.edges if e.curve == cid])
-    assert text.startswith("<b>Polygon</b>") and "Side" in text
-
-
-def test_labels_are_muted_and_values_left_alone():
-    from views.tray import EntityInfoPanel
-    out = EntityInfoPanel._styled("<b>Face</b><br>Area: 1 m²<br>Material: —")
-    assert out.startswith("<b>Face</b><br><span style=")
-    assert "Area:</span> 1 m²" in out and "Material:</span> —" in out
+    rows = inspector(native_host, list(mesh.edges))
+    assert "Side" in rows["Polygon"]
 
 
 def test_a_painted_face_shows_a_swatch_and_its_code():

@@ -4,37 +4,17 @@
 everyone looks for it — one undo step, per object."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-import pytest  # noqa: E402
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
-from core.group import Group  # noqa: E402
-from core.mesh import Mesh  # noqa: E402
-
-_app = QApplication.instance() or QApplication([])
+from core.group import Group
+from core.mesh import Mesh
+from tests.native_tree import action, inspector
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
+from views.wgpu_ui import _edit
 
 
 def V(x, y, z=0.0):
     return QVector3D(float(x), float(y), float(z))
-
-
-@pytest.fixture
-def window():
-    from views.main_window import MainWindow
-    w = MainWindow()
-    w.show()
-    yield w
-    w._saved_version = w.viewport.scene.version   # no "save?" modal
-    w.close()
-
-
-def _panel(window):
-    from views.tray import EntityInfoPanel
-    return window.findChild(EntityInfoPanel)
 
 
 def _group(scene, name, x=0.0):
@@ -45,42 +25,30 @@ def _group(scene, name, x=0.0):
     return g
 
 
-def test_the_field_shows_only_for_one_group(window):
-    scene = window.viewport.scene
-    panel = _panel(window)
+def test_the_field_shows_only_for_one_group(native_host):
+    scene = native_host.viewport.scene
     a, b = _group(scene, "Cámara"), _group(scene, "Brida", 3)
-    scene.selection.add(a)
-    panel.refresh()
-    assert panel._name_edit.isVisible()
-    assert panel._name_edit.text() == "Cámara"
-    scene.selection.add(b)                       # two: no single name
-    panel.refresh()
-    assert not panel._name_edit.isVisible()
-    scene.selection.clear()
-    scene.selection.add(b)                       # another one: its name
-    panel.refresh()
-    assert panel._name_edit.text() == "Brida"
+    for group in (a, b):
+        assert inspector(native_host, [group])["Item"]["Name"] == _edit(
+            f"groupname:{group.uid}", group.name)
+    assert "Item" not in inspector(native_host, [a, b])
 
 
-def test_renaming_is_one_undo_step(window):
-    scene = window.viewport.scene
-    panel = _panel(window)
-    g = _group(scene, "Group")
-    scene.selection.add(g)
-    panel.refresh()
-    panel._name_edit.setText("Cámara de vacío")
-    panel._on_name_edited()
-    assert g.name == "Cámara de vacío"
-    assert window.viewport.history.undo()
-    assert g.name == "Group"
+def test_renaming_is_one_undo_step(native_host):
+    vp = native_host.viewport
+    g = _group(vp.scene, "Group")
+    vp.scene.select([g])
+    revision = vp.history.revision
+    action(native_host, "edit", f"groupname:{g.uid}", "Cámara de vacío")
+    assert g.name == "Cámara de vacío" and vp.history.revision == revision + 1
+    assert vp.history.undo() and g.name == "Group"
 
 
-def test_an_empty_name_is_not_taken(window):
-    scene = window.viewport.scene
-    panel = _panel(window)
-    g = _group(scene, "Tapa")
-    scene.selection.add(g)
-    panel.refresh()
-    panel._name_edit.setText("   ")
-    panel._on_name_edited()
-    assert g.name == "Tapa" and panel._name_edit.text() == "Tapa"
+def test_an_empty_name_is_not_taken(native_host):
+    vp = native_host.viewport
+    g = _group(vp.scene, "Tapa")
+    vp.scene.select([g])
+    revision = vp.history.revision
+    action(native_host, "edit", f"groupname:{g.uid}", "   ")
+    assert vp.history.revision == revision
+    assert inspector(native_host, [g])["Item"]["Name"] == _edit(f"groupname:{g.uid}", "Tapa")
