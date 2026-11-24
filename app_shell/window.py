@@ -790,7 +790,7 @@ class ShellWindow(WindowDocumentCommands, QObject):
         """MainWindow._activate_tool's Metal path."""
         tool = self._tools.get(key)
         if tool is None:
-            self._status.showMessage(f"{key} is not in the native app yet — File ▸ Open in Classic App", 4000)
+            self._status.showMessage(f"{key} is unavailable in this window", 4000)
             return
         self.viewport.set_active_tool(tool)
         display = self.viewport.keys_stand_in

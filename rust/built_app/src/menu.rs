@@ -129,9 +129,7 @@ pub fn build() -> muda::Result<Menus> {
           &PredefinedMenuItem::separator(),
           &import,
           &item("link", "Link a Document…", None),
-          &item("reload_links", "Reload Linked Files", None),
-          &PredefinedMenuItem::separator(),
-          &item("classic", "Open in Classic App", None)],
+          &item("reload_links", "Reload Linked Files", None)],
     )?;
     let edit = Submenu::with_items(
         "Edit",

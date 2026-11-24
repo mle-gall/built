@@ -235,24 +235,6 @@ def test_composite_with_nested_links_opens_and_reloads(host, tmp_path):
     assert host.state()["status"] == "Linked documents reloaded" and host.errors == []
 
 
-# ---- the classic app, dialogs, widgets ---------------------------------------------------
-def test_classic_app_command_opens_the_same_file(host, tmp_path, monkeypatch):
-    from app_shell import files
-    src = _copy(tmp_path)
-    host.open_path(src)
-    started = []
-    monkeypatch.setattr(files.subprocess, "Popen", lambda cmd, **kw: started.append(cmd))
-    assert host.menu("classic")
-    cmd = started[0]
-    assert cmd[-1] == str(src) and cmd[-2] == "--new-window" and cmd[-3].endswith("main.py")
-    monkeypatch.setenv("BUILT_CLASSIC", "/Applications/Built.app/Contents/MacOS/built --qt")
-    assert files.classic_command(src) == ["/Applications/Built.app/Contents/MacOS/built", "--qt", str(src)]
-    monkeypatch.setattr(host.window, "_doc_is_dirty", lambda doc: True)
-    monkeypatch.setattr("views.chrome_dialogs.ask", lambda *args, **kwargs: "cancel")
-    assert not files.open_in_classic(host.window, why="The classic sheet editor")
-    assert len(started) == 1
-
-
 def test_open_dialog_goes_through_the_native_panel(host, tmp_path, monkeypatch):
     from app_shell import native
     src = _copy(tmp_path)
@@ -261,9 +243,9 @@ def test_open_dialog_goes_through_the_native_panel(host, tmp_path, monkeypatch):
     assert host.state()["path"] == str(src)
 
 
-def test_a_qt_dialog_the_borrowed_code_shows_is_refused_not_waited_for(host):
+def test_a_legacy_qt_modal_is_reported_without_blocking_the_window(host):
     """Offscreen nobody can answer a Qt modal: it is rejected at once and
-    reported (the status names the classic app)."""
+    reported with the name of the unavailable feature."""
     got = QMessageBox.question(None, "Some old dialog", "Really?")
     assert got != QMessageBox.Yes
     st = host.state()
@@ -272,7 +254,7 @@ def test_a_qt_dialog_the_borrowed_code_shows_is_refused_not_waited_for(host):
     # timed (6 s of wall time), and on a loaded machine the dialog's round
     # trip alone took that long under pytest-xdist.
     assert host.not_here_log
-    assert "Classic App" in host.window.statusBar()._msg.text()
+    assert host.not_here_log[-1] in host.window.statusBar()._msg.text()
 
 
 def test_right_click_builds_the_menu_for_what_was_hit(host, tmp_path, monkeypatch):

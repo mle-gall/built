@@ -9,10 +9,6 @@ menu.rs), the start page and the chrome's document ▾.
 """
 from __future__ import annotations
 
-import os
-import shutil
-import subprocess
-import sys
 import threading
 from collections import deque
 from pathlib import Path
@@ -117,7 +113,6 @@ def command(win, name, *args):
         "export_igz": lambda: export_igz(win),
         "link": lambda: link_document(win),
         "reload_links": lambda: win._reload_all_links(),
-        "classic": lambda: open_in_classic(win),
         "prefs": lambda: open_settings(win),
         "library": lambda: open_library(win),
         "select_all": lambda: win._on_select_all(),
@@ -904,56 +899,6 @@ def cold_start(win) -> None:
     if win._doc_is_blank():
         win._start_blank_document()
         show_start(win)
-
-
-# ---- the classic app --------------------------------------------------------------
-def classic_command(path=None) -> list:
-    """How to start the Qt app on ``path``: ``BUILT_CLASSIC`` (a command
-    line) when set, else the checkout's main.py with its venv's Python."""
-    from app_shell import host as _host
-    extra = [str(path)] if path else []
-    env = os.environ.get("BUILT_CLASSIC")
-    if env:
-        import shlex
-        return shlex.split(env) + extra
-    root = Path(_host.ROOT or Path(__file__).resolve().parent.parent)
-    venv = _host.VENV
-    python = None
-    if venv:
-        for name in ("python3", "python"):
-            cand = Path(venv) / "bin" / name
-            if cand.exists():
-                python = str(cand)
-                break
-    python = python or shutil.which("python3") or sys.executable
-    return [python, str(root / "main.py"), "--new-window", *extra]
-
-
-def open_in_classic(win, *, why: str | None = None) -> bool:
-    """Open the active document for an explicit Classic command, after the save prompt."""
-    from views import chrome_dialogs as cd
-    doc = win._doc
-    if doc is not None and win._doc_is_dirty(doc):
-        got = cd.ask(win, tr("Save before opening in the classic app?"),
-                     tr("The classic app opens the file on disk. Save your changes first?"),
-                     [("discard", tr("Open Without Saving")), ("cancel", tr("Cancel")),
-                      ("save", tr("Save and Open"))],
-                     default="save", cancel="cancel", discard="discard")
-        if got == "cancel":
-            return False
-        if got == "save" and not save(win):
-            return False
-    path = getattr(doc, "path", None)
-    cmd = classic_command(path)
-    try:
-        subprocess.Popen(cmd, start_new_session=True, stdout=subprocess.DEVNULL,
-                         stderr=subprocess.DEVNULL, cwd=str(Path(cmd[1]).parent) if len(cmd) > 1 else None)
-    except OSError as exc:
-        cd.warning(win, tr("Open in Classic App"), str(exc))
-        return False
-    what = f"{why} open" if why else "Opening"
-    win.statusBar().showMessage(f"{what} in the classic app…", 4000)
-    return True
 
 
 def sync_foreign_clipboard(win):

@@ -257,10 +257,10 @@ class Host:
         self._picture_seen = False
 
     def not_here(self, feature):
-        """Say that ``feature`` needs the classic app (and how to get there)."""
+        """Show which requested operation was unavailable."""
         self.not_here_log.append(feature)
         self.window.statusBar().showMessage(
-            f"{feature} is not in the native app yet — File ▸ Open in Classic App", 6000)
+            f"{feature} is unavailable in this window", 6000)
 
     # ---- one turn of the loop ------------------------------------------
     def idle(self):
