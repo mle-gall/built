@@ -10,13 +10,12 @@ from plugins import python_console, render_blender
 from views.extension_api import ExtensionApp
 
 
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
+
+
 @pytest.fixture
-def window():
-    from views.main_window import MainWindow
-    win = MainWindow(defer_extensions=True)
-    yield win
-    win._saved_version = win.viewport.scene.version
-    win.close()
+def window(native_host):
+    return native_host.window
 
 
 def test_console_session(window):
@@ -103,17 +102,15 @@ def test_pick_callback_only_for_original_revision(window):
     assert vp.active_tool is not tool
 
 
-def test_classic_plugin_entry_points(window, monkeypatch):
-    flash = MagicMock()
-    monkeypatch.setattr(window.viewport, "flash_status", flash)
+def test_plugin_entry_points_open_the_registered_native_panels(window, monkeypatch):
+    opened = []
+    monkeypatch.setattr(plugin_panels, "open_panel",
+                        lambda win, key: opened.append((win, key)) or True)
     python_console.PythonConsoleTool().on_activate(window.viewport)
-    flash.assert_called_once()
-
+    actions = []
     app = ExtensionApp(window, "render_blender")
-    monkeypatch.setattr(window._doc, "_renderer_wgpu", False)
-    panels = []
-    monkeypatch.setattr(app, "add_panel", lambda title, panel, **kw: panels.append(panel))
-    monkeypatch.setattr(app, "add_menu_action", lambda *a, **kw: None)
+    monkeypatch.setattr(app, "add_menu_action", lambda title, callback: actions.append(callback))
     render_blender.setup(app)
-    assert len(panels) == 1 and isinstance(panels[0], render_blender.RenderPanel)
-    panels[0].deleteLater()
+    assert len(actions) == 1
+    actions[0]()
+    assert opened == [(window, "python_console"), (window, "render_blender")]

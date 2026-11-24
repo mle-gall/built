@@ -270,6 +270,21 @@ fn document_value_key(v: &Obj, event: &Obj) -> PyResult<bool> {
     v.call_method1("_set_value_buffer", (typed,))?;
     Ok(true)
 }
+/// An idle tool can accept a replacement value after its geometry anchor
+/// is gone. Use the same unit grammar as a commit.
+#[pyfunction]
+fn pending_tool_value(tool: &Obj, buffer: &str) -> PyResult<String> {
+    if buffer.is_empty() || tool.is_none() {
+        return Ok(String::new());
+    }
+    let unitless = opt(tool, "value_is_unitless")?;
+    if unitless.is_callable() && unitless.call0()?.is_truthy()? {
+        return Ok(buffer.to_owned());
+    }
+    tool.py().import("core.units")?.call_method1("typed_value_text", (buffer,))?.extract()
+}
+
 pub(super) fn register(m: &Bound<PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(pending_tool_value, m)?)?;
     m.add_function(wrap_pyfunction!(document_value_key, m)?)
 }

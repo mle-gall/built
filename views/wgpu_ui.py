@@ -533,7 +533,10 @@ def _cursor_value(view, win) -> None:
         _lens_value(view, tools, revision)
         return
     if at is None:
-        view.renderer.ui_set_cursor_value("", "", False, 0.0, 0.0, None, revision)
+        from ingetrazo_render import pending_tool_value
+        value = pending_tool_value(tool, getattr(tools, "value_buffer", ""))
+        view.renderer.ui_set_cursor_value(tr(caption) if caption and value else "", value,
+                                          bool(value), None, None, None, revision)
         return
     start = getattr(tool, "start_point", None)
     start = display._world_to_pixel(start) if start is not None else None
@@ -701,16 +704,26 @@ TIPS = {
 }
 
 
-def _tree_model(view, scene, cv):
+def _tree_model(view, scene, cv, readers):
     """The tree's nodes and memberships (core/link_structure.py), kept
     until the model changes: a click that only changes the selection
     rebuilds the rows from it without walking every placement again."""
     cached = view.__dict__.get("_ui_tree_model")
     key = (id(scene), cv)
-    if cached is not None and cached[0] == key:
+    # A tree prepared on the open worker has only the document/version key.
+    # Adopt it at that version and start following this pane's history feed.
+    epoch = readers.filing_epoch(scene.content_version) if readers is not None else None
+    if cached is not None and cached[0][:2] == key:
+        if len(cached[0]) == 2:
+            view._ui_tree_model = ((*key, epoch), cached[1])
         return cached[1]
-    model = prepare_tree_model(scene)
-    view._ui_tree_model = (key, model)
+    from ingetrazo_core import refresh_unfiled
+    if (epoch is not None and cached is not None and cached[0][0] == id(scene)
+            and cached[0][2:] == (epoch,) and refresh_unfiled(scene, cached[1]["tree"])):
+        model = cached[1]
+    else:
+        model = prepare_tree_model(scene)
+    view._ui_tree_model = ((*key, epoch), model)
     return model
 
 
@@ -803,7 +816,9 @@ def _tree(view, win, *, discover=False):
     from core import structure
     from core import layers as L
     from ingetrazo_core import filing_rows, mark_filing_selection, project_sidebar
-    model = _tree_model(view, scene, cv)
+    hist = getattr(win.viewport, "history", None)
+    readers = getattr(getattr(hist, "feed", None), "readers", None)
+    model = _tree_model(view, scene, cv, None if getattr(win, "_outliner_kinds", ()) else readers)
     tree, registry, recipes = model["tree"], model["registry"], model["recipes"]
     counts, to_fix = model["counts"], model["to_fix"]
     node_layers, order = model["node_layers"], model["order"]

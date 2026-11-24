@@ -575,6 +575,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(style_edit::document_piece, m)?)?;
     m.add_function(wrap_pyfunction!(style_edit::import_line_file, m)?)?;
     m.add_function(wrap_pyfunction!(sidebar::promote_tag, m)?)?;
+    m.add_function(wrap_pyfunction!(filing_rows::refresh_unfiled, m)?)?;
     m.add_function(wrap_pyfunction!(filing_rows::filing_rows, m)?)?;
     m.add_function(wrap_pyfunction!(filing_rows::mark_filing_selection, m)?)?;
     m.add_function(wrap_pyfunction!(selection_identity::selection_identity, m)?)?;

@@ -2521,7 +2521,7 @@ impl Renderer {
     /// typed, its anchor (points), the tool's start on screen and the
     /// document's revision (a commit is read from them, ui/value_field.rs).
     #[pyo3(signature = (caption, value, typing, x, y, start=None, revision=0))]
-    fn ui_set_cursor_value(&mut self, caption: String, value: String, typing: bool, x: f32, y: f32,
+    fn ui_set_cursor_value(&mut self, caption: String, value: String, typing: bool, x: Option<f32>, y: Option<f32>,
                            start: Option<(f32, f32)>, revision: u64) {
         if let Some(ui) = self.ui.as_mut() { ui.set_cursor_value(caption, value, typing, x, y, start, revision); }
     }

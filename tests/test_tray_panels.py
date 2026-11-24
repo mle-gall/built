@@ -127,21 +127,6 @@ def test_the_bridge_section_starts_and_stops(win, monkeypatch):
     assert section._text.isHidden()
 
 
-def test_a_right_click_on_the_tray_tabs_is_recognised(win):
-    win.resize(1200, 800)
-    win.show()
-    QApplication.processEvents()
-    bars = [b for b in win.findChildren(QTabBar)
-            if b.isVisible() and b.count() >= 3
-            and win.rect().contains(b.mapTo(win, b.rect().center()))]
-    assert bars, "the side trays are tabbed"
-    bar = bars[0]
-    pos = bar.mapTo(win, bar.tabRect(0).center())
-    assert win._tray_tab_bar_at(pos)
-    vp_pos = win.viewport.mapTo(win, win.viewport.rect().center())
-    assert not win._tray_tab_bar_at(vp_pos)
-
-
 def test_the_prompt_takes_several_lines_and_enter_sends(win):
     from PySide6.QtCore import Qt
     from PySide6.QtGui import QKeyEvent

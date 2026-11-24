@@ -144,8 +144,8 @@ pub struct FeedReaders {
     #[pyo3(get)]
     revision: u64,
     browser_version: i64,
+    filing_epoch: u64,
     dirty_paint: HashSet<String>,
-    dirty_rows: HashSet<String>,
 }
 
 #[pymethods]
@@ -177,19 +177,12 @@ impl FeedReaders {
         if reader == "mesh_paint" {
             self.dirty_paint.clear();
         }
-        if reader == "row_edits" {
-            self.dirty_rows.clear();
-        }
         self.scans.insert(reader, (version, serial));
         Ok(())
     }
 
     fn dirty_paint_meshes(&self) -> Vec<String> {
         self.dirty_paint.iter().cloned().collect()
-    }
-
-    fn dirty_row_uids(&self) -> Vec<String> {
-        self.dirty_rows.iter().cloned().collect()
     }
 
     fn current(&self, py: Python<'_>, reader: &str, version: i64) -> PyResult<bool> {
@@ -206,6 +199,16 @@ impl FeedReaders {
         Ok(self.browser_version)
     }
 
+    /// Multiple panes can consume an insert, removal or context transition
+    /// independently. Any intervening unaccounted write starts a new epoch.
+    fn filing_epoch(&mut self, py: Python<'_>, version: i64) -> PyResult<u64> {
+        if self.scans.get("filing").map(|s| s.0) != Some(version) {
+            self.mark(py, "filing".into(), version)?;
+            self.filing_epoch += 1;
+        }
+        Ok(self.filing_epoch)
+    }
+
     fn context_changed(
         &mut self,
         py: Python<'_>,
@@ -215,7 +218,7 @@ impl FeedReaders {
     ) -> PyResult<()> {
         let now = self.stamp(py)?;
         for (reader, stamp) in &mut self.scans {
-            if *stamp == (before, serial) && matches!(reader.as_str(), "row_groups" | "mesh_paint")
+            if *stamp == (before, serial) && matches!(reader.as_str(), "mesh_paint" | "filing")
             {
                 *stamp = (after, now);
             }
@@ -275,22 +278,14 @@ impl FeedReaders {
         for field in ["created", "removed", "modified"] {
             tag_changes |= tags.get_item(field)?.is_truthy()?;
         }
-        let row_edit = !membership && !registry && !tag_changes && command == "RenameGroupCommand";
-        if row_edit && self.scans.get("row_edits") == Some(&(before, serial)) {
-            self.dirty_rows.extend(keys(&placements, "modified")?);
-        }
         self.scans.retain(|reader, version| {
             let keep = match reader.as_str() {
                 "paint" | "bim" => paint && !registry && !membership && !tag_changes,
                 "rows" => (paint || rows) && !membership && !tag_changes && !registry,
-                "row_edits" => row_edit,
-                "row_groups" => {
-                    (paint || rows || groups)
-                        && (!modified || paint || rows)
-                        && !tag_changes
-                        && !registry
-                }
                 "mesh_paint" => (paint || groups || keyed_paint) && !registry,
+                "filing" => !registry && !tag_changes && (
+                    matches!(command.as_str(), "DeleteGroupCommand" | "InsertGroupCommand")
+                    || (command == "MoveGroupCommand" && paint)),
                 "browser" => !membership && !tag_changes && !registry && (
                     (command == "MoveGroupCommand" && paint) ||
                     (!modified && matches!(command.as_str(),
