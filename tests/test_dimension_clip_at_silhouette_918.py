@@ -6,9 +6,10 @@ length at a time, and the cut jumped from sample to sample as the view
 turned — the dimensions clipped in and out behind other surfaces. Moving
 the occluder a little now moves the end of the line a little.
 
-Needs a GL context that renders; skipped where the platform has none."""
+Requires a native wgpu surface for pixel readback."""
 from __future__ import annotations
 
+from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
 import math
 import os
 
@@ -45,19 +46,8 @@ def _box(mesh, x0, y0, z0, x1, y1, z1):
 
 
 @pytest.fixture
-def win():
-    from views.main_window import MainWindow
-    w = MainWindow()
-    try:
-        w.show()
-        for _ in range(5):
-            _app.processEvents()
-        if not w.viewport.keys_stand_in._can_create_surface():
-            pytest.skip("the Qt platform has no native GPU surface")
-        yield w
-    finally:
-        w._saved_version = w.viewport.scene.version
-        w.close()
+def win(native_gpu_host):
+    return native_gpu_host.window
 
 
 def _seen_length(vp, x_edge, left=False):
@@ -89,8 +79,6 @@ def test_the_line_ends_at_the_silhouette_and_follows_it(win):
     vp.camera.set_view("front")                      # looking toward +Y
     vp.camera.perspective = False
     vp.camera.fit_to(V(-3, -1, 0), V(3, 3, 3))
-    for _ in range(3):
-        _app.processEvents()
     full = _seen_length(vp, 2.5)                     # wall clear of it
     assert full > 100
     px_per_m = full / 4.0

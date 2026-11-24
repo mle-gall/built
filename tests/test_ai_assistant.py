@@ -9,6 +9,8 @@ import json
 import os
 import sys
 
+import pytest
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import QApplication  # noqa: E402
@@ -20,6 +22,17 @@ from core import ai  # noqa: E402
 
 
 # ---- Provider layer ---------------------------------------------------------
+
+@pytest.fixture
+def plugin_parent():
+    """Own the optional Qt plugin widgets for one native document test."""
+    from PySide6.QtCore import QCoreApplication, QEvent
+    from PySide6.QtWidgets import QWidget
+    parent = QWidget()
+    yield parent
+    parent.deleteLater()
+    QCoreApplication.sendPostedEvents(parent, QEvent.DeferredDelete)
+
 
 def test_detect_provider_by_key_prefix():
     assert ai.detect_provider("gsk_xxx") == "groq"
@@ -284,7 +297,7 @@ def test_truncated_code_detects_a_cut_reply():
 
 # ---- In-app agent loop ------------------------------------------------------
 
-def test_assistant_loop_executes_recipes_transactionally(native_host, monkeypatch):
+def test_assistant_loop_executes_recipes_transactionally(plugin_parent, native_host, monkeypatch):
     from plugins.ai_assistant import AsistenteDialog
 
     replies = iter([
@@ -303,7 +316,7 @@ def test_assistant_loop_executes_recipes_transactionally(native_host, monkeypatc
 
     win = native_host.window
     vp = win.viewport
-    dlg = AsistenteDialog(vp, parent=None)
+    dlg = AsistenteDialog(vp, parent=plugin_parent)
     dlg._key.setText("sk-ant-test")
     dlg._shots.setChecked(False)           # offscreen has no GL anyway
     edges0 = len(vp.scene.mesh.edges)
@@ -328,7 +341,7 @@ def test_assistant_loop_executes_recipes_transactionally(native_host, monkeypatc
     assert roles == ["user", "assistant", "user", "assistant"]
 
 
-def test_photo_attaches_to_next_message_only(native_host, monkeypatch, tmp_path):
+def test_photo_attaches_to_next_message_only(plugin_parent, native_host, monkeypatch, tmp_path):
     # The attached photo rides the NEXT user message as scaled JPEG and is
     # cleared afterwards — execution feedback turns must not re-send it.
     from PySide6.QtGui import QImage
@@ -352,7 +365,7 @@ def test_photo_attaches_to_next_message_only(native_host, monkeypatch, tmp_path)
     monkeypatch.setattr(ai, "chat", fake_chat)
 
     win = native_host.window
-    dlg = AsistenteDialog(win.viewport, parent=None)
+    dlg = AsistenteDialog(win.viewport, parent=plugin_parent)
     dlg._provider.setCurrentIndex(0)   # Auto: the sk-ant key → vision
     dlg._key.setText("sk-ant-test")
     dlg._shots.setChecked(False)
@@ -391,7 +404,7 @@ def test_photo_attaches_to_next_message_only(native_host, monkeypatch, tmp_path)
     assert "image_png_b64" not in feedback
 
 
-def test_cut_reply_gets_a_retry_not_a_silent_stop(native_host, monkeypatch):
+def test_cut_reply_gets_a_retry_not_a_silent_stop(plugin_parent, native_host, monkeypatch):
     # Live failure (gemini-2.5-flash): reply cut mid-```python → the loop
     # used to end silently with nothing drawn. Now it tells the model and
     # asks for a shorter complete block, and the retry still executes.
@@ -415,7 +428,7 @@ def test_cut_reply_gets_a_retry_not_a_silent_stop(native_host, monkeypatch):
 
     win = native_host.window
     vp = win.viewport
-    dlg = AsistenteDialog(vp, parent=None)
+    dlg = AsistenteDialog(vp, parent=plugin_parent)
     dlg._provider.setCurrentIndex(0)   # Auto: the AIza key → gemini
     dlg._key.setText("AIzaTest")
     dlg._shots.setChecked(False)
@@ -439,7 +452,7 @@ def test_cut_reply_gets_a_retry_not_a_silent_stop(native_host, monkeypatch):
     assert budgets == [TOKENS_BY_PROVIDER["gemini"]] * 3
 
 
-def test_step_limit_announces_instead_of_silent_stop(native_host, monkeypatch):
+def test_step_limit_announces_instead_of_silent_stop(plugin_parent, native_host, monkeypatch):
     # Second live failure mode: the model was still sending recipes when
     # MAX_ROUNDS ran out and the loop just went quiet. Now it says so and
     # points at "continue" (the convo survives, so continuing works).
@@ -456,7 +469,7 @@ def test_step_limit_announces_instead_of_silent_stop(native_host, monkeypatch):
 
     win = native_host.window
     vp = win.viewport
-    dlg = pa.AsistenteDialog(vp, parent=None)
+    dlg = pa.AsistenteDialog(vp, parent=plugin_parent)
     dlg._provider.setCurrentIndex(0)   # Auto: the AIza key → gemini
     dlg._key.setText("AIzaTest")
     dlg._shots.setChecked(False)
@@ -477,7 +490,7 @@ def test_step_limit_announces_instead_of_silent_stop(native_host, monkeypatch):
     assert "Step limit reached" in dlg._chat.toPlainText()
 
 
-def test_consecutive_failures_hand_control_back(native_host, monkeypatch):
+def test_consecutive_failures_hand_control_back(plugin_parent, native_host, monkeypatch):
     # #461: llama3.2 fed its own TypeError back for all 12 rounds. Three
     # failed blocks in a row stop the loop and say so; a success between
     # failures resets the count.
@@ -493,7 +506,7 @@ def test_consecutive_failures_hand_control_back(native_host, monkeypatch):
 
     monkeypatch.setattr(ai, "chat", fake_chat)
     win = native_host.window
-    dlg = pa.AsistenteDialog(win.viewport, parent=None)
+    dlg = pa.AsistenteDialog(win.viewport, parent=plugin_parent)
     dlg._provider.setCurrentIndex(0)
     dlg._key.setText("AIzaTest")
     dlg._shots.setChecked(False)
@@ -550,19 +563,19 @@ def test_box_helper_builds_a_closed_box(native_host):
     assert "box((x,y,z), (dx,dy,dz)" in ai_recipes.RECIPES
 
 
-def test_encode_photo_rejects_garbage(native_host, tmp_path):
+def test_encode_photo_rejects_garbage(plugin_parent, native_host, tmp_path):
     from plugins.ai_assistant import AsistenteDialog
     bad = tmp_path / "no-es-imagen.jpg"
     bad.write_bytes(b"not an image at all")
     win = native_host.window
-    dlg = AsistenteDialog(win.viewport, parent=None)
+    dlg = AsistenteDialog(win.viewport, parent=plugin_parent)
     assert dlg._encode_photo(str(bad)) is None
     dlg._attach_photo(str(bad))                    # reports, no crash
     assert dlg._foto is None
     assert "Could not read the image." in dlg._chat.toPlainText()
 
 
-def test_send_becomes_stop_and_a_stopped_turn_is_discarded(native_host, monkeypatch):
+def test_send_becomes_stop_and_a_stopped_turn_is_discarded(plugin_parent, native_host, monkeypatch):
     """While a turn runs, Send turns into Stop; stopping frees the UI at
     once and the late reply lands nowhere (stale gen is dropped)."""
     import threading
@@ -576,7 +589,7 @@ def test_send_becomes_stop_and_a_stopped_turn_is_discarded(native_host, monkeypa
     monkeypatch.setattr(ai, "chat", slow_chat)
     win = native_host.window
     try:
-        dlg = AsistenteDialog(win.viewport, parent=None)
+        dlg = AsistenteDialog(win.viewport, parent=plugin_parent)
         dlg._provider.setCurrentIndex(0)
         dlg._key.setText("sk-ant-test")
         dlg._input.setText("hola")
@@ -596,7 +609,7 @@ def test_send_becomes_stop_and_a_stopped_turn_is_discarded(native_host, monkeypa
         gate.set()
 
 
-def test_dropped_or_pasted_image_attaches_with_thumbnail(native_host, tmp_path):
+def test_dropped_or_pasted_image_attaches_with_thumbnail(plugin_parent, native_host, tmp_path):
     """An image dragged onto the prompt (or pasted from the clipboard)
     attaches like Photo… — and the chip shows a thumbnail preview."""
     from PySide6.QtCore import QMimeData, QUrl
@@ -606,7 +619,7 @@ def test_dropped_or_pasted_image_attaches_with_thumbnail(native_host, tmp_path):
     photo = tmp_path / "pieza.png"
     assert QImage(64, 32, QImage.Format_RGB32).save(str(photo))
     win = native_host.window
-    dlg = AsistenteDialog(win.viewport, parent=None)
+    dlg = AsistenteDialog(win.viewport, parent=plugin_parent)
     mime = QMimeData()
     mime.setUrls([QUrl.fromLocalFile(str(photo))])
     path = _drop_image(mime)
@@ -630,7 +643,7 @@ def test_dropped_or_pasted_image_attaches_with_thumbnail(native_host, tmp_path):
     assert _drop_image(mime2) is None
 
 
-def test_sent_photo_bubble_is_clickable(native_host, tmp_path, monkeypatch):
+def test_sent_photo_bubble_is_clickable(plugin_parent, native_host, tmp_path, monkeypatch):
     """A sent photo lands in the chat as a thumbnail resource; clicking
     its link opens the viewer dialog with the full image."""
     from PySide6.QtCore import QUrl
@@ -640,7 +653,7 @@ def test_sent_photo_bubble_is_clickable(native_host, tmp_path, monkeypatch):
     photo = tmp_path / "pieza.png"
     assert QImage(64, 32, QImage.Format_RGB32).save(str(photo))
     win = native_host.window
-    dlg = AsistenteDialog(win.viewport, parent=None)
+    dlg = AsistenteDialog(win.viewport, parent=plugin_parent)
     b64, mime = dlg._encode_photo(str(photo))
     dlg._append_foto(b64, mime, "pieza.png")
     assert len(dlg._fotos) == 1
@@ -668,10 +681,10 @@ def test_user_agent_defeats_cloudflare_and_headers_carry_it():
         assert headers["User-Agent"].startswith("IngeTrazo/")
 
 
-def test_provider_selector_overrides_autodetect(native_host, monkeypatch):
+def test_provider_selector_overrides_autodetect(plugin_parent, native_host, monkeypatch):
     from plugins.ai_assistant import AsistenteDialog
     win = native_host.window
-    dlg = AsistenteDialog(win.viewport, parent=None)
+    dlg = AsistenteDialog(win.viewport, parent=plugin_parent)
     dlg._provider.setCurrentIndex(0)             # Auto (QSettings persist
     dlg._key.setText("sk-ant-algo")              # between tests) → key wins
     assert dlg._effective_provider() == "anthropic"
@@ -777,11 +790,11 @@ def test_panel_builds_without_fixed_font_lookup(monkeypatch):
         QApplication.instance().processEvents()
 
 
-def test_chat_colors_follow_theme(native_host):
+def test_chat_colors_follow_theme(plugin_parent, native_host):
     from PySide6.QtGui import QColor, QPalette
     from plugins.ai_assistant import AsistenteDialog
     win = native_host.window
-    dlg = AsistenteDialog(win.viewport, parent=None)
+    dlg = AsistenteDialog(win.viewport, parent=plugin_parent)
     light = QPalette()
     light.setColor(QPalette.ColorRole.Base, QColor("#ffffff"))
     dlg.setPalette(light)
@@ -792,7 +805,7 @@ def test_chat_colors_follow_theme(native_host):
     assert dlg._chat_colors()["ai"] == "#e8eaed"   # readable on dark
 
 
-def test_each_provider_remembers_its_own_key_and_model(native_host, monkeypatch, tmp_path):
+def test_each_provider_remembers_its_own_key_and_model(plugin_parent, native_host, monkeypatch, tmp_path):
     # Pasting the Gemini key must not erase the Groq one: switching
     # providers when tokens run out has to be two clicks (user report).
     from PySide6.QtCore import QSettings
@@ -802,7 +815,7 @@ def test_each_provider_remembers_its_own_key_and_model(native_host, monkeypatch,
         AsistenteDialog, "_settings",
         lambda self: QSettings(ini, QSettings.Format.IniFormat))
     win = native_host.window
-    dlg = AsistenteDialog(win.viewport, parent=None)
+    dlg = AsistenteDialog(win.viewport, parent=plugin_parent)
     dlg._provider.setCurrentIndex(dlg._provider.findData("groq"))
     dlg._key.setText("gsk_AAA")
     dlg._model.setEditText("openai/gpt-oss-120b")
@@ -820,7 +833,7 @@ def test_each_provider_remembers_its_own_key_and_model(native_host, monkeypatch,
 
     # A fresh dialog on the same settings restores the last provider.
     dlg._save_settings()
-    dlg2 = AsistenteDialog(win.viewport, parent=None)
+    dlg2 = AsistenteDialog(win.viewport, parent=plugin_parent)
     assert dlg2._provider.currentData() == "gemini"
     assert dlg2._key.text() == "AIzaBBB"
 

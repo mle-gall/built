@@ -5,9 +5,10 @@ un grupo o componente lo demás quede gris», 14-10). The fade went towards
 the background, and white faces on a light background stayed white: nothing
 said you were inside a group. Renders two groups, opens one, reads pixels.
 
-Needs a GL context that renders; skipped where the platform has none."""
+Requires a native wgpu surface for pixel readback."""
 from __future__ import annotations
 
+from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -43,107 +44,87 @@ def _square(x, comp):
 
 
 @pytest.mark.parametrize("comp", [False, True], ids=["group", "component"])
-def test_the_rest_reads_grey_and_the_group_keeps_its_colour(comp):
-    from views.main_window import MainWindow
-    w = MainWindow()
-    w.resize(1200, 800)
-    w.show()
-    for _ in range(10):
-        _app.processEvents()
+def test_the_rest_reads_grey_and_the_group_keeps_its_colour(native_gpu_host, comp):
+    w = native_gpu_host.window
+    native_gpu_host.resize(1200, 800, 1.)
     vp = w.viewport
-    try:
-        if not vp.keys_stand_in._can_create_surface():
-            pytest.skip("the Qt platform has no native GPU surface")
-        sc = vp.scene
-        sc.groups.clear()
-        a, b = _square(0, comp), _square(4, comp)
-        sc.groups.extend([a, b])
-        sc.version += 1
-        vp.set_edit_rest_mode("fade")
-        vp.camera.set_view("top")
-        vp.camera.target = V(3, 1, 0)
-        vp.camera.distance = 12
+    sc = vp.scene
+    sc.groups.clear()
+    a, b = _square(0, comp), _square(4, comp)
+    sc.groups.extend([a, b])
+    sc.version += 1
+    vp.set_edit_rest_mode("fade")
+    vp.camera.set_view("top")
+    vp.camera.target = V(3, 1, 0)
+    vp.camera.distance = 12
 
-        def colour(p):
-            vp.update()
-            _app.processEvents()
-            img = live_image(vp)
-            x, y = vp._world_to_pixel(p)
-            r = img.devicePixelRatio()
-            return img.pixelColor(int(x * r), int(y * r))
+    def colour(p):
+        vp.update()
+        native_gpu_host.idle()
+        img = live_image(vp)
+        x, y = vp._world_to_pixel(p)
+        r = img.devicePixelRatio()
+        return img.pixelColor(int(x * r), int(y * r))
 
-        before = colour(V(5, 1, 0))
-        vp.begin_group_edit(a)
-        after = colour(V(5, 1, 0))
-        inside = colour(V(1, 1, 0))
-        # the other group lost a clear step of lightness: grey, not white
-        assert before.lightnessF() - after.lightnessF() > 0.08
-        # the open one keeps its own colour
-        assert abs(inside.lightnessF() - before.lightnessF()) < 0.03
-    finally:
-        w._saved_version = vp.scene.version
-        w.close()
+    before = colour(V(5, 1, 0))
+    vp.begin_group_edit(a)
+    after = colour(V(5, 1, 0))
+    inside = colour(V(1, 1, 0))
+    # the other group lost a clear step of lightness: grey, not white
+    assert before.lightnessF() - after.lightnessF() > 0.08
+    # the open one keeps its own colour
+    assert abs(inside.lightnessF() - before.lightnessF()) < 0.03
 
 
 @pytest.mark.parametrize("mode", ["fade", "hide"])
-def test_people_and_images_go_grey_with_the_rest(tmp_path, mode):
+def test_people_and_images_go_grey_with_the_rest(native_gpu_host, tmp_path, mode):
     """The face-me figures and the reference images are drawn by passes of
     their own: they kept their full colour on a grey model («al editar un
     grupo o componente las imágenes no se ponen en gris», 20-10)."""
     from PySide6.QtGui import QColor, QImage
     from core.group import make_billboard_group
     from core.image_plane import ImagePlane
-    from views.main_window import MainWindow
     red = QImage(16, 16, QImage.Format_ARGB32)
     red.fill(QColor(220, 20, 20))
     path = str(tmp_path / "red.png")
     red.save(path)
-    w = MainWindow()
-    w.resize(1200, 800)
-    w.show()
-    for _ in range(10):
-        _app.processEvents()
+    w = native_gpu_host.window
+    native_gpu_host.resize(1200, 800, 1.)
     vp = w.viewport
-    try:
-        if not vp.keys_stand_in._can_create_surface():
-            pytest.skip("the Qt platform has no native GPU surface")
-        sc = vp.scene
-        sc.groups.clear()
-        a = _square(0, False)
-        person = make_billboard_group(path, 2.0, "person", 1.0,
-                                      position=V(-3, 0, 0))
-        sc.groups.extend([a, person])
-        sc.image_planes.append(ImagePlane(path, V(4, 0, 0), V(2, 0, 0),
-                                          V(0, 0, 2), layer=None))
-        sc.version += 1
-        vp.set_edit_rest_mode(mode)
-        vp.camera.set_view("front")
-        vp.camera.target = V(0.5, 0, 1)
-        vp.camera.distance = 14
+    sc = vp.scene
+    sc.groups.clear()
+    a = _square(0, False)
+    person = make_billboard_group(path, 2.0, "person", 1.0,
+                                  position=V(-3, 0, 0))
+    sc.groups.extend([a, person])
+    sc.image_planes.append(ImagePlane(path, V(4, 0, 0), V(2, 0, 0),
+                                      V(0, 0, 2), layer=None))
+    sc.version += 1
+    vp.set_edit_rest_mode(mode)
+    vp.camera.set_view("front")
+    vp.camera.target = V(0.5, 0, 1)
+    vp.camera.distance = 14
 
-        def colour(p):
-            vp.update()
-            _app.processEvents()
-            img = live_image(vp)
-            x, y = vp._world_to_pixel(p)
-            r = img.devicePixelRatio()
-            return img.pixelColor(int(x * r), int(y * r))
+    def colour(p):
+        vp.update()
+        native_gpu_host.idle()
+        img = live_image(vp)
+        x, y = vp._world_to_pixel(p)
+        r = img.devicePixelRatio()
+        return img.pixelColor(int(x * r), int(y * r))
 
-        spots = (V(-3, 0, 1), V(5, 0, 1))       # the person, the image
-        # A figure's texture is loaded on a timer: wait for it to show.
-        from PySide6.QtTest import QTest
-        for _ in range(40):
-            if all(c.red() > 150 and c.green() < 80
-                   for c in (colour(p) for p in spots)):
-                break
-            QTest.qWait(50)
-        before = [colour(p) for p in spots]
-        for c in before:
-            assert c.red() > 150 and c.green() < 80, c.name()
-        vp.begin_group_edit(a)
-        for c in (colour(p) for p in spots):
-            # neither the full red of before: washed grey, or gone
-            assert c.red() - c.green() < 80, c.name()
-    finally:
-        w._saved_version = vp.scene.version
-        w.close()
+    spots = (V(-3, 0, 1), V(5, 0, 1))       # the person, the image
+    # A figure's texture is loaded on a timer: wait for it to show.
+    from PySide6.QtTest import QTest
+    for _ in range(40):
+        if all(c.red() > 150 and c.green() < 80
+               for c in (colour(p) for p in spots)):
+            break
+        QTest.qWait(50)
+    before = [colour(p) for p in spots]
+    for c in before:
+        assert c.red() > 150 and c.green() < 80, c.name()
+    vp.begin_group_edit(a)
+    for c in (colour(p) for p in spots):
+        # neither the full red of before: washed grey, or gone
+        assert c.red() - c.green() < 80, c.name()

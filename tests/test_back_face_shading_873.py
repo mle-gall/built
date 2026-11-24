@@ -9,6 +9,7 @@ its flat plan tint.
 The rendering cases need a GL context; skipped where there is none."""
 from __future__ import annotations
 
+from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -32,33 +33,22 @@ def _rgb(img: QImage) -> np.ndarray:
 
 
 @pytest.fixture
-def open_box():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        win.show()
-        _app.processEvents()
-        vp = win.viewport
-        if not vp.keys_stand_in._can_create_surface():
-            pytest.skip("the Qt platform has no native GPU surface")
-        m = vp.scene.mesh
-        p = [V(0, 0, 0), V(4, 0, 0), V(4, 4, 0), V(0, 4, 0),
-             V(0, 0, 4), V(4, 0, 4), V(4, 4, 4), V(0, 4, 4)]
-        # Outward walls and floor, no lid.
-        for idx in ((3, 2, 1, 0), (0, 1, 5, 4), (1, 2, 6, 5),
-                    (2, 3, 7, 6), (3, 0, 4, 7)):
-            m.add_face([p[i] for i in idx])
-        vp.scene.version += 1
-        # From above and in front-left, looking down into the box: the far
-        # walls (+x, +y) show their insides — their backs.
-        vp.camera.set_view("iso")
-        vp.camera.fit_to(V(0, 0, 0), V(4, 4, 4))
-        for _ in range(3):
-            _app.processEvents()
-        yield vp
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def open_box(native_gpu_host):
+    win = native_gpu_host.window
+    vp = win.viewport
+    m = vp.scene.mesh
+    p = [V(0, 0, 0), V(4, 0, 0), V(4, 4, 0), V(0, 4, 0),
+         V(0, 0, 4), V(4, 0, 4), V(4, 4, 4), V(0, 4, 4)]
+    # Outward walls and floor, no lid.
+    for idx in ((3, 2, 1, 0), (0, 1, 5, 4), (1, 2, 6, 5),
+                (2, 3, 7, 6), (3, 0, 4, 7)):
+        m.add_face([p[i] for i in idx])
+    vp.scene.version += 1
+    # From above and in front-left, looking down into the box: the far
+    # walls (+x, +y) show their insides — their backs.
+    vp.camera.set_view("iso")
+    vp.camera.fit_to(V(0, 0, 0), V(4, 4, 4))
+    yield vp
 
 
 def _inner_tones(vp, mode):

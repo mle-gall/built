@@ -1,9 +1,10 @@
 """A double click of the wheel recentres the view on the model point under the
 cursor (#979, #1154): no orbit starts, no zoom, the tool in use is not
 disturbed, on sky it slides all the same, and a plain wheel-drag still orbits. Needs a
-GL context that renders: the point comes from the depth of the frame."""
+native wgpu surface: the point comes from the depth of the frame."""
 from __future__ import annotations
 
+from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
 import math
 import os
 
@@ -11,37 +12,26 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from tests.controller_surface import live_image
 import pytest
-from PySide6.QtCore import QEvent, QPointF, Qt
-from PySide6.QtGui import QMouseEvent
 from ingetrazo_core import Vec3 as V
 from PySide6.QtWidgets import QApplication
 
 _app = QApplication.instance() or QApplication([])
 
 
-def _event(kind, x, y, button, buttons):
-    p = QPointF(x, y)
-    return QMouseEvent(kind, p, p, button, buttons, Qt.NoModifier)
-
-
 def _press(vp, x=200, y=200):
-    vp.mousePressEvent(_event(QEvent.MouseButtonPress, x, y,
-                              Qt.MiddleButton, Qt.MiddleButton))
+    vp.window()._host.pointer("press", x, y, 4, 4)
 
 
 def _release(vp, x=200, y=200):
-    vp.mouseReleaseEvent(_event(QEvent.MouseButtonRelease, x, y,
-                                Qt.MiddleButton, Qt.NoButton))
+    vp.window()._host.pointer("release", x, y, 4, 0)
 
 
 def _double(vp, x=200, y=200):
-    vp.mouseDoubleClickEvent(_event(QEvent.MouseButtonDblClick, x, y,
-                                    Qt.MiddleButton, Qt.MiddleButton))
+    vp.window()._host.pointer("double", x, y, 4, 4)
 
 
 def _move(vp, x, y):
-    vp.mouseMoveEvent(_event(QEvent.MouseMove, x, y,
-                             Qt.NoButton, Qt.MiddleButton))
+    vp.window()._host.pointer("move", x, y, 0, 4)
 
 
 def _double_click(vp, x=200, y=200):
@@ -70,19 +60,8 @@ def _view(vp, perspective=True):
 
 
 @pytest.fixture
-def win():
-    from views.main_window import MainWindow
-    w = MainWindow()
-    w.show()
-    for _ in range(10):
-        _app.processEvents()
-    vp = w.viewport
-    if not vp.keys_stand_in._can_create_surface():
-        w.close()
-        pytest.skip("the Qt platform has no native GPU surface")
-    yield w
-    w._saved_version = w.viewport.scene.version
-    w.close()
+def win(native_gpu_host):
+    return native_gpu_host.window
 
 
 def _off_centre(vp):
@@ -182,12 +161,12 @@ def test_on_empty_sky_it_slides_to_the_point_keeping_the_zoom(win, perspective):
     assert abs((y - vp.height() / 2) - (vp.height() / 2 - 30)) < 2.0
 
 
-def test_it_no_longer_frames_the_model(win):
+def test_it_no_longer_frames_the_model(win, monkeypatch):
     vp = win.viewport
     _wall(vp)
     _view(vp)
     framed = []
-    win._act_zoom_extents.triggered.connect(lambda *_: framed.append(1))
+    monkeypatch.setattr(win, "_on_zoom_extents", lambda: framed.append(1))
     _double_click(vp, *_off_centre(vp))
     assert framed == []
     assert not hasattr(vp, "zoomExtentsRequested")
@@ -243,10 +222,8 @@ def test_a_line_half_drawn_stays_half_drawn(win):
     vp.set_active_tool(tool)
     fresh = dict(vars(tool))
     x, y = _off_centre(vp)
-    vp.mousePressEvent(_event(QEvent.MouseButtonPress, x, y,
-                              Qt.LeftButton, Qt.LeftButton))
-    vp.mouseReleaseEvent(_event(QEvent.MouseButtonRelease, x, y,
-                                Qt.LeftButton, Qt.NoButton))
+    vp.window()._host.pointer("press", x, y, 1, 1)
+    vp.window()._host.pointer("release", x, y, 1, 0)
     started = dict(vars(tool))
     assert started != fresh                            # a line under way
     edges = len(vp.scene.mesh.edges)
@@ -276,7 +253,7 @@ def test_it_works_in_a_tab_opened_later(win):
     """Each tab has its own viewport, and its wheel recentres that one."""
     first = win.viewport
     first_target = V(first.camera.target)
-    win._new_document()
+    win.new_document()
     vp = win.viewport
     assert vp is not first
     for _ in range(10):
@@ -296,8 +273,6 @@ def test_a_double_click_of_the_left_button_does_not_recentre(win):
     _view(vp)
     target = V(vp.camera.target)
     x, y = _off_centre(vp)
-    vp.mouseDoubleClickEvent(_event(QEvent.MouseButtonDblClick, x, y,
-                                    Qt.LeftButton, Qt.LeftButton))
-    vp.mouseReleaseEvent(_event(QEvent.MouseButtonRelease, x, y,
-                                Qt.LeftButton, Qt.NoButton))
+    vp.window()._host.pointer("double", x, y, 1, 1)
+    vp.window()._host.pointer("release", x, y, 1, 0)
     assert vp.camera.target == target

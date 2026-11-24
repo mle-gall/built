@@ -115,3 +115,26 @@ def one_off_export(win, fmt, destination):
         win._host.idle()
     assert not win._delivery_queue and destination.is_file()
     return form
+
+
+@pytest.fixture
+def native_gpu_host(native_host, monkeypatch):
+    """Attach the native renderer to a hidden platform window for pixel readbacks."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QApplication, QWidget
+    from views.wgpu_surface import window_handles
+    if QApplication.platformName() in {"offscreen", "minimal"}:
+        pytest.skip("pixel readback requires a native window system")
+    surface = QWidget()
+    surface.setAttribute(Qt.WA_DontShowOnScreen)
+    surface.resize(native_host.width, native_host.height)
+    handle, platform = window_handles(surface)
+    # The window handle must outlive the renderer in native_host's teardown.
+    native_host._test_surface = surface
+    native_host.ns_view = handle
+    native_host.surface_handles = platform
+    # Pixel assertions sample model coordinates. Keep egui out of that buffer.
+    from views import wgpu_ui
+    monkeypatch.setattr(wgpu_ui, "attach", lambda view: None)
+    assert native_host.attach_surface() is not None
+    return native_host

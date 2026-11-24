@@ -9,6 +9,7 @@ shaded the other way round. Both instance paths re-shade now — the CPU
 chunk (copies with glass or painted backs) and the GPU instanced pass."""
 from __future__ import annotations
 
+from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -76,37 +77,28 @@ def _pixels(img: QImage):
     return buf.reshape(a.height(), a.width(), 4)[..., :3].astype(int).copy()
 
 
-def test_the_gpu_pass_lights_a_turned_copy_like_the_plain_group():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    win.show()
-    _app.processEvents()
+def test_the_gpu_pass_lights_a_turned_copy_like_the_plain_group(native_gpu_host):
+    win = native_gpu_host.window
     vp = win.viewport
-    try:
-        if not vp.keys_stand_in._can_create_surface():
-            pytest.skip("the Qt platform has no native GPU surface")
-        scene = vp.scene
-        scene.groups[:] = []
-        cam = vp.camera
-        cam.target, cam.distance = V(0.5, 0.3, 0.6), 6.0
-        cam.set_view("iso")
-        proto = _box()
-        far = Group(proto, "lejos")             # a sibling out of view
-        far.xform = QMatrix4x4()
-        far.xform.translate(0, 500, 0)
-        inst = Group(proto, "copia")
-        inst.xform = _turn()
-        scene.groups += [far, inst]
-        scene.version += 1
-        assert vp._instanced_eligible(inst)
-        as_copy = _pixels(vp.render_image(300, 300, overlays=False))
-        scene.groups[:] = [Group(transformed_mesh(_box(), _turn()), "g")]
-        scene.version += 1
-        as_group = _pixels(vp.render_image(300, 300, overlays=False))
-        diff = np.abs(as_copy - as_group).sum(axis=2)
-        # Face interiors agree to the bake's 1/64 steps; only edge pixels
-        # (anti-aliasing) may differ more.
-        assert np.percentile(diff, 99) <= 12, int(np.percentile(diff, 99))
-    finally:
-        win._saved_version = vp.scene.version
-        win.close()
+    scene = vp.scene
+    scene.groups[:] = []
+    cam = vp.camera
+    cam.target, cam.distance = V(0.5, 0.3, 0.6), 6.0
+    cam.set_view("iso")
+    proto = _box()
+    far = Group(proto, "lejos")             # a sibling out of view
+    far.xform = QMatrix4x4()
+    far.xform.translate(0, 500, 0)
+    inst = Group(proto, "copia")
+    inst.xform = _turn()
+    scene.groups += [far, inst]
+    scene.version += 1
+    assert vp._instanced_eligible(inst)
+    as_copy = _pixels(vp.render_image(300, 300, overlays=False))
+    scene.groups[:] = [Group(transformed_mesh(_box(), _turn()), "g")]
+    scene.version += 1
+    as_group = _pixels(vp.render_image(300, 300, overlays=False))
+    diff = np.abs(as_copy - as_group).sum(axis=2)
+    # Face interiors agree to the bake's 1/64 steps; only edge pixels
+    # (anti-aliasing) may differ more.
+    assert np.percentile(diff, 99) <= 12, int(np.percentile(diff, 99))

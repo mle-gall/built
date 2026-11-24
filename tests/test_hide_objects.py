@@ -11,6 +11,7 @@ editing.
 """
 from __future__ import annotations
 
+from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
 import os
 
 import pytest
@@ -102,27 +103,21 @@ def test_a_hidden_face_round_trips_through_igz(tmp_path):
     assert sum(1 for f in scene2.mesh.faces if f.attrs.get("hidden")) == 1
 
 
-def test_hidden_faces_leave_a_groups_chunk_but_keep_their_edges():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    win.show()
+def test_hidden_faces_leave_a_groups_chunk_but_keep_their_edges(native_host):
+    win = native_host.window
     _app.processEvents()
     vp = win.viewport
-    try:
-        g = _group("caja")
-        vp.scene.groups.append(g)
-        vp.scene.version += 1
-        before = vp._group_chunk(g)
-        assert len(before["faces"]) == 6
-        vp.history.execute(HideCommand([g.mesh.faces[0]]))
-        after = vp._group_chunk(g)
-        assert len(after["faces"]) == 5             # rebuilt without it
-        assert after["edges"] == before["edges"]    # its edges stay drawn
-        vp.history.undo()
-        assert len(vp._group_chunk(g)["faces"]) == 6
-    finally:
-        win._saved_version = vp.scene.version
-        win.close()
+    g = _group("caja")
+    vp.scene.groups.append(g)
+    vp.scene.version += 1
+    before = vp._group_chunk(g)
+    assert len(before["faces"]) == 6
+    vp.history.execute(HideCommand([g.mesh.faces[0]]))
+    after = vp._group_chunk(g)
+    assert len(after["faces"]) == 5             # rebuilt without it
+    assert after["edges"] == before["edges"]    # its edges stay drawn
+    vp.history.undo()
+    assert len(vp._group_chunk(g)["faces"]) == 6
 
 
 def test_the_hidden_view_makes_hidden_things_selectable_but_never_visible():
@@ -162,44 +157,38 @@ def test_hidden_view_flags_travel_in_the_document_and_in_scenes(tmp_path):
     assert scene.show_hidden_objects
 
 
-def test_ghost_pass_draws_and_unhide_selected_brings_them_back():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    win.show()
+def test_ghost_pass_draws_and_unhide_selected_brings_them_back(native_gpu_host):
+    win = native_gpu_host.window
     _app.processEvents()
     vp = win.viewport
-    try:
-        g = _group("caja")
-        vp.scene.groups.append(g)
-        _box(vp.scene.mesh, x0=5.0)
-        face = vp.scene.mesh.faces[0]
-        vp.scene.version += 1
-        vp.scene.select([g, face])
-        win._on_hide()
-        assert g.hidden and face.attrs.get("hidden")
-        if not vp.keys_stand_in._can_create_surface():
-            pytest.skip("the Qt platform has no native GPU surface")
-        from tests.controller_surface import live_image
-        from views.wgpu_scene import OBJECT_HIDDEN
-        live_image(vp)
-        assert vp.keys_stand_in.packed.reveal_hidden == (False, False)
-        win._act_hidden_objects.setChecked(True)
-        win._act_hidden_geometry.setChecked(True)
-        live_image(vp)
-        packed = vp.keys_stand_in.packed
-        assert packed.reveal_hidden == (True, True)
-        assert any(row["info"][2] & OBJECT_HIDDEN for row in packed.instances)
-        assert sum(packed.hidden_commands["count"]) > 0
-        # selectable again → Unhide ▸ Selected
-        vp.scene.select([g, face])
-        win._on_unhide_selected()
-        assert not g.hidden and not face.attrs.get("hidden")
-        live_image(vp)
-        packed = vp.keys_stand_in.packed
-        assert not any(row["info"][2] & OBJECT_HIDDEN for row in packed.instances)
-    finally:
-        win._saved_version = vp.scene.version
-        win.close()
+    g = _group("caja")
+    vp.scene.groups.append(g)
+    _box(vp.scene.mesh, x0=5.0)
+    face = vp.scene.mesh.faces[0]
+    vp.scene.version += 1
+    vp.scene.select([g, face])
+    win._on_hide()
+    assert g.hidden and face.attrs.get("hidden")
+    if not vp.keys_stand_in._can_create_surface():
+        pytest.skip("the Qt platform has no native GPU surface")
+    from tests.controller_surface import live_image
+    from views.wgpu_scene import OBJECT_HIDDEN
+    live_image(vp)
+    assert vp.keys_stand_in.packed.reveal_hidden == (False, False)
+    win._set_hidden_view("show_hidden_objects", True)
+    win._set_hidden_view("show_hidden_geometry", True)
+    live_image(vp)
+    packed = vp.keys_stand_in.packed
+    assert packed.reveal_hidden == (True, True)
+    assert any(row["info"][2] & OBJECT_HIDDEN for row in packed.instances)
+    assert sum(packed.hidden_commands["count"]) > 0
+    # selectable again → Unhide ▸ Selected
+    vp.scene.select([g, face])
+    win._on_unhide_selected()
+    assert not g.hidden and not face.attrs.get("hidden")
+    live_image(vp)
+    packed = vp.keys_stand_in.packed
+    assert not any(row["info"][2] & OBJECT_HIDDEN for row in packed.instances)
 
 
 def test_hidden_flag_and_uid_round_trip_through_igz(tmp_path):
@@ -263,71 +252,59 @@ def test_a_scene_from_before_this_field_leaves_hidden_objects_alone():
     assert g.hidden                              # hands-off
 
 
-def test_hiding_a_container_hides_its_nested_placements_in_the_viewport():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    win.show()
+def test_hiding_a_container_hides_its_nested_placements_in_the_viewport(native_host):
+    win = native_host.window
     _app.processEvents()
     vp = win.viewport
-    try:
-        letter = _group("hoja")
-        letter.xform = QMatrix4x4()
-        container = Group(name="arbol")
-        container.adopt([letter])
-        vp.scene.groups.append(container)
-        vp.scene.version += 1
-        proxies = [g for g in vp._placements() if g.owner is container]
-        assert proxies and not any(p.hidden for p in proxies)
+    letter = _group("hoja")
+    letter.xform = QMatrix4x4()
+    container = Group(name="arbol")
+    container.adopt([letter])
+    vp.scene.groups.append(container)
+    vp.scene.version += 1
+    proxies = [g for g in vp._placements() if g.owner is container]
+    assert proxies and not any(p.hidden for p in proxies)
 
-        vp.history.execute(HideCommand([container]))
-        proxies = [g for g in vp._placements() if g.owner is container]
-        assert proxies and all(p.hidden for p in proxies)
-        assert all(not vp.scene.entity_visible(p) for p in proxies)
-        _paints(vp)                                       # still paints
+    vp.history.execute(HideCommand([container]))
+    proxies = [g for g in vp._placements() if g.owner is container]
+    assert proxies and all(p.hidden for p in proxies)
+    assert all(not vp.scene.entity_visible(p) for p in proxies)
+    _paints(vp)                                       # still paints
 
-        # a child hidden on its own stays hidden inside a visible parent
-        vp.history.undo()
-        vp.history.execute(HideCommand([letter]))
-        proxies = [g for g in vp._placements() if g.owner is container]
-        assert all(p.hidden for p in proxies)
-        assert vp.scene.entity_visible(container)
-    finally:
-        win._saved_version = vp.scene.version
-        win.close()
+    # a child hidden on its own stays hidden inside a visible parent
+    vp.history.undo()
+    vp.history.execute(HideCommand([letter]))
+    proxies = [g for g in vp._placements() if g.owner is container]
+    assert all(p.hidden for p in proxies)
+    assert vp.scene.entity_visible(container)
 
 
-def test_edit_menu_hide_unhide_last_and_all():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    win.show()
+def test_edit_menu_hide_unhide_last_and_all(native_host):
+    win = native_host.window
     _app.processEvents()
     vp = win.viewport
-    try:
-        a, b = _group("a"), _group("b", x0=3.0)
-        vp.scene.groups += [a, b]
-        _box(vp.scene.mesh, x0=6.0)
-        edge = vp.scene.mesh.edges[0]
-        vp.scene.version += 1
+    a, b = _group("a"), _group("b", x0=3.0)
+    vp.scene.groups += [a, b]
+    _box(vp.scene.mesh, x0=6.0)
+    edge = vp.scene.mesh.edges[0]
+    vp.scene.version += 1
 
-        vp.scene.select([a])
-        win._on_hide()
-        assert a.hidden and not b.hidden
-        vp.scene.select([b, edge])
-        win._on_hide()
-        assert b.hidden and edge.hidden
+    vp.scene.select([a])
+    win._on_hide()
+    assert a.hidden and not b.hidden
+    vp.scene.select([b, edge])
+    win._on_hide()
+    assert b.hidden and edge.hidden
 
-        win._on_unhide_last()                      # the second Hide comes back
-        assert not b.hidden and not edge.hidden and a.hidden
-        win._on_unhide_last()
-        assert not a.hidden
-        assert win._hidden_everywhere() == []
+    win._on_unhide_last()                      # the second Hide comes back
+    assert not b.hidden and not edge.hidden and a.hidden
+    win._on_unhide_last()
+    assert not a.hidden
+    assert win._hidden_everywhere() == []
 
-        vp.scene.select([a, b])
-        win._on_hide()
-        win._on_unhide_all()
-        assert not a.hidden and not b.hidden
-        vp.history.undo()                          # Unhide All is one step
-        assert a.hidden and b.hidden
-    finally:
-        win._saved_version = vp.scene.version
-        win.close()
+    vp.scene.select([a, b])
+    win._on_hide()
+    win._on_unhide_all()
+    assert not a.hidden and not b.hidden
+    vp.history.undo()                          # Unhide All is one step
+    assert a.hidden and b.hidden

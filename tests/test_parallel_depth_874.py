@@ -8,6 +8,7 @@ without a known reach the range is the one it always was, and it is never
 wider than that."""
 from __future__ import annotations
 
+from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -55,19 +56,8 @@ def _rgb(img: QImage) -> np.ndarray:
 
 
 @pytest.fixture
-def win():
-    from views.main_window import MainWindow
-    w = MainWindow()
-    try:
-        w.show()
-        _app.processEvents()
-        vp = w.viewport
-        if not vp.keys_stand_in._can_create_surface():
-            pytest.skip("the Qt platform has no native GPU surface")
-        yield w
-    finally:
-        w._saved_version = w.viewport.scene.version
-        w.close()
+def win(native_gpu_host):
+    return native_gpu_host.window
 
 
 def test_faces_close_together_do_not_fight_in_parallel(win):
@@ -90,7 +80,6 @@ def test_faces_close_together_do_not_fight_in_parallel(win):
         vp.camera.set_view("iso")
         vp.camera.set_projection(proj)
         vp.camera.fit_to(V(0, 0, 0), V(1, 1, 0.01))
-        _app.processEvents()
         px = _rgb(vp.render_image(400, 300, overlays=False))
         red = (px[..., 0] > 150) & (px[..., 2] < 100)
         blue = (px[..., 2] > 150) & (px[..., 0] < 100)

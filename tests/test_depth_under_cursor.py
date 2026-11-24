@@ -6,6 +6,7 @@ model of 21 406 placements the first wheel notch built the index — every
 placement baked, minutes and 8 GB. Needs a GL context that renders."""
 from __future__ import annotations
 
+from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -27,16 +28,9 @@ def _box(scene, x0, y0, z0, x1, y1, z1):
 
 
 @pytest.fixture
-def win():
-    from views.main_window import MainWindow
-    w = MainWindow()
-    w.show()
-    for _ in range(10):
-        _app.processEvents()
+def win(native_gpu_host):
+    w = native_gpu_host.window
     vp = w.viewport
-    if not vp.keys_stand_in._can_create_surface():
-        w.close()
-        pytest.skip("the Qt platform has no native GPU surface")
     vp.scene.guides.clear()
     _box(vp.scene, -1, -1, 0, 1, 1, 2)                   # front face at y = -1
     vp.scene.version += 1
@@ -50,12 +44,9 @@ def win():
     # in the empty corner — and the face test then failed on the platform,
     # not on the zoom (the same tests pass on a real GL).
     if vp._depth_world_at(10, 10) != ("background", None):
-        w._saved_version = vp.scene.version
-        w.close()
+
         pytest.skip("surface has no reliable background depth")
     yield w
-    w._saved_version = vp.scene.version
-    w.close()
 
 
 def _no_index(vp, monkeypatch):

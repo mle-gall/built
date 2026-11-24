@@ -12,6 +12,7 @@ No GL context is needed: the snapshot is synthesized by hand for a flat
 wall, the way ``_capture_depth`` would have read it back."""
 from __future__ import annotations
 
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -25,34 +26,28 @@ _app = QApplication.instance() or QApplication([])
 
 
 @pytest.fixture
-def vp_with_wall():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        win.show()
-        for _ in range(5):
-            _app.processEvents()
-        vp = win.viewport
-        vp.camera.set_view("front")          # looking toward +Y
-        vp.camera.perspective = False
-        vp.camera.fit_to(V(-3, -3, 0), V(3, 3, 3))
-        w, h = vp.width(), vp.height()
-        mvp = vp.camera.projection_matrix() * vp.camera.view_matrix()
-        inv, ok = mvp.inverted()
-        assert ok
-        # The wall is the plane y=0; its read-back depth is the NDC depth
-        # of any point on it. It covers the middle band of the frame.
-        from ingetrazo_core import Vec4 as QVector4D
-        clip = mvp.map(QVector4D(0.0, 0.0, 1.0, 1.0))
-        d_wall = (clip.z() / clip.w() + 1.0) * 0.5
-        buf = np.ones((h, w), dtype=np.float32)
-        buf[h // 3:2 * h // 3, w // 4:3 * w // 4] = d_wall
-        vp._depth_snap = (buf, mvp, inv, w, h,
-                          vp.camera.eye(), vp.camera.forward())
-        yield vp
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def vp_with_wall(native_host):
+    win = native_host.window
+    for _ in range(5):
+        _app.processEvents()
+    vp = win.viewport
+    vp.camera.set_view("front")          # looking toward +Y
+    vp.camera.perspective = False
+    vp.camera.fit_to(V(-3, -3, 0), V(3, 3, 3))
+    w, h = vp.width(), vp.height()
+    mvp = vp.camera.projection_matrix() * vp.camera.view_matrix()
+    inv, ok = mvp.inverted()
+    assert ok
+    # The wall is the plane y=0; its read-back depth is the NDC depth
+    # of any point on it. It covers the middle band of the frame.
+    from ingetrazo_core import Vec4 as QVector4D
+    clip = mvp.map(QVector4D(0.0, 0.0, 1.0, 1.0))
+    d_wall = (clip.z() / clip.w() + 1.0) * 0.5
+    buf = np.ones((h, w), dtype=np.float32)
+    buf[h // 3:2 * h // 3, w // 4:3 * w // 4] = d_wall
+    vp._depth_snap = (buf, mvp, inv, w, h,
+                      vp.camera.eye(), vp.camera.forward())
+    yield vp
 
 
 def _points(vp):

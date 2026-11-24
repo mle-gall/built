@@ -10,6 +10,7 @@ closed mesh repainted (an undo after leaving it, a material edited) bumped no
 serial. Real frames are read back, in the offscreen platform's GL context."""
 from __future__ import annotations
 
+from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -90,28 +91,9 @@ def container_own(vp):
 LAYOUTS = [plain, component, nested_plain, nested_component, container_own]
 
 
-@pytest.fixture(scope="module")
-def window():
-    from views.main_window import MainWindow
-    if QApplication.platformName() in ("offscreen", "minimal"):
-        pytest.skip("no native GPU surface")
-    window = MainWindow()
-    window.show()
-    _app.processEvents()
-    yield window
-    window._saved_version = window.viewport.scene.version
-    window.close()
-    window.deleteLater()
-
-
 @pytest.fixture
-def win(window):
-    from PySide6.QtCore import QCoreApplication, QEvent
-    previous = window.active_document()
-    window._new_document()
-    window.close_document(previous, ask=False)
-    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
-    _app.processEvents()
+def win(native_gpu_host):
+    window = native_gpu_host.window
     window.viewport.scene.guides.clear()
     return window
 

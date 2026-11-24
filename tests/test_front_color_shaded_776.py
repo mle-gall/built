@@ -10,6 +10,7 @@ take it too.
 The rendering cases need a GL context; skipped where there is none."""
 from __future__ import annotations
 
+from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -46,26 +47,13 @@ def _box(mesh, x0=0.0, color=None):
 
 
 @pytest.fixture
-def win():
-    from views.main_window import MainWindow
-    w = MainWindow()
-    try:
-        w.show()
-        _app.processEvents()
-        vp = w.viewport
-        if not vp.keys_stand_in._can_create_surface():
-            pytest.skip("the Qt platform has no native GPU surface")
-        yield w
-    finally:
-        w._saved_version = w.viewport.scene.version
-        w.close()
+def win(native_gpu_host):
+    return native_gpu_host.window
 
 
 def _frame(vp, lo, hi):
     vp.camera.set_view("iso")
     vp.camera.fit_to(lo, hi)
-    for _ in range(3):
-        _app.processEvents()
 
 
 def _shot(vp):
@@ -107,8 +95,6 @@ def test_back_faces_keep_the_back_tint(win):
     sc.version += 1
     vp.camera.set_view("top")
     vp.camera.fit_to(V(-0.5, -0.5, 0), V(2.5, 2.5, 2))
-    for _ in range(3):
-        _app.processEvents()
     sc.display_style.face_mode = "shaded"
     stock = _shot(vp)
     sc.display_style.front_color = (1.0, 0.0, 0.0)
