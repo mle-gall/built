@@ -218,13 +218,20 @@ mod perf {
         }
     }
 
+    /// A sample measured elsewhere, in milliseconds.
+    pub fn note_ms(what: &'static str, ms: f64) {
+        if on() {
+            SAMPLES.lock().unwrap().push((what, ms));
+        }
+    }
+
     pub fn report() {
         if !on() {
             return;
         }
         let samples = std::mem::take(&mut *SAMPLES.lock().unwrap());
         let mut parts = Vec::new();
-        for what in ["move_ms", "frame_ms", "open_stall_ms", "open_total_ms", "open_handover_ms"] {
+        for what in ["move_ms", "frame_ms", "py_frame_ms", "open_stall_ms", "open_total_ms", "open_handover_ms"] {
             let mut v: Vec<f64> = samples.iter().filter(|(w, _)| *w == what).map(|(_, x)| *x).collect();
             if v.is_empty() {
                 continue;
@@ -1288,9 +1295,13 @@ impl App {
             }
             WindowEvent::RedrawRequested => pyo3::Python::attach(|_| {
                 let t0 = Instant::now();
-                let drew = self.win(id).is_some_and(|w| w.host.frame().is_some());
-                if drew {
+                let out = self.win(id).and_then(|w| w.host.frame());
+                let drew = out.is_some();
+                if let Some((cpu, _, _)) = out {
                     perf::note("frame_ms", t0);
+                    // The frame call less the renderer's own encode: Python
+                    // glue and the Rust calls it makes (docs/render-glue-port.md).
+                    perf::note_ms("py_frame_ms", (t0.elapsed().as_secs_f64() * 1e3 - cpu).max(0.));
                 }
                 if drew {
                     let win = self.win_mut(id).unwrap();
