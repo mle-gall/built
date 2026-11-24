@@ -45,6 +45,7 @@ mod dae_write;
 mod dxf_read;
 mod view_svg;
 mod file_model;
+mod fuse;
 mod obj_read;
 mod obj_write;
 mod gltf_maps;
@@ -148,6 +149,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     dxf_read::register(m)?;
     view_svg::register(m)?;
     m.add_function(wrap_pyfunction!(file_model::dae_add_fused, m)?)?;
+    fuse::register(m)?;
     obj_read::register(m)?;
     obj_write::register(m)?;
     gltf_maps::register(m)?;

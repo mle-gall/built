@@ -488,12 +488,13 @@ fn obj_load<'p>(
                 let m = new_mesh(py)?;
                 let rows = raw(py, &p.faces, shift)?;
                 dae_add_fused(&m, &fuse.call_method1("fuse_coplanar_loops", (rows,))?)?;
-                for op in [
-                    "soften_by_smoothing_group",
-                    "soften_smooth_edges",
-                    "drop_smoothing_groups",
-                ] {
-                    fuse.call_method1(op, (&m,))?;
+                let has_smoothing_groups = p.faces.iter().any(|f| f.smooth != 0);
+                if has_smoothing_groups {
+                    fuse.call_method1("soften_by_smoothing_group", (&m,))?;
+                }
+                fuse.call_method1("soften_smooth_edges", (&m,))?;
+                if has_smoothing_groups {
+                    fuse.call_method1("drop_smoothing_groups", (&m,))?;
                 }
                 if multi {
                     if m.getattr("faces")?.len()? == 0 {
