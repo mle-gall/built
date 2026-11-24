@@ -347,21 +347,6 @@ def test_the_header_shows_and_hides_columns_and_remembers():
     _close(win2)
 
 
-def test_several_rows_painted_and_unpainted_in_one_step():
-    building, tree = _building()
-    level1 = building.children[0]
-    wall, slab = level1.children
-    win, scene, panel = _window_with(building, tree)
-    red = {"color": [0.8, 0.1, 0.1]}
-    panel.paint_groups([wall, slab], material=red)
-    assert wall.material == red and slab.material == red
-    panel.paint_groups([wall, slab], clear=True)
-    assert wall.material is None and slab.material is None
-    win.viewport.history.undo()
-    assert wall.material == red and slab.material == red
-    _close(win)
-
-
 # ---- 10 · A plan of a group ------------------------------------------------
 
 def test_a_plan_of_a_group_is_a_cut_a_scene_and_a_sheet_in_one_step():

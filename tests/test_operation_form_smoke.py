@@ -713,12 +713,23 @@ def dispatch(self, command):
         from tools.paint import PaintTool
         wgpu_library.edit_field(self.window,self.view,"brush_name:"+PaintTool.current_material.name,"Site paint")
         self.fixture_swatch=(PaintTool.current_material.name=="Site paint" and "Site paint" not in scene.materials)
+    elif command=="fixture-paint-rows":
+        from views import chrome_sheet
+        group=scene.groups[0]
+        wgpu_ui._tree_action(self.window,self.view,wgpu_ui.SEP.join(("paintrows","i:"+group.uid)))
+    elif command=="fixture-apply-paint":
+        from views import chrome_sheet
+        st=self.window._chrome_sheet
+        self.fixture_paint_sheet=st.built.id
+        chrome_sheet.action(self.window,chrome_sheet.SEP.join(("tree-material","open","ral:RAL 1000")))
+        self.fixture_row_paint=scene.groups[0].material["mat"]
     self.request_frame()
 def facts(self):
     scene=self.viewport.scene
     paths=scene.layer("Paths")
     row=self.window._scene_tabs.marked_view()
     return dict(state(self), photo=getattr(self,"fixture_photo",False), restored=getattr(self,"fixture_restored",False),
+        paint_sheet=getattr(self,"fixture_paint_sheet",None), row_paint=getattr(self,"fixture_row_paint",None),
         swatch=getattr(self,"fixture_swatch",False), editor=self.renderer.ui_input_state()["drawing_line"],
         line=paths.linetype, hatch=paths.hatch, mortar=paths.mortar, size=scene.bricks.get("brick"),
         folder=scene.layer_folder_names.get(paths.folder,paths.folder),scene_folder=getattr(row,"folder",None))
@@ -740,6 +751,11 @@ wait 350
 menu fixture-preview
 wait 500
 state
+menu fixture-paint-rows
+wait 450
+menu fixture-apply-paint
+wait 350
+state
 quit
 """)
     result = run([str(BIN), "--root", str(ROOT), "--venv", str(venv), "--new-instance",
@@ -749,6 +765,7 @@ quit
     assert result.returncode == 0 and "Traceback" not in log, log
     states = [json.loads(line.removeprefix("[built] state ")) for line in log.splitlines()
               if line.startswith("[built] state ")]
+    assert states[3]["paint_sheet"] == "tree-material" and states[3]["row_paint"].startswith("RAL 1000"), log
     opened, saved, edited = states[:3]
     assert opened["editor"] and not saved["editor"] and saved["line"] == "lin:Boundary", log
     assert edited["hatch"] == "brick" and edited["mortar"] and edited["size"] == [250, 115, 60, 8], log

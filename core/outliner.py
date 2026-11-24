@@ -616,53 +616,6 @@ def fit_scale(scene, view, w_mm: float, h_mm: float,
     return float(STANDARD_SCALES[-1])
 
 
-def material_choices(scene, recent=()) -> list:
-    """``[(label, paint)]`` for the Browser's «Material ▸» menu (#565,
-    @fafecm: paint several rows from the Browser without going to the
-    Materials tab): the document's materials by name, then the recent
-    paints not already listed, newest first. ``paint`` is a container
-    material — the keys a face's attrs use, as the Paint tool hands one to
-    a group — so a texture travels as well as a colour."""
-    from tools.paint import recent_key
-    out: list = []
-    seen: set = set()
-    mats = getattr(scene, "materials", None) or {}
-    for name in sorted(mats, key=lambda n: n.casefold()):
-        m = mats[name]
-        if m.color is None and m.texture is None:
-            continue
-        paint: dict = {"mat": name}
-        if m.texture is not None:
-            paint["texture"] = dict(m.texture)
-        else:
-            paint["color"] = list(m.color)
-        if m.opacity is not None:
-            paint["opacity"] = float(m.opacity)
-        out.append((name, paint))
-        seen.add(recent_key(paint))
-    for entry in recent or ():
-        key = recent_key(entry)
-        if key in seen or not (entry.get("color") or entry.get("texture")):
-            continue
-        seen.add(key)
-        out.append((paint_label(entry), dict(entry)))
-    return out
-
-
-def paint_label(paint: dict) -> str:
-    """A name for a paint in a menu: its material's, the image's file name,
-    or the colour as ``#RRGGBB``."""
-    import os
-    if paint.get("mat"):
-        return str(paint["mat"])
-    tex = paint.get("texture")
-    if tex and tex.get("path"):
-        return os.path.basename(str(tex["path"]))
-    col = paint.get("color") or (0.0, 0.0, 0.0)
-    return "#" + "".join(f"{max(0, min(255, round(float(c) * 255))):02X}"
-                         for c in list(col)[:3])
-
-
 # ---- Renaming several rows at once (#565, #87) --------------------------------
 
 def numbered_names(count: int, base: str, start: int = 1,

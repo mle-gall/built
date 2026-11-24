@@ -3338,6 +3338,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<change_callbacks::ChangeCallbacks>()?;
     m.add_class::<window_timers::WindowTimer>()?;
     m.add_class::<camera_inspector::CameraInspector>()?;
+    m.add_class::<tree_grouping::paint::TreePaint>()?;
     m.add_class::<registry_editor::RegistryEditor>()?;
     m.add_class::<render_result::RenderResult>()?;
     m.add_function(wrap_pyfunction!(font_lengths::font_length, m)?)?;

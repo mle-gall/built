@@ -34,7 +34,10 @@ impl TagCounts {
     pub fn tick(&mut self, history: &Bound<'_, PyAny>) -> PyResult<bool> {
         let scene = history.getattr("scene")?;
         let revision = || scene.getattr("content_version")?.extract::<i64>();
-        let document = scene.getattr("_root")?.getattr("_doc_key")?.extract::<u64>()?;
+        let document = scene
+            .getattr("_root")?
+            .getattr("_doc_key")?
+            .extract::<u64>()?;
         let version = (document, revision()?);
         if self.version != Some(version) {
             *self = Self::default();
