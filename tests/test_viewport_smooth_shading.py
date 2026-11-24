@@ -13,8 +13,6 @@ from __future__ import annotations
 
 import math
 import os
-import inspect
-import types
 from collections import defaultdict
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -34,7 +32,7 @@ elif not isinstance(_inst, QApplication):
 from core.group import Group                                      # noqa: E402
 from core.mesh import Mesh                                        # noqa: E402
 from core.scene import Scene                                      # noqa: E402
-from tests.controller_surface import ControllerSurface as Viewport
+from views.document_interaction import DocumentInteraction
 
 SIDES = 12
 # A light from the side: every side face of the cylinder gets a clearly
@@ -70,7 +68,7 @@ def _box(mesh):
     return mesh
 
 
-class _VP:
+class _VP(DocumentInteraction):
     def __init__(self, scene):
         self.scene = scene
 
@@ -82,18 +80,8 @@ class _VP:
 
 
 def _stub(scene):
-    """A Viewport with no GL: every plain method bound, no disk cache."""
+    """A document surface with no window or disk cache."""
     vp = _VP(scene)
-    for name in dir(Viewport):
-        if name.startswith("__") or hasattr(vp, name):
-            continue
-        attr = inspect.getattr_static(Viewport, name)
-        if isinstance(attr, types.FunctionType):
-            setattr(vp, name, attr.__get__(vp))
-        elif isinstance(attr, staticmethod):
-            setattr(vp, name, attr.__func__)
-        elif not callable(attr) and attr is not None:
-            setattr(vp, name, attr)
     vp.active_tool = None
     vp._chunk_cache_load = None
     vp._chunk_cache_store = None
@@ -139,7 +127,7 @@ def test_a_soft_side_face_shades_across_its_width():
 
 def test_the_cap_keeps_its_flat_colour_against_a_soft_side():
     mesh = _cylinder(Mesh())
-    flat = _stub(Scene())._shaded_color(Viewport.DEFAULT_FACE_COLOR,
+    flat = _stub(Scene())._shaded_color(DocumentInteraction.DEFAULT_FACE_COLOR,
                                         QVector3D(0, 0, 1))
     rows = _chunk_rows(mesh)
     caps = [r for r in rows if abs(r[2]) < 1e-6 or abs(r[2] - 2) < 1e-6]
