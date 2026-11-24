@@ -1063,7 +1063,7 @@ def sweep_tjunctions(mesh, seedkeys=None) -> None:
     from core.mesh import _STITCH_TOL
     seeds = list(seedkeys or ())
     while True:
-        scan = scan_index.scan(mesh) or scan_index.Scan(mesh, mod=kernel)
+        scan = scan_index.scan(mesh) or scan_index.Scan(mesh)
         hits = scan.native.stitch_hits(seeds, _STITCH_TOL)
         if not hits:
             return
@@ -1125,7 +1125,7 @@ def prune_collinear_orphan_edges(mesh) -> list:
     """Trim overlapping loose edges, carrying their flags onto uncovered stretches."""
     from core import scan_index
     from core.mesh import edge_flags, stamp_edge_flags
-    scan = scan_index.scan(mesh) or scan_index.Scan(mesh, mod=kernel)
+    scan = scan_index.scan(mesh) or scan_index.Scan(mesh)
     cuts = scan.native.orphan_pieces()
     removed = scan.edges(i for i, _ in cuts)
     curved = False
