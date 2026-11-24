@@ -1353,6 +1353,28 @@ impl PyMeshStore {
         Ok(self.inner.outline(f, crate::hypot_of(hypot)?).carve(&ring))
     }
 
+    fn merged_hole(
+        &self,
+        py: Python<'_>,
+        key: u128,
+        ring: Vec<[f64; 3]>,
+        hypot: &str,
+    ) -> PyResult<Option<(usize, Vec<crate::math::Vec3>)>> {
+        let f = live_of(&self.inner, Kind::Face, key)?;
+        Ok(self
+            .inner
+            .outline(f, crate::hypot_of(hypot)?)
+            .merged_hole(py, &ring)?
+            .map(|(i, ring)| {
+                (
+                    i,
+                    ring.into_iter()
+                        .map(|p| glam::DVec3::from_array(p).into())
+                        .collect(),
+                )
+            }))
+    }
+
     fn shared_hole(
         &self,
         face: u128,

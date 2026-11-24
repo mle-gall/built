@@ -546,6 +546,10 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<object_outline::HoleBounds>()?;
     m.add_function(wrap_pyfunction!(object_outline::interior_point, m)?)?;
     m.add_function(wrap_pyfunction!(object_outline::inside_loop, m)?)?;
+    m.add_function(wrap_pyfunction!(store::drawing_face::loops_cross, m)?)?;
+    m.add_function(wrap_pyfunction!(object_outline::containing_object, m)?)?;
+    m.add_function(wrap_pyfunction!(object_outline::orphan_objects, m)?)?;
+    m.add_function(wrap_pyfunction!(object_outline::bordered_object, m)?)?;
     m.add_class::<object_outline::FaceOutline>()?;
     m.add_function(wrap_pyfunction!(object_outline::winding_footprint, m)?)?;
     m.add_function(wrap_pyfunction!(object_outline::object_winding, m)?)?;
