@@ -440,8 +440,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         bar.activated.connect(self.activate_document)
         bar.closeRequested.connect(self.close_document)
         bar.newRequested.connect(self._on_new_tab)
-        bar.picture_of = self._tab_picture
-        bar.setVisible(self._project_tabs_wanted())
         box.addWidget(bar)
         self._doc_stack = QStackedWidget(area)
         box.addWidget(self._doc_stack, 1)
@@ -461,7 +459,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         self.scene_player.activeChanged.connect(self._on_player_active)
         box.addWidget(scenes)
         self._empty_on = False
-        bar.menuRequested.connect(self._project_tab_menu)
         # The views button: the layouts of the project in front.
         from views.multi_view import LayoutPicker
         self._layout_picker = LayoutPicker(self)
@@ -1698,18 +1695,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         self.addAction(scenes_action)
         window_menu.addAction(scenes_action)
         self._act_scene_tabs = scenes_action
-        # The project tabs above the viewport, for the whole window.
-        tabs_action = QAction(tr("Show project tabs"), self)
-        tabs_action.setCheckable(True)
-        tabs_action.setChecked(self._project_tabs_wanted())
-        tabs_action.setShortcut(QKeySequence("Alt+T"))
-        tabs_action.setStatusTip(tr(
-            "The tabs of the open projects above the view; hidden, the "
-            "projects stay open: Ctrl+PgDown goes through them."))
-        tabs_action.toggled.connect(self.set_project_tabs_shown)
-        self.addAction(tabs_action)
-        window_menu.addAction(tabs_action)
-        self._act_project_tabs = tabs_action
         # With several views, the one under the pointer alone and back.
         maximize_action = QAction(tr("Maximize view"), self)
         maximize_action.setShortcut(QKeySequence("Ctrl+Space"))
@@ -5191,17 +5176,8 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
             vp.history.max_steps = int(_gs.value("undo_steps", 200))
         except (TypeError, ValueError):
             vp.history.max_steps = 200
-        # The extensions' overlays, snap providers and pickables are the
-        # same lists in every viewport: what an extension registered once
-        # works in every tab, the ones opened later included.
-        shared = self.__dict__.get("_ext_shared")
-        if shared is None:
-            shared = self._ext_shared = {
-                "_ext_overlays": vp._ext_overlays,
-                "_ext_snap_providers": vp._ext_snap_providers,
-                "_ext_pickables": getattr(vp, "_ext_pickables", [])}
-        for name, value in shared.items():
-            setattr(vp, name, value)
+        from ingetrazo_render import attach_viewport_extensions
+        attach_viewport_extensions(self, vp)
         return vp
 
     def _wire_viewport(self, vp) -> None:
@@ -5287,8 +5263,7 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
     def activate_document(self, doc, closing: bool = False) -> None:
         """Bring ``doc``'s tab to the front. The tool in hand is dropped and
         an open group is left in the project left behind; the panels, the
-        menus and the title follow the one in front. ``closing``: the one
-        left behind is about to go, so no hover picture is taken of it."""
+        menus and the title follow the one in front."""
         if doc is None or doc not in self._documents:
             return
         bar = self._project_tabs
@@ -5299,13 +5274,13 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
             # An extension's workspace holds the window: stay on it.
             bar.set_current(self._doc)
             return
-        self._leave_document(self._doc, picture=not closing)
+        self._leave_document(self._doc)
         self._doc = doc
         self._doc_stack.setCurrentWidget(doc.slot_widget())
         bar.set_current(doc)
         self._enter_document(doc)
 
-    def _leave_document(self, doc, picture: bool = True) -> None:
+    def _leave_document(self, doc) -> None:
         from views.inspector_bridge import leave_camera
         leave_camera(doc)
         vp = doc.viewport
@@ -5319,55 +5294,26 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         except RuntimeError:            # its widget is already gone
             return
         vp._last_pos = None
-        # The picture draws a whole frame again — seconds and ~650 MB of
-        # draw caches on the SPR the first time: never on the way out of a
-        # tab, only when its tab is hovered (_tab_picture). None for a
-        # closing tab.
-        doc.thumbnail = None
-        doc.picture_due = picture
         comp = doc.composer
         doc.composer_shown = bool(comp is not None and comp.isVisible())
         if doc.composer_shown:
             comp.hide()
 
-    #: Width of the picture a tab in the back shows on hover (px).
-    TAB_PREVIEW_PX = 280
+    #: Fallback width for the document archive thumbnail.
+    ARCHIVE_PREVIEW_PX = 280
 
-    def _tab_picture(self, doc):
-        """The picture of a tab in the back, drawn the first time its tab is
-        hovered since it was left: nothing in it can have moved since. The
-        units and axes are global, so they are its own for that one frame.
-        None with the picture off in Preferences: the plain tooltip shows."""
-        if str(QSettings().value("tabs/hover_picture", "1")) == "0":
-            return None
-        if doc.picture_due and doc.thumbnail is None \
-                and doc.viewport is not None:
-            doc.picture_due = False
-            from core import axes as _axes
-            from core import units as _units
-            front = self.viewport.scene
-            _units.bind_scene(doc.viewport.scene)
-            _axes.sync(getattr(doc.viewport.scene, "drawing_frame", None))
-            try:
-                doc.thumbnail = self._tab_thumbnail(doc.viewport)
-            finally:
-                _units.bind_scene(front)
-                _axes.sync(getattr(front, "drawing_frame", None))
-        return doc.thumbnail
-
-    def _tab_thumbnail(self, vp):
-        """The frame the viewport shows, small: the picture of the project
-        on hover over its tab (one frame drawn again, as the view stands)."""
+    def _archive_thumbnail(self, vp):
+        """Render a small archive picture from the document viewport."""
         try:
             if vp.keys_stand_in.renderer is None:
                 return None
-            img = vp.render_image(self.TAB_PREVIEW_PX, overlays=False)
+            img = vp.render_image(self.ARCHIVE_PREVIEW_PX, overlays=False)
         except Exception:  # noqa: BLE001 — a missing picture only
             return None
         if img.isNull():
             return None
         from PySide6.QtCore import Qt as _Qt
-        return img.scaledToWidth(self.TAB_PREVIEW_PX,
+        return img.scaledToWidth(self.ARCHIVE_PREVIEW_PX,
                                  _Qt.SmoothTransformation)
 
     #: Width of the picture a save keeps in the file (px): the start page's
@@ -5394,7 +5340,7 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
                 except Exception:  # noqa: BLE001 — a missing picture only
                     image = None
             return None if blank_picture(image) else image
-        image = self._tab_thumbnail(doc.viewport)
+        image = self._archive_thumbnail(doc.viewport)
         return None if blank_picture(image) else image
 
     #: Panel caches keyed by the scene's content version: two projects can
@@ -5457,22 +5403,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         """No project open: the empty area is shown."""
         return bool(self.__dict__.get("_empty_on"))
 
-    @staticmethod
-    def _project_tabs_wanted() -> bool:
-        return str(QSettings().value("tabs/show_project_tabs", "1")) != "0"
-
-    def set_project_tabs_shown(self, on: bool) -> None:
-        """Window ▸ Show project tabs (Alt+T), kept for the next start. With
-        them hidden the projects stay open, each key still goes through them;
-        the empty area keeps its «+», the only way back from it."""
-        QSettings().setValue("tabs/show_project_tabs", "1" if on else "0")
-        self._sync_project_tabs_bar()
-
-    def _sync_project_tabs_bar(self) -> None:
-        self._project_tabs.setVisible(self._project_tabs_wanted()
-                                      or self.is_empty())
-        self._place_sidebar_handle()
-
     def _show_empty_area(self) -> None:
         """Every project closed: the hatched area with only «+» above —
         the tabs, the views button, the scene row, the panels and their
@@ -5485,7 +5415,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         bar = self._project_tabs
         bar.tabs.setVisible(False)
         bar.views_button.setVisible(False)
-        self._sync_project_tabs_bar()
         self._layout_picker.hide()
         self._hide_panels()
         strip = getattr(self, "_sheet_tabs", None)
@@ -5507,7 +5436,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         bar = self._project_tabs
         bar.tabs.setVisible(True)
         bar.views_button.setVisible(True)
-        self._sync_project_tabs_bar()
         self.set_tool_filter(None)
         self._doc_stack.setVisible(True)
         self._show_panels_again()
@@ -5881,64 +5809,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         # The panel marks its tab: in a folder it is not the last one.
         self.tray.scenes.add_scene()
 
-    def _project_tab_menu(self, doc, global_pos) -> None:
-        # The project right-clicked comes to the front: Save and Save As
-        # act on it, as they do on the project in front.
-        if doc is not self._doc:
-            self.activate_document(doc)
-            if doc is not self._doc:        # an extension's workspace holds it
-                return
-        self._build_project_tab_menu(doc).exec(global_pos)
-
-    def _build_project_tab_menu(self, doc):
-        """A project tab's right-click menu: New, Open…, Save, Save As…;
-        closing it, the ones to its right or left, or all; and its scenes
-        as tabs; the picture on hover over the tabs, as in Preferences."""
-        from PySide6.QtGui import QKeySequence
-        from PySide6.QtWidgets import QMenu
-        menu = QMenu(self)
-        menu.setAttribute(Qt.WA_DeleteOnClose)
-
-        def add(text, slot, keys=None, enabled=True):
-            act = menu.addAction(text)
-            if keys is not None:
-                act.setShortcut(QKeySequence(keys))
-                act.setShortcutVisibleInContextMenu(True)
-            act.setEnabled(enabled)
-            act.triggered.connect(lambda _c=False: slot())
-            return act
-
-        docs = self._project_tabs.documents()
-        i = docs.index(doc) if doc in docs else -1
-        add(tr("New"), self._on_new_tab, QKeySequence.New)
-        add(tr("Open…"), self._on_open, QKeySequence.Open)
-        add(tr("Save"), self._on_save, QKeySequence.Save)
-        add(tr("Save As…"), self._on_save_as, QKeySequence.SaveAs)
-        menu.addSeparator()
-        add(tr("Close Project"), lambda: self.close_document(doc), "Ctrl+W")
-        add(tr("Close Projects to the Right"),
-            lambda: self.close_documents(docs[i + 1:]),
-            enabled=0 <= i < len(docs) - 1)
-        add(tr("Close Projects to the Left"),
-            lambda: self.close_documents(docs[:i]), enabled=i > 0)
-        add(tr("Close All Projects"), lambda: self.close_documents(docs))
-        menu.addSeparator()
-        act = menu.addAction(tr("Show scenes as tabs"))
-        act.setShortcut(QKeySequence("Alt+E"))
-        act.setShortcutVisibleInContextMenu(True)
-        act.setCheckable(True)
-        act.setChecked(bool(doc.scene_tabs))
-        act.setStatusTip(tr(
-            "This project's scenes as tabs under the view; a click shows one."))
-        act.toggled.connect(lambda on, d=doc: self.set_scene_tabs(on, d))
-        act = menu.addAction(tr(
-            "Show a picture of the project on hover over its tab"))
-        act.setCheckable(True)
-        act.setChecked(str(QSettings().value("tabs/hover_picture", "1")) != "0")
-        act.toggled.connect(lambda on: QSettings().setValue(
-            "tabs/hover_picture", "1" if on else "0"))
-        return menu
-
     def _update_tab(self, doc=None) -> None:
         """The tab's name, its unsaved-changes dot and its tooltip."""
         bar = self.__dict__.get("_project_tabs")
@@ -6061,25 +5931,9 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         # The window as context: closing it within the delay drops the call.
         QTimer.singleShot(self.RECLAIM_DELAY_MS, self, self._reclaim_memory)
 
-    def _reclaim_memory(self) -> None:
-        """After a project's tab is closed: collect its reference cycles
-        (the scene, its meshes and caches are freed only by the collector)
-        and hand the freed heap back to the system. Without the trim glibc
-        keeps it: closing the SPR beside plaza went 5.8 → 4.8 GB in the
-        system monitor; with it, ~0.8 GB. The collection is what freeing
-        costs anyway (1.2 s for the SPR on the Rust engine, ~25 s on the
-        Python one, whose millions of objects the collector would
-        otherwise free at some random later moment): the busy cursor says
-        so."""
-        import gc
-        from PySide6.QtWidgets import QApplication
-        from core import malloc_arenas
-        QApplication.setOverrideCursor(Qt.WaitCursor)
-        try:
-            gc.collect()
-            malloc_arenas.trim()
-        finally:
-            QApplication.restoreOverrideCursor()
+    def _reclaim_memory(self):
+        from ingetrazo_render import reclaim_closed_documents
+        reclaim_closed_documents()
 
     # ---- Extension workspaces (ExtensionApp.enter_workspace) ----------------
     def enter_workspace(self, workspace) -> bool:
@@ -6717,36 +6571,8 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
 
     # ---- linked documents (core/links.py) ------------------------------------
     def _on_link_igz(self) -> None:
-        """Place another document as a live link (core/links.py)."""
-        from core import links
-        from PySide6.QtWidgets import QCheckBox, QFileDialog
-        from views.filedialogs import remember, start_in
-
-        start = self._current_path.parent if self._current_path else None
-        dialog = QFileDialog(self)
-        # The system file picker cannot display our placement options.
-        dialog.setOption(QFileDialog.Option.DontUseNativeDialog)
-        dialog.setWindowTitle(tr("Link IngeTrazo document"))
-        dialog.setDirectory(start_in(start))
-        dialog.setNameFilters(tr(IGZ_FILE_FILTER).split(";;"))
-        dialog.setFileMode(QFileDialog.FileMode.ExistingFile)
-        nested = QCheckBox(tr("Include nested linked files"), dialog)
-        nested.setChecked(True)
-        grid = dialog.layout()
-        grid.addWidget(nested, grid.rowCount(), 0, 1, grid.columnCount())
-        try:
-            if not dialog.exec():
-                return
-            path = dialog.selectedFiles()[0]
-            include_nested = nested.isChecked()
-        finally:
-            dialog.deleteLater()
-        remember(path)
-        try:
-            self.link_igz_path(path, include_nested=include_nested)
-        except links.LinkError as exc:
-            _dialogs.warning(self, tr("Link IngeTrazo document"),
-                                str(exc))
+        from app_shell.files import link_document
+        link_document(self)
 
     def _refresh_layer_views(self) -> None:
         dock = getattr(self, "layers_dock", None)

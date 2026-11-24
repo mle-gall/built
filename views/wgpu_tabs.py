@@ -14,22 +14,14 @@ switching, closing and New reuse that machinery.
   project links. It opens right of its host ("Open source" in the tree, the
   inspector or the right-click menu), and its tip names the host and
   counts the placements.
-- Hovering a tab in the back shows the picture of that project as it was
-  left. The picture is drawn when the tab is first hovered after you left it
-  (``ptab:hover``), or, in the native app, as you leave it, since there the
-  one renderer goes to the project in front. **Picture on hover** in the
-  tab menu turns it off (the ``tabs/hover_picture`` setting, shared with the
-  classic app).
+- A background tab can show its last model frame. The renderer owns the
+  tab textures and reads the hover preference with this strip's payload.
 - Scenes are never tabs: they keep the ‹ Scene ▾ › control.
 """
 from __future__ import annotations
 
 import time
 from pathlib import Path
-
-#: The picture's width (pixels; the card shows it at 264 pt).
-PICTURE_PX = 528
-
 
 def _docs(win):
     bar = getattr(win, "_project_tabs", None)
@@ -103,56 +95,16 @@ def pictures_on() -> bool:
     return str(QSettings().value("tabs/hover_picture", "1")) != "0"
 
 
-def remember_picture(doc) -> bool:
-    """The picture of ``doc`` as its view stands, for its tab's hover card
-    (the native app calls this as the project is left; the Qt app on the
-    first hover after). Only a view that holds a renderer can draw it."""
-    view = getattr(doc, "stand_in", None)
-    if view is None or getattr(view, "renderer", None) is None or getattr(view, "packed", None) is None:
-        return False
-    if not pictures_on():
-        return False
-    try:
-        if view.width() <= 0 or view.height() <= 0:
-            return False
-        w, h, data = view.render_pixels(PICTURE_PX)
-    except Exception:  # noqa: BLE001 — a missing picture only
-        return False
-    if not data or len(data) != w * h * 4:
-        return False
-    doc._tab_picture = (w, h, data)
-    doc._tab_picture_n = getattr(doc, "_tab_picture_n", 0) + 1
-    doc.picture_due = False
-    return True
-
-
-def _picture_key(view, doc) -> str:
-    pic = getattr(doc, "_tab_picture", None)
-    if pic is None:
-        return ""
-    key = f"tabpic:{id(doc)}:{getattr(doc, '_tab_picture_n', 0)}"
-    sent = view.__dict__.setdefault("_ui_tab_pictures", set())
-    if key not in sent:
-        w, h, data = pic
-        view.renderer.ui_set_icons([(key, w, h, data)])
-        sent.add(key)
-    return key
-
-
-def tabs(win, view=None) -> list:
+def tabs(win) -> list:
     """The strip's tabs: (id, name, front, unsaved, link source, tip,
-    picture key), in the window's order."""
+    optional external picture key), in the window's order."""
     docs = _docs(win)
     front = getattr(win, "_doc", None)
     out = []
-    for i, doc in enumerate(docs):
-        if doc is front:
-            # Its picture is of how it was left; it changes from now on.
-            doc._tab_picture = None
+    for doc in docs:
         host, n = link_host(win, doc, docs)
-        key = _picture_key(view, doc) if view is not None and doc is not front else ""
-        out.append((str(i), doc.display_name(), doc is front, _dirty(win, doc), host is not None,
-                    _tip(win, doc, host, n), key))
+        out.append((doc.tab_id, doc.display_name(), doc is front, _dirty(win, doc), host is not None,
+                    _tip(win, doc, host, n), ""))
     return out
 
 
@@ -183,12 +135,12 @@ def before_frame(view, win) -> None:
     docs = _docs(win)
     sig = (tuple(id(d) for d in docs), id(getattr(win, "_doc", None)),
            tuple(_dirty(win, d) for d in docs), tuple(d.display_name() for d in docs),
-           tuple(getattr(d, "_tab_picture_n", 0) for d in docs), pictures_on(),
+           pictures_on(),
            tuple(_elsewhere(win)))
     last = view.__dict__.get("_ui_ptabs_sig")
     if last is not None and last[0] == sig and now - last[1] < 1.0:
         return
-    data = tabs(win, view)
+    data = tabs(win)
     payload = (data, _elsewhere(win), _can_move(win), pictures_on())
     if payload != view.__dict__.get("_ui_ptabs"):
         renderer.ui_set_project_tabs(*payload)
@@ -238,11 +190,6 @@ def action(win, view, arg) -> None:
         bar = getattr(win, "_project_tabs", None)
         if bar is not None and hasattr(bar, "newRequested"):
             bar.newRequested.emit()
-    elif verb == "hover":
-        doc = doc_at(rest)
-        if doc is not None and doc is not getattr(win, "_doc", None) \
-                and getattr(doc, "_tab_picture", None) is None and remember_picture(doc):
-            view._ui_ptabs_sig = None
     elif verb == "goto":
         try:
             from app_shell import windows
@@ -251,41 +198,12 @@ def action(win, view, arg) -> None:
         windows.goto(win, rest)
     elif verb == "menu":
         what, _, index = rest.partition(":")
-        menu(win, what, doc_at(index), docs)
+        if doc_at(index) is not None:
+            from ingetrazo_render import project_tab_menu
+            project_tab_menu(win, what, int(index))
     if view is not None:
         view._ui_ptabs_sig = None
         view.update()
-
-
-def menu(win, what, doc, docs) -> None:
-    """The tab menu's rows (ui/tabs.rs): ``doc`` is the tab right-clicked,
-    already in front."""
-    if what == "new":
-        action(win, None, "new")
-    elif what == "open":
-        win._on_open()
-    elif what == "save":
-        win._on_save()
-    elif what == "save_as":
-        win._on_save_as()
-    elif what == "close" and doc is not None:
-        _close(win, doc)
-    elif what in ("close_right", "close_left", "close_all") and doc is not None:
-        i = docs.index(doc) if doc in docs else -1
-        targets = {"close_right": docs[i + 1:], "close_left": docs[:i], "close_all": docs}[what]
-        # Each asks about its own changes; a Cancel stops there.
-        for d in list(reversed(targets)) if what == "close_right" else list(targets):
-            if d in _docs(win) and not _close(win, d):
-                break
-    elif what == "move" and doc is not None:
-        try:
-            from app_shell import windows
-        except Exception:  # noqa: BLE001
-            return
-        windows.move_to_new_window(win, doc)
-    elif what == "pictures":
-        from core.settings import settings as QSettings
-        QSettings().setValue("tabs/hover_picture", "0" if pictures_on() else "1")
 
 
 def source_context(win):

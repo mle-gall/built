@@ -493,10 +493,18 @@ def test_feed_changes_follow_the_document_across_windows(host, second):
     left, right = [], []
     ExtensionApp(src, "probe").on_document_changed(lambda: left.append(src._doc))
     ExtensionApp(dst.window, "probe").on_document_changed(lambda: right.append(dst.window._doc))
+    # Each window owns its plugin registrations. A moved viewport must switch
+    # all three callback lists, including those registered before it arrived.
+    callback_lists = ("_ext_overlays", "_ext_snap_providers", "_ext_pickables")
+    destination = [getattr(dst.viewport, key) for key in callback_lists]
+    for key, callbacks in zip(callback_lists, destination):
+        assert getattr(doc.viewport, key) is not callbacks
     history = doc.viewport.history
     history.execute(SetPluginDataCommand("probe", 1))
     assert left == [doc] and not right
     assert windows.transfer(src, doc, dst)
+    for key, callbacks in zip(callback_lists, destination):
+        assert getattr(doc.viewport, key) is callbacks
     left.clear()
     right.clear()
     history.undo()

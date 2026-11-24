@@ -9,6 +9,7 @@ mod change_callbacks;
 mod window_document;
 mod close_documents;
 mod component_replacement;
+mod component_rows;
 mod inspection_edits;
 mod context_edits;
 mod native_view_actions;
@@ -2644,7 +2645,7 @@ impl Renderer {
     #[pyo3(signature = (tabs, elsewhere=Vec::new(), can_move=false, pictures=true))]
     fn ui_set_project_tabs(&mut self, tabs: Vec<(String, String, bool, bool, bool, String, String)>,
                            elsewhere: Vec<(String, String, String)>, can_move: bool, pictures: bool) {
-        if let Some(ui) = self.ui.as_mut() { ui.set_project_tabs(tabs, elsewhere, can_move, pictures); }
+        if let Some(ui) = self.ui.as_mut() { ui.set_project_tabs(&self.device, &self.queue, tabs, elsewhere, can_move, pictures); }
     }
     fn ui_cluster_buttons(&self) -> Vec<(String, (f32, f32))> {
         self.ui.as_ref().map_or_else(Vec::new, |ui| ui.cluster_buttons.clone())
@@ -3208,6 +3209,8 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<tool_instances::InstancePreview>()?;
     window_document::register(m)?;
     close_documents::register(m)?;
+    m.add_class::<component_rows::ComponentRows>()?;
+    m.add_function(wrap_pyfunction!(component_rows::select_component_instances, m)?)?;
     component_replacement::register(m)?;
     inspection_edits::register(m)?;
     context_edits::register(m)?;

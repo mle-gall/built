@@ -1024,22 +1024,14 @@ def _starter_components():
 
 
 def _components_in_model(view, win):
-    """``[(name, faces, groups, kept template)]`` from the Components tray's
-    own listing, kept until the model changes."""
+    """Placed and retained component definitions for this document revision."""
     scene = win.viewport.scene
     sig = (id(scene), scene.content_version)
     cache = getattr(view, "_ui_comp_cache", None)
     if cache is not None and cache[0] == sig:
         return cache[1]
-    panel = getattr(getattr(win, "tray", None), "components", None)
-    rows = []
-    if panel is not None:
-        gen = panel._components_in_model()
-        try:
-            while True:
-                next(gen)
-        except StopIteration as stop:
-            rows = stop.value or []
+    from ingetrazo_render import ComponentRows
+    rows = ComponentRows(scene).finish()
     view._ui_comp_cache = (sig, rows)
     return rows
 
@@ -1076,7 +1068,8 @@ def _component_verb(win, view, verb, key) -> None:
     if verb == "cplace":
         win._start_place(place_copy(kept if kept is not None else make_template(definition)))
     elif verb == "cselect":
-        _select(win, groups)
+        from ingetrazo_render import select_component_instances
+        select_component_instances(win, groups)
     elif verb == "creplace":
         swap = [g for g in win.viewport.scene.selection
                 if isinstance(g, Group) and g.is_component() and g.mesh is not definition.mesh]

@@ -114,6 +114,8 @@ def transfer(src_win, doc, dst_host) -> bool:
     if view is not None:
         view.move_timers(dst_host)
         view.renderer = None
+    from ingetrazo_render import attach_viewport_extensions
+    attach_viewport_extensions(dst, doc.viewport)
     dst._documents.append(doc)
     dst.activate_document(doc)
     for d in blank:

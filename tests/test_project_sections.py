@@ -5,7 +5,8 @@ import pytest
 from core.group import Group
 from tests.test_project_drawing_filters import Project
 from tests.test_project_occurrences import _two_planes
-from views import wgpu_ui
+from views import view_commands, wgpu_ui
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 
 @pytest.fixture
@@ -116,18 +117,20 @@ def test_a_plane_is_renamed_in_one_undo_step(project):
 
 
 @pytest.fixture
-def window_project():
-    from views.main_window import MainWindow
-    win = MainWindow()
+def window_project(native_host):
+    win = native_host.window
     p = Project(scene=win.viewport.scene)
     p.win = win
     a, b = _two_planes(p.scene)
     p.rows()
     p.action("toggle", "sections:all")
-    yield p, a, b
-    for doc in win.documents():
-        doc.saved_content = doc.viewport.scene.content_version
-    win.close()
+    return p, a, b
+
+
+def menu_checks(p):
+    view_commands.sync(p.view, p.win)
+    cluster, menus = p.view.renderer.calls["ui_set_cluster"]
+    return {item[0]: item[4] for group in list(cluster) + [rows for _, rows in menus] for item in group}
 
 
 def folder(p):
@@ -141,12 +144,12 @@ def test_the_folder_row_drives_the_view_menu_switches(window_project):
     p, _, _ = window_project
     assert folder(p)["Display"]["Cuts"] == "On"
     p.action("eye", "sections:all")
-    assert not p.scene.show_section_planes and not p.win._act_show_splanes.isChecked()
+    assert not p.scene.show_section_planes and not menu_checks(p)["section_planes"]
     wgpu_ui._tree_action(p.win, p.view, "insp:sectionview:section_cuts")
-    assert not p.scene.show_section_cuts and not p.win._act_show_scuts.isChecked()
+    assert not p.scene.show_section_cuts and not menu_checks(p)["section_cuts"]
     assert folder(p)["Display"] == {"Frames": "Off", "Cuts": "Off", "Fill": "On"}
-    p.win._act_show_splanes.setChecked(True)
-    p.win._act_show_scuts.setChecked(True)
+    assert view_commands.run(p.win, "section_planes")
+    assert view_commands.run(p.win, "section_cuts")
     assert p.rows()["sections:all"][1][5] == 1
     assert folder(p)["Display"]["Cuts"] == "On"
 
@@ -156,11 +159,11 @@ def test_the_section_fill_switch_on_the_folder_and_the_cutting_plane(window_proj
     action = "sectionview:section_fill"
     assert action in folder(p)["Actions"]
     wgpu_ui._tree_action(p.win, p.view, "insp:" + action)
-    assert not p.scene.display_style.section_fill and not p.win._act_section_fill.isChecked()
+    assert not p.scene.display_style.section_fill and not menu_checks(p)["section_fill"]
     assert folder(p)["Display"]["Fill"] == "Off"
     assert action in inspector(p, a)["Actions"]
     wgpu_ui._tree_action(p.win, p.view, "insp:" + action)
     assert p.scene.display_style.section_fill
     assert action not in inspector(p, b)["Actions"]
-    p.win._act_section_fill.setChecked(False)
+    assert view_commands.run(p.win, "section_fill")
     assert folder(p)["Display"]["Fill"] == "Off"

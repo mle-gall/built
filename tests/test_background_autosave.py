@@ -1,13 +1,13 @@
 import threading
 import time
 import pytest
-from PySide6.QtCore import QTimer
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_core import Vec3 as V
 from core import autosave
 from core.scene import Scene
 from formats import igz
 from formats.igz_snapshot import snapshot_steps
-from tests.test_project_tabs import win, _edit, _settle
+from tests.test_project_tabs import win, _edit
 
 
 def drain(steps):
@@ -16,10 +16,11 @@ def drain(steps):
         except StopIteration as done: return done.value
 
 
-def until(predicate, timeout=10):
+def until(win, predicate, timeout=10):
     deadline = time.monotonic()+timeout
     while not predicate() and time.monotonic()<deadline:
-        _settle(10)
+        win._host.idle()
+        time.sleep(.005)
     assert predicate()
 
 
@@ -57,18 +58,23 @@ def test_worker_does_not_block_ui_or_publish_after_clear(win, monkeypatch):
         assert release.wait(10)
         return original(*args,**kwargs)
     monkeypatch.setattr(igz,'write_prepared',slow)
-    ticks=[];heartbeat=QTimer();heartbeat.setInterval(5)
-    heartbeat.timeout.connect(lambda:ticks.append(1));heartbeat.start()
+    class Probe:
+        ticks = 0
+        def tick(self):
+            self.ticks += 1
+    probe = Probe()
+    heartbeat = win._host.timers.timer(probe.tick, interval=5, repeat=True)
+    heartbeat.start()
     try:
         win._on_autosave_tick()
         manager=win._background_autosave
-        until(started.is_set)
-        _settle(60)
-        assert len(ticks)>1 and worker==[worker[0]] and worker[0]!=ui
+        until(win, started.is_set)
+        until(win, lambda: probe.ticks >= 2)
+        assert probe.ticks >= 2 and worker==[worker[0]] and worker[0]!=ui
         doc=win.active_document()
         autosave.clear(doc.path,untitled=doc.untitled_no)
         release.set()
-        until(lambda:not manager.busy)
+        until(win, lambda:not manager.busy)
         assert autosave.pending(doc.path,untitled=doc.untitled_no) is None
         assert doc.autosaved_version is None
     finally:
@@ -86,7 +92,7 @@ def test_edit_during_capture_restarts_and_saves_latest(win):
     manager.advance()
     assert manager.job is None
     manager.SLICE_SECONDS=.006;manager.timer.start()
-    until(lambda:not manager.busy)
+    until(win, lambda:not manager.busy)
     doc=win.active_document()
     assert doc.autosaved_version>old
     loaded=Scene();igz.load_into(loaded,autosave.pending(doc.path,doc.untitled_no))
@@ -103,13 +109,13 @@ def test_edit_during_write_stays_dirty_for_next_autosave(win, monkeypatch):
     monkeypatch.setattr(igz,'write_prepared',slow)
     try:
         win._on_autosave_tick();manager=win._background_autosave
-        until(started.is_set)
+        until(win, started.is_set)
         _edit(win,z=4);release.set()
-        until(lambda:not manager.busy)
+        until(win, lambda:not manager.busy)
         doc=win.active_document()
         assert doc.autosaved_version<doc.viewport.scene.content_version
         win._on_autosave_tick()
-        until(lambda:not manager.busy)
+        until(win, lambda:not manager.busy)
         assert doc.autosaved_version==doc.viewport.scene.content_version
     finally:
         release.set()
@@ -118,14 +124,14 @@ def test_edit_during_write_stays_dirty_for_next_autosave(win, monkeypatch):
 def test_failed_write_keeps_previous_recovery(win, monkeypatch):
     _edit(win,z=1)
     win._on_autosave_tick();manager=win._background_autosave
-    until(lambda:not manager.busy)
+    until(win, lambda:not manager.busy)
     doc=win.active_document();slot=autosave.pending(doc.path,doc.untitled_no)
     old=slot.read_bytes();version=doc.autosaved_version
     _edit(win,z=7)
     def fail(*args,**kwargs): raise OSError('disk full')
     monkeypatch.setattr(igz,'write_prepared',fail)
     win._on_autosave_tick()
-    until(lambda:not manager.busy)
+    until(win, lambda:not manager.busy)
     assert slot.read_bytes()==old
     assert doc.autosaved_version==version
     assert manager.last_error=='disk full'

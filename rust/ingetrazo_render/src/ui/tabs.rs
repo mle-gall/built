@@ -37,8 +37,9 @@ pub struct Strip {
     hover: Option<(usize, Rect)>,
     /// Tabs left out of the strip (under ›› n).
     hidden: Vec<usize>,
-    /// The tab hovered last frame: a new hover asks Python for its picture.
-    last_hover: Option<usize>,
+    /// Owner of the last model image that went through the chrome blur passes.
+    pub painted_doc: Option<String>,
+    photos: std::collections::HashMap<String, (wgpu::Texture, Option<egui::TextureId>)>,
     /// Each tab's rect as last laid out, by index (None: under ›› n).
     pub rects: Vec<Option<Rect>>,
 }
@@ -158,11 +159,6 @@ impl Strip {
                 self.menu = None;
             }
         }
-        let now = self.hover.map(|h| h.0);
-        if now != self.last_hover {
-            if let Some(i) = now { out.push(format!("ptab:hover:{i}")); }
-            self.last_hover = now;
-        }
         let plus = (String::new(), "+".to_owned(), "New project (⌘N)".to_owned(), String::new(), -1i8, true);
         let (rect, resp) = ui.allocate_exact_size(vec2(PLUS_W, CONTROL_H), Sense::click());
         let st = state_of(&resp, false, true);
@@ -172,40 +168,9 @@ impl Strip {
         out
     }
 
-    /// The hover card, the tab menu and the ›› n menu.
-    pub fn popups(&mut self, ctx: &egui::Context, icons: &std::collections::HashMap<String, egui::TextureHandle>) -> Vec<String> {
-        let mut out = Vec::new();
-        // The hover card: picture (when the tab was left), name, path, saved.
-        if self.menu.is_none() && self.overflow.is_none() {
-            if let Some((i, rect)) = self.hover {
-                if let Some((_, name, front, _, _, tip, pic)) = self.tabs.get(i) {
-                    let picture = (!*front && self.pictures).then(|| icons.get(pic)).flatten();
-                    egui::Area::new(egui::Id::new("tab_card"))
-                        .fixed_pos(pos2(rect.min.x, TOP_H + 6.0))
-                        .order(egui::Order::Tooltip)
-                        .interactable(false)
-                        .show(ctx, |ui| {
-                            glass(Surface::Raised).inner_margin(Margin::same(8)).show(ui, |ui| {
-                                ui.set_max_width(PICTURE_W);
-                                if let Some(tex) = picture {
-                                    let s = tex.size_vec2();
-                                    let h = if s.x > 0.0 { PICTURE_W * s.y / s.x } else { PICTURE_W * 0.6 };
-                                    let (r, _) = ui.allocate_exact_size(vec2(PICTURE_W, h), Sense::hover());
-                                    egui::Image::new(tex).corner_radius(CornerRadius::same(R_ROW)).paint_at(ui, r);
-                                    ui.add_space(SPACE_S);
-                                }
-                                ui.label(egui::RichText::new(name).font(strong(TYPE_BODY)).color(INK));
-                                for line in tip.lines() {
-                                    ui.label(egui::RichText::new(line).font(meta()).color(DIM));
-                                }
-                            });
-                        });
-                }
-            }
-        }
-        if let Some((i, at)) = self.menu {
-            let count = self.tabs.len();
-            let rows: Vec<(&str, String, &str, bool, i8)> = vec![
+    fn menu_rows(&self, i: usize) -> Vec<(&'static str, String, &'static str, bool, i8)> {
+        let count = self.tabs.len();
+        vec![
                 ("new", "New project".into(), "⌘N", true, -1),
                 ("open", "Open…".into(), "⌘O", true, -1),
                 ("save", "Save".into(), "⌘S", true, -1),
@@ -219,7 +184,51 @@ impl Strip {
                 ("move", "Move to new window".into(), "", self.can_move && count > 1, -1),
                 ("-", String::new(), "", true, -1),
                 ("pictures", "Picture on hover".into(), "", true, if self.pictures { 1 } else { 0 }),
-            ];
+        ]
+    }
+
+    /// The hover card, the tab menu and the ›› n menu.
+    pub fn popups(&mut self, device: &wgpu::Device, painter: &mut egui_wgpu::Renderer, ctx: &egui::Context, icons: &std::collections::HashMap<String, egui::TextureHandle>) -> Vec<String> {
+        let mut out = Vec::new();
+        // The hover card: picture (when the tab was left), name, path, saved.
+        if self.menu.is_none() && self.overflow.is_none() {
+            if let Some((i, rect)) = self.hover {
+                if let Some((id, name, front, _, _, tip, pic)) = self.tabs.get(i) {
+                    let picture = if !*front && self.pictures {
+                        self.photos.get_mut(id).map(|(texture, registered)| {
+                            let id = *registered.get_or_insert_with(|| {
+                                let view = texture.create_view(&wgpu::TextureViewDescriptor {
+                                    format: Some(texture.format().remove_srgb_suffix()), ..Default::default()
+                                });
+                                painter.register_native_texture(device, &view, wgpu::FilterMode::Linear)
+                            });
+                            (id, vec2(texture.width() as f32, texture.height() as f32))
+                        }).or_else(|| icons.get(pic).map(|tex| (tex.id(), tex.size_vec2())))
+                    } else { None };
+                    egui::Area::new(egui::Id::new("tab_card"))
+                        .fixed_pos(pos2(rect.min.x, TOP_H + 6.0))
+                        .order(egui::Order::Tooltip)
+                        .interactable(false)
+                        .show(ctx, |ui| {
+                            glass(Surface::Raised).inner_margin(Margin::same(8)).show(ui, |ui| {
+                                ui.set_max_width(PICTURE_W);
+                                if let Some((id, s)) = picture {
+                                    let h = if s.x > 0.0 { PICTURE_W * s.y / s.x } else { PICTURE_W * 0.6 };
+                                    let (r, _) = ui.allocate_exact_size(vec2(PICTURE_W, h), Sense::hover());
+                                    egui::Image::new((id, s)).corner_radius(CornerRadius::same(R_ROW)).paint_at(ui, r);
+                                    ui.add_space(SPACE_S);
+                                }
+                                ui.label(egui::RichText::new(name).font(strong(TYPE_BODY)).color(INK));
+                                for line in tip.lines() {
+                                    ui.label(egui::RichText::new(line).font(meta()).color(DIM));
+                                }
+                            });
+                        });
+                }
+            }
+        }
+        if let Some((i, at)) = self.menu {
+            let rows = self.menu_rows(i);
             let mut close = false;
             egui::Area::new(egui::Id::new("tab_menu"))
                 .fixed_pos(at)
@@ -295,9 +304,27 @@ fn paint_link(ui: &egui::Ui, c: Pos2, ink: Color32) {
 impl Ui {
     /// Python's tabs for the strip (views/wgpu_tabs.py): the tabs, the
     /// projects in other windows, and the tab menu's two switches.
-    pub fn set_project_tabs(&mut self, tabs: Vec<TabData>, elsewhere: Vec<(String, String, String)>,
+    pub fn set_project_tabs(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, tabs: Vec<TabData>, elsewhere: Vec<(String, String, String)>,
                             can_move: bool, pictures: bool) {
-        if tabs.len() != self.strip.tabs.len() { self.strip.close_menus(); }
+        let background = |id: &str| tabs.iter().any(|t| t.0 == id && !t.2);
+        self.strip.photos.retain(|id, (_, texture)| {
+            if background(id) { return true; }
+            if let Some(texture) = texture { self.free_after_frame.push(*texture); }
+            false
+        });
+        if let Some(id) = self.strip.painted_doc.as_ref() {
+            if !tabs.iter().any(|t| &t.0 == id && t.2) {
+                if background(id) {
+                    if let Some(texture) = self.glass.tab_picture(device, queue) {
+                        self.strip.photos.insert(id.clone(), (texture, None));
+                    }
+                }
+                self.strip.painted_doc = None;
+            }
+        }
+        if !self.strip.tabs.iter().map(|t| &t.0).eq(tabs.iter().map(|t| &t.0)) {
+            self.strip.close_menus();
+        }
         self.strip.tabs = tabs;
         self.strip.elsewhere = elsewhere;
         self.strip.can_move = can_move;
@@ -379,6 +406,36 @@ mod tests {
                     let (_, actions) = frame(&ctx, &mut strip, 700.0, vec![event(false)]);
                     assert!(actions.contains(&format!("ptab:{verb}:{index}")), "{actions:?}");
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn right_click_activates_the_target_before_its_file_menu() {
+        let ctx = context();
+        let mut strip = Strip { tabs: vec![tab("A", true), tab("B", false)], ..Default::default() };
+        frame(&ctx, &mut strip, 700., vec![]);
+        let pos = strip.rects[1].unwrap().center();
+        for pressed in [true, false] {
+            let click = egui::Event::PointerButton { pos, button: egui::PointerButton::Secondary,
+                pressed, modifiers: Default::default() };
+            let (_, actions) = frame(&ctx, &mut strip, 700., vec![egui::Event::PointerMoved(pos), click]);
+            if !pressed {
+                assert_eq!(actions, ["ptab:activate:1"]);
+                assert_eq!(strip.menu.unwrap().0, 1);
+            }
+        }
+        for i in 0..2 {
+            for pictures in [true, false] {
+                strip.pictures = pictures;
+                let rows = strip.menu_rows(i);
+                for verb in ["new", "open", "save", "save_as", "close"] {
+                    assert!(rows.iter().any(|r| r.0 == verb && !r.2.is_empty() && r.3));
+                }
+                for (verb, enabled) in [("close_left", i == 1), ("close_right", i == 0), ("close_all", true)] {
+                    assert!(rows.iter().any(|r| r.0 == verb && r.3 == enabled));
+                }
+                assert!(rows.iter().any(|r| r.0 == "pictures" && r.4 == i8::from(pictures)));
             }
         }
     }

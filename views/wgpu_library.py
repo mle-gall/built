@@ -556,8 +556,8 @@ class ComponentsProvider(Provider):
             _select(ctx.win, [g])
             ctx.vp.begin_group_edit(g)
         elif verb == "select":
-            _select(ctx.win, groups)
-            ctx.flash(f"{len(groups)} copies of {name} selected")
+            from ingetrazo_render import select_component_instances
+            select_component_instances(ctx.win, groups)
         elif verb == "replace":
             from core.group import Group
             swap = [g for g in ctx.scene.selection

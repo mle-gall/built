@@ -5,27 +5,14 @@ panel's folders, saving the source in another tab reloads the host, and
 going into the linked copy offers to open its file."""
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-import pytest  # noqa: E402
-from PySide6.QtCore import QEventLoop, QTimer  # noqa: E402
+import pytest
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
 
-from core import links  # noqa: E402
-from formats import igz  # noqa: E402
-
-_app = QApplication.instance() or QApplication([])
-
-
-def _settle(ms: int = 0) -> None:
-    loop = QEventLoop()
-    QTimer.singleShot(ms, loop.quit)
-    loop.exec()
+from core import links
+from formats import igz
 
 
 def _source(path, faces=1):
@@ -42,13 +29,8 @@ def _source(path, faces=1):
 
 
 @pytest.fixture
-def win():
-    from views.main_window import MainWindow
-    w = MainWindow()
-    yield w
-    for d in w.documents():
-        d.saved_content = d.viewport.scene.content_version
-    w.close()
+def win(native_host):
+    return native_host.window
 
 
 def _faces(g):
@@ -101,10 +83,11 @@ def test_going_into_a_linked_copy_offers_its_file(win, tmp_path, monkeypatch):
 def test_save_as_placeholder_and_reopen(win, tmp_path):
     src = _source(tmp_path / "Site.igz", faces=2)
     win.link_igz_path(src, at=(0, 0, 0))
-    host = tmp_path / "Host.igz"
-    win._do_save(host)
-    win.open_path(host)
-    _settle()
+    host = tmp_path / "Host.built"
+    assert win.run_command(f"save_to:{host}")
+    assert win.close_document(ask=False)
+    assert win.open_path(host)
+    win._host.idle()
     (g,) = links.linked_groups(win.viewport.scene)
     assert _faces(g) == 2
 
@@ -136,30 +119,20 @@ def test_project_link_subset_and_agent_surface(win, tmp_path):
 
 @pytest.mark.parametrize("choice", [True, False, None])
 def test_link_document_action_shows_nested_choice(win, tmp_path, monkeypatch, choice):
-    from PySide6.QtWidgets import QCheckBox, QFileDialog
     from core.i18n import tr
-    from views import filedialogs
+    from views import chrome_forms
+    from views.filedialogs import file_dialogs
 
     path = _source(tmp_path / "building.igz")
     placements = []
-    monkeypatch.setattr(win, "link_igz_path", lambda path, include_nested:
-                        placements.append((path, include_nested)))
-    monkeypatch.setattr(filedialogs, "remember", lambda path: None)
-
-    def choose(dialog):
-        assert dialog.testOption(QFileDialog.Option.DontUseNativeDialog)
-        checkbox = next(box for box in dialog.findChildren(QCheckBox)
-                        if box.text() == tr("Include nested linked files"))
-        assert checkbox.isChecked()
-        if choice is None:
-            return QFileDialog.DialogCode.Rejected
-        checkbox.setChecked(choice)
-        dialog.selectFile(str(path))
-        return QFileDialog.DialogCode.Accepted
-
-    monkeypatch.setattr(QFileDialog, "exec", choose)
-    win._act_link_document.trigger()
-    assert placements == ([] if choice is None else [(str(path), choice)])
+    monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *args: (str(path), ""))
+    monkeypatch.setattr(win, "link_igz_path", lambda path, **opts: placements.append((path, opts)))
+    def choose(parent, title, label, items, done):
+        assert items == [tr("Include nested linked files"), tr("Source geometry only")]
+        done(None if choice is None else items[0 if choice else 1])
+    monkeypatch.setattr(chrome_forms, "ask_choice", choose)
+    assert win.run_command("link")
+    assert placements == ([] if choice is None else [(str(path), {"select": None, "include_nested": choice})])
 
 
 def test_a_reloaded_link_keeps_the_layers_rows(win, tmp_path):
@@ -167,27 +140,25 @@ def test_a_reloaded_link_keeps_the_layers_rows(win, tmp_path):
     tree down: same row objects, folders left folded as they were. In
     the composite (hundreds of linked folders) the rebuild was a blink
     of the whole tree on every save of a source."""
-    from core import layers as L
     src = _source(tmp_path / "Site.igz", faces=1)
     win.link_igz_path(src, at=(0, 0, 0))
     scene = win.viewport.scene
-    panel = win.layers_dock.panel
-    panel.refresh()
-    folder = next(f for f in L.folders_of(scene) if f.startswith("Site"))
-    panel.item_for(folder, "folder").setExpanded(False)
-    _settle()
-    rows = {id(it) for it in panel._all_items()}
-    rebuilt = []
-    original = type(panel).refresh
-    panel.refresh = lambda *a, **k: (rebuilt.append(1), original(panel, *a, **k))
-    _source(src, faces=3)                     # same tags, more geometry
+    from tests.test_project_drawing_filters import Project
+    project = Project(scene=scene)
+    project.win = win
+    project.view._ui_lens = 1
+    key = "n:link:Site"
+    rows = project.rows()
+    assert key in rows
+    opened = project.action("toggle", key)
+    assert any("Wood" in name for name, _ in opened.values())
+    rows = project.action("toggle", key)
+    assert not any("Wood" in name for name, _ in rows.values())
+    _source(src, faces=3)
     _wait_for_reload(win, scene)
-    _settle()                                 # what the reload deferred
-    (g,) = links.linked_groups(scene)
-    assert _faces(g) == 3
-    assert not rebuilt
-    assert {id(it) for it in panel._all_items()} == rows
-    assert not panel.item_for(folder, "folder").isExpanded()
+    assert _faces(links.linked_groups(scene)[0]) == 3
+    assert project.rows().keys() == rows.keys()
+    assert project.action("toggle", key).keys() == opened.keys()
 
 
 def test_project_edits_only_the_addressed_link_subset_and_undoes_without_source(win, tmp_path, monkeypatch):

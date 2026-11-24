@@ -176,19 +176,6 @@ def test_each_project_lists_its_own_scenes_and_keeps_its_choice(win):
     assert _names(win) == ["Exterior"]
 
 
-def test_the_tab_menu_turns_them_off_and_on(win):
-    _scene(win, "Exterior")
-    menu = win._build_project_tab_menu(win._doc)
-    act = next(a for a in menu.actions() if a.isCheckable())
-    from core.i18n import tr
-    assert act.text() == tr("Show scenes as tabs") and act.isChecked()
-    act.setChecked(False)
-    assert _row(win).isHidden() and not win._doc.scene_tabs
-    act.setChecked(True)
-    assert not _row(win).isHidden()
-    menu.close()
-
-
 def test_alt_e_shows_and_hides_them_for_the_project_in_front(win):
     from PySide6.QtGui import QKeySequence
     _scene(win, "Exterior")
@@ -214,16 +201,6 @@ def test_alt_e_is_no_other_commands_shortcut(win):
               if alt_e in a.shortcuts()}
     from core.i18n import tr
     assert owners == {tr("Show scenes as tabs")}
-
-
-def test_a_right_click_on_a_tab_asks_for_its_menu(win):
-    bar = win._project_tabs
-    # Only the signal: the window's handler opens a real (modal) menu.
-    bar.menuRequested.disconnect(win._project_tab_menu)
-    seen = []
-    bar.menuRequested.connect(lambda doc, pos: seen.append(doc))
-    bar._on_menu(bar.tabs.tabRect(0).center())
-    assert seen == [win._doc]
 
 
 def test_an_opened_project_lists_the_scenes_it_was_saved_with(win, tmp_path):

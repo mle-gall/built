@@ -5,15 +5,15 @@ from __future__ import annotations
 
 import pytest
 from ingetrazo_core import Vec3 as QVector3D, Vec4 as QVector4D
-from PySide6.QtWidgets import QMessageBox
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 from formats import skp as skp_format
-from views.main_window import MainWindow
+from views import chrome_dialogs
 
 
 @pytest.fixture
-def window():
-    win = MainWindow()
+def window(native_host):
+    win = native_host.window
     win.viewport.scene.clear()
     # Still an untouched drawing: an .skp opened from outside comes into
     # it, not into a tab of its own (#1066).
@@ -24,9 +24,7 @@ def window():
     cam.yaw = 1.1
     cam.pitch = 0.45
     cam.set_aspect(600, 900)
-    yield win
-    win._saved_version = win.viewport.scene.version
-    win.close()
+    return win
 
 
 def _payload():
@@ -59,7 +57,9 @@ def test_skp_import_frames_geometry_far_from_the_old_view(
     cam = window.viewport.camera
     cam.set_projection(projection)
 
-    assert getattr(window, opener)(tmp_path / "house.skp") is True
+    path = tmp_path / "house.skp"
+    path.touch()  # the parser below supplies the synthetic geometry
+    assert getattr(window, opener)(path) is True
 
     scene = window.viewport.scene
     assert len(scene.groups) == 1 and len(scene.groups[0].mesh.faces) == 2
@@ -106,8 +106,9 @@ def test_empty_or_failed_skp_import_keeps_the_camera(
         payload, exc = None, ValueError("broken model")
     monkeypatch.setattr(skp_format, "can_handle", lambda path: True)
     monkeypatch.setattr(window, "_parse_skp_threaded", lambda path, cb: (payload, exc))
-    monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: QMessageBox.Ok)
-    monkeypatch.setattr(QMessageBox, "critical", lambda *a, **k: QMessageBox.Ok)
+    messages = []
+    for name in ("warning", "critical"):
+        monkeypatch.setattr(chrome_dialogs, name, lambda win, title, text: messages.append((title, text)))
     cam = window.viewport.camera
     before = (QVector3D(cam.target), cam.distance, cam.yaw, cam.pitch)
 
@@ -115,3 +116,4 @@ def test_empty_or_failed_skp_import_keeps_the_camera(
 
     assert (cam.target, cam.distance, cam.yaw, cam.pitch) == before
     assert window.viewport.scene.groups == before_groups
+    assert bool(messages) is (result in {"unreadable", "error"})

@@ -2596,7 +2596,7 @@ impl Ui {
             self.bar_menu(ctx);
             self.view_popup(ctx);
             self.form_popup(ctx);
-            let acts = self.strip.popups(ctx, &self.icons);
+            let acts = self.strip.popups(device, &mut self.painter, ctx, &self.icons);
             self.actions.extend(acts);
             if !sheet_up { self.context_menu(ctx, screen); }
             self.large_sheet(ctx, screen);
@@ -2660,6 +2660,9 @@ impl Ui {
             .and_then(|spec| self.icons.get(&spec.backdrop_icon))
             .and_then(|handle| self.painter.texture(&handle.id())?.texture.clone().map(|tex| (handle.id(), tex)));
         if let Some(res) = self.painter.callback_resources.get_mut::<crate::glass::Resources>() {
+            self.strip.painted_doc = if preview.is_none() && !self.sheets.shown {
+                self.strip.tabs.iter().find(|t| t.2).map(|t| t.0.clone())
+            } else { None };
             self.glass.prepare(device, queue, e, frame, res, if self.lsheet.spec.is_some() { SHEET_BLUR } else { 1.0 }, preview);
         }
         let screen_desc = egui_wgpu::ScreenDescriptor { size_in_pixels: size, pixels_per_point: out.pixels_per_point };

@@ -11,27 +11,16 @@ that a closed project lets its memory go."""
 from __future__ import annotations
 
 import gc
-import os
+import time
 import weakref
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-import pytest  # noqa: E402
-from PySide6.QtCore import QEventLoop, QTimer  # noqa: E402
+import pytest
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
 
-from formats import igz as igz_format  # noqa: E402
-
-_app = QApplication.instance() or QApplication([])
-
-
-def _settle(ms: int = 0) -> None:
-    """Run the event loop — deleteLater included, which processEvents()
-    alone never runs."""
-    loop = QEventLoop()
-    QTimer.singleShot(ms, loop.quit)
-    loop.exec()
+from formats import igz as igz_format
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
+from views import wgpu_tabs
 
 
 def _face(scene, z=0.0, size=2.0):
@@ -62,19 +51,19 @@ def _clean_all(win):
 
 
 @pytest.fixture
-def win():
-    from views.main_window import MainWindow
-    w = MainWindow()
-    yield w
-    _clean_all(w)
-    w.close()
+def win(native_host, tmp_path, monkeypatch):
+    from core import autosave
+    slots = tmp_path / "autosave"
+    slots.mkdir()
+    monkeypatch.setattr(autosave, "autosave_dir", lambda: slots)
+    return native_host.window
 
 
 # ---- opening -------------------------------------------------------------
 def test_one_tab_at_start_and_the_bar_is_shown(win):
     assert len(win.documents()) == 1
     assert win._project_tabs.count() == 1
-    assert not win._project_tabs.isHidden()
+    assert wgpu_tabs.tabs(win)[0][2]
     assert win.viewport is win.active_document().viewport
     assert win._project_tabs.tabs.tabText(0) == "Untitled"
 
@@ -144,7 +133,7 @@ def test_file_new_opens_a_tab_and_reuses_an_untouched_one(win):
 
 def test_the_plus_button_makes_a_project(win):
     _edit(win)
-    win._project_tabs.plus.click()
+    wgpu_tabs.action(win, win.view, "new")
     assert len(win.documents()) == 2
 
 
@@ -192,86 +181,69 @@ def test_switching_drops_the_tool_and_leaves_the_group(win):
 def test_the_title_and_the_tab_mark_follow_the_front(win, tmp_path):
     path = _igz(tmp_path, "casa.igz")
     win.open_path(path)
-    assert win.windowTitle() == "Built — casa.igz"
+    assert win._host.idle()[3] == "casa.igz — Built"
     _edit(win)
-    assert win.windowTitle().endswith(" *")
+    assert win._host.idle()[3] == "casa.igz * — Built"
     assert win._project_tabs.tabs.tabText(0) == "casa.igz •"
     win._on_new()
-    assert win.windowTitle() == "Built — Untitled"
+    assert win._host.idle()[3] == "Untitled — Built"
     # The background tab still says it has unsaved changes.
     assert win._project_tabs.tabs.tabText(0) == "casa.igz •"
 
 
-def test_ctrl_tab_walks_the_projects_or_the_sheets(win, monkeypatch):
-    sheets = []
-    monkeypatch.setattr(win, "_to_sheets", lambda: sheets.append(1))
-    win._ctrl_tab(1)                    # one project: to the sheets (#91)
-    assert sheets == [1]
-    _edit(win)
-    a = win.active_document()
-    win._on_new()
-    b = win.active_document()
-    win._ctrl_tab(1)
-    assert win.active_document() is a
-    win._ctrl_tab(-1)
-    assert win.active_document() is b
-    assert sheets == [1]
-
-
-def test_the_new_shortcuts_do_not_clash(win):
-    from PySide6.QtGui import QAction
-    from PySide6.QtGui import QKeySequence
-    keys = {}
-    for act in win.findChildren(QAction):
-        for seq in act.shortcuts():
-            text = seq.toString()
-            if text:
-                keys.setdefault(text, []).append(act.text())
-    for key in ("Ctrl+W", "Ctrl+PgDown", "Ctrl+PgUp"):
-        owners = keys.get(QKeySequence(key).toString(), [])
-        assert len(owners) == 1, (key, owners)
+def test_ctrl_tab_walks_the_projects(win):
+    single = win.active_document()
+    win.run_command("next_doc")
+    assert win.active_document() is single
+    second = win.new_document()
+    win.run_command("next_doc")
+    assert win.active_document() is single
+    win.run_command("prev_doc")
+    assert win.active_document() is second
 
 
 def test_panels_forget_what_they_drew_for_the_other_project(win):
-    """Two projects can stand at the same content version: a panel that
-    skips its refresh on an unchanged version would keep showing the
-    other project's rows."""
-    _edit(win)
-    panel = win.tray.components
-    panel._in_model_cv = win.viewport.scene.content_version
-    win._on_new()
-    assert panel._in_model_cv is None or \
-        panel._in_model_cv == win.viewport.scene.content_version
-    assert win.project_browser.outliner._scene() is win.viewport.scene
+    from tests.test_tree_links import _View
+    from views import wgpu_ui
+    from tests.test_in_model_nested import _component, _quad
+    view = _View()
+    for name in ("First project component", "Second project component"):
+        win.new_document()
+        group = _component(_quad(), name)
+        win.viewport.scene.groups.append(group)
+        win.viewport.scene.version += 1
+        assert [r[0] for r in wgpu_ui._components_in_model(view, win)] == [name]
+        wgpu_ui._tree(view, win)
+        assert view._ui_tree_cv[0] == id(win.viewport.scene)
 
 
 def test_materials_let_go_of_the_meshes_of_the_project_left(win):
-    """Materials remembers what each mesh wears; kept across a switch it
-    held a closed project's whole geometry (2 722 meshes of the SPR)."""
     from core.group import Group
     from core.mesh import Mesh
-    m = Mesh()
-    m.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)])
-    win.viewport.scene.groups.append(Group(m, "box"))
+    from views.wgpu_library import material_uses
+    mesh = Mesh()
+    face = mesh.add_face([V(0, 0, 0), V(1, 0, 0), V(0, 1, 0)])
+    face.attrs = {"mat": "Brick"}
+    win.viewport.scene.groups.append(Group(mesh, "Wall"))
     win.viewport.scene.version += 1
-    win._saved_version = -1
-    panel = win.tray.materials
-    panel.refresh_in_model()
-    assert any(hit[0] is m for hit in panel._worn_by_mesh.values())
-    win._on_new()
-    worn = panel._worn_by_mesh or {}
-    assert not any(hit[0] is m for hit in worn.values())
+    assert material_uses(win.viewport.scene)["Brick"]
+    old_mesh = weakref.ref(mesh)
+    doc = win.active_document()
+    win.new_document()
+    assert not material_uses(win.viewport.scene)["Brick"]
+    del mesh, face
+    assert win.close_document(doc, ask=False)
+    win._host.idle()
+    assert old_mesh() is None
 
 
 def test_view_preferences_reach_the_tabs_behind(win, tmp_path):
-    from PySide6.QtCore import QSettings
     from views.settings_sheet import Env, SettingsSheet
 
     _edit(win)
     a = win.active_document()
     win._on_new()
     env = Env(win)
-    env.st = QSettings(str(tmp_path / "navigation.ini"), QSettings.IniFormat)
     want = not a.viewport._invert_wheel
     row = next(r for _, _, rows in SettingsSheet().groups(env, "navigation") for r in rows
                if r.id == "invert_wheel")
@@ -281,84 +253,46 @@ def test_view_preferences_reach_the_tabs_behind(win, tmp_path):
 
 
 # ---- closing -------------------------------------------------------------
-def test_middle_click_closes_a_tab(win):
-    from PySide6.QtCore import QPointF, Qt
-    from PySide6.QtGui import QMouseEvent
+def test_a_closed_project_lets_its_memory_go(win, tmp_path):
     _edit(win)
-    win._saved_version = win.viewport.scene.version
-    win._on_new()
-    bar = win._project_tabs.tabs
-    win.show()
-    _settle()
-    centre = QPointF(bar.tabRect(1).center())
-    ev = QMouseEvent(QMouseEvent.MouseButtonRelease, centre, centre,
-                     Qt.MiddleButton, Qt.NoButton, Qt.NoModifier)
-    QApplication.sendEvent(bar, ev)
-    _settle()
-    assert len(win.documents()) == 1
-    win.hide()
-
-
-def test_a_closed_project_lets_its_memory_go(win, tmp_path, monkeypatch):
-    monkeypatch.setattr(win, "_confirm_discard", lambda prompt: True)
-    _edit(win)
-    win.open_path(_igz(tmp_path, "big.igz"))
-    doc = win.active_document()
-    scene = weakref.ref(doc.viewport.scene)
-    vp = weakref.ref(doc.viewport)
-    win.close_document(doc)
-    del doc
-    _settle()
-    gc.collect()
-    _settle()
-    gc.collect()
-    assert vp() is None, "the closed viewport is still alive"
-    assert scene() is None, "the closed scene is still alive"
+    assert win.open_path(_igz(tmp_path, "big.igz"))
+    scene = weakref.ref(win.viewport.scene)
+    vp = weakref.ref(win.viewport)
+    assert win.close_document()
+    win._host.idle()
+    assert vp() is None and scene() is None
 
 
 def test_closing_the_first_tab_lets_it_go_too(win, tmp_path):
-    """The bundled panels were built with the first tab's viewport: they
-    must not keep it (and its whole project) alive once it is closed."""
-    win.open_path(_igz(tmp_path, "first.igz"))
+    assert win.open_path(_igz(tmp_path, "first.igz"))
     vp = weakref.ref(win.viewport)
     scene = weakref.ref(win.viewport.scene)
-    win.close_document(ask=False)
-    _settle()
-    gc.collect()
-    _settle()
-    gc.collect()
-    assert vp() is None, "the first viewport is still alive"
-    assert scene() is None
+    assert win.close_document(ask=False)
+    win._host.idle()
+    assert vp() is None and scene() is None
 
 
-def test_closing_a_tab_hands_its_memory_back(win, tmp_path, monkeypatch):
-    """The system monitor saw closing the SPR's tab drop only ~1 GB of
-    ~5.8 GB: its scene was freed only by the cycle collector, whenever
-    that ran, and glibc kept the freed heap anyway. Once the viewport is
-    gone the window collects and trims by itself — and takes no hover
-    picture of the closing tab (a whole frame drawn again: seconds and
-    ~650 MB of draw caches on the SPR)."""
+def test_closing_tabs_hands_their_memory_back_once(win, tmp_path, monkeypatch):
     from core import malloc_arenas
     trims = []
     monkeypatch.setattr(malloc_arenas, "trim", lambda: trims.append(1))
-    pictured = []
-    monkeypatch.setattr(win, "_tab_thumbnail",
-                        lambda vp: pictured.append(vp))
-    win.open_path(_igz(tmp_path, "a.igz"))
-    win.open_path(_igz(tmp_path, "b.igz"))
-    closing = win.viewport
-    scene = weakref.ref(closing.scene)
-    pictured.clear()                    # a's, taken as b's tab opened
-    gc.disable()                        # only the window may collect
+    scenes = []
+    for name in ("a.igz", "b.igz"):
+        assert win.open_path(_igz(tmp_path, name))
+        scenes.append(weakref.ref(win.viewport.scene))
+        monkeypatch.setattr(type(win.view), "render_pixels",
+                            lambda *a, **k: pytest.fail("redrew a closing tab"))
+    was_enabled = gc.isenabled()
+    gc.disable()
     try:
-        win.close_document(ask=False)
-        del closing
-        assert not pictured, "a picture was taken of the closing tab"
-        _settle(win.RECLAIM_DELAY_MS + 300)
-        assert scene() is None, "the closed project is still in memory"
-        assert trims, "the freed heap was not handed back"
+        assert win.close_documents(win.documents())
+        assert not trims
+        win._host.idle()
+        assert all(ref() is None for ref in scenes)
+        assert trims == [1]
     finally:
-        gc.enable()
+        if was_enabled:
+            gc.enable()
 
 
 # ---- auto-save and recovery ---------------------------------------------
@@ -375,7 +309,8 @@ def test_each_untitled_project_autosaves_to_its_own_slot(win):
         import time
         deadline = time.monotonic() + 10
         while win._background_autosave.busy and time.monotonic() < deadline:
-            _settle(10)
+            win._host.idle()
+            time.sleep(0.005)
         assert not win._background_autosave.busy
         slot_a = autosave.pending(None, untitled=a.untitled_no)
         slot_b = autosave.pending(None, untitled=b.untitled_no)
@@ -491,11 +426,11 @@ def test_a_workspace_holds_the_tabs(win):
     a = win.active_document()
     win._on_new()
     win.enter_workspace(_Ws())
-    assert not win._project_tabs.isEnabled()
     win.activate_document(a)                      # refused while it is shown
     assert win.active_document() is not a
     assert win.leave_workspace()
-    assert win._project_tabs.isEnabled()
+    win.activate_document(a)
+    assert win.active_document() is a
 
 
 # ---- copy and paste between projects --------------------------------------
@@ -535,128 +470,24 @@ def test_copy_in_one_project_paste_in_another(win):
     assert b.clipboard is clip
 
 
-def test_leaving_a_tab_draws_no_picture_until_its_tab_is_hovered(win,
-                                                                  monkeypatch):
-    """Drawing a frame again on the way out made every «+» and every switch
-    pay for it, heavy models most of all (#1132): the hover pays, once, with
-    the units of that tab, and the one in front gets its own back."""
-    from PySide6.QtGui import QColor, QHelpEvent, QImage
-    from core import units
-    _edit(win)
-    win.show()
-    _settle(50)
-    a = win.active_document()
-    drawn = []
-    img = QImage(280, 160, QImage.Format_RGB32)     # no GL here to draw it
-    img.fill(QColor(200, 30, 30))
-
-    def draw(vp):
-        drawn.append(units._SCENE)
-        return img
-    monkeypatch.setattr(win, "_tab_thumbnail", draw)
-    b = win._new_document()
-    _settle(50)
-    assert not drawn and a.thumbnail is None and a.picture_due
-    bar = win._project_tabs
-    tabs = bar.tabs
-    centre = tabs.tabRect(bar.index_of(a)).center()
-    for _ in range(2):
-        QApplication.sendEvent(tabs, QHelpEvent(QHelpEvent.ToolTip, centre,
-                                                tabs.mapToGlobal(centre)))
-    assert drawn == [a.viewport.scene], "one frame, with that tab's units"
-    assert units._SCENE is b.viewport.scene
-    assert a.thumbnail is img
-    assert bar._preview.isVisible()
-    assert bar._preview._name.text() == a.display_name()
-    bar._hide_preview()
-    win.hide()
-
-
-def test_the_picture_off_in_preferences_draws_nothing(win, monkeypatch):
-    """Off, from the next hover and with no restart: no frame is drawn, the
-    plain tooltip shows; on again, the picture is there."""
-    from PySide6.QtCore import QSettings
-    from PySide6.QtGui import QColor, QHelpEvent, QImage
-    _edit(win)
-    win.show()
-    _settle(50)
-    a = win.active_document()
-    drawn = []
-    img = QImage(280, 160, QImage.Format_RGB32)
-    img.fill(QColor(200, 30, 30))
-    monkeypatch.setattr(win, "_tab_thumbnail",
-                        lambda vp: drawn.append(vp) or img)
-    win._new_document()
-    _settle(50)
-    bar = win._project_tabs
-    tabs = bar.tabs
-    centre = tabs.tabRect(bar.index_of(a)).center()
-
-    def hover():
-        QApplication.sendEvent(tabs, QHelpEvent(QHelpEvent.ToolTip, centre,
-                                                tabs.mapToGlobal(centre)))
-        return bar._preview is not None and bar._preview.isVisible()
-    QSettings().setValue("tabs/hover_picture", "0")
-    try:
-        assert not hover() and not drawn
-    finally:
-        QSettings().remove("tabs/hover_picture")
-    assert hover() and len(drawn) == 1
-    bar._hide_preview()
-    win.hide()
-
-
-def test_hovering_a_tab_behind_shows_its_picture(win):
-    from PySide6.QtCore import QPoint
-    from PySide6.QtGui import QColor, QHelpEvent, QImage
-    _edit(win)
-    a = win.active_document()
-    win._on_new()
-    img = QImage(280, 160, QImage.Format_RGB32)
-    img.fill(QColor(200, 30, 30))
-    a.thumbnail = img
-    win.show()
-    _settle()
-    bar = win._project_tabs
-    tabs = bar.tabs
-    for i, wanted in ((0, True), (1, False)):     # behind / in front
-        centre = tabs.tabRect(i).center()
-        ev = QHelpEvent(QHelpEvent.ToolTip, centre,
-                        tabs.mapToGlobal(centre))
-        QApplication.sendEvent(tabs, ev)
-        shown = bar._preview is not None and bar._preview.isVisible()
-        assert shown is wanted
-    bar._hide_preview()
-    win.hide()
-
-
 def test_open_progress_is_one_monotonic_lifecycle(win, tmp_path, monkeypatch):
-    path = _igz(tmp_path, 'progress.igz')
-    events = []
+    path = _igz(tmp_path, "progress.igz")
+    progress = []
+    bars = []
+    monkeypatch.setattr("views.chrome_dialogs.live", lambda *_: win.view)
     original = win._import_progress
+
     def dialog(title, **kwargs):
-        dlg, callback = original(title, **kwargs)
-        def record(fraction, text):
-            callback(fraction, text)
-            events.append(dlg.value())
-        return dlg, record
-    monkeypatch.setattr(win, '_import_progress', dialog)
-    # The loading bar finishes monotonically; drawing now happens in the
-    # next event-loop turn, without an eager preparation or forced repaint.
-    def prepare(progress):
-        pytest.fail("Opening must not eagerly prepare the drawing")
-    monkeypatch.setattr(win.viewport, 'prepare_drawing', prepare)
-    drawn = []
-    def repaint():
-        drawn.append(win._progress_dlg.value())
-        assert win._opening_document
-        assert win.viewport.updatesEnabled()
-    monkeypatch.setattr(win.viewport, 'repaint', repaint)
+        bar, update = original(title, **kwargs)
+        bars.append(bar)
+        def record(fraction, message):
+            update(fraction, message)
+            progress.append(bar.value())
+        return bar, record
+
+    monkeypatch.setattr(win, "_import_progress", dialog)
+    monkeypatch.setattr(type(win.view), "render_pixels", lambda *a, **k: pytest.fail("eager drawing"))
     assert win.open_path(path)
-    assert events == sorted(events)
-    assert events[-1] == 100
-    assert all(value < 100 for value in events[:-1])
-    assert drawn == []
-    assert not win._progress_dlg.isVisible()
-    assert not win._opening_document
-    assert win.viewport.updatesEnabled()
+    assert progress and progress == sorted(progress) and progress[-1] == 100
+    assert all(value < 100 for value in progress[:-1])
+    assert not bars[0].isVisible() and not win._open_in_progress

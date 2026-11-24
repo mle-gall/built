@@ -359,6 +359,7 @@ class ShellWindow(WindowDocumentCommands, object if NATIVE else QObject):
         self._tool_filter = None
         self._doc = None
         self._documents = []
+        self._reclaim_timer = host.timers.timer(self._reclaim_closed_documents)
         self._project_tabs = ShellProjectTabs(self)
         self._scene_tabs = _SceneRow()
         self.tray = _Tray(self)
@@ -509,14 +510,6 @@ class ShellWindow(WindowDocumentCommands, object if NATIVE else QObject):
             except Exception:  # noqa: BLE001
                 pass
         renderer = getattr(getattr(old, "stand_in", None), "renderer", None)
-        if old is not None and not closing and renderer is not None:
-            # Its tab's picture on hover, as it is left: the one renderer
-            # goes to the project in front (views/wgpu_tabs.py).
-            from views import wgpu_tabs
-            try:
-                wgpu_tabs.remember_picture(old)
-            except Exception:  # noqa: BLE001 — a missing picture only
-                pass
         if old is not None and old.stand_in is not None:
             old.stand_in.renderer = None
         self._doc = doc
@@ -539,6 +532,7 @@ class ShellWindow(WindowDocumentCommands, object if NATIVE else QObject):
     def _watch_document(self, doc):
         from ingetrazo_core import DocumentWatch
         vp = doc.viewport
+        native.attach_viewport_extensions(self, vp)
         vp._document_watch = DocumentWatch(doc)
         vp._unsubscribe_changes = vp.history.feed.subscribe(vp._document_watch)
 
@@ -587,6 +581,12 @@ class ShellWindow(WindowDocumentCommands, object if NATIVE else QObject):
         doc.front_view = None
         doc.viewport = None
         doc.stand_in = None
+
+        self._reclaim_timer.start(0)
+
+    def _reclaim_closed_documents(self):
+        from ingetrazo_render import reclaim_closed_documents
+        reclaim_closed_documents()
 
     def bind(self, viewport, view):
         """The first document (Host.__init__ made its controller and view)."""

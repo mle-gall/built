@@ -13,6 +13,8 @@ class Document:
     view_layout = "single"
 
     def __init__(self, viewport=None) -> None:
+        from core.group import new_uid
+        self.tab_id = new_uid()
         self.viewport = viewport
         #: The .igz it was opened from or saved to (None = never saved).
         self.path: Optional[Path] = None
@@ -30,10 +32,6 @@ class Document:
         #: The composer was on screen when the user left this tab.
         self.composer_shown = False
         self.last_sheet: int = 0
-        #: Its viewport's frame, small, shown on hover over its tab; drawn
-        #: then, if it is due (MainWindow._tab_picture).
-        self.thumbnail = None
-        self.picture_due = False
         #: Its scenes shown as tabs under the viewport (views/scene_tabs.py);
         #: its tab's right-click menu turns them off and on.
         self.scene_tabs: bool = True

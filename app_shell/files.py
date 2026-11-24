@@ -612,18 +612,14 @@ def import_path(win, path: Path) -> bool:
 
 
 def link_document(win) -> bool:
-    """File ▸ Link a Document…: another document placed as a live link,
-    with its own nested links (the classic dialog's checkbox, on)."""
+    """Choose a source file, then ask which of its contents to place."""
     from formats import built
     from views.filedialogs import file_dialogs
     path, _ = file_dialogs.getOpenFileName(win, tr("Link a document"), "", built.DOCUMENT_FILTER)
     if not path:
         return False
-    try:
-        return bool(win.link_igz_path(Path(path)))
-    except Exception:  # noqa: BLE001
-        win._host._error("link")
-        return False
+    win._choose_link_contents(path)
+    return True
 
 
 # ---- save ----------------------------------------------------------------------
