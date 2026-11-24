@@ -1571,161 +1571,19 @@ def _point_in_screen_hull(x: float, y: float, points,
     return True
 
 
-#: Fewest dashes a guide circle is ever cut into: below this a circle too
-#: small for the camera's dash spacing would collapse into a single dash
-#: and stop reading as a dashed circle.
-_MIN_CIRCLE_DASHES = 12
-
-
-def _circle_guide_dashes(g, spacing: float, eye=None,
-                         base_dist: float = 0.0) -> list:
-    """World-space dashes along one guide circle, as a flat
-    ``[x,y,z, x,y,z, …]`` float list for the GL vertex stream.
-
-    The circle is analytic; only this display tessellation is polygonal,
-    and only into the few chords that keep a dash reading round on screen.
-    The dash period follows the camera's spacing like a guide line, but a
-    circle too small for that spacing gets proportionally smaller dashes
-    (never fewer than ``_MIN_CIRCLE_DASHES``) so it stays visibly dashed.
-    """
-    r = float(g.radius)
-    if r <= 0.0:
-        return []
-    from core.axes import plane_axes
-    u, v = plane_axes(g.normal)
-    k = 1.0
-    if eye is not None and base_dist > 0.0:
-        k = max(1.0, (QVector3D(g.center) - QVector3D(eye)).length()
-                / base_dist)
-    sp = max(float(spacing), 1e-6) * k
-    circ = 2.0 * math.pi * r
-    n = min(max(int(circ / sp), _MIN_CIRCLE_DASHES), 4000)
-    # Half of each angular period is drawn, half is a gap — the same 1:1
-    # dash/gap ratio the guide lines use.
-    dash_angle = math.pi / n
-    chords = max(1, int(math.ceil(dash_angle / 0.15)))
-    out: list = []
-    c = QVector3D(g.center)
-    for i in range(n):
-        t0 = 2.0 * math.pi * i / n
-        step = dash_angle / chords
-        for j in range(chords):
-            a0 = t0 + step * j
-            a1 = a0 + step
-            pa = c + u * (r * math.cos(a0)) + v * (r * math.sin(a0))
-            pb = c + u * (r * math.cos(a1)) + v * (r * math.sin(a1))
-            out.extend([pa.x(), pa.y(), pa.z(), pb.x(), pb.y(), pb.z()])
-    return out
+from ingetrazo_core import MIN_CIRCLE_DASHES as _MIN_CIRCLE_DASHES
 
 
 def _guide_vertices(guides, spacing: float, selection=(), centre=None,
                     reach: float = 0.0, eye=None):
-    """Guides as world-space DASHES for the GL pass, so they are hidden by
-    the geometry in front of them like any other line (issue #23,
-    @pacaeiro: «guide lines are always in front of other objects, even if
-    they are behind the object»).
-
-    The QPainter overlay they used to live in has no depth buffer at all —
-    it paints after the render, so a guide could only ever be on top. And
-    the cheap fix does not exist: asking the pick index per sample point
-    (``_is_occluded``, what the snap engine uses) measured **618 µs a ray**
-    on the Plaza Yanque model, so ten guides would have cost 200 ms a
-    frame. The depth buffer already knows the answer for free.
-
-    A guide is a HALF-MILLION-METRE line (``GUIDE_HALF_LEN``), so it is not
-    dashed end to end: the run is centred on the guide's closest point to
-    ``centre`` (the camera target) and reaches ``reach`` metres each way,
-    with ``spacing`` scaled to the camera distance — the recipe of
-    ``_axes_vertices``, so the on-screen density stays put across zoom and
-    the dashes converge toward the horizon in perspective. Dashing the
-    whole length instead, under any sane cap, gave 27-metre dashes with
-    22-metre gaps: at a 16-metre view the guide fell in a gap and vanished.
-
-    With ``eye`` given, each guide LINE scales ``spacing`` and ``reach``
-    by how much farther from the eye its looked-at stretch lies than the
-    camera's own distance (never less): a guide 30 m away while the view
-    sits a metre from a detail drew 3 cm dashes — under a pixel — over
-    15 m, and read as faint or gone on big models (#481); and a 2 cm orbit
-    distance left after a deep zoom (#579) did the same to every guide.
-
-    Returns ``(coords, spans)``: a flat float array and
-    ``[(first_vertex, count, selected)]``, one entry per guide LINE, so the
-    caller can colour the selected ones without a second buffer. Guide
-    points are not here — they stay screen-space crosses in the overlay.
-    """
-    import numpy as np
-    coords = array("f")
-    spans: list[tuple[int, int, bool]] = []
-    spacing = max(float(spacing), 1e-6)
-    reach = float(reach) if reach > 0 else spacing * 500.0
-    dash = spacing * 0.5
-    origin = QVector3D(centre) if centre is not None else QVector3D(0, 0, 0)
-    sel = {id(g) for g in (selection or ())}
-    n = max(1, min(int(2.0 * reach / spacing), 4000))
-    # The camera distance the spacing was made for (eye to centre).
-    base_dist = ((QVector3D(eye) - origin).length()
-                 if eye is not None else 0.0)
-    for g in guides or ():
-        if getattr(g, "is_circle", False):
-            flat = _circle_guide_dashes(g, spacing, eye, base_dist)
-            if flat:
-                start = len(coords) // 3
-                coords.extend(flat)
-                count = len(coords) // 3 - start
-                if count:
-                    spans.append((start, count, id(g) in sel))
-            continue
-        if not getattr(g, "is_line", False):
-            # A guide POINT measured from a vertex draws its guide SEGMENT
-            # (Rafael, Revisión 3): finite, dashed the same way, from the
-            # vertex to the point. The cross itself stays in the overlay.
-            o = getattr(g, "origin", None)
-            p = getattr(g, "point", None)
-            if o is None or p is None:
-                continue
-            seg = p - o
-            length = seg.length()
-            if length < 1e-9:
-                continue
-            d = seg / length
-            start = len(coords) // 3
-            t = 0.0
-            while t < length:
-                a = o + d * t
-                b = o + d * min(t + dash, length)
-                coords.extend([a.x(), a.y(), a.z(), b.x(), b.y(), b.z()])
-                t += spacing
-            count = len(coords) // 3 - start
-            if count:
-                spans.append((start, count, id(g) in sel))
-            continue
-        d = getattr(g, "direction", None)
-        p = getattr(g, "point", None)
-        if d is None or p is None:
-            continue
-        # Foot of the perpendicular from the centre: the stretch of guide
-        # the camera is actually looking at.
-        tf = QVector3D.dotProduct(origin - p, d)
-        g_sp, g_reach, g_dash = spacing, reach, dash
-        if eye is not None and base_dist > 0.0:
-            k = max(1.0, (p + d * tf - eye).length() / base_dist)
-            g_sp, g_reach, g_dash = spacing * k, reach * k, dash * k
-        t0 = tf - g_reach
-        start = len(coords) // 3
-        # The n dashes in one NumPy pass: a Python loop of QVector3D maths
-        # here cost ~2 ms a guide on EVERY frame, so forty guides took a
-        # frame from 18 to 110 ms (#816).
-        ts = t0 + np.arange(n, dtype=np.float64) * g_sp
-        pv = np.array((p.x(), p.y(), p.z()), dtype=np.float64)
-        dv = np.array((d.x(), d.y(), d.z()), dtype=np.float64)
-        seg = np.empty((n, 2, 3), dtype=np.float32)
-        seg[:, 0] = pv + ts[:, None] * dv
-        seg[:, 1] = pv + (ts + g_dash)[:, None] * dv
-        coords.frombytes(seg.tobytes())
-        count = len(coords) // 3 - start
-        if count:
-            spans.append((start, count, id(g) in sel))
-    return coords, spans
+    from core import axes
+    from ingetrazo_core import guide_vertices
+    coords, spans = guide_vertices(guides or (), spacing, selection or (),
+                                   centre, reach, eye,
+                                   None if axes.is_world() else axes.frame())
+    data = array("f")
+    data.frombytes(memoryview(coords).cast("B"))
+    return data, spans
 
 
 def _ray_triangle(
