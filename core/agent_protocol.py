@@ -60,6 +60,9 @@ class ProtocolTools:
         self._viewport.update()
         return {**out, "step": out["step"].to_json() if out["step"] else None}
 
+    def _tool_set_group_axes(self, placement, origin, red, green):
+        return self._edit_command("set_group_axes", placement=placement, origin=origin, red=red, green=green)
+
     def _tool_flip_selection(self, center, axis, copy=False, placements=(), faces=(), edges=()):
         return self._edit_command("flip_selection", center=center, axis=axis, copy=copy,
                                   placements=placements, faces=faces, edges=edges)

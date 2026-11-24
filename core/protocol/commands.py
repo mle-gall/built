@@ -114,6 +114,23 @@ def _push_face(history, f, distance, keep_base, tool):
     return _answer(history, before)
 
 
+def set_group_axes(history, placement, origin, red, green):
+    """Re-express a placement's axes while keeping its geometry in place."""
+    from ingetrazo_core import ToolMachine, Vec3
+    from core.axes import frame_matrix
+    from core.coordinate_frame import point_in_frame, ZERO
+    from core.history import ChangeAxesCommand
+    group, = _placements(history, [placement])
+    basis = ToolMachine.group_axes_basis(origin, red, green)
+    if basis is None:
+        raise ValueError("the red and green points must define a nondegenerate frame")
+    local = point_in_frame(origin, getattr(store_of(history.scene.mesh), "frame_origin", ZERO))
+    frame = frame_matrix(local, *(Vec3(*p) for p in basis))
+    before = history.revision
+    history.execute(ChangeAxesCommand(group, frame))
+    return _answer(history, before)
+
+
 def flip_selection(history, center, axis, copy=False, placements=(), faces=(), edges=()):
     """Mirror keyed selection across a plane through center with normal axis."""
     from math import isfinite
@@ -1481,7 +1498,7 @@ COMMANDS = {"set_location": set_location, "set_model_units": set_model_units, "s
             "add_guide": add_guide, "change_guide": change_guide, "add_guide_circle": add_guide_circle, "add_arc": add_arc,
             "move_placements": move_placements, "copy_placements": copy_placements,
             "move_selection": move_selection, "scale_selection": scale_selection,
-            "flip_selection": flip_selection, "paste_clipboard": paste_clipboard, "bevel_selection": bevel_selection, "rotate_selection": rotate_selection, "offset_outline": offset_outline, "paint_material": paint_material,
+            "set_group_axes": set_group_axes, "flip_selection": flip_selection, "paste_clipboard": paste_clipboard, "bevel_selection": bevel_selection, "rotate_selection": rotate_selection, "offset_outline": offset_outline, "paint_material": paint_material,
             "divide_edges": divide_edges, "join_edges": join_edges,
             "move_vertices": move_vertices, "erase": erase,
             "reverse_faces": reverse_faces, "push_pull": push_pull, "orient_faces": orient_faces,

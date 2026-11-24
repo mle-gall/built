@@ -596,3 +596,23 @@ def test_bridge_mirrors_and_stamps_the_model_clipboard(bridge):
     result = _call(b, "paste_clipboard", offset=[8, 2, 1])
     assert result["ok"] and result["step"] and len(vp.scene.mesh.faces) == count + 1
     assert vp.history.undo() and len(vp.scene.mesh.faces) == count
+
+
+def test_group_axes_verb_rejects_collinearity_and_preserves_world_points():
+    from core.group import frame_axes, group_frame
+    from core.history import History
+    from core.protocol.commands import run
+    from core.scene import Scene
+    from tests.test_group_axes import _slab, _world_pts
+    scene, group = Scene(), _slab()
+    scene.groups.append(group)
+    history = History(scene)
+    original = _world_pts(group)
+    args = dict(placement=group.uid, origin=[2, 0, 0], red=[2, 2, 0])
+    with pytest.raises(ValueError):
+        run(history, "set_group_axes", **args, green=[2, 1, 0])
+    assert not history.undo_stack
+    assert run(history, "set_group_axes", **args, green=[0, 3, 0])["ok"]
+    assert tuple(frame_axes(group_frame(group))[1].toTuple()) == (0., 1., 0.)
+    assert _world_pts(group) == original
+    assert history.undo() and group_frame(group) is None

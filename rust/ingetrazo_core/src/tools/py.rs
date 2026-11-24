@@ -421,6 +421,11 @@ impl ToolMachine {
     }
 
     #[staticmethod]
+    fn group_axes_basis(origin: P3, red: P3, green: P3) -> Option<[P3; 3]> {
+        super::change_axes::axes(origin, red, green)
+    }
+
+    #[staticmethod]
     fn flip_quad(axis: &str, center: P3, half: P3, margin: f64) -> [P3; 4] {
         super::flip::quad(axis, center, half, margin)
     }

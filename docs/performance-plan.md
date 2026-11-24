@@ -2923,7 +2923,7 @@ Native denotes routed, not exhaustive parity acceptance.
 | --- | --- | --- | --- |
 | select | SelectTool | native | Rust state machine, rubber_band_lines |
 | line | LineTool | native | Rust state machine, rubber_band_lines |
-| freehand | FreehandTool | native | rubber_band_lines |
+| freehand | FreehandTool | native | Rust state machine, rubber_band_lines |
 | rectangle | RectangleTool | native | rubber_band_lines |
 | rotated_rect | RotatedRectangleTool | native | rubber_band_lines |
 | circle | CircleTool | native | rubber_band_lines |
@@ -2954,7 +2954,7 @@ Native denotes routed, not exhaustive parity acceptance.
 | walk | WalkTool | native | Rust state machine |
 | look_around | LookAroundTool | native | Rust state machine |
 | first_person | FirstPersonTool | native | Rust state machine |
-| change_axes | ChangeAxesTool | native | rubber_band_lines |
+| change_axes | ChangeAxesTool | native | Rust state machine, rubber_band_lines |
 | scale_manager | ScaleManagerTool | native | shared viewport / tool base |
 | paste | PasteTool | native | Rust state machine, set_groups_preview_offset |
 | place_group | PlaceGroupTool | native | pick_face_any, rubber_band_lines |

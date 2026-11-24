@@ -301,6 +301,12 @@ BUILTIN_TOOLS.append(dict(
     }, required=["distance"], oneOf=[{"required": ["face"]}, {"required": ["points", "normal"]}])))
 
 BUILTIN_TOOLS.append(dict(
+    name="set_group_axes", mutates=True,
+    description="Set a placement's axes using an origin, a red-axis point and a green-side point in metres.",
+    inputSchema=dict(type="object", properties={"placement": _OCCURRENCE, "origin": _SCALE_TRIPLE,
+        "red": _SCALE_TRIPLE, "green": _SCALE_TRIPLE}, required=["placement", "origin", "red", "green"])))
+
+BUILTIN_TOOLS.append(dict(
     name="flip_selection", mutates=True,
     description="Mirror named faces, edges and placements across a plane, optionally making a copy.",
     inputSchema=dict(type="object", properties={"center": _SCALE_TRIPLE, "axis": _SCALE_TRIPLE,

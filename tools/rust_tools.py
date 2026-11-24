@@ -80,8 +80,8 @@ class _Host:
                 # Undo can invalidate a cached viewport pick between events.
                 return False, self.revision(), 0, str(error)
             return answer["ok"], self.revision(), 0, answer.get("error")
-        if name == "add_guide":
-            for key in ("point", "origin"):
+        if name in ("add_guide", "set_group_axes"):
+            for key in ("point", "origin", "red", "green"):
                 if args.get(key) is not None:
                     args[key] = self._model(args[key])
         for key in ("a", "b", "eye", "anchor", "center"):
@@ -1863,7 +1863,6 @@ class FlipTool(FlipHost, RustTool):
     _copy = property(lambda self: self._state("copy"))
     cursor_plus = _copy
 
-
 class FreehandTool(RustTool):
     kind = "freehand"
     shortcut = None
@@ -1892,3 +1891,41 @@ class FreehandTool(RustTool):
     def on_hover(self, ctx):
         if self._send(ctx.viewport, self._pointer("hover", ctx))["redraw"]:
             ctx.viewport.update()
+
+
+class ChangeAxesTool(RustTool):
+    kind = "change_axes"
+    shortcut = None
+    description = None
+    target = None
+    start_point = _point_property("start_point")
+    red_point = _point_property("red_point")
+    hover_point = _point_property("hover_point")
+
+    def host_axes_target(self, vp, _):
+        return self.target.uid if self.target is not None else None
+
+    def host_axes_message(self, vp, key):
+        from core.i18n import tr
+        if key == "collinear":
+            vp.flash_status(tr("The green direction cannot run along red — click off the red axis"), 4000)
+        elif key == "done":
+            vp.flash_status(tr("Axes changed"), 2500)
+        else:
+            labels = {"empty": "Select one group or component first", "red": "Click along the new red axis",
+                      "green": "Click to set the green direction"}
+            vp.flash_status(tr(labels[key]))
+
+    def on_click(self, ctx):
+        vp = ctx.viewport
+        if self._send(vp, self._pointer("click", ctx))["committed"]:
+            self.target = None
+            window = vp.window() if hasattr(vp, "window") else None
+            if hasattr(window, "_activate_tool"):
+                window._activate_tool("select")
+        vp.update()
+
+    def value_label(self):
+        from core.i18n import tr
+        if self.start_point is not None and self.hover_point is not None:
+            return (tr("Red axis") if self.red_point is None else tr("Green axis")), self.hover_point
