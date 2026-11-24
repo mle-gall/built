@@ -165,13 +165,32 @@ fn path_surface_area(obj: &Obj<'_>) -> PyResult<Option<f64>> {
     Ok(Some(area))
 }
 #[pyfunction]
-fn parse_points_csv<'p>(py: Python<'p>, text: &str) -> PyResult<Obj<'p>> {
+fn parse_points_csv(py: Python<'_>, text: String) -> PyResult<Py<PyAny>> {
+    crate::file_open::DocumentOpen::stage(
+        py,
+        None,
+        move |py, _| Ok(parse_rows(py, &text)?.unbind()),
+    )
+}
+fn parse_rows<'p>(py: Python<'p>, text: &str) -> PyResult<Obj<'p>> {
     let list = PyList::empty(py);
-    for line in text
+    let read = py.import("csv")?.getattr("reader")?;
+    let options = |sep: &str| -> PyResult<_> {
+        let args = PyDict::new(py);
+        args.set_item("delimiter", sep)?;
+        Ok(args)
+    };
+    let comma = options(",")?;
+    let semi = options(";")?;
+    for (i, line) in text
         .lines()
         .map(str::trim)
         .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .enumerate()
     {
+        if i % 256 == 0 {
+            crate::file_open::checkpoint(py)?;
+        }
         let cells: Vec<String> = if let Some(sep) = if line.contains(';') {
             Some(';')
         } else if line.contains(',') {
@@ -179,10 +198,7 @@ fn parse_points_csv<'p>(py: Python<'p>, text: &str) -> PyResult<Obj<'p>> {
         } else {
             None
         } {
-            let kw = PyDict::new(py);
-            kw.set_item("delimiter", sep.to_string())?;
-            py.import("csv")?
-                .call_method("reader", (vec![line],), Some(&kw))?
+            read.call((vec![line],), Some(if sep == ',' { &comma } else { &semi }))?
                 .call_method0("__next__")?
                 .extract()?
         } else {

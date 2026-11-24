@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 use super::{error, Obj};
+use crate::file_open::DocumentOpen;
 use numpy::{ndarray::Array3, IntoPyArray, PyArray3};
 use pyo3::prelude::*;
 use std::{
@@ -77,7 +78,7 @@ impl Layout {
             .into_raw_vec_and_offset()
             .0);
         }
-        let mut buf = vec![0; need];
+        let mut buf = zeroed(need)?;
         match self.compression {
             5 => {
                 let mut decoder =
@@ -165,11 +166,14 @@ impl Layout {
     fn band(&self, file: &mut File, index: usize, rows: usize) -> Result<Vec<u8>, String> {
         let plane = if self.planar == 2 { self.samples } else { 1 };
         let channels = self.samples / plane;
-        let mut raw = vec![0; product(&[rows, self.width, self.samples])?];
+        let mut raw = zeroed(product(&[rows, self.width, self.samples])?)?;
         let across = self.width.div_ceil(self.tile_w);
         let down = self.height.div_ceil(self.tile_h);
         for p in 0..plane {
             for x in 0..across {
+                if crate::file_open::cancelled() {
+                    return Err("cancelled".into());
+                }
                 let id = (p * down + index) * across + x;
                 let offset = *self.offsets.get(id).ok_or("missing TIFF tile")?;
                 let count = *self.bytecounts.get(id).ok_or("missing TIFF byte count")?;
@@ -202,6 +206,13 @@ impl Layout {
         Ok(raw)
     }
 }
+fn zeroed(n: usize) -> Result<Vec<u8>, String> {
+    let mut data = Vec::new();
+    data.try_reserve_exact(n)
+        .map_err(|_| "TIFF buffer exceeds available memory".to_string())?;
+    data.resize(n, 0);
+    Ok(data)
+}
 fn product(v: &[usize]) -> Result<usize, String> {
     v.iter()
         .try_fold(1usize, |n, &m| n.checked_mul(m))
@@ -212,12 +223,76 @@ fn product(v: &[usize]) -> Result<usize, String> {
 fn unsupported_reason(info: Layout) -> Option<String> {
     info.reason()
 }
+// Progress callbacks belong to the UI thread. Replay every completed band even
+// when several short strips finish between two polls of the document worker.
+#[pyclass]
+struct BandProgress {
+    callback: Py<PyAny>,
+    count: usize,
+    delivered: usize,
+}
+#[pymethods]
+impl BandProgress {
+    fn __call__(&mut self, py: Python<'_>, fraction: f64, _phase: &str) -> PyResult<()> {
+        let done = ((fraction * self.count as f64).round() as usize).min(self.count);
+        while self.delivered < done {
+            self.delivered += 1;
+            if !self
+                .callback
+                .bind(py)
+                .call1((self.delivered as f64 / self.count as f64,))?
+                .is_truthy()?
+            {
+                return Err(error(py, "cancelled"));
+            }
+        }
+        Ok(())
+    }
+}
 #[pyfunction(signature=(info,max_px=8192,progress=None))]
-fn read_rgba<'p>(
+fn read_rgba(
+    py: Python<'_>,
+    info: Layout,
+    max_px: usize,
+    progress: Option<Py<PyAny>>,
+) -> PyResult<Py<PyAny>> {
+    let count = info.height.div_ceil(info.tile_h.max(1));
+    let callback = progress
+        .map(|callback| {
+            Py::new(
+                py,
+                BandProgress {
+                    callback,
+                    count,
+                    delivered: 0,
+                },
+            )
+        })
+        .transpose()?;
+    let nested = DocumentOpen::staging();
+    let caller = callback.as_ref().map(|c| c.bind(py).as_any().clone());
+    DocumentOpen::stage(py, caller.as_ref(), move |py, worker| {
+        let notify = |fraction| -> PyResult<()> {
+            if nested {
+                if let Some(cb) = &callback {
+                    cb.call1(py, (fraction, "Reading orthomosaic"))?;
+                }
+            } else if callback.is_some() {
+                worker.call1((fraction, "Reading orthomosaic"))?;
+            }
+            Ok(())
+        };
+        Ok(decode(py, info, max_px, notify)?
+            .into_pyobject(py)?
+            .into_any()
+            .unbind())
+    })
+}
+fn decode<'p>(
     py: Python<'p>,
     info: Layout,
     max_px: usize,
-    progress: Option<&Obj<'p>>,
+    progress: impl Fn(f64) -> PyResult<()>,
 ) -> PyResult<(Bound<'p, PyArray3<u8>>, usize)> {
     if let Some(r) = info.reason() {
         return Err(error(
@@ -237,7 +312,7 @@ fn read_rgba<'p>(
     let w = info.width.div_ceil(k);
     let h = info.height.div_ceil(k);
     let n = product(&[w, h, 4]).map_err(|e| error(py, e))?;
-    let mut out = vec![0; n];
+    let mut out = zeroed(n).map_err(|e| error(py, e))?;
     let mut sums = vec![[0u64; 4]; w];
     let denom = (k as u64)
         .checked_mul(k as u64)
@@ -286,11 +361,8 @@ fn read_rgba<'p>(
             Ok(())
         })
         .map_err(|e| error(py, e))?;
-        if let Some(cb) = progress {
-            if !cb.call1(((i + 1) as f64 / bands as f64,))?.is_truthy()? {
-                return Err(error(py, "cancelled"));
-            }
-        }
+        progress((i + 1) as f64 / bands as f64)?;
+        crate::file_open::checkpoint(py)?;
     }
     Ok((
         Array3::from_shape_vec((h, w, 4), out)

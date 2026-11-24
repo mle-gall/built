@@ -111,7 +111,10 @@ impl Survey {
         let mut runs = Vec::<(String, usize, usize)>::new();
         let mut mtl = None;
         let mut header = true;
-        for line in src.lines() {
+        for (index, line) in src.lines().enumerate() {
+            if index % 4096 == 0 && crate::file_open::cancelled() {
+                return Err("Opening cancelled".into());
+            }
             let mut words = line.split_whitespace();
             let tag = words.next();
             let mut num = || {
@@ -206,7 +209,25 @@ impl Survey {
     }
 }
 #[pyfunction(signature=(obj_path,datum,ground_ref=0.,anchor=None))]
-fn load_odm_obj<'p>(
+fn load_odm_obj(
+    py: Python<'_>,
+    obj_path: PathBuf,
+    datum: Py<PyAny>,
+    ground_ref: f64,
+    anchor: Option<Py<PyAny>>,
+) -> PyResult<Py<PyAny>> {
+    crate::file_open::DocumentOpen::stage(py, None, move |py, _| {
+        Ok(load_inner(
+            py,
+            obj_path,
+            datum.bind(py),
+            ground_ref,
+            anchor.map(|a| a.into_bound(py)),
+        )?
+        .unbind())
+    })
+}
+fn load_inner<'p>(
     py: Python<'p>,
     obj_path: PathBuf,
     datum: &Obj<'p>,
@@ -233,12 +254,18 @@ fn load_odm_obj<'p>(
             && north == datum.getattr("northern")?.is_truthy()?
         {
             let v = crate::math::xyz(&datum.call_method1("utm_to_local", (e, n, 0.))?)?;
-            for p in &mut data.xyz {
+            for (index, p) in data.xyz.iter_mut().enumerate() {
+                if index % 2048 == 0 {
+                    crate::file_open::checkpoint(py)?;
+                }
                 p[0] += v.x;
                 p[1] += v.y
             }
         } else {
-            for p in &mut data.xyz {
+            for (index, p) in data.xyz.iter_mut().enumerate() {
+                if index % 2048 == 0 {
+                    crate::file_open::checkpoint(py)?;
+                }
                 let (lat, lon) = crate::location::utm_inverse(e + p[0], n + p[1], z, north);
                 let v =
                     crate::math::xyz(&datum.call_method1("geodetic_to_local", (lat, lon, 0.))?)?;

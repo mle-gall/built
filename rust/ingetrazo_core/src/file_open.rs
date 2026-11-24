@@ -215,7 +215,7 @@ pub struct DocumentOpen {
 #[pymethods]
 impl DocumentOpen {
     #[staticmethod]
-    fn staging() -> bool {
+    pub(crate) fn staging() -> bool {
         STAGING.with_borrow(Option::is_some)
     }
 
