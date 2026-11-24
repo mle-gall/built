@@ -64,23 +64,20 @@ must leave process-wide state as it found it.
   for every later test on a worker;
 - the Paint tool's class state: its chosen material (`PaintTool.current_*`),
   recent materials and armed pipette;
-- the scene `core.units` formats with (`bind_scene`), and the Qt application
-  and organization names, which name the settings file;
+- the scene used for dimension formatting by `core.units.bind_scene`;
 - the drawing axes, the SKP parse tables and `core._native.native`.
 
-Each test file also gets an empty settings store of its own
-(`_settings_per_module`): windows save their geometry and docks when they
-close, and the next file on the worker restored them.
+Before collection, the controller and each worker set `HOME`,
+`CFFIXED_USER_HOME` and `BUILT_SETTINGS_DIR` to private directories.
+Each test module gets an empty native settings store. Tests that need to
+reopen preferences in their own directory can use `private_settings`.
+A change to the real macOS Built preferences plist's mtime fails the
+session, including when the suite runs in batches.
 
-A leak guard (`_leak_guard`, on by default) fails a test, at teardown, that
-leaves the environment, the Qt application names or the settings location
-changed after its own monkeypatch has undone what it did. The message names
-what changed. Undo it in the test with `monkeypatch` or a `finally`; for a
-settings store of the test's own, ask for the `private_settings` fixture
-instead of calling `QSettings.setPath`. Two process set-ups are not leaks:
-the native shell's Qt host, started once per process and undone at the end
-of its module (`tests/shell_isolation.py`), and the profile `main.py` sets
-when it is first imported. `BUILT_LEAK_GUARD=0` turns the guard off.
+The leak guard checks environment changes left behind by a test. Restore
+them with `monkeypatch` or a `finally` block. Shell fixtures restore the
+process-wide services they install. `BUILT_LEAK_GUARD=0` disables the
+per-test check. The session's plist check runs independently.
 
 The guard does not cover the class and module state the fixtures put back
 (the Paint tool, `core.units`, the drawing axes). For a new kind of leak,
