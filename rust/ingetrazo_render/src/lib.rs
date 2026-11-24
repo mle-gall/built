@@ -4,6 +4,8 @@ mod captured_frame;
 use captured_frame::CapturedFrame;
 mod window_timers;
 mod window_document;
+mod component_replacement;
+mod edge_commands;
 mod face_commands;
 mod model_edit;
 mod profile_commands;
@@ -2566,6 +2568,9 @@ impl Renderer {
                      fields: Vec<ui::dialog::Field>, buttons: Vec<ui::dialog::Button>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_dialog(seq, title, note, width, fields, buttons); }
     }
+    fn ui_set_join_marks(&mut self, seq: &str, marks: PyRef<'_, edge_commands::JoinMarks>, matrix: [f64; 16], width: f64, height: f64) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_join_marks(seq, marks.project(matrix, width, height)); }
+    }
     fn ui_dialog_open(&self) -> bool { self.ui.as_ref().is_some_and(|ui| ui.dialog_open()) }
     fn ui_font_picker(&mut self, draft: &str) -> PyResult<()> {
         let choice = serde_json::from_str(draft).map_err(|e| PyValueError::new_err(e.to_string()))?;
@@ -3008,6 +3013,8 @@ fn context_targets(hit: bool, selection: &Bound<'_, PyAny>) -> PyResult<Vec<Py<P
 #[pymodule]
 pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     window_document::register(m)?;
+    component_replacement::register(m)?;
+    edge_commands::register(m)?;
     face_commands::register(m)?;
     model_edit::register(m)?;
     profile_commands::register(m)?;

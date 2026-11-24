@@ -4394,67 +4394,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         tool.target = group
         self._activate_tool("scale_manager")
 
-    def _replacement_choices(self, sel) -> list:
-        """``[(label, instance)]``: one row per component definition in the
-        model that the selection could be swapped for — one instance stands
-        for its definition. The selected components' own definitions are
-        left out, and so are the face-me cutouts, as the tray does."""
-        own = {id(g.mesh) for g in sel
-               if isinstance(g, Group) and g.is_component()}
-        scene = self.viewport.scene
-        pool = list(scene.groups)
-        ctx = scene.edit_group
-        if ctx is not None:
-            pool += [c for c in (ctx.children or ()) if c not in pool]
-        by_proto: dict = {}
-        for g in pool:
-            if (not isinstance(g, Group) or not g.is_component()
-                    or getattr(g, "billboard", False) or id(g.mesh) in own):
-                continue
-            by_proto.setdefault(id(g.mesh), []).append(g)
-        # Definitions kept in the file count even with no copy placed:
-        # (definition, copies) per prototype.
-        rows = [(gs[0], len(gs)) for gs in by_proto.values()]
-        rows += [(t, 0) for t in scene.kept_components
-                 if id(t.mesh) not in by_proto and id(t.mesh) not in own]
-        rows.sort(key=lambda r: ((r[0].name or "").lower(), -r[1]))
-        out = []
-        seen: set = set()
-        for definition, n in rows:
-            name = definition.name or tr("Component")
-            label = f"{name}  ({n}×)"
-            k = 2
-            while label in seen:                # two definitions, one name
-                label = f"{name} [{k}]  ({n}×)"
-                k += 1
-            seen.add(label)
-            out.append((label, definition))
-        return out
-
-    def _on_replace_component(self) -> None:
-        """Replace Component…: the selected component instances take
-        another definition from the model, each keeping its place, turn and
-        scale. Select ▸ All Instances first to swap every copy."""
-        from PySide6.QtWidgets import QInputDialog
-        sel = list(self.viewport.scene.selection)
-        targets = [g for g in sel if isinstance(g, Group) and g.is_component()]
-        if not targets:
-            self.viewport.flash_status(tr("Select a component first"))
-            return
-        choices = self._replacement_choices(sel)
-        if not choices:
-            self.viewport.flash_status(tr(
-                "There is no other component in the model to replace it with"))
-            return
-        labels = [lb for lb, _g in choices]
-        label, ok = QInputDialog.getItem(
-            self, tr("Replace Component"),
-            tr("Replace {n} selected instances with:", n=len(targets)),
-            labels, 0, False)
-        if not ok or label not in labels:
-            return
-        self.replace_selection_with(choices[labels.index(label)][1])
-
     def keep_component(self, definition, keep: bool = True) -> None:
         """Keep in File on or off for ``definition``'s component (an
         instance or a kept template), undoable."""
@@ -4468,49 +4407,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
             text = tr("{name} is no longer kept in the file",
                       name=definition.name)
         self.statusBar().showMessage(text, 4000)
-
-    def replace_selection_with(self, source) -> int:
-        """Swap the selected component instances for ``source``'s
-        definition, as one undo step; how many changed. The menu's dialog
-        and the tray's «In model» list both land here."""
-        from core.history import (CompoundCommand, KeepComponentCommand,
-                                  ReplaceComponentCommand)
-        from core.kept_components import orphaned_by
-        cmd = ReplaceComponentCommand(
-            [g for g in self.viewport.scene.selection
-             if isinstance(g, Group)], source)
-        if not cmd.targets:
-            return 0
-        # Swapping every copy away would drop a definition from the file
-        # for good: say which, and offer to keep it — in the same undo step.
-        orphans = orphaned_by(self.viewport.scene, cmd.targets)
-        steps = [cmd]
-        if orphans:
-            keep = self._ask_keep_orphans(orphans)
-            if keep is None:
-                return 0
-            if keep:
-                steps = [KeepComponentCommand(g) for g in orphans] + [cmd]
-        self.viewport.history.execute(
-            steps[0] if len(steps) == 1 else CompoundCommand(steps))
-        self.viewport.notify_scene_changed()
-        self.viewport.update()
-        self.statusBar().showMessage(tr(
-            "{n} instances replaced with {name}", n=len(cmd.targets),
-            name=source.name), 4000)
-        return len(cmd.targets)
-
-    def _ask_keep_orphans(self, orphans):
-        """True = keep them in the file, False = let them go, None =
-        cancel the replacement."""
-        names = ", ".join(sorted({g.name or tr("Component") for g in orphans}))
-        answer = _dialogs.ask(
-            self, tr("Keep {names} in the file?", names=names),
-            tr("You can place it or swap back to it later."),
-            [("drop", tr("Let It Go")), ("cancel", tr("Cancel")),
-             ("keep", tr("Keep in File"))],
-            default="keep", cancel="cancel")
-        return {"keep": True, "drop": False}.get(answer)
 
     def keep_selected_components(self, keep: bool = True) -> None:
         """Keep in File, on or off, for every component definition the
@@ -4641,41 +4537,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
             act = menu.addAction(
                 label, lambda m=mode: self._on_intersect_faces(m))
             act.setStatusTip(tip)
-
-    @_repeatable("Split into Pieces")
-    def _on_split_into_pieces(self) -> None:
-        """Regroup the selected group's contents by physical piece — the
-        solids that do not touch (see :mod:`core.pieces`). The group stays
-        one object; Explode afterwards gives each piece on its own."""
-        from PySide6.QtWidgets import QApplication
-        from core.history import SplitIntoPiecesCommand
-        from core.pieces import split_into_pieces
-        scene = self.viewport.scene
-        if scene.edit_group is not None:
-            self.viewport.flash_status(tr(
-                "Leave the group first (Esc) to split it into pieces"))
-            return
-        groups = [g for g in scene.selection if isinstance(g, Group)
-                  and not getattr(g, "billboard", False)]
-        if len(groups) != 1:
-            self.viewport.flash_status(tr(
-                "Select one group or component to split into pieces"))
-            return
-        QApplication.setOverrideCursor(Qt.WaitCursor)
-        try:
-            pieces = split_into_pieces(groups[0])
-        finally:
-            QApplication.restoreOverrideCursor()
-        if not pieces:
-            self.viewport.flash_status(tr(
-                "Nothing to split: it is already in its pieces"))
-            return
-        self.viewport.history.execute(
-            SplitIntoPiecesCommand(groups[0], pieces))
-        self.viewport.flash_status(tr(
-            "Split into {n} pieces — Explode Group sets them free",
-            n=len(pieces)), 5000)
-        self.viewport.update()
 
     # ---- Sections (section planes) -----------------------------------------
     def _set_section_visibility(self, attr: str, on: bool) -> None:
@@ -5620,32 +5481,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
             panel.refresh()
         self.viewport.update()
 
-    @_repeatable("Divide")
-    def _on_divide(self) -> None:
-        """Divide the selected edges / curves into N equal pieces (#63),
-        through the core protocol, once the count is answered."""
-        scene = self.viewport.scene
-        edges = [e for e in scene.selection if isinstance(e, Edge)
-                 and e in scene.mesh.edges]
-        if not edges:
-            return
-
-        def divide(n):
-            if n is None:
-                return
-            from core.protocol import commands as protocol
-            live = [e for e in edges if e in scene.mesh.edges]
-            if not live:
-                return
-            protocol.divide_edges(self.viewport.history, [e.key for e in live], int(n))
-            scene.selection.clear()
-            scene.version += 1
-            self.viewport.update()
-            self.statusBar().showMessage(
-                tr("Divided into {n} segments", n=n), 3000)
-        _forms.ask_number(self, tr("Divide"), tr("Number of segments:"), 2, 2, 500,
-                          done=divide)
-
     @_repeatable("Join Segments")
     def _on_explode_curve(self) -> None:
         """Explode Curve: the selected curves become plain segments, in one
@@ -5662,69 +5497,6 @@ class MainWindow(WorksessionMixin, WindowDocumentCommands, QMainWindow):
         self.statusBar().showMessage(
             tr("{n} curves exploded into segments", n=cmd.curves), 3000)
         self.viewport.update()
-
-    def _on_join_segments(self) -> None:
-        """Join the selected collinear segments into single lines; with
-        no edge selected, every one of the model being edited. First a
-        preview: a dot on each point that goes, and on each point of a
-        straight line that stays, in the colour of its reason; Enter
-        joins, Esc leaves the model alone."""
-        from core.edits import join_preview
-        from views.join_preview import JoinPreview
-        scene = self.viewport.scene
-        edges = [e for e in scene.selection if isinstance(e, Edge)
-                 and e in scene.mesh.edges]
-        whole = not edges
-        if whole:
-            edges = list(scene.mesh.edges)
-        verdicts = join_preview(scene.mesh, edges)
-        if not verdicts:
-            self.statusBar().showMessage(
-                tr("No collinear segments to join."), 3000)
-            return
-        old = getattr(self, "_join_preview", None)
-        if old is not None:
-            old.reject()
-        panel = JoinPreview(self.viewport, verdicts,
-                            self._edit_group_matrix())
-        panel.accepted.connect(lambda: self._apply_join_segments(edges, whole))
-        panel.finished.connect(lambda _ok: setattr(self, "_join_preview", None))
-        self._join_preview = panel
-
-    def _edit_group_matrix(self):
-        """The world placement of the group being edited (``None`` at
-        the top level), wherever it is nested."""
-        scene = self.viewport.scene
-        group = getattr(scene, "edit_group", None)
-        if group is None:
-            return None
-        from core.group import iter_placements
-        for top in scene.groups:
-            for g, m in iter_placements(top):
-                if g is group:
-                    return m
-        return getattr(group, "xform", None)
-
-    def _apply_join_segments(self, edges, whole: bool) -> None:
-        """Join Segments itself, once its preview is accepted: one undo
-        step, the joined lines selected in place of their pieces."""
-        from core.edits import join_edges
-        from core.history import SnapshotMutation
-        scene = self.viewport.scene
-        edges = [e for e in edges if e in scene.mesh.edges]
-        before = len(edges)
-        result: list = []
-        self.viewport.history.execute(SnapshotMutation(
-            lambda sc: result.extend(join_edges(sc.mesh, edges))))
-        joined = before - len(result)
-        if not whole:
-            scene.selection.clear()
-            scene.selection.update(result)
-        scene.version += 1
-        self.viewport.update()
-        self.statusBar().showMessage(
-            tr("Removed {n} intermediate points", n=joined) if joined
-            else tr("No collinear segments to join."), 3000)
 
     def _on_flip_along(self, axis: str) -> None:
         """Right-click ▸ Flip Along ▸ Red / Green / Blue (issue #178)."""

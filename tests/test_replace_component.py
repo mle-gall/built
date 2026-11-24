@@ -232,7 +232,7 @@ def _menu_texts(win, monkeypatch):
 
 
 def test_the_menu_offers_both_and_replace_swaps_the_selection(monkeypatch):
-    from PySide6.QtWidgets import QInputDialog
+    from views import chrome_forms
     from core.i18n import tr
     from views.main_window import MainWindow
     win = MainWindow()
@@ -248,14 +248,10 @@ def test_the_menu_offers_both_and_replace_swaps_the_selection(monkeypatch):
 
         choices = win._replacement_choices(list(scene.selection))
         assert [g.name for _lb, g in choices] == ["Mesa"]   # not its own
-        asked = {}
-
-        def pick(_parent, _title, label, items, *_a, **_k):
-            asked["label"], asked["items"] = label, items
-            return items[0], True
-        monkeypatch.setattr(QInputDialog, "getItem", pick)
         win._on_replace_component()
-        assert "3" in asked["label"]
+        form = chrome_forms.current(win)
+        assert "3" in form.field("item").label
+        form.press("ok")
         assert all(g.mesh is mesas[0].mesh for g in sillas)
         win.viewport.history.undo()
         assert all(g.name == "Silla" for g in sillas)

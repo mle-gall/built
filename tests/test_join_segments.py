@@ -7,18 +7,28 @@ from __future__ import annotations
 import math
 import os
 import random
+import json
+from pathlib import Path
+
+import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
+from views import chrome_forms
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 from core.edits import divide_edges, join_edges, join_preview
 from core.history import AddEdgeCommand, History, SnapshotMutation
 from core.mesh import Mesh
 from core.scene import Scene
 
-_app = QApplication.instance() or QApplication([])
+@pytest.fixture
+def host(tmp_path):
+    from app_shell.host import Host
+    host = Host(0, 1280, 800, 2.0, settings=str(tmp_path / "settings"))
+    yield host
+    host.close()
 
 
 def V(x, y, z=0.0):
@@ -219,49 +229,36 @@ def test_join_is_one_undo_step():
     assert len(scene.mesh.edges) == 1
 
 
-def test_the_menu_command_joins_the_selection_and_reselects_the_line():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        scene = win.viewport.scene
-        hist = win.viewport.history
-        for x in range(4):
-            hist.execute(AddEdgeCommand(V(x, 0), V(x + 1, 0)))
-        hist.execute(AddEdgeCommand(V(0, 5), V(1, 5)))
-        scene.selection.update(e for e in scene.mesh.edges if abs(e.a.y()) < 1e-9)
-        win._on_join_segments()
-        assert len(scene.mesh.edges) == 5          # only the preview so far
-        win._join_preview.apply_button.click()
-        assert len(scene.mesh.edges) == 2
-        assert len(scene.selection) == 1
-        (line,) = scene.selection
-        assert _ends(line) == [(0, 0, 0), (4, 0, 0)]
-        hist.undo()
-        assert len(scene.mesh.edges) == 5
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_the_menu_command_joins_the_selection_and_reselects_the_line(host):
+    win = host.window
+    scene = win.viewport.scene
+    hist = win.viewport.history
+    for x in range(4):
+        hist.execute(AddEdgeCommand(V(x, 0), V(x + 1, 0)))
+    hist.execute(AddEdgeCommand(V(0, 5), V(1, 5)))
+    scene.selection.update(e for e in scene.mesh.edges if abs(e.a.y()) < 1e-9)
+    host.menu("join_segments")
+    assert len(scene.mesh.edges) == 5          # only the preview so far
+    chrome_forms.current(win).press("ok")
+    assert len(scene.mesh.edges) == 2
+    assert len(scene.selection) == 1
+    (line,) = scene.selection
+    assert _ends(line) == [(0, 0, 0), (4, 0, 0)]
+    hist.undo()
+    assert len(scene.mesh.edges) == 5
 
 
-def test_the_menu_command_with_nothing_selected_cleans_the_whole_model():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        win.show()
-        from PySide6.QtWidgets import QApplication
-        QApplication.processEvents()
-        scene = win.viewport.scene
-        hist = win.viewport.history
-        for x in range(3):
-            hist.execute(AddEdgeCommand(V(x, 0), V(x + 1, 0)))
-            hist.execute(AddEdgeCommand(V(0, x), V(0, x + 1)))
-        scene.selection.clear()
-        win._on_join_segments()
-        win._join_preview.accept()
-        assert len(scene.mesh.edges) == 2
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_the_menu_command_with_nothing_selected_cleans_the_whole_model(host):
+    win = host.window
+    scene = win.viewport.scene
+    hist = win.viewport.history
+    for x in range(3):
+        hist.execute(AddEdgeCommand(V(x, 0), V(x + 1, 0)))
+        hist.execute(AddEdgeCommand(V(0, x), V(0, x + 1)))
+    scene.selection.clear()
+    host.menu("join_segments")
+    chrome_forms.current(win).press("ok")
+    assert len(scene.mesh.edges) == 2
 
 
 # ---- The preview: what goes and what stays, before anything changes ----
@@ -314,75 +311,66 @@ def test_the_preview_marks_the_facets_of_a_curve():
     assert _reasons(join_preview(m, arc)) == {"curve": [(1, 0)]}
 
 
-def test_the_preview_panel_paints_and_cancel_leaves_the_model_alone():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        win.show()
-        from PySide6.QtWidgets import QApplication
-        QApplication.processEvents()
-        scene = win.viewport.scene
-        hist = win.viewport.history
-        for x in range(3):
-            hist.execute(AddEdgeCommand(V(x, 0), V(x + 1, 0)))
-        scene.selection.update(scene.mesh.edges)
-        win._on_join_segments()
-        panel = win._join_preview
-        assert panel.counts == {"join": 2}
-        assert panel._paint in win.viewport._ext_overlays
-        assert panel.parent() is win.viewport.keys_stand_in          # floats in the view
-        vp = win.viewport
-        assert panel.geometry().right() <= vp.width()
-        assert panel.geometry().bottom() <= vp.height()
-        assert panel.x() > vp.width() // 2 or vp.width() < 2 * panel.width()
-        panel.reject()
-        assert panel._paint not in win.viewport._ext_overlays
-        assert len(scene.mesh.edges) == 3
-        assert win._join_preview is None
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_the_preview_panel_paints_and_cancel_leaves_the_model_alone(host):
+    win = host.window
+    scene = win.viewport.scene
+    hist = win.viewport.history
+    for x in range(3):
+        hist.execute(AddEdgeCommand(V(x, 0), V(x + 1, 0)))
+    scene.selection.update(scene.mesh.edges)
+    host.menu("join_segments")
+    form = chrome_forms.current(win)
+    assert form.field("join_reason_join").label.startswith("2  ")
+    from ingetrazo_core import Matrix4
+    assert sorted(form.join_marks.project(Matrix4().data(), 2, 2)) == [(0, 2.0, 1.0), (0, 3.0, 1.0)]
+    form.press("cancel")
+    assert len(scene.mesh.edges) == 3
+    assert chrome_forms.current(win) is None
 
 
-def test_nothing_to_show_skips_the_panel():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        scene = win.viewport.scene
-        win.viewport.history.execute(AddEdgeCommand(V(0, 0), V(1, 0)))
-        scene.selection.update(scene.mesh.edges)
-        win._on_join_segments()
-        assert getattr(win, "_join_preview", None) is None
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_nothing_to_show_skips_the_panel(host):
+    win = host.window
+    scene = win.viewport.scene
+    win.viewport.history.execute(AddEdgeCommand(V(0, 0), V(1, 0)))
+    scene.selection.update(scene.mesh.edges)
+    host.menu("join_segments")
+    assert chrome_forms.current(win) is None
 
 
-def test_enter_on_the_view_joins_and_esc_cancels():
-    from PySide6.QtCore import QEvent, Qt
-    from PySide6.QtGui import QKeyEvent
-    from views.main_window import MainWindow
-    win = MainWindow()
-    try:
-        win.show()
-        from PySide6.QtWidgets import QApplication
-        QApplication.processEvents()
-        scene = win.viewport.scene
-        hist = win.viewport.history
-        for x in range(3):
-            hist.execute(AddEdgeCommand(V(x, 0), V(x + 1, 0)))
-
-        def press(key):
-            QApplication.sendEvent(win.viewport.keys_stand_in, QKeyEvent(
-                QEvent.KeyPress, key, Qt.NoModifier))
-
-        scene.selection.update(scene.mesh.edges)
-        win._on_join_segments()
-        press(Qt.Key_Escape)
-        assert win._join_preview is None and len(scene.mesh.edges) == 3
-        win._on_join_segments()
-        press(Qt.Key_Return)
-        assert win._join_preview is None and len(scene.mesh.edges) == 1
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_enter_on_the_view_joins_and_esc_cancels(tmp_path):
+    from formats import igz
+    from scripts.isolated_launch import run
+    root = Path(__file__).resolve().parents[1]
+    binary = Path(os.environ.get("BUILT_BINARY", root / "rust/built_app/target/release/built"))
+    if not binary.is_file():
+        pytest.skip("requires the native window")
+    model = tmp_path / "segments.built"
+    scene = Scene()
+    _polyline(scene.mesh, [V(x, 0) for x in range(4)])
+    igz.save_scene(scene, model)
+    steps = tmp_path / "join.txt"
+    steps.write_text("""wait 500
+menu join_segments
+wait 200
+state
+key escape
+wait 150
+state
+menu join_segments
+wait 150
+key enter
+wait 150
+state
+menu undo
+state
+quit
+""")
+    proc = run([binary, "--new-instance", "--root", root, "--venv", root / ".venv",
+                "--script", steps, model], capture_output=True, text=True, timeout=60)
+    assert proc.returncode == 0, proc.stderr
+    states = [json.loads(l.removeprefix("[built] state ")) for l in proc.stdout.splitlines()
+              if l.startswith("[built] state ")]
+    preview, cancelled, joined, undo = states[:4]
+    assert preview["input"]["dialog"] and not cancelled["input"]["dialog"]
+    assert [s["edges"] for s in (preview, cancelled, joined, undo)] == [3, 3, 1, 3]
+    assert all(s["errors"] == 0 and s["borrowed"] == 0 for s in states), proc.stderr

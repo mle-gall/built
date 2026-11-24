@@ -271,3 +271,27 @@ class WindowDocumentCommands:
 
     def _on_simplify_mesh(self):
         native.ask_simplify_mesh(self)
+
+    @_repeatable("Divide")
+    def _on_divide(self):
+        native.divide_selected(self)
+
+    @_repeatable("Split into Pieces")
+    def _on_split_into_pieces(self):
+        native.split_pieces(self)
+
+    @_repeatable("Join Segments")
+    def _on_join_segments(self):
+        native.join_segments(self)
+
+    def _replacement_choices(self, selection):
+        return native.replacement_choices(self.viewport.scene, selection)
+
+    def _on_replace_component(self):
+        native.choose_replacement(self)
+
+    def replace_selection_with(self, source):
+        return native.replace_selection(self, source)
+
+    def _ask_keep_orphans(self, orphans):
+        return native.ask_keep_orphans(self, orphans)

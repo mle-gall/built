@@ -430,6 +430,9 @@ def before_frame(view, win) -> None:
     if sig != view.__dict__.get("_ui_dialog_sig"):
         view._ui_dialog_sig = sig
         renderer.ui_set_dialog(*wire)
+    if marks := getattr(form, "join_marks", None):
+        matrix = view.camera.projection_matrix() * view.camera.view_matrix()
+        renderer.ui_set_join_marks(form.seq, marks, matrix.data(), view.width(), view.height())
     form.shown = True
 
 
