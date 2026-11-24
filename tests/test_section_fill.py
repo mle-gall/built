@@ -14,6 +14,7 @@ from ingetrazo_core import Vec3 as QVector3D
 
 from core.mesh import Mesh
 from core.section import cut_chords, fill_triangles
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 _QUADS = [(0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6),
           (0, 2, 6, 4), (1, 5, 7, 3)]
@@ -139,27 +140,22 @@ def test_a_box_cut_on_a_slant_fills_in_its_own_plane():
     assert abs(_area(fill) - 1.9 * 2 ** 0.5 * 2) < 1e-5
 
 
-def test_the_viewport_fills_the_cut_and_keeps_it_across_a_selection():
-    from PySide6.QtWidgets import QApplication
+def test_the_viewport_fills_the_cut_and_keeps_it_across_a_selection(native_host):
     from core.group import Group
     from core.section import SectionPlane
-    from views.main_window import MainWindow
-    QApplication.instance() or QApplication([])
-    win = MainWindow()
-    scene = win.viewport.scene
+    vp = native_host.viewport
+    scene = vp.scene
     m = Mesh()
     _box(m, 0, 0, 0, 2, 3, 2)
     scene.groups[:] = [Group(m, name="Block")]
     scene.section_planes[:] = [SectionPlane(QVector3D(0, 0, 1), UP,
                                             active=True)]
     scene.version += 1
-    vp = win.viewport
     tris = vp._section_fill_tris()
     assert tris is not None and abs(_area(tris) - 6.0) < 1e-5
     scene.selection.add(scene.groups[0])
     scene.bump_view()                      # a click: new version, same cut
     assert vp._section_fill_tris() is tris
-    win._saved_version = scene.version
 
 
 # ---- Pattern, colour, spacing ------------------------------------------------
@@ -233,23 +229,18 @@ def test_the_plane_fill_over_the_style():
                                                 "spacing": 0.1}
 
 
-def test_the_viewport_hatches_the_cut_it_fills():
-    from PySide6.QtWidgets import QApplication
+def test_the_viewport_hatches_the_cut_it_fills(native_host):
     from core.group import Group
     from core.section import SectionPlane
-    from views.main_window import MainWindow
-    QApplication.instance() or QApplication([])
-    win = MainWindow()
-    scene = win.viewport.scene
+    vp = native_host.viewport
+    scene = vp.scene
     m = Mesh()
     _box(m, 0, 0, 0, 2, 3, 2)
     scene.groups[:] = [Group(m, name="Block")]
     scene.section_planes[:] = [SectionPlane(QVector3D(0, 0, 1), UP,
                                             active=True)]
     scene.version += 1
-    vp = win.viewport
     assert vp._section_fill_tris() is not None
     lines = vp._section_hatch(0.2, False)
     assert lines is not None and len(lines)
     assert vp._section_hatch(0.2, False) is lines      # cached
-    win._saved_version = scene.version
