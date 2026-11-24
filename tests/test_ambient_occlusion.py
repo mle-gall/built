@@ -289,4 +289,3 @@ def test_the_sky_round_a_silhouette_is_never_darkened(native_gpu_host, monkeypat
     # Softly since the horizons and the bounce, but they do.
     assert (off - on > 2).mean() > 0.0005      # the corners still darken
     assert np.array_equal(on[sky], off[sky])
-
