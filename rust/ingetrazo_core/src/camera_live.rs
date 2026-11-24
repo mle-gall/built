@@ -231,7 +231,7 @@ fn look_angles(cam: &Cam, direction: DVec3) -> (DVec3, f64, f64) {
     let d = d.normalize_or_zero();
     let pitch = pmax(-1.0, pmin(1.0, -d.z)).asin();
     let pitch = pmax(pmin(pitch, 89f64.to_radians()), (-89f64).to_radians());
-    let yaw = if pitch.cos().abs() > 1e-9 { (-d.y).atan2(-d.x) } else { cam.yaw };
+    let yaw = if crate::pyfloat::cos(pitch).abs() > 1e-9 { (-d.y).atan2(-d.x) } else { cam.yaw };
     (d, yaw, pitch)
 }
 
@@ -253,8 +253,8 @@ pub fn camera_turn(camera: &Bound<'_, PyAny>, d_yaw_deg: f64, d_pitch_deg: f64) 
     let yaw = d.y.atan2(d.x) - d_yaw_deg.to_radians();
     let pitch = pmax(-1.0, pmin(1.0, d.z)).asin() + d_pitch_deg.to_radians();
     let pitch = pmax(pmin(pitch, 89f64.to_radians()), (-89f64).to_radians());
-    let cp = pitch.cos();
-    let (d, yaw, pitch) = look_angles(&cam, DVec3::new(cp * yaw.cos(), cp * yaw.sin(), pitch.sin()));
+    let cp = crate::pyfloat::cos(pitch);
+    let (d, yaw, pitch) = look_angles(&cam, DVec3::new(cp * crate::pyfloat::cos(yaw), cp * crate::pyfloat::sin(yaw), crate::pyfloat::sin(pitch)));
     set_pose(camera, Some(eye + d * cam.distance), None, Some((yaw, pitch)))
 }
 
@@ -379,10 +379,10 @@ pub fn camera_snap_iso(camera: &Bound<'_, PyAny>) -> PyResult<()> {
     let (mut best_yaw, mut best_pitch, mut best_dot) = (yaws[0].to_radians(), 30f64.to_radians(), -2.0);
     for sign in [1.0, -1.0] {
         let pitch = sign * 30f64.to_radians();
-        let (cp, sp) = (pitch.cos(), pitch.sin());
+        let (cp, sp) = (crate::pyfloat::cos(pitch), crate::pyfloat::sin(pitch));
         for yd in yaws {
             let yaw = yd.to_radians();
-            let d = DVec3::new(-cp * yaw.cos(), -cp * yaw.sin(), -sp);
+            let d = DVec3::new(-cp * crate::pyfloat::cos(yaw), -cp * crate::pyfloat::sin(yaw), -sp);
             let dot = f.dot(d);
             if dot > best_dot {
                 best_dot = dot;
