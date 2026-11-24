@@ -31,9 +31,10 @@ class _InputSurface(WidgetShim):
 
 class ControllerSurface(DocumentInteraction, _InputSurface):
     def __init__(self, parent=None):
+        from app_shell.host import Host
         host = SimpleNamespace(width=640, height=480, scale=1., ns_view=0,
                                timers=WindowTimers(), input_state=WindowInput(), window=proxy(self),
-                               request_frame=lambda: None, cursor_changed=lambda cursor: None)
+                               tool_cursor=Host.tool_cursor, request_frame=lambda: None, cursor_changed=lambda cursor: None)
         super().__init__(parent, host=host)
 
     def resize(self, width, height=None):
