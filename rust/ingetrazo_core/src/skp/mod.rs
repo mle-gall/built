@@ -1,5 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Metadata carried in .skp VFF model.dat records. Tags are little-endian.
+mod apply;
+pub use apply::{skp_apply_folders, skp_apply_geometry, skp_apply_metadata};
+mod annotations;
+pub use annotations::{skp_annotations, skp_definition_spans};
+mod mfc;
+pub use mfc::{SkpArchiveCursor, skp_mfc_object};
+mod definition;
+pub use definition::skp_definition;
 mod geometry;
 pub use geometry::skp_geometry_nodes;
 use pyo3::{

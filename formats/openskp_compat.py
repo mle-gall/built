@@ -118,7 +118,9 @@ def apply() -> bool:
         return False
     from openskp import _core
     from functools import partial
-    from ingetrazo_core import skp_geometry_nodes
+    from ingetrazo_core import SkpArchiveCursor, skp_mfc_object, skp_geometry_nodes
+    L._R = SkpArchiveCursor
+    L._Archive.read_object = lambda ar, r, expect=None: skp_mfc_object(ar, r, expect)
     if hasattr(_core, "_GeometryRecordNode"):
         _core._parse_tlv_geometry = partial(
             skp_geometry_nodes, _core._TlvNode, _core._GeometryRecordNode,
@@ -459,83 +461,7 @@ def _keep_vff_annotation_inputs() -> bool:
     return True
 
 
-def _vff_point(block_payload, id2pos, inst_world):
-    """One connection point of a VFF annotation record — the pinned
-    reader's own resolution (``_parse_dimensions``' closure, which is not
-    importable): type 1 is a free point, anything else resolves the
-    ``520B → 53FC`` vertex reference, lifted by the named instance's
-    world transform when the reference carries one."""
-    from openskp import _core
-    blk = _core._tlv_find(_core._tlv_items(block_payload) or [], 0x5208)
-    if blk is None:
-        return None
-    sub = _core._tlv_items(blk) or []
-    typ = _core._tlv_find(sub, 0x5209)
-    typ = struct.unpack("<I", typ)[0] if typ and len(typ) == 4 else None
-    if typ == 1:
-        pos = _core._tlv_find(sub, 0x520A)
-        return struct.unpack("<3d", pos) if pos and len(pos) == 24 else None
-    ref = _core._tlv_find(sub, 0x520B)
-    f53fc = _core._tlv_find(_core._tlv_items(ref) or [], 0x53FC) \
-        if ref else None
-    fi = _core._tlv_items(f53fc) or [] if f53fc else []
-    vid = _core._tlv_find(fi, 0x53FD)
-    if not vid:
-        return None
-    local = id2pos.get(vid.hex())
-    if local is None:
-        return None
-    iid = _core._tlv_find(fi, 0x53FE)
-    if iid and len(iid) >= 1 and iid[0] > 0 and 1 + iid[0] <= len(iid):
-        world = inst_world.get(iid[1:1 + iid[0]].hex())
-        if world:
-            return _core.transform_point(local, world)
-    return local           # no instance named — the owner's local space
-
-
-def _vff_records(model_dat, marker):
-    """Yield ``(offset, fields)`` for each flat-TLV record starting with
-    ``marker`` whose body parses and is plausibly sized, in file order —
-    the pinned reader's scan shape, shared by dimensions and texts."""
-    from openskp import _core
-    i, n = 0, len(model_dat)
-    while True:
-        j = model_dat.find(marker, i)
-        if j < 0:
-            return
-        i = j + 1
-        if j + 6 > n:
-            continue
-        ln = struct.unpack_from("<I", model_dat, j + 2)[0]
-        if ln < 40 or j + 6 + ln > n:
-            continue
-        body = _core._tlv_items(model_dat[j + 6:j + 6 + ln])
-        if body is not None:
-            yield j, body
-
-
-def _vff_definition_spans(model_dat):
-    """``(start, end)`` byte spans of the file's ``7C15`` definitions, in
-    file order, located with the reader's own header machinery (a lone
-    ``F401`` wrapper, then the ``F901`` definition-list container). An
-    annotation record inside a span belongs to that definition; outside
-    every span it is model-level. ``[]`` when the shape is not found."""
-    from openskp import _core
-    try:
-        headers = _core._flat_headers(model_dat, 0, len(model_dat))
-        if len(headers) == 1 and headers[0][0] == "F401":
-            _, off, size = headers[0]
-            headers = _core._flat_headers(model_dat, off + 6, off + 6 + size)
-        for tag, off, size in headers:
-            if tag == "F901":
-                defs = _core._unwrap_definitions_container(
-                    model_dat, off, size)
-                if defs:
-                    return [(o, o + 6 + s) for _t, o, s in defs]
-                return []
-    except Exception:  # noqa: BLE001 — a shape we do not know: no owners
-        return []
-    return []
+from ingetrazo_core import skp_definition_spans as _vff_definition_spans
 
 
 def _vff_owner(spans, offset):
@@ -550,57 +476,13 @@ def _vff_owner(spans, offset):
 
 
 def _scan_vff_dimensions(model_dat, id2pos, inst_world):
-    """The file's ``5BCC`` dimension records that resolve, in file order,
-    each with the constraint axis (``5BD1``) the pinned reader drops."""
-    from openskp import _core
-    out = []
-    for offset, body in _vff_records(model_dat, b"\xcc\x5b"):
-        tags = [t for t, _ in body]
-        if 0x5BCD not in tags or 0x5BCE not in tags:
-            continue
-        a = _vff_point(_core._tlv_find(body, 0x5BCD), id2pos, inst_world)
-        b = _vff_point(_core._tlv_find(body, 0x5BCE), id2pos, inst_world)
-        if a is None or b is None:
-            continue
-        axis_raw = _core._tlv_find(body, 0x5BD1)
-        out.append({
-            "offset": offset, "a": a, "b": b,
-            "axis": struct.unpack("<I", axis_raw)[0]
-                    if axis_raw and len(axis_raw) == 4 else None,
-        })
-    return out
+    from ingetrazo_core import skp_annotations
+    return skp_annotations(True, model_dat, id2pos, inst_world)
 
 
 def _scan_vff_texts(model_dat, id2pos, inst_world):
-    """The file's ``55F0`` text records, in file order. ``label_raw`` is
-    the stored ``55F5`` triple, whose space the caller settles (see
-    :func:`resolve_vff_annotations`)."""
-    from openskp import _core
-    out = []
-    for offset, body in _vff_records(model_dat, b"\xf0\x55"):
-        tags = [t for t, _ in body]
-        if 0x55F1 not in tags or 0x55F4 not in tags:
-            continue
-        raw = _core._tlv_find(body, 0x55F1)
-        text = raw.decode("utf-8", "replace").strip() if raw else ""
-        if not text:
-            continue
-        point = _vff_point(_core._tlv_find(body, 0x55F4),
-                           id2pos, inst_world)
-        label = _core._tlv_find(body, 0x55F5)
-        hidden = False
-        draw = _core._tlv_find(body, 0x07D0)
-        if draw:
-            flags = _core._tlv_find(_core._tlv_items(draw) or [], 0x07D3)
-            if flags:
-                hidden = bool(flags[0] & 0x01)
-        out.append({
-            "offset": offset, "text": text, "point": point,
-            "label_raw": struct.unpack("<3d", label)
-                         if label and len(label) == 24 else None,
-            "hidden": hidden,
-        })
-    return out
+    from ingetrazo_core import skp_annotations
+    return skp_annotations(False, model_dat, id2pos, inst_world)
 
 
 def _vff_label_point(point, label_raw, bbox):

@@ -298,6 +298,11 @@ def _apply_payload_inner(scene, payload, progress=None, *, consume=False) -> str
                 continue
 
     def _build_mesh(faces, soft_edges=None, loose_edges=None, curves=None):
+        if soft_edges is not None and payload.get("backend") == "openskp":
+            from ingetrazo_core import skp_definition
+            mesh = Mesh()
+            if hasattr(mesh, "_store"):
+                return skp_definition(mesh, faces, soft_edges, loose_edges, curves)
         mesh = _build_faces(faces, soft_edges)
         _add_lines(mesh, loose_edges)
         for segments in curves or ():
@@ -412,205 +417,11 @@ def _apply_payload_inner(scene, payload, progress=None, *, consume=False) -> str
         soften_smooth_edges(mesh)
         return mesh
 
-    # The file's named materials join the scene registry (core.materials).
-    # register() dedups: an identical re-import merges silently; a name
-    # collision with a DIFFERENT recipe lands as "name (2)" and the faces
-    # about to be built are remapped to the final name (their attrs dicts
-    # are shared per material, so each is rewritten once, by identity).
-    if payload.get("materials"):
-        from core.materials import Material, register
-        if not hasattr(scene, "materials") or scene.materials is None:
-            scene.materials = {}
-        remap: dict = {}
-        for raw in payload["materials"]:
-            mat = Material.from_dict(raw)
-            if not mat.name:
-                continue
-            final = register(scene.materials, mat)
-            if final != mat.name:
-                remap[mat.name] = final
-        if remap:
-            seen: set = set()
-            containers = list(payload.get("groups", []) or []) + \
-                list(payload.get("protos", []) or [])
-            for group in containers:
-                for _outer, _holes, attrs in group.get("faces", []) or []:
-                    if attrs and id(attrs) not in seen:
-                        seen.add(id(attrs))
-                        if attrs.get("mat") in remap:
-                            attrs["mat"] = remap[attrs["mat"]]
+    from ingetrazo_core import skp_apply_metadata
+    skp_apply_metadata(scene, payload)
 
-    # The file's layers (.skp tags) join the scene's layer list, keeping
-    # their visibility — layers already present are left untouched (a re-import
-    # must not flip what the user toggled).
-    if payload.get("layers"):
-        from core.layers import Layer
-        folder_of, folder_hidden = _import_tag_folders(
-            scene, payload.get("layer_folders") or ())
-        known = {ly.key for ly in scene.layers}
-        for raw in payload["layers"]:
-            name = raw.get("name")
-            if name and name not in known:
-                # Preserve the tag's own switch independently of its folder.
-                scene.layers.append(Layer(
-                    name,
-                    visible=raw.get("visible", True),
-                    folder=folder_of.get(name)))
-                known.add(name)
-
-    # The file's saved scenes become saved views (camera + hidden layers);
-    # a view whose name already exists is left alone (re-import).
-    if payload.get("scenes"):
-        from core.saved_views import from_lookat
-        existing = {v.name for v in scene.saved_views}
-        for raw in payload["scenes"]:
-            if raw.get("name") in existing:
-                continue
-            scene.saved_views.append(from_lookat(
-                raw["name"], raw["eye"], raw["target"],
-                raw.get("up") or (0.0, 0.0, 1.0),
-                fov_deg=raw.get("fov", 45.0),
-                perspective=not raw.get("parallel", False),
-                ortho_height=raw.get("ortho_height") or None,
-                hidden_layers=raw.get("hidden_layers")))
-            existing.add(raw["name"])
-
-    # Linear dimensions (.skp dimension entities): world endpoints + an
-    # offset. IngeTrazo's Dimension carries the offset as a VECTOR from
-    # the a–b segment to the dimension line. The adapter resolves that
-    # vector itself when the file states the dimension's constraint
-    # axis (#1226); otherwise turn the .skp scalar into the in-plane
-    # perpendicular direction × distance here, as before.
-    if payload.get("dimensions"):
-        from ingetrazo_core import Vec3 as QVector3D
-        from core.dimension import Dimension
-        for raw in payload["dimensions"]:
-            a = QVector3D(*raw["a"])
-            b = QVector3D(*raw["b"])
-            seg = b - a
-            if seg.length() < 1e-9:
-                continue
-            if raw.get("offset_vector"):
-                scene.dimensions.append(
-                    Dimension(a, b, QVector3D(*raw["offset_vector"])))
-                continue
-            n = QVector3D(*raw["normal"]) if raw.get("normal") \
-                else QVector3D(0.0, 0.0, 1.0)
-            perp = QVector3D.crossProduct(n, seg)
-            if perp.length() < 1e-9:               # normal ∥ segment: fall back
-                perp = QVector3D.crossProduct(QVector3D(0.0, 0.0, 1.0), seg)
-            if perp.length() < 1e-9:
-                perp = QVector3D.crossProduct(QVector3D(1.0, 0.0, 0.0), seg)
-            perp.normalize()
-            scene.dimensions.append(
-                Dimension(a, b, perp * float(raw.get("offset", 0.0))))
-
-    # Leader texts (.skp text entities): the anchor is the pointed-at
-    # spot and the label floats at its world "label" position (leader line
-    # joins them) — screen texts carry no label position and float at the
-    # anchor itself.
-    if payload.get("texts"):
-        from ingetrazo_core import Vec3 as QVector3D
-        from core.textlabel import TextLabel
-        for raw in payload["texts"]:
-            if raw.get("hidden"):
-                continue
-            anchor = QVector3D(*raw["anchor"])
-            label = QVector3D(*raw["label"]) if raw.get("label") else anchor
-            scene.text_labels.append(TextLabel(
-                anchor, label - anchor, raw["text"]))
-
-    import uuid
-    used_uids = set()
-
-    def remember(group):
-        used_uids.add(group.uid)
-        for child in group.children:
-            remember(child)
-    for group in scene.groups:
-        remember(group)
-
-    def assign_uid(group, identity):
-        if identity is not None and payload.get("identity_namespace"):
-            key = repr((payload["identity_namespace"], identity))
-            candidate = uuid.uuid5(uuid.NAMESPACE_URL, key).hex[:16]
-            if candidate not in used_uids:
-                group.uid = candidate
-        while group.uid in used_uids:
-            group.uid = uuid.uuid4().hex[:16]
-        used_uids.add(group.uid)
-
-    for gp in groups:
-        _tick(1)
-        mesh = _build_mesh(gp["faces"], gp.get("soft_edges"),
-                           gp.get("loose_edges"), gp.get("curves"))
-        _release(gp)
-        if mesh.faces or mesh.edges:        # a group of lines is one too
-            g = Group(mesh, name=gp.get("name"))
-            assign_uid(g, gp.get("identity"))
-            if gp.get("layer"):
-                g.layer = gp["layer"]
-            axes = gp.get("axes")
-            if isinstance(axes, list) and len(axes) == 16:
-                # The .skp instance's transformation, kept as the
-                # group's own axes (issue #44) — its mesh stays in world
-                # coordinates. Column-major, as QMatrix4x4.data() wrote it.
-                from ingetrazo_core import Matrix4 as QMatrix4x4
-                m = QMatrix4x4(*[axes[c * 4 + r] for r in range(4)
-                                 for c in range(4)])
-                if not m.isIdentity():
-                    g.axes = m
-            if gp.get("billboard"):
-                # Image-entity cutout (photo person/animal/tree): the real
-                # geometry turns toward the camera each frame, like the DAE
-                # face-me import.
-                g.billboard = "mesh"
-            scene.groups.append(g)
-    # Shared components: ONE prototype mesh (local coordinates), one Group per
-    # placement with only a local->world matrix (Components v1 instances). A
-    # prototype may PLACE other prototypes — the sharing a component already
-    # has inside itself — and those become the instance's ``children``, one
-    # object to the user however deep the tree.
-    proto_meshes = []
-    for pr in protos:
-        _tick(1)
-        proto_meshes.append(_build_mesh(pr["faces"], pr.get("soft_edges"),
-                                        pr.get("loose_edges"), pr.get("curves")))
-        _release(pr)
-
-    def _place(idx, xf, layer=None, depth=0, name=None, identity=None):
-        pr = protos[idx]
-        # The placement's own name (what the user called the group or
-        # copy), else the definition's.
-        g = Group(proto_meshes[idx], name=name or pr.get("name"))
-        assign_uid(g, identity)
-        g.xform = xf
-        # A .skp GROUP stays a group: only a component definition is one.
-        g.component = bool(pr.get("component", True))
-        if layer:
-            g.layer = layer
-        if depth < 32:      # a malformed file must not spin
-            g.adopt(_place(kid["proto"], kid["xform"], kid.get("layer"),
-                           depth + 1, kid.get("name"),
-                           (*identity, *kid["identity"])
-                           if identity is not None and kid.get("identity") is not None
-                           else None)
-                    for kid in pr.get("children", []) or [])
-        return g
-
-    for idx, pr in enumerate(protos):
-        if not proto_meshes[idx].faces and not proto_meshes[idx].edges \
-                and not (pr.get("children") or []):
-            continue
-        _tick(1)
-        layers = pr.get("instance_layers") or []
-        names = pr.get("instance_names") or []
-        identities = pr.get("instance_identities") or []
-        for i, xf in enumerate(pr.get("instances", []) or []):
-            g = _place(idx, xf, layers[i] if i < len(layers) else None,
-                       name=names[i] if i < len(names) else None,
-                       identity=identities[i] if i < len(identities) else None)
-            scene.groups.append(g)
+    from ingetrazo_core import skp_apply_geometry
+    skp_apply_geometry(scene, payload, _build_mesh, _release, _tick)
     if consume:
         payload["groups"] = []
         payload["protos"] = []
@@ -626,41 +437,7 @@ def _apply_payload_inner(scene, payload, progress=None, *, consume=False) -> str
     return payload.get("backend", "?")
 
 
-def _import_tag_folders(scene, records) -> tuple[dict, dict]:
-    """Rebuild a .skp's tag folders (``formats.openskp_compat`` records,
-    parents before children) as the scene's tag folders. A folder of the
-    same name already in the same place is reused — a re-import does not
-    duplicate the tree — and a name taken elsewhere gets a suffix.
-    Returns ``(tag → folder name, tag → hidden by a folder)``."""
-    from core.layers import add_folder, folder_parent, folders_of, move_folder
-    names: dict = {}        # file folder key → scene folder name
-    hidden: dict = {}       # file folder key → hidden, with its ancestors
-    folder_of: dict = {}
-    tag_hidden: dict = {}
-    for rec in records:
-        key = rec.get("key")
-        name = (rec.get("name") or "").strip() or "Folder"
-        parent = names.get(rec.get("parent"))
-        taken = folders_of(scene)
-        if name in taken and folder_parent(scene, name) == parent:
-            here = name
-        elif name not in taken:
-            # The file's own name — add_folder numbers every name it
-            # makes («New folder 1»), right for a new folder, not here.
-            here = name
-            scene.layer_folders = taken + [name]
-            if parent:
-                move_folder(scene, name, parent)
-        else:
-            here = add_folder(scene, name, parent)
-        scene.folder_visibility[here] = not bool(rec.get("hidden"))
-        names[key] = here
-        hidden[key] = bool(rec.get("hidden")) \
-            or hidden.get(rec.get("parent"), False)
-        for tag in rec.get("tags") or ():
-            folder_of[tag] = here
-            tag_hidden[tag] = hidden[key]
-    return folder_of, tag_hidden
+from ingetrazo_core import skp_apply_folders as _import_tag_folders
 
 
 def load_skp(scene, path, progress=None) -> str:

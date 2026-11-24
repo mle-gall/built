@@ -112,6 +112,14 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<window_commands::WindowCommand>()?;
     m.add_class::<file_open::DocumentOpen>()?;
     m.add_function(wrap_pyfunction!(skp::skp_tag_folders, m)?)?;
+    m.add_function(wrap_pyfunction!(skp::skp_apply_folders, m)?)?;
+    m.add_function(wrap_pyfunction!(skp::skp_apply_geometry, m)?)?;
+    m.add_function(wrap_pyfunction!(skp::skp_apply_metadata, m)?)?;
+    m.add_class::<skp::SkpArchiveCursor>()?;
+    m.add_function(wrap_pyfunction!(skp::skp_mfc_object, m)?)?;
+    m.add_function(wrap_pyfunction!(skp::skp_annotations, m)?)?;
+    m.add_function(wrap_pyfunction!(skp::skp_definition_spans, m)?)?;
+    m.add_function(wrap_pyfunction!(skp::skp_definition, m)?)?;
     m.add_function(wrap_pyfunction!(skp::skp_pages, m)?)?;
     m.add_function(wrap_pyfunction!(skp::skp_geometry_nodes, m)?)?;
     m.add_class::<command_search::SearchItem>()?;
