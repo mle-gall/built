@@ -26,6 +26,7 @@ mod document_placements;
 mod document_annotations;
 mod document_planes;
 mod document_host;
+mod document_camera;
 mod section_display;
 mod inspection_edits;
 mod context_edits;
@@ -3249,6 +3250,7 @@ fn context_targets(hit: bool, selection: &Bound<'_, PyAny>) -> PyResult<Vec<Py<P
 
 #[pymodule]
 pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    document_camera::register(m)?;
     document_input::register(m)?;
     document_chunks::register(m)?;
     document_records::register(m)?;
