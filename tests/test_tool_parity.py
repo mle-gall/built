@@ -94,3 +94,8 @@ def test_the_arcs_match_the_recorded_python_tools(name):
     for i, (g, w) in enumerate(zip(got, want)):
         g = json.loads(json.dumps(g))
         assert g == w, f"step {i}: {tp.ARC_SCENARIOS[name][i]}"
+
+
+@pytest.mark.parametrize("name", sorted(tp.SCALE_SCENARIOS))
+def test_scale_matches_the_recorded_python_tool(name):
+    assert tp.run_scale(tp.SCALE_SCENARIOS[name]) == tp.load("scale")[name]

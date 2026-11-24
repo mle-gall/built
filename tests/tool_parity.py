@@ -895,6 +895,62 @@ def run_move(steps):
     return out
 
 
+SCALE_SCENARIOS = {
+    "corner_retype_and_undo": [("click", 400, 300), ("value", 2.0),
+                               ("value", 0.5), ("undo",)],
+    "absolute_and_mirror": [("click", 400, 150), ("value", ("abs_len", 6.0)),
+                            ("value", -1.0), ("undo",)],
+    "center_uniform": [("click", 400, 150), ("key", "Control"),
+                       ("key", "Shift"), ("value", 2.0), ("undo",)],
+    "invalid_then_pair": [("click", 400, 300), ("value", 0.0),
+                          ("value", (1.0, 2.0, 3.0)), ("value", (1.5, 2.0))],
+    "drag_release": [("click", 400, 150), ("release",), ("hover", 600, 150),
+                     ("release",), ("undo",)],
+    "cancel_preview": [("click", 400, 300), ("hover", 800, 600), ("cancel",)],
+}
+
+
+def run_scale(steps):
+    from ingetrazo_core import Vec3
+    from PySide6.QtCore import QPointF, Qt
+    from tools.base import ToolContext
+    from tools.scale import ScaleTool
+
+    view = LineView()
+    view._world_to_pixel = lambda p: (100 * p.x(), 100 * p.y())
+    face = view.scene.mesh.add_face([(0., 0., 0.), (4., 0., 0.),
+                                     (4., 3., 0.), (0., 3., 0.)])
+    view.scene.select([face])
+    tool = ScaleTool()
+    tool.on_activate(view)
+    out = []
+    for kind, *args in steps:
+        result = None
+        if kind in ("click", "hover"):
+            x, y = args
+            point = Vec3(x / 100, y / 100, 0)
+            snap = _Snap("endpoint")
+            snap.point = point
+            ctx = ToolContext(view, point, QPointF(x, y), Qt.NoModifier, snap)
+            (tool.on_click if kind == "click" else tool.on_hover)(ctx)
+        elif kind == "key":
+            result = tool.on_key(view, getattr(Qt, "Key_" + args[0]), Qt.NoModifier)
+        elif kind == "release":
+            tool.on_release(view)
+        elif kind == "value":
+            result = tool.on_value(view, args[0])
+        elif kind == "cancel":
+            tool.on_cancel(view)
+        elif kind == "undo":
+            view.history.undo()
+        box = tool.scale_box_state()
+        out.append({"vertices": sorted(_pt(v.position) for v in view.scene.mesh.vertices),
+                    "grips": [[_pt(p), role] for p, role in box["grips"]],
+                    "snap": tool.uses_snap, "caption": tool.vcb_caption(),
+                    "undo": len(view.history.undo_stack), "result": result})
+    return out
+
+
 def _compact(fixture) -> str:
     """One scenario step per line: the protractors' segments make an
     indented file several times larger than the data."""
@@ -925,6 +981,9 @@ def record(which=("line", "select", "rectangle", "move", "circle", "rotated_rect
     if "rotated_rectangle" in which:
         rot = {name: run_rot(steps) for name, steps in ROT_SCENARIOS.items()}
         (FIXTURES / "rotated_rectangle.json").write_text(_compact(rot))
+    if "scale" in which:
+        scale = {name: run_scale(steps) for name, steps in SCALE_SCENARIOS.items()}
+        (FIXTURES / "scale.json").write_text(_compact(scale))
     if "arc" in which:
         arcs = {name: run_arc(name, steps) for name, steps in ARC_SCENARIOS.items()}
         (FIXTURES / "arc.json").write_text(_compact(arcs))
