@@ -103,7 +103,7 @@ def test_collapsed_definition_uses_only_the_copies_in_its_branch(native_host):
     a, b, c, nested, *_ = _setup(scene)
     native_host.view._ui_tree = {"unfiled": [a, b, c]}
     key = f"d::{id(a.mesh)}"
-    assert {verb for verb, _, _ in tree_group_rows(scene, [a, b, c])} == {"instances", "unique"}
+    assert {verb for verb, _, _ in tree_group_rows(scene, [a, b, c])} == {"instances", "unique", "paintrows"}
     action(native_host, "unique", key)
     assert len({id(g.mesh) for g in (a, b, c, nested)}) == 4
     assert native_host.viewport.history.undo()

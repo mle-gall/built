@@ -524,6 +524,13 @@ impl Ui {
         if let Some(col)=self.column.as_mut(){col.styles.hatches.preference(py,verb,value)?;}
         Ok(())
     }
+    pub fn tick_tag_counts(&mut self, history: &pyo3::Bound<'_, pyo3::PyAny>) -> pyo3::PyResult<bool> {
+        if let Some(col) = self.column.as_mut() {
+            if col.lens == Lens::Drawing { return col.styles.tick_counts(history); }
+        }
+        Ok(false)
+    }
+
     pub fn drawing_edit_applied(&mut self,verb:&str,key:&str){
         if let Some(col)=self.column.as_mut(){col.styles.applied(verb,key);}
     }
@@ -1820,6 +1827,9 @@ impl Ui {
                     let cols = lens::RowLayout::plan(col.lens, row_left, row_left + ui.available_width());
                     let row_room = if col.mode.is_empty() && nodes_len > 0 {
                         let header = cols.header(ui, row_left);
+                        if col.lens == Lens::Drawing {
+                            drawing::drawing_drop(ui, &header, &col.nodes, None, col.styles.owner, &mut actions);
+                        }
                         drawing::drop_on(ui, &header, "", &mut actions);
                         room - ROW_H
                     } else { room };
@@ -1837,9 +1847,17 @@ impl Ui {
                                 let index = if col.mode.is_empty() { col.ordered[i] } else { i };
                                 let n = &col.nodes[index];
                                 let editable = n.row == 0 && n.key.starts_with("n:") && n.key.len() > 2 && !n.key.starts_with("n:link:");
-                                let sense = if editable || n.local_placement { Sense::click_and_drag() } else { Sense::click() };
+                                let drawing_row = col.lens == Lens::Drawing && (n.key.starts_with("preview-folder:") || n.key.starts_with("preview-tag:"));
+                                let sense = if editable || n.local_placement || drawing_row { Sense::click_and_drag() } else { Sense::click() };
                                 let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_H), sense);
-                                if editable {
+                                if drawing_row {
+                                    if resp.drag_started() {
+                                        if let Some(payload) = drawing::DrawingDrag::begin(&col.styles, n) {
+                                            resp.dnd_set_drag_payload(payload);
+                                        }
+                                    }
+                                    drawing::drawing_drop(ui, &resp, &col.nodes, Some(index), col.styles.owner, &mut actions);
+                                } else if editable {
                                     if resp.drag_started() { resp.dnd_set_drag_payload(drawing::DraggedRow::Node(n.key.clone())); }
                                     drawing::drop_on(ui, &resp, n.key.strip_prefix("n:").unwrap_or(""), &mut actions);
                                 } else if n.local_placement {
@@ -3173,6 +3191,55 @@ fn occurrence_menu_runs_the_document_action_and_closes() {
         .take_actions()
         .contains(&format!("tree:explode\u{1f}{key}")));
     assert!(ui.column.unwrap().row_menu.is_none());
+}
+
+#[test]
+fn dragging_sorted_drawing_rows_files_tags_and_folders_by_key() {
+    let Some(mut ui) = test_chrome() else { return };
+    ui.ctx = test_context();
+    let row = |key: &str, name: &str, depth: i64, folder: bool| {
+        let mut text = vec![String::new(); if folder { 5 } else { 12 }];
+        text[0] = key.into();
+        text[1] = name.into();
+        if folder { text[4] = "folder".into(); }
+        else { text[10] = key.strip_prefix("preview-tag:").unwrap().into(); }
+        (text, vec![depth, 0, 0, 0, 6, 1, 0, i64::from(folder), 1])
+    };
+    ui.set_tree(vec![row("preview-folder:f","Plans",0,true),
+                     row("preview-tag:inside","Section",1,false),
+                     row("preview-folder:g","Elevations",0,true),
+                     row("preview-tag:z","Brick",0,false),
+                     row("preview-tag:a","Steel",0,false)],0);
+    ui.set_tree_sort(1);
+    ui.column.as_mut().unwrap().lens = Lens::Drawing;
+    for _ in 0..3 { tree_frame(&mut ui, vec![]); }
+    let at = tree_frame(&mut ui, vec![]);
+    let drag = |ui: &mut Ui, from: Pos2, to: Pos2| {
+        let button = |pos, pressed| egui::Event::PointerButton {
+            pos, button: egui::PointerButton::Primary, pressed, modifiers: Default::default()
+        };
+        tree_frame(ui, vec![egui::Event::PointerMoved(from), button(from, true)]);
+        tree_frame(ui, vec![egui::Event::PointerMoved(from + vec2(8., 0.))]);
+        tree_frame(ui, vec![egui::Event::PointerMoved(to)]);
+        tree_frame(ui, vec![button(to, false)]);
+        ui.take_actions()
+    };
+    for (source, dest, verb, tags, folder, parent) in [
+        ("Brick", "Section", "file", vec!["z"], "", "f"),
+        ("Plans", "Elevations", "move", vec![], "f", "g"),
+        ("Section", "Name", "file", vec!["inside"], "", ""),
+    ] {
+        let actions = drag(&mut ui, at[source], at[dest]);
+        let expected = serde_json::json!({"tags":tags,"folder":folder,"parent":parent});
+        assert!(actions.contains(&format!("tree:tagfolder\u{1f}{verb}\u{1f}{expected}")), "{source}: {actions:?}");
+    }
+    let col = ui.column.as_mut().unwrap();
+    col.styles.pick(&col.nodes[3], false);
+    col.styles.pick(&col.nodes[4], true);
+    let actions = drag(&mut ui, at["Brick"], at["Plans"]);
+    let expected = serde_json::json!({"tags":["a","z"],"folder":"","parent":"f"});
+    assert!(actions.contains(&format!("tree:tagfolder\u{1f}file\u{1f}{expected}")), "{actions:?}");
+
 }
 
 #[test]

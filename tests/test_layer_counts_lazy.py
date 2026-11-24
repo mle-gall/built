@@ -82,29 +82,25 @@ def test_welded_duplicate_last_layer_and_missing_boundary_edges():
     assert counts == {None: 2, 'b': 1}
 
 
-def test_panel_publishes_only_a_complete_current_count(monkeypatch):
-    from types import SimpleNamespace
-    import time
+def test_native_inspector_publishes_only_a_complete_current_count(monkeypatch):
+    from time import sleep
     from core import purge
-    from views.layers_panel import LayersPanel
+    from core.history import History
+    from ingetrazo_render import TagCounts
 
-    ticks = iter(range(20))
-    monkeypatch.setattr(time, "monotonic", lambda: next(ticks))
-    scene = Scene()
-    published = []
-    viewport = SimpleNamespace(history=object())
-    panel = SimpleNamespace(_window=SimpleNamespace(viewport=viewport),
-                            _scene=lambda: scene, _show_counts=published.append,
-                            _count_timer=SimpleNamespace(start=lambda ms: None))
     def steps(scene, *, history):
-        assert history is viewport.history
+        assert history.scene is scene
         version = scene.content_version
+        sleep(.008)
         yield None
-        yield {"layer": version}
+        yield {"tag": version}
+
     monkeypatch.setattr(purge, "layer_count_steps", steps)
-    LayersPanel._count_slice(panel)
+    scene = Scene()
+    history = History(scene)
+    counts = TagCounts()
+    assert counts.tick(history) and counts.count("tag") is None
     scene.version += 1
-    LayersPanel._count_slice(panel)
-    assert not published
-    LayersPanel._count_slice(panel)
-    assert published == [{"layer": scene.content_version}]
+    assert counts.tick(history) and counts.count("tag") is None
+    assert not counts.tick(history) and counts.count("tag") == scene.content_version
+    assert counts.count("empty") == 0

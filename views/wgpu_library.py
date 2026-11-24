@@ -309,29 +309,39 @@ class MaterialsProvider(Provider):
         i = int(item["key"].partition(":")[2])
         return _settings_json(_MINE_KEY, [])[i]
 
+    def paint_recipe(self, ctx, item):
+        key = item["key"]
+        kind = key.partition(":")[0]
+        if kind == "uc":
+            return "", unnamed_colours_cached(ctx.scene).get(key[3:])
+        if kind == "my":
+            return "", self._mine_entry(item)
+        if kind in ("m", "lk"):
+            return item["name"], None
+        return "", item.get("recipe") or _catalogue().get(key, {}).get("recipe")
+
     def run(self, ctx, verb, item, arg=""):
         key, name = item["key"], item["name"]
         kind = key.partition(":")[0]
-        if verb == "name":
+        if verb == "apply":
+            if kind in ("uc", "my"):
+                _, recipe = self.paint_recipe(ctx, item)
+                if recipe:
+                    _pick_paint(ctx.win, recipe=recipe)
+            else:
+                from views.wgpu_ui import _paint_with
+                _paint_with(ctx.win, f"m:{name}" if kind == "lk" else key)
+        elif verb == "name":
             self.type_action(ctx, "name")
         elif kind == "uc":
             entry = unnamed_colours_cached(ctx.scene).get(key[3:])
             if entry is None:
                 return
-            if verb == "apply":
-                _pick_paint(ctx.win, recipe=entry)
-            elif verb == "select":
+            if verb == "select":
                 loose = set(map(id, ctx.scene.mesh.faces))
                 faces = [f for f, side in entry["faces"] if side == "front" and id(f) in loose]
                 ctx.scene.select(faces + [g for g in entry["groups"] if g in ctx.scene.groups])
                 getattr(ctx.vp, "notify_scene_changed", ctx.vp.update)()
-        elif verb == "apply":
-            if kind == "my":
-                e = self._mine_entry(item)
-                _pick_paint(ctx.win, recipe=e)
-            else:
-                from views.wgpu_ui import _paint_with
-                _paint_with(ctx.win, f"m:{name}" if kind == "lk" else key)
         elif verb == "edit" and kind == "m":
             set_mode(ctx.view, ctx.win, "")
             ctx.view._ui_mat_focus = key
@@ -732,8 +742,11 @@ class LibrarySheet(_chrome_sheet().Provider):
     model usage on the right. The inspector edits the chosen material."""
     id = "library"
 
-    def __init__(self, view):
+    def __init__(self, view, paint_target=None):
         self.view = view
+        self.paint_target = paint_target
+        if paint_target is not None:
+            self.id = "tree-material"
         self.catalogue = self.registry = None
 
     def signature(self, ctx):
@@ -763,10 +776,12 @@ class LibrarySheet(_chrome_sheet().Provider):
         view, st = self.view, _state(self.view)
         prov = provider(st["type"])
         items, counts = self._items(ctx)
-        s = cs.Sheet(self.id, "", width=1240)
-        for p in PROVIDERS:
-            s.tab(p.id, p.label, counts.get(p.id, "") if p.ready else "soon", on=p.id == st["type"], enabled=p.ready)
-        s.tab("registry", "Project registry", on=st["type"] == "registry")
+        target = self.paint_target
+        s = cs.Sheet(self.id, "Choose material" if target else "", width=1240)
+        if target is None:
+            for p in PROVIDERS:
+                s.tab(p.id, p.label, counts.get(p.id, "") if p.ready else "soon", on=p.id == st["type"], enabled=p.ready)
+            s.tab("registry", "Project registry", on=st["type"] == "registry")
         if st["type"] == "registry":
             from ingetrazo_render import RegistryEditor
             if self.registry is None:
@@ -774,9 +789,14 @@ class LibrarySheet(_chrome_sheet().Provider):
             self.registry.build(s)
             return s
         scene = ctx.win.viewport.scene
+        browse = json.loads(_browse(st))
+        if target:
+            target.prepare(items, browse)
+            st["items"] = {e["key"]: e for e in items}
+        current = target.current if target else _current_material_name()
         out = json.loads(library_sheet(json.dumps({
-            "type": prov.id, "items": items, "st": json.loads(_browse(st)),
-            "current": _current_material_name() if prov.id == "materials" else None,
+            "type": prov.id, "items": items, "st": browse,
+            "current": current if prov.id == "materials" else None,
             "model_uses": dict(material_uses(scene)) if prov.id == "materials" else {},
             "unnamed": len(unnamed_colours_cached(scene)) if prov.id == "materials" else 0}, default=str)))
         for path in out["thumbs"]:
@@ -801,13 +821,20 @@ class LibrarySheet(_chrome_sheet().Provider):
             if g["caption"]:
                 c.caption(g["caption"], right=g["right"])
             c.tiles(g["tiles"], size=96)
-        if out["type_actions"]:
+        if target is None and out["type_actions"]:
             acts = [cs.verb(f"typeact:{a}", lab, quiet=True) for a, lab in prov.type_actions(Ctx(ctx.win, view))]
             if acts:
                 c.buttons(acts, align="left")
         st["cursor"] = out["cursor"]
         d = s.detail(width=340, empty="Pick an item to see it here.")
-        d.blocks = out["detail"]
+        if target:
+            d.fields(target, "tree-paint")
+            d.buttons([cs.verb("custompaint", "Apply colour"), cs.verb("activepaint", "Use active paint"),
+                       cs.verb("clearpaint", "Remove paint")])
+            if st.get("cursor"):
+                d.buttons([cs.verb("apply", "Apply material", primary=True)], align="fill")
+        else:
+            d.blocks = out["detail"]
         e = st["items"].get(st["cursor"]) if st["cursor"] else None
         if e is not None and prov.id == "components":
             self._component_detail(d, prov, ctx, e)
@@ -865,6 +892,13 @@ class LibrarySheet(_chrome_sheet().Provider):
         st = _state(view)
         arg = args[0] if args else ""
         lctx = Ctx(win, view)
+        if self.paint_target is not None:
+            if verb == "tab":
+                return
+            if verb == "verb" and arg in ("custompaint", "activepaint", "clearpaint"):
+                self.paint_target.apply(win.viewport, arg)
+                _chrome_sheet().close(win)
+                return
         if self.catalogue is not None:
             if verb == "tab" or (verb == "side" and arg != "s:online" and not arg.startswith("online-cat:")):
                 self.close_catalogue()
@@ -922,6 +956,12 @@ class LibrarySheet(_chrome_sheet().Provider):
             return
         prov = provider(st["type"])
         lctx = Ctx(win, view)
+        if self.paint_target is not None:
+            if verb == "apply":
+                name, recipe = prov.paint_recipe(lctx, e)
+                self.paint_target.apply(win.viewport, f"m:{name}" if name else key, recipe)
+                _chrome_sheet().close(win)
+            return
         if verb == "rename":
             self._rename(ctx, e)
             return
@@ -983,7 +1023,7 @@ def _active_tool(win) -> str:
     return next((k for k, a in getattr(win, "_tool_actions", {}).items() if a.isChecked()), "")
 
 
-def open_library(win, type_id=None, search=None, scope=None) -> bool:
+def open_library(win, type_id=None, search=None, scope=None, *, paint_target=None) -> bool:
     """Window › Library › <type>, ⌘K, the rail, the Paint strip's Browse
     all…: the Library sheet on that type. Requires an active document view."""
     view = getattr(getattr(win, "_doc", None), "stand_in", None)
@@ -996,7 +1036,8 @@ def open_library(win, type_id=None, search=None, scope=None) -> bool:
     if scope:
         st["scope"] = scope
     st["filter"] = search or ""
-    return _chrome_sheet().open(win, _sheet_provider(view), search=search)
+    sheet = LibrarySheet(view, paint_target) if paint_target is not None else _sheet_provider(view)
+    return _chrome_sheet().open(win, sheet, search=search)
 
 
 def set_mode(view, win, mode) -> None:

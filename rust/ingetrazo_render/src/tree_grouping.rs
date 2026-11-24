@@ -1,4 +1,5 @@
 //! Document facts and commands for an occurrence's context menu.
+pub mod paint;
 use super::model_edit::translated;
 use pyo3::{
     prelude::*,
@@ -258,6 +259,7 @@ pub fn tree_group_rows(
             rows.push((id.into(), translated(py, label, vars)?.extract()?, reason));
             Ok(())
         };
+    push("paintrows", "Choose material…", None, tree.refusal(scene, &tree.targets, false)?)?;
     if !clicked.is_instance_of::<PyList>() {
         let why = tree.refusal(scene, &tree.targets, true)?;
         if tree.targets.len() > 1 {

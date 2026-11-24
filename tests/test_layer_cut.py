@@ -33,18 +33,6 @@ from core.section import SectionPlane
 V = QVector3D
 
 
-@pytest.fixture(autouse=True)
-def _pointer_out_of_the_way():
-    """The picker's preview follows the pointer, and the pointer stays
-    wherever the last test that clicked left it — on a pattern, as likely
-    as not, when a picker opens there."""
-    from PySide6.QtGui import QCursor, QGuiApplication
-    screen = QGuiApplication.primaryScreen()
-    if screen is not None:
-        QCursor.setPos(screen.geometry().bottomRight())
-    yield
-
-
 def _box(m, x0, y0, z0, x1, y1, z1):
     """A closed axis-aligned box of six faces."""
     m.add_face([V(x0, y0, z0), V(x1, y0, z0), V(x1, y1, z0), V(x0, y1, z0)])
@@ -280,42 +268,6 @@ def test_a_template_and_the_legend_carry_the_hatch():
     assert "hatch" not in swatches[DEFAULT_LAYER]
 
 
-def test_the_hatch_grid_picks_for_every_selected_row(win, monkeypatch):
-    from views.layers_panel import COL_HATCH, HatchGrid
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers += [Layer("A"), Layer("B"), Layer("C")]
-    panel.refresh()
-    assert not panel.tree.isColumnHidden(COL_HATCH)       # shown by default
-    for n in ("A", "B"):
-        panel.item_for(n).setSelected(True)
-
-    def fake_popup(menu, _at):
-        grid = next(w for w in menu.findChildren(HatchGrid))
-        assert set(grid.buttons) >= {None, "brick", "insulation"}
-        grid.buttons["insulation"].click()
-
-    monkeypatch.setattr(panel, "_popup", fake_popup)
-    panel.click_cell(("layer", "A"), COL_HATCH)
-    assert scene.layer("A").hatch == scene.layer("B").hatch == "insulation"
-    assert scene.layer("C").hatch is None
-    assert not panel.item_for("A").icon(COL_HATCH).isNull()
-    assert panel.item_for("C").text(COL_HATCH) == ""
-    assert not panel.item_for("C").icon(COL_HATCH).isNull()   # «none»
-    assert panel.item_for("C").toolTip(COL_HATCH) == "The frame's fill"
-
-
-def test_the_grid_marks_the_current_hatch_and_offers_the_frame_fill():
-    from views.layers_panel import HatchGrid
-    grid = HatchGrid("brick")
-    assert grid.buttons["brick"].isChecked()
-    assert not grid.buttons[None].isChecked()
-    got = []
-    grid.picked.connect(got.append)
-    grid.buttons[None].click()
-    assert got == [None]
-
-
 # ---- A solid ground under the hatch ---------------------------------------
 
 def test_the_hatch_ground_round_trips_as_a_colour_or_the_layer():
@@ -358,62 +310,6 @@ def test_a_template_carries_the_ground():
     assert dst.layer("Muros").hatch_ground == "layer"
 
 
-def test_the_grid_offers_the_grounds_and_marks_the_current_one():
-    from views.layers_panel import HatchGrid
-    ly = Layer("A", color=(0.2, 0.4, 0.8), hatch="brick",
-               hatch_ground=(1.0, 1.0, 1.0))
-    grid = HatchGrid("brick", ground=ly.hatch_ground, layer=ly)
-    assert set(grid.ground_buttons) == {
-        None, (1.0, 1.0, 1.0), (0.88, 0.88, 0.88), (0.70, 0.70, 0.70),
-        "layer", "other"}
-    assert grid.ground_buttons[(1.0, 1.0, 1.0)].isChecked()
-    assert not grid.ground_buttons[None].isChecked()
-    got = []
-    grid.ground_picked.connect(got.append)
-    grid.ground_buttons["layer"].click()
-    grid.ground_buttons[None].click()
-    assert got == ["layer", None]
-
-
-def test_other_colour_asks_and_a_cancel_changes_nothing():
-    from PySide6.QtCore import Qt
-    from PySide6.QtTest import QTest
-    from views.layers_panel import HatchGrid
-    grid = _shown(HatchGrid("brick"))
-    got = []
-    grid.ground_picked.connect(got.append)
-    grid.ground_buttons["other"].click()
-    QTest.keyClick(grid.colour_dialog, Qt.Key_Escape)     # Esc: back
-    assert got == [] and not grid.colour_page.isVisible()
-    grid.ground_buttons["other"].click()
-    grid.colour_dialog.setCurrentColor(QColor(51, 102, 153))
-    grid.colour_use.click()
-    assert got == [(0.2, 0.4, 0.6)]
-    grid.close()
-
-
-def test_the_panel_sets_the_ground_for_every_selected_row(win, monkeypatch):
-    from views.layers_panel import COL_HATCH, HatchGrid
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers += [Layer("A", hatch="brick"), Layer("B", hatch="brick"),
-                     Layer("C")]
-    panel.refresh()
-    for n in ("A", "B"):
-        panel.item_for(n).setSelected(True)
-
-    def fake_popup(menu, _at):
-        grid = next(w for w in menu.findChildren(HatchGrid))
-        grid.ground_buttons[(0.70, 0.70, 0.70)].click()
-
-    monkeypatch.setattr(panel, "_popup", fake_popup)
-    panel.click_cell(("layer", "A"), COL_HATCH)
-    assert scene.layer("A").hatch_ground == scene.layer("B").hatch_ground \
-        == (0.7, 0.7, 0.7)
-    assert scene.layer("A").hatch == "brick"           # the pattern stays
-    assert scene.layer("C").hatch_ground is None
-
-
 # ---- The ink of the hatch: as the frame says, by layer, or fixed -----------
 
 def test_the_hatch_ink_round_trips_by_layer_or_fixed():
@@ -442,66 +338,6 @@ def test_only_hatched_layers_give_their_ink_and_the_legend_shows_it():
     assert L.cut_hatch_inks(scene) == {"A": (0.0, 0.0, 0.0)}
     _rows, swatches = L.legend_rows(scene)
     assert swatches["A"]["hatch_color"] == [0.0, 0.0, 0.0]
-
-
-def test_the_grid_offers_the_inks_and_marks_the_current_one():
-    from views.layers_panel import HatchGrid
-    ly = Layer("A", color=(0.2, 0.4, 0.8), hatch="brick", hatch_color="layer")
-    grid = HatchGrid("brick", ink=ly.hatch_color, layer=ly)
-    assert set(grid.ink_buttons) == {None, "layer", (0.0, 0.0, 0.0),
-                                     (0.40, 0.40, 0.40), "other"}
-    assert grid.ink_buttons["layer"].isChecked()
-    got = []
-    grid.ink_picked.connect(got.append)
-    grid.ink_buttons[None].click()
-    assert got == [None]
-    grid.ink_buttons[(0.0, 0.0, 0.0)].click()
-    assert got == [None, (0.0, 0.0, 0.0)]
-    assert grid.ink_name.text() == "· Black"
-    # One not offered (a near-black) shows as «Other colour…».
-    black = HatchGrid("brick", ink=(0.12, 0.14, 0.17))
-    assert black.ink_buttons["other"].isChecked()
-    white = HatchGrid("brick", ink=(1.0, 1.0, 1.0))   # through «Other»
-    assert white.ink_buttons["other"].isChecked()
-
-
-def test_the_panel_sets_the_ink_for_every_selected_row(win, monkeypatch):
-    from views.layers_panel import COL_HATCH, HatchGrid
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers += [Layer("A", hatch="brick"), Layer("B", hatch="brick")]
-    panel.refresh()
-    for n in ("A", "B"):
-        panel.item_for(n).setSelected(True)
-
-    def fake_popup(menu, _at):
-        grid = next(w for w in menu.findChildren(HatchGrid))
-        grid.ink_buttons["layer"].click()
-
-    monkeypatch.setattr(panel, "_popup", fake_popup)
-    panel.click_cell(("layer", "A"), COL_HATCH)
-    assert scene.layer("A").hatch_color == scene.layer("B").hatch_color \
-        == "layer"
-
-
-def test_other_colour_stands_apart_from_the_swatches():
-    """«Other colour…» is a chip of every hue, the size and frame of the
-    others, with its name beside it; a colour picked before fills it."""
-    from PySide6.QtCore import Qt
-    from views.layers_panel import HatchGrid
-    grid = HatchGrid("brick", ground=(0.2, 0.4, 0.6))
-    for buttons in (grid.ground_buttons, grid.ink_buttons):
-        other = buttons["other"]
-        assert other.toolButtonStyle() == Qt.ToolButtonTextBesideIcon
-        assert other.text() == "Other colour…"
-        assert other.iconSize() == buttons[None].iconSize()
-        assert buttons[None].toolButtonStyle() == Qt.ToolButtonIconOnly
-        assert buttons[None].toolTip()                    # named on hover
-    other = grid.ground_buttons["other"]
-    assert other.isChecked()                             # a colour of its own
-    img = other.icon().pixmap(other.iconSize()).toImage()
-    left = QColor(img.pixel(img.width() // 4, img.height() // 2))
-    assert (left.red(), left.green(), left.blue()) == (51, 102, 153)
 
 
 # ---- The catalogue -----------------------------------------------------------
@@ -544,38 +380,6 @@ def test_every_pattern_marks_inside_its_box_and_tells_apart():
         seen[sig] = key
 
 
-def test_the_grid_shows_every_pattern_under_its_group_title():
-    from PySide6.QtWidgets import QLabel
-    from core.hatches import HATCH_GROUPS, HATCH_ORDER
-    from views.layers_panel import HatchGrid
-    grid = HatchGrid(None)
-    assert set(grid.buttons) == {None} | set(HATCH_ORDER)
-    titles = {w.text() for w in grid.findChildren(QLabel)}
-    assert {t for t, _k in HATCH_GROUPS} <= titles
-
-
-def test_the_patterns_scroll_and_open_at_the_top():
-    """A few rows of patterns in sight, the rest behind a scroll bar; the
-    picker opens at the top — the recently used and the general ones —
-    whatever the layer's pattern, which the preview names; grounds and
-    inks stay out of the scroll, always in sight."""
-    from views.layers_panel import HatchGrid
-    grid = HatchGrid("plastic", recent=["brick"])     # the very last one
-    grid.show()
-    for _ in range(3):
-        _app.processEvents()
-    bar = grid.scroll.verticalScrollBar()
-    assert bar.maximum() > 0                          # there is more below
-    assert bar.value() == 0                           # but it opens on top
-    head = grid._heads["Recent"]
-    top = head.mapTo(grid.scroll.viewport(), head.rect().topLeft()).y()
-    assert 0 <= top < grid.scroll.viewport().height()
-    assert grid.preview_name.text() == "Plastic, rubber"
-    for b in list(grid.ground_buttons.values()) + list(
-            grid.ink_buttons.values()):
-        assert not grid.scroll.widget().isAncestorOf(b)
-    grid.close()
-
 def test_the_ground_chips_tell_white_from_light_grey_and_the_paper():
     from views.hatch_paint import colour_chip
     def middle(px):
@@ -587,216 +391,6 @@ def test_the_ground_chips_tell_white_from_light_grey_and_the_paper():
     paper = colour_chip(48, 26, None, paper=True).toImage()
     shades = {QColor(paper.pixel(x, 12)).name() for x in range(2, 46)}
     assert len(shades) >= 2                           # a checkerboard
-
-
-# ---- The picker as a popover -------------------------------------------------
-
-def _shown(grid):
-    grid.show()
-    for _ in range(3):
-        _app.processEvents()
-    return grid
-
-
-def test_the_search_keeps_only_matching_patterns_and_their_groups():
-    from views.layers_panel import HatchGrid
-    grid = _shown(HatchGrid("brick"))
-    grid.search.setText("brick")
-    visible = {k for k, b in grid.buttons.items()
-               if k is not None and b.isVisible()}
-    from core.hatches import HATCH_LABELS
-    assert visible == {k for k, v in HATCH_LABELS.items()
-                       if "brick" in v.lower()}
-    assert grid._heads["Masonry"].isVisible()
-    assert not grid._heads["Wood"].isVisible()
-    assert not grid.nothing.isVisible()
-    grid.search.setText("zzz")
-    assert grid.nothing.isVisible() and "zzz" in grid.nothing.text()
-    grid.search.clear()
-    assert all(b.isVisible() for b in grid.buttons.values())
-    grid.close()
-
-
-def test_the_funnel_shows_one_group_at_a_time():
-    from core.hatches import HATCH_GROUPS
-    from views.layers_panel import HatchGrid
-    grid = _shown(HatchGrid("brick", recent=["glass"]))
-    metals = dict(HATCH_GROUPS)["Metals, glass and plastics"]
-    grid.group_actions["Metals, glass and plastics"].trigger()
-    shown = {k for k, b in grid.buttons.items() if b.isVisibleTo(grid)}
-    assert shown == set(metals)                     # that group alone
-    assert not grid.recent_buttons["glass"].isVisibleTo(grid)
-    assert grid.filter_btn.toolTip() == "Filter: Metals, glass and plastics"
-    grid.search.setText("steel")                    # the search within it
-    shown = {k for k, b in grid.buttons.items() if b.isVisibleTo(grid)}
-    assert shown == {"steel"}
-    grid.search.clear()
-    grid.filter_to(None)
-    assert all(b.isVisibleTo(grid) for b in grid.buttons.values())
-    assert grid.filter_btn.toolTip() == "Filter: All hatches"
-    grid.close()
-
-
-def test_the_preview_shows_the_pattern_on_its_ground_and_follows_hover():
-    from PySide6.QtCore import QEvent
-    from PySide6.QtGui import QEnterEvent
-    from views.layers_panel import HatchGrid
-    grid = _shown(HatchGrid("brick", ground=(0.88, 0.88, 0.88)))
-    assert grid.preview_name.text() == "Brick"
-    img = grid.preview.pixmap().toImage()
-    shades = {QColor(img.pixel(x, y)).name()
-              for x in range(5, img.width() - 5, 7)
-              for y in range(5, img.height() - 5, 7)}
-    assert QColor.fromRgbF(0.88, 0.88, 0.88).name() in shades
-    grid.ground_buttons[(1.0, 1.0, 1.0)].click()      # live: white ground
-    img = grid.preview.pixmap().toImage()
-    assert QColor(img.pixel(3, 3)).name() != QColor.fromRgbF(
-        0.88, 0.88, 0.88).name()
-    assert "White" in grid.ground_name.text()
-    tile = grid.buttons["glass"]
-    QApplication.sendEvent(tile, QEvent(QEvent.Enter))
-    assert grid.preview_name.text() == "Glass"        # hover previews
-    QApplication.sendEvent(tile, QEvent(QEvent.Leave))
-    assert grid.preview_name.text() == "Brick"        # and goes back
-    grid.close()
-
-
-def test_picks_apply_at_once_and_the_picker_stays_open(win, monkeypatch):
-    """Pattern, ground and ink in one go: the menu stays open after each
-    pick and «Done» closes it."""
-    from views.layers_panel import COL_HATCH, HatchGrid
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers.append(Layer("A"))
-    panel.refresh()
-    seen = {}
-
-    def fake_popup(menu, _at):
-        menu.show()
-        grid = next(w for w in menu.findChildren(HatchGrid))
-        grid.buttons["concrete"].click()
-        grid.ground_buttons[(1.0, 1.0, 1.0)].click()
-        grid.ink_buttons["layer"].click()
-        seen["open"] = menu.isVisible()
-        grid.done_button.click()
-        seen["closed"] = not menu.isVisible()
-
-    monkeypatch.setattr(panel, "_popup", fake_popup)
-    panel.click_cell(("layer", "A"), COL_HATCH)
-    ly = scene.layer("A")
-    assert (ly.hatch, ly.hatch_ground, ly.hatch_color) == (
-        "concrete", (1.0, 1.0, 1.0), "layer")
-    assert seen == {"open": True, "closed": True}
-
-
-def test_enter_keeps_and_escape_cancels():
-    from PySide6.QtCore import Qt
-    from PySide6.QtTest import QTest
-    from views.layers_panel import HatchGrid
-    for key, signal in ((Qt.Key_Return, "done"), (Qt.Key_Escape,
-                                                   "cancelled")):
-        grid = _shown(HatchGrid("brick"))
-        got = []
-        grid.done.connect(lambda: got.append("done"))
-        grid.cancelled.connect(lambda: got.append("cancelled"))
-        QTest.keyClick(grid, key)
-        assert got == [signal]
-        grid.close()
-
-
-def test_cancel_puts_the_layer_back_as_it_was(win, monkeypatch):
-    """Picks apply at once; «Cancel» undoes all of them and closes."""
-    from views.layers_panel import COL_HATCH, HatchGrid
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers.append(Layer("A", hatch="brick", hatch_angle=15.0))
-    panel.refresh()
-    seen = {}
-
-    def fake_popup(menu, _at):
-        menu.show()
-        grid = next(w for w in menu.findChildren(HatchGrid))
-        assert grid.cancel_button.text() == "Cancel"
-        grid.buttons["concrete"].click()
-        grid.ground_buttons[(1.0, 1.0, 1.0)].click()
-        grid.angle_spin.setValue(90)
-        seen["during"] = scene.layer("A").hatch
-        grid.cancel_button.click()
-        seen["closed"] = not menu.isVisible()
-
-    monkeypatch.setattr(panel, "_popup", fake_popup)
-    panel.click_cell(("layer", "A"), COL_HATCH)
-    ly = scene.layer("A")
-    assert seen == {"during": "concrete", "closed": True}
-    assert (ly.hatch, ly.hatch_ground, ly.hatch_angle) == ("brick", None,
-                                                           15.0)
-
-def test_a_cancelled_other_colour_keeps_the_old_choice_ticked():
-    from views.layers_panel import HatchGrid
-    grid = _shown(HatchGrid("brick", ground=(1.0, 1.0, 1.0)))
-    got = []
-    grid.ground_picked.connect(got.append)
-    grid.ground_buttons["other"].click()
-    assert grid.colour_page.isVisible()               # in the picker
-    grid.colour_back.click()
-    assert not grid.colour_page.isVisible()
-    assert grid.ground_buttons[(1.0, 1.0, 1.0)].isChecked()
-    assert not grid.ground_buttons["other"].isChecked()
-    assert got == []
-    grid.close()
-
-
-def test_the_picker_fits_a_laptop_side_by_side():
-    """The catalogue on the left, the preview and the settings on the
-    right: wide and low, it fits a 1366 × 768 screen; the grid scrolls."""
-    from views.layers_panel import HatchGrid
-    grid = _shown(HatchGrid("brick"))
-    assert grid.width() <= 1120 and grid.height() <= 600
-    assert grid.scroll.geometry().right() < grid.preview.mapTo(
-        grid, grid.preview.rect().topLeft()).x()      # the grid left of it
-    assert grid.scroll.height() < grid.scroll.widget().height()
-    grid.close()
-
-
-def test_a_tile_is_the_pattern_alone_named_on_hover():
-    """No caption under each tile (the preview names the one under the
-    pointer): the name is the tooltip and the accessible name."""
-    from PySide6.QtCore import Qt
-    from views.layers_panel import HatchGrid
-    grid = HatchGrid("brick")
-    for key, b in grid.buttons.items():
-        if key is None:
-            continue                       # the footer button keeps its text
-        assert b.toolButtonStyle() == Qt.ToolButtonIconOnly
-        assert b.text() == ""
-        assert b.toolTip() and b.accessibleName() == b.toolTip()
-    assert grid.buttons["brick"].toolTip() == "Brick"
-
-
-def test_the_hatch_picker_opens_centred_on_the_screen(win, monkeypatch):
-    """From the cell and from the right-click menu alike."""
-    from views.layers_panel import COL_HATCH
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers.append(Layer("A", hatch="brick"))
-    panel.refresh()
-    seen = []
-    monkeypatch.setattr(panel, "_popup", lambda menu, at: seen.append(
-        (menu.sizeHint(), at)))
-    panel.click_cell(("layer", "A"), COL_HATCH)
-    from PySide6.QtWidgets import QMenu
-    menu = QMenu()
-    panel._add_look_menus(menu, ["A"], scene.layer("A"))
-    next(a for a in menu.actions() if a.text() == "Cut hatch…").trigger()
-    for _ in range(3):
-        _app.processEvents()
-    assert len(seen) == 2
-    area = (panel.screen() or _app.primaryScreen()).availableGeometry()
-    for size, at in seen:
-        cx = at.x() + size.width() // 2
-        cy = at.y() + size.height() // 2
-        assert abs(cx - area.center().x()) <= 1
-        assert abs(cy - area.center().y()) <= 1
 
 
 # ---- Angle, scale, size on paper or with the drawing, imported patterns -----
@@ -896,22 +490,6 @@ def test_the_size_rule_is_saved_only_when_the_layer_chose_it():
                            ).hatch_on_paper is None
 
 
-def test_the_picker_follows_the_pattern_until_the_box_is_clicked():
-    from views.layers_panel import HatchGrid
-    grid = HatchGrid("concrete", recent=[],
-                     form={"hatch_on_paper": True, "paper_fixed": False})
-    got = []
-    grid.form_picked.connect(got.append)
-    grid.picked.connect(lambda k: got.append(("pick", k)))
-    grid.buttons["brick"].click()
-    assert grid.drawing_check.isChecked()            # brick grows by itself
-    grid.angle_spin.setValue(45)
-    assert "hatch_on_paper" not in got[-1]           # still the pattern's
-    grid.drawing_check.setChecked(False)             # now the layer chooses
-    assert got[-1]["hatch_on_paper"] is True
-    grid.buttons["concrete"].click()
-    assert not grid.drawing_check.isChecked()
-
 def test_imported_patterns_live_in_the_document(tmp_path):
     from core.hatches import parse_pat
     from formats import igz
@@ -932,55 +510,6 @@ def test_imported_patterns_live_in_the_document(tmp_path):
     igz.save_scene(fresh, tmp_path / "empty.igz")
     igz.load_into(back, tmp_path / "empty.igz")
     assert back.hatch_patterns == {}
-
-
-def test_the_panel_imports_a_pattern_file_and_the_picker_shows_it(
-        win, tmp_path):
-    from views.layers_panel import HatchGrid
-    panel = win.layers_dock.panel
-    pat = tmp_path / "mine.pat"
-    pat.write_text(_PAT, encoding="utf-8")
-    assert panel.import_pat_file(pat) == 1
-    assert panel.import_pat_file(tmp_path / "missing.pat") == 0
-    junk = tmp_path / "junk.pat"
-    junk.write_bytes(b"\xff\xfe not a pattern")
-    assert panel.import_pat_file(junk) == 0
-    scene = win.viewport.scene
-    grid = HatchGrid(None, patterns=scene.hatch_patterns, recent=[])
-    assert "pat:TEST-HEX" in grid.buttons
-    assert "Imported" in grid.group_actions
-    assert "TEST-HEX" in grid.buttons["pat:TEST-HEX"].toolTip()
-
-
-def test_the_picker_sets_angle_scale_and_size_live():
-    from views.layers_panel import HatchGrid
-    grid = HatchGrid("brick", form={"hatch_angle": 0, "hatch_scale": 1,
-                                    "hatch_on_paper": True}, recent=[])
-    got = []
-    grid.form_picked.connect(got.append)
-    grid.angle_spin.setValue(45)
-    grid.scale_spin.setValue(2.0)
-    grid.drawing_check.setChecked(True)
-    assert got[-1] == {"hatch_angle": 45.0, "hatch_scale": 2.0,
-                       "hatch_offset": None, "hatch_on_paper": False,
-                       "hatch_cross": False}
-
-
-def test_the_recently_used_come_first(monkeypatch):
-    from PySide6.QtCore import QSettings
-    from views.layers_panel import HatchGrid
-    QSettings().remove(HatchGrid.RECENT_KEY)
-    for key in ("brick", "glass", "brick", "pat:GONE"):
-        HatchGrid.remember(key)
-    assert HatchGrid.recent()[:2] == ["pat:GONE", "brick"]
-    grid = HatchGrid(None)
-    # An imported pattern the document no longer has is left out.
-    assert list(grid.recent_buttons) == ["brick", "glass"]
-    assert grid._heads["Recent"].isVisible() or True
-    grid.recent_buttons["glass"].click()
-    assert HatchGrid.recent()[0] == "glass"
-    assert grid.buttons["glass"].isChecked()
-    QSettings().remove(HatchGrid.RECENT_KEY)
 
 
 def test_the_hatch_thumbnail_has_the_colour_swatch_shape(win):
@@ -1052,14 +581,16 @@ def test_a_line_pattern_goes_to_a_pattern_file_and_back_unchanged():
         assert differ < 120 * 90 * 0.005, (key, differ)
 
 
-def test_the_panel_exports_the_line_patterns_and_the_imported(win, tmp_path):
+def test_export_includes_standard_line_patterns_and_imported_patterns(tmp_path):
+    from core.history import History
     from core.hatches import line_families, HATCH_ORDER, parse_pat
-    panel = win.layers_dock.panel
+    from ingetrazo_core import import_hatch_file, export_style_file
+    scene = Scene()
     pat = tmp_path / "mine.pat"
     pat.write_text(_PAT, encoding="utf-8")
-    panel.import_pat_file(pat)
+    assert import_hatch_file(History(scene), pat) == 1
     out = tmp_path / "out.pat"
-    n = panel.export_pat_file(out)
+    n = export_style_file(scene, out, "pat")
     lines = [k for k in HATCH_ORDER if line_families(k)]
     assert n == len(lines) + 1
     back = parse_pat(out.read_text(encoding="utf-8"))
@@ -1383,43 +914,6 @@ def test_the_brick_families_follow_the_brick():
     assert usual[1][4] * 2 == pytest.approx(1.5 * 225.0 / 75.0)
 
 
-def test_the_picker_sets_the_brick_for_brickwork_only():
-    from views.layers_panel import HatchGrid
-    grid = _shown(HatchGrid("brick", form={"brick": None}))
-    grid.more_buttons["piece"].setChecked(True)          # the fields
-    got = []
-    grid.brick_picked.connect(got.append)
-    assert grid.brick_box.isEnabled()
-    assert grid.brick_combo.currentIndex() == 0           # the usual one
-    grid.brick_combo.setCurrentIndex(2)
-    grid.brick_combo.activated.emit(2)                    # Chile
-    assert got[-1] == (290.0, 140.0, 71.0, 10.0)
-    grid.brick_spins[1].setValue(400.0)                   # wider than long
-    assert grid.brick_problem.isVisibleTo(grid) and len(got) == 1
-    grid.brick_spins[1].setValue(140.0)
-    grid.brick_spins[3].setValue(12.0)
-    assert got[-1] == (290.0, 140.0, 71.0, 12.0)
-    assert grid.brick_combo.currentText() == "Custom"
-    grid._pick("block")                                   # its own sizes
-    assert grid.brick_box.isEnabled() and grid.brick_combo.isEnabled()
-    assert grid.brick_combo.itemText(0) == "390 × 140 × 190"   # measures
-    grid._pick("ashlar")                                  # joints, no size
-    assert grid.brick_box.isEnabled() and not grid.brick_combo.isEnabled()
-    grid._pick("concrete")
-    assert not grid.brick_box.isEnabled()
-
-
-def test_the_panel_sets_the_brick(win):
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers.append(Layer("Muro", hatch="brick"))
-    panel.refresh()
-    panel.set_style(["Muro"], brick=(240, 115, 50, 10))
-    assert scene.layer("Muro").brick == (240.0, 115.0, 50.0, 10.0)
-    panel.set_style(["Muro"], brick=None)
-    assert scene.layer("Muro").brick is None
-
-
 def test_the_zigzag_insulation_runs_face_to_face():
     from core.hatches import FITTED, fitted_marks
     assert "insulation_zigzag" in FITTED
@@ -1432,59 +926,6 @@ def test_the_zigzag_insulation_runs_face_to_face():
     assert min(xs) <= 0.0 and max(xs) >= 12.0
     assert fitted_marks("insulation_zigzag", (0, 0), (1, 0), (0, 1),
                         12.0, 0.0) == []
-
-
-def test_the_preview_shows_masonry_cut_in_plan_and_section():
-    from views.hatch_paint import cut_tile
-    from views.layers_panel import HatchGrid
-    grid = _shown(HatchGrid("brick_bond"))
-    assert grid.cut_preview.isVisibleTo(grid)
-    assert not grid.cut_same.isVisibleTo(grid)
-    for tile in (grid.plan_tile, grid.section_tile):
-        img = tile.pixmap().toImage()
-        dark = sum(1 for x in range(2, img.width() - 2)
-                   for y in range(2, img.height() - 2)
-                   if QColor(img.pixel(x, y)).lightness() < 120)
-        assert dark > 40                         # a wall, inked
-    # The tiles are as tall as each other: one wall, one scale.
-    assert grid.plan_tile.height() == grid.section_tile.height()
-    card = grid.cut_preview.parentWidget()
-    grid._pick("concrete")
-    assert not grid.cut_preview.isVisibleTo(grid)   # same in any cut
-    assert grid.cut_same.isVisibleTo(grid)          # and it says so
-    assert card.sizeHint().height() > 0
-    grid._pick("insulation_zigzag")
-    assert grid.cut_preview.isVisibleTo(grid)
-    plain = cut_tile("concrete", "plan", 104, 44).toImage()
-    assert QColor(plain.pixel(52, 22)).lightness() > 200   # paper only
-
-
-def test_a_click_on_an_empty_spot_keeps_the_picker_open(win):
-    from PySide6.QtCore import QPoint, Qt
-    from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QMenu
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers.append(Layer("Muro", hatch="brick"))
-    panel.refresh()
-    menu = QMenu()
-    panel._fill_hatches(menu, ["Muro"], scene.layer("Muro"))
-    menu.popup(QPoint(40, 40))
-    for _ in range(3):
-        _app.processEvents()
-    grid = menu.actions()[0].defaultWidget()
-    for spot in (grid.preview_name, grid.preview, grid.plan_tile,
-                 grid.section_tile, grid.ground_name):
-        QTest.mouseClick(spot, Qt.LeftButton)
-        _app.processEvents()
-        assert menu.isVisible(), spot
-    QTest.mouseClick(grid, Qt.LeftButton, pos=QPoint(grid.width() - 4,
-                                                     grid.height() - 60))
-    _app.processEvents()
-    assert menu.isVisible()
-    grid.done_button.click()
-    _app.processEvents()
-    assert not menu.isVisible()
 
 
 def test_timber_cut_across_is_crossed_corner_to_corner():
@@ -1509,170 +950,6 @@ def test_a_piece_is_cut_across_when_short_and_stocky():
     assert not cut_across(fit_band(board), 10.0)
     assert not cut_across(fit_band(stud), 1000.0)          # 15 m: no stud
     assert not cut_across(None)
-
-
-def test_the_picker_offers_the_cross_for_wood_only():
-    from views.layers_panel import HatchGrid
-    grid = _shown(HatchGrid("wood_grain", form={"hatch_cross": False}))
-    got = []
-    grid.form_picked.connect(got.append)
-    assert grid.cross_check.isEnabled()
-    assert not grid.cut_preview.isVisibleTo(grid)        # grain alone
-    grid.cross_check.setChecked(True)
-    assert got[-1]["hatch_cross"] is True
-    assert grid.cut_preview.isVisibleTo(grid)            # plan + crossed cut
-    grid._pick("concrete")
-    assert not grid.cross_check.isEnabled()
-
-
-def test_the_picker_sets_the_joints_and_the_mortar(win):
-    from views.layers_panel import HatchGrid
-    grid = _shown(HatchGrid("brick", form={"joints": "single"}))
-    got = []
-    grid.form_picked.connect(got.append)
-    assert grid.joints_combo.currentData() == "single"
-    i = grid.joints_combo.findData("double")
-    grid.joints_combo.setCurrentIndex(i)
-    grid.joints_combo.activated.emit(i)
-    assert got[-1] == {"joints": "double", "mortar": False}
-    grid.mortar_check.setChecked(True)
-    assert got[-1] == {"joints": "double", "mortar": True}
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers.append(Layer("Muro", hatch="brick"))
-    panel.set_style(["Muro"], **got[-1])
-    assert scene.layer("Muro").joints == "double"
-    assert scene.layer("Muro").mortar is True
-    panel.set_style(["Muro"], joints=None)
-    assert scene.layer("Muro").joints is None
-
-
-def test_a_click_on_a_style_cell_selects_the_layer_being_edited(win,
-                                                                monkeypatch):
-    from views import layers_panel as lp
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    for n in ("A", "B", "C"):
-        scene.layers.append(Layer(n))
-    panel.refresh()
-    opened = []
-    monkeypatch.setattr(type(panel), "open_hatch_picker",
-                        lambda self, targets, ly: opened.append(list(targets)))
-    panel.item_for("A").setSelected(True)
-    panel.click_cell(panel._key(panel.item_for("B")), lp.COL_HATCH)
-    assert opened[-1] == ["B"]
-    assert [panel._key(i)[1] for i in panel.tree.selectedItems()] == ["B"]
-    assert panel.tree.currentItem() is panel.item_for("B")
-    # Clicked inside a selection of several: they all stay, all take it.
-    panel.item_for("C").setSelected(True)
-    panel.click_cell(panel._key(panel.item_for("C")), lp.COL_HATCH)
-    assert sorted(opened[-1]) == ["B", "C"]
-    assert sorted(panel._key(i)[1]
-                  for i in panel.tree.selectedItems()) == ["B", "C"]
-
-
-@pytest.fixture
-def menu_effects():
-    """The application's menu effects as the test found them: left on, the
-    next menu a test opens in this process fades in and is not yet visible
-    when it is asked."""
-    from PySide6.QtCore import Qt
-    from PySide6.QtWidgets import QApplication
-    kinds = (Qt.UI_General, Qt.UI_FadeMenu, Qt.UI_AnimateMenu)
-    was = [QApplication.isEffectEnabled(k) for k in kinds]
-    yield
-    for k, on in zip(kinds, was):
-        QApplication.setEffectEnabled(k, on)
-
-
-def test_the_picker_shows_at_once_without_the_menu_effects(win, monkeypatch,
-                                                            menu_effects):
-    """No fade or slide while it opens — its shadow would show first, alone
-    — and the effects back for every other menu once it is up."""
-    from PySide6.QtCore import Qt
-    from PySide6.QtWidgets import QApplication
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers.append(Layer("Muro", hatch="brick"))
-    panel.refresh()
-    QApplication.setEffectEnabled(Qt.UI_General, True)
-    QApplication.setEffectEnabled(Qt.UI_FadeMenu, True)
-    QApplication.setEffectEnabled(Qt.UI_AnimateMenu, True)
-    before = (QApplication.isEffectEnabled(Qt.UI_FadeMenu),
-              QApplication.isEffectEnabled(Qt.UI_AnimateMenu))
-    seen = []
-    monkeypatch.setattr(type(panel), "_popup", staticmethod(
-        lambda menu, at: seen.append(
-            (QApplication.isEffectEnabled(Qt.UI_FadeMenu),
-             QApplication.isEffectEnabled(Qt.UI_AnimateMenu),
-             menu.actions()[0].defaultWidget().isVisibleTo(menu)))))
-    panel.open_hatch_picker(["Muro"], scene.layer("Muro"))
-    assert seen == [(False, False, True)]
-    _app.processEvents()
-    assert before == (True, True)
-    assert (QApplication.isEffectEnabled(Qt.UI_FadeMenu),
-            QApplication.isEffectEnabled(Qt.UI_AnimateMenu)) == before
-
-
-def test_the_arrows_walk_the_patterns():
-    from PySide6.QtCore import Qt
-    from PySide6.QtTest import QTest
-    from core.hatches import HATCH_GROUPS
-    from views.layers_panel import HatchGrid
-    grid = _shown(HatchGrid(None, recent=[]))
-    got = []
-    grid.picked.connect(got.append)
-    # «No hatch» is the first tile of General: the walk starts there.
-    general = [None] + list(HATCH_GROUPS[0][1])
-    grid.search.setFocus()
-    QTest.keyClick(grid, Qt.Key_Right)
-    assert got[-1] == general[1]
-    QTest.keyClick(grid, Qt.Key_Left)
-    assert got[-1] is None
-    QTest.keyClick(grid.search, Qt.Key_Down)         # the row below
-    assert got[-1] == general[grid.COLUMNS]
-    QTest.keyClick(grid, Qt.Key_Down)                # into the next group
-    assert got[-1] == HATCH_GROUPS[1][1][0]
-    QTest.keyClick(grid, Qt.Key_Up)
-    assert got[-1] == general[grid.COLUMNS]
-    assert grid.buttons[got[-1]].isChecked()
-    # A tile with the focus walks too, and the search narrows the walk.
-    grid.buttons[got[-1]].setFocus()
-    QTest.keyClick(grid.buttons[got[-1]], Qt.Key_Right)
-    assert got[-1] == general[grid.COLUMNS + 1]
-    grid.search.setText("brick")
-    QTest.keyClick(grid.search, Qt.Key_Down)
-    assert "brick" in got[-1]
-    # The spin boxes keep their arrows.
-    n = len(got)
-    grid.angle_spin.setFocus()
-    QTest.keyClick(grid.angle_spin, Qt.Key_Up)
-    assert len(got) == n and grid.angle_spin.value() == 15.0
-
-
-def test_the_arrows_walk_the_patterns_inside_the_open_picker(win):
-    """In the menu that holds it, the arrows still reach the grid (not the
-    menu's own entry by entry walk)."""
-    from PySide6.QtCore import QPoint, Qt
-    from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QMenu
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers.append(Layer("Muro", hatch="brick"))
-    panel.refresh()
-    menu = QMenu()
-    panel._fill_hatches(menu, ["Muro"], scene.layer("Muro"))
-    menu.popup(QPoint(40, 40))
-    for _ in range(3):
-        _app.processEvents()
-    grid = menu.actions()[0].defaultWidget()
-    grid.search.setFocus()
-    QTest.keyClick(grid.search, Qt.Key_Right)       # the text keeps it
-    QTest.keyClick(grid.search, Qt.Key_Down)
-    _app.processEvents()
-    assert scene.layer("Muro").hatch != "brick"     # moved, and applied
-    assert menu.isVisible()
-    menu.close()
 
 
 # ---- One wall in pieces, and the hatches in the DXF ---------------------------
@@ -1886,35 +1163,6 @@ def test_a_document_keeps_and_draws_a_line_type_with_words(tmp_path):
 
 # ---- Favourite hatches, and the line type editor -------------------------------
 
-def test_a_pinned_pattern_comes_first_and_stays():
-    from PySide6.QtCore import QSettings, Qt
-    from views.layers_panel import HatchGrid
-    QSettings().setValue(HatchGrid.FAVOURITES_KEY, [])
-    grid = _shown(HatchGrid("brick", recent=[]))
-    assert not grid.favourite_buttons and not grid.star.isChecked()
-    grid.star.click()                                # pin the current one
-    assert HatchGrid.favourites() == ["brick"]
-    assert list(grid.favourite_buttons) == ["brick"]
-    assert grid._sections[0][0] == "Favourites"
-    assert grid.star.isChecked() and grid.star.text() == "★"
-    grid.set_favourite("insulation", True)
-    assert list(grid.favourite_buttons) == ["brick", "insulation"]
-    # A favourite tile is a shortcut: it picks, the grid keeps its own.
-    grid.favourite_buttons["insulation"].click()
-    assert grid._current == "insulation"
-    assert grid.buttons["insulation"].isChecked()
-    # The next picker opens with them.
-    again = _shown(HatchGrid(None, recent=[]))
-    assert list(again.favourite_buttons) == ["brick", "insulation"]
-    grid.set_favourite("brick", False)
-    assert HatchGrid.favourites() == ["insulation"]
-    # The arrows walk the catalogue, not the shortcuts.
-    again._pick("solid")
-    again._step(Qt.Key_Left)
-    assert again._current is None                   # «No hatch», first
-    QSettings().setValue(HatchGrid.FAVOURITES_KEY, [])
-
-
 def test_the_panel_edits_and_deletes_its_line_types(win):
     panel = win.layers_dock.panel
     scene = win.viewport.scene
@@ -1987,53 +1235,6 @@ def test_a_block_and_a_ticholo_are_drawn_their_own_size():
     assert course == pytest.approx(180.0)
 
 
-def test_once_for_the_whole_document(win):
-    from views.layers_panel import HatchGrid
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers += [Layer("A", hatch="brick", brick=(240, 115, 50, 10)),
-                     Layer("B", hatch="brick_bond"),
-                     Layer("C", hatch="block", brick=(390, 90, 190, 10))]
-    panel.refresh()
-    grid = _shown(HatchGrid("brick", form={"brick": None}))
-    got = []
-    grid.brick_for_document.connect(got.append)
-    grid.brick_combo.setCurrentIndex(2)
-    grid.brick_combo.activated.emit(2)                   # Chile
-    grid.brick_document.click()
-    assert got == [("brick", (290.0, 140.0, 71.0, 10.0))]
-    panel.set_document_brick(got[-1])
-    assert scene.bricks == {"brick": (290.0, 140.0, 71.0, 10.0)}
-    assert scene.layer("A").brick is None               # follows it now
-    assert scene.layer("C").brick is not None           # a block: its own
-    # A picker opened on a layer then shows the document's brick, and
-    # picking that same one gives the layer no brick of its own.
-    grid = _shown(HatchGrid("brick", form={"brick": None,
-                                           "doc_bricks": scene.bricks}))
-    assert grid.brick_combo.currentIndex() == 2
-    picked = []
-    grid.brick_picked.connect(picked.append)
-    grid.brick_combo.activated.emit(2)
-    assert picked == [None]
-    # A block picked: the block's sizes, its usual one shown, its drawing.
-    grid._pick("block")
-    assert grid.brick_spins[0].value() == 390.0
-    assert grid.piece_view.isVisibleTo(grid)
-    assert not grid.piece_view.pixmap().isNull()
-    grid._pick("concrete")
-    assert not grid.piece_view.isVisibleTo(grid)
-
-
-def test_a_layer_switched_to_another_piece_forgets_its_size(win):
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers.append(Layer("M", hatch="brick", brick=(290, 140, 71, 10)))
-    panel.set_style(["M"], hatch="brick_bond")          # still a brick
-    assert scene.layer("M").brick is not None
-    panel.set_style(["M"], hatch="block")               # a block now
-    assert scene.layer("M").brick is None
-
-
 # ---- Bed joint and head joint ------------------------------------------------------
 
 def test_a_brick_may_have_two_joints():
@@ -2071,27 +1272,6 @@ def test_double_joints_show_each_joint_its_own_width():
     per_mm = 1.5 / 70.0
     assert xs[1] - xs[0] == pytest.approx(240.0 * per_mm)   # head off
     assert ys[1] - ys[0] == pytest.approx(50.0 * per_mm)    # bed off
-
-
-def test_the_padlock_keeps_the_joints_one_or_frees_them():
-    from views.layers_panel import HatchGrid
-    grid = _shown(HatchGrid("brick", form={"brick": None}))
-    got = []
-    grid.brick_picked.connect(got.append)
-    bed, head = grid.brick_spins[3], grid.brick_spins[4]
-    assert grid.joint_lock.isChecked() and not head.isEnabled()
-    bed.setValue(12.0)                              # locked: both follow
-    assert head.value() == 12.0 and got[-1][3:] == (12.0,)
-    grid.joint_lock.setChecked(False)               # open: each its own
-    assert head.isEnabled()
-    head.setValue(6.0)
-    assert got[-1][3:] == (12.0, 6.0)
-    grid.joint_lock.setChecked(True)                # closed again: one
-    assert head.value() == 12.0 and got[-1][3:] == (12.0,)
-    # A layer with two joints opens with the padlock open.
-    other = _shown(HatchGrid("brick", form={"brick": (240, 115, 50, 15, 5)}))
-    assert not other.joint_lock.isChecked()
-    assert other.brick_spins[4].value() == 5.0
 
 
 # ---- Aerated concrete, load-bearing ceramic blocks, Uruguay ----------------------
@@ -2137,75 +1317,6 @@ def test_uruguay_and_the_new_pieces_are_in_the_lists():
     assert "Rejillón" in names["perforated"]
     assert names["aac"][0] == "Aerated 15"
     assert dict(PIECE_SIZES["aac"])["Aerated 15"][3] == 3.0
-
-
-def test_the_picker_shows_only_the_settings_its_pattern_uses():
-    from views.layers_panel import HatchGrid
-    grid = _shown(HatchGrid("brick", recent=[]))
-    height = grid.height()
-    assert grid.piece_section.isVisibleTo(grid)
-    assert not grid.wood_section.isVisibleTo(grid)
-    grid._pick("wood_grain")
-    assert grid.wood_section.isVisibleTo(grid)
-    assert not grid.piece_section.isVisibleTo(grid)
-    grid._pick("concrete")
-    assert not grid.wood_section.isVisibleTo(grid)
-    assert not grid.piece_section.isVisibleTo(grid)
-    _app.processEvents()
-    assert grid.height() == height                # nothing jumps
-    # The .pat files: two buttons on the left, the answers on the right.
-    load, save = grid.file_buttons
-    assert (load.text(), save.text()) == ("Import .pat…", "Export .pat…")
-    assert not load.icon().isNull() and not save.icon().isNull()
-    assert save.x() < grid.cancel_button.x() < grid.done_button.x()
-    assert load.x() < grid.width() / 4
-    got = []
-    grid.import_requested.connect(lambda: got.append("in"))
-    grid.export_requested.connect(lambda: got.append("out"))
-    load.click()
-    save.click()
-    assert got == ["in", "out"]
-
-
-def test_the_seldom_used_settings_fold_away():
-    from PySide6.QtCore import QSettings
-    from views.layers_panel import HatchGrid
-    QSettings().setValue(HatchGrid.MORE_KEY, [])
-    grid = _shown(HatchGrid("brick", recent=[]))
-    height = grid.height()
-    # Folded: the list and the measures in a line; no fields.
-    assert not grid.more_boxes["piece"].isVisibleTo(grid)
-    assert grid.drawing_check.isVisibleTo(grid)      # always in sight
-    assert grid.piece_summary.text().startswith("215 × 102.5 × 65 mm")
-    grid.more_buttons["piece"].setChecked(True)
-    assert grid.brick_spins[0].isVisibleTo(grid)
-    assert grid.height() == height                   # nothing jumps
-    assert QSettings().value(HatchGrid.MORE_KEY) == ["piece"]
-    # «Custom» opens the fields by itself.
-    grid.more_buttons["piece"].setChecked(False)
-    last = grid.brick_combo.count() - 1
-    grid.brick_combo.setCurrentIndex(last)
-    grid.brick_combo.activated.emit(last)
-    assert grid.more_boxes["piece"].isVisibleTo(grid)
-    # Two joints read as two.
-    grid.joint_lock.setChecked(False)
-    grid.brick_spins[4].setValue(6.0)
-    assert "10 / 6" in grid.piece_summary.text()
-    QSettings().setValue(HatchGrid.MORE_KEY, [])
-
-
-def test_no_hatch_is_the_first_tile():
-    from views.layers_panel import HatchGrid
-    grid = _shown(HatchGrid("brick", recent=[]))
-    general = next(t for t in grid._sections if t[0] == "General")
-    assert general[2][0][0] is None
-    tile = grid.buttons[None]
-    assert tile.objectName() == "hatch_frame"
-    assert tile.toolTip() == "No hatch (the frame's fill)"
-    got = []
-    grid.picked.connect(got.append)
-    tile.click()
-    assert got == [None] and grid.buttons[None].isChecked()
 
 
 def test_a_precast_concrete_brick_shows_its_holes():
@@ -2406,115 +1517,6 @@ def test_the_layer_keeps_where_its_pieces_start():
     scene = Scene()
     scene.layers.append(ly)
     assert cut_hatch_forms(scene, 50.0)["Muros"]["offset"] == (115.0, -20.0)
-
-
-def test_the_picker_shifts_only_patterns_of_pieces():
-    from views.layers_panel import HatchGrid
-    grid = _shown(HatchGrid("brick", form={"hatch_offset": (40.0, 0.0)}))
-    assert grid.offset_spins[0].isVisibleTo(grid)
-    # In the grid of Angle and Scale: each field under the one above.
-    assert grid.offset_spins[0].x() == grid.angle_spin.x()
-    assert grid.offset_spins[1].x() == grid.scale_spin.x()
-    assert grid.offset_spins[0].value() == 40.0
-    got = []
-    grid.form_picked.connect(got.append)
-    grid.offset_spins[1].setValue(25.0)
-    assert got[-1]["hatch_offset"] == (40.0, 25.0)
-    grid.offset_spins[0].setValue(0.0)
-    grid.offset_spins[1].setValue(0.0)
-    assert got[-1]["hatch_offset"] is None
-    grid.close()
-    grid = _shown(HatchGrid("concrete"))
-    assert not any(w.isVisibleTo(grid) for w in grid.offset_widgets)
-    grid.close()
-
-
-def test_other_colour_is_a_chip_like_the_rest():
-    from views.layers_panel import HatchGrid
-    grid = _shown(HatchGrid("brick"))
-    other = grid.ground_buttons["other"]
-    white = grid.ground_buttons[(1.0, 1.0, 1.0)]
-    assert other.iconSize() == white.iconSize()           # the same chip
-    assert other.text() == "Other colour…"                # still named
-    before = other.icon().pixmap(other.iconSize()).toImage()
-    other.click()
-    grid.colour_dialog.setCurrentColor(QColor(200, 30, 30))
-    grid.colour_use.click()
-    after = other.icon().pixmap(other.iconSize()).toImage()
-    assert after != before                                # shows the pick
-    assert other.isChecked()
-    grid.close()
-
-
-@pytest.mark.parametrize("how", ["escape", "outside"])
-def test_closing_without_done_puts_the_layer_back(win, monkeypatch, how):
-    """Picks show at once, but only «Done» keeps them: Esc or a click
-    outside the picker is a «Cancel»."""
-    from views.layers_panel import COL_HATCH, HatchGrid
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers.append(Layer("B", hatch="brick", hatch_angle=15.0))
-    panel.refresh()
-    seen = {}
-
-    def fake_popup(menu, _at):
-        menu.show()
-        grid = next(w for w in menu.findChildren(HatchGrid))
-        grid.buttons["concrete"].click()
-        grid.angle_spin.setValue(90)
-        seen["during"] = scene.layer("B").hatch
-        menu.close()                   # Esc and a click outside both hide it
-
-    monkeypatch.setattr(panel, "_popup", fake_popup)
-    panel.click_cell(("layer", "B"), COL_HATCH)
-    ly = scene.layer("B")
-    assert seen["during"] == "concrete"
-    assert (ly.hatch, ly.hatch_angle) == ("brick", 15.0)
-
-
-def test_done_keeps_what_was_picked(win, monkeypatch):
-    from views.layers_panel import COL_HATCH, HatchGrid
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers.append(Layer("C", hatch="brick"))
-    panel.refresh()
-
-    def fake_popup(menu, _at):
-        menu.show()
-        grid = next(w for w in menu.findChildren(HatchGrid))
-        grid.buttons["concrete"].click()
-        grid.done_button.click()
-
-    monkeypatch.setattr(panel, "_popup", fake_popup)
-    panel.click_cell(("layer", "C"), COL_HATCH)
-    assert scene.layer("C").hatch == "concrete"
-
-
-def test_other_colour_keeps_the_picker_open_until_done(win, monkeypatch):
-    """The colour is chosen inside the picker — no window of its own, which
-    would close it — and, like every pick, kept only with «Done»."""
-    from views.layers_panel import COL_HATCH, HatchGrid
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers.append(Layer("D", hatch="brick"))
-    panel.refresh()
-    seen = {}
-
-    def fake_popup(menu, _at):
-        menu.show()
-        grid = next(w for w in menu.findChildren(HatchGrid))
-        grid.ink_buttons["other"].click()
-        grid.colour_dialog.setCurrentColor(QColor(0, 0, 255))
-        grid.colour_use.click()
-        seen["open"] = menu.isVisible()
-        seen["page"] = grid.colour_page.isVisible()
-        seen["during"] = scene.layer("D").hatch_color
-        menu.close()                          # no «Done»: put back
-
-    monkeypatch.setattr(panel, "_popup", fake_popup)
-    panel.click_cell(("layer", "D"), COL_HATCH)
-    assert seen == {"open": True, "page": False, "during": (0.0, 0.0, 1.0)}
-    assert scene.layer("D").hatch_color is None
 
 
 # ---- A line type's own colour ----------------------------------------------
@@ -2762,45 +1764,6 @@ def test_the_line_panel_foot_and_the_pencil(win, monkeypatch):
     assert called == ["Borde"]
     panel0.delete_line_type("Borde")
     assert "Borde" not in scene.line_types
-
-
-def test_the_sizes_are_measures_and_one_of_ones_own_is_kept():
-    """No country names in the list — the measures alone — and a size of
-    one's own saved for every document (★), removable again."""
-    from PySide6.QtCore import QSettings
-    from views.layers_panel import HatchGrid
-    QSettings().remove(HatchGrid.OWN_PIECES_KEY)
-    try:
-        grid = _shown(HatchGrid("brick", form={"brick": None}))
-        texts = [grid.brick_combo.itemText(i)
-                 for i in range(grid.brick_combo.count())]
-        assert texts[0] == "215 × 102.5 × 65" and texts[-1] == "Custom"
-        assert not any(n in t for t in texts
-                       for n in ("Chile", "Uruguay", "Metric", "Spain"))
-        grid.more_buttons["piece"].setChecked(True)
-        assert not grid.brick_save.isEnabled()        # a usual one: in it
-        for spin, v in zip(grid.brick_spins, (300, 150, 80, 12)):
-            spin.setValue(float(v))
-        assert grid.brick_save.isEnabled()
-        assert grid.brick_save.text() == "Save this size"
-        grid.brick_save.click()
-        assert HatchGrid.own_pieces()["brick"] == [(300.0, 150.0, 80.0,
-                                                     12.0)]
-        assert grid.brick_combo.currentText() == "★ 300 × 150 × 80"
-        assert grid.brick_save.text() == "Remove from the list"
-        grid.close()
-        again = _shown(HatchGrid("brick"))             # another document
-        texts = [again.brick_combo.itemText(i)
-                 for i in range(again.brick_combo.count())]
-        assert "★ 300 × 150 × 80" in texts
-        again.close()
-        grid = _shown(HatchGrid("brick", form={"brick": (300.0, 150.0, 80.0,
-                                                         12.0)}))
-        grid.brick_save.click()                          # remove it
-        assert "brick" not in HatchGrid.own_pieces()
-        grid.close()
-    finally:
-        QSettings().remove(HatchGrid.OWN_PIECES_KEY)
 
 
 def test_the_model_writes_a_line_types_words(win):

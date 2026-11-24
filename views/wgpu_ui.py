@@ -429,6 +429,8 @@ def before_frame(view) -> None:
     from views import wgpu_deliveries
     wgpu_deliveries.bind(win)
     _tree(view, win)
+    if view.__dict__.get("_ui_lens") == 1 and view.renderer.ui_tick_tag_counts(win.viewport.history):
+        view.update()
     from views import wgpu_library
     wgpu_library.before_frame(view, win)
     _inspector(view, win)
@@ -1402,6 +1404,11 @@ def _tree_action(win, view, action) -> None:
         if verb == "grouprows":
             from ingetrazo_render import tree_group_rows
             view.renderer.ui_set_tree_group_rows(rk, tree_group_rows(scene, copies() if kind == "d" else item()))
+        elif verb == "paintrows":
+            from ingetrazo_render import TreePaint
+            from views.wgpu_library import open_library
+            target = TreePaint(scene, copies() if kind == "d" else item())
+            open_library(win, "materials", scope="s:model", paint_target=target)
         elif verb in ("into", "beside", "root", "outdent"):
             from ingetrazo_render import tree_move
             target = _group_by_uid(win, extra.partition(":")[2]) if extra else None

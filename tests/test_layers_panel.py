@@ -109,24 +109,6 @@ def test_purge_lives_in_the_right_click_and_asks_with_the_count(win,
     assert [ly.name for ly in scene.layers] == [DEFAULT_LAYER]
 
 
-def test_folder_row_shows_hides_and_counts(win):
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers += [Layer("A", folder="Arq"), Layer("B", folder="Arq")]
-    f = _square(scene.mesh)
-    assign_layer(f, "A")
-    panel.refresh()
-    folder = panel.item_for("Arq", "folder")
-    assert folder.childCount() == 2
-    panel.click_cell(("folder", "Arq"), 2)
-    assert not L.effective_visible(scene, scene.layer("A"))
-    assert not L.effective_visible(scene, scene.layer("B"))
-    panel.click_cell(("folder", "Arq"), 2)
-    assert L.effective_visible(scene, scene.layer("A"))
-    panel.update_counts()
-    assert panel.item_for("A").text(5) == "1"
-
-
 def test_columns_and_indent_follow_the_browser(win):
     from views.layers_panel import (COL_ACTIVE, COL_COLOR, COL_COUNT,
                                     COL_EYE, COL_LOCK, COL_NAME)
@@ -366,74 +348,6 @@ def test_the_top_bar_buttons_share_one_size(win):
     assert len(sizes) == 1
 
 
-def test_dropping_rows_files_them_in_a_folder(win):
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers += [Layer("A"), Layer("B"), Layer("C", folder="Arq")]
-    L.add_folder(scene, "Ext")
-    scene.layer_folders = L.folders_of(scene)
-    panel.refresh()
-    panel.drop_rows([("layer", "A"), ("layer", "B"),
-                     ("layer", DEFAULT_LAYER)], "Arq")
-    assert scene.layer("A").folder == scene.layer("B").folder == "Arq"
-    assert scene.layer(DEFAULT_LAYER).folder is None      # never filed
-    ext = L.folders_of(scene)[-1]
-    panel.drop_rows([("folder", "Arq"), ("layer", "C")], ext)
-    assert L.folder_parent(scene, "Arq") == ext
-    assert scene.layer("C").folder == "Arq"               # went with it
-    panel.drop_rows([("folder", ext)], "Arq")             # into its own child
-    assert L.folder_parent(scene, ext) is None
-    panel.drop_rows([("layer", "A")], None)               # out of any
-    assert scene.layer("A").folder is None
-
-
-def test_the_drop_target_is_the_folder_under_the_pointer(win):
-    from PySide6.QtCore import QPoint
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers += [Layer("A"), Layer("B", folder="Arq")]
-    panel.refresh()
-    tree = panel.tree
-    for name, kind, expect in (("Arq", "folder", "Arq"),
-                               ("B", "layer", "Arq"),
-                               ("A", "layer", None)):
-        rect = tree.visualItemRect(panel.item_for(name, kind))
-        assert tree.target_folder(rect.center()) == expect
-    # Empty space under the last row: out of any folder. The list is made
-    # tall enough to have some, whatever window size the run left.
-    tree.setMinimumHeight(400)
-    _app.processEvents()
-    rows = [panel.tree.topLevelItem(i)
-            for i in range(panel.tree.topLevelItemCount())]
-    below = max(tree.visualItemRect(it).bottom() for it in rows) + 10
-    assert below < tree.viewport().height()
-    assert tree.target_folder(QPoint(0, below)) is None
-
-
-def test_a_real_drag_and_drop_moves_the_selected_rows(win):
-    """The event path itself: a drop on a folder files every selected
-    layer there, and Qt does not move rows on its own."""
-    from PySide6.QtCore import QMimeData, QPointF
-    from PySide6.QtGui import QDropEvent
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers += [Layer("A"), Layer("B"), Layer("C", folder="Arq")]
-    panel.refresh()
-    tree = panel.tree
-    for n in ("A", "B"):
-        panel.item_for(n).setSelected(True)
-    pos = QPointF(tree.visualItemRect(panel.item_for("Arq", "folder")).center())
-
-    class _Drop(QDropEvent):
-        def source(self):
-            return tree
-
-    ev = _Drop(pos, Qt.MoveAction, QMimeData(), Qt.LeftButton, Qt.NoModifier)
-    tree.dropEvent(ev)
-    _app.processEvents()
-    assert scene.layer("A").folder == scene.layer("B").folder == "Arq"
-
-
 def _shown(panel):
     return sorted(panel._key(it)[1] for it in panel._all_items()
                   if panel._key(it)[0] == "layer" and not it.isHidden())
@@ -668,75 +582,6 @@ def _drag_move(tree, pos):
     ev = _Move(pos, Qt.MoveAction, QMimeData(), Qt.LeftButton, Qt.NoModifier)
     tree.dragMoveEvent(ev)
     return ev
-
-
-def test_a_drag_outlines_the_folder_it_would_file_into(win):
-    """With folders inside folders, the outline is the INNER folder's
-    block, not its parent's — and it says where in words."""
-    from core import layers as L
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    arq = L.add_folder(scene, "Arq")
-    est = L.add_folder(scene, "Est", parent=arq)
-    scene.layers += [Layer("A"), Layer("B", folder=arq),
-                     Layer("C", folder=est)]
-    panel.refresh()
-    panel.tree.expandAll()
-    _app.processEvents()
-    tree = panel.tree
-    rect = lambda n, k="layer": tree.visualItemRect(panel.item_for(n, k))
-    # The outline spans the list's width; a row's middle may lie past it
-    # when the columns scroll sideways, so its height is what counts.
-    _rows_of = lambda box, r: box.top() <= r.center().y() <= box.bottom()
-
-    ev = _drag_move(tree, rect("C").center())
-    assert ev.isAccepted() and tree.drop_hint == (est,)
-    box = tree.drop_rect(est)
-    assert _rows_of(box, rect(est, "folder"))
-    assert _rows_of(box, rect("C"))
-    assert not _rows_of(box, rect(arq, "folder"))
-    assert not _rows_of(box, rect("B"))
-
-    _drag_move(tree, rect("B").center())
-    assert tree.drop_hint == (arq,)
-    box = tree.drop_rect(arq)
-    for n, k in ((arq, "folder"), (est, "folder"), ("C", "layer"),
-                 ("B", "layer")):
-        assert _rows_of(box, rect(n, k))
-    assert not _rows_of(box, rect("A"))
-
-    _drag_move(tree, rect("A").center())
-    assert tree.drop_hint == (None,)
-    assert tree.drop_rect(None) == tree.viewport().rect()
-    tree.grab()                                       # paints the hint
-    tree._clear_hint()
-    assert tree.drop_hint is None
-
-
-def test_the_dragged_rows_are_stacked_see_through_and_counted(win):
-    """Rows far apart are drawn one under the other with no empty band
-    between them, half see-through; past a handful, the rest is counted."""
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers += [Layer(n) for n in "ABCDEFGHIJ"]
-    panel.refresh()
-    tree = panel.tree
-    for n in ("A", "D", "H"):
-        panel.item_for(n).setSelected(True)
-    pm, rows = tree.drag_pixmap()
-    h = tree.visualItemRect(panel.item_for("A")).height()
-    assert [panel._key(r)[1] for r in rows] == ["A", "D", "H"]
-    assert round(pm.height() / pm.devicePixelRatio()) == 3 * h
-    img = pm.toImage()
-    alphas = {img.pixelColor(x, y).alpha()
-              for x in range(5, img.width() - 5, 7)
-              for y in range(3, img.height() - 3, 3)}
-    assert alphas and max(alphas) < 255            # see-through
-    for n in "BCEFGIJ":
-        panel.item_for(n).setSelected(True)
-    pm, rows = tree.drag_pixmap()
-    assert len(rows) == 10
-    assert round(pm.height() / pm.devicePixelRatio()) == (tree.DRAG_ROWS + 1) * h
 
 
 def test_a_new_row_opens_its_name_without_a_half_lit_highlight(win):
@@ -974,38 +819,6 @@ def test_a_new_layer_goes_into_the_folder_of_the_selected_layer(win):
 
 
 # ---- DXF: every layer with its colour ---------------------------------------
-
-
-def test_an_edit_of_the_model_does_not_rebuild_the_rows(win):
-    """The rows are rebuilt when what they show changes, not on every edit:
-    a rebuild on every change of the scene was 9 ms of each edit on plaza
-    (release_check 0.5.11). The counts still follow the edit."""
-    panel = win.layers_dock.panel
-    scene = win.viewport.scene
-    scene.layers += [Layer("Muros")]
-    win.layers_dock.show()
-    win.layers_dock.raise_()
-    _app.processEvents()
-    panel.refresh()
-    first = panel.tree.topLevelItem(0)
-    m = Mesh()
-    a, b = QVector3D(0, 0, 0), QVector3D(1, 0, 0)
-    e = m.add_edge(a, b)
-    e.layer = "Muros"
-    g = Group(m, name="g")
-    scene.groups.append(g)
-    scene.version += 1
-    win.viewport.notify_scene_changed()
-    assert panel.tree.topLevelItem(0) is first          # not rebuilt
-    panel.update_counts()                               # the timer's call
-    assert panel._counts.get("Muros") == 1
-    swatch = panel.item_for("Muros").icon(4).cacheKey()
-    scene.layer("Muros").color = (1.0, 0.0, 0.0)
-    win.viewport.notify_scene_changed()
-    _app.processEvents()                        # the deferred turn
-    # A layer changed: its row is repainted in place, not rebuilt.
-    assert panel.tree.topLevelItem(0) is first
-    assert panel.item_for("Muros").icon(4).cacheKey() != swatch
 
 
 def test_behind_another_tab_the_panel_waits_until_shown(win):

@@ -35,10 +35,8 @@ from PySide6.QtWidgets import (QAbstractItemView, QApplication, QDialog,
                                QDockWidget,
                                QHBoxLayout,
                                QHeaderView, QLabel, QLineEdit, QStyle,
-                               QStyledItemDelegate,
                                QToolButton, QTreeWidget,
-                               QTreeWidgetItem, QVBoxLayout, QWidget,
-                               QFrame)
+                               QTreeWidgetItem, QVBoxLayout, QWidget)
 
 from core import outliner
 from core.group import Group
@@ -308,57 +306,6 @@ def _tool_button(text: str, tip: str, slot) -> QToolButton:
 
 # ---- Model 3D ------------------------------------------------------------------
 
-def library_catalog() -> list:
-    """The material library the Materials tab offers, as ``[(category,
-    [(label, paint, swatch)])]``: the RAL colours (named, as the tab paints
-    them: «RAL 7035 Light grey»), each texture category of the bundled
-    manifest, and the loose images in resources/textures. ``paint`` is a
-    container material; ``swatch()`` reads the image only when asked — the
-    library holds hundreds of them."""
-    import json as _json
-    from views import tray as _tray
-    out: list = []
-    colours = []
-    if _tray._RAL_FILE.exists():
-        data = _json.loads(_tray._RAL_FILE.read_text(encoding="utf-8"))
-        for fam in data.get("families", []):
-            for c in fam.get("colors", []):
-                name = "%s %s" % (c["code"], _tray._ral_name(c))
-                colours.append((
-                    "%s · %s" % (c["code"], _tray._ral_name(c)),
-                    {"color": list(c["rgb"]), "mat": name},
-                    lambda rgb=c["rgb"]: _tray._color_pixmap(rgb)))
-    if colours:
-        out.append((tr("Colors"), colours))
-    manifest = _tray._TEX_DIR / "library.json"
-    if manifest.exists():
-        data = _json.loads(manifest.read_text(encoding="utf-8"))
-        names = _tray.MaterialsPanel.CATEGORY_NAMES
-        for cat in data.get("categories", []):
-            entries = []
-            for item in cat.get("items", []):
-                path = _tray._TEX_DIR / "library" / item["file"]
-                label = tr(item["name"])
-                paint = {"texture": {"path": str(path),
-                                     "sw": float(item.get("sw") or 1.0),
-                                     "sh": float(item.get("sh") or 1.0),
-                                     "rot": 0.0},
-                         "mat": label}
-                if item.get("opacity") is not None:
-                    paint["opacity"] = float(item["opacity"])
-                entries.append((label, paint,
-                                lambda pa=path: _tray._texture_pixmap(pa)))
-            if entries:
-                out.append((tr(names.get(cat["id"], cat["id"])), entries))
-    loose = sorted(_tray._TEX_DIR.glob("*.png"))
-    if loose:
-        out.append((tr("Other"), [
-            (pa.stem, {"texture": {"path": str(pa), "sw": 1.0, "sh": 1.0,
-                                   "rot": 0.0}, "mat": pa.stem},
-             lambda q=pa: _tray._texture_pixmap(q)) for pa in loose]))
-    return out
-
-
 class BatchRenameDialog(QDialog):
     """Rename several rows at once (#565, @fafecm; #87): a name and a
     number (W01, W02…), find and replace, or a prefix and a suffix — with
@@ -474,293 +421,6 @@ def outliner_common_prefix(names) -> str:
     return common.rstrip("0123456789 _-#.").strip()
 
 
-class MaterialLibraryDialog(QDialog):
-    """«More materials…»: the whole library in a window of its own, as
-    «New color…» opens the colour dialog — categories on the left, their
-    swatches on the right (read the first time a category is shown), and a
-    search across all of them. A click on a swatch closes it with that
-    paint in ``chosen``."""
-
-    #: How many matches a search shows at most (each reads an image).
-    SEARCH_LIMIT = 120
-
-    def __init__(self, parent=None) -> None:
-        super().__init__(parent)
-        from PySide6.QtWidgets import QListWidget, QScrollArea
-        from PySide6.QtWidgets import QDialogButtonBox
-        from views.theme import style as theme_style
-        self.setWindowTitle(tr("Materials") + " — Built")
-        self.resize(660, 480)
-        self.chosen = None
-        self._catalog = library_catalog()
-        lay = QVBoxLayout(self)
-        self.search = QLineEdit()
-        self.search.setPlaceholderText(tr("Search…"))
-        self.search.setClearButtonEnabled(True)
-        self.search.textChanged.connect(self._show_search)
-        lay.addWidget(self.search)
-        note = QLabel(tr("Click a swatch to apply it"))
-        theme_style(note, "color:{muted}; font-size:11px;")
-        lay.addWidget(note)
-        row = QHBoxLayout()
-        self.categories = QListWidget()
-        self.categories.setMaximumWidth(190)
-        for title, entries in self._catalog:
-            self.categories.addItem("%s  (%d)" % (title, len(entries)))
-        self.categories.currentRowChanged.connect(self._show_category)
-        row.addWidget(self.categories)
-        self._area = QScrollArea()
-        self._area.setWidgetResizable(True)
-        row.addWidget(self._area, 1)
-        lay.addLayout(row, 1)
-        # As every dialog of the program: its buttons at the bottom right.
-        buttons = QDialogButtonBox(QDialogButtonBox.Cancel)
-        buttons.rejected.connect(self.reject)
-        lay.addWidget(buttons)
-        self.buttons: list = []         # (label, button) of what is shown
-        if self._catalog:
-            self.categories.setCurrentRow(0)
-
-    def _fill(self, entries) -> None:
-        from views.tray import FlowLayout, _SWATCH
-        body = QWidget()
-        flow = FlowLayout(body, spacing=2)
-        self.buttons = []
-        for label, paint, swatch in entries:
-            pm = swatch()
-            if pm is None:
-                continue
-            b = QToolButton()
-            b.setIcon(QIcon(pm))
-            b.setIconSize(QSize(_SWATCH, _SWATCH))
-            b.setToolTip(label)
-            b.setAutoRaise(True)
-            b.clicked.connect(lambda _c=False, pt=paint: self._choose(pt))
-            flow.addWidget(b)
-            self.buttons.append((label, b))
-        if not self.buttons:
-            flow.addWidget(QLabel(tr("No materials yet")))
-        self._area.setWidget(body)
-
-    def _show_category(self, row: int) -> None:
-        if 0 <= row < len(self._catalog) and not self.search.text().strip():
-            self._fill(self._catalog[row][1])
-
-    def _show_search(self, text: str) -> None:
-        needle = text.strip().casefold()
-        if not needle:
-            self._show_category(self.categories.currentRow())
-            return
-        found = [e for _t, entries in self._catalog for e in entries
-                 if needle in e[0].casefold()]
-        self._fill(found[:self.SEARCH_LIMIT])
-
-    def _choose(self, paint) -> None:
-        self.chosen = paint
-        self.accept()
-
-    def showEvent(self, ev) -> None:            # noqa: N802 — Qt override
-        super().showEvent(ev)
-        self.place()
-
-    def place(self) -> None:
-        """In the middle of the screen the program is on, wholly on it,
-        title bar included. Placed once shown, when the frame's size is
-        known: placed before, a window not maximised (or one wider than
-        the screen) sent it to the bottom, half hidden."""
-        win = self.parentWidget().window() if self.parentWidget() else None
-        screen = (win.screen() if isinstance(win, QWidget) else None)             or QApplication.primaryScreen()
-        room = screen.availableGeometry()
-        frame = self.frameGeometry()
-        x = room.center().x() - frame.width() // 2
-        y = room.center().y() - frame.height() // 2
-        x = max(room.left(), min(x, room.right() + 1 - frame.width()))
-        y = max(room.top(), min(y, room.bottom() + 1 - frame.height()))
-        self.move(x, y)             # a window's move() places its frame
-
-    @classmethod
-    def choose(cls, parent=None):
-        """Open it and wait: the paint picked, or ``None``. It opens in the
-        middle of the screen, not where the panel was."""
-        dlg = cls(parent)
-        dlg.exec()
-        return dlg.chosen
-
-
-class MaterialPopup(QFrame):
-    """A floating, short-lived panel to give rows a material: opened by a
-    click on a row's Material cell, gone on a choice or a click outside.
-    The document's materials and the recent paints as swatches (a search
-    field narrows them), «No material», «New color…» (an optional name
-    makes it a material of the document) and «More materials…» (the whole
-    library, in a window of its own). ``apply(paint)`` is
-    called with the chosen container material, or ``None`` for none."""
-
-    COLS = 6
-    SWATCH = 26
-
-    def __init__(self, parent, scene, recent, current, apply) -> None:
-        super().__init__(parent, Qt.Popup)
-        from PySide6.QtWidgets import QGridLayout, QPushButton
-        from views.theme import style as theme_style
-        self.setAttribute(Qt.WA_DeleteOnClose)
-        # Framed and compact, as the Fillet 3D panel floating in the view.
-        self.setFrameShape(QFrame.StyledPanel)
-        self._apply = apply
-        from tools.paint import recent_key
-        # The paint the row wears, by identity (its material's name, or its
-        # colour or image): the swatch for it shows framed.
-        self._current = recent_key(current) if current else None
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(8, 6, 8, 6)
-        lay.setSpacing(4)
-        self.search = QLineEdit()
-        self.search.setPlaceholderText(tr("Search…"))
-        self.search.setClearButtonEnabled(True)
-        self.search.textChanged.connect(self._filter)
-        lay.addWidget(self.search)
-        self._swatches: list = []
-        choices = outliner.material_choices(scene, recent)
-        names = set(getattr(scene, "materials", None) or {})
-        doc = [(l, pt) for l, pt in choices if pt.get("mat") in names]
-        rest = [(l, pt) for l, pt in choices if pt.get("mat") not in names]
-        for title, group in ((tr("In model"), doc), (tr("Recent"), rest)):
-            if not group:
-                continue
-            # A section's title as Preferences writes its notes: small, grey.
-            head = QLabel(title)
-            theme_style(head, "color:{muted}; font-size:11px;")
-            lay.addWidget(head)
-            grid = QGridLayout()
-            grid.setSpacing(3)
-            for i, (label, paint) in enumerate(group):
-                b = QToolButton()
-                b.setAutoRaise(True)
-                b.setCheckable(True)
-                b.setChecked(recent_key(paint) == self._current)
-                b.setStyleSheet("QToolButton:checked { border: 2px solid "
-                                "palette(highlight); border-radius: 3px; }")
-                b.setIcon(_paint_icon(paint, self.SWATCH))
-                b.setIconSize(QSize(self.SWATCH, self.SWATCH))
-                b.setToolTip(label)
-                b.clicked.connect(lambda _c=False, pt=paint: self._choose(pt))
-                grid.addWidget(b, i // self.COLS, i % self.COLS)
-                self._swatches.append((label.casefold(), b))
-            # Left-aligned in every section, however few swatches it has.
-            grid.setColumnStretch(self.COLS, 1)
-            lay.addLayout(grid)
-        if not self._swatches:
-            lay.addWidget(QLabel(tr("No materials yet")))
-        none = QPushButton(tr("No material"))
-        none.clicked.connect(lambda: self._choose(None))
-        lay.addWidget(none)
-        new = QPushButton(tr("New color…"))
-        new.clicked.connect(self._new_colour)
-        lay.addWidget(new)
-        more_btn = QPushButton(tr("More materials…"))
-        more_btn.setToolTip(tr(
-            "The whole library: RAL colours and textures by category"))
-        more_btn.clicked.connect(self._open_more)
-        lay.addWidget(more_btn)
-        self.search.setFocus()
-
-    def _filter(self, text: str) -> None:
-        needle = text.strip().casefold()
-        for label, b in self._swatches:
-            b.setVisible(not needle or needle in label)
-
-    def _choose(self, paint) -> None:
-        self.close()
-        self._apply(paint)
-
-    def _new_colour(self) -> None:
-        """Pick a colour; a name, if given, makes it a material of the
-        document (listed in the Materials tab), otherwise a plain colour."""
-        from views import prompts
-        from views.color_dialog import get_color
-        self.hide()                     # the dialogs take the stage
-        colour = get_color(QColor(200, 200, 200), self.parentWidget(),
-                           tr("New color…"))
-        if not colour.isValid():
-            self.close()
-            return
-        name, ok = prompts.get_text(self.parentWidget(), tr("New material"),
-                                    tr("Material name (optional):"))
-        self.close()
-        if not ok:
-            return
-        paint = {"color": [colour.redF(), colour.greenF(), colour.blueF()]}
-        if name.strip():
-            paint["mat"] = name.strip()
-        self._apply(paint)
-
-    def _open_more(self) -> None:
-        """The library in its own window, as «New color…» opens the colour
-        dialog; what is picked there paints the rows."""
-        self.hide()                     # the dialog takes the stage
-        paint = MaterialLibraryDialog.choose(self.parentWidget())
-        self.close()
-        if paint is not None:
-            self._apply(paint)
-
-    def popup_at(self, global_pos) -> None:
-        """Shown with its top-left at ``global_pos``, kept on the screen."""
-        self.adjustSize()
-        screen = QApplication.screenAt(global_pos) or QApplication.primaryScreen()
-        area = screen.availableGeometry()
-        x = min(global_pos.x(), area.right() - self.width())
-        y = global_pos.y()
-        if y + self.height() > area.bottom():
-            y = max(area.top(), y - self.height())
-        self.move(max(area.left(), x), y)
-        self.show()
-
-
-class _MaterialCellDelegate(QStyledItemDelegate):
-    """The Material cell with a small ▾ at its right end: the handle that
-    opens the material panel. Pressing it does not select the row — the
-    rest of the cell selects, as anywhere in the row — so choosing a
-    material and selecting are never mixed up."""
-
-    #: Width of the ▾ handle at the cell's right end.
-    ARROW = 16
-
-    def paint(self, painter, option, index) -> None:
-        if not index.data(_GROUP_ROLE_FLAG):
-            super().paint(painter, option, index)
-            return
-        from PySide6.QtWidgets import QStyleOption, QStyleOptionViewItem
-        style = option.widget.style() if option.widget else QApplication.style()
-        # The row's background and selection over the whole cell; the
-        # swatch and the name stop short of the ▾.
-        opt = QStyleOptionViewItem(option)
-        self.initStyleOption(opt, index)
-        style.drawPrimitive(QStyle.PE_PanelItemViewItem, opt, painter,
-                            option.widget)
-        opt.rect = option.rect.adjusted(0, 0, -self.ARROW, 0)
-        style.drawControl(QStyle.CE_ItemViewItem, opt, painter, option.widget)
-        arrow = QStyleOption()
-        arrow.initFrom(option.widget)
-        r = self.arrow_rect(option.rect)
-        arrow.rect = r.adjusted(3, r.height() // 2 - 4, -3,
-                                -(r.height() // 2 - 4))
-        arrow.palette = option.palette
-        if option.state & QStyle.State_Selected:
-            arrow.palette.setColor(QPalette.ButtonText, option.palette.color(
-                QPalette.HighlightedText))
-        style.drawPrimitive(QStyle.PE_IndicatorArrowDown, arrow, painter,
-                            option.widget)
-
-    @classmethod
-    def arrow_rect(cls, cell):
-        """Where the ▾ sits in a cell's rectangle."""
-        return cell.adjusted(max(0, cell.width() - cls.ARROW), 0, 0, 0)
-
-
-#: Set on a row's Material cell when the row is a group (it gets a ▾).
-_GROUP_ROLE_FLAG = Qt.UserRole + 7
-
-
 class _Tree(SideTree):
     """The Browser's tree, with the keyboard of an outliner: Space shows
     or hides the selected rows, Enter opens the current one, Esc steps out
@@ -785,21 +445,6 @@ class _Tree(SideTree):
     #: with rows that already sat inside another group — beside one of
     #: those lands inside its parent.
     BESIDE_BAND = 0.18
-
-    def mousePressEvent(self, ev) -> None:      # noqa: N802 — Qt override
-        """A press on a Material cell's ▾ opens the material list at once,
-        also without touching the selection."""
-        if ev.button() == Qt.LeftButton:
-            index = self.indexAt(ev.position().toPoint())
-            if (index.isValid() and index.column() == COL_MATERIAL
-                    and index.data(_GROUP_ROLE_FLAG)):
-                cell = self.visualRect(index)
-                if _MaterialCellDelegate.arrow_rect(cell).contains(
-                        ev.position().toPoint()):
-                    self._panel.material_popup(self.itemFromIndex(index))
-                    ev.accept()
-                    return
-        super().mousePressEvent(ev)
 
     def event(self, ev) -> bool:
         from PySide6.QtCore import QEvent
@@ -996,14 +641,6 @@ class OutlinerPanel(QWidget):
                                         self._expand_or_collapse)
         self._expand_btn.setIcon(node_icon("layers_expand"))
         bar.addWidget(self._expand_btn)
-        # Order: the document's or by layer. A way of reading the
-        # tree — the model is left as it is, so drag, rename and isolate go
-        # on working on the same groups.
-        self._order_btn = _tool_button("", tr(
-            "Order the rows: as the model holds them or by layer"),
-            self._open_order_menu)
-        self._order_btn.setIcon(node_icon("layers_order"))
-        bar.addWidget(self._order_btn)
         lay.addLayout(bar)
         self.tree = _Tree(self)
         self.tree.setColumnCount(9)
@@ -1052,9 +689,6 @@ class OutlinerPanel(QWidget):
         # columns can be dragged to another order, which is remembered;
         # Window ▸ Panels ▸ Restore default panels puts them back.
         self.tree.setTreePosition(COL_NAME)
-        self._material_delegate = _MaterialCellDelegate(self.tree)
-        self.tree.setItemDelegateForColumn(COL_MATERIAL,
-                                           self._material_delegate)
         head.setSectionsMovable(True)
         head.setFirstSectionMovable(True)
         self._apply_column_order()
@@ -1160,7 +794,6 @@ class OutlinerPanel(QWidget):
         hi.setIcon(COL_LOCK, node_icon("lock"))
         hi.setIcon(COL_ISOLATE, isolate_icon(False))
         self._rename_btn.setIcon(node_icon("layers_rename"))
-        self._order_btn.setIcon(node_icon("layers_order"))
         self._update_expand_button()
         root = getattr(self, "_root", None)
         if root is not None:
@@ -1573,9 +1206,6 @@ class OutlinerPanel(QWidget):
             paint = getattr(group, "material", None)
             item.setIcon(COL_MATERIAL, _paint_icon(paint) if paint
                          else QIcon())
-            item.setToolTip(COL_MATERIAL,
-                            tr("Click the ▾ to choose a material"))
-            item.setData(COL_MATERIAL, _GROUP_ROLE_FLAG, True)
         kind, hidden, bold = new[3], new[4], new[5]
         if old is None or old[3] != kind:
             item.setData(COL_TYPE, Qt.UserRole, kind)
@@ -1797,26 +1427,6 @@ class OutlinerPanel(QWidget):
     #: The ways to order the rows, in menu order: (key, label).
     ORDERS = (("document", "Document order"),
               ("layer", "Order by layer"))
-
-    def _fill_order_actions(self, menu) -> None:
-        from PySide6.QtGui import QActionGroup
-        group = QActionGroup(menu)
-        for key, label in self.ORDERS:
-            act = menu.addAction(tr(label))
-            act.setCheckable(True)
-            act.setChecked(self.order_by == key)
-            # A choice, not a switch: the menu closes on it even when it is
-            # one of the ones that stay open for the columns.
-            act.setProperty("close", True)
-            group.addAction(act)
-            act.triggered.connect(lambda _c=False, k=key: self.set_order_by(k))
-
-    def _open_order_menu(self) -> None:
-        from PySide6.QtWidgets import QMenu
-        b = self._order_btn
-        menu = QMenu(b)
-        self._fill_order_actions(menu)
-        menu.exec(b.mapToGlobal(b.rect().bottomLeft()))
 
     def _layer_outline(self, scene) -> list:
         """The layers and their folders as the Layers tab lists them now —
@@ -2407,32 +2017,6 @@ class OutlinerPanel(QWidget):
         scene.bump_view()
         self._window.viewport.update()
 
-    def material_popup(self, item):
-        """The floating material panel for ``item``'s row, under its
-        Material cell. Applies to the selected rows when the row is one of
-        them (as the eye and the padlock do), to that row alone otherwise.
-        Returns the panel (shown), or ``None`` on a row with no group."""
-        group = self._group_of(item)
-        if group is None:
-            return None
-        from tools.paint import PaintTool
-        selected = self._selected_groups()
-        targets = selected if group in selected else [group]
-
-        def apply(paint) -> None:
-            if paint is None:
-                self.paint_groups(targets, clear=True)
-            else:
-                self.paint_groups(targets, material=paint)
-
-        popup = MaterialPopup(self, self._scene(), PaintTool.recent,
-                              getattr(group, "material", None), apply)
-        rect = self.tree.visualItemRect(item)
-        head = self.tree.header()
-        rect.setLeft(head.sectionViewportPosition(COL_MATERIAL))
-        popup.popup_at(self.tree.viewport().mapToGlobal(rect.bottomLeft()))
-        return popup
-
     def _on_item_clicked(self, item, column) -> None:
         head = self._head_of(item)
         if head is not None:
@@ -2912,10 +2496,7 @@ class OutlinerPanel(QWidget):
         return menu
 
     def _on_header_menu(self, pos) -> None:
-        """Every column there is to show, and how the rows are ordered."""
         menu = self._columns_menu()
-        menu.addSeparator()
-        self._fill_order_actions(menu)
         menu.exec(self.tree.header().mapToGlobal(pos))
 
     def _on_columns_button(self) -> None:
@@ -2964,45 +2545,6 @@ class OutlinerPanel(QWidget):
         if ok and name.strip():
             self.assign_layer(groups, name.strip())
 
-    def paint_groups(self, groups, material=None, clear=False) -> None:
-        """Paint the rows as a whole with ``material`` (the Paint tool's
-        current one by default), or take their paint off — the same as
-        painting a group from outside it; one undo step."""
-        from core.history import (CompoundCommand, SetFaceMaterialTagCommand,
-                                  SetGroupMaterialCommand)
-        groups = [g for g in groups if g is not None]
-        if not groups:
-            return
-        if clear:
-            cmds = [SetGroupMaterialCommand(g, None) for g in groups]
-        else:
-            from tools.paint import PaintTool
-            if material is None:
-                if PaintTool.current_is_default:
-                    cmds = [SetGroupMaterialCommand(g, None) for g in groups]
-                else:
-                    mat = PaintTool.current_material
-                    material = PaintTool._current_as_material()
-                    cmds = [SetFaceMaterialTagCommand(
-                        [], mat.name if mat is not None else None, mat)]
-                    cmds += [SetGroupMaterialCommand(g, material)
-                             for g in groups]
-            else:
-                cmds = [SetGroupMaterialCommand(g, material) for g in groups]
-                # A named paint the document does not know yet (a recent
-                # one): registered in the same step, as the Paint tool does.
-                name = material.get("mat")
-                if name and name not in self._scene().materials:
-                    from core.materials import Material
-                    col = material.get("color")
-                    cmds.insert(0, SetFaceMaterialTagCommand([], name, Material(
-                        name, color=tuple(col) if col else None,
-                        texture=material.get("texture"),
-                        opacity=material.get("opacity"), pbr=material.get("pbr"))))
-        self._window.viewport.history.execute(CompoundCommand(cmds))
-        self._window.viewport.update()
-        self.refresh()
-
     def _batch_menu(self, menu, targets) -> None:
         layers = menu.addMenu(tr("Layer"))
         current = {outliner.layer_name(g) for g in targets}
@@ -3017,24 +2559,6 @@ class OutlinerPanel(QWidget):
         from PySide6.QtCore import QTimer
         layers.addAction(tr("New layer…"), lambda: QTimer.singleShot(
             0, lambda: self._ask_new_layer(targets)))
-        menu.addAction(tr("Paint with the active material"),
-                       lambda: self.paint_groups(targets))
-        # Any material of the document, or a recent paint, without going to
-        # the Materials tab (#565, @fafecm).
-        from tools.paint import PaintTool
-        choices = outliner.material_choices(self._scene(), PaintTool.recent)
-        if choices:
-            mats = menu.addMenu(tr("Material"))
-            current = {repr(getattr(g, "material", None)) for g in targets}
-            for label, paint in choices:
-                act = mats.addAction(_paint_icon(paint), label,
-                                     lambda p=paint: self.paint_groups(
-                                         targets, material=p))
-                act.setCheckable(True)
-                act.setChecked(current == {repr(paint)})
-        if any(getattr(g, "material", None) for g in targets):
-            menu.addAction(tr("Remove paint"),
-                           lambda: self.paint_groups(targets, clear=True))
 
     # ---- A plan of a group -------------------------------------------------
     def create_plan(self, group, cut_height: float, sheet: bool = True,
