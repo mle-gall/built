@@ -43,6 +43,7 @@ mod file_members;
 mod file_document;
 mod file_blocks;
 mod file_prepare;
+mod reader_compat;
 mod file_links;
 mod file_mesh;
 mod file_scene;
@@ -179,6 +180,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     file_document::register(m)?;
     file_blocks::register(m)?;
     file_prepare::register(m)?;
+    reader_compat::register(m)?;
     file_links::register(m)?;
     file_read::register(m)?;
     file_bounds::register(m)?;
