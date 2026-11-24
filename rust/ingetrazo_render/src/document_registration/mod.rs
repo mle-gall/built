@@ -7,6 +7,7 @@ use pyo3::types::{PyDict, PyString, PyTuple};
 mod defaults;
 mod helpers;
 mod host;
+mod plugin;
 
 type Obj<'py> = Bound<'py, PyAny>;
 
@@ -249,7 +250,8 @@ impl<'py> Registrar<'py> {
 fn register_document_host(cls: &Obj) -> PyResult<()> {
     let r = Registrar::new(cls.py())?;
     defaults::controller(&r, cls)?;
-    host::install(&r, cls)
+    host::install(&r, cls)?;
+    plugin::install(&r, cls)
 }
 
 #[pyfunction]
