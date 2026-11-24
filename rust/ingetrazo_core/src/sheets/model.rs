@@ -278,7 +278,32 @@ fn format_scale_py(n: f64) -> String {
     format_scale(n)
 }
 
+#[pyfunction]
+fn sheet_model_height(frame_h_mm: f64, scale_n: f64) -> PyResult<f64> {
+    if frame_h_mm <= 0.0 || scale_n <= 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err("frame height and scale must be positive"));
+    }
+    Ok(model_height_for_frame(frame_h_mm, scale_n))
+}
+
+#[pyfunction]
+fn sheet_ortho_distance(model_h_m: f64, fov_deg: f64) -> PyResult<f64> {
+    let t = (fov_deg.to_radians() / 2.0).tan();
+    if t <= 0.0 || fov_deg.is_infinite() {
+        return Err(pyo3::exceptions::PyValueError::new_err("fov must be in (0, 180)"));
+    }
+    Ok((model_h_m / 2.0) / t)
+}
+
+#[pyfunction]
+fn sheet_readable_deg(dx_mm: f64, dy_mm: f64) -> f64 {
+    super::items_b::readable_deg(dx_mm, dy_mm)
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(sheet_model_height, m)?)?;
+    m.add_function(wrap_pyfunction!(sheet_ortho_distance, m)?)?;
+    m.add_function(wrap_pyfunction!(sheet_readable_deg, m)?)?;
     m.add_function(wrap_pyfunction!(sheet_page_size, m)?)?;
     m.add_function(wrap_pyfunction!(format_scale_py, m)?)?;
     Ok(())

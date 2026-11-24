@@ -129,7 +129,7 @@ impl Store {
 }
 
 /// `core.topology.is_planar` for more than three points.
-pub(super) fn is_planar(pts: &[[f64; 3]], tolerance: f64) -> bool {
+pub(crate) fn is_planar(pts: &[[f64; 3]], tolerance: f64) -> bool {
     let a = pts[0];
     let rel: Vec<[f64; 3]> = pts.iter().map(|p| [p[0] - a[0], p[1] - a[1], p[2] - a[2]]).collect();
     // Python's max(): the first of the largest.

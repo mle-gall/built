@@ -357,7 +357,7 @@ pub fn frame_camera(mut cam: Cam, frame: &Fields, view: Option<&ViewCam>, bounds
         return cam;
     }
     cam.perspective = false;
-    let model_h = frame.num("h_mm", 170.0) * frame.num("scale_n", 100.0) / 1000.0;
+    let model_h = super::model::model_height_for_frame(frame.num("h_mm", 170.0), frame.num("scale_n", 100.0));
     cam.distance = (model_h / 2.0) / (cam.fov_deg.to_radians() / 2.0).tan();
     cam
 }

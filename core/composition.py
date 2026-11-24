@@ -14,7 +14,12 @@ Model units are METRES; composer units are MILLIMETRES of paper.
 """
 from __future__ import annotations
 
-from ingetrazo_core import presentation as _presentation
+from ingetrazo_core import (
+    presentation as _presentation,
+    sheet_model_height as model_height_for_frame,
+    sheet_ortho_distance as ortho_distance_for_height,
+    sheet_readable_deg as readable_deg,
+)
 from core import doc_model
 from core.doc_model import Record, record_fields
 
@@ -106,30 +111,6 @@ def pen_px(mm: float, dpi: int = RENDER_DPI) -> int:
 def mm_to_px(mm: float, dpi: int = RENDER_DPI) -> int:
     """Paper millimetres → device pixels at ``dpi`` (rounded)."""
     return max(int(round(mm / 25.4 * dpi)), 1)
-
-
-def model_height_for_frame(frame_h_mm: float, scale_n: float) -> float:
-    """Metres of model that a frame ``frame_h_mm`` tall shows at 1:N.
-
-    1:100 on a 200 mm frame ⇒ 20 m of model — the sacred equation of the
-    whole composer (docs/composer-plan.md)."""
-    if frame_h_mm <= 0 or scale_n <= 0:
-        raise ValueError("frame height and scale must be positive")
-    return frame_h_mm * scale_n / 1000.0
-
-
-def ortho_distance_for_height(model_h_m: float, fov_deg: float) -> float:
-    """Camera ``distance`` that makes OrbitCamera's parallel projection show
-    exactly ``model_h_m`` metres vertically.
-
-    The camera derives its ortho half-height from distance·tan(fov/2)
-    (core/camera.py), so we invert that instead of duplicating projection
-    code — one source of truth for the frustum."""
-    half = model_h_m / 2.0
-    t = math.tan(math.radians(fov_deg) / 2.0)
-    if t <= 0:
-        raise ValueError("fov must be in (0, 180)")
-    return half / t
 
 
 def fit_distance_for_scene(scene, fov_deg: float,
@@ -1008,29 +989,6 @@ def cota_line_deg(ct) -> float:
     horizontal however slanted the two points are."""
     (ax, ay), (bx, by) = ct.line_points()
     return readable_deg(bx - ax, by - ay)
-
-
-def readable_deg(dx_mm: float, dy_mm: float) -> float:
-    """The rotation a dimension's TEXT takes so it is read, not deciphered.
-
-    ISO 129: dimension text is read from the bottom and from the right of
-    the sheet — you tilt your head to the LEFT, never to the right. It is
-    the rule Rafael repeats most in his video (09:00, 10:00), and it is
-    circular: it holds at every inclination, not just the vertical.
-
-    On the page Y grows downward, so the legible half-turn is
-    **[-90°, 90°)** — a vertical dimension's text runs bottom-to-top
-    whichever way the line happened to be drawn.
-
-    It used to be written out at five call sites in two contradictory
-    spellings: three tested ``deg > 90 or deg < -90``, which let the exact
-    +90° of a cota drawn DOWNWARD through, and two tested ``deg <= -90``,
-    which turned every vertical the wrong way round — that second pair is
-    what projected the MODEL's dimensions onto a sheet, so those always
-    read head-to-the-right.
-    """
-    deg = math.degrees(math.atan2(dy_mm, dx_mm))
-    return (deg + 90.0) % 180.0 - 90.0
 
 
 @record_fields(extra=("hold_a", "hold_b"))

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from ingetrazo_core import Vec3 as QVector3D
+from ingetrazo_core import Vec3 as QVector3D, polygon_centroid, polygon_newell
 
 
 @dataclass(eq=False)
@@ -50,19 +50,7 @@ class Face:
     attrs: dict | None = None
 
     def _newell(self) -> QVector3D:
-        """Raw (un-normalized) Newell vector of the outer loop. Its length is
-        twice the polygon's area and its direction is the face normal."""
-        n = QVector3D(0.0, 0.0, 0.0)
-        count = len(self.vertices)
-        for i in range(count):
-            curr = self.vertices[i]
-            nxt = self.vertices[(i + 1) % count]
-            n = n + QVector3D(
-                (curr.y() - nxt.y()) * (curr.z() + nxt.z()),
-                (curr.z() - nxt.z()) * (curr.x() + nxt.x()),
-                (curr.x() - nxt.x()) * (curr.y() + nxt.y()),
-            )
-        return n
+        return polygon_newell(self.vertices)
 
     def normal(self) -> QVector3D:
         if len(self.vertices) < 3:
@@ -81,13 +69,7 @@ class Face:
         return 0.5 * self._newell().length()
 
     def centroid(self) -> QVector3D:
-        count = len(self.vertices)
-        if count == 0:
-            return QVector3D(0.0, 0.0, 0.0)
-        cx = sum(v.x() for v in self.vertices) / count
-        cy = sum(v.y() for v in self.vertices) / count
-        cz = sum(v.z() for v in self.vertices) / count
-        return QVector3D(cx, cy, cz)
+        return polygon_centroid(self.vertices)
 
     def triangulate(self) -> list[tuple[QVector3D, QVector3D, QVector3D]]:
         """Triangles covering this face (outer loop minus any holes).
