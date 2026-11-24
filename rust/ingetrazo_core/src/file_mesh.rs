@@ -708,13 +708,23 @@ fn igz_mesh_json<'py>(mesh: &Obj<'py>, geom_sink: Option<&Obj<'py>>) -> PyResult
     Ok(out)
 }
 
-struct Vertices {
+pub(crate) struct Vertices {
     precise: bool,
-    indices: HashMap<u64, i32>,
+    indices: HashMap<u128, i32>,
     pos: Vec<f64>,
 }
 impl Vertices {
-    fn index(&mut self, v: &Obj<'_>) -> PyResult<i32> {
+    pub(crate) fn new(precise: bool) -> Self {
+        Self {
+            precise,
+            indices: HashMap::new(),
+            pos: Vec::new(),
+        }
+    }
+    pub(crate) fn positions(self) -> Vec<f64> {
+        self.pos
+    }
+    pub(crate) fn index(&mut self, v: &Obj<'_>) -> PyResult<i32> {
         let key = v.getattr("key")?.extract()?;
         if let Some(i) = self.indices.get(&key) {
             return Ok(*i);
@@ -731,7 +741,7 @@ impl Vertices {
         Ok(index)
     }
 }
-fn maximal_vertex_holes<'py>(holes: &Obj<'py>) -> PyResult<Vec<Obj<'py>>> {
+pub(crate) fn maximal_vertex_holes<'py>(holes: &Obj<'py>) -> PyResult<Vec<Obj<'py>>> {
     let py = holes.py();
     let originals: Vec<_> = holes.try_iter()?.collect::<PyResult<_>>()?;
     if originals.len() < 2 {
