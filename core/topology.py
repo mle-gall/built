@@ -209,25 +209,14 @@ def plan_edge_split(
 
 def face_exists(faces: Iterable[Face], cycle: list[QVector3D]) -> bool:
     """Whether a face with the same vertex set as ``cycle`` already exists."""
-    cycle_keys = frozenset(_key(v) for v in cycle)
-    for face in faces:
-        if frozenset(_key(v) for v in face.vertices) == cycle_keys:
-            return True
-    return False
+    return kernel.object_drawing.face_exists(faces, cycle)
 
 
 # ---- Containment (face split / hole punching) ------------------------------
 
 def _on_segment_2d(p, a, b, tol: float = 1e-7) -> bool:
     """Whether 2D point ``p`` lies on segment ``a``–``b`` within ``tol``."""
-    cross = (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0])
-    if abs(cross) > tol:
-        return False
-    dot = (p[0] - a[0]) * (b[0] - a[0]) + (p[1] - a[1]) * (b[1] - a[1])
-    if dot < -tol:
-        return False
-    sqlen = (b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2
-    return dot <= sqlen + tol
+    return kernel.object_drawing.segment_contains(p, a, b, tol)
 
 
 def _strictly_inside_2d(p, poly: list[tuple[float, float]]) -> bool:
@@ -455,18 +444,7 @@ def _loop_with_point(
     """Copy of ``loop`` with ``point`` inserted between the first consecutive
     vertex pair whose keys are ``ka``/``kb`` (either order). ``None`` if no such
     boundary edge exists or ``point`` already is one of those vertices."""
-    kp = _key(point)
-    n = len(loop)
-    for i in range(n):
-        j = (i + 1) % n
-        ki, kj = _key(loop[i]), _key(loop[j])
-        if {ki, kj} == {ka, kb}:
-            if kp in (ki, kj):
-                return None
-            new = list(loop)
-            new.insert(i + 1, QVector3D(point))
-            return new
-    return None
+    return kernel.object_drawing.loop_with_point(loop, ka, kb, point)
 
 
 def split_edge_in_faces(
@@ -490,16 +468,7 @@ def split_edge_in_faces(
     is chord-split by the drawn segment, which already inserts the point, so
     handling it here would double-process it. Holes are left untouched.
     """
-    ka, kb = _key(edge_a), _key(edge_b)
-    skip = list(skip_endpoints)
-    out: list[tuple[Face, list[QVector3D]]] = []
-    for f in faces:
-        if skip and all(_locate_on_loop(f.vertices, p) is not None for p in skip):
-            continue
-        new_verts = _loop_with_point(f.vertices, ka, kb, point)
-        if new_verts is not None:
-            out.append((f, new_verts))
-    return out
+    return kernel.object_drawing.split_boundaries(faces, edge_a, edge_b, point, skip_endpoints)
 
 
 # ---- Loop subtraction (a face drawn against another's boundary) -------------
@@ -592,7 +561,7 @@ def carve_loop_by_chords(
 # ---- Multiple-cycle detection ----------------------------------------------
 
 def _same_cycle(c1: list[QVector3D], c2: list[QVector3D]) -> bool:
-    return frozenset(_key(v) for v in c1) == frozenset(_key(v) for v in c2)
+    return kernel.object_drawing.same_cycle(c1, c2)
 
 
 def find_cycles_through(

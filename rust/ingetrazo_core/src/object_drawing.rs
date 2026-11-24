@@ -18,7 +18,7 @@ fn cells(ring: &Obj<'_>) -> PyResult<Vec<Cell>> {
         .map(|p| Ok(cell(xyz(&p?)?.to_array())))
         .collect()
 }
-fn outline_key(ring: &Obj<'_>) -> PyResult<Vec<Cell>> {
+pub(crate) fn outline_key(ring: &Obj<'_>) -> PyResult<Vec<Cell>> {
     let mut k = cells(ring)?;
     k.sort_unstable();
     k.dedup();
@@ -515,5 +515,6 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     sub.add_function(wrap_pyfunction!(crate::draw_plan::graph_insert, &sub)?)?;
     sub.add_function(wrap_pyfunction!(crate::draw_plan::graph_remove, &sub)?)?;
     sub.add_function(wrap_pyfunction!(crate::draw_plan::smallest_cycle, &sub)?)?;
+    crate::object_boundary::register(&sub)?;
     m.add_submodule(&sub)
 }

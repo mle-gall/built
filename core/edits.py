@@ -23,7 +23,7 @@ from core.mesh import element_identity
 
 from typing import Iterable, Optional, Sequence
 
-from ingetrazo_core import Vec3 as QVector3D, object_drawing, polygon_newell as _newell
+from ingetrazo_core import Vec3 as QVector3D, object_drawing
 
 _order_chain = object_drawing.order_chain
 
@@ -271,23 +271,7 @@ def face_up_or_toward(loop, eye=None):
     (2026-09-21, tests 15 and 19 of the bench). Returns the loop, reversed
     when needed; untouched when nothing decides (no eye and a vertical
     face, or a degenerate loop)."""
-    pts = list(loop)
-    if len(pts) < 3:
-        return pts
-    n = _newell(pts)
-    if n.length() < 1e-12:
-        return pts
-    if abs(n.z()) > 0.5 * n.length():
-        want = n.z() > 0
-    elif eye is not None:
-        c = QVector3D(0, 0, 0)
-        for q in pts:
-            c += q
-        c /= float(len(pts))
-        want = QVector3D.dotProduct(n, QVector3D(eye) - c) > 0
-    else:
-        return pts
-    return pts if want else [pts[0]] + pts[:0:-1]
+    return object_drawing.face_winding(loop, eye)
 
 
 def build_add_edge(scene, a: QVector3D, b: QVector3D, detect_faces: bool = True,

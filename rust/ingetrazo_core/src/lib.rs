@@ -107,6 +107,7 @@ mod object_bulk;
 mod object_fold;
 mod object_curves;
 mod object_drawing;
+mod object_boundary;
 mod draw_overlay;
 mod draw_plan;
 mod drawing_queries;
