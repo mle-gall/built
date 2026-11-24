@@ -2889,6 +2889,7 @@ mod units_start;
 mod preferences;
 mod about;
 mod sheet_host;
+mod start_view;
 mod scene_photo;
 /// The Sheets workspace's page, native (docs/rust-sheets.md).
 pub mod sheet_page;
@@ -2954,7 +2955,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(scene_photo::render_scene_photo,m)?)?;
     m.add_function(wrap_pyfunction!(scene_photo::scene_thumbnail_icon,m)?)?;
     m.add_function(wrap_pyfunction!(scene_photo::save_thumbnail_mode,m)?)?;
-    m.add_function(wrap_pyfunction!(sheet_host::start_backdrop, m)?)?;
+    start_view::register(m)?;
     m.add_function(wrap_pyfunction!(sheet_host::show_delivery_form, m)?)?;
     m.add_function(wrap_pyfunction!(sheet_host::show_view_export, m)?)?;
     m.add_class::<units_start::UnitsDraft>()?;

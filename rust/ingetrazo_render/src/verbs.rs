@@ -200,9 +200,6 @@ impl Rows {
             self.0.push((label.into(), entries));
         }
     }
-    fn has(&self, id: &str) -> bool {
-        self.0.iter().any(|(_, es)| es.iter().any(|e| e.0 == id))
-    }
 }
 
 fn intersect() -> Vec<Entry> {

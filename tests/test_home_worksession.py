@@ -66,8 +66,8 @@ def test_home_lists_opens_and_locates(win, tmp_path, monkeypatch):
     recent.remember(make_project(tmp_path))
     win.show_home()
     rows = wgpu_start.page(win).sheet.items(False)
-    assert any(row[2]["path"] == str(old) for key in ("cont", "recent") for row in rows[key])
-    assert any(row[2]["path"] == str(tmp_path / "job.igzproj") for row in rows["projects"])
+    assert any(row[2] == str(old) for key in ("cont", "recent") for row in rows[key])
+    assert any(row[2] == str(tmp_path / "job.igzproj") for row in rows["projects"])
     monkeypatch.setattr(file_dialogs, 'getOpenFileName', lambda *a: (str(tmp_path / 'moved.igz'), ''))
     assert wgpu_start.open_recent(win, old)
     assert win._doc.path == a

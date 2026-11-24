@@ -250,6 +250,23 @@ class Sheet:
         return out
 
 
+class Spec(Sheet):
+    """A sheet whose spec a Rust view model built (start_view.rs): the
+    provider only adds the pictures it names."""
+
+    def __init__(self, spec: dict):
+        super().__init__(spec.get("id", ""), spec.get("title", ""), closable=bool(spec.get("closable", True)))
+        self.spec = spec
+        self.focused = spec.get("focus")
+        self.force_focus = bool(spec.get("force_focus"))
+
+    def wire(self, search_text=None, search_force=False) -> dict:
+        out = dict(self.spec, focus=self.focused, force_focus=self.force_focus)
+        if out.get("search") is not None and search_text is not None:
+            out["search"] = dict(out["search"], text=search_text, force=search_force)
+        return out
+
+
 # ---- Providers ----------------------------------------------------------------------
 class Provider:
     """One surface on the sheet. Override :meth:`build` and :meth:`act`."""
