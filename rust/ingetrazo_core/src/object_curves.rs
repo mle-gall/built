@@ -17,12 +17,7 @@ type Obj<'py> = Bound<'py, PyAny>;
 
 #[pyfunction]
 #[pyo3(signature=(pt, p, q, tol=1e-4))]
-pub(crate) fn point_on_segment(
-    pt: &Obj<'_>,
-    p: &Obj<'_>,
-    q: &Obj<'_>,
-    tol: f64,
-) -> PyResult<bool> {
+pub(crate) fn point_on_segment(pt: &Obj<'_>, p: &Obj<'_>, q: &Obj<'_>, tol: f64) -> PyResult<bool> {
     Ok(StrokeSegment::new(xyz(p)?, xyz(q)?).contains(xyz(pt)?, tol))
 }
 
@@ -33,6 +28,7 @@ pub(crate) fn tag_curve(
     closed: bool,
     id: &Obj<'_>,
 ) -> PyResult<bool> {
+    let py = edges.py();
     let path = points
         .try_iter()?
         .map(|p| Ok(xyz(&p?)?.to_array()))
@@ -44,16 +40,16 @@ pub(crate) fn tag_curve(
     let mut changed = false;
     for e in edges.try_iter()? {
         let e = e?;
-        if !e.getattr("curve")?.is_none() {
+        if !e.getattr(pyo3::intern!(py, "curve"))?.is_none() {
             continue;
         }
-        let a = xyz(&e.getattr("a")?)?;
-        let b = xyz(&e.getattr("b")?)?;
+        let a = xyz(&e.getattr(pyo3::intern!(py, "a"))?)?;
+        let b = xyz(&e.getattr(pyo3::intern!(py, "b"))?)?;
         if segments
             .iter()
             .any(|s| s.contains(a, 1e-4) && s.contains(b, 1e-4))
         {
-            e.setattr("curve", id)?;
+            e.setattr(pyo3::intern!(py, "curve"), id)?;
             changed = true;
         }
     }
@@ -61,13 +57,14 @@ pub(crate) fn tag_curve(
 }
 
 fn key(e: &Obj<'_>) -> PyResult<i128> {
-    e.getattr("key")?.extract()
+    e.getattr(pyo3::intern!(e.py(), "key"))?.extract()
 }
 
 fn branch(v: &Obj<'_>, group: &HashSet<i128>) -> PyResult<bool> {
+    let py = v.py();
     let mut mine = Vec::new();
     let mut other = Vec::new();
-    for e in v.getattr("edges")?.try_iter()? {
+    for e in v.getattr(pyo3::intern!(py, "edges"))?.try_iter()? {
         let e = e?;
         if group.contains(&key(&e)?) {
             mine.push(e);
@@ -81,9 +78,13 @@ fn branch(v: &Obj<'_>, group: &HashSet<i128>) -> PyResult<bool> {
     if other.is_empty() {
         return Ok(false);
     }
-    let p = xyz(&v.getattr("position")?)?;
-    let direction =
-        |e: &Obj<'_>| Ok(xyz(&e.call_method1("other", (v,))?.getattr("position")?)? - p);
+    let p = xyz(&v.getattr(pyo3::intern!(py, "position"))?)?;
+    let direction = |e: &Obj<'_>| {
+        Ok(xyz(&e
+            .call_method1("other", (v,))?
+            .getattr(pyo3::intern!(py, "position"))?)?
+            - p)
+    };
     let others = other.iter().map(direction).collect::<PyResult<Vec<_>>>()?;
     Ok(planar_branch(direction(a)?, direction(b)?, &others))
 }
@@ -94,7 +95,7 @@ pub(crate) fn resplit_curves<'py>(edges: &Obj<'py>, mut next_id: Obj<'py>) -> Py
     let groups = PyDict::new(py);
     for e in edges.try_iter()? {
         let e = e?;
-        let id = e.getattr("curve")?;
+        let id = e.getattr(pyo3::intern!(py, "curve"))?;
         if id.is_none() {
             continue;
         }
@@ -111,8 +112,8 @@ pub(crate) fn resplit_curves<'py>(edges: &Obj<'py>, mut next_id: Obj<'py>) -> Py
         let mut group = HashSet::new();
         for edge in edges {
             group.insert(key(&edge)?);
-            let a = edge.getattr("v0")?;
-            let b = edge.getattr("v1")?;
+            let a = edge.getattr(pyo3::intern!(py, "v0"))?;
+            let b = edge.getattr(pyo3::intern!(py, "v1"))?;
             let pair = [key(&a)?, key(&b)?];
             vertices.insert(pair[0], a);
             vertices.insert(pair[1], b);
@@ -137,7 +138,9 @@ pub(crate) fn resplit_curves<'py>(edges: &Obj<'py>, mut next_id: Obj<'py>) -> Py
                 tag
             };
             for i in chain {
-                edges.get_item(i)?.setattr("curve", &tag)?;
+                edges
+                    .get_item(i)?
+                    .setattr(pyo3::intern!(py, "curve"), &tag)?;
             }
         }
     }

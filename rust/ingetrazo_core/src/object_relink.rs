@@ -66,6 +66,7 @@ enum RadialEdit {
 /// New faces record every occurrence of an edge, including repeated corners.
 /// Reattaching an existing face inserts it at most once in each radial list.
 fn edit_ring(mesh: &Obj<'_>, face: &Obj<'_>, ring: &Obj<'_>, edit: RadialEdit) -> PyResult<()> {
+    let py = mesh.py();
     let find = mesh.getattr(match edit {
         RadialEdit::Append | RadialEdit::Attach => "_link_edge",
         _ => "find_edge",
@@ -76,19 +77,19 @@ fn edit_ring(mesh: &Obj<'_>, face: &Obj<'_>, ring: &Obj<'_>, edit: RadialEdit) -
         if edge.is_none() {
             continue;
         }
-        let radial = edge.getattr("faces")?;
+        let radial = edge.getattr(pyo3::intern!(py, "faces"))?;
         match edit {
             RadialEdit::Append => {
-                radial.call_method1("append", (face,))?;
+                radial.call_method1(pyo3::intern!(py, "append"), (face,))?;
             }
             RadialEdit::Attach | RadialEdit::Restore => {
                 if !radial.contains(face)? {
-                    radial.call_method1("append", (face,))?;
+                    radial.call_method1(pyo3::intern!(py, "append"), (face,))?;
                 }
             }
             RadialEdit::Detach => {
                 if radial.contains(face)? {
-                    radial.call_method1("remove", (face,))?;
+                    radial.call_method1(pyo3::intern!(py, "remove"), (face,))?;
                 }
             }
         }
@@ -112,7 +113,7 @@ pub(crate) fn add_face<'py>(
     holes: Option<&Obj<'py>>,
 ) -> PyResult<Obj<'py>> {
     let py = mesh.py();
-    let vertex = mesh.getattr("vertex")?;
+    let vertex = mesh.getattr(pyo3::intern!(py, "vertex"))?;
     let outer = weld_ring(&vertex, outer)?;
     let raw = PyList::empty(py);
     if let Some(holes) = holes {
@@ -132,7 +133,11 @@ pub(crate) fn add_face<'py>(
         }
     }
     let kw = PyDict::new(py);
-    kw.set_item("key", mesh.getattr("_keys")?.call_method0("__next__")?)?;
+    kw.set_item(
+        "key",
+        mesh.getattr(pyo3::intern!(py, "_keys"))?
+            .call_method0(pyo3::intern!(py, "__next__"))?,
+    )?;
     let face = py
         .import("core.mesh")?
         .getattr("Face")?
@@ -140,7 +145,8 @@ pub(crate) fn add_face<'py>(
     for ring in std::iter::once(outer.into_any()).chain(holes.iter()) {
         edit_ring(mesh, &face, &ring, RadialEdit::Append)?;
     }
-    mesh.getattr("faces")?.call_method1("append", (&face,))?;
+    mesh.getattr(pyo3::intern!(py, "faces"))?
+        .call_method1(pyo3::intern!(py, "append"), (&face,))?;
     Ok(face)
 }
 
@@ -150,30 +156,33 @@ pub(crate) fn add_hole<'py>(
     face: &Obj<'py>,
     positions: &Obj<'py>,
 ) -> PyResult<Bound<'py, PyList>> {
-    let ring = weld_ring(&mesh.getattr("vertex")?, positions)?;
-    face.getattr("hole_loops")?
-        .call_method1("append", (&ring,))?;
+    let py = mesh.py();
+    let ring = weld_ring(&mesh.getattr(pyo3::intern!(py, "vertex"))?, positions)?;
+    face.getattr(pyo3::intern!(py, "hole_loops"))?
+        .call_method1(pyo3::intern!(py, "append"), (&ring,))?;
     edit_ring(mesh, face, ring.as_any(), RadialEdit::Attach)?;
     Ok(ring)
 }
 
 #[pyfunction]
 pub(crate) fn remove_hole(mesh: &Obj<'_>, face: &Obj<'_>, ring: &Obj<'_>) -> PyResult<()> {
-    let holes = face.getattr("hole_loops")?;
+    let py = mesh.py();
+    let holes = face.getattr(pyo3::intern!(py, "hole_loops"))?;
     if holes.contains(ring)? {
-        holes.call_method1("remove", (ring,))?;
+        holes.call_method1(pyo3::intern!(py, "remove"), (ring,))?;
     }
     edit_ring(mesh, face, ring, RadialEdit::Detach)
 }
 
 #[pyfunction]
 pub(crate) fn remove_face(mesh: &Obj<'_>, face: &Obj<'_>) -> PyResult<()> {
+    let py = mesh.py();
     for ring in rings(face)? {
         edit_ring(mesh, face, &ring, RadialEdit::Detach)?;
     }
-    let faces = mesh.getattr("faces")?;
+    let faces = mesh.getattr(pyo3::intern!(py, "faces"))?;
     if faces.contains(face)? {
-        faces.call_method1("remove", (face,))?;
+        faces.call_method1(pyo3::intern!(py, "remove"), (face,))?;
     }
     Ok(())
 }
@@ -181,7 +190,7 @@ pub(crate) fn remove_face(mesh: &Obj<'_>, face: &Obj<'_>) -> PyResult<()> {
 #[pyfunction]
 pub(crate) fn surface_of<'py>(mesh: &Obj<'py>, face: &Obj<'py>) -> PyResult<Bound<'py, PyList>> {
     let py = mesh.py();
-    let find = mesh.getattr("find_edge")?;
+    let find = mesh.getattr(pyo3::intern!(py, "find_edge"))?;
     let seen = PySet::empty(py)?;
     let mut todo = vec![face.clone()];
     seen.add(face)?;
@@ -190,10 +199,10 @@ pub(crate) fn surface_of<'py>(mesh: &Obj<'py>, face: &Obj<'py>) -> PyResult<Boun
             let n = ring.len()?;
             for i in 0..n {
                 let e = find.call1((ring.get_item(i)?, ring.get_item((i + 1) % n)?))?;
-                if e.is_none() || !e.getattr("soft")?.is_truthy()? {
+                if e.is_none() || !e.getattr(pyo3::intern!(py, "soft"))?.is_truthy()? {
                     continue;
                 }
-                for g in e.getattr("faces")?.try_iter()? {
+                for g in e.getattr(pyo3::intern!(py, "faces"))?.try_iter()? {
                     let g = g?;
                     if !g.eq(&f)? && !seen.contains(&g)? {
                         seen.add(&g)?;

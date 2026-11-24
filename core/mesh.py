@@ -474,8 +474,11 @@ class Mesh:
         all its pieces tagged. Returns the id, or ``None`` if nothing matched."""
         self._chunk_dirty = True
         self._mut_serial += 1
-        if object_drawing.tag_curve(self.edges, loop_points, closed, _CURVE_COUNTER):
-            return self.next_curve_id()
+        points = list(loop_points)
+        cid = _CURVE_COUNTER
+        if object_drawing.tag_curve(self.edges, points, closed, cid):
+            self.next_curve_id()
+            return cid
         return None
 
     def curve_edges(self, edge) -> list:

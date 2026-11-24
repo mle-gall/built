@@ -33,11 +33,14 @@ pub(super) fn read<'py>(
     let mut indices = HashMap::new();
     let mut points = Vec::with_capacity(verts.len());
     for (i, v) in verts.iter().enumerate() {
-        indices.insert(v.getattr("key")?.extract::<i128>()?, i as i64);
-        points.push(xyz(&v.getattr("position")?)?.to_array());
+        indices.insert(
+            v.getattr(pyo3::intern!(py, "key"))?.extract::<i128>()?,
+            i as i64,
+        );
+        points.push(xyz(&v.getattr(pyo3::intern!(py, "position"))?)?.to_array());
     }
     let index = |v: Obj<'py>| -> PyResult<i64> {
-        let k = v.getattr("key")?.extract::<i128>()?;
+        let k = v.getattr(pyo3::intern!(py, "key"))?.extract::<i128>()?;
         indices
             .get(&k)
             .copied()
@@ -50,27 +53,30 @@ pub(super) fn read<'py>(
     let mut by_name = HashMap::new();
     let mut names = Vec::new();
     for e in &edges {
-        ends.push([index(e.getattr("v0")?)?, index(e.getattr("v1")?)?]);
-        let soft = e.getattr("soft")?.is_truthy()?;
+        ends.push([
+            index(e.getattr(pyo3::intern!(py, "v0"))?)?,
+            index(e.getattr(pyo3::intern!(py, "v1"))?)?,
+        ]);
+        let soft = e.getattr(pyo3::intern!(py, "soft"))?.is_truthy()?;
         let mut bits = if soft { SOFT } else { 0 };
-        if e.getattr("hidden")?.is_truthy()? {
+        if e.getattr(pyo3::intern!(py, "hidden"))?.is_truthy()? {
             bits |= HIDDEN;
         }
         if soft {
-            if let Some(flat) = e.getattr_opt("flat")? {
+            if let Some(flat) = e.getattr_opt(pyo3::intern!(py, "flat"))? {
                 if flat.is_truthy()? {
                     bits |= FLAT;
                 }
             }
         }
         flags.push(bits);
-        let c = e.getattr("curve")?;
+        let c = e.getattr(pyo3::intern!(py, "curve"))?;
         curves.push(if c.is_none() {
             -1
         } else {
             py.get_type::<PyInt>().call1((c,))?.extract()?
         });
-        let layer = e.getattr("layer")?;
+        let layer = e.getattr(pyo3::intern!(py, "layer"))?;
         let li = if layer.is_none() {
             -1
         } else {
@@ -88,7 +94,9 @@ pub(super) fn read<'py>(
     let mut counts = Vec::with_capacity(faces.len());
     for f in &faces {
         let mut count = 0;
-        for ring in std::iter::once(f.getattr("loop")).chain(f.getattr("hole_loops")?.try_iter()?) {
+        for ring in std::iter::once(f.getattr(pyo3::intern!(py, "loop")))
+            .chain(f.getattr(pyo3::intern!(py, "hole_loops"))?.try_iter()?)
+        {
             let ring = ring?;
             sizes.push(ring.len()? as i64);
             for v in ring.try_iter()? {
@@ -119,25 +127,26 @@ pub(super) fn read<'py>(
     let views = PyDict::new(py);
     // id(original) is the compatibility return key. All geometry references
     // and all newly issued handles above and below use the mesh element keys.
-    let object_id = py.import("builtins")?.getattr("id")?;
+    let object_id = py.import("builtins")?.getattr(pyo3::intern!(py, "id"))?;
     for (kind, objects, name) in [
         (Kind::Vertex, &verts, "VertexView"),
         (Kind::Edge, &edges, "EdgeView"),
         (Kind::Face, &faces, "FaceView"),
     ] {
         if store.n(kind) != objects.len() {
-            return Err(PyErr::from_value(api.getattr("StoreRefusal")?.call1((
-                "to_store: the store would weld or drop elements of this mesh",
-            ))?));
+            return Err(PyErr::from_value(
+                api.getattr(pyo3::intern!(py, "StoreRefusal"))?
+                    .call1(("to_store: the store would weld or drop elements of this mesh",))?,
+            ));
         }
         let class = api.getattr(name)?;
         for (slot, obj) in objects.iter().enumerate() {
             let key = store.key(kind, slot as u32);
             if kind == Kind::Face {
-                if obj.getattr("interior")?.is_truthy()? {
+                if obj.getattr(pyo3::intern!(py, "interior"))?.is_truthy()? {
                     store.set_face_flags(slot as u32, INTERIOR);
                 }
-                let attrs = obj.getattr("attrs")?;
+                let attrs = obj.getattr(pyo3::intern!(py, "attrs"))?;
                 if attrs.is_truthy()? {
                     own.set_item(key, attrs)?;
                 }
