@@ -1484,6 +1484,17 @@ impl PyMeshStore {
         self.inner.curve_keys(curve)
     }
 
+    /// Create or restamp a command edge. The public result contains only key and change data.
+    #[staticmethod]
+    #[pyo3(signature = (mesh, a, b, soft=None, curve=None, layer=None))]
+    fn command_draw_edge(
+        mesh: &Bound<'_, PyAny>, a: [f64; 3], b: [f64; 3], soft: Option<bool>,
+        curve: Option<i64>, layer: Option<&str>,
+    ) -> PyResult<Option<(Option<u128>, bool, u32)>> {
+        Ok(super::command_facade::command_draw_edge(mesh, a, b, soft, curve, layer)?
+            .map(|r| (r.key, r.flags_changed, r.dirty)))
+    }
+
     /// Draw an edge, stamping optional attributes even on a coincident edge.
     /// Only a new edge belongs to the command. Keep each attribute write's
     /// revision for consumers of the protocol mesh record.

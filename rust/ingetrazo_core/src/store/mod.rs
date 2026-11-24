@@ -30,6 +30,7 @@ mod changes;
 pub mod cow;
 pub mod diff;
 pub(crate) mod drawing;
+pub(crate) mod command_facade;
 pub(crate) mod commands;
 pub(crate) mod fold;
 mod landing;
