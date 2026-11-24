@@ -97,9 +97,7 @@ mod sun;
 mod shadow_fit;
 mod textures;
 pub mod tool_cursors;
-pub mod icon_art;
-mod billboards;
-mod document_tabs;
+mod render_glue;
 mod annotation_canvas;
 mod tool_overlay;
 mod image_assets;
@@ -232,7 +230,7 @@ static NEXT_RENDERER_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::Atomi
 struct Renderer {
     id: u64,
     /// What the document ▾ and the project tabs were last sent (document_tabs.rs).
-    document_tabs: Option<Py<document_tabs::DocumentTabs>>,
+    document_tabs: Option<Py<render_glue::document_tabs::DocumentTabs>>,
     instance: wgpu::Instance,
     /// Inactive views of the same scene, addressed by a never-recycled id.
     targets: std::collections::HashMap<usize, Target>,
@@ -2681,9 +2679,9 @@ impl Renderer {
     /// The window's documents as this renderer's chrome was last sent them
     /// (``DocumentTabs.sync``, document_tabs.rs): one per renderer, so the
     /// comparison is always with what it shows.
-    fn document_tabs(&mut self, py: Python<'_>) -> PyResult<Py<document_tabs::DocumentTabs>> {
+    fn document_tabs(&mut self, py: Python<'_>) -> PyResult<Py<render_glue::document_tabs::DocumentTabs>> {
         if self.document_tabs.is_none() {
-            self.document_tabs = Some(Py::new(py, document_tabs::DocumentTabs::default())?);
+            self.document_tabs = Some(Py::new(py, render_glue::document_tabs::DocumentTabs::default())?);
         }
         Ok(self.document_tabs.as_ref().unwrap().clone_ref(py))
     }
@@ -3315,14 +3313,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     scene_navigation::register(m)?;
     window_services::register(m)?;
     m.add_function(wrap_pyfunction!(tool_cursors::rail_icon,m)?)?;
-    m.add_function(wrap_pyfunction!(icon_art::icon_art, m)?)?;
-    m.add_function(wrap_pyfunction!(icon_art::icon_keys, m)?)?;
-    m.add_function(wrap_pyfunction!(icon_art::letter_art, m)?)?;
-    m.add_function(wrap_pyfunction!(icon_art::row_icon_art, m)?)?;
-    m.add_class::<document_tabs::DocumentTabs>()?;
-    m.add_function(wrap_pyfunction!(billboards::billboard_stances, m)?)?;
-    m.add_function(wrap_pyfunction!(billboards::billboard_worlds, m)?)?;
-    m.add_function(wrap_pyfunction!(billboards::sprite_mapping, m)?)?;
+    render_glue::register_render_glue(m)?;
     m.add_function(wrap_pyfunction!(tool_cursors::tool_cursor_name, m)?)?;
     m.add_function(wrap_pyfunction!(tool_cursors::tool_cursor_art, m)?)?;
     m.add_function(wrap_pyfunction!(image_assets::texture_has_alpha,m)?)?;

@@ -33,9 +33,9 @@ fn icons() -> &'static Atlas {
     ATLAS.get_or_init(|| Atlas {
         side: SIDE,
         columns: 16,
-        keys: include_str!("../assets/icon_keys.txt"),
-        weights: load(include_bytes!("../assets/icon_weights.png")),
-        fixed: load(include_bytes!("../assets/icon_fixed.png")),
+        keys: include_str!("../../assets/icon_keys.txt"),
+        weights: load(include_bytes!("../../assets/icon_weights.png")),
+        fixed: load(include_bytes!("../../assets/icon_fixed.png")),
     })
 }
 
@@ -46,9 +46,9 @@ fn rows() -> &'static Atlas {
     ATLAS.get_or_init(|| Atlas {
         side: 18,
         columns: 8,
-        keys: include_str!("../assets/row_icon_keys.txt"),
-        weights: load(include_bytes!("../assets/row_icon_weights.png")),
-        fixed: load(include_bytes!("../assets/row_icon_fixed.png")),
+        keys: include_str!("../../assets/row_icon_keys.txt"),
+        weights: load(include_bytes!("../../assets/row_icon_weights.png")),
+        fixed: load(include_bytes!("../../assets/row_icon_fixed.png")),
     })
 }
 
