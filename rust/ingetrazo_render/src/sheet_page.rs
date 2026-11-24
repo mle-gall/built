@@ -213,6 +213,9 @@ impl Page {
     /// the click that sets its offset makes it.
     fn pick_pointer(&mut self, kind: &str, p: Pos2, mods: u8, out: &mut Vec<String>) {
         use crate::sheet_tools::{sep_of, snap_at, Pt};
+        if kind == "release" {
+            return;                       // a click is its press; the release adds nothing
+        }
         let mm = self.to_mm(p);
         let thr = 7.0 / f64::from(self.zoom.max(1e-6));
         let pick = self.pick.get_or_insert_with(|| crate::sheet_tools::Pick { tool: self.tool.clone(), ..Default::default() });
@@ -226,7 +229,7 @@ impl Page {
         };
         self.hot = if offsetting { None } else { snap_at(&self.snaps, mm, thr) };
         self.cursor = "crosshair";
-        if kind == "move" {
+        if !matches!(kind, "press" | "double") {
             return;
         }
         let mut pt = self.hot.clone().unwrap_or_else(|| Pt::free(mm));
@@ -1344,11 +1347,15 @@ mod tests {
         let mut out = vec![];
         p.pointer("move", at(&p, 50.4, 60.3), 0, 0, &mut out);
         assert!(p.hot.is_some());
-        p.pointer("press", at(&p, 50.4, 60.3), 1, 0, &mut out);
-        p.pointer("press", at(&p, 89.8, 60.2), 1, 0, &mut out);
+        // Clicks: a press and a release each, as the shell sends them.
+        for (x, y) in [(50.4, 60.3), (89.8, 60.2)] {
+            p.pointer("press", at(&p, x, y), 1, 0, &mut out);
+            p.pointer("release", at(&p, x, y), 1, 0, &mut out);
+        }
         p.pointer("move", at(&p, 70.0, 52.0), 0, 0, &mut out);
         assert!(p.hot.is_none(), "the offset does not snap");
         p.pointer("press", at(&p, 70.0, 52.0), 1, 0, &mut out);
+        p.pointer("release", at(&p, 70.0, 52.0), 1, 0, &mut out);
         assert_eq!(out.len(), 1);
         let body: serde_json::Value = serde_json::from_str(out[0].strip_prefix("sheets:cota\u{1f}").unwrap()).unwrap();
         assert_eq!(body["a"]["p"], serde_json::json!([50.0, 60.0]));
