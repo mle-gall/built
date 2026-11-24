@@ -16,6 +16,8 @@ use std::{
 };
 #[path = "dxf_ascii.rs"]
 mod ascii;
+#[path = "dxf_wire.rs"]
+mod wire;
 
 type Obj<'p> = Bound<'p, PyAny>;
 type Ring = Vec<DVec3>;
@@ -600,15 +602,9 @@ enum NativeDocument {
 }
 impl NativeDocument {
     fn read(path: &Path) -> Option<Self> {
-        use std::io::{BufRead, BufReader, Read};
-        let mut file = BufReader::new(std::fs::File::open(path).ok()?);
-        // Binary DXF goes directly to the compatibility reader.
-        if file.fill_buf().ok()?.starts_with(b"AutoCAD Binary DXF") {
-            return None;
-        }
-        let mut raw = String::new();
-        file.read_to_string(&mut raw).ok()?;
-        let text = raw.as_str();
+        let bytes = std::fs::read(path).ok()?;
+        let decoded = wire::text(&bytes)?;
+        let text = decoded.as_ref();
         if text.starts_with("0\nSECTION\n2\nTABLES\n") {
             if let Some(sheet) = sheet_records(text) {
                 return Some(Self::Sheet(std::sync::Arc::new(sheet)));
