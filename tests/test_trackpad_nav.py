@@ -470,6 +470,7 @@ def test_the_metal_view_orbits_and_pinches_too():
 def test_off_centre_navigation_pose_sequence(vp):
     """Pin yaw, pitch, distance and target at each input boundary."""
     vp.resize(640, 480)
+    assert not vp.isVisible()
     vp.camera.aspect = 640 / 480
     at = QPointF(328, 196)
     actual = []
