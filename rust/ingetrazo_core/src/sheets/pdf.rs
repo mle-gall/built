@@ -344,54 +344,23 @@ impl Content {
     /// Qt's `drawText(rect, flags, text)` on the sheet font's metrics.
     fn text(&mut self, op: &Op) {
         let Prim::Text { rect, flags, text, size, bold, italic, underline, color } = &op.prim else { return };
-        if text.is_empty() || *size <= 0.0 {
-            return;
-        }
-        let (u, v) = ([rect[1][0] - rect[0][0], rect[1][1] - rect[0][1]], [rect[3][0] - rect[0][0], rect[3][1] - rect[0][1]]);
-        let (w, h) = (u[0].hypot(u[1]), v[0].hypot(v[1]));
-        let un = if w > 0.0 { [u[0] / w, u[1] / w] } else { [1.0, 0.0] };
-        let vn = if h > 0.0 { [v[0] / h, v[1] / h] } else { [0.0, 1.0] };
-        let face: &Face = face_for(*bold);
-        let k = size / 100.0; // mm per metrics unit
-        let lines: Vec<(String, bool)> = if flags & align::WORD_WRAP != 0 {
-            wrap_lines(text, w / k, face)
-        } else {
-            text.split('\n').map(|l| (l.to_string(), false)).collect()
-        };
-        let line_h = (face.ascent + face.descent) * k;
-        let step = line_h + k / 64.0;
-        let block = line_h + (lines.len() - 1) as f64 * step;
-        let y0 = if flags & align::BOTTOM != 0 {
-            h - block
-        } else if flags & align::VCENTER != 0 {
-            (h - block) / 2.0
-        } else {
-            0.0
-        };
+        let Some(lay) = text_lines(rect, *flags, text, *size, *bold) else { return };
+        let (un, vn) = (lay.u, lay.v);
+        let face = face_for(*bold);
         let fi = usize::from(*bold);
         let font = &fonts()[fi];
         self.out += "q\n";
         self.gs(255, color.3);
         self.out += &format!("{} rg\n", Self::rgb(*color));
-        for (i, (line, wrapped)) in lines.iter().enumerate() {
-            let shown = if *wrapped { line.trim_end_matches(' ') } else { line.as_str() };
-            let lw = face.advance(shown) * k;
-            let dx = if flags & align::RIGHT != 0 {
-                w - lw
-            } else if flags & align::HCENTER != 0 {
-                (w - lw) / 2.0
-            } else {
-                0.0
-            };
-            let by = y0 + face.ascent * k + i as f64 * step;
-            let o = [rect[0][0] + un[0] * dx + vn[0] * by, rect[0][1] + un[1] * dx + vn[1] * by];
-            if !shown.is_empty() {
+        for line in &lay.lines {
+            let o = line.origin;
+            if !line.text.is_empty() {
                 // Glyph space: x along the box, up against it (the page runs y down).
                 let (a, b, c, d) = (un[0], un[1], -vn[0], -vn[1]);
                 let (c, d) = if *italic { (c + 0.2 * a, d + 0.2 * b) } else { (c, d) };
                 self.out += &format!("BT /F{fi} {} Tf {} {} {} {} {} {} Tm [", n(*size), n(a), n(b), n(c), n(d), n(o[0]), n(o[1]));
                 let mut prev: Option<char> = None;
-                for ch in shown.chars() {
+                for ch in line.text.chars() {
                     if let Some(p) = prev {
                         let kern = face.kern(p, ch);
                         if kern != 0.0 {
@@ -408,11 +377,8 @@ impl Content {
                 }
                 self.out += "> ] TJ ET\n";
             }
-            if *underline && !shown.is_empty() {
-                let uy = by + 0.11 * size;
-                let t = (size / 14.0).max(0.05);
-                let a = [o[0] + vn[0] * (uy - by), o[1] + vn[1] * (uy - by)];
-                let b = [a[0] + un[0] * lw, a[1] + un[1] * lw];
+            if *underline && !line.text.is_empty() {
+                let (a, b, t) = underline_of(&lay, line, *size);
                 self.out += &format!("{} RG {} w 0 J {} {} m {} {} l S\n", Self::rgb(*color), n(t), n(a[0]), n(a[1]), n(b[0]), n(b[1]));
             }
         }
@@ -420,7 +386,75 @@ impl Content {
     }
 }
 
-fn rounded(p: &[[f64; 2]; 4], rx: f64, ry: f64) -> Vec<[f64; 2]> {
+/// One laid-out line: its baseline origin (paper mm), what it shows and its width.
+pub struct Line {
+    pub origin: [f64; 2],
+    pub text: String,
+    pub width: f64,
+}
+
+/// A text box laid out: the box's axes (unit, along and down) and its lines.
+pub struct Laid {
+    pub u: [f64; 2],
+    pub v: [f64; 2],
+    pub lines: Vec<Line>,
+}
+
+/// Qt's `drawText(rect, flags, text)` on the sheet font's metrics: typed
+/// breaks (and word wrap with `TextWordWrap`), the first baseline at the
+/// ascent, the lines a height and 1/64 apart, each aligned in the box.
+pub fn text_lines(rect: &[[f64; 2]; 4], flags: i64, text: &str, size: f64, bold: bool) -> Option<Laid> {
+    if text.is_empty() || size <= 0.0 {
+        return None;
+    }
+    let (u, v) = ([rect[1][0] - rect[0][0], rect[1][1] - rect[0][1]], [rect[3][0] - rect[0][0], rect[3][1] - rect[0][1]]);
+    let (w, h) = (u[0].hypot(u[1]), v[0].hypot(v[1]));
+    let un = if w > 0.0 { [u[0] / w, u[1] / w] } else { [1.0, 0.0] };
+    let vn = if h > 0.0 { [v[0] / h, v[1] / h] } else { [0.0, 1.0] };
+    let face: &Face = face_for(bold);
+    let k = size / 100.0; // mm per metrics unit
+    let raw: Vec<(String, bool)> = if flags & align::WORD_WRAP != 0 {
+        wrap_lines(text, w / k, face)
+    } else {
+        text.split('\n').map(|l| (l.to_string(), false)).collect()
+    };
+    let line_h = (face.ascent + face.descent) * k;
+    let step = line_h + k / 64.0;
+    let block = line_h + (raw.len() - 1) as f64 * step;
+    let y0 = if flags & align::BOTTOM != 0 {
+        h - block
+    } else if flags & align::VCENTER != 0 {
+        (h - block) / 2.0
+    } else {
+        0.0
+    };
+    let lines = raw.iter().enumerate().map(|(i, (line, wrapped))| {
+        let shown = if *wrapped { line.trim_end_matches(' ') } else { line.as_str() };
+        let lw = face.advance(shown) * k;
+        let dx = if flags & align::RIGHT != 0 {
+            w - lw
+        } else if flags & align::HCENTER != 0 {
+            (w - lw) / 2.0
+        } else {
+            0.0
+        };
+        let by = y0 + face.ascent * k + i as f64 * step;
+        Line { origin: [rect[0][0] + un[0] * dx + vn[0] * by, rect[0][1] + un[1] * dx + vn[1] * by],
+               text: shown.to_string(), width: lw }
+    }).collect();
+    Some(Laid { u: un, v: vn, lines })
+}
+
+/// A line's underline: its ends and thickness.
+pub fn underline_of(lay: &Laid, line: &Line, size: f64) -> ([f64; 2], [f64; 2], f64) {
+    let (un, vn, o) = (lay.u, lay.v, line.origin);
+    let d = 0.11 * size;
+    let a = [o[0] + vn[0] * d, o[1] + vn[1] * d];
+    let b = [a[0] + un[0] * line.width, a[1] + un[1] * line.width];
+    (a, b, (size / 14.0).max(0.05))
+}
+
+pub fn rounded(p: &[[f64; 2]; 4], rx: f64, ry: f64) -> Vec<[f64; 2]> {
     let u = [p[1][0] - p[0][0], p[1][1] - p[0][1]];
     let v = [p[3][0] - p[0][0], p[3][1] - p[0][1]];
     let (w, h) = (u[0].hypot(u[1]), v[0].hypot(v[1]));
@@ -597,6 +631,17 @@ pub fn sheet_pdf(py: Python<'_>, path: std::path::PathBuf, comps: Vec<Bound<'_, 
                  contents: Option<Bound<'_, PyDict>>, pictures: Option<Bound<'_, PyDict>>,
                  profiles: Option<Bound<'_, PyAny>>, scene: Option<Bound<'_, PyAny>>,
                  doc_path: Option<Bound<'_, PyAny>>) -> PyResult<()> {
+    let pages = pages_of(py, &comps, contents.as_ref(), profiles.as_ref(), scene.as_ref(), doc_path.as_ref())?;
+    let pics = pictures_of(pictures.as_ref())?;
+    let bytes = py.detach(|| document(&pages, &pics));
+    std::fs::write(&path, bytes).map_err(|e| pyo3::exceptions::PyOSError::new_err(format!("{}: {e}", path.display())))
+}
+
+/// Each sheet as a page: its items' display lists in stacking order (frames
+/// with their content), the border on top, the field context set per sheet.
+pub fn pages_of(py: Python<'_>, comps: &[Bound<'_, PyAny>], contents: Option<&Bound<'_, PyDict>>,
+                profiles: Option<&Bound<'_, PyAny>>, scene: Option<&Bound<'_, PyAny>>,
+                doc_path: Option<&Bound<'_, PyAny>>) -> PyResult<Vec<Page>> {
     py.import("core.doc_model")?.call_method0("flush")?;
     let composition = py.import("core.composition")?;
     let mut pages = Vec::new();
@@ -604,8 +649,8 @@ pub fn sheet_pdf(py: Python<'_>, path: std::path::PathBuf, comps: Vec<Bound<'_, 
     for (index, comp) in comps.iter().enumerate() {
         let kw = PyDict::new(py);
         kw.set_item("comp", comp)?;
-        kw.set_item("scene", scene.as_ref())?;
-        kw.set_item("path", doc_path.as_ref())?;
+        kw.set_item("scene", scene)?;
+        kw.set_item("path", doc_path)?;
         kw.set_item("index", index)?;
         kw.set_item("total", total)?;
         composition.getattr("set_field_context")?.call((), Some(&kw))?;
@@ -627,13 +672,13 @@ pub fn sheet_pdf(py: Python<'_>, path: std::path::PathBuf, comps: Vec<Bound<'_, 
             let Some(kind) = ItemKind::of_class(&class) else { continue };
             let key = crate::doc::py::handle_key(&m)?;
             let f = super::model::read_fields(key)?;
-            let profile = match (&profiles, kind) {
+            let profile = match (profiles, kind) {
                 (Some(p), ItemKind::Profile) if !p.is_none() => p.get_item(key).ok(),
                 _ => None,
             };
             let x = super::display::extra(py, &m, kind, &f, profile.as_ref())?;
             let ops = if kind == ItemKind::Frame {
-                let content = match &contents {
+                let content = match contents {
                     Some(c) => c.get_item(key)?.map(|v| v.cast_into::<PyDict>()).transpose()?,
                     None => None,
                 };
@@ -652,6 +697,11 @@ pub fn sheet_pdf(py: Python<'_>, path: std::path::PathBuf, comps: Vec<Bound<'_, 
         placed.push(Placed { origin: [0.0, 0.0], ops: border.ops });
         pages.push(Page { size: [pw, ph], items: placed });
     }
+    Ok(pages)
+}
+
+/// ``{source: (w, h, rgba bytes)}`` as pictures.
+pub fn pictures_of(pictures: Option<&Bound<'_, PyDict>>) -> PyResult<HashMap<String, Picture>> {
     let mut pics = HashMap::new();
     if let Some(p) = pictures {
         for (k, v) in p.iter() {
@@ -659,6 +709,5 @@ pub fn sheet_pdf(py: Python<'_>, path: std::path::PathBuf, comps: Vec<Bound<'_, 
             pics.insert(k.extract::<String>()?, Picture { w, h, rgba: data });
         }
     }
-    let bytes = py.detach(|| document(&pages, &pics));
-    std::fs::write(&path, bytes).map_err(|e| pyo3::exceptions::PyOSError::new_err(format!("{}: {e}", path.display())))
+    Ok(pics)
 }

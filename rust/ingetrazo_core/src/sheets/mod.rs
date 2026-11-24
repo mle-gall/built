@@ -24,5 +24,6 @@ pub mod page;
 pub mod py;
 pub mod profile;
 pub mod pymath;
+pub mod raster;
 pub mod svg;
 pub mod visibility;

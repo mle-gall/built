@@ -164,3 +164,34 @@ def test_a_frame_s_render_is_an_image_of_its_pixels(written):
     # 400 × 300 px at 300 dpi is smaller than the frame: drawn at its own size.
     assert rect.x0 / PT == pytest.approx(shaded.x_mm, abs=0.01)
     assert rect.width / PT == pytest.approx(400 * 25.4 / 300, abs=0.01)
+
+
+def test_the_image_export_draws_the_same_page(tmp_path):
+    """sheets::raster: the page the PDF writer writes, on white paper at
+    the dpi asked: the frame's render where the frame is, ink where the
+    lines and the text are, paper elsewhere."""
+    from PySide6.QtGui import QImage
+    a, _b = _sheets()
+    vector, shaded = a.frames
+    w, h = 400, 300
+    rgba = np.zeros((h, w, 4), np.uint8)
+    rgba[..., 0] = 200
+    rgba[..., 3] = 255
+    contents = {vector._doc_key: _content(vector), shaded._doc_key: {"image": (w, h)}}
+    out = tmp_path / "sheet.png"
+    size = NATIVE.sheet_image(str(out), a, 100.0, contents, {f"frame:{shaded._doc_key}": (w, h, rgba.tobytes())})
+    pw, ph = a.page_size_mm()
+    assert size == (round(pw * 100 / 25.4), round(ph * 100 / 25.4))
+    img = QImage(str(out))
+    assert (img.width(), img.height()) == size
+    px = lambda x_mm, y_mm: img.pixelColor(int(x_mm * 100 / 25.4), int(y_mm * 100 / 25.4))  # noqa: E731
+    assert px(shaded.x_mm + 5, shaded.y_mm + 5).red() == 200 and px(shaded.x_mm + 5, shaded.y_mm + 5).green() == 0
+    assert px(200, 180).lightness() == 255                          # paper
+    # The bold text's ink, inside its box.
+    t = a.texts[0]
+    inked = [px(t.x_mm + dx * 0.25, t.y_mm + dy * 0.25).lightness()
+             for dx in range(0, 200) for dy in range(0, 24)]
+    assert min(inked) < 80
+    jpg = tmp_path / "sheet.jpg"
+    NATIVE.sheet_image(str(jpg), a, 50.0, contents, {f"frame:{shaded._doc_key}": (w, h, rgba.tobytes())})
+    assert jpg.read_bytes()[:2] == b"\xff\xd8"

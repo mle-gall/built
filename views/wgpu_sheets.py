@@ -857,8 +857,12 @@ class Workspace:
                         self.view, comps, path, self._ground,
                         getattr(comp._window, "_current_path", None))
                 elif kind == "png":
-                    comp.refresh_all_frames()
-                    comp.export_image(path, comp.IMAGE_EXPORT_DPI)
+                    from views import wgpu_sheet_frames
+                    if self._ground is None:
+                        self._ground = wgpu_sheet_frames.Ground(self._touch)
+                    troubled = wgpu_sheet_frames.export_image(
+                        self.view, comp.comp, path, 200.0, self._ground,
+                        getattr(comp._window, "_current_path", None))
                 elif kind == "dxf":
                     comp.export_frame_dxf(self._frame(), path)
                 elif kind == "svg":

@@ -261,10 +261,11 @@ def drawing(source, frame):
     return out, np.asarray(d.kinds, np.int8), fills
 
 
-def export_pdf(view_widget, comps, path, ground=None, doc_path=None) -> list:
-    """Sheets ``comps`` into the PDF at ``path`` (sheets::pdf), each frame
-    worked out afresh; returns the names of the sheets where a frame would
-    not render (it prints its placeholder, the rest goes on)."""
+def frame_contents(view_widget, comps, ground=None):
+    """Each frame's content for a file, worked out afresh: ``(contents,
+    pictures, profiles, troubled)`` as sheet_pdf / sheet_image take them;
+    ``troubled`` names the sheets where a frame would not render (it
+    prints its placeholder, the rest goes on)."""
     source = view_widget.source_viewport
     scene = source.scene
     contents, pictures, profiles, troubled = {}, {}, {}, []
@@ -291,8 +292,23 @@ def export_pdf(view_widget, comps, path, ground=None, doc_path=None) -> list:
                 traceback.print_exc()
                 if comp.name not in troubled:
                     troubled.append(comp.name)
-    NATIVE.sheet_pdf(str(path), list(comps), contents, pictures, profiles or None, scene,
+    return contents, pictures, profiles or None, troubled
+
+
+def export_pdf(view_widget, comps, path, ground=None, doc_path=None) -> list:
+    """Sheets ``comps`` into the PDF at ``path`` (sheets::pdf); returns the
+    names of the sheets where a frame would not render."""
+    contents, pictures, profiles, troubled = frame_contents(view_widget, comps, ground)
+    NATIVE.sheet_pdf(str(path), list(comps), contents, pictures, profiles, view_widget.source_viewport.scene,
                      None if doc_path is None else str(doc_path))
+    return troubled
+
+
+def export_image(view_widget, comp, path, dpi=200.0, ground=None, doc_path=None) -> list:
+    """Sheet ``comp`` as a PNG or JPEG at ``dpi`` (sheets::raster)."""
+    contents, pictures, profiles, troubled = frame_contents(view_widget, [comp], ground)
+    NATIVE.sheet_image(str(path), comp, float(dpi), contents, pictures, profiles,
+                       view_widget.source_viewport.scene, None if doc_path is None else str(doc_path))
     return troubled
 
 
