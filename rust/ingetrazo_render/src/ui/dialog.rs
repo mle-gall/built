@@ -274,7 +274,7 @@ impl Ui {
                             }
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                 for (id, label, hint, role) in d.buttons.iter().rev().filter(|b| b.3 != 2) {
-                                    if sheet_button(ui, label, hint, *role) { out.push(d.act("b", id, None)); }
+                                    if ui.add_enabled_ui(role & 128 == 0, |ui| sheet_button(ui, label, hint, role & 127)).inner { out.push(d.act("b", id, None)); }
                                 }
                             });
                         });
@@ -316,6 +316,9 @@ pub(super) fn fields(ui: &mut egui::Ui, d: &mut Dialog, out: &mut Vec<String>) {
         let enabled = flags & DISABLED == 0;
         let full = flags & FULL != 0;
         match kind {
+            "rename_preview" => {
+                super::kit::rename_preview(ui, label, text, options);
+            }
             "caption" => { ui.add_space(SPACE_S); caption_at(ui, label, 4.0); }
             "text" if id.starts_with("join_reason_") => {
                 let index = match &id["join_reason_".len()..] {

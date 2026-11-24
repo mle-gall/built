@@ -45,6 +45,7 @@ class SnapFrame:
         self.acquired_normal = _coords(self.acquired_face_normal)
         self.angle = self.inference_angle_deg
         self.magnet = self.magnetic_axis_deg
+        self.max_axis_reach = S._MAX_AXIS_REACH
         self.screen = self.screen_axis_px
         self.threshold = self.threshold_px
         self.et = self.threshold if self.edge_threshold_px is None else self.edge_threshold_px
@@ -194,7 +195,7 @@ class SnapFrame:
         rims = [] if include_ends else [hit for _, hit, _ in self.rims]
         return self.query.target(self.et, rims, self.project_line if self.projectable else None,
                                  self.hidden_batch if self.is_occluded is not None else None,
-                                 include_ends, skip_clipped, exclude)
+                                 include_ends, skip_clipped, exclude, self.are_occluded is not None)
 
     def crossing_result(self, point, start):
         p = V(*point)

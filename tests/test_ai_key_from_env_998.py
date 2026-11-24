@@ -13,6 +13,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
 from tests.preferences_chrome import settings_file
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from PySide6.QtCore import QSettings  # noqa: E402
 from PySide6.QtWidgets import QApplication, QWidget  # noqa: E402
 
@@ -96,19 +97,17 @@ def test_wrapped_key_link_keeps_its_second_line():
     label.close()
 
 
-def _panel(monkeypatch, tmp_path):
-    from views.main_window import MainWindow
+def _panel(monkeypatch, tmp_path, host):
     ini = str(tmp_path / "cfg.ini")
     monkeypatch.setattr(
         AsistenteDialog, "_settings",
         lambda self: QSettings(ini, QSettings.Format.IniFormat))
-    win = MainWindow()
-    return win, AsistenteDialog(win.viewport, parent=win), ini
+    return AsistenteDialog(host.viewport), ini
 
 
-def test_named_provider_uses_the_environment_key(clean_env, tmp_path):
+def test_named_provider_uses_the_environment_key(clean_env, tmp_path, native_host):
     clean_env.setenv("ANTHROPIC_API_KEY", "sk-ant-from-env")
-    win, dlg, ini = _panel(clean_env, tmp_path)
+    dlg, ini = _panel(clean_env, tmp_path, native_host)
     try:
         dlg._provider.setCurrentIndex(dlg._provider.findData("anthropic"))
         dlg._key.setText("")
@@ -147,15 +146,15 @@ def test_named_provider_uses_the_environment_key(clean_env, tmp_path):
         assert "ANTHROPIC_API_KEY" not in dlg._key_link.text()
         assert dlg._config()[2] == "sk-ant-typed"
     finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+        dlg.close()
+        dlg.deleteLater()
 
 
-def test_auto_with_an_empty_field_stays_local(clean_env, tmp_path):
+def test_auto_with_an_empty_field_stays_local(clean_env, tmp_path, native_host):
     """An ``OPENAI_API_KEY`` exported for another program must not send
     the chat of someone running Ollama to the cloud."""
     clean_env.setenv("OPENAI_API_KEY", "sk-env")
-    win, dlg, _ini = _panel(clean_env, tmp_path)
+    dlg, _ini = _panel(clean_env, tmp_path, native_host)
     try:
         dlg._provider.setCurrentIndex(dlg._provider.findData("auto"))
         dlg._key.setText("")
@@ -165,8 +164,8 @@ def test_auto_with_an_empty_field_stays_local(clean_env, tmp_path):
         assert "OPENAI_API_KEY" in dlg._key_link.text()
         assert "OpenAI" in dlg._key_link.text()
     finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+        dlg.close()
+        dlg.deleteLater()
 
 
 def test_missing_key_hint_names_the_variable(clean_env):

@@ -9,17 +9,14 @@ from tests.test_metal_parity_inference import at, harness
 from tests.test_.skp_inference_gaps import view  # noqa: F401
 
 
-@pytest.fixture(params=["python", "rust"], autouse=True)
-def snap_engine(request, monkeypatch):
-    from types import SimpleNamespace
-    from core import _native, snap, snap_query, inference
-    module = _native.available() if request.param == "rust" else None
-    if request.param == "rust":
-        assert hasattr(module, "resolve_snap"), "rebuild ingetrazo_core"
-        monkeypatch.setattr(snap, "_compute_snap_python",
-                            lambda **_: pytest.fail("unexpected Python snap fallback"))
-    for adapter in (snap, snap_query, inference):
-        monkeypatch.setattr(adapter, "_native", SimpleNamespace(native=module))
+@pytest.fixture(params=["callback", "matrix"], autouse=True)
+def snap_projection(request, monkeypatch):
+    if request.param == "callback":
+        from core import snap_query
+        make_query = snap_query.make_query
+        def callback_query(edges, projector, cursor):
+            return make_query(edges, lambda point: projector(point), cursor)
+        monkeypatch.setattr(snap_query, "make_query", callback_query)
 
 
 def placed_scene(placement):
@@ -146,3 +143,14 @@ def test_recorded_first_work_plane(forward, normal):
     else:
         assert plane[0] == center
         assert plane[1].toTuple() == normal
+
+
+def test_projection_callback_error_reaches_the_tool():
+    from types import SimpleNamespace
+    from core.snap import compute_snap
+
+    def project(point):
+        raise ValueError("camera disconnected")
+
+    with pytest.raises(ValueError, match="camera disconnected"):
+        compute_snap(V(1, 1, 0), (1., 1.), SimpleNamespace(edges=[]), project, 3.)

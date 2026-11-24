@@ -735,6 +735,14 @@ def dispatch(self, command):
         scene.select([group])
         menu_state=context_menu.build(self.window,self.view)
         context_menu.run(self.window,self.view,menu_state.kind,"selectiontag",menu_state.sel)
+    elif command=="fixture-rename":
+        from core.group import Group
+        if not hasattr(self,"fixture_rename"):
+            self.fixture_rename=[Group(name="Panel A"), Group(name="Panel B")]
+            scene.groups.extend(self.fixture_rename)
+        scene.select(self.fixture_rename)
+        order=[[g.uid,False] for g in self.fixture_rename]
+        wgpu_ui._tree_action(self.window,self.view,"batchrename"+wgpu_ui.SEP+json.dumps([id(scene),True,"",order]))
     elif command=="fixture-merge-tag":
         from core.layers import Layer
         if scene.layer_by_key("Merge me") is None:
@@ -793,7 +801,8 @@ def facts(self):
     question=current_sheet(self.window)
     paths=scene.layer("Paths")
     row=self.window._scene_tabs.marked_view()
-    return dict(state(self), choice=choice.fields[0].value if choice else None, group_tag=scene.groups[0].layer,
+    return dict(state(self), rename_names=[g.name for g in getattr(self,"fixture_rename",[])],
+        choice=choice.fields[0].value if choice and choice.fields else None, group_tag=scene.groups[0].layer,
         photo=getattr(self,"fixture_photo",False), restored=getattr(self,"fixture_restored",False),
         hatch_prefs=getattr(self,"fixture_hatch_prefs",False),
         paint_sheet=getattr(self,"fixture_paint_sheet",None), row_paint=getattr(self,"fixture_row_paint",None),
@@ -856,6 +865,17 @@ state
 menu fixture-finish-merge
 wait 200
 state
+menu fixture-rename
+wait 250
+state
+key escape
+wait 150
+state
+menu fixture-rename
+wait 250
+key enter
+wait 200
+state
 quit
 """)
     result = run([str(BIN), "--root", str(ROOT), "--venv", str(venv), "--new-instance",
@@ -879,6 +899,10 @@ quit
     assert selection["choice"] and selection["choice"].startswith("Assign to ") and cancelled["choice"] is None, log
     assert merge["choice"] and merge["group_tag"] == "Merge me", log
     assert moved["choice"] is None and moved["group_tag"] == "Paths", log
+    opened_rename, cancelled_rename, applied_rename = states[13:16]
+    assert opened_rename["form_open"] and not cancelled_rename["form_open"], log
+    assert cancelled_rename["rename_names"] == ["Panel A", "Panel B"], log
+    assert not applied_rename["form_open"] and applied_rename["rename_names"] == ["Panel01", "Panel02"], log
     opened, saved, edited = states[:3]
     assert edited["hatch_prefs"] == {"pinned": ["brick", "glass"], "recent": ["brick", "glass"],
                                      "saved": {"brick": [[300, 150, 80, 12, 8]]}, "removed": {}}
@@ -1026,3 +1050,55 @@ def test_native_survey_imports_share_datum_and_save(tmp_path):
     load_into(scene, path)
     assert len(scene.geo_paths) == len(scene.geo_points) == 1
     assert scene.photo_mesh.triangle_count == 2 and scene.georef.alt == pytest.approx(1750.)
+
+
+@pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
+                    reason="requires a built window and BUILT_WINDOW_TESTS=1")
+def test_native_takeoff_picks_tagged_faces_in_their_edit_context(tmp_path):
+    from core.bim import tag_faces
+    from core.history import History
+    from core.scene import Scene
+    from formats.igz import save_scene
+    from tests.test_bim_grouped_tags import _box, _group
+
+    scene = Scene()
+    faces = _box(scene)
+    tag_faces(faces, "IfcWall", "West wall", 1)
+    _group(scene, History(scene), faces).name = "Wall assembly"
+    model = tmp_path / "wall.built"
+    save_scene(scene, model)
+    venv = fixture_venv(tmp_path, """from app_shell.host import Host
+from views import wgpu_ui
+menu, state = Host.menu, Host.state
+def drive(self, command):
+    scene = self.viewport.scene
+    if command == "fixture-measure":
+        wgpu_ui._tree_action(self.window, self.view, "insp:measure")
+    elif command == "fixture-select-faces":
+        group, = scene.selection
+        (key, label), = scene._inspector_takeoff.face_actions(group)
+        assert label == "Select West wall faces"
+        wgpu_ui._tree_action(self.window, self.view, "insp:" + key)
+    else:
+        return menu(self, command)
+def inspect(self):
+    scene = self.viewport.scene
+    return dict(state(self), context=scene.edit_group.name if scene.edit_group else "",
+                tagged_faces=sum((getattr(f, "attrs", {}).get("ifc") or {}).get("name") == "West wall"
+                                 for f in scene.selection))
+Host.menu, Host.state = drive, inspect
+""")
+    steps = tmp_path / "steps"
+    steps.write_text("wait 600\nkey escape\nmenu select_all\nmenu fixture-measure\nwait 250\n"
+                     "menu fixture-select-faces\nwait 250\nstate\nkey escape\nkey escape\nwait 250\nstate\nquit\n")
+    result = run([str(BIN), "--root", str(ROOT), "--venv", str(venv), "--new-instance",
+                  "--size", "1000x720", "--script", str(steps), str(model)],
+                 env=dict(os.environ, BUILT_ANSWERS="cmd-d"), capture_output=True, text=True, timeout=45)
+    log = result.stdout + result.stderr
+    assert result.returncode == 0 and "Traceback" not in log, log
+    states = [json.loads(line.removeprefix("[built] state ")) for line in log.splitlines()
+              if line.startswith("[built] state ")]
+    selected, closed = states[:2]
+    assert (selected["context"], selected["tagged_faces"]) == ("Wall assembly", 6), log
+    assert closed["context"] == "" and not closed["tagged_faces"], log
+    assert all(not s["errors"] and not s["blocked_widgets"] for s in (selected, closed)), log

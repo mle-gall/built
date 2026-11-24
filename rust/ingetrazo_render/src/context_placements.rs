@@ -37,30 +37,42 @@ pub fn pick_candidates<'py>(
     lazy: Option<&Bound<'py, PyAny>>,
 ) -> PyResult<Candidates<'py>> {
     let py = view.py();
-    let editable = view.call_method0("_context_placements")?;
     let selectable = PySet::empty(py)?;
-    for g in editable.try_iter()? {
-        selectable.add(g?.as_ptr() as usize)?;
-    }
     let context = view.getattr("scene")?.getattr("edit_group")?;
-    let show_rest = !context.is_none() && !hidden;
-    let candidates = if show_rest {
-        view.call_method0("_placements")?
-    } else {
-        editable
-    };
+    let root = context.is_none();
+    let candidates = view.call_method0("_placements")?;
+    let context_attr = pyo3::intern!(py, "context");
+    let owner_attr = pyo3::intern!(py, "owner");
     let lazy_ids = lazy.map(|table| table.get_item(4)).transpose()?;
     let fixed = PyList::empty(py);
     let positions = PyDict::new(py);
     let mut index = 0usize;
     for group in candidates.try_iter()? {
         let group = group?;
-        if show_rest
-            && (group.is(&context) || view.call_method1("_owner_of", (&group,))?.is(&context))
+        let id = group.as_ptr() as usize;
+        // Read each occurrence once. Children may be selected, while faded
+        // surroundings contribute snap/occlusion rows only.
+        let own_geometry = !root
+            && group
+                .getattr_opt(owner_attr)?
+                .is_some_and(|owner| owner.is(&context));
+        let child = root
+            || (!own_geometry
+                && group
+                    .getattr_opt(context_attr)?
+                    .is_some_and(|parent| parent.is(&context)));
+        if child {
+            selectable.add(id)?;
+        }
+        if !root
+            && (if hidden {
+                !child
+            } else {
+                group.is(&context) || own_geometry
+            })
         {
             continue;
         }
-        let id = group.as_ptr() as usize;
         if lazy_ids
             .as_ref()
             .map_or(Ok(false), |ids| ids.contains(id))?

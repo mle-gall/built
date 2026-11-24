@@ -8,34 +8,14 @@ failing script left half its mutations behind, and the scope captured the
 scene once at open (stale after New/Open or entering a group)."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
 import pytest
-from PySide6.QtWidgets import QApplication
-
-_inst = QApplication.instance()
-if _inst is None:
-    _app = QApplication([])
-elif not isinstance(_inst, QApplication):
-    pytest.skip("a non-widget QGuiApplication is already active",
-                allow_module_level=True)
-
-from plugins.python_console import (                              # noqa: E402
-    ConsolePanel, PythonConsoleTool)
+from plugins.python_console import ConsolePanel, PythonConsoleTool
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 
 @pytest.fixture
-def win():
-    from views.main_window import MainWindow
-    w = MainWindow()
-    yield w
-    # Console runs DO dirty the document (that is the feature); mark it
-    # saved before closing or closeEvent's modal "Quit IngeTrazo?" box
-    # blocks forever under the offscreen platform.
-    w._saved_version = w.viewport.scene.version
-    w.close()
+def win(native_host):
+    return native_host.window
 
 
 @pytest.fixture
@@ -69,7 +49,7 @@ def test_mutation_is_undoable_and_dirties(console, win):
     assert len(scene.mesh.faces) == faces0 + 1
     assert len(win.viewport.history.undo_stack) == depth0 + 1   # one step
     assert scene.version > version0                             # dirty+repaint
-    assert scene.version != win._saved_version                  # asks to save
+    assert win._is_dirty()
 
     assert win.viewport.history.undo()                          # Ctrl+Z
     assert len(scene.mesh.faces) == faces0
@@ -134,7 +114,9 @@ def test_scope_rebinds_to_the_current_mesh(console, win):
     """PR #3 regression: the scope captured scene.mesh once at open; after
     entering a group (or New/Open) it pointed at the wrong mesh."""
     scene = win.viewport.scene
-    group = scene.groups[0]                         # the scale figure
+    from core.group import Group
+    group = Group(name="Console edit context")
+    scene.groups.append(group)
     scene.begin_group_edit(group)
     try:
         console._run_code("es_del_grupo = mesh is scene.mesh", "<test>")
@@ -156,8 +138,9 @@ def test_one_console_per_document(win, monkeypatch):
     from unittest.mock import Mock
     from types import SimpleNamespace
     from core import plugin_panels
-    view = SimpleNamespace(_ui_attached=True, renderer=Mock(), update=lambda: None)
-    monkeypatch.setattr(win._doc, "stand_in", view)
+    view = win._doc.stand_in
+    monkeypatch.setattr(view, "_ui_attached", True, raising=False)
+    monkeypatch.setattr(view, "renderer", Mock())
     plugin_panels.install(win, [SimpleNamespace(stem="python_console", panel=ConsolePanel)])
     tool = PythonConsoleTool()
     tool.on_activate(win.viewport)

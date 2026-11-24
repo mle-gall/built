@@ -180,3 +180,27 @@ def test_an_old_sheet_opens_parallel_even_pointing_at_a_perspective_scene():
     assert cam.perspective is False
 
 
+
+
+def test_projector_broadcasts_each_coordinate_with_depth():
+    import numpy as np
+    from types import SimpleNamespace
+
+    frame = MarcoVista(w_mm=120., h_mm=60., perspective=True)
+    project = frame_page_projector(frame, SimpleNamespace(fov_deg=60.))
+    x = np.array([[.2], [-.3], [.5]])
+    y = np.array([.4, .8])
+    depths = np.array([[1., -1.]])
+    px, py = project(x, y, depths)
+    half_height = np.tan(np.deg2rad(30.)) * np.maximum(depths, .0001)
+    np.testing.assert_allclose(px, np.clip((x / (2 * half_height) + 1) * 60., -1200., 1320.))
+    np.testing.assert_allclose(py, np.clip((1 - y / half_height) * 30., -600., 660.))
+    assert px.shape == (3, 2) and py.shape == (1, 2)
+    assert np.isnan(project(1., 2., float("nan"))[0])
+    with pytest.raises(ValueError, match="depth"):
+        project(1., 2.)
+
+    frame.perspective = False
+    px, py = frame_page_projector(frame, None)(x.astype("float32"), y)
+    assert px.shape == x.shape and py.shape == y.shape
+    assert px.dtype == np.float32

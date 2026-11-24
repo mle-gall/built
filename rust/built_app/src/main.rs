@@ -67,6 +67,14 @@ impl Args {
     fn temporary_profile(&self) -> bool {
         self.check || self.measure || self.gallery || self.script.is_some()
     }
+
+    /// Test and scripted runs never take focus: no activation, no Dock icon,
+    /// windows open behind whatever the user is doing. `BUILT_BACKGROUND=1`
+    /// asks for the same on any launch.
+    fn background(&self) -> bool {
+        self.check || self.measure || self.script.is_some()
+            || std::env::var_os("BUILT_BACKGROUND").is_some_and(|v| v != "0")
+    }
 }
 
 fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
@@ -218,13 +226,20 @@ mod perf {
         }
     }
 
+    /// A sample measured elsewhere, in milliseconds.
+    pub fn note_ms(what: &'static str, ms: f64) {
+        if on() {
+            SAMPLES.lock().unwrap().push((what, ms));
+        }
+    }
+
     pub fn report() {
         if !on() {
             return;
         }
         let samples = std::mem::take(&mut *SAMPLES.lock().unwrap());
         let mut parts = Vec::new();
-        for what in ["move_ms", "frame_ms", "open_stall_ms", "open_total_ms", "open_handover_ms"] {
+        for what in ["move_ms", "frame_ms", "py_frame_ms", "open_stall_ms", "open_total_ms", "open_handover_ms"] {
             let mut v: Vec<f64> = samples.iter().filter(|(w, _)| *w == what).map(|(_, x)| *x).collect();
             if v.is_empty() {
                 continue;
@@ -419,7 +434,7 @@ impl App {
 
     fn focus(&mut self, id: WindowId) {
         if let Some(w) = self.win(id) {
-            w.window.focus_window();
+            if !self.args.background() { w.window.focus_window(); }
         }
         self.focused = Some(id);
     }
@@ -472,7 +487,7 @@ impl App {
         eprintln!("[built] dispatched {} in {ms:.0} ms", path.display());
         if !pending { self.timings.opened.get_or_insert(self.timings.process.elapsed()); }
         if let Some(w) = self.win(id) {
-            w.window.focus_window();
+            if !self.args.background() { w.window.focus_window(); }
         }
         self.redraw(id);
     }
@@ -708,6 +723,9 @@ impl App {
                 .with_fullsize_content_view(true)
                 .with_title_hidden(true);
         }
+        if self.args.background() {
+            attrs = attrs.with_active(false);
+        }
         let window = event_loop.create_window(attrs).map_err(|e| e.to_string())?;
         window.set_ime_allowed(true);
         if self.timings.window.is_none() {
@@ -726,6 +744,7 @@ impl App {
         };
         let ns_view = if platform == "cocoa" { window_id } else { 0 };
         native::configure_window(ns_view);
+        if self.args.background() { native::send_window_back(ns_view); }
         let size = window.inner_size();
         let scale = window.scale_factor();
         let host = python::Host::new(
@@ -801,7 +820,7 @@ impl App {
             Ok(id) => {
                 if let Some(w) = self.win(id) {
                     w.host.call("adopt", (token,));
-                    w.window.focus_window();
+                    if !self.args.background() { w.window.focus_window(); }
                 }
                 self.redraw(id);
             }
@@ -1129,6 +1148,12 @@ fn main() {
         std::process::exit(result);
     }
     let mut builder = EventLoop::<UserEvent>::with_user_event();
+    #[cfg(target_os = "macos")]
+    if app_args_background() {
+        use winit::platform::macos::{ActivationPolicy, EventLoopBuilderExtMacOS};
+        builder.with_activation_policy(ActivationPolicy::Accessory);
+        builder.with_activate_ignoring_other_apps(false);
+    }
     #[cfg(windows)]
     winit::platform::windows::EventLoopBuilderExtWindows::with_msg_hook(&mut builder, native::raw_input_message);
     let event_loop = match builder.build() {
@@ -1288,9 +1313,13 @@ impl App {
             }
             WindowEvent::RedrawRequested => pyo3::Python::attach(|_| {
                 let t0 = Instant::now();
-                let drew = self.win(id).is_some_and(|w| w.host.frame().is_some());
-                if drew {
+                let out = self.win(id).and_then(|w| w.host.frame());
+                let drew = out.is_some();
+                if let Some((cpu, _, _)) = out {
                     perf::note("frame_ms", t0);
+                    // The frame call less the renderer's own encode: Python
+                    // glue and the Rust calls it makes (docs/render-glue-port.md).
+                    perf::note_ms("py_frame_ms", (t0.elapsed().as_secs_f64() * 1e3 - cpu).max(0.));
                 }
                 if drew {
                     let win = self.win_mut(id).unwrap();
@@ -1479,4 +1508,12 @@ impl App {
             _ => {}
         }
     }
+}
+
+/// The background decision before `App` exists: the same rule as
+/// `Args::background`, read from the raw command line.
+fn app_args_background() -> bool {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    args.iter().any(|a| a == "--check" || a == "--measure" || a == "--script")
+        || std::env::var_os("BUILT_BACKGROUND").is_some_and(|v| v != "0")
 }

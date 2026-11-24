@@ -1489,7 +1489,7 @@ def edit_material(history, name, color=None, opacity=None, tile=None):
         size = None
         if tile is not None:
             size = (float(tile[0]), float(tile[1]), float(tex.get("rot", 0.0)))
-        tint = tuple(color) if color is not None else (tuple(mat.color) if mat.color is not None else None)
+        tint = tuple(color) if color is not None else tex.get("tint")
         history.execute(EditTexturedMaterialCommand(name, tint, size=size))
         return _answer(history, before)
     if tile is not None and not mat.texture:

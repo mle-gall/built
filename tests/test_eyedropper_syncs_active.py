@@ -8,38 +8,13 @@ call went to the tray dock, which has no ``sync_from_paint`` — the method
 lives on its Materials panel — so nothing ever refreshed."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-import pytest
-from PySide6.QtCore import QPointF, Qt
+from core.input_types import QPointF, Qt
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
-
-_app = QApplication.instance() or QApplication([])
-
-from tools.base import ToolContext                                # noqa: E402
-from tools.paint import PaintTool                                 # noqa: E402
-
-
-@pytest.fixture(autouse=True)
-def _reset_paint_state():
-    saved = (PaintTool.current_color, PaintTool.current_texture,
-             PaintTool.current_texture_plane, PaintTool.current_material,
-             PaintTool.current_opacity, PaintTool.current_is_default)
-    yield
-    (PaintTool.current_color, PaintTool.current_texture,
-     PaintTool.current_texture_plane, PaintTool.current_material,
-     PaintTool.current_opacity, PaintTool.current_is_default) = saved
-
-
-def _window():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    win.show()
-    _app.processEvents()
-    return win
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
+from tests.test_tree_links import _View
+from tools.base import ToolContext
+from tools.paint import PaintTool
+from views import wgpu_library, wgpu_ui
 
 
 def _sample(win, face, monkeypatch):
@@ -57,39 +32,31 @@ def _quad(win):
          QVector3D(4, 4, 0), QVector3D(0, 4, 0)])
 
 
-def test_sampled_colour_shows_in_the_active_swatch(monkeypatch):
-    from views.tray import _color_pixmap
-    win = _window()
-    panel = win.tray.materials
-    PaintTool.current_texture = None
-    PaintTool.current_is_default = False
-    PaintTool.current_color = (0.8, 0.45, 0.3)
-    panel._refresh_preview()
+def shown(view, win):
+    wgpu_ui._inspector(view, win)
+    title, sections = view.renderer.calls["ui_set_inspector"]
+    assert title == "Active paint"
+    return {k: v.rsplit("\x1d", 1)[-1] for k, v in dict(sections)["Next paint stroke"]}
 
+
+def test_sampled_colour_shows_in_the_active_swatch(native_host, monkeypatch):
+    win, view = native_host.window, _View()
+    win._activate_tool("paint")
     face = _quad(win)
-    face.attrs["color"] = (0.1, 0.6, 0.2)
-    _sample(win, face, monkeypatch)
-
-    assert PaintTool.current_color == (0.1, 0.6, 0.2)
-    shown = panel._preview.pixmap().toImage()
-    assert shown == _color_pixmap((0.1, 0.6, 0.2)).toImage()
-    win.close()
+    for rgb, expected in [((.8, .4, .2), "#cc6633"), ((.1, .6, .2), "#1a9933")]:
+        face.attrs["color"] = rgb
+        _sample(win, face, monkeypatch)
+        assert shown(view, win)["Colour"] == expected
 
 
-def test_sampled_texture_loads_the_size_fields(monkeypatch):
-    win = _window()
-    panel = win.tray.materials
-    panel._sw_box.setValue(1.0)
-    panel._sh_box.setValue(1.0)
-    panel._rot_box.setValue(0.0)
-
+def test_sampled_texture_loads_the_size_fields(native_host, monkeypatch):
+    win, view = native_host.window, _View()
+    win._activate_tool("paint")
     face = _quad(win)
-    face.attrs["texture"] = {"path": "/no/such/ladrillo.png",
-                             "sw": 2.5, "sh": 0.75, "rot": 30.0}
+    face.attrs["texture"] = {"path": "ladrillo.png", "sw": 2.5, "sh": .75, "rot": 30.}
     _sample(win, face, monkeypatch)
-
-    assert PaintTool.current_texture["sw"] == 2.5
-    assert panel._sw_box.value() == pytest.approx(2.5)
-    assert panel._sh_box.value() == pytest.approx(0.75)
-    assert panel._rot_box.value() == pytest.approx(30.0)
-    win.close()
+    rows = shown(view, win)
+    assert [float(rows[k]) for k in ["Tile width (m)", "Tile height (m)", "Rotation (°)"]] == [2.5, .75, 30.]
+    wgpu_library.edit_field(win, view, "brush_sw:", "3.5")
+    assert PaintTool.current_texture == {**face.attrs["texture"], "sw": 3.5}
+    assert face.attrs["texture"]["sw"] == 2.5

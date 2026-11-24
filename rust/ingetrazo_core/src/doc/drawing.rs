@@ -4,6 +4,19 @@ use super::{attr_id, lock, value::Value, Data, Doc, FVal, Field, Key, Node, Tras
 use crate::project_tree::text_matches;
 use std::collections::{HashMap, HashSet};
 
+/// Stable model colours for tags without an explicit override.
+pub(crate) const PALETTE: [(f64, f64, f64); 12] = [
+    (0.86, 0.42, 0.36), (0.36, 0.60, 0.84), (0.52, 0.74, 0.40),
+    (0.92, 0.70, 0.30), (0.62, 0.48, 0.80), (0.34, 0.74, 0.72),
+    (0.88, 0.52, 0.70), (0.66, 0.58, 0.44), (0.56, 0.66, 0.30),
+    (0.46, 0.50, 0.70), (0.84, 0.60, 0.48), (0.40, 0.66, 0.56),
+];
+
+#[pyo3::pyfunction]
+pub(crate) fn automatic_tag_color(key: &str) -> (f64, f64, f64) {
+    PALETTE[crc32fast::hash(key.as_bytes()) as usize % PALETTE.len()]
+}
+
 fn labels<'a>(root: &'a Node, name: &str) -> Result<HashMap<&'a str, &'a str>, String> {
     let Some(Value::Dict(entries)) = root.attr(attr_id(name)?) else {
         return Ok(HashMap::new());
@@ -75,8 +88,15 @@ pub(super) fn cells(node: &Node) -> Result<Vec<String>, String> {
             _ => String::new(),
         })
     };
+    let chosen = colour(tag.color.as_ref());
+    let key = tag.key.as_deref().unwrap_or_default();
+    let swatch = if chosen.is_empty() && !key.is_empty() && key != "Layer 0" {
+        let (r, g, b) = automatic_tag_color(key);
+        let byte = |v: f64| (255. * v).round() as u8;
+        format!("#{:02x}{:02x}{:02x}", byte(r), byte(g), byte(b))
+    } else { chosen.clone() };
     Ok(vec![
-        colour(tag.color.as_ref()),
+        chosen,
         string("linetype", "continuous")?,
         weight,
         u8::from(print).to_string(),
@@ -92,6 +112,7 @@ pub(super) fn cells(node: &Node) -> Result<Vec<String>, String> {
         switch("hatch_on_paper", "")?, measures("hatch_offset")?,
         switch("hatch_cross", "0")?, string("joints", "")?, switch("mortar", "0")?,
         measures("brick")?, node.attr(attr_id("opacity")?).and_then(number).unwrap_or(1.).to_string(),
+        swatch,
     ])
 }
 

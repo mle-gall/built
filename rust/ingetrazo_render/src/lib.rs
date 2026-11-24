@@ -12,6 +12,8 @@ mod component_replacement;
 mod component_rows;
 mod context_pick;
 mod context_placements;
+mod document_input;
+mod section_display;
 mod inspection_edits;
 mod context_edits;
 mod native_view_actions;
@@ -67,6 +69,7 @@ mod sun;
 mod shadow_fit;
 mod textures;
 pub mod tool_cursors;
+pub mod icon_art;
 mod annotation_canvas;
 mod tool_overlay;
 mod image_assets;
@@ -2232,16 +2235,13 @@ impl Renderer {
         self.overlay.center_cue(&self.queue, &self.camera_data,
             [self.config.width, self.config.height], center, radius, cursor, scale);
     }
-    fn set_annotation_layer(&mut self, mut layer: PyRefMut<'_, annotation_canvas::AnnotationCanvas>) -> PyResult<()> {
+    fn set_annotation_layer(&mut self, layer: PyRef<'_, annotation_canvas::AnnotationCanvas>) -> PyResult<()> {
         let (w, h) = layer.size();
         if (w, h) != (self.config.width, self.config.height) {
             return Err(PyValueError::new_err("overlay must match physical surface dimensions"));
         }
-        if let Some(rgba) = layer.take_rgba() {
-            self.overlay.upload(&self.device, &self.queue, w, h, &rgba);
-        } else {
-            self.overlay.clear_layer(&self.device, w, h);
-        }
+        let region = layer.drawn_region();
+        self.overlay.upload_changed(&self.device, &self.queue, w, h, region, |r| layer.region_rgba(r));
         Ok(())
     }
     fn set_overlay(
@@ -2572,14 +2572,18 @@ impl Renderer {
         if let Some(ui) = self.ui.as_mut() { ui.panels.set(key, value); }
         Ok(())
     }
+    fn ui_project_hidden(&self) -> bool {
+        self.ui.as_ref().is_some_and(|ui| ui.project_hidden())
+    }
     fn ui_toggle_review(&mut self) {
         if let Some(ui) = self.ui.as_mut() { ui.toggle_review(); }
     }
     fn ui_show_inspector(&mut self) {
         if let Some(ui) = self.ui.as_mut() { ui.show_inspector(); }
     }
-    fn ui_set_catalog_info(&mut self, filename: String, tree: &Bound<'_,PyAny>, counts: &Bound<'_,PyAny>) -> PyResult<()> {
-        if let Some(ui)=self.ui.as_mut() { ui.set_catalog_info(filename,tree,counts)?; }
+    #[pyo3(signature=(filename, tree, counts, picked=0))]
+    fn ui_set_catalog_info(&mut self, filename: String, tree: &Bound<'_,PyAny>, counts: &Bound<'_,PyAny>, picked: usize) -> PyResult<()> {
+        if let Some(ui)=self.ui.as_mut() { ui.set_catalog_info(filename,tree,counts)?; ui.set_browser_picks(picked); }
         Ok(())
     }
     #[pyo3(signature = (owner, lines, patterns=None, scene=None))]
@@ -2710,6 +2714,9 @@ impl Renderer {
     }
     fn ui_set_activity(&mut self, history: Vec<ui::ActivityRow>, banner: String) {
         if let Some(ui) = self.ui.as_mut() { ui.set_activity(history, banner); }
+    }
+    fn ui_rename_browser_row(&mut self, id: &str) -> bool {
+        self.ui.as_mut().is_some_and(|ui| ui.rename_browser_row(id))
     }
     fn ui_reveal_row(&mut self, key: String) {
         if let Some(ui) = self.ui.as_mut() { ui.reveal_row(key); }
@@ -3221,11 +3228,13 @@ fn context_targets(hit: bool, selection: &Bound<'_, PyAny>) -> PyResult<Vec<Py<P
 
 #[pymodule]
 pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    document_input::register(m)?;
     m.add_class::<tool_instances::InstancePreview>()?;
     window_document::register(m)?;
     close_documents::register(m)?;
     m.add_class::<component_rows::ComponentRows>()?;
     m.add_function(wrap_pyfunction!(context_placements::pick_candidates, m)?)?;
+    section_display::register(m)?;
     m.add_function(wrap_pyfunction!(context_placements::context_placements, m)?)?;
     m.add_function(wrap_pyfunction!(context_pick::context_pick, m)?)?;
     m.add_function(wrap_pyfunction!(component_rows::select_component_instances, m)?)?;
@@ -3255,6 +3264,10 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     scene_navigation::register(m)?;
     window_services::register(m)?;
     m.add_function(wrap_pyfunction!(tool_cursors::rail_icon,m)?)?;
+    m.add_function(wrap_pyfunction!(icon_art::icon_art, m)?)?;
+    m.add_function(wrap_pyfunction!(icon_art::icon_keys, m)?)?;
+    m.add_function(wrap_pyfunction!(icon_art::letter_art, m)?)?;
+    m.add_function(wrap_pyfunction!(icon_art::row_icon_art, m)?)?;
     m.add_function(wrap_pyfunction!(tool_cursors::tool_cursor_name, m)?)?;
     m.add_function(wrap_pyfunction!(tool_cursors::tool_cursor_art, m)?)?;
     m.add_function(wrap_pyfunction!(image_assets::texture_has_alpha,m)?)?;

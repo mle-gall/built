@@ -275,7 +275,7 @@ class _Tray:
         self.materials = PaintRecents(PaintTool)
 
 
-_QUIET = ("_sync_style_menu", "_sync_section_menu", "_refresh_layer_views",
+_QUIET = ("_sync_style_menu", "_sync_section_menu",
           "_refresh_sheet_tabs",
           "_sync_projection_buttons", "_show_renderer_note",
           "_sync_component_edit_menu", "_refresh_vcb", "_forget_panel_caches", "_show_panels_again",

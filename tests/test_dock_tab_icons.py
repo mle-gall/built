@@ -84,10 +84,9 @@ def test_every_panel_icon_is_drawn_and_its_own():
 
 def test_every_built_in_tray_has_its_icon(win):
     keys = {d.property("icon_key") for d in
-            (win.tray, win.bim_tray, win.georef_tray, win.project_browser,
-             win.layers_dock)}
+            (win.tray, win.bim_tray, win.georef_tray, win.project_browser)}
     assert keys == {"panel_properties", "panel_bim", "panel_terrain",
-                    "panel_browser", "layers_panel"}
+                    "panel_browser"}
     for dock in win._sidebar_docks():
         assert dock.testAttribute(Qt.WA_SetWindowIcon), dock.windowTitle()
         assert not dock.windowIcon().isNull()
@@ -677,7 +676,7 @@ def _own_dock(win, title, name):
 def test_a_tab_stands_for_its_own_panel_not_for_one_of_the_same_name(win):
     """An extension dock with the same title as a built-in dock: found by title,
     the tab of one answered for the other — its menu, its icon."""
-    mine = win.layers_dock
+    mine = win.project_browser
     other = _own_dock(win, mine.windowTitle(), "own_scenes")
     docks = [mine, other]
     seen = []
@@ -717,18 +716,9 @@ def test_the_initial_of_a_panel_without_icon_follows_the_theme(win):
 
 
 def test_the_initial_is_drawn_with_the_weight_of_the_other_icons():
-    """Its frame as thin as theirs: fewer inked pixels than at full weight."""
+    """Its frame as thin as theirs: two pixels across at 48 px, where the
+    full-weight frame took three or four."""
     from views import icons
-
-    def inked(icon):
-        img = _image(icon)
-        return sum(1 for x in range(img.width()) for y in range(img.height())
-                   if img.pixelColor(x, y).alpha() > 60)
-    thin = inked(icons.letter_icon("Zeta"))
-    stroke = icons.ICON_STROKE
-    icons.ICON_STROKE = 1.0
-    try:
-        full = inked(icons.letter_icon("Zeta"))
-    finally:
-        icons.ICON_STROKE = stroke
-    assert thin < full
+    img = _image(icons.letter_icon("Zeta"))
+    run = [x for x in range(4, 14) if img.pixelColor(x, 24).alpha() > 60]
+    assert run == [8, 9]

@@ -11,8 +11,6 @@ import importlib
 import itertools
 import math
 import os
-import inspect
-import re
 import sys
 import time as _time_mod
 import types
@@ -21,7 +19,6 @@ from pathlib import Path
 from typing import Optional
 from core.units import fmt_len as _fmt_len
 from core.units import typed_value_text as _typed_value_text
-from core.units import is_expression
 
 # Perf telemetry (INGETRAZO_PERF=1): every operation slower than 50 ms and a
 # once-per-second frame summary land in ~/ingetrazo-perf.log — the tool for
@@ -74,6 +71,11 @@ if not NATIVE:
 from views.paint_types import QColor, QFont, QPen, QPolygonF
 if not NATIVE:
     from PySide6.QtGui import QFontMetrics, QImage, QPainter
+import numpy as np
+import ingetrazo_core
+import ingetrazo_render
+from ingetrazo_render import document_value_key as _value_key
+from ingetrazo_core import ray_aabb_span as _ray_aabb_span
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D, Vec4 as QVector4D
 
 from core.camera import OrbitCamera
@@ -430,51 +432,6 @@ def _split_chunk_spans(chunk, depth=0, force=False):
     if not force:
         chunk["_span_grid"] = ((chunk.get("rev"), n), out)
     return out
-
-
-def _ray_aabb_span(o, d, lo, hi):
-    """``(t_in, t_out)`` of the forward ray (t >= 0) through the AABB, or
-    ``None`` if it misses. Plain floats."""
-    tmin, tmax = 0.0, float("inf")
-    for i in range(3):
-        di = d[i]
-        if -1e-12 < di < 1e-12:
-            if o[i] < lo[i] - 1e-9 or o[i] > hi[i] + 1e-9:
-                return None
-            continue
-        t1 = (lo[i] - o[i]) / di
-        t2 = (hi[i] - o[i]) / di
-        if t1 > t2:
-            t1, t2 = t2, t1
-        tmin, tmax = max(tmin, t1), min(tmax, t2)
-        if tmin > tmax:
-            return None
-    return tmin, tmax
-
-
-def _ray_aabb(o, d, lo, hi, reach=float("inf")) -> bool:
-    """Slab test: does the forward ray (``0 <= t <= reach``) touch the AABB?
-    Plain floats — the pick prefilter tests ~tens of chunk boxes per ray."""
-    tmin = 0.0
-    tmax = reach
-    for i in range(3):
-        di = d[i]
-        if -1e-12 < di < 1e-12:
-            if o[i] < lo[i] - 1e-9 or o[i] > hi[i] + 1e-9:
-                return False
-            continue
-        inv = 1.0 / di
-        t1 = (lo[i] - o[i]) * inv
-        t2 = (hi[i] - o[i]) * inv
-        if t1 > t2:
-            t1, t2 = t2, t1
-        if t1 > tmin:
-            tmin = t1
-        if t2 < tmax:
-            tmax = t2
-        if tmin > tmax:
-            return False
-    return True
 
 
 #: Every chunk entry built (or loaded from disk) takes the next number.
@@ -1568,177 +1525,6 @@ def _parse_number(tok: str):
     refusing a number too long for a float or too big for a model (#185)."""
     from core.units import _number
     return _number(tok)
-
-
-def _is_chord(modifiers) -> bool:
-    """Ctrl or Alt held — a shortcut, not typing. Both together is AltGr on
-    Windows, which types characters, so that one still types."""
-    ctrl = bool(modifiers & Qt.ControlModifier)
-    alt = bool(modifiers & Qt.AltModifier)
-    return (ctrl or alt or bool(modifiers & Qt.MetaModifier)) \
-        and not (ctrl and alt)
-
-
-def _expression_result_text(value, plain: bool) -> str:
-    """What a calculation drew, for the value box: ``3.725 m``, or the
-    number alone for an angle or a factor (``plain``)."""
-    from core.units import localized
-
-    def one(v):
-        if plain:
-            return localized(f"{v:.6g}")
-        return _fmt_len(v)
-
-    if isinstance(value, tuple) and value and value[0] == "abs_len":
-        return _fmt_len(value[1])
-    if isinstance(value, tuple):
-        return "; ".join(one(v) for v in value)
-    return one(value)
-
-
-_VALUE_KEYS = {Qt.Key_Backspace: "backspace", Qt.Key_Escape: "escape"}
-
-
-def _value_accepts(vp, tool, text: str, buffer: str) -> dict:
-    """What the active ``tool`` takes besides lengths, for the Rust field.
-    Whether a copy waits for «x5» is only asked for a bare ``x``."""
-    arrays = bool(getattr(tool, "accepts_array", False))
-    pending = arrays and not buffer and text.lower() == "x" and vp._array_pending()
-    return dict(arrays=arrays, array_pending=bool(pending),
-                profile=hasattr(tool, "on_profile_value"),
-                comma_lists=bool(getattr(tool, "vcb_comma_lists", False)))
-
-
-def _value_claims(vp, text: str, buffer: str) -> bool:
-    from ingetrazo_core import value_claims
-    tool = vp.active_tool
-    zoom = tool is None and getattr(vp, "nav_mode", None) == "zoom"
-    accepts = _value_accepts(vp, tool, text, buffer)
-    accepts.pop("comma_lists")
-    return value_claims(buffer, text, tool is not None, zoom=zoom, **accepts)
-
-
-def _value_key(vp, ev) -> bool:
-    """One key for the value box of ``vp`` (a document view, or the Metal
-    view's tools): True when the box took it."""
-    from ingetrazo_core import value_key
-    tool = vp.active_tool
-    zoom = tool is None and getattr(vp, "nav_mode", None) == "zoom"
-    if tool is None and not zoom:
-        return False
-    key = ev.key()
-    if key in (Qt.Key_Return, Qt.Key_Enter):
-        return _enter_zoom_value(vp) if zoom else _enter_value(vp, tool)
-    typed = value_key(
-        vp._value_buffer, _VALUE_KEYS.get(key, ""), ev.text(),
-        chord=_is_chord(getattr(ev, "modifiers", lambda: Qt.NoModifier)()),
-        zoom=zoom, **({} if zoom else _value_accepts(vp, tool, ev.text(), vp._value_buffer)))
-    if typed is None:
-        return False
-    vp._set_value_buffer(typed)
-    return True
-
-
-def _flash_parse_error(vp, error: str, word: str) -> None:
-    from core.units import Parsed
-    vp.flash_status(Parsed(error=error, word=word).message(), 4000)
-
-
-def _enter_zoom_value(vp) -> bool:
-    """Enter with Zoom on: the lens first, then the box empties."""
-    if not vp._value_buffer:
-        return False
-    from ingetrazo_core import zoom_value_enter
-    typed, error, word = zoom_value_enter(vp._value_buffer)
-    if typed is None:
-        _flash_parse_error(vp, error, word)
-        return True
-    vp.apply_zoom_value(typed)
-    vp._set_value_buffer("")
-    return True
-
-
-def _hand_tagged_value(vp, tool, value) -> bool:
-    """A slope, a segment count, an array, a profile or a radius goes to
-    the tool that declares it (``on_<kind>_value``); True when ``value``
-    was one of them."""
-    kind = value[0] if isinstance(value, tuple) and value and isinstance(value[0], str) else None
-    if kind is None:
-        return False
-    if kind == "ratio":
-        # A slope typed as rise:run reaches angle tools as plain degrees.
-        if getattr(tool, "accepts_angle_ratio", False):
-            tool.on_value(vp, value[1])
-        return True
-    handler = getattr(tool, f"on_{kind}_value", None)
-    if handler is None:
-        return True
-    if kind != "array":
-        handler(vp, value[1])
-    elif len(value) <= 3:
-        handler(vp, value[1], value[2])
-    elif "step" in inspect.signature(handler).parameters:
-        handler(vp, value[1], value[2], step=value[3])
-    else:                                       # "5x10m" means nothing here
-        vp.flash_status(tr("Type the count alone here, e.g. 3x"))
-    return True
-
-
-def _enter_value(vp, tool) -> bool:
-    """Enter with a tool on: the Rust field reads the box, the tool takes
-    the value, and the box then shows what was drawn."""
-    from ingetrazo_core import value_enter
-    from core.units import typed_context, unitless_numbers
-    buffer = vp._value_buffer
-    unitless = getattr(tool, "value_is_unitless", None)
-    plain = callable(unitless) and unitless()
-    length = typed_context("length")
-    if plain:
-        # An angle, a factor or a count is not a length (#176).
-        with unitless_numbers():
-            bare = typed_context("length")[0]
-    else:
-        bare = length[0]
-    entry = value_enter(buffer, bool(getattr(tool, "vcb_comma_lists", False)),
-                        bare, length[1], length[0],
-                        bool(getattr(tool, "accepts_absolute_length", False)))
-    if entry is None:
-        return False
-    if entry[0] == "error":
-        # A calculation that doesn't add up stays in the box with the
-        # reason, to be fixed with Backspace.
-        _flash_parse_error(vp, entry[1], entry[2])
-        return True
-    if entry[0] == "clear":
-        vp._set_value_buffer("")
-        return True
-    _, value, absolute = entry
-    if _hand_tagged_value(vp, tool, value):
-        vp._set_value_buffer("")
-        return True
-    if absolute:
-        value = ("abs_len", value)              # Scale: "2m" is a size
-    # Did this value commit geometry? A chaining tool like Line stays busy
-    # once the segment exists, so "busy" is not "done": the typed length
-    # drops the arrow lock like the second click. A hot retype (typed right
-    # after a commit) replaces the stack's top: the model changed too (#859).
-    history = getattr(vp, "history", None)
-    before = len(history.undo_stack) if history is not None else 0
-    top = history.undo_stack[-1] if before else None
-    tool.on_value(vp, value)
-    drew = history is not None and len(history.undo_stack) > before
-    redrew = (not drew and before > 0 and len(history.undo_stack) == before
-              and history.undo_stack[-1] is not top)
-    vp._set_value_buffer("")
-    # The box shows what was drawn, read as the canvas showed it, not the
-    # preview from before the Enter (#607).
-    if drew or redrew:
-        if is_expression(buffer):
-            vp.measurementChanged.emit(_expression_result_text(value, plain))
-        else:
-            vp.measurementChanged.emit(buffer if plain else _typed_value_text(buffer))
-    vp._release_axis_lock_after_operation(committed=drew)
-    return True
 
 
 def _parse_length_field(field: str):
@@ -2968,54 +2754,13 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
     @staticmethod
     def _widened_planes(planes, frac):
-        """The six planes of ``_frustum_planes`` with the four sides moved
-        out by ``frac`` of the view on each side — the clip test |x|, |y|
-        ≤ w becomes ≤ (1 + 2·frac)·w — and no near plane (what is behind
-        the eye is clipped anyway)."""
-        # Each side is r3 ± row: half the sum of a pair is r3 itself.
-        r3 = [(a + b) * 0.5 for a, b in zip(planes[0], planes[1])]
-        k = 2.0 * frac
-        out = [tuple(c + k * r for c, r in zip(pl, r3)) for pl in planes[:4]]
-        out.append(planes[5])                                       # far
-        return out
+        from ingetrazo_core import widened_planes
+        return widened_planes(planes, frac)
 
     @staticmethod
     def _instances_in_frustum(lo, hi, planes, margin=0.0):
-        """Mask of the boxes ``lo``/``hi`` not wholly outside one of the
-        frustum ``planes`` — moved ``margin`` world units outward.
-
-        A box whose bounds are not finite is always kept: ±inf is what a
-        placement with no known extent is stored as, a NaN can creep into
-        a huge model's coordinates, and neither can be proven outside —
-        the rule ``_bounding_spheres`` and ``_visible_spans`` already
-        keep for unknown extents. Running the products on them anyway
-        multiplied inf by a zero plane component (``invalid value
-        encountered in multiply``, issue #952) and let the NaN comparison
-        drop the box."""
-        import numpy as np
-        lo = np.asarray(lo)
-        hi = np.asarray(hi)
-        keep = np.ones(len(lo), dtype=bool)
-        finite = np.isfinite(lo).all(axis=1) & np.isfinite(hi).all(axis=1)
-        idx = np.flatnonzero(finite)
-        if not len(idx):
-            return keep
-        flo, fhi = lo[idx], hi[idx]
-        fkeep = np.ones(len(idx), dtype=bool)
-        # Same p-vertex test as ``_aabb_visible``, all boxes at once — a
-        # plane at a time on the box columns (the (planes, boxes, 3) array
-        # it used to build was most of a frame's gather, #158); the same
-        # products and sums, in the same order.
-        for pl in planes:
-            nx, ny, nz, d = (float(c) for c in pl)
-            if margin:
-                d += margin * (nx * nx + ny * ny + nz * nz) ** 0.5
-            px = fhi[:, 0] if nx >= 0.0 else flo[:, 0]
-            py = fhi[:, 1] if ny >= 0.0 else flo[:, 1]
-            pz = fhi[:, 2] if nz >= 0.0 else flo[:, 2]
-            fkeep &= ((px * nx + py * ny) + pz * nz) + d >= 0.0
-        keep[idx] = fkeep
-        return keep
+        from ingetrazo_core import instances_in_frustum
+        return instances_in_frustum(lo, hi, planes, margin)
 
     #: An instance whose bounding sphere spans less than this many
     #: framebuffer pixels is not drawn (the camera's frame only).
@@ -3041,31 +2786,15 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
     @staticmethod
     def _bounding_spheres(lo, hi):
-        """Centres and radii of boxes ``lo``/``hi``; a box with an unknown
-        (infinite) extent gets an infinite radius: it is never «small»."""
-        import numpy as np
-        with np.errstate(invalid="ignore"):
-            ctr = (lo + hi) * 0.5
-            rad = np.linalg.norm(hi - lo, axis=1) * 0.5
-        known = np.isfinite(ctr).all(axis=1) & np.isfinite(rad)
-        return np.where(known[:, None], ctr, 0.0), np.where(known, rad, np.inf)
+        from ingetrazo_core import bounding_spheres
+        return bounding_spheres(lo, hi)
 
     def _spheres_below_a_pixel(self, ctr, rad, floor=None):
-        """Mask of the spheres that span under ``floor`` (by default
-        ``_INST_MIN_PX``) framebuffer pixels across on this frame."""
-        import numpy as np
-        h = (self._export_size or self._fb_size())[1]
-        m = self._np_mvp()
-        # pixels per world unit at w = 1: the projection's own y scale
-        sy = abs(self.camera.projection_matrix().data()[5]) * h * 0.5
-        w = ctr @ m[3, :3] + m[3, 3]
-        if self.camera.perspective:
-            w = w - rad                         # the sphere's nearest point
-        with np.errstate(invalid="ignore", divide="ignore"):
-            px = 2.0 * rad * sy / np.where(w > 1e-9, w, np.nan)
-        if floor is None:
-            floor = self._INST_MIN_PX
-        return np.isfinite(px) & (px < floor)
+        from ingetrazo_core import small_spheres
+        height = (self._export_size or self._fb_size())[1]
+        scale = abs(self.camera.projection_matrix().data()[5]) * height
+        return small_spheres(ctr, rad, self._np_mvp()[3], scale, self.camera.perspective,
+                             self._INST_MIN_PX if floor is None else floor)
 
     def _edit_rest_fade(self, group):
         """How a reference image (``group=None``) or a face-me figure is
@@ -3199,7 +2928,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         if idx is None:
             return None
         hits = DocumentInteraction._face_hits(self, idx, origin, direction, "vis")
-        DocumentInteraction._drop_past_cut(self, hits, origin, direction)
+        ingetrazo_core.drop_past_cut(self, hits, origin, direction)
         if hits is None or not len(hits.t):
             return None
         front = DocumentInteraction._smallest_at_front(self, hits, origin, direction)
@@ -4605,27 +4334,8 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return _active_cut(self.scene)
 
     def section_plane_frame(self, sp) -> list:
-        """Four world corners of the plane's drawn frame: the model's bounds
-        projected onto the plane, with a margin (the plane object is sized
-        to the model)."""
-        u, v = plane_axes(sp.normal)
-        lo, hi = self.scene.bounds()
-        if lo is None:
-            half_u = half_v = 1.5
-            cu = cv = 0.0
-        else:
-            corners = [QVector3D(x, y, z)
-                       for x in (lo.x(), hi.x())
-                       for y in (lo.y(), hi.y())
-                       for z in (lo.z(), hi.z())]
-            us = [QVector3D.dotProduct(c - sp.point, u) for c in corners]
-            vs = [QVector3D.dotProduct(c - sp.point, v) for c in corners]
-            cu, cv = (min(us) + max(us)) * 0.5, (min(vs) + max(vs)) * 0.5
-            half_u = (max(us) - min(us)) * 0.56 + 0.2
-            half_v = (max(vs) - min(vs)) * 0.56 + 0.2
-        c = sp.point + u * cu + v * cv
-        return [c - u * half_u - v * half_v, c + u * half_u - v * half_v,
-                c + u * half_u + v * half_v, c - u * half_u + v * half_v]
+        from ingetrazo_core import section_frame
+        return section_frame(sp.point, plane_axes(sp.normal), self.scene.bounds())
 
     def _draw_section_planes(self, painter: QPainter) -> None:
         """The section plane OBJECTS (frame + corner brackets + symbol):
@@ -4742,314 +4452,60 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return best
 
     def _section_cut_segments(self):
-        """World-space cut segments: the active plane ∩ every visible model
-        triangle, vectorized over the pick index's (v0, e1, e2) arrays.
-        Cached per (scene version, plane pose)."""
-        sp = self.scene.active_section()
-        if sp is None:
-            return None
-        n, o = sp.normal, sp.point
-        key = (self.scene.version, round(n.x(), 9), round(n.y(), 9),
-               round(n.z(), 9), round(o.x(), 6), round(o.y(), 6),
-               round(o.z(), 6))
-        cached = getattr(self, "_section_cut_cache", None)
-        if cached is not None and cached[0] == key:
-            return cached[1]
-        idx = self._pick_flat(self._pick_index(near="all"))
-        from core.section import cut_chords
-        segs = tags = None
-        if idx.tri_v0 is not None and len(idx.tri_v0):
-            # Each triangle's height along the normal is kept while the
-            # model and the normal stay: a plane dragged by its arrow then
-            # only compares three arrays with its new offset (a furnished
-            # house froze ~2 s per drag measuring every triangle again).
-            reach = getattr(self, "_section_reach", None)
-            if reach is None or not reach.fits(idx.tri_v0, n, idx.tri_e1,
-                                               idx.tri_e2):
-                from core.section import PlaneReach
-                reach = self._section_reach = PlaneReach(
-                    idx.tri_v0, idx.tri_e1, idx.tri_e2, n)
-            segs, rows = cut_chords(idx.tri_v0, idx.tri_e1, idx.tri_e2, n, o,
-                                    idx.ent_vis[idx.tri_ent], rows=True,
-                                    reach=reach)
-            if segs is not None:
-                tags = self._cut_layer_tags(idx, idx.tri_ent[rows])
-        self._section_cut_cache = (key, segs, tags)
-        return segs
+        from ingetrazo_render import section_cut
+        return section_cut(self)
 
     @staticmethod
     def _cut_layer_tags(idx, ents):
-        """The layer each cut triangle's section is filled with, as a sheet
-        tags it: the face's own layer, else its object's."""
-        import numpy as np
-        from core.layers import DEFAULT_LAYER, layer_of
-        memo: dict = {}
-        out = []
-        # A lazy placement's face is built with its whole mesh when asked
-        # for: its layer is read from the document instead.
-        quick = getattr(idx.entities, "layer_at", None)
-        for e in ents.tolist():
-            tag = memo.get(e)
-            if tag is None:
-                if quick is not None:
-                    own, owner = quick(e)
-                    tag = own or DEFAULT_LAYER
-                else:
-                    face, owner = idx.entities[e]
-                    tag = layer_of(face)
-                if tag == DEFAULT_LAYER and owner is not None:
-                    tag = layer_of(owner)
-                memo[e] = tag
-            out.append(tag)
-        return np.asarray(out, dtype=object)
+        from ingetrazo_render import cut_layer_tags
+        return cut_layer_tags(idx, ents)
 
     def _section_fill_tris(self):
-        """The fill's triangles for the active cut, cached with the cut
-        segments they come from (same scene version, same plane pose)."""
-        import numpy as np
-        segs = self._section_cut_segments()
-        cached = getattr(self, "_section_fill_cache", None)
-        if cached is not None and (cached[0] is segs or (
-                segs is not None and cached[0] is not None
-                and cached[0].shape == segs.shape
-                and np.array_equal(cached[0], segs))):
-            # A selection click moves the scene version, not the cut.
-            self._section_fill_cache = (segs, cached[1])
-            return cached[1]
-        # Chaining the rings costs a fraction of a second on a model with
-        # thousands of cut solids — nothing once, too much per frame while
-        # a plane is dragged. A cut that keeps changing shows its lines
-        # live and its fill once it rests for a moment.
-        import time as _t
-        now = _t.monotonic()
-        last = getattr(self, "_section_fill_changed", 0.0)
-        self._section_fill_changed = now
-        if cached is not None and now - last < 0.15:
-            later(self, 200, self.update)
-            return None
-        from core.section import fill_triangles
-        tris = fill_triangles(segs, self.scene.active_section().normal)
-        self._section_fill_cache = (segs, tris)
-        self._section_hatch_cache = {}
-        return tris
+        from ingetrazo_render import section_fill
+        return section_fill(self)
 
     def _model_linetype_edges(self) -> list:
-        """``[(rgb or None, dashes, gaps)]``: the edges of the layers drawn
-        with their line type in the model (core.layers.model_line_styles),
-        cut into their dashes and gaps (world space, as a sheet at 1:50
-        dashes them) — rebuilt when the model or the line types change."""
-        import numpy as np
-        from core.layers import dash_segments, model_line_styles
-        scene = self.scene
-        styles = model_line_styles(scene)
-        if not styles:
-            return []
-        # The document's version, not the view's: picking something moves
-        # ``scene.version`` too, and every click on a model with dashed
-        # layers walked all its edges and cut them into dashes again (a
-        # second per click with 24 000 of them).
-        key = (id(scene), scene.content_version,
-               tuple(sorted(styles.items())))
-        memo = getattr(self, "_model_lines_cache", None)
-        if memo is not None and memo[0] == key:
-            return memo[1]
-        # From the viewport's arrays with their layers, not a walk of the
-        # model: every change of the model walked 85 000 faces of a plaza.
-        _t, hard, _s, _n, _tt, hard_tags, _st = self.hlr_geometry(tags=True)
-        by_layer: dict = {}
-        for seg, tag in zip(hard, hard_tags):
-            if tag in styles:
-                by_layer.setdefault(tag, []).append(seg)
-        from core.layers import linetype_text
-        names = {ly.key: ly.linetype for ly in scene.layers}
-        out = []
-        for tag, segs in by_layer.items():
-            rgb, pattern = styles[tag]
-            dashes, gaps = dash_segments(np.asarray(segs), pattern)
-            words = self._model_line_words(
-                np.asarray(segs), linetype_text(names.get(tag), scene))
-            out.append((rgb, dashes, gaps, words))
-        self._model_lines_cache = (key, out)
-        return out
+        from ingetrazo_render import model_layer_lines
+        return model_layer_lines(self)
 
     @staticmethod
     def _model_line_words(segs, spec):
-        """A line type's words (GAS…) on the model's edges, in the gaps the
-        pattern leaves for them, as a sheet at 1:50 places them: their
-        letters' outlines as world segments, lying in the plane of the
-        edge and the horizontal across it, reading upright from above (a
-        rising edge: from its side)."""
-        import numpy as np
-        from core.layers import MODEL_DASH_SCALE, text_marks
-        empty = np.zeros((0, 2, 3), dtype=np.float32)
-        if spec is None or not len(segs):
-            return empty
-        from ingetrazo_render import line_text_strokes
-        strokes = line_text_strokes(spec[0], spec[1])
-        if not strokes:
-            return empty
-        unit = MODEL_DASH_SCALE
-        up_z = np.array([0.0, 0.0, 1.0])
-        out: list = []
-        for a, b in np.asarray(segs, dtype=np.float64).reshape(-1, 2, 3):
-            d = b - a
-            total = float(np.linalg.norm(d))
-            if total <= 1e-9:
-                continue
-            u = d / total
-            if u[0] < -1e-9 or (abs(u[0]) <= 1e-9 and u[1] < 0):
-                u = -u                  # read left to right
-                a, b = b, a
-            side = np.cross(up_z, u)
-            if np.linalg.norm(side) < 1e-6:
-                side = np.array([0.0, 1.0, 0.0])
-            side /= np.linalg.norm(side)
-            marks = text_marks((0.0, 0.0), (total / unit, 0.0), spec)
-            if len(marks) * len(strokes) > 4000:
-                continue
-            for x, _y, _deg in marks:
-                centre = a + u * (x * unit)
-                for poly in strokes:
-                    pts = [centre + u * (px * unit) + side * (py * unit)
-                           for px, py in poly]
-                    out += [(p0, p1) for p0, p1 in zip(pts, pts[1:])]
-        if not out:
-            return empty
-        return np.asarray(out, dtype=np.float32)
+        from ingetrazo_render import model_line_words
+        return model_line_words(segs, spec)
 
 
 
     def _section_layer_fills(self, color):
-        """The cut filled layer by layer with the layers' hatches
-        (core.section.layer_fills) — once the cut rests, as its plain fill,
-        and again only when the cut or a layer's hatch changes."""
-        if self._section_fill_tris() is None:
-            return None
-        cut = getattr(self, "_section_cut_cache", None)
-        if cut is None or cut[1] is None:
-            return None
-        scene = self.scene
-        sign = (id(cut[1]), tuple(color[:3]),
-                repr([ly.to_dict() for ly in scene.layers]),
-                repr(getattr(scene, "bricks", None)))
-        memo = getattr(self, "_section_layer_cache", None)
-        if memo is not None and memo[0] == sign:
-            return memo[1]
-        from core.section import layer_fills
-        fills = layer_fills(cut[1], cut[2], scene.active_section().normal,
-                            scene, color)
-        self._section_layer_cache = (sign, fills)
-        return fills
+        from ingetrazo_render import section_layer_fills
+        return section_layer_fills(self, color)
 
 
 
     def _section_hatch(self, spacing: float, cross: bool):
-        """The hatch lines of the cut whose fill is cached, per (spacing,
-        cross) — computed once, while the cut stays the same."""
-        cached = getattr(self, "_section_fill_cache", None)
-        if cached is None:
-            return None
-        memo = getattr(self, "_section_hatch_cache", None)
-        if memo is None:
-            memo = self._section_hatch_cache = {}
-        key = (round(spacing, 9), bool(cross))
-        if key not in memo:
-            from core.section import hatch_segments
-            memo[key] = hatch_segments(
-                cached[0], self.scene.active_section().normal, spacing,
-                cross)
-        return memo[key]
+        from ingetrazo_render import section_hatch
+        return section_hatch(self, spacing, cross)
 
     #: The sheet's cut pen (mm) a layer's own cut weight is measured
     #: against in the model: a layer at 0.50 draws the usual ~2.5 px line.
     CUT_PEN_MM = 0.5
 
     def _cut_edge_weights(self, plane, keep):
-        """How much thicker or thinner each cut line is drawn than usual:
-        with «Layers' hatches» each layer's cut weight (Muros at 0.70 a
-        heavy line, an insulation at 0.18 a fine one), as on a sheet;
-        otherwise all alike."""
-        import numpy as np
-        from core.section import effective_fill
-        count = int(keep.sum())
-        pattern = effective_fill(plane, self._frame_style)[0]
-        cut = getattr(self, "_section_cut_cache", None)
-        if pattern != "layers" or cut is None or cut[2] is None                 or len(cut[2]) != len(keep):
-            return np.ones(count)
-        pens = {ly.key: float(ly.cut_weight) / self.CUT_PEN_MM
-                for ly in self.scene.layers
-                if getattr(ly, "cut_weight", None) is not None}
-        if not pens:
-            return np.ones(count)
-        out = np.array([pens.get(t, 1.0) for t in cut[2][keep].tolist()])
-        return np.clip(out, 0.4, 2.4)
+        from ingetrazo_render import cut_weights
+        return cut_weights(self, plane, keep)
 
     def _clip_segment_front(
         self, a: QVector3D, b: QVector3D
     ) -> Optional[tuple[QVector3D, QVector3D]]:
-        """Clip a world segment to the part in FRONT of the camera. The long
-        'infinite' guide segments (±10 km) routinely have an endpoint behind
-        the eye, where ``_world_to_pixel`` returns None — which used to make
-        the whole guide vanish from render, snap and pick in ordinary 3D
-        views. Returns the visible sub-segment, or ``None``."""
-        mvp = self.camera.projection_matrix() * self.camera.view_matrix()
-        wa = mvp.map(QVector4D(a.x(), a.y(), a.z(), 1.0)).w()
-        wb = mvp.map(QVector4D(b.x(), b.y(), b.z(), 1.0)).w()
-        eps = 1e-3
-        if wa <= eps and wb <= eps:
-            return None
-        if wa <= eps or wb <= eps:
-            t = (eps - wa) / (wb - wa)   # w is linear along the segment
-            cut = a + (b - a) * t
-            return (cut, QVector3D(b)) if wa <= eps else (QVector3D(a), cut)
-        return (QVector3D(a), QVector3D(b))
+        from ingetrazo_core import clip_annotation_front
+        return clip_annotation_front(self.camera.projection_matrix() * self.camera.view_matrix(), a, b)
 
     def _guide_snap_segment(
         self, g, margin: float = 1.5
     ) -> Optional[tuple[QVector3D, QVector3D]]:
-        """The span of guide line ``g`` the snap engine works on: the part
-        inside the view (widened by ``margin`` so the ends stay well off
-        screen), computed in double precision from the guide's own point
-        and direction.
-
-        The ±10 km segment of ``Guide.segment()`` is fine for drawing but not
-        for arithmetic: float32 rounds a coordinate of 10 000 m to ~1 mm, so
-        every crossing, 'on line' point and lock-line hit computed from those
-        endpoints was off by up to 2 mm — lines drawn from the X of two
-        diagonal guides visibly left the guides when zoomed in (#110).
-        Clipped to the view the endpoints are as large as what is on
-        screen, and the error scales with it (µm at a working zoom)."""
         from core.guide import GUIDE_HALF_LEN
-        mvp = self.camera.projection_matrix() * self.camera.view_matrix()
-        p, u = g.point, g.direction
-        c0 = mvp.map(QVector4D(p.x(), p.y(), p.z(), 1.0))
-        c1 = mvp.map(QVector4D(u.x(), u.y(), u.z(), 0.0))
-        c0 = (c0.x(), c0.y(), c0.w())
-        c1 = (c1.x(), c1.y(), c1.w())
-        lo, hi = -GUIDE_HALF_LEN, GUIDE_HALF_LEN
-        # Clip coordinates are affine in s along the line: keep
-        # w >= eps and |x|, |y| <= margin * w (Liang–Barsky on four planes).
-        planes = ((c0[2] - 1e-3, c1[2]),
-                  (margin * c0[2] - c0[0], margin * c1[2] - c1[0]),
-                  (margin * c0[2] + c0[0], margin * c1[2] + c1[0]),
-                  (margin * c0[2] - c0[1], margin * c1[2] - c1[1]),
-                  (margin * c0[2] + c0[1], margin * c1[2] + c1[1]))
-        for f0, f1 in planes:           # need f0 + f1 * s >= 0
-            if abs(f1) < 1e-15:
-                if f0 < 0.0:
-                    return None
-                continue
-            s = -f0 / f1
-            if f1 > 0.0:
-                lo = max(lo, s)
-            else:
-                hi = min(hi, s)
-            if lo >= hi:
-                return None
-        px, py, pz = p.x(), p.y(), p.z()
-        ux, uy, uz = u.x(), u.y(), u.z()
-        return (QVector3D(px + ux * lo, py + uy * lo, pz + uz * lo),
-                QVector3D(px + ux * hi, py + uy * hi, pz + uz * hi))
+        from ingetrazo_core import clip_snap_guide
+        return clip_snap_guide(self.camera.projection_matrix() * self.camera.view_matrix(),
+                               g.point, g.direction, GUIDE_HALF_LEN, margin)
 
     def _draw_scale_box(self, painter: QPainter) -> None:
         """The scaling box: yellow edges, green grips, the grabbed grip
@@ -5099,40 +4555,8 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         self, p0: tuple[float, float], p1: tuple[float, float],
         margin: float = 64.0,
     ) -> Optional[tuple[tuple[float, float], tuple[float, float]]]:
-        """Liang-Barsky clip of a 2D pixel segment to the widget rect (plus a
-        margin). Overlay guides are only clipped in 3D to the part in front of
-        the camera (``_clip_segment_front``), so their on-screen endpoints land
-        MILLIONS of pixels from origin. Qt's dash stroker runs in fixed point
-        and collapses a dashed pen into a solid line at that scale (measured:
-        a guide of 400 k px still dashes, 4 M px comes out solid). Trimming to
-        the visible area first keeps the dashes — and spares the rasteriser
-        hundreds of thousands of dash repeats. Returns the clipped endpoints,
-        or ``None`` when the segment misses the widget entirely."""
-        x0, y0 = p0
-        x1, y1 = p1
-        dx, dy = x1 - x0, y1 - y0
-        xmin, ymin = -margin, -margin
-        xmax, ymax = self.width() + margin, self.height() + margin
-        t0, t1 = 0.0, 1.0
-        for p, q in ((-dx, x0 - xmin), (dx, xmax - x0),
-                     (-dy, y0 - ymin), (dy, ymax - y0)):
-            if p == 0.0:
-                if q < 0.0:
-                    return None
-                continue
-            r = q / p
-            if p < 0.0:
-                if r > t1:
-                    return None
-                if r > t0:
-                    t0 = r
-            else:
-                if r < t0:
-                    return None
-                if r < t1:
-                    t1 = r
-        return ((x0 + t0 * dx, y0 + t0 * dy),
-                (x0 + t1 * dx, y0 + t1 * dy))
+        from ingetrazo_core import clip_annotation_line
+        return clip_annotation_line(p0, p1, self.width(), self.height(), margin)
 
     def _draw_guides(self, painter: QPainter) -> None:
         """The small crosses of guide POINTS, the usual scaffolding.
@@ -5603,162 +5027,14 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
     def _draw_occluded_segment(self, painter: QPainter, p3a: QVector3D,
                                p3b: QVector3D, samples: int = 16) -> None:
-        """Draw the 3D segment ``p3a``–``p3b`` in screen space, skipping the
-        parts hidden behind solid geometry (CPU occlusion sample).
-
-        The line is sampled about every ``_OCCLUSION_STEP_PX`` on screen (at
-        least ``samples`` steps), and where one sample is seen and the next
-        is not, the point where it goes behind is pinned by halving the
-        step — the line stops AT the silhouette. Drawing only the steps
-        whose both ends were seen cut it back a whole sixteenth at a time,
-        and the cut jumped from step to step as the view turned: the
-        dimensions clipped in and out behind other surfaces (issue #918).
-
-        The samples are projected and tested as one batch
-        (``_project_samples``): doing it point by point rebuilt the camera's
-        projection*view matrix for every sample — 432 rebuilds a frame for
-        eight dimensions — and ran a NumPy 3x3 reduction per sample (#439)."""
-        d = p3b - p3a
-
-        def at(ts):
-            return [p3a + d * t for t in ts]
-
+        from ingetrazo_core import annotation_strokes
         mvp = self.camera.projection_matrix() * self.camera.view_matrix()
-        ea = self._world_to_pixel(p3a, mvp)
-        eb = self._world_to_pixel(p3b, mvp)
-        n = samples
-        if ea is not None and eb is not None:
-            # With both ends in front of the eye, the projected segment
-            # stays between them. Allow for the annotation pen and AA.
-            if (max(ea[0], eb[0]) < -2 or min(ea[0], eb[0]) > self.width() + 2
-                    or max(ea[1], eb[1]) < -2 or min(ea[1], eb[1]) > self.height() + 2):
-                return
-            span = math.hypot(eb[0] - ea[0], eb[1] - ea[1])
-            n = max(samples, min(self._OCCLUSION_MAX_SAMPLES,
-                                 int(span / self._OCCLUSION_STEP_PX)))
-        ts = [i / n for i in range(n + 1)]
-        res = self._project_samples(at(ts))
-        pxs = [px for px, _v in res]
-        vis = [px is not None and v for px, v in res]
-        # The steps that change from seen to hidden (or back): each is cut
-        # in ``_OCCLUSION_SPLIT`` and narrowed to the part where it flips,
-        # every cut step in one batch per round.
-        cuts = [i for i in range(n)
-                if pxs[i] is not None and pxs[i + 1] is not None
-                and vis[i] != vis[i + 1]]
-        edge: dict = {}
-        if cuts:
-            k = self._OCCLUSION_SPLIT
-            lo = {i: ts[i] for i in cuts}          # t on sample i's side
-            hi = {i: ts[i + 1] for i in cuts}
-            edge = {i: pxs[i] if vis[i] else pxs[i + 1] for i in cuts}
-            for _ in range(self._OCCLUSION_ROUNDS):
-                probe = [(i, lo[i] + (hi[i] - lo[i]) * j / k)
-                         for i in cuts for j in range(1, k)]
-                got = self._project_samples(at([t for _i, t in probe]))
-                for c, i in enumerate(cuts):
-                    row = got[c * (k - 1):(c + 1) * (k - 1)]
-                    tt = [t for _i, t in probe[c * (k - 1):(c + 1) * (k - 1)]]
-                    new_lo, new_hi = lo[i], hi[i]
-                    for (px, v), t in zip(row, tt):
-                        if (px is not None and v) == vis[i]:
-                            new_lo = t
-                            if vis[i]:
-                                edge[i] = px      # the last seen, so far
-                        else:
-                            new_hi = t
-                            if not vis[i]:
-                                edge[i] = px      # the first seen, so far
-                            break
-                    lo[i], hi[i] = new_lo, new_hi
-        for i in range(n):
-            a, b = pxs[i], pxs[i + 1]
-            if a is None or b is None:
-                continue
-            if vis[i] and vis[i + 1]:
-                painter.drawLine(QPointF(*a), QPointF(*b))
-            elif edge.get(i) is not None:
-                start = a if vis[i] else b
-                painter.drawLine(QPointF(*start), QPointF(*edge[i]))
+        for a, b in annotation_strokes(self, p3a, p3b, mvp, samples):
+            painter.drawLine(QPointF(*a), QPointF(*b))
 
     def _project_samples(self, pts: list[QVector3D]):
-        """Project ``pts`` to screen pixels and test each one against the
-        frame's depth snapshot, as a single batch: the camera's MVP is built
-        once for the whole run, and the snapshot's 3x3 depth test runs as one
-        NumPy gather instead of a slice-and-max per point (#439).
-
-        The answers are the ones ``_world_to_pixel`` and
-        ``_occluded_on_screen`` give point by point — the live camera's
-        matrix for the pixel, the snapshot's own for the test, the same
-        tolerances — and without a snapshot (or NumPy) this defers to those
-        per-point paths. Returns a list of ``(pixel, visible)`` pairs, with
-        ``pixel`` None for a point behind the camera."""
-        mvp = self.camera.projection_matrix() * self.camera.view_matrix()
-        snap = getattr(self, "_depth_snap", None)
-        if snap is None:
-            return [(self._world_to_pixel(p, mvp),
-                     not self._occluded_on_screen(p)) for p in pts]
-        try:
-            import numpy as np
-        except Exception:  # noqa: BLE001 — never break the paint
-            return [(self._world_to_pixel(p, mvp),
-                     not self._occluded_on_screen(p)) for p in pts]
-        buf, smvp, inv, sw, sh, eye, fwd = snap
-
-        def rows(m):
-            return np.array([[m.row(r).x(), m.row(r).y(),
-                              m.row(r).z(), m.row(r).w()]
-                             for r in range(4)], dtype=np.float64)
-
-        p4 = np.array([(p.x(), p.y(), p.z(), 1.0) for p in pts],
-                      dtype=np.float64)
-        with np.errstate(all="ignore"):
-            # The pixel, with the live camera (as _world_to_pixel).
-            clip = p4 @ rows(mvp).T
-            cw = clip[:, 3]
-            ndc = clip[:, :2] / cw[:, None]
-            pxs = (ndc[:, 0] * 0.5 + 0.5) * self.width()
-            pys = (1.0 - (ndc[:, 1] * 0.5 + 0.5)) * self.height()
-            pixels = [None if c <= 0 else (float(x), float(y))
-                      for c, x, y in zip(cw, pxs, pys)]
-            # The occlusion test, with the snapshot's matrices (as
-            # _occluded_on_screen): untested points stay visible.
-            occluded = np.zeros(len(pts), dtype=bool)
-            c = p4 @ rows(smvp).T
-            w = c[:, 3]
-            nx = c[:, 0] / w
-            ny = c[:, 1] / w
-            ix = ((nx + 1.0) * 0.5 * sw).astype(np.int64)
-            iy = ((ny + 1.0) * 0.5 * sh).astype(np.int64)
-            live = (w > 1e-9) & (ix >= 0) & (ix < sw) & (iy >= 0) & (iy < sh)
-            if live.any():
-                # The FARTHEST depth of the 3x3 around each pixel: gathering
-                # with the indices clamped to the frame reads the edge
-                # pixels twice, which a max does not see — the same values
-                # the per-point clamped slice takes, without copying the
-                # frame to pad it.
-                gx, gy = ix[live], iy[live]
-                d = np.maximum.reduce(
-                    [buf[np.clip(gy + dy, 0, sh - 1),
-                         np.clip(gx + dx, 0, sw - 1)]
-                     for dy in (-1, 0, 1) for dx in (-1, 0, 1)]
-                ).astype(np.float64)
-                near = d < 1.0                       # else background
-                if near.any():
-                    idx = np.flatnonzero(live)[near]
-                    q = np.column_stack(
-                        [nx[idx], ny[idx], d[near] * 2.0 - 1.0,
-                         np.ones(len(idx))]) @ rows(inv).T
-                    qw = q[:, 3]
-                    ok = np.abs(qw) >= 1e-12
-                    surf = q[:, :3] / np.where(ok, qw, 1.0)[:, None]
-                    eye_a = np.array([eye.x(), eye.y(), eye.z()])
-                    fwd_a = np.array([fwd.x(), fwd.y(), fwd.z()])
-                    along_pt = (p4[idx, :3] - eye_a) @ fwd_a
-                    along_surf = (surf - eye_a) @ fwd_a
-                    tol = np.maximum(0.02, 0.003 * np.abs(along_pt))
-                    occluded[idx] = ok & (along_surf < along_pt - tol)
-        return [(px, not occ) for px, occ in zip(pixels, occluded)]
+        from ingetrazo_core import annotation_samples
+        return annotation_samples(self, pts, self.camera.projection_matrix() * self.camera.view_matrix())
 
     def _draw_inference_marker(self, painter: QPainter) -> None:
         """Snap cue where the active tool's distance inference is engaged."""
@@ -6462,7 +5738,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         face, then the lazy placements' only nearer than it (a tie goes to
         the index's, as the argmin over the index's then the lazy faces
         does), and of those only the nearest made into a face — the
-        first of equals in the order _lazy_face_hits keeps. Each probe of
+        first of equals in placement and prototype face order. Each probe of
         a face crossing (see _crossing_on_screen) is one of these, ~2 ms
         over the plant when every face met was made."""
         import numpy as np
@@ -8073,9 +7349,8 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     def _np_mvp(self):
         """Current MVP as a (4, 4) float64 NumPy matrix (row-major indexing).
         ``QMatrix4x4.data()`` is column-major, hence the Fortran reshape."""
-        import numpy as np
         m = self.camera.projection_matrix() * self.camera.view_matrix()
-        return np.array(m.data(), dtype=np.float64).reshape(4, 4, order="F")
+        return np.asarray(m.data(), dtype=np.float64).reshape(4, 4, order="F")
 
     def _camera_px(self):
         """``(mvp, width, height)``: what the native pick kernels project
@@ -8086,120 +7361,28 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     def _project_px(self, pts):
         """Batch world points (N, 3) → ``(px, py, in_front)`` arrays — the
         exact math of :meth:`_world_to_pixel` (``ingetrazo_core.project_px``)."""
-        import numpy as np
-        from ingetrazo_core import project_px
-        return project_px(np.ascontiguousarray(pts, dtype=np.float64).reshape(-1, 3),
-                          list(self._np_mvp().reshape(-1, order="F")),
-                          float(self.width()), float(self.height()))
+        points = np.ascontiguousarray(pts, dtype=np.float64).reshape(-1, 3)
+        matrix = self._np_mvp().ravel(order="F").tolist()
+        return ingetrazo_core.project_px(points, matrix, float(self.width()), float(self.height()))
 
     @staticmethod
     def _frustum_planes(mvp):
-        """The six view-frustum planes of ``mvp`` as (nx, ny, nz, d) tuples
-        (Gribb–Hartmann rows); a point is inside when n·p + d ≥ 0 for all
-        six. Plain floats — the per-frame consumer tests ~tens of chunk
-        boxes, where NumPy overhead would dominate."""
-        m = mvp.data()                    # column-major
-        rows = [(m[i], m[i + 4], m[i + 8], m[i + 12]) for i in range(4)]
-        r3 = rows[3]
-        planes = []
-        for row in rows[:3]:
-            planes.append(tuple(r3[i] + row[i] for i in range(4)))
-            planes.append(tuple(r3[i] - row[i] for i in range(4)))
-        return planes
+        from ingetrazo_core import frustum_planes
+        return frustum_planes(mvp)
 
     @staticmethod
     def _aabb_visible(planes, lo, hi) -> bool:
-        """Conservative AABB-vs-frustum p-vertex test: culled only when the
-        box lies fully outside one plane (never drops visible geometry)."""
-        lx, ly, lz = lo
-        hx, hy, hz = hi
-        for nx, ny, nz, d in planes:
-            px = hx if nx >= 0.0 else lx
-            py = hy if ny >= 0.0 else ly
-            pz = hz if nz >= 0.0 else lz
-            if nx * px + ny * py + nz * pz + d < 0.0:
-                return False
-        return True
+        from ingetrazo_core import aabb_visible
+        return aabb_visible(planes, lo, hi)
 
     def _visible_spans(self, spans, planes, split=None):
-        """Filter draw spans ``[(bbox, start, count)]`` by the frustum and
-        merge adjacent survivors: returns ``([(start, count)], culled)``.
-        ``bbox None`` = always drawn (loose geometry, unknown extents).
-
-        ``split`` (a vertex offset) is a boundary merging never crosses, so
-        the caller can still tell the two sides apart — the faded context
-        before it, the group being edited from it on."""
-        if len(spans) >= _SPAN_VECTOR_MIN and planes:
-            return self._visible_spans_np(spans, planes, split)
-        out: list = []
-        culled = 0
-        for bbox, start, count in spans:
-            if not count:
-                continue
-            if bbox is not None and not self._aabb_visible(
-                    planes, bbox[0], bbox[1]):
-                culled += count
-                continue
-            if (out and out[-1][0] + out[-1][1] == start
-                    and not (split is not None
-                             and out[-1][0] < split <= start)):
-                out[-1] = (out[-1][0], out[-1][1] + count)
-            else:
-                out.append((start, count))
-        return out, culled
+        from ingetrazo_core import visible_draw_spans
+        return visible_draw_spans(self, spans, planes, split,
+                                  len(spans) >= _SPAN_VECTOR_MIN and bool(planes))
 
     def _visible_spans_np(self, spans, planes, split=None):
-        """:meth:`_visible_spans` over many spans at once: the same p-vertex
-        test, float op for float op, on arrays kept per span list (a model
-        of 21 406 placements tested ~4 800 boxes one by one per frame)."""
-        import numpy as np
-        memo = getattr(self, "_span_arrays", None)
-        if memo is None:
-            memo = self._span_arrays = {}
-        hit = memo.get(id(spans))
-        if hit is None or hit[0] is not spans:
-            if len(memo) > 16:
-                memo.clear()
-            n = len(spans)
-            has = np.zeros(n, dtype=bool)
-            lo = np.zeros((n, 3))
-            hi = np.zeros((n, 3))
-            start = np.empty(n, dtype=np.int64)
-            count = np.empty(n, dtype=np.int64)
-            for i, (bbox, s0, c0) in enumerate(spans):
-                start[i] = s0
-                count[i] = c0
-                if bbox is not None:
-                    has[i] = True
-                    lo[i], hi[i] = bbox[0], bbox[1]
-            hit = memo[id(spans)] = (spans, has, lo, hi, start, count,
-                                     *self._bounding_spheres(lo, hi))
-        _s, has, lo, hi, start, count, ctr, rad = hit
-        vis = np.ones(len(start), dtype=bool)
-        for nx, ny, nz, d in planes:
-            px = hi[:, 0] if nx >= 0.0 else lo[:, 0]
-            py = hi[:, 1] if ny >= 0.0 else lo[:, 1]
-            pz = hi[:, 2] if nz >= 0.0 else lo[:, 2]
-            vis &= ~(((nx * px + ny * py) + nz * pz) + d < 0.0)
-        # What comes out under a pixel is not drawn either, as with the
-        # instances (see _instances_below_a_pixel).
-        vis &= ~(has & self._spheres_below_a_pixel(ctr, rad))
-        live = count > 0
-        drawn = live & (vis | ~has)
-        culled = int(count[live & ~drawn].sum())
-        idx = np.flatnonzero(drawn)
-        if not len(idx):
-            return [], culled
-        st = start[idx]
-        ct = count[idx]
-        brk = np.ones(len(idx), dtype=bool)
-        brk[1:] = st[1:] != st[:-1] + ct[:-1]
-        if split is not None:
-            # A run never crosses the split (see _visible_spans).
-            brk[1:] |= (st[:-1] < split) & (split <= st[1:])
-        heads = np.flatnonzero(brk)
-        sums = np.add.reduceat(ct, heads)
-        return list(zip(st[heads].tolist(), sums.tolist())), culled
+        from ingetrazo_core import visible_draw_spans
+        return visible_draw_spans(self, spans, planes, split, True)
 
     def _tex_run_spans(self, parts, planes, fading: bool):
         """Frustum-culled draw spans of one texture run, split into
@@ -8231,1497 +7414,67 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     _PICK_NEAR_PX = 32.0
 
     def _pick_lazy_table(self):
-        """The component placements the pick index takes lazily — only when
-        a query comes near them — as ``(groups, lo, hi, nf, ids)``, or
-        ``None`` when they are too few to bother (the index then holds
-        everything, as it always did).
-
-        Baking every placement to world coordinates for the index was what
-        a model of 21 406 placements (14 million faces) could not survive:
-        the first hover with Select went past 8 GB (issue #158)."""
-        import numpy as np
-        key = self._placements_epoch()
-        memo = getattr(self, "_pick_lazy_memo", None)
-        if memo is not None and memo[0] == key:
-            return memo[1]
-        if memo is not None and self._epoch_only_matrices(memo[0], key):
-            # A Move: picking up changes no row, putting down the rows of
-            # what moved. Made again, the table framed 20 500 placements
-            # (~0.55 s) on the first pointer move after either.
-            table, xfs = memo[1], memo[2]
-            if table is not None:
-                # The nested placements' proxies take their composed
-                # matrices here: the rows are read through them.
-                self._placements()
-                groups, lo, hi = table[0], table[1], table[2]
-                moved = [i for i, g in enumerate(groups)
-                         if tuple(g.xform.data()) != xfs[i]]
-                if moved:
-                    inf = float("inf")
-                    lo, hi, xfs = lo.copy(), hi.copy(), list(xfs)
-                    for i in moved:
-                        box = self._placement_frame(groups[i])[0]
-                        lo[i], hi[i] = (box if box
-                                        else ((-inf,) * 3, (inf,) * 3))
-                        xfs[i] = tuple(groups[i].xform.data())
-                    table = (groups, lo, hi) + table[3:]
-            self._pick_lazy_memo = (key, table, xfs)
-            return table
-        groups = [g for g in self._placements()
-                  if getattr(g, "xform", None) is not None
-                  and not getattr(g, "billboard", False)]
-        # An object or two added or taken away (a Delete, a Paste): the
-        # rows of the others are the old table's.
-        kept = (self._epoch_kept_tops(memo[0], key, ctx=True)
-                if memo is not None and memo[1] is not None else None)
-        src = None
-        if kept:
-            o_groups, o_lo, o_hi, o_nf = memo[1][:4]
-            row = {id(g): i for i, g in enumerate(o_groups)}
-            top_of = self._placement_top
-            src = np.fromiter(
-                (row.get(id(g), -1) if top_of(g) in kept else -1
-                 for g in groups), np.int64, count=len(groups))
-        from core.mesh import face_count
-        if src is None:
-            nf = np.fromiter((face_count(g.mesh) for g in groups), np.int64,
-                             count=len(groups))
-        else:
-            nf = np.fromiter((face_count(g.mesh) if k < 0 else 0
-                              for g, k in zip(groups, src.tolist())),
-                             np.int64, count=len(groups))
-            at = np.flatnonzero(src >= 0)
-            nf[at] = o_nf[src[at]]
-        table = None
-        if int(nf.sum()) >= self._PICK_LAZY_MIN_FACES:
-            inf = float("inf")
-            lo = np.empty((len(groups), 3))
-            hi = np.empty((len(groups), 3))
-            if src is None:
-                todo = range(len(groups))
-            else:
-                lo[at], hi[at] = o_lo[src[at]], o_hi[src[at]]
-                todo = np.flatnonzero(src < 0).tolist()
-            for i in todo:
-                box = self._placement_frame(groups[i])[0]
-                lo[i], hi[i] = box if box else ((-inf,) * 3, (inf,) * 3)
-            table = (groups, lo, hi, nf, {id(g) for g in groups})
-        if table is None:
-            xfs = None
-        elif src is None:
-            xfs = [tuple(g.xform.data()) for g in groups]
-        else:
-            o_xfs = memo[2]
-            xfs = [tuple(g.xform.data()) if k < 0 else o_xfs[k]
-                   for g, k in zip(groups, src.tolist())]
-        self._pick_lazy_memo = (key, table, xfs)
-        return table
+        return ingetrazo_core.pick_lazy_table(self)
 
     def _pick_instance_set(self, table):
-        """core._native's InstanceSet over the lazy placements of ``table``
-        (see _pick_lazy_table), or ``None`` without the experimental
-        engine. A prototype's index (a BVH of its pick triangles, its hard
-        edges, from its local bake) is kept while its bake is."""
-        if not _INSTANCE_FILTER:
-            return None
-        from core import _native
-        mod = _native.native
-        if mod is None or not hasattr(mod, "InstanceSet"):
-            return None
-        memo = getattr(self, "_inst_set_memo", None)
-        if memo is not None and memo[0] is table:
-            return memo[1]
-        import numpy as np
-        _pick_warm_take(self)
-        groups = table[0]
-        cache = getattr(self, "_inst_proto_cache", None) or {}
-        keep: dict = {}
-        by_mesh: dict = {}
-        protos: list = []
-        proto_of = np.empty(len(groups), dtype=np.int64)
-        mats = np.empty((len(groups), 16), dtype=np.float64)
-        todo: list = []                       # (position in protos, key, bake)
-        for i, g in enumerate(groups):
-            k = by_mesh.get(id(g.mesh))
-            if k is None:
-                # Every placement of a mesh has the same triangles and hard
-                # edges, whatever its paint: one bake (the first one's).
-                base = self._proto_base_chunk(g.mesh, _paint_of(self, g))
-                ckey = (base.get("uid"), base.get("rev"))
-                ip = cache.get(ckey)
-                if ip is None:
-                    todo.append((len(protos), ckey, base))
-                keep[ckey] = ip
-                k = by_mesh[id(g.mesh)] = len(protos)
-                protos.append(ip)
-            proto_of[i] = k
-            mats[i] = g.xform.data()
-
-        def build(job):
-            pos, ckey, base = job
-            ip = _inst_proto_of(mod, base)
-            protos[pos] = ip
-            keep[ckey] = ip
-        # The engine lets go of the GIL for each tree: side by side, not the
-        # 2.4 s of a big model's first hover one after another (#1092).
-        if len(todo) > 1:
-            import os
-            from concurrent.futures import ThreadPoolExecutor
-            with ThreadPoolExecutor(
-                    max_workers=min(8, os.cpu_count() or 2)) as ex:
-                list(ex.map(build, todo))
-        else:
-            for job in todo:
-                build(job)
-        self._inst_proto_cache = keep
-        iset = mod.InstanceSet(protos, proto_of, mats,
-                               np.ascontiguousarray(table[1], np.float64),
-                               np.ascontiguousarray(table[2], np.float64))
-        self._inst_set_memo = (table, iset)
-        return iset
+        return ingetrazo_core.pick_instance_set(self, table)
 
     def start_pick_warmup(self) -> None:
-        """A big document is on screen: work out the heavy parts of the pick
-        index behind it, so the first move of the pointer does not wait for
-        them (4 s on a model of 5 M faces, #1092). Whoever moves the mouse
-        needs them, whatever the tool, and the answers cannot change: the
-        same calls with the same arrays, only sooner. Only with the engine
-        and on a model big enough for lazy placements."""
-        if not _PICK_WARM or not _INSTANCE_FILTER:
-            return
-        from core import _native
-        mod = _native.native
-        if mod is None or not hasattr(mod, "InstanceSet"):
-            return
-        table = self._pick_lazy_table()
-        if table is None:
-            return
-        memo = getattr(self, "_inst_set_memo", None)
-        if memo is not None and memo[0] is table:
-            return                       # the pointer got there first
-        seen: set = set()
-        protos: list = []
-        for g in table[0]:
-            if id(g.mesh) not in seen:
-                seen.add(id(g.mesh))
-                base = self._proto_base_chunk(g.mesh, _paint_of(self, g))
-                protos.append(((base.get("uid"), base.get("rev")), base))
-        grids: list = []
-        if not _NO_SPAN_GRID:
-            fixed = DocumentInteraction._pick_candidates(self, False, table)[1]
-            for g in fixed:
-                if not getattr(g, "billboard", False):
-                    c = self._group_chunk(g)
-                    if (c["v0"] is not None and len(c["v0"]) > _SPAN_GRID_MIN
-                            and "_span_grid" not in c):
-                        grids.append(c)
-        # What a box selection asks of each, the first time (2 s over 257).
-        bounds = [base for _k, base in protos]
-        self._pick_warm = _PickWarm(mod, protos, grids, bounds)
+        return ingetrazo_core.start_pick_warmup(self)
 
     def _static_occluders(self, idx):
-        """core._native's InstanceSet over the pick index's own triangles
-        that hide what is behind them, placed by the identity (which the
-        engine maps bit for bit): the fixed placements' as one prototype,
-        kept while those triangles and their visibility are — a stroke
-        changes only the loose part, the other prototype. Made once per
-        index."""
-        import numpy as np
-        hit = getattr(idx, "_static_occl", None)
-        if hit is not None:
-            return hit
-        mod = _occlusion_native()
-        if mod is None or not hasattr(mod, "InstanceSet"):
-            return None
-        st = getattr(self, "_pick_static_memo", None)
-        fv0 = st[1]["v0"] if st is not None else None
-        n = len(idx.tri_v0)
-        nf = len(fv0) if fv0 is not None else 0
-        if nf > n or (nf and not np.array_equal(idx.tri_v0[n - nf], fv0[0])):
-            nf = 0                       # not the index's tail: one part
-        vis = idx.ent_vis[idx.tri_ent]
-
-        def proto(lo, hi):
-            keep = np.flatnonzero(vis[lo:hi]) + lo
-            return mod.InstanceProto(
-                np.ascontiguousarray(idx.tri_v0[keep], np.float64),
-                np.ascontiguousarray(idx.tri_e1[keep], np.float64),
-                np.ascontiguousarray(idx.tri_e2[keep], np.float64),
-                np.zeros((0, 6))), keep
-        memo = getattr(self, "_static_occl_memo", None)
-        fkeep = vis[n - nf:]
-        if (nf and memo is not None and memo[0] is fv0
-                and np.array_equal(memo[1], fkeep)):
-            fixed = memo[2]
-        elif nf:
-            fixed = proto(n - nf, n)
-            self._static_occl_memo = (fv0, fkeep.copy(), fixed)
-        else:
-            fixed = None
-        parts = [proto(0, n - nf)] + ([fixed] if fixed is not None else [])
-        iset = mod.InstanceSet([p for p, _k in parts],
-                               np.arange(len(parts), dtype=np.int64),
-                               np.tile(np.eye(4).reshape(1, 16),
-                                       (len(parts), 1)))
-        # Prototype p's triangle r is index row rows[start[p] + r].
-        rows = np.concatenate([k for _p, k in parts])
-        start = np.cumsum([0] + [len(k) for _p, k in parts[:-1]])
-        idx._static_occl = (iset, np.arange(len(parts), dtype=np.int64),
-                            rows, start)
-        return idx._static_occl
+        return ingetrazo_core.static_occluders(self, idx)
 
     def _static_ray_rows(self, idx, ent_mask, o3, d3):
-        """The index rows of the triangles the ray from ``o3`` along ``d3``
-        may meet, in order, from the engine's BVH over the visible ones
-        (_static_occluders) — or None where that cannot answer for
-        ``ent_mask``: no engine, or an entity it passes that is not visible
-        (its triangles are not in there). A superset of what the exact test
-        accepts, so the hits are the same as over every span the ray's box
-        test keeps (hundreds of thousands of triangles of a big fixed part,
-        30 ms a hover over the plant of #158)."""
-        import numpy as np
-        if not (hasattr(self, "_lazy_native")
-                and self._lazy_native() is not None):
-            return None
-        memo = idx.__dict__.setdefault("_mask_in_vis", {})
-        ok = memo.get(id(ent_mask))
-        if ok is None or ok[0] is not ent_mask:
-            ok = memo[id(ent_mask)] = (
-                ent_mask, not bool((ent_mask & ~idx.ent_vis).any()))
-        if not ok[1]:
-            return None
-        stat = self._static_occluders(idx)
-        if stat is None:
-            return None
-        iset, cand, rows, start = stat
-        pl, tr, _v0, _e1, _e2 = iset.ray_cands(cand, o3, d3, float("inf"))
-        return np.sort(rows[start[pl] + tr])
+        return ingetrazo_core.static_ray_rows(self, idx, ent_mask, o3, d3)
 
     def _lazy_native(self):
-        """What the experimental engine answers for the context's lazy
-        placements without baking them (#158): ``(iset, snap, vis)`` —
-        core._native's InstanceSet over the lazy table, and the table rows
-        of the placements the pick index would take that a snap may land
-        on and that hide what is behind them, in the index's order — or
-        ``None`` (no lazy table, no engine)."""
-        if not _LAZY_NATIVE:
-            return None
-        table = self._pick_lazy_table()
-        if table is None:
-            return None
-        iset = self._pick_instance_set(table)
-        if iset is None or not hasattr(iset, "corners_near"):
-            return None
-        oculto = getattr(self, "_rest_is_hidden", None)
-        oculto = bool(oculto()) if callable(oculto) else False
-        ckey = (self._placements_epoch(), id(self.scene.edit_group), oculto,
-                id(table))
-        cmemo = getattr(self, "_pick_cands_memo", None)
-        if cmemo is None or cmemo[0] != ckey:
-            self._pick_index(near="skip")         # the candidates it takes
-            cmemo = getattr(self, "_pick_cands_memo", None)
-            if cmemo is None or cmemo[0] != ckey:
-                return None
-        memo = getattr(self, "_lazy_native_memo", None)
-        if memo is not None and memo[0] is cmemo and memo[1] is iset:
-            return memo[2]
-        import numpy as np
-        scene = self.scene
-        row = {id(g): i for i, g in enumerate(table[0])}
-        ordered = [g for _p, g in sorted(cmemo[3].values(),
-                                         key=lambda pg: pg[0])]
-        snap = np.fromiter((row[id(g)] for g in ordered
-                            if scene.group_snappable(g)), np.int64)
-        vis = np.fromiter((row[id(g)] for g in ordered
-                           if scene.entity_visible(g)), np.int64)
-        out = (iset, snap, vis)
-        self._lazy_native_memo = (cmemo, iset, out)
-        return out
+        return ingetrazo_core.pick_lazy_native(self)
 
-    def _pick_materialize(self, near) -> None:
-        """Bake into the pick index the lazy placements a query needs:
-        ``near`` = ``None`` (around the cursor), ``("px", x, y)`` (around a
-        widget pixel), ``("ray", origin, direction)`` or ``"all"``. What was
-        baked stays until the cap needs room (least recently needed first);
-        ``_pick_gen`` counts the changes, which key the index."""
-        import numpy as np
-        from collections import OrderedDict
-        table = self._pick_lazy_table()
-        live = getattr(self, "_pick_live", None)
-        if table is None:
-            if live:
-                live.clear()
-                self._pick_gen = getattr(self, "_pick_gen", 0) + 1
-            return
-        groups, lo, hi, nf, _ids = table
-        if live is None:
-            live = self._pick_live = OrderedDict()
-        if near == "skip":
-            return                              # a loose-only query
-        px_at = None
-        if isinstance(near, tuple) and near[0] == "px":
-            px_at = (float(near[1]), float(near[2]))
-            # A pick at a pixel only meets what the ray through it crosses:
-            # the 32 px footprint is for snaps (``("snap", x, y)``), and on a
-            # dense plant it took in thousands of placements per hover.
-            o, d = self._pixel_to_ray(float(near[1]), float(near[2]))
-            if o is None or d is None:
-                return
-            near = ("ray", o, d)
-        elif isinstance(near, tuple) and near[0] == "snap":
-            near = (None, near[1], near[2])
-        footprint = False
-        if near == "all":
-            need = np.arange(len(groups))
-        elif isinstance(near, tuple) and near[0] == "ray":
-            o, d = near[1], near[2]
-            reach = near[3] if len(near) > 3 else None
-            o = np.array([o.x(), o.y(), o.z()])
-            d = np.array([d.x(), d.y(), d.z()])
-            with np.errstate(divide="ignore", invalid="ignore"):
-                inv = 1.0 / np.where(np.abs(d) > 1e-12, d, 1e-12)
-                t1 = (lo - o) * inv
-                t2 = (hi - o) * inv
-            tmin = _slab_far(np.minimum(t1, t2))
-            tmax = _slab_near(np.maximum(t1, t2))
-            hit = tmax >= np.maximum(tmin, 0.0)
-            if reach is not None:
-                # A bounded query (the walkthrough's wall feelers, half a
-                # metre ahead) needs nothing past its reach: an unbounded
-                # one baked every placement down the street, and turning
-                # the head brought in new ones and rebuilt the index.
-                hit &= tmin <= reach
-            if px_at is not None and hit.sum() > 1:
-                # Whatever starts behind the surface the frame shows at this
-                # pixel can be neither picked nor seen.
-                seen = self._depth_world_at(*px_at)
-                if seen is not None and seen[0] == "hit":
-                    t_vis = float(np.linalg.norm(
-                        np.array([seen[1].x(), seen[1].y(), seen[1].z()]) - o))
-                    hit &= tmin <= t_vis * 1.02 + 0.05
-            need = np.flatnonzero(hit)
-            iset = self._pick_instance_set(table) if len(need) else None
-            if iset is not None:
-                # Of the boxes the ray crosses, the placements whose
-                # triangles it can meet (the spatial index, with margins
-                # past the exact test's): only those are baked.
-                need = np.asarray(iset.ray_filter(
-                    need.astype(np.int64), tuple(o.tolist()),
-                    tuple(d.tolist()), reach), dtype=np.int64)
-        else:
-            if near is None:
-                pos = getattr(self, "_last_mouse_pos", None)
-                if pos is None:
-                    return
-                x, y = float(pos.x()), float(pos.y())
-            else:
-                x, y = float(near[1]), float(near[2])
-            footprint = True
-            need = self._footprint_need(table, x, y)
-        if footprint and len(need):
-            # A footprint takes in the placements nearest the eye that fit
-            # in most of the cap, and those stay (see the eviction below):
-            # zoomed out over the plant of #158 it met ~3 400 placements,
-            # far more than fit, and each pointer move the first ray let go
-            # of 300 the footprint then brought in again — two rebuilds of
-            # the lazy part a move, for the same set.
-            room = self._PICK_LIVE_MAX_FACES * 0.8
-            need = np.asarray(need, dtype=np.int64)
-            if float(nf[need].sum()) > room:
-                e = self.camera.eye()
-                e = np.array([e.x(), e.y(), e.z()])
-                dist = np.linalg.norm(np.clip(e, lo[need], hi[need]) - e,
-                                      axis=1)
-                srt = need[np.argsort(dist, kind="stable")]
-                fit = np.cumsum(nf[srt]) <= room
-                fit[0] = True
-                need = srt[fit]
-            self._pick_foot_keep = {id(groups[int(i)]) for i in need}
-        new = [int(i) for i in need if id(groups[int(i)]) not in live]
-        # The footprint queries of one input event (the snap, the cursor's
-        # own) share the cap: each brought in its own 300 over the same
-        # spot, and each change rebuilt the lazy part of the index — five
-        # rebuilds a pointer move over the plant of #158.
-        serial = getattr(self, "_input_serial", None)
-        cap = self._PICK_NEW_PER_QUERY
-        budget = None
-        if footprint and serial is not None:
-            budget = getattr(self, "_pick_budget", None)
-            if budget is None or budget[0] != serial:
-                budget = self._pick_budget = [serial, cap]
-            cap = budget[1]
-        if len(new) > cap and near != "all":
-            # A first snap over a dense spot met thousands at once (2.3 s):
-            # the nearest to the eye come in now, the rest on the next moves.
-            e = self.camera.eye()
-            e = np.array([e.x(), e.y(), e.z()])
-            nn = np.array(new)
-            dist = np.linalg.norm(np.clip(e, lo[nn], hi[nn]) - e, axis=1)
-            keep_new = set(nn[np.argsort(dist)[:cap]].tolist())
-            need = [int(i) for i in need
-                    if id(groups[int(i)]) in live or int(i) in keep_new]
-        if budget is not None:
-            budget[1] = max(0, cap - min(len(new), cap))
-        changed = False
-        for i in need:
-            g = groups[int(i)]
-            k = id(g)
-            if k in live:
-                live.move_to_end(k)
-            else:
-                live[k] = (g, int(nf[int(i)]))
-                changed = True
-        faces = sum(v[1] for v in live.values())
-        # Making room once per input event: the ray picks that follow the
-        # snap over the same spot let go of what it had just brought in,
-        # and every such change rebuilt the index (up to twice the cap).
-        evict = faces > self._PICK_LIVE_MAX_FACES and near != "all"
-        if (evict and serial is not None
-                and getattr(self, "_pick_evicted_at", None) == serial
-                and faces <= 2 * self._PICK_LIVE_MAX_FACES):
-            evict = False
-        if evict:
-            self._pick_evicted_at = serial
-            keep = {id(groups[int(i)]) for i in need}
-            keep |= getattr(self, "_pick_foot_keep", None) or set()
-            inst = getattr(self, "_inst_chunks", None)
-            for k in list(live):
-                if faces <= self._PICK_LIVE_MAX_FACES:
-                    break
-                if k in keep:
-                    continue
-                gone, nf_k = live.pop(k)
-                faces -= nf_k
-                # Its world bake goes with it — unless the static buffers
-                # draw it, and then the next sync baked it all over again
-                # (13 placements, ~0.15 s of picking an object up on #158).
-                if inst is not None and self._instanced_eligible(gone):
-                    inst.pop(k, None)
-                changed = True
-        if changed:
-            self._pick_gen = getattr(self, "_pick_gen", 0) + 1
+    def _pick_materialize(self, near):
+        return ingetrazo_core.pick_materialize(self, near)
 
     def _depth_limits(self, x: float, y: float, r: float):
-        """What the last frame shows within ``r`` px of widget pixel
-        ``(x, y)``: per device pixel of that patch, the distance from the
-        eye past which a point there is hidden by something drawn — the
-        farthest surface drawn at the pixel and the 8 around it, plus what
-        the depth buffer cannot tell apart (8 steps of a 24-bit depth),
-        0.2 % and 2 cm; inf where it cannot say (sky at the pixel, the edge
-        of the frame). ``(eye, limits (gh, gw), x0, y0, dpr, device height)``
-        as core.instances.DepthLimits reads it, or None without a frame."""
-        import numpy as np
-        if getattr(self, "_depth_snap", None) is None:
-            return None
-        buf, inv, w, h = (self._depth_snap[0], self._depth_snap[2],
-                          self._depth_snap[3], self._depth_snap[4])
-        dpr = w / max(1, self.width())
-        x0 = int(np.floor((x - r) * dpr)) - 1
-        x1 = int(np.floor((x + r) * dpr)) + 1
-        yb0 = h - 1 - (int(np.floor((y + r) * dpr)) + 1)
-        yb1 = h - 1 - (int(np.floor((y - r) * dpr)) - 1)
-        ix, iy = np.meshgrid(np.arange(x0, x1 + 1), np.arange(yb0, yb1 + 1))
-        inside = (ix >= 1) & (ix < w - 1) & (iy >= 1) & (iy < h - 1)
-        cx, cy = np.clip(ix, 1, w - 2), np.clip(iy, 1, h - 2)
-        # The farthest of what is drawn among the nine (the sky among them
-        # is nothing in front): a corner on a silhouette is measured
-        # against the farther side of it.
-        d = np.zeros(ix.shape, dtype=np.float64)
-        for oy in (-1, 0, 1):
-            for ox in (-1, 0, 1):
-                b = buf[cy + oy, cx + ox]
-                d = np.maximum(d, np.where(b < 1.0, b, 0.0))
-        M = np.array(inv.data(), dtype=np.float64).reshape(4, 4, order="F")
-        e = self.camera.eye()
-        e = np.array([e.x(), e.y(), e.z()])
-
-        def dist_at(depth):
-            ndc = np.stack([(ix + 0.5) / w * 2.0 - 1.0,
-                            (iy + 0.5) / h * 2.0 - 1.0,
-                            depth * 2.0 - 1.0, np.ones(ix.shape)], axis=-1)
-            q = ndc @ M.T
-            with np.errstate(divide="ignore", invalid="ignore"):
-                r_ = np.linalg.norm(q[..., :3] / q[..., 3:4] - e, axis=-1)
-            return np.where(np.abs(q[..., 3]) >= 1e-12, r_, np.nan)
-        far = dist_at(d)
-        step = dist_at(np.minimum(d + 8.0 / (1 << 24), 1.0)) - far
-        lim = far + np.abs(step) + 0.0005 * far + 0.01
-        ok = (inside & (buf[cy, cx] < 1.0) & np.isfinite(lim)
-              & (far <= 1.01 * self.camera.far_plane()))
-        lim = np.ascontiguousarray(np.where(ok, lim, np.inf))
-        return (e.tolist(), lim, x0, yb0, float(dpr), int(h))
+        return ingetrazo_core.pick_depth_limits(self, x, y, r)
 
     @staticmethod
     def _depth_hidden(seen, pts, sx, sy):
-        """core.instances.DepthLimits.hides for arrays: per point (N,3) at
-        widget pixel ``(sx, sy)``, whether it lies past its pixel's limit."""
-        import numpy as np
-        eye, lim, x0, y0, dpr, hdev = seen
-        gh, gw = lim.shape
-        ix = np.floor(sx * dpr).astype(np.int64) - x0
-        iy = hdev - 1 - np.floor(sy * dpr).astype(np.int64) - y0
-        at = (ix >= 0) & (iy >= 0) & (ix < gw) & (iy < gh)
-        out = np.zeros(len(pts), dtype=bool)
-        k = np.flatnonzero(at)
-        if len(k):
-            dist = np.sqrt(((pts[k] - np.array(eye)) ** 2).sum(axis=1))
-            out[k] = dist > lim[iy[k], ix[k]]
-        return out
+        return ingetrazo_core.depth_hidden(seen, pts, sx, sy)
 
     def _footprint_need(self, table, x: float, y: float, reach=None):
-        """The rows of the lazy ``table`` a snap's footprint at widget pixel
-        ``(x, y)`` takes in (see _pick_materialize): the boxes near the
-        pixel, but what lies wholly behind what the frame shows there or
-        under a pixel, and of those the ones the spatial index finds
-        something near the cursor in. ``reach`` widens the boxes' margin
-        past ``_PICK_NEAR_PX`` (the edges near the cursor are looked for
-        farther out). Memoised per view and pixel."""
-        import numpy as np
-        lo, hi = table[1], table[2]
-        r = max(float(reach or 0.0), self._PICK_NEAR_PX)
-        ckey = (self._placements_epoch(), round(x), round(y),
-                tuple(self._np_mvp().ravel()), r)
-        # One per margin: a hover asks for both (the pick's, the edges').
-        slot = ("_pick_near_memo" if r == self._PICK_NEAR_PX
-                else "_edge_near_memo")
-        cmemo = getattr(self, slot, None)
-        if cmemo is not None and cmemo[0] == ckey:
-            return cmemo[1]
-        need = self._placements_under_px(lo, hi, x, y, r)
-        far = self._visible_depth_limit(x, y)
-        if len(need) and (far is not None or self._PICK_MIN_PX > 0.0):
-            dist, small = self._footprint_rows(table)
-            if far is not None:
-                # What lies wholly behind what is on screen around the
-                # cursor can be neither picked nor snapped to (hidden
-                # snaps are dropped): a dense plant stacks thousands of
-                # placements under one pixel (#158).
-                need = need[dist[need] <= far]
-            if small is not None:
-                # Nor what the frame leaves out for being under a pixel
-                # (see _instances_below_a_pixel): from the whole plant
-                # of #158 the snap's footprint met more placements
-                # than the cap, and each pointer move threw out the
-                # last move's to bring in as many again.
-                need = need[~small[need]]
-        iset = self._pick_instance_set(table) if len(need) else None
-        if iset is not None:
-            # Of the boxes near the cursor, the placements with a
-            # hard edge within the farthest reach a snap measures
-            # or a triangle within the footprint (with margins).
-            M = self._np_mvp()
-            need = np.asarray(iset.screen_filter(
-                need.astype(np.int64),
-                np.ascontiguousarray(M.T).ravel().tolist(),
-                float(self.width()), float(self.height()), x, y,
-                DocumentInteraction.GEDGE_REACH_PX + 2.0,
-                r + 2.0), dtype=np.int64)
-        setattr(self, slot, (ckey, need))
-        return need
+        return ingetrazo_core.footprint_need(self, table, x, y, reach)
 
     def _footprint_rows(self, table):
-        """For every row of the lazy ``table``, how far its box lies from
-        the eye and whether it spans under ``_PICK_MIN_PX`` (None when
-        that floor is off): what _footprint_need cuts by, the same for
-        any pixel of the view. Kept for the view: over the 16 000 rows
-        near the cursor in the plant of #158 they cost ~2 ms a search,
-        two searches a pointer move."""
-        import numpy as np
-        lo, hi = table[1], table[2]
-        e = self.camera.eye()
-        h = (self._export_size or self._fb_size())[1]
-        key = (self._placements_epoch(), tuple(self._np_mvp().ravel()),
-               (e.x(), e.y(), e.z()), h, bool(self.camera.perspective),
-               self._PICK_MIN_PX)
-        memo = getattr(self, "_footprint_rows_memo", None)
-        if (memo is not None and memo[0] == key and memo[1] is lo
-                and memo[2] is hi):
-            return memo[3]
-        eye = np.array([e.x(), e.y(), e.z()])
-        dist = np.linalg.norm(np.clip(eye, lo, hi) - eye, axis=1)
-        small = None
-        if self._PICK_MIN_PX > 0.0:
-            ctr, rad = self._bounding_spheres(lo, hi)
-            small = self._spheres_below_a_pixel(ctr, rad, self._PICK_MIN_PX)
-        self._footprint_rows_memo = (key, lo, hi, (dist, small))
-        return dist, small
+        return ingetrazo_core.footprint_rows(self, table)
 
     def _visible_depth_limit(self, x: float, y: float):
-        """The farthest distance from the eye of what the last frame shows
-        within ``_PICK_NEAR_PX`` of widget pixel ``(x, y)``, with a margin —
-        or ``None`` when the frame cannot say (no read-back, the camera
-        moved since, or sky in the window: then anything may be there)."""
-        import numpy as np
-        if getattr(self, "_depth_snap", None) is None:
-            return None
-        snap = self._depth_snap
-        buf, inv, w, h = snap[0], snap[2], snap[3], snap[4]
-        dpr = w / max(1, self.width())
-        r = int(self._PICK_NEAR_PX * dpr) + 1
-        cx, cy = int(x * dpr), int(h - 1 - y * dpr)
-        win = buf[max(cy - r, 0):cy + r + 1, max(cx - r, 0):cx + r + 1]
-        if not win.size or float(win.max()) >= 1.0:
-            return None
-        iy, ix = np.unravel_index(int(np.argmax(win)), win.shape)
-        px = max(cx - r, 0) + ix
-        py = max(cy - r, 0) + iy
-        d = float(win.max())
-        q = inv.map(QVector4D((px + 0.5) / w * 2 - 1, (py + 0.5) / h * 2 - 1,
-                              d * 2 - 1, 1.0))
-        if abs(q.w()) < 1e-12:
-            return None
-        far = (QVector3D(q.x() / q.w(), q.y() / q.w(), q.z() / q.w())
-               - self.camera.eye()).length()
-        return far * 1.02 + 0.05
+        return ingetrazo_core.visible_depth_limit(self, x, y)
 
     def _placements_under_px(self, lo, hi, x, y, r=None):
-        """Indices of the boxes ``lo``/``hi`` whose screen footprint comes
-        within ``r`` (``_PICK_NEAR_PX``) of widget pixel ``(x, y)``; a box that
-        crosses the eye plane counts (it can be anywhere on screen)."""
-        import numpy as np
-        from core import _native
-        M = self._np_mvp()
-        r = self._PICK_NEAR_PX if r is None else r
-        mod = _native.native
-        if mod is not None and hasattr(mod, "boxes_near_px"):
-            # The same test in parallel: ~9 ms of NumPy a pointer move over
-            # the 21 406 boxes of #158, twice (the pick's, the edges').
-            return mod.boxes_near_px(
-                np.ascontiguousarray(lo, np.float64),
-                np.ascontiguousarray(hi, np.float64),
-                np.ascontiguousarray(M, np.float64).ravel().tolist(),
-                float(self.width()), float(self.height()), float(x),
-                float(y), float(r))
-        corners = np.stack([np.where(np.array([(i >> k) & 1 for k in range(3)],
-                                              bool), hi, lo)
-                            for i in range(8)], axis=1)          # (P, 8, 3)
-        finite = np.isfinite(corners).all(axis=(1, 2))
-        c = np.where(np.isfinite(corners), corners, 0.0)
-        clip = c @ M[:, :3].T + M[:, 3]                          # (P, 8, 4)
-        w = clip[..., 3]
-        front = w > 1e-9
-        ww = np.where(front, w, 1.0)
-        sx = (clip[..., 0] / ww * 0.5 + 0.5) * self.width()
-        sy = (1.0 - (clip[..., 1] / ww * 0.5 + 0.5)) * self.height()
-        big = 1e12
-        x0 = np.where(front, sx, big).min(axis=1)
-        x1 = np.where(front, sx, -big).max(axis=1)
-        y0 = np.where(front, sy, big).min(axis=1)
-        y1 = np.where(front, sy, -big).max(axis=1)
-        inside = (x0 - r <= x) & (x <= x1 + r) & (y0 - r <= y) & (y <= y1 + r)
-        straddle = front.any(axis=1) & ~front.all(axis=1)
-        return np.flatnonzero((inside & front.all(axis=1)) | straddle
-                              | ~finite)
-
-    def _pick_block_part(self, candidatos, tocables, lazy_set, base):
-        """One part of the pick block (see _pick_index): the faces, owners,
-        triangles and hard edges of ``candidatos``, numbered after ``base``
-        (the part before it, or None). Lists, joined by _pick_join_parts."""
-        import numpy as np
-        scene = self.scene
-        chunks = []
-        for g in candidatos:
-            if getattr(g, "billboard", False):
-                continue          # per-frame quad; picked separately
-            gvis = scene.entity_visible(g)
-            # Locked objects remain inference references, but cannot be
-            # edited. The context further limits what a pick may touch.
-            gsnap = scene.group_snappable(g)
-            gsel = scene.entity_selectable(g) and id(g) in tocables
-            if not (gvis or gsnap):
-                continue
-            chunk = self._group_chunk(g)
-            if not (chunk["faces"] or chunk["edges"]):
-                continue          # nothing in it to pick or snap to
-            # Note the `or edges`: a group of nothing but lines and arcs
-            # has no faces, and skipping it here dropped it out of the
-            # index ENTIRELY — so inference found none of its edges and
-            # the edge fallback below, written for "a lines-only group",
-            # read an empty array and never found it either (GitHub #8).
-            # The OWNER a hit resolves to depends on the open context
-            # (inside the plaza its children are the objects): it keys
-            # the block too, or a double-click into the plaza kept
-            # answering "the plaza" for the arch inside (Marco,
-            # 2026-09-14).
-            chunks.append((g, chunk, gvis, gsel, gsnap))
-        _pick_warm_take(self)
-        # Each big chunk's grid is its own work, mostly NumPy: side by side
-        # (0.9 s of a big model's first hover one after another, #1092). Each
-        # keeps it on its chunk, where the loop below finds it.
-        big = [c for g, c, _v, _s, _n in chunks
-               if c["v0"] is not None and id(g) not in lazy_set
-               and len(c["v0"]) > _SPAN_GRID_MIN and "_span_grid" not in c]
-        if len(big) > 1 and not _NO_SPAN_GRID:
-            import os
-            from concurrent.futures import ThreadPoolExecutor
-            with ThreadPoolExecutor(
-                    max_workers=min(8, os.cpu_count() or 2)) as ex:
-                list(ex.map(_split_chunk_spans, big))
-        n_ent = base["n_ent"] if base else 0
-        n_plist = base["n_plist"] if base else 0
-        b_tri_off = base["n_tri"] if base else 0
-        n_ggroups = base["n_ggroups"] if base else 0
-        b_entities: list = []
-        # Per entity, the PLACEMENT (proxy) whose matrix puts the
-        # face in the world — the owner above is what a click
-        # selects. Run-length, one int per face: a Python object
-        # per face doubled the cold build (30 → 65 ms).
-        b_pidx: list = []
-        b_plist: list = []
-        b_v0, b_e1, b_e2, b_te = [], [], [], []
-        b_area, b_vis, b_sel, b_infer = [], [], [], []
-        b_spans: list = []    # (bbox, tri start, count) per chunk
-        # Group hard edges, flat — pick_group's fallback (cursor over
-        # empty space / lines-only group) walked every group edge in
-        # Python (~300 ms per mouse move against a 300k-edge import).
-        b_gea, b_geb, b_ggi = [], [], []
-        b_gel: list = []
-        b_gbase: list = []    # each chunk's (n, 2, 3) edge array, kept
-        b_gsel: list = []     # per edge: may pick_group land on it
-        b_ggroups: list = []
-        b_gctx: list = []     # per group: the tip's context word
-        # Per group: a placement of lines only (no faces), picked by its
-        # lines before a face under the cursor (SelectTool._linework).
-        b_gwire: list = []
-        # Lazy placements (#158) keep their triangles in their own
-        # arrays — spans the ray walks as they are — and go after
-        # the static chunks, whose concatenation is kept: joining
-        # every array on each change of the lazy set copied
-        # hundreds of MB per hover.
-        b_own: list = []
-        static_key: list = []
-        count = 0
-        for g, chunk, gvis, gsel, gsnap in chunks:
-            n = len(chunk["faces"])
-            off = n_ent + count
-            owner = self._owner_of(g)
-            # A chunk keeps its (face, owner) list: the block is
-            # rebuilt whenever the lazy placements change (#158),
-            # and re-making a tuple per face of everything already
-            # in it cost ~250 ms a hover on 14 million faces.
-            ents = chunk.get("_pick_ents")
-            if ents is None or ents[0] is not owner:
-                from views import array_bake
-                if isinstance(chunk["faces"], array_bake.DeferredFaces):
-                    # A lazy mesh (experimental engine): its faces
-                    # are built when a pick lands on one.
-                    pairs = array_bake.LazyPairs(chunk["faces"], owner)
-                else:
-                    pairs = [(f, owner) for f in chunk["faces"]]
-                ents = chunk["_pick_ents"] = (owner, pairs)
-            b_entities.append(ents[1])
-            count += n
-            b_pidx.append(np.full(n, n_plist + len(b_plist), dtype=np.int32))
-            b_plist.append(g)
-            b_area.append(chunk["areas"])
-            b_vis.append(np.full(n, gvis, dtype=bool))
-            b_sel.append(np.full(n, gsel, dtype=bool))
-            # Inferred from even when the open context makes it untouchable:
-            # the rest of the model is a reference, not an answer.
-            b_infer.append(np.full(n, gsnap, dtype=bool))
-            if chunk["v0"] is not None and id(g) in lazy_set:
-                b_own.append((chunk.get("bbox"), chunk["v0"],
-                              chunk["e1"], chunk["e2"],
-                              chunk["tri_ent"], off))
-            elif chunk["v0"] is not None:
-                static_key.append((chunk.get("uid", id(chunk)), chunk.get("rev"), off))
-                v0, e1, e2, te, cells = _split_chunk_spans(chunk)
-                b_v0.append(v0)
-                b_e1.append(e1)
-                b_e2.append(e2)
-                b_te.append(te + off)
-                if cells is None:
-                    b_spans.append((chunk.get("bbox"), b_tri_off,
-                                    len(v0)))
-                else:
-                    # One span per grid cell, each with its own box:
-                    # a ray meets the cells it crosses, not the chunk.
-                    b_spans += [(bb, b_tri_off + s0, n)
-                                for bb, s0, n in cells]
-                b_tri_off += len(v0)
-            if gsnap and chunk["edges"]:
-                ge = chunk.get("_pick_ge")
-                if ge is None or ge[0] is not chunk["edges"]:
-                    ge = chunk["_pick_ge"] = (
-                        chunk["edges"],
-                        np.frombuffer(chunk["edges"], dtype=np.float32)
-                        .reshape(-1, 2, 3).astype(np.float64))
-                ge = ge[1]
-                b_gbase.append(ge)
-                b_gea.append(ge[:, 0])
-                b_geb.append(ge[:, 1])
-                b_ggi.append(np.full(len(ge), n_ggroups + len(b_ggroups),
-                                     dtype=np.int64))
-                own = chunk.get("edge_layer")
-                gel = np.empty(len(ge), dtype=object)
-                if own is not None and len(own) == len(ge):
-                    gel[:] = own
-                b_gel.append(gel)
-                b_gsel.append(np.full(len(ge), gsel, dtype=bool))
-                b_ggroups.append(owner)
-                # "outside" while a group/component is open and this
-                # placement is not part of it (see _snap_context_of).
-                b_gctx.append(_snap_context_of(self, g))
-                b_gwire.append(n == 0)
-        part = {"entities": b_entities, "pidx": b_pidx, "plist": b_plist,
-                "area": b_area, "vis": b_vis, "sel": b_sel,
-                "infer": b_infer,
-                "own": b_own, "static_key": static_key,
-                "v0": b_v0, "e1": b_e1, "e2": b_e2, "te": b_te,
-                "spans": b_spans, "gea": b_gea, "geb": b_geb, "ggi": b_ggi,
-                "gel": b_gel,
-                "gsel": b_gsel, "ggroups": b_ggroups, "gctx": b_gctx,
-                "gwire": b_gwire, "gbase": b_gbase,
-                "n_ent": n_ent + count, "n_plist": n_plist + len(b_plist),
-                "n_tri": b_tri_off,
-                "n_ggroups": n_ggroups + len(b_ggroups)}
-        if base is None:
-            # The fixed part joins its own lists once, here: it is kept.
-            for k in ("pidx", "area", "vis", "sel", "infer", "gea", "geb",
-                      "ggi", "gel", "gsel"):
-                part[k] = [np.concatenate(part[k])] if part[k] else []
-            if all(isinstance(e, list) for e in b_entities):
-                part["entities"] = [[x for e in b_entities for x in e]]
-        return part
-
-    def _pick_join_parts(self, fixed, lazy) -> dict:
-        """The pick block of the fixed part followed by the lazy one — the
-        very arrays the single pass made, in the same order."""
-        import numpy as np
-        from views.array_bake import PickEntities
-
-        def cat(k, empty):
-            parts = fixed[k] + lazy[k]
-            return np.concatenate(parts) if parts else empty
-        ents = fixed["entities"] + lazy["entities"]
-        if not lazy["entities"] and len(ents) == 1 and \
-                isinstance(ents[0], list):
-            entities: list = ents[0]      # the fixed part's, kept
-        elif all(isinstance(e, list) for e in ents) and \
-                sum(map(len, ents)) < 200_000:
-            entities = [x for e in ents for x in e]
-        else:
-            entities = PickEntities()
-            for e in ents:
-                entities.extend(e)
-        static = fixed["static_key"] + lazy["static_key"]
-        gea = fixed["gea"] + lazy["gea"]
-        return {
-            "entities": entities,
-            "place_idx": cat("pidx", np.empty(0, np.int32)),
-            "placements": fixed["plist"] + lazy["plist"],
-            "areas": cat("area", np.empty(0)),
-            "vis": cat("vis", np.empty(0, bool)),
-            "sel": cat("sel", np.empty(0, bool)),
-            "infer": cat("infer", np.empty(0, bool)),
-            **DocumentInteraction._pick_static_tris(self, tuple(static),
-                                         fixed["v0"] + lazy["v0"],
-                                         fixed["e1"] + lazy["e1"],
-                                         fixed["e2"] + lazy["e2"],
-                                         fixed["te"] + lazy["te"]),
-            "own": fixed["own"] + lazy["own"],
-            "gedge_a": np.concatenate(gea) if gea else None,
-            "gedge_b": cat("geb", None) if gea else None,
-            "gedge_gi": cat("ggi", None) if gea else None,
-            "gedge_layer": cat("gel", None) if gea else None,
-            "gedge_sel": cat("gsel", None) if gea else None,
-            "gedge_groups": fixed["ggroups"] + lazy["ggroups"],
-            "gedge_ctx": fixed.get("gctx", []) + lazy.get("gctx", []),
-            "gedge_wire": fixed.get("gwire", []) + lazy.get("gwire", []),
-            # The fixed part's edges lead, and that part outlives many lazy
-            # rebuilds: their screen projection is kept across them.
-            "gedge_fixed": (fixed, sum(map(len, fixed["gea"])),
-                            lazy["gbase"]),
-            "spans": fixed["spans"] + lazy["spans"],
-        }
+        return ingetrazo_core.placements_under_px(self, lo, hi, x, y, r)
 
     def _outer_loose_meshes(self):
-        """The root loose mesh drawn AROUND an open group / component, as a
-        tuple of meshes (usually one, or none).
-
-        Opening a group points ``scene.mesh`` at its mesh: the loose
-        geometry of the outer context stops being the loose part of the
-        index, and it was nowhere else in it — the rest of the model could
-        be inferred on only where it was grouped («estoy dentro del
-        componente y no me snapea a lo de fuera»). It is drawn faded
-        (``scene.loose_mesh``), so it must occlude, snap and be acquirable
-        as a reference like every other faded thing.
-
-        Hidden with «Hide rest of model» it is not drawn, so it is not
-        offered either (same rule as the placements, see
-        ``_pick_candidates``). A mesh a placement already draws is left out
-        or the model would be snapped through twice (a copied group can
-        share the loose mesh)."""
-        scene = self.scene
-        if scene.edit_group is None:
-            return ()
-        rest_hidden = getattr(self, "_rest_is_hidden", None)
-        if callable(rest_hidden) and rest_hidden():
-            return ()
-        outer = getattr(scene, "loose_mesh", None)
-        if outer is None or outer is scene.mesh:
-            return ()
-        key = (_content_ver(self), id(outer), id(scene.edit_group),
-               id(scene.mesh))
-        memo = getattr(self, "_outer_loose_memo", None)
-        if memo is not None and memo[0] == key:
-            return memo[1]
-        carried = {id(g.mesh) for g in self._placements()}
-        meshes = () if id(outer) in carried else (outer,)
-        self._outer_loose_memo = (key, meshes)
-        return meshes
+        return ingetrazo_core.outer_loose_meshes(self)
 
     def _loose_mesh_wrapper(self, mesh):
-        """A stable stand-in for a mesh that is a *reference*, not an
-        object: what an outer loose face rides in the index so the snap
-        paths can tell its mesh (and its world frame: identity) from the
-        open context's. Cached, as ``_group_chunk`` keys on ``id``."""
-        wrappers = getattr(self, "_loose_wrappers", None)
-        if wrappers is None:
-            wrappers = self._loose_wrappers = {}
-        w = wrappers.get(id(mesh))
-        if w is None:
-            from types import SimpleNamespace
-            w = wrappers[id(mesh)] = SimpleNamespace(
-                mesh=mesh, xform=None, material=None, name=None,
-                billboard=False, hidden=False, locked=False, layer=None)
-        return w
+        return ingetrazo_core.loose_mesh_wrapper(self, mesh)
 
     def _pick_index(self, near=None):
-        """Flat NumPy pick index of the scene — triangles of every loose and
-        group face (with visibility/selectability masks and areas) plus the
-        loose edges — rebuilt when the scene changes.
-
-        Every mouse-move pick used to walk the mesh in Python re-running
-        earcut per face (~1–2 s per move against an imported 17k-triangle
-        building — the app read as frozen); batched over this index a pick
-        is a couple of milliseconds.
-
-        On a model whose component placements hold more than
-        ``_PICK_LAZY_MIN_FACES`` faces, those placements enter only when a
-        query comes near them (``near``, see ``_pick_materialize``): the
-        rest of the index is the same."""
-        if hasattr(self, "_pick_lazy_table"):
-            # The snap asks occlusion hundreds of times per mouse move, each
-            # through here: the same cursor query in the same tick has
-            # nothing new to bake (#158).
-            pos = getattr(self, "_last_mouse_pos", None)
-            qkey = (getattr(self, "_tick", 0), _content_ver(self),
-                    (pos.x(), pos.y()) if near is None and pos is not None
-                    else repr(near) if not isinstance(near, tuple) or
-                    near[0] != "ray" else None)
-            if qkey[2] is None or getattr(self, "_pick_last_q", None) != qkey:
-                self._pick_materialize(near)
-                self._pick_last_q = qkey
-        oculto = getattr(self, "_rest_is_hidden", None)
-        oculto = bool(oculto()) if callable(oculto) else False
-        # The open context decides what a hit RESOLVES to (inside the
-        # plaza its children are the objects, not the plaza): a stale index
-        # kept answering "the plaza" after a double-click opened it, so the
-        # arch inside never opened (Marco, 2026-09-14).
-        # The content version: a click (a view-only bump) changes nothing
-        # in it — on the plant of #158 it rebuilt it on every click.
-        key = (_content_ver(self), id(self.scene.mesh), oculto,
-               id(self.scene.edit_group), getattr(self, "_pick_gen", 0))
-        cached = getattr(self, "_pick_index_cache", None)
-        if cached is not None and cached[0] == key:
-            return cached[1]
-        if (cached is not None and len(cached) > 2
-                and cached[0][:4] == key[:4]
-                and getattr(self, "_frozen_cache_version", None) is not None
-                and cached[2] is not None
-                and cached[2] is getattr(self, "_pick_block", None)):
-            # Only the lazy set moved, under a frozen preview (a drag): the
-            # block is kept frozen as it is, the loose part is the same —
-            # the rebuild would make this very index again (it did, ~35 ms
-            # a pointer move dragging beside the plant of #158).
-            self._pick_index_cache = (key, cached[1], cached[2])
-            return cached[1]
-        _p0 = _time_mod.perf_counter() if _PERF else 0.0
-        import numpy as np
-        from types import SimpleNamespace
-        scene = self.scene
-        entities: list = []           # (face, group_or_None)
-        place_idx = None              # per entity: index into placements, -1 = loose
-        placements: list = []
-        ent_area: list = []
-        ent_sel: list = []
-        ent_vis: list = []
-        ent_loose: list = []
-        ent_infer: list = []
-        tris: list = []
-        tri_ent: list = []
-
-        # Stub viewports in tests call this unbound — fall back to the
-        # uncached face methods when the memo helpers aren't there.
-        area_of = getattr(self, "_area_of", None) or (lambda f: f.area())
-        tris_of = getattr(self, "_tris_of", None) or \
-            (lambda f: f.triangulate())
-
-        def add_face(f, grp, vis, sel, infer=None, loose=None):
-            i = len(entities)
-            entities.append((f, grp))
-            ent_area.append(area_of(f))
-            ent_vis.append(vis)
-            ent_sel.append(sel)
-            # What the snap engine may INFER FROM: selectable, except that
-            # the rest of the model outside the open context is a reference
-            # even though it cannot be picked (see _face_hits "infer").
-            ent_infer.append(sel if infer is None else infer)
-            ent_loose.append((grp is None) if loose is None else loose)
-            for t0, t1, t2 in tris_of(f):
-                tris.append((t0.x(), t0.y(), t0.z(),
-                             t1.x(), t1.y(), t1.z(),
-                             t2.x(), t2.y(), t2.z()))
-                tri_ent.append(i)
-
-        # The loose part lasts while the content and the context do: a
-        # change of the lazy set (a few times a pointer move over the plant
-        # of #158) rebuilds the index, and walked the loose faces again.
-        lmemo = getattr(self, "_pick_loose_memo", None)
-        if lmemo is not None and lmemo[0] == key[:4]:
-            loose = lmemo[1]
-        else:
-            for f in scene.faces:
-                add_face(f, None, scene.entity_visible(f),
-                         scene.entity_selectable(f))
-            # The loose mesh drawn AROUND an open group / component: the
-            # rest of the model when it was never grouped. It cannot be
-            # picked or selected from inside the context, but it is drawn
-            # (faded), so it occludes and the snap engine infers from it
-            #. Its own mesh rides with the face (the wrapper) so
-            # the plane and the centre come from the right mesh.
-            outer_of = getattr(self, "_outer_loose_meshes", None)
-            for om in (outer_of() if outer_of is not None else ()):
-                wrap = self._loose_mesh_wrapper(om)
-                for f in om.faces:
-                    add_face(f, wrap, scene.entity_visible(f),
-                             False, infer=scene.entity_selectable(f),
-                             loose=True)
-            # Loose part → arrays; groups append their cached chunk arrays.
-            if tris:
-                t = np.asarray(tris, dtype=np.float64).reshape(-1, 3, 3)
-                lt = (t[:, 0], t[:, 1] - t[:, 0], t[:, 2] - t[:, 0],
-                      np.asarray(tri_ent, dtype=np.int64))
-            else:
-                lt = None
-            loose = (list(entities), lt, len(tris),
-                     np.asarray(ent_area, dtype=np.float64),
-                     np.asarray(ent_vis, dtype=bool),
-                     np.asarray(ent_sel, dtype=bool),
-                     np.asarray(ent_infer, dtype=bool),
-                     np.asarray(ent_loose, dtype=bool))
-            self._pick_loose_memo = (key[:4], loose)
-        entities = list(loose[0])
-        lt, n_loose_tris = loose[1], loose[2]
-        if lt is not None:
-            v0s, e1s, e2s, tents = [lt[0]], [lt[1]], [lt[2]], [lt[3]]
-        else:
-            v0s, e1s, e2s, tents = [], [], [], []
-        areas, vis_parts, sel_parts, infer_parts, loose_parts = (
-            [loose[3]], [loose[4]], [loose[5]], [loose[6]], [loose[7]])
-
-        # Per-chunk triangle spans (P3): a hover/zoom ray prefilters chunks
-        # by AABB and runs Möller-Trumbore only on the spans it crosses.
-        tri_spans: list = [(None, 0, n_loose_tris)] if n_loose_tris else []
-        own_spans: list = []      # lazy placements' own arrays (#158)
-        # What the current context lets you TOUCH: the whole scene at the
-        # root, the children of the group you are inside otherwise. This
-        # used to be `if scene.edit_group is None`, which took EVERY group
-        # out of the index while you were inside one — so a group's children
-        # were drawn and could not be clicked, and «todo está combinado»
-        # (Marco, 2026-09-11).
-        lazy = (self._pick_lazy_table()
-                if hasattr(self, "_pick_lazy_table") else None)
-        epoch_of = getattr(self, "_placements_epoch", None)   # stub VPs in tests
-        # The context's placements, split into fixed and lazy, last as long
-        # as the placements and the context: walking all 21 000 of them on
-        # each change of the lazy set was ~20 ms of every such rebuild, a
-        # few times a mouse move over the plant of #158.
-        ckey = ((epoch_of(), id(scene.edit_group), oculto, id(lazy))
-                if epoch_of is not None else None)
-        cmemo = getattr(self, "_pick_cands_memo", None)
-        if ckey is None or cmemo is None or cmemo[0] != ckey:
-            cmemo = (ckey, *DocumentInteraction._pick_candidates(self, oculto, lazy))
-            if ckey is not None:
-                self._pick_cands_memo = cmemo
-        _ck, tocables, fixed_c, lazy_pos = cmemo
-        if lazy is not None:
-            live = getattr(self, "_pick_live", None) or {}
-            lazies_c = [lazy_pos[k][1] for k in sorted(
-                (k for k in live if k in lazy_pos),
-                key=lambda k: lazy_pos[k][0])]
-        else:
-            lazies_c = [g for _p, g in lazy_pos.values()]
-        candidatos = fixed_c + lazies_c
-        if candidatos:
-            # The group block is cached across versions (keyed by each
-            # chunk's identity + rev + flags): re-deriving per-face masks and
-            # re-offsetting 300k triangle rows per scene change cost ~130 ms
-            # per stroke/drag frame beside a big import.
-            # The block (every placement's faces, owners and hard edges) is
-            # keyed on the placements epoch: a loose edit — every frame of a
-            # Move drag — no longer walks 1 300 chunks to learn that none of
-            # them changed (2026-09-14).
-            sig = (epoch_of() if epoch_of is not None else _cache_ver(self),
-                   oculto, len(candidatos), getattr(self, "_pick_gen", 0))
-            blk = getattr(self, "_pick_block", None)
-            frozen = getattr(self, "_frozen_cache_version", None) is not None
-            if blk is None or (blk[0] != sig and not frozen):
-                # Two parts, fixed placements first, as the block always
-                # ran: the fixed part lasts while the placements do, and a
-                # change of the lazy set rebuilds only the lazy part on its
-                # offsets. Re-making the fixed one each time (900
-                # placements, half a million faces) was most of every hover
-                # that met new lazy placements on the plant of #158.
-                lazy_set = (lazy[4] if lazy is not None else ())
-                fixed, lazies = fixed_c, lazies_c
-                fkey = (sig[0], oculto, len(fixed), id(scene.edit_group))
-                fpart = getattr(self, "_pick_fixed_part", None)
-                if fpart is None or fpart[0] != fkey:
-                    # Called through the class: the stub viewports of the
-                    # tests run this unbound.
-                    fpart = self._pick_fixed_part = (fkey, DocumentInteraction._pick_block_part(
-                        self, fixed, tocables, lazy_set, None))
-                lpart = DocumentInteraction._pick_block_part(self, lazies, tocables,
-                                                  lazy_set, fpart[1])
-                blk = (sig, DocumentInteraction._pick_join_parts(self, fpart[1], lpart))
-                self._pick_block = blk
-            block = blk[1]
-            if block["entities"]:
-                offset = len(entities)
-                loose_count = len(entities)
-                if not isinstance(block["entities"], list):
-                    from views.array_bake import PickEntities
-                    entities = PickEntities(entities)
-                entities.extend(block["entities"])
-                place_idx = np.concatenate([
-                    np.full(loose_count, -1, dtype=np.int32),
-                    block.get("place_idx", np.full(len(block["entities"]), -1, np.int32))])
-                placements = block.get("placements", [])
-                areas.append(block["areas"])
-                vis_parts.append(block["vis"])
-                sel_parts.append(block["sel"])
-                infer_parts.append(block.get("infer", block["sel"]))
-                loose_parts.append(
-                    np.zeros(len(block["entities"]), dtype=bool))
-                if block["v0"] is not None:
-                    v0s.append(block["v0"])
-                    e1s.append(block["e1"])
-                    e2s.append(block["e2"])
-                    tents.append(_offset_kept(self, block["te"], offset))
-                    tri_spans += [(bb, n_loose_tris + s, n)
-                                  for bb, s, n in block.get("spans", ())]
-                own_spans = [(bb, a, b, c, te, o + offset)
-                             for bb, a, b, c, te, o in block.get("own", ())]
-
-        gedge_a = gedge_b = gedge_gi = gedge_sel = gedge_fixed = None
-        gedge_layer = None
-        gedge_groups: list = []
-        gedge_ctx: list = []
-        gedge_wire: list = []
-        if candidatos:
-            block = self._pick_block[1] if getattr(self, "_pick_block", None) \
-                else {}
-            gedge_a = block.get("gedge_a")
-            gedge_b = block.get("gedge_b")
-            gedge_gi = block.get("gedge_gi")
-            gedge_layer = block.get("gedge_layer")
-            gedge_sel = block.get("gedge_sel")
-            gedge_groups = block.get("gedge_groups", [])
-            gedge_ctx = block.get("gedge_ctx", [])
-            gedge_wire = block.get("gedge_wire", [])
-            gedge_fixed = block.get("gedge_fixed")
-
-        edges: list = []
-        ea: list = []
-        eb: list = []
-        esel: list = []
-        esnap: list = []
-        esoft: list = []
-        for e in scene.edges:
-            edges.append(e)
-            esoft.append(bool(getattr(e, "soft", False)))
-            ea.append([e.a.x(), e.a.y(), e.a.z()])
-            eb.append([e.b.x(), e.b.y(), e.b.z()])
-            # A hidden EDGE (Hide on raw geometry, a smoothed surface's
-            # inner edges) is selectable only while the hidden view shows
-            # it — what window selection already did; a click found it
-            # through here with the view off.
-            esel.append(scene.entity_selectable(e)
-                        and (not getattr(e, "hidden", False)
-                             or bool(getattr(scene, "show_hidden_geometry",
-                                             False))))
-            # Snapping is a different question from selecting: a locked
-            # edge is no target for a click and a fine target for a
-            # dimension, while an edge that draws nothing is neither. The
-            # same rule the snap scene applies (Scene.edge_snappable), kept
-            # here so the corner a from-point acquires cannot come from a
-            # line the user cannot see.
-            esnap.append(scene.edge_snappable(e))
-        # The rest of the model's loose edges — drawn around an open group /
-        # component, a reference to snap to and never a thing to pick. They
-        # are what a move started inside the component aligns to, and what
-        # occludes the corners behind them.
-        outer_of = getattr(self, "_outer_loose_meshes", None)
-        for om in (outer_of() if outer_of is not None else ()):
-            for e in om.edges:
-                edges.append(e)
-                esoft.append(bool(getattr(e, "soft", False)))
-                ea.append([e.a.x(), e.a.y(), e.a.z()])
-                eb.append([e.b.x(), e.b.y(), e.b.z()])
-                esel.append(False)
-                esnap.append(scene.edge_snappable(e))
-
-        idx = SimpleNamespace(
-            entities=entities,
-            ent_place_idx=(place_idx if place_idx is not None
-                           else np.full(len(entities), -1, np.int32)),
-            ent_placements=placements,
-            ent_area=np.concatenate(areas) if entities else np.empty(0),
-            ent_sel=np.concatenate(sel_parts) if entities else np.empty(0, bool),
-            ent_infer=(np.concatenate(infer_parts) if entities
-                       else np.empty(0, bool)),
-            ent_vis=np.concatenate(vis_parts) if entities else np.empty(0, bool),
-            ent_loose=(np.concatenate(loose_parts) if entities
-                       else np.empty(0, bool)),
-            tri_v0=_cat_kept(self, "v0", v0s) if v0s else None,
-            tri_e1=_cat_kept(self, "e1", e1s) if v0s else None,
-            tri_e2=_cat_kept(self, "e2", e2s) if v0s else None,
-            tri_ent=_cat_kept(self, "te", tents) if v0s else None,
-            edges=edges,
-            edge_a=np.asarray(ea, dtype=np.float64) if edges else None,
-            edge_b=np.asarray(eb, dtype=np.float64) if edges else None,
-            edge_sel=np.asarray(esel, dtype=bool) if edges else None,
-            edge_snap=np.asarray(esnap, dtype=bool) if edges else None,
-            edge_soft=np.asarray(esoft, dtype=bool) if edges else None,
-            gedge_a=gedge_a,
-            gedge_b=gedge_b,
-            gedge_gi=gedge_gi,
-            gedge_layer=gedge_layer,
-            gedge_sel=gedge_sel,
-            gedge_groups=gedge_groups,
-            gedge_ctx=gedge_ctx,
-            gedge_wire=gedge_wire,
-            gedge_fixed=gedge_fixed,
-            tri_spans=None,
-        )
-        # Spans must tile the triangle array exactly, or the prefilter would
-        # silently drop triangles (a stale cached block predating spans).
-        total_tris = len(idx.tri_v0) if idx.tri_v0 is not None else 0
-        if tri_spans and sum(n for _, _, n in tri_spans) == total_tris:
-            idx.tri_spans = tri_spans
-        idx.own_spans = own_spans
-        if _PERF:
-            _plog("pick_index", (_time_mod.perf_counter() - _p0) * 1000.0)
-        self._pick_index_cache = (key, idx, getattr(self, "_pick_block", None))
-        return idx
-
-    def _pick_static_tris(self, key, v0, e1, e2, te) -> dict:
-        """The static chunks' triangles joined, kept while the same chunks
-        sit at the same entity offsets: the lazy set changes on many
-        hovers (#158), the static part does not."""
-        import numpy as np
-        memo = getattr(self, "_pick_static_memo", None)
-        if memo is not None and memo[0] == key:
-            return memo[1]
-        out = {"v0": np.concatenate(v0) if v0 else None,
-               "e1": np.concatenate(e1) if v0 else None,
-               "e2": np.concatenate(e2) if v0 else None,
-               "te": np.concatenate(te) if v0 else None}
-        self._pick_static_memo = (key, out)
-        return out
+        return ingetrazo_core.document_pick_index(self, near)
 
     @staticmethod
     def _pick_flat(idx):
-        """``idx`` with the lazy placements' own spans joined into the flat
-        triangle arrays — for the passes that read every triangle (hidden
-        lines, section cuts); kept on the index once made."""
-        own = getattr(idx, "own_spans", None)
-        if not own:
-            return idx
-        flat = getattr(idx, "_flat", None)
-        if flat is not None:
-            return flat
-        import numpy as np
-        from types import SimpleNamespace
-        parts = ([(idx.tri_v0, idx.tri_e1, idx.tri_e2, idx.tri_ent)]
-                 if idx.tri_v0 is not None else [])
-        parts += [(a, b, c, te + o) for _bb, a, b, c, te, o in own]
-        flat = SimpleNamespace(**vars(idx))
-        flat.tri_v0 = np.concatenate([p[0] for p in parts])
-        flat.tri_e1 = np.concatenate([p[1] for p in parts])
-        flat.tri_e2 = np.concatenate([p[2] for p in parts])
-        flat.tri_ent = np.concatenate([p[3] for p in parts])
-        flat.tri_spans = None
-        flat.own_spans = []
-        idx._flat = flat
-        return flat
+        return ingetrazo_core.flat_pick_index(idx)
 
     def ray_distance(self, origin: QVector3D, direction: QVector3D,
                      reach: float | None = None):
-        """Distance along ``direction`` (unit) from ``origin`` to the nearest
-        VISIBLE face, or ``None`` when the ray meets nothing. What the
-        walkthrough tools ask — the floor under the eye, the wall ahead —
-        over the same index every pick uses (hidden objects and hidden
-        layers are not there to bump into). With ``reach``, only faces
-        within that distance count: the query bakes and tests only what
-        lies within it."""
-        nat = (self._lazy_native() if hasattr(self, "_lazy_native")
-               else None)
-        near = (("ray", origin, direction) if reach is None
-                else ("ray", origin, direction, float(reach)))
-        idx = self._pick_index(near="skip" if nat is not None else near)
-        if nat is not None:
-            # The lazy placements from the engine, none baked (#158).
-            t = self._ray_hits(idx, origin, direction, idx.ent_vis,
-                               reduce_global=True, reach=reach, own=False)
-            lz = DocumentInteraction._lazy_face_hits(self, nat, origin, direction,
-                                          "vis", reach)
-            if lz is not None:
-                tl = float(lz[0].min())
-                t = tl if t is None else min(t, tl)
-        elif idx is None or (getattr(idx, "tri_v0", None) is None
-                             and not getattr(idx, "own_spans", None)):
-            return None
-        else:
-            t = self._ray_hits(idx, origin, direction, idx.ent_vis,
-                               reduce_global=True, reach=reach)
-        if t is None or t == float("inf") or (reach is not None
-                                               and t > reach):
-            return None
-        return float(t)
+        return ingetrazo_core.index_ray_distance(self, origin, direction, reach)
 
     def _ray_hits(self, idx, origin, direction, ent_mask,
                   reduce_global: bool = False, reach: float | None = None,
                   own: bool = True):
-        """Per-entity nearest ray parameter over the index triangles whose
-        entity passes ``ent_mask``. Returns an (E,) array of t (``inf`` = no
-        hit), the single nearest t as a float when ``reduce_global``, or
-        ``None`` when the index has no triangles. Same acceptance
-        thresholds as :func:`_ray_triangle`.
-
-        P3: the Möller–Trumbore pass runs per chunk SPAN on array views,
-        after a ray-vs-AABB prefilter — a hover/zoom ray only pays for the
-        chunks it actually crosses (the full 700k-row pass cost 25–45 ms
-        per pick against the piscina scene). ``own`` False leaves out the
-        lazy placements' own spans (the engine answers for them, see
-        _face_hits)."""
-        import numpy as np
-        own = (getattr(idx, "own_spans", None) or ()) if own else ()
-        if idx.tri_v0 is None and not own:
-            return None
-        o = np.array([origin.x(), origin.y(), origin.z()])
-        d = np.array([direction.x(), direction.y(), direction.z()])
-        fast = (DocumentInteraction._static_ray_rows(
-                    self, idx, ent_mask,
-                    (float(o[0]), float(o[1]), float(o[2])),
-                    (float(d[0]), float(d[1]), float(d[2])))
-                if (reach is None and not own and idx.tri_v0 is not None
-                    and hasattr(self, "_static_occluders"))
-                else None)
-        if fast is not None:
-            # The engine's BVH in place of the span boxes below.
-            spans = ([(None, idx.tri_v0[fast], idx.tri_e1[fast],
-                       idx.tri_e2[fast], idx.tri_ent[fast], 0)]
-                     if len(fast) else [])
-        elif idx.tri_v0 is None:
-            spans = []
-        else:
-            spans = (getattr(idx, "tri_spans", None)
-                     or [(None, 0, len(idx.tri_v0))])
-        # Lazy placements' own arrays (#158) ride the same loop: a span is
-        # then (bbox, v0, e1, e2, local tri_ent, entity offset).
-        spans = list(spans) + list(own)
-        if len(spans) > 64 and fast is None:
-            # Thousands of spans on a huge model: which boxes the ray meets
-            # is one NumPy pass, not a Python test per span (900 000 of
-            # them in one snap hover, #158).
-            boxes = getattr(idx, "_span_boxes", None)
-            if boxes is None or boxes[0] != len(spans):
-                inf = float("inf")
-                blo = np.array([sp[0][0] if sp[0] is not None else (-inf,) * 3
-                                for sp in spans], dtype=np.float64)
-                bhi = np.array([sp[0][1] if sp[0] is not None else (inf,) * 3
-                                for sp in spans], dtype=np.float64)
-                boxes = idx._span_boxes = (len(spans), blo, bhi)
-            _n, blo, bhi = boxes
-            with np.errstate(divide="ignore", invalid="ignore"):
-                inv_d = 1.0 / np.where(np.abs(d) > 1e-12, d, 1e-12)
-                t1 = (blo - o) * inv_d
-                t2 = (bhi - o) * inv_d
-            tmin = _slab_far(np.minimum(t1, t2))
-            tmax = _slab_near(np.maximum(t1, t2))
-            meet = tmax >= np.maximum(tmin, 0.0)
-            if reach is not None:
-                meet &= tmin <= reach
-            spans = [(None,) + tuple(spans[i][1:])
-                     for i in np.flatnonzero(meet)]
-        o3 = (float(o[0]), float(o[1]), float(o[2]))
-        d3 = (float(d[0]), float(d[1]), float(d[2]))
-        lim = float("inf") if reach is None else float(reach)
-        best = float("inf")
-        face_t = None if reduce_global else np.full(len(idx.entities), np.inf)
-
-        # The static spans the ray meets go through Möller–Trumbore in ONE
-        # pass: with the span grid a ray meets dozens of small spans, and a
-        # NumPy call per span (~30 µs) became the ray's whole cost.
-        ranges = []
-        rest = []
-        for span in spans:
-            if len(span) == 3:
-                bb, s0, n = span
-                if n and (bb is None or _ray_aabb(o3, d3, bb[0], bb[1])):
-                    ranges.append((s0, n))
-            else:
-                rest.append(span)
-        if ranges:
-            if len(ranges) == 1:
-                s0, n = ranges[0]
-                sel = slice(s0, s0 + n)
-            else:
-                sel = np.concatenate([np.arange(s0, s0 + n)
-                                      for s0, n in ranges])
-            rest.insert(0, (None, idx.tri_v0[sel], idx.tri_e1[sel],
-                            idx.tri_e2[sel], idx.tri_ent[sel], 0))
-        spans = rest
-        for span in spans:
-            if len(span) == 3:
-                bb, s0, n = span
-                if not n:
-                    continue
-                if bb is not None and not _ray_aabb(o3, d3, bb[0], bb[1],
-                                                    lim):
-                    continue
-                v0 = idx.tri_v0[s0:s0 + n]
-                e1 = idx.tri_e1[s0:s0 + n]
-                e2 = idx.tri_e2[s0:s0 + n]
-                te = idx.tri_ent[s0:s0 + n]
-            else:
-                bb, v0, e1, e2, te_local, eoff = span
-                if not len(v0):
-                    continue
-                if bb is not None and not _ray_aabb(o3, d3, bb[0], bb[1],
-                                                    lim):
-                    continue
-                te = te_local + eoff
-            t, hit = _moller_trumbore(o, d, v0, e1, e2)
-            hit &= ent_mask[te]
-            if reduce_global:
-                # Zoom focus wants ONE nearest t, not per-entity buckets.
-                th = t[hit]
-                if len(th):
-                    tm = float(th.min())
-                    if tm < best:
-                        best = tm
-            else:
-                hit_rows = np.where(hit)[0]
-                if len(hit_rows):
-                    # minimum.at only over the triangles the ray actually
-                    # hits (a handful) — over the full array it alone cost
-                    # ~100 ms per snap hover.
-                    np.minimum.at(face_t, te[hit_rows], t[hit_rows])
-        return best if reduce_global else face_t
+        return ingetrazo_core.index_ray_hits(self, idx, origin, direction, ent_mask,
+                              reduce_global, reach, own)
 
     def _ray_near(self, x: float, y: float):
         """What a ray pick at widget pixel ``(x, y)`` asks the pick index
@@ -9733,222 +7486,19 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return "skip" if nat is not None else ("px", x, y)
 
     def _face_hits(self, idx, origin, direction, which: str = "sel"):
-        """The faces the ray from ``origin`` along ``direction`` meets, each
-        at its nearest t, of the index entities that pass ``which``
-        ("sel": selectable, "vis": visible, "infer": a face the snap
-        engine may infer from — the selectable ones PLUS the rest of the
-        model around an open group / component, which cannot be picked but
-        is drawn as a reference) — in the index's order, which the ties of
-        every pick go by: ``SimpleNamespace(t, area, loose, ent(k) →
-        (face, owner), place(k) → placement)``, or None when the index has
-        no triangles. With the experimental engine the lazy placements'
-        faces come from it, none of them baked (#158), after the index's
-        own, in the order their bakes would follow them."""
-        import numpy as np
-        from types import SimpleNamespace
-        nat = (self._lazy_native() if hasattr(self, "_lazy_native")
-               else None)
-        if which == "sel":
-            mask = idx.ent_sel
-        elif which == "infer":
-            mask = getattr(idx, "ent_infer", idx.ent_sel)
-        else:
-            mask = idx.ent_vis
-        face_t = (self._ray_hits(idx, origin, direction, mask,
-                                 own=nat is None)
-                  if len(idx.entities) else None)
-        lazy = (DocumentInteraction._lazy_face_hits(self, nat, origin, direction, which)
-                if nat is not None else None)
-        if face_t is None and lazy is None:
-            return None
-        rows = (np.flatnonzero(np.isfinite(face_t)) if face_t is not None
-                else np.empty(0, np.int64))
-        pidx = getattr(idx, "ent_place_idx", None)
-        n = len(rows)
-
-        def ent(k):
-            if k < n:
-                return idx.entities[int(rows[k])]
-            return lazy[3](k - n)
-
-        def owner(k):
-            if k < n:
-                return _entity_owner(idx.entities, int(rows[k]))
-            return lazy[5](k - n)
-
-        def place(k):
-            if k < n:
-                i = int(rows[k])
-                if pidx is not None and i < len(pidx) and pidx[i] >= 0:
-                    return idx.ent_placements[int(pidx[i])]
-                return _entity_owner(idx.entities, i)
-            return lazy[4](k - n)
-        t = face_t[rows] if n else np.empty(0)
-        area = idx.ent_area[rows] if n else np.empty(0)
-        loose = idx.ent_loose[rows] if n else np.empty(0, bool)
-        if lazy is not None:
-            t = np.concatenate([t, lazy[0]])
-            area = np.concatenate([area, lazy[1]])
-            loose = np.concatenate([loose, np.zeros(len(lazy[0]), bool)])
-        return SimpleNamespace(t=t, area=area, loose=loose, ent=ent,
-                               owner=owner, place=place)
+        return ingetrazo_core.face_hits(self, idx, origin, direction, which)
 
     def _lazy_sel_rows(self, nat):
-        """The rows of the lazy table whose faces a pick may land on (see
-        _lazy_native's ``snap``, less what the open context keeps from
-        being touched), in the index's order."""
-        import numpy as np
-        memo = getattr(self, "_lazy_sel_memo", None)
-        if memo is not None and memo[0] is nat:
-            return memo[1]
-        toc = self._pick_cands_memo[1]
-        groups = self._pick_lazy_table()[0]
-        snap = nat[1]
-        sel = np.fromiter((i for i in snap.tolist() if id(groups[i]) in toc
-                          and self.scene.entity_selectable(groups[i])),
-                          np.int64)
-        self._lazy_sel_memo = (nat, sel)
-        return sel
-
-    def _lazy_face_hits(self, nat, origin, direction, which,
-                        reach: float | None = None):
-        """The lazy placements' faces the ray meets, from the engine (see
-        _face_hits): ``(t, area, order, ent(k), place(k))`` as their bakes
-        would give them, or None. The engine hands the triangles the ray
-        may meet; which it meets, and where, is decided here by the pick
-        index's own test."""
-        import numpy as np
-        iset, snap, vis = nat
-        if which == "sel":
-            rows = DocumentInteraction._lazy_sel_rows(self, nat)
-        elif which == "infer":
-            # The lazy placements the snap may land on (visible, unlocked),
-            # touchable or not — see _face_hits.
-            rows = snap
-        else:
-            rows = vis
-        if not len(rows):
-            return None
-        o = np.array([origin.x(), origin.y(), origin.z()])
-        d = np.array([direction.x(), direction.y(), direction.z()])
-        pl, tr, v0, e1, e2 = iset.ray_cands(
-            np.ascontiguousarray(rows, np.int64), tuple(o.tolist()),
-            tuple(d.tolist()), float("inf") if reach is None else float(reach))
-        if not len(pl):
-            return None
-        t, hit = _moller_trumbore(o, d, v0, e1, e2)
-        k = np.flatnonzero(hit)
-        if not len(k):
-            return None
-        groups = self._pick_lazy_table()[0]
-        lazy_pos = self._pick_cands_memo[3]
-        bases: dict = {}
-        best: dict = {}                     # (row, entity) → nearest t
-        for i, r, tt in zip(pl[k].tolist(), tr[k].tolist(), t[k].tolist()):
-            base = bases.get(i)
-            if base is None:
-                g = groups[i]
-                base = bases[i] = self._proto_base_chunk(
-                    g.mesh, _paint_of(self, g))
-            key = (i, int(base["tri_ent"][r]))
-            if tt < best.get(key, float("inf")):
-                best[key] = tt
-        keys = sorted(best, key=lambda ij: (lazy_pos[id(groups[ij[0]])][0],
-                                            ij[1]))
-        scale: dict = {}
-        for i in bases:
-            # The placed areas as _instance_chunk makes them.
-            L = _placed_maps(groups[i].xform)[0]
-            scale[i] = abs(float(np.linalg.det(L))) ** (2.0 / 3.0)
-        tt = np.array([best[ij] for ij in keys], dtype=np.float64)
-        area = np.array([bases[i]["areas"][j] * scale[i] for i, j in keys],
-                        dtype=np.float64)
-
-        def ent(m):
-            i, j = keys[m]
-            return bases[i]["faces"][j], self._owner_of(groups[i])
-
-        def place(m):
-            return groups[keys[m][0]]
-
-        def owner(m):
-            return self._owner_of(groups[keys[m][0]])
-        return tt, area, keys, ent, place, owner
+        return ingetrazo_core.pick_lazy_selectable(self, nat)
 
     def _hover_hits(self, idx, origin, direction):
-        """:meth:`_face_hits` of the selectable faces, memoised for the
-        current cursor ray, without what lies past the active cut. One
-        SelectTool hover fires pick_group + pick_face on the same mouse
-        move, and each used to re-run the full Möller–Trumbore pass (~20 ms
-        over a 260k-triangle import); they now share one pass and post-mask
-        by loose/group."""
-        key = (self.scene.version, id(self.scene.mesh),
-               origin.x(), origin.y(), origin.z(),
-               direction.x(), direction.y(), direction.z())
-        nat = (self._lazy_native() if hasattr(self, "_lazy_native")
-               else None)
-        cached = getattr(self, "_hover_hits_cache", None)
-        # The answer is per entity OF THIS INDEX: a lazy index (#158) is
-        # rebuilt between two asks of one hover when a query brings new
-        # placements in, and the old index's per-entity times read against
-        # the new one picked the wrong face, or ran past its end.
-        if (cached is not None and cached[0] == key and cached[2] is idx
-                and cached[3] is nat):
-            return cached[1]
-        hits = DocumentInteraction._face_hits(self, idx, origin, direction, "sel")
-        DocumentInteraction._drop_past_cut(self, hits, origin, direction)
-        self._hover_hits_cache = (key, hits, idx, nat)
-        return hits
+        return ingetrazo_core.cached_face_hits(self, idx, origin, direction, False)
 
     def _infer_hits(self, idx, origin, direction):
-        """:meth:`_hover_hits` of the faces the snap engine may INFER FROM:
-        every selectable one plus the rest of the model around an open group
-        / component (drawn faded, never pickable). Geometry being moved is
-        still left out by the caller's own rules — this only widens the
-        context, not the moving set."""
-        key = (self.scene.version, id(self.scene.mesh),
-               origin.x(), origin.y(), origin.z(),
-               direction.x(), direction.y(), direction.z())
-        nat = (self._lazy_native() if hasattr(self, "_lazy_native")
-               else None)
-        cached = getattr(self, "_infer_hits_cache", None)
-        if (cached is not None and cached[0] == key and cached[2] is idx
-                and cached[3] is nat):
-            return cached[1]
-        hits = DocumentInteraction._face_hits(self, idx, origin, direction, "infer")
-        DocumentInteraction._drop_past_cut(self, hits, origin, direction)
-        self._infer_hits_cache = (key, hits, idx, nat)
-        return hits
-
-    def _drop_past_cut(self, hits, origin, direction) -> None:
-        """Hits beyond the active cut are on clipped-away geometry: their
-        ``t`` becomes ``inf``, in place."""
-        sp = _active_cut(self.scene)
-        if sp is not None and hits is not None and len(hits.t):
-            import numpy as np
-            o = np.array([origin.x(), origin.y(), origin.z()])
-            d = np.array([direction.x(), direction.y(), direction.z()])
-            n = np.array([sp.normal.x(), sp.normal.y(), sp.normal.z()])
-            c = float(n @ [sp.point.x(), sp.point.y(), sp.point.z()])
-            pts = o + d * hits.t[:, None]
-            hidden = (pts @ n - c) > 1e-6
-            hits.t = np.where(hidden, np.inf, hits.t)
+        return ingetrazo_core.cached_face_hits(self, idx, origin, direction, True)
 
     def edge_point_under_cursor(self, edge, screen_x: float, screen_y: float):
-        """The world point of ``edge`` nearest the cursor (closest point of
-        its screen-space segment, mapped back along the edge), or None when
-        the edge does not project."""
-        pa = self._world_to_pixel(edge.a)
-        pb = self._world_to_pixel(edge.b)
-        if pa is None or pb is None:
-            return None
-        dx, dy = pb[0] - pa[0], pb[1] - pa[1]
-        l2 = dx * dx + dy * dy
-        if l2 < 1e-12:
-            return QVector3D(edge.a)
-        t = ((screen_x - pa[0]) * dx + (screen_y - pa[1]) * dy) / l2
-        t = max(0.0, min(1.0, t))
-        return edge.a + (edge.b - edge.a) * t
+        return ingetrazo_core.edge_cursor_point(self, edge, screen_x, screen_y)
 
     def pick_edge(self, screen_x: float, screen_y: float):
         """Return the edge closest to ``(screen_x, screen_y)`` within threshold."""
@@ -9981,84 +7531,13 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
                                with_distance=True)
 
     def _linework_edge_rows(self, screen_x: float, screen_y: float):
-        """``(idx, rows, ax, ay, bx, by)``: the pick index's group edges of
-        placements made of lines only (no faces) that a click may land
-        on — their rows, kept on the index, and their screen endpoints —
-        or ``None`` when there are none (or the lazy engine holds the
-        placements: it keeps no such flag)."""
-        import numpy as np
-        if hasattr(self, "_lazy_native") and self._lazy_native() is not None:
-            return None
-        idx = self._pick_index(near=("px", screen_x, screen_y))
-        wire = getattr(idx, "gedge_wire", None)
-        if (idx.gedge_a is None or not wire
-                or len(wire) != len(idx.gedge_groups)):
-            return None
-        kept = getattr(idx, "_linework_rows", None)
-        if kept is None or kept[0] is not idx.gedge_gi:
-            rows = np.flatnonzero(np.asarray(wire, bool)[idx.gedge_gi])
-            sel = getattr(idx, "gedge_sel", None)
-            if sel is not None:
-                rows = rows[sel[rows]]
-            kept = idx._linework_rows = (idx.gedge_gi, rows)
-        rows = kept[1]
-        if not len(rows):
-            return None
-        proj = self._gedge_screen()
-        if proj is None:
-            return None
-        ax, ay, bx, by, ok = (p[rows] for p in proj)
-        rows, ax, ay, bx, by = rows[ok], ax[ok], ay[ok], bx[ok], by[ok]
-        return (idx, rows, ax, ay, bx, by) if len(rows) else None
+        return ingetrazo_core.linework_edge_rows(self, screen_x, screen_y)
 
     def pick_linework_groups(self, screen_x: float, screen_y: float):
-        """``[(group, pixels)]``, nearest first: the objects made of lines
-        only whose visible lines pass within the pick threshold of the
-        cursor — what a click selects there before the face under the
-        cursor, as a lone loose line would be (a hatch or a set of
-        lines grouped on a slab had no hitbox but its 1-px lines, and the
-        slab took the click). ``group`` is what a click selects in the
-        open context."""
-        import numpy as np
-        found = self._linework_edge_rows(screen_x, screen_y)
-        if found is None:
-            return []
-        idx, rows, ax, ay, bx, by = found
-        dx, dy = bx - ax, by - ay
-        l2 = dx * dx + dy * dy
-        safe = np.where(l2 > 1e-12, l2, 1.0)
-        t = np.clip(((screen_x - ax) * dx + (screen_y - ay) * dy) / safe,
-                    0.0, 1.0)
-        d = np.hypot(ax + t * dx - screen_x, ay + t * dy - screen_y)
-        near = np.flatnonzero(d < self.pick_threshold_px)
-        out, seen = [], set()
-        for k in near[np.argsort(d[near])][:64]:
-            i = int(rows[k])
-            owner = idx.gedge_groups[int(idx.gedge_gi[i])]
-            if id(owner) in seen or not self.scene.entity_selectable(owner):
-                continue
-            a = QVector3D(*idx.gedge_a[i])
-            p = a + (QVector3D(*idx.gedge_b[i]) - a) * float(t[k])
-            if self.linework_hidden(p):
-                continue
-            seen.add(id(owner))
-            out.append((owner, float(d[k])))
-        return out
+        return ingetrazo_core.linework_groups(self, screen_x, screen_y, False)
 
     def linework_groups_around(self, screen_x: float, screen_y: float):
-        """The objects made of lines only whose screen box holds the
-        cursor, smallest box first: what a click between the lines of a
-        hatch may select (SelectTool takes one when nothing else is under
-        the cursor, and offers them on a repeated click)."""
-        import numpy as np
-        found = self._linework_edge_rows(screen_x, screen_y)
-        if found is None:
-            return []
-        idx, rows, ax, ay, bx, by = found
-        return _boxes_around(idx.gedge_gi[rows], np.minimum(ax, bx),
-                             np.minimum(ay, by), np.maximum(ax, bx),
-                             np.maximum(ay, by), screen_x, screen_y,
-                             lambda g: idx.gedge_groups[g], self.scene)
+        return ingetrazo_core.linework_groups(self, screen_x, screen_y, True)
 
     def _pick_edge(self, screen_x: float, screen_y: float,
                    visible_only: bool, which: str = "sel", hidden=None,
@@ -10076,51 +7555,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return found[0] if found is not None else None
 
     def _pick_edge_d(self, screen_x, screen_y, visible_only, which, hidden):
-        import numpy as np
-        idx = self._pick_index(near="skip")
-        if idx.edge_a is None:
-            return None
-        ax, ay, oka = self._project_px(idx.edge_a)
-        bx, by, okb = self._project_px(idx.edge_b)
-        allowed = (idx.edge_sel if which == "sel"
-                   else getattr(idx, "edge_snap", idx.edge_sel))
-        ok = oka & okb & allowed
-        soft = getattr(idx, "edge_soft", None)
-        if (visible_only and soft is not None
-                and not getattr(self.scene, "show_hidden_geometry", False)):
-            ok &= ~soft
-        sp = _active_cut(self.scene)
-        if sp is not None:
-            n = np.array([sp.normal.x(), sp.normal.y(), sp.normal.z()])
-            c = float(n @ [sp.point.x(), sp.point.y(), sp.point.z()])
-            da = idx.edge_a @ n - c
-            db = idx.edge_b @ n - c
-            ok &= ~((da > 1e-6) & (db > 1e-6))
-        if not ok.any():
-            return None
-        dx, dy = bx - ax, by - ay
-        l2 = dx * dx + dy * dy
-        safe = np.where(l2 > 1e-12, l2, 1.0)
-        t = np.clip(((screen_x - ax) * dx + (screen_y - ay) * dy) / safe,
-                    0.0, 1.0)
-        d = np.hypot(ax + t * dx - screen_x, ay + t * dy - screen_y)
-        d = np.where(ok, d, np.inf)
-        if not visible_only:
-            i = int(np.argmin(d))
-            return ((idx.edges[i], float(d[i]))
-                    if d[i] < self.pick_threshold_px else None)
-        hidden = hidden or self._is_occluded
-        # Nearest first, skipping the ones hidden behind the model; a few
-        # tries are plenty (the threshold holds only a handful).
-        for i in np.argsort(d)[:8]:
-            i = int(i)
-            if not d[i] < self.pick_threshold_px:
-                return None
-            e = idx.edges[i]
-            p = self.edge_point_under_cursor(e, screen_x, screen_y)
-            if p is None or not hidden(p):
-                return e, float(d[i])
-        return None
+        return ingetrazo_core.pick_edge_distance(self, screen_x, screen_y, visible_only, which, hidden)
 
     def pick_dimension(self, screen_x: float, screen_y: float):
         """Return the dimension whose lines (extension + dimension line) are
@@ -10256,71 +7691,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return False
 
     def _gedge_screen(self):
-        """Screen-projected endpoints of every group hard edge —
-        ``(ax, ay, bx, by, ok)`` arrays, cached until the scene or the
-        camera moves. Shared by pick_group's edge fallback and the snap
-        prefilter (during a drawing hover the camera is still, so the two
-        big projections run once, not per mouse move)."""
-        import numpy as np
-        idx = self._pick_index(near="skip")
-        if idx.gedge_a is None or not len(idx.gedge_a):
-            return None
-        M = self._np_mvp()
-        # The rest-of-model mode changes WHICH edges the index holds
-        # (hidden surroundings leave it), so it keys the projection too.
-        key = (id(idx.gedge_a), id(self.scene.mesh), M.tobytes(),
-               self.width(), self.height(),
-               getattr(self, "_edit_rest_mode", None))
-        cached = getattr(self, "_gedge_px_cache", None)
-        # The array itself, not only its id(): a rebuilt index's edges can
-        # be given the address of the ones they replaced.
-        if (cached is not None and cached[0] == key and len(cached) > 2
-                and cached[2] is idx.gedge_a):
-            return cached[1]
-        # A hover that brings new lazy placements in rebuilds the index:
-        # the fixed part's edges lead it unchanged and each lazy chunk
-        # keeps its edge array, so only what is new to this view is
-        # projected (all 1.6 M edges, four times a mouse move with Line
-        # beside the plant of #158).
-        fx = getattr(idx, "gedge_fixed", None)
-        head = getattr(self, "_gedge_px_head", None)
-        vkey = key[1:]
-        if fx is None or fx[1] + sum(map(len, fx[2])) != len(idx.gedge_a):
-            ax, ay, oka = self._project_px(idx.gedge_a)
-            bx, by, okb = self._project_px(idx.gedge_b)
-            data = (ax, ay, bx, by, oka & okb)
-        else:
-            n = fx[1]
-            if (head is None or head[0] != vkey or head[1] is not fx[0]
-                    or head[2] != n):
-                ax, ay, oka = self._project_px(idx.gedge_a[:n])
-                bx, by, okb = self._project_px(idx.gedge_b[:n])
-                head = self._gedge_px_head = (vkey, fx[0], n,
-                                              (ax, ay, bx, by, oka & okb))
-            memo = getattr(self, "_gedge_px_pieces", None)
-            if memo is None or memo[0] != vkey:
-                memo = self._gedge_px_pieces = (vkey, {})
-            pieces, todo = memo[1], []
-            for ge in fx[2]:
-                hit = pieces.get(id(ge))
-                if hit is None or hit[0] is not ge:
-                    todo.append(ge)
-            if todo:
-                # The new chunks in one projection, split back after.
-                flat = np.concatenate([ge.reshape(-1, 3) for ge in todo])
-                x, y, ok = self._project_px(flat)
-                o = 0
-                for ge in todo:
-                    m = 2 * len(ge)
-                    sx, sy, sk = x[o:o + m], y[o:o + m], ok[o:o + m]
-                    pieces[id(ge)] = (ge, (sx[0::2], sy[0::2], sx[1::2],
-                                           sy[1::2], sk[0::2] & sk[1::2]))
-                    o += m
-            parts = [head[3]] + [pieces[id(ge)][1] for ge in fx[2]]
-            data = tuple(np.concatenate([p[k] for p in parts])
-                         for k in range(5))
-        self._gedge_px_cache = (key, data, idx.gedge_a)
-        return data
+        return ingetrazo_core.gedge_screen(self)
 
     #: The group-edge distances' contract with their two readers (the
     #: hovered-edge pick, within ``pick_threshold_px``; the snap prefilter,
@@ -10340,1044 +7711,92 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     GEDGE_GRID_MIN = 20000
 
     def _gedge_dist(self, px: float, py: float):
-        """Screen distance from the cursor to every group hard edge, shared
-        by the hovered-edge pick and the snap prefilter (both used to
-        compute it); see ``GEDGE_NEAR_PX`` for how far it is exact.
-
-        On a 330 k-face city the full pass was ~30 ms of every mouse move
-        for the few dozen edges that matter. A camera that stays put for a
-        second hover gets the edges binned into a screen grid (once — the
-        projection's own lifetime), and each move then measures the cells
-        around the cursor: 0.2 ms zoomed onto a building, ~2 ms with the
-        whole city in view (11 edges per pixel: the near radius already
-        holds hundreds). The grid lives as long as the projection: the
-        first hover of a projection keeps the full pass, so one that
-        changes every event (the camera moving) never pays for a grid it
-        would use once. City-L, the interaction benchmark: hover with Line
-        103 -> 60 ms, a Move drag 101 -> 49 ms per event (median)."""
-        import numpy as np
-        from core.edge_grid import EdgeGrid, segment_distances
-        proj = self._gedge_screen()
-        # Whole pixels: the hovered-edge pick gets the float position and
-        # the snap scene the rounded one — the same pass must serve both.
-        key = (id(proj), int(round(px)), int(round(py)))
-        cached = getattr(self, "_gedge_dist_cache", None)
-        if (cached is not None and cached[0] == key and len(cached) > 2
-                and cached[2] is proj):
-            return cached[1]
-        ax, ay, bx, by, ok = proj
-        d = None
-        if (not _NO_SNAP_FAST and len(ax) >= DocumentInteraction.GEDGE_GRID_MIN
-                and getattr(self, "pick_threshold_px", 0.0)
-                <= DocumentInteraction.GEDGE_REACH_PX):
-            # (projection, grid or None): the grid waits for the second hover.
-            slot = getattr(self, "_gedge_grid_cache", None)
-            if slot is None or slot[0] is not proj:
-                self._gedge_grid_cache = (proj, None)
-            else:
-                grid = slot[1]
-                if grid is None:
-                    grid = EdgeGrid(ax, ay, bx, by, ok, self.width(),
-                                    self.height(), DocumentInteraction.GEDGE_REACH_PX)
-                    self._gedge_grid_cache = (proj, grid)
-                near_px = max(DocumentInteraction.GEDGE_NEAR_PX,
-                              getattr(self, "pick_threshold_px", 0.0))
-                for reach in (near_px, DocumentInteraction.GEDGE_REACH_PX):
-                    ids = grid.near(px, py, reach)
-                    if ids is None:
-                        break
-                    sub = segment_distances(ax, ay, bx, by, ok, px, py, ids)
-                    if (reach >= DocumentInteraction.GEDGE_REACH_PX
-                            or int((sub < reach).sum()) >= DocumentInteraction.GEDGE_ENOUGH):
-                        d = np.full(len(ax), np.inf)
-                        d[ids] = sub
-                        break
-        if d is None:
-            d = segment_distances(ax, ay, bx, by, ok, px, py)
-        self._gedge_dist_cache = (key, d, proj)
-        return d
+        return ingetrazo_core.gedge_dist(self, px, py)
 
     def _ledge_screen(self):
-        """Screen-projected endpoints of every loose edge — the
-        ``_gedge_screen`` twin for the snap prefilter after an explode
-        leaves a big loose mesh. While a context is open the rest of the
-        model's loose edges ride along (see ``_outer_loose_meshes``); their
-        ``edge_sel`` is False, so picks and the box leave them alone.
-        Cached until the scene/camera moves."""
-        idx = self._pick_index(near="skip")
-        if idx.edge_a is None or not len(idx.edge_a):
-            return None
-        M = self._np_mvp()
-        # Whether the rest of the model's loose edges are in the index
-        # changes with «Hide rest of model», which bumps no scene version.
-        key = (_content_ver(self), id(self.scene.mesh), M.tobytes(),
-               self.width(), self.height(),
-               bool(getattr(self, "_rest_is_hidden", lambda: False)()))
-        cached = getattr(self, "_ledge_px_cache", None)
-        if cached is not None and cached[0] == key:
-            return cached[1]
-        ax, ay, oka = self._project_px(idx.edge_a)
-        bx, by, okb = self._project_px(idx.edge_b)
-        data = (ax, ay, bx, by, oka & okb)
-        self._ledge_px_cache = (key, data)
-        return data
+        return ingetrazo_core.ledge_screen(self)
 
     def _nearby_loose_edges(self, px: float, py: float,
                             radius_px: float = 64.0, cap: int = 400) -> list:
-        """The loose edges whose screen segment passes near the cursor —
-        real Edge objects, nearest first, at most ``cap``."""
-        proj = self._ledge_screen()
-        if proj is None:
-            return []
-        import numpy as np
-        ax, ay, bx, by, ok = proj
-        if not ok.any():
-            return []
-        dx, dy = bx - ax, by - ay
-        l2 = dx * dx + dy * dy
-        safe = np.where(l2 > 1e-12, l2, 1.0)
-        t = np.clip(((px - ax) * dx + (py - ay) * dy) / safe, 0.0, 1.0)
-        d = np.hypot(ax + t * dx - px, ay + t * dy - py)
-        d = np.where(ok, d, np.inf)
-        cand = np.where(d < radius_px)[0]
-        if len(cand) > cap:
-            cand = cand[np.argsort(d[cand])[:cap]]
-        idx = self._pick_index(near="skip")
-        edges = idx.edges
-        n = len(edges)
-        return [edges[int(i)] for i in cand if int(i) < n]
+        return ingetrazo_core.nearby_loose_edges(self, px, py, radius_px, cap)
 
     def _nearby_group_edges(self, px: float, py: float,
                             radius_px: float = 48.0, cap: int = 48) -> list:
-        """Group hard edges whose screen-space segment passes within
-        ``radius_px`` of the cursor, as :class:`_SnapEdge` pseudo-edges —
-        at most ``cap``, nearest first. Vectorised prefilter:
-        ``compute_snap`` walks its edge list in Python several times per
-        hover, so feeding it ALL 160k edges of an import would freeze every
-        mouse move; the ~dozens near the cursor cover the point/edge snaps
-        the user can actually see."""
-        # The placements near THIS pixel enter the index first (lazy mode,
-        # #158): the projection below reads the index as it stands, and the
-        # edges are read from that same one. Asking again bakes more and
-        # reorders the lazy part: the measured positions then pointed at
-        # other edges, or past the end (the SPR, hovering with Line).
-        nat = (self._lazy_native() if hasattr(self, "_lazy_native")
-               else None)
-        if (nat is not None and radius_px <= DocumentInteraction.GEDGE_REACH_PX
-                and cap <= DocumentInteraction.GEDGE_ENOUGH):
-            return self._nearby_edges_unbaked(px, py, radius_px, cap, nat)
-        idx = self._pick_index(near=("snap", px, py))
-        proj = self._gedge_screen()
-        if proj is None:
-            return []
-        import numpy as np
-        if not proj[4].any():
-            return []
-        dist = getattr(self, "_gedge_dist", None)          # stub VPs in tests
-        if radius_px > DocumentInteraction.GEDGE_REACH_PX or cap > DocumentInteraction.GEDGE_ENOUGH:
-            # Past what _gedge_dist promises (GEDGE_NEAR_PX): every edge.
-            from core.edge_grid import segment_distances
-            d = segment_distances(*proj, px, py)
-        else:
-            d = (dist(px, py) if dist is not None
-                 else DocumentInteraction._gedge_dist(self, px, py))
-        cand = np.where(d < radius_px)[0]
-        if len(cand) > cap:
-            # The nearest ``cap`` first, then those in order: sorting all
-            # of them was 90 ms a move with the whole plant of #158 in view
-            # (half a million edges inside the radius).
-            dc = d[cand]
-            if len(cand) > 4 * cap:
-                part = np.argpartition(dc, cap - 1)[:cap]
-                cand, dc = cand[part], dc[part]
-            cand = cand[np.lexsort((cand, dc))[:cap]]
-        return [_group_pseudo_edge(idx, int(i)) for i in cand]
+        return ingetrazo_core.nearby_group_edges(self, px, py, radius_px, cap)
 
     def _nearby_edges_unbaked(self, px, py, radius, cap, nat,
                               with_d=False) -> list:
-        """``_nearby_group_edges`` with the lazy placements' edges from the
-        native engine, none of them baked (#158): the fixed placements'
-        edges as the index holds them, those of the placements the snap's
-        footprint takes in as their bakes would hold them — the nearest
-        ``cap`` within ``radius`` px, nearest first (with their distances
-        as ``(d, edge)`` when ``with_d``).
-
-        Within one input event the cursor's own edge (``pick_edge_any``:
-        the nearest under the pick threshold) and the snap's (the nearest
-        48 within 48 px) are both read off one search of the wider: by
-        distance, then fixed before lazy, then index or (candidate, edge),
-        the order is total, so the nearest ``cap`` within ``radius`` are
-        those of the wider within it. Over the plant of #158 each search
-        was ~10 ms, twice a pointer move."""
-        wide, ncap = DocumentInteraction.GEDGE_SHARED_PX, DocumentInteraction.GEDGE_ENOUGH
-        serial = getattr(self, "_input_serial", None)
-        if (not _EDGES_SHARED or serial is None or not radius <= wide
-                or not 0 < cap <= ncap):
-            out = self._nearby_edges_found(px, py, radius, cap, nat)
-        else:
-            key = (serial, float(px), float(py), id(nat[0]), id(nat[1]),
-                   self._placements_epoch(),
-                   getattr(self.scene, "version", None),
-                   tuple(self._np_mvp().ravel()), self.width(),
-                   self.height(), id(self._pick_index(near="skip")),
-                   id(self._gedge_screen()),
-                   id(getattr(self, "_depth_snap", None)))
-            memo = getattr(self, "_edges_near_shared", None)
-            if memo is None or memo[0] != key:
-                memo = self._edges_near_shared = (key, self._nearby_edges_found(
-                    px, py, wide, ncap, nat))
-            out = [(d, _copy_snap_edge(e)) for d, e in memo[1]
-                   if d < radius][:cap]
-        return out if with_d else [e for _d, e in out]
+        return ingetrazo_core.nearby_edges_unbaked(self, px, py, radius, cap, nat, with_d)
 
     def _nearby_edges_found(self, px, py, radius, cap, nat) -> list:
-        """_nearby_edges_unbaked's search: ``(d, edge)``, nearest first."""
-        import numpy as np
-        iset, snap, _vis = nat
-        idx = self._pick_index(near="skip")
-        fx = getattr(idx, "gedge_fixed", None)
-        m = fx[1] if fx is not None else 0
-        out = []                           # (d, edge)
-        if m and self._gedge_screen() is not None:
-            d = self._gedge_dist(px, py)[:m]
-            cand = _nearest_within(d, radius, cap)
-            out += [(float(d[i]), _group_pseudo_edge(idx, int(i)))
-                    for i in cand]
-        table = self._pick_lazy_table()
-        rows = self._footprint_need(table, float(px), float(py), radius)
-        rows = rows[np.isin(rows, snap)] if len(rows) else rows
-        if len(rows):
-            M = self._np_mvp()
-            pl, _e, a, b, d = iset.edges_near(
-                np.ascontiguousarray(rows, np.int64),
-                np.ascontiguousarray(M.T).ravel().tolist(),
-                float(self.width()), float(self.height()), float(px),
-                float(py), float(radius), int(cap))
-            groups = table[0]
-            for i, aa, bb, dd in zip(pl.tolist(), a.tolist(), b.tolist(),
-                                     d.tolist()):
-                owner = self._owner_of(groups[i])
-                out.append((dd, _SnapEdge(
-                    QVector3D(*aa), QVector3D(*bb), in_group=True,
-                    context=_snap_context_of(self, groups[i]), group=owner)))
-        out.sort(key=lambda de: de[0])        # stable: the fixed ones first
-        return out[:cap]
+        return ingetrazo_core.nearby_edges_found(self, px, py, radius, cap, nat)
 
     def _pick_group_edge_unbaked(self, px, py, nat):
-        """pick_group's edge fallback with the lazy placements' edges from
-        the engine, none baked (#158): ``(d, owner)`` of the nearest group
-        edge within the pick threshold that a pick may land on and the
-        user can see, or ``(threshold, None)``."""
-        import numpy as np
-        best = self.pick_threshold_px
-        idx = self._pick_index(near="skip")
-        cands = []                         # (d, a, b, t, owner)
-        fx = getattr(idx, "gedge_fixed", None)
-        m = fx[1] if fx is not None else 0
-        proj = self._gedge_screen() if m else None
-        if proj is not None:
-            ax, ay, bx, by, ok = (v[:m] for v in proj)
-            dx, dy = bx - ax, by - ay
-            l2 = dx * dx + dy * dy
-            safe = np.where(l2 > 1e-12, l2, 1.0)
-            t = np.clip(((px - ax) * dx + (py - ay) * dy) / safe, 0.0, 1.0)
-            d = np.hypot(ax + t * dx - px, ay + t * dy - py)
-            sel = getattr(idx, "gedge_sel", None)
-            if sel is not None:
-                ok = ok & sel[:m]
-            d = np.where(ok, d, np.inf)
-            near = np.where(d < best)[0]
-            for i in near[np.argsort(d[near], kind="stable")]:
-                cands.append((float(d[i]), QVector3D(*idx.gedge_a[i]),
-                              QVector3D(*idx.gedge_b[i]), float(t[i]),
-                              idx.gedge_groups[int(idx.gedge_gi[i])]))
-        table = self._pick_lazy_table()
-        rows = self._footprint_need(table, float(px), float(py), best)
-        if len(rows):
-            rows = rows[np.isin(rows, DocumentInteraction._lazy_sel_rows(self, nat))]
-        if len(rows):
-            M = self._np_mvp()
-            pl, _e, a, b, d = nat[0].edges_near(
-                np.ascontiguousarray(rows, np.int64),
-                np.ascontiguousarray(M.T).ravel().tolist(),
-                float(self.width()), float(self.height()), float(px),
-                float(py), float(best), int(DocumentInteraction.GEDGE_ENOUGH))
-            if len(pl):
-                # Where along each the cursor is, as the index's
-                # projection of it reads it.
-                ex, ey, _ok = self._project_px(
-                    np.concatenate([np.asarray(a, np.float64),
-                                    np.asarray(b, np.float64)]))
-                n = len(pl)
-                ax, ay, bx, by = ex[:n], ey[:n], ex[n:], ey[n:]
-                dx, dy = bx - ax, by - ay
-                l2 = dx * dx + dy * dy
-                safe = np.where(l2 > 1e-12, l2, 1.0)
-                t = np.clip(((px - ax) * dx + (py - ay) * dy) / safe,
-                            0.0, 1.0)
-                groups = table[0]
-                for k, i in enumerate(pl.tolist()):
-                    cands.append((float(d[k]), QVector3D(*a[k]),
-                                  QVector3D(*b[k]), float(t[k]),
-                                  self._owner_of(groups[i])))
-        cands.sort(key=lambda c: c[0])         # stable: the fixed ones first
-        for dd, a, b, t, owner in cands:
-            if not self._is_occluded(a + (b - a) * t):
-                return dd, owner
-        return best, None
+        return ingetrazo_core.pick_group_edge_unbaked(self, px, py, nat)
 
     def pick_edge_any(self, screen_x: float, screen_y: float):
-        """The edge under the cursor, loose OR a group's (as a world
-        pseudo-edge with ``in_group``), nearest first — what the linear
-        inferences hover: parallel / perpendicular to a component's edge,
-        the reference lock, Push/Pull level with it (groups are read
-        from outside without opening them).
-
-        The loose half is picked with the SNAP rule, not the click one: the
-        rest of the model drawn around an open group / component is a
-        reference too, even though a click cannot select it."""
-        loose = self._pick_edge(screen_x, screen_y, visible_only=False,
-                                which="snap")
-        nat = (self._lazy_native() if hasattr(self, "_lazy_native")
-               else None)
-        if nat is not None:
-            # The nearest group edge under the threshold, fixed or lazy
-            # (see _nearby_edges_unbaked), against the loose one as below.
-            near = self._nearby_edges_unbaked(screen_x, screen_y,
-                                              self.pick_threshold_px, 1, nat,
-                                              with_d=True)
-            if not near:
-                return loose
-            dg, g = near[0]
-            if loose is not None:
-                pa = self._world_to_pixel(loose.a)
-                pb = self._world_to_pixel(loose.b)
-                if pa is not None and pb is not None:
-                    from core.snap import _closest_on_segment_2d
-                    dl, _t = _closest_on_segment_2d((screen_x, screen_y),
-                                                    pa, pb)
-                    if dl <= dg:
-                        return loose
-            return g
-        # The index this pixel asks for, then its projection: the edge is
-        # read from the index it was measured on (see _nearby_group_edges).
-        idx = self._pick_index(near=("px", screen_x, screen_y))
-        proj = self._gedge_screen()
-        if proj is None:
-            return loose
-        import numpy as np
-        ax, ay, bx, by, ok = proj
-        if not ok.any():
-            return loose
-        d = self._gedge_dist(screen_x, screen_y)
-        i = int(np.argmin(d))
-        if d[i] >= self.pick_threshold_px:
-            return loose
-        if loose is not None:
-            pa = self._world_to_pixel(loose.a)
-            pb = self._world_to_pixel(loose.b)
-            if pa is not None and pb is not None:
-                from core.snap import _closest_on_segment_2d
-                dl, _t = _closest_on_segment_2d((screen_x, screen_y), pa, pb)
-                if dl <= d[i]:
-                    return loose
-        return _group_pseudo_edge(idx, i)
+        return ingetrazo_core.pick_edge_any(self, screen_x, screen_y)
 
     #: How close (px) the cursor must come to a component's origin or an
     #: arc's midpoint for it to enter the snap scene at all.
     POINT_INFERENCE_PX = 40.0
 
     def _component_origin_points(self, px: float, py: float) -> list:
-        """The "Component Origin Point": each placed group's own
-        origin (its insertion point), as a degenerate pseudo-edge when it
-        lies near the cursor. One projection per placement."""
-        import numpy as np
-        cache = getattr(self, "_corigin_cache", None)
-        # The content's version: a view-only bump (a hover's highlight, a
-        # click) moves no origin — 21 000 of them re-mapped a mouse move.
-        key = (_content_ver(self), id(self.scene.edit_group))
-        if cache is None or cache[0] != key:
-            groups, pts = [], []
-            for g in self._placements():
-                xf = getattr(g, "xform", None)
-                if xf is None or getattr(g, "billboard", False):
-                    continue
-                o = xf.map(QVector3D(0.0, 0.0, 0.0))
-                groups.append(g)
-                pts.append((o.x(), o.y(), o.z()))
-            cache = (key, groups, np.array(pts, dtype=np.float64).reshape(-1, 3))
-            self._corigin_cache = cache
-        _k, groups, pts = cache
-        if not len(pts):
-            return []
-        sx, sy, ok = self._project_px(pts)
-        d = np.where(ok, np.hypot(sx - px, sy - py), np.inf)
-        moving = getattr(self.active_tool, "_group", None)
-        out: list = []
-        near = np.flatnonzero(d <= self.POINT_INFERENCE_PX)
-        cap = DocumentInteraction.GEDGE_ENOUGH
-        if len(near) > cap:
-            # The nearest ones, as with the group edges: with the whole
-            # plant of #158 in view 17 000 origins fell inside the radius
-            # and the snap weighed each in Python (~0.1 s a mouse move).
-            near = near[np.lexsort((near, d[near]))[:cap + 1]]
-        for i in near:
-            if groups[i] is moving:
-                continue
-            if len(out) >= cap:
-                break
-            o = QVector3D(*pts[i])
-            out.append(_SnapEdge(o, QVector3D(o), component_origin=True,
-                                 context=_snap_context_of(self, groups[i])))
-        return out
+        return ingetrazo_core.component_origin_points(self, px, py)
 
     def _arc_midpoints(self, px: float, py: float) -> list:
-        """The "Arc Midpoint": the middle of each loose arc's sweep
-        (the point on the arc bisecting its two ends — not any facet's
-        midpoint). Closed curves (circles) have none. Computed once per
-        scene version, offered when near the cursor."""
-        cache = getattr(self, "_arc_mid_cache", None)
-        # On the content, not the version: a click's selection bump made
-        # every placement's midpoints over again.
-        ckey = (_content_ver(self), id(self.scene.mesh),
-                id(self.scene.edit_group),
-                bool(getattr(self, "_rest_is_hidden", lambda: False)()))
-        if cache is None or cache[0] != ckey:
-            # Per MESH, keyed by its mutation serial: a scene version bump
-            # (every frame of a drag) used to walk every prototype's curves
-            # again — 31 ms a frame while moving a face (2026-09-14). Now a
-            # mesh's midpoints are recomputed only when that mesh changed;
-            # the version pass only maps them through the placements.
-            by_mesh = getattr(self, "_arc_mid_by_mesh", None)
-            if by_mesh is None:
-                by_mesh = self._arc_mid_by_mesh = {}
-            # Only the meshes met in this pass are kept. Emptying the whole
-            # memo past 2 048 meshes emptied it on EVERY pass on a model
-            # with more (2 721 on the plant of #158): all of them were
-            # worked out again, ~0.5 s of the first hover after an edit.
-            seen: dict = {}
-
-            def local_mids(mesh):
-                serial = getattr(mesh, "_mut_serial", None)
-                hit = seen.get(id(mesh)) or by_mesh.get(id(mesh))
-                if hit is None or hit[0] != serial or hit[2] is not mesh:
-                    hit = (serial, self._mesh_arc_midpoints(mesh), mesh)
-                seen[id(mesh)] = hit
-                return hit[1]
-            mids = [(m, None) for m in local_mids(self.scene.mesh)]
-            # …the root loose mesh drawn around an open context (a reference
-            # outside it), in its own world coordinates…
-            outer_of = getattr(self, "_outer_loose_meshes", None)
-            for om in (outer_of() if outer_of is not None else ()):
-                mids += [(m, "outside") for m in local_mids(om)]
-            # …and the arcs inside every placed group / component, through
-            # each placement's matrix.
-            for g in self._placements():
-                mesh = getattr(g, "mesh", None)
-                if mesh is None or getattr(g, "billboard", False):
-                    continue
-                lm = local_mids(mesh)
-                if not lm:
-                    continue
-                xf = getattr(g, "xform", None)
-                ctx = _snap_context_of(self, g)
-                mids += [(xf.map(m) if xf is not None else QVector3D(m), ctx)
-                         for m in lm]
-            self._arc_mid_by_mesh = seen
-            cache = (ckey, mids)
-            self._arc_mid_cache = cache
-        out: list = []
-        for m, ctx in cache[1]:
-            pc = self._world_to_pixel(m)
-            if pc is None or math.hypot(pc[0] - px, pc[1] - py) > self.POINT_INFERENCE_PX:
-                continue
-            out.append(_SnapEdge(QVector3D(m), QVector3D(m),
-                                 arc_midpoint=True, context=ctx))
-        return out
+        return ingetrazo_core.arc_midpoints(self, px, py)
 
     @staticmethod
     def _mesh_arc_midpoints(mesh) -> list:
-        """The sweep midpoint of every open curve chain of ``mesh`` (in the
-        mesh's own space)."""
-        from core.snap import arc_sweep_midpoint
-        from core.lazy_mesh import plan_of
-        plan = plan_of(mesh)
-        by_curve: dict = {}
-        if plan is not None:
-            # A lazy mesh: its curves from the planned edges, the same
-            # chains in the same order, nothing built.
-            # (only the curve edges listed: listing all of them was
-            # most of the first hover over the plant of #158)
-            curved = _plan_curved_edges(plan)
-            ab = plan.edges[curved].tolist()
-            for k, i in enumerate(curved.tolist()):
-                by_curve.setdefault(plan.curve[i], []).append(ab[k])
-        else:
-            for e in mesh.edges:
-                cid = getattr(e, "curve", None)
-                if cid is not None:
-                    by_curve.setdefault(cid, []).append(e)
-        mids = []
-        for edges in by_curve.values():
-            degree: dict = {}
-            pos: dict = {}
-            for e in edges:
-                if plan is not None:
-                    for v in e:
-                        degree[v] = degree.get(v, 0) + 1
-                        if v not in pos:
-                            pos[v] = QVector3D(*plan.pos[v])
-                    continue
-                for v in (e.v0, e.v1):
-                    degree[element_identity(v)] = degree.get(element_identity(v), 0) + 1
-                    pos[element_identity(v)] = v.position
-            ends = [pos[k] for k, n in degree.items() if n == 1]
-            if len(ends) != 2 or len(pos) < 3:
-                continue                     # a circle, or not a chain
-            mid = arc_sweep_midpoint(list(pos.values()))
-            if mid is not None:
-                mids.append(mid)
-        return mids
+        return ingetrazo_core.mesh_arc_midpoints(mesh)
 
     def _billboard_placements(self) -> list:
-        """The face-me placements of ``_placements()``, kept while it is:
-        walking the 21 406 placements of #158 for the two of them was
-        ~2 ms of every pointer move."""
-        groups = self._placements()
-        epoch_of = getattr(self, "_placements_epoch", None)
-        if epoch_of is None:                         # stub viewports
-            return [g for g in groups if getattr(g, "billboard", False)]
-        key = (epoch_of(), id(groups), len(groups))
-        memo = getattr(self, "_billboard_memo", None)
-        if memo is None or memo[0] != key or memo[1] is not groups:
-            memo = self._billboard_memo = (
-                key, groups,
-                [g for g in groups if getattr(g, "billboard", False)])
-        return memo[2]
+        return ingetrazo_core.billboard_placements(self)
 
     def _billboard_snap_edges(self) -> list:
-        """The one snap a face-me billboard offers: its FEET, the anchor
-        point, as a degenerate pseudo-edge (a point, like a guide point) —
-        enough to place a figure or measure from where it stands. It used
-        to offer its base edge and vertical axis too (corners, midpoints,
-        head, and two whole lines to ride), and the scale figure beside the
-        origin stole the inference from the drawing around it («me está
-        cogiendo el paisano», Rafael, revision 4; Marco: «siempre toma
-        protagonismo»). The group a transform tool is currently dragging is
-        excluded (it would snap to itself)."""
-        moving = getattr(self.active_tool, "_group", None)
-        out: list = []
-        for g in self._billboard_placements():
-            if g is moving:
-                continue
-            if not self.scene.group_snappable(g):
-                continue
-            quad = self._billboard_quad(g)
-            if quad is None:
-                continue
-            c = quad[0]
-            feet = (c[0] + c[1]) * 0.5
-            out.append(_SnapEdge(QVector3D(feet), QVector3D(feet), figure=True))
-        return out
+        return ingetrazo_core.billboard_snap_edges(self)
 
     def _snap_scene(self, px: Optional[float] = None,
                     py: Optional[float] = None):
-        """The scene the snap engine sees: loose edges, construction guides as
-        pseudo-edges (``Guide.a/.b`` span the long segment), and — when the
-        cursor position is given — the group edges near it plus the face-me
-        billboard anchors, so drawing and dimensioning over an imported
-        reference model snaps to its corners and edges.
-
-        Loose edges the scene itself says are not there (hidden, or on a
-        hidden layer) are left out — see :func:`_snap_dropped_loose`."""
-        # Guide lines are clipped to the part in front of the camera so the
-        # snap engine gets projectable endpoints (an endpoint behind the eye
-        # used to kill on-line snapping in ordinary 3D views); guide POINTS
-        # snap as degenerate pseudo-edges, exactly like survey points.
-        lines = []
-        circles = []
-        # Guides that Move is dragging pass through the cursor: left out,
-        # or the cursor locks onto its own guide (#627).
-        moving = getattr(self.active_tool, "moving_guide_ids", None)
-        moving = moving() if callable(moving) else ()
-        for g in shown_guides(self.scene):
-            if id(g) in moving:
-                continue
-            if getattr(g, "is_circle", False):
-                circles.append(g)   # rim is resolved in compute_snap; centre below
-                continue
-            if g.is_line:
-                seg = self._guide_snap_segment(g)
-                if seg is not None:
-                    lines.append(_SnapEdge(*seg, guide=True))
-            else:
-                lines.append(_SnapEdge(QVector3D(g.point), QVector3D(g.point)))
-        # Reference-image borders snap like guides: aligning a scan against
-        # real geometry (or drawing to its edge) is what tracing needs.
-        for im in getattr(self.scene, "image_planes", None) or []:
-            if getattr(im, "locked", False) or not self.scene.entity_selectable(im):
-                continue
-            for a, b in im.border_edges():
-                seg = self._clip_segment_front(a, b)
-                if seg is not None:
-                    lines.append(_SnapEdge(*seg))
-        near = self._nearby_group_edges(px, py) if px is not None else []
-        # What a transform tool is dragging must not attract snaps (the
-        # entities in motion stay out of inference; issue #19): the
-        # tool names the edges/groups in motion and they are dropped here.
-        excl = getattr(self.active_tool, "snap_excluded", None)
-        excl = excl() if callable(excl) else None
-        if excl is not None and excl[1]:
-            near = [e for e in near
-                    if id(getattr(e, "group", None)) not in excl[1]]
-        if px is not None:
-            near += self._billboard_snap_edges()
-            origins = getattr(self, "_component_origin_points", None)   # stub VPs in tests
-            if origins is not None:
-                near += origins(px, py)
-            arcs = getattr(self, "_arc_midpoints", None)
-            if arcs is not None:
-                near += arcs(px, py)
-        box_pts = self._selection_box_points()
-        if excl is not None and excl[1]:
-            # A selected group's box corners are the group itself: Scale
-            # dragging it must not land its grip on its own box (#233).
-            box_pts = self._selection_box_points(skip=excl[1])
-        near += box_pts
-        valid = getattr(self, "_valid_center_ref", None)   # stub VPs in tests
-        ref = valid() if callable(valid) else None
-        if ref is not None:
-            # No dot, no snap: a circle too small on screen keeps quiet.
-            pc = self._world_to_pixel(ref[0])
-            hint = getattr(self, "_center_hint_px", None)
-            if pc is not None and (hint is None or hint(ref, pc) > 0.0):
-                near.append(_SnapEdge(QVector3D(ref[0]), QVector3D(ref[0]),
-                                      center=True))
-        # 10/Oct/26 added BastelBaus: add snapping to dimension edges.
-        # Added before the early return below (a scene with only dimensions
-        # must still snap to them) and before the cut filter (a dimension
-        # the section hides must not attract snaps).
-        for dim in getattr(self.scene, "dimensions", None) or []:
-            if not self.scene.entity_selectable(dim):
-                continue
-            near.append(_SnapEdge(*dim.line_points()))
-        # A guide circle's centre is a permanent snap target, like the centre
-        # of a visited mesh circle (the rim is resolved in compute_snap).
-        for c in circles:
-            near.append(_SnapEdge(QVector3D(c.center), QVector3D(c.center),
-                                  center=True))
-        sp = _active_cut(self.scene)
-        if sp is not None:
-            # What the cut hides must not attract snaps: drop
-            # edges whose BOTH endpoints are on the hidden side.
-            def _kept(e):
-                return not (sp.side(e.a) > 1e-6 and sp.side(e.b) > 1e-6)
-            near = [e for e in near if _kept(e)]
-        # Survey points snap as degenerate pseudo-edges: the endpoint snap
-        # lands EXACTLY on the surveyed coordinate (the municipal flow's whole
-        # point); direction-based inferences skip zero-length edges safely.
-        for gp in getattr(self.scene, "geo_points", None) or []:
-            near.append(_SnapEdge(QVector3D(gp.position),
-                                  QVector3D(gp.position)))
-        # The rest of the model's loose geometry — the root mesh drawn faded
-        # around an open group / component — is a reference too.
-        # Its edges are filtered one by one (each carries its own layer and
-        # hidden flag), and «Hide rest of model» leaves them out already.
-        outer_of = getattr(self, "_outer_loose_meshes", None)
-        outer = []
-        for om in (outer_of() if outer_of is not None else ()):
-            outer += [e for e in om.edges if self.scene.edge_snappable(e)]
-        big = (px is not None
-               and (len(self.scene.edges) + len(outer)) > _LOOSE_SNAP_CAP)
-        if not lines and not near and not circles and sp is None \
-                and not big and not outer and excl is None \
-                and not _snap_dropped_loose(self):
-            return self.scene
-        if big:
-            # Only the edges near the cursor are considered, so ask each one
-            # (dozens) rather than walking a mesh of 160k to build the drop
-            # set above. The index holds the rest of the model's loose
-            # edges too, so this reaches them.
-            loose = [e for e in self._nearby_loose_edges(px, py)
-                     if self.scene.edge_snappable(e)]
-        else:
-            loose = list(self.scene.edges) + outer
-            drops = _snap_dropped_loose(self)
-            if drops:
-                loose = [e for e in loose if element_identity(e) not in drops]
-        if excl is not None and excl[0]:
-            loose = [e for e in loose if element_identity(e) not in excl[0]]
-        if sp is not None:
-            loose = [e for e in loose if _kept(e)]
-        if outer:
-            # The ScreenTip must say these are outside the open context:
-            # a real Edge carries no context of its own.
-            outer_ids = {element_identity(e) for e in outer}
-            loose = [_SnapEdge(e.a, e.b, context="outside")
-                     if element_identity(e) in outer_ids else e for e in loose]
-        from types import SimpleNamespace
-        return SimpleNamespace(edges=loose + lines + near, circles=circles)
+        return ingetrazo_core.document_snap_scene(self, px, py)
 
     def _group_obb(self, group):
-        """``(frame, lo, hi)`` of the group in its OWN axes, cached on its
-        chunk. A world-aligned box on a rotated object reads as skewed and
-        wraps far more air than object — and its corners, which are the
-        handles you grab, end up nowhere near the thing.
-
-        A CONTAINER's box comes from its children, and its own chunk knows
-        nothing about them: cached there, the box outlived a deleted child
-        (the frame stayed long after one of two fountains was gone) and
-        followed the container's own matrix when entering pushed that
-        matrix down into the children — the box slid to the axes while
-        the fountain stayed put (Marco, 2026-09-11). So a container's box
-        is cached per scene version instead: it is recomputed on any
-        change, and ``placement_points`` makes that one matrix multiply
-        per placement."""
-        kids = getattr(group, "children", None)
-        if kids:
-            cache = getattr(self, "_container_obb", None)
-            if cache is None:
-                cache = self._container_obb = {}
-            key = _content_ver(self)
-            hit = cache.get(id(group))
-            if hit is not None and hit[0] == key:
-                return hit[1]
-            fetch = getattr(self, "_proto_points_cache", None)   # stub VPs in tests
-            protos = fetch(group) if fetch is not None else None
-            obb = self._compute_obb(group, protos)
-            if fetch is not None:
-                self._proto_points_store(group, protos)
-            if len(cache) > 256:            # ids of groups long gone
-                cache.clear()
-            cache[id(group)] = (key, obb)
-            return obb
-        # The box follows the group's axes (issue #44), and Change Axes can
-        # turn them without touching one vertex — so the cached box is only
-        # good for the frame it was measured on.
-        from core.group import group_frame
-        fr = group_frame(group)
-        fkey = tuple(fr.data()) if fr is not None else None
-        xf = getattr(group, "xform", None)
-        if xf is not None and id(group) not in (
-                getattr(self, "_inst_chunks", None) or ()):
-            # A placement nobody has baked to the world: the box is measured
-            # on the points, the bake would only have carried it. Selecting
-            # the 590 objects of a big model baked them all (#1092). Good for
-            # what its bake would have been good for.
-            base = self._group_chunk(
-                _proto_wrapper(self, group.mesh, _paint_of(self, group)))
-            key = (base["uid"], tuple(xf.data()), base.get("rev"), fkey)
-            memo = getattr(self, "_inst_obb", None)
-            if memo is None:
-                memo = self._inst_obb = {}
-            hit = memo.get(id(group))
-            if hit is not None and hit[0] == key:
-                return hit[1]
-            obb = self._compute_obb(group)
-            if len(memo) > 65536:          # ids of placements long gone
-                memo.clear()
-            memo[id(group)] = (key, obb)
-            return obb
-        entry = self._group_chunk(group)
-        obb = entry.get("obb")
-        if obb is not None and entry.get("obb_frame") == fkey:
-            return obb
-        obb = entry["obb"] = self._compute_obb(group)
-        entry["obb_frame"] = fkey
-        return obb
+        return ingetrazo_core.group_obb(self, group)
 
     def _proto_points_cache(self, group) -> dict:
-        """``{id(mesh): local points}`` of the prototypes under ``group``
-        that are still current. A prototype's LOCAL array only changes
-        when its mesh is edited — never when a placement moves — so an
-        entry is dropped when the mesh is the one open for editing (or
-        under a share-back) or a mutation primitive flagged it
-        (``_chunk_dirty``, O(1)). No chunk is built to find out: validating
-        against fresh local chunks built one per nested child, 384 ms on
-        the first box after entering the plaza."""
-        from core.purge import iter_groups
-        store = getattr(self, "_proto_pts_store", None)
-        if store is None:
-            store = self._proto_pts_store = {}
-        editing = self._editing_meshes()
-        valid: dict = {}
-        from core.mesh import DeferredMesh
-        for g in iter_groups((group,)):
-            mesh = g.mesh
-            if mesh is None or id(mesh) in valid:
-                continue
-            # A lazy mesh still unbuilt was never edited (an edit builds
-            # it): its cached points stand, and asking for its vertices
-            # would build it -- the box over a big model built them all.
-            lazy = type(mesh) is DeferredMesh
-            if not lazy and not mesh.vertices:
-                continue
-            hit = store.get(id(mesh))
-            if hit is None:
-                continue
-            serial, arr = hit
-            if (id(mesh) in editing
-                    or getattr(mesh, "_mut_serial", None) != serial
-                    or (not lazy and len(arr) != len(mesh.vertices))):
-                del store[id(mesh)]
-                continue
-            valid[id(mesh)] = arr
-        return valid
+        return ingetrazo_core.proto_points_cache(self, group)
 
     def _editing_meshes(self) -> set:
-        """ids of the meshes a command can be mutating right now: the open
-        context's, and every level's share-back prototype."""
-        scene = self.scene
-        ids = {id(scene.mesh)}
-        for level in getattr(scene, "_edit_stack", None) or ():
-            share = level.get("share") if isinstance(level, dict) else None
-            if share:
-                ids.add(id(share[1]))                  # the prototype
-                ids.add(id(share[0].mesh))             # the working copy
-        return ids
+        return ingetrazo_core.editing_meshes(self)
 
     def _proto_points_store(self, group, protos: dict) -> None:
-        store = self._proto_pts_store
-        if len(store) > 512:
-            store.clear()
-        from core.purge import iter_groups
-        editing = self._editing_meshes()
-        serials = {id(g.mesh): getattr(g.mesh, "_mut_serial", None)
-                   for g in iter_groups((group,)) if g.mesh is not None}
-        for mid, arr in protos.items():
-            if mid not in editing:
-                store[mid] = (serials.get(mid), arr)
+        return ingetrazo_core.proto_points_store(self, group, protos)
 
     @staticmethod
     def _compute_obb(group, protos=None):
-        from core.group import (frame_axes, frame_from_points, group_frame,
-                                oriented_bounds, placement_points)
-        # The corners come from the POINTS — never from a merged copy of the
-        # component (see ``placement_points``).
-        pos = placement_points(group, protos)
-        frame = group_frame(group)
-        if frame is not None:
-            # A group that knows its own axes is boxed on them — the
-            # selection box and Scale grips follow the object's axes
-            # (issue #44), turned however the object is.
-            _o, x, y, z = frame_axes(frame)
-            return oriented_bounds(None, (x, y, z), points=pos)
-        world = oriented_bounds(None, points=pos)         # world axes
-        own = oriented_bounds(None, frame_from_points(pos if len(pos) else None),
-                              points=pos)
-
-        def volume(b):
-            _f, lo, hi = b
-            # A flat group has zero volume; rank those by their largest face.
-            side = sorted(hi[i] - lo[i] for i in range(3))
-            return side[1] * side[2] * max(side[0], 1e-6)
-
-        # Derived axes are meaningless on organic geometry — a hedge has no
-        # dominant plane, and its "own" box came out 25% LARGER than the world
-        # one. Keep the derived frame only when it earns its place.
-        return own if volume(own) < 0.9 * volume(world) else world
+        return ingetrazo_core.compute_obb(group, protos)
 
     def _update_center_ref(self, x: float, y: float) -> None:
-        """Acquire the centre of the circle or arc under the cursor.
-
-        A loose curve edge gives its own curve; a face gives the curves on
-        its boundary — a cylinder's lid, a rounded corner, a circular hole
-        — placed through the group's matrix when the face is inside one.
-        With several on one face, the one whose points come closest to the
-        cursor wins. Nothing under the cursor keeps the last centre: you
-        hover the rim, then travel to the centre and snap to it."""
-        found = None
-        edge = self._hover_edge
-        if getattr(edge, "curve", None) is not None:
-            found = self._center_of_edge(edge, self.scene.mesh)
-        elif getattr(edge, "in_group", False) and getattr(edge, "group", None) is not None:
-            found = self._center_of_group_edge(edge)
-        if found is None:
-            pick = (getattr(self, "pick_face_inference", None)
-                    or getattr(self, "pick_face_placement", None)
-                    or self.pick_face_any)   # stub VPs in tests
-            face, group = pick(x, y)
-            if face is not None:
-                mesh = getattr(group, "mesh", None) if group is not None \
-                    else self.scene.mesh
-                if mesh is None:
-                    mesh = self.scene.mesh
-                found = self._center_of_face(face, group, mesh, x, y)
-        if found is not None:
-            self._center_ref = found
-            return found
-        self._valid_center_ref()
-        return None
+        return ingetrazo_core.update_center_ref(self, x, y)
 
     def _center_of_group_edge(self, pseudo):
-        """The rim of a circle inside a top-level group / component: the
-        world pseudo-edge is matched to the group's own edge (positions in
-        its space) and the curve's centre comes back through its matrix."""
-        g = pseudo.group
-        mesh = getattr(g, "mesh", None)
-        xf = getattr(g, "xform", None)
-        if mesh is None:
-            return None
-        inv = None
-        if xf is not None:
-            inv, ok = xf.inverted()
-            if not ok:
-                return None
-        la = inv.map(pseudo.a) if inv is not None else pseudo.a
-        lb = inv.map(pseudo.b) if inv is not None else pseudo.b
-        if not _lazy_edge_may_be_curve(mesh, la, lb):
-            # A lazy mesh with no curve edge where the lookups below could
-            # land: building it (~0.5 s for a big group of the plant of
-            # #158, on the hover that crosses into it) would answer None.
-            return None
-        if not mesh.edges:
-            return None
-        # The mesh's own registry: two O(1) vertex lookups (tolerant, the
-        # weld grid) and the edge between them by incidence. This used to
-        # build a dict of EVERY edge of the group, keyed by rounded
-        # positions, cached for one group at a time — so a cursor crossing
-        # from one group to the next rebuilt it on nearly every move:
-        # 9 ms of a 14 ms hover on pileta-fuente (2 500 edges per group).
-        edge = None
-        if not _NO_SNAP_FAST:
-            va, vb = mesh.vertex_at(la), mesh.vertex_at(lb)
-            if va is not None and vb is not None:
-                edge = mesh.find_edge(va, vb)
-        if edge is None:
-            # The registry missed (a position past the weld tolerance):
-            # the rounded-position table, one per mesh, built once.
-            tables = getattr(self, "_group_edge_tables", None)
-            if tables is None or tables[0] != self.scene.version:
-                tables = self._group_edge_tables = (self.scene.version, {})
-            def k(p):
-                return (round(p.x(), 4), round(p.y(), 4), round(p.z(), 4))
-            table = tables[1].get(id(mesh))
-            if table is None:
-                table = tables[1][id(mesh)] = {
-                    frozenset((k(e.a), k(e.b))): e for e in mesh.edges}
-            edge = table.get(frozenset((k(la), k(lb))))
-        if edge is None or getattr(edge, "curve", None) is None:
-            return None
-        found = self._center_of_edge(edge, mesh)
-        if found is None:
-            return None
-        c = xf.map(found[0]) if xf is not None else found[0]
-        return (c, found[1], found[2], found[3], found[4], found[5], g)
+        return ingetrazo_core.center_of_group_edge(self, pseudo)
 
     def _center_of_edge(self, edge, mesh):
-        from core.snap import fit_circle
-        pts = {}
-        for e in mesh.curve_edges(edge):
-            pts[element_identity(e.v0)] = e.v0.position
-            pts[element_identity(e.v1)] = e.v1.position
-        fit = fit_circle(list(pts.values())) if len(pts) >= 3 else None
-        if fit is None:
-            return None
-        return (fit[0], fit[1], ("edge", edge.curve), self.scene.version,
-                edge, mesh, None)
+        return ingetrazo_core.center_of_edge(self, edge, mesh)
 
     def _center_of_face(self, face, group, mesh, x, y):
-        from core.snap import curve_centers_of_face
-        xf = getattr(group, "xform", None) if group is not None else None
-        centers = curve_centers_of_face(face, xf)
-        if not centers:
-            return None
-        if len(centers) == 1:
-            c, r, key = centers[0]
-        else:
-            # Several arcs on one face (a rounded slab): the one whose
-            # centre projects nearest the cursor.
-            best = None
-            for c, r, key in centers:
-                pc = self._world_to_pixel(c)
-                if pc is None:
-                    continue
-                d = math.hypot(pc[0] - x, pc[1] - y)
-                if best is None or d < best[0]:
-                    best = (d, c, r, key)
-            if best is None:
-                return None
-            _d, c, r, key = best
-        return (c, r, (element_identity(face), key), self.scene.version, face, mesh, group)
+        return ingetrazo_core.center_of_face(self, face, group, mesh, x, y)
 
     def _center_hint_px(self, ref, pc) -> float:
-        """How close (px) the cursor must come for the centre's dot to show:
-        a share of the circle's own size on screen, capped — so a fountain
-        seen from far, a few pixels across, does not light up whenever the
-        cursor wanders over it («estoy lejos y me puse cerca de la pileta y
-        aparece ese círculo», Marco, 2026-09-12). Zero when the circle is
-        too small on screen to mean anything."""
-        rim = self._world_to_pixel(ref[0] + QVector3D(ref[1], 0.0, 0.0))
-        rim2 = self._world_to_pixel(ref[0] + QVector3D(0.0, ref[1], 0.0))
-        r_px = 0.0
-        for q in (rim, rim2):
-            if q is not None:
-                r_px = max(r_px, math.hypot(q[0] - pc[0], q[1] - pc[1]))
-        if r_px < self.CENTER_MIN_RADIUS_PX:
-            return 0.0
-        return min(self.CENTER_HINT_PX, 0.5 * r_px)
+        return ingetrazo_core.center_hint_px(self, ref, pc)
 
     def _valid_center_ref(self):
-        """The acquired centre, re-checked against the scene: once the
-        circle is gone the dot goes with it — it lingered after the circle
-        was erased («elimino el círculo y el punto verde continúa allí»,
-        Marco, 2026-09-11) — and once it moved, the centre follows.
-        Costs nothing until the scene changes."""
-        ref = getattr(self, "_center_ref", None)
-        if ref is None:
-            return None
-        if ref[3] == self.scene.version:
-            return ref
-        src, mesh, group = ref[4], ref[5], ref[6]
-        fresh = None
-        real = getattr(src, "real", None)
-        from core.mesh import DeferredMesh
-        lazy = real is not None and type(mesh) is DeferredMesh
-        if real is not None and not lazy:
-            # Found over a lazy mesh's light face, since built: an edit asks
-            # of the real one. Still lazy, the mesh has not changed: only the
-            # matrix can have, and building it here cost a big group's whole
-            # build on the frame after any edit (#1092).
-            src = real()
-        if isinstance(src, Face):
-            if lazy or src in mesh.faces:
-                # the same arc of the face, wherever it is now
-                from core.snap import curve_centers_of_face
-                xf = getattr(group, "xform", None) if group is not None else None
-                same = [c for c in curve_centers_of_face(src, xf)
-                        if c[2] == ref[2][1]]
-                if same:
-                    fresh = (same[0][0], same[0][1], ref[2],
-                             self.scene.version, src, mesh, group)
-        elif src in mesh.edges:
-            fresh = self._center_of_edge(src, mesh)
-            xf = getattr(group, "xform", None) if group is not None else None
-            if fresh is not None and xf is not None:
-                fresh = (xf.map(fresh[0]), fresh[1], fresh[2], fresh[3],
-                         fresh[4], fresh[5], group)
-        self._center_ref = fresh
-        return fresh
+        return ingetrazo_core.valid_center_ref(self)
 
     def _selection_box_points(self, skip=()) -> list:
-        """The corners of a selected group's bounding box, as degenerate
-        pseudo-edges so the snap engine offers them as endpoints.
-
-        Those corners are grabbable: with a group selected they are
-        what you take hold of to move it somewhere exact, and the green dot
-        tells you the grab landed. The box is the group's selection cue here
-        too (see ``_sync_edges``), so the corners were already on screen —
-        they just were not snap targets. Costs nothing: the chunk's bbox is
-        already cached, so a 230k-face group contributes eight points."""
-        pts: list = []
-        for ent in self.scene.selection:
-            if not isinstance(ent, Group) or getattr(ent, "billboard", False):
-                continue
-            if id(ent) in skip:
-                continue
-            from core.group import oriented_box_corners
-            for p in oriented_box_corners(*self._group_obb(ent)):
-                pts.append(_SnapEdge(p, QVector3D(p)))
-        return pts
+        return ingetrazo_core.selection_box_points(self, skip)
 
     def pick_axis(self, screen_x: float, screen_y: float):
         """The model axis line under the cursor — ``"x"`` / ``"y"`` /
@@ -12284,7 +8703,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         many_spans = len(spans) > 64
         blo, bhi = blo[sel], bhi[sel]
         # The box prefilter _ray_hits applies, in both its regimes: the
-        # vectorised slab past 64 spans, ``_ray_aabb`` (with its tolerance
+        # batched slab past 64 spans, a scalar slab (with its tolerance
         # for a ray parallel to an axis) below — they differ on exactly
         # those rays, the standard views'.
         with np.errstate(divide="ignore", invalid="ignore"):
@@ -13002,100 +9421,17 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
 
     def _model_point_at(self, x: float, y: float):
-        """The model point under pixel ``(x, y)`` -- what the frame on screen
-        shows there, else the nearest face the pick ray hits -- or ``None``
-        when the cursor is on sky or ground."""
-        origin, direction = self._pixel_to_ray(x, y)
-        seen = self._depth_world_at(x, y) if hasattr(self, "_depth_world_at") \
-            else None
-        if seen is not None and seen[0] == "hit":
-            return seen[1]
-        if origin is not None and direction is not None and seen is None:
-            try:
-                idx = self._pick_index(near=DocumentInteraction._ray_near(self, x, y))
-                import numpy as np
-                hits = self._hover_hits(idx, origin, direction)
-                if hits is not None and len(hits.t):
-                    t = float(np.min(hits.t))
-                    if math.isfinite(t) and t > 0.0:
-                        return origin + direction * t
-            except Exception:                  # noqa: BLE001 - no point then
-                pass
-        return None
+        return ingetrazo_render.model_point_at(self, x, y)
 
 
     def _orbit_pivot_at(self, x: float, y: float):
-        """Where an orbit gesture that starts at pixel ``(x, y)`` turns (#164).
-
-        1. The model point under the cursor -- the nearest face the pick
-           ray hits (loose geometry and groups alike);
-        2. else, with the cursor on sky or ground, the middle of the
-           stretch of the view's central ray that crosses the model's
-           bounding box -- the middle of what is on screen;
-        3. else the camera target (an empty scene, a model off screen).
-        Worked out once per gesture: the pivot stays put while dragging.
-        """
-        point = DocumentInteraction._model_point_at(self, x, y)
-        if point is not None:
-            return point
-        lo, hi = self.scene.bounds()
-        if lo is not None:
-            o, d = self._pixel_to_ray(self.width() / 2.0, self.height() / 2.0)
-            if o is not None and d is not None:
-                span = _ray_aabb_span(
-                    (o.x(), o.y(), o.z()), (d.x(), d.y(), d.z()),
-                    (lo.x(), lo.y(), lo.z()), (hi.x(), hi.y(), hi.z()))
-                if span is not None:
-                    return o + d * ((span[0] + span[1]) * 0.5)
-        return QVector3D(self.camera.target)
+        return ingetrazo_render.orbit_pivot_at(self, x, y)
 
     def _set_middle_drag_pan_mode(self, pan: bool) -> None:
-        """Switch an active MMB drag between orbit and pan."""
-        if not self._middle_drag_active or self.nav_mode is not None:
-            return
-        pan = bool(pan)
-        if self._pan_mode == pan:
-            return
-        self._pan_mode = pan
-        cur = self._pointer_for_tool("pan" if pan else "orbit")
-        if cur is not None:
-            self.setCursor(cur)
+        return ingetrazo_render.set_middle_drag_pan_mode(self, pan)
 
     def set_nav_mode(self, mode: Optional[str]) -> None:
-        """Enter a camera navigation mode ("orbit" / "pan").
-
-        For trackpad users with no middle mouse button: while a nav mode is
-        active the left-drag drives the camera (orbit or pan). The active
-        drawing tool is suspended with its state (``suspended_tool``):
-        picking it again resumes it where it was, a line's first point
-        still placed; picking any other tool, or Space (Select), resets it.
-        ``None`` clears the nav mode and leaves no tool, as before: the
-        suspended one is reset.
-        """
-        if mode is None and self.suspended_tool is not None:
-            suspended, self.suspended_tool = self.suspended_tool, None
-            suspended.on_deactivate(self)
-        if self.active_tool is not None:
-            if mode is not None:
-                self.suspended_tool = self.active_tool
-                suspend = getattr(self.active_tool, "on_suspend", None)
-                if callable(suspend):
-                    suspend(self)
-            else:
-                self.active_tool.on_deactivate(self)
-            self.active_tool = None
-        self._hover_entity = None
-        self.last_snap = None
-        self.nav_mode = mode
-        self._last_pos = None             # a drag in progress ends here
-        self._orbit_pivot = None
-        self._pan_mode = False
-        self._middle_drag_active = False
-        if mode is not None:
-            self._apply_nav_cursor()      # orbit / pan / magnifier icons
-        else:
-            self.unsetCursor()
-        self.update()
+        return ingetrazo_render.set_nav_mode(self, mode)
 
     # ---- Input --------------------------------------------------------------
     def _context_pick(self, x: float, y: float):
@@ -13103,91 +9439,13 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return context_pick(self, x, y)
 
     def _face_or_image_in_front(self, x: float, y: float):
-        face = self.pick_face(x, y)
-        return self.image_in_front_of(face, x, y) or face
+        return ingetrazo_render.face_or_image_in_front(self, x, y)
 
     def _dispatch_tool_click(self, ev, double: bool = False) -> None:
-        """Forward a (double-)click to the active tool, then run the shared
-        follow-ups: lock the chain to a clicked face's plane, clear the VCB."""
-        had_start = getattr(self.active_tool, "start_point", None) is not None
-        had_plane = getattr(self.active_tool, "work_plane", None) is not None
-        face_at_click = None
-        group_at_click = None
-        from views.array_bake import reading_only
-        if not had_start and not had_plane:
-            # Only its plane is read, below: no need to build a big group's
-            # mesh for that (seconds and gigabytes, #1092).
-            with reading_only():
-                face_at_click, group_at_click = self.pick_face_placement(
-                    ev.position().x(), ev.position().y())
-        ctx = self._build_ctx(ev)
-        if ctx is not None:
-            # The tool hears the cursor's snap KIND before it is called, as on
-            # every hover (``_note_snap``): a click that never had its own
-            # hover would otherwise leave a stale — or absent — kind in the
-            # tool, and ``PlaneLock.snapped_plane`` decides with it whether
-            # the shape re-plans onto the clicked point (#37) or stays on the
-            # face under the cursor (#545).
-            self._note_snap(ctx.snap)
-            _before = len(self.history.undo_stack)
-            if double:
-                self.active_tool.on_double_click(ctx)
-            else:
-                self.active_tool.on_click(ctx)
-            # Did this click actually MAKE something? That, not «the tool
-            # went idle», is when the arrow lock should go — @pacaeiro on
-            # 0.4.4: «I draw a line with hard lock (arrows) and, after the
-            # line is created the lock is still active». The Line tool
-            # chains, so it is still busy the instant a segment exists, and
-            # the first fix waited for the whole polyline to end.
-            _drew = len(self.history.undo_stack) > _before
-            # If the click established a new start point on top of an
-            # existing face, lock the rest of the chain to that face's
-            # plane so subsequent clicks stay coplanar.
-            now_start = getattr(self.active_tool, "start_point", None)
-            if (
-                not had_start
-                and now_start is not None
-                and face_at_click is not None
-                and hasattr(self.active_tool, "work_plane")
-                and self.active_tool.work_plane is None   # a plane lock wins
-            ):
-                # In WORLD space: a component's face keeps its own
-                # coordinates, and the plane it captured for a rectangle
-                # on the pergola's post was the untransformed one — the
-                # second corner landed on a plane nowhere near the post
-                # («la inferencia se atasca», Marco, 2026-09-14).
-                from core.snap import face_plane_world
-                self.active_tool.work_plane = face_plane_world(
-                    face_at_click, getattr(group_at_click, "xform", None))
-            # Any pending typed value is invalidated once the user
-            # commits a point with the mouse.
-            self._set_value_buffer("")
-            # A command that failed was rolled back (History is
-            # transactional) — surface it instead of failing silently.
-            if self.history.last_error:
-                self.flash_status(
-                    tr("Operation failed and was undone: {err}",
-                       err=self.history.last_error), 8000)
-            self._release_axis_lock_after_operation(committed=_drew)
-            if _drew:
-                self._reassert_tool_cursor()
-            self.update()
+        return ingetrazo_render.dispatch_tool_click(self, ev, double)
 
     def _reassert_tool_cursor(self) -> None:
-        """Put the active tool's pointer back after an operation (#191,
-        fafecm on Windows: «after the push/pull cursor is used once, the
-        cursor symbol disappears» — the Line did the same). On Windows the
-        viewport is a native OpenGL window and the system brought the arrow
-        back when an operation ended, while Qt still believed its cursor
-        set, so setting the same one again changed nothing: unset first,
-        then set. Nothing to do while a camera mode or a look drag owns
-        the pointer."""
-        if (self.active_tool is None or self.nav_mode is not None
-                or self._look_drag is not None):
-            return
-        self.unsetCursor()
-        self._apply_tool_cursor()
+        return ingetrazo_render.reassert_tool_cursor(self)
 
     # ---- Mouse look (a tool with ``on_look``: First Person) -----------------
 
@@ -13200,125 +9458,21 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     # hooks). These properties and thin wrappers keep the surface the tools,
     # the extensions, the probe and the tests read and write, so the
     # extraction stays behaviour-neutral.
-    @property
-    def _acquired_point(self) -> Optional[QVector3D]:
-        return self.inference._acquired_point
-
-    @_acquired_point.setter
-    def _acquired_point(self, value: Optional[QVector3D]) -> None:
-        self.inference._acquired_point = value
-
-    @property
-    def _encouraged(self) -> list:
-        return self.inference._encouraged
-
-    @_encouraged.setter
-    def _encouraged(self, value: list) -> None:
-        self.inference._encouraged = value
-
-    @property
-    def _dwell_point(self) -> Optional[QVector3D]:
-        return self.inference._dwell_point
-
-    @_dwell_point.setter
-    def _dwell_point(self, value: Optional[QVector3D]) -> None:
-        self.inference._dwell_point = value
-
-    @property
-    def _dwell_timer(self) -> QTimer:
-        return self.inference._dwell_timer
-
-    @_dwell_timer.setter
-    def _dwell_timer(self, value: QTimer) -> None:
-        self.inference._dwell_timer = value
-
-    @property
-    def axis_lock(self) -> Optional[str]:
-        return self.inference.axis_lock
-
-    @axis_lock.setter
-    def axis_lock(self, value: Optional[str]) -> None:
-        self.inference.axis_lock = value
-
-    @property
-    def last_snap(self) -> Optional[SnapResult]:
-        return self.inference.last_snap
-
-    @last_snap.setter
-    def last_snap(self, value) -> None:
-        self.inference.last_snap = value
-
-    @property
-    def reference_edge(self):
-        return self.inference.reference_edge
-
-    @reference_edge.setter
-    def reference_edge(self, value) -> None:
-        self.inference.reference_edge = value
-
-    @property
-    def reference_mode(self) -> Optional[str]:
-        return self.inference.reference_mode
-
-    @reference_mode.setter
-    def reference_mode(self, value: Optional[str]) -> None:
-        self.inference.reference_mode = value
-
-    @property
-    def _shift_lock(self):
-        return self.inference._shift_lock
-
-    @_shift_lock.setter
-    def _shift_lock(self, value) -> None:
-        self.inference._shift_lock = value
-
-    @property
-    def _shift_lock_ref(self):
-        return self.inference._shift_lock_ref
-
-    @_shift_lock_ref.setter
-    def _shift_lock_ref(self, value) -> None:
-        self.inference._shift_lock_ref = value
-
-    @property
-    def _hover_edge(self):
-        return self.inference._hover_edge
-
-    @_hover_edge.setter
-    def _hover_edge(self, value) -> None:
-        self.inference._hover_edge = value
-
-    @property
-    def _hover_center(self):
-        return self.inference._hover_center
-
-    @_hover_center.setter
-    def _hover_center(self, value) -> None:
-        self.inference._hover_center = value
-
-    @property
-    def _center_ref(self):
-        return self.inference._center_ref
-
-    @_center_ref.setter
-    def _center_ref(self, value) -> None:
-        self.inference._center_ref = value
-
-    @property
-    def _acquired_edge(self):
-        return self.inference._acquired_edge
-
-    @_acquired_edge.setter
-    def _acquired_edge(self, value) -> None:
-        self.inference._acquired_edge = value
-
-    @property
-    def _acquired_face_normal(self):
-        return self.inference._acquired_face_normal
-
-    @_acquired_face_normal.setter
-    def _acquired_face_normal(self, value) -> None:
-        self.inference._acquired_face_normal = value
+    _acquired_point = ingetrazo_render.InferenceField("_acquired_point")
+    _encouraged = ingetrazo_render.InferenceField("_encouraged")
+    _dwell_point = ingetrazo_render.InferenceField("_dwell_point")
+    _dwell_timer = ingetrazo_render.InferenceField("_dwell_timer")
+    axis_lock = ingetrazo_render.InferenceField("axis_lock")
+    last_snap = ingetrazo_render.InferenceField("last_snap")
+    reference_edge = ingetrazo_render.InferenceField("reference_edge")
+    reference_mode = ingetrazo_render.InferenceField("reference_mode")
+    _shift_lock = ingetrazo_render.InferenceField("_shift_lock")
+    _shift_lock_ref = ingetrazo_render.InferenceField("_shift_lock_ref")
+    _hover_edge = ingetrazo_render.InferenceField("_hover_edge")
+    _hover_center = ingetrazo_render.InferenceField("_hover_center")
+    _center_ref = ingetrazo_render.InferenceField("_center_ref")
+    _acquired_edge = ingetrazo_render.InferenceField("_acquired_edge")
+    _acquired_face_normal = ingetrazo_render.InferenceField("_acquired_face_normal")
 
     def _dwell_on(self, point: Optional[QVector3D]) -> None:
         self.inference._dwell_on(point)
@@ -13340,60 +9494,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return self.inference._extension_snap(snap, px_x, px_y)
 
     def _process_hover(self, pos, modifiers) -> None:
-        if (self._last_pos is not None or self._box_active
-                or self.nav_mode is not None):
-            # Navigation tools don't select or snap. In particular, a
-            # pointer move between orbit drags must not build the editing
-            # pick index and block the next press on a large assembly.
-            return
-        self._tick = getattr(self, "_tick", 0) + 1     # a new epoch memo
-        ev = _HoverEvent(pos, modifiers)
-        _hp0 = _time_mod.perf_counter() if _PERF else 0.0
-
-        def _hmark(name):
-            nonlocal _hp0
-            if _PERF:
-                now = _time_mod.perf_counter()
-                _plog(f"hover.{name}", (now - _hp0) * 1000.0, floor=200.0)
-                _hp0 = now
-
-        # Track cursor + hover edge so Down can capture a reference edge.
-        self._last_mouse_pos = ev.position()
-        self._emit_coordinate(ev)
-        _hmark("coord")
-        # What the snap reads of a face under the cursor builds no lazy mesh
-        # (#1092); a tool's on_hover below may keep what it picks, and a click
-        # gets the real faces.
-        from views.array_bake import reading_only
-        with reading_only():
-            self.inference.acquire(ev.position().x(), ev.position().y())
-
-            if self.active_tool is None:
-                return
-            _hmark("acquire")
-            ctx = self._build_ctx(ev)
-        _hmark("ctx")
-        if ctx is None:
-            return
-        self._note_snap(ctx.snap)
-        if (self.active_tool.uses_snap
-                and getattr(self.active_tool, "allow_inferences", True)):
-            # Encouraging: the point the snap already found — no extra pick
-            # per hover. A circle's rim encourages its CENTRE (found by the
-            # centre reference while the cursor is on the rim); on a face
-            # with arcs a real corner under the cursor still wins.
-            center = getattr(self, "_hover_center", None)
-            point = None
-            if ctx.snap.kind in self._ENCOURAGING_KINDS:
-                point = ctx.snap.point
-            if center is not None and (point is None or center[2][0] == "edge"):
-                point = QVector3D(center[0])
-            self._dwell_on(point)
-        self.active_tool.on_hover(ctx)
-        _hmark("tool")
-        self.measurementChanged.emit(self._measurement_text())
-        _hmark("measure")
-        self.update()
+        return ingetrazo_render.process_hover(self, pos, modifiers)
 
     # Below this many pixels of drag, a left press/release is a click, not a box.
     BOX_DRAG_THRESHOLD_PX = 4.0
@@ -13403,30 +9504,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         # imitation of the same push (3Dconnexion does that for programs it
         # does not know): zooming on them too made the view jump a step
         # about eight times a second over the smooth move.
-        from views.ndof_input import cap_in_use
-        if cap_in_use():
-            ev.accept()
-            return
-        self._input_t = _time_mod.monotonic()   # P0: input→paint latency
-        self._input_serial = getattr(self, "_input_serial", 0) + 1
-        # A finger slide (trackpad, or the touch screen) orbits or pans
-        # instead, by preference; it says so by taking the event.
-        from ingetrazo_render import trackpad_nav
-        if trackpad_nav.slide(self, ev):
-            self.update()
-            return
-        import time as _time
-        from views.wheel_zoom import zoom_steps
-        steps = zoom_steps(ev, self._invert_wheel)
-        if steps == 0.0:
-            ev.accept()            # trackpad begin/end events do not zoom or pick
-            return
-        now = _time.monotonic()
-        reproj, reused = self._zoom_at(steps, ev.position())
-        if _PERF:
-            _plog("wheel", (_time_mod.monotonic() - now) * 1000.0,
-                  extra=f"reused={'proj' if reproj else reused}", floor=10.0)
-        self.update()
+        return ingetrazo_render.document_wheel(self, ev)
 
 
     #: The least a notch of the wheel backs out, from a close-up, once the
@@ -13436,22 +9514,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
 
     def _model_diag(self) -> float:
-        """The model's size, for the zoom step. On a huge model it comes
-        from the placement boxes the pick index already holds: the exact
-        box read every vertex, ~2 s on the first wheel notch (#158)."""
-        cached = getattr(self.scene, "_bounds_cache", None)
-        if cached is None or cached[0] != self.scene.version:
-            table = (self._pick_lazy_table()
-                     if hasattr(self, "_pick_lazy_table") else None)
-            if table is not None:
-                import numpy as np
-                lo, hi = table[1], table[2]
-                ok = np.isfinite(lo).all(axis=1) & np.isfinite(hi).all(axis=1)
-                if ok.any():
-                    return float(np.linalg.norm(hi[ok].max(axis=0)
-                                                - lo[ok].min(axis=0)))
-        lo, hi = self.scene.bounds()
-        return (hi - lo).length() if lo is not None else 0.0
+        return ingetrazo_render.model_diag(self)
 
     _MODIFIER_KEYS = frozenset({Qt.Key_Control, Qt.Key_Shift, Qt.Key_Alt,
                                 Qt.Key_Meta, Qt.Key_AltGr})
@@ -13464,258 +9527,32 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return getattr(self, "_ctrl_alone", False)
 
     def event(self, ev) -> bool:
-        if ev.type() == QEvent.NativeGesture:
-            # Pinch, smart zoom: a trackpad's, or the touch screen's (#248).
-            from ingetrazo_render import trackpad_nav
-            if trackpad_nav.native_gesture(self, ev):
-                return True
-        if (ev.type() in (QEvent.ShortcutOverride, QEvent.KeyPress)
-                and ev.key() not in self._MODIFIER_KEYS):
-            self._ctrl_alone = False
-        # With a VCB buffer in progress, claim keys that continue it (unit
-        # suffixes m/cm/mm, separators, sign) before the window's QAction
-        # shortcuts swallow them — otherwise typing "2m" would fire the Move
-        # tool instead of finishing the length. Bare letters with no buffer
-        # still reach the shortcuts.
-        # A tool that plays letters as keys (First Person's W/A/S/D) takes
-        # them from the window's tool shortcuts while it is active.
-        if ev.type() == QEvent.ShortcutOverride and self._tool_claims_key(ev):
-            ev.accept()
-            return True
-        if (ev.type() == QEvent.ShortcutOverride
-                and self._measurement_claims_key(ev, self._value_buffer)):
-            ev.accept()
+        if ingetrazo_render.document_event(self, ev):
             return True
         return super().event(ev)
 
     def _measurement_claims_key(self, ev, buffer) -> bool:
-        """Reserve measurement text before Qt dispatches window shortcuts
-        (``value_field::claims``)."""
-        if _is_chord(ev.modifiers()):
-            return False
-        return _value_claims(self, ev.text().lower(), buffer)
+        return ingetrazo_render.measurement_claims_key(self, ev, buffer)
 
     def _tool_claims_key(self, ev) -> bool:
-        claims = getattr(self.active_tool, "claims_key", None)
-        return callable(claims) and bool(claims(ev.key(), ev.modifiers()))
+        return ingetrazo_render.tool_claims_key(self, ev)
 
     def keyPressEvent(self, ev) -> None:
-        if ev.key() == Qt.Key_Control and not ev.isAutoRepeat():
-            self._ctrl_alone = True       # until another key says otherwise
-        # Held keys (First Person): the press and the release are the
-        # tool's; auto-repeat says nothing new.
-        if self._tool_claims_key(ev):
-            if not ev.isAutoRepeat():
-                self.active_tool.on_key(self, ev.key(), ev.modifiers())
+        if ingetrazo_render.document_key_press(self, ev):
             return
-        # 0. Shift state change → refresh snap immediately so the user sees
-        #the contextual lock take effect without moving the mouse.
-        if ev.key() == Qt.Key_Down and not ev.isAutoRepeat():
-            # A Down press takes the plane over from a held Shift (see
-            # _mark_plane_for_shift): what the user locks with it now
-            # outlives the key, so the Shift release must not undo it.
-            self._shift_plane_mark = None
-        if ev.key() == Qt.Key_Shift and not ev.isAutoRepeat():
-            self._set_middle_drag_pan_mode(True)
-            self._capture_shift_lock()
-            self._refresh_snap()
-            # Do not return — Shift is a modifier; let the rest fall through.
-        # 0b. Alt turns Paint into the eyedropper: show it on the pointer the
-        #     moment the key goes down, not after the next mouse move.
-        if ev.key() == Qt.Key_Alt and not ev.isAutoRepeat():
-            self._apply_alt_cursor(True)
-        elif self._alt_tap and not ev.isAutoRepeat():
-            # Alt+something is a shortcut: we are not taking its release.
-            self._alt_tap = False
-
-        # 1. Numeric value buffer (VCB-style length input).
-        if self._handle_value_key(ev):
-            return
-
-        # 2. Active tool gets first shot at the key.
-        if self.active_tool is not None:
-            if self.active_tool.on_key(self, ev.key(), ev.modifiers()):
-                return
-
-        # 2b. Delete in any other tool (Paint, Push/Pull, Offset…): with the
-        #     tool idle, erase the selection or — nothing selected — the edge
-        #     or face highlighted under the cursor. Mid-operation it would
-        #     pull the geometry out from under the tool, so it waits.
-        if ev.key() == Qt.Key_Delete and not ev.isAutoRepeat():
-            tool = self.active_tool
-            if tool is None or not self._tool_busy_for_delete(tool):
-                from tools.select import delete_selection_or_hover
-                delete_selection_or_hover(self)
-                return
-
-        # 3. Esc, escalating (standard CAD): first clear the typed value buffer,
-        #    then cancel the tool's in-progress action (an unfinished chain, a
-        #    drag), and finally — nothing in progress — clear the selection.
-        if ev.key() == Qt.Key_Escape:
-            self.escape()
-            return
-
-        # 3. Projection toggle.
-        if ev.key() == Qt.Key_P:
-            self.toggle_projection()
-            return
-
-        # 3b. Alt: cycle linear inferences — ONLY while an operation is in
-        #     progress, the classic behaviour. Its status bar offers
-        #     «Alt = Activar/desactivar "Inferencias lineales"» after the
-        #     first click of a line and not before, and the three states are
-        #     ours exactly: all → off → parallel/perp.
-        #
-        #     We had it global, at any moment, and that is the whole of
-        #     issue #26: Pedro Caeiro switches windows with Alt+Tab all day
-        #     and every switch moved a mode he was not using. Idle, there is
-        #     now nothing to steal. Cycling on the PRESS (not the release) is
-        #     deliberate: the release is what makes Qt's menu bar take focus,
-        #     so it lands on the QMenuBar, not here — measured on Marco's
-        #     desktop, one tap in six reached us.
-        if ev.key() == Qt.Key_Alt and not ev.isAutoRepeat():
-            if self.active_tool is not None and self._tool_busy(
-                    self.active_tool):
-                self._alt_tap = True        # the release is ours too
-                self._cycle_linear_inference_mode()
-            return
-
-        # 4. Axis lock (arrow keys). Pressing the same arrow toggles it off.
-        if ev.key() == Qt.Key_Right:
-            self.axis_lock = None if self.axis_lock == "x" else "x"
-            self._refresh_snap()
-            return
-        if ev.key() == Qt.Key_Left:
-            self.axis_lock = None if self.axis_lock == "y" else "y"
-            self._refresh_snap()
-            return
-        if ev.key() == Qt.Key_Up:
-            self.axis_lock = None if self.axis_lock == "z" else "z"
-            self._refresh_snap()
-            return
-
-        # 5. Reference edge — Down cycles None → parallel → perpendicular → None.
-        if ev.key() == Qt.Key_Down:
-            self._cycle_reference_mode()
-            self._refresh_snap()
-            return
-
-        super().keyPressEvent(ev)
+        return super().keyPressEvent(ev)
 
     def _release_linear_mode(self) -> None:
-        """Back to «all inferences» once the operation is over.
-
-        The toggle lasts ONE operation (the classic behaviour), and Marco checked it
-        against the real thing (2026-09-17): «desactivo con alt, termino de
-        dibujar la línea, aprieto la flechita y aprieto otra vez la línea y
-        está activo la inferencia». Ours was sticky — switched off it stayed
-        off for the rest of the session, which is a trap: you turn it off
-        for one line and then wonder for an hour why nothing snaps. It is
-        also what made issue #26 bite so hard, since an accidental Alt+Tab
-        left it off for good.
-
-        Called where an operation can END: a click that commits, a release,
-        Esc, and any change of tool."""
-        if self.linear_inference_mode == "all":
-            return
-        tool = self.active_tool
-        if tool is not None and self._tool_busy(tool):
-            return
-        self.linear_inference_mode = "all"
-        self._refresh_snap()
-        self.update()
+        return ingetrazo_render.release_linear_mode(self)
 
     def _release_axis_lock_after_operation(self, committed: bool = False) -> None:
-        """Drop the arrow-key axis lock when the operation that used it ends.
-
-        The classic rule, reported by @pacaeiro (issue #30): «if you're
-        drawing a line and press Arrow to lock X and finish drawing the
-        line, the X lock is released automatically. In ingeTrazo the Axis
-        lock keeps active». Ours only came off in the Esc cascade, so the
-        lock — and its label on screen — outlived the line it was for and
-        silently constrained whatever you drew next.
-
-        Same shape as the Alt toggle two issues ago (#26): a mode meant to
-        last one operation that lasted the session. The Down-arrow
-        reference is deliberately NOT released here — it is bound to an
-        edge the user went and picked, which is a more deliberate act than
-        tapping an arrow, and it already has Esc.
-
-        Called where an operation can END: a click that commits, a stroke
-        released, a typed value applied. A no-op mid-operation, so the
-        second click of a line keeps its lock.
-        """
-        if self.axis_lock is None:
-            return
-        tool = self.active_tool
-        if not committed and tool is not None and self._tool_busy(tool):
-            return
-        self.axis_lock = None
-        self._refresh_snap()
-        self.update()
+        return ingetrazo_render.release_axis_lock_after_operation(self, committed)
 
     def _cycle_linear_inference_mode(self) -> None:
-        """Alt: cycle linear inferences all → off → parallel/perp → all.
-
-        The classic toggle, states and all — the usual status bar reads «Alt =
-        Activar/desactivar "Inferencias lineales"» while a line is being
-        drawn. Offered only DURING an operation there, and here too since
-        issue #26. Point snaps (endpoint, midpoint, …) stay on; explicit
-        locks (arrow keys, Down reference) keep working in every mode."""
-        order = {"all": "off", "off": "parallel_perp", "parallel_perp": "all"}
-        self.linear_inference_mode = order[self.linear_inference_mode]
-        label = {
-            "all": "Linear inferences: all on",
-            "off": "Linear inferences: off",
-            "parallel_perp": "Linear inferences: parallel / perpendicular only",
-        }[self.linear_inference_mode]
-        self.measurementChanged.emit(label)
-        self._refresh_snap()
+        return ingetrazo_render.cycle_linear_inference_mode(self)
 
     def escape(self) -> None:
-        """The Esc cascade (standard CAD), ONE step per press: a typed value
-        buffer, then a sticky constraint (axis lock / reference), then the
-        array window a copy just opened, then the tool's in-progress action, then — nothing in progress — step out ONE level of the open group,
-        then clear the selection at the root, and
-        finally the tool's own cancel. The window's «Cancel current tool»
-        action (shortcut Esc, which fires BEFORE this widget's key event)
-        calls this too: it used to carry its own copy of the cascade,
-        without the group step, so Esc never left a group (Marco,
-        2026-09-14: «he hecho Esc varias veces y no salgo»)."""
-        if self._value_buffer:
-            self._set_value_buffer("")
-            return
-        if self.release_constraints():
-            return
-        tool = self.active_tool
-        close = getattr(tool, "close_array_window", None)
-        if callable(close) and self._array_pending():
-            # Right after a copy the array window is what is open: Esc
-            # closes it before touching the selection, so a bare X is the
-            # Text shortcut again (#542).
-            close()
-            return
-        if tool is not None and type(tool).__name__ == "PasteTool":
-            win = self.window()
-            activate = getattr(win, "_activate_tool", None)
-            if activate is not None:
-                activate("select")
-                return
-        if tool is not None and self._tool_busy(tool):
-            tool.on_cancel(self)
-            self._release_linear_mode()
-            return
-        if self.scene.edit_group is not None:
-            self.clear_extension_pick()
-            self.end_one_group_edit()       # selection must not consume Esc
-            return
-        if self.scene.selection or self.extension_pick is not None:
-            self.scene.clear_selection()
-            self.clear_extension_pick()
-            self.update()
-            return
-        if tool is not None:
-            tool.on_cancel(self)
+        return ingetrazo_render.document_escape(self)
 
     # ---- Items an extension lets the user select (issue #205) ---------------
     #: The one extension item selected — ``(entry, item_id, scene version)``
@@ -13725,203 +9562,48 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     extension_pick = None
 
     def pick_extension_item(self, px: float, py: float):
-        """The first extension item under the pixel, as ``(entry, id)``."""
-        for entry in getattr(self, "_ext_pickables", ()):
-            try:
-                item = entry["pick"](self, px, py)
-            except Exception:  # noqa: BLE001 — an extension's bug, not ours
-                import logging
-                logging.getLogger(__name__).exception("pickable failed")
-                continue
-            if item is not None:
-                return entry, item
-        return None
+        return ingetrazo_render.pick_extension_item(self, px, py)
 
     def set_extension_pick(self, hit) -> None:
-        """Select one extension item (``hit`` from pick_extension_item),
-        telling the extension what was let go and what was taken."""
-        self.clear_extension_pick()
-        entry, item = hit
-        self.extension_pick = (entry, item, self.scene.version)
-        if entry.get("on_select") is not None:
-            entry["on_select"](item)
-        self.update()
+        return ingetrazo_render.set_extension_pick(self, hit)
 
     def clear_extension_pick(self, notify: bool = True) -> None:
-        pick = self.extension_pick
-        self.extension_pick = None
-        if pick is not None and notify and pick[0].get("on_select") is not None:
-            pick[0]["on_select"](None)
+        return ingetrazo_render.clear_extension_pick(self, notify)
 
     def delete_extension_pick(self) -> bool:
-        """Supr on a selected extension item: the extension deletes it (as
-        its own undo step). A pick older than the document's last change
-        is dropped instead — after an undo the id may name another item."""
-        pick = self.extension_pick
-        if pick is None:
-            return False
-        entry, item, version = pick
-        self.clear_extension_pick()
-        if version != self.scene.version or entry.get("delete") is None:
-            return version != self.scene.version
-        entry["delete"](item)
-        self.update()
-        return True
+        return ingetrazo_render.delete_extension_pick(self)
 
     def release_constraints(self) -> bool:
-        """Drop the sticky drawing constraints — the arrow-key axis lock and
-        the Down-arrow parallel/perpendicular reference. First stop of the
-        Esc cascade: returns True if there was one to release (that Esc press
-        is consumed; the next one cancels the tool action as before)."""
-        if self.axis_lock is None and self.reference_mode is None:
-            return False
-        self.axis_lock = None
-        self.reference_edge = None
-        self.reference_mode = None
-        self._refresh_snap()
-        return True
+        return ingetrazo_render.release_constraints(self)
 
     def _cycle_reference_mode(self, edge=None) -> None:
-        """Down arrow: cycle None → parallel → perpendicular → None.
-
-        the modeller's: on entry to parallel mode it captures ``edge`` (the
-        Metal view's pick under the cursor), else the edge under the cursor,
-        else the last edge the line being drawn referenced (the soft
-        parallel/perpendicular the cursor picked up and then left: Down
-        makes that reference a lock). With no edge at all, do nothing —
-        there is nothing to be parallel/perpendicular to.
-        """
-        if self.reference_mode is None:
-            edge = (edge if edge is not None else self._hover_edge
-                    if self._hover_edge is not None
-                    else self.inference._acquired_edge)
-            if edge is None:
-                return  # nothing to capture
-            self.reference_edge = edge
-            self.reference_mode = "parallel"
-        elif self.reference_mode == "parallel":
-            self.reference_mode = "perpendicular"
-        else:
-            self.reference_edge = None
-            self.reference_mode = None
+        return ingetrazo_render.cycle_reference_mode(self, edge)
 
     def _refresh_snap(self) -> None:
-        """Re-run snap with the last known cursor position. Used when modifier
-        state changes (axis lock, reference mode, Shift) without mouse motion."""
-        self._sync_axes()
-        self.update()
-        if (
-            self._last_mouse_pos is None
-            or self.active_tool is None
-            or not self.active_tool.uses_snap
-        ):
-            return
-        from views import input_state
-
-        modifiers = input_state.modifiers(self)
-        p = self._last_mouse_pos.toPoint()
-        snap = self._snap_at(p.x(), p.y(), modifiers)
-        if snap is None:
-            return                              # the ray casts no world point
-        # Same bookkeeping as a hover with movement: the tool reads the KIND
-        # of the snap it is being handed (``_note_snap``), and a modifier
-        # changing with the hand still is exactly when a planar shape has to
-        # know whether the cursor is on a FACE or on a point of the model.
-        self._note_snap(snap)
-        ctx = ToolContext(
-            viewport=self,
-            world=snap.point,
-            screen=self._last_mouse_pos,
-            modifiers=modifiers,
-            snap=snap,
-        )
-        self.active_tool.on_hover(ctx)
-        self.measurementChanged.emit(self._measurement_text())
+        return ingetrazo_render.refresh_snap(self)
 
     def refresh_status_hint(self) -> None:
-        """Redraw the status bar's base line now. The hint otherwise rides
-        the 12 Hz text timer, which only ticks on mouse movement — a tool
-        that changes mode on a KEY needs to say so without waiting for the
-        hand to move (the Tape's Ctrl, issue #29)."""
-        win = self.window()
-        fn = getattr(win, "_update_status_hint", None)
-        if fn is not None:
-            fn()
+        return ingetrazo_render.refresh_status_hint(self)
 
     def _alt_tapped(self) -> bool:
-        """A clean Alt tap (press and release, nothing in between) toggles
-        Paint's eyedropper and it STAYS until one sample is taken or Alt is
-        tapped again — the usual behaviour (Marco, 2026-09-23: «se alterna
-        con Alt, no es que se mantenga presionado»). Holding Alt and
-        clicking still samples, as before."""
-        if self.nav_mode is not None or getattr(
-                self.active_tool, "icon", None) != "paint":
-            return False
-        from tools.paint import PaintTool
-        win = self.window()
-        act = getattr(win, "_act_eyedropper", None)
-        if act is not None:
-            act.setChecked(not act.isChecked())   # the button shows it too
-        else:
-            PaintTool.sample_armed = not PaintTool.sample_armed
-        self._apply_tool_cursor()
-        return True
+        return ingetrazo_render.alt_tapped(self)
 
     def _apply_alt_cursor(self, down: bool) -> None:
-        """Refresh the pointer for an Alt state change (Paint <-> eyedropper);
-        no-op while a camera nav mode owns the cursor. ``down`` is the key's
-        state after this event — see ``_apply_tool_cursor``."""
-        self._alt_down = bool(down)
-        if self.nav_mode is None and getattr(
-                self.active_tool, "icon", None) == "paint":
-            self._apply_tool_cursor()
+        return ingetrazo_render.apply_alt_cursor(self, down)
 
     def keyReleaseEvent(self, ev) -> None:
-        release = getattr(self.active_tool, "on_key_release", None)
-        if callable(release):
-            if ev.isAutoRepeat() and self._tool_claims_key(ev):
-                return
-            if not ev.isAutoRepeat() and release(self, ev.key()):
-                return
-        if ev.key() == Qt.Key_Alt and not ev.isAutoRepeat():
-            self._apply_alt_cursor(False)
-            if self._alt_tap:
-                # We acted on the press, so the release is ours: swallowing
-                # it keeps Qt's menu bar from taking focus on it. Otherwise
-                # the focus ping-pongs viewport → menu bar → viewport and
-                # every other Alt lands on the menu bar instead of here
-                # (issue #26; measured: one tap in six got through).
-                self._alt_tap = False
-                ev.accept()
-                return
-        if ev.key() == Qt.Key_Shift and not ev.isAutoRepeat():
-            self._set_middle_drag_pan_mode(False)
-            self._shift_lock = None
-            self._shift_lock_ref = None
-            self._release_shift_plane_mark()
-            self._refresh_snap()
-        super().keyReleaseEvent(ev)
+        if ingetrazo_render.document_key_release(self, ev):
+            return
+        return super().keyReleaseEvent(ev)
 
     #: The view shown in this one's place (the Metal view), which takes the
     #: keyboard whenever this hidden one is given it.
     keys_stand_in = None
 
     def setFocus(self, *args) -> None:  # noqa: N802 — Qt's name
-        """Orbit / Pan, a scene picked in its list, the camera panel, a
-        project switch… all give the keyboard back with
-        ``viewport.setFocus()``. Under Metal this viewport is hidden and Qt
-        ignores it there, so the keys stayed in the list or on a button:
-        the view the user sees takes them instead."""
-        shown = self.keys_stand_in
-        if shown is not None and not self.isVisible():
-            try:
-                visible = shown.isVisible()
-            except RuntimeError:        # its C++ side is gone
-                self.keys_stand_in = visible = None
-            if visible:
-                shown.setFocus(*args)
-                return
-        super().setFocus(*args)
+        if ingetrazo_render.document_focus(self, args):
+            return
+        return super().setFocus(*args)
 
     def focusNextPrevChild(self, next) -> bool:  # noqa: A002 — Qt's name
         """Tab is a tool key (``views.shortcuts.reserved_reason``): Qt's
@@ -13930,16 +9612,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return False
 
     def focusOutEvent(self, ev) -> None:
-        """Focus gone means the Alt release will land somewhere else, so the
-        claim on it lapses (issue #26)."""
-        self._alt_tap = False
-        self._alt_down = False        # its release will not reach us either
-        self._ctrl_alone = False      # nor will Ctrl's
-        self._release_shift_plane_mark()   # nor Shift's: unmark the plane
-        # Nor will the release of a held walking key (First Person).
-        lost = getattr(self.active_tool, "on_focus_out", None)
-        if callable(lost):
-            lost(self)
+        ingetrazo_render.document_focus_out(self)
         super().focusOutEvent(ev)
 
     # Inferences whose direction can be captured by a Shift lock.
@@ -13949,103 +9622,21 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     })
 
     def _capture_shift_lock(self) -> None:
-        """On Shift press, mark the plane the shape is drawing on and freeze
-        the active inference's direction so it holds even as the cursor
-        wanders off it (inference lock). Both at once, one does not take
-        the other's place: the mark only says WHICH plane, and the pointer
-        goes on marking midpoints, endpoints and alignments (Marco: «100%
-        aditivo»). Each side keeps its own guard."""
-        self._shift_lock = None
-        self._shift_lock_ref = None
-        self._mark_plane_for_shift()
-        snap = self.last_snap
-        tool = self.active_tool
-        owns = getattr(tool, "owns_shift_lock", None)
-        if owns is not None and owns():
-            return  # the tool reads the cursor's motion itself
-        start = getattr(tool, "start_point", None) if tool is not None else None
-        if snap is None or snap.kind not in self._SHIFT_LOCKABLE:
-            return
-        axis = snap.axis if snap.axis in _AXIS_VECTORS else None
-        if start is None and axis is None:
-            return          # no start point and no axis: nothing to lock
-
-        # Lock to the exact inferred axis, preserving its direction.
-        if axis is not None:
-            d = QVector3D(_AXIS_VECTORS[axis])
-            if start is not None and QVector3D.dotProduct(snap.point - start, d) < 0.0:
-                d = -d
-        else:
-            d = snap.point - start
-        if d.length() > 1e-6:
-            self._shift_lock = (d.normalized(), snap.color)
-            if (snap.kind == "from_point" and axis is not None
-                    and getattr(snap, "guide", None) is not None):
-                self._shift_lock_ref = (snap.guide[0], axis)
+        return ingetrazo_render.capture_shift_lock(self)
 
     def _mark_plane_for_shift(self) -> None:
-        """Shift marks the plane the shape would draw on — the tool's call
-        (``PlaneLock.mark_plane``). Unlike the inference lock above this is
-        HELD, not locked: the release hands the plane back
-        (``_release_shift_plane_mark``)."""
-        self._shift_plane_mark = None
-        tool = self.active_tool
-        if tool is None:
-            return
-        from tools.base import PlaneLock
-        if not isinstance(tool, PlaneLock):
-            return
-        if tool.mark_plane(self):
-            self._shift_plane_mark = tool
+        return ingetrazo_render.mark_plane_for_shift(self)
 
     def _release_shift_plane_mark(self) -> None:
-        """Shift let go (or the window lost focus): hand the plane back.
-        Only the mark that Shift itself put there goes — a plane locked with
-        an arrow or with Down in the meantime outlives the key."""
-        tool = getattr(self, "_shift_plane_mark", None)
-        self._shift_plane_mark = None
-        if tool is None:
-            return
-        ref = getattr(tool, "plane_ref", None)
-        if ref is not None and ref[1] == "plane":
-            tool.plane_ref = None
+        return ingetrazo_render.release_shift_plane_mark(self)
 
     # ---- Zoom: the lens typed in the value box ------------------------------
     def apply_zoom_value(self, typed: str) -> bool:
-        """Set the lens from what was typed with Zoom on: ``35mm`` is a
-        focal length on the camera's sensor (Camera Settings), ``60deg``,
-        ``60°`` or ``60`` the vertical field of view. Only in perspective
-        — a parallel view has no lens. ``False`` (and nothing changes) when
-        it cannot be done; the status bar says why."""
-        from core.camera import FOV_RANGE
-        m = re.fullmatch(r"\s*(\d+(?:[.,]\d*)?|[.,]\d+)\s*(mm|deg|°)?\s*",
-                         typed.lower())
-        value = float(m.group(1).replace(",", ".")) if m else 0.0
-        if m is None or not math.isfinite(value) or value <= 0.0:
-            self.flash_status(tr(
-                "Type a focal length like 35mm, or an angle like 60deg."))
-            return False
-        cam = self.camera
-        if not cam.perspective:
-            self.flash_status(tr(
-                "Field of view applies to perspective; switch to "
-                "Perspective first."))
-            return False
-        fov = cam.fov_for_focal(value) if m.group(2) == "mm" else value
-        lo, hi = FOV_RANGE
-        cam.fov_deg = float(min(hi, max(lo, fov)))
-        self.update()
-        self.flash_status(tr(
-            "Lens {mm} mm, field of view {deg}°",
-            mm=f"{cam.focal_mm:.0f}", deg=f"{cam.fov_deg:.1f}"), 4000)
-        return True
+        return ingetrazo_render.apply_zoom_value(self, typed)
 
     # ---- Numeric value buffer (VCB-style) ----------------------------------
     def _handle_value_key(self, ev) -> bool:
-        """The value box's keys: ``rust/ingetrazo_core/src/value_field.rs``
-        takes or refuses each one (``docs/rust-tools.md`` §20) and reads
-        Enter; :func:`_enter_value` hands the reading to the tool. With
-        Zoom on and no tool, the box takes the lens (``35mm``, ``60deg``)."""
+        """Route a value-box key to its document tool or the camera lens."""
         return _value_key(self, ev)
 
     @staticmethod
@@ -14061,17 +9652,10 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         return parse_value_box(buffer, comma_lists)
 
     def _array_pending(self) -> bool:
-        """Whether the active tool just made a copy that «x5» would turn
-        into an array (#542)."""
-        pending = getattr(self.active_tool, "array_pending", None)
-        return bool(pending(self)) if callable(pending) else False
+        return ingetrazo_render.array_pending(self)
 
     def _set_value_buffer(self, text: str) -> None:
-        if text == self._value_buffer:
-            return
-        self._value_buffer = text
-        self.valueBufferChanged.emit(text)
-        self.update()
+        return ingetrazo_render.set_value_buffer(self, text)
 
     def toggle_projection(self) -> None:
         self.camera.toggle_projection()
@@ -14093,58 +9677,10 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     def _snap_at(
         self, px_x: float, px_y: float, modifiers
     ) -> Optional[SnapResult]:
-        """The snap engine's answer for the cursor at ``(px_x, px_y)``.
-
-        THE one code path: both ``_build_ctx`` (mouse motion and clicks) and
-        ``_refresh_snap`` (a modifier changing with the hand still) go through
-        here, so the :func:`compute_snap` argument list lives in exactly one
-        place. Returns ``None`` when the pixel casts no world point (the ray
-        misses the plane / the point is behind the camera). A tool that does
-        not snap (Select, Push/Pull) gets a ``"none"`` result instead - no
-        snap engine, no occlusion raycasts, no marker.
-
-        A point that is not finite counts as no point: a NaN that reached a
-        tool showed «nan m» in the length box and failed the Line's commit
-        with «AddEdgeCommand: cannot convert float NaN to integer» (#466,
-        #754). Whatever inference produced it, the cursor just gives
-        nothing for that pixel.
-
-        The answer is values, no face: whatever the search picks it only
-        reads, so a big lazy mesh under the cursor stays unbuilt (#1092)."""
-        from views.array_bake import reading_only
-        with reading_only():
-            snap = self.inference.snap(px_x, px_y, modifiers)
-        if snap is not None and not _finite_point(snap.point):
-            return None
-        return snap
+        return ingetrazo_render.document_snap_at(self, px_x, px_y, modifiers)
 
     def _build_ctx(self, ev) -> Optional[ToolContext]:
-        self._sync_axes()
-        p = ev.position().toPoint()
-        snap = self._snap_at(p.x(), p.y(), ev.modifiers())
-        if snap is None:
-            return None
-        return ToolContext(
-            viewport=self,
-            world=snap.point,
-            screen=ev.position(),
-            modifiers=ev.modifiers(),
-            snap=snap,
-        )
+        return ingetrazo_render.build_ctx(self, ev)
 
     def _note_snap(self, snap: SnapResult) -> None:
-        """Record the cursor's snap and hand its KIND to the active tool
-        (``Tool.snap_kind``).
-
-        The kind is known only once the snap has been computed — the plane
-        comes first, the point and its snap second — so a planar tool
-        asking the viewport which face the cursor is over cannot be told
-        whether the cursor is on that face as a FACE or snapped to a point
-        that merely lies on it. The tool hears it here, on every hover and
-        click, before it is called: that is where ``PlaneLock.
-        snapped_plane`` decides whether the shape re-plans onto a point
-        (#37) or stays on the face under the cursor (#545)."""
-        self.last_snap = snap
-        tool = self.active_tool
-        if tool is not None:
-            tool.snap_kind = getattr(snap, "kind", None)
+        return ingetrazo_render.note_snap(self, snap)
