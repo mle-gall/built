@@ -439,6 +439,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(tools::chunk_selection::chunk_bounds, m)?)?;
     m.add_function(wrap_pyfunction!(tools::chunk_selection::box_chunk_group, m)?)?;
     m.add_function(wrap_pyfunction!(tools::push_targets::push_reference_target, m)?)?;
+    m.add_function(wrap_pyfunction!(tools::adapters::register_tool_adapter, m)?)?;
     m.add_function(wrap_pyfunction!(tools::bevel_queries::bevel_nearest_end, m)?)?;
     m.add_function(wrap_pyfunction!(tools::bevel_queries::bevel_selection, m)?)?;
     m.add_function(wrap_pyfunction!(tools::bevel_queries::bevel_targets, m)?)?;

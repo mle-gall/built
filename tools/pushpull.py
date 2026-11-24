@@ -38,6 +38,7 @@ reaches it); pushing out grows the solid. A free-standing face keeps its base
 as the cap of the new box.
 """
 from __future__ import annotations
+from ingetrazo_core import register_tool_adapter
 
 import math
 
@@ -66,6 +67,7 @@ from core.push_pull import (  # noqa: E402,F401  (moved; tests and extensions im
 )
 
 
+@register_tool_adapter
 class PushPullTool(PushPullOperation, RustTool):
     kind = "pushpull"
     _READ_DURING = ()
@@ -74,21 +76,6 @@ class PushPullTool(PushPullOperation, RustTool):
         RustTool.__init__(self)
         PushPullOperation.__init__(self)
         self._ctx = None
-
-    def busy(self):
-        return self.dragging
-
-    def host_reading(self, viewport, args):
-        return {"dragging": self.dragging, "distance": self.extrusion,
-                "has_base": self.base_face is not None, "mode": self._keep_mode,
-                "repeat": type(self).last_distance}
-
-    def _pointer_event(self, kind, ctx):
-        previous, self._ctx = self._ctx, ctx
-        try:
-            return self._send(ctx.viewport, self._pointer(kind, ctx))
-        finally:
-            self._ctx = previous
 
     def on_click(self, ctx):
         self._pointer_event("click", ctx)
@@ -137,158 +124,10 @@ class PushPullTool(PushPullOperation, RustTool):
     # result, and it costs a dot product each.
     preview_cull_back = True
 
-    # ---- Lifecycle ----------------------------------------------------------
-    def host_activate(self, viewport, args) -> None:
-        self._reset()
-        self._keep_mode = False      # the modifier arms ONE operation
-        # The .skp preselection workflow: activated with EXACTLY one
-        # Face of the loose mesh selected, the tool arms on it — the first
-        # click anywhere starts the drag there, not on whatever sits under
-        # the cursor. Anything else (nothing, several items, an edge, a
-        # group) leaves the tool idle, as before.
-        sel = viewport.scene.selection
-        if len(sel) > 1:
-            # Several faces: no single arm (which one would the cursor
-            # measure along?), but a drag started on any of them takes them
-            # all along — see _take_extras.
-            faces = self._selected_faces(viewport.scene)
-            if len(faces) > 1:
-                viewport.flash_status(tr(
-                    "{n} faces selected — push or pull one of them to move "
-                    "them all", n=len(faces)), 5000)
-            return
-        if len(sel) != 1:
-            return
-        item = next(iter(sel))
-        if not isinstance(item, MeshFace) or item not in viewport.scene.mesh.faces:
-            return
-        self.hovered_face = item
-        self._hover_group = None
-        self._selected_arm = True
-        viewport.set_hover(item)
-
-    def host_deactivate(self, viewport, args) -> None:
-        self._revert_preview(viewport)
-        viewport.set_hover(None)
-        viewport.set_suppressed_faces(set())
-        self._reset()
-
     # ---- Spatial input ------------------------------------------------------
-    def drag_plane(self, viewport):
-        """Mid-drag, the plane through the anchor that CONTAINS the push
-        axis and faces the camera — the cursor ray always hits it, so the
-        viewport keeps delivering hovers and clicks wherever the cursor
-        goes. The ground it used otherwise stops answering above the
-        horizon (or when the ray merely grazes it), and then the box froze
-        mid-pull and the click on its top was lost: «hago clic aquí para que
-        quede fijado… no me deja, tengo que venirme al lateral» (Rafael,
-        2026-09-16, camera at ground level). The distance itself is still
-        read off the pixel (``_project_to_lock_line``); the plane only has
-        to exist. Looking straight along the axis, where no plane contains
-        it face-on, the base plane answers as before."""
-        if not self.dragging or self._anchor is None or self._normal is None:
-            return None
-        cam = getattr(viewport, "camera", None)
-        if cam is None:
-            return None
-        forward = cam.target - cam.eye()
-        n = self._normal
-        side = forward - n * QVector3D.dotProduct(forward, n)
-        if side.length() < 1e-6:
-            return None
-        return QVector3D(self._anchor), side.normalized()
-
-    def host_hover_face(self, viewport, args):
-        ctx = self._ctx
-        self._inference_point = None
-        self._inference_kind = None
-        # The armed preselection outranks the cursor: an idle frame
-        # elsewhere must not steal it. A face gone from the mesh (undo
-        # took it) disarms and falls through to a normal pick.
-        if self._selected_arm and self.hovered_face is not None:
-            if self.hovered_face in viewport.scene.mesh.faces:
-                viewport.set_hover(self.hovered_face)
-                return
-            self._selected_arm = False
-        # A closed group's face is only ever refused: a big lazy mesh is
-        # not built to learn that (#1092). A face that can be pushed is
-        # the real one.
-        from views.array_bake import LightFace, reading_only
-        with reading_only():
-            self.hovered_face, self._hover_group = viewport.pick_face_any(
-                ctx.screen.x(), ctx.screen.y())
-        if self._hover_group is None and isinstance(self.hovered_face,
-                                                    LightFace):
-            self.hovered_face = self.hovered_face.real()
-        # Shade the face that would be pushed, so the target
-        # is unmistakable before clicking. A face inside a group that is not
-        # open gets NO shading: it is not going to be pushed, and promising
-        # it with a highlight is how the wrong thing gets modified.
-        viewport.set_hover(None if self._hover_group is not None
-                           else self.hovered_face)
-        return
-
     def host_preview(self, viewport, args):
         self._preview_at(viewport, self._ctx)
         return self.dragging
-
-    def _preview_at(self, viewport, ctx):
-        if self.base_face is None or self._anchor is None:
-            return
-        if self._drop_stale_stage(viewport):
-            return
-        # Only the prism translation is undone per frame — arithmetic, so
-        # inference never sees the forming solid's moving points. A staged
-        # result stays put (restoring it every frame is the snapshot cost the
-        # stage exists to avoid); the inference skips its geometry instead.
-        self._revert_prism_preview(viewport)
-        inferred = self._infer_reference_distance(ctx)
-        if inferred is not None:
-            self.extrusion = inferred
-        else:
-            grab = self._grab if self._grab is not None else self._anchor
-            projected = viewport._project_to_lock_line(
-                grab, self._normal, ctx.screen.x(), ctx.screen.y()
-            )
-            self.extrusion = QVector3D.dotProduct(
-                projected - grab, self._normal)
-        self._clamp_extrusion(viewport)
-        self._present(viewport, "auto")
-
-    def host_begin(self, viewport, pick):
-        ctx = self._ctx
-        face, group = (viewport.pick_face_any(ctx.screen.x(), ctx.screen.y()) if pick
-                       else (self.hovered_face, self._hover_group))
-        if face is None:
-            return False
-        if group is not None:
-            self._refuse_closed_group(viewport)
-            return False
-        self.base_face = face
-        self._take_extras(face, viewport.scene)
-        if not self._ensure_store(viewport.scene):
-            self._refuse_python_mesh(viewport)
-            return False
-        face = self.base_face
-        self.extrusion = 0.0
-        self.dragging = True
-        self._group = group
-        self._selected_arm = False
-        target = self._target_scene(viewport.scene)
-        orient_outward(target.mesh, only=(face,))
-        self._drag_pre_oriented = True
-        self._anchor = face.centroid()
-        self._normal = self._outward_normal(face, target.mesh)
-        self._grab = self._grab_point(viewport, ctx)
-        self._attached, self._prism_cap = self._classify_base(target)
-        self._cap_positions = self._cap_loop_positions(face)
-        self._prism_verts = self._cap_vertices(target)
-        self._compute_inward_limit(target)
-        self._compute_plane_levels(target)
-        if not pick:
-            viewport.set_hover(None)
-            viewport.update()
-        return True
 
     def host_close_retype(self, viewport, args):
         self._last = None
@@ -296,86 +135,12 @@ class PushPullTool(PushPullOperation, RustTool):
     def host_tiny_push(self, viewport, args):
         viewport.flash_status(tr("Too small a push — drag further or type a distance"), 4000)
 
-    def host_commit(self, viewport, distance):
-        if distance is not None:
-            self.extrusion = distance
-            self._clamp_extrusion(viewport)
-        self._commit(viewport)
-
-    def _grab_point(self, viewport, ctx: ToolContext) -> QVector3D | None:
-        """The clicked spot on the face's plane, or ``None`` (the centroid
-        then stands in).
-
-        The drag is measured along the line through this point: the cursor
-        stays on it. Through the centroid instead, a click near a corner of
-        a 12 m slab read -3.39 m for a 0.3 m pull, and a ring's centroid lies
-        in its hole -- 1 m of cursor gave 0.13 m walls (tutorial hunt 2,
-        A13/B5)."""
-        hit = getattr(viewport, "_ray_hit_plane", None)
-        if hit is None or self._anchor is None or self._normal is None:
-            return None
-        return hit((ctx.screen.x(), ctx.screen.y()),
-                   (self._anchor, self._normal))
-
     def _refuse_python_mesh(self, viewport) -> None:
         self.base_face = None
         self._extra_faces = []
         self._extra_normals = []
         viewport.flash_status(tr("Push refused: the geometry kernel could not take "
                                  "this mesh (left it unchanged)"), 6000)
-
-    def host_restore_retype(self, viewport, args):
-        """Recover the last push's handles only while its undo entry is still on top."""
-        last = self._last
-        if last is None:
-            return None
-        stack = getattr(viewport.history, "undo_stack", None)
-        if not stack or stack[-1] is not last["cmd"]:
-            self._last = None
-            return None
-        viewport.history.undo()
-        # Replay the push as a drag at the typed distance: restore the state
-        # _commit cleared, neutralize the preview bookkeeping, then commit.
-        # _anchor/_attached/_prism_verts stay cleared — the commit path
-        # never reads them.
-        self.base_face = last["face"]
-        self._group = last["group"]
-        self._keep_base = last["keep_base"]
-        self._prism_cap = last["prism_cap"]
-        self._normal = last["normal"]
-        self._cap_positions = last["cap_positions"]
-        self._drag_pre_oriented = last["pre_oriented"]
-        self._limit_in = last["limit_in"]
-        self._extra_faces = last["extras"]
-        self._extra_normals = last["extra_normals"]
-        self.dragging = True
-        self.extrusion = 0.0
-        self._prism_applied = 0.0
-        self._prism_verts = []
-        self._light_faces = []
-        self._light_wires = []
-        self._infer_cache = None
-        self._refused = False
-        self._topped_out = False
-        return last["sign"]
-
-    def host_cancel(self, viewport, args):
-        self._light_faces = []
-        self._light_wires = []
-        self._revert_preview(viewport)
-        viewport.set_hover(None)
-        viewport.set_suppressed_faces(set())
-        self._reset()
-        self._spend_keep_mode(viewport)
-        viewport.update()
-
-    def on_redo(self, viewport) -> bool:
-        """Redo mid-drag abandons the push first, then lets the redo run (False)
-        — on the clean model. Run under a staged preview, it would land on the
-        staged result and leave that in the model with no undo entry."""
-        if self.dragging:
-            self.on_cancel(viewport)
-        return False
 
     # ---- Visual preview -----------------------------------------------------
     # A free face and a Ctrl-copy show the naive sweep as overlay faces
@@ -419,14 +184,6 @@ class PushPullTool(PushPullOperation, RustTool):
     def _show_prism_preview(self, viewport) -> None:
         self._present(viewport, "prism")
 
-    def _cap_vertices(self, scene) -> list:
-        """The Vertex OBJECTS the cap loop stands on, resolved once."""
-        keys = {_key(p) for p in self._cap_positions}
-        mesh = self._group.mesh if self._group is not None else scene.mesh
-        near = push_scans.vertices_at_keys(mesh, self._cap_positions)
-        return [v for v in (mesh.vertices if near is None else near)
-                if _key(v.position) in keys]
-
     #: A stage (one pipeline run, snapshot work included) slower than this, in
     #: seconds, ends staging for the drag: leaving every parked interval shows
     #: the overlay, and a release outside them runs the pipeline as before.
@@ -435,122 +192,6 @@ class PushPullTool(PushPullOperation, RustTool):
 
     def _show_staged_preview(self, viewport) -> None:
         self._present(viewport, "stage")
-
-    def inference_marker(self):
-        """Return ``(world_point, kind)`` for the marker the viewport draws
-        when the distance inference is locked onto model geometry, or
-        ``None``. The kind selects the matching snap colour and label,
-        including the cyan midpoint cue."""
-        if not self.dragging or self._inference_point is None:
-            return None
-        return self._inference_point, self._inference_kind
-
-    def inference_guide_lines(self):
-        """The «level with that point» reference segment, from the geometry
-        the distance inference locked onto to the moving cap, as
-        ``(reference, moved_anchor, kind)`` — ``[]`` while nothing is
-        engaged."""
-        # The inference point FIRST: the hot-retype replay arms a drag with no
-        # anchor, and the hook must stay [] there, never evaluate anchor math.
-        if self._inference_point is None or not self.dragging:
-            return []
-        moved = self._anchor + self._normal * self.extrusion
-        return [(self._inference_point, moved, self._inference_kind)]
-
-    def value_label(self):
-        """Return ``(text, midpoint_world)`` for the floating distance label.
-        Uses the anchor captured at drag start, which stays fixed even while a
-        prism cap deforms the real geometry live."""
-        if not self.dragging or self._anchor is None:
-            return None
-        midpoint = self._anchor + self._normal * (self.extrusion * 0.5)
-        return (fmt_len(abs(self.extrusion)), midpoint)
-
-    def _compute_plane_levels(self, scene) -> None:
-        """The levels (along the normal, both sides) of every face parallel to
-        the base that overlaps it laterally — where a staged preview's
-        topology changes: the far face a push punches through, a floor it
-        lands flush on, an overhang a pull runs into. Stored in
-        ``self._plane_levels``; see _resolve_stage."""
-        self._plane_levels = []
-        if (not self._attached or self._prism_cap or self.base_face is None
-                or self._normal is None):
-            return                # never staged: the overlay or the prism
-        n = self._normal
-        nn = n.normalized()
-        base_xy = _project_loop_2d(self.base_face.vertices, nn)
-        near = push_scans.parallel_overlapping(scene.mesh, nn, base_xy)
-        for g in (scene.faces if near is None else near):
-            if g == self.base_face:
-                continue
-            if abs(QVector3D.dotProduct(g.normal().normalized(), nn)) <= 0.999:
-                continue  # not parallel
-            level = QVector3D.dotProduct(g.centroid() - self._anchor, n)
-            if abs(level) <= _STITCH_TOL:
-                continue  # the base's own plane: level 0 is always an event
-            if _loops_overlap_2d(base_xy, _project_loop_2d(g.vertices, nn)):
-                self._plane_levels.append(level)
-
-    def _reference_hidden(self, vp, world) -> bool:
-        """Whether ``world`` is a reference the user cannot see: on the
-        hidden side of the active section cut, or behind other geometry.
-
-        The snap engine runs both rules over its candidates (the viewport's
-        snap scene drops cut-hidden edges; ``_is_occluded`` raycasts the
-        rest), but Push/Pull sets ``uses_snap = False`` and its mid-drag
-        inference read vertices and edges the eye cannot reach — the extrusion
-        lunged to an invisible corner as the cursor crossed it (the "jumpy
-        push" reports, #270). X-ray and wireframe show everything:
-        ``_is_occluded`` is already False there, and the cut hides its side
-        in every style — the same rule the snaps follow."""
-        from views.document_interaction import _active_cut
-        sp = _active_cut(vp.scene)
-        if sp is not None and sp.side(world) > 1e-6:
-            return True
-        occluded = getattr(vp, "_is_occluded", None)   # stub viewports in tests
-        return occluded is not None and occluded(world)
-
-    def _infer_reference_distance(self, ctx: ToolContext):
-        ref = push_reference_target(self, ctx.viewport,
-                                    (ctx.screen.x(), ctx.screen.y()), _MIN_EXTRUDE)
-        self._inference_point, self._inference_kind, distance = ref or (None, None, None)
-        return distance
-
-    @staticmethod
-    def _reference_face(viewport, x, y):
-        from views.array_bake import reading_only
-        pick = getattr(viewport, "pick_face_placement", None) or viewport.pick_face_any
-        with reading_only():
-            return pick(x, y)
-
-    @staticmethod
-    def _selected_faces(scene) -> list:
-        """The selected Faces of the loose mesh."""
-        return [f for f in scene.selection
-                if isinstance(f, MeshFace) and f in scene.mesh.faces]
-
-    def _take_extras(self, face, scene) -> None:
-        """A drag starting on one of two or more selected faces takes the
-        others along; on any other face it is the ordinary single push.
-
-        The selection is read HERE, at every drag's start, not kept from the
-        activation: the pushed caps stay selected, and pushing the same
-        faces again moved only the one under the cursor."""
-        faces = self._selected_faces(scene)
-        if len(faces) < 2 or not any(f == face for f in faces):
-            self._extra_faces, self._extra_normals = [], []
-            return
-        mesh = scene.mesh
-        # In the mesh's order, not the selection's (a set): when the faces
-        # meet, which goes first decides the result.
-        from core.mesh import element_identity
-        place = {element_identity(f): i for i, f in enumerate(mesh.faces)}
-        faces.sort(key=lambda f: place.get(element_identity(f), 0))
-        self._extra_faces = [f for f in faces if f != face]
-        for f in self._extra_faces:
-            orient_outward(mesh, only=(f,))
-        self._extra_normals = [self._outward_normal(f, mesh)
-                               for f in self._extra_faces]
 
     # ---- Modifier: Ctrl keeps the starting face -----------------------------
     def on_key(self, viewport, key, modifiers):
