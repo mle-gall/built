@@ -13,23 +13,16 @@ wall, the way ``_capture_depth`` would have read it back."""
 from __future__ import annotations
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 import pytest
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication
-
-_app = QApplication.instance() or QApplication([])
 
 
 @pytest.fixture
 def vp_with_wall(native_host):
     win = native_host.window
-    for _ in range(5):
-        _app.processEvents()
     vp = win.viewport
     vp.camera.set_view("front")          # looking toward +Y
     vp.camera.perspective = False

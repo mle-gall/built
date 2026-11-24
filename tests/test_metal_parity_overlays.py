@@ -1,14 +1,13 @@
-"""QImage parity with actual GL painter methods; no mapped widgets or GPU needed."""
-import os
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+"""Compare native annotation layout, tool overlays and offscreen RGBA captures."""
+
 from copy import copy
 from types import SimpleNamespace
 import numpy as np
 import pytest
-from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QColor, QImage, QPainter
+from core.input_types import QPointF, Qt
+from ingetrazo_render import AnnotationCanvas, PaintColor, PaintPen, SurveyRaster
+from tests.raster_samples import pixels
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication
 from core.camera import OrbitCamera as Camera
 from core.scene import Scene
 from core.dimension import Dimension
@@ -18,33 +17,22 @@ from core.section import SectionPlane
 from core.snap import SnapResult
 from views.document_interaction import _guide_vertices, shown_guides
 from tests.controller_surface import ControllerSurface as Viewport
-from views.wgpu_overlay import draw_snap_indicator, pixels, rasterize, selection_rectangle
+from views.wgpu_overlay import draw_snap_indicator, paint_layer, selection_rectangle
 from views.wgpu_annotations import (
-    AnnotationLayout, composite_annotations, draw_annotations, draw_tool_overlays,
+    AnnotationLayout, composite_pixels, draw_annotations, draw_tool_overlays,
     guide_segments,
 )
 
 
-@pytest.fixture(scope="module", autouse=True)
-def app():
-    return QApplication.instance() or QApplication([])
-
-
-def painted(draw, size=(360, 100), dpr=1):
-    image = QImage(int(size[0] * dpr), int(size[1] * dpr), QImage.Format_RGBA8888)
-    image.setDevicePixelRatio(dpr)
-    image.fill(Qt.transparent)
-    painter = QPainter(image)
-    painter.setRenderHint(QPainter.Antialiasing)
-    try:
-        draw(painter)
-    finally:
-        painter.end()
-    return image
+def painted(draw, size=(360, 100), dpr=1, *, logical_width=None):
+    width, height = (int(n * dpr) for n in size)
+    canvas = AnnotationCanvas(width, height, float(size[0] if logical_width is None else logical_width))
+    draw(canvas)
+    return SurveyRaster(width, height, canvas.composite(bytes(width * height * 4)))
 
 
 def equal(a, b):
-    assert a.size() == b.size()
+    assert (a.width, a.height) == (b.width, b.height)
     delta = np.abs(pixels(a).astype(int) - pixels(b).astype(int))
     assert delta.max(initial=0) <= 1
 
@@ -94,12 +82,12 @@ def test_rectangle_matches_gl(style, dpr):
     if style == "crossing":
         a, b = b, a
     box = selection_rectangle(a, b, zoom=style == "zoom")
-    actual = rasterize([box], 360, 100, dpr)
+    actual = pixels(painted(lambda canvas: paint_layer(canvas, [box]), dpr=dpr))
     color = {"window": "#3366c7", "crossing": "#289e5c", "zoom": "#f37329"}[style]
     assert box.color == color
     assert box.pen_style == (Qt.SolidLine if style == "window" else Qt.DashLine)
-    assert actual.pixelColor(40 * dpr, 40 * dpr).alpha() == (26 if style == "zoom" else 28)
-    assert actual.pixelColor(10 * dpr, 40 * dpr).alpha() == 0
+    assert actual[40 * dpr, 40 * dpr, 3] == (26 if style == "zoom" else 28)
+    assert actual[40 * dpr, 10 * dpr, 3] == 0
 
 
 def fixture():
@@ -114,14 +102,12 @@ def fixture():
     return scene, camera
 
 
-@pytest.mark.parametrize("size,dpr", [((640, 400), 1), ((1280, 800), 2),
-                                     ((500, 700), 1), ((1000, 1400), 2)])
+@pytest.mark.parametrize("size", [(640, 400), (1280, 800), (500, 700), (1000, 1400)])
 @pytest.mark.parametrize("only", [True, False])
-def test_export_layout_matches_gl_at_output_aspect(size, dpr, only):
+def test_export_layout_matches_document_at_output_aspect(size, only):
     scene, camera = fixture()
     old_aspect = camera.aspect
-    # Reference uses a real (never shown) GL viewport's painter code at the
-    # virtual sheet size. No GL context, render, or native window is requested.
+    # Compare the document projection against the exported capture at the same logical width.
     gl = Viewport()
     gl.scene = scene
     gl.camera = copy(camera)
@@ -135,7 +121,6 @@ def test_export_layout_matches_gl_at_output_aspect(size, dpr, only):
     gl._depth_snap = None
     gl._preview_groups = None
     def reference(p):
-        p.scale(size[0] / 640 / dpr, size[0] / 640 / dpr)
         if not only:
             # GL guides are native world segments; paint their projection to
             # compare dash placement without asserting GPU AA/depth parity.
@@ -146,39 +131,14 @@ def test_export_layout_matches_gl_at_output_aspect(size, dpr, only):
                 getattr(gl, name)(p)
         gl._draw_dimensions(p)
         gl._draw_text_labels(p)
-    expected = painted(reference, (size[0] / dpr, size[1] / dpr), dpr)
-    blank = painted(lambda p: None, (size[0] / dpr, size[1] / dpr), dpr)
-    actual = composite_annotations(blank, scene, camera, logical_size=(640, 400),
-                                   annotations_only=only)
-    # Keep the byte-level check of shared projection, selection and pen layout.
-    def layout_reference(painter):
-        painter.scale(size[0] / 640 / dpr, size[0] / 640 / dpr)
-        draw_annotations(painter, scene, camera, (640, logical_height), annotations_only=only)
-    equal(painted(layout_reference, (size[0] / dpr, size[1] / dpr), dpr), expected)
-
-    # tiny-skia and the platform painter sample strokes and font outlines
-    # differently. Compare coverage and location in both directions.
-    def alpha(image):
-        return pixels(image).reshape(size[1], size[0], 4)[:, :, 3]
-    a, b = alpha(actual), alpha(expected)
-    assert 0.80 < a.sum() / b.sum() < 1.20
-    def within_stroke(mask):
-        near = mask.copy()
-        for _ in range(3 * dpr):
-            prev = near.copy()
-            near[1:] |= prev[:-1]
-            near[:-1] |= prev[1:]
-            prev = near.copy()
-            near[:, 1:] |= prev[:, :-1]
-            near[:, :-1] |= prev[:, 1:]
-        return near
-    for observed, target in ((a, b), (b, a)):
-        assert within_stroke(target > 24)[observed > 24].mean() > .95
-    assert pixels(actual).sum() > 0
-    assert not pixels(blank).any()
+    expected = painted(reference, size, logical_width=640)
+    background = bytes(size[0] * size[1] * 4)
+    rgba = composite_pixels(background, *size, scene, camera, logical_size=(640, 400),
+                            annotations_only=only)
+    actual = SurveyRaster(*size, rgba)
+    equal(actual, expected)
+    assert pixels(actual)[:, :, 3].any()
     assert camera.aspect == old_aspect
-    equal(composite_annotations(actual, scene, camera, logical_size=(640, 400),
-                                overlays=False), actual)
     gl.close()
 
 
@@ -259,11 +219,16 @@ def test_capture_occlusion_callback_and_painter_state():
     scene, camera = fixture()
     layout = AnnotationLayout(scene, camera, (360, 100), occluded=lambda p: p.x() > 0)
     assert layout._project_samples([V(-1, 0, 0), V(1, 0, 0)])[1][1] is False
-    def paint(p):
-        before = (p.pen(), p.brush(), p.font(), p.transform())
-        draw_annotations(p, scene, camera, (360, 100), annotations_only=True)
-        assert before == (p.pen(), p.brush(), p.font(), p.transform())
-    painted(paint)
+    # A caller's stroke and transform must survive an annotation pass.
+    def marker(canvas, annotate):
+        canvas.setPen(PaintPen(PaintColor(0, 255, 0), 2))
+        if annotate:
+            draw_annotations(canvas, scene, camera, (360, 100), annotations_only=True)
+        canvas.drawLine(QPointF(1, 2), QPointF(12, 2))
+    reference = pixels(painted(lambda canvas: marker(canvas, False)))
+    actual = pixels(painted(lambda canvas: marker(canvas, True)))
+    assert reference[:5, :14, 1].max() == 255
+    np.testing.assert_array_equal(reference[:5, :14], actual[:5, :14])
 
 
 def test_clear_dimension_stroke_covers_arrows_and_label_for_this_frame():
@@ -281,13 +246,12 @@ def test_clear_dimension_stroke_covers_arrows_and_label_for_this_frame():
 
 def test_capture_marks_composite_over_straight_alpha_and_escape_label_text():
     from ingetrazo_render import AnnotationCanvas
-    from PySide6.QtCore import QPointF
-    from PySide6.QtGui import QColor, QPen
+    from core.input_types import QPointF
     target = AnnotationCanvas(96, 36, 96)
     base = bytes([0, 0, 255, 128]) * (96 * 36)
     assert target.composite(base) is base
-    target.fillRect(0, 0, 8, 8, QColor(255, 0, 0, 128))
-    target.setPen(QPen(QColor(0, 255, 0)))
+    target.fillRect(0, 0, 8, 8, PaintColor(255, 0, 0, 128))
+    target.setPen(PaintPen(PaintColor(0, 255, 0)))
     target.drawText(QPointF(10, 24), "A < B & C")
     pixels = np.frombuffer(target.composite(base), np.uint8).reshape(36, 96, 4)
     np.testing.assert_allclose(pixels[2, 2], [170, 0, 85, 192], atol=1)

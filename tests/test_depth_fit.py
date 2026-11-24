@@ -6,17 +6,12 @@ The raster check needs a real GL context: run this file with
 QT_QPA_PLATFORM=cocoa on macOS (no window is left open).
 """
 import math
-import os
-import sys
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 import pytest
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication
 
-_app = QApplication.instance() or QApplication([])
 
 from core.camera import OrbitCamera  # noqa: E402
 

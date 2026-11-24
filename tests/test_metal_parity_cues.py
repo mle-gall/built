@@ -1,17 +1,16 @@
 """Interaction cues the Metal view paints with GL's own code (docs/metal-parity-audit.md).
 
-Device-free: painters run on QImages, renderer calls are recorded.
+Draw annotations into a native RGBA canvas and record renderer calls.
 """
-import os
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+from ingetrazo_render import MouseEvent
+
 import math
 from types import SimpleNamespace
 import numpy as np
 import pytest
-from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QMouseEvent
+from core.input_types import QPointF
+from core.input_codes import Input as Qt
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
-from PySide6.QtWidgets import QApplication
 from core.camera import OrbitCamera as Camera
 from core.group import Group
 from core.mesh import Mesh
@@ -19,16 +18,12 @@ from core.scene import Scene
 from core.snap import SnapResult
 from tests.controller_surface import ControllerSurface as Viewport
 from views.wgpu_annotations import AnnotationLayout, draw_tool_feedback
-from views.wgpu_overlay import draw_snap_indicator, pixels
+from views.wgpu_overlay import draw_snap_indicator
+from tests.raster_samples import pixels
 from views.wgpu_scene import VERTEX, pack_scene
 from tests.test_metal_parity_overlays import equal, painted
 
 SIZE = (360, 200)
-
-
-@pytest.fixture(scope="module", autouse=True)
-def app():
-    return QApplication.instance() or QApplication([])
 
 
 def camera():
@@ -189,8 +184,7 @@ def test_snap_tooltip_is_painted():
 # ---- view-level cues --------------------------------------------------------
 
 @pytest.fixture
-def view():
-    from views.wgpu_view import WgpuView
+def view(native_host):
     from views.wgpu_inference import prepare
     scene = Scene()
     mesh = Mesh()
@@ -199,8 +193,8 @@ def view():
     group.xform = QMatrix4x4()
     group.xform.translate(4, 3, 0)
     scene.groups.append(group)
-    v = WgpuView()
-    v.resize(800, 600)
+    native_host.resize(800, 600, 1.)
+    v = native_host.view
     v.scene = scene
     v.packed = pack_scene(scene)
     v.uid_rows = {uid: [i] for i, uid in enumerate(v.packed.uids)}
@@ -219,7 +213,6 @@ def view():
                                         _preview_groups=(), _hover_entity=None)
     yield v
     v.renderer = None
-    v.close()
 
 
 def test_tool_hovered_face_wears_dots_through_its_placement(view):
@@ -265,13 +258,10 @@ def test_selection_rectangle_waits_for_the_drag_threshold(view):
     view.tools.mode = 'select'
     view.source_viewport.nav_mode = None
     a, b, c = QPointF(100, 100), QPointF(102, 101), QPointF(140, 130)
-    QApplication.sendEvent(view, QMouseEvent(QMouseEvent.MouseButtonPress, a, a,
-        Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
-    QApplication.sendEvent(view, QMouseEvent(QMouseEvent.MouseMove, b, b,
-        Qt.NoButton, Qt.LeftButton, Qt.NoModifier))
+    view.mousePressEvent(MouseEvent('press', a.x(), a.y(), Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
+    view.mouseMoveEvent(MouseEvent('move', b.x(), b.y(), Qt.NoButton, Qt.LeftButton, Qt.NoModifier))
     assert view.overlay_primitives == []
-    QApplication.sendEvent(view, QMouseEvent(QMouseEvent.MouseMove, c, c,
-        Qt.NoButton, Qt.LeftButton, Qt.NoModifier))
+    view.mouseMoveEvent(MouseEvent('move', c.x(), c.y(), Qt.NoButton, Qt.LeftButton, Qt.NoModifier))
     assert [p.kind for p in view.overlay_primitives] == ['rectangle']
 
 

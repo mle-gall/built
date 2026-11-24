@@ -8,21 +8,17 @@ said you were inside a group. Renders two groups, opens one, reads pixels.
 Requires a native wgpu surface for pixel readback."""
 from __future__ import annotations
 
+from tests.raster_samples import pixels, solid_raster
 from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from tests.controller_surface import live_image
 import pytest
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
-from PySide6.QtWidgets import QApplication
 
 from core.group import Group
 from core.mesh import Mesh
 from views.document_interaction import edit_fade_color
-
-_app = QApplication.instance() or QApplication([])
 
 
 def test_the_fade_colour_is_a_grey_away_from_a_light_background():
@@ -63,17 +59,20 @@ def test_the_rest_reads_grey_and_the_group_keeps_its_colour(native_gpu_host, com
         native_gpu_host.idle()
         img = live_image(vp)
         x, y = vp._world_to_pixel(p)
-        r = img.devicePixelRatio()
-        return img.pixelColor(int(x * r), int(y * r))
+        r = img.width / vp.width()
+        return tuple(map(int, pixels(img)[int(y * r), int(x * r), :3]))
 
     before = colour(V(5, 1, 0))
     vp.begin_group_edit(a)
     after = colour(V(5, 1, 0))
     inside = colour(V(1, 1, 0))
+    def lightness(rgb):
+        return (max(rgb) + min(rgb)) / 510.0
+
     # the other group lost a clear step of lightness: grey, not white
-    assert before.lightnessF() - after.lightnessF() > 0.08
+    assert lightness(before) - lightness(after) > 0.08
     # the open one keeps its own colour
-    assert abs(inside.lightnessF() - before.lightnessF()) < 0.03
+    assert abs(lightness(inside) - lightness(before)) < 0.03
 
 
 @pytest.mark.parametrize("mode", ["fade", "hide"])
@@ -81,11 +80,9 @@ def test_people_and_images_go_grey_with_the_rest(native_gpu_host, tmp_path, mode
     """The face-me figures and the reference images are drawn by passes of
     their own: they kept their full colour on a grey model («al editar un
     grupo o componente las imágenes no se ponen en gris», 20-10)."""
-    from PySide6.QtGui import QColor, QImage
     from core.group import make_billboard_group
     from core.image_plane import ImagePlane
-    red = QImage(16, 16, QImage.Format_ARGB32)
-    red.fill(QColor(220, 20, 20))
+    red = solid_raster(16, 16, (220, 20, 20))
     path = str(tmp_path / "red.png")
     red.save(path)
     w = native_gpu_host.window
@@ -110,21 +107,21 @@ def test_people_and_images_go_grey_with_the_rest(native_gpu_host, tmp_path, mode
         native_gpu_host.idle()
         img = live_image(vp)
         x, y = vp._world_to_pixel(p)
-        r = img.devicePixelRatio()
-        return img.pixelColor(int(x * r), int(y * r))
+        r = img.width / vp.width()
+        return tuple(map(int, pixels(img)[int(y * r), int(x * r), :3]))
 
     spots = (V(-3, 0, 1), V(5, 0, 1))       # the person, the image
     # A figure's texture is loaded on a timer: wait for it to show.
-    from PySide6.QtTest import QTest
+    import time
     for _ in range(40):
-        if all(c.red() > 150 and c.green() < 80
+        if all(c[0] > 150 and c[1] < 80
                for c in (colour(p) for p in spots)):
             break
-        QTest.qWait(50)
+        time.sleep(.05)
     before = [colour(p) for p in spots]
     for c in before:
-        assert c.red() > 150 and c.green() < 80, c.name()
+        assert c[0] > 150 and c[1] < 80, c
     vp.begin_group_edit(a)
     for c in (colour(p) for p in spots):
         # neither the full red of before: washed grey, or gone
-        assert c.red() - c.green() < 80, c.name()
+        assert c[0] - c[1] < 80, c

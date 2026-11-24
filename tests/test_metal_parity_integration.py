@@ -1,12 +1,12 @@
-"""P7 production handoffs, with unshown Qt event and resident range checks."""
+"""Native input handling, edit previews and resident geometry ranges."""
+from ingetrazo_render import MouseEvent
+from tests.native_view_input import click, key
 from types import SimpleNamespace
 import numpy as np
 import pytest
-from PySide6.QtCore import Qt, QPointF
-from PySide6.QtGui import QMouseEvent
+from core.input_types import QPointF
+from core.input_codes import Input as Qt
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
-from PySide6.QtTest import QTest
 from core.scene import Scene
 from core.group import Group
 from core.layers import Layer
@@ -70,7 +70,7 @@ def test_face_ranges_and_native_marks_keep_pack(view):
     assert len(captured[-1]) == 0
 
 
-def test_pushpull_recess_qt_events_suppress_without_repack(view, monkeypatch):
+def test_pushpull_recess_events_suppress_without_repack(view, monkeypatch):
     from tools.pushpull import PushPullTool
     f = face(view)
     tool = PushPullTool()
@@ -79,7 +79,7 @@ def test_pushpull_recess_qt_events_suppress_without_repack(view, monkeypatch):
     # A bordered face uses the lightweight recess preview. A deterministic
     # drag-axis projection isolates native event/suppression lifetime from snap.
     point = pixel(view, QVector3D(1,1,0))
-    QTest.mouseClick(view, Qt.LeftButton, Qt.NoModifier, point)
+    click(view, Qt.LeftButton, Qt.NoModifier, point)
     assert tool.dragging and tool.base_face == f
     tool._attached = True
     monkeypatch.setattr(tool, '_infer_reference_distance', lambda ctx: -.5)
@@ -91,13 +91,12 @@ def test_pushpull_recess_qt_events_suppress_without_repack(view, monkeypatch):
     original = view.packed
     # Keep the already established resident face pick for this synthetic host.
     move = QPointF(point.x()+10, point.y()+10)
-    QApplication.sendEvent(view, QMouseEvent(QMouseEvent.MouseMove, move, move,
-        Qt.NoButton, Qt.NoButton, Qt.NoModifier))
+    view.mouseMoveEvent(MouseEvent('move', move.x(), move.y(), Qt.NoButton, Qt.NoButton, Qt.NoModifier))
     assert view.packed is original
     assert captured['suppressed'][-1] == [(0,0,2)]
     triangles = np.frombuffer(captured['mesh'][-1][0], VERTEX)
     assert len(triangles) and triangles['pos'][:,2].min() < -.49
-    QTest.keyClick(view, Qt.Key_Escape)
+    key(view, Qt.Key_Escape)
     assert captured['suppressed'][-1] == []
     assert len(captured['mesh'][-1][0]) == 0
     assert not f.attrs.get('hidden')
@@ -131,15 +130,13 @@ def test_tape_and_eraser_reference_pickers(view):
 
 
 @pytest.mark.parametrize('crossing,zoom', [(False,False),(True,False),(False,True)])
-def test_rectangle_qt_move_uses_directional_helper(view, crossing, zoom):
+def test_rectangle_mouse_move_uses_directional_helper(view, crossing, zoom):
     from views.wgpu_overlay import selection_rectangle
     a,b = QPointF(100,100),QPointF(300,250)
     if crossing: a,b = b,a
     if zoom: view.source_viewport.nav_mode = 'zoom_window'
-    QApplication.sendEvent(view,QMouseEvent(QMouseEvent.MouseButtonPress,a,a,
-        Qt.LeftButton,Qt.LeftButton,Qt.NoModifier))
-    QApplication.sendEvent(view,QMouseEvent(QMouseEvent.MouseMove,b,b,
-        Qt.NoButton,Qt.LeftButton,Qt.NoModifier))
+    view.mousePressEvent(MouseEvent('press', a.x(), a.y(), Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
+    view.mouseMoveEvent(MouseEvent('move', b.x(), b.y(), Qt.NoButton, Qt.LeftButton, Qt.NoModifier))
     assert view.overlay_primitives == [selection_rectangle((a.x(),a.y()),(b.x(),b.y()),zoom=zoom)]
 
 
@@ -187,7 +184,6 @@ def test_matching_back_header_renders_both_sides(native):
     assert front[1]<5 and back[1]<5
 
 
-
 def test_eraser_guide_click_and_undo(view):
     from core.guide import Guide
     from tools.eraser import EraserTool
@@ -195,11 +191,10 @@ def test_eraser_guide_click_and_undo(view):
     guide=Guide(QVector3D(0,1,0),QVector3D(1,0,0))
     view.scene.guides.append(guide)
     view.source_viewport.active_tool=EraserTool()
-    QTest.mouseClick(view,Qt.LeftButton,Qt.NoModifier,pixel(view,QVector3D(1,1,0)))
+    click(view,Qt.LeftButton,Qt.NoModifier,pixel(view,QVector3D(1,1,0)))
     assert guide not in view.scene.guides
     view.source_viewport.history.undo()
     assert guide in view.scene.guides
-
 
 
 def test_arc_uses_resident_tangent_without_gl_placement_scan(view):

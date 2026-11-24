@@ -7,25 +7,15 @@ through the viewport (the same live path the Camera menu uses).
 """
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from PySide6.QtCore import QSettings
-from PySide6.QtWidgets import QApplication, QWidget
+from ingetrazo_core import NativeSettings
 
-_inst = QApplication.instance()
-if _inst is None:
-    _app = QApplication([])
-elif not isinstance(_inst, QApplication):
-    pytest.skip("a non-widget QGuiApplication is already active",
-                allow_module_level=True)
 
 from tests.preferences_chrome import Controls, settings_file
 
 
-class _Win(QWidget):
+class _Win:
     """Just enough main window: a viewport with the rest-mode contract."""
 
     def __init__(self):
@@ -46,7 +36,7 @@ class _Win(QWidget):
 
 
 def _fresh(path):
-    return QSettings(str(path), QSettings.IniFormat)
+    return NativeSettings(path.parent.parent)
 
 
 def test_ok_writes_the_settings(settings_file):
@@ -120,10 +110,8 @@ def test_toolbar_sizes_are_fixed_even_with_old_keys(settings_file):
 
 
 def test_old_theme_is_ignored_by_the_default_palette(settings_file):
-    from views import theme
     st = _fresh(settings_file)
     st.setValue("General/theme", "light")
-    theme.install_dark_palette(QApplication.instance())
     with pytest.raises(KeyError):
         Controls(_Win(), "general").row("theme")
 
