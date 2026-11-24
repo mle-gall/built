@@ -26,6 +26,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 from PySide6.QtCore import QSettings, Qt
 from PySide6.QtGui import QCloseEvent, QColor, QImage, QPainter
 from ingetrazo_core import Vec3 as V
@@ -183,7 +184,8 @@ def test_the_vectorised_projection_matches_the_per_point_one(win):
 
 # ---- file openers ----------------------------------------------------------------------
 
-def test_an_extension_opens_its_own_file_type(win):
+def test_an_extension_opens_its_own_file_type(native_window):
+    win = native_window
     opened = []
     _app_for(win).add_file_opener("XYZ", lambda p: opened.append(p) or True)
     assert ".xyz" in win.file_openers
@@ -191,15 +193,17 @@ def test_an_extension_opens_its_own_file_type(win):
     assert opened == [Path("/tmp/job.XYZ")]
 
 
-@pytest.mark.parametrize("suffix", [".igz", ".dae", ".skp", ".dxf", ".dwg",
+@pytest.mark.parametrize("suffix", [".igz", ".builtproject", ".igzproj", ".gltf", ".dae", ".skp", ".dxf", ".dwg",
                                     ".obj", ".stl", ".glb"])
-def test_a_core_suffix_cannot_be_claimed(win, caplog, suffix):
+def test_a_core_suffix_cannot_be_claimed(native_window, caplog, suffix):
+    win = native_window
     _app_for(win).add_file_opener(suffix, lambda p: True)
     assert suffix not in win.file_openers
     assert any("core format" in r.message for r in caplog.records)
 
 
-def test_a_suffix_already_claimed_is_refused_not_overwritten(win, caplog):
+def test_a_suffix_already_claimed_is_refused_not_overwritten(native_window, caplog):
+    win = native_window
     app = _app_for(win, key="first")
     first_opened = []
     app.add_file_opener(".xyz", lambda p: first_opened.append(p) or True)
@@ -262,7 +266,8 @@ class FakeWorkspace:
         self.gone = True
 
 
-def test_the_model_is_parked_and_comes_back(win):
+def test_the_model_is_parked_and_comes_back(native_window):
+    win = native_window
     app = _app_for(win)
     model = win.viewport.scene
     model.mesh.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)])
@@ -273,7 +278,7 @@ def test_the_model_is_parked_and_comes_back(win):
     assert app.workspace() is ws
     assert win.viewport.scene is ws.scene and win.viewport.history is ws.history
     assert ws.scene.version > model.version              # no render cache is shared
-    assert win.windowTitle() == "Built — job.xyz"
+    assert win._host._title == "Built — job.xyz"
     assert not app.enter_workspace(FakeWorkspace())      # one at a time
     assert app.leave_workspace()
     assert win.viewport.scene is model and win.viewport.history is history
@@ -282,7 +287,8 @@ def test_the_model_is_parked_and_comes_back(win):
     assert ws.gone and app.workspace() is None
 
 
-def test_each_swap_resets_the_document_caches(win, monkeypatch):
+def test_each_swap_resets_the_document_caches(native_window, monkeypatch):
+    win = native_window
     calls = []
     orig = win.viewport.reset_document_caches
     monkeypatch.setattr(win.viewport, "reset_document_caches",
@@ -293,19 +299,21 @@ def test_each_swap_resets_the_document_caches(win, monkeypatch):
     assert len(calls) == 2
 
 
-def test_file_actions_and_the_title_go_to_the_workspace(win):
+def test_file_actions_and_the_title_go_to_the_workspace(native_window):
+    win = native_window
     ws = FakeWorkspace()
     _app_for(win).enter_workspace(ws)
     ws.dirty = True
     win._update_title()
-    assert win.windowTitle().endswith("job.xyz *")
+    assert win._host._title.endswith("job.xyz *")
     assert win._is_dirty()
     win._on_save()
     assert ws.saved == 1 and not win._is_dirty()
     win.leave_workspace()
 
 
-def test_the_tool_filter_keeps_other_tools_out(win):
+def test_the_tool_filter_keeps_other_tools_out(native_window):
+    win = native_window
     ws = FakeWorkspace(allowed={"select", "line", "rectangle"})
     _app_for(win).enter_workspace(ws)
     assert not win._tool_actions["pushpull"].isEnabled()
@@ -316,18 +324,19 @@ def test_the_tool_filter_keeps_other_tools_out(win):
     assert win._tool_actions["pushpull"].isEnabled()
 
 
-def test_a_workspace_that_will_not_go_stops_quitting(win):
+def test_a_workspace_that_will_not_go_stops_quitting(native_window):
+    win = native_window
     ws = FakeWorkspace(leave=False)
     _app_for(win).enter_workspace(ws)
-    event = QCloseEvent()
-    win.closeEvent(event)
-    assert not event.isAccepted()
+    from app_shell.files import request_close
+    assert not request_close(win)
     assert win.workspace() is ws
     ws.leave_answer = True
     assert win.leave_workspace()
 
 
-def test_opening_an_igz_leaves_the_workspace_first(win, tmp_path):
+def test_opening_an_igz_leaves_the_workspace_first(native_window, tmp_path):
+    win = native_window
     from formats import igz
     doc = tmp_path / "model.igz"
     igz.save_scene(Scene(), doc)
@@ -337,7 +346,8 @@ def test_opening_an_igz_leaves_the_workspace_first(win, tmp_path):
     assert win.workspace() is None and ws.gone
 
 
-def test_autosave_pauses_while_the_model_is_parked(win, monkeypatch):
+def test_autosave_pauses_while_the_model_is_parked(native_window, monkeypatch):
+    win = native_window
     from core import autosave
     written = []
     monkeypatch.setattr(autosave, "write", lambda *a, **k: written.append(a))

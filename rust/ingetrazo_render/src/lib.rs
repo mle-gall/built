@@ -9,6 +9,7 @@ mod component_replacement;
 mod inspection_edits;
 mod context_edits;
 mod native_view_actions;
+mod plugin_workspace;
 mod context_tools;
 mod image_edits;
 mod component_files;
@@ -3032,6 +3033,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     inspection_edits::register(m)?;
     context_edits::register(m)?;
     native_view_actions::register(m)?;
+    plugin_workspace::register(m)?;
     context_tools::register(m)?;
     image_edits::register(m)?;
     component_files::register(m)?;

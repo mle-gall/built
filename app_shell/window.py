@@ -1,38 +1,13 @@
-"""What views/wgpu_ui.py and the tools ask of "the window", without one.
+"""The document window presented to native commands, chrome and Python extensions.
 
-The egui chrome reads the window's tool actions (checked state, text,
-shortcut), its status bar, and runs ``_activate_tool``. :class:`ShellWindow`
-answers those from the same tool registry MainWindow builds, so the chrome
-code runs unchanged.
-
-**MainWindow's own Python, on demand.** Every method, property and
-constant of ``views.main_window.MainWindow`` (and its worksession mixin)
-that the shell does not define is borrowed the first time something asks
-for it (:meth:`ShellWindow.__getattr__`): Select All,
-Undo, the links menu's verbs, the unsaved-changes question, File ▸ New…
-run as the Qt app runs them. What they reach for and the shell lacks (a
-dock, a tray, a Qt menu) raises inside them, and the host reports it as
-"not in the shell yet" with the classic app as the way out. What was
-looked up and is nowhere is still counted in
-:data:`views.view_host.MISSING`.
-
-**Documents.** Each open project is a ``views.documents.Document`` with
-its own controller (``DocumentController``: scene, history, camera) and its own
-view object (``ShellView``: the packed scene, picking, inference index,
-tool dispatch). One renderer, the window's surface, is handed to the
-document in front; a switch uploads that document's packed arrays again
-(no repack) and resends the chrome's state. The egui top bar's document
-▾ lists them (``_project_tabs`` below answers what views/wgpu_ui.py reads);
-no new tab strip yet (it waits for the design review in
-build/shell-design/).
+Each open document owns its history, controller, panes and packed scene.
+The winit window gives its render surface to the front document.
 """
 from __future__ import annotations
 
-import types
-
 import ingetrazo_render as native
 
-from PySide6.QtCore import QEvent, QObject, Qt, Signal
+from PySide6.QtCore import QEvent, QObject, Qt
 
 from app_shell.command_action import ShellAction
 from views.view_host import MISSING
@@ -309,99 +284,11 @@ class _Tray:
         self.materials = PaintRecents(PaintTool)
 
 
-def _rebind(fn, cls, depth=0):
-    """``fn`` with every ``__class__`` cell (its own and its closures')
-    pointing at ``cls``."""
-    if not isinstance(fn, types.FunctionType) or depth > 3:
-        return fn
-    code = fn.__code__
-    if not code.co_freevars:
-        return fn
-    cells = []
-    changed = False
-    for name, cell in zip(code.co_freevars, fn.__closure__):
-        if name == "__class__":
-            cells.append(types.CellType(cls))
-            changed = True
-            continue
-        try:
-            value = cell.cell_contents
-        except ValueError:
-            cells.append(cell)
-            continue
-        new = _rebind(value, cls, depth + 1)
-        if new is not value:
-            cells.append(types.CellType(new))
-            changed = True
-        else:
-            cells.append(cell)
-    if not changed:
-        return fn
-    out = types.FunctionType(code, fn.__globals__, fn.__name__, fn.__defaults__, tuple(cells))
-    out.__kwdefaults__ = fn.__kwdefaults__
-    out.__dict__.update(fn.__dict__)
-    out.__qualname__ = fn.__qualname__
-    out.__doc__ = fn.__doc__
-    return out
-
-
-#: MainWindow members the shell defines itself and never borrows (they
-#: build Qt widgets, or the shell has its own version).
-_OWN = {"viewport", "documents", "active_document", "activate_document",
-        "close_document", "close_documents", "_new_document", "_retire_document",
-        "_install_wgpu_display", "_choose_document_renderer", "open_path",
-        "_open_path_here", "_import_progress", "_parse_skp_threaded",
-        "_parse_stl_threaded", "show_viewport_context_menu", "closeEvent",
-        "_update_title", "_update_tab", "_refresh_scene_tabs", "setWindowTitle",
-        "_on_save", "_on_save_as", "_do_save", "_on_export_igz", "_document_picture",
-        "_show_empty_area", "_leave_empty_area", "_dismiss_home", "_on_new_window",
-        "_sync_foreign_clipboard", "_on_open", "_open_recent", "_fill_recent_menu",
-        # Optional per-instance attachments and QWidget probes. A lookup
-        # before installation must not load the Classic window class.
-        "_host_window", "_doc_area", "_lib_installed", "_mac_chrome",
-        "_panel_view", "_vcb_name", "_vcb_value", "isWindow", "scenes_dock"}
-
-#: What a borrowed method may reach for that the shell has nothing for:
-#: answered with a no-op, as a window with that panel closed would.
 _QUIET = ("_sync_style_menu", "_sync_section_menu", "_refresh_layer_views",
           "_refresh_sheet_tabs",
           "_light_views_button", "_sync_projection_buttons", "_show_renderer_note",
           "_sync_component_edit_menu", "_refresh_vcb", "_forget_panel_caches", "_show_panels_again",
           "on_active_view_changed", "keep_other_views_style", "settle_heap_later")
-
-
-def _lazy(name):
-    """MainWindow's ``name`` copied onto ShellWindow, or None."""
-    if name in _OWN:
-        return None
-    try:
-        from views.main_window import MainWindow
-    except Exception:  # noqa: BLE001 — no Qt app module: nothing to borrow
-        return None
-    for klass in MainWindow.__mro__:
-        mod = getattr(klass, "__module__", "") or ""
-        if mod.startswith(("PySide6", "Shiboken", "shiboken6")) or klass is object:
-            continue
-        if name not in vars(klass):
-            continue
-        value = vars(klass)[name]
-        if isinstance(value, Signal):
-            return None
-        if isinstance(value, types.FunctionType):
-            value = _rebind(value, ShellWindow)
-        elif isinstance(value, property):
-            value = property(_rebind(value.fget, ShellWindow), _rebind(value.fset, ShellWindow),
-                             _rebind(value.fdel, ShellWindow), value.__doc__)
-        elif isinstance(value, (staticmethod, classmethod)):
-            value = type(value)(_rebind(value.__func__, ShellWindow))
-        setattr(ShellWindow, name, value)
-        BORROWED.add(name)
-        return value
-    return None
-
-
-#: MainWindow members borrowed so far (diagnostics, the smoke test).
-BORROWED: set = set()
 
 
 def _doc_attr(name):
@@ -449,7 +336,7 @@ class ShellWindow(WindowDocumentCommands, QObject):
         self.tray = _Tray(self)
         from views.scene_playback import WindowPlayback
         self.scene_player = WindowPlayback(self, host.timers)
-        # MainWindow's own state the borrowed methods read.
+        self.file_openers = {}
         self._workspace = None
         self._empty_on = False
         self._session_path = None
@@ -514,9 +401,6 @@ class ShellWindow(WindowDocumentCommands, QObject):
             raise AttributeError(name)
         if name in _QUIET:
             return lambda *a, **k: None
-        value = _lazy(name)
-        if value is not None:
-            return getattr(self, name)
         MISSING["window." + name] += 1
         raise AttributeError(name)
 
@@ -592,7 +476,7 @@ class ShellWindow(WindowDocumentCommands, QObject):
         if doc is None or doc not in self._documents:
             return
         old = self._doc
-        if doc is old:
+        if self._workspace is not None or doc is old:
             return
         self.scene_player.cancel()
         if old is not None:
@@ -792,6 +676,8 @@ class ShellWindow(WindowDocumentCommands, QObject):
         if tool is None:
             self._status.showMessage(f"{key} is unavailable in this window", 4000)
             return
+        if self._workspace is not None and not self._tool_actions[key].isEnabled():
+            return
         self.viewport.set_active_tool(tool)
         display = self.viewport.keys_stand_in
         display.tools.pick_up()
@@ -878,7 +764,10 @@ class ShellWindow(WindowDocumentCommands, QObject):
         if doc is None or doc.viewport is None:
             return
         marker = " *" if self._is_dirty() else ""
-        self.setWindowTitle(f"{doc.display_name()}{marker} — Built")
+        if self._workspace is not None:
+            self.setWindowTitle(f"Built — {self._workspace.title()}{marker}")
+        else:
+            self.setWindowTitle(f"{doc.display_name()}{marker} — Built")
         view = doc.stand_in
         if view is not None:
             view._ui_docs = None            # the document ▾ shows the • too
@@ -910,9 +799,6 @@ class ShellWindow(WindowDocumentCommands, QObject):
         from app_shell import files
         return files.command(self, name, *args)
 
-    # MainWindow's names for what app_shell.files does in the shell: the
-    # borrowed code (the unsaved-changes question's Save, the start page,
-    # the import pipelines, Paste) calls these.
     def open_path(self, path):
         from app_shell import files
         return files.open_path(self, path)
@@ -960,6 +846,15 @@ class ShellWindow(WindowDocumentCommands, QObject):
         from views.survey_import import import_points
         import_points(self)
 
+
+    def workspace(self):
+        return self._workspace
+
+    def enter_workspace(self, workspace):
+        return native.enter_workspace(self, workspace)
+
+    def leave_workspace(self):
+        return native.leave_workspace(self)
 
     def _on_standard_view(self, key):
         native.standard_view(self._active_view(), key)

@@ -59,7 +59,7 @@ API_VERSION = 2
 #: ``file_openers`` first — it's the extension's own opener that would
 #: silently steal Open Recent / CLI / double-click from the core reader.
 CORE_FILE_SUFFIXES = frozenset({
-    *built.DOCUMENT_SUFFIXES, ".dae", ".skp", ".rfa", ".dxf", ".dwg", ".obj", ".stl", ".glb",
+    *built.DOCUMENT_SUFFIXES, ".builtproject", ".igzproj", ".gltf", ".dae", ".skp", ".rfa", ".dxf", ".dwg", ".obj", ".stl", ".glb",
 })
 
 

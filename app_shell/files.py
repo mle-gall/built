@@ -67,7 +67,7 @@ class ShellFileDialog:
 
 
 def install(win) -> None:
-    """The shell's pieces in the modules the borrowed code calls."""
+    """Install the shell’s bindings for document commands."""
     from views import filedialogs
     filedialogs.QFileDialog = ShellFileDialog
     # The shell draws with Metal by construction: no probe process, no
@@ -186,6 +186,11 @@ def new_model(win) -> None:
     """File ▸ New (MainWindow._on_new: an untouched untitled one starts
     over, else a new project), and the start page goes."""
     from views import wgpu_start
+    if win._workspace is not None:
+        new = getattr(win._workspace, "new", None)
+        if new is not None:
+            new()
+        return
     if wgpu_start.shown(win):
         return wgpu_start.new_model(win)
     win._on_new()
@@ -213,6 +218,10 @@ def show_start(win) -> None:
 
 # ---- open ------------------------------------------------------------------------
 def open_dialog(win) -> bool:
+    opener = getattr(win._workspace, "open", None)
+    if opener is not None:
+        opener()
+        return True
     from formats import built
     from views.filedialogs import file_dialogs
     win.viewport.end_group_edit()
@@ -248,6 +257,11 @@ def open_path(win, path: Path) -> bool:
     host = win._host
     suffix = path.suffix.lower()
     if win._closed:
+        return False
+    opener = win.file_openers.get(suffix)
+    if opener is not None:
+        return bool(opener(path))
+    if win._workspace is not None and not win.leave_workspace():
         return False
     if suffix in (".builtproject", ".igzproj"):
         # Built projects open here (app_shell/project.py); an .igzproj
@@ -639,6 +653,10 @@ def link_document(win) -> bool:
 
 # ---- save ----------------------------------------------------------------------
 def save(win) -> bool:
+    if win._workspace is not None:
+        result = win._workspace.save()
+        win._update_title()
+        return result is not False
     from formats import built
     win._end_group_edits()
     path = win._current_path
@@ -660,6 +678,10 @@ def _ask_save_path(win, caption, default):
 
 
 def save_as(win) -> bool:
+    if win._workspace is not None:
+        result = win._workspace.save_as()
+        win._update_title()
+        return result is not False
     from formats import built
     win._end_group_edits()
     default = (win._current_path or Path(win._doc.display_name())).with_suffix(built.BUILT_SUFFIX)
@@ -716,6 +738,8 @@ def do_save(win, path: Path, copy: bool = False) -> bool:
     from formats import igz as igz_format
     from views import chrome_dialogs as cd
     from app_shell import project
+    if win._workspace is not None:
+        return False
     doc = win._doc
     vp = doc.viewport
     scene = vp.scene
@@ -834,6 +858,8 @@ def close_document(win, doc=None) -> bool:
     from views import chrome_dialogs as cd
     if cd.current_sheet(win) is not None or cd.modal(win):
         return False
+    if win._workspace is not None and not win.leave_workspace():
+        return False
     if win._doc_is_dirty(doc):
         if doc is not win._doc:
             win.activate_document(doc)
@@ -870,6 +896,8 @@ def request_close(win) -> bool:
         return False
     if win._open_in_progress:
         win._open_aborted = True        # the load unwinds at its next step
+        return False
+    if win._workspace is not None and not win.leave_workspace():
         return False
     if not win._confirm_quit():
         return False

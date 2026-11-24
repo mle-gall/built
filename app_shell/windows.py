@@ -83,7 +83,7 @@ def can_move(win) -> bool:
 def move_to_new_window(win, doc) -> str | None:
     """Ask for a window that takes ``doc`` from ``win`` (the tab menu)."""
     host = host_of(win)
-    if host is None or doc not in win._documents or len(win._documents) < 2:
+    if host is None or win._workspace is not None or doc not in win._documents or len(win._documents) < 2:
         return None
     from views import chrome_dialogs as cd
     if cd.modal(win):
