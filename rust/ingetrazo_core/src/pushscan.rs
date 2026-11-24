@@ -45,6 +45,27 @@ fn big(b: &[f64; 6]) -> f64 {
     b.iter().fold(0.0f64, |m, x| if x.is_finite() { m.max(x.abs()) } else { m })
 }
 
+pub(crate) fn grown_ring_box(scan: &MeshScan, f: usize, pad: f64, rel: f64) -> [f64; 6] {
+    let mut b = ring_box(scan, f);
+    if b[0].is_finite() {
+        let diagonal = ((b[3] - b[0]).powi(2) + (b[4] - b[1]).powi(2) + (b[5] - b[2]).powi(2)).sqrt();
+        let g = pad + rel * diagonal + slack(big(&b));
+        if !g.is_finite() {
+            return [f64::NEG_INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY,
+                    f64::INFINITY, f64::INFINITY, f64::INFINITY];
+        }
+        for i in 0..3 {
+            b[i] -= g;
+            b[i + 3] += g;
+        }
+    }
+    b
+}
+
+pub(crate) fn holds_point(b: &[f64; 6], p: [f64; 3]) -> bool {
+    (0..3).all(|i| p[i] >= b[i] && p[i] <= b[i + 3])
+}
+
 /// Whether the mesh has faces and every listed edge borders at least two
 /// (`core.orient.is_closed`, exactly).
 #[pyfunction]
@@ -72,19 +93,8 @@ pub fn scan_faces_holding_points(
         (0..s.n_faces() as u32)
             .into_par_iter()
             .filter(|&f| {
-                let b = ring_box(s, f as usize);
-                if !b[0].is_finite() {
-                    return false; // no corner: no boundary edge to lie on
-                }
-                let diag = ((b[3] - b[0]).powi(2) + (b[4] - b[1]).powi(2) + (b[5] - b[2]).powi(2)).sqrt();
-                let g = pad + rel * diag + slack(big(&b));
-                if !g.is_finite() {
-                    return true;
-                }
-                points.iter().all(|p| {
-                    let p = [p.0, p.1, p.2];
-                    (0..3).all(|k| p[k] >= b[k] - g && p[k] <= b[k + 3] + g)
-                })
+                let b = grown_ring_box(s, f as usize, pad, rel);
+                b[0] <= b[3] && points.iter().all(|&(x, y, z)| holds_point(&b, [x, y, z]))
             })
             .collect()
     }))
@@ -801,23 +811,25 @@ pub fn scan_sweeps_free_sheet(py: Python<'_>, mut scan: PyRefMut<'_, MeshScan>, 
                               hypot: &str, compensated: bool) -> PyResult<bool> {
     scan.need_parts(py, RINGS | EFACES)?;
     let g: std::sync::Arc<Geom> = geom_of(py, &mut scan, hypot, compensated)?;
-    let s: &MeshScan = &scan;
+    Ok(sweeps_free_sheet(&scan, &g, face, &loops))
+}
+pub(crate) fn sweeps_free_sheet(s: &MeshScan, g: &Geom, face: u32, loops: &[Vec<[f64; 3]>]) -> bool {
     let f0 = face as usize;
     let near = Near::of(s, loops.iter().flatten().map(|p| V3(p[0], p[1], p[2])));
     let normal = g.normal[f0];
-    for lp in &loops {
+    for lp in loops {
         let m = lp.len();
         for i in 0..m {
             let (a, b) = (lp[i], lp[(i + 1) % m]);
             let (a, b) = (V3(a[0], a[1], a[2]), V3(b[0], b[1], b[2]));
             for f in near.on_segment(a, b) {
-                if f != f0 && !coplanar(normal, g.normal[f], g.h) && segment_on_boundary(s, &g, f, a, b) {
-                    return Ok(false);
+                if f != f0 && !coplanar(normal, g.normal[f], g.h) && segment_on_boundary(s, g, f, a, b) {
+                    return false;
                 }
             }
         }
     }
-    Ok(true)
+    true
 }
 
 /// `_surface_normal`: `face`'s unit normal, turned to agree with the

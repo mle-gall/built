@@ -48,6 +48,30 @@ Rules of the road:
   rely on being importable as `plugins.yourname`, and never assume the
   plugin directory is on `sys.path`.
 
+## Holding a face across edits
+
+Keep the mesh and the face key for a later callback. Resolve the key when
+the callback runs, before reading paint, geometry or issuing an edit.
+
+```python
+from core.protocol.keys import element
+
+def remember_face(scene, face):
+    return scene.mesh, face.key
+
+
+def read_face_area(held):
+    mesh, key = held
+    face = element(mesh, "face", key)
+    return face.area() if face is not None else None
+```
+
+Push/Pull can replace a face during a weld or plane rebuild. It also
+converts materialised Python meshes to the store before editing them,
+giving every element a fresh key. Either case can invalidate the pick.
+A plugin that lets the user keep a face selected across conversion can
+read the converted face from the current selection after the edit.
+
 ## Mutating the document
 
 Read anything you like. To **modify** the model, go through the command

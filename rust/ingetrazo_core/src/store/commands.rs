@@ -6,6 +6,14 @@ use std::collections::HashSet;
 type Point = [f64; 3];
 pub(crate) type Cell = [u64; 3];
 
+/// NumPy float64 to int64 maps a floor coordinate outside int64 to MIN.
+pub(super) fn floor_cell(p: Point) -> [i64; 3] {
+    p.map(|x| {
+        let n = (x * 1e4).floor();
+        if n >= i64::MIN as f64 && n < -(i64::MIN as f64) { n as i64 } else { i64::MIN }
+    })
+}
+
 /// A position key supplied by a caller has already been rounded.
 pub(crate) fn supplied_cell(p: Point) -> Cell {
     p.map(|x| if x == 0. { 0 } else { x.to_bits() })

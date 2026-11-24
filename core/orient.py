@@ -662,6 +662,18 @@ def orient_outward(mesh, seed: int = 12345, only=None) -> list:
     got = _native_decision(mesh, seed, only)
     if got is not None:
         scan, marks, flips = got
+        from core.store_mesh import StoreMesh
+        if type(mesh) is StoreMesh:
+            from core.mesh import swap_orientation_paint
+            marked = scan.faces([i for i, _ in marks]) if marks else []
+            out = scan.faces(flips) if flips else []
+            if marked or out:
+                mesh._store.apply_orientation(
+                    [(f.key, value) for f, (_, value) in zip(marked, marks)],
+                    [f.key for f in out])
+                for f in out:
+                    swap_orientation_paint(f)
+            return out
         if marks:
             for f, (_, v) in zip(scan.faces([i for i, _ in marks]), marks):
                 f.interior = v

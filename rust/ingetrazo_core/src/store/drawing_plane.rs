@@ -77,7 +77,7 @@ impl Store {
         self.state.displaced = Default::default();
         self.state.extra = Default::default();
     }
-    fn position_rings(&self, f: u32) -> Vec<Ring> {
+    pub(super) fn position_rings(&self, f: u32) -> Vec<Ring> {
         self.face_rings(f)
             .iter()
             .map(|r| {

@@ -2,6 +2,21 @@
 use super::{edit::Change, keys::Kind, Store};
 
 impl Store {
+    /// Apply orient_decision in mesh order. Keep the same revision steps
+    /// as assigning each interior flag and reversing each face separately.
+    pub fn apply_orientation(&mut self, marks: &[(u32, bool)], flips: &[u32]) {
+        for &(face, interior) in marks {
+            let flags = *self.state.fflags.get(face as usize);
+            let bit = super::INTERIOR;
+            self.set_face_flags(face, if interior { flags | bit } else { flags & !bit });
+        }
+        for &face in flips {
+            let mut change = Change::default();
+            self.reverse_face(face, &mut change);
+            self.finish(change);
+        }
+    }
+
     /// Repeated occurrences flip the same face repeatedly. Only odd
     /// multiplicities can change the winding or its feed record.
     pub fn reverse_faces(&mut self, mut slots: Vec<u32>, change: &mut Change) {

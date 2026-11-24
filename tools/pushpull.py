@@ -28,7 +28,7 @@ Commit pipeline (the deterministic root-fix, no case tree):
    existing face's plane.
 3. Stitch connectivity (T-junctions, collinear vertices).
 4. On a solid: deterministically rebuild every touched plane (seams, overlaps,
-   cracks) from its edges via ``core.cap_rebuild``; on a flat sheet, fall back
+   cracks) from its edges via ``Store::rebuild_push_planes``; on a flat sheet, fall back
    to the seeded coplanar merge (no outward side exists there).
 5. Orient outward again — every committed solid upholds the invariant.
 
@@ -56,27 +56,59 @@ from core.mesh import _STITCH_TOL
 from core.mesh import Face as MeshFace
 from core.orient import orient_outward
 from core.topology import _key
-from tools.base import Tool, ToolContext, ctrl_clause
+from tools.base import ToolContext, ctrl_clause
+from tools.rust_tools import RustTool, _mods
 from core.units import fmt_len
 from core import push_scans
 from core.push_pull import (  # noqa: E402,F401  (moved; tests and extensions import them here)
     PushPullOperation,
-    _DRAG_PX,
     _GroupScene,
     _MIN_EXTRUDE,
-    _PushBand,
-    _classify_edge,
-    _component_is_closed,
     _face_shape,
     _loops_overlap_2d,
     _made_since,
     _paint_of,
     _project_loop_2d,
-    _refine_candidates,
 )
 
 
-class PushPullTool(PushPullOperation, Tool):
+class PushPullTool(PushPullOperation, RustTool):
+    kind = "pushpull"
+    _READ_DURING = ()
+
+    def __init__(self):
+        RustTool.__init__(self)
+        PushPullOperation.__init__(self)
+        self._ctx = None
+
+    def busy(self):
+        return self.dragging
+
+    def host_reading(self, viewport, args):
+        return {"dragging": self.dragging, "distance": self.extrusion,
+                "has_base": self.base_face is not None, "mode": self._keep_mode,
+                "repeat": type(self).last_distance}
+
+    def _pointer_event(self, kind, ctx):
+        previous, self._ctx = self._ctx, ctx
+        try:
+            return self._send(ctx.viewport, self._pointer(kind, ctx))
+        finally:
+            self._ctx = previous
+
+    def on_click(self, ctx):
+        self._pointer_event("click", ctx)
+
+    def on_hover(self, ctx):
+        self._pointer_event("hover", ctx)
+
+    def on_double_click(self, ctx):
+        self._pointer_event("double_click", ctx)
+
+    def on_release(self, viewport):
+        mods = _mods(input_state.modifiers(viewport, query=True)) if self.dragging else 0
+        self._send(viewport, {"type": "release", "mods": mods})
+
     name = "Push / Pull"
 
     #: P is the usual key for this tool (Marco, 2026-09-10). U, the one
@@ -112,10 +144,9 @@ class PushPullTool(PushPullOperation, Tool):
     preview_cull_back = True
 
     # ---- Lifecycle ----------------------------------------------------------
-    def on_activate(self, viewport) -> None:
+    def host_activate(self, viewport, args) -> None:
         self._reset()
         self._keep_mode = False      # the modifier arms ONE operation
-        self._ctrl_used = False
         # The .skp preselection workflow: activated with EXACTLY one
         # Face of the loose mesh selected, the tool arms on it — the first
         # click anywhere starts the drag there, not on whatever sits under
@@ -145,7 +176,7 @@ class PushPullTool(PushPullOperation, Tool):
         self._selected_arm = True
         viewport.set_hover(item)
 
-    def on_deactivate(self, viewport) -> None:
+    def host_deactivate(self, viewport, args) -> None:
         self._revert_preview(viewport)
         viewport.set_hover(None)
         viewport.set_suppressed_faces(set())
@@ -176,47 +207,45 @@ class PushPullTool(PushPullOperation, Tool):
             return None
         return QVector3D(self._anchor), side.normalized()
 
-    def on_hover(self, ctx: ToolContext) -> None:
-        viewport = ctx.viewport
-        if not self.dragging:
-            self._inference_point = None
-            self._inference_kind = None
-            # The armed preselection outranks the cursor: an idle frame
-            # elsewhere must not steal it. A face gone from the mesh (undo
-            # took it) disarms and falls through to a normal pick.
-            if self._selected_arm and self.hovered_face is not None:
-                if self.hovered_face in viewport.scene.mesh.faces:
-                    viewport.set_hover(self.hovered_face)
-                    return
-                self._selected_arm = False
-            # A closed group's face is only ever refused: a big lazy mesh is
-            # not built to learn that (#1092). A face that can be pushed is
-            # the real one.
-            from views.array_bake import LightFace, reading_only
-            with reading_only():
-                self.hovered_face, self._hover_group = viewport.pick_face_any(
-                    ctx.screen.x(), ctx.screen.y())
-            if self._hover_group is None and isinstance(self.hovered_face,
-                                                        LightFace):
-                self.hovered_face = self.hovered_face.real()
-            # Shade the face that would be pushed, so the target
-            # is unmistakable before clicking. A face inside a group that is not
-            # open gets NO shading: it is not going to be pushed, and promising
-            # it with a highlight is how the wrong thing gets modified.
-            viewport.set_hover(None if self._hover_group is not None
-                               else self.hovered_face)
-            return
+    def host_hover_face(self, viewport, args):
+        ctx = self._ctx
+        self._inference_point = None
+        self._inference_kind = None
+        # The armed preselection outranks the cursor: an idle frame
+        # elsewhere must not steal it. A face gone from the mesh (undo
+        # took it) disarms and falls through to a normal pick.
+        if self._selected_arm and self.hovered_face is not None:
+            if self.hovered_face in viewport.scene.mesh.faces:
+                viewport.set_hover(self.hovered_face)
+                return
+            self._selected_arm = False
+        # A closed group's face is only ever refused: a big lazy mesh is
+        # not built to learn that (#1092). A face that can be pushed is
+        # the real one.
+        from views.array_bake import LightFace, reading_only
+        with reading_only():
+            self.hovered_face, self._hover_group = viewport.pick_face_any(
+                ctx.screen.x(), ctx.screen.y())
+        if self._hover_group is None and isinstance(self.hovered_face,
+                                                    LightFace):
+            self.hovered_face = self.hovered_face.real()
+        # Shade the face that would be pushed, so the target
+        # is unmistakable before clicking. A face inside a group that is not
+        # open gets NO shading: it is not going to be pushed, and promising
+        # it with a highlight is how the wrong thing gets modified.
+        viewport.set_hover(None if self._hover_group is not None
+                           else self.hovered_face)
+        return
 
-        # Tracked before any guard: the release's "was this a stroke" test
-        # must know where the cursor is even when the anchor state is not
-        # ready to measure an extrusion yet.
-        self._last_screen = (ctx.screen.x(), ctx.screen.y())
+    def host_preview(self, viewport, args):
+        self._preview_at(viewport, self._ctx)
+        return self.dragging
+
+    def _preview_at(self, viewport, ctx):
         if self.base_face is None or self._anchor is None:
             return
         if self._drop_stale_stage(viewport):
             return
-        # Ctrl can be pressed/released mid-drag; the live preview follows.
-        self._sync_keep_base(ctx.modifiers)
         # Only the prism translation is undone per frame — arithmetic, so
         # inference never sees the forming solid's moving points. A staged
         # result stays put (restoring it every frame is the snapshot cost the
@@ -251,69 +280,52 @@ class PushPullTool(PushPullOperation, Tool):
         else:
             self._show_light_preview(viewport)
 
-    def on_click(self, ctx: ToolContext) -> None:
-        viewport = ctx.viewport
-        self._last = None            # a click ends the retype window
-        # A CLICK latches Ctrl as the gesture's own (see _sync_keep_base): the
-        # first click begins the gesture, the second commits it — and a mouse
-        # MOVE must never latch it, or the tap dies whenever the hand moves.
-        self._sync_keep_base(ctx.modifiers, latch_ctrl=True)
-        if not self.dragging:
-            face = self.hovered_face
-            if face is None:
-                return
-            if self._hover_group is not None:
-                self._refuse_closed_group(viewport)
-                return
-            self.base_face = face
-            self._take_extras(face, viewport.scene)
-            if not self._ensure_store(viewport.scene):
-                self._refuse_python_mesh(viewport)
-                return
-            face = self.base_face
-            self.extrusion = 0.0
-            self.dragging = True
-            self._group = self._hover_group
-            # The press pixel: a release far enough from it commits
-            # (on_release); one on the spot is the click-click rhythm's own
-            # second beat, not a stroke.
-            self._press_screen = (ctx.screen.x(), ctx.screen.y())
-            self._last_screen = self._press_screen
-            self._selected_arm = False  # a drag exists; the arm is spent
-            target = self._target_scene(viewport.scene)
-            # Establish the outward invariant ONCE per drag, before anchor and
-            # normal are captured. The preview restores its own snapshot (taken
-            # after this), so every frame sees an already-oriented mesh and
-            # _mutate_inner skips the per-frame parity pass — the drag on the
-            # eye model lagged at ~4 fps re-orienting the same mesh each frame.
-            # Scoped to the pushed solid: a group of welded bricks holds many,
-            # and the others are not this push's business.
-            orient_outward(target.mesh, only=(face,))
-            self._drag_pre_oriented = True
-            self._anchor = face.centroid()
-            self._normal = self._outward_normal(face, target.mesh)
-            self._grab = self._grab_point(viewport, ctx)
-            self._attached, self._prism_cap = self._classify_base(target)
-            self._cap_positions = self._cap_loop_positions(face)
-            self._prism_verts = self._cap_vertices(target)
-            self._compute_inward_limit(target)
-            self._compute_plane_levels(target)
-            self._preview_snapshot = None
-            # The live preview takes over from the hover shade now.
+    def host_begin(self, viewport, pick):
+        ctx = self._ctx
+        face, group = (viewport.pick_face_any(ctx.screen.x(), ctx.screen.y()) if pick
+                       else (self.hovered_face, self._hover_group))
+        if face is None:
+            return False
+        if group is not None:
+            self._refuse_closed_group(viewport)
+            return False
+        self.base_face = face
+        self._take_extras(face, viewport.scene)
+        if not self._ensure_store(viewport.scene):
+            self._refuse_python_mesh(viewport)
+            return False
+        face = self.base_face
+        self.extrusion = 0.0
+        self.dragging = True
+        self._group = group
+        self._selected_arm = False
+        target = self._target_scene(viewport.scene)
+        orient_outward(target.mesh, only=(face,))
+        self._drag_pre_oriented = True
+        self._anchor = face.centroid()
+        self._normal = self._outward_normal(face, target.mesh)
+        self._grab = self._grab_point(viewport, ctx)
+        self._attached, self._prism_cap = self._classify_base(target)
+        self._cap_positions = self._cap_loop_positions(face)
+        self._prism_verts = self._cap_vertices(target)
+        self._compute_inward_limit(target)
+        self._compute_plane_levels(target)
+        self._preview_snapshot = None
+        if not pick:
             viewport.set_hover(None)
             viewport.update()
-            return
+        return True
 
-        # Already dragging — second click commits.
-        if abs(self.extrusion) < _MIN_EXTRUDE:
-            # No-op extrusion; just stay in drag mode so the user can keep
-            # going — but say so once: a click that does nothing with no
-            # word reads as a broken tool.
-            if not self._tiny_hint_shown:
-                viewport.flash_status(tr(
-                    "Too small a push — drag further or type a distance"), 4000)
-                self._tiny_hint_shown = True
-            return
+    def host_close_retype(self, viewport, args):
+        self._last = None
+
+    def host_tiny_push(self, viewport, args):
+        viewport.flash_status(tr("Too small a push — drag further or type a distance"), 4000)
+
+    def host_commit(self, viewport, distance):
+        if distance is not None:
+            self.extrusion = distance
+            self._clamp_extrusion(viewport)
         self._commit(viewport)
 
     def _grab_point(self, viewport, ctx: ToolContext) -> QVector3D | None:
@@ -338,114 +350,15 @@ class PushPullTool(PushPullOperation, Tool):
         viewport.flash_status(tr("Push refused: the geometry kernel could not take "
                                  "this mesh (left it unchanged)"), 6000)
 
-    def on_double_click(self, ctx: ToolContext) -> None:
-        """Repeat the last committed distance on the face under the cursor,
-        as push/pull users expect. Works both as a fresh double-click (the
-        first press
-        already locked the face) and right after a commit (the next quick
-        click arrives as a double-click)."""
-        viewport = ctx.viewport
-        last = PushPullTool.last_distance
-        if last is None:
-            self.on_click(ctx)
-            return
-        self._sync_keep_base(ctx.modifiers, latch_ctrl=True)
-        if not self.dragging:
-            face, grp = viewport.pick_face_any(ctx.screen.x(), ctx.screen.y())
-            if face is None:
-                return
-            if grp is not None:
-                self._refuse_closed_group(viewport)
-                return
-            self.base_face = face
-            self._take_extras(face, viewport.scene)
-            if not self._ensure_store(viewport.scene):
-                self._refuse_python_mesh(viewport)
-                return
-            face = self.base_face
-            self.dragging = True
-            self._group = grp
-            target = self._target_scene(viewport.scene)
-            orient_outward(target.mesh, only=(face,))
-            self._drag_pre_oriented = True
-            self._anchor = face.centroid()
-            self._normal = self._outward_normal(face, target.mesh)
-            self._grab = self._grab_point(viewport, ctx)
-            self._attached, self._prism_cap = self._classify_base(target)
-            self._cap_positions = self._cap_loop_positions(face)
-            self._prism_verts = self._cap_vertices(target)
-            self._compute_inward_limit(target)
-            self._compute_plane_levels(target)
-            self._preview_snapshot = None
-            self._selected_arm = False  # never armed once a drag exists
-        elif abs(self.extrusion) > _MIN_EXTRUDE:
-            # Mid-drag with a real distance: treat as the commit click.
-            self._commit(viewport)
-            return
-        self.extrusion = last
-        self._clamp_extrusion(viewport)
-        self._commit(viewport)
-
-    def on_release(self, viewport) -> None:
-        """Left button up mid-drag: a press-drag-release stroke commits the
-        push at the distance the drag built — the way every drag tool ends.
-
-        The contract mirrors Follow Me (tools/followme.py): only a release
-        that moved ``_DRAG_PX`` from the press is a stroke. A stationary or
-        jittery release is the starting click's own and leaves the drag
-        open, so the click-click rhythm still works; a release trailing a
-        commit, an Esc or a tool change finds ``dragging`` False and does
-        nothing."""
-        if not self.dragging:
-            return
-        a, b = self._press_screen, self._last_screen
-        if a is None or b is None:
-            return          # drag armed without a real press (retype replay)
-        if math.hypot(b[0] - a[0], b[1] - a[1]) < _DRAG_PX:
-            return          # jitter, not a stroke: never a commit
-        # Ctrl re-read LIVE: the copy decision is the user's at the release,
-        # not whatever the press carried. The release is a commit, so it
-        # latches like the commit click does — and a tapped keep mode
-        # (#322) still holds when no key is down.
-        self._sync_keep_base(input_state.modifiers(viewport, query=True),
-                             latch_ctrl=True)
-        if abs(self.extrusion) < _MIN_EXTRUDE:
-            if not self._tiny_hint_shown:
-                viewport.flash_status(tr(
-                    "Too small a push — drag further or type a distance"), 4000)
-                self._tiny_hint_shown = True
-            return
-        # The VCB buffer is NOT cleared here, deliberately: typing mid-drag
-        # + release + Enter lands as the hot retype (only _dispatch_tool_click
-        # clears it).
-        self._commit(viewport)
-
-    def on_value(self, viewport, value) -> bool:
-        # Push/Pull only takes a single extrusion length; 3D deltas don't apply.
-        if isinstance(value, tuple):
-            return False
-        if self.dragging and self.base_face is not None:
-            if value == 0.0:
-                return False
-            # A positive value goes the way the user is dragging (default
-            # +normal); a negative one reverses it.
-            sign = -1.0 if self.extrusion < 0.0 else 1.0
-            self.extrusion = sign * value
-            self._clamp_extrusion(viewport)
-            self._commit(viewport)
-            return True
-        # Idle: the hot retype — adjust the last push by typing. The typed
-        # distance is the TOTAL from the base: positive keeps the committed
-        # direction, negative reverses it ("sign" * value). Only the command
-        # this tool just committed may be replaced; anything else on top
-        # means the user's history moved on and the window is gone.
+    def host_restore_retype(self, viewport, args):
+        """Recover the last push's handles only while its undo entry is still on top."""
         last = self._last
-        if last is None or value == 0.0:
-            return False
+        if last is None:
+            return None
         stack = getattr(viewport.history, "undo_stack", None)
         if not stack or stack[-1] is not last["cmd"]:
             self._last = None
-            return False
+            return None
         viewport.history.undo()
         # Replay the push as a drag at the typed distance: restore the state
         # _commit cleared, neutralize the preview bookkeeping, then commit.
@@ -471,14 +384,9 @@ class PushPullTool(PushPullOperation, Tool):
         self._infer_cache = None
         self._refused = False
         self._topped_out = False
-        self.extrusion = last["sign"] * value
-        self._clamp_extrusion(viewport)
-        # Re-arms the window where the replay landed (success or top-out);
-        # a refusal or a too-tiny value leaves it closed.
-        self._commit(viewport)
-        return True
+        return last["sign"]
 
-    def on_cancel(self, viewport) -> None:
+    def host_cancel(self, viewport, args):
         self._light_faces = []
         self._light_rings = []
         self._revert_preview(viewport)
@@ -487,15 +395,6 @@ class PushPullTool(PushPullOperation, Tool):
         self._reset()
         self._spend_keep_mode(viewport)
         viewport.update()
-
-    def on_undo(self, viewport) -> bool:
-        """Ctrl+Z mid-drag abandons the push, like Esc. Undoing history
-        underneath a staged preview and then restoring its snapshot would
-        resurrect the undone geometry. Idle, the ordinary undo runs."""
-        if not self.dragging:
-            return False
-        self.on_cancel(viewport)
-        return True
 
     def on_redo(self, viewport) -> bool:
         """Redo mid-drag abandons the push first, then lets the redo run (False)
@@ -523,7 +422,7 @@ class PushPullTool(PushPullOperation, Tool):
         A riser that the commit is going to SOFTEN is left out: pushing a
         circle drew every facet seam of the cylinder's side, so the shape
         arrived streaked with lines and only cleaned up on release (Marco,
-        2026-08-27). The same dihedral rule ``_soften_curve_facets`` applies
+        2026-08-27). The same dihedral rule ``Store::finish_push`` applies
         afterwards decides it here — read off the sweep's own wall normals,
         no mesh needed — so a circle previews as a smooth cylinder while a
         hexagon keeps the edges it will really have. A circle's own segments
@@ -1397,29 +1296,24 @@ class PushPullTool(PushPullOperation, Tool):
                                for f in self._extra_faces]
 
     # ---- Modifier: Ctrl keeps the starting face -----------------------------
-    def on_key(self, viewport, key: int, modifiers) -> bool:
-        """Swallow the Ctrl press — the tap acts on the RELEASE, where
-        ``ctrl_tapped`` tells a tap from the Ctrl of a shortcut (#183) and
-        Ctrl+P (Push/Pull's own key) never arms the mode in passing."""
+    def on_key(self, viewport, key, modifiers):
         if key == Qt.Key_Control:
-            return True
+            return self._send(viewport, {"type": "key", "key": "Control", "mods": _mods(modifiers)})["consumed"]
         return super().on_key(viewport, key, modifiers)
 
-    def on_key_release(self, viewport, key: int) -> bool:
+    def on_key_release(self, viewport, key):
         if key != Qt.Key_Control:
             return False
-        if self._ctrl_used:
-            self._ctrl_used = False
-            return True                  # the gesture's own Ctrl, not a tap
-        if not self.ctrl_tapped(viewport):
-            return False                 # Ctrl was part of a shortcut
-        self._keep_mode = not self._keep_mode
-        self._keep_base = self._keep_mode
-        viewport.flash_status(tr("Keep the base: on") if self._keep_mode
-                              else tr("Keep the base: off"))
+        return self._send(viewport, {"type": "key_release", "key": "Control",
+                                     "tapped": self.ctrl_tapped(viewport)})["consumed"]
+
+    def host_modifier(self, viewport, values):
+        self._keep_mode, self._keep_base = values
+
+    def host_show_mode(self, viewport, enabled):
+        viewport.flash_status(tr("Keep the base: on") if enabled else tr("Keep the base: off"))
         self.refresh_hint(viewport)
         viewport.update()
-        return True
 
     def status_clause(self) -> str:
         # Short on purpose: the clause rides the same line as the hint, and
@@ -1427,22 +1321,3 @@ class PushPullTool(PushPullOperation, Tool):
         # de partida». "Keep the base" / "move the base" is the same idea in
         # the tool's own words (base_face, _keep_base).
         return ctrl_clause(self._keep_mode, "keep the base", "move the base")
-
-    def _sync_keep_base(self, modifiers, latch_ctrl: bool = False) -> None:
-        """Read Ctrl where it is HELD: it keeps the base face for THIS push
-        only, so a gesture begun while Ctrl was down never latches the mode
-        (its release finds ``_ctrl_used`` and stops there). A Ctrl tapped on
-        its own arms ``_keep_mode`` instead, and that mode stands by itself.
-
-        ``latch_ctrl`` is True only where a CLICK happens — the gesture's
-        start and its commit. Whether Ctrl was a TAP is a question about keys,
-        and latching on every mouse MOVE answered it with the hand's position
-        instead: mid-drag, the first hover after the press claimed that Ctrl
-        as the gesture's own, so the mode only toggled with the cursor parked
-        — the one case where no hover came in between the press and the release (@pacaeiro, 2026-10-01: «si estoy moviendo
-        el ratón mientras hago Ctrl, el Ctrl no altera el estado»). The live follow is unchanged:
-        Ctrl held mid-drag still keeps the base for the push in progress."""
-        held = bool(modifiers & Qt.ControlModifier)
-        if latch_ctrl:
-            self._ctrl_used = held
-        self._keep_base = held or self._keep_mode

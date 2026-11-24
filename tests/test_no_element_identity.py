@@ -57,7 +57,6 @@ _ALLOWED = {
     ("core/intersect.py", "intersect"): "polygons of two meshes",
     ("core/links.py", "restamp_materials"): "paint rows: was one copied",
     ("core/outliner.py", "reparent_problem"): "groups",
-    ("tools/texture_position.py", "changed"): "uvw tuples or None",
     ("views/outliner.py", "toggle_isolated"): "groups",
     ("views/tray.py", "_component_steps"): "groups",
     ("views/document_interaction.py", "_cat_kept"): "cached arrays",

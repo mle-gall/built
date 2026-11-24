@@ -110,7 +110,7 @@ def test_orient_feed():
 
 @pytest.mark.parametrize("hole", [False, True])
 def test_split_pushed_cap(hole):
-    from core.cap_rebuild import _canon_faces
+    from ingetrazo_core import plane_fingerprint as _canon_faces
     from tests.test_core_protocol import _expected, _got, _read
     from core.history import History
     from core.protocol.commands import run
@@ -227,30 +227,27 @@ def test_transformed_solid_operands():
 
 
 def test_seam_and_crack_discovery():
-    from core.cap_rebuild import crack_planes, edges_along, seam_planes
+    import sys
+    from core.store_mesh import _hypot
 
-    def planes(rows):
-        return [(p.toTuple(), n.toTuple()) for p, n in rows]
-
-    results = []
-    for store in (False, True):
-        sc = empty(store)
-        m = sc.mesh
-        f = m.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)])
-        m.add_face([V(1, 0, 0), V(3, 0, 0), V(3, 1, 0), V(1, 1, 0)])
-        m.add_edge(V(7, 0, 0), V(9, 0, 0))
-        segments = [(V(0, 0, 0), V(3, 0, 0))]
-        edges = edges_along(m, segments)
-        assert len(edges) == 2
-        seams = planes(seam_planes(m, [f]))
-        cracks = planes(crack_planes(m, (0, 0, 0, 1, 1, 0)))
-        assert len(seams) == len(cracks) == 1
-        results.append((seams, cracks, [(e.a.toTuple(), e.b.toTuple()) for e in edges]))
-    assert results[0] == results[1]
+    mesh = empty(True).mesh
+    f = mesh.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)])
+    mesh.add_face([V(1, 0, 0), V(3, 0, 0), V(3, 1, 0), V(1, 1, 0)])
+    mesh.add_edge(V(7, 0, 0), V(9, 0, 0))
+    snap = mesh._store.snapshot()
+    h, compensated = _hypot(), sys.version_info >= (3, 12)
+    edges = snap.edges_along([((0, 0, 0), (3, 0, 0))], 1e-4, h)
+    assert edges == [mesh.find_edge(mesh.vertex_at(V(x,0,0)), mesh.vertex_at(V(y,0,0))).key
+                     for x,y in ((0,1),(1,3))]
+    seams = snap.seam_planes([f.key], 1e-4, (1.0 - 2.0**-25)**2, h, compensated)
+    cracks = snap.crack_planes(h, compensated, (0,0,0,1,1,0))
+    for planes in (seams, cracks):
+        assert planes
+        assert all(p[2] == 0 and abs(n[2]) == 1 for p,n,*_ in planes)
 
 
 def test_repeated_prism_pushes():
-    from core.cap_rebuild import _canon_faces
+    from ingetrazo_core import plane_fingerprint as _canon_faces
     from core.history import History
     from tests.test_cap_rebuild import _push, _walls
 

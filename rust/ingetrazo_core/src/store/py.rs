@@ -849,11 +849,7 @@ impl PyMeshStore {
         -> Vec<(u128, [f64; 3])> {
         self.inner.live_slots(Kind::Vertex).into_iter().filter_map(|v| {
             let p = *self.inner.state.vpos.get(v as usize);
-            // Match numpy float64 -> int64 (out of range becomes i64::MIN).
-            let cell = p.map(|x| {
-                let n = (x * 1e4).floor();
-                if n >= i64::MIN as f64 && n < -(i64::MIN as f64) { n as i64 } else { i64::MIN }
-            });
+            let cell = super::commands::floor_cell(p);
             near.contains(&cell).then(|| (self.inner.key(Kind::Vertex, v), p))
         }).collect()
     }
@@ -1128,6 +1124,86 @@ impl PyMeshStore {
             .map(|f| self.inner.key(Kind::Face, f))
             .collect()
     }
+    #[pyo3(signature = (face, distance, normal, keep, oriented, preview, own, rows, swapped, surface, hypot, compensated))]
+    fn push_extrude(&mut self, face: u128, distance: f64, normal: Option<[f64;3]>, keep: bool, oriented: bool, preview: bool,
+                    own: std::collections::HashMap<u128,u32>, rows: Vec<u32>, swapped: Vec<u32>, surface: Vec<u32>, hypot: &str, compensated: bool)
+        -> PyResult<(usize,usize,Vec<(u128,u32)>,Vec<u128>,Vec<u128>,Vec<u128>)> {
+        let f=live_of(&self.inner,Kind::Face,face)?;
+        let h=crate::hypot_of(hypot)?;
+        let classes = swapped.len();
+        if classes == 0 || surface.len() != classes ||
+            own.values().chain(&rows).chain(&swapped).chain(&surface).any(|&c| c as usize >= classes) {
+            return Err(PyValueError::new_err("missing push paint class"));
+        }
+        let mut paint=super::Paint::new(own,rows);
+        let (r,_)=self.op_all(|s,ch|s.push_extrude(f,distance,normal,keep,oriented,preview,&mut paint,&swapped,&surface,h,compensated,ch))?;
+        Ok((r.bumps,r.steps,r.painted,r.flipped,r.faces,r.edges))
+    }
+
+    #[pyo3(signature = (face, base, top, delta, attached, far, hypot))]
+    fn push_shell(&mut self, face: u128, base: Vec<Vec<[f64; 3]>>, top: Vec<Vec<[f64; 3]>>,
+                  delta: [f64; 3], attached: bool, far: Option<(u128, Vec<[f64; 3]>, Option<Vec<[f64; 3]>>)>, hypot: &str)
+        -> PyResult<(usize, usize, u128, Vec<u128>, Vec<u128>, Option<u128>, Vec<u128>)> {
+        let face = live_of(&self.inner, Kind::Face, face)?;
+        let far = far.map(|(key,back,rest)| Ok::<_,PyErr>((live_of(&self.inner, Kind::Face,key)?,back,rest))).transpose()?;
+        let mut work = self.inner.clone();
+        let result = work.push_shell(face,base,top,delta,attached,far,crate::hypot_of(hypot)?).map_err(op_err)?;
+        self.inner = work;
+        Ok((result.dirty,result.steps,result.cap,result.removed_faces,result.removed_edges,result.source,result.remainders))
+    }
+
+    fn single_plane(&self, origin: [f64;3], normal: [f64;3], hypot: &str, compensated: bool)
+        -> PyResult<Option<Vec<super::caps::Cap>>> {
+        self.inner.single_plane(origin, normal, crate::hypot_of(hypot)?, compensated).map_err(op_err)
+    }
+
+    fn rebuild_single_plane(&mut self, origin: [f64;3], normal: [f64;3], own: std::collections::HashMap<u128,u32>,
+                            rows: Vec<u32>, hypot: &str, compensated: bool) -> PyResult<(usize, Vec<(u128,u32)>)> {
+        let mut paint = super::Paint::new(own, rows);
+        let h = crate::hypot_of(hypot)?;
+        let mut work = self.inner.clone();
+        let mut ch = Change::default();
+        let result = work.rebuild_single_plane(origin, normal, &mut paint, h, compensated, &mut ch).map_err(op_err)?;
+        if result.0 != 0 {
+            let removed: Vec<_> = ch.removed[2].iter().filter_map(|&k| work.slot_any(Kind::Face,k)).collect();
+            if work.dangling(&removed) { return Err(StoreFallback::new_err("a removed cap is still present on an edge")); }
+            work.finish(ch);
+            self.inner = work;
+        }
+        Ok(result)
+    }
+
+    fn faces_are_flat(&self, tolerance: f64, hypot: &str) -> PyResult<Option<bool>> {
+        Ok(self.inner.faces_are_flat(tolerance, crate::hypot_of(hypot)?))
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn push_translate(&mut self, cap: Vec<[f64; 3]>, delta: [f64; 3], removing: bool, preview: bool,
+                      mut next_curve: i64, own: std::collections::HashMap<u128, u32>, rows: Vec<u32>,
+                      hypot: &str, compensated: bool)
+        -> PyResult<(usize, i64, Vec<(u128, u128)>, Vec<(u128, u32)>, Vec<(u128, u128)>,
+                     Vec<(u128, u128)>, Vec<u128>)> {
+        let h = crate::hypot_of(hypot)?;
+        let mut paint = super::Paint::new(own, rows);
+        let (r, _) = self.op_all(|s, ch| s.push_translate(&cap, delta, removing, preview, &mut next_curve,
+                                                          &mut paint, h, compensated, ch))?;
+        Ok((r.bumps, next_curve, r.before, r.painted, r.after, r.replaced, r.flipped))
+    }
+
+    #[pyo3(signature = (before, base, shift, facet_cos, next_curve, painted, hypot))]
+    fn finish_push(&mut self, before: &PyStoreSnapshot, base: Option<u128>, shift: Option<[f64; 3]>,
+                   facet_cos: f64, mut next_curve: i64, painted: bool, hypot: &str)
+        -> PyResult<(i64, Vec<u128>)> {
+        let old = reader(&before.inner);
+        if old.lineage != self.inner.lineage {
+            return Err(PyValueError::new_err("foreign push snapshot"));
+        }
+        let face = base.and_then(|key| old.slot(Kind::Face, key));
+        let h = crate::hypot_of(hypot)?;
+        let fresh = self.inner.finish_push(&old, face, shift, facet_cos, &mut next_curve, painted, h);
+        Ok((next_curve, fresh))
+    }
+
     fn heal_plan(
         &self,
         coverage: f64,
@@ -2612,6 +2688,16 @@ impl PyMeshStore {
         let snap = Snapshot { state: empty, revision: self.inner.revision, lineage: self.inner.lineage };
         self.inner.restore(&snap, None).map_err(PyValueError::new_err)?;
         Ok(self.net_change(&before))
+    }
+
+    fn apply_orientation(&mut self, marks: Vec<(u128, bool)>, flips: Vec<u128>) -> PyResult<()> {
+        let marks = marks.into_iter()
+            .map(|(key, interior)| Ok((live_of(&self.inner, Kind::Face, key)?, interior)))
+            .collect::<PyResult<Vec<_>>>()?;
+        let flips = flips.into_iter().map(|key| live_of(&self.inner, Kind::Face, key))
+            .collect::<PyResult<Vec<_>>>()?;
+        self.inner.apply_orientation(&marks, &flips);
+        Ok(())
     }
 
     fn reverse_faces(&mut self, keys: Vec<u128>) -> PyResult<PyChange> {

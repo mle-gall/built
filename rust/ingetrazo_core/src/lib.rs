@@ -13,6 +13,7 @@ use numpy::IntoPyArray;
 use pyo3::types::PyBytes;
 
 mod math;
+mod texture_position;
 mod navigation;
 mod recents;
 mod builtproject;
@@ -189,6 +190,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(store::planar::plane_nesting, m)?)?;
     m.add_function(wrap_pyfunction!(store::planar::plane_interior_point, m)?)?;
     m.add_function(wrap_pyfunction!(store::planar::plane_scan_point, m)?)?;
+    m.add_function(wrap_pyfunction!(store::planar::union_plane_regions, m)?)?;
     m.add_function(wrap_pyfunction!(store::planar::trace_plane_outline, m)?)?;
     m.add_function(wrap_pyfunction!(store::plane_regions::rebuild_region_faces, m)?)?;
     m.add_function(wrap_pyfunction!(store::plane_repair::object_cap_coverage, m)?)?;
@@ -212,8 +214,6 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(object_weld::revert_object_split, m)?)?;
     m.add_function(wrap_pyfunction!(push_guard::guarded_push, m)?)?;
     m.add_function(wrap_pyfunction!(push_guard::translate_prism_cap, m)?)?;
-    m.add_function(wrap_pyfunction!(push_guard::push_region, m)?)?;
-    m.add_function(wrap_pyfunction!(push_guard::push_through_face, m)?)?;
     m.add_function(wrap_pyfunction!(push_command::push_top_out, m)?)?;
     m.add_function(wrap_pyfunction!(push_command::push_secondary_faces, m)?)?;
     m.add_function(wrap_pyfunction!(push_command::outline_curve_runs, m)?)?;
@@ -221,6 +221,8 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     recents::register(m)?;
     delivery_form::register(m)?;
     m.add_class::<math::Vec3>()?;
+    m.add_class::<texture_position::TextureMap>()?;
+    m.add_class::<texture_position::TexturePlacement>()?;
     m.add_class::<math::Vec4>()?;
     m.add_class::<math::Matrix4>()?;
     m.add_class::<math::Quaternion>()?;

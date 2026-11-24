@@ -70,20 +70,14 @@ def is_closed(mesh):
     return fn(s.native)
 
 
-def mesh_is_flat_from(mesh, start: int, tol: float):
-    """``topology._mesh_is_flat(mesh)``'s verdict over the faces from
-    ``start`` on (the caller walked the first ones), natively for a
-    store-backed mesh; ``None`` otherwise (or for a face without corners,
-    where the Python walk raises)."""
-    from core import scan_index
-    fn = _mod("scan_mesh_is_flat")
-    args = _geom_args()
-    if fn is None or args is None or not scan_index.store_backed(mesh):
-        return None
-    s = scan_index.scan(mesh)
-    if s is None:
-        return None
-    return fn(s.native, start, tol, *args)
+def mesh_is_flat(mesh, tol: float):
+    """Store verdict, or None to run the object-mesh oracle."""
+    from core import _native, scan_index
+    if scan_index.store_backed(mesh) and scan_index.enabled():
+        hypot = _native.qt_hypot()
+        if hypot is not None:
+            return mesh._store.faces_are_flat(tol, hypot)
+    return None
 
 
 def faces_on_segment(mesh, a: QVector3D, b: QVector3D):

@@ -180,6 +180,74 @@ impl MeshScan {
         &self.enf
     }
 
+    /// Build directly from the transaction's state, including optional
+    /// ring, incidence and interior columns for orientation.
+    pub(crate) fn from_state(state: State, parts: u8) -> Self {
+        let st = &state;
+        let mut s = MeshScan::empty();
+        let live: [Vec<u32>; 3] = [
+            st.order[0].live(&st.slots[0]),
+            st.order[1].live(&st.slots[1]),
+            st.order[2].live(&st.slots[2]),
+        ];
+        let mut vdense = vec![NONE; st.slots[0].len()];
+        s.pos.reserve(live[0].len());
+        for (i, &v) in live[0].iter().enumerate() {
+            vdense[v as usize] = i as u32;
+            s.pos.push(*st.vpos.get(v as usize));
+        }
+        s.n_listed = s.pos.len();
+        let mut dense = |slot: u32, pos: &mut Vec<[f64; 3]>| -> u32 {
+            let d = vdense[slot as usize];
+            if d != NONE {
+                return d;
+            }
+            let i = pos.len() as u32;
+            pos.push(*st.vpos.get(slot as usize));
+            vdense[slot as usize] = i;
+            i
+        };
+        s.ends.reserve(live[1].len());
+        for &e in &live[1] {
+            let [a, b] = *st.ends.get(e as usize);
+            let da = dense(a, &mut s.pos);
+            let db = dense(b, &mut s.pos);
+            s.ends.push([da, db]);
+            let inc = st.efaces.get(e as usize);
+            let nf = if inc.len <= 2 { inc.len as usize } else { st.ef_spill.get(inc.a[0] as usize).len() };
+            s.enf.push(nf as u32);
+            let mut fl = 0u8;
+            if *st.eflags.get(e as usize) & crate::store::SOFT != 0 {
+                fl |= SOFT;
+            }
+            if *st.ecurve.get(e as usize) >= 0 {
+                fl |= CURVE;
+            }
+            s.eflag.push(fl);
+        }
+        s.fstart.reserve(live[2].len());
+        for &f in &live[2] {
+            let r = *st.frings.get(f as usize);
+            if r.n_rings > 0 {
+                let size = *st.ring_sizes.get(r.ring_start as usize) as usize;
+                for j in 0..size {
+                    let c = *st.corners.get(r.corner_start as usize + j);
+                    let d = dense(c, &mut s.pos);
+                    s.corners.push(d);
+                }
+            }
+            s.fstart.push(s.corners.len() as u32);
+        }
+        s.live = live;
+        s.state = Some(state);
+        s.vdense = vdense;
+        s.have = ALL | parts;
+        if parts != 0 {
+            s.store_parts(parts);
+        }
+        s
+    }
+
     /// Whether the scan reads a store state (keys) or Python objects.
     pub(crate) fn store_backed(&self) -> bool {
         self.state.is_some()
@@ -456,68 +524,7 @@ impl MeshScan {
     fn from_store(py: Python<'_>, store: PyRef<'_, PyMeshStore>) -> Self {
         let state = store.inner.state.clone();
         drop(store);
-        py.detach(move || {
-            let st = &state;
-            let mut s = MeshScan::empty();
-            let live: [Vec<u32>; 3] = [
-                st.order[0].live(&st.slots[0]),
-                st.order[1].live(&st.slots[1]),
-                st.order[2].live(&st.slots[2]),
-            ];
-            let mut vdense = vec![NONE; st.slots[0].len()];
-            s.pos.reserve(live[0].len());
-            for (i, &v) in live[0].iter().enumerate() {
-                vdense[v as usize] = i as u32;
-                s.pos.push(*st.vpos.get(v as usize));
-            }
-            s.n_listed = s.pos.len();
-            let mut dense = |slot: u32, pos: &mut Vec<[f64; 3]>| -> u32 {
-                let d = vdense[slot as usize];
-                if d != NONE {
-                    return d;
-                }
-                let i = pos.len() as u32;
-                pos.push(*st.vpos.get(slot as usize));
-                vdense[slot as usize] = i;
-                i
-            };
-            s.ends.reserve(live[1].len());
-            for &e in &live[1] {
-                let [a, b] = *st.ends.get(e as usize);
-                let da = dense(a, &mut s.pos);
-                let db = dense(b, &mut s.pos);
-                s.ends.push([da, db]);
-                let inc = st.efaces.get(e as usize);
-                let nf = if inc.len <= 2 { inc.len as usize } else { st.ef_spill.get(inc.a[0] as usize).len() };
-                s.enf.push(nf as u32);
-                let mut fl = 0u8;
-                if *st.eflags.get(e as usize) & crate::store::SOFT != 0 {
-                    fl |= SOFT;
-                }
-                if *st.ecurve.get(e as usize) >= 0 {
-                    fl |= CURVE;
-                }
-                s.eflag.push(fl);
-            }
-            s.fstart.reserve(live[2].len());
-            for &f in &live[2] {
-                let r = *st.frings.get(f as usize);
-                if r.n_rings > 0 {
-                    let size = *st.ring_sizes.get(r.ring_start as usize) as usize;
-                    for j in 0..size {
-                        let c = *st.corners.get(r.corner_start as usize + j);
-                        let d = dense(c, &mut s.pos);
-                        s.corners.push(d);
-                    }
-                }
-                s.fstart.push(s.corners.len() as u32);
-            }
-            s.live = live;
-            s.state = Some(state.clone());
-            s.vdense = vdense;
-            s.have = ALL;
-            s
-        })
+        py.detach(move || Self::from_state(state, 0))
     }
 
     /// The scan of a Python mesh from its three lists (``mesh.vertices``,

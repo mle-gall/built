@@ -18,7 +18,7 @@ from PySide6.QtWidgets import QApplication
 
 from core import solids
 from core.arrangement import _interior_point, _point_in_polygon
-from core.cap_rebuild import _region_test_point
+from ingetrazo_core import plane_region_point as _region_test_point
 from core.edits import build_add_edges
 from core.history import History
 from core.mesh import Mesh

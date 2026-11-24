@@ -607,7 +607,7 @@ def hole_merged_with_loop(face: Face, loop: list[QVector3D]):
     opening grows to take it in, ``merged`` being its new outline. ``None``
     when the loop shares no stretch of rim with any hole."""
     from core.arrangement import _signed_area
-    from core.cap_rebuild import _union_outline
+    from ingetrazo_core import union_plane_regions
     from core.triangulate import plane_axes
 
     normal = face.normal()
@@ -643,7 +643,7 @@ def hole_merged_with_loop(face: Face, loop: list[QVector3D]):
             if _signed_area(ring) < 0:
                 ring = ring[::-1]
             rings.append((ring, []))
-        merged = _union_outline(rings)
+        merged = union_plane_regions(rings)
         if len(merged) != 1 or merged[0][1]:
             return None
         return idx, [back[xy] for xy in merged[0][0]]
@@ -2334,7 +2334,7 @@ def _mesh_is_flat(mesh) -> bool:
     if len(faces) < 2:
         return True
     from core import push_scans
-    got = push_scans.mesh_is_flat_from(mesh, 1, _PLANAR_TOLERANCE)
+    got = push_scans.mesh_is_flat(mesh, _PLANAR_TOLERANCE)
     if got is not None:
         return got
     n0 = faces[0].normal()

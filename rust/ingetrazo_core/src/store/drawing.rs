@@ -44,18 +44,36 @@ impl Store {
             .then(|| [point(o), point(n)])
     }
 
+    fn face_plane(&self, face: u32, h: Hypot) -> Option<(V3, V3)> {
+        let ring = self.outer_ring(face);
+        let &first = ring.first()?;
+        Some((vector(*self.state.vpos.get(first as usize)), self.ring_normal(&ring, h)))
+    }
+
+    /// The common-plane test used by Push/Pull and overlap healing. Walking
+    /// the outer rings directly avoids triangulating a solid to test flatness.
+    pub fn faces_are_flat(&self, tolerance: f64, h: Hypot) -> Option<bool> {
+        let faces = self.live_slots(Kind::Face);
+        if faces.len() < 2 {
+            return Some(true);
+        }
+        let (origin, normal) = self.face_plane(faces[0], h)?;
+        let unit = normalized(normal, h);
+        let distance = normal.dot(origin, h);
+        for &face in &faces[1..] {
+            let (point, other) = self.face_plane(face, h)?;
+            if !(unit.dot(normalized(other, h), h).abs() > 0.999)
+                || (normal.dot(point, h) - distance).abs() > tolerance
+            {
+                return Some(false);
+            }
+        }
+        Some(true)
+    }
+
     pub fn rebuild_plane(&self, points: &[Point], cap: usize, h: Hypot) -> Option<[Point; 2]> {
         let faces = self.state.order[2].live(&self.state.slots[2]);
-        let plane = |f| {
-            let ring = self.outer_ring(f);
-            ring.first().map(|&v| {
-                (
-                    vector(*self.state.vpos.get(v as usize)),
-                    self.ring_normal(&ring, h),
-                )
-            })
-        };
-        let (o, n) = faces.iter().filter_map(|&f| plane(f)).find(|&(o, n)| {
+        let (o, n) = faces.iter().filter_map(|&f| self.face_plane(f, h)).find(|&(o, n)| {
             n.dot(n, h) >= 0.5
                 && points
                     .iter()
@@ -63,7 +81,7 @@ impl Store {
         })?;
         let count = faces
             .iter()
-            .filter_map(|&f| plane(f))
+            .filter_map(|&f| self.face_plane(f, h))
             .filter(|&(p, m)| {
                 p.sub(o).dot(n, h).abs() < 1e-4 && m.dot(n, h).abs() > 0.999
             })
