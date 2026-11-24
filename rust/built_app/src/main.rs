@@ -737,6 +737,7 @@ impl App {
         };
         let ns_view = if platform == "cocoa" { window_id } else { 0 };
         native::configure_window(ns_view);
+        if self.args.background() { native::send_window_back(ns_view); }
         let size = window.inner_size();
         let scale = window.scale_factor();
         let host = python::Host::new(

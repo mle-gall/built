@@ -355,6 +355,24 @@ pub fn configure_window(view: usize) {
     let _ = view;
 }
 
+/// Background (test) runs: put the window behind every other app's windows,
+/// so a scripted run never covers what the user is doing.
+pub fn send_window_back(view: usize) {
+    #[cfg(target_os = "macos")]
+    {
+        use objc2_app_kit::NSView;
+        if view == 0 || objc2::MainThreadMarker::new().is_none() {
+            return;
+        }
+        let v: &NSView = unsafe { &*(view as *const NSView) };
+        if let Some(window) = v.window() {
+            window.orderBack(None);
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = view;
+}
+
 /// Whether this window may join a macOS window tab group (`--script`'s
 /// state, tests).
 pub fn window_tabs_allowed(view: usize) -> bool {
