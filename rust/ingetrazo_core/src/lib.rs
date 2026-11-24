@@ -468,6 +468,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pick_index::edges::edge_cursor_point, m)?)?;
     m.add_function(wrap_pyfunction!(pick_index::hits::drop_past_cut, m)?)?;
     annotation_geometry::register(m)?;
+    pick_index::visibility::register(m)?;
     document_snap::register(m)?;
     view_culling::register(m)?;
     m.add_function(wrap_pyfunction!(pick_index::document_pick_index, m)?)?;

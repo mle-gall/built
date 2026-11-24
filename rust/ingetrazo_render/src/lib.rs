@@ -13,6 +13,19 @@ mod component_rows;
 mod context_pick;
 mod context_placements;
 mod document_input;
+mod document_chunks;
+mod document_records;
+mod document_state;
+mod document_environment;
+mod document_cache;
+mod document_grid;
+mod document_edits;
+mod document_targets;
+mod document_hlr;
+mod document_placements;
+mod document_annotations;
+mod document_planes;
+mod document_host;
 mod section_display;
 mod inspection_edits;
 mod context_edits;
@@ -3237,6 +3250,18 @@ fn context_targets(hit: bool, selection: &Bound<'_, PyAny>) -> PyResult<Vec<Py<P
 #[pymodule]
 pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     document_input::register(m)?;
+    document_chunks::register(m)?;
+    document_records::register(m)?;
+    document_state::register(m)?;
+    document_environment::register(m)?;
+    document_cache::register(m)?;
+    document_grid::register(m)?;
+    document_edits::register(m)?;
+    document_targets::register(m)?;
+    document_hlr::register(m)?;
+    document_placements::register(m)?;
+    document_annotations::register(m)?;
+    document_planes::register(m)?;
     m.add_class::<tool_instances::InstancePreview>()?;
     window_document::register(m)?;
     close_documents::register(m)?;
