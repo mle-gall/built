@@ -17,8 +17,9 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
-from PySide6.QtCore import QEvent, QPointF, Qt  # noqa: E402
-from PySide6.QtGui import QKeyEvent
+from PySide6.QtCore import QPointF, Qt  # noqa: E402
+from app_shell.events import KeyEvent
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 from ingetrazo_core import Vec3 as V
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
@@ -290,33 +291,14 @@ def test_circle_window_closes_on_a_new_centre_and_on_esc(viewport):
 
 
 # ---- Through the keyboard, as the user types it ----------------------------
-_KEYS = {";": Qt.Key_Semicolon, ".": Qt.Key_Period, "-": Qt.Key_Minus}
-
-
 def _type(vp, text):
     for ch in text:
-        key = _KEYS.get(ch) or Qt.Key(Qt.Key_0 + int(ch))
-        if vp._value_buffer:
-            ov = QKeyEvent(QEvent.ShortcutOverride, key, Qt.NoModifier, ch)
-            vp.event(ov)
-        vp.keyPressEvent(QKeyEvent(QEvent.KeyPress, key, Qt.NoModifier, ch))
-    vp.keyPressEvent(QKeyEvent(QEvent.KeyPress, Qt.Key_Return,
-                               Qt.NoModifier, "\r"))
+        vp.keyPressEvent(KeyEvent(True, ord(ch), 0, ch))
+    vp.keyPressEvent(KeyEvent(True, Qt.Key_Return, 0, "\r"))
 
 
-@pytest.fixture
-def win(monkeypatch, tmp_path):
-    from core import autosave
-    monkeypatch.setattr(autosave, "autosave_dir", lambda: tmp_path)
-    monkeypatch.setattr(autosave, "pending", lambda *a, **k: None)
-    from views.main_window import MainWindow
-    w = MainWindow()
-    yield w
-    w._saved_version = w.viewport.scene.version   # no "save?" modal
-    w.close()
-
-
-def test_typed_after_a_rectangle_through_the_value_box(win):
+def test_typed_after_a_rectangle_through_the_value_box(native_window):
+    win = native_window
     win._activate_tool("rectangle")
     vp = win.viewport
     tool = vp.active_tool
@@ -328,7 +310,8 @@ def test_typed_after_a_rectangle_through_the_value_box(win):
     assert len(vp.history.undo_stack) == steps
 
 
-def test_typed_after_a_circle_through_the_value_box(win):
+def test_typed_after_a_circle_through_the_value_box(native_window):
+    win = native_window
     win._activate_tool("circle")
     vp = win.viewport
     tool = vp.active_tool
@@ -339,7 +322,8 @@ def test_typed_after_a_circle_through_the_value_box(win):
     assert tool.sides == 24
 
 
-def test_typed_after_a_line_through_the_value_box(win):
+def test_typed_after_a_line_through_the_value_box(native_window):
+    win = native_window
     win._activate_tool("line")
     vp = win.viewport
     tool = vp.active_tool
