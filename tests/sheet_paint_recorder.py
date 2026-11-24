@@ -202,6 +202,18 @@ class RecordingPainter:
     def drawPolygon(self, poly, *a):  # noqa: N802
         self._add("poly", pts=self._points(poly), closed=True)
 
+    def drawPoints(self, points):  # noqa: N802
+        # A round-capped point is a dot the pen's width across: a filled circle.
+        r = self.pen_.widthF() / 2.0
+        colour = _hex(self.pen_.color())
+        for q in points:
+            c = QPointF(q)
+            o = self._pt(c)
+            ax = self._pt(c + QPointF(r, 0))
+            ay = self._pt(c + QPointF(0, r))
+            self._add("ellipse", center=o, ax=[ax[0] - o[0], ax[1] - o[1]], ay=[ay[0] - o[0], ay[1] - o[1]],
+                      pen=None, brush=colour)
+
     def drawPolyline(self, poly):  # noqa: N802
         self._add("poly", pts=self._points(poly), closed=False, brush=None)
 

@@ -56,6 +56,7 @@ _SNAP_MM = 2.0
 
 #: Standard views offered as frame sources (label key → camera.set_view key).
 from core.composition import STD_VIEWS as _STD_VIEWS  # noqa: E402
+from core.layers import grain_layers, section_cut_kind  # noqa: E402,F401
 
 
 # ── mm-space painters (shared by canvas and PDF) ────────────────────────────
@@ -627,16 +628,6 @@ def _paint_annots_mm(painter: QPainter, frame: MarcoVista, annots) -> None:
 _VECTOR_INK = QColor(30, 36, 44)
 
 
-def grain_layers(scene) -> list:
-    """The layers whose timber is crossed where it is cut across its grain
-    (``Layer.hatch_cross``): for them a view measures how far each cut piece
-    runs through the plane."""
-    from core.hatches import WOOD
-    return [ly.key for ly in getattr(scene, "layers", ())
-            if getattr(ly, "hatch_cross", False)
-            and getattr(ly, "hatch", None) in WOOD]
-
-
 #: The scale a view exported without a sheet («File ▸ Export ▸ Current
 #: view as DXF») draws its hatches at: the usual one of a plan or a section
 #: with its materials.
@@ -715,17 +706,6 @@ def dxf_cut_layers(scene, camera, scale_n: float = DXF_VIEW_SCALE, k=None,
                              for x0, y0, x1, y1 in lines])
             groups.append((f"{name}-TRAMA", segs, "CONTINUOUS", ink))
     return groups, solids
-
-
-def section_cut_kind(scene):
-    """What kind of cut a view of ``scene`` shows: ``"plan"`` (the active
-    section plane lies flat), ``"vertical"`` (it stands), ``None`` (no
-    section) — masonry is drawn one way in a plan, another in a section."""
-    plane = (scene.active_section() if hasattr(scene, "active_section")
-             else None)
-    if plane is None:
-        return None
-    return "plan" if abs(plane.normal.z()) >= 0.7 else "vertical"
 
 
 def dxf_groups_by_layer(drawing, view_layer: str, hidden_lines: bool,

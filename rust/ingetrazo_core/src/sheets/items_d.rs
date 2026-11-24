@@ -43,6 +43,10 @@ pub struct FrameContent {
     /// (`line_styles`): drawn layer by layer when given.
     pub tags: Option<Vec<String>>,
     pub styles: Vec<(String, LayerStyle)>,
+    /// The cut filled layer by layer (sheets::hatching, worked out with the
+    /// model's hatch engine when the content was read): drawn instead of
+    /// the frame's own fill.
+    pub fill_ops: Option<Vec<super::paint::Op>>,
 }
 
 /// How a layer's lines are inked (`core.layers.line_styles`, its line type
@@ -160,7 +164,11 @@ fn paint_lines(p: &mut Painter, f: &Fields, c: &FrameContent, segs: &[[f64; 4]])
 
 /// `_fill_cut_rings` the frame's own way (no layer look): solid, or 45°
 /// lines phase-locked to the frame.
-fn paint_cut_fills(p: &mut Painter, f: &Fields, fills: &[Vec<[f64; 2]>]) {
+fn paint_cut_fills(p: &mut Painter, f: &Fields, fills: &[Vec<[f64; 2]>], by_layer: Option<&[super::paint::Op]>) {
+    if let Some(ops) = by_layer {
+        p.ops.extend_from_slice(ops);
+        return;
+    }
     let mode = or(f.text("cut_fill", "solid"), "solid");
     if fills.is_empty() || mode == "none" {
         return;
@@ -350,7 +358,7 @@ pub fn paint_vector_content(p: &mut Painter, f: &Fields, c: &FrameContent) {
     if let Some(segs) = c.segs.as_ref().filter(|s| !s.is_empty()) {
         p.save();
         p.clip_rect(r);
-        paint_cut_fills(p, f, &c.fills);
+        paint_cut_fills(p, f, &c.fills, c.fill_ops.as_deref());
         paint_lines(p, f, c, segs);
         p.restore();
     }
@@ -382,7 +390,7 @@ pub fn paint_frame(p: &mut Painter, f: &Fields, x: &Extra, c: &FrameContent) {
             Some(segs) if !segs.is_empty() => {
                 p.save();
                 p.clip_rect(r);
-                paint_cut_fills(p, f, &c.fills);
+                paint_cut_fills(p, f, &c.fills, c.fill_ops.as_deref());
                 paint_lines(p, f, c, segs);
                 p.restore();
             }

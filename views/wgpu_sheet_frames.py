@@ -271,18 +271,26 @@ def drawing(source, frame):
     cut rings, and — when the frame inks layer by layer (a layer with a
     line type, weight or cut weight of its own, colours by layer) — each
     line's tag and each tag's look (``core.layers.line_styles``, the line
-    type resolved to its dash). None when its view is gone."""
-    from core.layers import LINETYPES, layer_lines_wanted, line_styles
+    type resolved to its dash); when it fills its cut by layer or a layer
+    has a hatch, each ring's look (colour, pattern, ground, ink, form) as
+    the composer's ``compute_hlr`` gave them. None when its view is gone."""
+    from core.composition import model_height_for_frame
+    from core.layers import (LINETYPES, cut_fill_colours, cut_hatch_forms, cut_hatch_grounds,
+                             cut_hatch_inks, cut_hatches, grain_layers, layer_lines_wanted,
+                             line_styles, section_cut_kind)
     scene = source.scene
     view = saved_view(scene, frame)
     if view is False:
         return None
     facade = frame_scene(scene, frame, view)
     coloured = bool(getattr(frame, "layer_colours", False))
-    by_layer = layer_lines_wanted(facade) or coloured
-    got = _hlr(source, frame, tags=by_layer, profiles=bool(getattr(frame, "profiles", True)),
-               fills=(getattr(frame, "cut_fill", "solid") or "solid") != "none",
-               hidden=bool(getattr(frame, "hidden_lines", False)))
+    filled = (getattr(frame, "cut_fill", "solid") or "solid") != "none"
+    fill_by_layer = bool(getattr(frame, "cut_fill_by_layer", False)) and filled
+    hatches = cut_hatches(facade) if filled else {}
+    by_layer = layer_lines_wanted(facade) or coloured or fill_by_layer or bool(hatches)
+    extra = {"depth_layers": grain_layers(facade)} if by_layer else {}
+    got = _hlr(source, frame, tags=by_layer, profiles=bool(getattr(frame, "profiles", True)), fills=filled,
+               hidden=bool(getattr(frame, "hidden_lines", False)), **extra)
     if got is None:
         return None
     d, to_mm = got
@@ -295,6 +303,21 @@ def drawing(source, frame):
         out["tags"] = [str(t) for t in d.layers]
         out["styles"] = {tag: (st[0], st[2], st[3], list(st[4] if st[4] is not None else LINETYPES.get(st[1], ())))
                          for tag, st in looks.items()}
+    if (fill_by_layer or hatches) and d.loop_layers is not None:
+        table = cut_fill_colours(facade) if fill_by_layer else {}
+        grounds, inks = cut_hatch_grounds(facade), cut_hatch_inks(facade)
+        cut = section_cut_kind(facade)
+        forms = {tag: dict(f, cut=cut) for tag, f in cut_hatch_forms(facade, float(frame.scale_n or 100.0)).items()}
+        k = frame.h_mm / model_height_for_frame(frame.h_mm, frame.scale_n)
+        rgb = lambda t, tag: list(t[tag][:3]) if tag in t else None  # noqa: E731
+        fill_looks = []
+        for i, tag in enumerate(d.loop_layers):
+            form = forms.get(tag)
+            depth = d.loop_depths[i] if d.loop_depths else None
+            if form is not None and depth is not None:
+                form = dict(form, depth=round(depth * k, 4))
+            fill_looks.append((rgb(table, tag), hatches.get(tag), rgb(grounds, tag), rgb(inks, tag), form))
+        out["fill_looks"] = fill_looks
     return out
 
 

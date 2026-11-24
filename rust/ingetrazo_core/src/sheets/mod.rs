@@ -14,6 +14,7 @@ pub mod display;
 pub mod drawing;
 pub mod dxf;
 pub mod geometry;
+pub mod hatching;
 pub mod items;
 pub mod items_b;
 pub mod items_c;

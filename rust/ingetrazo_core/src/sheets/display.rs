@@ -315,6 +315,8 @@ pub fn sheet_frame_display(py: Python<'_>, frame: &Bound<'_, PyAny>, content: Op
 
 pub fn frame_content(d: Option<&Bound<'_, pyo3::types::PyDict>>, key: crate::doc::Key)
     -> PyResult<super::items_d::FrameContent> {
+    let fields = super::model::read_fields(key).ok();
+    let fields = fields.as_ref();
     let mut c = super::items_d::FrameContent::default();
     let Some(d) = d else { return Ok(c) };
     if let Some(m) = d.get_item("missing")?.filter(|v| !v.is_none()) {
@@ -361,6 +363,31 @@ pub fn frame_content(d: Option<&Bound<'_, pyo3::types::PyDict>>, key: crate::doc
                 pattern: get(3)?.map(|x| x.extract()).transpose()?.unwrap_or_default(),
             };
             c.styles.push((tag.str()?.to_string(), style));
+        }
+    }
+    if let Some(looks) = d.get_item("fill_looks")?.filter(|v| !v.is_none()) {
+        // One look per cut ring: (colour, hatch, ground, ink, form).
+        let rgb = |v: Bound<'_, PyAny>| -> PyResult<Option<[f64; 3]>> {
+            if v.is_none() { return Ok(None) }
+            let c: Vec<f64> = v.extract()?;
+            Ok((c.len() >= 3).then(|| [c[0], c[1], c[2]]))
+        };
+        let mut out = Vec::new();
+        for l in looks.try_iter()? {
+            let l = l?;
+            let form = l.get_item(4)?;
+            out.push(super::hatching::Look {
+                colour: rgb(l.get_item(0)?)?,
+                hatch: l.get_item(1)?.extract()?,
+                ground: rgb(l.get_item(2)?)?,
+                ink: rgb(l.get_item(3)?)?,
+                form: if form.is_none() { None } else { Some(form.cast_into::<pyo3::types::PyDict>()?.unbind()) },
+            });
+        }
+        if out.len() == c.fills.len() && fields.is_some() {
+            let mut p = super::paint::Painter::default();
+            super::hatching::paint_fills(d.py(), &mut p, fields.unwrap(), &c.fills, &out)?;
+            c.fill_ops = Some(p.ops);
         }
     }
     if let Some(im) = d.get_item("image")?.filter(|v| !v.is_none()) {

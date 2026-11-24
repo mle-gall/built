@@ -1944,3 +1944,24 @@ def rename_layer(scene, old_name: str, new_name: str) -> bool:
         return False
     ly.name = new_name
     return True
+
+
+def grain_layers(scene) -> list:
+    """The layers whose timber is crossed where it is cut across its grain
+    (``Layer.hatch_cross``): for them a view measures how far each cut piece
+    runs through the plane."""
+    from core.hatches import WOOD
+    return [ly.key for ly in getattr(scene, "layers", ())
+            if getattr(ly, "hatch_cross", False)
+            and getattr(ly, "hatch", None) in WOOD]
+
+
+def section_cut_kind(scene):
+    """What kind of cut a view of ``scene`` shows: ``"plan"`` (the active
+    section plane lies flat), ``"vertical"`` (it stands), ``None`` (no
+    section) — masonry is drawn one way in a plan, another in a section."""
+    plane = (scene.active_section() if hasattr(scene, "active_section")
+             else None)
+    if plane is None:
+        return None
+    return "plan" if abs(plane.normal.z()) >= 0.7 else "vertical"
