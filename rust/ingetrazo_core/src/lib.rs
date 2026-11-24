@@ -327,6 +327,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<pick::FacePicker>()?;
     m.add_class::<tools::transform_queries::CopyWire>()?;
     m.add_function(wrap_pyfunction!(tools::transform_queries::transform_targets, m)?)?;
+    m.add_function(wrap_pyfunction!(tools::transform_queries::scale_grab, m)?)?;
     m.add_function(wrap_pyfunction!(tools::transform_queries::transform_records, m)?)?;
     m.add_class::<tools::host_geometry::ToolBounds>()?;
     m.add_function(wrap_pyfunction!(tools::py::scale_box_geometry, m)?)?;

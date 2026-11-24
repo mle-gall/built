@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from ingetrazo_core import TransformPose, ScaleGripSpec, Vec3 as QVector3D
+from ingetrazo_core import TransformPose, ScaleGripSpec, scale_grab, Vec3 as QVector3D
 
 from core.history import scale_matrix
 from core.i18n import tr
@@ -282,27 +282,7 @@ class ScaleHost:
         self._machine.set("grab", screen_xy)
 
     def _capture_grip(self, viewport, grip, screen_xy):
-        from core.image_plane import ImagePlane
-        from core.mesh import Edge, Face
-
-        sel = viewport.scene.selection
-        self._groups = [g for g in sel if hasattr(g, "mesh")
-                        and not isinstance(g, (Edge, Face))]
-        self._images = [im for im in sel if isinstance(im, ImagePlane)]
-        positions: list[QVector3D] = []
-        for ent in sel:
-            if isinstance(ent, Edge):
-                positions.extend([ent.a, ent.b])
-            elif isinstance(ent, Face):
-                positions.extend(ent.vertices)
-        seen: list[QVector3D] = []
-        for p in positions:
-            if not any((p - q).length() < 1e-9 for q in seen):
-                seen.append(QVector3D(p))
-        self._positions = seen
-        mesh = viewport.scene.mesh
-        self._verts = [v for v in (mesh.vertex_at(p) for p in seen)
-                       if v is not None]
+        scale_grab(viewport.scene, self)
         self._grip = grip
         self._anchor = self._anchor_for(grip)
         self._factors = (1.0, 1.0, 1.0)

@@ -32,34 +32,124 @@ fn entities<'py>(ctx: &Bound<'py, PyAny>, picks: &[&str]) -> PyResult<Vec<Bound<
     Ok(Vec::new())
 }
 
-#[pyfunction]
-pub fn transform_targets(ctx: &Bound<'_, PyAny>) -> PyResult<(Vec<Py<PyAny>>, Vec<Vec3>)> {
-    let mut groups = Vec::new();
-    let mut points = Vec::new();
-    let mut seen = HashSet::new();
-    let mut add = |v: Bound<'_, PyAny>| -> PyResult<()> {
-        let p = xyz(&v)?;
-        if seen.insert(cell(p.to_array())) {
-            points.push(Vec3::from(p));
-        }
-        Ok(())
-    };
-    for entity in entities(ctx, &["pick_group", "pick_edge", "pick_face"])? {
-        match classify(&entity)? {
-            "group" => groups.push(entity.unbind()),
-            "edge" => {
-                add(entity.getattr("a")?)?;
-                add(entity.getattr("b")?)?;
+#[derive(Default)]
+struct GrabGeometry {
+    groups: Vec<Py<PyAny>>,
+    positions: Vec<Vec3>,
+    vertices: Vec<Py<PyAny>>,
+    images: Vec<Py<PyAny>>,
+}
+
+fn grab_geometry<'py>(
+    mesh: &Bound<'py, PyAny>,
+    entities: Vec<Bound<'py, PyAny>>,
+) -> PyResult<GrabGeometry> {
+    let mut result = GrabGeometry::default();
+    let mut keys = HashSet::new();
+    let mut cells = HashSet::new();
+    let data = mesh.getattr("__dict__")?;
+    let store = data
+        .cast::<PyDict>()?
+        .get_item("_store")?
+        .filter(|s| !s.is_none());
+    let mut vertex_type = None;
+    for entity in entities {
+        let kind = match classify(&entity)? {
+            "group" => {
+                result.groups.push(entity.unbind());
+                continue;
             }
-            "face" => {
-                for p in entity.getattr("vertices")?.try_iter()? {
+            "image_plane" => {
+                result.images.push(entity.unbind());
+                continue;
+            }
+            "edge" => Kind::Edge,
+            "face" => Kind::Face,
+            _ => continue,
+        };
+        // A nested pick may reference another prototype. Only read slots
+        // belonging to this editing mesh. Stand-ins keep the position lookup.
+        if let Some(st) = store.as_ref().filter(|_| {
+            entity
+                .getattr_opt("_m")
+                .ok()
+                .flatten()
+                .is_some_and(|m| m.is(mesh))
+        }) {
+            let st = PyMeshStore::read(st)?;
+            if let Some(slot) = st.inner.slot(kind, entity.getattr("key")?.extract()?) {
+                let slots = if kind == Kind::Edge {
+                    st.inner.state.ends.get(slot as usize).to_vec()
+                } else {
+                    st.inner.face_rings(slot).into_iter().flatten().collect()
+                };
+                let class = match &vertex_type {
+                    Some(class) => class,
+                    None => vertex_type
+                        .insert(mesh.py().import("core.store_mesh")?.getattr("VertexView")?),
+                };
+                for v in slots {
+                    let key = st.inner.key(Kind::Vertex, v);
+                    if keys.insert(key) {
+                        let p = *st.inner.state.vpos.get(v as usize);
+                        cells.insert(cell(p));
+                        result.positions.push(Vec3::from(DVec3::from(p)));
+                        result.vertices.push(class.call1((mesh, key))?.unbind());
+                    }
+                }
+                continue;
+            }
+        }
+        let mut add = |point: Bound<'_, PyAny>| -> PyResult<()> {
+            let p = xyz(&point)?;
+            if cells.insert(cell(p.to_array())) {
+                result.positions.push(Vec3::from(p));
+                let v = mesh.call_method1("vertex_at", (point,))?;
+                if !v.is_none() {
+                    result.vertices.push(v.unbind());
+                }
+            }
+            Ok(())
+        };
+        if kind == Kind::Edge {
+            add(entity.getattr("a")?)?;
+            add(entity.getattr("b")?)?;
+        } else {
+            for ring in std::iter::once(Ok(entity.getattr("vertices")?))
+                .chain(entity.getattr("holes")?.try_iter()?)
+            {
+                for p in ring?.try_iter()? {
                     add(p?)?;
                 }
             }
-            _ => {}
         }
     }
-    Ok((groups, points))
+    Ok(result)
+}
+
+#[pyfunction]
+pub fn transform_targets(ctx: &Bound<'_, PyAny>) -> PyResult<(Vec<Py<PyAny>>, Vec<Vec3>)> {
+    let mesh = ctx.getattr("viewport")?.getattr("scene")?.getattr("mesh")?;
+    let grab = grab_geometry(
+        &mesh,
+        entities(ctx, &["pick_group", "pick_edge", "pick_face"])?,
+    )?;
+    Ok((grab.groups, grab.positions))
+}
+
+#[pyfunction]
+pub fn scale_grab(scene: &Bound<'_, PyAny>, tool: &Bound<'_, PyAny>) -> PyResult<()> {
+    let grab = grab_geometry(
+        &scene.getattr("mesh")?,
+        scene
+            .getattr("selection")?
+            .try_iter()?
+            .collect::<PyResult<_>>()?,
+    )?;
+    tool.setattr("_groups", grab.groups)?;
+    tool.setattr("_images", grab.images)?;
+    tool.setattr("_positions", grab.positions)?;
+    tool.setattr("_verts", grab.vertices)
 }
 
 #[pyfunction]
@@ -238,7 +328,11 @@ impl CopyWire {
             .map(DMat4::from_cols_array)
             .unwrap_or(DMat4::IDENTITY);
         let d = mesh.getattr("__dict__")?;
-        if let Some(store) = d.cast::<PyDict>()?.get_item("_store")?.filter(|s| !s.is_none()) {
+        if let Some(store) = d
+            .cast::<PyDict>()?
+            .get_item("_store")?
+            .filter(|s| !s.is_none())
+        {
             let store = PyMeshStore::read(&store)?;
             for slot in store.inner.live_slots(Kind::Edge).into_iter().take(limit) {
                 let segment =
@@ -341,10 +435,18 @@ pub fn transform_grab(
     } else {
         None
     };
-    let (mut groups, mut positions) = if let Some(v) = endpoint {
-        (vec![], vec![Vec3::from(xyz(&v.getattr("position")?)?)])
+    let (mut groups, mut positions, mut verts) = if let Some(v) = endpoint {
+        (
+            vec![],
+            vec![Vec3::from(xyz(&v.getattr("position")?)?)],
+            vec![v.unbind()],
+        )
     } else {
-        transform_targets(ctx)?
+        let geometry = grab_geometry(
+            &mesh,
+            entities(ctx, &["pick_group", "pick_edge", "pick_face"])?,
+        )?;
+        (geometry.groups, geometry.positions, geometry.vertices)
     };
     let sections = transform_records(ctx, "section_plane")?;
     let mut guides = if mode == "move" || !direct {
@@ -377,12 +479,8 @@ pub fn transform_grab(
     } else {
         transform_records(ctx, "image_plane")?
     };
-    let mut verts = Vec::new();
-    for p in &positions {
-        let v = mesh.call_method1("vertex_at", (Vec3::from(DVec3::from(p.coords())),))?;
-        if !v.is_none() {
-            verts.push(v)
-        }
+    if positions.is_empty() {
+        verts.clear();
     }
     let dims = if mode == "move" {
         let dims = transform_records(ctx, "dimension")?;
