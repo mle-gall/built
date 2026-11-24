@@ -89,7 +89,7 @@ def test_it_empties_the_selection_without_dirtying_the_document(native_host):
 
 
 def test_the_shortcut_is_configurable_like_any_other(native_host):
-    from views.settings_sheet import SettingsSheet
+    from ingetrazo_render.settings_sheet import SettingsSheet
     win = native_host.window
     sheet = SettingsSheet("keyboard")
     sheet._win = win

@@ -238,7 +238,7 @@ def test_materials_let_go_of_the_meshes_of_the_project_left(win):
 
 
 def test_view_preferences_reach_the_tabs_behind(win, tmp_path):
-    from views.settings_sheet import Env, SettingsSheet
+    from ingetrazo_render.settings_sheet import Env, SettingsSheet
 
     _edit(win)
     a = win.active_document()

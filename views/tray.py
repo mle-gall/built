@@ -794,7 +794,7 @@ class BaseMapPanel(QWidget):
 
     def _open_locator(self) -> None:
         """Open the map locator; on accept, drop the chosen lat/lon and go."""
-        from views.settings_sheet import edit_location
+        from ingetrazo_render.settings_sheet import edit_location
         src = self._current_source() or PRESETS[DEFAULT_SOURCE_ID]
 
         def use_site(lat, lon, width_m, length_m):
@@ -3191,7 +3191,7 @@ class ShadowsPanel(QWidget):
         """Add Location, scoped to the sun: pick the site on the
         map and it becomes the model's geographic datum (which is also what
         the Terrain workspace reads — one location, one truth)."""
-        from views.settings_sheet import edit_location
+        from ingetrazo_render.settings_sheet import edit_location
         edit_location(_dialog_parent(self))
 
     def _apply(self, *_a) -> None:

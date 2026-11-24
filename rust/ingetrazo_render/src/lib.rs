@@ -56,6 +56,8 @@ mod inspector_host;
 mod shell_events;
 mod deliveries_host;
 mod sheet_runtime;
+mod settings_rows;
+mod settings_host;
 pub mod ui;
 mod host_context;
 mod inspector;
@@ -3372,6 +3374,8 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<units_start::UnitsDraft>()?;
     m.add_class::<preferences::PreferencesView>()?;
     m.add_class::<preferences::RestartPreferences>()?;
+    // Settings needs the preference classes above.
+    settings_host::register(m)?;
     m.add_class::<preferences::PreferencePage>()?;
     m.add_function(wrap_pyfunction!(preferences::edit_ai_connection, m)?)?;
     m.add_class::<preferences::DevicePreferences>()?;

@@ -175,7 +175,7 @@ def open_library(win) -> bool:
 
 
 def open_settings(win) -> bool:
-    from views import settings_sheet
+    from ingetrazo_render import settings_sheet
     return settings_sheet.show(win)
 
 

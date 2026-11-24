@@ -12,7 +12,7 @@ from PySide6.QtWidgets import QWidget
 from core import units
 from core.scene import Scene
 from formats import igz
-from views.settings_sheet import Env, SettingsSheet
+from ingetrazo_render.settings_sheet import Env, SettingsSheet
 from tests.units_chrome import edit_unit, units_row
 
 
