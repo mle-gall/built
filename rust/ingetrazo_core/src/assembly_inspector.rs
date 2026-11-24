@@ -132,9 +132,9 @@ pub(crate) fn plan_part_edit<'py>(
         if let (Some(_), Some(name)) = (child_uid, name) {
             let name = name.trim();
             if !name.is_empty() && !child.getattr("name")?.eq(name)? {
-                return Ok(Some(
-                    history.call_method1("RenameGroupCommand", (child, name))?,
-                ));
+                let name = pyo3::types::PyString::new(scene.py(), name);
+                let step = crate::doc::commands::NativeCommand::rename(&child, name.as_any())?;
+                return Ok(Some(Bound::new(scene.py(), step)?.into_any()));
             }
         }
         if visible == Some(child.getattr("hidden")?.is_truthy()?) {

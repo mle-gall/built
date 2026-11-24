@@ -21,7 +21,7 @@ if QApplication.instance() is None:
     QApplication([])
 
 from core.group import Group  # noqa: E402
-from core.history import History, LockCommand  # noqa: E402
+from core.history import History, NativeCommand  # noqa: E402
 from core.mesh import Mesh  # noqa: E402
 from tests.controller_surface import ControllerSurface as Viewport
 
@@ -59,7 +59,7 @@ def test_the_padlock_takes_the_group_out_of_the_pick():
     history = History(vp.scene)
     px = vp._world_to_pixel(V(2, 2, 0))
     assert vp.pick_group(*px) is g                    # the block is built
-    history.execute(LockCommand([g], True))
+    history.execute(NativeCommand.lock([g], True))
     assert vp.pick_group(*px) is None                 # locked: not pickable
     history.undo()
     assert vp.pick_group(*px) is g                    # unlocked again

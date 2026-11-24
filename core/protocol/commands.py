@@ -1010,16 +1010,21 @@ def _placement(history, uid):
 
 def _placements(history, uids):
     """Placements of the open context by uid, nested ones included (the
-    project tree names items at any depth)."""
+    project tree names items at any depth). In-process callers may pass the
+    placement handles themselves (the UI holds them already)."""
+    from ingetrazo_core import Placement
     want = list(dict.fromkeys(tuple(u) if isinstance(u, (list, tuple)) else u for u in uids))
     found = {}
+    for item in want:
+        if isinstance(item, Placement):
+            found[item] = item
     for path in (u for u in want if isinstance(u, tuple)):
         group = history.scene.resolve_occurrence(path)
         if group is None:
             raise KeyError(f"no placement at occurrence path {path!r}")
         found[path] = group
     wanted = set(want)
-    stack = list(reversed(history.scene.groups))
+    stack = list(reversed(history.scene.groups)) if len(found) < len(wanted) else []
     while stack and len(found) < len(wanted):
         g = stack.pop()
         uid = getattr(g, "uid", None)
@@ -1051,21 +1056,57 @@ def unhide(history, placements):
 
 
 def lock(history, placements, locked=True):
-    """Lock (or unlock) placements (uids, nested included): ``LockCommand``."""
-    from core.history import LockCommand
+    """Lock (or unlock) placements (uids, nested included) as one native
+    step (``LockCommand`` in the feed). Locking drops them from the selection."""
+    from ingetrazo_core import NativeCommand
     gs = _placements(history, placements)
     before = history.revision
-    history.execute(LockCommand(gs, locked=bool(locked)))
+    history.execute(NativeCommand.lock(gs, bool(locked)))
     return _answer(history, before)
 
 
 def rename_placement(history, placement, name):
-    """Rename one placement (uid, nested included): ``RenameGroupCommand``
-    (a component's copies keep their own names)."""
-    from core.history import RenameGroupCommand
+    """Rename one placement (uid, nested included) as one native step
+    (``RenameGroupCommand`` in the feed; a component's copies keep their
+    own names)."""
+    from ingetrazo_core import NativeCommand
     g, = _placements(history, [placement])
     before = history.revision
-    history.execute(RenameGroupCommand(g, str(name)))
+    history.execute(NativeCommand.rename(g, str(name)))
+    return _answer(history, before)
+
+
+def rename_placements(history, placements, names):
+    """Give each placement (uid, nested included) its own name, as one
+    native step. Placements whose name is already that one are left out."""
+    from ingetrazo_core import NativeCommand
+    names = [str(n) for n in names]
+    gs = _placements(history, placements)
+    if len(gs) != len(names):
+        raise ValueError("rename_placements needs one name per distinct placement")
+    pairs = [(g, n) for g, n in zip(gs, names) if g.name != n]
+    before = history.revision
+    if pairs:
+        history.execute(NativeCommand.rename_each([g for g, _ in pairs], [n for _, n in pairs]))
+    return _answer(history, before)
+
+
+def paint_placements(history, placements, paint, material=None):
+    """Paint placements (uids, nested included) as a whole with one paint
+    dict, or unpaint them with ``paint`` None, as one step. Faces painted
+    themselves keep their own paint. ``material`` (a ``Material`` the
+    paint names) joins the registry in the same step when it is not there."""
+    from core.history import CompoundCommand, SetFaceMaterialTagCommand
+    from ingetrazo_core import NativeCommand
+    gs = [g for g in _placements(history, placements) if g.material != (paint or None)]
+    parts = []
+    if material is not None and history.scene.materials.get(material.name) is None:
+        parts.append(SetFaceMaterialTagCommand([], material.name, material))
+    if gs:
+        parts.append(NativeCommand.paint(gs, paint))
+    before = history.revision
+    if parts:
+        history.execute(parts[0] if len(parts) == 1 else CompoundCommand(parts))
     return _answer(history, before)
 
 
@@ -1619,7 +1660,6 @@ def rename_component(history, placement, name):
     """Rename a component definition: every copy (placed or nested) and the
     template kept in the file take ``name``, as one step. ``placement`` is
     the uid of any copy, or of the kept template."""
-    from core.history import CompoundCommand, RenameGroupCommand
     from core.kept_components import copies_of, kept_template
     scene = history.scene
     name = str(name).strip()
@@ -1634,10 +1674,11 @@ def rename_component(history, placement, name):
     for extra in (template, g):
         if extra is not None and extra not in targets:
             targets.append(extra)
+    from ingetrazo_core import NativeCommand
     before = history.revision
-    targets = [t for t in targets if t.name != name]
+    targets = list(dict.fromkeys(t for t in targets if t.name != name))
     if targets:
-        history.execute(CompoundCommand([RenameGroupCommand(t, name) for t in targets]))
+        history.execute(NativeCommand.rename_each(targets, [name] * len(targets)))
     return _answer(history, before)
 
 
@@ -1718,6 +1759,7 @@ COMMANDS = {"set_location": set_location, "set_model_units": set_model_units, "s
             "explode_view": explode_view, "purge_unused": purge_unused,
             "purge_debris": purge_debris, "undo": undo, "redo": redo,
             "hide": hide, "unhide": unhide, "lock": lock, "rename_placement": rename_placement,
+            "rename_placements": rename_placements, "paint_placements": paint_placements,
             "edit_assembly_part": edit_assembly_part, "edit_visibility_set": edit_visibility_set, "edit_saved_scene": edit_saved_scene, "edit_link_subset": edit_link_subset, "reset_link_tags": reset_link_tags, "unlink_placements": unlink_placements, "edit_section_plane": edit_section_plane, "edit_loose_geometry": edit_loose_geometry, "file_placements": file_placements, "promote_tag": promote_tag, "edit_structure_node": edit_structure_node, "edit_tag": edit_tag, "set_tag": set_tag, "set_tag_state": set_tag_state, "resegment_curve": resegment_curve, "repair_solid": repair_solid,
             "rename_material": rename_material, "edit_material": edit_material,
             "duplicate_material": duplicate_material, "delete_material": delete_material,

@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from core.group import Group
-from core.history import History, CompoundCommand, SetFaceMaterialTagCommand, SetGroupMaterialCommand
+from core.history import History, CompoundCommand, SetFaceMaterialTagCommand, NativeCommand
 from core.materials import Material
 from core.scene import Scene
 from tools.paint import PaintTool
@@ -65,7 +65,7 @@ def test_the_color_row_recolours_a_plain_colour_material(win):
     face.attrs.update(paint)
     mat = PaintTool.current_material
     vp.history.execute(CompoundCommand([
-        SetFaceMaterialTagCommand([], mat.name, mat), SetGroupMaterialCommand(g, paint)]))
+        SetFaceMaterialTagCommand([], mat.name, mat), NativeCommand.paint([g], paint)]))
     library.provider("materials").edit(library.Ctx(win, None), {"name":"Azul","key":"m:Azul"},
                                        "color", "#00ff00")
     assert tuple(face.attrs["color"]) == (0,1,0) and tuple(g.material["color"]) == (0,1,0)

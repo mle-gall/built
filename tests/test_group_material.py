@@ -19,7 +19,7 @@ from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 
 from core.group import Group, copy_group, effective_material
 from core.history import (ExplodeGroupCommand, History,
-                          SetGroupMaterialCommand)
+                          NativeCommand)
 from core.materials import effective_attrs, has_own_material
 from core.mesh import Mesh
 from core.scene import Scene
@@ -79,7 +79,7 @@ def test_set_group_material_is_one_undo_step_and_touches_no_face():
     scene = Scene()
     hist = History(scene)
     g, blue = _two_face_group(scene)
-    hist.execute(SetGroupMaterialCommand(g, RED))
+    hist.execute(NativeCommand.paint([g], RED))
     assert g.material == RED
     assert blue.attrs["color"] == [0.0, 0.0, 1.0]
     assert "color" not in g.mesh.faces[0].attrs                 # still default
@@ -317,7 +317,7 @@ def test_exploding_a_group_of_groups_lifts_them_whole():
     hist.execute(MakeNestedGroupCommand([], [], [a, b]))
     big = scene.groups[0]
     hist.execute(MoveGroupCommand(big, V(0, 5)))
-    hist.execute(SetGroupMaterialCommand(big, dict(RED)))
+    hist.execute(NativeCommand.paint([big], dict(RED)))
 
     def xs_ys(g):
         vs = world_mesh(g).vertices

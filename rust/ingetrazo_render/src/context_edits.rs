@@ -273,7 +273,7 @@ fn context_lock(vp: &Bound<'_, PyAny>, groups: Vec<Bound<'_, PyAny>>, lock: bool
     if picks.is_empty() { return Ok(()); }
     if editing && lock { vp.call_method0("end_group_edit")?; }
     py.import("views.tree_navigation")?.call_method1("execute", (
-        vp, py.import("core.history")?.call_method1("LockCommand", (picks, lock))?,
+        vp, py.import("ingetrazo_core")?.getattr("NativeCommand")?.call_method1("lock", (picks, lock))?,
     ))?;
     Ok(())
 }
@@ -281,12 +281,9 @@ fn context_lock(vp: &Bound<'_, PyAny>, groups: Vec<Bound<'_, PyAny>>, lock: bool
 #[pyfunction]
 fn unlock_group(vp: &Bound<'_, PyAny>, group: &Bound<'_, PyAny>) -> PyResult<()> {
     let groups = PyList::new(vp.py(), [group])?;
-    execute(
-        vp,
-        &vp.py()
-            .import("core.history")?
-            .call_method1("LockCommand", (&groups, false))?,
-    )?;
+    vp.py()
+        .import("core.protocol.commands")?
+        .call_method1("lock", (vp.getattr("history")?, &groups, false))?;
     let scene = vp.getattr("scene")?;
     if scene
         .call_method1("entity_selectable", (group,))?

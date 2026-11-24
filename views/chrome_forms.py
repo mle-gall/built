@@ -323,6 +323,32 @@ class OperationForm(Form):
         return seq, title, note, width, rows, buttons
 
 
+class BrowserRenameForm(Form):
+    """Transport the Rust preview and commit its validated targets."""
+    def __init__(self, window, model):
+        super().__init__(tr("Rename selected"), [], width=520,
+                         buttons=[("cancel", tr("Cancel")), ("ok", tr("Rename"))],
+                         validate=lambda *_: model.error(),
+                         on_done=lambda answer, _: model.apply(window) if answer == "ok" else None)
+        self.model = model
+        self._layout = None
+
+    def receive(self, fid, raw):
+        self.model.receive(fid, raw)
+        self._layout = None
+        self.error = ""
+        self.changed()
+
+    def wire(self):
+        seq, title, note, width, _, buttons = super().wire()
+        if self._layout is None:
+            self._layout = self.model.rows(), self.model.error()
+        rows, error = self._layout
+        if error:
+            buttons[-1] = (*buttons[-1][:3], 129)
+        return seq, title, note, width, rows, buttons
+
+
 # ---- On the window -------------------------------------------------------------
 def forms(win) -> list:
     return win.__dict__.setdefault("_chrome_forms", [])

@@ -78,8 +78,10 @@ Built (`core.protocol.commands.run(history, name, **args)`):
 | `purge_debris` | — | `Mesh.purge_debris` on the open mesh as one snapshot step: vertices no edge and no face uses |
 | `undo`, `redo` | — | `History.undo` / `redo` |
 | `hide` / `unhide` | `placements: [uid]` (nested included) | `HideCommand` |
-| `lock` | `placements: [uid]`, `locked: bool = true` | `LockCommand` |
-| `rename_placement` | `placement: uid`, `name: string` | `RenameGroupCommand` |
+| `lock` | `placements: [uid]`, `locked: bool = true` | Native step `LockCommand` (`NativeCommand.lock`, docs/commands-port.md); locking drops them from the selection |
+| `rename_placement` | `placement: uid`, `name: string` | Native step `RenameGroupCommand` (`NativeCommand.rename`) |
+| `rename_placements` | `placements: [uid]`, `names: [string]` (one per distinct placement) | Native step `RenameGroupCommand` (`NativeCommand.rename_each`), one step; placements already named so are left out |
+| `paint_placements` | `placements: [uid]`, `paint` (a paint dict, or null to unpaint), optional `material` (in process: a `Material` the paint names) | Native step `SetGroupMaterialCommand` (`NativeCommand.paint`): the placements are painted whole, faces painted themselves keep theirs. A material not in the registry joins it in the same step |
 | `set_tag` | `placements: [uid]`, `tag: tag key` | `AssignLayerCommand` |
 | `edit_tag` | `tags: [tag key]`, `field`, `value` | Apply a node’s Drawing style. Fields are `color` (#RRGGBB or empty), `weight` (mm or auto), `linetype`, `hatch` (pattern key or empty) and `print` (0 or 1). The document validates the batch before one undoable step. |
 | `edit_structure_node` | `node: key`, `field`, `value` | Rename (`name`), move to an editable node or the root (`parent`), or set the working node (`active`). Rename and move derive the descendants’ filing from the updated registry in the same history step. |
@@ -91,7 +93,7 @@ Built (`core.protocol.commands.run(history, name, **args)`):
 | `duplicate_material` | `name`, optional `new_name` | `AddMaterialCommand` (`core/material_commands.py`): a copy worn by nothing; default name `"<name> copy"` (numbered when taken); the answer adds `name` |
 | `delete_material` | `name` | `DeleteMaterialCommand`: the registry entry goes and what wore it shows the default material; undo restores faces and containers exactly |
 | `delete_placements` | `placements: [uid]` (nested included) | one `DeleteGroupCommand` each, as one `CompoundCommand` step |
-| `rename_component` | `placement: uid` of any copy or of the kept template, `name` | `RenameGroupCommand` on every copy and the kept template, one step |
+| `rename_component` | `placement: uid` of any copy or of the kept template, `name` | One native `RenameGroupCommand` step over every copy and the kept template |
 | `create_material` | one base: `color: [r,g,b]` or `texture: {path, sw, sh}`; optional `name`, `opacity`, `pbr`, `finish`, `reuse = true` | `AddMaterialCommand`. With `reuse` and no `pbr`, a material with the same plain recipe is answered (`reused: true`, no step). Unnamed: `Colour #RRGGBB` or the image's name. The answer adds `name` |
 | `set_material_base` | `name`, `base: "color" \| "image"`, optional `color` or `texture` | `RestampMaterialCommand`: the base switches, PBR values, opacity and finish are kept; what wears it follows. An image base with no image raises `ValueError` |
 | `set_material_pbr` | `name`, any of `metallic`, `roughness`, `ao_strength` (0–1), `normal_scale` (≥ 0), `metallic_map`, `roughness_map`, `normal_map`, `ao_map` (path or `{path, flip_y?}`); `null` removes | `RestampMaterialCommand`; the same channels for a colour or an image base. No channel left: no `pbr` (contract: `docs/skp-pbr-format.md`) |

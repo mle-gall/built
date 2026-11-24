@@ -12,7 +12,7 @@ from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 from core import doc_model
 from core.group import Group, PlacementProxy, model_placements
 from core.history import (AssignLayerCommand, HideCommand, History,
-                          LockCommand, SetPluginDataCommand, SetRecordCommand,
+                          NativeCommand, SetPluginDataCommand, SetRecordCommand,
                           SetStructureNodeCommand)
 from core.layers import STYLE_FIELDS, Layer, layer_values
 from core.materials import Material
@@ -264,7 +264,7 @@ def test_lock_hide_and_tag_of_a_selection_write_in_bulk():
     gs = [Group(Mesh(), name=f"g{i}") for i in range(20)]
     scene.groups.extend(gs)
     h = History(scene)
-    for cmd in (LockCommand(gs, True), HideCommand(gs, True),
+    for cmd in (NativeCommand.lock(gs, True), HideCommand(gs, True),
                 AssignLayerCommand(gs, "New tag")):
         h.execute(cmd)
         assert not h.last_error

@@ -2,6 +2,16 @@
 use super::{Column, Lens};
 
 impl Column {
+    pub(super) fn rename_request(&self, selected: bool) -> String {
+        let mut seen = std::collections::HashSet::new();
+        let order: Vec<_> = self.ordered.iter().map(|&i| &self.nodes[i])
+            .filter(|n| n.local_placement)
+            .filter_map(|n| n.key.split_once(':').map(|(_, id)| (id, n.problems > 0)))
+            .filter(|(id, _)| seen.insert(*id))
+            .collect();
+        format!("batchrename\u{1f}{}", serde_json::json!([self.styles.owner, selected, self.filter, order]))
+    }
+
     pub(super) fn claims_row_key(&self, name: &str, mods: u8) -> bool {
         let Some(key) = self.focused_row.as_ref() else {
             return false;
@@ -69,7 +79,9 @@ impl Column {
                 (prev.depth == node.depth && prev.local_placement)
                     .then(|| format!("tree:into\u{1f}{key}\u{1f}{}", prev.key))
             }
-            "F2" => {
+            "F2" if node.local_placement && node.selected > 0 && self.browser_picks > 1 =>
+                Some(format!("tree:{}", self.rename_request(true))),
+            "F2" if node.local_placement || plane => {
                 self.renaming = Some((key.clone(), node.name.clone()));
                 self.focus_rename = true;
                 None

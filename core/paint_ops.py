@@ -7,8 +7,8 @@ from core.history import (
     SetFaceMaterialTagCommand,
     SetFaceOpacityCommand,
     SetFaceTextureCommand,
-    SetGroupMaterialCommand,
 )
+from ingetrazo_core import NativeCommand
 
 
 def _face_plane(face) -> tuple:
@@ -104,7 +104,7 @@ def build_paint(mesh, faces, seed, group, back, default, color, texture, opacity
     register = SetFaceMaterialTagCommand([], name, material)
     if group is not None:
         stamp = None if default else paint_stamp(color, texture, opacity, material)
-        return CompoundCommand([register, SetGroupMaterialCommand(group, stamp)])
+        return CompoundCommand([register, NativeCommand.paint([group], stamp)])
     if back:
         if default:
             return SetFaceBackCommand(faces, None)
