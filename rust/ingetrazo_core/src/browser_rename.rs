@@ -199,10 +199,10 @@ impl BrowserRename {
         if !scene.is(self.scene.bind(py)) || !writable(&scene)? || self.error().is_some() {
             return Ok(false);
         }
-        let history = py.import("core.history")?;
         let root = scene.getattr("_root")?;
         let linked = py.import("core.links")?.getattr("linked_ancestor")?;
-        let commands = PyList::empty(py);
+        let groups = PyList::empty(py);
+        let names = PyList::empty(py);
         for (t, (_, new)) in self.targets.iter().zip(self.preview()) {
             let group = t.group.bind(py);
             if root.call_method1("_occurrence_path", (group,))?.is_none()
@@ -216,12 +216,17 @@ impl BrowserRename {
                 return Ok(false);
             }
             if new != t.old {
-                commands.append(history.call_method1("RenameGroupCommand", (group, new))?)?;
+                groups.append(group)?;
+                names.append(new)?;
             }
         }
-        let step = history.call_method1("CompoundCommand", (commands,))?;
-        py.import("views.tree_navigation")?
-            .call_method1("execute", (vp, step))?;
+        if groups.is_empty() {
+            return Ok(true);
+        }
+        // One native step through the protocol's batch rename verb.
+        py.import("core.protocol.commands")?
+            .call_method1("rename_placements", (vp.getattr("history")?, groups, names))?;
+        vp.call_method0("refresh_after_edit")?;
         Ok(true)
     }
 }
