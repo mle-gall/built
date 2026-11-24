@@ -65,14 +65,10 @@ def new_uid() -> str:
 
 
 def _highest_group_number(names) -> int:
-    """The largest N among the automatic "Group N" entries in ``names``."""
-    import re
-    top = 0
-    for n in names:
-        m = re.match(r"^Group (\d+)$", n or "")
-        if m:
-            top = max(top, int(m.group(1)))
-    return top
+    """The largest N among the automatic "Group N" entries in ``names``
+    (read in Rust: a Python regex per name was 67 ms of opening 50 000
+    placements)."""
+    return int(_dm.NATIVE.highest_group_number(names))
 
 
 def reserve_group_names(names) -> None:

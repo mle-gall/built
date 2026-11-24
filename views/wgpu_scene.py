@@ -67,6 +67,9 @@ class PackedScene:
     bake_focus: tuple | None = None
 
     occurrence_keys: dict = field(default_factory=dict)
+    # id(mesh) -> (mesh, a prototype code it is drawn with, -1: nothing to
+    # draw): every mesh the pack met, the loose one and empty ones included.
+    mesh_codes: dict = field(default_factory=dict)
 
     def row_key(self, group):
         return self.occurrence_keys.get(group, getattr(group, 'uid', 'loose'))
@@ -367,6 +370,58 @@ def _doc_worlds(local, has, parent):
 
 
 def _placement_records(scene, roots, vp, state):
+    """``(group, world, paint group, flags, columns)`` per placement under
+    ``roots``, parents first. ``paint group`` is what the paint resolves
+    from (``_paint_of``, ``state``): one stand-in per distinct tag and paint
+    on the native walk, the editor's proxy otherwise; ``columns`` is
+    ``(mesh, billboard, uid)`` from the native walk, or None."""
+    if (not scene._edit_stack and getattr(scene, '_navigator_allowed', None) is None
+            and not getattr(scene, '_navigator_through', None) and scene.edit_group is None):
+        yield from _native_records(scene, roots)
+        return
+    for g, world, proxy, flags in _proxy_records(scene, roots, vp, state):
+        yield g, world, proxy, flags, None
+
+
+def _native_records(scene, roots):
+    """The native walk (``doc_render_rows``): what each nested placement
+    inherits (tag, paint, Hide, the tag's visibility) resolved in Rust, the
+    paint resolved here once per distinct tag and paint, not per placement
+    (architecture review 12)."""
+    from core import doc_model
+    from core.group import PlacementProxy
+    from core.layers import DEFAULT_LAYER, LINK_UNTAGGED_SUFFIX, effective_visible
+    invisible, blocked = set(), set()
+    for ly in scene.layers:
+        if not effective_visible(scene, ly):
+            invisible.add(ly.key)
+            blocked.add(ly.key)
+        elif ly.locked:
+            blocked.add(ly.key)
+    cols = doc_model.NATIVE.doc_render_rows(roots, invisible, blocked, LINK_UNTAGGED_SUFFIX, DEFAULT_LAYER)
+    parent = cols['parent']
+    world, defined = _doc_worlds(cols['local'], cols['has'], parent)
+    names, materials = cols['names'], cols['materials']
+    reps = {}
+
+    def rep(layer, material):
+        key = (layer, material)
+        out = reps.get(key)
+        if out is None:
+            out = reps[key] = PlacementProxy(None, name="Paint", uid="paint")
+            out.layer = names[layer] if layer >= 0 else None
+            out.material = materials[material] if material >= 0 else None
+            out.owner = None
+        return out
+    handles, flags = cols['handles'], cols['flags'].tolist()
+    defined = defined.tolist()
+    layers, mats = cols['paint_layer'].tolist(), cols['material'].tolist()
+    for i, (g, mesh, billboard, uid) in enumerate(zip(handles, cols['mesh'], cols['billboard'], cols['uid'])):
+        yield (g, (world[i] if defined[i] else None), rep(layers[i], mats[i]), flags[i],
+               (mesh if mesh is not None else g.mesh, billboard, uid if uid is not None else g.uid))
+
+
+def _proxy_records(scene, roots, vp, state):
     """Read the tree from the Rust
     document in one call (``doc_tree``): handles, parents, f64 matrices and
     Hide flags as arrays, no attribute read per placement for them."""
@@ -452,25 +507,36 @@ def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=Tru
             if 0 <= code < len(previous_pack.prototype_origins):
                 old_anchors[mesh_id] = previous_pack.prototype_origins[code]
     from itertools import chain
-    placements = chain([(None, None, None, 0)], _placement_records(scene, scene.groups, vp, state))
+    placements = chain([(None, None, None, 0, None)], _placement_records(scene, scene.groups, vp, state))
     total = 0
     if progress is not None:
         total = max(1, sum(1 for _ in iter_groups(scene.groups)))
         progress(0.0, "Packing geometry for the GPU…")
-    for index, (group, matrix, paint_group, flags) in enumerate(placements):
+    # The paint each paint group resolves to, once per paint group: the
+    # native walk shares one between every placement of a tag and paint.
+    resolved = {}
+    mesh_codes = {}
+    for index, (group, matrix, paint_group, flags, columns) in enumerate(placements):
         if progress is not None and index % 64 == 63:
             progress(0.9 * index / total, "Packing geometry for the GPU…")
-        mesh = scene.loose_mesh if group is None else group.mesh
-        paint_attrs = _paint_of(vp, paint_group)
-        if paint_attrs and paint_attrs.get('front_only'):
-            paint_attrs = None  # style tint stays dynamic
+        if columns is not None:
+            mesh, billboard, uid = columns
+        else:
+            mesh = scene.loose_mesh if group is None else group.mesh
+            billboard = getattr(group, "billboard", False)
+            uid = getattr(group, 'uid', 'loose')
+        got = resolved.get(id(paint_group))
+        if got is None:
+            paint_attrs = _paint_of(vp, paint_group)
+            if paint_attrs and paint_attrs.get('front_only'):
+                paint_attrs = None  # style tint stays dynamic
+            got = resolved[id(paint_group)] = (_baked_paint(paint_attrs), state(paint_group)[1])
         # Texture mapping, opacity and tag effects create paint variants.
         # Opaque plain container RGB stays in the instance packed RGBA word.
         if baked_paints is not None and id(group) in baked_paints:
             baked_paint = baked_paints[id(group)]
         else:
-            baked_paint = _baked_paint(paint_attrs)
-        billboard = getattr(group, "billboard", False)
+            baked_paint = got[0]
         key = (id(mesh), repr(baked_paint), billboard)
         variant = key
         if variant in wide_variants:
@@ -488,16 +554,16 @@ def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=Tru
             else:
                 coordinates.pop()
         code = lookup[key]
+        mesh_codes.setdefault(id(mesh), (mesh, code))
         if code < 0:
             continue
         if billboard:
             billboard_codes.add(code)
-        _, paint = state(paint_group)
         world = np.eye(4) if matrix is None else matrix
         rows.append((code, world, flags | (8 if billboard else 0)))
-        uids.append(getattr(group, 'uid', 'loose'))
+        uids.append(uid)
         groups.append(group)
-        paints.append(paint)
+        paints.append(got[1])
     occurrence_keys = {}
     repeated = scene.repeated_uids()
     if repeated or any(u.startswith('@[') for u in uids):
@@ -593,7 +659,8 @@ def pack_scene(scene, view_tint=None, *, face_overrides=None, texture_images=Tru
     hidden_commands['start'] = hidden_edge_commands['start'] = commands['start']
     return PackedScene(vertices, indices, bounds, commands, edge_commands, instances, uids, world_bounds, dict(handoff=handoff-begin, native=baked-handoff, finish=perf_counter()-baked, peak_build_rss_bytes=(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss if resource is not None else None)), groups, materials, textures, tuple(texture_ids), hidden_commands, hidden_edge_commands, profile_exclusions,
                                (bool(getattr(scene, 'show_hidden_geometry', False)), bool(getattr(scene, 'show_hidden_objects', False))), lookup, prototype_paints, origin=origin, prototype_origins=tuple(origins), model_translations=model_translations,
-                               bake_focus=tuple(focus) if wide_variants else None, occurrence_keys=occurrence_keys)
+                               bake_focus=tuple(focus) if wide_variants else None, occurrence_keys=occurrence_keys,
+                               mesh_codes=mesh_codes)
 
 
 def _material_columns(pos, corners, sizes, counts, table, attributes, texture_ids, origin=(0., 0., 0.)):

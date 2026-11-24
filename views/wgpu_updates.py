@@ -68,15 +68,19 @@ class InstanceUpdates:
         self.resident = ResidentRows(list(packed.uids), packed.instances.view(np.uint8).reshape(-1),
                                      np.ascontiguousarray(packed.bounds).view(np.uint8).reshape(-1))
         self.changed_code_rows = {}
-        codes = packed.instances['info'][:, 0].tolist()
-        for row, group in enumerate(packed.groups):
-            mesh = group.mesh if group is not None else scene.loose_mesh
-            self.meshes[id(mesh)] = (mesh, mesh._mut_serial, codes[row])
-        # Empty containers have no GPU row, but still need a serial sentinel.
-        all_meshes = [scene.loose_mesh]
-        all_meshes.extend(g.mesh for g in iter_groups(scene.groups))
-        for mesh in all_meshes:
-            self.meshes.setdefault(id(mesh), (mesh, mesh._mut_serial, -1))
+        if packed.mesh_codes:
+            # What the pack met: each mesh once (empty containers' with -1,
+            # a serial sentinel without a GPU row).
+            self.meshes = {key: (mesh, mesh._mut_serial, code) for key, (mesh, code) in packed.mesh_codes.items()}
+        else:
+            codes = packed.instances['info'][:, 0].tolist()
+            for row, group in enumerate(packed.groups):
+                mesh = group.mesh if group is not None else scene.loose_mesh
+                self.meshes[id(mesh)] = (mesh, mesh._mut_serial, codes[row])
+            all_meshes = [scene.loose_mesh]
+            all_meshes.extend(g.mesh for g in iter_groups(scene.groups))
+            for mesh in all_meshes:
+                self.meshes.setdefault(id(mesh), (mesh, mesh._mut_serial, -1))
         self.mesh_revisions = {key: mesh.revision for key, (mesh, _, _) in self.meshes.items()}
         self.changed = []
         self.removed = []
@@ -366,11 +370,11 @@ class InstanceUpdates:
             swaps = None
         self.pending_swaps.clear()
         self.last_local = local
-        placements = [] if local else [(None, None, None, 0)]
+        placements = [] if local else [(None, None, None, 0, None)]
         state = _placement_state(scene)
         loose = self.meshes.get(id(scene.loose_mesh))
         if local and (loose is None or loose[1] != scene.loose_mesh._mut_serial):
-            placements.append((None, None, None, 0))
+            placements.append((None, None, None, 0, None))
         from types import SimpleNamespace
         from views.document_interaction import _paint_of
         vp = SimpleNamespace(scene=scene)
@@ -394,10 +398,17 @@ class InstanceUpdates:
         additions = []
         new_keys = set()
         fresh = {}      # code -> mesh: variants that exist from this edit on
-        for group, matrix, proxy, flags in placements:
-            mesh = group.mesh if group is not None else scene.loose_mesh
-            mode = getattr(group, 'billboard', False)
-            paint = _baked_paint(_paint_of(vp, proxy))
+        resolved = {}
+        for group, matrix, proxy, flags, columns in placements:
+            if columns is not None:
+                mesh, mode, _uid = columns
+            else:
+                mesh = group.mesh if group is not None else scene.loose_mesh
+                mode = getattr(group, 'billboard', False)
+            got = resolved.get(id(proxy))
+            if got is None:
+                got = resolved[id(proxy)] = (_baked_paint(_paint_of(vp, proxy)), state(proxy)[1])
+            paint = got[0]
             key = (id(mesh), repr(paint), mode)
             old = self.meshes.get(id(mesh))
             code = self.packed.prototype_lookup.get(key)
@@ -440,8 +451,7 @@ class InstanceUpdates:
             value = np.zeros((), INSTANCE)
             value['world'] = (np.eye(4, dtype=np.float32) if matrix is None
                               else np.asarray(matrix, np.float32))
-            _, paint = state(proxy)
-            value['info'][:3] = (code, paint, flags | (8 if mode else 0))
+            value['info'][:3] = (code, got[1], flags | (8 if mode else 0))
             if row < len(self.packed.instances):
                 value['info'][3] = self.packed.instances['info'][row, 3]
                 value['info'][2] |= self.packed.instances['info'][row, 2] & 192
