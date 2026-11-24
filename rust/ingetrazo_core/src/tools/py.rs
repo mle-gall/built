@@ -117,6 +117,7 @@ fn event(d: &Bound<'_, PyDict>) -> PyResult<ToolEvent> {
     use super::walkthrough::Navigation;
     let field = |key: &str| d.get_item(key)?.ok_or_else(|| PyValueError::new_err(format!("missing {key}")));
     Ok(match kind.as_str() {
+        "protractor_frame" => ToolEvent::ProtractorFrame { basis: field("basis")?.extract()?, near: field("near")?.extract()?, exact: field("exact")?.extract()? },
         "place_camera" => ToolEvent::Navigate(Navigation::Place { base: p3(&field("base")?)?, look: opt(d,"look")?.map(|v| p3(&v)).transpose()? }),
         "look_delta" => ToolEvent::Navigate(Navigation::Look(field("delta")?.extract()?)),
         "camera_tick" => ToolEvent::Navigate(Navigation::Tick { dt: field("dt")?.extract()?, mods: mods()? }),
@@ -414,6 +415,19 @@ impl ToolMachine {
         new_tool(kind)
             .map(|tool| ToolMachine { tool, serial: 0 })
             .ok_or_else(|| PyValueError::new_err(format!("no Rust tool {kind:?}")))
+    }
+
+    #[staticmethod]
+    fn protractor_angle(basis: [P3; 2], arm: P3, other: P3) -> Option<f64> {
+        super::protractor::angle(basis, arm, other)
+    }
+    #[staticmethod]
+    fn protractor_display(degrees: f64, near: bool) -> f64 {
+        super::protractor::display(degrees, near)
+    }
+    #[staticmethod]
+    fn protractor_direction(basis: [P3; 2], arm: P3, degrees: f64) -> P3 {
+        super::protractor::direction(basis, arm, degrees)
     }
 
     #[staticmethod]

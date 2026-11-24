@@ -59,3 +59,15 @@ class ProtocolTools:
                   default=default, back=back, plane=plane)
         self._viewport.update()
         return {**out, "step": out["step"].to_json() if out["step"] else None}
+
+    def _guide_command(self, name, **args):
+        from core.protocol.commands import run
+        out = run(self._viewport.history, name, **args)
+        self._viewport.update()
+        return {**out, "step": out["step"].to_json() if out["step"] else None}
+
+    def _tool_add_guide(self, point, direction=None, origin=None):
+        return self._guide_command("add_guide", point=point, direction=direction, origin=origin)
+
+    def _tool_change_guide(self, index, direction):
+        return self._guide_command("change_guide", index=index, direction=direction)

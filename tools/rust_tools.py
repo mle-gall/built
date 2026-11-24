@@ -71,6 +71,10 @@ class _Host:
             answer = run(self.vp.history, name, **args,
                          _picked_placement=getattr(self.tool, "_container", None))
             return answer["ok"], self.revision(), 0, answer.get("error")
+        if name == "add_guide":
+            for key in ("point", "origin"):
+                if args.get(key) is not None:
+                    args[key] = self._model(args[key])
         for key in ("a", "b", "eye", "anchor", "center"):
             if args.get(key) is not None:
                 args[key] = self._model(args[key])
@@ -1768,3 +1772,26 @@ from core.paint_ops import _face_plane, _surface_commands, _texture_commands
 
 class PaintTool(PaintHost, RustTool):
     kind = "paint"
+
+from tools.protractor_host import ProtractorHost, ProtractorBase, DISC_PX, TICK_DEG
+
+
+class ProtractorTool(ProtractorHost, RustTool):
+    kind = "protractor"
+    _READ_DURING = ("start_point", "ref_point", "guides")
+
+    def __init__(self):
+        RustTool.__init__(self)
+        ProtractorBase.__init__(self)
+
+    def _set_arm(self, key, p):
+        if self._during is None:
+            self._machine.set(key, _tuple(p))
+
+    start_point = property(lambda self: self._point("start_point"),
+                           lambda self, p: self._set_arm("start_point", p))
+    ref_point = property(lambda self: self._point("ref_point"),
+                         lambda self, p: self._set_arm("ref_point", p))
+    _guides = property(lambda self: self._state("guides"),
+                       lambda self, g: self._machine.set("guides", bool(g)))
+    _last = property(lambda self: True if self._state("retype") else None)

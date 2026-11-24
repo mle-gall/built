@@ -420,6 +420,40 @@ def add_arc(history, points, center=None, trim=None):
             history.execute(cmd)
     return _answer(history, before)
 
+def add_guide(history, point, direction=None, origin=None):
+    """Construction line or point, in open mesh coordinates."""
+    from ingetrazo_core import Vec3
+    from core.coordinate_frame import point_in_frame, ZERO
+    from core.guide import Guide
+    from core.history import AddGuideCommand
+    store = store_of(history.scene.mesh)
+    frame = store.frame_origin if store is not None else ZERO
+    guide = Guide(point_in_frame(point, frame), Vec3(*direction) if direction is not None else None,
+                  point_in_frame(origin, frame) if origin is not None else None)
+    before = history.revision
+    if guide.is_finite() and (direction is None or guide.is_line):
+        history.execute(AddGuideCommand(guide))
+    return _answer(history, before)
+
+
+def change_guide(history, index, direction):
+    """Re-aim an existing construction line, preserving its identity."""
+    from core.guide import Guide
+    from core.history import ChangeGuideCommand
+    from ingetrazo_core import Vec3
+    import math
+    if type(index) is not int or not 0 <= index < len(history.scene.guides):
+        raise ValueError("unknown guide index")
+    guide = history.scene.guides[index]
+    if not isinstance(guide, Guide) or not guide.is_line:
+        raise ValueError("this guide is not a line")
+    if len(direction) != 3 or not all(map(math.isfinite, direction)) or Vec3(*direction).length() < 1e-12:
+        raise ValueError("guide direction must be a finite nonzero vector")
+    before = history.revision
+    history.execute(ChangeGuideCommand(guide, Vec3(*direction)))
+    return _answer(history, before)
+
+
 def add_guide_circle(history, center, normal, radius):
     """An analytic guide circle (the Circle tool with Ctrl): ``center``
     (open mesh coordinates), the unit ``normal`` of its plane, ``radius``.
@@ -1336,7 +1370,7 @@ COMMANDS = {"set_location": set_location, "set_model_units": set_model_units, "s
             "create_delivery": create_delivery, "edit_delivery": edit_delivery,
             "delete_delivery": delete_delivery, "run_delivery": run_delivery, "follow_me": follow_me, "intersect_faces": intersect_faces,
             "add_edge": add_edge, "add_edges": add_edges, "add_face": add_face,
-            "add_guide_circle": add_guide_circle, "add_arc": add_arc,
+            "add_guide": add_guide, "change_guide": change_guide, "add_guide_circle": add_guide_circle, "add_arc": add_arc,
             "move_placements": move_placements, "copy_placements": copy_placements,
             "move_selection": move_selection, "scale_selection": scale_selection,
             "rotate_selection": rotate_selection, "offset_outline": offset_outline, "paint_material": paint_material,

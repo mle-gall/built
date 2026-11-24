@@ -6,6 +6,7 @@
 //! `py.rs` is the only PyO3 face, and `tests.rs` drives the machines
 //! against a fake host.
 
+mod protractor;
 mod paint;
 mod offset_tool;
 mod walkthrough;
@@ -120,6 +121,7 @@ pub enum ToolEvent {
     AbsoluteValue(Value),
     ScaleFactors(P3),
     Navigate(walkthrough::Navigation),
+    ProtractorFrame { basis: [P3; 2], near: bool, exact: bool },
     /// A segment or side count typed as `Ns` (Circle, Polygon, Arc).
     Segments(i64),
     /// A radius typed as `2r` (the 2-point Arc).
@@ -338,6 +340,7 @@ pub(crate) fn json_p3(v: &serde_json::Value) -> Option<P3> {
 
 pub fn new_tool(kind: &str) -> Option<Box<dyn Tool>> {
     match kind {
+        "protractor" => Some(Box::new(protractor::Protractor::default())),
         "paint" => Some(Box::new(paint::Paint)),
         "offset" => Some(Box::new(offset_tool::Offset::default())),
         "position_camera" | "look_around" | "walk" | "first_person" => Some(Box::new(walkthrough::Walkthrough::new(kind))),

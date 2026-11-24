@@ -2945,7 +2945,7 @@ Native denotes routed, not exhaustive parity acceptance.
 | dimension | DimensionTool | native | rubber_band_lines |
 | eraser | EraserTool | native | pick_dimension, pick_edge, pick_geopath, pick_guide, rubber_band_lines |
 | tape | TapeMeasureTool | native | _world_to_pixel, pick_axis, pick_edge, pick_edge_any, pick_guide, rubber_band_lines |
-| protractor | ProtractorTool | native | rubber_band_lines |
+| protractor | ProtractorTool | native | Rust state machine, rubber_band_lines |
 | north | NorthTool | native | rubber_band_lines |
 | text | TextTool | native | pick_edge, pick_face_any, rubber_band_lines |
 | geopath | GeoPathTool | native | _world_to_pixel, rubber_band_lines |

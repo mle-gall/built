@@ -310,3 +310,12 @@ BUILTIN_TOOLS.append(dict(
         "default": {"type": "boolean"}, "back": {"type": "boolean"},
         "plane": {"type": "array", "description": "Source texture plane [normal, signed offset]."}
     }, oneOf=[{"required": ["placement"]}, {"required": ["faces"]}])))
+
+for _name, _desc, _fields, _required in (
+    ("add_guide", "Create a construction line or guide point.", {"point": _VECTOR, "direction": _VECTOR,
+                                                                   "origin": _VECTOR}, ["point"]),
+    ("change_guide", "Re-aim an existing construction line.", {"index": {"type": "integer", "minimum": 0},
+                                                               "direction": _VECTOR}, ["index", "direction"]),
+):
+    BUILTIN_TOOLS.append(dict(name=_name, description=_desc, mutates=True,
+                              inputSchema=dict(type="object", properties=_fields, required=_required)))
