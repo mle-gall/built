@@ -109,6 +109,7 @@ mod tools;
 mod guide_vertices;
 mod pick;
 mod pick_index;
+mod document_snap;
 mod annotation_geometry;
 mod view_culling;
 mod units;
@@ -434,6 +435,7 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pick_index::edges::edge_cursor_point, m)?)?;
     m.add_function(wrap_pyfunction!(pick_index::hits::drop_past_cut, m)?)?;
     annotation_geometry::register(m)?;
+    document_snap::register(m)?;
     view_culling::register(m)?;
     m.add_function(wrap_pyfunction!(pick_index::document_pick_index, m)?)?;
     m.add_function(wrap_pyfunction!(pick::ray_triangles, m)?)?;
