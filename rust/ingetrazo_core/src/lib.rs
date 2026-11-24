@@ -77,6 +77,7 @@ mod snap_engine;
 mod tools;
 mod pick;
 mod units;
+mod value_field;
 mod inference_state;
 mod snap_curve;
 mod snap_planes;
@@ -217,6 +218,10 @@ fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(units::py_plain_marks, m)?)?;
     m.add_function(wrap_pyfunction!(units::py_parse, m)?)?;
     m.add_function(wrap_pyfunction!(units::py_parse_value_buffer, m)?)?;
+    m.add_function(wrap_pyfunction!(value_field::value_key, m)?)?;
+    m.add_function(wrap_pyfunction!(value_field::value_enter, m)?)?;
+    m.add_function(wrap_pyfunction!(value_field::py_zoom_enter, m)?)?;
+    m.add_function(wrap_pyfunction!(value_field::value_claims, m)?)?;
     m.add_function(wrap_pyfunction!(pick::project_px, m)?)?;
     m.add_function(wrap_pyfunction!(pick::seg_rect_mask, m)?)?;
     m.add_function(wrap_pyfunction!(pick::box_mesh_arrays, m)?)?;

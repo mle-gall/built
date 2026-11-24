@@ -275,9 +275,9 @@ class NativeTools(MeshToolAccess):
 
     def key(self, event):
         if self.mode == 'mesh':
-            from views.document_interaction import DocumentInteraction
+            from views.document_interaction import _value_key
             self._value_buffer = self.value_buffer
-            if DocumentInteraction._handle_value_key(self, event):
+            if _value_key(self, event):
                 self.value_buffer = self._value_buffer
                 self.start_point = getattr(self.tool, 'start_point', None)
                 self.view.overlay_primitives = []
@@ -286,10 +286,6 @@ class NativeTools(MeshToolAccess):
                 return True
             return self.tool.on_key(self, event.key(), event.modifiers())
         return False
-
-    def _current_token_tail(self):
-        from views.document_interaction import DocumentInteraction
-        return DocumentInteraction._current_token_tail(self)
 
     def _array_pending(self):
         return getattr(self.tool, 'array_pending', lambda vp: False)(self)
