@@ -199,3 +199,24 @@ def test_bootstrap_module_can_load_before_the_native_engine_is_on_sys_path():
     root = Path(__file__).resolve().parents[1]
     program = "import sys; from app_shell import host; assert 'core' not in sys.modules"
     subprocess.run([sys.executable, "-S", "-c", program], cwd=root, check=True)
+
+
+def test_batched_runner_propagates_a_session_failure_and_finishes_other_batches(tmp_path):
+    import subprocess
+
+    (tmp_path / "test_first.py").write_text("def test_ok(): pass\n")
+    (tmp_path / "test_second.py").write_text("def test_ok(): pass\n")
+    (tmp_path / "conftest.py").write_text(textwrap.dedent("""
+        import pytest
+        from pathlib import Path
+        def pytest_sessionfinish(session, exitstatus):
+            if any(str(arg).endswith("test_first.py") for arg in session.config.args):
+                pytest.exit("synthetic profile guard", returncode=1)
+            Path(__file__).with_name("second-finished").touch()
+    """))
+    runner = Path(__file__).resolve().parents[1] / "scripts" / "pytest_batches.py"
+    result = subprocess.run([sys.executable, str(runner), "--batches", "2", str(tmp_path)],
+                            cwd=tmp_path, capture_output=True, text=True)
+    assert result.returncode == 1
+    assert "synthetic profile guard" in result.stderr
+    assert (tmp_path / "second-finished").is_file()
