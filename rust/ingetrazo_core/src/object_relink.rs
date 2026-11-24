@@ -271,7 +271,12 @@ fn mark_edges(mesh: &Obj<'_>) -> PyResult<()> {
     mesh.setattr(serial, mesh.getattr(serial)?.add(1)?)
 }
 #[pyfunction]
-pub(crate) fn link_edge<'py>(mesh: &Obj<'py>, v0: &Obj<'py>, v1: &Obj<'py>) -> PyResult<Obj<'py>> {
+pub(crate) fn link_edge<'py>(
+    mesh: &Obj<'py>,
+    v0: &Obj<'py>,
+    v1: &Obj<'py>,
+    factory: &Obj<'py>,
+) -> PyResult<Obj<'py>> {
     let py = mesh.py();
     mark_edges(mesh)?;
     let e = mesh.call_method1(pyo3::intern!(py, "find_edge"), (v0, v1))?;
@@ -283,10 +288,7 @@ pub(crate) fn link_edge<'py>(mesh: &Obj<'py>, v0: &Obj<'py>, v1: &Obj<'py>) -> P
         .call_method0(pyo3::intern!(py, "__next__"))?;
     let kw = PyDict::new(py);
     kw.set_item(pyo3::intern!(py, "key"), key)?;
-    let e = py
-        .import(pyo3::intern!(py, "core.mesh"))?
-        .getattr(pyo3::intern!(py, "Edge"))?
-        .call((v0, v1), Some(&kw))?;
+    let e = factory.call((v0, v1), Some(&kw))?;
     for v in [v0, v1] {
         v.getattr(pyo3::intern!(py, "edges"))?
             .call_method1(pyo3::intern!(py, "add"), (&e,))?;

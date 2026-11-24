@@ -431,7 +431,7 @@ class Mesh:
     def vertex(self, position: QVector3D) -> Vertex:
         """Get-or-create the shared vertex at ``position`` (welds coincident
         points to one object)."""
-        return object_replay.vertex(self, position, _key(position), _WELD_TOL2, True)
+        return object_replay.vertex(self, position, _key(position), _WELD_TOL2, True, Vertex)
 
     def vertex_at(self, position: QVector3D) -> Optional[Vertex]:
         """The existing vertex at ``position``, or ``None``."""
@@ -500,7 +500,7 @@ class Mesh:
         _CURVE_COUNTER = object_drawing.resplit_curves(self.edges, _CURVE_COUNTER)
 
     def _link_edge(self, v0: Vertex, v1: Vertex) -> Edge:
-        return object_replay.link_edge(self, v0, v1)
+        return object_replay.link_edge(self, v0, v1, Edge)
 
     def add_edge(self, a: QVector3D, b: QVector3D) -> Edge:
         """Add a free edge between two positions (welding endpoints, deduping
