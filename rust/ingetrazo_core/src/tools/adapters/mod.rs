@@ -66,6 +66,7 @@ mod rotate_tool_api;
 mod rotated_rectangle_tool_api;
 mod scale;
 mod select_tool_api;
+mod solid_tool_api;
 mod text_tool_api;
 mod texture;
 mod texture_preview;
@@ -178,6 +179,7 @@ fn registration(module: &str, name: &str) -> Option<(&'static [Method], &'static
         ("tools.annotation_host", "TextTool") => {
             (text_tool_api::METHODS, stringify!(text_tool_api))
         }
+        ("tools.solid_host", "SolidTool") => (solid_tool_api::METHODS, stringify!(solid_tool_api)),
         ("tools.pushpull", "PushPullTool") => (pushpull::METHODS, stringify!(pushpull)),
         _ => return None,
     })
