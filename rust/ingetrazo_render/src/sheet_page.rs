@@ -164,6 +164,8 @@ pub struct Page {
     /// The clicks a snapping tool has gathered, and the snap under the cursor.
     pub pick: Option<crate::sheet_tools::Pick>,
     hot: Option<crate::sheet_tools::Pt>,
+    /// How far apart a baseline run's rows sit (the document's dimension style).
+    pub run_step: f64,
 }
 
 fn snap(value: f64, targets: &[f64]) -> Option<f64> {
@@ -216,7 +218,7 @@ impl Page {
         if pick.tool != self.tool {
             *pick = crate::sheet_tools::Pick { tool: self.tool.clone(), ..Default::default() };
         }
-        let offsetting = pick.tool == "cota" && pick.pts.len() == 2;
+        let offsetting = (pick.tool == "cota" || pick.sep.is_none()) && pick.pts.len() == 2;
         self.hot = if offsetting { None } else { snap_at(&self.snaps, mm, thr) };
         self.cursor = "crosshair";
         if kind == "move" {
@@ -243,8 +245,63 @@ impl Page {
                 self.pick = None;
                 self.hot = None;
             }
-            _ => {}
+            (_, n) => {
+                // A chain or a baseline. A click back on the last point ends it.
+                let near = 4.0 / f64::from(self.zoom.max(1e-6));
+                if n > 0 && (pt.p[0] - pick.pts[n - 1].p[0]).abs() + (pt.p[1] - pick.pts[n - 1].p[1]).abs() < near {
+                    self.finish_run(out);
+                    return;
+                }
+                if n < 2 {
+                    if n == 1 && mods & 4 != 0 {
+                        pick.axis = crate::sheet_tools::axis_out(pick.pts[0].p, pt.p, pt.p, "");
+                    }
+                    pick.pts.push(pt);
+                    return;
+                }
+                let one = |a: &Pt, b: &Pt, sep: f64, axis: &str| {
+                    let body = serde_json::json!({"a": a.json(), "b": b.json(), "sep": sep, "axis": axis});
+                    format!("sheets:cota\u{1f}{body}")
+                };
+                let Some(run_sep) = pick.sep else {
+                    let (a, b) = (pick.pts[0].p, pick.pts[1].p);
+                    if mods & 4 != 0 {
+                        pick.axis = crate::sheet_tools::axis_out(a, b, mm, &pick.axis);
+                    }
+                    let sep = sep_of(a, b, &pick.axis, mm);
+                    pick.sep = Some(sep);
+                    pick.placed = 1;
+                    out.push(one(&pick.pts[0], &pick.pts[1], sep, &pick.axis));
+                    return;
+                };
+                let base = pick.tool == "cota_base";
+                let prev = if base { pick.pts[0].clone() } else { pick.pts[n - 1].clone() };
+                let sep = if base {
+                    let step = self.run_step * pick.placed as f64;
+                    run_sep + if run_sep >= 0.0 { step } else { -step }
+                } else {
+                    crate::sheet_tools::chain_sep_for(pick.pts[0].p, pick.pts[1].p, run_sep, &pick.axis, prev.p, pt.p)
+                };
+                out.push(one(&prev, &pt, sep, &pick.axis));
+                pick.pts.push(pt);
+                pick.placed += 1;
+            }
         }
+    }
+
+    /// End a chain or baseline run: a chain of two or more stacks its total
+    /// (`sheets:cota_total`: first and last point, the run's line).
+    fn finish_run(&mut self, out: &mut Vec<String>) {
+        if let Some(pick) = self.pick.take() {
+            if pick.tool == "cota_cadena" && pick.placed >= 2 {
+                if let (Some(sep), Some(first), Some(last)) = (pick.sep, pick.pts.first(), pick.pts.last()) {
+                    let body = serde_json::json!({"a": first.json(), "b": last.json(), "sep": sep, "axis": pick.axis,
+                                                  "p1": pick.pts[0].p, "p2": pick.pts[1].p});
+                    out.push(format!("sheets:cota_total\u{1f}{body}"));
+                }
+            }
+        }
+        self.hot = None;
     }
 
     /// The tool's clicks so far and the snap dot, over the page.
@@ -253,12 +310,29 @@ impl Page {
         let stroke = Stroke::new(1.0_f32, ACCENT);
         if let (Some(pick), Some(cur)) = (&self.pick, self.pointer_mm) {
             let scr = |q: [f64; 2]| self.to_screen(q[0], q[1]);
+            let run = pick.tool != "cota";
             match (pick.tool.as_str(), pick.pts.len()) {
-                ("cota", 1) => {
+                (_, n) if run && n >= 2 && pick.sep.is_some() => {
+                    let base = pick.tool == "cota_base";
+                    let prev = if base { pick.pts[0].p } else { pick.pts[n - 1].p };
+                    let to = self.hot.as_ref().map_or(cur, |h| h.p);
+                    let run_sep = pick.sep.unwrap_or(0.0);
+                    let sep = if base {
+                        let step = self.run_step * pick.placed as f64;
+                        run_sep + if run_sep >= 0.0 { step } else { -step }
+                    } else {
+                        crate::sheet_tools::chain_sep_for(pick.pts[0].p, pick.pts[1].p, run_sep, &pick.axis, prev, to)
+                    };
+                    let (a2, b2) = line_ends(prev, to, sep, &pick.axis);
+                    for (p, q) in [(prev, a2), (to, b2), (a2, b2)] {
+                        painter.extend(egui::Shape::dashed_line(&[scr(p), scr(q)], stroke, 4.0, 3.0));
+                    }
+                }
+                (_, 1) => {
                     let to = self.hot.as_ref().map_or(cur, |h| h.p);
                     painter.extend(egui::Shape::dashed_line(&[scr(pick.pts[0].p), scr(to)], stroke, 4.0, 3.0));
                 }
-                ("cota", 2) => {
+                (_, 2) => {
                     let (a, b) = (pick.pts[0].p, pick.pts[1].p);
                     let (a2, b2) = line_ends(a, b, sep_of(a, b, &pick.axis, cur), &pick.axis);
                     for (p, q) in [(a, a2), (b, b2), (a2, b2)] {
@@ -398,6 +472,12 @@ impl Page {
             (_, "zoom") | (_, "zoom_ventana") => "Click to zoom in, ⌥-click to zoom out.",
             (_, "vista") => "Drag a rectangle to place a model view.",
             (_, t) if PLACE_TOOLS.contains(&t) => "Click to place it, or drag its box.",
+            (_, "cota_cadena") | (_, "cota_base") => match self.pick.as_ref().map_or(0, |p| p.pts.len()) {
+                0 => "Click the first point of the run: it snaps to the drawing.",
+                1 => "Click the second point; ⇧ keeps the run level or plumb.",
+                2 if self.pick.as_ref().is_some_and(|p| p.sep.is_none()) => "Click where the dimension line goes.",
+                _ => "Click the next point. Click the last one again, or Esc, to end the run.",
+            },
             (_, "cota") => match self.pick.as_ref().map_or(0, |p| p.pts.len()) {
                 0 => "Click the first point: it snaps to the drawing's corners, middles and edges.",
                 1 => "Click the second point; ⇧ keeps the dimension level or plumb.",
@@ -708,6 +788,10 @@ impl Page {
             "ArrowUp" => (0.0, -step),
             "ArrowDown" => (0.0, step),
             "Escape" => {
+                if self.pick.as_ref().is_some_and(|p| p.placed > 0) {
+                    self.finish_run(out);
+                    return true;
+                }
                 if self.pick.take().is_some() {
                     self.hot = None;
                     return true;
@@ -1151,6 +1235,23 @@ mod tests {
         assert!(p.pick.is_none());
         p.pointer("press", at(&p, 10.0, 10.0), 1, 0, &mut out);
         assert!(p.key("Escape", 0, &mut out) && p.pick.is_none());
+    }
+
+    #[test]
+    fn a_chain_places_on_the_offset_click_then_one_per_point_and_ends_with_its_total() {
+        let mut p = page();
+        p.tool = "cota_cadena".into();
+        p.run_step = 8.0;
+        let mut out = vec![];
+        for (x, y) in [(50.0, 260.0), (80.0, 260.0), (65.0, 250.0), (120.0, 260.0)] {
+            p.pointer("press", at(&p, x, y), 1, 0, &mut out);
+        }
+        assert_eq!(out.len(), 2, "{out:?}");
+        let second: serde_json::Value = serde_json::from_str(out[1].strip_prefix("sheets:cota\u{1f}").unwrap()).unwrap();
+        assert_eq!(second["a"]["p"], serde_json::json!([80.0, 260.0]));
+        assert!((second["sep"].as_f64().unwrap() - -10.0).abs() < 1e-9, "on the chain's line");
+        p.pointer("press", at(&p, 120.0, 260.0), 1, 0, &mut out);
+        assert!(out[2].starts_with("sheets:cota_total\u{1f}") && p.pick.is_none());
     }
 
     #[test]

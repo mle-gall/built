@@ -47,9 +47,10 @@ RAIL = [["select", "pan", "zoom", "zoom_ventana", "estilo"],
 #: The tools the native page runs (ui/page.rs); the others open the
 #: classic sheet editor with that tool.
 NATIVE_TOOLS = {"select", "pan", "zoom", "zoom_ventana", "vista", "texto", "llamada", "cajetin", "escala",
-                "norte", "leyenda", "perfil", "linea", "flecha", "terreno", "rect", "elipse", "cota"}
+                "norte", "leyenda", "perfil", "linea", "flecha", "terreno", "rect", "elipse", "cota",
+                "cota_cadena", "cota_base"}
 #: The tools that snap to the frames' model (ui/sheet_tools.rs PICK_TOOLS).
-SNAP_TOOLS = {"cota"}
+SNAP_TOOLS = {"cota", "cota_cadena", "cota_base"}
 #: Qt cursors for the page's cursor names.
 _CURSORS = {"": Qt.ArrowCursor, "move": Qt.SizeAllCursor, "grab": Qt.OpenHandCursor,
             "grabbing": Qt.ClosedHandCursor, "crosshair": Qt.CrossCursor,
@@ -499,8 +500,9 @@ class Workspace:
             self._edit_after = item._doc_key
         self._tool("select")
 
-    def _cota(self, body) -> None:
-        """A linear dimension the page measured: the record (sheets::create),
+    def _cota(self, body, total: bool = False) -> None:
+        """A linear dimension the page measured (one of a chain's or a
+        baseline's too, or a chain's ``total``): the record (sheets::create),
         bound to the model when both ends caught the same frame, one step of
         the history. The tool stays armed for the next."""
         import ingetrazo_core as NATIVE
@@ -509,8 +511,12 @@ class Workspace:
         comp = self.composer.comp
         scene = self.composer._scene()
         a, b = body["a"], body["b"]
-        item = NATIVE.sheet_new_cota(comp, tuple(a["p"]), tuple(b["p"]), float(body.get("sep", 0.0)),
-                                     body.get("axis", ""), scene)
+        if total:
+            item = NATIVE.sheet_new_chain_total(comp, tuple(a["p"]), tuple(b["p"]), float(body["sep"]),
+                                                body.get("axis", ""), tuple(body["p1"]), tuple(body["p2"]), scene)
+        else:
+            item = NATIVE.sheet_new_cota(comp, tuple(a["p"]), tuple(b["p"]), float(body.get("sep", 0.0)),
+                                         body.get("axis", ""), scene)
         frame = self._models().get(a.get("frame"))
         if frame is not None and a.get("frame") == b.get("frame") and a.get("world") and b.get("world"):
             wgpu_sheet_frames.anchor(item, frame, scene, [("a_world", a), ("b_world", b)])
@@ -590,6 +596,12 @@ class Workspace:
         self._send_contents(renderer)
         if self.composer.tool_mode in SNAP_TOOLS and not self._more:
             self._send_snaps(renderer)
+            style = getattr(self.composer._scene(), "dimension_style", None) or {}
+            try:
+                step = float(style.get("base_step_mm", 8.0))
+            except (TypeError, ValueError):
+                step = 8.0
+            self._once("run_step", step if step > 0.1 else 8.0, renderer.page_set_run_step)
         self._send(renderer, view)
 
     def _once(self, key, value, send) -> None:
@@ -728,9 +740,9 @@ class Workspace:
                             if int(k) in models])
         elif verb == "font":
             self._font(self._models().get(int(rest)))
-        elif verb == "cota":
+        elif verb in ("cota", "cota_total"):
             import json
-            self._cota(json.loads(rest))
+            self._cota(json.loads(rest), total=verb == "cota_total")
         elif verb == "refresh":
             model = self._models().get(int(rest))
             if model is not None:

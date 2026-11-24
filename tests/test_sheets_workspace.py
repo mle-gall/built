@@ -583,6 +583,21 @@ def test_a_dimension_measured_on_the_page_is_bound_to_the_model(host):
     assert len(comp.comp.cotas) == before
 
 
+def test_a_chain_s_total_stacks_one_row_beyond_its_line(host):
+    ws = _sheets(host)
+    comp = ws.composer
+    _run_actions(host, "sheets:tool\x1fcota_cadena")
+    free = lambda x, y: {"p": [x, y], "world": None, "frame": None, "segment": None}  # noqa: E731
+    for a, b in (((30, 200), (60, 200)), ((60, 200), (90, 200))):
+        _run_actions(host, "sheets:cota\x1f" + json.dumps({"a": free(*a), "b": free(*b), "sep": -5.0, "axis": "h"}))
+    _run_actions(host, "sheets:cota_total\x1f" + json.dumps({"a": free(30, 200), "b": free(90, 200), "sep": -5.0,
+                                                             "axis": "h", "p1": [30, 200], "p2": [60, 200]}))
+    total = comp.comp.cotas[-1]
+    assert (total.x_mm, total.dx_mm, total.axis) == (30, 60, "h")
+    assert total.sep_mm == pytest.approx(-5.0 - (total.text_mm * 2.0 + 2.5))
+    assert comp.tool_mode == "cota_cadena"
+
+
 def test_tools_not_native_yet_open_the_classic_editor(host, monkeypatch):
     ws = _sheets(host)
     opened = []

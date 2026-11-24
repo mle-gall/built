@@ -2126,6 +2126,10 @@ impl Renderer {
         };
         if let Some(ui) = self.ui.as_mut() { ui.page.snaps.insert(key, s); }
     }
+    /// How far apart a baseline run's rows sit (the document's dimension style).
+    fn page_set_run_step(&mut self, mm: f64) {
+        if let Some(ui) = self.ui.as_mut() { ui.page.run_step = mm; }
+    }
     fn page_frame_forget(&mut self, key: u64) {
         if let Some(ui) = self.ui.as_mut() { ui.page.forget_content(key); }
     }

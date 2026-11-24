@@ -213,3 +213,39 @@ pub fn sheet_new_cota<'py>(py: Python<'py>, comp: &Bound<'py, PyAny>, a: (f64, f
     item.setattr("z", super::display::sheet_next_z(comp)?)?;
     Ok(item)
 }
+
+/// A chain's total (`place_chain_total`): a dimension from its first point
+/// ``a`` to its last ``b``, stacked one row (a text height and clearances)
+/// beyond the chain's line, which ran ``sep`` off its first two points
+/// ``p1`` → ``p2``.
+#[pyfunction]
+#[pyo3(signature = (comp, a, b, sep, axis, p1, p2, scene=None))]
+#[allow(clippy::too_many_arguments)]
+pub fn sheet_new_chain_total<'py>(py: Python<'py>, comp: &Bound<'py, PyAny>, a: (f64, f64), b: (f64, f64), sep: f64,
+                                  axis: &str, p1: (f64, f64), p2: (f64, f64), scene: Option<Bound<'py, PyAny>>)
+    -> PyResult<Bound<'py, PyAny>> {
+    let item = sheet_new_cota(py, comp, a, b, 0.0, axis, scene)?;
+    let text_mm: f64 = item.getattr("text_mm")?.extract()?;
+    let step = text_mm * 2.0 + 2.5;
+    let out = if sep >= 0.0 { step } else { -step };
+    let total = match axis {
+        "h" => (p1.1 + sep - a.1) + out,
+        "v" => (p1.0 + sep - a.0) + out,
+        _ => {
+            let (dx, dy) = (p2.0 - p1.0, p2.1 - p1.1);
+            let l = dx.hypot(dy);
+            let (nx, ny) = if l > 1e-9 { (-dy / l, dx / l) } else { (0.0, -1.0) };
+            let line = (p1.0 + nx * sep, p1.1 + ny * sep);
+            let (tx, ty) = (b.0 - a.0, b.1 - a.1);
+            let length = tx.hypot(ty);
+            if length > 1e-9 {
+                let (tnx, tny) = (-ty / length, tx / length);
+                (line.0 - a.0) * tnx + (line.1 - a.1) * tny + out
+            } else {
+                sep + out
+            }
+        }
+    };
+    item.setattr("sep_mm", total)?;
+    Ok(item)
+}

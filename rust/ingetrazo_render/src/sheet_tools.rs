@@ -118,10 +118,62 @@ pub struct Pick {
     pub pts: Vec<Pt>,
     /// A dimension forced onto a row ("h") or a column ("v").
     pub axis: String,
+    /// A run's (chain, baseline) dimension line offset, once placed.
+    pub sep: Option<f64>,
+    /// The dimensions a run has placed.
+    pub placed: usize,
 }
 
 /// The tools that snap to the model and gather clicks on the page.
-pub const PICK_TOOLS: [&str; 1] = ["cota"];
+pub const PICK_TOOLS: [&str; 3] = ["cota", "cota_cadena", "cota_base"];
+
+/// ⇧ while a run's offset is chosen: as DIMLINEAR, the cursor pulled out
+/// above or below the two points measures horizontally, to a side
+/// vertically (`_run_axis`, `_straighten_at`).
+pub fn axis_out(a: [f64; 2], b: [f64; 2], at: [f64; 2], was: &str) -> String {
+    let (x0, x1) = (a[0].min(b[0]), a[0].max(b[0]));
+    let (y0, y1) = (a[1].min(b[1]), a[1].max(b[1]));
+    let out_x = (x0 - at[0]).max(at[0] - x1).max(0.0);
+    let out_y = (y0 - at[1]).max(at[1] - y1).max(0.0);
+    if out_y > out_x {
+        "h".into()
+    } else if out_x > out_y {
+        "v".into()
+    } else if !was.is_empty() {
+        was.into()
+    } else if (b[0] - a[0]).abs() >= (b[1] - a[1]).abs() {
+        "h".into()
+    } else {
+        "v".into()
+    }
+}
+
+/// The offset that puts dimension a→b's line ON a chain's line (the first
+/// dimension's, `sep` off p1→p2): the chain's offset for collinear points,
+/// for a jog the distance to that line along the new one's normal
+/// (`_chain_sep_for`).
+pub fn chain_sep_for(p1: [f64; 2], p2: [f64; 2], sep: f64, axis: &str, a: [f64; 2], b: [f64; 2]) -> f64 {
+    match axis {
+        "h" => return p1[1] + sep - a[1],
+        "v" => return p1[0] + sep - a[0],
+        _ => {}
+    }
+    let (d12x, d12y) = (p2[0] - p1[0], p2[1] - p1[1]);
+    let l12 = d12x.hypot(d12y);
+    let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+    let length = dx.hypot(dy);
+    if l12 < 1e-9 || length < 1e-9 {
+        return sep;
+    }
+    let (n12x, n12y) = (-d12y / l12, d12x / l12);
+    let (qx, qy) = (p1[0] + n12x * sep, p1[1] + n12y * sep);
+    let (nx, ny) = (-dy / length, dx / length);
+    let den = nx * d12y - ny * d12x;
+    if den.abs() < 1e-9 {
+        return sep;
+    }
+    ((qx - a[0]) * d12y - (qy - a[1]) * d12x) / den
+}
 
 #[cfg(test)]
 mod tests {
