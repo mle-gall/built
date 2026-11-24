@@ -207,7 +207,9 @@ fn add_patch(layer: &Obj<'_>, cx: f64, cy: f64, hw: f64, hh: f64) -> PyResult<()
         .call_method1("append", ((cx, cy, hw, hh),))?;
     Ok(())
 }
-pub(super) fn bbox(datum: &Obj<'_>, [x0, y0, x1, y1]: [f64; 4]) -> PyResult<(f64, f64, f64, f64)> {
+#[pyfunction(name = "terrain_geodetic_bounds")]
+pub(super) fn bbox(datum: &Obj<'_>, bounds: [f64; 4]) -> PyResult<(f64, f64, f64, f64)> {
+    let [x0, y0, x1, y1] = bounds;
     let (mut s, mut w, mut n, mut e) = (
         f64::INFINITY,
         f64::INFINITY,
@@ -484,6 +486,6 @@ fn default_cache_dir(py: Python<'_>) -> PyResult<Obj<'_>> {
     path_obj(py, &root.join("tiles"))
 }
 pub(super) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    functions!(m;deg2num,num2deg,tile_bbox,tiles_covering,tile_url,source_slug,custom_source,tile_init,tile_to_dict,tile_from_dict,set_rectangle,add_patch,patch_tiles,flat_tiles,visible_tiles,quad_local,capture_bounds,cap_detail,default_cache_dir);
+    functions!(m;deg2num,num2deg,tile_bbox,bbox,tiles_covering,tile_url,source_slug,custom_source,tile_init,tile_to_dict,tile_from_dict,set_rectangle,add_patch,patch_tiles,flat_tiles,visible_tiles,quad_local,capture_bounds,cap_detail,default_cache_dir);
     m.add_class::<TileCache>()
 }

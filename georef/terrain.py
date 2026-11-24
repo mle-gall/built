@@ -3,7 +3,9 @@
 """Native terrain sampling and display geometry."""
 from dataclasses import dataclass, field
 from functools import partialmethod
-from ingetrazo_core import build_mosaic, build_terrain, terrain_bounds, terrain_height
+from ingetrazo_core import (
+    build_mosaic, build_terrain, terrain_bounds, terrain_height, terrain_geodetic_bounds as _bbox_ll,
+)
 
 TILE_PX = 256
 
