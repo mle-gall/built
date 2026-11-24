@@ -939,7 +939,7 @@ impl PyMeshStore {
 
     /// Candidate rows for position-key lookup in mesh order. Python applies
     /// its exact decimal-rounding predicate only to this short list.
-    fn vertices_in_floor_cells(&self, near: std::collections::HashSet<[i64; 3]>)
+    pub(crate) fn vertices_in_floor_cells(&self, near: std::collections::HashSet<[i64; 3]>)
         -> Vec<(u128, [f64; 3])> {
         self.inner.live_slots(Kind::Vertex).into_iter().filter_map(|v| {
             let p = *self.inner.state.vpos.get(v as usize);

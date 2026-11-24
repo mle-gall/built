@@ -6,6 +6,7 @@ pub(crate) mod object_repair;
 pub(crate) mod push_queries;
 mod push_scans;
 mod snap_host;
+mod store_views;
 mod snap_surfaces;
 mod topology;
 use crate::{object_drawing, object_replay, snap, snap_engine, store};
@@ -18,6 +19,7 @@ pub(crate) fn register_kernel(m: &Bound<'_,PyModule>) -> PyResult<()> {
     push_queries::register(m)?;
     push_scans::register(m)?;
     snap_host::register(m)?;
+    store_views::register(m)?;
     snap_surfaces::register(m)?;
     topology::register(m)?;
     store::planar_api::register(m)?;
