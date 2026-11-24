@@ -11,6 +11,7 @@
 
 use glam::DVec3;
 use pyo3::prelude::*;
+use pyo3::types::PyDict;
 
 use crate::math::{xyz, Matrix4, Vec3};
 use crate::sheets::camera::Cam;
@@ -19,39 +20,97 @@ const MIN_DISTANCE: f64 = 0.005;
 const MIN_DISTANCE_FAR: f64 = 0.02;
 const MIN_PER_METRE: f64 = MIN_DISTANCE / 40.0;
 
-fn opt_f64(obj: &Bound<'_, PyAny>, name: &str) -> PyResult<Option<f64>> {
-    let v = obj.getattr(name)?;
-    if v.is_none() { Ok(None) } else { Ok(Some(v.extract()?)) }
-}
-
-/// The camera's fields as `Cam`.
+/// The camera's fields as `Cam`: from its `__dict__` when it has one
+/// (plain dictionary lookups), else by attribute.
 pub fn cam_of(obj: &Bound<'_, PyAny>, fitted: Option<(f64, f64)>) -> PyResult<Cam> {
-    let reach = obj.getattr("depth_reach")?;
+    let dict = obj.getattr("__dict__").ok().and_then(|d| d.cast_into::<PyDict>().ok());
+    let get = |name: &str| -> PyResult<Bound<'_, PyAny>> {
+        if let Some(d) = &dict {
+            if let Some(v) = d.get_item(name)? {
+                return Ok(v);
+            }
+        }
+        obj.getattr(name)
+    };
+    let opt = |name: &str| -> PyResult<Option<f64>> {
+        let v = get(name)?;
+        if v.is_none() { Ok(None) } else { Ok(Some(v.extract()?)) }
+    };
+    let reach = get("depth_reach")?;
     let depth_reach = if reach.is_none() {
         None
     } else {
         Some((xyz(&reach.get_item(0)?)?, reach.get_item(1)?.extract::<f64>()?))
     };
     Ok(Cam {
-        target: xyz(&obj.getattr("target")?)?,
-        distance: obj.getattr("distance")?.extract()?,
-        yaw: obj.getattr("yaw")?.extract()?,
-        pitch: obj.getattr("pitch")?.extract()?,
-        up: xyz(&obj.getattr("up")?)?,
-        fov_deg: obj.getattr("fov_deg")?.extract()?,
-        aspect: obj.getattr("aspect")?.extract()?,
-        znear: obj.getattr("znear")?.extract()?,
-        zfar: obj.getattr("zfar")?.extract()?,
-        perspective: obj.getattr("perspective")?.is_truthy()?,
-        two_point: obj.getattr("two_point")?.is_truthy()?,
-        shift_x: obj.getattr("shift_x")?.extract()?,
-        shift_y: obj.getattr("shift_y")?.extract()?,
-        roll_deg: obj.getattr("roll_deg")?.extract()?,
-        clip_near: opt_f64(obj, "clip_near")?,
-        clip_far: opt_f64(obj, "clip_far")?,
+        target: xyz(&get("target")?)?,
+        distance: get("distance")?.extract()?,
+        yaw: get("yaw")?.extract()?,
+        pitch: get("pitch")?.extract()?,
+        up: xyz(&get("up")?)?,
+        fov_deg: get("fov_deg")?.extract()?,
+        aspect: get("aspect")?.extract()?,
+        znear: get("znear")?.extract()?,
+        zfar: get("zfar")?.extract()?,
+        perspective: get("perspective")?.is_truthy()?,
+        two_point: get("two_point")?.is_truthy()?,
+        shift_x: get("shift_x")?.extract()?,
+        shift_y: get("shift_y")?.extract()?,
+        roll_deg: get("roll_deg")?.extract()?,
+        clip_near: opt("clip_near")?,
+        clip_far: opt("clip_far")?,
         depth_reach,
         fitted,
     })
+}
+
+/// The camera's fields as last read, kept in its `__dict__` as `_rs_cam`.
+/// `OrbitCamera.__setattr__` drops it on every write; the two vectors are
+/// checked again on use, since a `Vec3` can be changed in place.
+#[pyclass(module = "ingetrazo_core", name = "CameraState", frozen)]
+pub struct CameraState {
+    cam: Cam,
+}
+
+#[pymethods]
+impl CameraState {
+    /// Immutable: a copy is itself.
+    fn __copy__(slf: Py<Self>) -> Py<Self> {
+        slf
+    }
+    fn __deepcopy__(slf: Py<Self>, _memo: &Bound<'_, PyAny>) -> Py<Self> {
+        slf
+    }
+    /// Pickled as None: the camera rebuilds it on first use.
+    fn __reduce__<'py>(&self, py: Python<'py>) -> PyResult<(Bound<'py, PyAny>, ())> {
+        Ok((py.None().into_bound(py).get_type().into_any(), ()))
+    }
+}
+
+const CACHE: &str = "_rs_cam";
+
+/// The camera as `Cam`, from its cached state while that still holds.
+fn cam_cached(obj: &Bound<'_, PyAny>, fitted: Option<(f64, f64)>) -> PyResult<Cam> {
+    let dict = obj.getattr("__dict__")?.cast_into::<PyDict>()?;
+    if let Some(state) = dict.get_item(CACHE)? {
+        if let Ok(state) = state.cast::<CameraState>() {
+            let cam = &state.get().cam;
+            let target = dict.get_item("target")?;
+            let up = dict.get_item("up")?;
+            if let (Some(t), Some(u)) = (target, up) {
+                if xyz(&t)? == cam.target && xyz(&u)? == cam.up {
+                    let mut c = cam.clone();
+                    c.fitted = fitted;
+                    return Ok(c);
+                }
+            }
+        }
+    }
+    let cam = cam_of(obj, None)?;
+    dict.set_item(CACHE, Py::new(obj.py(), CameraState { cam: cam.clone() })?)?;
+    let mut c = cam;
+    c.fitted = fitted;
+    Ok(c)
 }
 
 fn vec(py: Python<'_>, v: DVec3) -> PyResult<Py<Vec3>> {
@@ -60,36 +119,36 @@ fn vec(py: Python<'_>, v: DVec3) -> PyResult<Py<Vec3>> {
 
 #[pyfunction]
 pub fn camera_eye(py: Python<'_>, camera: &Bound<'_, PyAny>) -> PyResult<Py<Vec3>> {
-    vec(py, cam_of(camera, None)?.eye())
+    vec(py, cam_cached(camera, None)?.eye())
 }
 
 #[pyfunction]
 pub fn camera_forward(py: Python<'_>, camera: &Bound<'_, PyAny>) -> PyResult<Py<Vec3>> {
-    vec(py, cam_of(camera, None)?.forward())
+    vec(py, cam_cached(camera, None)?.forward())
 }
 
 #[pyfunction]
 pub fn camera_up_vector(py: Python<'_>, camera: &Bound<'_, PyAny>) -> PyResult<Py<Vec3>> {
-    vec(py, cam_of(camera, None)?.up_vector())
+    vec(py, cam_cached(camera, None)?.up_vector())
 }
 
 #[pyfunction]
 pub fn camera_view_matrix(py: Python<'_>, camera: &Bound<'_, PyAny>) -> PyResult<Py<Matrix4>> {
-    Py::new(py, Matrix4::from(cam_of(camera, None)?.view_matrix()))
+    Py::new(py, Matrix4::from(cam_cached(camera, None)?.view_matrix()))
 }
 
 #[pyfunction]
 #[pyo3(signature = (camera, fitted=None))]
 pub fn camera_projection_matrix(py: Python<'_>, camera: &Bound<'_, PyAny>, fitted: Option<(f64, f64)>)
     -> PyResult<Py<Matrix4>> {
-    Py::new(py, Matrix4::from(cam_of(camera, fitted)?.projection_matrix()))
+    Py::new(py, Matrix4::from(cam_cached(camera, fitted)?.projection_matrix()))
 }
 
 /// `(near, far, parallel depth)`.
 #[pyfunction]
 #[pyo3(signature = (camera, fitted=None))]
 pub fn camera_depths(camera: &Bound<'_, PyAny>, fitted: Option<(f64, f64)>) -> PyResult<(f64, f64, f64)> {
-    let c = cam_of(camera, fitted)?;
+    let c = cam_cached(camera, fitted)?;
     Ok((c.near_plane(), c.far_plane(), c.parallel_depth()))
 }
 
@@ -106,6 +165,7 @@ pub fn camera_min_distance(at: &Bound<'_, PyAny>) -> PyResult<f64> {
 }
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<CameraState>()?;
     m.add_function(wrap_pyfunction!(camera_eye, m)?)?;
     m.add_function(wrap_pyfunction!(camera_forward, m)?)?;
     m.add_function(wrap_pyfunction!(camera_up_vector, m)?)?;

@@ -148,6 +148,9 @@ class OrbitCamera:
         if name in ("target", "up") and not isinstance(value, CameraPoint):
             value = CameraPoint(value)
         super().__setattr__(name, value)
+        # The Rust copy of the fields (``_rs_cam``, made on first use by
+        # ``rust/ingetrazo_core/src/camera_live.rs``) no longer holds.
+        self.__dict__.pop("_rs_cam", None)
 
     def __init__(self) -> None:
         self.target = QVector3D(0.0, 0.0, 0.0)
@@ -389,20 +392,21 @@ class OrbitCamera:
         or up. Parallel: sized from the distance so the framing matches the
         perspective, deep as :meth:`parallel_depth`. A depth range fitted to
         the view (:meth:`fit_depth_range`) replaces the automatic planes."""
-        return native.camera_projection_matrix(self, self._fitted_depth_range())
+        return native.camera_projection_matrix(
+            self, self._depth_range and self._fitted_depth_range())
 
     def parallel_depth(self) -> float:
         """How far in front of and behind the eye a parallel view reaches:
         a few times the reach of what the view holds (``depth_reach``), so
         the depth buffer is not split over ±10 km (#874); ``far_plane()``
         when the reach is unknown."""
-        return native.camera_depths(self, self._fitted_depth_range())[2]
+        return native.camera_depths(self, self._depth_range and self._fitted_depth_range())[2]
 
     def near_plane(self) -> float:
         """The near clipping distance in perspective: ``clip_near`` set by
         hand, else the fitted range, else ``znear`` stepping back with the
         camera at close range — never closer than :data:`NEAR_FLOOR`."""
-        return native.camera_depths(self, self._fitted_depth_range())[0]
+        return native.camera_depths(self, self._depth_range and self._fitted_depth_range())[0]
 
     def min_distance(self, at: QVector3D | None = None) -> float:
         """How close the camera may come to ``at`` (the target when not
@@ -415,7 +419,7 @@ class OrbitCamera:
         nearer than just past the near plane), else the fitted range, else
         ``zfar`` growing with the orbit distance when zoomed far out
         (#340)."""
-        return native.camera_depths(self, self._fitted_depth_range())[1]
+        return native.camera_depths(self, self._depth_range and self._fitted_depth_range())[1]
 
     # ---- Depth range fitted to the view ----------------------------------
     def picking_projection_matrix(self) -> QMatrix4x4:
