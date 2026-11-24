@@ -47,6 +47,7 @@ mod arc_base_api;
 mod arc_tool_api;
 mod center_arc_tool_api;
 mod dimension_tool_api;
+mod eraser_host_api;
 mod eye_host_api;
 mod fillet_host_api;
 mod first_person_host_api;
@@ -195,6 +196,9 @@ fn registration(module: &str, name: &str) -> Option<(&'static [Method], &'static
         ),
         ("tools.flip_host", "FlipHost") => (flip_host_api::METHODS, stringify!(flip_host_api)),
         ("tools.north_host", "NorthTool") => (north_tool_api::METHODS, stringify!(north_tool_api)),
+        ("tools.eraser_host", "EraserHost") => {
+            (eraser_host_api::METHODS, stringify!(eraser_host_api))
+        }
         ("tools.pushpull", "PushPullTool") => (pushpull::METHODS, stringify!(pushpull)),
         _ => return None,
     })
