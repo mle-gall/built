@@ -6469,7 +6469,7 @@ class ComposerWindow(QMainWindow):
         # version; stale frames get a badge and, when auto is on and the
         # window is visible, the raster ones re-render by themselves after a
         # short quiet period. Vector frames (seconds each) wait for Update.
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         self._load_default_cota_style()
         self._auto_render = str(QSettings().value(
             "composer/auto_render", "1")) != "0"
@@ -6529,7 +6529,7 @@ class ComposerWindow(QMainWindow):
         self._build_arrange_toolbar()
 
         panel = self._build_panel()
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         from PySide6.QtWidgets import QSplitter
         split = QSplitter(Qt.Horizontal)
         self._canvas_area = self._build_canvas_area(view)
@@ -7324,7 +7324,7 @@ class ComposerWindow(QMainWindow):
         self.items_group_check.setToolTip(tr(
             "Show the items in folders — views, annotations, dimensions, "
             "graphics — instead of one list in stacking order."))
-        from PySide6.QtCore import QSettings as _QS
+        from core.settings import settings as QSettings
         self.items_group_check.setChecked(
             str(_QS().value("composer/items_grouped", "0")) == "1")
         self.items_group_check.toggled.connect(self._on_items_grouping)
@@ -9904,13 +9904,13 @@ class ComposerWindow(QMainWindow):
 
     @staticmethod
     def default_template_name():
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         name = str(QSettings().value("composer/default_template", "") or "")
         return name or None
 
     @staticmethod
     def set_default_template(name) -> None:
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         QSettings().setValue("composer/default_template", name or "")
 
     def _on_templates_menu(self) -> None:
@@ -10410,7 +10410,7 @@ class ComposerWindow(QMainWindow):
         «nunca la he usado, ocupa espacio»). Every command also lives in
         the items' right-click menu and on the keys; right-click a toolbar
         to hide or show it, and the choice is remembered."""
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         from PySide6.QtGui import QAction
         from PySide6.QtWidgets import QToolBar
         tb = QToolBar(tr("Arrange"), self)
@@ -11321,7 +11321,7 @@ class ComposerWindow(QMainWindow):
         return id(frame) in self._stale
 
     def _set_auto_render(self, on: bool) -> None:
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         self._auto_render = bool(on)
         QSettings().setValue("composer/auto_render", "1" if on else "0")
         if on:
@@ -12065,13 +12065,13 @@ class ComposerWindow(QMainWindow):
 
     @staticmethod
     def default_cajetin_template_name():
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         name = str(QSettings().value("composer/default_cajetin", "") or "")
         return name or None
 
     @staticmethod
     def set_default_cajetin_template(name) -> None:
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         QSettings().setValue("composer/default_cajetin", name or "")
 
     def _on_cajetin_templates_menu(self) -> None:
@@ -12533,7 +12533,7 @@ class ComposerWindow(QMainWindow):
         """The last edited cota's look becomes the sheet's default for new
         cotas — and the app's, across sessions (QSettings)."""
         import json
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         self._last_cota_style = {k: getattr(model, k)
                                  for k in self._COTA_STYLE_FIELDS
                                  if hasattr(model, k)}
@@ -12545,7 +12545,7 @@ class ComposerWindow(QMainWindow):
 
     def _load_default_cota_style(self) -> None:
         import json
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
 
         def read(key):
             raw = QSettings().value(key, "")
@@ -12804,7 +12804,7 @@ class ComposerWindow(QMainWindow):
         menu.exec(self.items_list.viewport().mapToGlobal(pos))
 
     def _on_items_grouping(self, on: bool) -> None:
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         QSettings().setValue("composer/items_grouped", "1" if on else "0")
         self._refresh_items_list()
         self._sync_items_list(self._selected_item())
@@ -14330,7 +14330,7 @@ class ComposerWindow(QMainWindow):
         """The sheet as a PNG or JPG (Marco, 2026-09-08: «sería bueno poder
         guardar o exportar la lámina en jpg o png»): pick the file, then
         the resolution; the page comes out at its paper size × dpi."""
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         from PySide6.QtWidgets import QInputDialog
         self.refresh_all_frames()
         path, chosen = file_dialogs.getSaveFileName(
@@ -14570,7 +14570,7 @@ class ComposerWindow(QMainWindow):
             # Never on screen: nothing of a window to remember.
             super().closeEvent(event)
             return
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         st = QSettings()
         self._remember_side_sizes()
         # The toolbar arrangement IS a preference; closing mid-presentation
@@ -14596,7 +14596,7 @@ class ComposerWindow(QMainWindow):
         act.toggled.connect(self._set_sidebar_visible)
         self.addAction(act)
         self._act_sidebar = act
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         views = QAction(tr("Left panel"), self)
         views.setCheckable(True)
         # Unfolded when it holds tabs (the user's last choice wins).
@@ -14665,7 +14665,7 @@ class ComposerWindow(QMainWindow):
         (``composer/tab_layout``); pages it does not name keep their
         factory side."""
         import json
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         layout = {k: list(v) for k, v in self._DEFAULT_SIDES.items()}
         raw = QSettings().value("composer/tab_layout")
         try:
@@ -14709,7 +14709,7 @@ class ComposerWindow(QMainWindow):
 
     def _save_tab_layout(self) -> None:
         import json
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         out = {}
         for side in ("left", "right"):
             tabs = self._side_tabs(side)
@@ -14740,7 +14740,7 @@ class ComposerWindow(QMainWindow):
     def restore_default_tabs(self) -> None:
         """Every tab back to its factory side and order — all on the
         right, the left side folded — and the choice forgotten."""
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         st = QSettings()
         st.remove("composer/tab_layout")
         st.remove("composer/views_visible")
@@ -14772,7 +14772,7 @@ class ComposerWindow(QMainWindow):
     def _apply_side_sizes(self) -> None:
         """The splitter's three sizes from what is shown and the widths
         the user left the side panels at."""
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         st = QSettings()
         left = (st.value("composer/views_width", 260, int)
                 if not self._left_panel.isHidden() else 0)
@@ -14782,7 +14782,7 @@ class ComposerWindow(QMainWindow):
             [left, max(self.width() - left - right, 400), right])
 
     def _remember_side_sizes(self) -> None:
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         st = QSettings()
         sizes = self._splitter.sizes()
         if not self._left_panel.isHidden() and sizes[0] > 0:
@@ -14793,7 +14793,7 @@ class ComposerWindow(QMainWindow):
     def _set_views_visible(self, on: bool) -> None:
         """Ctrl+F6 / the left handle: the left panel folds away and back,
         remembered — as the right one does with Ctrl+F5."""
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         from views.icons import tool_icon
         if on:
             self._left_panel.show()
@@ -14811,7 +14811,7 @@ class ComposerWindow(QMainWindow):
             QTimer.singleShot(0, self._place_sidebar_handle)
 
     def _set_sidebar_visible(self, on: bool) -> None:
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         from views.icons import tool_icon
         panel = self._panel
         if on:

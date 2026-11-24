@@ -42,6 +42,7 @@ mod sidebar;
 mod hatch_file;
 mod style_files;
 mod style_edit;
+mod settings;
 mod filing_rows;
 mod readiness;
 mod project_sections;
@@ -95,6 +96,7 @@ mod sheets;
 
 #[pymodule]
 fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<settings::NativeSettings>()?;
     m.add_class::<file_open::DocumentOpen>()?;
     m.add_class::<command_search::SearchItem>()?;
     m.add_function(wrap_pyfunction!(command_search::damerau_levenshtein, m)?)?;

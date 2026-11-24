@@ -169,7 +169,7 @@ class ExtensionApp:
         if late is not None:
             restored = bool(late())
         else:
-            from PySide6.QtCore import QSettings
+            from core.settings import settings as QSettings
             state = QSettings().value("ui/window_state")
             if state is None:
                 return False

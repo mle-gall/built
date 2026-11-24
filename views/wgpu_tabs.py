@@ -99,7 +99,7 @@ def _tip(win, doc, host, n) -> str:
 
 
 def pictures_on() -> bool:
-    from PySide6.QtCore import QSettings
+    from core.settings import settings as QSettings
     return str(QSettings().value("tabs/hover_picture", "1")) != "0"
 
 
@@ -288,7 +288,7 @@ def menu(win, what, doc, docs) -> None:
             return
         windows.move_to_new_window(win, doc)
     elif what == "pictures":
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         QSettings().setValue("tabs/hover_picture", "0" if pictures_on() else "1")
 
 

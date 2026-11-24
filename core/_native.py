@@ -107,7 +107,7 @@ def start_guard(argv) -> bool:
     if os.environ.get("INGETRAZO_RUST") is not None:
         return False                    # tests and benches choose for us
     try:
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         from core import general_settings
         from core.version import __version__
         st = QSettings()
@@ -142,7 +142,7 @@ def start_guard(argv) -> bool:
 def start_ok() -> None:
     """The window is up and has drawn: this start with the engine worked."""
     try:
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         from core import general_settings
         st = QSettings()
         if _count(general_settings.value(STARTING, "0", st)):

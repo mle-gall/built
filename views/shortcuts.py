@@ -17,7 +17,8 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from PySide6.QtCore import QEvent, QObject, QSettings, Qt
+from core.settings import settings as QSettings
+from PySide6.QtCore import QEvent, QObject, Qt
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtCore import Signal
 from PySide6.QtCore import QKeyCombination

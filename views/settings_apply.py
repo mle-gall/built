@@ -3,7 +3,7 @@
 """Settings persistence and live application shared by the chrome and Qt host."""
 from __future__ import annotations
 
-from PySide6.QtCore import QSettings
+from core.settings import settings as QSettings
 
 from core import general_settings as _gs
 from core.i18n import SYSTEM as SYSTEM_LANGUAGE

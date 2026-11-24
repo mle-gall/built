@@ -63,9 +63,9 @@ def start(settings: str | None = None, *, temporary: bool = False) -> str | None
     QCoreApplication.setOrganizationName("IngeTrazo")
     QCoreApplication.setApplicationName("IngeTrazo")
     _APP = QApplication.instance() or QApplication([sys.argv[0] if sys.argv else "built"])
-    from core import i18n
-    from PySide6.QtCore import QSettings
-    i18n.set_language(i18n.resolve_language(QSettings().value("language")))
+    from core import i18n, settings
+    settings.use_native(profile)
+    i18n.set_language(i18n.resolve_language(settings.settings().value("language")))
     _answer_input_state()
     _track_timers()
     install_widget_guard()

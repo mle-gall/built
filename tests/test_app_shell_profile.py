@@ -31,6 +31,9 @@ def test_isolated_profiles(tmp_path, mode):
             os.environ.pop("BUILT_SETTINGS_DIR")
         folder = qt_host.start(str(root / "explicit") if mode == "directory" else None,
                                temporary=mode != "directory")
+        from core.settings import settings as product_settings
+        from ingetrazo_core import NativeSettings
+        assert isinstance(product_settings(), NativeSettings)
         assert QStandardPaths.isTestModeEnabled()
         assert QSettings.defaultFormat() == QSettings.IniFormat
         assert Path(QSettings().fileName()).is_relative_to(folder)
@@ -71,15 +74,18 @@ def test_launchers_share_an_isolated_profile(tmp_path):
         from pathlib import Path
         from PySide6.QtCore import QSettings
         def exchange():
-            from core import general_settings
+            from core import general_settings, settings
+            from ingetrazo_core import NativeSettings
             st = QSettings()
+            user = settings.settings()
+            assert isinstance(user, NativeSettings) == (sys.argv[1] == "native")
             assert st.format() == QSettings.IniFormat
             assert Path(st.fileName()).is_relative_to(sys.argv[4])
             assert st.value("recent_files", [], type=list) == ([sys.argv[2]] if sys.argv[2] else [])
             assert general_settings.value("test_profile", "initial") == (sys.argv[2] or "initial")
             general_settings.set_value("test_profile", sys.argv[3])
-            st.setValue("recent_files", [sys.argv[3]])
-            st.sync()
+            user.setValue("recent_files", [sys.argv[3]])
+            user.sync()
             assert st.status() == QSettings.NoError
         if sys.argv[1] == "native":
             from app_shell.host import Host
@@ -112,7 +118,7 @@ def test_native_defaults_read_and_write_the_product_domain(tmp_path):
     prefs = tmp_path / "Library/Preferences"
     prefs.mkdir(parents=True)
     plist = prefs / "com.ingetrazo.IngeTrazo.plist"
-    plist.write_bytes(plistlib.dumps({"recent_files": ["seed.built"]}))
+    plist.write_bytes(plistlib.dumps({"recent_files": ["seed.built"], "General.autosave": "0", "shortcuts.x·y": "F9", "unknown": b"old widget state"}))
     (prefs / "com.builtprofileprobe.Probe.plist").write_bytes(plistlib.dumps({"home": str(tmp_path)}))
     dylib = tmp_path / "preferences.dylib"
     source = Path(__file__).parent / "fixtures/shell/fake_preferences.c"
@@ -133,10 +139,71 @@ def test_native_defaults_read_and_write_the_product_domain(tmp_path):
         for loc in (QStandardPaths.AppDataLocation, QStandardPaths.CacheLocation):
             assert Path(QStandardPaths.writableLocation(loc)).resolve().is_relative_to(Path.home() / "Library")
         assert st.value("recent_files") == ["seed.built"]
-        st.setValue("recent_files", ["last.built"])
+        import os
+        # The successful probe above established that CFPreferences is
+        # interposed into this test's container before selecting the domain.
+        os.environ.pop("BUILT_SETTINGS_DIR")
+        from ingetrazo_core import NativeSettings
+        store = NativeSettings()
+        assert store.value("recent_files") == ["seed.built"]
+        assert store.value("General/autosave", type=bool) is False
+        store.beginGroup("shortcuts")
+        assert store.childKeys() == ["x.y"]
+        assert store.value("x.y") == "F9"
+        store.endGroup()
+        store.setValue("recent_files", ["last.built"])
+        store.setValue("new/foo.bar·baz", 9)
+        store.sync()
         st.sync()
+        assert st.value("new/foo.bar·baz") == 9
         assert st.status() == QSettings.NoError
     """
     isolated_launch.run([sys.executable, "-c", textwrap.dedent(script)], home=tmp_path,
                         env=dict(os.environ, DYLD_INSERT_LIBRARIES=str(dylib)), check=True, timeout=45)
-    assert plistlib.loads(plist.read_bytes())["recent_files"] == ["last.built"]
+    saved = plistlib.loads(plist.read_bytes())
+    assert saved["recent_files"] == ["last.built"]
+    assert saved["unknown"] == b"old widget state"
+
+
+def test_native_profile_retains_unrelated_entries_and_group_identity(tmp_path):
+    from ingetrazo_core import NativeSettings
+    path = tmp_path / "IngeTrazo/IngeTrazo.ini"
+    path.parent.mkdir()
+    opaque = "; extension-owned\ngeometry=@Variant(opaque)\n"
+    path.write_text("[General]\n" + opaque + "[%General]\nundo=42\n")
+    st = NativeSettings(tmp_path)
+    assert st.value("General/undo", type=int) == 42
+    st.beginGroup("custom")
+    st.setValue("nested/é:·🌲", ['@abc', ' x ', 'comma, quote"', 'x\\x'])
+    st.setValue("piece", 2.5)
+    st.setValue("piece", 3.5)
+    assert st.childKeys() == ["piece"]
+    assert st.allKeys() == ["nested/é:·🌲", "piece"]
+    assert NativeSettings(tmp_path).value("custom/nested/é:·🌲") == ['@abc', ' x ', 'comma, quote"', 'x\\x']
+    assert path.read_text().count("[custom]") == 1
+    st.remove("nested")
+    st.endGroup()
+    assert st.value("custom/piece", type=float) == 3.5
+    assert opaque in path.read_text()
+
+
+def test_native_processes_merge_independent_keys_without_qt(tmp_path):
+    import subprocess
+    script = textwrap.dedent("""
+        import sys
+        from core.settings import settings, use_native
+        use_native(None)
+        st = settings()
+        for i in range(30):
+            st.setValue(f"{sys.argv[1]}/{i}", i)
+        assert not any(s.startswith("PySide6") for s in sys.modules)
+    """)
+    env = dict(os.environ, BUILT_SETTINGS_DIR=str(tmp_path))
+    writers = [subprocess.Popen([sys.executable, "-c", script, k], env=env)
+               for k in ("keyboard", "navigation")]
+    assert [proc.wait(timeout=30) for proc in writers] == [0, 0]
+    from ingetrazo_core import NativeSettings
+    store = NativeSettings(tmp_path)
+    for k in ("keyboard", "navigation"):
+        for i in range(30):
+            assert store.value(f"{k}/{i}", type=int) == i

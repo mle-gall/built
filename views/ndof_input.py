@@ -348,7 +348,7 @@ _KEYS = (("enabled", True), ("sensitivity", 1.0), ("invert_pan", False),
 
 def load_settings():
     """The user's 3D mouse settings (Preferences ▸ Navigation)."""
-    from PySide6.QtCore import QSettings
+    from core.settings import settings as QSettings
     from core.ndof import NdofSettings
     st = QSettings()
     out = NdofSettings()
@@ -395,7 +395,7 @@ def current_settings():
 def save_settings(settings) -> None:
     global _settings_cache
     _settings_cache = settings
-    from PySide6.QtCore import QSettings
+    from core.settings import settings as QSettings
     st = QSettings()
     for key, default in _KEYS:
         val = getattr(settings, key)

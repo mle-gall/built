@@ -142,7 +142,7 @@ def attach(view) -> None:
     from views import wgpu_library
     wgpu_library.install(win)
     if hasattr(renderer, "ui_set_dock_width"):
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         try:
             renderer.ui_set_dock_width(float(QSettings().value("ui/dock_width", 300.0)))
         except (TypeError, ValueError):
@@ -163,7 +163,7 @@ def dock_width(lens, settings=None) -> float:
     """The dock width for lens ``lens``: the user's width for
     Filing; for the wide sets the width last dragged there, at least
     ``WIDE_DOCK`` and never narrower than the user's own."""
-    from PySide6.QtCore import QSettings
+    from core.settings import settings as QSettings
     st = settings if settings is not None else QSettings()
     try:
         own = float(st.value("ui/dock_width", 300.0))
@@ -188,7 +188,7 @@ def apply_dock_width(view, settings=None) -> None:
 def keep_dock_width(view, arg, settings=None) -> None:
     """The grip let go (or double-clicked): keep the width for the column
     set it was dragged in, so Filing comes back to the user's width."""
-    from PySide6.QtCore import QSettings
+    from core.settings import settings as QSettings
     st = settings if settings is not None else QSettings()
     try:
         w = float(arg or 300)
@@ -993,7 +993,7 @@ def _tree(view, win, *, discover=False):
     if hasattr(view.renderer, "ui_set_proposal_available"):
         view.renderer.ui_set_proposal_available(not mode and tree._host_roots < 0)
     if not view.__dict__.get("_ui_sort_loaded") and hasattr(view.renderer, "ui_set_tree_sort"):
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         view.renderer.ui_set_tree_sort(max(0, QSettings().value("ui/project_tree_sort", 0, type=int)))
         view._ui_sort_loaded = True
     view.renderer.ui_set_style_catalog(id(scene), [*L.LINETYPES, *(L.CUSTOM_LINETYPE + key for key in scene.line_types)], scene.hatch_patterns, scene if lens == 1 else None)
@@ -1651,7 +1651,7 @@ def _tree_action(win, view, action) -> None:
             view._ui_filter = rk
             rebuild()
         elif verb == "sort":
-            from PySide6.QtCore import QSettings
+            from core.settings import settings as QSettings
             QSettings().setValue("ui/project_tree_sort", int(rk))
         elif verb == "item" and kind == "exportitem":
             group = item()

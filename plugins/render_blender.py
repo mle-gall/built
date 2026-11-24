@@ -22,9 +22,10 @@ import math
 import time
 from pathlib import Path
 
+from core.settings import settings as QSettings
 from PySide6.QtCore import (QObject, QPointF, QProcess, QProcessEnvironment,
                             QTimer, Signal,
-                            QSettings, Qt)
+                            Qt)
 from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from ingetrazo_core import Vec3 as QVector3D
 from PySide6.QtWidgets import (

@@ -321,7 +321,7 @@ mod tests {
 
 pub fn touch_select() -> bool {
     Python::attach(|py| -> PyResult<bool> {
-        let store = py.import("PySide6.QtCore")?.getattr("QSettings")?.call0()?;
+        let store = py.import("core.settings")?.getattr("settings")?.call0()?;
         Ok(store
             .call_method1("value", ("nav/touch_slide", "orbit"))?
             .extract::<String>()?

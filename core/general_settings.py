@@ -19,13 +19,13 @@ there and nobody loses a setting on the way.
 """
 from __future__ import annotations
 
-from PySide6.QtCore import QSettings
+from core.settings import settings as QSettings
 
 _GROUP = "General/"
 _OLD_GROUP = "general/"
 
 
-def value(name: str, default=None, settings: QSettings | None = None):
+def value(name: str, default=None, settings=None):
     """The saved General setting ``name``, or ``default``."""
     st = settings if settings is not None else QSettings()
     got = st.value(_GROUP + name)
@@ -34,6 +34,6 @@ def value(name: str, default=None, settings: QSettings | None = None):
     return default if got is None else got
 
 
-def set_value(name: str, val, settings: QSettings | None = None) -> None:
+def set_value(name: str, val, settings=None) -> None:
     st = settings if settings is not None else QSettings()
     st.setValue(_GROUP + name, val)

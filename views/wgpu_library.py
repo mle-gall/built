@@ -28,7 +28,8 @@ from functools import lru_cache
 import re
 from collections import Counter
 
-from PySide6.QtCore import QSettings, Qt
+from core.settings import settings as QSettings
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage
 
 SEP = "\x1f"

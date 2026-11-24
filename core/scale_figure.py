@@ -104,7 +104,7 @@ def chosen(settings=None) -> Figure | None:
     sheet. A choice that no longer resolves (a deleted picture, a person
     gone from people.json) falls back to the Engineer rather than to
     nothing: the user asked for a figure."""
-    from PySide6.QtCore import QSettings
+    from core.settings import settings as QSettings
     from core.i18n import tr
     st = settings if settings is not None else QSettings()
     if str(st.value(KEY_ON, "1")) == "0":

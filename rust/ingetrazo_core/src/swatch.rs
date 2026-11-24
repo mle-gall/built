@@ -195,7 +195,7 @@ pub fn edit_swatch(
 }
 
 fn settings(py: Python<'_>) -> PyResult<Obj<'_>> {
-    py.import("PySide6.QtCore")?.getattr("QSettings")?.call0()
+    py.import("core.settings")?.getattr("settings")?.call0()
 }
 const KEY: &str = "paint/recent_materials";
 #[pyfunction]

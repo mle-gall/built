@@ -308,7 +308,7 @@ def _remember_widths(header, key: str, columns, quiet=None) -> None:
     """Give ``columns`` the widths the user left them at, and keep them
     as they are dragged (per user, not per document). ``quiet()`` true:
     a resize the program made, not the user — not kept."""
-    from PySide6.QtCore import QSettings
+    from core.settings import settings as QSettings
     saved = QSettings().value(key)
     if isinstance(saved, str):
         saved = saved.split(",")
@@ -1083,7 +1083,7 @@ class OutlinerPanel(QWidget):
         # Until the user drags a column edge, Name, Type and Layer share the
         # panel's width as it changes (see _fit_columns).
         self._fitting = False
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         self._auto_fit = not QSettings().contains("browser/model_columns")
         # Kept only once the user has sized them: while they follow the
         # panel, what Qt or the fitting does to them is nobody's choice.
@@ -1976,7 +1976,7 @@ class OutlinerPanel(QWidget):
 
     @property
     def order_by(self) -> str:
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         v = str(QSettings().value(self.ORDER_KEY, "document") or "document")
         return v if v in dict(self.ORDERS) else "document"
 
@@ -1985,7 +1985,7 @@ class OutlinerPanel(QWidget):
         siblings only: a group stays inside its parent. A way of reading
         the tree, remembered between sessions; the model is left as it
         is."""
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         how = how if how in dict(self.ORDERS) else "document"
         if how == self.order_by:
             return
@@ -3202,7 +3202,7 @@ class OutlinerPanel(QWidget):
 
     def _column_order(self) -> list:
         """The order the user left the columns in, or the factory one."""
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         raw = QSettings().value("browser/model_column_order")
         if isinstance(raw, str):
             raw = raw.split(",")
@@ -3225,7 +3225,7 @@ class OutlinerPanel(QWidget):
             head.blockSignals(False)
 
     def _save_column_order(self, *_args) -> None:
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         head = self.tree.header()
         order = sorted(range(head.count()), key=head.visualIndex)
         QSettings().setValue("browser/model_column_order",
@@ -3236,7 +3236,7 @@ class OutlinerPanel(QWidget):
         factory order (the eye, the padlock and the target first), the
         factory columns shown and their widths; the choices remembered are
         forgotten."""
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         st = QSettings()
         for key in ("browser/model_column_order",
                     "browser/model_hidden_columns", "browser/model_columns",
@@ -3290,7 +3290,7 @@ class OutlinerPanel(QWidget):
             self._auto_fit = False
             # The widths are the user's now: kept from this drag on (the
             # header's own saver ran before this, while they were not).
-            from PySide6.QtCore import QSettings
+            from core.settings import settings as QSettings
             QSettings().setValue("browser/model_columns", ",".join(
                 str(head.sectionSize(c)) for c in (COL_NAME, COL_TYPE)))
 
@@ -3442,7 +3442,7 @@ class OutlinerPanel(QWidget):
             QTimer.singleShot(0, fit)
 
     def _hidden_columns(self) -> set:
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         raw = QSettings().value("browser/model_hidden_columns")
         if raw is None:
             return {c for c, _l, shown in OPTIONAL_COLUMNS if not shown}
@@ -3462,7 +3462,7 @@ class OutlinerPanel(QWidget):
             self.tree.setColumnHidden(col, col in hidden)
 
     def set_column_shown(self, col: int, shown: bool) -> None:
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         hidden = self._hidden_columns()
         (hidden.discard if shown else hidden.add)(col)
         QSettings().setValue("browser/model_hidden_columns",

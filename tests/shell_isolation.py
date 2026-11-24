@@ -9,6 +9,7 @@ import pytest
 _ENV = ("QT_QPA_PLATFORM", "XDG_DATA_HOME", "BUILT_ANSWERS", "BUILT_SETTINGS_DIR")
 
 _PATCHED = {
+    "core.settings": ("_store",),
     "views.chrome_dialogs": ("live", "QEventLoop", "_shell_installed"),
     "views.filedialogs": ("QFileDialog",),
     "core.renderer_settings": ("capability", "status_text", "_shell_installed"),

@@ -37,7 +37,7 @@ class Env:
     scene, and one QSettings for the whole build or change."""
 
     def __init__(self, win):
-        from PySide6.QtCore import QSettings
+        from core.settings import settings as QSettings
         self.win = win
         self.st = QSettings()
         self.vp = getattr(win, "viewport", None)
@@ -1113,7 +1113,7 @@ class SettingsSheet(chrome_sheet.Provider):
             self._kb_import()
         elif verb == "kb_reset_all":
             def reset():
-                from PySide6.QtCore import QSettings
+                from core.settings import settings as QSettings
                 from app_shell.windows import hosts
                 from views.shortcuts import _GROUP
                 st = QSettings()
