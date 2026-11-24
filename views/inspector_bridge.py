@@ -290,7 +290,7 @@ def action(win, view, payload):
                 return
             if verb == "report":
                 if g is not None and address == v:
-                    from views.report_sheets import show
+                    from ingetrazo_render import show_report_sheet as show
                     show(win, "cutlist")
                 return
             uid = v if verb == "split" else v[0]

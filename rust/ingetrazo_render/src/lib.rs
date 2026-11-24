@@ -50,6 +50,7 @@ mod pane_dividers;
 mod verbs;
 mod viewport_menu;
 mod shell_commands;
+mod report_sheets;
 pub mod ui;
 mod host_context;
 mod inspector;
@@ -3245,6 +3246,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     context_edits::register(m)?;
     viewport_menu::register(m)?;
     shell_commands::register(m)?;
+    report_sheets::register(m)?;
     native_view_actions::register(m)?;
     plugin_workspace::register(m)?;
     m.add_class::<link_watch::LinkWatch>()?;

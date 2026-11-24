@@ -9,7 +9,6 @@ from core import library
 from core.i18n import current_language, tr
 from ingetrazo_render import ComponentCatalogue
 from views import chrome_sheet
-from views.report_sheets import NativeSheet
 
 # Two Library windows can request the same archive. Serialise index and
 # archive writes. The thumbnail service has its own coalescing worker pool.
@@ -37,8 +36,8 @@ class CatalogueSession:
         self.timer = None
 
     def build(self, base, query):
-        sheet = NativeSheet("library", spec=self.model.sheet(
-            json.dumps(base.wire()), current_language(), query, tr))
+        sheet = chrome_sheet.Spec(json.loads(self.model.sheet(
+            json.dumps(base.wire()), current_language(), query, tr)))
         for icon in self.artwork:
             sheet.icon(*icon)
         self.artwork.clear()

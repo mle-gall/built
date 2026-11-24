@@ -85,7 +85,7 @@ def command(win, name, *args):
     """A command by name (menu bar, start page, document ▾). Returns what
     the command returns (open/save: whether it happened)."""
     if name in ("about", "extensions", "cutlist"):
-        from views.report_sheets import show
+        from ingetrazo_render import show_report_sheet as show
         return show(win, name)
     if name == "delivery_export":
         from views.wgpu_deliveries import export_form

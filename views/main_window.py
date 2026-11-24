@@ -2887,7 +2887,7 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
                   max(avail.top(), min(frame.top(), avail.bottom() - frame.height() + 1)))
 
     def _on_manage_extensions(self) -> None:
-        from views.report_sheets import show
+        from ingetrazo_render import show_report_sheet as show
         # An exception in a menu slot goes to stderr, and a windowed build
         # has none: the click did nothing at all (#1152).
         try:
@@ -2988,11 +2988,11 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         tool.on_activate(self.viewport)
 
     def _on_cut_list(self) -> None:
-        from views.report_sheets import show
+        from ingetrazo_render import show_report_sheet as show
         show(self, "cutlist")
 
     def _on_about(self) -> None:
-        from views.report_sheets import show
+        from ingetrazo_render import show_report_sheet as show
         show(self, "about")
 
     def _file_actions(self) -> list[QAction]:

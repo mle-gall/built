@@ -8,8 +8,13 @@ from unittest.mock import Mock
 
 import pytest
 
-from views import chrome_sheet, report_sheets
-from views.report_sheets import About, Extensions, CutList
+from views import chrome_sheet
+from ingetrazo_render import AboutSheet as About, ExtensionsSheet as Extensions, CutListSheet as CutList
+
+
+def _clipboard():
+    from PySide6.QtWidgets import QApplication
+    return QApplication.clipboard().text()
 
 
 def build(provider, ctx):
@@ -26,11 +31,10 @@ def test_about_and_clipboard(monkeypatch):
     assert spec.get("detail") is None
     for label in ("GPL-3.0-or-later", "Marco Sumari Tellez", "Civil Engineer", "Pedro Caeiro"):
         assert label in str(spec["content"])
-    copied = []
-    monkeypatch.setattr(report_sheets, "_copy", copied.append)
     sheet.act(ctx, "verb", ["copy"])
     for field in ("Built ", "Engine:", "Renderer:", "Commit:", "Language:"):
-        assert field in copied[0]
+        assert field in _clipboard()
+    copied = []
     import webbrowser
     monkeypatch.setattr(webbrowser, "open", copied.append)
     sheet.act(ctx, "verb", ["upstream"])
@@ -101,10 +105,8 @@ def test_cut_list_group_copy_export(tmp_path, monkeypatch):
     assert spec["content"]["blocks"][0]["cells"] == sheet.table
     assert len(sheet.table) == 2 and sheet.table[1][0] == "2"
     assert len(sheet.table[1]) == 6
-    copied = []
-    monkeypatch.setattr(report_sheets, "_copy", copied.append)
     sheet.act(ctx, "verb", ["copy"])
-    assert list(csv.reader(io.StringIO(copied[0]), dialect="excel-tab")) == sheet.table
+    assert list(csv.reader(io.StringIO(_clipboard(), newline=""), dialect="excel-tab")) == sheet.table
     path = tmp_path / "parts.csv"
     monkeypatch.setattr(file_dialogs, "getSaveFileName", lambda *args: (str(path), "CSV"))
     sheet.act(ctx, "verb", ["csv"])

@@ -1273,7 +1273,7 @@ def _tree_action(win, view, action) -> None:
             nk = key.partition(":")[2]
             if nk:
                 _select(win, _tree_groups(view, nk))
-            from views.report_sheets import show
+            from ingetrazo_render import show_report_sheet as show
             show(win, "cutlist")
         elif verb == "insp" and key.startswith("lib:"):
             from views import wgpu_library
