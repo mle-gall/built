@@ -1,0 +1,25 @@
+{
+"lock_and_mirror": [
+  {"axis":"x","copy":false,"result":true,"faces":1,"undo":0,"vertices":[[1.0,0.0,0.0],[1.0,2.0,0.0],[3.0,0.0,0.0]],"groups":[]},
+  {"axis":"x","copy":false,"result":null,"faces":1,"undo":1,"vertices":[[1.0,0.0,0.0],[3.0,0.0,0.0],[3.0,2.0,0.0]],"groups":[]},
+  {"axis":"x","copy":false,"result":null,"faces":1,"undo":0,"vertices":[[1.0,0.0,0.0],[1.0,2.0,0.0],[3.0,0.0,0.0]],"groups":[]},
+  {"axis":"y","copy":false,"result":true,"faces":1,"undo":0,"vertices":[[1.0,0.0,0.0],[1.0,2.0,0.0],[3.0,0.0,0.0]],"groups":[]},
+  {"axis":null,"copy":false,"result":null,"faces":1,"undo":0,"vertices":[[1.0,0.0,0.0],[1.0,2.0,0.0],[3.0,0.0,0.0]],"groups":[]}],
+"copy": [
+  {"axis":null,"copy":true,"result":true,"faces":1,"undo":0,"vertices":[[1.0,0.0,0.0],[1.0,2.0,0.0],[3.0,0.0,0.0]],"groups":[]},
+  {"axis":"x","copy":true,"result":true,"faces":1,"undo":0,"vertices":[[1.0,0.0,0.0],[1.0,2.0,0.0],[3.0,0.0,0.0]],"groups":[]},
+  {"axis":"x","copy":false,"result":null,"faces":2,"undo":1,"vertices":[[1.0,0.0,0.0],[1.0,2.0,0.0],[3.0,0.0,0.0],[3.0,2.0,0.0]],"groups":[]},
+  {"axis":"x","copy":false,"result":null,"faces":1,"undo":0,"vertices":[[1.0,0.0,0.0],[1.0,2.0,0.0],[3.0,0.0,0.0]],"groups":[]}],
+"copy_chord": [
+  {"axis":null,"copy":true,"result":true,"faces":1,"undo":0,"vertices":[[1.0,0.0,0.0],[1.0,2.0,0.0],[3.0,0.0,0.0]],"groups":[]},
+  {"axis":null,"copy":false,"result":true,"faces":1,"undo":0,"vertices":[[1.0,0.0,0.0],[1.0,2.0,0.0],[3.0,0.0,0.0]],"groups":[]},
+  {"axis":"y","copy":false,"result":true,"faces":1,"undo":0,"vertices":[[1.0,0.0,0.0],[1.0,2.0,0.0],[3.0,0.0,0.0]],"groups":[]},
+  {"axis":"y","copy":false,"result":null,"faces":1,"undo":1,"vertices":[[1.0,0.0,0.0],[1.0,2.0,0.0],[3.0,2.0,0.0]],"groups":[]},
+  {"axis":"y","copy":false,"result":null,"faces":1,"undo":0,"vertices":[[1.0,0.0,0.0],[1.0,2.0,0.0],[3.0,0.0,0.0]],"groups":[]}],
+"direct_nested": [
+  {"axis":null,"copy":false,"result":null,"faces":1,"undo":0,"vertices":[[1.0,0.0,0.0],[1.0,2.0,0.0],[3.0,0.0,0.0]],"groups":[[[2.0,0.0,0.0],[2.0,0.0,2.0],[4.0,0.0,0.0]]]},
+  {"axis":null,"copy":false,"result":true,"faces":1,"undo":1,"vertices":[[1.0,0.0,0.0],[1.0,2.0,0.0],[3.0,0.0,0.0]],"groups":[[[2.0,0.0,0.0],[4.0,0.0,0.0],[4.0,0.0,2.0]]]},
+  {"axis":null,"copy":false,"result":null,"faces":1,"undo":0,"vertices":[[1.0,0.0,0.0],[1.0,2.0,0.0],[3.0,0.0,0.0]],"groups":[[[2.0,0.0,0.0],[2.0,0.0,2.0],[4.0,0.0,0.0]]]},
+  {"axis":null,"copy":false,"result":null,"faces":1,"undo":0,"vertices":[[1.0,0.0,0.0],[1.0,2.0,0.0],[3.0,0.0,0.0]],"groups":[[[2.0,0.0,0.0],[2.0,0.0,2.0],[4.0,0.0,0.0]]]},
+  {"axis":null,"copy":false,"result":false,"faces":1,"undo":0,"vertices":[[1.0,0.0,0.0],[1.0,2.0,0.0],[3.0,0.0,0.0]],"groups":[[[2.0,0.0,0.0],[2.0,0.0,2.0],[4.0,0.0,0.0]]]}]
+}

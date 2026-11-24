@@ -139,3 +139,8 @@ def test_tape_matches_the_recorded_python_tool(name):
 @pytest.mark.parametrize("name", sorted(tp.PASTE_SCENARIOS))
 def test_paste_matches_the_recorded_python_tool(name):
     assert tp.run_paste(tp.PASTE_SCENARIOS[name]) == tp.load("paste")[name]
+
+
+@pytest.mark.parametrize("name", sorted(tp.FLIP_SCENARIOS))
+def test_flip_matches_the_recorded_python_tool(name):
+    assert tp.run_flip(tp.FLIP_SCENARIOS[name]) == tp.load("flip")[name]

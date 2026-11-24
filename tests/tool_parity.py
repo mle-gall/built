@@ -1001,6 +1001,54 @@ def run_rotate(steps):
     return out
 
 
+FLIP_SCENARIOS = {
+    "lock_and_mirror": ["x", "click", "undo", "y", "cancel"],
+    "copy": ["control", "x", "click", "undo"],
+    "copy_chord": ["control", "chord", "y", "click", "undo"],
+    "direct_nested": ["group", "direct", "undo", "clear", "direct"],
+}
+
+
+def run_flip(steps):
+    from types import SimpleNamespace
+    from PySide6.QtCore import Qt
+    from core.scene import Scene
+    from core.group import placement_points
+    from tests.test_flip_nested_groups import _vp, _cabinet, V
+    from tools.flip import FlipTool
+    scene = Scene()
+    face = scene.mesh.add_face([V(1, 0, 0), V(3, 0, 0), V(1, 2, 0)])
+    scene.select([face])
+    vp, tool = _vp(scene), FlipTool()
+    tool.on_activate(vp)
+    out = []
+    for kind in steps:
+        result = None
+        if kind in ("x", "y", "control"):
+            key = {"x": Qt.Key_Right, "y": Qt.Key_Left, "control": Qt.Key_Control}[kind]
+            result = tool.on_key(vp, key, Qt.NoModifier)
+        elif kind == "chord":
+            vp.ctrl_tapped = lambda: False
+            result = tool.on_key_release(vp, Qt.Key_Control)
+        elif kind == "click":
+            tool.on_click(SimpleNamespace(viewport=vp))
+        elif kind == "cancel":
+            tool.on_cancel(vp)
+        elif kind == "undo":
+            vp.history.undo()
+        elif kind == "group":
+            _cabinet(scene)
+        elif kind == "clear":
+            scene.clear_selection()
+        elif kind == "direct":
+            result = tool.flip(vp, "x")
+        out.append({"axis": tool._lock_axis, "copy": tool.cursor_plus, "result": result,
+                    "faces": len(scene.mesh.faces), "undo": len(vp.history.undo_stack),
+                    "vertices": sorted(_pt(v.position) for v in scene.mesh.vertices),
+                    "groups": [sorted(placement_points(g).round(6).tolist()) for g in scene.groups]})
+    return out
+
+
 PASTE_SCENARIOS = {
     "face_and_edge": [("hover", 3, 4), ("click", 3, 4), ("undo",), ("redo",)],
     "in_place": [("in_place",), ("undo",)],
@@ -1395,6 +1443,9 @@ def record(which=("line", "select", "rectangle", "move", "circle", "rotated_rect
     if "rotated_rectangle" in which:
         rot = {name: run_rot(steps) for name, steps in ROT_SCENARIOS.items()}
         (FIXTURES / "rotated_rectangle.json").write_text(_compact(rot))
+    if "flip" in which:
+        cases = {name: run_flip(steps) for name, steps in FLIP_SCENARIOS.items()}
+        (FIXTURES / "flip.json").write_text(_compact(cases))
     if "paste" in which:
         cases = {name: run_paste(steps) for name, steps in PASTE_SCENARIOS.items()}
         (FIXTURES / "paste.json").write_text(_compact(cases))
