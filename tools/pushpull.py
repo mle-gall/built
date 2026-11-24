@@ -41,7 +41,7 @@ from __future__ import annotations
 
 import math
 
-from PySide6.QtCore import Qt
+from core.input_types import Qt
 from ingetrazo_core import Vec3 as QVector3D, push_reference_target
 from views import input_state
 

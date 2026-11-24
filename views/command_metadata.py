@@ -1,16 +1,15 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez and IngeTrazo contributors.
 """Shared host action metadata for search, tooltips and Keyboard settings."""
+from __future__ import annotations
 import re
 
 from core.settings import settings as QSettings
-from PySide6.QtGui import QAction
 from ingetrazo_render import shortcut_text
-from PySide6.QtWidgets import QMainWindow, QMenu, QMenuBar, QToolBar
 
 from core import string_search
 from core.i18n import source_of, tr
-from views.shortcuts import _plain, action_key, action_keys, collect_actions
+from core.shortcuts import _plain, action_key, action_keys, collect_actions
 
 
 #: The command that opens this box — kept out of its own list.
@@ -53,6 +52,7 @@ def _menubar(window):
     """The window's menu bar, or ``None`` — never made by asking (the
     composer has none, and ``menuBar()`` would give it an empty one), and
     none either for a window that is not a main window."""
+    from PySide6.QtWidgets import QMainWindow, QMenuBar
     bar = window.menuWidget() if isinstance(window, QMainWindow) else None
     return bar if isinstance(bar, QMenuBar) else None
 
@@ -63,6 +63,7 @@ def _submenus(window) -> dict:
     6.11.1, ``QAction.menu()`` on a menu whose wrapper did not exist yet
     handed back a dead wrapper for the Help menu (seen on one machine;
     every window then failed to build)."""
+    from PySide6.QtWidgets import QMenu
     return {m.menuAction(): m for m in window.findChildren(QMenu)}
 
 
@@ -79,6 +80,9 @@ def menu_paths(window) -> dict:
     """``{action_key: "Edit ▸ Unhide"}`` for the actions in the menu bar;
     an action found only on a toolbar gets the toolbar's name («Draw»)."""
     paths = dict(vars(window).get("_command_paths", {}))
+    if "_command_store" in vars(window):
+        return paths
+    from PySide6.QtWidgets import QToolBar
     subs = _submenus(window)
 
     def walk(menu: QMenu, trail: list) -> None:
@@ -132,6 +136,7 @@ def _belongs(action: QAction, window) -> bool:
     while obj is not None:
         if obj is window:
             return True
+        from PySide6.QtWidgets import QMainWindow
         if isinstance(obj, QMainWindow):
             return False                       # another window's
         obj = obj.parent()
@@ -182,6 +187,8 @@ class Command:
 
 
 def visible(action):
+    if hasattr(action, "portable_keys"):
+        return action.isVisible()
     from shiboken6 import isValid
     return isValid(action) and action.isVisible()
 

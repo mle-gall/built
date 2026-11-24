@@ -66,9 +66,14 @@ def _plog(tag: str, ms: float, extra: str = "", floor: float = 50.0) -> None:
                      f"{tag} {ms:.0f}ms"
                      f"{' ' + extra if extra else ''}\n")
 
-from PySide6.QtCore import (QEvent, QObject, Qt, QPointF, QRectF, QTimer,
-                            Signal)
-from PySide6.QtGui import QColor, QFont, QFontMetrics, QImage, QPainter, QPen, QPolygonF, QVector2D
+from core.input_types import NATIVE, QEvent, Qt, QPointF, QRectF
+from core.host_callbacks import Signal
+from core.timers import later, timer as window_timer
+if not NATIVE:
+    from PySide6.QtCore import QObject, QTimer
+from views.paint_types import QColor, QFont, QPen, QPolygonF
+if not NATIVE:
+    from PySide6.QtGui import QFontMetrics, QImage, QPainter
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D, Vec4 as QVector4D
 
 from core.camera import OrbitCamera
@@ -1967,7 +1972,7 @@ def _parse_length_field(field: str):
     return parse_length_field(field)
 
 
-class _AltWatch(QObject):
+class _AltWatch(object if NATIVE else QObject):
     """Hears Alt at APPLICATION level, without taking it, for the Paint
     tool's eyedropper pointer (@pacaeiro, #47: «press Alt and release it —
     icon changed but we're still on Paint mode»). The viewport's own key
@@ -2149,7 +2154,8 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
     """Editing and input shared by the document presentation hosts."""
 
     def _render_framed_image(self, width_px, overlays, annotations_only,
-                             sharp_shadows, transparent):
+                             sharp_shadows, transparent, *, raster=False):
+        render = self.render_raster if raster else self.render_image
         lw, lh = max(self.width(), 1), max(self.height(), 1)
         from core.camera import frame_rect
         rect = frame_rect(lw, lh, getattr(self.camera, "frame_aspect",
@@ -2160,11 +2166,13 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
             aspect = self.camera.frame_aspect
             out_w = max(int(width_px), 64)
             out_h = max(int(round(out_w / aspect)), 1)
-            full = self.render_image(
+            full = render(
                 max(int(round(out_w * lw / fw)), 64), None, overlays,
                 annotations_only, sharp_shadows, transparent, False)
             if full is None:
                 return None
+            if raster:
+                return full.frame_region((fx / lw, fy / lh, fw / lw, fh / lh), out_w, out_h)
             sx = full.width() / lw
             sy = full.height() / lh
             x = int(round(fx * sx))
@@ -2176,7 +2184,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
                 image = image.scaled(out_w, out_h, Qt.IgnoreAspectRatio,
                                      Qt.SmoothTransformation)
             return image
-        return self.render_image(width_px, None, overlays, annotations_only,
+        return render(width_px, None, overlays, annotations_only,
                                  sharp_shadows, transparent, False)
 
     def _configure_surface(self):
@@ -2256,15 +2264,16 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
 
     _bind_bake_store = _bind_bake_store
 
-    def __init__(self, parent=None) -> None:
-        super().__init__(parent)
+    def __init__(self, parent=None, **surface) -> None:
+        super().__init__(parent, **surface)
         self.view_filter = None
         self.view_tint = None
         self.active_view_key = None
         # The model and its camera are the same in every language: a right-
         # to-left interface (#1067) does not mirror what is drawn here.
-        from views.rtl import keep_ltr
-        keep_ltr(self)
+        if not NATIVE:
+            from views.rtl import keep_ltr
+            keep_ltr(self)
         self._configure_surface()
         self.setMinimumSize(640, 480)
         self.setFocusPolicy(Qt.StrongFocus)
@@ -2278,7 +2287,8 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         #: that cycles the mode on release (issue #26).
         self._alt_tap = False
         self._alt_down = False
-        _AltWatch.watch(self)
+        if not NATIVE:
+            _AltWatch.watch(self)
         self._last_mouse_pos: Optional[QPointF] = None
 
         # Pixel radius for point snaps (endpoint, origin, close). 12 px felt
@@ -2479,9 +2489,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
             self._nav_detail_until = now + 0.35
             timer = getattr(self, "_nav_detail_timer", None)
             if timer is None:
-                timer = self._nav_detail_timer = QTimer(self)
-                timer.setSingleShot(True)
-                timer.timeout.connect(self.update)
+                timer = self._nav_detail_timer = window_timer(self, self.update)
             timer.start(370)
         if now < getattr(self, "_nav_detail_until", 0.0):
             return True
@@ -3471,22 +3479,8 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
             cache = self._tex_avg_cache = {}
         c = cache.get(path)
         if c is None:
-            img = QImage(path)
-            if img.isNull():
-                c = (0.78, 0.78, 0.78)
-            else:
-                small = img.scaled(4, 4, Qt.IgnoreAspectRatio,
-                                   Qt.SmoothTransformation)
-                rs = gs = bs = n = 0
-                for yy in range(small.height()):
-                    for xx in range(small.width()):
-                        px = small.pixelColor(xx, yy)
-                        rs += px.red()
-                        gs += px.green()
-                        bs += px.blue()
-                        n += 1
-                c = ((rs / (255.0 * n), gs / (255.0 * n), bs / (255.0 * n))
-                     if n else (0.78, 0.78, 0.78))
+            from core.vista_caras import texture_average
+            c = texture_average(path, cache) or (0.78, 0.78, 0.78)
             cache[path] = c
         return c
 
@@ -3616,7 +3610,10 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         if self._tile_requests_scheduled:
             return
         self._tile_requests_scheduled = True
-        QTimer.singleShot(0, self._request_missing_tiles)
+        if NATIVE:
+            later(self, 0, self._request_missing_tiles)
+        else:
+            QTimer.singleShot(0, self._request_missing_tiles)
 
     def _request_missing_tiles(self) -> None:
         """Fetch the current layer's missing images outside ``paintGL``.
@@ -4274,7 +4271,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         if self.__dict__.get("_announce_queued"):
             return
         self._announce_queued = True
-        QTimer.singleShot(0, self, self._announce_queued_version)
+        later(self, 0, self._announce_queued_version)
 
     def _announce_queued_version(self) -> None:
         self._announce_queued = False
@@ -5099,8 +5096,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         last = getattr(self, "_section_fill_changed", 0.0)
         self._section_fill_changed = now
         if cached is not None and now - last < 0.15:
-            from PySide6.QtCore import QTimer
-            QTimer.singleShot(200, self.update)
+            later(self, 200, self.update)
             return None
         from core.section import fill_triangles
         tris = fill_triangles(segs, self.scene.active_section().normal)
@@ -5159,7 +5155,7 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         empty = np.zeros((0, 2, 3), dtype=np.float32)
         if spec is None or not len(segs):
             return empty
-        from views.hatch_paint import line_text_strokes
+        from ingetrazo_render import line_text_strokes
         strokes = line_text_strokes(spec[0], spec[1])
         if not strokes:
             return empty
@@ -10442,9 +10438,11 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         # does: bare QFontMetrics(font) reads the primary screen's DPI, and
         # on a scaled display the glyph box it gave missed the letters
         # (Marco, 2026-09-23: the eraser only took a text by its leader).
-        from PySide6.QtGui import QPaintDevice
-        fm = (QFontMetrics(font, self) if isinstance(self, QPaintDevice)
-              else QFontMetrics(font))        # the test stubs bind this
+        if NATIVE:
+            fm = font
+        else:
+            from PySide6.QtGui import QPaintDevice
+            fm = QFontMetrics(font, self) if isinstance(self, QPaintDevice) else QFontMetrics(font)
         best, best_d = None, self.pick_threshold_px * 2.0
         for lab in labels:
             if not self.scene.entity_selectable(lab):   # hidden / locked
@@ -12980,8 +12978,11 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
                 return
             shape = getattr(self.active_tool, "qt_cursor", None)
             if shape is not None:
-                from PySide6.QtGui import QCursor
-                cur = QCursor(shape)
+                if NATIVE:
+                    cur = shape
+                else:
+                    from PySide6.QtGui import QCursor
+                    cur = QCursor(shape)
         if cur is not None:
             self.setCursor(cur)
         else:
@@ -13092,7 +13093,10 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
                           "groups": group_data, "ref": ref}
         # Also on the system clipboard, so another IngeTrazo window can
         # paste it (issue #76); encoded only if that window asks.
-        if publish:
+        if publish and NATIVE:
+            from app_shell.files import publish_clipboard
+            publish_clipboard(self.window(), self.clipboard)
+        elif publish:
             from formats import clip as clip_transfer
             clip_transfer.publish(self.clipboard)
         return True

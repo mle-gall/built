@@ -100,10 +100,8 @@ class StallWatch:
         self.thread = None
 
     def start(self, parent=None):
-        from PySide6.QtCore import QTimer
-        self.timer = QTimer(parent)
-        self.timer.setInterval(int(self.period * 1000))
-        self.timer.timeout.connect(self.tick)
+        from core.timers import timer
+        self.timer = timer(parent, self.tick, int(self.period * 1000), repeat=True)
         self.timer.start()
         self.thread = threading.Thread(target=self._run, name="stall-watch",
                                        daemon=True)

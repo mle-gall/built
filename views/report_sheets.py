@@ -35,9 +35,6 @@ def about_review(version, gl_line="", host=None, renderer=None):
     import os
     import platform
     import sys
-    import PySide6
-    from PySide6.QtCore import qVersion
-    from PySide6.QtGui import QGuiApplication
     from ingetrazo_render import AboutReview, build_commit
     from core._native import engine
     from core.i18n import current_language
@@ -50,16 +47,22 @@ def about_review(version, gl_line="", host=None, renderer=None):
         except OSError:
             pass
     size = None
+    qt = pyside = ""
     if host is not None:
         size = [host.width, host.height, host.scale]
-    elif screen := QGuiApplication.primaryScreen():
-        size = [screen.size().width(), screen.size().height(), screen.devicePixelRatio()]
+    elif not chrome_sheet.in_shell():
+        import PySide6
+        from PySide6.QtCore import qVersion
+        from PySide6.QtGui import QGuiApplication
+        qt, pyside = qVersion(), PySide6.__version__
+        if screen := QGuiApplication.primaryScreen():
+            size = [screen.size().width(), screen.size().height(), screen.devicePixelRatio()]
     return AboutReview(json.dumps(dict(
         version=version, flatpak=bool(os.environ.get("FLATPAK_ID")), appimage=bool(os.environ.get("APPIMAGE")),
         packaged=bool(getattr(sys, "frozen", False) or (chrome_sheet.in_shell() and hasattr(sys, "_MEIPASS"))),
         system=system, release=platform.release(), machine=platform.machine(), pretty=pretty,
         os_version=platform.mac_ver()[0] if system == "Darwin" else platform.version(),
-        python=platform.python_version(), qt=qVersion(), pyside=PySide6.__version__, gl=gl_line,
+        python=platform.python_version(), qt=qt, pyside=pyside, gl=gl_line,
         renderer=getattr(renderer, "backend_label", "wgpu"), size=size, native=host is not None, language=current_language(), engine=engine(), commit=build_commit)))
 
 
@@ -88,11 +91,11 @@ class About(chrome_sheet.Provider):
             return
         kind, value = action
         if kind == "copy":
-            from PySide6.QtCore import QTimer
+            from core.timers import later
             if not _copy(value):
                 return
             self.review.acknowledge()
-            QTimer.singleShot(1510, lambda: chrome_sheet.refresh(ctx.win)
+            later(ctx.win, 1510, lambda: chrome_sheet.refresh(ctx.win)
                               if chrome_sheet.current(ctx.win) is self else None)
         elif kind == "open":
             import webbrowser
@@ -177,9 +180,8 @@ class Extensions(chrome_sheet.Provider):
         self.catalog = em.load_cached_catalog()
         self.bundled = em.bundled_extensions()
         from concurrent.futures import ThreadPoolExecutor
-        from PySide6.QtCore import QStandardPaths
-        from pathlib import Path
-        self.cache = Path(QStandardPaths.writableLocation(QStandardPaths.AppLocalDataLocation)) / "extension-screenshots"
+        from core.autosave import _app_data_base
+        self.cache = _app_data_base() / "extension-screenshots"
         self.pool = ThreadPoolExecutor(max_workers=3, thread_name_prefix="catalog")
         self.refreshing = None
         self.requests = {}

@@ -44,15 +44,20 @@ class _ConsoleExecution:
         """Re-bind the live objects: always the CURRENT document, not the one
         open when the console appeared (documents change under New/Open)."""
         from ingetrazo_core import Vec3 as QVector3D
-        from PySide6.QtWidgets import QApplication
         from core import bim
         from core.group import Group
         from core.mesh import Edge, Face, Mesh, Vertex
         from core.scene import Scene
 
         vp = self._viewport
+        from core.input_types import NATIVE
+        if NATIVE:
+            app = vp.window()._host
+        else:
+            from PySide6.QtWidgets import QApplication
+            app = QApplication.instance()
         self._scope.update(
-            app=QApplication.instance(), window=vp.window(), viewport=vp,
+            app=app, window=vp.window(), viewport=vp,
             document=getattr(vp.window(), "_doc", None),
             scene=vp.scene, model=vp.scene, mesh=vp.scene.mesh,
             selection=vp.scene.selection, groups=vp.scene.groups,

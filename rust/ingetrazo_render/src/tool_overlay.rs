@@ -79,6 +79,21 @@ fn tile(marks: Vec<Mark>, width: u32, height: u32, dpr: f32) -> Option<(u32, u32
     }
     Some((x, y, tile))
 }
+pub(crate) fn render_tile(
+    kind: &str,
+    tool: &Bound<'_, PyAny>,
+    view: &Bound<'_, PyAny>,
+    width: u32,
+    height: u32,
+    dpr: f32,
+) -> PyResult<Option<(u32, u32, Pixmap)>> {
+    let marks = tool
+        .py()
+        .import("ingetrazo_core")?
+        .call_method1("tool_overlay_marks", (kind, tool, view))?
+        .extract()?;
+    Ok(tile(marks, width, height, dpr))
+}
 #[pyfunction]
 pub fn tool_overlay_tile<'py>(
     py: Python<'py>,
@@ -89,11 +104,7 @@ pub fn tool_overlay_tile<'py>(
     height: u32,
     dpr: f32,
 ) -> PyResult<Option<Tile<'py>>> {
-    let marks = py
-        .import("ingetrazo_core")?
-        .call_method1("tool_overlay_marks", (kind, tool, view))?
-        .extract()?;
-    Ok(tile(marks, width, height, dpr)
+    Ok(render_tile(kind, tool, view, width, height, dpr)?
         .map(|(x, y, t)| (x, y, t.width(), t.height(), PyBytes::new(py, t.data()))))
 }
 

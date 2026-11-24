@@ -46,6 +46,9 @@ def texture_cache_root() -> Path:
     override = os.environ.get("INGETRAZO_TEXTURE_CACHE")
     if override:
         return Path(override)
+    from app_shell.native import _shell
+    if _shell is not None:
+        return Path(_shell.local_data_directory(os.environ.get("BUILT_SETTINGS_DIR"))) / "IngeTrazo" / "textures"
     base = ""
     try:
         from PySide6.QtCore import QStandardPaths
@@ -639,16 +642,12 @@ def colorize_image(data, target_rgb, ctype=COLORIZE_SHIFT):
     survive). Returns PNG bytes, or ``data`` unchanged on any failure."""
     try:
         import numpy as np
-        from PySide6.QtCore import QBuffer
-        from PySide6.QtGui import QImage
-        img = QImage.fromData(data)
-        if img.isNull():
+        from ingetrazo_render import SurveyRaster
+        img = SurveyRaster.decode(bytes(data))
+        if img is None:
             return data
-        img = img.convertToFormat(QImage.Format.Format_RGBA8888)
-        w, h = img.width(), img.height()
-        buf = np.frombuffer(img.constBits(), dtype=np.uint8,
-                            count=h * img.bytesPerLine())
-        px = buf.reshape(h, img.bytesPerLine())[:, : w * 4].reshape(h, w, 4)
+        w, h = img.width, img.height
+        px = np.frombuffer(img.rgba(), np.uint8).reshape(h, w, 4)
         rgb = px[..., :3].astype(np.float64) / 255.0
         alpha = px[..., 3]
         vis = alpha > 0
@@ -675,12 +674,7 @@ def colorize_image(data, target_rgb, ctype=COLORIZE_SHIFT):
                 hls_to_rgb(hue, lum, sat) * 255.0 + 0.5, 0, 255).astype(np.uint8)
         result[:, 3] = alpha.reshape(-1)
         del rgb, flat
-        tinted = QImage(result.tobytes(), w, h, w * 4,
-                        QImage.Format.Format_RGBA8888)
-        qbuf = QBuffer()
-        qbuf.open(QBuffer.OpenModeFlag.WriteOnly)
-        tinted.save(qbuf, "PNG")
-        return bytes(qbuf.data())
+        return SurveyRaster(w, h, result.tobytes()).material_png(bytes(data))
     except Exception:
         return data
 

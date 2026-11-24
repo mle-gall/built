@@ -49,14 +49,9 @@ def _image_data(src):
         return data, "image/jpeg"
     if not is_image_bytes(data) and Path(src).suffix.lower() != ".tga":
         return None
-    from PySide6.QtCore import QBuffer, QIODevice
-    from PySide6.QtGui import QImage
-    image = QImage(str(src))
-    buf = QBuffer()
-    buf.open(QIODevice.WriteOnly)
-    if image.isNull() or not image.save(buf, "PNG"):
-        return None
-    return bytes(buf.data()), "image/png"
+    from ingetrazo_render import SurveyRaster
+    image = SurveyRaster.open(src)
+    return (image.png(), "image/png") if image is not None else None
 
 
 def _yup_matrix(m) -> list:

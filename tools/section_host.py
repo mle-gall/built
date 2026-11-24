@@ -32,7 +32,7 @@ class SectionPlaneTool(RustTool):
         return super()._send(vp, event)
 
     def on_key(self, vp, key, modifiers):
-        from PySide6.QtCore import Qt
+        from core.input_types import Qt
         arrow = {Qt.Key_Right: "ArrowRight", Qt.Key_Left: "ArrowLeft", Qt.Key_Up: "ArrowUp", Qt.Key_Down: "ArrowDown"}.get(key)
         if not arrow:
             return False

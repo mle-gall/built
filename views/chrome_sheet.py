@@ -556,7 +556,7 @@ def search_text(win) -> str:
 def _window_key(event) -> bool:
     """⌘/⌃ combinations stay the window's (⌘K, ⌘O, ⌘W, ⌘Q…), except the
     ones a text field uses and ⌘F (the sheet's search)."""
-    from PySide6.QtCore import Qt
+    from core.input_types import Qt
     if not event.modifiers() & (Qt.ControlModifier | Qt.MetaModifier):
         return False
     return event.key() not in (Qt.Key_F, Qt.Key_A, Qt.Key_C, Qt.Key_V, Qt.Key_X, Qt.Key_Z)

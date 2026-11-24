@@ -5,8 +5,7 @@ from views.document_interaction import DocumentInteraction
 
 class DocumentController(DocumentInteraction, WidgetShim):
     def __init__(self, host=None):
-        super().__init__()
-        self._host = host
+        super().__init__(host=host)
         self._enabled = False
 
     @classmethod
@@ -97,6 +96,16 @@ class DocumentController(DocumentInteraction, WidgetShim):
     def _photo_showing(self):
         mesh = getattr(self.scene, 'photo_mesh', None)
         return bool(mesh and mesh.visible and mesh.triangle_count and self.scene.entity_visible(mesh))
+
+    def render_raster(self, width_px, height_px=None, overlays=True, annotations_only=False,
+                      sharp_shadows=False, transparent=False, crop_to_frame=False):
+        from ingetrazo_render import SurveyRaster
+        if crop_to_frame and height_px is None:
+            return self._render_framed_image(width_px, overlays, annotations_only, sharp_shadows,
+                                             transparent, raster=True)
+        frame = self.keys_stand_in.render_pixels(width_px, height_px, overlays=overlays,
+                    sharp_shadows=sharp_shadows, transparent=transparent, annotations_only=annotations_only)
+        return SurveyRaster(*frame) if frame else None
 
     def render_image(self, width_px, height_px=None, overlays=True, annotations_only=False,
                      sharp_shadows=False, transparent=False, crop_to_frame=False):

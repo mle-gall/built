@@ -14,13 +14,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QObject, Signal, QUrl
 from ingetrazo_render import SurveyRaster
-from PySide6.QtNetwork import (
-    QNetworkAccessManager,
-    QNetworkReply,
-    QNetworkRequest,
-)
+from georef.transport import NATIVE, Service, Signal
+if not NATIVE:
+    from PySide6.QtCore import QUrl
+    from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
+
 
 from georef.tiles import TileCache, TileSource, default_cache_dir  # noqa: F401 — re-exported
 
@@ -32,7 +31,7 @@ from core.version import __version__
 _USER_AGENT = (f"IngeTrazo/{__version__} (https://github.com/ingelibre/ingetrazo)").encode()
 
 
-class TileFetcher(QObject):
+class TileFetcher(Service):
     """Cache-first async tile provider.
 
     Call :meth:`request` with a source + tile index; the tile arrives via the
@@ -51,10 +50,11 @@ class TileFetcher(QObject):
     _MAX_INFLIGHT = 8
 
     def __init__(self, cache: TileCache | None = None,
-                 parent: QObject | None = None) -> None:
+                 parent: Service | None = None) -> None:
         super().__init__(parent)
         self._cache = cache if cache is not None else TileCache(default_cache_dir())
-        self._nam = QNetworkAccessManager(self)
+        if not NATIVE:
+            self._nam = QNetworkAccessManager(self)
         # (source_id, x, y, z) -> QNetworkReply, so repeated asks coalesce.
         self._inflight: dict[tuple[str, int, int, int], QNetworkReply] = {}
         # Pending downloads waiting for an in-flight slot.
@@ -98,6 +98,13 @@ class TileFetcher(QObject):
             self._start_download(source, x, y, z)
 
     def _start_download(self, source: TileSource, x: int, y: int, z: int) -> None:
+        if NATIVE:
+            from georef.transport import request
+            key = (source.id, x, y, z)
+            self._inflight[key] = request(self, source.url(x, y, z), _USER_AGENT,
+                                          lambda data: self._completed(key, data),
+                                          lambda reason: self._completed(key, None, reason))
+            return
         # QNetworkRequest's documented constructor takes QUrl.  Relying on
         # PySide's implicit str conversion enters binding code just as the
         # native network backend is being created; keep this path identical
@@ -114,21 +121,24 @@ class TileFetcher(QObject):
 
     def _on_finished(self, source_id: str, x: int, y: int, z: int,
                      reply: QNetworkReply) -> None:
-        self._inflight.pop((source_id, x, y, z), None)
-        self._pump()   # a slot freed — start the next queued download
+        key = source_id, x, y, z
         try:
             if reply.error() != QNetworkReply.NetworkError.NoError:
-                self.tileFailed.emit(source_id, x, y, z, reply.errorString())
-                return
-            data = bytes(reply.readAll())
-            img = SurveyRaster.decode(data)
-            if img is None:
-                self.tileFailed.emit(source_id, x, y, z, "undecodable tile data")
-                return
-            self._cache.put(source_id, x, y, z, data)
-            self.tileReady.emit(source_id, x, y, z, img)
+                self._completed(key, None, reply.errorString())
+            else:
+                self._completed(key, bytes(reply.readAll()))
         finally:
             reply.deleteLater()
+
+    def _completed(self, key, data, error=""):
+        self._inflight.pop(key, None)
+        self._pump()
+        img = SurveyRaster.decode(data) if data is not None else None
+        if img is None:
+            self.tileFailed.emit(*key, error or "undecodable tile data")
+        else:
+            self._cache.put(*key, data)
+            self.tileReady.emit(*key, img)
 
     def cancel_all(self) -> None:
         """Abort every in-flight download and drop the queue (source changed)."""

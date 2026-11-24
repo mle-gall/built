@@ -2,8 +2,8 @@
 rule).
 
 Each winit window has its own :class:`app_shell.host.Host`, its own
-ShellWindow (its projects) and its own renderer. They share one Python, one
-Qt application, the settings, the recent list and the link sources already
+ShellWindow (its projects) and its own renderer. They share one Python interpreter,
+the settings, the recent list and the link sources already
 read. This replaces "⇧⌘N starts another `built` process" (an Archicad-style
 instance per window, which costs memory and start-up time and races on the
 settings).
@@ -108,6 +108,7 @@ def transfer(src_win, doc, dst_host) -> bool:
     # The project's controller and view now answer to the new window.
     for obj in (doc.viewport, doc.stand_in):
         if obj is not None and hasattr(obj, "_host"):
+            dst_host.timers.transfer_context(src_win._host.timers, obj)
             obj._host = dst_host
     view = doc.stand_in
     if view is not None:

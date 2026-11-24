@@ -4,7 +4,7 @@ from app_shell.command_action import ShellAction
 
 from core.i18n import tr
 from ingetrazo_render import command_registry, shortcut_text
-from views import shortcuts
+from core import shortcuts
 
 
 def refresh(win):

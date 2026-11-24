@@ -431,6 +431,22 @@ pub(crate) fn billboard_image(py: Python<'_>, path: &Path) -> PyResult<Option<(u
     }
 }
 
+#[pyfunction]
+pub fn texture_has_alpha(py: Python<'_>, path: PathBuf) -> PyResult<bool> {
+    use image::ImageDecoder;
+    match py.detach(|| {
+        reader(&path)?
+            .into_decoder()
+            .map(|d| d.color_type().has_alpha())
+    }) {
+        Ok(has) => Ok(has),
+        Err(ImageError::Unsupported(_)) => {
+            Ok(billboard_image(py, &path)?.is_some_and(|(_, _, a)| a))
+        }
+        Err(_) => Ok(false),
+    }
+}
+
 /// Keep the legacy 32×32 nearest-neighbour test used by material import.
 #[pyfunction]
 pub fn texture_cutout(py: Python<'_>, path: PathBuf) -> PyResult<bool> {

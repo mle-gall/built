@@ -33,6 +33,11 @@ impl AtomicDocument {
             .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("closed document output"))
     }
 
+    fn write(&mut self, py: Python<'_>, bytes: &[u8]) -> PyResult<()> {
+        use std::io::Write;
+        Ok(py.detach(|| self.output()?.write_all(bytes))?)
+    }
+
     fn publish(&mut self, py: Python<'_>) -> PyResult<()> {
         Ok(py.detach(|| self.commit())?)
     }

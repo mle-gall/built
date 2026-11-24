@@ -4,6 +4,7 @@
 the section cut on a sheet — and draw its swatch for the pickers."""
 from __future__ import annotations
 
+from ingetrazo_render import line_text_strokes  # public extension import
 from PySide6.QtCore import QLineF, QPointF, QRectF, Qt
 from PySide6.QtGui import (QBrush, QColor, QImage, QPainter, QPainterPath,
                            QPen, QPixmap, QPolygonF)
@@ -252,22 +253,6 @@ def _text_path(text):
         cap = QFontMetricsF(font).capHeight() or 70.0
         _TEXT_PATHS[text] = path = (path, cap)
     return path
-
-
-def line_text_strokes(text: str, size: float) -> list:
-    """The outlines of ``text`` as polylines in paper mm — its capitals
-    ``size`` high, centred on the origin, y up — for drawing a line type's
-    words with lines (the model's edges)."""
-    path, cap = _text_path(text)
-    box = path.boundingRect()
-    k = float(size) / cap
-    out = []
-    for poly in path.toSubpathPolygons():
-        pts = [((q.x() - box.center().x()) * k, -(q.y() + cap / 2.0) * k)
-               for q in poly]
-        if len(pts) > 1:
-            out.append(pts)
-    return out
 
 
 def paint_line_text(painter: QPainter, lines, spec, colour: QColor,

@@ -7,14 +7,16 @@ import threading
 import time
 import uuid
 
-from PySide6.QtCore import QObject, QTimer, Qt, Signal
+from core.host_callbacks import HostService, Signal
+from core.timers import timer
+from core.input_types import Qt
 from views import input_state
 
 from core import autosave
 from formats.igz_snapshot import snapshot_steps
 
 
-class BackgroundAutosave(QObject):
+class BackgroundAutosave(HostService):
     finished = Signal(str, str)  # document name, error (empty on success)
     SLICE_SECONDS = .006
 
@@ -26,9 +28,7 @@ class BackgroundAutosave(QObject):
         self.steps = None
         self.writing = False
         self.results = SimpleQueue()
-        self.timer = QTimer(self)
-        self.timer.setInterval(16)
-        self.timer.timeout.connect(self.advance)
+        self.timer = timer(self, self.advance, 16, repeat=True)
         self.last_error = None
         self.max_slice_seconds = 0.0
 

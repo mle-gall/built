@@ -94,12 +94,12 @@ class DimensionTool(_AnnotationTool):
         return self.b is not None
 
     def _shift_held(self):
-        from PySide6.QtCore import Qt
+        from core.input_types import Qt
         from views import input_state
         return bool(input_state.modifiers(self._vp) & Qt.ShiftModifier)
 
     def _pointer(self, kind, ctx, t=0.0):
-        from PySide6.QtCore import Qt
+        from core.input_types import Qt
         from core.snap import project_to_view_plane
         event = super()._pointer(kind, ctx, t)
         camera = getattr(ctx.viewport, "camera", None)

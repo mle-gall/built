@@ -198,6 +198,7 @@ name = "built_app"
 version = "0.1.0"
 dependencies = [
  "cc",
+ "gtk",
  "ingetrazo_render",
  "muda",
  "objc2 0.6.5",
@@ -208,6 +209,7 @@ dependencies = [
  "raw-window-handle",
  "rfd",
  "serde_json",
+ "windows",
  "winit",
 ]
 
@@ -1211,12 +1213,14 @@ dependencies = [
  "bytemuck",
  "core-foundation",
  "core-graphics",
+ "crc32fast",
  "egui",
  "egui-wgpu",
  "flate2",
  "foreign-types",
  "glam",
  "image",
+ "kurbo",
  "libloading",
  "numpy",
  "png 0.18.1",
@@ -1228,6 +1232,9 @@ dependencies = [
  "rustybuzz",
  "serde",
  "serde_json",
+ "svgtypes",
+ "unicode-bidi",
+ "unicode-script",
  "wgpu",
  "windows",
 ]

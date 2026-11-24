@@ -65,20 +65,17 @@ def people() -> list[dict]:
 
 def figures_dir() -> Path:
     """The user's own pictures, beside the rest of the app's data."""
-    from PySide6.QtCore import QStandardPaths
-    base = (QStandardPaths.writableLocation(QStandardPaths.AppDataLocation)
-            or str(Path.home() / ".ingetrazo"))
-    return Path(base) / "figures"
+    from core.autosave import _app_data_base
+    return _app_data_base() / "figures"
 
 
 def store_picture(source: str | Path) -> Path:
     """Copy ``source`` into :func:`figures_dir` under a name made from its
     bytes (the same picture chosen twice is one file). Raises ``OSError``
     or ``ValueError`` when it cannot be read as an image."""
-    from PySide6.QtGui import QImage
+    from ingetrazo_render import SurveyRaster
     data = Path(source).read_bytes()
-    img = QImage()
-    if not img.loadFromData(data) or img.isNull() or img.height() == 0:
+    if SurveyRaster.open(source) is None:
         raise ValueError("not an image")
     folder = figures_dir()
     folder.mkdir(parents=True, exist_ok=True)

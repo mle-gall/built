@@ -14,7 +14,7 @@ parent-context axes, and the magenta custom plane from hovering a face.
 from __future__ import annotations
 
 from tools.overlay_painter import draw_overlay
-from PySide6.QtCore import Qt
+from core.input_types import Qt
 from ingetrazo_core import Vec3 as QVector3D
 
 from ingetrazo_core import ToolMachine

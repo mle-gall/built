@@ -755,14 +755,8 @@ def _image_color(dae: _Dae, image_el):
         from urllib.parse import unquote
         candidate = Path(dae.base_dir) / unquote(ref)
         if candidate.is_file():
-            from PySide6.QtCore import Qt
-            from PySide6.QtGui import QImage
-            img = QImage(str(candidate))
-            if not img.isNull():
-                px = img.scaled(1, 1, Qt.IgnoreAspectRatio,
-                                Qt.SmoothTransformation)
-                c = px.pixelColor(0, 0)
-                color = [c.redF(), c.greenF(), c.blueF()]
+            from core.vista_caras import texture_average
+            color = texture_average(candidate)
     if color is None:
         # Missing image: a deterministic light tint keeps the material
         # boundary visible without inventing loud colours.
@@ -1007,20 +1001,8 @@ def _image_has_cutout(dae: _Dae, path: str) -> bool:
     cached = dae._img_alpha.get(path)
     if cached is not None:
         return cached
-    from PySide6.QtCore import Qt
-    from PySide6.QtGui import QImage
-    img = QImage(path)
-    ok = False
-    if not img.isNull() and img.hasAlphaChannel():
-        small = img.scaled(32, 32, Qt.IgnoreAspectRatio,
-                           Qt.FastTransformation)
-        for yy in range(small.height()):
-            for xx in range(small.width()):
-                if small.pixelColor(xx, yy).alpha() < 32:
-                    ok = True
-                    break
-            if ok:
-                break
+    from ingetrazo_render import texture_cutout
+    ok = texture_cutout(path)
     dae._img_alpha[path] = ok
     return ok
 

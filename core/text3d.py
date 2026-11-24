@@ -3,8 +3,7 @@
 """3D Text — real, editable geometry generated from font glyphs (Texto
 3D).
 
-Qt supplies the glyph outlines (the line shaped by ``QTextLayout``, its
-glyph paths → ``toSubpathPolygons``); each outline ring is classified outer/hole by
+Rust shapes the line and flattens its glyph outlines; each outline ring is classified outer/hole by
 containment parity, becomes a front face (with holes) and, when a thickness
 is given, a back face plus side walls — one closed solid per contour group.
 The result is a plain ``Mesh`` for a ``Group``: the letters push/pull, paint
@@ -24,77 +23,10 @@ after the thickness is re-edited.
 """
 from __future__ import annotations
 
-from PySide6.QtGui import QFont, QPainterPath, QTextLayout
+from ingetrazo_render import text_outlines
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.mesh import Mesh
-
-#: Curve flattening happens at font-point scale; 100 pt keeps letter curves
-#: smooth without exploding the vertex count.
-_FONT_PT = 100.0
-
-
-def _font(font_family: str, bold: bool, italic: bool) -> QFont:
-    font = QFont(font_family)
-    font.setPointSizeF(_FONT_PT)
-    font.setBold(bold)
-    font.setItalic(italic)
-    return font
-
-
-def _shaped_paths(text: str, font_family: str, bold: bool,
-                  italic: bool) -> dict[int, QPainterPath]:
-    """The line shaped ONCE (kerning, font fallback, ligatures) as glyph
-    outlines per owning character index, baseline at y=0. The whole text
-    and its letters both come from here: ``QPainterPath.addText`` places
-    glyphs its own way, and on Windows (Segoe UI) and macOS its advances
-    differ from the shaped line's, so a text built in one piece and the
-    same text split into letters did not match (MAC-07, ronda Windows
-    0.5.9)."""
-    layout = QTextLayout(text, _font(font_family, bold, italic))
-    layout.beginLayout()
-    line = layout.createLine()
-    layout.endLayout()
-    # Qt string indexes count UTF-16 units; Python indexes Unicode characters.
-    owners = {}
-    offset = 0
-    for i, ch in enumerate(text):
-        owners[offset] = i
-        offset += len(ch.encode("utf-16-le")) // 2
-    paths = {}
-    for run in layout.glyphRuns(0, -1, QTextLayout.GlyphRunRetrievalFlag.RetrieveAll):
-        raw = run.rawFont()
-        for glyph, pos, index in zip(run.glyphIndexes(), run.positions(),
-                                     run.stringIndexes()):
-            owner = owners[index]
-            path = raw.pathForGlyph(glyph)
-            path.translate(pos.x(), pos.y() - line.ascent())
-            paths.setdefault(owner, QPainterPath()).addPath(path)
-    return paths
-
-
-def _rings(text: str, font_family: str, bold: bool,
-           italic: bool) -> tuple[list[list[tuple[float, float]]], float]:
-    """Glyph outline rings of the whole shaped line in font units (y already
-    flipped to 'up') and the layout height of one line."""
-    rings = []
-    for _i, path in sorted(_shaped_paths(text, font_family, bold,
-                                         italic).items()):
-        rings.extend(_path_rings(path))
-    return rings, _FONT_PT
-
-
-def _path_rings(path: QPainterPath) -> list[list[tuple[float, float]]]:
-    rings = []
-    for poly in path.toSubpathPolygons():
-        ring = [(pt.x(), -pt.y()) for pt in poly]   # Qt y-down → up
-        if len(ring) >= 3:
-            if ring[0] == ring[-1]:
-                ring = ring[:-1]
-            if len(ring) >= 3:
-                rings.append(ring)
-    return rings
-
 
 def _ring_area(ring) -> float:
     s = 0.0
@@ -217,7 +149,8 @@ def build_text_mesh(text: str, font_family: str = "", bold: bool = False,
                     thickness: float = 0.05) -> Mesh:
     """Build the 3D-text mesh in ONE piece: ``height`` is the letter height
     in metres, ``thickness`` the extrusion depth (0 → flat faces only)."""
-    rings, _layout_h = _rings(text, font_family, bold, italic)
+    paths = text_outlines(text, font_family, bold, italic)
+    rings = [ring for glyph in paths.values() for ring in glyph]
     if not rings:
         return Mesh()
     scale, y_min = _block_scale(rings, height)
@@ -235,14 +168,14 @@ def build_text_letters(text: str, font_family: str = "", bold: bool = False,
     The whole line is shaped once, including kerning, font fallback and
     ligatures. Shared glyphs belong to their first character's mesh.
     """
-    rings, _layout_h = _rings(text, font_family, bold, italic)
+    paths = text_outlines(text, font_family, bold, italic)
+    rings = [ring for glyph in paths.values() for ring in glyph]
     if not rings:
         return []
     scale, y_min = _block_scale(rings, height)
-    paths = _shaped_paths(text, font_family, bold, italic)
     letters: list = []
     for i in sorted(paths):
-        glyph = _path_rings(paths[i])
+        glyph = paths[i]
         if not glyph:
             continue
         mesh = _solid_from_rings(glyph, scale, y_min, thickness)

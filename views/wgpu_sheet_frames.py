@@ -569,7 +569,8 @@ class Ground:
     scene's datum, or the survey when it shows. ``changed`` is called when
     tiles land, for the page to be sent again."""
 
-    def __init__(self, changed):
+    def __init__(self, changed, owner=None):
+        self._owner = owner
         self._changed = changed
         self._dem = self._survey = None
 
@@ -580,7 +581,7 @@ class Ground:
         datum = getattr(scene, "georef", None)
         if self._dem is None or self._dem.datum is not datum:
             from georef.dem import DEMSampler
-            self._dem = DEMSampler(datum)
+            self._dem = DEMSampler(datum, parent=self._owner) if self._owner is not None else DEMSampler(datum)
             self._dem.changed.connect(self._changed)
         survey = getattr(scene, "photo_mesh", None)
         sampler = None

@@ -182,7 +182,7 @@ def _import_by_path(stem: str, file: Path):
     return mod
 
 
-def discover_plugins(dirs=None, *, panels_only=False):
+def discover_plugins(dirs=None, *, panels_only=False, native_panels=None):
     """Scan ``dirs`` (default :func:`plugin_dirs`) and load every plugin.
 
     Returns ``(plugins, errors)`` and never raises: each failing candidate
@@ -198,6 +198,12 @@ def discover_plugins(dirs=None, *, panels_only=False):
     from core.extension_manager import disabled_overrides, safe_mode
     if safe_mode():
         return plugins, errors
+    if native_panels is not None:
+        # Optional binary dependencies installed beside user plugins. Bundled
+        # modules keep precedence. A .pth file must not execute at app startup.
+        libraries = user_plugins_dir().with_name("plugin-libs")
+        if libraries.is_dir() and str(libraries) not in sys.path:
+            sys.path.append(str(libraries))
     disabled = disabled_overrides()
     for p_dir in (list(dirs) if dirs is not None else plugin_dirs()):
         if not os.path.isdir(p_dir):
@@ -215,6 +221,12 @@ def discover_plugins(dirs=None, *, panels_only=False):
                 errors.append(PluginError(stem, file, problem))
                 continue
             try:
+                if native_panels is not None and file.parent == app_root() / "plugins" and stem in native_panels:
+                    module = native_panels[stem]
+                    if module:
+                        factory = importlib.import_module(module).create_panel
+                        plugins.append(LoadedPlugin(stem, file, panel=factory))
+                    continue
                 mod = _import_by_path(stem, file)
                 panel = getattr(mod, "create_panel", None)
                 if panels_only and not callable(panel):

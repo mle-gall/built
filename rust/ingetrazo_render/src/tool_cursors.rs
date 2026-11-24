@@ -116,3 +116,17 @@ pub fn tool_cursor_art<'py>(
 ) -> Option<(Bound<'py, PyBytes>, [f32; 2])> {
     pixels(key, side).map(|(art, hot)| (PyBytes::new(py, art.as_raw()), hot))
 }
+
+/// 48-pixel white-alpha masters for the native rail and view-command cluster.
+#[pyfunction]
+pub fn rail_icon<'py>(py: Python<'py>, key: &str) -> (u32, u32, Bound<'py, PyBytes>) {
+    static ATLAS: OnceLock<RgbaImage> = OnceLock::new();
+    let Some(index) = include_str!("../assets/rail_icons.txt").lines().position(|name| name == key) else {
+        return (0, 0, PyBytes::new(py, &[]));
+    };
+    let atlas = ATLAS.get_or_init(|| image::load_from_memory(include_bytes!("../assets/rail_icons.png"))
+        .expect("invalid embedded rail artwork").into_rgba8());
+    let i = index as u32;
+    let image = imageops::crop_imm(atlas, i % 8 * 48, i / 8 * 48, 48, 48).to_image();
+    (48, 48, PyBytes::new(py, image.as_raw()))
+}

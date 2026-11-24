@@ -18,6 +18,7 @@ from ingetrazo_render import ModelClipboard, cold_start_document as cold_start, 
 from core.i18n import tr
 
 _clipboard = ModelClipboard()
+publish_clipboard = _clipboard.publish
 
 #: What open_path reads as a document; the rest are imports.
 IMPORTS = (".skp", ".dae", ".dxf", ".dwg", ".rfa", ".glb", ".gltf")
@@ -769,7 +770,7 @@ def export_igz(win, path=None) -> bool:
     """File ▸ Save a Copy as IngeTrazo (.igz): float32 geometry, after
     saying how far that rounding moves points."""
     import copy as _copy
-    from PySide6.QtWidgets import QMessageBox
+    from views.chrome_dialogs import QMessageBox
     from formats import igz as igz_format
     from views import chrome_dialogs as cd
     from views.filedialogs import file_dialogs

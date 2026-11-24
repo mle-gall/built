@@ -97,14 +97,9 @@ def texture_average(path, cache={}) -> tuple | None:
     cannot be read — what a textured face shows without its texture."""
     if path in cache:
         return cache[path]
-    from PySide6.QtCore import Qt
-    from PySide6.QtGui import QImage
-    img = QImage(str(path))
-    out = None
-    if not img.isNull():
-        px = img.scaled(1, 1, Qt.IgnoreAspectRatio,
-                        Qt.SmoothTransformation).pixelColor(0, 0)
-        out = (px.redF(), px.greenF(), px.blueF())
+    from ingetrazo_render import SurveyRaster
+    img = SurveyRaster.open(path)
+    out = img.mean_rgb() if img is not None else None
     cache[path] = out
     return out
 

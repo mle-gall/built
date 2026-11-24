@@ -20,8 +20,12 @@ import os
 from pathlib import Path
 
 from core.settings import settings as QSettings
-from PySide6.QtCore import QStandardPaths
-from PySide6.QtWidgets import QFileDialog
+from app_shell.native import _shell
+if _shell is not None:
+    from app_shell.files import ShellFileDialog as QFileDialog
+else:
+    from PySide6.QtCore import QStandardPaths
+    from PySide6.QtWidgets import QFileDialog
 
 _KEY = "files/last_dir"
 
@@ -45,8 +49,9 @@ def last_dir(fallback: str | os.PathLike | None = None) -> str:
         return str(saved)
     if fallback and _is_dir(fallback):
         return str(fallback)
-    docs = QStandardPaths.writableLocation(QStandardPaths.DocumentsLocation)
-    return docs if docs and _is_dir(docs) else str(Path.home())
+    docs = (_shell.documents_directory() if _shell is not None else
+            QStandardPaths.writableLocation(QStandardPaths.DocumentsLocation))
+    return str(docs) if docs and _is_dir(docs) else str(Path.home())
 
 
 def remember(path: str | os.PathLike | None) -> None:

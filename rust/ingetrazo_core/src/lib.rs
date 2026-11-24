@@ -13,6 +13,7 @@ use numpy::IntoPyArray;
 use pyo3::types::PyBytes;
 
 mod math;
+mod screen;
 mod texture_position;
 mod navigation;
 mod recents;
@@ -111,6 +112,7 @@ mod sheets;
 
 #[pymodule]
 fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    screen::register(m)?;
     scene_animation::register(m)?;
     survey_pixels::register(m)?;
     m.add_class::<scene_video::MkvWriter>()?;

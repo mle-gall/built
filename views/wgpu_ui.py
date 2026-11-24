@@ -9,119 +9,17 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer, QSize
-from PySide6.QtGui import QImage, QKeySequence
+from core.input_types import Qt
+from core.timers import later
+from ingetrazo_render import shortcut_text
+from core.shortcuts import action_keys
 
 # Inter 400/500/600 (SIL OFL, resources/fonts/inter); the system font if missing.
 FONT = str(Path(__file__).resolve().parents[1] / "resources" / "fonts" / "inter")
 if not os.path.isdir(FONT):
     FONT = "/System/Library/Fonts/SFNS.ttf"
-_ICON_PX = 48
 
-
-def _icon_rgba(key: str) -> tuple[int, int, bytes]:
-    """The tool's own icon as white with its alpha, so egui can tint it."""
-    from views.icons import tool_icon
-    icon = tool_icon(key)
-    if icon.isNull():
-        return 0, 0, b""
-    image = icon.pixmap(QSize(_ICON_PX, _ICON_PX)).toImage().convertToFormat(
-        QImage.Format_RGBA8888)
-    w, h = image.width(), image.height()
-    data = bytearray(bytes(image.constBits())[: w * h * 4])
-    data[0::4] = data[1::4] = data[2::4] = b"\xff" * (w * h)
-    return w, h, bytes(data)
-
-
-def _drawn_icon(key: str) -> tuple[int, int, bytes]:
-    """Icons the app has no art for yet (view-state toggles), drawn in the
-    same 48-px grid and stroke as views/icons.py, white for tinting."""
-    from PySide6.QtCore import QPointF, QRectF
-    from PySide6.QtGui import QColor, QPainter, QPen
-    image = QImage(_ICON_PX, _ICON_PX, QImage.Format_RGBA8888)
-    image.fill(Qt.transparent)
-    p = QPainter(image)
-    p.setRenderHint(QPainter.Antialiasing, True)
-    solid = QPen(QColor(255, 255, 255), 3.0, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
-    dashed = QPen(QColor(255, 255, 255, 200), 2.2, Qt.DashLine, Qt.RoundCap, Qt.RoundJoin)
-    dashed.setDashPattern([1.6, 1.8])
-    front, back = QRectF(10, 18, 20, 20), QRectF(18, 10, 20, 20)
-    corners = [(front.topLeft(), back.topLeft()), (front.topRight(), back.topRight()),
-               (front.bottomLeft(), back.bottomLeft()), (front.bottomRight(), back.bottomRight())]
-    if key == "xray":
-        # A cube you see through: faces washed, every edge drawn.
-        p.setPen(Qt.NoPen)
-        p.setBrush(QColor(255, 255, 255, 70))
-        p.drawRect(back)
-        p.drawRect(front)
-        p.setBrush(Qt.NoBrush)
-        p.setPen(solid)
-        p.drawRect(front)
-        p.drawRect(back)
-        for a, b in corners:
-            p.drawLine(a, b)
-    elif key == "back_edges":
-        # The near edges solid, the ones behind dashed.
-        p.setPen(dashed)
-        p.drawLine(back.topLeft(), back.bottomLeft())
-        p.drawLine(back.bottomLeft(), back.bottomRight())
-        p.drawLine(front.bottomLeft(), back.bottomLeft())
-        p.setPen(solid)
-        p.drawRect(front)
-        p.drawLine(back.topLeft(), back.topRight())
-        p.drawLine(back.topRight(), back.bottomRight())
-        p.drawLine(front.topLeft(), back.topLeft())
-        p.drawLine(front.topRight(), back.topRight())
-        p.drawLine(front.bottomRight(), back.bottomRight())
-    elif key == "section_cut":
-        # A box sliced by a plane: the near half kept, its cut face hatched,
-        # the far half gone (dashed), the plane drawn through it.
-        p.setPen(dashed)
-        p.drawLine(QPointF(25, 15), QPointF(37, 15))
-        p.drawLine(QPointF(37, 15), QPointF(37, 35))
-        p.drawLine(QPointF(37, 35), QPointF(25, 35))
-        p.setPen(Qt.NoPen)
-        p.setBrush(QColor(255, 255, 255, 90))
-        p.drawRect(QRectF(11, 15, 14, 20))
-        p.setBrush(Qt.NoBrush)
-        hatch = QPen(QColor(255, 255, 255, 190), 1.6)
-        p.setPen(hatch)
-        for k in range(0, 34, 6):
-            p.drawLine(QPointF(max(11, 11 + k - 20), min(35, 15 + k)), QPointF(min(25, 11 + k), max(15, 15 + k - 14)))
-        p.setPen(solid)
-        p.drawLine(QPointF(25, 15), QPointF(11, 15))
-        p.drawLine(QPointF(11, 15), QPointF(11, 35))
-        p.drawLine(QPointF(11, 35), QPointF(25, 35))
-        plane = QPen(QColor(255, 255, 255), 3.4, Qt.SolidLine, Qt.RoundCap)
-        p.setPen(plane)
-        p.drawLine(QPointF(25, 9), QPointF(25, 41))
-    elif key == "shadows":
-        # A sun, a box, and the shadow it casts on the ground.
-        p.setPen(Qt.NoPen)
-        p.setBrush(QColor(255, 255, 255, 110))
-        from PySide6.QtGui import QPolygonF
-        p.drawPolygon(QPolygonF([QPointF(24, 38), QPointF(36, 38), QPointF(44, 31), QPointF(32, 31)]))
-        p.setBrush(Qt.NoBrush)
-        p.setPen(solid)
-        p.drawRect(QRectF(22, 22, 14, 16))
-        p.drawEllipse(QPointF(12, 12), 4.5, 4.5)
-        ray = QPen(QColor(255, 255, 255), 2.2, Qt.SolidLine, Qt.RoundCap)
-        p.setPen(ray)
-        import math
-        for a in range(0, 360, 45):
-            r = math.radians(a)
-            p.drawLine(QPointF(12 + 7.5 * math.cos(r), 12 + 7.5 * math.sin(r)),
-                       QPointF(12 + 10 * math.cos(r), 12 + 10 * math.sin(r)))
-    elif key == "hidden_geometry":
-        # A face whose soft diagonal and smoothed edges show dashed.
-        p.setPen(solid)
-        p.drawRect(QRectF(11, 11, 26, 26))
-        p.setPen(dashed)
-        p.drawLine(QPointF(11, 37), QPointF(37, 11))
-        p.drawLine(QPointF(11, 24), QPointF(24, 11))
-        p.drawLine(QPointF(24, 37), QPointF(37, 24))
-    p.end()
-    return _ICON_PX, _ICON_PX, bytes(image.constBits())[: _ICON_PX * _ICON_PX * 4]
+from ingetrazo_render import rail_icon as _icon_rgba
 
 
 def _window(view):
@@ -218,7 +116,8 @@ def _send_tools(view, win) -> None:
                 continue
             if not action.isEnabled():
                 disabled.append(key)
-            shortcut = action.shortcut().toString(QKeySequence.NativeText)
+            primary = next(iter(action_keys(action)), "")
+            shortcut = shortcut_text(primary)[1] if primary else ""
             w, h, rgba = _icon_rgba(key)
             row.append((key, action.text().replace("&", ""), shortcut, w, h, rgba))
         if row:
@@ -227,6 +126,29 @@ def _send_tools(view, win) -> None:
         view.renderer.ui_set_tools(groups, disabled)
     else:
         view.renderer.ui_set_tools(groups)
+    if "_host" not in vars(win):
+        _hide_widget_chrome(view, win)
+    icons = []
+    from views.view_commands import entries
+    for group, _, _, _, key in entries():
+        if group not in ("nav", "walkthrough", "Views", "Projection") or not key:
+            continue
+        w, h, rgba = _icon_rgba(key)
+        icons.append((key, w, h, rgba))
+    icons.append(("four_views", *_icon_rgba("four_views")))
+    for key in ("xray", "back_edges", "hidden_geometry", "section_cut", "shadows"):
+        icons.append((key, *_icon_rgba(key)))
+    view.renderer.ui_set_icons(icons)
+    view._ui_tools_sent = True
+
+
+#: Window buttons' room at the top left (mac_glass: 14 + three buttons).
+LIGHTS_ROOM = 86.0
+#: The docked top bar (ui.rs TOP_H): its empty parts move the window.
+TOP_H = 40.0
+
+
+def _hide_widget_chrome(view, win):
     # Full bleed: the palette replaces every tool bar.
     from PySide6.QtWidgets import QToolBar
     for bar in win.findChildren(QToolBar):
@@ -249,24 +171,6 @@ def _send_tools(view, win) -> None:
               getattr(win, "_vcb_value", None)):
         if w is not None:
             w.setMaximumWidth(0)
-    icons = []
-    from views.view_commands import entries
-    for group, _, _, _, key in entries():
-        if group not in ("nav", "walkthrough", "Views", "Projection") or not key:
-            continue
-        w, h, rgba = _icon_rgba(key)
-        icons.append((key, w, h, rgba))
-    icons.append(("four_views", *_icon_rgba("four_views")))
-    for key in ("xray", "back_edges", "hidden_geometry", "section_cut", "shadows"):
-        icons.append((key, *_drawn_icon(key)))
-    view.renderer.ui_set_icons(icons)
-    view._ui_tools_sent = True
-
-
-#: Window buttons' room at the top left (mac_glass: 14 + three buttons).
-LIGHTS_ROOM = 86.0
-#: The docked top bar (ui.rs TOP_H): its empty parts move the window.
-TOP_H = 40.0
 
 
 def _merge_title_row(win) -> None:
@@ -297,8 +201,8 @@ def _merge_title_row(win) -> None:
         top = view.mapTo(win, QPoint(0, 0)).y() if view is not None else 0
         chrome._glass.place_lights(top + TOP_H / 2)     # the top bar's centre
     chrome.fit_lights = fit
-    QTimer.singleShot(0, fit)
-    QTimer.singleShot(400, fit)
+    later(win, 0, fit)
+    later(win, 400, fit)
 
 
 def _projects(view, win) -> None:
@@ -551,7 +455,7 @@ def _ctrl() -> str:
     """The native name of the key the tools call Ctrl (⌘ on the Mac)."""
     global _CTRL
     if _CTRL is None:
-        _CTRL = QKeySequence(Qt.CTRL | Qt.Key_A).toString(QKeySequence.NativeText)[:-1].strip("+") or "Ctrl"
+        _CTRL = shortcut_text("Ctrl+A")[1][:-1].strip("+") or "Ctrl"
     return _CTRL
 
 
@@ -1193,6 +1097,28 @@ def _paint_with(win, key) -> None:
 UNIT_TEXT = {"m2": "m²", "m3": "m³", "m": "m", "und": "u", "kg": "kg"}
 
 
+from contextlib import contextmanager
+
+
+@contextmanager
+def _wait_cursor(viewport):
+    from core.input_types import NATIVE, Qt
+    if NATIVE:
+        previous = viewport.cursor()
+        viewport.setCursor(Qt.WaitCursor)
+        try:
+            yield
+        finally:
+            viewport.setCursor(previous)
+    else:
+        from PySide6.QtWidgets import QApplication
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            yield
+        finally:
+            QApplication.restoreOverrideCursor()
+
+
 def _measure(view, win, auto=False) -> None:
     """Quantity takeoff (the BIM panel's metrado), per item. The first
     measure walks every tagged object (7.5 s on the 99k-object Ride file),
@@ -1208,11 +1134,8 @@ def _measure(view, win, auto=False) -> None:
         q = view._ui_qty = {"scene": id(scene), "memo": {}, "sig": None, "by_group": {}}
     if q["sig"] == scene.content_version:
         return
-    from PySide6.QtCore import Qt
-    from PySide6.QtWidgets import QApplication
     t0 = time.perf_counter()
-    QApplication.setOverrideCursor(Qt.WaitCursor)
-    try:
+    with _wait_cursor(win.viewport):
         objs = bim.collect_objects(scene, q["memo"])
         by_group = {}
         for obj in objs:
@@ -1234,8 +1157,6 @@ def _measure(view, win, auto=False) -> None:
         q["by_group"] = by_group
         q["sig"] = scene.content_version
         q["count"] = len(objs)
-    finally:
-        QApplication.restoreOverrideCursor()
     if not auto:
         win.viewport.flash_status(f"Measured {len(objs)} items in {time.perf_counter() - t0:.1f} s")
     view._ui_tree_sig = None
@@ -1263,19 +1184,14 @@ def _qty_rows(per_unit) -> list:
 
 
 def _export_csv(win) -> None:
-    from PySide6.QtCore import Qt
-    from PySide6.QtWidgets import QApplication
     from core.bim import quantities_csv
     from views.filedialogs import file_dialogs
     path, _ = file_dialogs.getSaveFileName(win, "Export quantities CSV", "metrado.csv", "CSV (*.csv);;All files (*)")
     if not path:
         return
-    QApplication.setOverrideCursor(Qt.WaitCursor)
-    try:
+    with _wait_cursor(win.viewport):
         with open(path, "w", encoding="utf-8") as fh:
             fh.write(quantities_csv(win.viewport.scene))
-    finally:
-        QApplication.restoreOverrideCursor()
     win.viewport.flash_status(f"Quantities exported to {path}")
 
 
@@ -2498,7 +2414,7 @@ def after_frame(view) -> None:
     if actions:
         win = _window(view)
         # Never switch tools from inside a paint.
-        QTimer.singleShot(0, view, lambda: _run(win, actions, view))
+        later(view, 0, lambda: _run(win, actions, view))
     delay = renderer.ui_repaint_after_ms()
     if view.__dict__.get("_ui_poll_jobs"):
         delay = 400 if delay is None else min(delay, 400)
@@ -2949,13 +2865,13 @@ _KEYS = {Qt.Key_PageUp: "PageUp", Qt.Key_PageDown: "PageDown", Qt.Key_Escape: "E
 
 
 def _opens_commands(view, event) -> bool:
-    from PySide6.QtGui import QKeySequence
     window = view.window()
     registry = vars(window).get("_registry_actions")
     action = registry.get("command_search") if registry is not None else getattr(window, "_act_search_commands", None)
     if action is None:
         return False
-    return QKeySequence(event.key() | event.modifiers().value) in action.shortcuts()
+    combo = event.key() | event.modifiers().value
+    return any(parsed[2] == combo for key in action_keys(action) if (parsed := shortcut_text(key)))
 
 
 def _all_commands(win):

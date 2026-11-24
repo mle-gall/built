@@ -12,6 +12,7 @@ there is one answer to "where am I installed". (Same contract as IngeCAD's
 """
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -107,3 +108,11 @@ def prune_handled_com_errors(path) -> None:
         Path(path).write_text("".join(kept), encoding="utf-8")
     except OSError:
         pass
+
+def cache_directory() -> Path:
+    """Platform cache root for regenerable drawing and render files."""
+    from app_shell.native import _shell
+    if _shell is not None:
+        return Path(_shell.cache_directory(os.environ.get("BUILT_SETTINGS_DIR")))
+    from PySide6.QtCore import QStandardPaths
+    return Path(QStandardPaths.writableLocation(QStandardPaths.GenericCacheLocation))

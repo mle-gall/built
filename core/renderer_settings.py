@@ -7,7 +7,6 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from functools import lru_cache
-from PySide6.QtCore import qVersion
 
 
 @dataclass(frozen=True)
@@ -15,7 +14,7 @@ class Capability:
     available: bool
     reason: str = ''
     python_version: str = platform.python_version()
-    qt_version: str = qVersion()
+    qt_version: str = ""
 
 
 def _probe_local():
@@ -27,7 +26,7 @@ def _probe_local():
         return Capability(False, reason)
     try:
         from PySide6.QtWidgets import QApplication, QWidget
-        from PySide6.QtCore import Qt
+        from PySide6.QtCore import Qt, qVersion
         app = QApplication.instance() or QApplication([])
         view = QWidget()
         view.setAttribute(Qt.WidgetAttribute.WA_NativeWindow)
@@ -38,9 +37,10 @@ def _probe_local():
         renderer.ui_enable(None)
         del renderer
         view.close()
-        return Capability(True)
+        return Capability(True, qt_version=qVersion())
     except BaseException as exc:  # also catches PyO3's PanicException
-        return Capability(False, f'GPU adapter/device unavailable: {exc}')
+        return Capability(False, f'GPU adapter/device unavailable: {exc}',
+                          qt_version=qVersion() if 'qVersion' in locals() else '')
 
 
 @lru_cache(maxsize=1)

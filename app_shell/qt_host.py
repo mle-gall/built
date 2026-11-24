@@ -1,18 +1,8 @@
-"""Headless Qt for the shell: value types, painting and timers, no widgets.
+"""Select native preferences and, on demand, host Qt extension widgets offscreen.
 
-``start`` must run before anything imports ``views`` or ``core`` modules that
-read QSettings at import time. Interactive launches share the classic app's
-profile. Automation and tests use isolated settings.
-
-The application object is an offscreen ``QApplication`` (no window ever
-reaches AppKit; winit owns the screen). It used to be a QGuiApplication,
-but borrowed code that still builds a Qt widget (a QMessageBox fallback, a
-QMenu, a dialog an extension opens) then aborted the process: "Must
-construct a QApplication before a QWidget". Now such a widget can exist,
-and :class:`WidgetGuard` stops it from waiting for an answer nobody can
-see: a top-level widget that shows is rejected or closed at once, and the
-host is told, so the status says "needs the classic app" instead of the
-app hanging behind an invisible modal dialog.
+Winit drives the native window and its timers. A plugin that imports Qt GUI can
+use actions and callbacks. The guard intercepts attempts to open a widget that
+would otherwise wait for input outside the shell.
 """
 from __future__ import annotations
 
@@ -45,30 +35,40 @@ def configure_settings(profile: str | None) -> None:
 
 
 def start(settings: str | None = None, *, temporary: bool = False) -> str | None:
-    """Create the offscreen QApplication once; return the settings dir."""
+    """Select the shell profile before document or plugin imports."""
     global _APP, _SETTINGS_DIR
     profile = settings or os.environ.get("BUILT_SETTINGS_DIR")
     if not profile and not temporary and ("pytest" in sys.modules or "PYTEST_CURRENT_TEST" in os.environ):
         raise RuntimeError("pytest must supply an isolated shell profile")
-    if _APP is not None:
-        return _SETTINGS_DIR
-    # Offscreen: Qt opens no window and never talks to AppKit; winit does.
-    os.environ["QT_QPA_PLATFORM"] = "offscreen"
-    from PySide6.QtCore import QCoreApplication
-    from PySide6.QtWidgets import QApplication
     if temporary and not profile:
         profile = tempfile.mkdtemp(prefix="built-shell-settings-")
     _SETTINGS_DIR = profile
-    configure_settings(profile)
-    QCoreApplication.setOrganizationName("IngeTrazo")
-    QCoreApplication.setApplicationName("IngeTrazo")
-    _APP = QApplication.instance() or QApplication([sys.argv[0] if sys.argv else "built"])
+    os.environ["QT_QPA_PLATFORM"] = "offscreen"  # optional widget extensions
+    if profile:
+        data = os.path.join(profile, "data")
+        os.makedirs(data, exist_ok=True)
+        os.environ["XDG_DATA_HOME"] = data
+    if "built_shell" not in sys.builtin_module_names:
+        enable_plugin_widgets()
     from core import i18n, settings
     settings.use_native(profile)
     i18n.set_language(i18n.resolve_language(settings.settings().value("language")))
+    return profile
+
+
+def enable_plugin_widgets():
+    """Install the optional offscreen event loop when an extension requests widgets."""
+    global _APP
+    if _APP is not None:
+        return
+    from PySide6.QtCore import QCoreApplication
+    from PySide6.QtWidgets import QApplication
+    configure_settings(_SETTINGS_DIR)
+    QCoreApplication.setOrganizationName("IngeTrazo")
+    QCoreApplication.setApplicationName("IngeTrazo")
+    _APP = QApplication.instance() or QApplication([sys.argv[0] if sys.argv else "built"])
     _track_timers()
     install_widget_guard()
-    return _SETTINGS_DIR
 
 
 # ---- Qt timers: when the loop must wake ----------------------------------------
