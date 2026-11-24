@@ -259,6 +259,7 @@ pub struct Column {
     sort: tree_order::Sort,
     ordered: Vec<usize>,
     unfiled: u32,
+    browser_picks: usize,
     issue_at: Option<usize>,
     export_focus: (Option<String>, std::collections::HashSet<String>),
     filter: String,
@@ -442,7 +443,7 @@ impl Ui {
     /// row, eye, lock, expandable, expanded, selected]).
     pub fn set_tree(&mut self, rows: Vec<(Vec<String>, Vec<i64>)>, unfiled: u32) {
         let col = self.column.get_or_insert_with(|| Column {
-            nodes: Vec::new(), path: Vec::new(), host: Default::default(), overview: Default::default(), styles: Default::default(), reveal: None, proposal_available: false, proposal_dismissed: false, sort: Default::default(), ordered: Vec::new(), unfiled: 0, issue_at: None, export_focus: Default::default(), filter: String::new(),
+            nodes: Vec::new(), path: Vec::new(), host: Default::default(), overview: Default::default(), styles: Default::default(), reveal: None, proposal_available: false, proposal_dismissed: false, sort: Default::default(), ordered: Vec::new(), unfiled: 0, browser_picks: 0, issue_at: None, export_focus: Default::default(), filter: String::new(),
             filing: None, focus_filter: false, group_rows: Vec::new(), row_menu: None, renaming: None, focus_rename: false, head_menu: None,
             kind_menu: None, kinds: Vec::new(), prompt: None, lens: Lens::Filing, edits: Default::default(), mode: String::new(), issues: false,
             identity: Vec::new(),
@@ -495,6 +496,17 @@ impl Ui {
     pub fn cursor_shape(&self) -> &'static str { self.cursor_shape }
     pub fn set_issues(&mut self, on: bool) {
         if let Some(col) = self.column.as_mut() { col.issues = on; }
+    }
+    pub fn set_browser_picks(&mut self, count: usize) {
+        if let Some(col) = self.column.as_mut() { col.browser_picks = count; }
+    }
+    pub fn rename_browser_row(&mut self, id: &str) -> bool {
+        let Some(col) = self.column.as_mut() else { return false };
+        let Some(node) = col.nodes.iter().find(|n| n.local_placement && n.key.split_once(':').is_some_and(|(_, k)| k == id)) else { return false };
+        col.renaming = Some((node.key.clone(), node.name.clone()));
+        col.reveal = Some(node.key.clone());
+        col.focus_rename = true;
+        true
     }
     pub fn reveal_row(&mut self, key: String) {
         self.plugins.showing = false;
@@ -2359,10 +2371,14 @@ impl Ui {
                                 ui.painter().hline(r.x_range().shrink(6.0), r.center().y, Stroke::new(1.0_f32, EDGE));
                                 continue;
                             }
+                            let multi_rename = *id == "rename" && row.is_some_and(|n| n.local_placement && n.selected > 0)
+                                && col.browser_picks > 1;
+                            let label = if multi_rename { "Rename selected…" } else { *label };
                             let item = (id.to_string(), label.to_string(), String::new(), String::new(), -1i8, true);
                             let (r, rect) = menu_row_resp(ui, &item);
                             if r.clicked() {
                                 match *id {
+                                    "rename" if multi_rename => actions.push(col.rename_request(true)),
                                     "rename" => {
                                         let name = col.nodes.iter().find(|n| n.key == key).map(|n| n.name.clone()).unwrap_or_default();
                                         col.renaming = Some((key.clone(), name));
@@ -2462,6 +2478,15 @@ impl Ui {
                                     col.sort = options[index].0;
                                     col.ordered = col.sort.order(&col.nodes);
                                     actions.push(format!("sort\u{1f}{index}"));
+                                    close = true;
+                                }
+                            }
+                            if col.mode.is_empty() && col.lens == Lens::Filing {
+                                let picked = col.browser_picks > 0;
+                                let enabled = picked || col.unfiled > 0 || col.nodes.iter().any(|n| n.local_placement || n.key.starts_with("n:") && n.count > 0);
+                                let label = if picked { "Rename selected…" } else if col.filter.is_empty() { "Rename model rows…" } else { "Rename matching rows…" };
+                                if menu_row(ui, &("batchrename".into(), label.into(), String::new(), String::new(), -1, enabled)) {
+                                    actions.push(col.rename_request(picked));
                                     close = true;
                                 }
                             }
@@ -3619,4 +3644,48 @@ fn drawing_controls_own_press_drag_and_double_click_and_release_focus_to_model()
     assert!(ui.column.as_ref().unwrap().styles.active());
     assert!(!ui.pointer("press", 300., 400., 1, 0));
     assert!(!ui.column.as_ref().unwrap().styles.active());
+}
+
+#[test]
+fn browser_rename_uses_focused_row_selection_and_header_scope() {
+    let Some(mut ui) = test_chrome() else { return };
+    ui.ctx = test_context();
+    let rows = ["Box", "Door"].map(|name| (
+        vec![format!("i:{name}"), name.into()],
+        vec![0, 0, 0, 0, 1, -1, -1, 0, 0, 1],
+    ));
+    ui.set_tree(rows.to_vec(), 0);
+    ui.set_browser_picks(2);
+    let col = ui.column.as_mut().unwrap();
+    col.focused_row = Some("i:Box".into());
+    let selected = format!("tree:{}", col.rename_request(true));
+    assert!(ui.key("F2", true, 0));
+    assert_eq!(ui.take_actions(), [selected.clone()]);
+    for _ in 0..3 { tree_frame(&mut ui, vec![]); }
+    let at = tree_frame(&mut ui, vec![])["Box"];
+    tree_click(&mut ui, at, egui::PointerButton::Secondary);
+    ui.take_actions();
+    for _ in 0..3 { tree_frame(&mut ui, vec![]); }
+    let rename = tree_frame(&mut ui, vec![])["Rename selected…"];
+    tree_click(&mut ui, rename, egui::PointerButton::Primary);
+    assert_eq!(ui.take_actions(), [selected]);
+    assert!(ui.rename_browser_row("Door"));
+    assert_eq!(ui.column.as_mut().unwrap().renaming.take().unwrap().0, "i:Door");
+    assert!(!ui.rename_browser_row("removed"));
+    for (empty, filter, label) in [
+        (false, "", "Rename model rows…"), (false, "Door", "Rename matching rows…"),
+        (true, "", "Rename model rows…")
+    ] {
+        if empty { ui.set_tree(vec![], 0); }
+        ui.set_browser_picks(0);
+        let col = ui.column.as_mut().unwrap();
+        col.filter = filter.into();
+        col.head_menu = Some(pos2(680., 80.));
+        let action = format!("tree:{}", col.rename_request(false));
+        for _ in 0..3 { tree_frame(&mut ui, vec![]); }
+        let p = tree_frame(&mut ui, vec![])[label];
+        tree_click(&mut ui, p, egui::PointerButton::Primary);
+        if empty { assert!(ui.take_actions().is_empty()); }
+        else { assert_eq!(ui.take_actions(), [action]); }
+    }
 }

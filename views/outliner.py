@@ -31,7 +31,7 @@ from __future__ import annotations
 from PySide6.QtCore import QItemSelectionModel, QPointF, QRectF, QSize, Qt
 from PySide6.QtGui import (QColor, QFont, QIcon, QPainter, QPalette, QPen,
                            QPixmap)
-from PySide6.QtWidgets import (QAbstractItemView, QApplication, QDialog,
+from PySide6.QtWidgets import (QAbstractItemView, QApplication,
                                QDockWidget,
                                QHBoxLayout,
                                QHeaderView, QLabel, QLineEdit, QStyle,
@@ -290,121 +290,6 @@ def _tool_button(text: str, tip: str, slot) -> QToolButton:
 
 # ---- Model 3D ------------------------------------------------------------------
 
-class BatchRenameDialog(QDialog):
-    """Rename several rows at once (#565, @fafecm; #87): a name and a
-    number (W01, W02…), find and replace, or a prefix and a suffix — with
-    the names before and after side by side before anything changes. The
-    rows come in the tree's order, top to bottom, so the numbers follow
-    it. ``names()`` gives the new names, one per row."""
-
-    NUMBER, REPLACE, AFFIX = range(3)
-
-    def __init__(self, old_names, parent=None) -> None:
-        super().__init__(parent)
-        from PySide6.QtWidgets import (QCheckBox, QDialogButtonBox,
-                                       QFormLayout, QSpinBox, QTabWidget,
-                                       QTableWidget, QTableWidgetItem)
-        self._Item = QTableWidgetItem
-        # As Preferences: «— IngeTrazo» in the title, one tab per way of
-        # renaming, forms with their labels, OK and Cancel at the bottom.
-        self.setWindowTitle(tr("Rename selected") + " — Built")
-        self.setMinimumWidth(440)
-        self.resize(480, 440)
-        self.old = list(old_names)
-        lay = QVBoxLayout(self)
-        self.mode = self.pages = QTabWidget()
-        # Name and number
-        page = QWidget()
-        form = QFormLayout(page)
-        self.base = QLineEdit(outliner_common_prefix(self.old) or "W")
-        self.start = QSpinBox()
-        self.start.setRange(0, 99999)
-        self.start.setValue(1)
-        self.digits = QSpinBox()
-        self.digits.setRange(1, 6)
-        self.digits.setValue(2)
-        form.addRow(tr("Name:"), self.base)
-        form.addRow(tr("Start at:"), self.start)
-        form.addRow(tr("Digits:"), self.digits)
-        self.pages.addTab(page, tr("Name and number"))
-        # Find and replace
-        page = QWidget()
-        form = QFormLayout(page)
-        self.find = QLineEdit()
-        self.replace = QLineEdit()
-        self.match_case = QCheckBox(tr("Match case"))
-        form.addRow(tr("Find:"), self.find)
-        form.addRow(tr("Replace with:"), self.replace)
-        form.addRow("", self.match_case)
-        self.pages.addTab(page, tr("Find and replace"))
-        # Prefix and suffix
-        page = QWidget()
-        form = QFormLayout(page)
-        self.prefix = QLineEdit()
-        self.suffix = QLineEdit()
-        form.addRow(tr("Prefix:"), self.prefix)
-        form.addRow(tr("Suffix:"), self.suffix)
-        self.pages.addTab(page, tr("Prefix and suffix"))
-        lay.addWidget(self.pages)
-        self.preview = QTableWidget(len(self.old), 2)
-        self.preview.setHorizontalHeaderLabels([tr("Before"), tr("After")])
-        self.preview.verticalHeader().setVisible(False)
-        self.preview.horizontalHeader().setStretchLastSection(True)
-        self.preview.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.preview.setColumnWidth(0, 200)
-        lay.addWidget(self.preview, 1)
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok
-                                   | QDialogButtonBox.Cancel)
-        self.ok = buttons.button(QDialogButtonBox.Ok)
-        self.ok.setText(tr("Rename"))
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        lay.addWidget(buttons)
-        for w in (self.base, self.find, self.replace, self.prefix,
-                  self.suffix):
-            w.textChanged.connect(self._update)
-        for w in (self.start, self.digits):
-            w.valueChanged.connect(self._update)
-        self.match_case.toggled.connect(self._update)
-        self.mode.currentChanged.connect(self._update)
-        self._update()
-
-    def names(self) -> list:
-        mode = self.mode.currentIndex()
-        if mode == self.NUMBER:
-            return outliner.numbered_names(len(self.old), self.base.text(),
-                                           self.start.value(),
-                                           self.digits.value())
-        if mode == self.REPLACE:
-            return outliner.replaced_names(self.old, self.find.text(),
-                                           self.replace.text(),
-                                           self.match_case.isChecked())
-        return outliner.affixed_names(self.old, self.prefix.text(),
-                                      self.suffix.text())
-
-    def _update(self, *_a) -> None:
-        new = self.names()
-        bold = QFont(self.font())
-        bold.setBold(True)
-        for row, (before, after) in enumerate(zip(self.old, new)):
-            self.preview.setItem(row, 0, self._Item(before))
-            cell = self._Item(after)
-            if after != before:
-                cell.setFont(bold)          # what will change
-            self.preview.setItem(row, 1, cell)
-        changed = any(a != b for a, b in zip(self.old, new))
-        self.ok.setEnabled(changed and all(n.strip() for n in new))
-
-
-def outliner_common_prefix(names) -> str:
-    """What the names start with in common, trailing digits, spaces and
-    separators dropped — «Muro 01», «Muro 02» → «Muro »… → «Muro»; a fair
-    first guess for the base of a numbering."""
-    import os
-    common = os.path.commonprefix(list(names)) if names else ""
-    return common.rstrip("0123456789 _-#.").strip()
-
-
 class _Tree(SideTree):
     """The Browser's tree, with the keyboard of an outliner: Space shows
     or hides the selected rows, Enter opens the current one, Esc steps out
@@ -436,10 +321,6 @@ class _Tree(SideTree):
                 plane = self._panel._plane_of(self.currentItem())
                 if plane is not None:
                     self._panel.rename_plane(plane)
-                    return
-                picked = self._panel._selected_groups()
-                if len(picked) > 1:         # several rows: all at once
-                    self._panel.ask_batch_rename(picked)
                     return
             if key == Qt.Key_Space:
                 self._panel.toggle_hidden()
@@ -496,14 +377,6 @@ class OutlinerPanel(QWidget):
         self.search.setClearButtonEnabled(True)
         self.search.textChanged.connect(self._on_filter)
         bar.addWidget(self.search, 1)
-        # Rename: one row in place, several rows at once (Rename selected).
-        self._rename_btn = _tool_button("", tr(
-            "Rename (F2): several selected rows at once — a name and a "
-            "number, find and replace, a prefix or a suffix; one row in "
-            "place; nothing selected: every row the filter shows"),
-            self._rename_picked)
-        self._rename_btn.setIcon(node_icon("layers_rename"))
-        bar.addWidget(self._rename_btn)
         # Expand all and Collapse all in one button too: ⊞ while a branch
         # is folded, ⊟ once everything is open.
         self._expand_btn = _tool_button("", tr("Expand all"),
@@ -586,7 +459,6 @@ class OutlinerPanel(QWidget):
             "level. Drag rows onto a group, or press Tab / Shift+Tab, to "
             "move them in or out of it."))
         self.tree.itemSelectionChanged.connect(self._on_tree_selection)
-        self.tree.itemSelectionChanged.connect(self._update_rename_button)
         self.tree.itemClicked.connect(self._on_item_clicked)
         self.tree.itemDoubleClicked.connect(self._on_double_clicked)
         self.tree.itemChanged.connect(self._on_item_changed)
@@ -655,7 +527,6 @@ class OutlinerPanel(QWidget):
         hi.setIcon(COL_EYE, node_icon("eye"))
         hi.setIcon(COL_LOCK, node_icon("lock"))
         hi.setIcon(COL_ISOLATE, isolate_icon(False))
-        self._rename_btn.setIcon(node_icon("layers_rename"))
         self._update_expand_button()
         root = getattr(self, "_root", None)
         if root is not None:
@@ -772,7 +643,6 @@ class OutlinerPanel(QWidget):
         self._empty.setVisible(not self._items)
         self._update_summary()
         self._update_expand_button()
-        self._update_rename_button()
 
     def _holds_departed_groups(self) -> bool:
         """Whether a row still holds a group the model no longer has —
@@ -1793,70 +1663,6 @@ class OutlinerPanel(QWidget):
         self._window.viewport.update()
         self.refresh()
 
-    def _update_rename_button(self) -> None:
-        b = getattr(self, "_rename_btn", None)
-        if b is not None:
-            b.setEnabled(bool(getattr(self, "_items", None)))
-
-    def _shown_groups(self) -> list:
-        """Every row, in the tree's order — or, with a filter typed, the
-        rows it matches (not the groups shown only to hold them)."""
-        scene = self._scene()
-        hit = None
-        if self._filters_active():
-            counts = outliner.instance_counts(scene.groups)
-            _keep, hit = outliner.filter_keep(
-                scene.groups, self._query,
-                lambda g: self._type_text(g, counts))
-        return [g for g, _p, _d in outliner.walk(scene.groups)
-                if id(g) in self._items and (hit is None or id(g) in hit)]
-
-    def _rename_picked(self) -> None:
-        """The pencil button: the selected rows renamed — several at once in
-        the Rename selected window, one in its cell; with nothing selected,
-        every row the tree shows (all, or what the filter keeps)."""
-        picked = self._selected_groups()
-        if not picked:
-            # Nothing selected: every row on show (what the filter keeps).
-            picked = self._shown_groups()
-        if len(picked) > 1:
-            self.ask_batch_rename(picked)
-            return
-        item = self.tree.currentItem()
-        if picked and self._group_of(item) is not picked[0]:
-            item = self._items.get(id(picked[0]))
-        if item is not None and self._group_of(item) is not None:
-            self.tree.setFocus()
-            self.tree.editItem(item, COL_NAME)
-
-    def ask_batch_rename(self, groups) -> bool:
-        """The Rename selected window for ``groups`` (in the tree's order);
-        what it gives is applied as one undo step. Whether anything was
-        renamed."""
-        order = {id(g): i for i, (g, _p, _d) in
-                 enumerate(outliner.walk(self._scene().groups))}
-        groups = sorted((g for g in groups if g is not None),
-                        key=lambda g: order.get(id(g), 0))
-        if len(groups) < 2:
-            return False
-        dlg = BatchRenameDialog([g.name or "" for g in groups], self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return False
-        return self.batch_rename(groups, dlg.names())
-
-    def batch_rename(self, groups, names) -> bool:
-        """Give ``groups`` the ``names`` — one undo step, the rows whose
-        name does not change left out."""
-        from core.history import CompoundCommand, RenameGroupCommand
-        cmds = [RenameGroupCommand(g, n) for g, n in zip(groups, names)
-                if n.strip() and n != g.name]
-        if not cmds:
-            return False
-        self._window.viewport.history.execute(CompoundCommand(cmds))
-        self._window.viewport.update()
-        self.refresh()
-        return True
-
     # ---- Columns ---------------------------------------------------------
     #: The step, in pixels, from one level of nesting to the next.
     INDENT = 12
@@ -2430,9 +2236,6 @@ class OutlinerPanel(QWidget):
                 item, COL_NAME))
             selected = self._selected_groups()
             targets = selected if group in selected else [group]
-            if len(targets) > 1:
-                menu.addAction(tr("Rename selected…"), lambda: QTimer.singleShot(
-                    0, lambda: self.ask_batch_rename(targets)))
             menu.addAction(tr("Show") if group.hidden else tr("Hide"),
                            lambda: self.toggle_hidden(targets))
             menu.addAction(tr("Unlock") if getattr(group, "locked", False)

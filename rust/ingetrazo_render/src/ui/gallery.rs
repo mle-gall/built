@@ -678,6 +678,7 @@ impl Gallery {
                     ("Tag".into(), "A-WALL".into(), "eye".into(), Some(true)),
                 ], &mut Vec::new());
                 ui.add_space(SPACE_XS);
+                rename_preview(ui, "Before", "After", &["Wall".into(), "W01".into(), "Door".into(), "Door".into()]);
                 property_control(ui, "Hatch", |ui| {
                     let (sample, _) = ui.allocate_exact_size(vec2(44., 16.), Sense::hover());
                     hatch_sample(ui, sample, "brick", None);

@@ -1936,6 +1936,25 @@ pub fn scene_preview_row(ui:&mut egui::Ui,name:&str,current:bool,image:Option<&e
     hit.on_hover_text(name)
 }
 
+/// Paired names in a scrollable preview. Unchanged values use the secondary ink.
+pub fn rename_preview(ui: &mut egui::Ui, before: &str, after: &str, pairs: &[String]) {
+    let row = |ui: &mut egui::Ui, left: &str, right: &str, header: bool| {
+        ui.columns(2, |cells| {
+            for (i, value) in [left, right].into_iter().enumerate() {
+                let changed = !header && i == 1 && left != right;
+                let font = if changed { strong(TYPE_BODY) } else { meta() };
+                let color = if changed { INK } else { DIM };
+                cells[i].add(egui::Label::new(egui::RichText::new(value).font(font).color(color)).truncate()).on_hover_text(value);
+            }
+        });
+    };
+    row(ui, before, after, true);
+    egui::ScrollArea::vertical().id_salt("rename preview").max_height(ROW_H * 8.)
+        .show_rows(ui, ROW_H, pairs.len() / 2, |ui, indices| {
+            for i in indices { row(ui, &pairs[2*i], &pairs[2*i + 1], false); }
+        });
+}
+
 pub fn line_sample(ui: &egui::Ui, rect: Rect, mm: &str, pattern: &str, color: Color32) {
     let width = (mm.parse::<f32>().unwrap_or(0.18)*3.8).clamp(0.7, 5.);
     let dash: &[f32] = match pattern {

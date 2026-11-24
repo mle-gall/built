@@ -846,7 +846,7 @@ def _tree(view, win, *, discover=False):
                          active=active, node_of=node_of, nodes=nodes, tree=tree, counts=counts,
                          node_layers={k: list(c) for k, c in node_layers.items()})
     view.renderer.ui_set_tree(rows, len(unfiled))
-    view.renderer.ui_set_catalog_info(Path(str(getattr(win, "_current_path", "") or "")).name, tree, counts)
+    view.renderer.ui_set_catalog_info(Path(str(getattr(win, "_current_path", "") or "")).name, tree, counts, len(sel_ids))
     view.renderer.ui_set_edit_path(path_bar)
     if hasattr(view.renderer, "ui_set_proposal_available"):
         view.renderer.ui_set_proposal_available(not mode and tree._host_roots < 0)
@@ -1428,6 +1428,14 @@ def _tree_action(win, view, action) -> None:
             from ingetrazo_render import tree_header_state
             tree_header_state(vp, rk, verb == "headerlock")
             rebuild()
+        elif verb == "batchrename":
+            from ingetrazo_core import browser_rename
+            from views import chrome_forms
+            model = browser_rename(scene, rk)
+            if model is not None:
+                single = model.single_row()
+                if single is None or not view.renderer.ui_rename_browser_row(single):
+                    chrome_forms.show(win, chrome_forms.BrowserRenameForm(win, model))
         elif verb == "isolatetags":
             import json
             from ingetrazo_render import isolate_tags

@@ -2578,8 +2578,9 @@ impl Renderer {
     fn ui_show_inspector(&mut self) {
         if let Some(ui) = self.ui.as_mut() { ui.show_inspector(); }
     }
-    fn ui_set_catalog_info(&mut self, filename: String, tree: &Bound<'_,PyAny>, counts: &Bound<'_,PyAny>) -> PyResult<()> {
-        if let Some(ui)=self.ui.as_mut() { ui.set_catalog_info(filename,tree,counts)?; }
+    #[pyo3(signature=(filename, tree, counts, picked=0))]
+    fn ui_set_catalog_info(&mut self, filename: String, tree: &Bound<'_,PyAny>, counts: &Bound<'_,PyAny>, picked: usize) -> PyResult<()> {
+        if let Some(ui)=self.ui.as_mut() { ui.set_catalog_info(filename,tree,counts)?; ui.set_browser_picks(picked); }
         Ok(())
     }
     #[pyo3(signature = (owner, lines, patterns=None, scene=None))]
@@ -2710,6 +2711,9 @@ impl Renderer {
     }
     fn ui_set_activity(&mut self, history: Vec<ui::ActivityRow>, banner: String) {
         if let Some(ui) = self.ui.as_mut() { ui.set_activity(history, banner); }
+    }
+    fn ui_rename_browser_row(&mut self, id: &str) -> bool {
+        self.ui.as_mut().is_some_and(|ui| ui.rename_browser_row(id))
     }
     fn ui_reveal_row(&mut self, key: String) {
         if let Some(ui) = self.ui.as_mut() { ui.reveal_row(key); }

@@ -48,6 +48,7 @@ mod sidebar;
 mod hatch_file;
 mod style_files;
 mod style_edit;
+mod browser_rename;
 mod settings;
 mod document_watch;
 mod window_input;
@@ -114,6 +115,7 @@ mod sheets;
 
 #[pymodule]
 fn ingetrazo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(browser_rename::browser_rename, m)?)?;
     screen::register(m)?;
     scene_animation::register(m)?;
     survey_pixels::register(m)?;
