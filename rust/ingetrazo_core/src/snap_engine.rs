@@ -3,6 +3,9 @@
 use crate::snap::{along, dot, drawing_axis, edge_direction, norm, sub, unit, SnapQuery, P};
 use pyo3::prelude::*;
 
+#[path="snap_frame.rs"]
+pub(crate) mod services;
+
 #[derive(FromPyObject)]
 pub struct Gesture {
     world: P,
@@ -108,8 +111,25 @@ impl Gesture {
 }
 
 #[pyfunction]
-pub fn resolve_snap<'py>(q: &SnapQuery, frame: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    let g: Gesture = frame.extract()?;
+#[pyo3(signature = (q, frame, state=None))]
+pub fn resolve_snap<'py>(
+    q: &SnapQuery,
+    frame: &Bound<'py, PyAny>,
+    state: Option<&services::FrameState>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let stored;
+    let fallback;
+    let g = match state {
+        Some(state) => &state.gesture,
+        None if frame.is_instance_of::<crate::kernel::SnapFrame>() => {
+            stored = frame.getattr("state")?.cast_into::<services::FrameState>()?;
+            &stored.get().gesture
+        }
+        None => {
+            fallback = frame.extract()?;
+            &fallback
+        }
+    };
     if [g.arrow, g.sticky, g.shift_reference.map(|(_, k)| k)]
         .into_iter()
         .flatten()

@@ -178,7 +178,7 @@ pub(crate) struct PointVisibility {
 impl PointVisibility {
     #[new]
     #[pyo3(signature=(one,many=None))]
-    fn new(one: Py<PyAny>, many: Option<Py<PyAny>>) -> Self {
+    pub(crate) fn new(one: Py<PyAny>, many: Option<Py<PyAny>>) -> Self {
         Self {
             one,
             many,

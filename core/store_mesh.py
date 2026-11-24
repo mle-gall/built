@@ -33,7 +33,7 @@ from collections.abc import Mapping
 from itertools import count
 
 import numpy as np
-from ingetrazo_core import Vec3 as QVector3D, polygon_centroid, polygon_net_area, polygon_newell as _newell
+from ingetrazo_core import Vec3 as QVector3D, polygon_centroid, polygon_net_area, polygon_newell as _newell, store_views, object_replay
 
 from core import mesh as _mesh
 from core.mesh import Edge, Face, Mesh, Vertex
@@ -570,14 +570,14 @@ class FaceView(_ViewMixin, Face):
     def vertices(self):
         rings = self._vectors()
         if rings is None:
-            return [v.position for v in self.loop]
+            return object_replay.face_vertices(self)
         return list(rings[0])
 
     @property
     def holes(self):
         rings = self._vectors()
         if rings is None:
-            return [[v.position for v in h] for h in self.hole_loops]
+            return object_replay.face_holes(self)
         return [list(r) for r in rings[1:]]
 
     @property
@@ -665,13 +665,7 @@ class FaceView(_ViewMixin, Face):
             return Face.normal(self)
         n = hit[2]
         if n is None:
-            ring = hit[0][0]
-            if len(ring) < 3:
-                n = QVector3D(0.0, 0.0, 1.0)
-            else:
-                n = _newell(ring)
-                length = n.length()
-                n = QVector3D(0.0, 0.0, 1.0) if length < 1e-9 else n / length
+            n = store_views.face_normal(hit[0][0])
             hit[2] = n
         return QVector3D(n)          # a caller may scale it in place
 
@@ -679,9 +673,7 @@ class FaceView(_ViewMixin, Face):
         rings = self._positions() if _store_of(self._m) is not None else None
         if rings is None:
             return Face.area(self)
-        if len(rings[0]) < 3:
-            return 0.0
-        return 0.5 * _newell(rings[0]).length()
+        return store_views.face_area(rings[0])
 
     def net_area(self) -> float:
         rings = self._positions() if _store_of(self._m) is not None else None
@@ -1294,30 +1286,10 @@ class StoreMesh(Mesh):
         (``topology._key``: floats; ``mesh._key``: cells x 10^4). Candidates
         from the position array (a cell's points floor to it or the cell
         below), then ``keyfn`` itself on those: Python's answer exactly."""
-        if not cells:
-            return []
-        near = set()
-        for c in cells:
-            ci = [round(float(x) * (1.0 if isinstance(x, int) else 1e4))
-                  for x in c]
-            for dx in (-1, 0):
-                for dy in (-1, 0):
-                    for dz in (-1, 0):
-                        near.add((ci[0] + dx, ci[1] + dy, ci[2] + dz))
-        near = {cell for cell in near if all(-2**63 <= x < 2**63 for x in cell)}
-        return [VertexView(self, key)
-                for key, position in self._store.vertices_in_floor_cells(near)
-                if keyfn(position) in cells]
+        return store_views.vertices_in_cells(self, self._store, cells, keyfn, VertexView)
 
     def cells_of(self, vertex_keys, keyfn) -> set:
-        st = self._store
-        out = set()
-        for k in vertex_keys:
-            try:
-                out.add(keyfn(st.vertex_position(k)))
-            except (KeyError, OverflowError, TypeError):
-                pass
-        return out
+        return store_views.cells_of(self._store, vertex_keys, keyfn)
 
     def textured_faces(self) -> list:
         """The faces whose attrs hold a texture (own dict or table row),

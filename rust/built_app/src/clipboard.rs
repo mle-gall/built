@@ -196,7 +196,17 @@ mod platform {
                 std::thread::Builder::new()
                     .name("clipboard".to_owned())
                     .spawn(move || {
+                        #[cfg(target_os = "linux")]
+                        if std::env::var_os("DISPLAY").is_none() && std::env::var_os("WAYLAND_DISPLAY").is_some()
+                            && crate::linux_pointer::compositor_has_seat() == Some(false) {
+                            return;
+                        }
                         if gtk::init().is_err() {
+                            return;
+                        }
+                        // A headless compositor can advertise no input seat. GDK's
+                        // Wayland clipboard requires one for keyboard selection.
+                        if gdk::Display::default().and_then(|d| d.default_seat()).is_none() {
                             return;
                         }
                         let board = Clipboard::get(&gdk::SELECTION_CLIPBOARD);

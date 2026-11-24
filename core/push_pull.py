@@ -12,7 +12,7 @@ from core.geometry import Face
 from core.i18n import tr
 from core.mesh import _STITCH_TOL, PAINT_KEYS
 from core.history import SnapshotMutation
-from core.arrangement import _interior_point, _point_in_polygon, plane_basis
+from ingetrazo_core import arrangement as _arrangement
 from core.orient import is_closed, orient_outward
 from ingetrazo_core import plane_cycle as _canon_loop
 from core.topology import _mesh_is_flat
@@ -87,8 +87,7 @@ def _write_conversion_failure(reason: str) -> None:
 
 
 def _project_loop_2d(loop, normal):
-    u, v = plane_basis(normal)
-    return [(QVector3D.dotProduct(p, u), QVector3D.dotProduct(p, v)) for p in loop]
+    return _arrangement.project_loop(loop, normal)
 
 
 def _loops_overlap_2d(a_xy, b_xy) -> bool:
@@ -97,12 +96,7 @@ def _loops_overlap_2d(a_xy, b_xy) -> bool:
     strictly inside. Good for the push-clamp candidates (a far cap under the
     whole loop, a floor under a corner notch); exotic offset-cross overlaps
     with no contained vertex are not the clamp's concern. Holes are ignored."""
-    if _point_in_polygon(_interior_point(a_xy), b_xy):
-        return True
-    if _point_in_polygon(_interior_point(b_xy), a_xy):
-        return True
-    return any(_point_in_polygon(p, b_xy) for p in a_xy) or \
-        any(_point_in_polygon(p, a_xy) for p in b_xy)
+    return _arrangement.loops_overlap(a_xy, b_xy)
 
 
 class _GroupScene:

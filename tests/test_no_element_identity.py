@@ -39,14 +39,8 @@ _ELEMENT = re.compile(
     r"[a-z]_(?:face|edge|vert))$")
 
 # (path, enclosing function) -> why identity is meant there.
-_KERNEL = ("kernel: runs on Python objects only (a StoreMesh materialises "
-           "first through _on_python; MaterialisedMesh resolves the views "
-           "it is handed through _resolving)")
 _ALLOWED = {
-    # The Mesh kernel itself, mutation and its helpers.
-    ("core/mesh.py", "_insert_into_face_loops"): _KERNEL,
     # Not elements: names that look like them.
-    ("core/topology.py", "__call__"): "id()-keyed memo of a QVector3D",
     ("core/history_commands.py", "_sync"): "tag-state dict values against a sentinel, not elements",
     ("core/ai.py", "_tidy_groups"): "groups",
     ("core/intersect.py", "intersect"): "polygons of two meshes",
