@@ -9,6 +9,7 @@ from ingetrazo_core import Vec3 as QVector3D
 from tools.arc import ArcTool
 from tools.fillet import FilletTool
 from tools.rust_tools import LineTool
+from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 from views.status_hints import HINTS, NAV_HINTS, hint_for, phase_of
 
 
@@ -40,22 +41,11 @@ def test_navigation_and_unknown_tools_have_a_line_too():
     assert hint_for("line", LineTool(), nav_mode="orbit") == NAV_HINTS["orbit"]
 
 
-def test_every_registered_tool_has_a_hint():
-    from PySide6.QtWidgets import QApplication
-    import pytest
-    app = QApplication.instance()
-    if app is None:
-        app = QApplication([])
-    elif not isinstance(app, QApplication):
-        pytest.skip("another Qt application flavour is already running")
-    from views.main_window import MainWindow
-    win = MainWindow()
+def test_every_registered_tool_has_a_hint(native_window):
+    win = native_window
     missing = [k for k in win._tools if k not in HINTS and not k.startswith("plugin_")]
     assert not missing, missing
     win._activate_tool("line")
-    # The tool's name leads its hint (it used to sit apart on the right).
-    assert win.status_hint.startswith("Line — Click the start point")
     assert win.statusBar().currentMessage().startswith("Line — Click the start point")
     win._activate_nav("orbit")
-    assert win.status_hint.startswith("Orbit — Drag to orbit")
-    win.close()
+    assert win.statusBar().currentMessage().startswith("Orbit — Drag to orbit")

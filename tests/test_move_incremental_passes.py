@@ -10,15 +10,10 @@ rows up to date. Every answer here is compared with a pass made afresh."""
 from __future__ import annotations
 
 import math
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np  # noqa: E402
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
-from PySide6.QtWidgets import QApplication  # noqa: E402
-
-_app = QApplication.instance() or QApplication([])
 
 
 def _prisma(n=12, r=1.0, h=2.0):
@@ -36,10 +31,10 @@ def _prisma(n=12, r=1.0, h=2.0):
     return m
 
 
-def _scene():
+def _scene(native_host):
     from core.group import Group
-    from views.main_window import MainWindow
-    win = MainWindow()
+
+    win = native_host.window
     vp = win.viewport
     protos = [_prisma(12), _prisma(7, r=0.5, h=3.0)]
     gs = []
@@ -55,51 +50,37 @@ def _scene():
     return win, vp, gs
 
 
-def _close(win):
-    win._saved_version = win.viewport.scene.version
-    win.close()
+def test_an_edit_of_a_mesh_is_not_only_matrices(native_host):
+    win, vp, gs = _scene(native_host)
+    old = vp._placements_epoch()
+    gs[0].mesh.add_face([V(0, 0, 5), V(1, 0, 5), V(1, 1, 5)])
+    vp.scene.version += 1
+    assert not vp._epoch_only_matrices(old)
 
 
-def test_an_edit_of_a_mesh_is_not_only_matrices():
-    win, vp, gs = _scene()
-    try:
-        old = vp._placements_epoch()
-        gs[0].mesh.add_face([V(0, 0, 5), V(1, 0, 5), V(1, 1, 5)])
-        vp.scene.version += 1
-        assert not vp._epoch_only_matrices(old)
-    finally:
-        _close(win)
+def test_a_new_layer_state_is_not_only_matrices(native_host):
+    win, vp, gs = _scene(native_host)
+    old = vp._placements_epoch()
+    gs[4].hidden = True
+    vp.scene.version += 1
+    assert not vp._epoch_only_matrices(old)
 
 
-def test_a_new_layer_state_is_not_only_matrices():
-    win, vp, gs = _scene()
-    try:
-        old = vp._placements_epoch()
-        gs[4].hidden = True
-        vp.scene.version += 1
-        assert not vp._epoch_only_matrices(old)
-    finally:
-        _close(win)
-
-
-def test_moving_a_plain_group_is_only_matrices_unless_its_mesh_is_a_prototype():
+def test_moving_a_plain_group_is_only_matrices_unless_its_mesh_is_a_prototype(native_host):
     from core.group import Group
-    win, vp, gs = _scene()
-    try:
-        plain = Group(_prisma(5), name="plain")             # no matrix
-        vp.scene.groups.append(plain)
-        vp.scene.version += 1
-        old = vp._placements_epoch()
-        plain.mesh.add_face([V(0, 0, 9), V(1, 0, 9), V(1, 1, 9)])   # edited
-        vp.scene.version += 1
-        assert vp._epoch_only_matrices(old)
-        # the same mesh drawn by a placement too: its edit is not a move
-        shared = Group(gs[0].mesh, name="shared")
-        vp.scene.groups.append(shared)
-        vp.scene.version += 1
-        old = vp._placements_epoch()
-        shared.mesh.add_face([V(0, 0, 7), V(1, 0, 7), V(1, 1, 7)])
-        vp.scene.version += 1
-        assert not vp._epoch_only_matrices(old)
-    finally:
-        _close(win)
+    win, vp, gs = _scene(native_host)
+    plain = Group(_prisma(5), name="plain")             # no matrix
+    vp.scene.groups.append(plain)
+    vp.scene.version += 1
+    old = vp._placements_epoch()
+    plain.mesh.add_face([V(0, 0, 9), V(1, 0, 9), V(1, 1, 9)])   # edited
+    vp.scene.version += 1
+    assert vp._epoch_only_matrices(old)
+    # the same mesh drawn by a placement too: its edit is not a move
+    shared = Group(gs[0].mesh, name="shared")
+    vp.scene.groups.append(shared)
+    vp.scene.version += 1
+    old = vp._placements_epoch()
+    shared.mesh.add_face([V(0, 0, 7), V(1, 0, 7), V(1, 1, 7)])
+    vp.scene.version += 1
+    assert not vp._epoch_only_matrices(old)

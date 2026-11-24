@@ -11,6 +11,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from pathlib import Path  # noqa: E402
 
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from PySide6.QtGui import QColor  # noqa: E402
 from PySide6.QtWidgets import QApplication, QColorDialog  # noqa: E402
 
@@ -40,19 +41,13 @@ def test_no_panel_opens_the_desktops_picker_directly():
             assert "QColorDialog.getColor(" not in path.read_text("utf-8"), path
 
 
-def test_a_menu_entrys_description_shows_in_the_status_bar():
-    """#213: hovering a menu entry sends its status tip through Qt's own
-    showMessage, which bypassed the bar's label — nothing showed."""
-    from PySide6.QtGui import QStatusTipEvent
-    from views.main_window import MainWindow
-    w = MainWindow()
-    try:
-        bar = w.statusBar()
-        bar.showMessage("standing hint")
-        QApplication.sendEvent(w, QStatusTipEvent("Take back the last change to the model."))
-        assert bar.currentMessage() == "Take back the last change to the model."
-        QApplication.sendEvent(w, QStatusTipEvent(""))
-        assert bar.currentMessage() == "standing hint"
-    finally:
-        w._saved_version = w.viewport.scene.version
-        w.close()
+def test_a_temporary_message_gives_the_tool_hint_back(native_host):
+    win = native_host.window
+    win._activate_tool("line")
+    bar = win.statusBar()
+    standing = bar.currentMessage()
+    assert standing.startswith("Line")
+    win.viewport.flash_status("Temporary message")
+    assert bar.currentMessage() == "Temporary message"
+    bar.clearMessage()
+    assert bar.currentMessage() == standing

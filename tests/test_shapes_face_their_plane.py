@@ -24,46 +24,34 @@ so a wall can arrive inside-out somewhere else entirely.
 """
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
 from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QMouseEvent
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
 
 from tools.base import face_the_plane, loop_normal
-
-_app = QApplication.instance() or QApplication([])
 
 
 def V(x, y, z=0.0):
     return QVector3D(float(x), float(y), float(z))
 
 
-def _draw(tool_key, points):
-    from views.main_window import MainWindow
-    win = MainWindow()
-    win.show()
-    win.resize(1200, 800)
-    _app.processEvents()
+def _draw(native_host, tool_key, points):
+    win = native_host.window
+    native_host.resize(1200, 800, 1.0)
     vp = win.viewport
     win._activate_tool(tool_key)
-    try:
-        for w in points:
-            px, py = vp._world_to_pixel(w)
-            vp._last_mouse_pos = QPointF(px, py)
-            vp._refresh_snap()
-            vp._dispatch_tool_click(QMouseEvent(
-                QMouseEvent.MouseButtonPress, QPointF(px, py),
-                Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
-        faces = vp.scene.mesh.faces
-        return faces[0].normal() if faces else None
-    finally:
-        win._saved_version = vp.scene.version
-        win.close()
+    for w in points:
+        px, py = vp._world_to_pixel(w)
+        vp._last_mouse_pos = QPointF(px, py)
+        vp._refresh_snap()
+        vp._dispatch_tool_click(QMouseEvent(
+            QMouseEvent.MouseButtonPress, QPointF(px, py),
+            Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
+    faces = vp.scene.mesh.faces
+    return faces[0].normal() if faces else None
 
 
 @pytest.mark.parametrize("a,b", [
@@ -72,23 +60,23 @@ def _draw(tool_key, points):
     (V(1, 1), V(4, 3)),      # right-up
     (V(4, 3), V(1, 1)),      # left-down
 ])
-def test_a_rectangle_on_the_ground_faces_up_from_every_diagonal(a, b):
-    n = _draw("rectangle", [a, b])
+def test_a_rectangle_on_the_ground_faces_up_from_every_diagonal(native_host, a, b):
+    n = _draw(native_host, "rectangle", [a, b])
     assert n is not None
     assert n.z() > 0.9, "the ground's front faces up, whoever is looking"
 
 
 @pytest.mark.parametrize("third", [V(4, 3), V(4, -1)])
-def test_the_rotated_rectangle_too_going_either_way_round(third):
-    n = _draw("rotated_rect", [V(1, 1), V(4, 1), third])
+def test_the_rotated_rectangle_too_going_either_way_round(native_host, third):
+    n = _draw(native_host, "rotated_rect", [V(1, 1), V(4, 1), third])
     assert n is not None
     assert n.z() > 0.9
 
 
-def test_the_circle_was_already_right():
+def test_the_circle_was_already_right(native_host):
     """Pinned rather than assumed: a swept angle cannot change sign, and
     that is why it never showed the bug."""
-    n = _draw("circle", [V(2, 2), V(0, 0)])
+    n = _draw(native_host, "circle", [V(2, 2), V(0, 0)])
     assert n is not None
     assert n.z() > 0.9
 

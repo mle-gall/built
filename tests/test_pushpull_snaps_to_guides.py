@@ -10,26 +10,18 @@ and guides live in ``Scene.guides``, outside the mesh.
 from __future__ import annotations
 
 import math
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QMouseEvent
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
 
 from core.guide import Guide
 
-_app = QApplication.instance() or QApplication([])
 
-
-def _window():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    win.show()
-    win.resize(1600, 900)
-    _app.processEvents()
+def _window(native_host):
+    win = native_host.window
+    native_host.resize(1600, 900, 1.0)
     vp = win.viewport
     cam = vp.camera
     cam.target = QVector3D(2, 2, 1.5)
@@ -40,7 +32,6 @@ def _window():
                                    QVector3D(4, 4, 0), QVector3D(0, 4, 0)])
     vp.scene.version += 1
     vp.update()
-    _app.processEvents()
     return win, vp, face
 
 
@@ -82,51 +73,39 @@ def _tape_guide_point(win, vp, height):
     return points[0]
 
 
-def test_push_stops_level_with_a_tape_guide_point():
-    win, vp, face = _window()
-    try:
-        guide = _tape_guide_point(win, vp, 2.5)
-        tool = _start_push(win, vp)
-        gx, gy = vp._world_to_pixel(guide.point)
-        _hover(vp, gx + 2, gy + 1)                   # a hair off the guide
-        assert tool._inference_kind == "guide_point"
-        assert abs(tool.extrusion - guide.point.z()) < 1e-9
-        marker = tool.inference_marker()
-        assert marker is not None and marker[1] == "guide_point"
-        _click(vp, gx + 2, gy + 1)                   # commit
-        tops = [f for f in vp.scene.mesh.faces
-                if all(abs(v.z() - guide.point.z()) < 1e-9 for v in f.vertices)]
-        assert tops, "no cap at the guide's height"
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_push_stops_level_with_a_tape_guide_point(native_host):
+    win, vp, face = _window(native_host)
+    guide = _tape_guide_point(win, vp, 2.5)
+    tool = _start_push(win, vp)
+    gx, gy = vp._world_to_pixel(guide.point)
+    _hover(vp, gx + 2, gy + 1)                   # a hair off the guide
+    assert tool._inference_kind == "guide_point"
+    assert abs(tool.extrusion - guide.point.z()) < 1e-9
+    marker = tool.inference_marker()
+    assert marker is not None and marker[1] == "guide_point"
+    _click(vp, gx + 2, gy + 1)                   # commit
+    tops = [f for f in vp.scene.mesh.faces
+            if all(abs(v.z() - guide.point.z()) < 1e-9 for v in f.vertices)]
+    assert tops, "no cap at the guide's height"
 
 
-def test_push_stops_level_with_a_guide_line():
-    win, vp, face = _window()
-    try:
-        # the kind of line the Tape pulls off an edge: along X, 3 m up
-        line = Guide(QVector3D(0, 6, 3.0), QVector3D(1, 0, 0))
-        vp.scene.guides.append(line)
-        tool = _start_push(win, vp)
-        lx, ly = vp._world_to_pixel(QVector3D(2, 6, 3.0))
-        _hover(vp, lx + 1, ly + 2)
-        assert tool._inference_kind == "guide_line"
-        assert abs(tool.extrusion - 3.0) < 1e-9
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_push_stops_level_with_a_guide_line(native_host):
+    win, vp, face = _window(native_host)
+    # the kind of line the Tape pulls off an edge: along X, 3 m up
+    line = Guide(QVector3D(0, 6, 3.0), QVector3D(1, 0, 0))
+    vp.scene.guides.append(line)
+    tool = _start_push(win, vp)
+    lx, ly = vp._world_to_pixel(QVector3D(2, 6, 3.0))
+    _hover(vp, lx + 1, ly + 2)
+    assert tool._inference_kind == "guide_line"
+    assert abs(tool.extrusion - 3.0) < 1e-9
 
 
-def test_without_the_guide_the_push_follows_the_cursor():
-    win, vp, face = _window()
-    try:
-        tool = _start_push(win, vp)
-        target = QVector3D(4, 4, 2.5)
-        gx, gy = vp._world_to_pixel(target)
-        _hover(vp, gx + 2, gy + 1)
-        assert tool._inference_kind != "guide_point"
-        assert abs(tool.extrusion - 2.5) > 1e-6       # nothing to lock on
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_without_the_guide_the_push_follows_the_cursor(native_host):
+    win, vp, face = _window(native_host)
+    tool = _start_push(win, vp)
+    target = QVector3D(4, 4, 2.5)
+    gx, gy = vp._world_to_pixel(target)
+    _hover(vp, gx + 2, gy + 1)
+    assert tool._inference_kind != "guide_point"
+    assert abs(tool.extrusion - 2.5) > 1e-6       # nothing to lock on

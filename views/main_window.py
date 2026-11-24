@@ -94,9 +94,6 @@ _STYLE_TIPS = {
 }
 _SAVE_TIP = ("Save the document — the model and every sheet — to its "
              "file.")
-_RESET_TOOLBARS_TIP = ("Every toolbar back in its factory place and order, "
-                       "the hidden ones shown again. The panels stay as "
-                       "they are.")
 _TEXT3D_TIP = ("Build a text as an extruded solid, in the font and height "
                "you choose.")
 
@@ -610,8 +607,7 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         (2026-09-20). Removing and adding a toolbar back drops the stored
         length for its size hint, which is all we ever want; nothing here
         lets a toolbar be stretched on purpose."""
-        from PySide6.QtCore import Qt, QTimer
-        was_maximized = bool(self.windowState() & Qt.WindowMaximized)
+        from PySide6.QtCore import Qt
         areas = (Qt.LeftToolBarArea, Qt.RightToolBarArea,
                  Qt.TopToolBarArea, Qt.BottomToolBarArea)
         for area in areas:
@@ -634,18 +630,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         # macOS glass: the traffic lights' room stays first in the top row.
         from views import mac_glass
         mac_glass.seat_lights(self)
-        if was_maximized and sys.platform == "win32":
-            # Re-seating the bars can raise the window's minimum height above
-            # the normal size Qt still holds when Windows has just maximized
-            # it from Explorer; Qt then resizes to that minimum, drops the
-            # maximized state, and Windows puts the flag back on a window
-            # left 1296 × 901 in the corner (#800). Put it back, once the
-            # repack has settled and again after the platform has answered.
-            QTimer.singleShot(0, self, self._keep_maximized)
-            QTimer.singleShot(500, self, self._keep_maximized)
-            # Windows only: on Wayland a maximize lands asynchronously, so a
-            # window can be flagged maximized at its normal size for a moment
-            # at start-up and this would toggle it for nothing.
 
     def _toolbar_seat_key(self, vertical: bool):
         """Sort key of a docked toolbar: its row (its column, in a side
@@ -660,25 +644,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
             x = -(g.x() + g.width()) if rtl else g.x()
             return (x, g.y()) if vertical else (g.y(), x)
         return key
-
-    def _keep_maximized(self) -> None:
-        """Re-maximize a window that a toolbar repack left smaller than its
-        screen. A window that really fills the screen is left alone."""
-        from PySide6.QtCore import Qt
-        if not self.isVisible() or self.isFullScreen():
-            return
-        screen = self.screen()
-        if screen is None:
-            return
-        avail = screen.availableGeometry()
-        frame = self.frameGeometry()
-        state = self.windowState()
-        if (state & Qt.WindowMaximized
-                and frame.width() >= 0.9 * avail.width()
-                and frame.height() >= 0.9 * avail.height()):
-            return
-        self.setWindowState(state & ~Qt.WindowMaximized)
-        self.setWindowState(state | Qt.WindowMaximized)
 
     def addToolBar(self, *args):  # noqa: N802 — Qt override
         """Every toolbar, the window's own and an extension's — at start-up
@@ -743,81 +708,11 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
                     and self.frameGeometry().width() > avail.width():
                 self.resize(avail.width() - frame_w, self.height())
 
-    def restore_default_toolbars(self) -> None:
-        """Window ▸ Restore default toolbars (and the right-click menu over
-        a toolbar): every toolbar back where the factory layout has it —
-        area, row, order — and shown. The panels are not touched:
-        ``restoreState`` lays out every dock the blob names, so the docks
-        go by another name meanwhile and the blob finds none of them.
-
-        First the window's own bars go back to where a new window builds
-        them, along the top in build order: a bar younger than the blob
-        (Solid Tools) is not in it, and that is its factory place. A
-        plugin's toolbar stays where it is."""
-        from PySide6.QtCore import QTimer
-        from PySide6.QtWidgets import QDockWidget
-        from core.paths import app_root
-        factory = app_root() / "resources" / "ui" / "default_layout.state"
-        if not factory.is_file():
-            return
-        own = list(self.toolbars.values())
-        panels_tb = self.findChild(QToolBar, "panels_toolbar")
-        if panels_tb is not None:
-            own.append(panels_tb)
-        for tb in own:
-            self.removeToolBar(tb)
-            self.addToolBar(Qt.TopToolBarArea, tb)
-            tb.show()
-        docks = {d: d.objectName() for d in self.findChildren(QDockWidget)}
-        rows = self._dock_tab_rows(docks)
-        size = self.size()
-        for d, name in docks.items():
-            d.setObjectName(f"_keep_{name}")
-        try:
-            self.restoreState(factory.read_bytes())
-        finally:
-            for d, name in docks.items():
-                d.setObjectName(name)
-        # Even unnamed, the docks are laid out again: their tabs come back
-        # reordered, another in front. Put each row of tabs back as it was.
-        for row, front in rows:
-            for d in row[1:]:
-                self.tabifyDockWidget(row[0], d)
-            front.raise_()
-        # Meanwhile they were docked one under the other: their heights
-        # added up past the window, which grew to hold them and slid the
-        # sidebar's handle down with the view. Back in their tabs, the
-        # window goes back to its size.
-        if self.size() != size:
-            self.layout().activate()
-            self.resize(size)
-        QTimer.singleShot(0, self, self._pack_toolbars)
-
-    def _dock_tab_rows(self, docks) -> list:
-        """Each row of tabbed docks on screen, in tab order, and the dock
-        in front."""
-        from PySide6.QtWidgets import QTabBar
-        by_title = {d.windowTitle(): d for d in docks if d.isVisible()}
-        rows = []
-        for bar in self.findChildren(QTabBar):
-            if bar.parent() is not self or not bar.isVisible():
-                continue
-            row = [by_title.get(bar.tabText(i)) for i in range(bar.count())]
-            front = by_title.get(bar.tabText(bar.currentIndex()))
-            if len(row) > 1 and None not in row and front is not None:
-                rows.append((row, front))
-        return rows
-
     def createPopupMenu(self):  # noqa: N802 — Qt override
-        """Right-click over a toolbar: Qt's list of toolbars and panels,
-        and under it the way back to the factory toolbars."""
+        """Include toolbar customization in the standard Qt context menu."""
         menu = super().createPopupMenu()
         if menu is None:
             menu = QMenu(self)
-        act = getattr(self, "_act_reset_toolbars", None)
-        if act is not None:
-            menu.addSeparator()
-            menu.addAction(act)
         custom = getattr(self, "_act_customize_toolbars", None)
         if custom is not None and custom.isVisible():
             menu.addAction(custom)
@@ -1890,12 +1785,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
             lambda m=panels_menu: self._fill_panels_menu(m))
         window_menu.addMenu(panels_menu)
         self._panels_menu = panels_menu
-        # The same entry closes the right-click menu over a toolbar.
-        self._act_reset_toolbars = window_menu.addAction(
-            tr("Restore default toolbars"))
-        self._act_reset_toolbars.setStatusTip(tr(_RESET_TOOLBARS_TIP))
-        self._act_reset_toolbars.triggered.connect(
-            self.restore_default_toolbars)
         # macOS glass: the toolbars are locked and grip-less; they are
         # rearranged in a mode of their own, as in AppKit apps.
         from views import mac_glass
@@ -3997,12 +3886,7 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         # The status bar carries the Model | Sheet 1 | … strip at its left,
         # on the same row as the measurements box (AutoCAD's Model / Layout
         # tabs): one click from the model to any sheet.
-        # The sheets are the Sheets workspace's (views/wgpu_sheets.py): the
-        # strip of sheet tabs went with the composer; the bar keeps its
-        # standing hint (views/status_bar.py).
-        from views.status_bar import HintStatusBar
-        bar = HintStatusBar(self)
-        self.setStatusBar(bar)
+        bar = self.statusBar()
         self._sheet_tabs = None
         # Ctrl+Tab: to the sheets and back (#91, @pacaeiro) — the last sheet
         # shown, as the strip's own tab; Ctrl+Shift+Tab too, with only two
@@ -4013,13 +3897,6 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         for seq, step in (("Ctrl+Tab", 1), ("Ctrl+Shift+Tab", -1)):
             QShortcut(QKeySequence(seq), self,
                       activated=lambda k=step: self._ctrl_tab(k))
-        # ONE hint for the tool and its step (the usual status bar) goes in
-        # as the bar's BASE message — SheetStatusBar keeps the Model | Sheet
-        # strip glued to the left and restores the base after a timed
-        # message (flash_status). A widget of our own here landed LEFT of
-        # the strip (Marco, 2026-09-15: «la ubicación de modelo y
-        # composiciones siempre debe ser primero»). It replaced a strip of
-        # every shortcut at once.
         self._tool_label = QLabel(tr("Tool: none"))
         bar.addPermanentWidget(self._tool_label)
         # Not shown any more: the tool's name leads the hint instead, and the
@@ -4098,46 +3975,8 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         if not self._status_timer.isActive():
             self._status_timer.start()
 
-    def _update_status_hint(self) -> None:
-        """Refresh the one-line hint for the active tool and its step: the
-        status bar's base message, under any timed one."""
-        bar = self.statusBar()
-        if bar is None:
-            return
-        from views.status_hints import hint_for
-        vp = self.viewport
-        tool = vp.active_tool
-        nav = getattr(vp, "nav_mode", None)
-        text = hint_for(self._tool_key(tool), tool, nav,
-                        getattr(vp, "linear_inference_mode", None))
-        # The tool's name leads its hint (it used to sit apart, on the right).
-        if nav is not None:
-            name = tr(nav.replace("_", " ").capitalize())
-        elif tool is not None:
-            name = tr(tool.name)
-        else:
-            name = ""
-        self._refresh_repeat_hint()
-        if name and text:
-            text = f"{name} — {text}"
-        elif name:
-            text = name
-        if text != getattr(bar, "_base", None):
-            if hasattr(bar, "_base"):
-                # Keep a running timed message; only the base changes.
-                bar._base = text
-                if not bar._timer.isActive():
-                    bar._msg.setText(text)
-            else:
-                bar.showMessage(text)
-
-    @property
-    def status_hint(self) -> str:
-        bar = self.statusBar()
-        return getattr(bar, "_base", None) or (bar.currentMessage() if bar else "")
-
     def _flush_status_texts(self) -> None:
-        self._update_status_hint()
+        self._refresh_repeat_hint()
         pending, self._status_pending = self._status_pending, {}
         coord = pending.get("coordinate")
         if coord is not None and coord != self._coord_label.text():
@@ -4201,7 +4040,7 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
             action.setChecked(True)
         self._tool_label.setText(tr("Tool: {name}", name=tr(tool.name)))
         self._refresh_vcb()
-        self._update_status_hint()
+        self._refresh_repeat_hint()
         # Select is where Repeat is pressed FROM, and the two tools entered
         # from a right-click need the face or group that click was on.
         if key not in ("select", "texture_position", "change_axes",
@@ -4247,7 +4086,7 @@ class MainWindow(WindowDocumentCommands, QMainWindow):
         self._tool_label.setText(
             tr("Nav: {name}", name=tr(key.capitalize())))
         self._refresh_vcb()
-        self._update_status_hint()
+        self._refresh_repeat_hint()
 
     def _on_scale_dialog(self, group) -> None:
         tool = self._tools["scale_manager"]

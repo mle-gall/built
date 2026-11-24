@@ -2750,8 +2750,6 @@
  "The tabs on the left of the page: drag any tab there, or back to the right.": "علامات التبويب الموجودة على يسار الصفحة: اسحب أي علامة تبويب هناك، أو ارجع إلى اليمين.",
  "Browser": "المتصفح",
  "Properties and the Browser open, the other panels closed, all on the right in the factory order.": "الخصائص والمتصفح مفتوحان، واللوحات الأخرى مغلقة، كل ذلك على اليمين بأمر المصنع.",
- "Restore default toolbars": "استعادة أشرطة الأدوات الافتراضية",
- "Every toolbar back in its factory place and order, the hidden ones shown again. The panels stay as they are.": "يعود كل شريط أدوات إلى مكانه وترتيبه في المصنع، وتظهر العناصر المخفية مرة أخرى. تبقى الألواح كما هي.",
  "{n} attempts in a row failed — stopping here. Rephrase the request or type \"continue\" to let it try again.": "{n} فشلت المحاولات المتتالية — توقف هنا. أعد صياغة الطلب أو اكتب \"متابعة\" للسماح له بالمحاولة مرة أخرى.",
  "The local server is loading the model — the first answer takes longer.": "يقوم الخادم المحلي بتحميل النموذج — تستغرق الإجابة الأولى وقتًا أطول.",
  "{model} is a small model and often fails at writing code. A code model works much better, e.g. {suggested} (ollama pull {suggested}).": "{model} هو نموذج صغير وغالبًا ما يفشل في كتابة التعليمات البرمجية. نموذج التعليمات البرمجية يعمل بشكل أفضل بكثير، على سبيل المثال. {suggested} (سحب أولاما {suggested}).",

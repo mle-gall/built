@@ -9,25 +9,17 @@ hunt 2, A13/B5). The cursor now rides the line through the click.
 from __future__ import annotations
 
 import math
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QMouseEvent
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication
-
-_app = QApplication.instance() or QApplication([])
 
 
-def _window(target, distance):
-    from views.main_window import MainWindow
-    win = MainWindow()
+def _window(native_host, target, distance):
+    win = native_host.window
     win._confirm_discard = lambda *a, **k: True   # never a modal on close
-    win.show()
-    win.resize(1600, 900)
-    _app.processEvents()
+    native_host.resize(1600, 900, 1.0)
     cam = win.viewport.camera
     cam.target = target
     cam.distance = distance
@@ -46,7 +38,6 @@ def _pull(win, vp, at, rise):
     """Click the face at ``at``, move the cursor to ``rise`` m above it."""
     vp.scene.version += 1
     vp.update()
-    _app.processEvents()
     win._activate_tool("pushpull")
     tool = vp.active_tool
     px, py = vp._world_to_pixel(at)
@@ -58,25 +49,19 @@ def _pull(win, vp, at, rise):
     return tool.extrusion
 
 
-def test_a_pull_clicked_near_a_slab_corner_follows_the_cursor():
-    win, vp = _window(V(6, 3.66, 0), 22.0)
-    try:
-        vp.scene.mesh.add_face([V(0, 0, 0), V(12, 0, 0), V(12, 7.32, 0),
-                                V(0, 7.32, 0)])
-        got = _pull(win, vp, V(0.4, 0.4, 0), 0.3)
-        assert abs(got - 0.3) < 0.03, got
-    finally:
-        win.close()
+def test_a_pull_clicked_near_a_slab_corner_follows_the_cursor(native_host):
+    win, vp = _window(native_host, V(6, 3.66, 0), 22.0)
+    vp.scene.mesh.add_face([V(0, 0, 0), V(12, 0, 0), V(12, 7.32, 0),
+                            V(0, 7.32, 0)])
+    got = _pull(win, vp, V(0.4, 0.4, 0), 0.3)
+    assert abs(got - 0.3) < 0.03, got
 
 
-def test_a_ring_pulled_one_metre_rises_one_metre():
-    win, vp = _window(V(0, 0, 0), 14.0)
-    try:
-        outer = [V(-2, -2, 0), V(2, -2, 0), V(2, 2, 0), V(-2, 2, 0)]
-        hole = [V(-1.8, -1.8, 0), V(-1.8, 1.8, 0), V(1.8, 1.8, 0),
-                V(1.8, -1.8, 0)]
-        vp.scene.mesh.add_face(outer, [hole])
-        got = _pull(win, vp, V(1.9, 0, 0), 1.0)
-        assert abs(got - 1.0) < 0.05, got
-    finally:
-        win.close()
+def test_a_ring_pulled_one_metre_rises_one_metre(native_host):
+    win, vp = _window(native_host, V(0, 0, 0), 14.0)
+    outer = [V(-2, -2, 0), V(2, -2, 0), V(2, 2, 0), V(-2, 2, 0)]
+    hole = [V(-1.8, -1.8, 0), V(-1.8, 1.8, 0), V(1.8, 1.8, 0),
+            V(1.8, -1.8, 0)]
+    vp.scene.mesh.add_face(outer, [hole])
+    got = _pull(win, vp, V(1.9, 0, 0), 1.0)
+    assert abs(got - 1.0) < 0.05, got

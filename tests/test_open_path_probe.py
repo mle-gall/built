@@ -3,20 +3,17 @@ tiny document, and (opt-in, it opens a window) the real-window run."""
 import importlib.util
 import json
 import os
-import subprocess
 import sys
 from pathlib import Path
 
 import pytest
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
-from PySide6.QtWidgets import QApplication
 
 from core.group import Group
 from core.history import History
 from core.mesh import Mesh
 from core.scene import Scene
 
-app = QApplication.instance() or QApplication([])
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "open_path_probe.py"
 
@@ -122,7 +119,8 @@ def test_real_window_run_writes_every_measurement(tmp_path):
     save_scene(_scene(), doc, backup=False)
     out = tmp_path / "probe.json"
     env = {k: v for k, v in os.environ.items() if k != "QT_QPA_PLATFORM"}
-    subprocess.run([sys.executable, str(SCRIPT), str(doc), str(out), "--edit",
+    from scripts.isolated_launch import run
+    run([sys.executable, str(SCRIPT), str(doc), str(out), "--edit",
                     "--takeoff", "--timeout", "120"], cwd=ROOT, env=env,
                    timeout=180, check=True, capture_output=True)
     result = json.loads(out.read_text())

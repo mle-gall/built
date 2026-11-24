@@ -14,17 +14,11 @@ tool a NaN point."""
 from __future__ import annotations
 
 import math
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from PySide6.QtCore import QEvent, QPointF, Qt  # noqa: E402
 from PySide6.QtGui import QMouseEvent
 from ingetrazo_core import Vec3 as V
-from PySide6.QtTest import QTest  # noqa: E402
-from PySide6.QtWidgets import QApplication  # noqa: E402
-
-_app = QApplication.instance() or QApplication([])
 
 
 def _finite(p) -> bool:
@@ -33,10 +27,9 @@ def _finite(p) -> bool:
 
 def _move(vp, w):
     px, py = vp._world_to_pixel(w)
-    QTest.mouseMove(vp.keys_stand_in, QPointF(px, py).toPoint())
+    vp._host.pointer("move", px, py)
     vp._last_mouse_pos = QPointF(px, py)
     vp._refresh_snap()
-    _app.processEvents()
     return px, py
 
 
@@ -44,23 +37,21 @@ def _click(vp, px, py):
     vp._dispatch_tool_click(QMouseEvent(
         QEvent.MouseButtonPress, QPointF(px, py), QPointF(px, py),
         Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
-    _app.processEvents()
 
 
 def _type(vp, text):
     for ch in text:
-        QTest.keyClick(vp.keys_stand_in, ch)
-    QTest.keyClick(vp.keys_stand_in, Qt.Key_Return)
-    _app.processEvents()
+        vp._host.key(True, ord(ch), 0, ch)
+        vp._host.key(False, ord(ch), 0, ch)
+    vp._host.key(True, int(Qt.Key_Return))
+    vp._host.key(False, int(Qt.Key_Return))
 
 
-def _window():
+def _window(native_host):
     from core import units
-    from views.main_window import MainWindow
-    win = MainWindow()
-    win.resize(1200, 800)
-    win.show()
-    _app.processEvents()
+
+    win = native_host.window
+    native_host.resize(1200, 800, 1.0)
     scene = win.viewport.scene
     units.apply_units(scene, {"length": "mm", "precision": 2})
     scene.groups.clear()                        # «delete man»
@@ -77,38 +68,29 @@ def _two_lines_then_zoom(win):
     _move(vp, V(1, 0.01, 0))
     _type(vp, "10")                              # the line is still going
     win._on_zoom_extents()
-    vp.repaint()
-    _app.processEvents()
+    vp.update()
     return vp
 
 
-def test_the_cursor_ray_stays_finite_a_few_centimetres_from_a_part():
-    win = _window()
-    try:
-        vp = _two_lines_then_zoom(win)
-        assert vp.camera.distance < 0.05         # right up to the part
-        for w in (V(0.02, 0.01, 0), V(0.01, 0, 0), V(-0.01, 0.02, 0)):
-            origin, direction = vp._pixel_to_ray(*vp._world_to_pixel(w))
-            assert _finite(origin) and _finite(direction), w
-            assert abs(direction.length() - 1.0) < 1e-4
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_the_cursor_ray_stays_finite_a_few_centimetres_from_a_part(native_host):
+    win = _window(native_host)
+    vp = _two_lines_then_zoom(win)
+    assert vp.camera.distance < 0.05         # right up to the part
+    for w in (V(0.02, 0.01, 0), V(0.01, 0, 0), V(-0.01, 0.02, 0)):
+        origin, direction = vp._pixel_to_ray(*vp._world_to_pixel(w))
+        assert _finite(origin) and _finite(direction), w
+        assert abs(direction.length() - 1.0) < 1e-4
 
 
-def test_drawing_goes_on_after_zoom_extents_on_a_10_mm_part():
-    win = _window()
-    try:
-        vp = _two_lines_then_zoom(win)
-        tool = vp.active_tool
-        edges = len(vp.scene.mesh.edges)
-        for w in (V(0.02, 0.01, 0), V(0.01, 0, 0), V(0.015, 0.012, 0)):
-            _move(vp, w)
-            assert _finite(tool.hover_point), w
-        _click(vp, *vp._world_to_pixel(V(0.015, 0.012, 0)))
-        assert "NaN" not in (win.statusBar().currentMessage() or "")
-        assert len(vp.scene.mesh.edges) == edges + 1
-        assert all(_finite(v.position) for v in vp.scene.mesh.vertices)
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+def test_drawing_goes_on_after_zoom_extents_on_a_10_mm_part(native_host):
+    win = _window(native_host)
+    vp = _two_lines_then_zoom(win)
+    tool = vp.active_tool
+    edges = len(vp.scene.mesh.edges)
+    for w in (V(0.02, 0.01, 0), V(0.01, 0, 0), V(0.015, 0.012, 0)):
+        _move(vp, w)
+        assert _finite(tool.hover_point), w
+    _click(vp, *vp._world_to_pixel(V(0.015, 0.012, 0)))
+    assert "NaN" not in (win.statusBar().currentMessage() or "")
+    assert len(vp.scene.mesh.edges) == edges + 1
+    assert all(_finite(v.position) for v in vp.scene.mesh.vertices)

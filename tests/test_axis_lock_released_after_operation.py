@@ -19,29 +19,16 @@ bound to an edge the user went and picked.
 """
 from __future__ import annotations
 
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
+from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QMouseEvent
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
-
-_app = QApplication.instance() or QApplication([])
 
 
-def _viewport():
-    from views.main_window import MainWindow
-    win = MainWindow()
-    win.show()
-    _app.processEvents()
+def _viewport(native_host):
+    win = native_host.window
     return win, win.viewport
-
-
-def _close(win, vp):
-    win._saved_version = vp.scene.version
-    win.close()
 
 
 def _click(vp, x=5.0, y=5.0):
@@ -50,7 +37,7 @@ def _click(vp, x=5.0, y=5.0):
         Qt.LeftButton, Qt.NoModifier))
 
 
-def test_the_lock_goes_the_moment_the_SEGMENT_exists():
+def test_the_lock_goes_the_moment_the_SEGMENT_exists(native_host):
     """Corrected 2026-09-18 by @pacaeiro, testing 0.4.4: «I draw a line with
     hard lock (arrows) and, after the line is created the lock is still
     active».
@@ -64,80 +51,65 @@ def test_the_lock_goes_the_moment_the_SEGMENT_exists():
 
     The signal is «did this click make something», not «is the tool idle».
     """
-    win, vp = _viewport()
-    try:
-        win._activate_tool("line")
-        vp.active_tool.start_point = QVector3D(0.0, 0.0, 0.0)
-        vp.axis_lock = "x"
-        _click(vp)                       # this one commits a segment
-        assert vp.axis_lock is None
-    finally:
-        _close(win, vp)
+    win, vp = _viewport(native_host)
+    win._activate_tool("line")
+    vp.active_tool.start_point = QVector3D(0.0, 0.0, 0.0)
+    vp.axis_lock = "x"
+    _click(vp)                       # this one commits a segment
+    assert vp.axis_lock is None
 
 
-def test_but_a_click_that_makes_NOTHING_keeps_it():
+def test_but_a_click_that_makes_NOTHING_keeps_it(native_host):
     """The first click of a line only sets the start point, so a lock taken
     before it must still be there to constrain the segment — otherwise the
     lock would be useless in the only place it is used."""
-    win, vp = _viewport()
-    try:
-        win._activate_tool("line")
-        vp.axis_lock = "x"
-        _click(vp)                       # first click: nothing committed
-        assert vp.axis_lock == "x"
-        assert vp._tool_busy(vp.active_tool), "the line is under way"
-    finally:
-        _close(win, vp)
+    win, vp = _viewport(native_host)
+    win._activate_tool("line")
+    vp.axis_lock = "x"
+    _click(vp)                       # first click: nothing committed
+    assert vp.axis_lock == "x"
+    assert vp._tool_busy(vp.active_tool), "the line is under way"
 
 
-def test_the_lock_goes_when_the_line_is_finished():
+def test_the_lock_goes_when_the_line_is_finished(native_host):
     """The Line tool CHAINS — after the second click it keeps drawing from
     there — so «the operation» is the whole polyline, and it ends when the
     chain does: closing the loop resets the tool, and the lock goes with
     it. (Ending with Esc was already covered: releasing the constraint is
     the cascade's second step.)"""
-    win, vp = _viewport()
-    try:
-        win._activate_tool("line")
-        tool = vp.active_tool
-        tool.start_point = QVector3D(1.0, 0.0, 0.0)
-        vp.axis_lock = "x"
-        tool.start_point = None                    # the chain closed
-        vp._release_axis_lock_after_operation()
-        assert vp.axis_lock is None
-    finally:
-        _close(win, vp)
+    win, vp = _viewport(native_host)
+    win._activate_tool("line")
+    tool = vp.active_tool
+    tool.start_point = QVector3D(1.0, 0.0, 0.0)
+    vp.axis_lock = "x"
+    tool.start_point = None                    # the chain closed
+    vp._release_axis_lock_after_operation()
+    assert vp.axis_lock is None
 
 
-def test_switching_tool_drops_it_too():
+def test_switching_tool_drops_it_too(native_host):
     """The leak that was worse than the report: this reset cleared every
     other sticky state and forgot the axis lock, so a lock taken while
     drawing a line silently constrained the next tool."""
-    win, vp = _viewport()
-    try:
-        win._activate_tool("line")
-        vp.axis_lock = "x"
-        win._activate_tool("rectangle")
-        assert vp.axis_lock is None
-    finally:
-        _close(win, vp)
+    win, vp = _viewport(native_host)
+    win._activate_tool("line")
+    vp.axis_lock = "x"
+    win._activate_tool("rectangle")
+    assert vp.axis_lock is None
 
 
-def test_a_typed_length_ends_the_operation_too():
+def test_a_typed_length_ends_the_operation_too(native_host):
     """The lock is released however the line ends, and typing a distance and
     pressing Enter is the other way to end one."""
-    win, vp = _viewport()
-    try:
-        win._activate_tool("line")
-        vp.axis_lock = "y"
-        vp.active_tool.start_point = None
-        vp._release_axis_lock_after_operation()
-        assert vp.axis_lock is None
-    finally:
-        _close(win, vp)
+    win, vp = _viewport(native_host)
+    win._activate_tool("line")
+    vp.axis_lock = "y"
+    vp.active_tool.start_point = None
+    vp._release_axis_lock_after_operation()
+    assert vp.axis_lock is None
 
 
-def test_a_typed_length_actually_drops_the_lock():
+def test_a_typed_length_actually_drops_the_lock(native_host):
     """The path that had the bug (Marco): the Line tool chains, so the
     instant the typed value commits a segment the tool is STILL busy. The
     old code called ``_release_axis_lock_after_operation()`` without the
@@ -146,50 +118,41 @@ def test_a_typed_length_actually_drops_the_lock():
     the click path: did this input make geometry?"""
     from PySide6.QtCore import QEvent
     from PySide6.QtGui import QKeyEvent
-    win, vp = _viewport()
-    try:
-        win._activate_tool("line")
-        tool = vp.active_tool
-        tool.start_point = QVector3D(0.0, 0.0, 0.0)
-        tool.hover_point = QVector3D(1.0, 0.0, 0.0)     # pointing along X
-        vp.axis_lock = "x"
-        before = len(vp.history.undo_stack)
-        for ch in "1500":
-            vp._handle_value_key(
-                QKeyEvent(QEvent.KeyPress, Qt.Key_0, Qt.NoModifier, ch))
+    win, vp = _viewport(native_host)
+    win._activate_tool("line")
+    tool = vp.active_tool
+    tool.start_point = QVector3D(0.0, 0.0, 0.0)
+    tool.hover_point = QVector3D(1.0, 0.0, 0.0)     # pointing along X
+    vp.axis_lock = "x"
+    before = len(vp.history.undo_stack)
+    for ch in "1500":
         vp._handle_value_key(
-            QKeyEvent(QEvent.KeyPress, Qt.Key_Return, Qt.NoModifier, "\r"))
-        assert len(vp.history.undo_stack) == before + 1, "the segment exists"
-        assert vp.axis_lock is None
-    finally:
-        _close(win, vp)
+            QKeyEvent(QEvent.KeyPress, Qt.Key_0, Qt.NoModifier, ch))
+    vp._handle_value_key(
+        QKeyEvent(QEvent.KeyPress, Qt.Key_Return, Qt.NoModifier, "\r"))
+    assert len(vp.history.undo_stack) == before + 1, "the segment exists"
+    assert vp.axis_lock is None
 
 
-def test_the_down_arrow_reference_is_left_alone():
+def test_the_down_arrow_reference_is_left_alone(native_host):
     """Not in the report and not the same gesture: it is bound to an edge
     the user went and picked, and Esc still drops it."""
-    win, vp = _viewport()
-    try:
-        win._activate_tool("line")
-        vp.reference_mode = "parallel"
-        vp.active_tool.start_point = None
-        vp._release_axis_lock_after_operation()
-        assert vp.reference_mode == "parallel"
-        assert vp.release_constraints() is True     # …and Esc still does
-        assert vp.reference_mode is None
-    finally:
-        _close(win, vp)
+    win, vp = _viewport(native_host)
+    win._activate_tool("line")
+    vp.reference_mode = "parallel"
+    vp.active_tool.start_point = None
+    vp._release_axis_lock_after_operation()
+    assert vp.reference_mode == "parallel"
+    assert vp.release_constraints() is True     # …and Esc still does
+    assert vp.reference_mode is None
 
 
-def test_esc_still_releases_it_mid_operation():
+def test_esc_still_releases_it_mid_operation(native_host):
     """The Esc cascade is untouched: mid-line you can still drop the lock
     without cancelling the line."""
-    win, vp = _viewport()
-    try:
-        win._activate_tool("line")
-        vp.active_tool.start_point = QVector3D(0.0, 0.0, 0.0)
-        vp.axis_lock = "z"
-        assert vp.release_constraints() is True
-        assert vp.axis_lock is None
-    finally:
-        _close(win, vp)
+    win, vp = _viewport(native_host)
+    win._activate_tool("line")
+    vp.active_tool.start_point = QVector3D(0.0, 0.0, 0.0)
+    vp.axis_lock = "z"
+    assert vp.release_constraints() is True
+    assert vp.axis_lock is None

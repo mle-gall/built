@@ -118,11 +118,10 @@ def test_scenes_is_a_tab_of_its_own_right_after_layers(win):
 def test_on_a_first_run_the_tab_comes_right_after_layers(win):
     """Layers is seated again at start-up and goes to the end of the row;
     Scenes follows it there instead of staying in front of it."""
-    rows = [row for row, _front in win._dock_tab_rows(win._sidebar_docks())
-            if win.scenes_dock in row]
-    assert rows, "the Scenes tab is in no row of tabs"
-    names = [d.objectName() for d in rows[0]]
-    assert names.index("tray_scenes") == names.index("tray_layers") + 1
+    scenes, layers = win.scenes_dock.windowTitle(), win.layers_dock.windowTitle()
+    rows = [[bar.tabText(i) for i in range(bar.count())] for bar in win._dock_tab_bars()]
+    row = next(row for row in rows if scenes in row)
+    assert row.index(scenes) == row.index(layers) + 1
 
 
 def test_a_layout_saved_before_the_tab_seats_it_beside_layers(win):

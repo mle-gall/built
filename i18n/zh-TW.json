@@ -2889,8 +2889,6 @@
  "The tabs on the left of the page: drag any tab there, or back to the right.": "頁面左側的頁籤：可將任何頁籤拖曳到那裡，或拖回右側。",
  "Browser": "瀏覽器",
  "Properties and the Browser open, the other panels closed, all on the right in the factory order.": "開啟「屬性」與「瀏覽器」，其他面板關閉，全部位於右側，依原廠順序排列。",
- "Restore default toolbars": "還原預設工具列",
- "Every toolbar back in its factory place and order, the hidden ones shown again. The panels stay as they are.": "所有工具列都回到原廠位置與順序，已隱藏的會重新顯示。面板則維持原狀。",
  "{n} attempts in a row failed — stopping here. Rephrase the request or type \"continue\" to let it try again.": "連續 {n} 次嘗試都失敗 — 在此停止。請換個說法重新提出要求，或輸入「繼續」讓它再試一次。",
  "The local server is loading the model — the first answer takes longer.": "本機伺服器正在載入模型 — 第一次回答會比較久。",
  "{model} is a small model and often fails at writing code. A code model works much better, e.g. {suggested} (ollama pull {suggested}).": "{model} 是小型模型，經常在撰寫程式碼時失敗。程式碼專用模型的效果會好得多，例如 {suggested}（ollama pull {suggested}）。",

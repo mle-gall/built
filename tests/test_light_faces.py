@@ -9,13 +9,9 @@ engine."""
 from __future__ import annotations
 
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
-import os
 import random
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
 import pytest  # noqa: E402
-from PySide6.QtWidgets import QApplication  # noqa: E402
 from PySide6.QtCore import QEvent, QPointF, Qt  # noqa: E402
 from PySide6.QtGui import QMouseEvent
 from ingetrazo_core import Vec3 as V
@@ -27,7 +23,6 @@ from formats import igz  # noqa: E402
 from tests.test_deferred_mesh import _meshes, _random_scene  # noqa: E402
 from views import array_bake  # noqa: E402
 
-_app = QApplication.instance() or QApplication([])
 pytestmark = pytest.mark.skipif(
     _native.native is None or _native.qt_hypot() is None,
     reason="engine off or not built")
@@ -129,8 +124,8 @@ def test_deferred_faces_answer_light_only_while_reading(binary, tmp_path):
         assert faces[0] == real, "once built, the real face"
 
 
-def _window(tmp_path):
-    from views.main_window import MainWindow
+def _window(native_host, tmp_path):
+
     from core.group import Group
     scene = Scene()
     m = M.Mesh()
@@ -141,11 +136,11 @@ def _window(tmp_path):
     scene.groups.append(Group(m, name="floor"))
     path = tmp_path / "floor.igz"
     igz.save_scene(scene, path)
-    win = MainWindow()
-    win.resize(900, 640)
+    win = native_host.window
+    native_host.resize(900, 640, 1.0)
     assert win.open_path(path) is not False
     vp = win.viewport
-    vp.resize(900, 640)
+    native_host.resize(900, 640, 1.0)
     vp.camera.set_aspect(900, 640)
     vp.camera.set_view("top")
     vp.camera.fit_to(*vp.scene.bounds())
@@ -163,37 +158,29 @@ def big_enough(binary, monkeypatch):
 
 
 def test_hovering_with_line_builds_no_mesh_and_a_click_gets_the_real_face(
-        big_enough, tmp_path):
-    win, vp = _window(tmp_path)
-    try:
-        mesh = vp.scene.groups[0].mesh
-        assert type(mesh) is M.DeferredMesh
-        win._activate_tool("line")
-        x, y = vp.width() / 2 + 7, vp.height() / 2 + 3
-        for k in (3, 2, 1, 0):           # the last one where the click comes
-            _hover(vp, x + 13 * k, y)
-        assert type(mesh) is M.DeferredMesh, "a Line hover built the group"
-        assert vp.last_snap is not None
-        face, group = vp.pick_face_any(x, y)
-        assert _real(face), "the memo of a hover's light face leaked"
-        assert face in mesh.faces and group is vp.scene.groups[0]
-    finally:
-        win._saved_version = vp.scene.version
-        win.close()
+        native_host, big_enough, tmp_path):
+    win, vp = _window(native_host, tmp_path)
+    mesh = vp.scene.groups[0].mesh
+    assert type(mesh) is M.DeferredMesh
+    win._activate_tool("line")
+    x, y = vp.width() / 2 + 7, vp.height() / 2 + 3
+    for k in (3, 2, 1, 0):           # the last one where the click comes
+        _hover(vp, x + 13 * k, y)
+    assert type(mesh) is M.DeferredMesh, "a Line hover built the group"
+    assert vp.last_snap is not None
+    face, group = vp.pick_face_any(x, y)
+    assert _real(face), "the memo of a hover's light face leaked"
+    assert face in mesh.faces and group is vp.scene.groups[0]
 
 
-def test_hovering_with_select_builds_no_mesh(big_enough, tmp_path):
-    win, vp = _window(tmp_path)
-    try:
-        mesh = vp.scene.groups[0].mesh
-        win._activate_tool("select")
-        x, y = vp.width() / 2 + 7, vp.height() / 2 + 3
-        assert vp.pick_group(x, y) is vp.scene.groups[0]
-        _hover(vp, x, y)
-        assert type(mesh) is M.DeferredMesh, "«which object?» built the group"
-    finally:
-        win._saved_version = vp.scene.version
-        win.close()
+def test_hovering_with_select_builds_no_mesh(native_host, big_enough, tmp_path):
+    win, vp = _window(native_host, tmp_path)
+    mesh = vp.scene.groups[0].mesh
+    win._activate_tool("select")
+    x, y = vp.width() / 2 + 7, vp.height() / 2 + 3
+    assert vp.pick_group(x, y) is vp.scene.groups[0]
+    _hover(vp, x, y)
+    assert type(mesh) is M.DeferredMesh, "«which object?» built the group"
 
 
 def test_a_centre_found_on_a_light_face_survives_an_edit(native_window, big_enough, tmp_path):
@@ -235,27 +222,23 @@ def _click(vp, x, y):
 
 
 def test_a_click_with_line_builds_nothing_and_takes_the_same_plane(
-        big_enough, tmp_path):
+        native_host, big_enough, tmp_path):
     from core.snap import face_plane_world
-    win, vp = _window(tmp_path)
-    try:
-        mesh = vp.scene.groups[0].mesh
-        tool = win._activate_tool("line") or vp.active_tool
-        x, y = vp.width() / 2 + 7, vp.height() / 2 + 3
-        _hover(vp, x, y)
-        _click(vp, x, y)
-        assert tool.start_point is not None and tool.work_plane is not None
-        assert type(mesh) is M.DeferredMesh, "the first click built the group"
-        got = tool.work_plane
-        _hover(vp, x + 40, y)
-        _click(vp, x + 40, y + 11)
-        assert type(mesh) is M.DeferredMesh, "the second click built the group"
-        assert len(vp.scene.mesh.edges) == 1, "no edge drawn"
-        # The face that click would otherwise have built: the very same plane.
-        real, placed = vp.pick_face_placement(x, y)
-        assert type(real) is not array_bake.LightFace
-        want = face_plane_world(real, getattr(placed, "xform", None))
-        assert _xyz(got[0]) == _xyz(want[0]) and _xyz(got[1]) == _xyz(want[1])
-    finally:
-        win._saved_version = win.viewport.scene.version
-        win.close()
+    win, vp = _window(native_host, tmp_path)
+    mesh = vp.scene.groups[0].mesh
+    tool = win._activate_tool("line") or vp.active_tool
+    x, y = vp.width() / 2 + 7, vp.height() / 2 + 3
+    _hover(vp, x, y)
+    _click(vp, x, y)
+    assert tool.start_point is not None and tool.work_plane is not None
+    assert type(mesh) is M.DeferredMesh, "the first click built the group"
+    got = tool.work_plane
+    _hover(vp, x + 40, y)
+    _click(vp, x + 40, y + 11)
+    assert type(mesh) is M.DeferredMesh, "the second click built the group"
+    assert len(vp.scene.mesh.edges) == 1, "no edge drawn"
+    # The face that click would otherwise have built: the very same plane.
+    real, placed = vp.pick_face_placement(x, y)
+    assert type(real) is not array_bake.LightFace
+    want = face_plane_world(real, getattr(placed, "xform", None))
+    assert _xyz(got[0]) == _xyz(want[0]) and _xyz(got[1]) == _xyz(want[1])

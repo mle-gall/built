@@ -2753,8 +2753,6 @@
  "The tabs on the left of the page: drag any tab there, or back to the right.": "Вкладки слева от страницы: перетащите туда любую вкладку или обратно вправо.",
  "Browser": "Навигатор",
  "Properties and the Browser open, the other panels closed, all on the right in the factory order.": "«Свойства» и «Навигатор» открыты, остальные панели закрыты, все справа в заводском порядке.",
- "Restore default toolbars": "Восстановить панели инструментов по умолчанию",
- "Every toolbar back in its factory place and order, the hidden ones shown again. The panels stay as they are.": "Все панели инструментов возвращаются на заводские места и в заводском порядке, скрытые снова показываются. Панели остаются как есть.",
  "{n} attempts in a row failed — stopping here. Rephrase the request or type \"continue\" to let it try again.": "Подряд не удалось попыток: {n} — останавливаюсь. Переформулируйте запрос или введите «продолжить» (continue), чтобы попробовать снова.",
  "The local server is loading the model — the first answer takes longer.": "Локальный сервер загружает модель — первый ответ займет больше времени.",
  "{model} is a small model and often fails at writing code. A code model works much better, e.g. {suggested} (ollama pull {suggested}).": "{model} — небольшая модель и часто ошибается при написании кода. Модель для кода работает намного лучше, например {suggested} (ollama pull {suggested}).",
