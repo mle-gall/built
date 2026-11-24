@@ -143,6 +143,23 @@ def lateral_exit(mesh, base_face, samples, direction: QVector3D,
     return True, t
 
 
+def inward_limit(mesh, base_face, n: QVector3D, anchor: QVector3D,
+                 stitch_tol: float):
+    """How far ``base_face`` may be pushed into the solid, natively
+    (``pushscan::scan_inward_limit``): the nearest parallel blocker behind
+    the whole base, 0 for a backing wall leaning away, the lateral exit a
+    hair short; ``None`` unbounded. Always answered (a scan is built even
+    with scans off: there is no Python loop behind it any more)."""
+    from core import scan_index
+    s = _scan(mesh) or scan_index.Scan(mesh)
+    args = _geom_args()
+    got = s.face_indices([base_face])
+    if not got or got[0] is None:
+        return None
+    return _mod("scan_inward_limit")(s.native, got[0], _xyz(n), _xyz(anchor),
+                                     float(stitch_tol), *args)
+
+
 def vertices_in_boxes(mesh, boxes):
     """The listed vertices inside any of ``boxes`` (``(x0, y0, z0, x1, y1,
     z1)``, bounds included), in list order; ``None`` when scans are off."""

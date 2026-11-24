@@ -23,7 +23,7 @@ from core.history import (
     translate_points,
 )
 from core.arrangement import _interior_point, _point_in_polygon, plane_basis
-from core.orient import _ray_triangle, is_closed, orient_outward
+from core.orient import is_closed, orient_outward
 from core.cap_rebuild import (
     RebuildCache,
     _canon_loop,
@@ -693,23 +693,15 @@ class PushPullOperation:
     # ---- Internals ----------------------------------------------------------
     def _compute_inward_limit(self, scene) -> None:
         """How far the face can be pushed *into* the solid before the sweep
-        would shoot past blocking geometry — the "Offset limited to" rule.
-
-        A blocker is a parallel face on the material side (−normal: solids are
-        committed outward) that overlaps the base loop laterally but can't be
-        punched (the loop is not strictly inside it — those are through-hole
-        targets and stay unbounded; the punch stops at them on its own).
-        Pushing exactly *to* the limit is allowed: landing flush dissolves or
-        opens the geometry (collapse a box flat, cut a notch through a floor).
-
-        A second, *lateral* bound: the depth at which the swept loop would
-        first leave the solid through a **non-parallel** boundary face (push a
-        triangular prism's long wall inward and the sweep exits through a
-        slanted wall long before any parallel blocker). Beyond that depth the
-        result isn't representable without boolean subtraction, so the push
-        clamps there — the solid stays a solid.
-
-        Stored in ``self._limit_in``; ``None`` = unbounded."""
+        would shoot past blocking geometry — the "Offset limited to" rule —
+        stored in ``self._limit_in`` (``None`` = unbounded). Native
+        (``core.push_scans.inward_limit``, ``pushscan::scan_inward_limit``):
+        a parallel blocker behind the whole base (#1076; a face the base
+        would punch through is a through-hole target, not a blocker), a
+        backing wall leaning away from the push (#710: limit 0), and the
+        lateral exit through a non-parallel wall, a hair short of it.
+        Pushing exactly *to* a blocker is allowed: landing flush dissolves
+        or opens the geometry."""
         self._limit_in = None
         if not self._attached or self.base_face is None:
             return
@@ -717,107 +709,8 @@ class PushPullOperation:
              else self.base_face.normal()).normalized()
         anchor = (self._anchor if self._anchor is not None
                   else self.base_face.centroid())
-        base_xy = _project_loop_2d(self.base_face.vertices, n)
-        # Only a parallel face overlapping the base laterally can block it.
-        near = push_scans.parallel_overlapping(scene.mesh, n, base_xy)
-        for g in (scene.faces if near is None else near):
-            if g == self.base_face:
-                continue
-            gn = g.normal().normalized()
-            if abs(QVector3D.dotProduct(gn, n)) < 0.999:
-                continue  # not parallel
-            dist = QVector3D.dotProduct(anchor - g.centroid(), n)
-            if dist <= 1e-6:
-                continue  # coplanar or on the outward side
-            # A blocker stands behind the WHOLE base. The wall a door is
-            # drawn on touches the door's own corners: with the door's top
-            # a fraction of a millimetre out of true towards the room, its
-            # centroid read the wall as a blocker 0.04 mm deep and the push
-            # into the wall did nothing (#1076).
-            if min(QVector3D.dotProduct(v - g.centroid(), n)
-                   for v in self.base_face.vertices) <= _STITCH_TOL:
-                continue
-            back_loop = [v - n * dist for v in self.base_face.vertices]
-            if loop_inside_face(g, back_loop):
-                continue  # a through-hole target, not a blocker
-            if not _loops_overlap_2d(base_xy, _project_loop_2d(g.vertices, n)):
-                continue  # laterally elsewhere (another building's wall)
-            if self._limit_in is None or dist < self._limit_in:
-                self._limit_in = dist
-
-        # Immediate lateral exit: a backing wall that leans *away* from the
-        # push (−n has a component out of it) overflows at any depth — the
-        # long wall of a triangular prism can't move inward at all without
-        # boolean subtraction. Limit 0 (the push becomes a no-op).
-        # The lean is judged in metres, not as a bare cosine: how far the
-        # wall's far end strays from square. Coordinates saved in single
-        # precision tilt a narrow wall's normal by ~2e-5 — the 15 mm top of a
-        # board read as leaning away and its corner could not be cut through
-        # (#710) — while the strayed distance is a fraction of a micron.
-        direction = -n
-        mesh = scene.mesh
-        for loop in [self.base_face.loop] + self.base_face.hole_loops:
-            cnt = len(loop)
-            for i in range(cnt):
-                ed = mesh.find_edge(loop[i], loop[(i + 1) % cnt])
-                if ed is None:
-                    continue
-                for g in ed.faces:
-                    if g == self.base_face or g.interior:
-                        continue
-                    gn = g.normal().normalized()
-                    if abs(QVector3D.dotProduct(gn, n)) > 0.999:
-                        continue  # parallel/coplanar: not a lateral wall
-                    lean = QVector3D.dotProduct(direction, gn)
-                    if lean <= 1e-6:
-                        continue
-                    root = loop[i].position
-                    depth = max(QVector3D.dotProduct(v - root, direction)
-                                for v in g.vertices)
-                    if lean * depth > _STITCH_TOL:
-                        self._limit_in = 0.0
-                        return
-
-        # Lateral exit bound: march inward (−n) from points just inside the
-        # base loop and take the first crossing of any non-parallel boundary
-        # face. Parallel faces are the blocker/through logic above; interior
-        # partitions are not boundary and don't end the solid.
-        loop3 = self.base_face.vertices
-        u, w = plane_basis(n)
-        origin3 = loop3[0]
-        loop_xy = [(QVector3D.dotProduct(p - origin3, u),
-                    QVector3D.dotProduct(p - origin3, w)) for p in loop3]
-        ip_xy = _interior_point(loop_xy)
-        ip3 = origin3 + u * ip_xy[0] + w * ip_xy[1]
-        samples = [ip3]
-        for i, p in enumerate(loop3):
-            samples.append(p + (ip3 - p) * 1e-3)
-            mid = (p + loop3[(i + 1) % len(loop3)]) * 0.5
-            samples.append(mid + (ip3 - mid) * 1e-3)
-        lateral = None
-        # Natively: the same float32 ray test over every face's triangles.
-        got = push_scans.lateral_exit(scene.mesh, self.base_face, samples,
-                                      direction, n)
-        if got is not None:
-            lateral = got[1]
-        for g in (() if got is not None else scene.faces):
-            if g == self.base_face or g.interior:
-                continue
-            if abs(QVector3D.dotProduct(g.normal().normalized(), n)) > 0.999:
-                continue  # parallel: blocker/through logic owns it
-            for tri in g.triangulate():
-                for q in samples:
-                    t = _ray_triangle(q, direction, tri)
-                    if t is not None and t > 1e-4 and (
-                            lateral is None or t < lateral):
-                        lateral = t
-        if lateral is not None:
-            # Unlike a parallel blocker (face lands flush on face and
-            # dissolves), the lateral contact is an edge-on graze — landing
-            # exactly there degenerates the swept walls. Stop a hair short.
-            lateral = max(lateral - 1e-3, 0.0)
-            if self._limit_in is None or lateral < self._limit_in:
-                self._limit_in = lateral
+        self._limit_in = push_scans.inward_limit(scene.mesh, self.base_face, n, anchor,
+                                                 _STITCH_TOL)
 
     def _clamp_extrusion(self, viewport=None) -> None:
         if self._limit_in is not None and self.extrusion < -self._limit_in:

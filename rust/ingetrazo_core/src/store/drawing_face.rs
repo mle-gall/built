@@ -103,7 +103,7 @@ impl Store {
     }
 }
 impl Outline {
-    pub(super) fn from_rings(rings: Vec<Ring>, normal: V3, h: Hypot) -> Self {
+    pub(crate) fn from_rings(rings: Vec<Ring>, normal: V3, h: Hypot) -> Self {
         Self { rings, normal, axes: plane_axes(normal, h), h }
     }
     fn proj(&self, p: P) -> XY {
